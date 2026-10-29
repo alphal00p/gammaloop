@@ -74,6 +74,7 @@
     ],
     "kurvst": [],
     "linnest": [
+      "kurvst",
       "linnet"
     ],
     "linnet": [
@@ -146,7 +147,9 @@
     "alphal00p-docs-schema": {},
     "clinnet": {},
     "feynkit-model": {
-      "linnet": []
+      "linnet": [
+        "nodestore-vec"
+      ]
     },
     "feynkit-ufo": {
       "feynkit-model": []
@@ -239,8 +242,10 @@
     },
     "kurvst": {},
     "linnest": {
+      "kurvst": [],
       "linnet": [
         "drawing",
+        "nodestore-vec",
         "rkyv",
         "serde"
       ]
@@ -743,6 +748,7 @@
     ],
     "kurvst": [],
     "linnest": [
+      "kurvst",
       "linnet"
     ],
     "linnet": [
@@ -839,7 +845,9 @@
     "alphal00p-docs-schema": {},
     "clinnet": {},
     "feynkit-model": {
-      "linnet": []
+      "linnet": [
+        "nodestore-vec"
+      ]
     },
     "feynkit-ufo": {
       "feynkit-model": []
@@ -932,8 +940,10 @@
     },
     "kurvst": {},
     "linnest": {
+      "kurvst": [],
       "linnet": [
         "drawing",
+        "nodestore-vec",
         "rkyv",
         "serde"
       ]

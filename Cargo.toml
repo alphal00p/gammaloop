@@ -8,6 +8,7 @@ default-members = ["crates/gammaloop-api"]
 edition = "2024"
 
 [workspace.dependencies]
+serde_repr = "0.1.20"
 ahash = "0.8.12"
 alphal00p-docs-macros = { path = "crates/alphal00p-docs-macros/" }
 alphal00p-docs-schema = { path = "crates/alphal00p-docs-schema/" }
@@ -75,6 +76,10 @@ vakint = { path = "crates/vakint/" }
 walkdir = "2.5.0"
 
 which = "8.0.0"
+
+[patch.crates-io]
+# Typst plugins have no JavaScript clock; retain infinite-time Clarabel solves.
+clarabel = { path = "vendor/clarabel" }
 
 [profile.bench]
 opt-level = 3

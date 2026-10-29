@@ -173,7 +173,11 @@ impl<T> SmartEdgeVec<T> {
     }
 
     pub fn new(involution: Involution<T>) -> Self {
-        let mut data = EdgeVec::new();
+        // Each edge owns at least one hedge. Reserve that existing upper bound
+        // without another incidence scan; paired graphs use at most twice the
+        // required edge capacity.
+        let hedges: Hedge = involution.len();
+        let mut data = EdgeVec::with_capacity(hedges.0);
 
         let involution = involution.map_full(|a, d| {
             let new_data = d;
@@ -1293,6 +1297,88 @@ impl<T> Swap<EdgeIndex> for SmartEdgeVec<T> {
 #[cfg(test)]
 mod tests {
     use super::{Accessors, EdgeData, Flow, Involution, SmartEdgeVec};
+    use crate::half_edge::swap::Swap;
+
+    #[test]
+    fn reserved_edge_storage_preserves_original_conversion() {
+        use super::EdgeVec;
+        // Keep the original conversion as an independent incidence/data oracle.
+        fn original<T>(involution: Involution<T>) -> SmartEdgeVec<T> {
+            let mut data = EdgeVec::new();
+            let involution = involution.map_full(|pair, value| {
+                let edge = data.len();
+                data.push((value.data, pair));
+                EdgeData::new(edge, value.orientation)
+            });
+            SmartEdgeVec { data, involution }
+        }
+        for count in 0..32 {
+            for paired in 0..=count {
+                let mut source = Involution::new();
+                for id in 0..count {
+                    if id < paired {
+                        source.add_pair(id, id % 2 == 0);
+                    } else {
+                        source.add_identity(
+                            id,
+                            id % 2 == 0,
+                            if id % 3 == 0 {
+                                Flow::Sink
+                            } else {
+                                Flow::Source
+                            },
+                        );
+                    }
+                }
+                let expected = original(source.clone());
+                let actual = SmartEdgeVec::new(source);
+                assert_eq!(actual.data, expected.data);
+                assert_eq!(actual.involution.inv, expected.involution.inv);
+                assert!(actual.data.capacity() >= count + paired);
+                for hedge in actual.involution.iter_idx() {
+                    assert_eq!(actual.data(hedge), expected.data(hedge));
+                    assert_eq!(actual.flow(hedge), expected.flow(hedge));
+                    assert_eq!(actual.orientation(hedge), expected.orientation(hedge));
+                    assert_eq!(actual.pair(hedge), expected.pair(hedge));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn reserved_edge_storage_moves_nonclone_payloads_once() {
+        use std::{cell::RefCell, rc::Rc};
+        struct Payload(usize, Rc<RefCell<Vec<usize>>>);
+        impl Drop for Payload {
+            fn drop(&mut self) {
+                self.1.borrow_mut().push(self.0);
+            }
+        }
+        for count in 0..16 {
+            let drops = Rc::new(RefCell::new(Vec::new()));
+            let mut source = Involution::new();
+            for id in 0..count {
+                let payload = Payload(id, drops.clone());
+                if id % 2 == 0 {
+                    source.add_pair(payload, true);
+                } else {
+                    source.add_identity(payload, false, Flow::Sink);
+                }
+            }
+            let converted = SmartEdgeVec::new(source);
+            assert!(drops.borrow().is_empty());
+            assert_eq!(
+                converted
+                    .data
+                    .iter()
+                    .map(|(_, value)| value.0 .0)
+                    .collect::<Vec<_>>(),
+                (0..count).collect::<Vec<_>>()
+            );
+            drop(converted);
+            assert_eq!(&*drops.borrow(), &(0..count).collect::<Vec<_>>());
+        }
+    }
 
     #[test]
     fn connect_identities_preserves_swapped_edge_owners_and_merge_order() {

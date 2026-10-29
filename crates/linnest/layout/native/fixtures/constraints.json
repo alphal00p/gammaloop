@@ -1,0 +1,6271 @@
+[
+  {
+    "request": {
+      "nodes": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "v"
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "source": "v",
+          "target": "a"
+        },
+        {
+          "id": "e1",
+          "source": "a",
+          "target": "b"
+        },
+        {
+          "id": "e2",
+          "source": "b",
+          "target": "v"
+        },
+        {
+          "id": "e3",
+          "source": "v",
+          "target": "c"
+        },
+        {
+          "id": "e4",
+          "source": "c",
+          "target": "d"
+        },
+        {
+          "id": "e5",
+          "source": "d",
+          "target": "v"
+        }
+      ],
+      "rotation": {
+        "a": [
+          "e0",
+          "e1"
+        ],
+        "d": [
+          "e4",
+          "e5"
+        ],
+        "c": [
+          "e3",
+          "e4"
+        ],
+        "b": [
+          "e1",
+          "e2"
+        ],
+        "v": [
+          "e0",
+          "e2",
+          "e3",
+          "e5"
+        ]
+      },
+      "constraints": {
+        "v": {
+          "kind": "oriented",
+          "children": [
+            "e0",
+            "e2",
+            "e3",
+            "e5"
+          ]
+        }
+      }
+    },
+    "expected": {
+      "planar": true,
+      "rotation": {
+        "a": [
+          "e0",
+          "e1"
+        ],
+        "d": [
+          "e5",
+          "e4"
+        ],
+        "c": [
+          "e3",
+          "e4"
+        ],
+        "b": [
+          "e2",
+          "e1"
+        ],
+        "v": [
+          "e3",
+          "e5",
+          "e0",
+          "e2"
+        ]
+      },
+      "edges": {
+        "e1": [
+          "a",
+          "b"
+        ],
+        "e2": [
+          "b",
+          "v"
+        ],
+        "e0": [
+          "v",
+          "a"
+        ],
+        "e4": [
+          "c",
+          "d"
+        ],
+        "e5": [
+          "d",
+          "v"
+        ],
+        "e3": [
+          "v",
+          "c"
+        ]
+      }
+    }
+  },
+  {
+    "request": {
+      "nodes": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "v"
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "source": "v",
+          "target": "a"
+        },
+        {
+          "id": "e1",
+          "source": "a",
+          "target": "b"
+        },
+        {
+          "id": "e2",
+          "source": "b",
+          "target": "v"
+        },
+        {
+          "id": "e3",
+          "source": "v",
+          "target": "c"
+        },
+        {
+          "id": "e4",
+          "source": "c",
+          "target": "d"
+        },
+        {
+          "id": "e5",
+          "source": "d",
+          "target": "v"
+        }
+      ],
+      "rotation": {
+        "a": [
+          "e0",
+          "e1"
+        ],
+        "d": [
+          "e4",
+          "e5"
+        ],
+        "c": [
+          "e3",
+          "e4"
+        ],
+        "b": [
+          "e1",
+          "e2"
+        ],
+        "v": [
+          "e0",
+          "e2",
+          "e3",
+          "e5"
+        ]
+      },
+      "constraints": {
+        "v": {
+          "kind": "oriented",
+          "children": [
+            "e0",
+            "e3",
+            "e2",
+            "e5"
+          ]
+        }
+      }
+    },
+    "expected": {
+      "planar": false
+    }
+  },
+  {
+    "request": {
+      "nodes": [
+        "a",
+        "b",
+        "c",
+        "isolated"
+      ],
+      "edges": [
+        {
+          "id": "ab",
+          "source": "a",
+          "target": "b"
+        },
+        {
+          "id": "bc",
+          "source": "b",
+          "target": "c"
+        }
+      ],
+      "rotation": {
+        "a": [
+          "ab"
+        ],
+        "b": [
+          "ab",
+          "bc"
+        ],
+        "isolated": [],
+        "c": [
+          "bc"
+        ]
+      },
+      "constraints": {
+        "b": {
+          "kind": "oriented",
+          "children": [
+            "ab",
+            "bc"
+          ]
+        }
+      }
+    },
+    "expected": {
+      "planar": true,
+      "rotation": {
+        "a": [
+          "ab"
+        ],
+        "b": [
+          "ab",
+          "bc"
+        ],
+        "isolated": [],
+        "c": [
+          "bc"
+        ]
+      },
+      "edges": {
+        "bc": [
+          "b",
+          "c"
+        ],
+        "ab": [
+          "a",
+          "b"
+        ]
+      }
+    }
+  },
+  {
+    "request": {
+      "nodes": [],
+      "edges": [],
+      "rotation": {},
+      "constraints": {}
+    },
+    "expected": {
+      "planar": true,
+      "rotation": {},
+      "edges": {}
+    }
+  },
+  {
+    "request": {
+      "nodes": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e",
+        "f"
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "source": "a",
+          "target": "b"
+        },
+        {
+          "id": "e1",
+          "source": "a",
+          "target": "c"
+        },
+        {
+          "id": "e2",
+          "source": "a",
+          "target": "d"
+        },
+        {
+          "id": "e3",
+          "source": "b",
+          "target": "c"
+        },
+        {
+          "id": "e4",
+          "source": "b",
+          "target": "d"
+        },
+        {
+          "id": "e5",
+          "source": "c",
+          "target": "d"
+        },
+        {
+          "id": "e6",
+          "source": "a",
+          "target": "e"
+        },
+        {
+          "id": "e7",
+          "source": "a",
+          "target": "f"
+        },
+        {
+          "id": "e8",
+          "source": "b",
+          "target": "e"
+        },
+        {
+          "id": "e9",
+          "source": "b",
+          "target": "f"
+        },
+        {
+          "id": "e10",
+          "source": "e",
+          "target": "f"
+        }
+      ],
+      "rotation": {
+        "a": [
+          "e0",
+          "e1",
+          "e2",
+          "e6",
+          "e7"
+        ],
+        "e": [
+          "e6",
+          "e8",
+          "e10"
+        ],
+        "d": [
+          "e2",
+          "e4",
+          "e5"
+        ],
+        "c": [
+          "e1",
+          "e3",
+          "e5"
+        ],
+        "f": [
+          "e7",
+          "e9",
+          "e10"
+        ],
+        "b": [
+          "e0",
+          "e3",
+          "e4",
+          "e8",
+          "e9"
+        ]
+      },
+      "constraints": {}
+    },
+    "expected": {
+      "planar": true,
+      "rotation": {
+        "a": [
+          "e6",
+          "e7",
+          "e2",
+          "e1",
+          "e0"
+        ],
+        "e": [
+          "e6",
+          "e8",
+          "e10"
+        ],
+        "d": [
+          "e5",
+          "e2",
+          "e4"
+        ],
+        "b": [
+          "e3",
+          "e4",
+          "e9",
+          "e8",
+          "e0"
+        ],
+        "c": [
+          "e3",
+          "e1",
+          "e5"
+        ],
+        "f": [
+          "e10",
+          "e9",
+          "e7"
+        ]
+      },
+      "edges": {
+        "e0": [
+          "a",
+          "b"
+        ],
+        "e4": [
+          "b",
+          "d"
+        ],
+        "e2": [
+          "a",
+          "d"
+        ],
+        "e5": [
+          "c",
+          "d"
+        ],
+        "e3": [
+          "b",
+          "c"
+        ],
+        "e1": [
+          "a",
+          "c"
+        ],
+        "e7": [
+          "a",
+          "f"
+        ],
+        "e10": [
+          "e",
+          "f"
+        ],
+        "e6": [
+          "a",
+          "e"
+        ],
+        "e8": [
+          "b",
+          "e"
+        ],
+        "e9": [
+          "b",
+          "f"
+        ]
+      }
+    }
+  },
+  {
+    "request": {
+      "nodes": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e",
+        "f"
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "source": "a",
+          "target": "b"
+        },
+        {
+          "id": "e1",
+          "source": "a",
+          "target": "c"
+        },
+        {
+          "id": "e2",
+          "source": "a",
+          "target": "d"
+        },
+        {
+          "id": "e3",
+          "source": "b",
+          "target": "c"
+        },
+        {
+          "id": "e4",
+          "source": "b",
+          "target": "d"
+        },
+        {
+          "id": "e5",
+          "source": "c",
+          "target": "d"
+        },
+        {
+          "id": "e6",
+          "source": "a",
+          "target": "e"
+        },
+        {
+          "id": "e7",
+          "source": "a",
+          "target": "f"
+        },
+        {
+          "id": "e8",
+          "source": "b",
+          "target": "e"
+        },
+        {
+          "id": "e9",
+          "source": "b",
+          "target": "f"
+        },
+        {
+          "id": "e10",
+          "source": "e",
+          "target": "f"
+        }
+      ],
+      "rotation": {
+        "a": [
+          "e0",
+          "e1",
+          "e2",
+          "e6",
+          "e7"
+        ],
+        "e": [
+          "e6",
+          "e8",
+          "e10"
+        ],
+        "d": [
+          "e2",
+          "e4",
+          "e5"
+        ],
+        "c": [
+          "e1",
+          "e3",
+          "e5"
+        ],
+        "f": [
+          "e7",
+          "e9",
+          "e10"
+        ],
+        "b": [
+          "e0",
+          "e3",
+          "e4",
+          "e8",
+          "e9"
+        ]
+      },
+      "constraints": {
+        "c": {
+          "kind": "oriented",
+          "children": [
+            "e3",
+            "e1",
+            "e5"
+          ]
+        },
+        "e": {
+          "kind": "oriented",
+          "children": [
+            "e10",
+            "e8",
+            "e6"
+          ]
+        }
+      }
+    },
+    "expected": {
+      "planar": true,
+      "rotation": {
+        "a": [
+          "e1",
+          "e7",
+          "e6",
+          "e0",
+          "e2"
+        ],
+        "d": [
+          "e4",
+          "e5",
+          "e2"
+        ],
+        "b": [
+          "e4",
+          "e0",
+          "e8",
+          "e9",
+          "e3"
+        ],
+        "c": [
+          "e1",
+          "e5",
+          "e3"
+        ],
+        "f": [
+          "e10",
+          "e7",
+          "e9"
+        ],
+        "e": [
+          "e8",
+          "e6",
+          "e10"
+        ]
+      },
+      "edges": {
+        "e3": [
+          "b",
+          "c"
+        ],
+        "e2": [
+          "a",
+          "d"
+        ],
+        "e4": [
+          "b",
+          "d"
+        ],
+        "e5": [
+          "c",
+          "d"
+        ],
+        "e1": [
+          "a",
+          "c"
+        ],
+        "e0": [
+          "a",
+          "b"
+        ],
+        "e9": [
+          "b",
+          "f"
+        ],
+        "e10": [
+          "e",
+          "f"
+        ],
+        "e8": [
+          "b",
+          "e"
+        ],
+        "e6": [
+          "a",
+          "e"
+        ],
+        "e7": [
+          "a",
+          "f"
+        ]
+      }
+    }
+  },
+  {
+    "request": {
+      "nodes": [
+        "a",
+        "b",
+        "c",
+        "d"
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "source": "a",
+          "target": "b"
+        },
+        {
+          "id": "e1",
+          "source": "a",
+          "target": "c"
+        },
+        {
+          "id": "e2",
+          "source": "a",
+          "target": "d"
+        },
+        {
+          "id": "e3",
+          "source": "b",
+          "target": "c"
+        },
+        {
+          "id": "e4",
+          "source": "b",
+          "target": "d"
+        },
+        {
+          "id": "e5",
+          "source": "c",
+          "target": "d"
+        }
+      ],
+      "rotation": {
+        "a": [
+          "e0",
+          "e1",
+          "e2"
+        ],
+        "b": [
+          "e0",
+          "e3",
+          "e4"
+        ],
+        "d": [
+          "e2",
+          "e4",
+          "e5"
+        ],
+        "c": [
+          "e1",
+          "e3",
+          "e5"
+        ]
+      },
+      "constraints": {
+        "a": {
+          "kind": "oriented",
+          "children": [
+            "e0",
+            "e1",
+            "e2"
+          ]
+        },
+        "b": {
+          "kind": "mirror",
+          "children": [
+            "e3",
+            "e4",
+            "e0"
+          ]
+        }
+      }
+    },
+    "expected": {
+      "planar": true,
+      "rotation": {
+        "a": [
+          "e0",
+          "e1",
+          "e2"
+        ],
+        "b": [
+          "e0",
+          "e4",
+          "e3"
+        ],
+        "d": [
+          "e5",
+          "e4",
+          "e2"
+        ],
+        "c": [
+          "e1",
+          "e3",
+          "e5"
+        ]
+      },
+      "edges": {
+        "e2": [
+          "a",
+          "d"
+        ],
+        "e5": [
+          "c",
+          "d"
+        ],
+        "e3": [
+          "b",
+          "c"
+        ],
+        "e4": [
+          "b",
+          "d"
+        ],
+        "e0": [
+          "a",
+          "b"
+        ],
+        "e1": [
+          "a",
+          "c"
+        ]
+      }
+    }
+  },
+  {
+    "request": {
+      "nodes": [
+        "a",
+        "b"
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "source": "a",
+          "target": "b"
+        },
+        {
+          "id": "e1",
+          "source": "a",
+          "target": "b"
+        },
+        {
+          "id": "e2",
+          "source": "a",
+          "target": "b"
+        },
+        {
+          "id": "e3",
+          "source": "a",
+          "target": "b"
+        },
+        {
+          "id": "e4",
+          "source": "a",
+          "target": "b"
+        }
+      ],
+      "rotation": {
+        "a": [
+          "e0",
+          "e1",
+          "e2",
+          "e3",
+          "e4"
+        ],
+        "b": [
+          "e0",
+          "e1",
+          "e2",
+          "e3",
+          "e4"
+        ]
+      },
+      "constraints": {
+        "a": {
+          "kind": "oriented",
+          "children": [
+            {
+              "kind": "group",
+              "children": [
+                "e0",
+                "e1"
+              ]
+            },
+            {
+              "kind": "mirror",
+              "children": [
+                "e2",
+                "e3"
+              ]
+            },
+            "e4"
+          ]
+        },
+        "b": {
+          "kind": "oriented",
+          "children": [
+            "e4",
+            "e3",
+            "e2",
+            "e1",
+            "e0"
+          ]
+        }
+      }
+    },
+    "expected": {
+      "planar": true,
+      "rotation": {
+        "a": [
+          "e0",
+          "e1",
+          "e2",
+          "e3",
+          "e4"
+        ],
+        "b": [
+          "e3",
+          "e2",
+          "e1",
+          "e0",
+          "e4"
+        ]
+      },
+      "edges": {
+        "e4": [
+          "a",
+          "b"
+        ],
+        "e2": [
+          "a",
+          "b"
+        ],
+        "e3": [
+          "a",
+          "b"
+        ],
+        "e1": [
+          "a",
+          "b"
+        ],
+        "e0": [
+          "a",
+          "b"
+        ]
+      }
+    }
+  },
+  {
+    "request": {
+      "nodes": [
+        "a",
+        "b",
+        "c",
+        "d"
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "source": "a",
+          "target": "b"
+        },
+        {
+          "id": "e1",
+          "source": "a",
+          "target": "c"
+        },
+        {
+          "id": "e2",
+          "source": "a",
+          "target": "d"
+        },
+        {
+          "id": "e3",
+          "source": "b",
+          "target": "c"
+        },
+        {
+          "id": "e4",
+          "source": "b",
+          "target": "d"
+        },
+        {
+          "id": "e5",
+          "source": "c",
+          "target": "d"
+        }
+      ],
+      "rotation": {
+        "a": [
+          "e0",
+          "e1",
+          "e2"
+        ],
+        "b": [
+          "e0",
+          "e3",
+          "e4"
+        ],
+        "d": [
+          "e2",
+          "e4",
+          "e5"
+        ],
+        "c": [
+          "e1",
+          "e3",
+          "e5"
+        ]
+      },
+      "constraints": {
+        "a": {
+          "kind": "oriented",
+          "children": [
+            "e0",
+            "e1",
+            "e2"
+          ]
+        },
+        "b": {
+          "kind": "oriented",
+          "children": [
+            "e0",
+            "e4",
+            "e3"
+          ]
+        }
+      }
+    },
+    "expected": {
+      "planar": true,
+      "rotation": {
+        "a": [
+          "e0",
+          "e1",
+          "e2"
+        ],
+        "b": [
+          "e0",
+          "e4",
+          "e3"
+        ],
+        "d": [
+          "e5",
+          "e4",
+          "e2"
+        ],
+        "c": [
+          "e1",
+          "e3",
+          "e5"
+        ]
+      },
+      "edges": {
+        "e2": [
+          "a",
+          "d"
+        ],
+        "e5": [
+          "c",
+          "d"
+        ],
+        "e3": [
+          "b",
+          "c"
+        ],
+        "e4": [
+          "b",
+          "d"
+        ],
+        "e0": [
+          "a",
+          "b"
+        ],
+        "e1": [
+          "a",
+          "c"
+        ]
+      }
+    }
+  },
+  {
+    "request": {
+      "nodes": [
+        "a",
+        "b",
+        "c",
+        "d"
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "source": "a",
+          "target": "b"
+        },
+        {
+          "id": "e1",
+          "source": "a",
+          "target": "c"
+        },
+        {
+          "id": "e2",
+          "source": "a",
+          "target": "d"
+        },
+        {
+          "id": "e3",
+          "source": "b",
+          "target": "c"
+        },
+        {
+          "id": "e4",
+          "source": "b",
+          "target": "d"
+        },
+        {
+          "id": "e5",
+          "source": "c",
+          "target": "d"
+        }
+      ],
+      "rotation": {
+        "a": [
+          "e0",
+          "e1",
+          "e2"
+        ],
+        "b": [
+          "e0",
+          "e3",
+          "e4"
+        ],
+        "d": [
+          "e2",
+          "e4",
+          "e5"
+        ],
+        "c": [
+          "e1",
+          "e3",
+          "e5"
+        ]
+      },
+      "constraints": {
+        "a": {
+          "kind": "oriented",
+          "children": [
+            "e0",
+            "e1",
+            "e2"
+          ]
+        },
+        "b": {
+          "kind": "oriented",
+          "children": [
+            "e3",
+            "e4",
+            "e0"
+          ]
+        }
+      }
+    },
+    "expected": {
+      "planar": false
+    }
+  },
+  {
+    "request": {
+      "nodes": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e"
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "source": "a",
+          "target": "b"
+        },
+        {
+          "id": "e1",
+          "source": "c",
+          "target": "d"
+        },
+        {
+          "id": "e2",
+          "source": "b",
+          "target": "e"
+        },
+        {
+          "id": "e3",
+          "source": "a",
+          "target": "d"
+        },
+        {
+          "id": "e4",
+          "source": "b",
+          "target": "c"
+        },
+        {
+          "id": "e5",
+          "source": "d",
+          "target": "e"
+        },
+        {
+          "id": "e6",
+          "source": "a",
+          "target": "e"
+        },
+        {
+          "id": "e7",
+          "source": "b",
+          "target": "d"
+        }
+      ],
+      "rotation": {
+        "a": [
+          "e0",
+          "e3",
+          "e6"
+        ],
+        "e": [
+          "e2",
+          "e5",
+          "e6"
+        ],
+        "d": [
+          "e1",
+          "e3",
+          "e5",
+          "e7"
+        ],
+        "c": [
+          "e1",
+          "e4"
+        ],
+        "b": [
+          "e0",
+          "e2",
+          "e4",
+          "e7"
+        ]
+      },
+      "constraints": {
+        "a": {
+          "kind": "mirror",
+          "children": [
+            "e6",
+            "e3",
+            "e0"
+          ]
+        },
+        "b": {
+          "kind": "mirror",
+          "children": [
+            "e4",
+            "e7",
+            "e2",
+            "e0"
+          ]
+        },
+        "e": {
+          "kind": "oriented",
+          "children": [
+            "e6",
+            "e2",
+            "e5"
+          ]
+        }
+      }
+    },
+    "expected": {
+      "planar": true,
+      "rotation": {
+        "a": [
+          "e0",
+          "e6",
+          "e3"
+        ],
+        "e": [
+          "e5",
+          "e6",
+          "e2"
+        ],
+        "d": [
+          "e5",
+          "e7",
+          "e1",
+          "e3"
+        ],
+        "c": [
+          "e1",
+          "e4"
+        ],
+        "b": [
+          "e2",
+          "e0",
+          "e4",
+          "e7"
+        ]
+      },
+      "edges": {
+        "e3": [
+          "a",
+          "d"
+        ],
+        "e7": [
+          "b",
+          "d"
+        ],
+        "e2": [
+          "b",
+          "e"
+        ],
+        "e5": [
+          "d",
+          "e"
+        ],
+        "e6": [
+          "a",
+          "e"
+        ],
+        "e0": [
+          "a",
+          "b"
+        ],
+        "e4": [
+          "b",
+          "c"
+        ],
+        "e1": [
+          "c",
+          "d"
+        ]
+      }
+    }
+  },
+  {
+    "request": {
+      "nodes": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e"
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "source": "a",
+          "target": "e"
+        },
+        {
+          "id": "e1",
+          "source": "c",
+          "target": "e"
+        },
+        {
+          "id": "e2",
+          "source": "d",
+          "target": "e"
+        },
+        {
+          "id": "e3",
+          "source": "a",
+          "target": "c"
+        },
+        {
+          "id": "e4",
+          "source": "a",
+          "target": "b"
+        },
+        {
+          "id": "e5",
+          "source": "b",
+          "target": "e"
+        },
+        {
+          "id": "e6",
+          "source": "b",
+          "target": "d"
+        }
+      ],
+      "rotation": {
+        "a": [
+          "e0",
+          "e3",
+          "e4"
+        ],
+        "d": [
+          "e2",
+          "e6"
+        ],
+        "b": [
+          "e4",
+          "e5",
+          "e6"
+        ],
+        "c": [
+          "e1",
+          "e3"
+        ],
+        "e": [
+          "e0",
+          "e1",
+          "e2",
+          "e5"
+        ]
+      },
+      "constraints": {
+        "b": {
+          "kind": "mirror",
+          "children": [
+            "e6",
+            "e5",
+            "e4"
+          ]
+        }
+      }
+    },
+    "expected": {
+      "planar": true,
+      "rotation": {
+        "a": [
+          "e0",
+          "e3",
+          "e4"
+        ],
+        "e": [
+          "e1",
+          "e0",
+          "e2",
+          "e5"
+        ],
+        "d": [
+          "e6",
+          "e2"
+        ],
+        "c": [
+          "e1",
+          "e3"
+        ],
+        "b": [
+          "e6",
+          "e4",
+          "e5"
+        ]
+      },
+      "edges": {
+        "e5": [
+          "b",
+          "e"
+        ],
+        "e4": [
+          "a",
+          "b"
+        ],
+        "e0": [
+          "a",
+          "e"
+        ],
+        "e3": [
+          "a",
+          "c"
+        ],
+        "e1": [
+          "c",
+          "e"
+        ],
+        "e2": [
+          "d",
+          "e"
+        ],
+        "e6": [
+          "b",
+          "d"
+        ]
+      }
+    }
+  },
+  {
+    "request": {
+      "nodes": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e"
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "source": "d",
+          "target": "e"
+        },
+        {
+          "id": "e1",
+          "source": "a",
+          "target": "b"
+        },
+        {
+          "id": "e2",
+          "source": "a",
+          "target": "e"
+        },
+        {
+          "id": "e3",
+          "source": "a",
+          "target": "d"
+        },
+        {
+          "id": "e4",
+          "source": "b",
+          "target": "d"
+        },
+        {
+          "id": "e5",
+          "source": "b",
+          "target": "c"
+        },
+        {
+          "id": "e6",
+          "source": "a",
+          "target": "c"
+        },
+        {
+          "id": "e7",
+          "source": "b",
+          "target": "e"
+        }
+      ],
+      "rotation": {
+        "a": [
+          "e1",
+          "e2",
+          "e3",
+          "e6"
+        ],
+        "d": [
+          "e0",
+          "e3",
+          "e4"
+        ],
+        "b": [
+          "e1",
+          "e4",
+          "e5",
+          "e7"
+        ],
+        "c": [
+          "e5",
+          "e6"
+        ],
+        "e": [
+          "e0",
+          "e2",
+          "e7"
+        ]
+      },
+      "constraints": {
+        "b": {
+          "kind": "group",
+          "children": [
+            "e7",
+            "e1",
+            "e4",
+            "e5"
+          ]
+        },
+        "d": {
+          "kind": "group",
+          "children": [
+            "e4",
+            "e3",
+            "e0"
+          ]
+        }
+      }
+    },
+    "expected": {
+      "planar": true,
+      "rotation": {
+        "a": [
+          "e6",
+          "e1",
+          "e3",
+          "e2"
+        ],
+        "d": [
+          "e3",
+          "e4",
+          "e0"
+        ],
+        "b": [
+          "e4",
+          "e1",
+          "e5",
+          "e7"
+        ],
+        "c": [
+          "e6",
+          "e5"
+        ],
+        "e": [
+          "e0",
+          "e7",
+          "e2"
+        ]
+      },
+      "edges": {
+        "e2": [
+          "a",
+          "e"
+        ],
+        "e7": [
+          "b",
+          "e"
+        ],
+        "e0": [
+          "d",
+          "e"
+        ],
+        "e3": [
+          "a",
+          "d"
+        ],
+        "e4": [
+          "b",
+          "d"
+        ],
+        "e1": [
+          "a",
+          "b"
+        ],
+        "e5": [
+          "b",
+          "c"
+        ],
+        "e6": [
+          "a",
+          "c"
+        ]
+      }
+    }
+  },
+  {
+    "request": {
+      "nodes": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e"
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "source": "a",
+          "target": "d"
+        },
+        {
+          "id": "e1",
+          "source": "b",
+          "target": "e"
+        },
+        {
+          "id": "e2",
+          "source": "c",
+          "target": "d"
+        },
+        {
+          "id": "e3",
+          "source": "a",
+          "target": "c"
+        },
+        {
+          "id": "e4",
+          "source": "b",
+          "target": "d"
+        }
+      ],
+      "rotation": {
+        "a": [
+          "e0",
+          "e3"
+        ],
+        "e": [
+          "e1"
+        ],
+        "d": [
+          "e0",
+          "e2",
+          "e4"
+        ],
+        "c": [
+          "e2",
+          "e3"
+        ],
+        "b": [
+          "e1",
+          "e4"
+        ]
+      },
+      "constraints": {
+        "a": {
+          "kind": "oriented",
+          "children": [
+            "e3",
+            "e0"
+          ]
+        },
+        "b": {
+          "kind": "mirror",
+          "children": [
+            "e1",
+            "e4"
+          ]
+        }
+      }
+    },
+    "expected": {
+      "planar": true,
+      "rotation": {
+        "a": [
+          "e0",
+          "e3"
+        ],
+        "e": [
+          "e1"
+        ],
+        "d": [
+          "e2",
+          "e0",
+          "e4"
+        ],
+        "c": [
+          "e3",
+          "e2"
+        ],
+        "b": [
+          "e4",
+          "e1"
+        ]
+      },
+      "edges": {
+        "e1": [
+          "b",
+          "e"
+        ],
+        "e4": [
+          "b",
+          "d"
+        ],
+        "e2": [
+          "c",
+          "d"
+        ],
+        "e3": [
+          "a",
+          "c"
+        ],
+        "e0": [
+          "a",
+          "d"
+        ]
+      }
+    }
+  },
+  {
+    "request": {
+      "nodes": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e"
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "source": "a",
+          "target": "c"
+        },
+        {
+          "id": "e1",
+          "source": "d",
+          "target": "e"
+        },
+        {
+          "id": "e2",
+          "source": "c",
+          "target": "e"
+        },
+        {
+          "id": "e3",
+          "source": "b",
+          "target": "d"
+        }
+      ],
+      "rotation": {
+        "a": [
+          "e0"
+        ],
+        "d": [
+          "e1",
+          "e3"
+        ],
+        "b": [
+          "e3"
+        ],
+        "c": [
+          "e0",
+          "e2"
+        ],
+        "e": [
+          "e1",
+          "e2"
+        ]
+      },
+      "constraints": {
+        "c": {
+          "kind": "mirror",
+          "children": [
+            "e0",
+            "e2"
+          ]
+        },
+        "d": {
+          "kind": "mirror",
+          "children": [
+            "e3",
+            "e1"
+          ]
+        },
+        "e": {
+          "kind": "group",
+          "children": [
+            "e2",
+            "e1"
+          ]
+        }
+      }
+    },
+    "expected": {
+      "planar": true,
+      "rotation": {
+        "a": [
+          "e0"
+        ],
+        "d": [
+          "e1",
+          "e3"
+        ],
+        "b": [
+          "e3"
+        ],
+        "c": [
+          "e0",
+          "e2"
+        ],
+        "e": [
+          "e2",
+          "e1"
+        ]
+      },
+      "edges": {
+        "e3": [
+          "b",
+          "d"
+        ],
+        "e1": [
+          "d",
+          "e"
+        ],
+        "e2": [
+          "c",
+          "e"
+        ],
+        "e0": [
+          "a",
+          "c"
+        ]
+      }
+    }
+  },
+  {
+    "request": {
+      "nodes": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e"
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "source": "a",
+          "target": "b"
+        },
+        {
+          "id": "e1",
+          "source": "c",
+          "target": "e"
+        },
+        {
+          "id": "e2",
+          "source": "a",
+          "target": "d"
+        },
+        {
+          "id": "e3",
+          "source": "b",
+          "target": "d"
+        },
+        {
+          "id": "e4",
+          "source": "b",
+          "target": "e"
+        },
+        {
+          "id": "e5",
+          "source": "a",
+          "target": "e"
+        }
+      ],
+      "rotation": {
+        "a": [
+          "e0",
+          "e2",
+          "e5"
+        ],
+        "e": [
+          "e1",
+          "e4",
+          "e5"
+        ],
+        "d": [
+          "e2",
+          "e3"
+        ],
+        "c": [
+          "e1"
+        ],
+        "b": [
+          "e0",
+          "e3",
+          "e4"
+        ]
+      },
+      "constraints": {
+        "d": {
+          "kind": "group",
+          "children": [
+            "e2",
+            "e3"
+          ]
+        }
+      }
+    },
+    "expected": {
+      "planar": true,
+      "rotation": {
+        "a": [
+          "e2",
+          "e5",
+          "e0"
+        ],
+        "e": [
+          "e5",
+          "e4",
+          "e1"
+        ],
+        "d": [
+          "e2",
+          "e3"
+        ],
+        "c": [
+          "e1"
+        ],
+        "b": [
+          "e4",
+          "e3",
+          "e0"
+        ]
+      },
+      "edges": {
+        "e1": [
+          "c",
+          "e"
+        ],
+        "e0": [
+          "a",
+          "b"
+        ],
+        "e4": [
+          "b",
+          "e"
+        ],
+        "e5": [
+          "a",
+          "e"
+        ],
+        "e3": [
+          "b",
+          "d"
+        ],
+        "e2": [
+          "a",
+          "d"
+        ]
+      }
+    }
+  },
+  {
+    "request": {
+      "nodes": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e"
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "source": "b",
+          "target": "d"
+        },
+        {
+          "id": "e1",
+          "source": "b",
+          "target": "e"
+        },
+        {
+          "id": "e2",
+          "source": "a",
+          "target": "b"
+        },
+        {
+          "id": "e3",
+          "source": "a",
+          "target": "d"
+        },
+        {
+          "id": "e4",
+          "source": "a",
+          "target": "c"
+        }
+      ],
+      "rotation": {
+        "a": [
+          "e2",
+          "e3",
+          "e4"
+        ],
+        "e": [
+          "e1"
+        ],
+        "d": [
+          "e0",
+          "e3"
+        ],
+        "c": [
+          "e4"
+        ],
+        "b": [
+          "e0",
+          "e1",
+          "e2"
+        ]
+      },
+      "constraints": {
+        "a": {
+          "kind": "oriented",
+          "children": [
+            "e3",
+            "e4",
+            "e2"
+          ]
+        },
+        "b": {
+          "kind": "oriented",
+          "children": [
+            "e0",
+            "e2",
+            "e1"
+          ]
+        },
+        "d": {
+          "kind": "mirror",
+          "children": [
+            "e0",
+            "e3"
+          ]
+        }
+      }
+    },
+    "expected": {
+      "planar": true,
+      "rotation": {
+        "a": [
+          "e3",
+          "e4",
+          "e2"
+        ],
+        "e": [
+          "e1"
+        ],
+        "d": [
+          "e3",
+          "e0"
+        ],
+        "c": [
+          "e4"
+        ],
+        "b": [
+          "e0",
+          "e2",
+          "e1"
+        ]
+      },
+      "edges": {
+        "e1": [
+          "b",
+          "e"
+        ],
+        "e2": [
+          "a",
+          "b"
+        ],
+        "e0": [
+          "b",
+          "d"
+        ],
+        "e3": [
+          "a",
+          "d"
+        ],
+        "e4": [
+          "a",
+          "c"
+        ]
+      }
+    }
+  },
+  {
+    "request": {
+      "nodes": [
+        "a",
+        "b",
+        "c",
+        "d"
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "source": "b",
+          "target": "d"
+        },
+        {
+          "id": "e1",
+          "source": "b",
+          "target": "c"
+        },
+        {
+          "id": "e2",
+          "source": "a",
+          "target": "d"
+        },
+        {
+          "id": "e3",
+          "source": "a",
+          "target": "c"
+        }
+      ],
+      "rotation": {
+        "a": [
+          "e2",
+          "e3"
+        ],
+        "b": [
+          "e0",
+          "e1"
+        ],
+        "d": [
+          "e0",
+          "e2"
+        ],
+        "c": [
+          "e1",
+          "e3"
+        ]
+      },
+      "constraints": {
+        "a": {
+          "kind": "oriented",
+          "children": [
+            "e3",
+            "e2"
+          ]
+        },
+        "b": {
+          "kind": "mirror",
+          "children": [
+            "e0",
+            "e1"
+          ]
+        },
+        "c": {
+          "kind": "group",
+          "children": [
+            "e1",
+            "e3"
+          ]
+        },
+        "d": {
+          "kind": "mirror",
+          "children": [
+            "e2",
+            "e0"
+          ]
+        }
+      }
+    },
+    "expected": {
+      "planar": true,
+      "rotation": {
+        "a": [
+          "e2",
+          "e3"
+        ],
+        "b": [
+          "e1",
+          "e0"
+        ],
+        "d": [
+          "e0",
+          "e2"
+        ],
+        "c": [
+          "e1",
+          "e3"
+        ]
+      },
+      "edges": {
+        "e3": [
+          "a",
+          "c"
+        ],
+        "e2": [
+          "a",
+          "d"
+        ],
+        "e0": [
+          "b",
+          "d"
+        ],
+        "e1": [
+          "b",
+          "c"
+        ]
+      }
+    }
+  },
+  {
+    "request": {
+      "nodes": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e"
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "source": "a",
+          "target": "d"
+        },
+        {
+          "id": "e1",
+          "source": "d",
+          "target": "e"
+        },
+        {
+          "id": "e2",
+          "source": "a",
+          "target": "e"
+        },
+        {
+          "id": "e3",
+          "source": "c",
+          "target": "d"
+        },
+        {
+          "id": "e4",
+          "source": "b",
+          "target": "c"
+        },
+        {
+          "id": "e5",
+          "source": "b",
+          "target": "e"
+        },
+        {
+          "id": "e6",
+          "source": "b",
+          "target": "d"
+        },
+        {
+          "id": "e7",
+          "source": "a",
+          "target": "c"
+        }
+      ],
+      "rotation": {
+        "a": [
+          "e0",
+          "e2",
+          "e7"
+        ],
+        "d": [
+          "e0",
+          "e1",
+          "e3",
+          "e6"
+        ],
+        "b": [
+          "e4",
+          "e5",
+          "e6"
+        ],
+        "c": [
+          "e3",
+          "e4",
+          "e7"
+        ],
+        "e": [
+          "e1",
+          "e2",
+          "e5"
+        ]
+      },
+      "constraints": {
+        "d": {
+          "kind": "group",
+          "children": [
+            "e1",
+            "e0",
+            "e6",
+            "e3"
+          ]
+        },
+        "e": {
+          "kind": "group",
+          "children": [
+            "e5",
+            "e2",
+            "e1"
+          ]
+        }
+      }
+    },
+    "expected": {
+      "planar": true,
+      "rotation": {
+        "a": [
+          "e0",
+          "e2",
+          "e7"
+        ],
+        "e": [
+          "e1",
+          "e5",
+          "e2"
+        ],
+        "d": [
+          "e6",
+          "e1",
+          "e0",
+          "e3"
+        ],
+        "c": [
+          "e7",
+          "e4",
+          "e3"
+        ],
+        "b": [
+          "e6",
+          "e4",
+          "e5"
+        ]
+      },
+      "edges": {
+        "e3": [
+          "c",
+          "d"
+        ],
+        "e7": [
+          "a",
+          "c"
+        ],
+        "e0": [
+          "a",
+          "d"
+        ],
+        "e2": [
+          "a",
+          "e"
+        ],
+        "e1": [
+          "d",
+          "e"
+        ],
+        "e5": [
+          "b",
+          "e"
+        ],
+        "e4": [
+          "b",
+          "c"
+        ],
+        "e6": [
+          "b",
+          "d"
+        ]
+      }
+    }
+  },
+  {
+    "request": {
+      "nodes": [
+        "b",
+        "c",
+        "d",
+        "e"
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "source": "b",
+          "target": "c"
+        },
+        {
+          "id": "e1",
+          "source": "c",
+          "target": "e"
+        },
+        {
+          "id": "e2",
+          "source": "b",
+          "target": "d"
+        },
+        {
+          "id": "e3",
+          "source": "b",
+          "target": "e"
+        }
+      ],
+      "rotation": {
+        "b": [
+          "e0",
+          "e2",
+          "e3"
+        ],
+        "e": [
+          "e1",
+          "e3"
+        ],
+        "d": [
+          "e2"
+        ],
+        "c": [
+          "e0",
+          "e1"
+        ]
+      },
+      "constraints": {
+        "b": {
+          "kind": "oriented",
+          "children": [
+            "e2",
+            "e0",
+            "e3"
+          ]
+        },
+        "e": {
+          "kind": "oriented",
+          "children": [
+            "e1",
+            "e3"
+          ]
+        }
+      }
+    },
+    "expected": {
+      "planar": true,
+      "rotation": {
+        "e": [
+          "e1",
+          "e3"
+        ],
+        "d": [
+          "e2"
+        ],
+        "b": [
+          "e0",
+          "e3",
+          "e2"
+        ],
+        "c": [
+          "e0",
+          "e1"
+        ]
+      },
+      "edges": {
+        "e2": [
+          "b",
+          "d"
+        ],
+        "e3": [
+          "b",
+          "e"
+        ],
+        "e1": [
+          "c",
+          "e"
+        ],
+        "e0": [
+          "b",
+          "c"
+        ]
+      }
+    }
+  },
+  {
+    "request": {
+      "nodes": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e"
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "source": "b",
+          "target": "d"
+        },
+        {
+          "id": "e1",
+          "source": "b",
+          "target": "c"
+        },
+        {
+          "id": "e2",
+          "source": "a",
+          "target": "b"
+        },
+        {
+          "id": "e3",
+          "source": "d",
+          "target": "e"
+        },
+        {
+          "id": "e4",
+          "source": "b",
+          "target": "e"
+        },
+        {
+          "id": "e5",
+          "source": "a",
+          "target": "e"
+        }
+      ],
+      "rotation": {
+        "a": [
+          "e2",
+          "e5"
+        ],
+        "e": [
+          "e3",
+          "e4",
+          "e5"
+        ],
+        "d": [
+          "e0",
+          "e3"
+        ],
+        "c": [
+          "e1"
+        ],
+        "b": [
+          "e0",
+          "e1",
+          "e2",
+          "e4"
+        ]
+      },
+      "constraints": {
+        "a": {
+          "kind": "group",
+          "children": [
+            "e2",
+            "e5"
+          ]
+        },
+        "b": {
+          "kind": "group",
+          "children": [
+            "e0",
+            "e2",
+            "e1",
+            "e4"
+          ]
+        },
+        "e": {
+          "kind": "mirror",
+          "children": [
+            "e4",
+            "e5",
+            "e3"
+          ]
+        }
+      }
+    },
+    "expected": {
+      "planar": true,
+      "rotation": {
+        "a": [
+          "e2",
+          "e5"
+        ],
+        "e": [
+          "e3",
+          "e5",
+          "e4"
+        ],
+        "d": [
+          "e3",
+          "e0"
+        ],
+        "c": [
+          "e1"
+        ],
+        "b": [
+          "e2",
+          "e0",
+          "e4",
+          "e1"
+        ]
+      },
+      "edges": {
+        "e1": [
+          "b",
+          "c"
+        ],
+        "e4": [
+          "b",
+          "e"
+        ],
+        "e0": [
+          "b",
+          "d"
+        ],
+        "e3": [
+          "d",
+          "e"
+        ],
+        "e5": [
+          "a",
+          "e"
+        ],
+        "e2": [
+          "a",
+          "b"
+        ]
+      }
+    }
+  },
+  {
+    "request": {
+      "nodes": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e"
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "source": "c",
+          "target": "e"
+        },
+        {
+          "id": "e1",
+          "source": "b",
+          "target": "c"
+        },
+        {
+          "id": "e2",
+          "source": "a",
+          "target": "b"
+        },
+        {
+          "id": "e3",
+          "source": "a",
+          "target": "d"
+        },
+        {
+          "id": "e4",
+          "source": "a",
+          "target": "c"
+        },
+        {
+          "id": "e5",
+          "source": "a",
+          "target": "e"
+        }
+      ],
+      "rotation": {
+        "a": [
+          "e2",
+          "e3",
+          "e4",
+          "e5"
+        ],
+        "d": [
+          "e3"
+        ],
+        "b": [
+          "e1",
+          "e2"
+        ],
+        "c": [
+          "e0",
+          "e1",
+          "e4"
+        ],
+        "e": [
+          "e0",
+          "e5"
+        ]
+      },
+      "constraints": {
+        "a": {
+          "kind": "mirror",
+          "children": [
+            "e3",
+            "e4",
+            "e2",
+            "e5"
+          ]
+        },
+        "c": {
+          "kind": "group",
+          "children": [
+            "e1",
+            "e4",
+            "e0"
+          ]
+        },
+        "e": {
+          "kind": "group",
+          "children": [
+            "e0",
+            "e5"
+          ]
+        }
+      }
+    },
+    "expected": {
+      "planar": true,
+      "rotation": {
+        "a": [
+          "e5",
+          "e2",
+          "e4",
+          "e3"
+        ],
+        "d": [
+          "e3"
+        ],
+        "b": [
+          "e2",
+          "e1"
+        ],
+        "c": [
+          "e1",
+          "e0",
+          "e4"
+        ],
+        "e": [
+          "e0",
+          "e5"
+        ]
+      },
+      "edges": {
+        "e3": [
+          "a",
+          "d"
+        ],
+        "e4": [
+          "a",
+          "c"
+        ],
+        "e5": [
+          "a",
+          "e"
+        ],
+        "e0": [
+          "c",
+          "e"
+        ],
+        "e1": [
+          "b",
+          "c"
+        ],
+        "e2": [
+          "a",
+          "b"
+        ]
+      }
+    }
+  },
+  {
+    "request": {
+      "nodes": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e"
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "source": "a",
+          "target": "b"
+        },
+        {
+          "id": "e1",
+          "source": "d",
+          "target": "e"
+        },
+        {
+          "id": "e2",
+          "source": "b",
+          "target": "c"
+        },
+        {
+          "id": "e3",
+          "source": "c",
+          "target": "d"
+        },
+        {
+          "id": "e4",
+          "source": "a",
+          "target": "e"
+        },
+        {
+          "id": "e5",
+          "source": "b",
+          "target": "e"
+        },
+        {
+          "id": "e6",
+          "source": "a",
+          "target": "c"
+        },
+        {
+          "id": "e7",
+          "source": "a",
+          "target": "d"
+        }
+      ],
+      "rotation": {
+        "a": [
+          "e0",
+          "e4",
+          "e6",
+          "e7"
+        ],
+        "e": [
+          "e1",
+          "e4",
+          "e5"
+        ],
+        "d": [
+          "e1",
+          "e3",
+          "e7"
+        ],
+        "c": [
+          "e2",
+          "e3",
+          "e6"
+        ],
+        "b": [
+          "e0",
+          "e2",
+          "e5"
+        ]
+      },
+      "constraints": {
+        "b": {
+          "kind": "mirror",
+          "children": [
+            "e2",
+            "e5",
+            "e0"
+          ]
+        },
+        "c": {
+          "kind": "group",
+          "children": [
+            "e6",
+            "e3",
+            "e2"
+          ]
+        },
+        "e": {
+          "kind": "mirror",
+          "children": [
+            "e5",
+            "e1",
+            "e4"
+          ]
+        }
+      }
+    },
+    "expected": {
+      "planar": true,
+      "rotation": {
+        "a": [
+          "e4",
+          "e0",
+          "e6",
+          "e7"
+        ],
+        "d": [
+          "e1",
+          "e7",
+          "e3"
+        ],
+        "b": [
+          "e5",
+          "e2",
+          "e0"
+        ],
+        "c": [
+          "e6",
+          "e2",
+          "e3"
+        ],
+        "e": [
+          "e4",
+          "e1",
+          "e5"
+        ]
+      },
+      "edges": {
+        "e3": [
+          "c",
+          "d"
+        ],
+        "e7": [
+          "a",
+          "d"
+        ],
+        "e6": [
+          "a",
+          "c"
+        ],
+        "e0": [
+          "a",
+          "b"
+        ],
+        "e5": [
+          "b",
+          "e"
+        ],
+        "e4": [
+          "a",
+          "e"
+        ],
+        "e1": [
+          "d",
+          "e"
+        ],
+        "e2": [
+          "b",
+          "c"
+        ]
+      }
+    }
+  },
+  {
+    "request": {
+      "nodes": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e"
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "source": "d",
+          "target": "e"
+        },
+        {
+          "id": "e1",
+          "source": "b",
+          "target": "e"
+        },
+        {
+          "id": "e2",
+          "source": "a",
+          "target": "b"
+        },
+        {
+          "id": "e3",
+          "source": "c",
+          "target": "e"
+        },
+        {
+          "id": "e4",
+          "source": "a",
+          "target": "d"
+        },
+        {
+          "id": "e5",
+          "source": "b",
+          "target": "d"
+        },
+        {
+          "id": "e6",
+          "source": "a",
+          "target": "c"
+        }
+      ],
+      "rotation": {
+        "a": [
+          "e2",
+          "e4",
+          "e6"
+        ],
+        "d": [
+          "e0",
+          "e4",
+          "e5"
+        ],
+        "b": [
+          "e1",
+          "e2",
+          "e5"
+        ],
+        "c": [
+          "e3",
+          "e6"
+        ],
+        "e": [
+          "e0",
+          "e1",
+          "e3"
+        ]
+      },
+      "constraints": {
+        "c": {
+          "kind": "oriented",
+          "children": [
+            "e6",
+            "e3"
+          ]
+        },
+        "e": {
+          "kind": "group",
+          "children": [
+            "e1",
+            "e3",
+            "e0"
+          ]
+        }
+      }
+    },
+    "expected": {
+      "planar": true,
+      "rotation": {
+        "a": [
+          "e4",
+          "e2",
+          "e6"
+        ],
+        "e": [
+          "e1",
+          "e0",
+          "e3"
+        ],
+        "d": [
+          "e5",
+          "e4",
+          "e0"
+        ],
+        "c": [
+          "e6",
+          "e3"
+        ],
+        "b": [
+          "e1",
+          "e2",
+          "e5"
+        ]
+      },
+      "edges": {
+        "e3": [
+          "c",
+          "e"
+        ],
+        "e6": [
+          "a",
+          "c"
+        ],
+        "e0": [
+          "d",
+          "e"
+        ],
+        "e5": [
+          "b",
+          "d"
+        ],
+        "e1": [
+          "b",
+          "e"
+        ],
+        "e2": [
+          "a",
+          "b"
+        ],
+        "e4": [
+          "a",
+          "d"
+        ]
+      }
+    }
+  },
+  {
+    "request": {
+      "nodes": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e"
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "source": "a",
+          "target": "d"
+        },
+        {
+          "id": "e1",
+          "source": "c",
+          "target": "e"
+        },
+        {
+          "id": "e2",
+          "source": "b",
+          "target": "c"
+        },
+        {
+          "id": "e3",
+          "source": "d",
+          "target": "e"
+        },
+        {
+          "id": "e4",
+          "source": "c",
+          "target": "d"
+        },
+        {
+          "id": "e5",
+          "source": "a",
+          "target": "b"
+        },
+        {
+          "id": "e6",
+          "source": "b",
+          "target": "e"
+        }
+      ],
+      "rotation": {
+        "a": [
+          "e0",
+          "e5"
+        ],
+        "d": [
+          "e0",
+          "e3",
+          "e4"
+        ],
+        "b": [
+          "e2",
+          "e5",
+          "e6"
+        ],
+        "c": [
+          "e1",
+          "e2",
+          "e4"
+        ],
+        "e": [
+          "e1",
+          "e3",
+          "e6"
+        ]
+      },
+      "constraints": {
+        "a": {
+          "kind": "mirror",
+          "children": [
+            "e5",
+            "e0"
+          ]
+        },
+        "e": {
+          "kind": "oriented",
+          "children": [
+            "e3",
+            "e1",
+            "e6"
+          ]
+        }
+      }
+    },
+    "expected": {
+      "planar": true,
+      "rotation": {
+        "a": [
+          "e0",
+          "e5"
+        ],
+        "d": [
+          "e4",
+          "e3",
+          "e0"
+        ],
+        "b": [
+          "e6",
+          "e2",
+          "e5"
+        ],
+        "c": [
+          "e2",
+          "e1",
+          "e4"
+        ],
+        "e": [
+          "e3",
+          "e1",
+          "e6"
+        ]
+      },
+      "edges": {
+        "e5": [
+          "a",
+          "b"
+        ],
+        "e0": [
+          "a",
+          "d"
+        ],
+        "e4": [
+          "c",
+          "d"
+        ],
+        "e2": [
+          "b",
+          "c"
+        ],
+        "e6": [
+          "b",
+          "e"
+        ],
+        "e1": [
+          "c",
+          "e"
+        ],
+        "e3": [
+          "d",
+          "e"
+        ]
+      }
+    }
+  },
+  {
+    "request": {
+      "nodes": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e"
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "source": "b",
+          "target": "e"
+        },
+        {
+          "id": "e1",
+          "source": "d",
+          "target": "e"
+        },
+        {
+          "id": "e2",
+          "source": "a",
+          "target": "c"
+        },
+        {
+          "id": "e3",
+          "source": "a",
+          "target": "b"
+        },
+        {
+          "id": "e4",
+          "source": "c",
+          "target": "d"
+        },
+        {
+          "id": "e5",
+          "source": "b",
+          "target": "d"
+        },
+        {
+          "id": "e6",
+          "source": "a",
+          "target": "e"
+        }
+      ],
+      "rotation": {
+        "a": [
+          "e2",
+          "e3",
+          "e6"
+        ],
+        "e": [
+          "e0",
+          "e1",
+          "e6"
+        ],
+        "d": [
+          "e1",
+          "e4",
+          "e5"
+        ],
+        "c": [
+          "e2",
+          "e4"
+        ],
+        "b": [
+          "e0",
+          "e3",
+          "e5"
+        ]
+      },
+      "constraints": {
+        "a": {
+          "kind": "oriented",
+          "children": [
+            "e3",
+            "e6",
+            "e2"
+          ]
+        },
+        "b": {
+          "kind": "group",
+          "children": [
+            "e0",
+            "e5",
+            "e3"
+          ]
+        },
+        "c": {
+          "kind": "group",
+          "children": [
+            "e4",
+            "e2"
+          ]
+        },
+        "e": {
+          "kind": "mirror",
+          "children": [
+            "e1",
+            "e0",
+            "e6"
+          ]
+        }
+      }
+    },
+    "expected": {
+      "planar": true,
+      "rotation": {
+        "a": [
+          "e6",
+          "e2",
+          "e3"
+        ],
+        "e": [
+          "e6",
+          "e0",
+          "e1"
+        ],
+        "d": [
+          "e4",
+          "e1",
+          "e5"
+        ],
+        "c": [
+          "e4",
+          "e2"
+        ],
+        "b": [
+          "e5",
+          "e0",
+          "e3"
+        ]
+      },
+      "edges": {
+        "e3": [
+          "a",
+          "b"
+        ],
+        "e5": [
+          "b",
+          "d"
+        ],
+        "e1": [
+          "d",
+          "e"
+        ],
+        "e6": [
+          "a",
+          "e"
+        ],
+        "e0": [
+          "b",
+          "e"
+        ],
+        "e2": [
+          "a",
+          "c"
+        ],
+        "e4": [
+          "c",
+          "d"
+        ]
+      }
+    }
+  },
+  {
+    "request": {
+      "nodes": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e"
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "source": "c",
+          "target": "e"
+        },
+        {
+          "id": "e1",
+          "source": "a",
+          "target": "e"
+        },
+        {
+          "id": "e2",
+          "source": "b",
+          "target": "e"
+        },
+        {
+          "id": "e3",
+          "source": "c",
+          "target": "d"
+        },
+        {
+          "id": "e4",
+          "source": "a",
+          "target": "b"
+        }
+      ],
+      "rotation": {
+        "a": [
+          "e1",
+          "e4"
+        ],
+        "d": [
+          "e3"
+        ],
+        "b": [
+          "e2",
+          "e4"
+        ],
+        "c": [
+          "e0",
+          "e3"
+        ],
+        "e": [
+          "e0",
+          "e1",
+          "e2"
+        ]
+      },
+      "constraints": {
+        "c": {
+          "kind": "group",
+          "children": [
+            "e0",
+            "e3"
+          ]
+        },
+        "e": {
+          "kind": "group",
+          "children": [
+            "e1",
+            "e2",
+            "e0"
+          ]
+        }
+      }
+    },
+    "expected": {
+      "planar": true,
+      "rotation": {
+        "a": [
+          "e1",
+          "e4"
+        ],
+        "e": [
+          "e1",
+          "e0",
+          "e2"
+        ],
+        "d": [
+          "e3"
+        ],
+        "c": [
+          "e3",
+          "e0"
+        ],
+        "b": [
+          "e4",
+          "e2"
+        ]
+      },
+      "edges": {
+        "e2": [
+          "b",
+          "e"
+        ],
+        "e4": [
+          "a",
+          "b"
+        ],
+        "e1": [
+          "a",
+          "e"
+        ],
+        "e0": [
+          "c",
+          "e"
+        ],
+        "e3": [
+          "c",
+          "d"
+        ]
+      }
+    }
+  },
+  {
+    "request": {
+      "nodes": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e"
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "source": "a",
+          "target": "b"
+        },
+        {
+          "id": "e1",
+          "source": "d",
+          "target": "e"
+        },
+        {
+          "id": "e2",
+          "source": "b",
+          "target": "c"
+        },
+        {
+          "id": "e3",
+          "source": "c",
+          "target": "e"
+        },
+        {
+          "id": "e4",
+          "source": "a",
+          "target": "e"
+        },
+        {
+          "id": "e5",
+          "source": "c",
+          "target": "d"
+        },
+        {
+          "id": "e6",
+          "source": "a",
+          "target": "d"
+        },
+        {
+          "id": "e7",
+          "source": "b",
+          "target": "d"
+        }
+      ],
+      "rotation": {
+        "a": [
+          "e0",
+          "e4",
+          "e6"
+        ],
+        "e": [
+          "e1",
+          "e3",
+          "e4"
+        ],
+        "d": [
+          "e1",
+          "e5",
+          "e6",
+          "e7"
+        ],
+        "c": [
+          "e2",
+          "e3",
+          "e5"
+        ],
+        "b": [
+          "e0",
+          "e2",
+          "e7"
+        ]
+      },
+      "constraints": {
+        "a": {
+          "kind": "mirror",
+          "children": [
+            "e6",
+            "e4",
+            "e0"
+          ]
+        },
+        "b": {
+          "kind": "oriented",
+          "children": [
+            "e2",
+            "e7",
+            "e0"
+          ]
+        },
+        "c": {
+          "kind": "mirror",
+          "children": [
+            "e5",
+            "e2",
+            "e3"
+          ]
+        },
+        "d": {
+          "kind": "mirror",
+          "children": [
+            "e1",
+            "e5",
+            "e7",
+            "e6"
+          ]
+        },
+        "e": {
+          "kind": "oriented",
+          "children": [
+            "e3",
+            "e1",
+            "e4"
+          ]
+        }
+      }
+    },
+    "expected": {
+      "planar": false
+    }
+  },
+  {
+    "request": {
+      "nodes": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e"
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "source": "a",
+          "target": "b"
+        },
+        {
+          "id": "e1",
+          "source": "a",
+          "target": "e"
+        },
+        {
+          "id": "e2",
+          "source": "d",
+          "target": "e"
+        },
+        {
+          "id": "e3",
+          "source": "a",
+          "target": "d"
+        },
+        {
+          "id": "e4",
+          "source": "b",
+          "target": "c"
+        },
+        {
+          "id": "e5",
+          "source": "b",
+          "target": "e"
+        },
+        {
+          "id": "e6",
+          "source": "c",
+          "target": "e"
+        },
+        {
+          "id": "e7",
+          "source": "c",
+          "target": "d"
+        }
+      ],
+      "rotation": {
+        "a": [
+          "e0",
+          "e1",
+          "e3"
+        ],
+        "e": [
+          "e1",
+          "e2",
+          "e5",
+          "e6"
+        ],
+        "d": [
+          "e2",
+          "e3",
+          "e7"
+        ],
+        "c": [
+          "e4",
+          "e6",
+          "e7"
+        ],
+        "b": [
+          "e0",
+          "e4",
+          "e5"
+        ]
+      },
+      "constraints": {
+        "a": {
+          "kind": "group",
+          "children": [
+            "e1",
+            "e3",
+            "e0"
+          ]
+        },
+        "c": {
+          "kind": "mirror",
+          "children": [
+            "e7",
+            "e4",
+            "e6"
+          ]
+        },
+        "d": {
+          "kind": "group",
+          "children": [
+            "e7",
+            "e2",
+            "e3"
+          ]
+        }
+      }
+    },
+    "expected": {
+      "planar": true,
+      "rotation": {
+        "a": [
+          "e3",
+          "e0",
+          "e1"
+        ],
+        "d": [
+          "e3",
+          "e2",
+          "e7"
+        ],
+        "b": [
+          "e5",
+          "e0",
+          "e4"
+        ],
+        "c": [
+          "e4",
+          "e7",
+          "e6"
+        ],
+        "e": [
+          "e5",
+          "e6",
+          "e2",
+          "e1"
+        ]
+      },
+      "edges": {
+        "e1": [
+          "a",
+          "e"
+        ],
+        "e6": [
+          "c",
+          "e"
+        ],
+        "e4": [
+          "b",
+          "c"
+        ],
+        "e5": [
+          "b",
+          "e"
+        ],
+        "e0": [
+          "a",
+          "b"
+        ],
+        "e7": [
+          "c",
+          "d"
+        ],
+        "e2": [
+          "d",
+          "e"
+        ],
+        "e3": [
+          "a",
+          "d"
+        ]
+      }
+    }
+  },
+  {
+    "request": {
+      "nodes": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e"
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "source": "b",
+          "target": "d"
+        },
+        {
+          "id": "e1",
+          "source": "a",
+          "target": "b"
+        },
+        {
+          "id": "e2",
+          "source": "a",
+          "target": "c"
+        },
+        {
+          "id": "e3",
+          "source": "d",
+          "target": "e"
+        },
+        {
+          "id": "e4",
+          "source": "b",
+          "target": "e"
+        },
+        {
+          "id": "e5",
+          "source": "c",
+          "target": "e"
+        },
+        {
+          "id": "e6",
+          "source": "c",
+          "target": "d"
+        }
+      ],
+      "rotation": {
+        "a": [
+          "e1",
+          "e2"
+        ],
+        "e": [
+          "e3",
+          "e4",
+          "e5"
+        ],
+        "d": [
+          "e0",
+          "e3",
+          "e6"
+        ],
+        "c": [
+          "e2",
+          "e5",
+          "e6"
+        ],
+        "b": [
+          "e0",
+          "e1",
+          "e4"
+        ]
+      },
+      "constraints": {
+        "a": {
+          "kind": "group",
+          "children": [
+            "e1",
+            "e2"
+          ]
+        },
+        "b": {
+          "kind": "mirror",
+          "children": [
+            "e1",
+            "e0",
+            "e4"
+          ]
+        },
+        "d": {
+          "kind": "oriented",
+          "children": [
+            "e6",
+            "e0",
+            "e3"
+          ]
+        },
+        "e": {
+          "kind": "group",
+          "children": [
+            "e3",
+            "e4",
+            "e5"
+          ]
+        }
+      }
+    },
+    "expected": {
+      "planar": true,
+      "rotation": {
+        "a": [
+          "e1",
+          "e2"
+        ],
+        "e": [
+          "e4",
+          "e5",
+          "e3"
+        ],
+        "d": [
+          "e0",
+          "e3",
+          "e6"
+        ],
+        "c": [
+          "e5",
+          "e2",
+          "e6"
+        ],
+        "b": [
+          "e0",
+          "e1",
+          "e4"
+        ]
+      },
+      "edges": {
+        "e6": [
+          "c",
+          "d"
+        ],
+        "e3": [
+          "d",
+          "e"
+        ],
+        "e5": [
+          "c",
+          "e"
+        ],
+        "e4": [
+          "b",
+          "e"
+        ],
+        "e0": [
+          "b",
+          "d"
+        ],
+        "e2": [
+          "a",
+          "c"
+        ],
+        "e1": [
+          "a",
+          "b"
+        ]
+      }
+    }
+  },
+  {
+    "request": {
+      "nodes": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e"
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "source": "a",
+          "target": "d"
+        },
+        {
+          "id": "e1",
+          "source": "c",
+          "target": "e"
+        },
+        {
+          "id": "e2",
+          "source": "d",
+          "target": "e"
+        },
+        {
+          "id": "e3",
+          "source": "b",
+          "target": "e"
+        },
+        {
+          "id": "e4",
+          "source": "b",
+          "target": "c"
+        },
+        {
+          "id": "e5",
+          "source": "b",
+          "target": "d"
+        },
+        {
+          "id": "e6",
+          "source": "a",
+          "target": "e"
+        },
+        {
+          "id": "e7",
+          "source": "c",
+          "target": "d"
+        }
+      ],
+      "rotation": {
+        "a": [
+          "e0",
+          "e6"
+        ],
+        "d": [
+          "e0",
+          "e2",
+          "e5",
+          "e7"
+        ],
+        "b": [
+          "e3",
+          "e4",
+          "e5"
+        ],
+        "c": [
+          "e1",
+          "e4",
+          "e7"
+        ],
+        "e": [
+          "e1",
+          "e2",
+          "e3",
+          "e6"
+        ]
+      },
+      "constraints": {
+        "a": {
+          "kind": "oriented",
+          "children": [
+            "e6",
+            "e0"
+          ]
+        },
+        "b": {
+          "kind": "group",
+          "children": [
+            "e4",
+            "e3",
+            "e5"
+          ]
+        },
+        "c": {
+          "kind": "mirror",
+          "children": [
+            "e4",
+            "e7",
+            "e1"
+          ]
+        },
+        "d": {
+          "kind": "mirror",
+          "children": [
+            "e2",
+            "e7",
+            "e0",
+            "e5"
+          ]
+        },
+        "e": {
+          "kind": "group",
+          "children": [
+            "e3",
+            "e2",
+            "e6",
+            "e1"
+          ]
+        }
+      }
+    },
+    "expected": {
+      "planar": false
+    }
+  },
+  {
+    "request": {
+      "nodes": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e"
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "source": "a",
+          "target": "d"
+        },
+        {
+          "id": "e1",
+          "source": "b",
+          "target": "d"
+        },
+        {
+          "id": "e2",
+          "source": "c",
+          "target": "d"
+        },
+        {
+          "id": "e3",
+          "source": "a",
+          "target": "c"
+        },
+        {
+          "id": "e4",
+          "source": "d",
+          "target": "e"
+        },
+        {
+          "id": "e5",
+          "source": "a",
+          "target": "e"
+        },
+        {
+          "id": "e6",
+          "source": "b",
+          "target": "e"
+        },
+        {
+          "id": "e7",
+          "source": "c",
+          "target": "e"
+        }
+      ],
+      "rotation": {
+        "a": [
+          "e0",
+          "e3",
+          "e5"
+        ],
+        "e": [
+          "e4",
+          "e5",
+          "e6",
+          "e7"
+        ],
+        "d": [
+          "e0",
+          "e1",
+          "e2",
+          "e4"
+        ],
+        "c": [
+          "e2",
+          "e3",
+          "e7"
+        ],
+        "b": [
+          "e1",
+          "e6"
+        ]
+      },
+      "constraints": {
+        "a": {
+          "kind": "oriented",
+          "children": [
+            "e0",
+            "e3",
+            "e5"
+          ]
+        },
+        "b": {
+          "kind": "mirror",
+          "children": [
+            "e6",
+            "e1"
+          ]
+        },
+        "c": {
+          "kind": "group",
+          "children": [
+            "e7",
+            "e2",
+            "e3"
+          ]
+        },
+        "d": {
+          "kind": "oriented",
+          "children": [
+            "e4",
+            "e0",
+            "e1",
+            "e2"
+          ]
+        }
+      }
+    },
+    "expected": {
+      "planar": false
+    }
+  },
+  {
+    "request": {
+      "nodes": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e"
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "source": "b",
+          "target": "e"
+        },
+        {
+          "id": "e1",
+          "source": "a",
+          "target": "e"
+        },
+        {
+          "id": "e2",
+          "source": "b",
+          "target": "d"
+        },
+        {
+          "id": "e3",
+          "source": "b",
+          "target": "c"
+        }
+      ],
+      "rotation": {
+        "a": [
+          "e1"
+        ],
+        "e": [
+          "e0",
+          "e1"
+        ],
+        "d": [
+          "e2"
+        ],
+        "c": [
+          "e3"
+        ],
+        "b": [
+          "e0",
+          "e2",
+          "e3"
+        ]
+      },
+      "constraints": {
+        "b": {
+          "kind": "group",
+          "children": [
+            "e0",
+            "e2",
+            "e3"
+          ]
+        },
+        "e": {
+          "kind": "mirror",
+          "children": [
+            "e1",
+            "e0"
+          ]
+        }
+      }
+    },
+    "expected": {
+      "planar": true,
+      "rotation": {
+        "a": [
+          "e1"
+        ],
+        "d": [
+          "e2"
+        ],
+        "b": [
+          "e3",
+          "e2",
+          "e0"
+        ],
+        "c": [
+          "e3"
+        ],
+        "e": [
+          "e0",
+          "e1"
+        ]
+      },
+      "edges": {
+        "e1": [
+          "a",
+          "e"
+        ],
+        "e0": [
+          "b",
+          "e"
+        ],
+        "e2": [
+          "b",
+          "d"
+        ],
+        "e3": [
+          "b",
+          "c"
+        ]
+      }
+    }
+  },
+  {
+    "request": {
+      "nodes": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e"
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "source": "a",
+          "target": "c"
+        },
+        {
+          "id": "e1",
+          "source": "a",
+          "target": "e"
+        },
+        {
+          "id": "e2",
+          "source": "c",
+          "target": "d"
+        },
+        {
+          "id": "e3",
+          "source": "b",
+          "target": "e"
+        }
+      ],
+      "rotation": {
+        "a": [
+          "e0",
+          "e1"
+        ],
+        "d": [
+          "e2"
+        ],
+        "b": [
+          "e3"
+        ],
+        "c": [
+          "e0",
+          "e2"
+        ],
+        "e": [
+          "e1",
+          "e3"
+        ]
+      },
+      "constraints": {
+        "c": {
+          "kind": "group",
+          "children": [
+            "e0",
+            "e2"
+          ]
+        },
+        "e": {
+          "kind": "mirror",
+          "children": [
+            "e3",
+            "e1"
+          ]
+        }
+      }
+    },
+    "expected": {
+      "planar": true,
+      "rotation": {
+        "a": [
+          "e0",
+          "e1"
+        ],
+        "d": [
+          "e2"
+        ],
+        "b": [
+          "e3"
+        ],
+        "c": [
+          "e2",
+          "e0"
+        ],
+        "e": [
+          "e1",
+          "e3"
+        ]
+      },
+      "edges": {
+        "e3": [
+          "b",
+          "e"
+        ],
+        "e1": [
+          "a",
+          "e"
+        ],
+        "e0": [
+          "a",
+          "c"
+        ],
+        "e2": [
+          "c",
+          "d"
+        ]
+      }
+    }
+  },
+  {
+    "request": {
+      "nodes": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e"
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "source": "d",
+          "target": "e"
+        },
+        {
+          "id": "e1",
+          "source": "c",
+          "target": "e"
+        },
+        {
+          "id": "e2",
+          "source": "b",
+          "target": "d"
+        },
+        {
+          "id": "e3",
+          "source": "a",
+          "target": "b"
+        },
+        {
+          "id": "e4",
+          "source": "c",
+          "target": "d"
+        },
+        {
+          "id": "e5",
+          "source": "b",
+          "target": "e"
+        },
+        {
+          "id": "e6",
+          "source": "a",
+          "target": "e"
+        }
+      ],
+      "rotation": {
+        "a": [
+          "e3",
+          "e6"
+        ],
+        "d": [
+          "e0",
+          "e2",
+          "e4"
+        ],
+        "b": [
+          "e2",
+          "e3",
+          "e5"
+        ],
+        "c": [
+          "e1",
+          "e4"
+        ],
+        "e": [
+          "e0",
+          "e1",
+          "e5",
+          "e6"
+        ]
+      },
+      "constraints": {
+        "a": {
+          "kind": "group",
+          "children": [
+            "e6",
+            "e3"
+          ]
+        },
+        "b": {
+          "kind": "mirror",
+          "children": [
+            "e3",
+            "e5",
+            "e2"
+          ]
+        },
+        "c": {
+          "kind": "oriented",
+          "children": [
+            "e4",
+            "e1"
+          ]
+        },
+        "d": {
+          "kind": "oriented",
+          "children": [
+            "e0",
+            "e2",
+            "e4"
+          ]
+        },
+        "e": {
+          "kind": "group",
+          "children": [
+            "e0",
+            "e6",
+            "e5",
+            "e1"
+          ]
+        }
+      }
+    },
+    "expected": {
+      "planar": true,
+      "rotation": {
+        "a": [
+          "e3",
+          "e6"
+        ],
+        "e": [
+          "e0",
+          "e1",
+          "e6",
+          "e5"
+        ],
+        "d": [
+          "e4",
+          "e0",
+          "e2"
+        ],
+        "c": [
+          "e4",
+          "e1"
+        ],
+        "b": [
+          "e3",
+          "e2",
+          "e5"
+        ]
+      },
+      "edges": {
+        "e5": [
+          "b",
+          "e"
+        ],
+        "e2": [
+          "b",
+          "d"
+        ],
+        "e0": [
+          "d",
+          "e"
+        ],
+        "e1": [
+          "c",
+          "e"
+        ],
+        "e4": [
+          "c",
+          "d"
+        ],
+        "e6": [
+          "a",
+          "e"
+        ],
+        "e3": [
+          "a",
+          "b"
+        ]
+      }
+    }
+  },
+  {
+    "request": {
+      "nodes": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e"
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "source": "b",
+          "target": "d"
+        },
+        {
+          "id": "e1",
+          "source": "a",
+          "target": "b"
+        },
+        {
+          "id": "e2",
+          "source": "a",
+          "target": "d"
+        },
+        {
+          "id": "e3",
+          "source": "d",
+          "target": "e"
+        },
+        {
+          "id": "e4",
+          "source": "a",
+          "target": "e"
+        },
+        {
+          "id": "e5",
+          "source": "b",
+          "target": "e"
+        },
+        {
+          "id": "e6",
+          "source": "c",
+          "target": "d"
+        },
+        {
+          "id": "e7",
+          "source": "c",
+          "target": "e"
+        }
+      ],
+      "rotation": {
+        "a": [
+          "e1",
+          "e2",
+          "e4"
+        ],
+        "e": [
+          "e3",
+          "e4",
+          "e5",
+          "e7"
+        ],
+        "d": [
+          "e0",
+          "e2",
+          "e3",
+          "e6"
+        ],
+        "c": [
+          "e6",
+          "e7"
+        ],
+        "b": [
+          "e0",
+          "e1",
+          "e5"
+        ]
+      },
+      "constraints": {
+        "c": {
+          "kind": "mirror",
+          "children": [
+            "e6",
+            "e7"
+          ]
+        },
+        "e": {
+          "kind": "oriented",
+          "children": [
+            "e4",
+            "e7",
+            "e3",
+            "e5"
+          ]
+        }
+      }
+    },
+    "expected": {
+      "planar": true,
+      "rotation": {
+        "a": [
+          "e4",
+          "e1",
+          "e2"
+        ],
+        "d": [
+          "e2",
+          "e0",
+          "e3",
+          "e6"
+        ],
+        "b": [
+          "e0",
+          "e1",
+          "e5"
+        ],
+        "c": [
+          "e7",
+          "e6"
+        ],
+        "e": [
+          "e3",
+          "e5",
+          "e4",
+          "e7"
+        ]
+      },
+      "edges": {
+        "e6": [
+          "c",
+          "d"
+        ],
+        "e7": [
+          "c",
+          "e"
+        ],
+        "e3": [
+          "d",
+          "e"
+        ],
+        "e2": [
+          "a",
+          "d"
+        ],
+        "e4": [
+          "a",
+          "e"
+        ],
+        "e5": [
+          "b",
+          "e"
+        ],
+        "e1": [
+          "a",
+          "b"
+        ],
+        "e0": [
+          "b",
+          "d"
+        ]
+      }
+    }
+  },
+  {
+    "request": {
+      "nodes": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e"
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "source": "b",
+          "target": "e"
+        },
+        {
+          "id": "e1",
+          "source": "d",
+          "target": "e"
+        },
+        {
+          "id": "e2",
+          "source": "c",
+          "target": "e"
+        },
+        {
+          "id": "e3",
+          "source": "a",
+          "target": "c"
+        },
+        {
+          "id": "e4",
+          "source": "b",
+          "target": "d"
+        }
+      ],
+      "rotation": {
+        "a": [
+          "e3"
+        ],
+        "e": [
+          "e0",
+          "e1",
+          "e2"
+        ],
+        "d": [
+          "e1",
+          "e4"
+        ],
+        "c": [
+          "e2",
+          "e3"
+        ],
+        "b": [
+          "e0",
+          "e4"
+        ]
+      },
+      "constraints": {
+        "c": {
+          "kind": "group",
+          "children": [
+            "e2",
+            "e3"
+          ]
+        },
+        "d": {
+          "kind": "group",
+          "children": [
+            "e4",
+            "e1"
+          ]
+        },
+        "e": {
+          "kind": "oriented",
+          "children": [
+            "e2",
+            "e1",
+            "e0"
+          ]
+        }
+      }
+    },
+    "expected": {
+      "planar": true,
+      "rotation": {
+        "a": [
+          "e3"
+        ],
+        "d": [
+          "e1",
+          "e4"
+        ],
+        "b": [
+          "e4",
+          "e0"
+        ],
+        "c": [
+          "e3",
+          "e2"
+        ],
+        "e": [
+          "e2",
+          "e1",
+          "e0"
+        ]
+      },
+      "edges": {
+        "e0": [
+          "b",
+          "e"
+        ],
+        "e4": [
+          "b",
+          "d"
+        ],
+        "e1": [
+          "d",
+          "e"
+        ],
+        "e2": [
+          "c",
+          "e"
+        ],
+        "e3": [
+          "a",
+          "c"
+        ]
+      }
+    }
+  },
+  {
+    "request": {
+      "nodes": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e"
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "source": "b",
+          "target": "e"
+        },
+        {
+          "id": "e1",
+          "source": "a",
+          "target": "e"
+        },
+        {
+          "id": "e2",
+          "source": "d",
+          "target": "e"
+        },
+        {
+          "id": "e3",
+          "source": "c",
+          "target": "d"
+        },
+        {
+          "id": "e4",
+          "source": "b",
+          "target": "c"
+        },
+        {
+          "id": "e5",
+          "source": "c",
+          "target": "e"
+        },
+        {
+          "id": "e6",
+          "source": "a",
+          "target": "c"
+        }
+      ],
+      "rotation": {
+        "a": [
+          "e1",
+          "e6"
+        ],
+        "e": [
+          "e0",
+          "e1",
+          "e2",
+          "e5"
+        ],
+        "d": [
+          "e2",
+          "e3"
+        ],
+        "c": [
+          "e3",
+          "e4",
+          "e5",
+          "e6"
+        ],
+        "b": [
+          "e0",
+          "e4"
+        ]
+      },
+      "constraints": {
+        "a": {
+          "kind": "oriented",
+          "children": [
+            "e1",
+            "e6"
+          ]
+        },
+        "b": {
+          "kind": "group",
+          "children": [
+            "e4",
+            "e0"
+          ]
+        },
+        "d": {
+          "kind": "group",
+          "children": [
+            "e2",
+            "e3"
+          ]
+        }
+      }
+    },
+    "expected": {
+      "planar": true,
+      "rotation": {
+        "a": [
+          "e6",
+          "e1"
+        ],
+        "d": [
+          "e2",
+          "e3"
+        ],
+        "b": [
+          "e4",
+          "e0"
+        ],
+        "c": [
+          "e4",
+          "e5",
+          "e3",
+          "e6"
+        ],
+        "e": [
+          "e2",
+          "e5",
+          "e0",
+          "e1"
+        ]
+      },
+      "edges": {
+        "e1": [
+          "a",
+          "e"
+        ],
+        "e6": [
+          "a",
+          "c"
+        ],
+        "e5": [
+          "c",
+          "e"
+        ],
+        "e3": [
+          "c",
+          "d"
+        ],
+        "e2": [
+          "d",
+          "e"
+        ],
+        "e0": [
+          "b",
+          "e"
+        ],
+        "e4": [
+          "b",
+          "c"
+        ]
+      }
+    }
+  },
+  {
+    "request": {
+      "nodes": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e"
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "source": "a",
+          "target": "e"
+        },
+        {
+          "id": "e1",
+          "source": "c",
+          "target": "d"
+        },
+        {
+          "id": "e2",
+          "source": "b",
+          "target": "d"
+        },
+        {
+          "id": "e3",
+          "source": "d",
+          "target": "e"
+        },
+        {
+          "id": "e4",
+          "source": "b",
+          "target": "c"
+        },
+        {
+          "id": "e5",
+          "source": "a",
+          "target": "b"
+        },
+        {
+          "id": "e6",
+          "source": "c",
+          "target": "e"
+        }
+      ],
+      "rotation": {
+        "a": [
+          "e0",
+          "e5"
+        ],
+        "d": [
+          "e1",
+          "e2",
+          "e3"
+        ],
+        "b": [
+          "e2",
+          "e4",
+          "e5"
+        ],
+        "c": [
+          "e1",
+          "e4",
+          "e6"
+        ],
+        "e": [
+          "e0",
+          "e3",
+          "e6"
+        ]
+      },
+      "constraints": {
+        "b": {
+          "kind": "oriented",
+          "children": [
+            "e5",
+            "e4",
+            "e2"
+          ]
+        },
+        "c": {
+          "kind": "group",
+          "children": [
+            "e1",
+            "e6",
+            "e4"
+          ]
+        },
+        "e": {
+          "kind": "group",
+          "children": [
+            "e6",
+            "e3",
+            "e0"
+          ]
+        }
+      }
+    },
+    "expected": {
+      "planar": true,
+      "rotation": {
+        "a": [
+          "e5",
+          "e0"
+        ],
+        "d": [
+          "e3",
+          "e2",
+          "e1"
+        ],
+        "b": [
+          "e5",
+          "e4",
+          "e2"
+        ],
+        "c": [
+          "e4",
+          "e6",
+          "e1"
+        ],
+        "e": [
+          "e6",
+          "e0",
+          "e3"
+        ]
+      },
+      "edges": {
+        "e1": [
+          "c",
+          "d"
+        ],
+        "e3": [
+          "d",
+          "e"
+        ],
+        "e6": [
+          "c",
+          "e"
+        ],
+        "e2": [
+          "b",
+          "d"
+        ],
+        "e4": [
+          "b",
+          "c"
+        ],
+        "e0": [
+          "a",
+          "e"
+        ],
+        "e5": [
+          "a",
+          "b"
+        ]
+      }
+    }
+  },
+  {
+    "request": {
+      "nodes": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e"
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "source": "c",
+          "target": "e"
+        },
+        {
+          "id": "e1",
+          "source": "a",
+          "target": "b"
+        },
+        {
+          "id": "e2",
+          "source": "b",
+          "target": "e"
+        },
+        {
+          "id": "e3",
+          "source": "a",
+          "target": "d"
+        },
+        {
+          "id": "e4",
+          "source": "a",
+          "target": "e"
+        }
+      ],
+      "rotation": {
+        "a": [
+          "e1",
+          "e3",
+          "e4"
+        ],
+        "d": [
+          "e3"
+        ],
+        "b": [
+          "e1",
+          "e2"
+        ],
+        "c": [
+          "e0"
+        ],
+        "e": [
+          "e0",
+          "e2",
+          "e4"
+        ]
+      },
+      "constraints": {
+        "a": {
+          "kind": "mirror",
+          "children": [
+            "e3",
+            "e4",
+            "e1"
+          ]
+        }
+      }
+    },
+    "expected": {
+      "planar": true,
+      "rotation": {
+        "a": [
+          "e3",
+          "e1",
+          "e4"
+        ],
+        "d": [
+          "e3"
+        ],
+        "b": [
+          "e1",
+          "e2"
+        ],
+        "c": [
+          "e0"
+        ],
+        "e": [
+          "e4",
+          "e2",
+          "e0"
+        ]
+      },
+      "edges": {
+        "e0": [
+          "c",
+          "e"
+        ],
+        "e2": [
+          "b",
+          "e"
+        ],
+        "e4": [
+          "a",
+          "e"
+        ],
+        "e1": [
+          "a",
+          "b"
+        ],
+        "e3": [
+          "a",
+          "d"
+        ]
+      }
+    }
+  },
+  {
+    "request": {
+      "nodes": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e"
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "source": "a",
+          "target": "c"
+        },
+        {
+          "id": "e1",
+          "source": "d",
+          "target": "e"
+        },
+        {
+          "id": "e2",
+          "source": "a",
+          "target": "b"
+        },
+        {
+          "id": "e3",
+          "source": "c",
+          "target": "d"
+        }
+      ],
+      "rotation": {
+        "a": [
+          "e0",
+          "e2"
+        ],
+        "d": [
+          "e1",
+          "e3"
+        ],
+        "b": [
+          "e2"
+        ],
+        "c": [
+          "e0",
+          "e3"
+        ],
+        "e": [
+          "e1"
+        ]
+      },
+      "constraints": {
+        "c": {
+          "kind": "group",
+          "children": [
+            "e3",
+            "e0"
+          ]
+        },
+        "d": {
+          "kind": "oriented",
+          "children": [
+            "e3",
+            "e1"
+          ]
+        }
+      }
+    },
+    "expected": {
+      "planar": true,
+      "rotation": {
+        "a": [
+          "e0",
+          "e2"
+        ],
+        "e": [
+          "e1"
+        ],
+        "d": [
+          "e1",
+          "e3"
+        ],
+        "c": [
+          "e3",
+          "e0"
+        ],
+        "b": [
+          "e2"
+        ]
+      },
+      "edges": {
+        "e2": [
+          "a",
+          "b"
+        ],
+        "e0": [
+          "a",
+          "c"
+        ],
+        "e3": [
+          "c",
+          "d"
+        ],
+        "e1": [
+          "d",
+          "e"
+        ]
+      }
+    }
+  },
+  {
+    "request": {
+      "nodes": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e"
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "source": "b",
+          "target": "d"
+        },
+        {
+          "id": "e1",
+          "source": "c",
+          "target": "d"
+        },
+        {
+          "id": "e2",
+          "source": "b",
+          "target": "e"
+        },
+        {
+          "id": "e3",
+          "source": "c",
+          "target": "e"
+        },
+        {
+          "id": "e4",
+          "source": "a",
+          "target": "e"
+        }
+      ],
+      "rotation": {
+        "a": [
+          "e4"
+        ],
+        "e": [
+          "e2",
+          "e3",
+          "e4"
+        ],
+        "d": [
+          "e0",
+          "e1"
+        ],
+        "c": [
+          "e1",
+          "e3"
+        ],
+        "b": [
+          "e0",
+          "e2"
+        ]
+      },
+      "constraints": {
+        "b": {
+          "kind": "group",
+          "children": [
+            "e2",
+            "e0"
+          ]
+        },
+        "c": {
+          "kind": "oriented",
+          "children": [
+            "e1",
+            "e3"
+          ]
+        },
+        "d": {
+          "kind": "mirror",
+          "children": [
+            "e1",
+            "e0"
+          ]
+        },
+        "e": {
+          "kind": "group",
+          "children": [
+            "e4",
+            "e2",
+            "e3"
+          ]
+        }
+      }
+    },
+    "expected": {
+      "planar": true,
+      "rotation": {
+        "a": [
+          "e4"
+        ],
+        "d": [
+          "e1",
+          "e0"
+        ],
+        "b": [
+          "e2",
+          "e0"
+        ],
+        "c": [
+          "e3",
+          "e1"
+        ],
+        "e": [
+          "e3",
+          "e2",
+          "e4"
+        ]
+      },
+      "edges": {
+        "e4": [
+          "a",
+          "e"
+        ],
+        "e0": [
+          "b",
+          "d"
+        ],
+        "e1": [
+          "c",
+          "d"
+        ],
+        "e2": [
+          "b",
+          "e"
+        ],
+        "e3": [
+          "c",
+          "e"
+        ]
+      }
+    }
+  },
+  {
+    "request": {
+      "nodes": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e"
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "source": "c",
+          "target": "e"
+        },
+        {
+          "id": "e1",
+          "source": "b",
+          "target": "e"
+        },
+        {
+          "id": "e2",
+          "source": "b",
+          "target": "d"
+        },
+        {
+          "id": "e3",
+          "source": "a",
+          "target": "b"
+        },
+        {
+          "id": "e4",
+          "source": "a",
+          "target": "e"
+        },
+        {
+          "id": "e5",
+          "source": "a",
+          "target": "d"
+        },
+        {
+          "id": "e6",
+          "source": "c",
+          "target": "d"
+        },
+        {
+          "id": "e7",
+          "source": "a",
+          "target": "c"
+        }
+      ],
+      "rotation": {
+        "a": [
+          "e3",
+          "e4",
+          "e5",
+          "e7"
+        ],
+        "d": [
+          "e2",
+          "e5",
+          "e6"
+        ],
+        "b": [
+          "e1",
+          "e2",
+          "e3"
+        ],
+        "c": [
+          "e0",
+          "e6",
+          "e7"
+        ],
+        "e": [
+          "e0",
+          "e1",
+          "e4"
+        ]
+      },
+      "constraints": {
+        "b": {
+          "kind": "oriented",
+          "children": [
+            "e3",
+            "e1",
+            "e2"
+          ]
+        },
+        "c": {
+          "kind": "mirror",
+          "children": [
+            "e6",
+            "e7",
+            "e0"
+          ]
+        },
+        "e": {
+          "kind": "group",
+          "children": [
+            "e4",
+            "e1",
+            "e0"
+          ]
+        }
+      }
+    },
+    "expected": {
+      "planar": true,
+      "rotation": {
+        "a": [
+          "e4",
+          "e3",
+          "e5",
+          "e7"
+        ],
+        "e": [
+          "e1",
+          "e4",
+          "e0"
+        ],
+        "d": [
+          "e2",
+          "e6",
+          "e5"
+        ],
+        "c": [
+          "e7",
+          "e6",
+          "e0"
+        ],
+        "b": [
+          "e3",
+          "e1",
+          "e2"
+        ]
+      },
+      "edges": {
+        "e0": [
+          "c",
+          "e"
+        ],
+        "e7": [
+          "a",
+          "c"
+        ],
+        "e4": [
+          "a",
+          "e"
+        ],
+        "e5": [
+          "a",
+          "d"
+        ],
+        "e6": [
+          "c",
+          "d"
+        ],
+        "e2": [
+          "b",
+          "d"
+        ],
+        "e3": [
+          "a",
+          "b"
+        ],
+        "e1": [
+          "b",
+          "e"
+        ]
+      }
+    }
+  },
+  {
+    "request": {
+      "nodes": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e"
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "source": "b",
+          "target": "d"
+        },
+        {
+          "id": "e1",
+          "source": "a",
+          "target": "c"
+        },
+        {
+          "id": "e2",
+          "source": "a",
+          "target": "d"
+        },
+        {
+          "id": "e3",
+          "source": "d",
+          "target": "e"
+        },
+        {
+          "id": "e4",
+          "source": "c",
+          "target": "e"
+        }
+      ],
+      "rotation": {
+        "a": [
+          "e1",
+          "e2"
+        ],
+        "e": [
+          "e3",
+          "e4"
+        ],
+        "d": [
+          "e0",
+          "e2",
+          "e3"
+        ],
+        "c": [
+          "e1",
+          "e4"
+        ],
+        "b": [
+          "e0"
+        ]
+      },
+      "constraints": {
+        "c": {
+          "kind": "group",
+          "children": [
+            "e1",
+            "e4"
+          ]
+        },
+        "d": {
+          "kind": "group",
+          "children": [
+            "e2",
+            "e0",
+            "e3"
+          ]
+        },
+        "e": {
+          "kind": "group",
+          "children": [
+            "e4",
+            "e3"
+          ]
+        }
+      }
+    },
+    "expected": {
+      "planar": true,
+      "rotation": {
+        "a": [
+          "e2",
+          "e1"
+        ],
+        "d": [
+          "e3",
+          "e2",
+          "e0"
+        ],
+        "b": [
+          "e0"
+        ],
+        "c": [
+          "e1",
+          "e4"
+        ],
+        "e": [
+          "e4",
+          "e3"
+        ]
+      },
+      "edges": {
+        "e0": [
+          "b",
+          "d"
+        ],
+        "e3": [
+          "d",
+          "e"
+        ],
+        "e4": [
+          "c",
+          "e"
+        ],
+        "e1": [
+          "a",
+          "c"
+        ],
+        "e2": [
+          "a",
+          "d"
+        ]
+      }
+    }
+  },
+  {
+    "request": {
+      "nodes": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e"
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "source": "a",
+          "target": "c"
+        },
+        {
+          "id": "e1",
+          "source": "d",
+          "target": "e"
+        },
+        {
+          "id": "e2",
+          "source": "c",
+          "target": "e"
+        },
+        {
+          "id": "e3",
+          "source": "a",
+          "target": "d"
+        },
+        {
+          "id": "e4",
+          "source": "b",
+          "target": "e"
+        },
+        {
+          "id": "e5",
+          "source": "a",
+          "target": "b"
+        },
+        {
+          "id": "e6",
+          "source": "b",
+          "target": "c"
+        }
+      ],
+      "rotation": {
+        "a": [
+          "e0",
+          "e3",
+          "e5"
+        ],
+        "d": [
+          "e1",
+          "e3"
+        ],
+        "b": [
+          "e4",
+          "e5",
+          "e6"
+        ],
+        "c": [
+          "e0",
+          "e2",
+          "e6"
+        ],
+        "e": [
+          "e1",
+          "e2",
+          "e4"
+        ]
+      },
+      "constraints": {
+        "a": {
+          "kind": "oriented",
+          "children": [
+            "e0",
+            "e3",
+            "e5"
+          ]
+        },
+        "c": {
+          "kind": "oriented",
+          "children": [
+            "e0",
+            "e6",
+            "e2"
+          ]
+        },
+        "e": {
+          "kind": "oriented",
+          "children": [
+            "e1",
+            "e2",
+            "e4"
+          ]
+        }
+      }
+    },
+    "expected": {
+      "planar": true,
+      "rotation": {
+        "a": [
+          "e0",
+          "e3",
+          "e5"
+        ],
+        "d": [
+          "e3",
+          "e1"
+        ],
+        "b": [
+          "e4",
+          "e6",
+          "e5"
+        ],
+        "c": [
+          "e0",
+          "e6",
+          "e2"
+        ],
+        "e": [
+          "e1",
+          "e2",
+          "e4"
+        ]
+      },
+      "edges": {
+        "e5": [
+          "a",
+          "b"
+        ],
+        "e4": [
+          "b",
+          "e"
+        ],
+        "e2": [
+          "c",
+          "e"
+        ],
+        "e6": [
+          "b",
+          "c"
+        ],
+        "e0": [
+          "a",
+          "c"
+        ],
+        "e1": [
+          "d",
+          "e"
+        ],
+        "e3": [
+          "a",
+          "d"
+        ]
+      }
+    }
+  },
+  {
+    "request": {
+      "nodes": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e"
+      ],
+      "edges": [
+        {
+          "id": "e0",
+          "source": "c",
+          "target": "d"
+        },
+        {
+          "id": "e1",
+          "source": "b",
+          "target": "e"
+        },
+        {
+          "id": "e2",
+          "source": "a",
+          "target": "c"
+        },
+        {
+          "id": "e3",
+          "source": "b",
+          "target": "d"
+        },
+        {
+          "id": "e4",
+          "source": "b",
+          "target": "c"
+        }
+      ],
+      "rotation": {
+        "a": [
+          "e2"
+        ],
+        "e": [
+          "e1"
+        ],
+        "d": [
+          "e0",
+          "e3"
+        ],
+        "c": [
+          "e0",
+          "e2",
+          "e4"
+        ],
+        "b": [
+          "e1",
+          "e3",
+          "e4"
+        ]
+      },
+      "constraints": {
+        "b": {
+          "kind": "mirror",
+          "children": [
+            "e1",
+            "e3",
+            "e4"
+          ]
+        },
+        "c": {
+          "kind": "mirror",
+          "children": [
+            "e4",
+            "e0",
+            "e2"
+          ]
+        },
+        "d": {
+          "kind": "oriented",
+          "children": [
+            "e0",
+            "e3"
+          ]
+        }
+      }
+    },
+    "expected": {
+      "planar": true,
+      "rotation": {
+        "a": [
+          "e2"
+        ],
+        "e": [
+          "e1"
+        ],
+        "d": [
+          "e3",
+          "e0"
+        ],
+        "c": [
+          "e0",
+          "e4",
+          "e2"
+        ],
+        "b": [
+          "e3",
+          "e1",
+          "e4"
+        ]
+      },
+      "edges": {
+        "e2": [
+          "a",
+          "c"
+        ],
+        "e4": [
+          "b",
+          "c"
+        ],
+        "e0": [
+          "c",
+          "d"
+        ],
+        "e3": [
+          "b",
+          "d"
+        ],
+        "e1": [
+          "b",
+          "e"
+        ]
+      }
+    }
+  }
+]

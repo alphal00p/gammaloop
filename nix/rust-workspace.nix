@@ -106,6 +106,11 @@
     (workspaceRoot + "/crates/vakint/templates")
     (workspaceRoot + "/crates/feynkit-model/data/sm.json.zlib")
     (workspaceRoot + "/crates/feynkit-ufo/src/model_metadata.py")
+    (workspaceRoot + "/crates/linnest/src/svg/interactive.css")
+    (workspaceRoot + "/crates/linnest/src/svg/interactive.js")
+    (workspaceRoot + "/crates/linnest/typst/ec-layout.wasm")
+    (workspaceRoot + "/crates/linnest/typst/LICENSE.clarabel")
+    (workspaceRoot + "/crates/linnest/typst/LICENSE.ec-layout")
   ];
 
   snapshotSources = lib.fileset.unions [
@@ -397,6 +402,10 @@
     sortedUnique (map builtins.head sourceMatches);
 
   workspacePackageExtraSourceRoots.production = {
+    "linnest" = [
+      "crates/linnest/src/svg/interactive.css"
+      "crates/linnest/src/svg/interactive.js"
+    ];
     "feynkit-ufo" = ["crates/feynkit-ufo/src/model_metadata.py"];
     "feynkit-model" = ["crates/feynkit-model/data/sm.json.zlib"];
     "alphal00p-docs-catalogs" = documentationCatalogAnnotatedItemSourcePaths;
@@ -417,6 +426,9 @@
       "crates/linnest/typst/linnest.wasm"
       "crates/linnest/typst/src"
       "crates/linnest/typst/typst.toml"
+      "crates/linnest/typst/ec-layout.wasm"
+      "crates/linnest/typst/LICENSE.clarabel"
+      "crates/linnest/typst/LICENSE.ec-layout"
     ];
     gammalooprs = [
       "assets/models/json"
@@ -424,7 +436,7 @@
     "gammaloop-integration-tests" = [
       "tests/resources/fjcore"
     ];
-    clinnet = [
+    "clinnet" = [
       "crates/linnest/build_assets.rs"
       "crates/clinnet/templates"
       "crates/kurvst/typst/kurvst.wasm"
@@ -433,6 +445,9 @@
       "crates/linnest/typst/linnest.wasm"
       "crates/linnest/typst/src"
       "crates/linnest/typst/typst.toml"
+      "crates/linnest/typst/ec-layout.wasm"
+      "crates/linnest/typst/LICENSE.clarabel"
+      "crates/linnest/typst/LICENSE.ec-layout"
     ];
     "linnet-py" = [
       "crates/linnet-py/LICENSE"
@@ -455,6 +470,11 @@
   };
 
   workspacePackageExtraSourceRoots.compileTimeTest = {
+    "linnet" = ["crates/linnet/src/half_edge/layout/impred/fixtures"];
+    "linnest" = [
+      "crates/linnest/layout/native/fixtures"
+      "crates/linnest/src/ec_seed/fixtures"
+    ];
     "feynkit-model" = [
       "crates/feynkit-model/tests/fixtures"
       "assets/models/json/sm/sm.json"

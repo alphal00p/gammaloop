@@ -1774,6 +1774,18 @@ impl SiteBuilder {
                 source.display(),
                 typst.display()
             );
+            // Vendored metadata and executable HTML interfaces keep their upstream formats.
+            if matches!(
+                source.to_str(),
+                Some(
+                    "vendor/clarabel/CHANGELOG.md"
+                        | "vendor/clarabel/LICENSE.md"
+                        | "vendor/clarabel/html/rustdocs-header.html"
+                        | "examples/layout/impred/playground.html"
+                )
+            ) {
+                continue;
+            }
             if !matches!(
                 source.file_name().and_then(|name| name.to_str()),
                 Some("AGENTS.md" | "README.md")
