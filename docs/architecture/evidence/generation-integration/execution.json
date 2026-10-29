@@ -722,6 +722,6 @@
     "base": "ead78f0460b03ec5d5dd80b8a6d47b4c357592a8",
     "code_commit": "b9f788922341e7bde2e801a054423ae70ed7e9ae",
     "receipt": "docs/architecture/evidence/generation-integration/wp3/exit-matrix/receipt.json",
-    "status": "Executed with independent cells retained: oracle fast selection FAILS 82/371 and the current core producer fails E0283 before BRST. WP3 and M-rebuild remain incomplete pending fixes and NEW independent review."
+    "status": "Executed with independent cells retained: oracle fast selection FAILS82/371 and the original b9 core producer fails E0283 before BRST. Opus F1-F4 evidence corrections applied without outcome changes; awaiting NEW focused independent review. Separate core62 is not imported. WP3 and M-rebuild remain incomplete."
   }
 }

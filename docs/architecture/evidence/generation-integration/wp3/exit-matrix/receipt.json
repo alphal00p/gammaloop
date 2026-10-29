@@ -5,10 +5,11 @@
   "base_change": "komovntumpxxkxqploluxkslpyqsuvuy",
   "runtime_code": "b9f788922341e7bde2e801a054423ae70ed7e9ae",
   "runtime_change": "olwyvkywonuuoszxllzsnovoxktuolzk",
-  "evidence_change": "zqmwmtxykoptqmkzsvtwzllruxynrnzs",
+  "evidence_change": "zpmxpvowzxlznxxxkmslwopmvrptxmzk",
   "candidate_bookmark": "generation-integration-wp3-exit-matrix",
+  "correction": "docs/architecture/evidence/generation-integration/wp3/exit-matrix/round2-correction.json",
   "source46_approved": "79dfeaab77958064bf802bc88db23eb86ac2f8ce",
-  "status": "INCOMPLETE: independent matrix cells pass, but the canonical fast/oracle gate fails and the current core producer does not compile",
+  "status": "INCOMPLETE: independent matrix cells pass, but the canonical fast/oracle gate fails and the original b9 core producer does not compile; later core62 preparation is not imported or credited",
   "source": {
     "uri": "git+file:///shared/lcnbr/dev/gammaloop/main?rev=b9f788922341e7bde2e801a054423ae70ed7e9ae&shallow=1&allRefs=1",
     "full_source": "/nix/store/0dc1hvdcyvhswl4xy76r46p8n7xvgq13-source",
@@ -33,6 +34,15 @@
       "test_nlo_acceptance_elf_sha256": "cddebe3a413172042f76d7b5869be1374346364561964f195664067209570ffb",
       "classification": "Aggregate archive realized and executed."
     },
+    "idenso": {
+      "archive": "/nix/store/nyv36qsgs9cwrdv7md5pskfmxpc8n126-gammaloop-nextest-binaries-spenso-idenso-0.1.0/gammaloop-nextest-spenso-idenso.tar.zst",
+      "archive_sha256": "484278ab5e65aead91e92862654b62be3213c24f50272c9c7f49c07287b36bfe",
+      "elf_member": "target/ci-optim/deps/idenso-e3e3408140242c5e",
+      "elf_sha256": "baece4b2a608b45e201ffc774c0c9e8f0ff7c44079f581c294cba87bacfb7b8d",
+      "deriver": "/nix/store/50zx8g0chhkjl4xvz99w0d5i0rq7nrly-gammaloop-nextest-binaries-spenso-idenso-0.1.0.drv",
+      "b9_aggregate_deriver": "/nix/store/n6k6ryvzahh8cigk2bvwn5kna815skmh-gammaloop-nextest-binaries-spenso.drv",
+      "classification": "Exact producer-closure identity: b9's aggregate directly consumes the same50zx derivation and nyv archive."
+    },
     "four_loop_example": {
       "profile": "dev-optim",
       "elf": "target/dev-optim/examples/four_loop_numerator",
@@ -56,7 +66,7 @@
       "failed": 82,
       "skipped": 49,
       "duration_seconds": 456.327,
-      "failures": "81 generation-oracle historical rows differ at their summary assertions, plus grouping::tests::sampled_quotient_groups_physical_local_factors failed in the direct archive invocation because its child used the immutable /build/source path without the runtime source bind. The latter is superseded by the successful bounded source-bound B2 replay below.",
+      "failures": "81 generation-oracle historical rows differ at their summary assertions, plus grouping::tests::sampled_quotient_groups_physical_local_factors failed in the direct archive invocation because its child resolved the compiled /build/source path without any source bind. The failed command remains counted; a later bounded workspace-source-bound B2 replay passes below.",
       "log_sha256": "242642657df3ee506625beccd1fb6e7b57c3f0a91283f05ae43191b736662873",
       "qualification": "This is a real non-green canonical FeynKit fast selection. The initial unlicensed attempt is retained as harness history and receives no credit."
     },
@@ -67,8 +77,12 @@
       "failed": 0,
       "duration_seconds": 439.786,
       "coverage": "Three certified frame hashes, both source19 rows, and 12 fresh-process registration cells at actual 1/8/32 pools.",
-      "maximum_test_seconds": 71.088,
-      "minimum_headroom_to_240_seconds": 168.912,
+      "maximum_test": "ym_ggg_zero_color_L3",
+      "maximum_test_seconds": 90.535,
+      "minimum_headroom_to_240_seconds": 149.465,
+      "registration_maximum_test": "outputs_do_not_depend_on_index_registration_order_generation_1",
+      "registration_maximum_seconds": 71.088,
+      "registration_headroom_to_240_seconds": 168.912,
       "log_sha256": "74dc8b6e7816d400c0a11433a4da00bb6e3e4757377590ee5c861f1cb1e196de"
     },
     "sm_three_loop_filtered": {
@@ -104,7 +118,8 @@
       "tests": ["epem_a_ddx::epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes","epem_a_ttx::epem_a_ttx_msbar_nlo_matches_the_published_inclusive_ratio_in_all_local_uv_routes","cool_qm_eos::cool_qm_eos_nlo_matches_example_target"],
       "policy": "Original route, precision, normalization, seed 1337, 750000 samples and tolerances remain in the frozen test source.",
       "duration_seconds": 160.037,
-      "log_sha256": "f5da973e132c41769af3a94c63b4b09b76183b698d334e7f86feca0c5192e54e"
+      "log_sha256": "f5da973e132c41769af3a94c63b4b09b76183b698d334e7f86feca0c5192e54e",
+      "failed_attempt": {"name":"nlo-coolqm","exit":100,"selected":3,"passed":0,"failed":3,"argv_sha256":"07fda662a59283939ce88ed9a560ef95e5a936c994bbd7bd1a4aac7e5cc4e18c","log_sha256":"060f8f065b29cf5f132be06a1aec73fb3c951b4b0795f89b9902aa4bcdff48ec","cause":"outside the Nix development environment; required runtime tools/binary paths were unavailable","credit":"NONE"}
     },
     "b2": {
       "exit": 0,
@@ -114,7 +129,14 @@
       "identity": "N28=(7/2)N34 in the original production 4D SU(3) scope",
       "controls": "Physical sampled quotient plus scalar-interface, undefined-ratio and nonfinite fallback/rejection controls",
       "log_sha256": "c670ccb67b6b6fc8089ea0f6d015bb08ef3cbfc5a39e307259b360a3b2e94fa9",
-      "harness": "A bounded bubblewrap bind supplied the immutable current source at the archive's compiled /build/source path and a writable JUnit root; two failed harness attempts are retained without credit."
+      "harness": "b2-bwrap4 bound the read-only generation-integration-plan WORKSPACE checkout at /build/source and a writable JUnit root. Relevant source bytes matched b9; the reviewer's separate immutable-store-bound6/6 replay is distinct evidence, not the original command.",
+      "failed_attempts": [
+        {"name":"b2","exit":100,"selected":6,"passed":4,"failed":2,"argv_sha256":"ddc559372e09d1516fb9a529a8b28c39a26064e5b37c8220bb8602f7349b036b","log_sha256":"20d5158f27ed497f003535e9b45ce6a9d79c3271a8dc513d03cc6c3b7a0014c4","cause":"missing /build/source model asset","credit":"NONE"},
+        {"name":"b2-nix","exit":100,"selected":6,"passed":4,"failed":2,"argv_sha256":"f6d9f93255e445d8cd5a3299f13738e29d1f3554563a0a9b367be4c464252326","log_sha256":"f398d4449f065114bf17ea5bead8306fe5cd020fc89cc49d73787f0f202e87e9","cause":"Nix tools present but /build/source model asset still missing","credit":"NONE"},
+        {"name":"b2-bwrap","exit":96,"selected":0,"passed":0,"failed":0,"argv_sha256":"e29de12d71f21b6b86406cf191c1cd204ba323e55cacf4b39c13fbe1075e583c","log_sha256":"0053d565341d218d579655ed77e65d8ca7f2d6ff7461d92f3d446efaaa963b12","cause":"read-only /tmp prevented archive extraction","credit":"NONE"},
+        {"name":"b2-bwrap2","exit":96,"selected":0,"passed":0,"failed":0,"argv_sha256":"6873d8bb27c3f8849f478e9efe5e1239683793bcb93551d796ad68280042e254","log_sha256":"16f426b69b7f1391740c73e8b063370c3b06847512b21cdf3cc3aaf2749a0f0e","cause":"bound /tmp lacked inherited Nix shell temp path","credit":"NONE"},
+        {"name":"b2-bwrap3","exit":110,"selected":6,"test_body_passes":6,"failed":0,"argv_sha256":"cd0706683be002b699f54fd8615c5bd0735f47b39155ccbc9b8b8ccef565392b","log_sha256":"f227a280a21c6035646045afa9ccdf27970927cb89187a221799a7f087c79c0d","cause":"six test bodies passed but JUnit write failed; whole command nonzero","credit":"NONE"}
+      ]
     },
     "brst_quartet": {
       "status": "NOT EXECUTED",
@@ -122,22 +144,23 @@
       "reason": "The current Git-pinned core producer fails during compilation before listing or execution. No older executable receives current-tip credit."
     }
   },
-  "approved_omissions": [
-    "graph::parse::tests::failing::parse_local",
-    "graph::parse::tests::failing::polarizations",
-    "graph::parse::tests::failing::test_pols_tree",
-    "graph::parse::tests::failing::vertex_rules"
-  ],
-  "omission_policy": "These four helpers would expand whole graph numerators and remain deliberately omitted. They are not counted as passes. The two separate DOT-export parser exclusions are ordinary quarantined failures, not relabelled as these policy omissions.",
+  "stale_default_filter_entries": {
+    "parse_helpers": ["graph::parse::tests::failing::parse_local","graph::parse::tests::failing::polarizations","graph::parse::tests::failing::test_pols_tree","graph::parse::tests::failing::vertex_rules"],
+    "dot_export": ["graph::parse::tests::failing::dot_export_can_include_autogenerated_fields","graph::parse::tests::failing::explicit_hedge_payload_round_trips_in_dot_export","graph::parse::tests::failing::split_dot_export_places_initial_state_cut_inputs_left_and_outputs_right"],
+    "classification": "All seven names remain in .config/nextest.toml but have no b9 test bodies. No test was selected or executed and no pass credit is assigned.",
+    "policy": "The no-whole-graph-numerator-expansion policy remains independently active. No stale-filter cleanup is included in this metadata correction."
+  },
   "raw_evidence": {
     "root": "target/wp3-exit-matrix",
     "manifest": "target/wp3-exit-matrix/artifact-manifest.sha256",
     "entries": 98,
-    "manifest_sha256": "43759b075fb89b215f40c3018235b214582b3c867969907211e2c854ec7d9bd5"
+    "manifest_sha256": "43759b075fb89b215f40c3018235b214582b3c867969907211e2c854ec7d9bd5",
+    "supplemental_manifest": {"path":"docs/architecture/evidence/generation-integration/wp3/exit-matrix/supplemental-artifacts.sha256","entries":2,"b2_junit_sha256":"7bd04e9d05f71b7d20585da9658b018192948413f2f399d03ebf25e73abe5fdf","oracle_focus_junit_sha256":"4ba79a75c5db82da3b5d76b42e65b2cc81ca05121fb48e2505979eea2673ea75"}
   },
   "evidence_source_qualification": {"record":"target/wp3-exit-matrix/final-evidence-flake-metadata.json","classification":"Evaluated only after the evidence commit freezes; distinct from executed runtime code b9f78892 and neither built nor executed."},
   "protected_refs": [
     "generation-integration-wp3-exit-matrix-base=ead78f0460b03ec5d5dd80b8a6d47b4c357592a8",
+    "generation-integration-wp3-exit-matrix-round1=863f506c5211afef007d975387af86d8052d646e",
     "generation-integration-tensor-layout-code=b9f788922341e7bde2e801a054423ae70ed7e9ae",
     "generation-integration-source46=79dfeaab77958064bf802bc88db23eb86ac2f8ce"
   ],
