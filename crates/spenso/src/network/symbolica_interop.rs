@@ -6,6 +6,7 @@ use std::path::Path;
 use ahash::{AHashMap, AHashSet, HashMap};
 #[cfg(feature = "native-code-generation")]
 use eyre::eyre;
+use symbolica::atom::ZeroTestSettings;
 #[cfg(feature = "native-code-generation")]
 use symbolica::evaluate::{
     CompileOptions, CompiledCode, CompiledNumber, ExportNumber, ExportSettings, ExportedCode,
@@ -371,8 +372,12 @@ where
         iterations: usize,
         tolerance: f64,
     ) -> Self::ContainerData<symbolica::id::ConditionResult> {
+        let settings = ZeroTestSettings::default()
+            .finite_field_samples(iterations)
+            .numerical_samples(iterations)
+            .exact_fallback(iterations != 0);
         self.map_ref(
-            |a| a.zero_test(iterations, tolerance),
+            |a| a.check_zero_with(&settings),
             |a| a.zero_test(iterations, tolerance),
         )
     }

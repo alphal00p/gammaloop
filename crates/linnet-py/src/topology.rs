@@ -1,6 +1,7 @@
 //! Python views of Linnet's native half-edge topology and algorithms.
 
 use std::collections::BTreeSet;
+use std::time::Duration;
 
 use linnet::half_edge::algorithms::DirectionBasis;
 use linnet::half_edge::involution::{EdgeIndex, Hedge};
@@ -8,11 +9,13 @@ use linnet::half_edge::subgraph::{
     cut::OrientedCut, cycle::Cycle, Inclusion, ModifySubSet, SuBitGraph, SubSetLike, SubSetOps,
 };
 use linnet::half_edge::tree::SimpleTraversalTree;
-use linnet::half_edge::NodeIndex;
+use linnet::half_edge::{CycleEnumerationError, NodeIndex};
 use pyo3::class::gc::{PyTraverseError, PyVisit};
 use pyo3::exceptions::{PyIndexError, PyReferenceError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyAny;
+use symbolica::utils::resources;
+use symbolica::utils::resources::{ResourceBudget, ResourceLimits};
 
 use crate::graph::{PyEdge, PyGraph, PyHalfEdge, PyNode, PyOrientation};
 use crate::native_graph::PyHedgeGraph;
@@ -1590,55 +1593,82 @@ impl PyGraph {
         Ok(bond.map(|bond| PySubgraph::new(slf.clone_ref(py), revision, bond)))
     }
 
-    /// Enumerate circuits only when the complete cycle-space candidate count fits the bound.
+    /// Enumerate circuits without a default work-count ceiling.
     ///
-    /// `max_results` bounds all non-empty combinations of a cycle basis, not only
-    /// the combinations that ultimately form circuits.
+    /// An explicit `max_results` enables a diagnostic over all candidate
+    /// combinations. Resource checks run throughout the native enumeration.
     pub(crate) fn all_cycles(
         slf: Py<PyGraph>,
         py: Python<'_>,
-        max_results: usize,
+        max_results: Option<usize>,
         subgraph: Option<&PySubgraph>,
+        max_process_rss_bytes: Option<u64>,
+        max_elapsed_seconds: Option<f64>,
     ) -> PyResult<Vec<PyCycle>> {
-        let revision = slf.borrow(py).revision()?;
-        let (filter, _) = selected_filter(&slf, py, revision, subgraph)?;
-        let rank = {
-            let graph = slf.borrow(py);
-            let state = graph.state.borrow();
-            state
-                .as_ref()
-                .expect("checked")
-                .graph
-                .cyclotomatic_number(&filter)
+        let max_elapsed = max_elapsed_seconds
+            .map(Duration::try_from_secs_f64)
+            .transpose()
+            .map_err(|_| {
+                PyValueError::new_err("max_elapsed_seconds must be finite and nonnegative")
+            })?;
+        let checkpoint = || {
+            py.check_signals()?;
+            resources::checkpoint().map_err(|error| PyValueError::new_err(error.to_string()))
         };
-        let Some(candidates) = (rank < usize::BITS as usize).then(|| (1usize << rank) - 1) else {
-            return Err(PyValueError::new_err(format!(
-                "cycle-space powerset at rank {rank} is not representable or safely enumerable"
-            )));
-        };
-        if candidates > max_results {
-            return Err(PyValueError::new_err(format!(
-                "cycle space has {candidates} candidate combinations, exceeding max_results={max_results}"
-            )));
-        }
-        let cycles = {
-            let graph = slf.borrow(py);
-            let state = graph.state.borrow();
-            state
-                .as_ref()
-                .expect("checked")
-                .graph
-                .all_cycles_of(&filter, rank)
-                .map_err(PyValueError::new_err)?
-        };
-        Ok(cycles
-            .into_iter()
-            .map(|cycle| PyCycle {
-                graph: Some(slf.clone_ref(py)),
-                revision,
-                cycle,
-            })
-            .collect())
+        ResourceBudget::new(ResourceLimits {
+            max_process_rss_bytes,
+            max_elapsed,
+        })
+        .run(|| {
+            checkpoint()?;
+            let revision = slf.borrow(py).revision()?;
+            let (filter, _) = selected_filter(&slf, py, revision, subgraph)?;
+            let rank = {
+                let graph = slf.borrow(py);
+                let state = graph.state.borrow();
+                state
+                    .as_ref()
+                    .expect("checked")
+                    .graph
+                    .cyclotomatic_number(&filter)
+            };
+            let Some(candidates) = (rank < usize::BITS as usize).then(|| (1usize << rank) - 1) else {
+                return Err(PyValueError::new_err(format!(
+                    "cycle-space powerset at rank {rank} is not representable by this platform's usize iterator"
+                )));
+            };
+            if let Some(max_results) = max_results.filter(|limit| candidates > *limit) {
+                return Err(PyValueError::new_err(format!(
+                    "cycle space has {candidates} candidate combinations, exceeding max_results={max_results}"
+                )));
+            }
+            let cycles = {
+                let graph = slf.borrow(py);
+                let state = graph.state.borrow();
+                state
+                    .as_ref()
+                    .expect("checked")
+                    .graph
+                    .all_cycles_of(&filter, rank, &checkpoint)
+                    .map_err(|error| match error {
+                        CycleEnumerationError::Control(error) => error,
+                        error => PyValueError::new_err(error.to_string()),
+                    })?
+            };
+            let result = cycles
+                .into_iter()
+                .map(|cycle| {
+                    checkpoint()?;
+                    Ok(PyCycle {
+                        graph: Some(slf.clone_ref(py)),
+                        revision,
+                        cycle,
+                    })
+                })
+                .collect::<PyResult<Vec<_>>>()?;
+            checkpoint()?;
+            Ok(result)
+        })
     }
 
     /// Enumerate tadpole components after identifying a non-empty terminal node set.

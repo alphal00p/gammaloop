@@ -88,9 +88,10 @@
 use core::panic;
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
+use std::convert::Infallible;
+use std::error::Error as StdError;
 use std::fmt::Display;
 use std::hash::Hash;
-use std::num::TryFromIntError;
 use std::ops::{Index, IndexMut, RangeBounds};
 
 use ahash::{AHashMap, AHashSet};
@@ -2635,6 +2636,40 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
         subgraph: &S,
         max_cycle_rank: usize,
     ) -> Result<Vec<Cycle>, CycleEnumerationError> {
+        self.all_cycles_of_with_control(subgraph, max_cycle_rank, || Ok::<(), Infallible>(()))
+    }
+
+    /// Enumerate circuits with a fallible checkpoint throughout powerset work.
+    ///
+    /// The callback can enforce a caller-owned resource budget without coupling
+    /// this generic graph crate to a particular resource monitor. Failure returns
+    /// no partial enumeration; normal output matches [`Self::all_cycles_of`].
+    ///
+    /// ```
+    /// use linnet::half_edge::HedgeGraph;
+    /// use linnet::half_edge::builder::HedgeGraphBuilder;
+    /// use std::convert::Infallible;
+    /// let mut builder = HedgeGraphBuilder::<(), (), ()>::new();
+    /// let node = builder.add_node(());
+    /// builder.add_edge(node, node, (), false);
+    /// let graph: HedgeGraph<(), (), ()> = builder.build();
+    /// let cycles = graph.all_cycles_of_with_control(
+    ///     &graph.full_filter(), 1, || Ok::<(), Infallible>(()),
+    /// )?;
+    /// assert_eq!(cycles.len(), 1);
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn all_cycles_of_with_control<S, ControlError>(
+        &self,
+        subgraph: &S,
+        max_cycle_rank: usize,
+        mut checkpoint: impl FnMut() -> Result<(), ControlError>,
+    ) -> Result<Vec<Cycle>, CycleEnumerationError<ControlError>>
+    where
+        S: SubSetLike<Base = SuBitGraph> + SubGraphLike,
+        ControlError: StdError + 'static,
+    {
+        checkpoint().map_err(CycleEnumerationError::Control)?;
         let basis = self.paton_cycle_basis(subgraph.included())?.0;
         let rank = basis.len();
         if rank > max_cycle_rank {
@@ -2651,25 +2686,26 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
             });
         }
 
-        let mut cycles = Cycle::all_sum_powerset_filter_map(&basis, &|mut c| {
-            if c.is_circuit(self) {
-                c.loop_count = Some(1);
-                Some(c)
-            } else {
-                None
-            }
-        })
-        .map_err(|_| CycleEnumerationError::RankNotRepresentable {
-            rank,
-            max_supported,
-        })?
+        let mut cycles = Cycle::try_all_sum_powerset_filter_map(
+            &basis,
+            &|mut c| {
+                if c.is_circuit(self) {
+                    c.loop_count = Some(1);
+                    Some(c)
+                } else {
+                    None
+                }
+            },
+            &mut checkpoint,
+        )?
         .into_iter()
         .collect::<Vec<_>>();
         cycles.sort();
+        checkpoint().map_err(CycleEnumerationError::Control)?;
         Ok(cycles)
     }
 
-    pub fn all_cycle_sym_diffs(&self) -> Result<Vec<InternalSubGraph>, TryFromIntError> {
+    pub fn all_cycle_sym_diffs(&self) -> Result<Vec<InternalSubGraph>, CycleEnumerationError> {
         Cycle::all_sum_powerset_filter_map(&self.cycle_basis().0, &Some)
             .map(|a| a.into_iter().map(|c| c.internal_graph(self)).collect())
     }
@@ -3359,7 +3395,10 @@ where
 
 /// Errors returned by exhaustive cycle-based enumeration.
 #[derive(Debug, Error)]
-pub enum CycleEnumerationError {
+pub enum CycleEnumerationError<E = Infallible> {
+    /// The caller's cooperative control stopped enumeration.
+    #[error("cycle enumeration stopped: {0}")]
+    Control(#[source] E),
     /// The cycle-space rank exceeds the caller-selected bound.
     #[error("cycle-space rank {rank} exceeds the explicit enumeration limit {max_cycle_rank}")]
     RankLimitExceeded {

@@ -1,6 +1,7 @@
 use std::ops::{Index, IndexMut};
 
 use std::cell::RefCell;
+use std::error::Error as StdError;
 
 use linnet::half_edge::algorithms::DirectionBasis;
 use linnet::half_edge::builder::{HedgeData, HedgeGraphBuilder};
@@ -11,6 +12,7 @@ use linnet::half_edge::subgraph::{
 };
 use linnet::half_edge::swap::Swap;
 use linnet::half_edge::tree::SimpleTraversalTree;
+use linnet::half_edge::CycleEnumerationError;
 use linnet::half_edge::{EdgeAccessors, HedgeGraph, HedgeGraphError, NodeIndex};
 use linnet::permutation::Permutation;
 use linnet::tree::{child_vec::ChildVecStore, Forest};
@@ -458,16 +460,20 @@ impl PyHedgeGraph {
         }
     }
 
-    pub(crate) fn all_cycles_of(
+    pub(crate) fn all_cycles_of<ControlError: StdError + 'static>(
         &self,
         subgraph: &SuBitGraph,
         max_cycle_rank: usize,
-    ) -> Result<Vec<Cycle>, String> {
+        checkpoint: impl FnMut() -> Result<(), ControlError>,
+    ) -> Result<Vec<Cycle>, CycleEnumerationError<ControlError>> {
         match self {
-            Self::Vec(graph) => graph.all_cycles_of(subgraph, max_cycle_rank),
-            Self::Forest(graph) => graph.all_cycles_of(subgraph, max_cycle_rank),
+            Self::Vec(graph) => {
+                graph.all_cycles_of_with_control(subgraph, max_cycle_rank, checkpoint)
+            }
+            Self::Forest(graph) => {
+                graph.all_cycles_of_with_control(subgraph, max_cycle_rank, checkpoint)
+            }
         }
-        .map_err(|error| error.to_string())
     }
 
     pub(crate) fn tadpoles(&self, externals: &[NodeIndex]) -> Result<Vec<SuBitGraph>, String> {

@@ -5,6 +5,8 @@ import json
 import os
 import re
 import shutil
+import signal
+import time
 import unittest
 import weakref
 from dataclasses import dataclass
@@ -1294,6 +1296,33 @@ class TestHedgeGraphTopology(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "at least 1"):
                     edgeless.all_bonds(min_size=0)
 
+    @unittest.skipUnless(hasattr(signal, "setitimer"), "requires POSIX interval timers")
+    def test_unbounded_cycle_enumeration_preserves_keyboard_interrupt(self):
+        node = lp.node("loop")
+        graph = lp.build(
+            node,
+            *[
+                lp.edge(lp.source(node), f"loop-{index}", lp.sink(node))
+                for index in range(30)
+            ],
+        )
+
+        def interrupt(_signum, _frame):
+            raise KeyboardInterrupt("cycle enumeration interrupted")
+
+        previous = signal.signal(signal.SIGALRM, interrupt)
+        started = time.monotonic()
+        try:
+            signal.setitimer(signal.ITIMER_REAL, 0.02)
+            with self.assertRaisesRegex(
+                KeyboardInterrupt, "cycle enumeration interrupted"
+            ):
+                graph.all_cycles(max_elapsed_seconds=10)
+        finally:
+            signal.setitimer(signal.ITIMER_REAL, 0)
+            signal.signal(signal.SIGALRM, previous)
+        self.assertLess(time.monotonic() - started, 5)
+
     def test_boundaries_cycles_bonds_and_tadpoles_are_backend_neutral(self):
         for node_store in (lp.NodeStore.Vec, lp.NodeStore.Forest):
             with self.subTest(node_store=node_store):
@@ -1310,6 +1339,11 @@ class TestHedgeGraphTopology(unittest.TestCase):
 
                 cycles = graph.all_cycles(max_results=1)
                 self.assertEqual(len(cycles), 1)
+                self.assertEqual(len(graph.all_cycles()), len(cycles))
+                with self.assertRaisesRegex(ValueError, "elapsed time"):
+                    graph.all_cycles(max_elapsed_seconds=0)
+                with self.assertRaisesRegex(ValueError, "finite and nonnegative"):
+                    graph.all_cycles(max_elapsed_seconds=float("nan"))
                 self.assertEqual(
                     {edge.name for edge in graph.edges_of(cycles[0].filter)},
                     {"ab", "bc", "ca"},
