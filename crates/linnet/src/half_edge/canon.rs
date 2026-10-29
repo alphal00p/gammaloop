@@ -127,7 +127,7 @@ pub struct EdgeLabelling<KV, KE, KH> {
     /// Input node -> canonical node.
     pub nodes: NodeVec<NodeIndex>,
     /// Whether an automorphism moves a node. The labelling is then one of several equivalent
-    /// ones, chosen through the input order.
+    /// ones, chosen through the input node order; the order of the edges does not matter.
     pub moves_nodes: bool,
 }
 
@@ -168,6 +168,10 @@ impl<KV, KE, KH> CanonicalForm<KV, KE, KH> {
     /// [`HedgeGraph::canonize_by`], without constructing a graph, hedge/edge maps or the lifted
     /// half-edge automorphism group. Node keys are in input node order, including isolated nodes.
     /// [`EdgeLabelling::moves_nodes`] is whether a generator of that group moves a node.
+    ///
+    /// The labelling depends on the input only through its node order: the same edges in another
+    /// order give the same labelling. A caller can therefore choose among equivalent labellings
+    /// by renumbering the nodes, for example into the canonical order of a graph with finer keys.
     pub fn label_edges(
         node_keys: impl IntoIterator<Item = KV, IntoIter: ExactSizeIterator>,
         edges: impl IntoIterator<Item = KeyedEdge<KE, KH>>,

@@ -4,7 +4,7 @@ use rand::{Rng, SeedableRng};
 use Orientation::Default;
 use Orientation::Reversed;
 
-use super::{ignore, CanonicalForm, CanonicalInputError, Canonization, KeyedEdge};
+use super::{ignore, CanonicalForm, CanonicalInputError, Canonization, EdgeLabelling, KeyedEdge};
 use crate::half_edge::builder::HedgeGraphBuilder;
 use crate::half_edge::involution::{Flow, Hedge, Orientation};
 use crate::half_edge::remap::{HedgeRemap, NodeRemap};
@@ -111,6 +111,39 @@ impl Spec {
             }
         }
         builder.build()
+    }
+
+    /// [`CanonicalForm::label_edges`] of the elements in their order.
+    fn label_edges(&self) -> EdgeLabelling<u8, u8, u8> {
+        let edges = self.elements.iter().map(|&element| match element {
+            Element::Edge {
+                a,
+                ka,
+                b,
+                kb,
+                data,
+                orientation,
+            } => KeyedEdge::Paired {
+                source: (NodeIndex(a), ka),
+                sink: (NodeIndex(b), kb),
+                key: data,
+                orientation,
+            },
+            Element::Leg {
+                node,
+                key,
+                data,
+                orientation,
+                flow,
+            } => KeyedEdge::Dangling {
+                node: NodeIndex(node),
+                hedge_key: key,
+                key: data,
+                orientation,
+                flow,
+            },
+        });
+        CanonicalForm::label_edges(self.nodes.iter().copied(), edges).unwrap()
     }
 
     /// Random node order, element order and stored roles, with the same physical graph.
@@ -1356,37 +1389,6 @@ fn many_distinct_keys_use_the_dense_colour_table() {
 
 #[test]
 fn compact_input_preserves_canonical_form_and_exact_node_frame() {
-    let compact = |spec: &Spec| {
-        let edges = spec.elements.iter().map(|&element| match element {
-            Element::Edge {
-                a,
-                ka,
-                b,
-                kb,
-                data,
-                orientation,
-            } => KeyedEdge::Paired {
-                source: (NodeIndex(a), ka),
-                sink: (NodeIndex(b), kb),
-                key: data,
-                orientation,
-            },
-            Element::Leg {
-                node,
-                key,
-                data,
-                orientation,
-                flow,
-            } => KeyedEdge::Dangling {
-                node: NodeIndex(node),
-                hedge_key: key,
-                key: data,
-                orientation,
-                flow,
-            },
-        });
-        CanonicalForm::label_edges(spec.nodes.iter().copied(), edges).unwrap()
-    };
     let mut rng = SmallRng::seed_from_u64(0x0c01_1ac7);
     let fixtures = [
         Spec::new(0),
@@ -1408,7 +1410,7 @@ fn compact_input_preserves_canonical_form_and_exact_node_frame() {
         .into_iter()
         .chain((0..128).map(|_| Spec::random(&mut rng, 8, 12, 6)))
     {
-        let expected_form = compact(&spec).form;
+        let expected_form = spec.label_edges().form;
         // Each relabelled input must retain the *same map as the existing backend*, even when
         // several equivalent labels tie; equal isomorphism certificates alone are insufficient.
         let mut relabel_rng = SmallRng::seed_from_u64(481);
@@ -1417,7 +1419,7 @@ fn compact_input_preserves_canonical_form_and_exact_node_frame() {
         {
             let graph = case.build();
             let full = graph.canonize();
-            let labelling = compact(&case);
+            let labelling = case.label_edges();
             assert_eq!(labelling.form, expected_form);
             let full_owned = graph.canonize_by(|v| *v, |e| *e, |h| *h);
             assert_eq!(&labelling.form, full_owned.canonical_form());
@@ -1436,6 +1438,26 @@ fn compact_input_preserves_canonical_form_and_exact_node_frame() {
             );
         }
     }
+}
+
+#[test]
+fn compact_input_labelling_ignores_the_edge_order() {
+    // Ties between equivalent labellings are broken through the node order alone.
+    let mut rng = SmallRng::seed_from_u64(0xed9e_0de2);
+    let mut ties = 0;
+    for _ in 0..256 {
+        let spec = Spec::random(&mut rng, 8, 12, 6);
+        let expected = spec.label_edges();
+        ties += usize::from(expected.moves_nodes);
+        for _ in 0..4 {
+            let mut shuffled = spec.clone();
+            shuffled.elements.shuffle(&mut rng);
+            let labelling = shuffled.label_edges();
+            assert_eq!(labelling.nodes, expected.nodes, "{spec:?}");
+            assert_eq!(labelling.moves_nodes, expected.moves_nodes);
+        }
+    }
+    assert!(ties > 0, "some random graphs have equivalent labellings");
 }
 
 #[test]

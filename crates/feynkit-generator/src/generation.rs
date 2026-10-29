@@ -48,15 +48,13 @@ use idenso::dirac::AGS;
 use idenso::epsilon::EPSILON_SYMBOL;
 use idenso::representations::Bispinor;
 use idenso::tensor::SymbolicTensor;
-use linnet::half_edge::builder::HedgeGraphBuilder;
-use linnet::half_edge::canon::{CanonicalForm, KeyedEdge, ignore};
+use linnet::half_edge::canon::{CanonicalForm, KeyedEdge};
 use linnet::half_edge::generate::{
     Diagram as CompactDiagram, Plan, Run as EngineRun, SkeletonSnapshot,
 };
 use linnet::half_edge::involution::{Flow, Orientation};
-use linnet::half_edge::remap::{HedgeRemap, NodeRemap};
 use linnet::half_edge::subgraph::{InternalSubGraph, SuBitGraph, SubSetLike};
-use linnet::half_edge::{HedgeGraph, NodeIndex};
+use linnet::half_edge::{HedgeGraph, NoData, NodeIndex};
 use rayon::ThreadPoolBuildError;
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::ThreadPoolBuilder;
@@ -3511,7 +3509,6 @@ impl ResolvedProcess {
                     .numerator_colors
                     .edge(&edge, model, exact_internal_particles)?;
                 let particle = model.particle_by_id(edge.particle)?;
-                let ghost = particle.is_ghost().then(|| particle.is_antiparticle());
                 let labels = match (edge.source, edge.sink) {
                     (Endpoint::External(external), _) | (_, Endpoint::External(external)) => {
                         let normal = external_color(external)?;
@@ -3524,14 +3521,15 @@ impl ResolvedProcess {
                     }
                     _ => None,
                 };
-                Ok((edge, color, labels, ghost))
+                Ok((edge, color, labels, particle))
             })
             .collect::<Result<Vec<_>, GenerationError>>()?;
         // The reduced skeleton of one global left/right choice, in edge order.
         let reduced_edges = |swapped: bool| {
             edges.iter().map(
-                move |&(edge, key, labels, ghost)| match (edge.source, edge.sink) {
+                move |&(edge, key, labels, particle)| match (edge.source, edge.sink) {
                     (Endpoint::Vertex(source), Endpoint::Vertex(sink)) => {
+                        let ghost = particle.is_ghost().then(|| particle.is_antiparticle());
                         let ((source, sink), orientation) = match ghost {
                             Some(true) => ((sink, source), Orientation::Default),
                             Some(false) => ((source, sink), Orientation::Default),
@@ -3558,13 +3556,58 @@ impl ResolvedProcess {
                 },
             )
         };
+        // The physical graph of one global left/right choice, in edge order: fields in their
+        // physical direction, and legs keyed by the external index they show.
+        let physical_edges = |swapped: bool| {
+            edges.iter().map(move |&(edge, _, _, particle)| {
+                let reverse = edge.directed && particle.is_antiparticle();
+                let key = if reverse {
+                    particle.antiparticle
+                } else {
+                    edge.particle
+                };
+                let orientation = if !edge.directed {
+                    Orientation::Undirected
+                } else if reverse {
+                    Orientation::Reversed
+                } else {
+                    Orientation::Default
+                };
+                match (edge.source, edge.sink) {
+                    (Endpoint::Vertex(source), Endpoint::Vertex(sink)) => KeyedEdge::Paired {
+                        source: (NodeIndex(source), None),
+                        sink: (NodeIndex(sink), None),
+                        key,
+                        orientation,
+                    },
+                    (Endpoint::External(external), Endpoint::Vertex(vertex))
+                    | (Endpoint::Vertex(vertex), Endpoint::External(external)) => {
+                        let shown = if swapped { partner(external) } else { external };
+                        KeyedEdge::Dangling {
+                            node: NodeIndex(vertex),
+                            hedge_key: Some(shown.index),
+                            key,
+                            orientation,
+                            flow: if edge.source.external().is_some() {
+                                Flow::Sink
+                            } else {
+                                Flow::Source
+                            },
+                        }
+                    }
+                    (Endpoint::External(_), Endpoint::External(_)) => {
+                        unreachable!("generated edges touch an interaction vertex")
+                    }
+                }
+            })
+        };
         let mut candidates = Vec::new();
         for swapped in [false, true] {
             if swapped && !include_left_right_remapping {
                 continue;
             }
             let labelling = CanonicalForm::label_edges(
-                std::iter::repeat_n(linnet::half_edge::NoData {}, graph.n_vertices()),
+                std::iter::repeat_n(NoData {}, graph.n_vertices()),
                 reduced_edges(swapped),
             )
             .map_err(|error| GenerationError::GraphConstruction(error.to_string()))?;
@@ -3579,12 +3622,10 @@ impl ResolvedProcess {
         // ambiguity in the physical frame. The choice above compares reduced forms alone, so
         // only the selected exchange needs it.
         let positions = if reduced.moves_nodes {
-            self.anchored_positions(
-                graph,
-                model,
+            Self::anchored_positions(
+                graph.vertices(),
+                physical_edges(left_right_swapped),
                 reduced_edges(left_right_swapped),
-                left_right_swapped,
-                &partner,
                 &reduced.form,
             )?
         } else {
@@ -3604,7 +3645,7 @@ impl ResolvedProcess {
         let mut edges = edges
             .into_iter()
             .enumerate()
-            .map(|(edge_id, (edge, _, _, _))| {
+            .map(|(edge_id, (edge, _, _, data))| {
                 // All external edges point into the interaction graph and internal
                 // edges point from the lower to the higher canonical vertex.
                 let flipped = edge.sink.external().is_some()
@@ -3616,7 +3657,6 @@ impl ResolvedProcess {
                 // CP acts on neutral adjoint Faddeev-Popov ghosts through color, without
                 // exchanging ghost and antighost fields. Their derivative momentum keeps its
                 // ghost-number orientation.
-                let data = model.particle_by_id(edge.particle)?;
                 let conjugated = left_right_swapped
                     && !(data.is_ghost() && data.color == 8 && data.charge.is_zero());
                 let mut particle = edge.particle;
@@ -3663,108 +3703,59 @@ impl ResolvedProcess {
     }
 
     /// The canonical positions of the `reduced` skeleton (canonical form `form`) in an invariant
-    /// physical input order: feed the same reduced graph to its canonizer with nodes and
-    /// half-edges permuted into the canonical order of the physical graph (particles,
-    /// orientations and external states). No reduced color or topology certificate changes,
-    /// and no group is expanded. The physical frame depends on more than the reduced input.
+    /// physical input order. Equivalent labellings are chosen through the node order alone, so
+    /// the reduced graph is labelled again with its nodes renumbered into the canonical order of
+    /// the `physical` graph on the same vertices (`rules`; particles, orientations and external
+    /// states), and its edges keep their order. No reduced color or topology certificate changes,
+    /// and no group is expanded. The physical frame depends on more than the reduced input. The
+    /// search's choice among equivalent labellings follows the node order through its cell order
+    /// and first best leaf, not through the group alone, so neither the first labelling nor its
+    /// generators determine the anchored one.
     fn anchored_positions(
-        &self,
-        graph: &GeneratedGraph,
-        model: &Model,
+        rules: impl ExactSizeIterator<Item = VertexRuleId>,
+        physical: impl IntoIterator<Item = KeyedEdge<ParticleId, Option<usize>>>,
         reduced: impl IntoIterator<Item = KeyedEdge<usize, Option<i64>>>,
-        swapped: bool,
-        partner: &dyn Fn(ExternalNode) -> ExternalNode,
-        form: &CanonicalForm<linnet::half_edge::NoData, usize, Option<i64>>,
+        form: &CanonicalForm<NoData, usize, Option<i64>>,
     ) -> Result<Vec<usize>, GenerationError> {
-        let mut skeleton = HedgeGraphBuilder::new();
-        for _ in 0..graph.n_vertices() {
-            skeleton.add_node(());
-        }
-        for edge in reduced {
-            match edge {
+        let n_vertices = rules.len();
+        let physical = CanonicalForm::label_edges(rules, physical)
+            .map_err(|error| GenerationError::GraphConstruction(error.to_string()))?
+            .nodes;
+        let renumber = |node: NodeIndex| physical[node];
+        let anchored = CanonicalForm::label_edges(
+            std::iter::repeat_n(NoData {}, n_vertices),
+            reduced.into_iter().map(|edge| match edge {
                 KeyedEdge::Paired {
                     source,
                     sink,
                     key,
                     orientation,
-                } => skeleton.add_edge(
-                    source.0.add_data(source.1),
-                    sink.0.add_data(sink.1),
+                } => KeyedEdge::Paired {
+                    source: (renumber(source.0), source.1),
+                    sink: (renumber(sink.0), sink.1),
                     key,
                     orientation,
-                ),
+                },
                 KeyedEdge::Dangling {
                     node,
                     hedge_key,
                     key,
                     orientation,
                     flow,
-                } => skeleton.add_external_edge(node.add_data(hedge_key), key, orientation, flow),
-            }
-        }
-        let mut skeleton: HedgeGraph<usize, (), Option<i64>> = skeleton.build();
-        let mut physical = HedgeGraphBuilder::new();
-        let physical_nodes: Vec<_> = graph
-            .vertices()
-            .map(|rule| physical.add_node(rule))
-            .collect();
-        for edge in graph.edges() {
-            let particle = model.particle_by_id(edge.particle)?;
-            let reverse = edge.directed && particle.is_antiparticle();
-            let field = if reverse {
-                particle.antiparticle
-            } else {
-                edge.particle
-            };
-            let orientation = if !edge.directed {
-                Orientation::Undirected
-            } else if reverse {
-                Orientation::Reversed
-            } else {
-                Orientation::Default
-            };
-            match (edge.source, edge.sink) {
-                (Endpoint::Vertex(source), Endpoint::Vertex(sink)) => physical.add_edge(
-                    physical_nodes[source],
-                    physical_nodes[sink],
-                    field,
+                } => KeyedEdge::Dangling {
+                    node: renumber(node),
+                    hedge_key,
+                    key,
                     orientation,
-                ),
-                (Endpoint::External(external), Endpoint::Vertex(vertex))
-                | (Endpoint::Vertex(vertex), Endpoint::External(external)) => {
-                    let shown = if swapped { partner(external) } else { external };
-                    physical.add_external_edge(
-                        physical_nodes[vertex].add_data(Some(shown)),
-                        field,
-                        orientation,
-                        if edge.source.external().is_some() {
-                            Flow::Sink
-                        } else {
-                            Flow::Source
-                        },
-                    )
-                }
-                (Endpoint::External(_), Endpoint::External(_)) => {
-                    unreachable!("generated edges touch an interaction vertex")
-                }
-            }
-        }
-        let physical: HedgeGraph<ParticleId, VertexRuleId, Option<ExternalNode>> = physical.build();
-        let physical = physical.canonize_by(Clone::clone, Clone::clone, Clone::clone);
-        skeleton
-            .permute_nodes(&NodeRemap::from_permutation(&physical.node_permutation()))
-            .expect("physical and reduced graphs have the same nodes");
-        skeleton
-            .permute_hedges(&HedgeRemap::from_permutation(&physical.hedge_permutation()))
-            .expect("physical and reduced graphs have the same incidence");
-        let anchored = skeleton.canonize_by(ignore, |color| *color, |color| *color);
-        debug_assert_eq!(form, anchored.canonical_form());
-        Ok((0..graph.n_vertices())
-            .map(|vertex| {
-                anchored
-                    .canonical_node(physical.canonical_node(NodeIndex(vertex)))
-                    .0
-            })
+                    flow,
+                },
+            }),
+        )
+        .map_err(|error| GenerationError::GraphConstruction(error.to_string()))?;
+        debug_assert_eq!(form, &anchored.form);
+        Ok(physical
+            .into_iter()
+            .map(|(_, canonical)| anchored.nodes[canonical].0)
             .collect())
     }
 
