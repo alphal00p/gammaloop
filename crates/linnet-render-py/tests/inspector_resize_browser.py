@@ -79,7 +79,7 @@ def main():
                 ignore_default_args=["--hide-scrollbars"],
             )
             try:
-                for mode in ("inline", "iframe"):
+                for mode in ("inline", "iframe", "shadow-iframe", "late-scroll"):
                     for theme in ("light", "dark"):
                         for width in (590, 350):
                             page = browser.new_page(
@@ -99,17 +99,28 @@ def main():
                             page.set_content(
                                 f'<body data-theme="{theme}"><style>'
                                 f"body{{background:{background};color:{color};margin:20px}}"
-                                f"#host{{width:{width}px;overflow:auto}}"
+                                f"#host{{width:{width}px;overflow:{'visible' if mode == 'late-scroll' else 'auto'}}}"
                                 "</style><script>"
                                 + resize
                                 + '</script><div id="host">'
-                                + (html if mode == "inline" else wrapper)
+                                + (
+                                    html
+                                    if mode == "inline"
+                                    else wrapper
+                                    if mode in ("iframe", "late-scroll")
+                                    else ""
+                                )
                                 + "</div>"
                             )
+                            if mode == "shadow-iframe":
+                                page.evaluate(
+                                    "wrapper => host.attachShadow({mode:'open'}).innerHTML = wrapper",
+                                    wrapper,
+                                )
                             owner = page
-                            if mode == "iframe":
+                            if mode != "inline":
                                 page.wait_for_function(
-                                    "host.querySelector('iframe[data-linnet-ready]')"
+                                    "(host.shadowRoot || host).querySelector('iframe[data-linnet-ready]')"
                                 )
                                 owner = (
                                     page.locator("#host iframe")
@@ -120,14 +131,42 @@ def main():
                             owner.evaluate(
                                 "() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))"
                             )
+                            assert (
+                                owner.locator(
+                                    "svg[data-linnet-interactive]"
+                                ).get_attribute("data-theme")
+                                == theme
+                            )
                             host = page.locator("#host")
                             host.evaluate(
                                 "e => e.style.maxHeight = `${e.scrollHeight + 4}px`"
                             )
+                            if mode == "late-scroll":
+                                host.evaluate("e => e.style.overflow = 'auto'")
+                                owner.evaluate(
+                                    "() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))"
+                                )
                             target = owner.locator('[data-linnet-kind="node"]').first
                             panel = owner.locator(".linnet-inspector")
                             initial_width = host.evaluate("e => e.clientWidth")
                             initial_target = target.bounding_box()
+                            # Record before the pointer enters. Waiting for the
+                            # inspector's final height misses single-frame jumps.
+                            page.evaluate("""() => {
+                              window.hoverFrames = [];
+                              const iframe=(host.shadowRoot||host).querySelector('iframe');
+                              const document=iframe?.contentDocument||window.document;
+                              const target=document.querySelector('[data-linnet-kind="node"]');
+                              const sample=()=>{
+                                const box=target.getBoundingClientRect();
+                                const offset=iframe?.getBoundingClientRect()||{x:0,y:0};
+                                hoverFrames.push({width:host.clientWidth,target:{
+                                  x:box.x+offset.x,y:box.y+offset.y,
+                                  width:box.width,height:box.height}});
+                                if(hoverFrames.length<24) requestAnimationFrame(sample);
+                              };
+                              sample();
+                            }""")
                             page.mouse.move(
                                 initial_target["x"] + initial_target["width"] / 2,
                                 initial_target["y"] + initial_target["height"] / 2,
@@ -135,15 +174,15 @@ def main():
                             page.wait_for_function(
                                 "host.scrollHeight > host.clientHeight"
                             )
-                            widths = page.evaluate("""async () => {
-                              const widths=[];
-                              for(let i=0;i<16;i++) {
-                                await new Promise(requestAnimationFrame);
-                                widths.push(host.clientWidth);
-                              }
-                              return widths;
-                            }""")
+                            page.wait_for_function("hoverFrames.length === 24")
+                            frames = page.evaluate("hoverFrames")
+                            widths = [frame["width"] for frame in frames]
                             assert widths == [initial_width] * len(widths), widths
+                            assert all(
+                                abs(frame["target"][key] - value) < 0.05
+                                for frame in frames
+                                for key, value in initial_target.items()
+                            ), (mode, theme, width, initial_target, frames)
                             assert initial_width < width, (
                                 "Real scrollbar gutter required"
                             )
@@ -189,6 +228,7 @@ def main():
                                     "name": name,
                                     "gutter": width - initial_width,
                                     "sampled_widths": widths,
+                                    "hover_frames": frames,
                                     "target": initial_target,
                                     "hover_pin_close": True,
                                 }
