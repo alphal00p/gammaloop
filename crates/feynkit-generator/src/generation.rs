@@ -5439,85 +5439,12 @@ mod tests {
 
     #[test]
     fn cut_partitions_use_sewn_attachment_nodes() {
-        let model = fermion_model();
-        let resolved = ResolvedProcess::new(
-            &model,
-            &Process::new([22_i64, 22], [22_i64, 22]),
-            GenerationType::CrossSection,
-            &(Process::new([22_i64, 22], [22_i64, 22]))
-                .clone()
-                .cross_section(Loops::forward(0..=0))
-                .with_cuts(Cuts::new().with_blobs(1..=1).with_spectators(0..=0))
-                .with_topology(TopologyRules::new().with_self_loops(false)),
-        )
-        .unwrap();
-        let mut graph = Graph::new();
-        let external = |index, state| {
-            ColoredNode::External(ExternalNode {
-                index,
-                state,
-                particle: particle(&model, 22),
-            })
-        };
-        let incoming_0 = graph.add_node(external(0, ExternalState::Incoming));
-        let incoming_1 = graph.add_node(external(1, ExternalState::Incoming));
-        let outgoing_0 = graph.add_node(external(2, ExternalState::Outgoing));
-        let outgoing_1 = graph.add_node(external(3, ExternalState::Outgoing));
-        let left_0 = graph.add_node(ColoredNode::Interaction(vertex(&model, "V")));
-        let left_1 = graph.add_node(ColoredNode::Interaction(vertex(&model, "V")));
-        let right_0 = graph.add_node(ColoredNode::Interaction(vertex(&model, "V")));
-        let right_1 = graph.add_node(ColoredNode::Interaction(vertex(&model, "V")));
-        let photon = edge(&model, 22);
-        let external_edges = BTreeSet::from([
-            EdgeId(graph.add_edge(incoming_0, left_0, false, photon).unwrap()),
-            EdgeId(graph.add_edge(incoming_1, left_1, false, photon).unwrap()),
-            EdgeId(graph.add_edge(right_0, outgoing_0, false, photon).unwrap()),
-            EdgeId(graph.add_edge(right_1, outgoing_1, false, photon).unwrap()),
-        ]);
-        let bridge_0 = EdgeId(graph.add_edge(left_0, right_0, false, photon).unwrap());
-        let bridge_1 = EdgeId(graph.add_edge(left_1, right_1, false, photon).unwrap());
-        graph.add_edge(left_0, left_1, false, photon).unwrap();
-        graph.add_edge(right_0, right_1, false, photon).unwrap();
-
-        // The former pre-sewing convention fixed only the degree-one external
-        // vertices. It therefore admitted partitions which crossed an initial
-        // external edge and two or more internal edges; stripping that edge in
-        // the runtime bridge turned them into non-s-t threshold candidates.
-        let old_graph = graph.build().with_external_vertices();
-        let mut old_source = Vec::new();
-        let mut old_target = Vec::new();
-        for (node, _, color) in old_graph.iter_nodes() {
-            let PlainVertex::External(external) = color else {
-                continue;
-            };
-            match external.state {
-                ExternalState::Incoming => old_source.push(node),
-                ExternalState::Outgoing => old_target.push(node),
-            }
-        }
-        assert!(
-            old_graph
-                .all_cuts_from_ids(&old_source, &old_target)
-                .into_iter()
-                .any(|(_, cut, _)| {
-                    let crossing = cut
-                        .left
-                        .included_iter()
-                        .map(|hedge| EdgeId(old_graph[&hedge].0))
-                        .collect::<BTreeSet<_>>();
-                    crossing.iter().any(|edge| external_edges.contains(edge))
-                        && crossing
-                            .iter()
-                            .filter(|edge| !external_edges.contains(edge))
-                            .count()
-                            > 1
-                })
-        );
-
-        let inventory = resolved
-            .cut_partitions(
-                &graph.build(),
+        for self_energy_on_source_side in [None, Some(true), Some(false)] {
+            let model = fermion_model();
+            let resolved = ResolvedProcess::new(
                 &model,
+                &Process::new([22_i64, 22], [22_i64, 22]),
+                GenerationType::CrossSection,
                 &(Process::new([22_i64, 22], [22_i64, 22]))
                     .clone()
                     .cross_section(Loops::forward(0..=0))
@@ -5525,14 +5452,101 @@ mod tests {
                     .with_topology(TopologyRules::new().with_self_loops(false)),
             )
             .unwrap();
-        assert_eq!(inventory.topology_threshold_candidates.len(), 1);
-        let crossing = inventory.topology_threshold_candidates[0]
-            .cut
-            .iter()
-            .map(|half_edge| half_edge.edge)
-            .collect::<BTreeSet<_>>();
-        assert_eq!(crossing, BTreeSet::from([bridge_0, bridge_1]));
-        assert!(crossing.is_disjoint(&external_edges));
+            let mut graph = Graph::new();
+            let external = |index, state| {
+                ColoredNode::External(ExternalNode {
+                    index,
+                    state,
+                    particle: particle(&model, 22),
+                })
+            };
+            let incoming_0 = graph.add_node(external(0, ExternalState::Incoming));
+            let incoming_1 = graph.add_node(external(1, ExternalState::Incoming));
+            let outgoing_0 = graph.add_node(external(2, ExternalState::Outgoing));
+            let outgoing_1 = graph.add_node(external(3, ExternalState::Outgoing));
+            let left_0 = graph.add_node(ColoredNode::Interaction(vertex(&model, "V")));
+            let left_1 = graph.add_node(ColoredNode::Interaction(vertex(&model, "V")));
+            let right_0 = graph.add_node(ColoredNode::Interaction(vertex(&model, "V")));
+            let right_1 = graph.add_node(ColoredNode::Interaction(vertex(&model, "V")));
+            let photon = edge(&model, 22);
+            let external_edges = BTreeSet::from([
+                EdgeId(graph.add_edge(incoming_0, left_0, false, photon).unwrap()),
+                EdgeId(graph.add_edge(incoming_1, left_1, false, photon).unwrap()),
+                EdgeId(graph.add_edge(right_0, outgoing_0, false, photon).unwrap()),
+                EdgeId(graph.add_edge(right_1, outgoing_1, false, photon).unwrap()),
+            ]);
+            let bridge_0 = EdgeId(graph.add_edge(left_0, right_0, false, photon).unwrap());
+            let bridge_1 = EdgeId(graph.add_edge(left_1, right_1, false, photon).unwrap());
+            for (source_side, (a, b)) in [(true, (left_0, left_1)), (false, (right_0, right_1))] {
+                if self_energy_on_source_side == Some(source_side) {
+                    // The seeded attachments enclose this pocket on one side.
+                    // Cut enumeration must absorb it before testing connectivity.
+                    let m0 = graph.add_node(ColoredNode::Interaction(vertex(&model, "V")));
+                    let m1 = graph.add_node(ColoredNode::Interaction(vertex(&model, "V")));
+                    graph.add_edge(a, m0, false, photon).unwrap();
+                    graph.add_edge(m0, m1, false, photon).unwrap();
+                    graph.add_edge(m0, m1, false, photon).unwrap();
+                    graph.add_edge(m1, b, false, photon).unwrap();
+                } else {
+                    graph.add_edge(a, b, false, photon).unwrap();
+                }
+            }
+
+            // The former pre-sewing convention fixed only the degree-one external
+            // vertices. It therefore admitted partitions which crossed an initial
+            // external edge and two or more internal edges; stripping that edge in
+            // the runtime bridge turned them into non-s-t threshold candidates.
+            let old_graph = graph.build().with_external_vertices();
+            let mut old_source = Vec::new();
+            let mut old_target = Vec::new();
+            for (node, _, color) in old_graph.iter_nodes() {
+                let PlainVertex::External(external) = color else {
+                    continue;
+                };
+                match external.state {
+                    ExternalState::Incoming => old_source.push(node),
+                    ExternalState::Outgoing => old_target.push(node),
+                }
+            }
+            assert!(
+                old_graph
+                    .all_cuts_from_ids(&old_source, &old_target)
+                    .into_iter()
+                    .any(|(_, cut, _)| {
+                        let crossing = cut
+                            .left
+                            .included_iter()
+                            .map(|hedge| EdgeId(old_graph[&hedge].0))
+                            .collect::<BTreeSet<_>>();
+                        crossing.iter().any(|edge| external_edges.contains(edge))
+                            && crossing
+                                .iter()
+                                .filter(|edge| !external_edges.contains(edge))
+                                .count()
+                                > 1
+                    })
+            );
+
+            let inventory = resolved
+                .cut_partitions(
+                    &graph.build(),
+                    &model,
+                    &(Process::new([22_i64, 22], [22_i64, 22]))
+                        .clone()
+                        .cross_section(Loops::forward(0..=0))
+                        .with_cuts(Cuts::new().with_blobs(1..=1).with_spectators(0..=0))
+                        .with_topology(TopologyRules::new().with_self_loops(false)),
+                )
+                .unwrap();
+            assert_eq!(inventory.topology_threshold_candidates.len(), 1);
+            let crossing = inventory.topology_threshold_candidates[0]
+                .cut
+                .iter()
+                .map(|half_edge| half_edge.edge)
+                .collect::<BTreeSet<_>>();
+            assert_eq!(crossing, BTreeSet::from([bridge_0, bridge_1]));
+            assert!(crossing.is_disjoint(&external_edges));
+        }
     }
 
     #[test]

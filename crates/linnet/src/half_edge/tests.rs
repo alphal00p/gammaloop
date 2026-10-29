@@ -1449,6 +1449,51 @@ fn box_all_cuts_multiple() {
 }
 
 #[test]
+fn all_cuts_absorb_vertices_enclosed_by_the_terminals() {
+    // Each side of the box is seeded with its two external vertices and their
+    // attachments. A self-energy between the two attachments of one side
+    // encloses m0 and m1: before m0 and m1 join the source side, the target
+    // side has more components than the target terminals.
+    for self_energy_on_source_side in [true, false] {
+        let mut builder = HedgeGraphBuilder::new();
+        let [x0, x1, y0, y1, a0, a1, b0, b1, m0, m1] = [(); 10].map(|_| builder.add_node(()));
+        builder.add_edge(x0, a0, (), true);
+        builder.add_edge(x1, a1, (), true);
+        builder.add_edge(b0, y0, (), true);
+        builder.add_edge(b1, y1, (), true);
+        builder.add_edge(a1, b0, (), true);
+        builder.add_edge(b1, a0, (), true);
+        let ((p, q), (r, s)) = if self_energy_on_source_side {
+            ((a0, a1), (b0, b1))
+        } else {
+            ((b0, b1), (a0, a1))
+        };
+        builder.add_edge(p, m0, (), true);
+        builder.add_edge(m0, m1, (), true);
+        builder.add_edge(m0, m1, (), true);
+        builder.add_edge(m1, q, (), true);
+        builder.add_edge(r, s, (), true);
+        let graph: HedgeGraph<(), ()> = builder.build();
+
+        let cuts = graph.all_cuts_from_ids(&[x0, x1, a0, a1], &[y0, y1, b0, b1]);
+
+        assert_eq!(
+            cuts.len(),
+            1,
+            "self-energy on source side: {self_energy_on_source_side}"
+        );
+        let crossing = graph
+            .iter_edges_of(&cuts[0].1)
+            .map(|(_, edge, _)| edge)
+            .collect::<BTreeSet<_>>();
+        assert_eq!(
+            crossing,
+            BTreeSet::from([EdgeIndex::from(4), EdgeIndex::from(5)])
+        );
+    }
+}
+
+#[test]
 #[cfg(feature = "serde")]
 fn self_energy_box() {
     let mut self_energy_builder: HedgeGraphBuilder<(), (), ()> = HedgeGraphBuilder::new();
