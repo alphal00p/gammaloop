@@ -6,6 +6,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 #[cfg(any(
+    feature = "feynkit",
     feature = "gammaloop",
     feature = "vakint",
     feature = "linnet"
@@ -14,6 +15,7 @@ use pyo3::types::{PyAnyMethods as _, PyDictMethods as _, PyModuleMethods as _};
 #[cfg(feature = "linnet")]
 use pyo3::types::{PyStringMethods as _, PyTypeMethods as _};
 #[cfg(any(
+    feature = "feynkit",
     feature = "gammaloop",
     feature = "spenso",
     feature = "linnet",
@@ -45,10 +47,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         .modules
         .get(module_name)
         .ok_or_else(|| format!("{component} inventory has no module {module_name}"))?;
-    #[cfg(any(feature = "gammaloop", feature = "linnet"))]
+    #[cfg(any(feature = "feynkit", feature = "gammaloop", feature = "linnet"))]
     if matches!(
         component.as_str(),
-        "gammaloop-python" | "linnet-graph"
+        "feynkit-community" | "gammaloop-python" | "linnet-graph"
     ) {
         validate_runtime_stub_surface(module_name, module)?;
     }
@@ -84,6 +86,8 @@ fn main() -> Result<(), Box<dyn Error>> {
             .to_path_buf(),
     };
     match component.as_str() {
+        "feynkit-community" => outputs
+            .push(root.join("crates/feynkit-py/python/symbolica/community/hepkit/__init__.pyi")),
         "linnet-graph" => outputs
             .push(root.join("crates/linnet-py/python/symbolica/community/graph/__init__.pyi")),
         _ => {}
@@ -96,7 +100,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             if checked_in != normalized {
                 let hint = if matches!(
                     component.as_str(),
-                    "linnet-graph" | "spynso3"
+                    "feynkit-community" | "linnet-graph" | "spynso3"
                 ) {
                     "regenerate the shared package/docs surface"
                 } else {
@@ -118,7 +122,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-#[cfg(any(feature = "gammaloop", feature = "linnet"))]
+#[cfg(any(feature = "feynkit", feature = "gammaloop", feature = "linnet"))]
 fn validate_runtime_stub_surface(
     module_name: &str,
     module: &pyo3_stub_gen::generate::Module,
@@ -129,6 +133,12 @@ fn validate_runtime_stub_surface(
             "symbolica.community.graph" => {
                 let module = pyo3::types::PyModule::new(py, module_name)?;
                 linnet_py::register(&module)?;
+                module
+            }
+            #[cfg(feature = "feynkit")]
+            "symbolica.community.hepkit" => {
+                let module = pyo3::types::PyModule::new(py, module_name)?;
+                feynkit_py::initialize_feynkit(&module)?;
                 module
             }
             #[cfg(feature = "gammaloop")]
@@ -192,6 +202,8 @@ fn render(
     match component {
         #[cfg(feature = "spenso")]
         "spynso3" => Ok(spynso3::SpensoModule::stub_source(module)),
+        #[cfg(feature = "feynkit")]
+        "feynkit-community" => Ok(feynkit_py::FeynkitModule::stub_source(module)),
         #[cfg(feature = "linnet")]
         "linnet-graph" => Ok(linnet_py::canonical_stub(module)?),
         _ => Ok(module.to_string()),
@@ -246,6 +258,7 @@ fn validate_vakint_stub_surface(
 }
 
 #[cfg(any(
+    feature = "feynkit",
     feature = "gammaloop",
     feature = "spenso",
     feature = "linnet",
@@ -276,6 +289,7 @@ fn stub_names(module: &pyo3_stub_gen::generate::Module) -> BTreeSet<String> {
 }
 
 #[cfg(any(
+    feature = "feynkit",
     feature = "gammaloop",
     feature = "vakint",
     feature = "linnet"
@@ -310,6 +324,8 @@ fn validate_exact_surface(
 
 fn gather(component: &str) -> Result<(&'static str, pyo3_stub_gen::StubInfo), Box<dyn Error>> {
     let gathered: Result<_, Box<dyn Error>> = match component {
+        #[cfg(feature = "feynkit")]
+        "feynkit-community" => Ok(("symbolica.community.hepkit", feynkit_py::stub_info()?)),
         #[cfg(feature = "gammaloop")]
         "gammaloop-python" => {
             let mut stub_info = gammaloop_api::python::stub_info()?;
@@ -364,6 +380,7 @@ fn gather(component: &str) -> Result<(&'static str, pyo3_stub_gen::StubInfo), Bo
     #[cfg(any(
         feature = "linnet",
         feature = "spenso",
+        feature = "feynkit",
         feature = "gammaloop",
         feature = "vakint"
     ))]
@@ -374,6 +391,7 @@ fn gather(component: &str) -> Result<(&'static str, pyo3_stub_gen::StubInfo), Bo
 #[cfg(any(
     feature = "linnet",
     feature = "spenso",
+    feature = "feynkit",
     feature = "gammaloop",
     feature = "vakint"
 ))]

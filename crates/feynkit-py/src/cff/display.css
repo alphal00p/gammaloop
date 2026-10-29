@@ -1,0 +1,206 @@
+.feynkit-cff-result strong {
+  font-weight: 400;
+}
+.feynkit-cff-result .hs-action {
+  border-color: var(--hs-rule);
+  padding: 6px 10px;
+  font-size: 12px;
+  background: var(--hs-bg);
+}
+.feynkit-cff-result button:disabled,
+.feynkit-cff-result button[aria-disabled="true"] {
+  opacity: 0.4;
+}
+.feynkit-cff-result .hs-family-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 3px 0;
+  justify-content: space-between;
+  font-size: 12px;
+}
+.feynkit-cff-result .hs-arrowhead {
+  cursor: pointer;
+  outline: none;
+}
+.feynkit-cff-result .hs-arrowhead[aria-disabled="true"] {
+  opacity: 0.4;
+}
+.feynkit-cff-result
+  .hs-arrowhead:is(:hover, :focus-visible)
+  > path:first-of-type {
+  stroke: var(--hs-active);
+  stroke-width: 1.5;
+}
+.feynkit-cff-result .hs-arrow-hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 18px;
+  pointer-events: stroke;
+  vector-effect: non-scaling-stroke;
+}
+.feynkit-cff-result .hs-family-pages {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+}
+.feynkit-cff-result .hs-family-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 7px;
+  margin: 4px 0 8px;
+}
+.feynkit-cff-result .hs-family-choice {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: 0 1 calc((100% - 14px) / 3);
+  min-width: 0;
+  max-width: 320px;
+  height: 88px;
+  text-align: left;
+  width: 100%;
+  padding: 7px;
+  border-color: var(--hs-rule);
+  font-size: 12px;
+  background: var(--hs-bg);
+}
+.feynkit-cff-result .hs-family-label {
+  position: absolute;
+  top: 4px;
+  left: 6px;
+  font-size: 11px;
+}
+.feynkit-cff-result .hs-family-choice[aria-pressed="true"] {
+  border-color: var(--hs-active);
+  background: var(--hs-tint);
+}
+.feynkit-cff-result .hs-mini {
+  position: relative;
+  width: 100%;
+  height: 66px;
+}
+.feynkit-cff-result .hs-mini > svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  margin: auto;
+}
+.feynkit-cff-result .hs-mini > svg [data-linnet-node] {
+  fill: var(--hs-fg);
+  stroke: var(--hs-bg);
+  stroke-width: 0.7;
+}
+.feynkit-cff-result .hs-mini > svg [data-edge] {
+  stroke-width: 2.4;
+  stroke-linecap: round;
+}
+.feynkit-cff-result .hs-mini > svg [data-bands] path {
+  stroke-width: 3.2;
+}
+.feynkit-cff-result .hs-muted {
+  color: var(--hs-muted);
+  font-size: 12px;
+}
+.feynkit-cff-result .hs-graph {
+  width: 100%;
+}
+.feynkit-cff-result .hs-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 2px 0;
+  font-size: 12px;
+  color: var(--hs-muted);
+}
+.feynkit-cff-result .hs-legend span {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.feynkit-cff-result .hs-detail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  border-top: 1px solid var(--hs-rule);
+  padding-top: 8px;
+}
+.feynkit-cff-result .hs-definition-row {
+  flex: 1 1 270px;
+  min-width: 0;
+  padding: 3px 0 3px 8px;
+  border-left: 3px solid var(--hs-color);
+}
+.feynkit-cff-result .hs-sets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin-top: 1px;
+  font-size: 11px;
+  color: var(--hs-muted);
+}
+.feynkit-cff-result .hs-check {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--hs-fg);
+}
+.feynkit-cff-result .hs-check input {
+  accent-color: var(--hs-active);
+  margin: 0;
+}
+.feynkit-cff-result .hs-family-pages button {
+  padding: 2px 7px;
+}
+.feynkit-cff-result summary {
+  width: fit-content;
+  padding: 3px 0;
+}
+.feynkit-cff-result .hs-explore {
+  margin-top: 8px;
+  border-top: 1px solid var(--hs-rule);
+  padding-top: 5px;
+}
+.feynkit-cff-result .hs-explore > summary,
+.feynkit-cff-result .hs-options {
+  color: var(--hs-muted);
+  font-size: 12px;
+}
+.feynkit-cff-result .hs-options {
+  margin-top: 7px;
+}
+.feynkit-cff-result .hs-settings {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 18px;
+  padding: 7px 0;
+}
+.feynkit-cff-result .hs-help {
+  margin-top: 4px;
+  font-size: 12px;
+}
+@media (pointer: coarse) {
+  .feynkit-cff-result button,
+  .feynkit-cff-result summary,
+  .feynkit-cff-result .hs-check {
+    min-height: 44px;
+  }
+  .feynkit-cff-result .hs-arrow-hit {
+    stroke-width: 28px;
+  }
+}
+.feynkit-cff-result button,
+.feynkit-cff-result summary {
+  cursor: pointer;
+}
+.feynkit-cff-result .hs-mini {
+  pointer-events: none;
+}
+.feynkit-cff-result svg [data-linnet-node] {
+  fill: var(--hs-bg);
+  stroke: var(--hs-muted);
+}

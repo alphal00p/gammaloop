@@ -105,6 +105,16 @@
     (workspaceRoot + "/crates/vakint/templates")
     (workspaceRoot + "/crates/feynkit-model/data/sm.json.zlib")
     (workspaceRoot + "/crates/feynkit-ufo/src/model_metadata.py")
+    (workspaceRoot + "/crates/feynkit-py/src/collection.css")
+    (workspaceRoot + "/crates/feynkit-py/src/collection.js")
+    (workspaceRoot + "/crates/feynkit-py/src/notebook.js")
+    (workspaceRoot + "/crates/feynkit-py/src/expression.css")
+    (workspaceRoot + "/crates/feynkit-py/src/expression.js")
+    (workspaceRoot + "/crates/feynkit-py/src/cff/display.css")
+    (workspaceRoot + "/crates/feynkit-py/src/cff/display.html")
+    (workspaceRoot + "/crates/feynkit-py/src/cff/display.js")
+    (workspaceRoot + "/crates/feynkit-py/src/ltd/display.css")
+    (workspaceRoot + "/crates/feynkit-py/src/ltd/display.js")
     (workspaceRoot + "/crates/linnest/src/svg/interactive.css")
     (workspaceRoot + "/crates/linnest/src/svg/interactive.js")
     (workspaceRoot + "/crates/linnest/typst/ec-layout.wasm")
@@ -412,6 +422,18 @@
       "crates/linnest/src/svg/interactive.js"
     ];
     "feynkit-ufo" = ["crates/feynkit-ufo/src/model_metadata.py"];
+    "feynkit-py" = [
+      "crates/feynkit-py/src/collection.css"
+      "crates/feynkit-py/src/collection.js"
+      "crates/feynkit-py/src/notebook.js"
+      "crates/feynkit-py/src/expression.css"
+      "crates/feynkit-py/src/expression.js"
+      "crates/feynkit-py/src/cff/display.css"
+      "crates/feynkit-py/src/cff/display.html"
+      "crates/feynkit-py/src/cff/display.js"
+      "crates/feynkit-py/src/ltd/display.css"
+      "crates/feynkit-py/src/ltd/display.js"
+    ];
     "feynkit-model" = ["crates/feynkit-model/data/sm.json.zlib"];
     "linnet-render-py" = [
       "crates/linnet-render-py/fonts"
@@ -515,6 +537,22 @@
       "crates/feynkit-model/tests/fixtures"
       "assets/models/json/sm/sm.json"
     ];
+    "feynkit-py" = [
+      "crates/feynkit-model/tests/fixtures"
+      "crates/feynkit-py/python/symbolica/community/hepkit/__init__.py"
+      "crates/feynkit-py/tests/fixtures"
+      "crates/feynkit-py/tests/cff_display.py"
+      "crates/feynkit-py/tests/browser_display_fixtures.py"
+      "crates/feynkit-py/tests/installed_squared_amplitude_display.py"
+      "crates/feynkit-py/tests/installed_wavefunctions.py"
+      "crates/feynkit-py/tests/installed_offline_rendering.py"
+      "crates/feynkit-py/tests/native_forwarding.py"
+      "crates/spynso3/tests/installed_tensor_network_display.py"
+      "crates/linnet-py/tests/test_community_rendering.py"
+      "crates/linnet-py/tests/rendering_metrics.py"
+      "crates/linnet-py/python/symbolica/community/graph/__init__.py"
+      "crates/linnet-render-py/python/symbolica/community/graph/__init__.py"
+    ];
     "vakint" = ["crates/vakint/python/symbolica/community/hepkit/vakint/__init__.py"];
     "alphal00p-docs-macros" = ["crates/alphal00p-docs-macros/tests/ui"];
     "alphal00p-docs-python-exporter" = [
@@ -564,6 +602,7 @@
       "crates/spynso3/tests/browser_tensor_explorer.py"
     ];
     "linnet-render-py" = ["crates/linnet-render-py/tests"];
+    "feynkit-py" = ["crates/feynkit-py/tests"];
     "alphal00p-docs-builder" = [
       "assets/embedded/drawing/templates"
       "assets/gammalooplogo-dark.svg"
@@ -586,6 +625,8 @@
       "flake.nix"
       "scripts/render-docs-svg-assets.sh"
       "tests/resources/graphs"
+      "crates/feynkit-py/examples/ufo_generation.py"
+      "crates/feynkit-py/python/symbolica/community/hepkit/__init__.py"
       "crates/linnet-render-py/fonts/STIX-Two-OFL.txt"
       "crates/linnet-render-py/fonts/STIXTwoMath-Regular.woff2"
       "examples/notebooks"

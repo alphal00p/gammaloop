@@ -1781,6 +1781,7 @@ impl SiteBuilder {
                     "vendor/clarabel/CHANGELOG.md"
                         | "vendor/clarabel/LICENSE.md"
                         | "vendor/clarabel/html/rustdocs-header.html"
+                        | "crates/feynkit-py/src/cff/display.html"
                         | "examples/layout/impred/playground.html"
                 )
             ) {
