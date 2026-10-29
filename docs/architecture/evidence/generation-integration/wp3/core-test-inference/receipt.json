@@ -1,0 +1,83 @@
+{
+  "schema": 1,
+  "scope": "Approved core test-inference preparation integrated on approved exit-matrix evidence head; review candidate only, not WP3 or core-fast completion",
+  "base": "ddbee21256bb36bf202b0a8ce12c09207a7c8c14",
+  "built_code_source": "8bd39ede19825d73ec25e9e31dcb9267461b916e",
+  "built_code_change": "tmxvnovqoxurumoxrwzruptmtqrvooyv",
+  "evidence_change": "musnkpwxpxnzltryqrlsxpuzoulrmmlq",
+  "candidate_bookmark": "generation-integration-core-test-inference",
+  "approval_index": "docs/architecture/evidence/generation-integration/wp3/core-test-inference/approval-index.json",
+  "code_delta": {
+    "paths": 1,
+    "files": [{"path":"crates/gammalooprs/src/integrands/process/mod.rs","sha256":"2fdacba25abf4f60b41340247a5aaefc155f8177e8314d184e518e576f38af85"}],
+    "preparation_byte_identical": true,
+    "change": "One test-module BTreeSet import and two collect::<BTreeSet<_>>() result annotations. Expected singleton{2}, signed routing, odd local numerator and partition assertions are unchanged.",
+    "production_algorithms_changed": false,
+    "expectations_changed": false
+  },
+  "source": {
+    "uri": "git+file:///shared/lcnbr/dev/gammaloop/main?rev=8bd39ede19825d73ec25e9e31dcb9267461b916e&shallow=1&allRefs=1",
+    "full_source": {"path":"/nix/store/vkrwhwfh2cn0lp17m623dm5r528q41m1-source","narHash":"sha256-451sgvk7JhXiOPZbau69BHh/kF8YuqEZhyLj83iOVR4=","classification":"Git-pinned full combined code source; evaluated, not relabelled as the filtered producer source"},
+    "filtered_source": {"path":"/nix/store/a8y52l8p9954s5gjgxsqy916h0sgwndn-source","narHash":"sha256-Mc059ib5cqM1MfDca2RyOye5bFl+zELH8U1MU8mbcmE=","narSize":40991632,"process_mod_sha256":"2fdacba25abf4f60b41340247a5aaefc155f8177e8314d184e518e576f38af85"},
+    "distinction": "The full Git source includes repository content outside the scoped producer. The selected filtered source is byte-identical to preparation for every producer input and is the actual compiled source."
+  },
+  "producer": {
+    "aggregate_derivation": "/nix/store/jfqrijj0a641ydycf5d978fsrpanfwl2-gammaloop-nextest-binaries-core.drv",
+    "aggregate_derivation_record": {"path":"target/wp3-core-test-inference/code-core-aggregate-derivation.json","sha256":"333c3cc25fc7533919239cb48f9873a728060a9d84288357416296952abcac41"},
+    "scoped_derivation": "/nix/store/smwx0dns2bln927v1hly8dqwi6562jnr-gammaloop-nextest-binaries-core-gammalooprs-0.1.0.drv",
+    "scoped_derivation_record": {"path":"target/wp3-core-test-inference/scoped-derivation.json","sha256":"f53fdb304db7178e298c73e5ebd8239e68945d52e76d08f1d3b261646dee3143"},
+    "archive": "/nix/store/fji6xyj6pzjwbc88iss0jdai8nr80rxn-gammaloop-nextest-binaries-core-gammalooprs-0.1.0/gammaloop-nextest-core-gammalooprs.tar.zst",
+    "archive_sha256": "a3aeba1bed31f3a648093d00cfbc590617fcaa5b7f57b9c9625b43d52073a61c",
+    "archive_output_nar": "sha256-w9tiMZKilD4vvlzcTL0HujRKW/9RYQD8/tH4SJVG14U=",
+    "archive_output_nar_size": 214941016,
+    "elf": {"member":"target/ci-optim/deps/gammalooprs-4e379a600ee096ea","sha256":"5916fc2731a912f80899bc2396c847428aa650eb6707a66f2e83ec5ac0dd3bcc"},
+    "compiler": "/nix/store/c3bpv60f5wgp4pmgsifaykxk214h6463-rust-stable-with-components-2026-09-03",
+    "profile": "ci-optim / ci_gammaloop",
+    "features": "gammalooprs/python_stubgen plus reviewed pyo3-stub-gen and pyo3 feature closure recorded in the derivation",
+    "reuse": "The combined Git-pinned aggregate resolves to the exact reviewed jfq aggregate and smwx scoped derivations. Filtered source a8y and process/mod.rs bytes are identical, so the already realized preparation archive is reused without rebuild."
+  },
+  "policy": {"nextest_config_sha256":"03e166fbe150d150450df98ebfa00e3b823b487cab5f6f9ff3d4cfb4bff4b09f","test_workers":16,"memory_intensive_max_threads":2,"timeout_seconds":240,"retries":0,"fail_fast":false,"insta_update_unset":true,"force_pass_unset":true},
+  "execution": {
+    "source_copy": {"origin":"/nix/store/a8y52l8p9954s5gjgxsqy916h0sgwndn-source","writable_copy":"target/wp3-core-test-inference/combined-run/source","comparison":"All non-target bytes identical after execution","comparison_exit":0,"comparison_log_sha256":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
+    "list": {"argv":"target/wp3-core-test-inference/combined-run/list.argv","argv_sha256":"b93843f8a79a2c92e41d7a98f5ed33e270d0f73e2730776204e05a605575c939","inventory":1621,"selected":3,"exit":0,"json_sha256":"4ea1ff9c7be276ad90823493f0b53d05cc43f3a8a47f13e3be4ebfea6f2769dc"},
+    "run": {"argv":"target/wp3-core-test-inference/combined-run/run.argv","argv_sha256":"9fe60e66582c5266ba6d6963be929cc867b4c574f6deedcfab94344fee598766","log":"target/wp3-core-test-inference/combined-run/run.log","log_sha256":"dbe422eb3270f0316a09dd2e3d3e968ebcbbf8c3e818da55889dcf306629f63e","exit":0,"selected":3,"passed":3,"failed":0,"ignored":0,"skipped_by_filter":1618,"duration_seconds":11.731,"junit":"target/wp3-core-test-inference/combined-run/source/target/nextest/ci_gammaloop/junit.xml","junit_sha256":"c9576b35761b243ffb6afc98e6e229c22aea376fda3f9e8003e68a2180094f31"},
+    "tests": [
+      {"name":"integrands::process::tests::lmb_sampling_detects_only_oppositely_stored_parallel_edges","duration_seconds":0.080,"status":"passed"},
+      {"name":"integrands::process::tests::graph_derived_two_loop_reflections_preserve_local_odd_numerator_and_partition","duration_seconds":0.083,"status":"passed"},
+      {"name":"processes::cross_section::gauge_sewing_tests::massive_tau_covariant_cuts_satisfy_the_brst_quartet_identity","duration_seconds":11.701,"status":"passed"}
+    ]
+  },
+  "static": {
+    "rustfmt": {"scope":"process/mod.rs","exit":0,"argv_sha256":"9e3d932aa5c3e474e0e34705276e4668a8b9d5f9c3398eb8b1c4f53225384031","log_sha256":"63fb17a659f13585ae788898e612a294c4bcd430e62452dfed2ec4cd867a1602"},
+    "clippy": {"classification":"Reused exact preparation source/features","scope":"gammalooprs --lib --tests --profile ci-optim --features python_stubgen -- -D warnings","exit":0,"argv_sha256":"0bec9fd455ff815f6e06cbd4bb8df4a0e064dd7ae29261cca341357c22fa3f0f","log_sha256":"2c0e2bf7018993c407130d956298a101c55471552a31cc0acdb5cc8db5bab86a","limit":"Two vendored Clarabel dependency warnings were reported; no gammalooprs warning failed the scoped -D warnings check."},
+    "ci_graph": {"base_derivation":"/nix/store/dx2vmh8k9vhxrf3953xchxb4rwd1ds1i-gammaloop-guppy-workspace-graph-check.drv","code_derivation":"/nix/store/dx2vmh8k9vhxrf3953xchxb4rwd1ds1i-gammaloop-guppy-workspace-graph-check.drv","invariant":true},
+    "registry": {"notes":78,"unique_ids":78,"unique_titles":78,"scopes":110,"result_sha256":"cf3a2027867fefff517627ec049b9fb4a2425ec198f45536d6cd94bcfd16e701"},
+    "invariance": {"Cargo.lock":"0d896231393016a4df0ac9a8a2b8eddee545b4a8d62bc87cdfbd1f2e3230a2cd","Cargo.toml":"bf968d49de81d06aa62e12793cfb6d66b46064d55090c2bb3413f883765e63dd","nix-ci.nix":"e031749e51a33ee48bc5c653d13c2dc7e7d3a51bddea77fc3c67d01ac217c540","nextest":"03e166fbe150d150450df98ebfa00e3b823b487cab5f6f9ff3d4cfb4bff4b09f","nix_workspace":"74be4a4be2afc9b7d3e122c1789c506edb8ed1ab55b747aa606a645d90810ea8","kernel":"1a1829b1f3d0a88b53b44085b3b9f34ef77945b3","nixci_enabled":false}
+  },
+  "documentation": {
+    "tool":"/nix/store/wzpxqpc3v2xxah69rqifq5kac67hx36g-typst-0.15.1/bin/typst","tool_sha256":"3c381d7d3e2259f81766ff77a1e6dec18ec4c7b7702b9c51ad34d56432b9633c","creation_timestamp":0,
+    "note":{"source_sha256":"3e3560b6b22160559cf85e851c6a0398f373b8e1a92e5be96fb4d4316f8a383d","wrapper_sha256":"64c7da7552aeb6eff7c2630d71c519a519cf1956a6c724778e7f8d76be0a2f4e","pdf_sha256":"3a42f3b503eddc275bb3f720cb89c75b2eeae9120bb8f7ad0c9d112fbab6fbd8","html_sha256":"efe72ce3bcc135792180df003e960fd5cc0016b4e440910617f45ca5c0c335ab"},
+    "plan":{"source_sha256":"8237d9e510366f9be072bf75dafc68695acdefc93a6c3f99147d398e475b5f39","wrapper_sha256":"3a9deca513708fd960c6b91612311a4799b7b18ecd5de0425f35b17a17ef3103","pdf_sha256":"4601a1149ef22f0784776243e4f2b89500fcf2be2f50cac1caf7aae0c6b88523","html_sha256":"f8c402f337d07e6dac6cad224926296fd867fd86b675ecf2a3da8d6198723e8a"},
+    "semantic_check":{"script":"target/wp3-core-test-inference/check-renders.mjs","script_sha256":"a11f325168f79747eb66a9bf7a967190268ef1a0faafb79ae899bb2645518092","result_sha256":"052b847c276ed7d96e390ab8f48ecd6e83786d2e10dc75f219248f8054f04566","exit":0}
+  },
+  "candidate_inventory": {"code_paths":1,"metadata_paths":7,"total_paths":8,"paths":["crates/gammalooprs/src/integrands/process/mod.rs","docs/architecture/evidence/generation-integration/execution.json","docs/architecture/evidence/generation-integration/wp3/core-test-inference/approval-index.json","docs/architecture/evidence/generation-integration/wp3/core-test-inference/receipt.json","docs/architecture/evidence/generation-integration/wp3/replay.json","docs/architecture/generation-integration-core-test-inference.typ","docs/architecture/generation-integration-plan.typ","docs/developers.toml"]},
+  "raw_evidence": {"root":"target/wp3-core-test-inference","manifest":"target/wp3-core-test-inference/artifact-manifest.sha256","entries":46,"manifest_sha256":"f1e217354548c3c178c518a8c68a5f863c276f8f90d192f43036530afa78510c","source_copy_limit":"The writable filtered-source copy and extracted target payload are retained for review but excluded from the compact manifest except for the executed JUnit and exact non-target comparison."},
+  "history": {
+    "original_b9_matrix": "The frozen b9 exit matrix retains four E0283 compile errors and no BRST/core-fast execution credit. This new execution is credited only to combined code8bd.",
+    "exit_matrix_evidence": "ddbee212 APPROVE_EVIDENCE; original98-entry manifest and two supplemental JUnit bindings remain unchanged.",
+    "preparation": "62faff44 and its receipts/review remain immutable and separately bound."
+  },
+  "protected_refs": [
+    "generation-integration-core-test-inference-base=ddbee21256bb36bf202b0a8ce12c09207a7c8c14",
+    "generation-integration-core-test-inference-code=8bd39ede19825d73ec25e9e31dcb9267461b916e",
+    "generation-integration-wp3-exit-matrix-round1=863f506c5211afef007d975387af86d8052d646e",
+    "generation-integration-wp3-exit-matrix-round2=ddbee21256bb36bf202b0a8ce12c09207a7c8c14",
+    "generation-core-test-inference=62faff443524a436678c6a2fb5fca80bde9d6e99"
+  ],
+  "limits": [
+    "Candidate awaits NEW independent Opus combined integration review.",
+    "The aggregate core producer still fails later at the separately owned gammaloop-api topology-fixture source omission; no aggregate/core-fast green claim.",
+    "The81 FeynKit oracle rows, source44 later EXIT101 boundaries, stale nonexistent parser filter names and broader WP3 gates remain open.",
+    "No API/docs/QED lane, publication, upload, CI enablement, WP3 completion or M-rebuild claim."
+  ]
+}

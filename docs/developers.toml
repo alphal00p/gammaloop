@@ -28,6 +28,21 @@ topics = ["generation", "integration", "color", "testing"]
 review_triggers = ["crates/idenso/src/color/**", "nix/rust-workspace.nix", "docs/architecture/evidence/generation-integration/color-cycles/**"]
 
 [[section.note]]
+id = "generation-integration-core-test-inference"
+title = "Core test-inference integration"
+summary = "Reviewed BTreeSet inference annotations and fresh combined-head inference/BRST execution without production changes."
+source = "docs/architecture/generation-integration-core-test-inference.typ"
+kind = "Execution record"
+status = "Integrated candidate · NEW independent Opus combined review"
+lifecycle = "investigation"
+owner = "unassigned"
+reviewed_at = "2026-10-29"
+review_ref = "62faff443524a436678c6a2fb5fca80bde9d6e99"
+products = ["gammaloop"]
+topics = ["generation", "integration", "testing", "BRST"]
+review_triggers = ["crates/gammalooprs/src/integrands/process/mod.rs", "docs/architecture/generation-integration-core-test-inference.typ", "docs/architecture/evidence/generation-integration/wp3/core-test-inference/**"]
+
+[[section.note]]
 id = "generation-integration-tensor-layout"
 title = "TensorReduction declared-layout integration"
 summary = "Approved reducer-specific restoration of declared tensor layouts on the cumulative source46 head."

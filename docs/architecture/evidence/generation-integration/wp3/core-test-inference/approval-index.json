@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "integration_base": "ddbee21256bb36bf202b0a8ce12c09207a7c8c14",
+  "exit_matrix_review": {"path":".local/review-wp3-exit-matrix-round2-opus-a8a2f9cc0321/review.json","sha256":"79ac03ef6db8549a4846af53711956e35725cf1b5040071752d60939a81bc114","verdict":"APPROVE_EVIDENCE"},
+  "preparation": {"workspace":"/shared/lcnbr/dev/gammaloop/generation-core-test-inference","base":"ead78f0460b03ec5d5dd80b8a6d47b4c357592a8","candidate":"62faff443524a436678c6a2fb5fca80bde9d6e99","change":"xqtpxrrnwysqlpxxmnrksxosquntzmzt","bookmark":"generation-core-test-inference"},
+  "preparation_review": {"path":"/shared/lcnbr/dev/gammaloop/generation-core-test-inference/.local/review-core-test-inference-opus-20261029T183440-1102894/review.json","sha256":"945a1cb480fb0f1c54bb4362eb050a7e7d0cad6f4aae807defdf582795d600f8","verdict":"APPROVE preparation"},
+  "preparation_receipts": [
+    {"path":"/shared/lcnbr/dev/gammaloop/generation-core-test-inference/target/generation-core-test-inference/receipt.json","sha256":"56761fa62361da46922672bd3761b563cf76743106f2939f0c2140f461110859"},
+    {"path":"/shared/lcnbr/dev/gammaloop/generation-core-test-inference/target/generation-core-test-inference/continuation-receipt.json","sha256":"e75312a87a5651647900924e4350fd1bdfed4233601d958ee0db313930f9b1b7"}
+  ],
+  "integration_code": "8bd39ede19825d73ec25e9e31dcb9267461b916e",
+  "integration_code_change": "tmxvnovqoxurumoxrwzruptmtqrvooyv"
+}

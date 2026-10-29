@@ -722,6 +722,15 @@
     "base": "ead78f0460b03ec5d5dd80b8a6d47b4c357592a8",
     "code_commit": "b9f788922341e7bde2e801a054423ae70ed7e9ae",
     "receipt": "docs/architecture/evidence/generation-integration/wp3/exit-matrix/receipt.json",
-    "status": "Executed with independent cells retained: oracle fast selection FAILS82/371 and the original b9 core producer fails E0283 before BRST. Opus F1-F4 evidence corrections applied without outcome changes; awaiting NEW focused independent review. Separate core62 is not imported. WP3 and M-rebuild remain incomplete."
+    "status": "APPROVE_EVIDENCE at ddbee212; original b9 outcomes remain immutable: fast selection FAILS82/371 and original core has no BRST credit. WP3 and M-rebuild remain incomplete."
+  },
+  "active_core_test_inference": {
+    "base": "ddbee21256bb36bf202b0a8ce12c09207a7c8c14",
+    "approved_preparation": "62faff443524a436678c6a2fb5fca80bde9d6e99",
+    "code_commit": "8bd39ede19825d73ec25e9e31dcb9267461b916e",
+    "code_change": "tmxvnovqoxurumoxrwzruptmtqrvooyv",
+    "receipt": "docs/architecture/evidence/generation-integration/wp3/core-test-inference/receipt.json",
+    "candidate_bookmark": "generation-integration-core-test-inference",
+    "status": "Integrated one-file test-only repair and fresh 3/3 combined selection; awaiting NEW independent Opus integration review. API fixture aggregate blocker and 81 oracle failures remain open."
   }
 }

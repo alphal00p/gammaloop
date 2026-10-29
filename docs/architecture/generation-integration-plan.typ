@@ -385,9 +385,21 @@ own workspace. Bounded: one regression, one bisect, one written verdict.
   restored through the reducer-owned source carrier, while generic Idenso arithmetic
   remains canonical. Fresh bounded consumer, held-out, color, Python and Vakint
   validation is recorded in
-  `evidence/generation-integration/wp3/tensor-layout/receipt.json`. A NEW independent
-  Opus integration review is required before the rebuilt-tip WP3 exit matrix; this
-  integration does not complete WP3.
+  `evidence/generation-integration/wp3/tensor-layout/receipt.json`. Independent
+  review approved that integration; the rebuilt-tip exit matrix subsequently
+  retained 81 oracle-row failures and the original b9 core compile failure. WP3
+  remains incomplete.
+
+- #strong[Core test-inference integration 2026-10-29:]
+  approved preparation `62faff44` adds only the existing test-module `BTreeSet`
+  import and two explicit `collect::<BTreeSet<_>>()` result types. Combined code
+  reuses the exact reviewed filtered producer and freshly passes the two inference
+  regressions plus the massive-tau BRST quartet. The original b9 matrix remains
+  immutable history. The separate API topology-fixture source omission still
+  blocks the aggregate core producer;81 FeynKit rows and the broader WP3 matrix
+  remain open. Evidence is in
+  `evidence/generation-integration/wp3/core-test-inference/receipt.json`; a NEW
+  independent Opus integration review is required.
 
 - `jj duplicate` the v4 chain (`kursouxx::kpslpwqz`) onto the WP2 base; do not
   rebase in place, so the 19 live workspaces on older lines stay valid.
