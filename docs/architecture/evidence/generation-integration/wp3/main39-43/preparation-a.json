@@ -1,0 +1,688 @@
+{
+  "reviewer": "Fresh independent Astra, scope A; no nested agents",
+  "decision": "APPROVE bounded source39 preparation semantics",
+  "aggregate_candidate43": "BLOCKED / REQUEST_CHANGES before aggregate approval: unresolved original QCD2 weight gate; no main-integration authorization",
+  "candidate": "59b57cead76e576fa9f23e3996f5614de939fe35",
+  "base": "191aaf7b77018e377a9e5e4e3b9c88357218aa48",
+  "bookmark": "generation-frame-progress-ports",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports",
+  "kernel": "1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
+  "new_scope_a_findings": [],
+  "semantics": {
+    "source39_reconciliation": "canonicalize_numerator_graph_pass and anchored_positions are byte-identical to original source39 bodies. Staged imports retained. Historical bundled linnest.wasm excluded and unchanged from base; no speedup imported.",
+    "canonical_frame": "Reduced colors and global left/right choice remain the selector. Only when reduced node automorphisms exist, label the finer physical graph, relabel reduced nodes by that physical order, and compose anchored.nodes[physical[node]]. Same Flat/Search owner; no group expansion or alternative frame owner.",
+    "edge_order_and_ties": "Physical edge iteration retains full physical IDs. Compact loader preserves particle keys, direction, dangling flow and ghost convention. Search profiles/refinement and sorted leaf certificates are independent of edge insertion order; first tied leaf follows node order. Fresh tests cover random tied graphs and exact backend node maps plus quark-cycle reflections, flavour decorations, pure edge-kernel symmetry and reversed external charge storage.",
+    "external_keys": "ExternalNode orders index first. Generated external indices are unique, so replacing Some(ExternalNode) with Some(index) preserves physical-key ranks and separation for this input. Partner exchange remains global and external state stays attached to its process label.",
+    "transport": "Existing GeneratedGraph.reframed/frame_map compose vertex and full edge permutations and reversal bits. Signed PDG ordering, neutral-adjoint ghost exception, CP rule repair, Grassmann loop sign, multiplicity, cut/spectator and finalization owners unchanged. No weight, seed, exact numeric or color completion code changed.",
+    "typed_metadata": "Unreduced admission still precedes conservation rewrite. Retained template labels, checked tensor rewrite, actual-owner dynamic admission, canonical inferred constructors and declared-order translation remain separate existing responsibilities. Typed zeros, scoped dummy history, cache publication and finalization carriers remain intact.",
+    "documentation": "Independently checked 102/102 unique-anchor Git-blob scopes. Read current architecture generation, grouping, raw admission, typed transport and factorization prose before accepting generation-owner attestation. Updated digest covers compact anchoring and test-only cut additions and explicitly records the unresolved weight gate. No full site or blanket fingerprint approval.",
+    "technical_dependencies": "No import from missing36/38 or source44/45/46 detected in the 23-file frozen inventory. Current compact label owner already exists in base. Actual ordered32-36 and separately reviewed38 remain prerequisites before39-43 on main."
+  },
+  "fresh_checks": {
+    "passed_tests": 34,
+    "failed_tests": 3,
+    "failure_classification": "three known older frame oracle rows only",
+    "focused": [
+      {
+        "name": "canonical-frames",
+        "binary": "generator_ci_optim_test",
+        "args": [
+          "canonical_physical_frame",
+          "--nocapture",
+          "--test-threads=1"
+        ],
+        "exit_code": 0,
+        "seconds": 13.802644748007879,
+        "nonzero_count": true,
+        "log": "target/astra-source39-review-20261028T162445Z/canonical-frames.log"
+      },
+      {
+        "name": "interaction_momentum_reduction_public_api_retains_zero_interface",
+        "binary": "generator_ci_optim_test",
+        "args": [
+          "--exact",
+          "generation::tests::interaction_momentum_reduction_public_api_retains_zero_interface",
+          "--nocapture",
+          "--test-threads=1"
+        ],
+        "exit_code": 0,
+        "seconds": 0.008665865985676646,
+        "nonzero_count": true,
+        "log": "target/astra-source39-review-20261028T162445Z/interaction_momentum_reduction_public_api_retains_zero_interface.log"
+      },
+      {
+        "name": "interaction_templates_reuse_admission_and_localize_shifted_bound_indices",
+        "binary": "generator_ci_optim_test",
+        "args": [
+          "--exact",
+          "generation::tests::interaction_templates_reuse_admission_and_localize_shifted_bound_indices",
+          "--nocapture",
+          "--test-threads=1"
+        ],
+        "exit_code": 0,
+        "seconds": 0.009020538069307804,
+        "nonzero_count": true,
+        "log": "target/astra-source39-review-20261028T162445Z/interaction_templates_reuse_admission_and_localize_shifted_bound_indices.log"
+      },
+      {
+        "name": "interaction_templates_use_canonical_named_interfaces_and_actual_owner_values",
+        "binary": "generator_ci_optim_test",
+        "args": [
+          "--exact",
+          "generation::tests::interaction_templates_use_canonical_named_interfaces_and_actual_owner_values",
+          "--nocapture",
+          "--test-threads=1"
+        ],
+        "exit_code": 0,
+        "seconds": 0.010709905065596104,
+        "nonzero_count": true,
+        "log": "target/astra-source39-review-20261028T162445Z/interaction_templates_use_canonical_named_interfaces_and_actual_owner_values.log"
+      },
+      {
+        "name": "propagator_templates_use_canonical_named_interfaces_and_actual_owner_values",
+        "binary": "generator_ci_optim_test",
+        "args": [
+          "--exact",
+          "generation::tests::propagator_templates_use_canonical_named_interfaces_and_actual_owner_values",
+          "--nocapture",
+          "--test-threads=1"
+        ],
+        "exit_code": 0,
+        "seconds": 0.009428198914974928,
+        "nonzero_count": true,
+        "log": "target/astra-source39-review-20261028T162445Z/propagator_templates_use_canonical_named_interfaces_and_actual_owner_values.log"
+      },
+      {
+        "name": "template_transport_retains_declared_order_scoped_labels_and_zero_ports",
+        "binary": "generator_ci_optim_test",
+        "args": [
+          "--exact",
+          "generation::tests::template_transport_retains_declared_order_scoped_labels_and_zero_ports",
+          "--nocapture",
+          "--test-threads=1"
+        ],
+        "exit_code": 0,
+        "seconds": 0.007069789804518223,
+        "nonzero_count": true,
+        "log": "target/astra-source39-review-20261028T162445Z/template_transport_retains_declared_order_scoped_labels_and_zero_ports.log"
+      },
+      {
+        "name": "zero_template_and_direct_transport_retain_hidden_index_history",
+        "binary": "generator_ci_optim_test",
+        "args": [
+          "--exact",
+          "generation::tests::zero_template_and_direct_transport_retain_hidden_index_history",
+          "--nocapture",
+          "--test-threads=1"
+        ],
+        "exit_code": 0,
+        "seconds": 0.013394976034760475,
+        "nonzero_count": true,
+        "log": "target/astra-source39-review-20261028T162445Z/zero_template_and_direct_transport_retain_hidden_index_history.log"
+      },
+      {
+        "name": "callback_rules_are_constructed_in_the_actual_owner_frame",
+        "binary": "generator_ci_optim_test",
+        "args": [
+          "--exact",
+          "generation::tests::callback_rules_are_constructed_in_the_actual_owner_frame",
+          "--nocapture",
+          "--test-threads=1"
+        ],
+        "exit_code": 0,
+        "seconds": 0.007936423877254128,
+        "nonzero_count": true,
+        "log": "target/astra-source39-review-20261028T162445Z/callback_rules_are_constructed_in_the_actual_owner_frame.log"
+      },
+      {
+        "name": "global_left_right_canonicalization_preserves_charged_slash_momenta",
+        "binary": "generator_ci_optim_test",
+        "args": [
+          "--exact",
+          "generation::tests::global_left_right_canonicalization_preserves_charged_slash_momenta",
+          "--nocapture",
+          "--test-threads=1"
+        ],
+        "exit_code": 0,
+        "seconds": 0.0073673909064382315,
+        "nonzero_count": true,
+        "log": "target/astra-source39-review-20261028T162445Z/global_left_right_canonicalization_preserves_charged_slash_momenta.log"
+      },
+      {
+        "name": "canonical_parallel_edges_are_ordered_by_signed_pdg",
+        "binary": "generator_ci_optim_test",
+        "args": [
+          "--exact",
+          "generation::tests::canonical_parallel_edges_are_ordered_by_signed_pdg",
+          "--nocapture",
+          "--test-threads=1"
+        ],
+        "exit_code": 0,
+        "seconds": 0.009943292010575533,
+        "nonzero_count": true,
+        "log": "target/astra-source39-review-20261028T162445Z/canonical_parallel_edges_are_ordered_by_signed_pdg.log"
+      },
+      {
+        "name": "symmetrized_external_momenta_are_assigned_canonically",
+        "binary": "generator_ci_optim_test",
+        "args": [
+          "--exact",
+          "generation::tests::symmetrized_external_momenta_are_assigned_canonically",
+          "--nocapture",
+          "--test-threads=1"
+        ],
+        "exit_code": 0,
+        "seconds": 0.02329324884340167,
+        "nonzero_count": true,
+        "log": "target/astra-source39-review-20261028T162445Z/symmetrized_external_momenta_are_assigned_canonically.log"
+      },
+      {
+        "name": "sampled_lorentz_components_keep_open_color_and_zero_interfaces",
+        "binary": "generator_ci_optim_test",
+        "args": [
+          "--exact",
+          "grouping::tests::sampled_lorentz_components_keep_open_color_and_zero_interfaces",
+          "--nocapture",
+          "--test-threads=1"
+        ],
+        "exit_code": 0,
+        "seconds": 0.04522735089994967,
+        "nonzero_count": true,
+        "log": "target/astra-source39-review-20261028T162445Z/sampled_lorentz_components_keep_open_color_and_zero_interfaces.log"
+      },
+      {
+        "name": "removes_only_proven_zero_numerators_and_preserves_source_indices",
+        "binary": "generator_ci_optim_test",
+        "args": [
+          "--exact",
+          "grouping::tests::removes_only_proven_zero_numerators_and_preserves_source_indices",
+          "--nocapture",
+          "--test-threads=1"
+        ],
+        "exit_code": 0,
+        "seconds": 0.06252810382284224,
+        "nonzero_count": true,
+        "log": "target/astra-source39-review-20261028T162445Z/removes_only_proven_zero_numerators_and_preserves_source_indices.log"
+      },
+      {
+        "name": "b2-original-pair",
+        "binary": "generator_ci_optim_test",
+        "args": [
+          "--exact",
+          "grouping::tests::vacuum_group28_original_pair_identity",
+          "--ignored",
+          "--nocapture",
+          "--test-threads=1"
+        ],
+        "exit_code": 0,
+        "seconds": 3.09352409793064,
+        "nonzero_count": true,
+        "log": "target/astra-source39-review-20261028T162445Z/b2-original-pair.log"
+      },
+      {
+        "name": "compact_input_labelling_ignores_the_edge_order",
+        "binary": "linnet_ci_optim_test",
+        "args": [
+          "--exact",
+          "half_edge::canon::tests::compact_input_labelling_ignores_the_edge_order",
+          "--nocapture"
+        ],
+        "exit_code": 0,
+        "seconds": 0.009461259935051203,
+        "nonzero_count": true,
+        "log": "target/astra-source39-review-20261028T162445Z/compact_input_labelling_ignores_the_edge_order.log"
+      },
+      {
+        "name": "compact_input_preserves_canonical_form_and_exact_node_frame",
+        "binary": "linnet_ci_optim_test",
+        "args": [
+          "--exact",
+          "half_edge::canon::tests::compact_input_preserves_canonical_form_and_exact_node_frame",
+          "--nocapture"
+        ],
+        "exit_code": 0,
+        "seconds": 0.011243858141824603,
+        "nonzero_count": true,
+        "log": "target/astra-source39-review-20261028T162445Z/compact_input_preserves_canonical_form_and_exact_node_frame.log"
+      },
+      {
+        "name": "four-loop-8",
+        "binary": "four_loop_ci_optim_example",
+        "args": [
+          "8",
+          "-",
+          "true"
+        ],
+        "exit_code": 0,
+        "seconds": 6.884306875988841,
+        "log": "target/astra-source39-review-20261028T162445Z/four-loop-8.log",
+        "inventory_assertion_passed": true
+      }
+    ],
+    "raw_admission_and_finite": [
+      {
+        "name": "generation::tests::interaction_momentum_reduction_rejects_erased_invalid_indices",
+        "exit_code": 0,
+        "passed": true,
+        "seconds": 0.008793507004156709,
+        "log": "target/astra-source39-review-20261028T162445Z/interaction_momentum_reduction_rejects_erased_invalid_indices.log"
+      },
+      {
+        "name": "generation::tests::interaction_momentum_reduction_rejects_heterogeneous_summands",
+        "exit_code": 0,
+        "passed": true,
+        "seconds": 0.00900050695054233,
+        "log": "target/astra-source39-review-20261028T162445Z/interaction_momentum_reduction_rejects_heterogeneous_summands.log"
+      },
+      {
+        "name": "generation::tests::interaction_momentum_reduction_retains_complete_cancellation_metadata",
+        "exit_code": 0,
+        "passed": true,
+        "seconds": 0.00847951602190733,
+        "log": "target/astra-source39-review-20261028T162445Z/interaction_momentum_reduction_retains_complete_cancellation_metadata.log"
+      },
+      {
+        "name": "grouping::tests::sampled_quotient_does_not_group_nonfinite_operands",
+        "exit_code": 0,
+        "passed": true,
+        "seconds": 0.09369021002203226,
+        "log": "target/astra-source39-review-20261028T162445Z/sampled_quotient_does_not_group_nonfinite_operands.log"
+      },
+      {
+        "name": "grouping::tests::sampled_quotient_checks_nonfinite_operands_in_every_sample",
+        "exit_code": 0,
+        "passed": true,
+        "seconds": 0.008457305142655969,
+        "log": "target/astra-source39-review-20261028T162445Z/sampled_quotient_checks_nonfinite_operands_in_every_sample.log"
+      },
+      {
+        "name": "grouping::tests::canonical_quotient_rejects_nonfinite_operands_before_equality",
+        "exit_code": 0,
+        "passed": true,
+        "seconds": 0.007975423941388726,
+        "log": "target/astra-source39-review-20261028T162445Z/canonical_quotient_rejects_nonfinite_operands_before_equality.log"
+      },
+      {
+        "name": "grouping::tests::canonical_quotient_rejects_nonfinite_concrete_dimensions",
+        "exit_code": 0,
+        "passed": true,
+        "seconds": 0.00862921611405909,
+        "log": "target/astra-source39-review-20261028T162445Z/canonical_quotient_rejects_nonfinite_concrete_dimensions.log"
+      }
+    ],
+    "oracles": [
+      {
+        "name": "xs_qcdqed_addx_canonical_scalar_lr_L3",
+        "exit_code": 0,
+        "passed": true,
+        "seconds": 12.484621065901592,
+        "binary_sha256": "6f981704844025425817b1694958bf82a517fd9ed21ba181ae8b0ac3c766e9b1",
+        "threads": "1,8,32",
+        "log": "target/astra-source39-review-20261028T162445Z/xs_qcdqed_addx_canonical_scalar_lr_L3.log"
+      },
+      {
+        "name": "outputs_do_not_depend_on_index_registration_order_increasing_1",
+        "exit_code": 0,
+        "passed": true,
+        "seconds": 75.01798882312141,
+        "binary_sha256": "6f981704844025425817b1694958bf82a517fd9ed21ba181ae8b0ac3c766e9b1",
+        "threads": "1,8,32",
+        "log": "target/astra-source39-review-20261028T162445Z/outputs_do_not_depend_on_index_registration_order_increasing_1.log"
+      },
+      {
+        "name": "ym_ggg_zero_color_L3",
+        "exit_code": 0,
+        "passed": true,
+        "seconds": 96.02162777795456,
+        "binary_sha256": "6f981704844025425817b1694958bf82a517fd9ed21ba181ae8b0ac3c766e9b1",
+        "threads": "1,8,32",
+        "log": "target/astra-source39-review-20261028T162445Z/ym_ggg_zero_color_L3.log"
+      },
+      {
+        "name": "outputs_do_not_depend_on_index_registration_order_decreasing_8",
+        "exit_code": 0,
+        "passed": true,
+        "seconds": 61.58736249804497,
+        "binary_sha256": "6f981704844025425817b1694958bf82a517fd9ed21ba181ae8b0ac3c766e9b1",
+        "threads": "1,8,32",
+        "log": "target/astra-source39-review-20261028T162445Z/outputs_do_not_depend_on_index_registration_order_decreasing_8.log"
+      },
+      {
+        "name": "index_registration_child_failure_propagates",
+        "exit_code": 0,
+        "passed": true,
+        "seconds": 0.018264685990288854,
+        "binary_sha256": "6f981704844025425817b1694958bf82a517fd9ed21ba181ae8b0ac3c766e9b1",
+        "threads": "1,8,32",
+        "log": "target/astra-source39-review-20261028T162445Z/index_registration_child_failure_propagates.log"
+      },
+      {
+        "name": "frames::comparison_frames_with_fermion_flow_reversals",
+        "exit_code": 101,
+        "passed": false,
+        "seconds": 3.3171885248739272,
+        "binary_sha256": "6f981704844025425817b1694958bf82a517fd9ed21ba181ae8b0ac3c766e9b1",
+        "threads": "1,8,32",
+        "log": "target/astra-source39-review-20261028T162445Z/frames__comparison_frames_with_fermion_flow_reversals.log"
+      },
+      {
+        "name": "outputs_do_not_depend_on_index_registration_order_shuffled_32",
+        "exit_code": 0,
+        "passed": true,
+        "seconds": 59.50920713390224,
+        "binary_sha256": "6f981704844025425817b1694958bf82a517fd9ed21ba181ae8b0ac3c766e9b1",
+        "threads": "1,8,32",
+        "log": "target/astra-source39-review-20261028T162445Z/outputs_do_not_depend_on_index_registration_order_shuffled_32.log"
+      },
+      {
+        "name": "frames::representative_frames_with_fermion_flow_reversals",
+        "exit_code": 101,
+        "passed": false,
+        "seconds": 3.40792250004597,
+        "binary_sha256": "6f981704844025425817b1694958bf82a517fd9ed21ba181ae8b0ac3c766e9b1",
+        "threads": "1,8,32",
+        "log": "target/astra-source39-review-20261028T162445Z/frames__representative_frames_with_fermion_flow_reversals.log"
+      },
+      {
+        "name": "frames::representative_frames_with_left_right_symmetrization",
+        "exit_code": 101,
+        "passed": false,
+        "seconds": 13.301512558944523,
+        "binary_sha256": "6f981704844025425817b1694958bf82a517fd9ed21ba181ae8b0ac3c766e9b1",
+        "threads": "1,8,32",
+        "log": "target/astra-source39-review-20261028T162445Z/frames__representative_frames_with_left_right_symmetrization.log"
+      }
+    ],
+    "sm": {
+      "name": "test_vacuum_amplitude_generation_full_sm_three_loop_filtered",
+      "passed": true,
+      "exit_code": 0,
+      "seconds": 13.115929822903126,
+      "threads": [
+        1,
+        8
+      ],
+      "binary_sha256": "4a4ad5827ac3da6895075584028b143ac37cf3ebcda795b8ce785f34d01c50f2",
+      "log": "target/astra-source39-review-20261028T162445Z/sm-three-loop.log",
+      "states": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/astra-source39-review-20261028T162445Z/sm-states"
+    },
+    "four_loop": "Fresh 8-thread example: 4664 retained / 306 zero; inspected original 1/8/32 matrix and exact filter settings. No timing claim.",
+    "source19": {
+      "ym_ggg_zero_color_L3": {
+        "row": "fast ym_ggg_zero_color_L3: Row { diagrams: 1217, topologies: 469, assignments: 1340, inverse_symmetry: (3583, 4), weights: (-1161, 4), symmetry_factors: &[(1, 649), (2, 424), (4, 132), (6, 6), (8, 6)], content: 0x19b54d6ef892c24e, numerators: 0xae5ed16f90c02201, named: 0x3569d286d4aa397d, ids: 0x1ed193f8aeb76d2f };",
+        "numerator_digest_integer": 12564710287510348289,
+        "result": "unchanged existing row passed at 1/8/32 with both class strategies and Named/Minimal payload comparisons"
+      },
+      "xs_qcdqed_addx_canonical_scalar_lr_L3": {
+        "row": "fast xs_qcdqed_addx_canonical_scalar_lr_L3: Row { diagrams: 82, topologies: 25, assignments: 1410, inverse_symmetry: (161, 2), weights: (-2711, 2), symmetry_factors: &[(1, 79), (2, 3)], content: 0x72adf523d45d2a92, numerators: 0x82a821cc454caa0c, named: 0x85a0b3b8988b3a99, ids: 0x84812f02ee345665 };",
+        "numerator_digest_integer": 9414812182237719052,
+        "result": "unchanged existing row passed at 1/8/32 with both class strategies and Named/Minimal payload comparisons"
+      }
+    },
+    "registration": "increasing1, decreasing8, shuffled32 each invoke independent fresh reference and actual children; actual index cooking/pool and complete graph/local-factor/interface/group/ratio comparisons; negative child-failure propagation also passes. Children not double-counted.",
+    "B2": "Explicit --exact --ignored original pair passed: finite SU(3) factors 7/3 and -2/3; factor-preserving N28=(7/2)N34 and zero-sample/fallback checks. Bounded4D/SU3 certificate only."
+  },
+  "binary_identities": {
+    "generator_ci_optim_test": {
+      "path": "/common/build-cache/lcnbr/70/4b25d004416d5c/ci-optim/deps/feynkit_generator-820ca450194b8779",
+      "sha256": "659c69d9bf9fba78b3f69a3473ae242e19d34fc974caeda5fd32bce0aabb4278",
+      "matches_receipt": true,
+      "final_sha256": "659c69d9bf9fba78b3f69a3473ae242e19d34fc974caeda5fd32bce0aabb4278",
+      "unchanged": true,
+      "features": [
+        "default",
+        "native"
+      ],
+      "profile_fingerprint": 16057468363761213068
+    },
+    "linnet_ci_optim_test": {
+      "path": "/common/build-cache/lcnbr/70/4b25d004416d5c/ci-optim/deps/linnet-7d8f725f1a9b558a",
+      "sha256": "00c23f5ba5878b2e8ff5e1f976829cf668ca6a5c52013c7d12a5ee8c6692469f",
+      "matches_receipt": true,
+      "final_sha256": "00c23f5ba5878b2e8ff5e1f976829cf668ca6a5c52013c7d12a5ee8c6692469f",
+      "unchanged": true,
+      "features": [
+        "default",
+        "drawing",
+        "native",
+        "rayon",
+        "rkyv",
+        "serde"
+      ],
+      "profile_fingerprint": 16057468363761213068
+    },
+    "feynkit_py_ci_optim_test": {
+      "path": "/common/build-cache/lcnbr/70/4b25d004416d5c/ci-optim/deps/feynkit_py-d1315a1f051070a0",
+      "sha256": "1285ea4a0d841251c418ab656439657564dce4ab811dd5264ae5a291cc26682b",
+      "matches_receipt": true,
+      "final_sha256": "1285ea4a0d841251c418ab656439657564dce4ab811dd5264ae5a291cc26682b",
+      "unchanged": true
+    },
+    "four_loop_ci_optim_example": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/ci-optim/examples/four_loop_numerator",
+      "sha256": "ed6a2eb809096daee6b3b09187c95cb94a7426fe1460c9599a7fd8ff8c13fe65",
+      "matches_receipt": true,
+      "final_sha256": "ed6a2eb809096daee6b3b09187c95cb94a7426fe1460c9599a7fd8ff8c13fe65",
+      "unchanged": true
+    },
+    "candidate_feyngen_ci_optim_test_retained": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/generation-frame-progress-ports/candidate-test_feyngen-9581d43dfd98ca33",
+      "sha256": "4a4ad5827ac3da6895075584028b143ac37cf3ebcda795b8ce785f34d01c50f2",
+      "matches_receipt": true,
+      "final_sha256": "4a4ad5827ac3da6895075584028b143ac37cf3ebcda795b8ce785f34d01c50f2",
+      "unchanged": true
+    },
+    "base31_feyngen_ci_optim_test_retained": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/generation-frame-progress-ports/base31-test_feyngen-9581d43dfd98ca33",
+      "sha256": "beb5c0aa1a2c85210eae5a89943598f1d9585d08c59f5b079eba4ac604e9c31d",
+      "matches_receipt": true,
+      "final_sha256": "beb5c0aa1a2c85210eae5a89943598f1d9585d08c59f5b079eba4ac604e9c31d",
+      "unchanged": true
+    }
+  },
+  "fresh_oracle_binary": {
+    "candidate": "59b57cead76e576fa9f23e3996f5614de939fe35",
+    "sha256": "6f981704844025425817b1694958bf82a517fd9ed21ba181ae8b0ac3c766e9b1",
+    "artifact": {
+      "reason": "compiler-artifact",
+      "package_id": "path+file:///shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/crates/feynkit-generator#0.1.0",
+      "manifest_path": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/crates/feynkit-generator/Cargo.toml",
+      "target": {
+        "kind": [
+          "test"
+        ],
+        "crate_types": [
+          "bin"
+        ],
+        "name": "generation_oracle",
+        "src_path": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/crates/feynkit-generator/tests/generation_oracle/main.rs",
+        "edition": "2024",
+        "doc": false,
+        "doctest": false,
+        "test": true
+      },
+      "profile": {
+        "opt_level": "2",
+        "debuginfo": 0,
+        "debug_assertions": true,
+        "overflow_checks": true,
+        "test": true
+      },
+      "features": [
+        "default",
+        "native"
+      ],
+      "filenames": [
+        "/common/build-cache/lcnbr/70/4b25d004416d5c/ci-optim/deps/generation_oracle-513b63cbc76b9164"
+      ],
+      "executable": "/common/build-cache/lcnbr/70/4b25d004416d5c/ci-optim/deps/generation_oracle-513b63cbc76b9164",
+      "fresh": false
+    }
+  },
+  "reused_evidence": [
+    {
+      "path": "target/generation-frame-progress-ports/four-loop-1.log",
+      "sha256": "7cf83c47635f8e8f91fe49f90880913984ebe3ef456c35d17c900ad012cb73a2",
+      "status": "inspected retained evidence; not a fresh review run"
+    },
+    {
+      "path": "target/generation-frame-progress-ports/four-loop-8.log",
+      "sha256": "b76717e5ab3fcef2400d9515d5896364990837f383f7dab4b48863a7da608054",
+      "status": "inspected retained evidence; not a fresh review run"
+    },
+    {
+      "path": "target/generation-frame-progress-ports/four-loop-32.log",
+      "sha256": "e54ebbbbe6ef78d5914977989705d8f72686b07fd8939bb3e355e29fee56e9d1",
+      "status": "inspected retained evidence; not a fresh review run"
+    },
+    {
+      "path": "target/generation-frame-progress-ports/sm-three-loop.log",
+      "sha256": "a52bb23b5636839f00256bc6ee77a74c9ef30c441b844731344094f670f62c22",
+      "status": "inspected retained evidence; not a fresh review run"
+    },
+    {
+      "path": "target/generation-frame-progress-ports/aa-ttx-pocket.log",
+      "sha256": "1e15abece850160216da837a7fc25c2a4ad1c0ad84244c3034e1b4a4e140e79f",
+      "status": "inspected retained evidence; not a fresh review run"
+    },
+    {
+      "path": "target/generation-frame-progress-ports/base31-aa-ttx-pocket.log",
+      "sha256": "f005e664cf03464725bdd1aeb624eec85ef0d3b33dcc53511584ece330199374",
+      "status": "inspected retained evidence; not a fresh review run"
+    }
+  ],
+  "carried_gates": [
+    {
+      "severity": "P1",
+      "file": "tests/tests/test_feyngen.rs",
+      "line": 1814,
+      "description": "Original source43 QCD2 no-grouping aa->ttbar assertion expects874|-266; candidate and fresh retained base31 logs both show874|-186. Original QCD0/1 cells match4|-4 and40|-40. Exact retained binary hashes verified; failure logs inspected, not rerun. This is an unresolved physics acceptance gate, not waived as inherited. Parent Sol historical topology/cut/per-graph-weight diagnosis owns next comparison."
+    },
+    {
+      "severity": "P2",
+      "file": "crates/feynkit-generator/tests/generation_oracle/frames.rs",
+      "line": 124,
+      "description": "All three older frame-dependent numerator-digest assertions still fail. Exact cross-thread comparisons and all other summary fields agree; no new source39 failure found, no old-frame physics-equivalence or recertification claim.",
+      "cases": [
+        {
+          "test": "frames::comparison_frames_with_fermion_flow_reversals",
+          "first_failed_boundary": "recorded frame Summary assertion after exact cross-thread Census equality at 1/8/32",
+          "file": "crates/feynkit-generator/tests/generation_oracle/frames.rs",
+          "line": 124,
+          "only_differing_summary_field": "numerators",
+          "actual": 17492405225653900047,
+          "expected": 13526262874643750147,
+          "status": "Known older unresolved gate, reproduced; no recertification or new physics attribution",
+          "log": "target/astra-source39-review-20261028T162445Z/frames__comparison_frames_with_fermion_flow_reversals.log"
+        },
+        {
+          "test": "frames::representative_frames_with_fermion_flow_reversals",
+          "first_failed_boundary": "recorded frame Summary assertion after exact cross-thread Census equality at 1/8/32",
+          "file": "crates/feynkit-generator/tests/generation_oracle/frames.rs",
+          "line": 124,
+          "only_differing_summary_field": "numerators",
+          "actual": 1831509842489383612,
+          "expected": 13627127486228112534,
+          "status": "Known older unresolved gate, reproduced; no recertification or new physics attribution",
+          "log": "target/astra-source39-review-20261028T162445Z/frames__representative_frames_with_fermion_flow_reversals.log"
+        },
+        {
+          "test": "frames::representative_frames_with_left_right_symmetrization",
+          "first_failed_boundary": "recorded frame Summary assertion after exact cross-thread Census equality at 1/8/32",
+          "file": "crates/feynkit-generator/tests/generation_oracle/frames.rs",
+          "line": 124,
+          "only_differing_summary_field": "numerators",
+          "actual": 11122069825991028494,
+          "expected": 9770711142649904079,
+          "status": "Known older unresolved gate, reproduced; no recertification or new physics attribution",
+          "log": "target/astra-source39-review-20261028T162445Z/frames__representative_frames_with_left_right_symmetrization.log"
+        }
+      ]
+    },
+    {
+      "severity": "integration prerequisite",
+      "description": "Actual32-36 and separately reviewed38 must precede39-43; no gate waiver or main integration approved."
+    }
+  ],
+  "integrity": {
+    "source_audit": {
+      "candidate": "59b57cead76e576fa9f23e3996f5614de939fe35",
+      "tracked_files_equal_candidate": 3540,
+      "mismatches": [],
+      "inventory_count": 23,
+      "inventory_matches_receipt": true,
+      "protected_paths_unchanged": {
+        "Cargo.lock": true,
+        "tydenso/Cargo.lock": true,
+        "examples/notebooks/symbolica-host/Cargo.lock": true,
+        "uv.lock": true,
+        "pyproject.toml": true,
+        "nix-ci.nix": true,
+        "crates/linnest/typst/linnest.wasm": true
+      },
+      "source39_methods": {
+        "canonicalize_numerator_graph_pass": {
+          "equal_to_original39": true,
+          "original_sha256": "6a29d1ec04cb2b96740c1db9cebf68bd164d4d63fd1cfad32f017c72223543b9",
+          "candidate_sha256": "6a29d1ec04cb2b96740c1db9cebf68bd164d4d63fd1cfad32f017c72223543b9"
+        },
+        "anchored_positions": {
+          "equal_to_original39": true,
+          "original_sha256": "27a52e3bc847d6f7eb6e564d3667aaa42a1e7d258f47fe5113172a7f5c909625",
+          "candidate_sha256": "27a52e3bc847d6f7eb6e564d3667aaa42a1e7d258f47fe5113172a7f5c909625"
+        }
+      },
+      "scopes_valid": 102,
+      "scopes_total": 102,
+      "generation_scopes": [
+        {
+          "note": "generation-integration-wp3-staged",
+          "note_path": null,
+          "path": "crates/feynkit-generator/src/generation.rs",
+          "symbol": "admitted interaction templates and checked conservation rewrite",
+          "anchor": "    fn interaction_numerator(",
+          "end_anchor": "    fn edge_numerator(",
+          "digest": "584e7d14e34cf83605500b892943ea2ca3043569",
+          "status": "valid",
+          "actual": "584e7d14e34cf83605500b892943ea2ca3043569"
+        },
+        {
+          "note": "gammaloop-architecture",
+          "note_path": null,
+          "path": "crates/feynkit-generator/src/generation.rs",
+          "symbol": "feynkit_generator::generation::coordination",
+          "anchor": "pub enum GenerationError {",
+          "digest": "5ba73ee8f0b70a9dc5b500e0e84caad9819eb377",
+          "status": "valid",
+          "actual": "5ba73ee8f0b70a9dc5b500e0e84caad9819eb377"
+        }
+      ]
+    },
+    "tracked_before_after_count": 3539,
+    "tracked_changed": [],
+    "head_unchanged": true,
+    "frozen_protected_refs_changed": [],
+    "all_concurrent_ref_changes": {},
+    "ref_change_note": "No ref moves by this read-only review. Any listed nonprotected concurrent changes belong to other active task owners.",
+    "nix_ci": "enable=false unchanged",
+    "locks_uv_wasm": "unchanged from approved31; no overrides, cache seeding/deletion or lock updates",
+    "exact_json": "Python integers for all hashes represented as integers; no JS Number conversion"
+  },
+  "limits": [
+    "No main integration, publication, CI enablement, upload, full WP3, full physics, distribution or performance approval.",
+    "No source19 expectation refresh or use of the old two-kernel proof as a new transform certificate; current rows were actually rerun unchanged on kernel1a.",
+    "No historical CLI rebuild or duplicate Sol weight diagnosis.",
+    "Four parser parity helpers that expand graph numerators not executed; no graph numerator expansion added or used.",
+    "Scope B owns progress, cards, stubs and pocket/cut review; installed-extension subprocess/full site not certified here."
+  ],
+  "cleanup": {
+    "removed_empty_owned_directories": [
+      "target/astra-source39-review-20261028T162445Z/dump-outputs_do_not_depend_on_index_registration_order_decreasing_8",
+      "target/astra-source39-review-20261028T162445Z/dump-index_registration_child_failure_propagates",
+      "target/astra-source39-review-20261028T162445Z/dump-outputs_do_not_depend_on_index_registration_order_shuffled_32",
+      "target/astra-source39-review-20261028T162445Z/dump-outputs_do_not_depend_on_index_registration_order_increasing_1"
+    ],
+    "retained": "review.json, scripts, binary/build/source identities, fresh logs, full current oracle and failure inventories and isolated SM states retained under this ignored review directory for review/debugging. Shared caches and all prior contributor artifacts preserved.",
+    "background_processes": "All review test/build subprocesses completed; none intentionally retained."
+  }
+}

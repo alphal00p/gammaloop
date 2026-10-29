@@ -1,0 +1,136 @@
+{
+  "schema": 1,
+  "reviewer": "new independent Astra round2 Scope A",
+  "candidate": "7dd0b0c160e9c1b62533b54217f1d62275dde157",
+  "change": "rrpznzzyopqypkmwqruutwuyxnpxyzrs",
+  "bookmark": "generation-frame-certificate",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-frame-certificate",
+  "review_directory": "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/astra-r2-scope-a-20261028T200300Z",
+  "verdict": "APPROVE_CERTIFICATE",
+  "scope": "Effective full-model binding, original producer/member provenance, complete final payload and master binding for exactly the three frozen grouping-frame rows",
+  "scope_a_findings": [
+    {
+      "id": "R1-A-P1",
+      "status": "CLOSED",
+      "finding": "Detached current-only full model was not bound to live graph owner fingerprints",
+      "resolution": "Both live producer model Arcs are captured after test massless transformations. Authoritative Model::fingerprint probes recompute the complete canonical ModelDefinition under both locked kernels. All receipts and graph owners join; valid material changes alter the actual owner fingerprint and semantic replays reject.",
+      "evidence": [
+        "source-audit.json",
+        "independent-model-receipt-join.json",
+        "independent-fingerprint-mutations.json",
+        "fresh-capture-results.json",
+        "replay-results.json"
+      ]
+    },
+    {
+      "id": "R1-A-P2",
+      "status": "CLOSED",
+      "finding": "Final local, aggregate and prefactor fields were not joined to their identified masters",
+      "resolution": "The unchanged substantive round1 independent complete join passes all actual groups. Corrected final/member proofs bind every payload field, with exact grouped-factor construction separately checked. Independent one-sided edge, vertex, aggregate, prefactor, master-reference and grouped-factor mutations reject.",
+      "evidence": [
+        "independent-complete-join.json",
+        "replay-results.json"
+      ]
+    }
+  ],
+  "open_scope_a_semantic_findings": [],
+  "scope_b_overlap": {
+    "final_aggregate_and_master_binding": "independently closed by Scope A",
+    "full_prefactor_and_routing": "all actual-data scripts replayed and complete expression/effective-tensor/signed-affine dataflow inspected; supplied counterexamples reject",
+    "deep_algebra_routing_adjudication": "reserved to the separate independent Scope B review; no Scope B verdict inferred here"
+  },
+  "fresh_checks": {
+    "tracked_regular_files_match_candidate": 3545,
+    "original_capture_manifest_hashes": 2102,
+    "new_model_hook_manifest_hashes": 18,
+    "certificate_artifact_hashes": 76,
+    "immutable_binary_hashes_and_embedded_kernel_identities": 8,
+    "source_patches_apply_to_exact_frozen_bases": 4,
+    "model_hook_capture_runs": 6,
+    "fresh_models_receipts_final_graphs_byte_equal_frozen": true,
+    "historical_assertions_passed": 3,
+    "current_digest_only_expected_failures": 3,
+    "fresh_capture_threads": [
+      1
+    ],
+    "record_mode": "unset",
+    "positive_proof_scripts_including_control_orchestrator": 11,
+    "fresh_summary_objects_equal_frozen": 11,
+    "supplied_semantic_corruptions_rejected_without_sha_guards": 19,
+    "independent_semantic_corruptions_rejected_without_sha_guards": 11,
+    "valid_material_model_mutations_computed_in_both_kernels": 10,
+    "python_scripts_compile": 12,
+    "typst_report_compile": "passed",
+    "registry_entry_and_title": "passed"
+  },
+  "reused_checks": {
+    "original_pristine_binary_rows": "Round1 source-qualified runs of all three rows per producer at 1,8,32 threads; original ELF hashes verified freshly",
+    "original_pair_observations": "2102 immutable captures and exact saved source patches; no fresh pair-observation build",
+    "D65_typed_admission": "retained both-kernel logs; not rerun",
+    "full_docs": "not passed; retained builder run stops at absent unrelated gammalooprs catalog exporter"
+  },
+  "binary_provenance_limit": {
+    "old_graphproof_ELFs": "unavailable/overwritten at ordinary shared cache paths",
+    "expected_old_current_sha256": "0bdb82d0dea6cc8f456dbeada912aad96535b238df0e412abf5afb83d4ea3a0f",
+    "expected_old_historical_sha256": "019c405cb24b299027667b58a5b6df956252a9bd9414f05750eab684cb83d516",
+    "newly_retained_binaries": "original, before-model-hook, model-hook and fingerprint-probe binaries for each producer are distinct; they do not replace the missing old pair-observation ELF identity",
+    "details": "finish-checks.json"
+  },
+  "nonblocking_findings": [
+    {
+      "severity": "P3",
+      "category": "formatting",
+      "finding": "Repository-pinned Ruff 0.16.6 format --check fails for all 12 scripts; pinned rustfmt --check requests mod frame_certificate before mod frames in main.rs.",
+      "locations": [
+        "docs/architecture/evidence/generation-frame-certificate/scripts/",
+        "crates/feynkit-generator/tests/generation_oracle/main.rs:32"
+      ],
+      "evidence": [
+        "ruff.log",
+        "rustfmt.log",
+        "pinned-ruff-path.log"
+      ],
+      "scope_effect": "Does not invalidate the frozen semantic certificate; no implementation-integration approval is given."
+    },
+    {
+      "severity": "P3",
+      "category": "Rust policy",
+      "finding": "New diagnostics use qualified types/module paths despite CONTRIBUTING Imports And Paths; no documented exception supplied.",
+      "locations": [
+        "crates/feynkit-generator/tests/generation_oracle/frames.rs:92",
+        "crates/feynkit-generator/tests/generation_oracle/frames.rs:116",
+        "crates/feynkit-generator/tests/generation_oracle/frames.rs:133",
+        "crates/feynkit-generator/tests/generation_oracle/frame_certificate.rs:58"
+      ],
+      "scope_effect": "Source hygiene follow-up; no clean policy/Clippy pass asserted."
+    }
+  ],
+  "exact_entitlement": "Together with a successful independent Scope B review, supports only later separately tested/reviewed migration of the three native-schema numerator digest expectations. No expectation is changed or recertified now.",
+  "limitations": [
+    "Exactly frozen historical/current three-row values and original members; no general grouping/physics theorem.",
+    "No private proof-cache/archive-history identity. Only D65 typed admission executed under both kernels; all-graph proof is structural replay.",
+    "No general/full WP3, main integration, performance, distribution or publication approval.",
+    "No full docs suite or Clippy run and formatting checks fail as explicitly recorded.",
+    "Original graphproof observation ELFs unavailable; no duplicate cold build used to reconstruct them."
+  ],
+  "read_only_and_cleanup": {
+    "candidate": "7dd0b0c160e9c1b62533b54217f1d62275dde157",
+    "jj_identity_unchanged": true,
+    "all_shared_refs_unchanged": true,
+    "tracked_regular_files_unchanged": 3545,
+    "tracked_changes": [],
+    "protected_sources_locks_nixci_unchanged": 12,
+    "artifact_sha256_entries_unchanged": 76,
+    "pair_manifest_entries_unchanged": 2102,
+    "model_hook_manifest_entries_unchanged": 18,
+    "external_constructor_bridge_sha256_verified": "d16204ba54f1d113da343c7aa0e1ad5472f05207bd22aa81bca46e9eacf1c3a3",
+    "round1_tag": "c5a19031d8a527ca61903728b6465187f3e87928",
+    "diagnosis_tag": "67f36295d41cdf872d978692c8aff93d3f3b855e",
+    "historical_capture_tag": "3718714c791d40fb746dd9abc6eeb61fe86548c4",
+    "review_outputs_ignored_by_target_rule": true,
+    "temporary_patch_trees_removed": true,
+    "active_review_processes_after_this_check": "none; every spawned check was awaited to completion"
+  },
+  "retained_artifacts": "Review scripts, commands, JSON, Typst report, raw logs and isolated fresh capture outputs retained for review/continuation; only own temporary patch-check trees and model input temporaries removed.",
+  "primary_report": "review.typ"
+}

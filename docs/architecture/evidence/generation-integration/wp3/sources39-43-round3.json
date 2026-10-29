@@ -1,0 +1,63 @@
+{
+  "status": "bounded correction candidate; stop for new independent Astra round3 review",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports",
+  "round2_parent": "d6ddba2d445e8facacc70d9819925d47aaa3a78a",
+  "round2_references": [
+    "generation-frame-progress-ports-round2",
+    "generation-frame-progress-ports-round2-frozen"
+  ],
+  "round3_change": "vunmolok",
+  "review_source": "target/review-scope-b-astra-round2-20261028T171956Z/review.json",
+  "kernel": "1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
+  "file_inventory_since_round2": [
+    "crates/feynkit-py/src/generation/execution.rs",
+    "crates/feynkit-py/src/generation/tests.rs",
+    "crates/feynkit-py/tests/fixtures/progress_cross_batch_cancel.py",
+    "docs/architecture/evidence/generation-integration/wp3/sources39-43-round3.json"
+  ],
+  "correction": "An AtomicBool owned by the existing execute progress-delivery closure records only callback-return-False cancellation for that entire execution. Every later drained batch suppresses nonterminal Python callbacks while its one Done remains deliverable. Explicit caller-token cancellation retains its prior delivery semantics. No second queue, worker callback route, compatibility layer or timing-dependent production path was added.",
+  "real_binding_fixture": {
+    "path": "crates/feynkit-py/tests/fixtures/progress_cross_batch_cancel.py",
+    "sha256": "815e2f48cee90a54b90f92dc2d75ab5f2a8b1699f37cd5a7a104eb3041aa7ee2",
+    "request": "QCD u u~ -> g g two-loop, threads=1; 3575 retained native diagrams",
+    "qualification": "The first callback reports partial Skeletons, later Done reports 3575, the report is incomplete, exactly one terminal callback occurs on the caller thread, and no nonterminal callback follows False. The bounded 250 ms callback window exceeds the documented 150 ms interval; partial/final assertions qualify the observed native work, and three frozen-producer failures with this exact fixture establish the cross-batch schedule for the paired control. This is a real binding workload, not a synthetic queue test.",
+    "old_probe_source_sha256": "80bb2cb76ae95267024cc588c5eb45d5ccca2d89496685baaf188b5b3f82a3e3",
+    "new_probe_source_sha256": "80bb2cb76ae95267024cc588c5eb45d5ccca2d89496685baaf188b5b3f82a3e3",
+    "features_both": ["default", "native", "python_stubgen", "ufo"],
+    "profile_both": "ci-optim",
+    "old_probe": "target/review-scope-b-astra-round2-20261028T171956Z/progress_probe",
+    "old_probe_sha256": "64db0b8ccacfa5a5bc01624d78def43e822c1a9194dcdde5a751aa67a90ce980",
+    "old_feynkit_rlib_sha256": "5c20f059836b028088cd0aad84370c0a570d30cd04044e25c650986fe886ab6b",
+    "old_result": "3/3 fresh exact-fixture runs exit 1 with later Skeletons/Dressing/Prepare callbacks after False; Done(3575) remains once",
+    "old_logs": "target/generation-frame-progress-ports-round3/old-cross-batch-{1,2,3}.log",
+    "new_probe": "target/generation-frame-progress-ports-round3/progress_probe",
+    "new_probe_sha256": "2a0b43826d194c331188ae3820bfa43c8f23cf90ebb88a93b9ff87f691e57d4b",
+    "new_feynkit_rlib_sha256": "aa28110b485cd33cec295e5eba6d220a47ad6de42c0654dca0abe65e28080eb2",
+    "new_result": "3/3 fresh exact-fixture runs exit 0; each observes only partial Skeletons and one Done(3575)",
+    "new_logs": "target/generation-frame-progress-ports-round3/new-probe-{1,2,3}.log",
+    "producer_identity": "target/generation-frame-progress-ports-round3/probe-identity.json records exact new rlib, PyO3 dependency, rustflags, linked paths, shared source and binary hashes. The frozen old producer identity remains in the reviewer directory."
+  },
+  "native_test_binary": {
+    "path": "/common/build-cache/lcnbr/70/4b25d004416d5c/ci-optim/deps/feynkit_py-d1315a1f051070a0",
+    "sha256": "b0ea41bc03173b1b3b267ca2753ebecf7fc8c1878d8b3fa5bda3fcc7ff73317b",
+    "profile": "ci-optim",
+    "features": ["default", "native", "ufo"],
+    "cross_batch_regression": "3/3 fresh exact runs pass, each from a separate process with partial Skeletons and one Done(3575)",
+    "other_progress_controls": "10/10 exact native tests pass, including the round2 early/coalesced token/callback, error-precedence, caller-thread, signal, spinner and synthetic-queue controls",
+    "logs": "target/generation-frame-progress-ports-round3/new-cross-batch-{1,2,3}.log and controls.log"
+  },
+  "static_checks": {
+    "format": "cargo fmt --all --check passed",
+    "clippy": "cargo clippy --locked --profile ci-optim -p feynkit-py --lib -- -D warnings passed",
+    "clippy_tests": "cargo clippy --locked --profile ci-optim -p feynkit-py --tests -- -D warnings passed",
+    "scopes": "102/102 canonical unique-anchor Git-blob scopes valid; FeynKit tutorial title matches registry",
+    "stub_disposition": "No annotation, stub-owner or generated .pyi input changed since round2. Three copies remain byte-identical at SHA-256 bf9d4ce3f4b5f3871c39164d3c11db248123eecd8a1939a845ad7569da4de92f; no new exporter result is claimed."
+  },
+  "unchanged_blockers": [
+    "Original source43 aa->ttbar QCD2 874|-266 weight gate remains with the separate generation-pocket-weight-diagnosis; no physics assertion or production cut code changed.",
+    "Three older frame certificates remain with the separate generation-frame-certificate; approved scope-A frame code is byte-unchanged.",
+    "Actual ordered sources32-36 and separately reviewed38 must precede39-43 on main."
+  ],
+  "limits": "No installed-extension subprocess qualification, full physics/docs build, graph numerator expansion, source44/45 snapshot edit, other diagnostic workspace edit, main integration, push, PR, upload, publication or NixCI enablement.",
+  "retained_artifacts": "The ignored target/generation-frame-progress-ports-round3 directory retains same-source old/new probe logs, full build identity JSON, final native test logs, focused static-check logs and log-sha256.txt. Existing round1, round2, review and diagnostic artifacts remain untouched. No task background process is retained."
+}

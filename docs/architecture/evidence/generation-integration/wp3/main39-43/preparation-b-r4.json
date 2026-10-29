@@ -1,0 +1,1228 @@
+{
+  "reviewer": "Independent Astra scope B ROUND4; read-only; no nested agents",
+  "decision": "APPROVE",
+  "scope": "Complete bounded source42 callback port and R1-R4 cancellation corrections; approval does not clear whole39-43 or integration.",
+  "candidate": "595a2f4d921a119503db3d5c919b87fcc728a423",
+  "change": "oklkkrzsvqloyowvuvsylpxxzwkytnml",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports",
+  "evidence_directory": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z",
+  "completed_utc": "2026-10-28T19:22:50.721690+00:00",
+  "findings": [],
+  "historical_closures": {
+    "ROUND1-DROPPED-PENDING-DONE": {
+      "priority": "P2",
+      "status": "CLOSED; remains intact",
+      "basis": "False suppresses only later nonterminal updates and permits already-pending Done. Fresh terminal/caller-thread, cancellation and exception-precedence control passes; original frozen/corrected reproducer evidence is hash-verified and reused."
+    },
+    "ROUND1-INFLATED-WORKLOAD": {
+      "priority": "P2",
+      "status": "CLOSED; remains intact",
+      "basis": "The 10000-iteration PendingProgress/20000-snapshot case remains explicitly synthetic. Reused qualified uncancelled real QCD baseline returns 3575 diagrams and completed=true; no 10000-real-diagram claim. Controlled schedule count 2 is likewise synthetic and separate."
+    },
+    "ROUND2-CANCEL-CROSS-BATCH": {
+      "priority": "P2",
+      "status": "CLOSED",
+      "basis": "One private ProgressDelivery instance is allocated by actual execute, reused by service_caller and final forced drain, and shared by Arc clone. Its callback_cancelled AtomicBool is never recreated per batch. Fresh deterministic late-batch mutant fails and candidate passes under normal and contended schedules. Historical pristine d6 reproduction remains separate reused evidence."
+    },
+    "ROUND3-FIXTURE-SCHEDULER-DEPENDENCE": {
+      "priority": "P2",
+      "status": "CLOSED",
+      "basis": "The real fixture compares Done to both result.report.retained_count and len(result), asserts incomplete/one terminal/no late nonterminal/caller thread/no post-return updates, and has no fixed cancelled count or skeleton-to-diagram count comparison. Native channel handshakes deterministically put Dressing/Prepare/Done into a second drain only after the first callback returned False and the first delivery returned. Four bounded competitors on CPU 0 produced passing actual counts 1807,2003,2049. The real fixture sleep is only a workload advance opportunity, not the deterministic contract certificate."
+    },
+    "ROUND3-PYTHON-FORMAT": {
+      "priority": "P3",
+      "status": "CLOSED",
+      "basis": "Fresh repository-pinned Ruff 0.16.6 format --check and check pass on exact final fixture. Rustfmt also passes."
+    }
+  },
+  "production_audit": {
+    "ownership_and_callgraph": "PyRequest.generate/count/explain and PyDiagramSet.build/PyBuiltDiagramSet.select/group all enter execution::execute. It creates ProgressDelivery once at execution.rs:206. Native service_caller invokes the same instance at :340 and the post-join final flush at :471. WASM uses an Arc clone at :221/:239; source inspected only for WASM. Only the unit test constructs a separate delivery object for its independent execution.",
+    "state_lifetime": "The persistent AtomicBool belongs to the per-execution owner, starts false for each separate execute, and survives every pending.take. Relaxed is adequate because caller-thread deliveries are serialized. Run cancellation keeps its existing token synchronization. No second queue, alternate production dispatcher, public compatibility API, or per-batch reconstruction.",
+    "gil_and_locks": "PendingProgress lock is released before Python callbacks. Native work remains under py.detach and Python progress is attached on the invoking OS thread. Workers only record snapshots and request synchronized replies. Existing callback/predicate routing is unchanged; module-scope imports and a private inherent method follow owner/import policy.",
+    "cancellation_and_done": "Only an actual Python False sets callback suppression and cancels the token. Explicit token cancellation with None remains distinct. Nonterminals are skipped across drains; Done still passes. Native Done synchronization receives Cancel and report.completed is finalized false after cancellation; retained_count and Done count refer to returned diagrams.",
+    "exceptions_and_cleanup": "Callback errors/invalid returns stop delivery and preserve original errors; a Done exception after False retains precedence. The existing scoped generation worker and optional predicate worker are joined before return, cancellation/error replies continue to unblock work, and final drain is skipped when interruption is present. Spinner error cleanup is unchanged. Fresh controls cover signal handling, callback error identity, worker permission, GC/view expiry and terminal exceptions."
+  },
+  "controlled_red_qualification": {
+    "source": "516e02d3aa41d89f8ddbf35193be48558f9ffc5a",
+    "reference": "generation-frame-progress-ports-round4-red",
+    "red_sha256": "5ca59ed610eca4d805cf3bdb6c9856ffd50bb8be898db142679fb6a5ab8a283d",
+    "green_sha256": "c1dd25d7119115f9887ce492bef1dbf10ddcbc2682122fc8a4365ff807469796",
+    "test": "generation::execution::tests::callback_cancellation_suppresses_a_later_drained_batch",
+    "schedule": "Worker records Skeletons and blocks on continue_receiver. First ready handshake precedes deliver(false). Caller waits for that delivery to return and asserts cancelled, then sends continue. Worker records Dressing/Prepare/Done and signals ready. Only then caller forces the second drain, joins worker, and checks a third empty drain. No sleeps or wall-clock assertions determine this ordering.",
+    "mutation": "The red production method replaces execution-persistent callback_cancelled with local terminal_only=false inside each delivery. The controlled Rust test has the same callback, channels, snapshots and assertion; its only necessary source difference is initialization of the restored member in green. Red-to-green also has a receipt and a redundant globals()[fk] assignment in the separate real-generation Python fixture, which this controlled Rust test does not load. These do not cause the controlled failure.",
+    "observed": "Red fails 3/3 normal and 3/3 contended with Python AssertionError showing Skeletons(1),Dressing(2),Prepare(2),Done(2), exit101. Exact candidate passes all six with only Skeletons(1),Done(2).",
+    "historical_distinction": "This is a controlled lifetime mutant, not pristine historical d6. The earlier pristine d6 same-fixture failure/corrected pass remains preserved, hash-verified and reused; no fresh pristine-old reproduction claimed."
+  },
+  "fresh_checks": {
+    "runtime_results": [
+      {
+        "label": "normal-red-0",
+        "binary": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/generation-frame-progress-ports-round4/controlled-red-test-bin",
+        "test": "generation::execution::tests::callback_cancellation_suppresses_a_later_drained_batch",
+        "contended": false,
+        "expected_exit": 101,
+        "exit": 101,
+        "log": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/normal-red-0.log",
+        "command": [
+          "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/generation-frame-progress-ports-round4/controlled-red-test-bin",
+          "generation::execution::tests::callback_cancellation_suppresses_a_later_drained_batch",
+          "--exact",
+          "--nocapture"
+        ],
+        "competitors_reaped": true
+      },
+      {
+        "label": "normal-green-0",
+        "binary": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/green-test-bin",
+        "test": "generation::execution::tests::callback_cancellation_suppresses_a_later_drained_batch",
+        "contended": false,
+        "expected_exit": 0,
+        "exit": 0,
+        "log": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/normal-green-0.log",
+        "command": [
+          "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/green-test-bin",
+          "generation::execution::tests::callback_cancellation_suppresses_a_later_drained_batch",
+          "--exact",
+          "--nocapture"
+        ],
+        "competitors_reaped": true
+      },
+      {
+        "label": "normal-real-0",
+        "binary": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/green-test-bin",
+        "test": "generation::tests::progress_callback_cancellation_suppresses_later_native_batches",
+        "contended": false,
+        "expected_exit": 0,
+        "exit": 0,
+        "log": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/normal-real-0.log",
+        "command": [
+          "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/green-test-bin",
+          "generation::tests::progress_callback_cancellation_suppresses_later_native_batches",
+          "--exact",
+          "--nocapture"
+        ],
+        "events": [
+          [
+            "Stage.Skeletons",
+            55,
+            false
+          ],
+          [
+            "Stage.Done",
+            3575,
+            true
+          ]
+        ],
+        "competitors_reaped": true
+      },
+      {
+        "label": "normal-red-1",
+        "binary": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/generation-frame-progress-ports-round4/controlled-red-test-bin",
+        "test": "generation::execution::tests::callback_cancellation_suppresses_a_later_drained_batch",
+        "contended": false,
+        "expected_exit": 101,
+        "exit": 101,
+        "log": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/normal-red-1.log",
+        "command": [
+          "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/generation-frame-progress-ports-round4/controlled-red-test-bin",
+          "generation::execution::tests::callback_cancellation_suppresses_a_later_drained_batch",
+          "--exact",
+          "--nocapture"
+        ],
+        "competitors_reaped": true
+      },
+      {
+        "label": "normal-green-1",
+        "binary": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/green-test-bin",
+        "test": "generation::execution::tests::callback_cancellation_suppresses_a_later_drained_batch",
+        "contended": false,
+        "expected_exit": 0,
+        "exit": 0,
+        "log": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/normal-green-1.log",
+        "command": [
+          "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/green-test-bin",
+          "generation::execution::tests::callback_cancellation_suppresses_a_later_drained_batch",
+          "--exact",
+          "--nocapture"
+        ],
+        "competitors_reaped": true
+      },
+      {
+        "label": "normal-real-1",
+        "binary": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/green-test-bin",
+        "test": "generation::tests::progress_callback_cancellation_suppresses_later_native_batches",
+        "contended": false,
+        "expected_exit": 0,
+        "exit": 0,
+        "log": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/normal-real-1.log",
+        "command": [
+          "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/green-test-bin",
+          "generation::tests::progress_callback_cancellation_suppresses_later_native_batches",
+          "--exact",
+          "--nocapture"
+        ],
+        "events": [
+          [
+            "Stage.Skeletons",
+            61,
+            false
+          ],
+          [
+            "Stage.Done",
+            3575,
+            true
+          ]
+        ],
+        "competitors_reaped": true
+      },
+      {
+        "label": "normal-red-2",
+        "binary": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/generation-frame-progress-ports-round4/controlled-red-test-bin",
+        "test": "generation::execution::tests::callback_cancellation_suppresses_a_later_drained_batch",
+        "contended": false,
+        "expected_exit": 101,
+        "exit": 101,
+        "log": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/normal-red-2.log",
+        "command": [
+          "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/generation-frame-progress-ports-round4/controlled-red-test-bin",
+          "generation::execution::tests::callback_cancellation_suppresses_a_later_drained_batch",
+          "--exact",
+          "--nocapture"
+        ],
+        "competitors_reaped": true
+      },
+      {
+        "label": "normal-green-2",
+        "binary": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/green-test-bin",
+        "test": "generation::execution::tests::callback_cancellation_suppresses_a_later_drained_batch",
+        "contended": false,
+        "expected_exit": 0,
+        "exit": 0,
+        "log": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/normal-green-2.log",
+        "command": [
+          "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/green-test-bin",
+          "generation::execution::tests::callback_cancellation_suppresses_a_later_drained_batch",
+          "--exact",
+          "--nocapture"
+        ],
+        "competitors_reaped": true
+      },
+      {
+        "label": "normal-real-2",
+        "binary": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/green-test-bin",
+        "test": "generation::tests::progress_callback_cancellation_suppresses_later_native_batches",
+        "contended": false,
+        "expected_exit": 0,
+        "exit": 0,
+        "log": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/normal-real-2.log",
+        "command": [
+          "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/green-test-bin",
+          "generation::tests::progress_callback_cancellation_suppresses_later_native_batches",
+          "--exact",
+          "--nocapture"
+        ],
+        "events": [
+          [
+            "Stage.Skeletons",
+            60,
+            false
+          ],
+          [
+            "Stage.Done",
+            3575,
+            true
+          ]
+        ],
+        "competitors_reaped": true
+      },
+      {
+        "label": "contended-red-0",
+        "binary": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/generation-frame-progress-ports-round4/controlled-red-test-bin",
+        "test": "generation::execution::tests::callback_cancellation_suppresses_a_later_drained_batch",
+        "contended": true,
+        "expected_exit": 101,
+        "cpu": 0,
+        "competitors": 4,
+        "competitor_pids": [
+          641255,
+          641256,
+          641257,
+          641258
+        ],
+        "exit": 101,
+        "log": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/contended-red-0.log",
+        "command": [
+          "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/generation-frame-progress-ports-round4/controlled-red-test-bin",
+          "generation::execution::tests::callback_cancellation_suppresses_a_later_drained_batch",
+          "--exact",
+          "--nocapture"
+        ],
+        "competitors_reaped": true
+      },
+      {
+        "label": "contended-green-0",
+        "binary": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/green-test-bin",
+        "test": "generation::execution::tests::callback_cancellation_suppresses_a_later_drained_batch",
+        "contended": true,
+        "expected_exit": 0,
+        "cpu": 0,
+        "competitors": 4,
+        "competitor_pids": [
+          641378,
+          641379,
+          641380,
+          641381
+        ],
+        "exit": 0,
+        "log": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/contended-green-0.log",
+        "command": [
+          "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/green-test-bin",
+          "generation::execution::tests::callback_cancellation_suppresses_a_later_drained_batch",
+          "--exact",
+          "--nocapture"
+        ],
+        "competitors_reaped": true
+      },
+      {
+        "label": "contended-real-0",
+        "binary": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/green-test-bin",
+        "test": "generation::tests::progress_callback_cancellation_suppresses_later_native_batches",
+        "contended": true,
+        "expected_exit": 0,
+        "cpu": 0,
+        "competitors": 4,
+        "competitor_pids": [
+          641914,
+          641922,
+          641934,
+          641939
+        ],
+        "exit": 0,
+        "log": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/contended-real-0.log",
+        "command": [
+          "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/green-test-bin",
+          "generation::tests::progress_callback_cancellation_suppresses_later_native_batches",
+          "--exact",
+          "--nocapture"
+        ],
+        "competitors_reaped": true,
+        "events": [
+          [
+            "Stage.Skeletons",
+            23,
+            false
+          ],
+          [
+            "Stage.Done",
+            1807,
+            true
+          ]
+        ]
+      },
+      {
+        "label": "contended-red-1",
+        "binary": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/generation-frame-progress-ports-round4/controlled-red-test-bin",
+        "test": "generation::execution::tests::callback_cancellation_suppresses_a_later_drained_batch",
+        "contended": true,
+        "expected_exit": 101,
+        "cpu": 0,
+        "competitors": 4,
+        "competitor_pids": [
+          658845,
+          658846,
+          658847,
+          658848
+        ],
+        "exit": 101,
+        "log": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/contended-red-1.log",
+        "command": [
+          "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/generation-frame-progress-ports-round4/controlled-red-test-bin",
+          "generation::execution::tests::callback_cancellation_suppresses_a_later_drained_batch",
+          "--exact",
+          "--nocapture"
+        ],
+        "competitors_reaped": true
+      },
+      {
+        "label": "contended-green-1",
+        "binary": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/green-test-bin",
+        "test": "generation::execution::tests::callback_cancellation_suppresses_a_later_drained_batch",
+        "contended": true,
+        "expected_exit": 0,
+        "cpu": 0,
+        "competitors": 4,
+        "competitor_pids": [
+          658871,
+          658872,
+          658873,
+          658874
+        ],
+        "exit": 0,
+        "log": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/contended-green-1.log",
+        "command": [
+          "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/green-test-bin",
+          "generation::execution::tests::callback_cancellation_suppresses_a_later_drained_batch",
+          "--exact",
+          "--nocapture"
+        ],
+        "competitors_reaped": true
+      },
+      {
+        "label": "contended-real-1",
+        "binary": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/green-test-bin",
+        "test": "generation::tests::progress_callback_cancellation_suppresses_later_native_batches",
+        "contended": true,
+        "expected_exit": 0,
+        "cpu": 0,
+        "competitors": 4,
+        "competitor_pids": [
+          658888,
+          658889,
+          658890,
+          658891
+        ],
+        "exit": 0,
+        "log": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/contended-real-1.log",
+        "command": [
+          "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/green-test-bin",
+          "generation::tests::progress_callback_cancellation_suppresses_later_native_batches",
+          "--exact",
+          "--nocapture"
+        ],
+        "events": [
+          [
+            "Stage.Skeletons",
+            27,
+            false
+          ],
+          [
+            "Stage.Done",
+            2003,
+            true
+          ]
+        ],
+        "competitors_reaped": true
+      },
+      {
+        "label": "contended-red-2",
+        "binary": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/generation-frame-progress-ports-round4/controlled-red-test-bin",
+        "test": "generation::execution::tests::callback_cancellation_suppresses_a_later_drained_batch",
+        "contended": true,
+        "expected_exit": 101,
+        "cpu": 0,
+        "competitors": 4,
+        "competitor_pids": [
+          659047,
+          659049,
+          659050,
+          659051
+        ],
+        "exit": 101,
+        "log": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/contended-red-2.log",
+        "command": [
+          "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/generation-frame-progress-ports-round4/controlled-red-test-bin",
+          "generation::execution::tests::callback_cancellation_suppresses_a_later_drained_batch",
+          "--exact",
+          "--nocapture"
+        ],
+        "competitors_reaped": true
+      },
+      {
+        "label": "contended-green-2",
+        "binary": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/green-test-bin",
+        "test": "generation::execution::tests::callback_cancellation_suppresses_a_later_drained_batch",
+        "contended": true,
+        "expected_exit": 0,
+        "cpu": 0,
+        "competitors": 4,
+        "competitor_pids": [
+          659088,
+          659089,
+          659090,
+          659091
+        ],
+        "exit": 0,
+        "log": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/contended-green-2.log",
+        "command": [
+          "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/green-test-bin",
+          "generation::execution::tests::callback_cancellation_suppresses_a_later_drained_batch",
+          "--exact",
+          "--nocapture"
+        ],
+        "competitors_reaped": true
+      },
+      {
+        "label": "contended-real-2",
+        "binary": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/green-test-bin",
+        "test": "generation::tests::progress_callback_cancellation_suppresses_later_native_batches",
+        "contended": true,
+        "expected_exit": 0,
+        "cpu": 0,
+        "competitors": 4,
+        "competitor_pids": [
+          659127,
+          659128,
+          659129,
+          659130
+        ],
+        "exit": 0,
+        "log": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/contended-real-2.log",
+        "command": [
+          "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/green-test-bin",
+          "generation::tests::progress_callback_cancellation_suppresses_later_native_batches",
+          "--exact",
+          "--nocapture"
+        ],
+        "events": [
+          [
+            "Stage.Skeletons",
+            27,
+            false
+          ],
+          [
+            "Stage.Done",
+            2049,
+            true
+          ]
+        ],
+        "competitors_reaped": true
+      },
+      {
+        "label": "control-0",
+        "binary": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/green-test-bin",
+        "test": "generation::tests::progress_cancellation_delivers_terminal_once_on_the_calling_thread",
+        "contended": false,
+        "expected_exit": 0,
+        "exit": 0,
+        "log": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/control-0.log",
+        "command": [
+          "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/green-test-bin",
+          "generation::tests::progress_cancellation_delivers_terminal_once_on_the_calling_thread",
+          "--exact",
+          "--nocapture"
+        ],
+        "competitors_reaped": true
+      },
+      {
+        "label": "control-1",
+        "binary": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/green-test-bin",
+        "test": "generation::tests::streaming_progress_reaches_python_once_per_stage_and_interval",
+        "contended": false,
+        "expected_exit": 0,
+        "exit": 0,
+        "log": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/control-1.log",
+        "command": [
+          "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/green-test-bin",
+          "generation::tests::streaming_progress_reaches_python_once_per_stage_and_interval",
+          "--exact",
+          "--nocapture"
+        ],
+        "competitors_reaped": true
+      },
+      {
+        "label": "control-2",
+        "binary": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/green-test-bin",
+        "test": "generation::tests::automatic_progress_tracks_marimo_lifecycle",
+        "contended": false,
+        "expected_exit": 0,
+        "exit": 0,
+        "log": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/control-2.log",
+        "command": [
+          "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/green-test-bin",
+          "generation::tests::automatic_progress_tracks_marimo_lifecycle",
+          "--exact",
+          "--nocapture"
+        ],
+        "competitors_reaped": true
+      },
+      {
+        "label": "control-3",
+        "binary": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/green-test-bin",
+        "test": "generation::tests::display_only_generation_keeps_progress_and_native_regions",
+        "contended": false,
+        "expected_exit": 0,
+        "exit": 0,
+        "log": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/control-3.log",
+        "command": [
+          "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/green-test-bin",
+          "generation::tests::display_only_generation_keeps_progress_and_native_regions",
+          "--exact",
+          "--nocapture"
+        ],
+        "competitors_reaped": true
+      },
+      {
+        "label": "control-4",
+        "binary": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/green-test-bin",
+        "test": "generation::tests::progress_and_partial_filters_use_the_calling_python_thread",
+        "contended": false,
+        "expected_exit": 0,
+        "exit": 0,
+        "log": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/control-4.log",
+        "command": [
+          "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/green-test-bin",
+          "generation::tests::progress_and_partial_filters_use_the_calling_python_thread",
+          "--exact",
+          "--nocapture"
+        ],
+        "competitors_reaped": true
+      },
+      {
+        "label": "control-5",
+        "binary": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/green-test-bin",
+        "test": "generation::tests::staged_python_selection_uses_run_progress_cancellation_and_errors",
+        "contended": false,
+        "expected_exit": 0,
+        "exit": 0,
+        "log": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/control-5.log",
+        "command": [
+          "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/green-test-bin",
+          "generation::tests::staged_python_selection_uses_run_progress_cancellation_and_errors",
+          "--exact",
+          "--nocapture"
+        ],
+        "competitors_reaped": true
+      },
+      {
+        "label": "control-6",
+        "binary": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/green-test-bin",
+        "test": "generation::tests::worker_permission_keeps_progress_on_caller_and_preserves_failures_and_gc",
+        "contended": false,
+        "expected_exit": 0,
+        "exit": 0,
+        "log": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/control-6.log",
+        "command": [
+          "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/green-test-bin",
+          "generation::tests::worker_permission_keeps_progress_on_caller_and_preserves_failures_and_gc",
+          "--exact",
+          "--nocapture"
+        ],
+        "competitors_reaped": true
+      },
+      {
+        "label": "control-7",
+        "binary": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/green-test-bin",
+        "test": "generation::tests::python_signals_interrupt_both_generation_entry_points",
+        "contended": false,
+        "expected_exit": 0,
+        "exit": 0,
+        "log": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/control-7.log",
+        "command": [
+          "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/green-test-bin",
+          "generation::tests::python_signals_interrupt_both_generation_entry_points",
+          "--exact",
+          "--nocapture"
+        ],
+        "competitors_reaped": true
+      },
+      {
+        "label": "control-8",
+        "binary": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/green-test-bin",
+        "test": "progress::tests::one_spinner_shows_every_update_and_error_cleanup",
+        "contended": false,
+        "expected_exit": 0,
+        "exit": 0,
+        "log": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/control-8.log",
+        "command": [
+          "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/green-test-bin",
+          "progress::tests::one_spinner_shows_every_update_and_error_cleanup",
+          "--exact",
+          "--nocapture"
+        ],
+        "competitors_reaped": true
+      },
+      {
+        "label": "control-9",
+        "binary": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/green-test-bin",
+        "test": "generation::execution::tests::alternating_stages_reach_python_once_per_stage_and_interval",
+        "contended": false,
+        "expected_exit": 0,
+        "exit": 0,
+        "log": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/control-9.log",
+        "command": [
+          "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/green-test-bin",
+          "generation::execution::tests::alternating_stages_reach_python_once_per_stage_and_interval",
+          "--exact",
+          "--nocapture"
+        ],
+        "competitors_reaped": true
+      }
+    ],
+    "summary": {
+      "controlled_red_expected_failures": 6,
+      "controlled_green_passes": 6,
+      "actual_binding_normal_passes": 3,
+      "actual_binding_contended_passes": 3,
+      "retained_controls_passed": 10,
+      "normal_done_counts": [
+        3575,
+        3575,
+        3575
+      ],
+      "contended_done_counts": [
+        1807,
+        2003,
+        2049
+      ]
+    },
+    "source_build": {
+      "command": "nix develop --accept-flake-config -c cargo test --locked --profile ci-optim -p feynkit-py --lib --no-run --message-format=json",
+      "exit": 0,
+      "elapsed": "4m30s",
+      "features": [
+        "default",
+        "native",
+        "ufo"
+      ],
+      "artifact": "/common/build-cache/lcnbr/70/4b25d004416d5c/ci-optim/deps/feynkit_py-d1315a1f051070a0",
+      "sha256": "c1dd25d7119115f9887ce492bef1dbf10ddcbc2682122fc8a4365ff807469796",
+      "byte_identical_to_tested_retained_green": true
+    },
+    "rustfmt": "nix develop --accept-flake-config -c cargo fmt --all --check: exit0",
+    "ruff": "nix shell --accept-flake-config --inputs-from . nixpkgs#ruff: version0.16.6; format --check and check: exit0",
+    "metadata": {
+      "candidate": "595a2f4d921a119503db3d5c919b87fcc728a423",
+      "parent_round3": "09c4411bce2276f044b16cb04049d761e131c8e2",
+      "controlled_red": "516e02d3aa41d89f8ddbf35193be48558f9ffc5a",
+      "delta": [
+        "crates/feynkit-py/src/generation/execution.rs",
+        "crates/feynkit-py/tests/fixtures/progress_cross_batch_cancel.py",
+        "docs/architecture/evidence/generation-integration/wp3/sources39-43-round4.json"
+      ],
+      "nix_fixture": {
+        "source": "/nix/store/dcf5rhz9dmxdmwbvcyq3bpd38r6mk4aj-source",
+        "sha256": "f289185c07d17d5fa1c06f53b064126373e48a1055c71f5aa227c547df6ae4e8",
+        "in_actual_producer_source": true
+      },
+      "depfile_contains_fixture": true,
+      "fingerprint": {
+        "rustc": 1625334936438085654,
+        "features": "[\"default\", \"native\", \"ufo\"]",
+        "declared_features": "[\"default\", \"linnet-python\", \"native\", \"python_stubgen\", \"ufo\", \"wasm\"]",
+        "target": 1205597129026815865,
+        "profile": 16057468363761213068,
+        "path": 11949907219197713904,
+        "deps": [
+          [
+            824141387789191317,
+            "feynkit_amplitude",
+            false,
+            9720290904667140019
+          ],
+          [
+            1245959037524753650,
+            "pyo3",
+            false,
+            13809766814682032597
+          ],
+          [
+            1680685884976022744,
+            "feynkit_cff",
+            false,
+            13708278287221123584
+          ],
+          [
+            1819191786676615155,
+            "symbolica",
+            false,
+            1818663739933421421
+          ],
+          [
+            2811542318006936987,
+            "feynkit_kinematics",
+            false,
+            16336144866648064045
+          ],
+          [
+            2878135982285137535,
+            "linnet",
+            false,
+            3001133325389737606
+          ],
+          [
+            4479790829530052811,
+            "spenso",
+            false,
+            6853713796798821284
+          ],
+          [
+            5156925218712681703,
+            "feynkit_generator",
+            false,
+            3289451621012185443
+          ],
+          [
+            5812050004113311173,
+            "feynkit_ufo",
+            false,
+            8550502574292293941
+          ],
+          [
+            5958434411900392980,
+            "linnet_render_py",
+            false,
+            1092248845977910983
+          ],
+          [
+            6099558086451772327,
+            "spenso_macros",
+            false,
+            1286634514104062851
+          ],
+          [
+            7264510121943336168,
+            "pyo3_stub_gen_derive",
+            false,
+            11908511654652445066
+          ],
+          [
+            7497922256016908689,
+            "feynkit_model",
+            false,
+            16496760871761360140
+          ],
+          [
+            9723370144619655183,
+            "tempfile",
+            false,
+            10400464205889966735
+          ],
+          [
+            9917544417685332479,
+            "idenso",
+            false,
+            11264640788734204105
+          ],
+          [
+            9963473668617717428,
+            "feynkit_tensor",
+            false,
+            15507650790901131737
+          ],
+          [
+            10664185240009834588,
+            "linnet_py",
+            false,
+            8528830785467121970
+          ],
+          [
+            13795362694956882968,
+            "serde_json",
+            false,
+            14163828210576029918
+          ],
+          [
+            15374397757032566115,
+            "linnest",
+            false,
+            14043374461387743926
+          ],
+          [
+            17283853990992084357,
+            "feynkit_graph",
+            false,
+            2544151723415867829
+          ],
+          [
+            18304469748313745433,
+            "spynso3",
+            false,
+            11030712474082561444
+          ]
+        ],
+        "local": [
+          {
+            "CheckDepInfo": {
+              "dep_info": "ci-optim/.fingerprint/feynkit-py-d1315a1f051070a0/dep-test-lib-feynkit_py",
+              "checksum": false
+            }
+          }
+        ],
+        "rustflags": [
+          "-C",
+          "linker=/nix/store/z4c6k0mrlkwl3s4w9ysxc8vq1wylm3ms-gcc-wrapper-15.3.0/bin/gcc"
+        ],
+        "config": 1282902399306750302,
+        "compile_kind": 0
+      },
+      "locks": {
+        "Cargo.lock": {
+          "sha256": "def8dd7be5f208f4a290a4556081f7a63d10a5ae070c5df1808c1d350fa6161e",
+          "packages": [
+            {
+              "name": "graphica",
+              "source": "git+https://github.com/symbolica-dev/symbolica?branch=main#1a1829b1f3d0a88b53b44085b3b9f34ef77945b3"
+            },
+            {
+              "name": "numerica",
+              "source": "git+https://github.com/symbolica-dev/symbolica?branch=main#1a1829b1f3d0a88b53b44085b3b9f34ef77945b3"
+            },
+            {
+              "name": "symbolica",
+              "source": "git+https://github.com/symbolica-dev/symbolica?branch=main#1a1829b1f3d0a88b53b44085b3b9f34ef77945b3"
+            }
+          ]
+        },
+        "tydenso/Cargo.lock": {
+          "sha256": "f1f0573d5f1c02d4ddb73d4491514cd291ae94ded7d84627342226917ca41dd0",
+          "packages": [
+            {
+              "name": "graphica",
+              "source": "git+https://github.com/symbolica-dev/symbolica?branch=main#1a1829b1f3d0a88b53b44085b3b9f34ef77945b3"
+            },
+            {
+              "name": "numerica",
+              "source": "git+https://github.com/symbolica-dev/symbolica?branch=main#1a1829b1f3d0a88b53b44085b3b9f34ef77945b3"
+            },
+            {
+              "name": "symbolica",
+              "source": "git+https://github.com/symbolica-dev/symbolica?branch=main#1a1829b1f3d0a88b53b44085b3b9f34ef77945b3"
+            }
+          ]
+        },
+        "examples/notebooks/symbolica-host/Cargo.lock": {
+          "sha256": "03e18f00dbba096e08978063fd857d6558659f9f75e0ab09d73be3e543882c5a",
+          "packages": [
+            {
+              "name": "graphica",
+              "source": "git+https://github.com/symbolica-dev/symbolica?branch=main#1a1829b1f3d0a88b53b44085b3b9f34ef77945b3"
+            },
+            {
+              "name": "numerica",
+              "source": "git+https://github.com/symbolica-dev/symbolica?branch=main#1a1829b1f3d0a88b53b44085b3b9f34ef77945b3"
+            },
+            {
+              "name": "symbolica",
+              "source": "git+https://github.com/symbolica-dev/symbolica?branch=main#1a1829b1f3d0a88b53b44085b3b9f34ef77945b3"
+            }
+          ]
+        }
+      },
+      "protected_unchanged_since_round3": [
+        "Cargo.lock",
+        "uv.lock",
+        "flake.lock",
+        "nix-ci.nix",
+        "tydenso/Cargo.lock",
+        "examples/notebooks/symbolica-host/Cargo.lock",
+        "pyproject.toml",
+        "nix/rust-workspace.nix"
+      ],
+      "stubs": {
+        "crates/feynkit-py/python/symbolica/community/hepkit/__init__.pyi": "bf9d4ce3f4b5f3871c39164d3c11db248123eecd8a1939a845ad7569da4de92f",
+        "docs/api/python/feynkit-community.pyi": "bf9d4ce3f4b5f3871c39164d3c11db248123eecd8a1939a845ad7569da4de92f",
+        "examples/notebooks/symbolica-host/python/symbolica/community/hepkit/__init__.pyi": "bf9d4ce3f4b5f3871c39164d3c11db248123eecd8a1939a845ad7569da4de92f"
+      },
+      "scope_count": 102,
+      "tutorial_title_matches": true,
+      "receipt_log_checks": [
+        {
+          "path": "target/generation-frame-progress-ports-round4/clippy-tests.log",
+          "sha256": "d58814f423d4c78f436e51931159a628da962f367f96e7706118c4f048e5a2c3"
+        },
+        {
+          "path": "target/generation-frame-progress-ports-round4/contended-native-0.log",
+          "sha256": "0a4b73ed3955fcd1b919d9b5f38b5df9b1419c0c8455fb52be3da4671ceda549"
+        },
+        {
+          "path": "target/generation-frame-progress-ports-round4/contended-native-1.log",
+          "sha256": "a5f75fb7f4892d1da6293efe2d9401c4bec9a787f2b08d6e028f01d8b1c39814"
+        },
+        {
+          "path": "target/generation-frame-progress-ports-round4/contended-native-2.log",
+          "sha256": "545f4314e4f7214477a9954dc03615d0372800417029b833beffecdaf19da46c"
+        },
+        {
+          "path": "target/generation-frame-progress-ports-round4/contended-results.json",
+          "sha256": "b9aa3f82e29da02374de19a92a53aa10aad0b05794beaa29e74111314c127f7d"
+        },
+        {
+          "path": "target/generation-frame-progress-ports-round4/contended-run.log",
+          "sha256": "97eb799da574086c8fdaa4770e95cd7e64c80a695eb7ea2c619148a5a134f609"
+        },
+        {
+          "path": "target/generation-frame-progress-ports-round4/controlled-green-final.log",
+          "sha256": "7a6a90c589fc80ab61ee26bee6559cfc16ae77afeb16ace6bad7e38740e0f123"
+        },
+        {
+          "path": "target/generation-frame-progress-ports-round4/controlled-red-test-bin",
+          "sha256": "5ca59ed610eca4d805cf3bdb6c9856ffd50bb8be898db142679fb6a5ab8a283d"
+        },
+        {
+          "path": "target/generation-frame-progress-ports-round4/controlled-red.log",
+          "sha256": "f5f598ae71f5596d390efb6e2fd8fb517a4d842b7388851d2f621f523bc1f241"
+        },
+        {
+          "path": "target/generation-frame-progress-ports-round4/controls.log",
+          "sha256": "9c2b53fe6c2b000d08b23628fb136b18554ca6684a6eed166f6d8c2825d2b510"
+        },
+        {
+          "path": "target/generation-frame-progress-ports-round4/fmt.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "path": "target/generation-frame-progress-ports-round4/real-final-build.log",
+          "sha256": "4d12d82c8710ca980740e14939a98d60f14b58e68a20298718778ef90fbd388a"
+        },
+        {
+          "path": "target/generation-frame-progress-ports-round4/real-normal-1.log",
+          "sha256": "8228467543adb1d09ca8cc0690e1bd56668b0405cc6bf0ece4cd1d5b6b6bc6ef"
+        },
+        {
+          "path": "target/generation-frame-progress-ports-round4/real-normal-2.log",
+          "sha256": "8228467543adb1d09ca8cc0690e1bd56668b0405cc6bf0ece4cd1d5b6b6bc6ef"
+        },
+        {
+          "path": "target/generation-frame-progress-ports-round4/real-normal-3.log",
+          "sha256": "b2052d7d0422fcb8e5ef3fceb533f23bb731d12d70b5c0f416ccf514fe1d8fe2"
+        },
+        {
+          "path": "target/generation-frame-progress-ports-round4/ruff.log",
+          "sha256": "79a7993516e1a5329271012524ee012f64b0eb4aafa2f0d15db8c6e0805ea89c"
+        },
+        {
+          "path": "target/generation-frame-progress-ports-round4/run_contended.py",
+          "sha256": "a0021b1edd7de7e65c01f4c09400f7160ad105ab1a88d7b307c0ca263f758fcc"
+        },
+        {
+          "path": "target/generation-frame-progress-ports-round4/scopes.log",
+          "sha256": "47a81bfadc222fbef96746cd54d66b604db5c2b6c998c55d54a5c28ded4914d5"
+        }
+      ],
+      "nix_ci_enabled": false
+    },
+    "actual_nix_source_and_dependency": "Evaluated packages.x86_64-linux.crate-test-binaries-feynkit-py.artifact.src to /nix/store/dcf5rhz9dmxdmwbvcyq3bpd38r6mk4aj-source; exact final fixture f289185c07d17d5fa1c06f53b064126373e48a1055c71f5aa227c547df6ae4e8 present. Rust depfile includes normalized src/generation/../../tests/fixtures path. Fresh cargo compiler-artifact identifies final source/features and reproduces identical ELF."
+  },
+  "reused_checks": {
+    "clippy": "Reused exact candidate tests Clippy success log, SHA256 d58814f423d4c78f436e51931159a628da962f367f96e7706118c4f048e5a2c3; cargo clippy --locked --profile ci-optim -p feynkit-py --tests -- -D warnings. Log records existing vendor/clarabel unused-import and lifetime warnings; no changed-code warning. Not rerun.",
+    "matrix_baseline_and_originals": {
+      "files": [
+        {
+          "path": "target/review-scope-b-astra-round3-20261028T190000Z/review.json",
+          "sha256": "bb36f63cb41eaa77340e83fd110fc64b653e1a3ebc14ed28ccd8982a14fae6e3",
+          "matches_prior_manifest": true
+        },
+        {
+          "path": "target/review-scope-b-astra-round3-20261028T190000Z/adversarial-matrix.log",
+          "sha256": "f9845f8e2e0205eb745c0fe9d539e70fd734be1f20355ae041a4649d88aa820a",
+          "matches_prior_manifest": true
+        },
+        {
+          "path": "target/review-scope-b-astra-round3-20261028T190000Z/round1-original-frozen.log",
+          "sha256": "8a1fdcf8c57d6298f68f88c7d7ca074566ea32578ad59513f1f5782459af2d93",
+          "matches_prior_manifest": true
+        },
+        {
+          "path": "target/review-scope-b-astra-round3-20261028T190000Z/round1-original-corrected.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "matches_prior_manifest": true
+        },
+        {
+          "path": "target/review-scope-b-astra-round3-20261028T190000Z/round2-original-corrected.log",
+          "sha256": "662269c22e2bc5beb1a7878a24fa45c99e9c759134395ab4a623096559b0c8a2",
+          "matches_prior_manifest": true
+        },
+        {
+          "path": "target/review-scope-b-astra-round3-20261028T190000Z/old-cross-batch-0.log",
+          "sha256": "696679e8e113702258f2c2421bc882bfb7a1ea438b3b1b3202020884bc0f1feb",
+          "matches_prior_manifest": true
+        },
+        {
+          "path": "target/review-scope-b-astra-round3-20261028T190000Z/old-cross-batch-1.log",
+          "sha256": "8e026559de62168d038125d807f5017f549ed65f09e4f18d40e9a42a512cf1c4",
+          "matches_prior_manifest": true
+        },
+        {
+          "path": "target/review-scope-b-astra-round3-20261028T190000Z/old-cross-batch-2.log",
+          "sha256": "8e026559de62168d038125d807f5017f549ed65f09e4f18d40e9a42a512cf1c4",
+          "matches_prior_manifest": true
+        },
+        {
+          "path": "target/review-scope-b-astra-round3-20261028T190000Z/new-cross-batch-0.log",
+          "sha256": "9d3516452964266ea39dc2c909c287f7d661eebc0f3b28d7f6ac9bc210a25f80",
+          "matches_prior_manifest": true
+        },
+        {
+          "path": "target/review-scope-b-astra-round3-20261028T190000Z/new-cross-batch-1.log",
+          "sha256": "9d3516452964266ea39dc2c909c287f7d661eebc0f3b28d7f6ac9bc210a25f80",
+          "matches_prior_manifest": true
+        },
+        {
+          "path": "target/review-scope-b-astra-round3-20261028T190000Z/new-cross-batch-2.log",
+          "sha256": "9d3516452964266ea39dc2c909c287f7d661eebc0f3b28d7f6ac9bc210a25f80",
+          "matches_prior_manifest": true
+        },
+        {
+          "path": "target/review-scope-b-astra-round3-20261028T190000Z/progress_probe",
+          "sha256": "2a0b43826d194c331188ae3820bfa43c8f23cf90ebb88a93b9ff87f691e57d4b",
+          "matches_prior_manifest": true
+        },
+        {
+          "path": "target/astra-source39-review-20261028T162445Z/review.json",
+          "sha256": "dc4093c671d7fd08d3427da8d34fc8e178304e731cd5f58fd362ce81c4363672",
+          "decision": "APPROVE bounded source39 preparation semantics"
+        },
+        {
+          "path": "target/review-scope-b-astra-round2-20261028T171956Z/review.json",
+          "sha256": "2dbed8692540060345cc1f13f7bffd8af7e107577c71273b21c53c6d2bccacc6",
+          "decision": "REQUEST_CHANGES"
+        },
+        {
+          "path": "target/review-scope-b-astra-59b57ce-20261028/review.json",
+          "sha256": "2995b63b55cf187dd72ffa77a0c58c3f6e538d89a52dc3b802d814d5a30637b1",
+          "decision": "REQUEST_CHANGES"
+        }
+      ],
+      "matrix_cases": 32,
+      "uncancelled_baseline": {
+        "actual_diagram_count": 3575,
+        "completed": true,
+        "events": [
+          {
+            "stage": "Stage.Skeletons",
+            "completed": 71,
+            "total": null,
+            "zero": 0
+          },
+          {
+            "stage": "Stage.Dressing",
+            "completed": 1046,
+            "total": null,
+            "zero": 0
+          },
+          {
+            "stage": "Stage.Prepare",
+            "completed": 1046,
+            "total": null,
+            "zero": 0
+          },
+          {
+            "stage": "Stage.Skeletons",
+            "completed": 646,
+            "total": null,
+            "zero": 0
+          },
+          {
+            "stage": "Stage.Dressing",
+            "completed": 3575,
+            "total": null,
+            "zero": 0
+          },
+          {
+            "stage": "Stage.Prepare",
+            "completed": 3575,
+            "total": null,
+            "zero": 0
+          },
+          {
+            "stage": "Stage.Done",
+            "completed": 3575,
+            "total": 3575,
+            "zero": 0
+          }
+        ]
+      }
+    },
+    "matrix_reason": "The delivery body is moved into its private execution owner without behavior change from approved R3 runtime. Original 32 callback/token/exception/invalid-return cases plus uncancelled 3575 baseline are reused; all ten relevant native controls are freshly rerun for the refactor.",
+    "source39_40_41_43": "Exact three-file delta leaves previously bounded frame/source40/41/43 code and expectations unchanged. Prior bounded approvals reused, not widened.",
+    "stubs": "All three .pyi copies remain bf9d4ce3f4b5f3871c39164d3c11db248123eecd8a1939a845ad7569da4de92f. Exporter/public annotation owners unchanged; no fresh exporter execution claimed."
+  },
+  "final_guards": {
+    "candidate_unchanged": true,
+    "tracked_blobs_matched_before_after": 3544,
+    "tracked_edits": [],
+    "protected_refs_unchanged": {
+      "refs/heads/generation-asset-diagnostics-staged": "277d2f8b0051e0a41194b369fa683db550098bbb",
+      "refs/heads/generation-b2-diagnosis": "f473709ce444fd99f5200fed0c9fcead48e8bf71",
+      "refs/heads/generation-b2-upstream-control": "1f20e7805f678415863866770125597f4fa83bae",
+      "refs/heads/generation-color-cycles": "2a6ee257165cc1cbd2beb923729d09bab21ecdd3",
+      "refs/heads/generation-documentation-reconcile": "eb2a02f5dcee0171a728c6143ff28d7f16f40f40",
+      "refs/heads/generation-documentation-reconcile-code": "7e3eb9f69e37cbdf7aae0040742352e329d790f5",
+      "refs/heads/generation-documentation-reconcile-source31-approved": "87dfd362891cc264de49f56adb9bb47df7cc4b3d",
+      "refs/heads/generation-documentation-reconcile-source31-frozen": "068da800fa4e71eb057d8ae5b3ecf73d847861e0",
+      "refs/heads/generation-drawing-notices": "00df0507ded2b2ddce45b38e58311a0f8ea120c1",
+      "refs/heads/generation-drawing-ports": "98cbf5b8f984e702f4699b1b176fbebfee059d3a",
+      "refs/heads/generation-import-diagnostics": "c0e9ce68c325f9d597847d68cc4f1c924da29f19",
+      "refs/heads/generation-integration": "191aaf7b77018e377a9e5e4e3b9c88357218aa48",
+      "refs/heads/generation-integration-corrected-graph-code": "d109e898ecf569eeab1b568ce80462ee6094e58d",
+      "refs/heads/generation-integration-corrected-staged": "d48f9d1aedc766eea5cb185ab6029d1f04462043",
+      "refs/heads/generation-integration-corrected-staged-code": "1263f4fdbdffeb48a16a6c835c056e4e99c0d135",
+      "refs/heads/generation-integration-drawing15-16": "8430e701d858b07e40203a25bfc3b1fa61b15f4a",
+      "refs/heads/generation-integration-plan": "4374f72027b75df9ff95c5c7a725ee75beac27a8",
+      "refs/heads/generation-integration-pre-rebuild": "5226894ee1af61797e6b819d7e801a22bf17bace",
+      "refs/heads/generation-integration-pre-staged": "438b61500da4b32841c64211103e5da6fc4c4a72",
+      "refs/heads/generation-integration-prerequisites08-14": "438b61500da4b32841c64211103e5da6fc4c4a72",
+      "refs/heads/generation-integration-source-m1-source": "9540f5bbf7a96609e69af6983d2bf7325530126d",
+      "refs/heads/generation-integration-source-pre-v2": "75b6c7a88fb099f142bcec9227ee614b6fc56376",
+      "refs/heads/generation-integration-source-stage1": "f25961e21689ed1a33365430b4566a9a2e9c319a",
+      "refs/heads/generation-integration-source-transplant": "4e00851731541be7de4626b7d1e5274d79b9eea8",
+      "refs/heads/generation-integration-source-upstream": "588148851e3e989ecbb7478279db7d46727e23a8",
+      "refs/heads/generation-integration-source-v2": "d9ff71a6826166e57bf3bba56ffcf8a57ffaf9db",
+      "refs/heads/generation-integration-source-v3": "dfe6387606e44a96f110c1ce03f52d92824dbdb1",
+      "refs/heads/generation-integration-source-v3-original": "6d207cfce36ab2bb128d92d67cc3da182afb0bb1",
+      "refs/heads/generation-integration-source-v4": "e0a779808174c64057fecfd062c948b8de8e5c1f",
+      "refs/heads/generation-integration-source19-code": "4aa4d3d88394fd39be75f460b3ace4bc72a48894",
+      "refs/heads/generation-integration-source20-code": "c75ab826e6eb69c711130803bd54223664c9879a",
+      "refs/heads/generation-integration-source21-code": "82c1eb5b40c4911e59dfc25c9ba1786e282e111c",
+      "refs/heads/generation-integration-source30": "7587d0c768363f200e89250683e7836c867c9b81",
+      "refs/heads/generation-integration-source30-code": "f99fe4bf25db77df58ce4619e2ff176268499a58",
+      "refs/heads/generation-integration-source31": "191aaf7b77018e377a9e5e4e3b9c88357218aa48",
+      "refs/heads/generation-integration-source31-code": "ecd901151e9c6a4b30df75198c7613f1532416b1",
+      "refs/heads/generation-integration-source31-round1": "3a90bc05e1e50fc85b0f7541ef82086a0e2db873",
+      "refs/heads/generation-integration-source31-round2": "191aaf7b77018e377a9e5e4e3b9c88357218aa48",
+      "refs/heads/generation-integration-source31-round2-code": "2f500641ddbf08a57c5420194398aa68e761f41f",
+      "refs/heads/generation-integration-staged-code": "f264028690d117b4b99c320b61b7f2d5d89222d0",
+      "refs/heads/generation-integration-staged17-18-37": "817b5886a50276efea05ab860d22016e1fb0c203",
+      "refs/heads/generation-integration-units03-07": "9e2c4c23f3c48fb5df41edd2f5880097867dd117",
+      "refs/heads/generation-integration-units19-21": "df55185059f31bea548a5de27c95828656fbdc52",
+      "refs/heads/generation-integration-units19-21-recertified": "0a38ee4e3e7d16af3978f2c6ccde04dc176dfea9",
+      "refs/heads/generation-integration-units22-26": "a517ca563d78d161cff17fe60e661f80529c9a83",
+      "refs/heads/generation-integration-units22-26-code": "2eb0d9db13caed01cb589f869089bc0753ab429b",
+      "refs/heads/generation-integration-units27-29": "cb585c98a474628ca9c55bb17cf1e680450b8ef9",
+      "refs/heads/generation-integration-units27-29-code": "c2cce079a92c66fd1435a2ad42d86c17e16353be",
+      "refs/heads/generation-integration-wp3-prefix": "817b5886a50276efea05ab860d22016e1fb0c203",
+      "refs/heads/generation-numeric-comparisons": "254420243792a63270c80a451884422bbc4000d9",
+      "refs/heads/generation-oracle-budget-fix": "ea0e78bcc246cd070cb2f7b26c82b45f9a65ed81",
+      "refs/heads/generation-projector-flow": "735d599a665acbce1577b2c40d149c152f01543d",
+      "refs/heads/generation-projector-flow-staged": "f2e32c44c986058ede1d7e585b9e2e4fefe1110c",
+      "refs/heads/generation-python-docs-ports": "43ef486177335b295bfbbc5474d0da04a0c58c27",
+      "refs/heads/generation-python-docs-ports-reviewed-r1": "e7bbdc1182bf5e99290b38650f5ec57146749206",
+      "refs/heads/generation-sampling-fixes": "c82916079b5cc643151e0213499ca9875739a4e3",
+      "refs/heads/generation-sampling-fixes-staged": "2d679436ba300c339cf12fa8d647abaa97e6eda9",
+      "refs/heads/generation-scalar-admission": "872e84b2b5bb875264c9eb476c5af47154f66b18",
+      "refs/heads/generation-staged-drawing-fixes": "b1061d715bca86d2d29df0f108576c001a29b22a",
+      "refs/heads/generation-staged-evidence-fixes": "edabf052c5780be6460a9043cb9704e1583a2e4c",
+      "refs/heads/generation-staged-graph-fixes": "4b60161dd503bc870434a9ae6951003bc1dc2132",
+      "refs/heads/generation-staged-parser-fixes": "5ac772ac04209582147ba9b5e6204b74c488216a",
+      "refs/heads/generation-staged-transport-fix": "39e88ddff27c1279188a2ad50ab1197f75ad899e",
+      "refs/heads/generation-test-source-closure": "390993069213aa662ddfc0a7682c56020463d018",
+      "refs/remotes/origin/feynkit": "a6ee249b83901a480744f6abbb9a3739c66d2bdd",
+      "refs/remotes/origin/main": "89d420b55cd31bca13a3a7eed233369698ee7afc",
+      "refs/tags/generation-frame-historical-original-capture": "3718714c791d40fb746dd9abc6eeb61fe86548c4",
+      "refs/tags/generation-frame-intermediate-diagnosis": "67f36295d41cdf872d978692c8aff93d3f3b855e",
+      "jj bookmark generation-frame-progress-ports": "595a2f4d921a119503db3d5c919b87fcc728a423",
+      "jj bookmark generation-frame-progress-ports-round4": "595a2f4d921a119503db3d5c919b87fcc728a423",
+      "jj bookmark generation-frame-progress-ports-round4-red": "516e02d3aa41d89f8ddbf35193be48558f9ffc5a",
+      "jj bookmark generation-frame-progress-ports-round3": "09c4411bce2276f044b16cb04049d761e131c8e2",
+      "jj bookmark generation-frame-progress-ports-round2": "d6ddba2d445e8facacc70d9819925d47aaa3a78a",
+      "jj bookmark generation-frame-progress-ports-round2-frozen": "d6ddba2d445e8facacc70d9819925d47aaa3a78a",
+      "jj bookmark generation-frame-progress-ports-round1": "59b57cead76e576fa9f23e3996f5614de939fe35"
+    },
+    "all_ref_changes_observed": {
+      "refs/tags/generation-frame-certificate-round1": {
+        "before": null,
+        "after": "c5a19031d8a527ca61903728b6465187f3e87928"
+      }
+    },
+    "kernel": "1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
+    "nix_ci_enable": false,
+    "red_green_hashes_unchanged": true,
+    "nested_agents": false,
+    "other_lanes_edited": false,
+    "ref_moves_by_reviewer": false
+  },
+  "environment_and_review_harness_notes": "Supplied task workspace resumed, main/workspace guidance read. Nix-backed commands and normal shared caches, substitution enabled, no target/build-dir overrides or manual cache seeding/deletion. Existing license preserved, otherwise loaded silently from current-user config. No ../.envrc. Initial host python3 absent, retried through Nix. Default dev shell realized its normal linnest-wasm/clinnet prerequisites. A harmless concurrent Nix eval-cache busy warning was ignored by Nix. Reviewer log parser initially assumed trace started a line; libtest printed a prefix under contention, so parser was corrected and remaining cases resumed without rerunning completed checks. Metadata helper corrected path normalization and tutorial-registry lookup assumptions; final audit passed. These were reviewer helper errors, not candidate failures.",
+  "limits": "Native Rust/PyO3 embedded actual-binding tests only. No installed-extension subprocess/packaging/import-discovery/ABI distribution certification, no browser/WASM runtime qualification, no full physics/docs build or new performance claim. No graph numerator expansion. No publication/push/PR/upload/integration/NixCI enablement.",
+  "whole_39_43_gate": "STILL BLOCKED separately: original source43 aa->ttbar QCD2 gate expected874|-266 versus observed874|-186; three older frame certificates; actual ordered32-36 and separately reviewed38 integration prerequisites. This approval clears bounded complete callback port/corrections only, not weights, old frame certificates, order38 or whole39-43/main integration.",
+  "cleanup": "All owned runtime tests and bounded load competitors completed or were terminated and waited; affinity restored in finally. Focused source build and static checks completed; no owned background process retained. Keep this unique ignored review directory, scripts, exact green ELF, build identity, review.json and raw logs as review proof. Controlled red ELF remains at its original retained location; earlier raw binaries, evidence and diagnostic workspaces remain untouched. Shared caches are retained."
+}

@@ -2061,7 +2061,7 @@ class Cuts:
     @property
     def sewn_tadpoles(self) -> builtins.bool:
         r"""
-        Allow sewn tadpole contributions.
+        Whether graphs whose initial-state sewing creates a tadpole are vetoed.
 
         Examples
         --------
@@ -2094,7 +2094,8 @@ class Cuts:
         spectators : Range | None
             Allowed spectator count; None is unrestricted.
         sewn_tadpoles : bool
-            Allow sewn tadpole contributions.
+            Veto graphs in which sewing each incoming leg to its outgoing partner
+            creates a tadpole; False keeps them.
         symmetrize_left_right : bool
             Identify equivalent left-right cut assignments.
         """
@@ -11526,7 +11527,8 @@ class Run:
         cancellation : CancellationToken or None, optional
             Shared cancellation flag; None creates an execution control token.
         progress : callable, str or None, optional
-            Calling-thread progress observer, "auto" for notebook display, or None.
+            Calling-thread observer of each stage's latest snapshot, at most every 150 ms;
+            "auto" for notebook display, or None.
         thread_safe : bool, optional
             Opt into one reused predicate worker; Graph snapshots require False.
         """

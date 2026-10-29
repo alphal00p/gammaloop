@@ -1,0 +1,221 @@
+{
+  "verdict": "APPROVE_CERTIFICATE",
+  "scope": "B ROUND2: strict expressions, effective prefactors, final masters, member ratios and signed affine routing",
+  "candidate": "7dd0b0c160e9c1b62533b54217f1d62275dde157",
+  "change": "rrpznzzyopqypkmwqruutwuyxnpxyzrs",
+  "bookmark": "generation-frame-certificate",
+  "independent_review": true,
+  "nested_agents_used": false,
+  "blocking_scope_b_findings": [],
+  "round1_scope_b_findings": {
+    "prefactor_parser_and_effective_tensor": "closed by full grammar, actual finalization binding, complete independent AST replay, original counterexamples rejecting",
+    "final_aggregate_and_master_binding": "closed by exhaustive actual representative/payload and grouped-factor joins, original final numerator/master counterexamples rejecting",
+    "within_route_affine_routing": "closed by exact per-edge source/target coordinate substitution, independent signature-matrix and conservation checks, D65 both-producer counterexample rejecting"
+  },
+  "positive_replay": {
+    "scripts": [
+      {
+        "script": "model_binding",
+        "passed": true,
+        "source_sha256": "1d0dcf8aae1685103fcea506981ea56a6f874875d01a23abf9e8476def85369b"
+      },
+      {
+        "script": "full_key_join",
+        "passed": true,
+        "source_sha256": "fc0b5af20965313457cf98abc46bc00e115fb47881f8dcc060194760188a246c"
+      },
+      {
+        "script": "axis_and_frame_proof",
+        "passed": true,
+        "source_sha256": "15698db230307f44fc966a2713c4769454344bc0da9a55c30f3d20575632b8ea"
+      },
+      {
+        "script": "pair_expression_proof",
+        "passed": true,
+        "source_sha256": "d4054edb4bdd6aae58d69b21d514ed3ca8fbf093dd2ea44bf49e4166a2a243f7"
+      },
+      {
+        "script": "generated_map_proof",
+        "passed": true,
+        "source_sha256": "92a5412f010bc191a15e5851f4cad3151d8ec95402a4622c445e5c5be404642a"
+      },
+      {
+        "script": "routing_proof",
+        "passed": true,
+        "source_sha256": "cfe18cc483a51f68a0348021ed2ef72d1d7aee0d84be11fda0d893925deb16af"
+      },
+      {
+        "script": "prefactor_proof",
+        "passed": true,
+        "source_sha256": "394c26dd24d024518f8be5db57a828c155e5c0774ef232c8a1c60ed0fe3ea819"
+      },
+      {
+        "script": "member_proof",
+        "passed": true,
+        "source_sha256": "77b2c123aaa34830f39a9c0c3d4f3d8616252f1b4df1401b34b830c3a54e82d5"
+      },
+      {
+        "script": "member_denominators",
+        "passed": true,
+        "source_sha256": "9280ea8a1c273b037cf473a55a7b19852891cc246efc61857e4d2d0a01016a4f"
+      },
+      {
+        "script": "cut_sign_provenance",
+        "passed": true,
+        "source_sha256": "ac114b4f12870a3f207d664c141ee0ebfed57f2d129348a4c71f09430d5ac1d4"
+      },
+      {
+        "script": "corruption_controls",
+        "passed": true,
+        "source_sha256": "3e3e1be91be0e7a856849e0f5bdd712ae05cdb422c3619b7c0818b45a9d76c9d"
+      },
+      {
+        "script": "build_certificate",
+        "passed": true,
+        "source_sha256": "6e93ced580ed7cebca2fd26a66ad12193b4474a5f6cf187ead7c64b2c42fa3e2"
+      }
+    ],
+    "original_bytes_match": {
+      "model-binding-summary.json": true,
+      "axis-and-frame-summary.json": true,
+      "corruption-summary.json": true,
+      "member-summary.json": true,
+      "routing-summary.json": true,
+      "full-key-join-summary.json": true,
+      "prefactor-summary.json": true,
+      "pair-expression-summary.json": true,
+      "member-denominator-summary.json": true,
+      "generated-map-summary.json": true,
+      "cut-sign-provenance-summary.json": true,
+      "all-pair-axis-maps.jsonl": true,
+      "cut-sign-provenance-full.json": true,
+      "certificate.json": true
+    },
+    "guards_unchanged": true
+  },
+  "independent_positive_proof": {
+    "counts": {
+      "producer_stage_diagrams": 1572,
+      "aggregate_local_factor_products": 1572,
+      "basis_unit_and_vertex_conservation_graphs": 1572,
+      "effective_prefactor_bindings": 1572,
+      "provisional_prefactor_transports": 1048,
+      "affine_edge_checks": 8904,
+      "captured_final_edge_maps": 524,
+      "complete_expression_ast_pairs": 12960,
+      "owner_pairs": 12174,
+      "paired_axes": 27576,
+      "member_bindings": 524,
+      "final_master_bindings": 512,
+      "merged_group_factor_constructions": 12
+    },
+    "unique_counts": {
+      "logical_port_lists": 690,
+      "effective_prefactors": 141,
+      "expression_trees": 1458
+    },
+    "parsed_unique_input_strings": 2682,
+    "algebra_expansion": false,
+    "proof_kind": "complete syntax trees plus exact finite transport matrices; no kernel algebra proof or numerical sampling"
+  },
+  "semantic_controls_without_artifact_sha_guards": {
+    "submitted_rejections": 19,
+    "independent_original_round1_counterexamples": 6,
+    "independent_additional_payload_map_basis_rejections": 11,
+    "additional_expression_probes_rejected_or_unequal": 13,
+    "original_round1_counterexample_outcomes": [
+      {
+        "label": "r1_coefficient_suffix",
+        "script": "prefactor_proof",
+        "passed": false,
+        "error_type": "AssertionError",
+        "error": "gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(1,spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::vertex(1,9)))*gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(6,spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::vertex(1,9)))*2"
+      },
+      {
+        "label": "r1_dimension",
+        "script": "prefactor_proof",
+        "passed": false,
+        "error_type": "AssertionError",
+        "error": "-1*gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(0,spenso::{spenso::representation,spenso::self_dual}::mink(5,gammalooprs::{spenso::index}::vertex(0,9)))*gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(4,spenso::{spenso::representation,spenso::self_dual}::mink(5,gammalooprs::{spenso::index}::vertex(0,9)))"
+      },
+      {
+        "label": "r1_effective_only",
+        "script": "prefactor_proof",
+        "passed": false,
+        "error_type": "AssertionError",
+        "error": "('historical', 'comparison-qed', 'source-65', 'comparison')"
+      },
+      {
+        "label": "r1_final_numerator",
+        "script": "full_key_join",
+        "passed": false,
+        "error_type": "AssertionError",
+        "error": "('current', 'comparison-qed', 1, 'numerator')"
+      },
+      {
+        "label": "r1_master_swap",
+        "script": "full_key_join",
+        "passed": false,
+        "error_type": "AssertionError",
+        "error": ""
+      },
+      {
+        "label": "r1_routing_both",
+        "script": "routing_proof",
+        "passed": false,
+        "error_type": "AssertionError",
+        "error": "(5, 5, [Fraction(2, 1), Fraction(0, 1), Fraction(0, 1), Fraction(0, 1), Fraction(0, 1)], [Fraction(1, 1), Fraction(0, 1), Fraction(0, 1), Fraction(0, 1), Fraction(0, 1)], {0: (0, 1), 1: (1, 1), 2: (2, 1), 3: (3, 1), 4: (4, 1)})"
+      }
+    ]
+  },
+  "integrity": {
+    "tracked_blobs_exact": 3556,
+    "artifact_hashes_verified": 76,
+    "unique_manifest_entries": {
+      "pair-graphproof-sha256.txt": 2102,
+      "model-hooks-sha256.txt": 18
+    }
+  },
+  "kernel_execution": {
+    "fresh_typed_D65_helpers": {
+      "current": 1,
+      "historical": 1
+    },
+    "fresh_positive_model_probe_calls": 12,
+    "fresh_mutated_model_probe_calls": 1,
+    "unique_producer_case_model_receipts": 6,
+    "all_graph_proof_kind": "exact structural replay of qualified captures, not all-graph execution in both kernels",
+    "original_three_tests": "reused qualified historical pass/current numerator-only fail at 1/8/32 from retained/R1 provenance evidence; not rerun or rebuilt here"
+  },
+  "observational_elf_limit": "Original pair-observation ELF paths were overwritten before this review. No rebuild performed. Later model-hook and fingerprint-probe binaries do not replace their capture provenance.",
+  "reference_visibility": {
+    "generation-frame-certificate": "7dd0b0c160e9c1b62533b54217f1d62275dde157",
+    "preservation_tags": {
+      "generation-frame-certificate-round1": {
+        "expected_commit": "c5a19031d8a527ca61903728b6465187f3e87928",
+        "commit_object_available": true,
+        "visible_ref": "c5a19031d8a527ca61903728b6465187f3e87928"
+      },
+      "generation-frame-intermediate-diagnosis": {
+        "expected_commit": "67f36295d41cdf872d978692c8aff93d3f3b855e",
+        "commit_object_available": true,
+        "visible_ref": "67f36295d41cdf872d978692c8aff93d3f3b855e"
+      },
+      "generation-frame-historical-original-capture": {
+        "expected_commit": "3718714c791d40fb746dd9abc6eeb61fe86548c4",
+        "commit_object_available": true,
+        "visible_ref": "3718714c791d40fb746dd9abc6eeb61fe86548c4"
+      }
+    }
+  },
+  "provenance_note": "The three supplied preservation tags are not visible in this session, although their commit objects exist. Initial Git-ref guard was empty too. Scope A must reconcile durable preservation; no refs were moved.",
+  "cross_scope_dependency": "Independent ROUND2 scope A provenance/live-model disposition is still required; this is the scope B verdict only.",
+  "entitlement": "Only the three original grouping-frame rows: 60 groups/66 sources, 66/66, 130/130; may support later targeted native-schema migration after both review scopes plus migration tests/review.",
+  "expectations_changed": false,
+  "production_algorithms_changed": false,
+  "whole_graph_numerator_expansion": false,
+  "general_physics_or_integration_approval": false,
+  "retained_artifacts": "This ignored review directory contains the reproducible scripts, commands, successful baseline outputs, adversarial results, typed-helper logs, review and final guards.",
+  "remaining_review_processes": 0,
+  "report_sha256": "0b49172c0efeefbab86936fb8d5a9e9d16aaaf07c3c9552fe35f5492ff6ce814"
+}

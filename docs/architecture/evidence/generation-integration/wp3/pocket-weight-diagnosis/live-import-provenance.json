@@ -1,0 +1,390 @@
+{
+  "schema": 1,
+  "status": "corrected live-import provenance; new independent Astra scope A review required",
+  "frozen_round1": {
+    "candidate": "a8c5a11e1d3266faa478dc78db85cc111a3a05a6",
+    "bookmark": "generation-pocket-weight-diagnosis-round1",
+    "original_capture_root": "tests/artifacts/pocket_weight_diagnosis",
+    "original_scope_a_review_sha256": "0ffe16a213582b06b126191a021430b31b267c6416bcb211e7fafc0c96cfeb79",
+    "scope_b_review_sha256": "89715339a8572c8dd0e23b5e9bb518422fdec5ecfe88b7b560c83f3c29f67254",
+    "scope_a_fresh_controls": {
+      "historical": {
+        "log": "target/pocket-weight-diagnosis/provenance-review-20261028-jfWbKL/historical-pristine/execution.log",
+        "sha256": "9ffc5e6e6cdb89b07018ec95f922027d90b3d148fbded4ba6a51f73089a5d572",
+        "exit": 101,
+        "result": "QCD0 4|-4 and QCD1 40|-40 pass; QCD2 874|-186 fails unchanged -266 assertion"
+      },
+      "current": {
+        "log": "target/pocket-weight-diagnosis/provenance-review-20261028-jfWbKL/current-pristine-control/execution.log",
+        "sha256": "cbcf659887b56c481b017079530f948af7d0b0cabcdd9d6c7ce6d2278acc8cd5",
+        "exit": 101,
+        "result": "QCD0 4|-4 and QCD1 40|-40 pass; QCD2 874|-186 fails unchanged -266 assertion"
+      }
+    }
+  },
+  "correction": {
+    "old_claim": "c78b7e056b430c0396c8ac471c51aa701ddb6aabf29bfbf873fb6937f1656e51 was labeled imported model",
+    "actual_old_boundary": "helper SaveState before import model sm.json",
+    "pre_import_model_sha256": "c78b7e056b430c0396c8ac471c51aa701ddb6aabf29bfbf873fb6937f1656e51",
+    "pre_import_parameter_card_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+    "pre_import_restriction": null,
+    "pre_import_vertex_rules": 163,
+    "pre_import_parameter_card_entries": 0,
+    "new_boundary": "direct observation of CLIState.state.model and state.model_parameters immediately after import model sm.json, before generation; repeated after each generation",
+    "new_capture_root": "tests/artifacts/pocket_weight_diagnosis_round2"
+  },
+  "sources": {
+    "source43": "74fcd8e57e9fe256d4bc34b5d8ad93c97fc28848",
+    "current_physics": "59b57cead76e576fa9f23e3996f5614de939fe35",
+    "sm_source_sha256": "a0193ae09a6f920c8fcfbe8231c6a70e820b82b573257e07c216bdcd8e57acd9",
+    "default_restriction_source_sha256": "c683f9abb9459375865ef694edea38890ffd78a0b8f118a25db3c3de09a8a1cb",
+    "import_owner_sha256": "068217d4a90fe28f21bc6ffa3e372206ebfc3ce9b919526788c4068dad6fa701",
+    "flake_lock_sha256": "e10c5893b513d4c7120d841b47fbfddffb3ac4f1f5cb46a18c0f7542cbde8534",
+    "source43_cargo_lock_sha256": "29abed8df55accfd70d23546274008d42a694c26018b58c7a76bba2e907604b5",
+    "current_cargo_lock_sha256": "def8dd7be5f208f4a290a4556081f7a63d10a5ae070c5df1808c1d350fa6161e",
+    "source43_symbolica": "c78cffc20f318df1fce50539a587cbe8ffc717c0",
+    "current_symbolica": "1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
+    "features": "Cargo defaults, ci-optim profile, no feature override",
+    "source43_numerica": "git c78cffc20f318df1fce50539a587cbe8ffc717c0",
+    "source43_graphica": {
+      "version": "3.0.1",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "checksum": "118912fe5e24df9c7f36c1211bdeb1a803013b312cc149bd1794b9a0e4ef9c78"
+    },
+    "current_numerica": "git 1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
+    "current_graphica": "git 1a1829b1f3d0a88b53b44085b3b9f34ef77945b3"
+  },
+  "live_post_import": {
+    "model_sha256": "7e250b3ff20c98277ee19af863cc030c7a5fd47fea979931b28aba744f8a9de3",
+    "parameters_sha256": "232964f2b9783482f8ccb0e8812eb6e34a0d2dd6d5e8a8905a5b98377ae7fe1d",
+    "source_controlled_model": "docs/architecture/evidence/generation-integration/wp3/pocket-weight-diagnosis/live-post-import-model.json",
+    "source_controlled_parameters": "docs/architecture/evidence/generation-integration/wp3/pocket-weight-diagnosis/live-post-import-parameters.json",
+    "restriction": "default",
+    "model_name": "sm",
+    "model_fingerprint": "6e16ebaf9300927398e0e73855f43d72268a46d09c8337974efacf854ea11d9b",
+    "particle_count": 43,
+    "vertex_rule_count": 119,
+    "model_parameter_count": 118,
+    "input_parameter_count": 15,
+    "input_parameter_card": {
+      "Gf": [
+        0.0000116639,
+        0
+      ],
+      "MB": [
+        4.9,
+        0
+      ],
+      "MH": [
+        125,
+        0
+      ],
+      "MT": [
+        173,
+        0
+      ],
+      "MTA": [
+        1.777,
+        0
+      ],
+      "MZ": [
+        91.188,
+        0
+      ],
+      "WH": [
+        0.00638233934,
+        0
+      ],
+      "WT": [
+        1.4915,
+        0
+      ],
+      "WW": [
+        2.0476,
+        0
+      ],
+      "WZ": [
+        2.441404,
+        0
+      ],
+      "aEWM1": [
+        132.507,
+        0
+      ],
+      "aS": [
+        0.118,
+        0
+      ],
+      "ymb": [
+        4.7,
+        0
+      ],
+      "ymt": [
+        173,
+        0
+      ],
+      "ymtau": [
+        1.777,
+        0
+      ]
+    },
+    "topology_mass_owner": "feynkit-model Particle::is_massless checks declared ZERO or an internal zero expression; SpecialTopologyVetoes::vetoes uses the corresponding masslessness flag",
+    "relevant_particle_masses": [
+      {
+        "name": "a",
+        "pdg_code": 22,
+        "mass_parameter": "ZERO",
+        "mass_nature": "internal",
+        "mass_model_value": [
+          0,
+          0
+        ],
+        "input_card_value": null,
+        "declared_massless": true
+      },
+      {
+        "name": "g",
+        "pdg_code": 21,
+        "mass_parameter": "ZERO",
+        "mass_nature": "internal",
+        "mass_model_value": [
+          0,
+          0
+        ],
+        "input_card_value": null,
+        "declared_massless": true
+      },
+      {
+        "name": "ghG",
+        "pdg_code": 9000005,
+        "mass_parameter": "ZERO",
+        "mass_nature": "internal",
+        "mass_model_value": [
+          0,
+          0
+        ],
+        "input_card_value": null,
+        "declared_massless": true
+      },
+      {
+        "name": "ghG~",
+        "pdg_code": -9000005,
+        "mass_parameter": "ZERO",
+        "mass_nature": "internal",
+        "mass_model_value": [
+          0,
+          0
+        ],
+        "input_card_value": null,
+        "declared_massless": true
+      },
+      {
+        "name": "b",
+        "pdg_code": 5,
+        "mass_parameter": "MB",
+        "mass_nature": "external",
+        "mass_model_value": [
+          4.9,
+          0
+        ],
+        "input_card_value": [
+          4.9,
+          0
+        ],
+        "declared_massless": false
+      },
+      {
+        "name": "b~",
+        "pdg_code": -5,
+        "mass_parameter": "MB",
+        "mass_nature": "external",
+        "mass_model_value": [
+          4.9,
+          0
+        ],
+        "input_card_value": [
+          4.9,
+          0
+        ],
+        "declared_massless": false
+      },
+      {
+        "name": "t",
+        "pdg_code": 6,
+        "mass_parameter": "MT",
+        "mass_nature": "external",
+        "mass_model_value": [
+          173,
+          0
+        ],
+        "input_card_value": [
+          173,
+          0
+        ],
+        "declared_massless": false
+      },
+      {
+        "name": "t~",
+        "pdg_code": -6,
+        "mass_parameter": "MT",
+        "mass_nature": "external",
+        "mass_model_value": [
+          173,
+          0
+        ],
+        "input_card_value": [
+          173,
+          0
+        ],
+        "declared_massless": false
+      }
+    ],
+    "source43_current_model_byte_identical": true,
+    "source43_current_parameter_card_byte_identical": true,
+    "settings_equal_after_only_state_folder_removed": true,
+    "normalized_settings_sha256": "3fd97641ddbf49f421d1fa5e943c53f66c0dccd92d09fd8a7543ab8439fb65cf"
+  },
+  "routes": {
+    "source43": {
+      "workspace": "/shared/lcnbr/dev/gammaloop/generation-pocket-weight-historical-source43",
+      "clean_source_commit": "74fcd8e57e9fe256d4bc34b5d8ad93c97fc28848",
+      "original_baseline_round1": "aa411da5fae5eaaf20e825fd5386af62436d15f8",
+      "original_baseline_round1_bookmark": "generation-pocket-weight-historical-source43-round1",
+      "diagnostic_source_path": "target/pocket-weight-diagnosis/round2/historical-diagnostic-source.rs",
+      "diagnostic_source_sha256": "631777e39b7170f0e72ed412e0e1df359023863fe6ac5c502cedf28361db234b",
+      "diagnostic_binary_path": "target/pocket-weight-diagnosis/round2/historical-live-capture-test_feyngen",
+      "diagnostic_binary_sha256": "8b28555513a3f3839f6fcd4bd6a62c5819c3f4d19e6e1dbb6e5c8a053727a806",
+      "diagnostic_log_path": "target/pocket-weight-diagnosis/round2/historical-live-capture.log",
+      "diagnostic_log_sha256": "6df2ccc9c3b39be371195c0baa8c0c18dd1f0ddf1f3931aa5d9ee70f83e222a4",
+      "pristine_binary_sha256": "5e09a8dc940f56bbde9c9484f70bf76537892ebc39e094491e2981c6285d7f69",
+      "pristine_round2_log_path": "target/pocket-weight-diagnosis/round2/historical-pristine-control.log",
+      "pristine_round2_log_sha256": "8d22d8ee337a96a41b2c18189a7b5e7bd4a1fbc7b8ed9b61ec04e504c25b73ee",
+      "live_settings_sha256": "f2cf5dc4b8553460532541ecb12481edf5badfc421f29b46d6ea97b95813c1ae",
+      "stage_hashes": {
+        "post-import": {
+          "model_sha256": "7e250b3ff20c98277ee19af863cc030c7a5fd47fea979931b28aba744f8a9de3",
+          "parameters_sha256": "232964f2b9783482f8ccb0e8812eb6e34a0d2dd6d5e8a8905a5b98377ae7fe1d",
+          "settings_sha256": "f2cf5dc4b8553460532541ecb12481edf5badfc421f29b46d6ea97b95813c1ae"
+        },
+        "filtered-after-generation": {
+          "model_sha256": "7e250b3ff20c98277ee19af863cc030c7a5fd47fea979931b28aba744f8a9de3",
+          "parameters_sha256": "232964f2b9783482f8ccb0e8812eb6e34a0d2dd6d5e8a8905a5b98377ae7fe1d",
+          "settings_sha256": "f2cf5dc4b8553460532541ecb12481edf5badfc421f29b46d6ea97b95813c1ae"
+        },
+        "unfiltered-after-generation": {
+          "model_sha256": "7e250b3ff20c98277ee19af863cc030c7a5fd47fea979931b28aba744f8a9de3",
+          "parameters_sha256": "232964f2b9783482f8ccb0e8812eb6e34a0d2dd6d5e8a8905a5b98377ae7fe1d",
+          "settings_sha256": "f2cf5dc4b8553460532541ecb12481edf5badfc421f29b46d6ea97b95813c1ae"
+        }
+      },
+      "clean_baseline_commit": "81f7e3c0dcf9909472d22cc70a2bb2a79cef4c7c",
+      "clean_baseline_bookmark": "generation-pocket-weight-historical-source43",
+      "clean_baseline_tree": "source43 original code; historical diagnostic test restored after observation"
+    },
+    "current": {
+      "workspace": "/shared/lcnbr/dev/gammaloop/generation-pocket-weight-diagnosis",
+      "physics_parent_commit": "59b57cead76e576fa9f23e3996f5614de939fe35",
+      "diagnostic_source_path": "tests/tests/test_feyngen.rs",
+      "diagnostic_source_sha256": "93ec878421c384058aa88291c89050c632310169e39283b6a10fa081406ec572",
+      "diagnostic_binary_path": "target/pocket-weight-diagnosis/round2/current-live-capture-final-test_feyngen",
+      "diagnostic_binary_sha256": "a4afd64bbcbfc96afe46b7348c532317df81b1fb6c3450e67cfd8db7cbfef254",
+      "diagnostic_log_path": "target/pocket-weight-diagnosis/round2-current-capture-final.log",
+      "diagnostic_log_sha256": "8eee82801016b6c9fc639855681ca7b6fb45e6481e64a4bd2ea57740ad898159",
+      "live_settings_sha256": "b85ce657b19f429ae21ccbb75493db5a8cab350ba02278fda4fb9e6fcdc731db",
+      "stage_hashes": {
+        "post-import": {
+          "model_sha256": "7e250b3ff20c98277ee19af863cc030c7a5fd47fea979931b28aba744f8a9de3",
+          "parameters_sha256": "232964f2b9783482f8ccb0e8812eb6e34a0d2dd6d5e8a8905a5b98377ae7fe1d",
+          "settings_sha256": "b85ce657b19f429ae21ccbb75493db5a8cab350ba02278fda4fb9e6fcdc731db"
+        },
+        "filtered-after-generation": {
+          "model_sha256": "7e250b3ff20c98277ee19af863cc030c7a5fd47fea979931b28aba744f8a9de3",
+          "parameters_sha256": "232964f2b9783482f8ccb0e8812eb6e34a0d2dd6d5e8a8905a5b98377ae7fe1d",
+          "settings_sha256": "b85ce657b19f429ae21ccbb75493db5a8cab350ba02278fda4fb9e6fcdc731db"
+        },
+        "unfiltered-after-generation": {
+          "model_sha256": "7e250b3ff20c98277ee19af863cc030c7a5fd47fea979931b28aba744f8a9de3",
+          "parameters_sha256": "232964f2b9783482f8ccb0e8812eb6e34a0d2dd6d5e8a8905a5b98377ae7fe1d",
+          "settings_sha256": "b85ce657b19f429ae21ccbb75493db5a8cab350ba02278fda4fb9e6fcdc731db"
+        }
+      }
+    }
+  },
+  "graph_reuse": {
+    "filtered_graph_witness_sha256": "ae5fd00fd9efd09e262a46f839f9fd8abee88328f98008cceaa164e26d3433f0",
+    "unfiltered_graph_witness_sha256": "6a9d3d28b73c6099125c6748f392f3d0e2da071d50c38359a744b563e5bbc6e4",
+    "filtered_process_definition_sha256": "ecafb0b7998630157c3e83b928cc0a8f2cf029e99d2daec43f283af355be1aae",
+    "unfiltered_process_definition_sha256": "4b599670c5a8fc749dbfdf6dcfe18a23ddd20fdaf0c89e3ba03d8d5c56ae932a",
+    "each_route_new_vs_round1_exact_dot_tsv_definition": true,
+    "cross_route_tsv_and_definition_byte_identical": true,
+    "scope_b_decision": "APPROVE_CERTIFICATE on round1 physical graph/cut/factor evidence; reused only because fresh raw inputs match exactly",
+    "scope_b_ghost_counterfactual": "Omitting ghost-loop signs on 40 retained graphs changes -186 to -266; this does not prove why the old snapshot literal was written"
+  },
+  "snapshot_history": {
+    "source43": {
+      "failing_qcd2": {
+        "line": 1815,
+        "weight": -266
+      },
+      "slow_qcd2": {
+        "line": 2037,
+        "weight": -266
+      }
+    },
+    "087bda82ce5a14dab092776ea470e66278dda12d": {
+      "changed_files": [
+        "tests/tests/test_feyngen.rs"
+      ],
+      "change": "seven inline snapshot lines and one comment; no production or command change",
+      "failing_qcd2": {
+        "line": 1815,
+        "weight": -266,
+        "unchanged": true
+      },
+      "slow_qcd2": {
+        "line": 2037,
+        "weight": -186,
+        "changed": true
+      }
+    },
+    "dfe6387606e44a96f110c1ce03f52d92824dbdb1": {
+      "changed_files": [
+        "tests/tests/test_feyngen.rs"
+      ],
+      "change": "named failing row changes to -186",
+      "failing_qcd2": {
+        "line": 1815,
+        "weight": -186,
+        "changed": true
+      },
+      "slow_qcd2": {
+        "line": 2037,
+        "weight": -186,
+        "unchanged": true
+      }
+    },
+    "v4_source_only": "e0a779808174c64057fecfd062c948b8de8e5c1f"
+  },
+  "veto_semantics": {
+    "owner": "SpecArgs::veto with Veto::all() for self energy and tadpole, Veto::massless() for snail; SpecialTopologyVetoes::vetoes returns true to reject matching graph",
+    "self_energy_veto": {
+      "massive": true,
+      "massless": true
+    },
+    "tadpole_veto": {
+      "massive": true,
+      "massless": true
+    },
+    "snail_veto": {
+      "massive": false,
+      "massless": true
+    },
+    "sewn_tadpole_veto": false
+  },
+  "first_observed_unequal_boundary": "named source43 snapshot versus its own pristine locked producer; no cross-route production-weight difference established",
+  "limits": [
+    "No new full graph certificate: raw round2 inputs exactly reproduce round1, and independent scope B approval applies only to that fixed case",
+    "No proof of first historical production bug or why the old literal was written",
+    "No physics, expectation, lock, NixCI, frame/progress or main integration change"
+  ]
+}

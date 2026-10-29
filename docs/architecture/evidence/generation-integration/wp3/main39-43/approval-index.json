@@ -1,0 +1,56 @@
+{
+  "base": "2f46efe7491d5cb9c028aff12ac475e44bef0a92",
+  "approvals": [
+    {
+      "copy": "main38-a.json",
+      "original": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/.local/review-main-source38-a-astra-20261029-gJuPGk/review.json",
+      "sha256": "ff283e184b7097ec6afe5c9f87e104065808bd531bb2b4a72470ea4e108e7b51"
+    },
+    {
+      "copy": "main38-b.json",
+      "original": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/.local/review-source38-integration-b-astra-hQ7SHJ/review.json",
+      "sha256": "d046d3400b02b595ca4a18a30645ea04f44e6b9130668eb8c0fdd9b0e9b2fd00"
+    },
+    {
+      "copy": "preparation-a.json",
+      "original": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/astra-source39-review-20261028T162445Z/review.json",
+      "sha256": "dc4093c671d7fd08d3427da8d34fc8e178304e731cd5f58fd362ce81c4363672"
+    },
+    {
+      "copy": "preparation-b-r4.json",
+      "original": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports/target/review-scope-b-astra-round4-20261028T191000Z/review.json",
+      "sha256": "6529e965dcb728f025a6c993cf038ea14c314ba1dfd83186a0be49514730deb0"
+    },
+    {
+      "copy": "frame-certificate-a.json",
+      "original": "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/astra-r2-scope-a-20261028T200300Z/review.json",
+      "sha256": "e3e9ae201bf8d1590fb8b58cada4785a7327d4f346cfbd7ada92fbfd5e56a1a5"
+    },
+    {
+      "copy": "frame-certificate-b.json",
+      "original": "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/astra-frame-scope-b-round2-20261028T200020Z/review.json",
+      "sha256": "be92752b4ceac6f8ce6991c36309ec75424ab810a4b2d8e50167745de7c94374"
+    },
+    {
+      "copy": "frame-migration.json",
+      "original": "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/astra-migration-test-review-20261028T204716Z/review.json",
+      "sha256": "0299039eee57fe3ba0411c946ec7ccb384756a0684090984ab92ec250e1bfe3a"
+    },
+    {
+      "copy": "weight-certificate-a.json",
+      "original": "/shared/lcnbr/dev/gammaloop/generation-pocket-weight-diagnosis/target/pocket-weight-diagnosis/review-astra-scope-a-round2-JOlXh9/review.json",
+      "sha256": "c209f30fad0bf9a624851b284ccad2e4cd629fd67d5338ca563b310674791a78"
+    },
+    {
+      "copy": "weight-certificate-b.json",
+      "original": "/shared/lcnbr/dev/gammaloop/generation-pocket-weight-diagnosis/target/pocket-weight-diagnosis/review-astra-scope-b-YmoQie/review.json",
+      "sha256": "89715339a8572c8dd0e23b5e9bb518422fdec5ecfe88b7b560c83f3c29f67254"
+    },
+    {
+      "copy": "weight-migration.json",
+      "original": "/shared/lcnbr/dev/gammaloop/generation-pocket-weight-diagnosis/target/pocket-weight-diagnosis/review-astra-migration-YGwHhO/review.json",
+      "sha256": "b2e828d2d3825652d9e747b0dcf2dbe0ff8545e55a5defa6546a1c0acd40a2e5"
+    }
+  ],
+  "raw_proofs": "Original generation-frame-certificate and generation-pocket-weight-diagnosis workspaces/captures remain preserved read-only. Only summaries, approved scripts and exact review receipts imported; no claims of new complete proof replay."
+}

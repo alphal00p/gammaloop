@@ -1,5 +1,14 @@
 = Grouping-frame numerator digest migration
 
+== MAIN39–43 integration
+
+This approved preparation record is imported into the ordered MAIN39–43 candidate.
+The original source, proof and test bindings below remain historical; current combined
+checks and approvals are recorded in #link("evidence/generation-integration/wp3/main39-43/receipt.json")[the integration receipt].
+A NEW independent Astra combined review is required before44.
+
+== Historical preparation record
+
 This record proposes exactly three native-schema numerator digest updates in `crates/feynkit-generator/tests/generation_oracle/frames.rs`. The source rows, diagrams, topologies, assignments, inverse symmetry, weights, content, names, ids, grouping options, prefactor and named loop-momentum bases are unchanged. The candidate awaits a new independent Astra migration and test review. No integration or publication has occurred.
 
 == Entitlement and preservation
@@ -12,7 +21,7 @@ The approved certificate and all six original captures remain historical. Its pr
 
 #table(
   columns: (2fr, 1fr, 1fr),
-  [Test], [Old digest], [Reviewed native digest],
+  table.header([Test], [Old digest], [Reviewed native digest]),
   [`comparison_frames_with_fermion_flow_reversals`], [`0xbbb6f06b55b1dd03`], [`0xf2c181dfbe49930f`],
   [`representative_frames_with_fermion_flow_reversals`], [`0xbd1d483fc596a496`], [`0x196ad47f7c361abc`],
   [`representative_frames_with_left_right_symmetrization`], [`0x87988a044c993bcf`], [`0x9a59879459492f0e`],

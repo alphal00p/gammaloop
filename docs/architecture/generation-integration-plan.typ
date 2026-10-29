@@ -340,8 +340,19 @@ own workspace. Bounded: one regression, one bisect, one written verdict.
   `evidence/generation-integration/wp3/source38/receipt.json`.
   Native outline and public transport checks do not certify every extreme
   rasterization: the blank skinny-triangle crop remains a documented limit.
-  NEW independent Astra integration review is required before39. WP3, final
+  Independent MAIN38 A/B APPROVE at `2f46efe7` releases39. WP3, final
   distributions, performance and full physics remain incomplete.
+
+- #strong[Sources39–43 ordered integration 2026-10-29:]
+  approved preparation through `595a2f4d` is reconciled onto MAIN38 `2f46efe7`.
+  Compact physical-node frames, sewn-veto docs, five explicit filter cards and
+  complete caller-thread progress corrections retain current native owners.
+  Source43 strengthens terminal-pocket tests; no cut algorithm is replayed.
+  Three frame numerator digests and the named failing aa QCD2 weight migrate
+  only under separately approved exact certificates. No production physics fix.
+  Source44 slow/grouped rows remain untouched. Current qualification is in
+  `evidence/generation-integration/wp3/main39-43/receipt.json`.
+  NEW independent Astra combined review is required before44; WP3 incomplete.
 
 - `jj duplicate` the v4 chain (`kursouxx::kpslpwqz`) onto the WP2 base; do not
   rebase in place, so the 19 live workspaces on older lines stay valid.

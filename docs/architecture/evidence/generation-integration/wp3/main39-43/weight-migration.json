@@ -1,0 +1,370 @@
+{
+  "schema": 1,
+  "reviewer": "NEW independent Astra migration/test review",
+  "verdict": "APPROVE",
+  "candidate": {
+    "commit": "309631912ff5693ab38df4c748e5edfa3f94cd00",
+    "change": "xvqrsxnttxtylsxltsqkqpnknprntrky",
+    "bookmark": "generation-pocket-weight-diagnosis",
+    "workspace": "/shared/lcnbr/dev/gammaloop/generation-pocket-weight-diagnosis",
+    "approvedCertificate": "5f7d96ba675f76dcb7e814e085c5f66ece13cb2b",
+    "helperCommit": "bd473ae5dcee599346b0e2e802f5b5fec696de65",
+    "frozenProductionParent": "59b57cead76e576fa9f23e3996f5614de939fe35"
+  },
+  "scope": "Prepared ONE-ROW failing::test_generate_aa_ttx_cross_section_slow_filter QCD=2 snapshot correction and separate module-scope File/Value/json import cleanup.",
+  "blockingFindings": [],
+  "codeReview": {
+    "onlyExpectationChange": "874 | -266 = -266 -> 874 | -186 = -186",
+    "moduleQualifiedIdentityVerified": true,
+    "allOtherSourceBytesUnchangedAfterHelper": true,
+    "separateSlowTestUnchanged": true,
+    "unchanged": "QCD0/QCD1, test attributes/name/module, import and generate commands, clean=true, RunHistory/default settings, process clearing, only-diagrams mode, production code, Cargo/flake locks, kernel and NixCI.",
+    "helper": "Exact source transformation only imports std::fs::File and serde_json::{Value,json} at module scope and uses those same items. Capture statements, borrowed owning state, call order and Result propagation are unchanged. Resolves A-style without new policy exception.",
+    "fileInventory": [
+      "docs/architecture/evidence/generation-integration/wp3/pocket-weight-migration/migration.json",
+      "docs/architecture/evidence/generation-integration/wp3/pocket-weight-migration/validate-migration.mjs",
+      "docs/architecture/generation-pocket-weight-migration.typ",
+      "docs/developers.toml",
+      "tests/tests/test_feyngen.rs"
+    ],
+    "designPolicy": "Applicable import policy checked manually; formatting and focused Clippy pass. No general cleanup or unrelated inherited-code policy approval."
+  },
+  "freshTests": {
+    "oldExit": 101,
+    "newExit": 0,
+    "exactQualifiedTest": "failing::test_generate_aa_ttx_cross_section_slow_filter",
+    "testCountPerRun": 1,
+    "oldFailure": "third snapshot only; QCD0/QCD1 pass before QCD2 mismatch",
+    "snapshots": [
+      "4 | -4 = -4",
+      "40 | -40 = -40",
+      "874 | -186 = -186"
+    ],
+    "commandsUnchanged": true,
+    "producer": {
+      "freshCargoValidation": true,
+      "reusedArtifact": true,
+      "features": [
+        "default"
+      ],
+      "profile": "ci-optim",
+      "sha256": "0e6361f0e8a4d3e78c332a4263827c2310864e05d94bc25659b9bf9523cd838e"
+    },
+    "helper": {
+      "sets": [
+        {
+          "label": "filtered",
+          "graphs": 874,
+          "summary": "874 | -186 = -186"
+        },
+        {
+          "label": "unfiltered",
+          "graphs": 1106,
+          "summary": "1106 | -40 = -40"
+        }
+      ],
+      "byteIdenticalFiles": 1993,
+      "dotCount": 1980,
+      "normalizedSettings": [
+        {
+          "file": "post-import-live-settings.json",
+          "onlyRemovedField": "cli_settings.state.folder"
+        },
+        {
+          "file": "filtered-after-generation-live-settings.json",
+          "onlyRemovedField": "cli_settings.state.folder"
+        },
+        {
+          "file": "unfiltered-after-generation-live-settings.json",
+          "onlyRemovedField": "cli_settings.state.folder"
+        },
+        {
+          "file": "state/global_settings.toml",
+          "onlyRemovedField": "state.folder"
+        }
+      ],
+      "liveModelSha256": "7e250b3ff20c98277ee19af863cc030c7a5fd47fea979931b28aba744f8a9de3",
+      "liveParametersSha256": "232964f2b9783482f8ccb0e8812eb6e34a0d2dd6d5e8a8905a5b98377ae7fe1d"
+    },
+    "scopeAFreshFilesRehashed": 4126,
+    "executions": [
+      {
+        "name": "old-fail",
+        "command": "/shared/lcnbr/dev/gammaloop/generation-pocket-weight-diagnosis/target/pocket-weight-diagnosis/round2/current-live-capture-final-test_feyngen",
+        "args": [
+          "failing::test_generate_aa_ttx_cross_section_slow_filter",
+          "--exact",
+          "--nocapture",
+          "--test-threads=1"
+        ],
+        "cwd": "/shared/lcnbr/dev/gammaloop/generation-pocket-weight-diagnosis",
+        "started": "2026-10-28T19:54:56.304Z",
+        "environment": {
+          "licensePresent": true,
+          "INSTA_UPDATE": "no",
+          "removedVariables": [],
+          "CARGO_BUILD_JOBS": "2",
+          "CARGO_TARGET_DIR": null,
+          "RUST_MIN_STACK": "67108864",
+          "TESTS_GAMMALOOP_STATE_PATH": "/shared/lcnbr/dev/gammaloop/generation-pocket-weight-diagnosis/target/pocket-weight-diagnosis/review-astra-migration-YGwHhO/old-fail/state",
+          "INSTA_PENDING_DIR": "/shared/lcnbr/dev/gammaloop/generation-pocket-weight-diagnosis/target/pocket-weight-diagnosis/review-astra-migration-YGwHhO/old-fail/pending",
+          "GL_TEST_LOG_DIR": "/shared/lcnbr/dev/gammaloop/generation-pocket-weight-diagnosis/target/pocket-weight-diagnosis/review-astra-migration-YGwHhO/old-fail/logs"
+        },
+        "binarySha256": "a4afd64bbcbfc96afe46b7348c532317df81b1fb6c3450e67cfd8db7cbfef254",
+        "ended": "2026-10-28T19:55:04.025Z",
+        "exit": 101,
+        "signal": null,
+        "error": null,
+        "logSha256": "d005ec842652495851a2dee93a428b7d976d34e8ab727378e06249311f0c6a89"
+      },
+      {
+        "name": "new-pass",
+        "command": "/common/build-cache/lcnbr/9c/5e5e2f7a370b0f/ci-optim/deps/test_feyngen-9581d43dfd98ca33",
+        "args": [
+          "failing::test_generate_aa_ttx_cross_section_slow_filter",
+          "--exact",
+          "--nocapture",
+          "--test-threads=1"
+        ],
+        "cwd": "/shared/lcnbr/dev/gammaloop/generation-pocket-weight-diagnosis",
+        "started": "2026-10-28T19:55:05.077Z",
+        "environment": {
+          "licensePresent": true,
+          "INSTA_UPDATE": "no",
+          "removedVariables": [],
+          "CARGO_BUILD_JOBS": "2",
+          "CARGO_TARGET_DIR": null,
+          "RUST_MIN_STACK": "67108864",
+          "TESTS_GAMMALOOP_STATE_PATH": "/shared/lcnbr/dev/gammaloop/generation-pocket-weight-diagnosis/target/pocket-weight-diagnosis/review-astra-migration-YGwHhO/new-pass/state",
+          "INSTA_PENDING_DIR": "/shared/lcnbr/dev/gammaloop/generation-pocket-weight-diagnosis/target/pocket-weight-diagnosis/review-astra-migration-YGwHhO/new-pass/pending",
+          "GL_TEST_LOG_DIR": "/shared/lcnbr/dev/gammaloop/generation-pocket-weight-diagnosis/target/pocket-weight-diagnosis/review-astra-migration-YGwHhO/new-pass/logs"
+        },
+        "binarySha256": "0e6361f0e8a4d3e78c332a4263827c2310864e05d94bc25659b9bf9523cd838e",
+        "ended": "2026-10-28T19:55:12.756Z",
+        "exit": 0,
+        "signal": null,
+        "error": null,
+        "logSha256": "79a3593b388fcce287466f8abb8b7a2d6d546f4781724ed775e1c9b05c7ccb3a"
+      },
+      {
+        "name": "helper-diagnostic",
+        "command": "/shared/lcnbr/dev/gammaloop/generation-pocket-weight-diagnosis/target/pocket-weight-diagnosis/migration/helper-cleanup-test_feyngen",
+        "args": [
+          "diagnose_aa_ttx_qcd2_graphs",
+          "--exact",
+          "--ignored",
+          "--nocapture",
+          "--test-threads=1"
+        ],
+        "cwd": "/shared/lcnbr/dev/gammaloop/generation-pocket-weight-diagnosis",
+        "started": "2026-10-28T19:55:12.757Z",
+        "environment": {
+          "licensePresent": true,
+          "INSTA_UPDATE": "no",
+          "removedVariables": [],
+          "CARGO_BUILD_JOBS": "2",
+          "CARGO_TARGET_DIR": null,
+          "RUST_MIN_STACK": "67108864",
+          "TESTS_GAMMALOOP_STATE_PATH": "/shared/lcnbr/dev/gammaloop/generation-pocket-weight-diagnosis/target/pocket-weight-diagnosis/review-astra-migration-YGwHhO/helper-diagnostic/state",
+          "INSTA_PENDING_DIR": "/shared/lcnbr/dev/gammaloop/generation-pocket-weight-diagnosis/target/pocket-weight-diagnosis/review-astra-migration-YGwHhO/helper-diagnostic/pending",
+          "GL_TEST_LOG_DIR": "/shared/lcnbr/dev/gammaloop/generation-pocket-weight-diagnosis/target/pocket-weight-diagnosis/review-astra-migration-YGwHhO/helper-diagnostic/logs"
+        },
+        "binarySha256": "a655caf828330e39901454f77249716798fc5f163c2c9e1f03224dd8bdeea938",
+        "ended": "2026-10-28T19:55:44.115Z",
+        "exit": 0,
+        "signal": null,
+        "error": null,
+        "logSha256": "05cdd78dc8131a15b06afce52472315a012afd694c25375be1e96bfd313bb246"
+      }
+    ],
+    "oldNewControlInterpretation": "Old binary runs exactly one test and reaches/fails snapshot -3 at the certified discrepancy. With update=no and no force-pass, same module-qualified current test passes all three unchanged assertions except the approved QCD2 literal. Cargo independently confirms the matching current source/default-feature producer; cache reuse is recorded, not described as recompilation."
+  },
+  "certificateReuse": {
+    "reviews": 2,
+    "aArtifacts": 12,
+    "bArtifacts": 17,
+    "bRawInputs": 3969,
+    "bProducerBindings": 22,
+    "bSourceBindings": 24,
+    "scopeAFreshFilesRehashed": 4126,
+    "history": [
+      {
+        "commit": "74fcd8e57e9fe256d4bc34b5d8ad93c97fc28848",
+        "parents": "40c126b1ff91a0c8c95480cacc8f5ba3ee0f1309",
+        "failing": [
+          "4 | -4 = -4",
+          "40 | -40 = -40",
+          "874 | -266 = -266"
+        ],
+        "slowQcd2": "874 | -266 = -266"
+      },
+      {
+        "commit": "087bda82ce5a14dab092776ea470e66278dda12d",
+        "parents": "74fcd8e57e9fe256d4bc34b5d8ad93c97fc28848",
+        "failing": [
+          "4 | -4 = -4",
+          "40 | -40 = -40",
+          "874 | -266 = -266"
+        ],
+        "slowQcd2": "874 | -186 = -186"
+      },
+      {
+        "commit": "dfe6387606e44a96f110c1ce03f52d92824dbdb1",
+        "parents": "087bda82ce5a14dab092776ea470e66278dda12d",
+        "failing": [
+          "4 | -4 = -4",
+          "40 | -40 = -40",
+          "874 | -186 = -186"
+        ],
+        "slowQcd2": "874 | -186 = -186"
+      }
+    ],
+    "math": "Reused B fixed-case graph automorphism/Grassmann/cut/weight argument after source, report artifacts, producer bindings and all 3969 raw inputs verified. Forty filtered ghost graphs each change from +1 to -1 when the closed ghost sign is omitted, giving the -80 counterfactual shift from -186 to -266. This does not establish why the old literal was authored.",
+    "noNewGraphEnumeration": true
+  },
+  "validatorAudit": {
+    "validatorSha256": "3d97c625e975e6614d831185625d2bd53146ed01064e42db0f3e8122c9e77330",
+    "baseline": "exact tracked validator passed independently under Nix with JJ_IGNORE_WORKING_COPY=1",
+    "controls": [
+      {
+        "label": "extra QCD0 expectation edit",
+        "rejected": true,
+        "error": "Source revision binding changed"
+      },
+      {
+        "label": "unapproved source text",
+        "rejected": true,
+        "error": "Source revision binding changed"
+      },
+      {
+        "label": "raw DOT corruption",
+        "rejected": true,
+        "error": "Scope B raw input changed: /shared/lcnbr/dev/gammaloop/generation-pocket-weight-historical-source43/tests/artifacts/pocket_weight_diagnosis/filtered-dot/processes/cross_sections/aa_ttx/default/GL0000.dot"
+      }
+    ],
+    "readOnly": "Mutations existed only in intercepted read buffers; no file/ref changes",
+    "verifiedDirectlyByValidator": [
+      "Reads actual approved/helper source through jj; checks complete source hashes against receipt",
+      "Requires current full source equal helper source with exactly one named snapshot replacement",
+      "Rehashes all three binary/log pairs, actual source model/restriction/locks/NixCI and frozen certificate artifacts",
+      "Checks old failure/new success, equal exact three commands, counts 4/40/874, certificate review verdicts and 3969 raw hashes",
+      "Compares retained helper DOT inventory and bytes, process definitions, TSVs and live model/cards"
+    ],
+    "independentReviewSupplements": [
+      "Immutable commit ancestry, all bookmark targets and exact five-file inventory checked against user-named hashes",
+      "Entire candidate and historical tracked tree matched to immutable commits before and after; production compared to frozen parent",
+      "Exact approved-to-helper nonsemantic rewrite and full module qualification; separate slow row and all other source bytes unchanged",
+      "Raw review report/source/binary/history bindings independently rehashed and source43 descendant chronology read directly",
+      "Fresh exact old/new execution, Cargo-selected producer metadata, helper replay, complete emitted defaults and isolated state settings compared",
+      "Registry/title and static checks independently rerun; guards and fresh run identities retained"
+    ],
+    "limits": [
+      "The validator is a local retained-evidence consistency check, not a standalone future admission gate. It does not itself enforce all declared lineage/history, entire production-tree invariance, new execution or every descriptive receipt field; this review verifies those independently for the exact candidate.",
+      "The source matcher uses the unique function name; actual containing failing module and whole-file equality were independently verified.",
+      "Full graph mathematics is reused only after all raw inputs and bound review artifacts verify unchanged. No expanded physics or arbitrary future graph/cut certification."
+    ]
+  },
+  "staticChecks": {
+    "rustfmt": "PASS: cargo fmt --all --check",
+    "clippy": "PASS: cargo clippy --locked -p gammaloop-integration-tests --test test_feyngen --profile ci-optim -- -D warnings",
+    "typst": "PASS: pinned Typst migration-note compile",
+    "registry": {
+      "registryParsed": true,
+      "uniqueEntry": true,
+      "singleExactTitle": true,
+      "approvedCertificateReviewRef": "5f7d96ba675f76dcb7e814e085c5f66ece13cb2b",
+      "status": "Prepared · independent Astra migration/test review pending"
+    },
+    "originalCheckLogHashesVerified": 5
+  },
+  "preservation": {
+    "candidateAndHistoricalTrackedTreesUnchanged": true,
+    "candidateFiles": 3558,
+    "historicalFiles": 3551,
+    "protectedProofFilesUnchanged": 16519,
+    "allPocketWeightBookmarksAndWorkspacesUnchanged": true,
+    "allSharedReferencesUnchanged": false,
+    "globalGuardExit": 1,
+    "globalGuardReason": "Concurrent unrelated frame-certificate and frame-historical-diagnostic workspace snapshots moved shared references; no candidate/proof changes.",
+    "sharedDeltas": {
+      "bookmarks": {
+        "removed": [
+          "generation-frame-certificate: rrpznzzy 6fadcaa7 certify bounded grouping-frame numerator equivalence",
+          "generation-frame-historical-diagnostic: nuxnpxxx d60ae049 capture frozen frame grouping inputs and outputs"
+        ],
+        "added": [
+          "generation-frame-certificate: rrpznzzy 7dd0b0c1 certify bounded grouping-frame numerator equivalence",
+          "generation-frame-historical-diagnostic: nuxnpxxx 31190878 capture frozen frame grouping inputs and outputs"
+        ]
+      },
+      "gitRefs": {
+        "removed": [],
+        "added": [
+          "31190878ee22ade821baa987e7d722206247447f refs/jj/keep/31190878ee22ade821baa987e7d722206247447f",
+          "7dd0b0c160e9c1b62533b54217f1d62275dde157 refs/jj/keep/7dd0b0c160e9c1b62533b54217f1d62275dde157",
+          "e766e1c10fe895cc3b552998107fbf753dd5b5af refs/jj/keep/e766e1c10fe895cc3b552998107fbf753dd5b5af"
+        ]
+      },
+      "workspaces": {
+        "removed": [
+          "generation-frame-certificate: ../generation-frame-certificate rrpznzzy 6fadcaa7 generation-frame-certificate | certify bounded grouping-frame numerator equivalence",
+          "generation-frame-historical-diagnostic: ../generation-frame-historical-diagnostic nuxnpxxx d60ae049 generation-frame-historical-diagnostic | capture frozen frame grouping inputs and outputs"
+        ],
+        "added": [
+          "generation-frame-certificate: ../generation-frame-certificate rrpznzzy 7dd0b0c1 generation-frame-certificate | certify bounded grouping-frame numerator equivalence",
+          "generation-frame-historical-diagnostic: ../generation-frame-historical-diagnostic nuxnpxxx 31190878 generation-frame-historical-diagnostic | capture frozen frame grouping inputs and outputs"
+        ]
+      }
+    },
+    "addedKeepCommits": [
+      {
+        "commit": "31190878ee22ade821baa987e7d722206247447f",
+        "subject": "capture frozen frame grouping inputs and outputs"
+      },
+      {
+        "commit": "7dd0b0c160e9c1b62533b54217f1d62275dde157",
+        "subject": "certify bounded grouping-frame numerator equivalence"
+      },
+      {
+        "commit": "e766e1c10fe895cc3b552998107fbf753dd5b5af",
+        "subject": "certify bounded grouping-frame numerator equivalence"
+      }
+    ],
+    "evidence": "shared-operation-log.txt identifies operations in frame workspaces; this review ran no ref-moving command and left their work untouched.",
+    "trackedEdits": false,
+    "refMovesByReviewer": false,
+    "integration": false,
+    "publication": false,
+    "nestedAgents": false,
+    "ownedProcessesRemaining": 0,
+    "retainedDirectory": "/shared/lcnbr/dev/gammaloop/generation-pocket-weight-diagnosis/target/pocket-weight-diagnosis/review-astra-migration-YGwHhO",
+    "retentionReason": "Review verdict, exact commands, original/fresh controls, complete helper captures, hash bindings and guards retained for coordinator reconciliation and combined-test review. No abandoned scratch or active check process remains."
+  },
+  "acceptance": "The bounded weight-case acceptance can be reconciled with this certified correction. Actual main integration and its combined test/review remain required; this is approval of the prepared migration only.",
+  "excluded": [
+    "Every other source44/45 snapshot",
+    "Frame/drawing certificates and callback rows",
+    "General physics, full graph-generation completeness, symbolic color-zero proof or numerator expansion",
+    "Full WP3 or ordered main integration",
+    "Performance/distribution validation",
+    "CI enablement, upload, push, PR, integration or publication"
+  ],
+  "artifactIndex": {
+    "path": "review-artifact-bindings.json",
+    "sha256": "b6a9657ebf19c645c78a441435d99d089d2f8f02e7406ace459f3a9cc37837fe",
+    "fileCount": 2127
+  },
+  "exactCommands": [
+    "bash target/pocket-weight-diagnosis/review-astra-migration-YGwHhO/run-checks.sh",
+    "commands.json (exact subprocess argv, cwd, environment policy and exit/log bindings)",
+    "source-commands.json (exact immutable source/ref queries)",
+    "node target/pocket-weight-diagnosis/review-astra-migration-YGwHhO/audit-source.mjs",
+    "node target/pocket-weight-diagnosis/review-astra-migration-YGwHhO/audit-replays.mjs",
+    "node target/pocket-weight-diagnosis/review-astra-migration-YGwHhO/audit-validator.mjs",
+    "nix develop -c python3 target/pocket-weight-diagnosis/review-astra-migration-YGwHhO/registry.py",
+    "node target/pocket-weight-diagnosis/review-astra-migration-YGwHhO/guard.mjs before",
+    "node target/pocket-weight-diagnosis/review-astra-migration-YGwHhO/guard.mjs after",
+    "node target/pocket-weight-diagnosis/review-astra-migration-YGwHhO/finalize.mjs"
+  ],
+  "toolingNotes": "tooling-notes.json"
+}

@@ -1,0 +1,488 @@
+{
+  "status": "round2 provenance corrections complete; NEW independent Astra scope A re-review required; scope B certificate reused only on unchanged raw inputs",
+  "scope": "failing::test_generate_aa_ttx_cross_section_slow_filter; aa to t tbar QCD=2 generation weights only",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-pocket-weight-diagnosis",
+  "parent_commit": "59b57cead76e576fa9f23e3996f5614de939fe35",
+  "routes": {
+    "source43": {
+      "source_commit": "74fcd8e57e9fe256d4bc34b5d8ad93c97fc28848",
+      "workspace": "/shared/lcnbr/dev/gammaloop/generation-pocket-weight-historical-source43",
+      "model_git_blob": "061418836baf431e3be0c22fa70d27efcf2d00f4",
+      "model_sha256": "a0193ae09a6f920c8fcfbe8231c6a70e820b82b573257e07c216bdcd8e57acd9",
+      "lock_git_blob": "3fb57ae3f63f758f9488e0a670d3077af3aeb001",
+      "lock_sha256": "29abed8df55accfd70d23546274008d42a694c26018b58c7a76bba2e907604b5",
+      "symbolica_commit": "c78cffc20f318df1fce50539a587cbe8ffc717c0",
+      "checked_in_qcd2_expectation": -266,
+      "baseline_change": "txswskoynxuk",
+      "baseline_commit": "aa411da5fae5eaaf20e825fd5386af62436d15f8",
+      "baseline_bookmark": "generation-pocket-weight-historical-source43",
+      "flake_lock_sha256": "e10c5893b513d4c7120d841b47fbfddffb3ac4f1f5cb46a18c0f7542cbde8534",
+      "feature_selection": "Cargo defaults; no explicit feature flags; ci-optim profile",
+      "pristine_control": {
+        "command": "CARGO_BUILD_JOBS=2 nix develop -c cargo test --locked -p gammaloop-integration-tests --test test_feyngen --profile ci-optim failing::test_generate_aa_ttx_cross_section_slow_filter -- --exact --nocapture",
+        "binary_path": "/shared/lcnbr/dev/gammaloop/generation-pocket-weight-historical-source43/target/pocket-weight-diagnosis/binaries/source43-pristine-test_feyngen",
+        "binary_sha256": "5e09a8dc940f56bbde9c9484f70bf76537892ebc39e094491e2981c6285d7f69",
+        "producer_path": "/common/build-cache/lcnbr/18/55d85fd98416b5/ci-optim/deps/test_feyngen-76197627d991bf5e",
+        "first_log_sha256": "fdbfea4791b47c9bbbc23120f22760dd7ae78815cec2163796b1536aa89b6ada",
+        "final_log_sha256": "bf333f730ce69618fb20bc6ce78529d1c3052f9e0e80bfb44a712efa96705f98",
+        "result": "failed unchanged QCD=2 snapshot: expected 874|-266, actual 874|-186"
+      },
+      "diagnostic": {
+        "binary_path": "/shared/lcnbr/dev/gammaloop/generation-pocket-weight-historical-source43/target/pocket-weight-diagnosis/binaries/source43-diagnostic-final-test_feyngen",
+        "binary_sha256": "01485991202d518d0cedda2ac4fe2cb9930fae14328321ec51ee536023e1ecfb",
+        "log_sha256": "00290fe993c2b3660ea38c5fdc33036d11eede6abded1a8a3c2b3d3a12f19140",
+        "source_adaptation": "only an ignored diagnostic test, subsequently restored; pristine source43 working tree retained"
+      },
+      "original_round1_baseline_commit": "aa411da5fae5eaaf20e825fd5386af62436d15f8",
+      "original_round1_baseline_bookmark": "generation-pocket-weight-historical-source43-round1",
+      "clean_baseline_change": "txswskoynxukmzqnnvxnqszlyvukvpln",
+      "clean_baseline_commit": "81f7e3c0dcf9909472d22cc70a2bb2a79cef4c7c",
+      "round2": {
+        "workspace": "/shared/lcnbr/dev/gammaloop/generation-pocket-weight-historical-source43",
+        "clean_source_commit": "74fcd8e57e9fe256d4bc34b5d8ad93c97fc28848",
+        "original_baseline_round1": "aa411da5fae5eaaf20e825fd5386af62436d15f8",
+        "original_baseline_round1_bookmark": "generation-pocket-weight-historical-source43-round1",
+        "diagnostic_source_path": "target/pocket-weight-diagnosis/round2/historical-diagnostic-source.rs",
+        "diagnostic_source_sha256": "631777e39b7170f0e72ed412e0e1df359023863fe6ac5c502cedf28361db234b",
+        "diagnostic_binary_path": "target/pocket-weight-diagnosis/round2/historical-live-capture-test_feyngen",
+        "diagnostic_binary_sha256": "8b28555513a3f3839f6fcd4bd6a62c5819c3f4d19e6e1dbb6e5c8a053727a806",
+        "diagnostic_log_path": "target/pocket-weight-diagnosis/round2/historical-live-capture.log",
+        "diagnostic_log_sha256": "6df2ccc9c3b39be371195c0baa8c0c18dd1f0ddf1f3931aa5d9ee70f83e222a4",
+        "pristine_binary_sha256": "5e09a8dc940f56bbde9c9484f70bf76537892ebc39e094491e2981c6285d7f69",
+        "pristine_round2_log_path": "target/pocket-weight-diagnosis/round2/historical-pristine-control.log",
+        "pristine_round2_log_sha256": "8d22d8ee337a96a41b2c18189a7b5e7bd4a1fbc7b8ed9b61ec04e504c25b73ee",
+        "live_settings_sha256": "f2cf5dc4b8553460532541ecb12481edf5badfc421f29b46d6ea97b95813c1ae",
+        "stage_hashes": {
+          "post-import": {
+            "model_sha256": "7e250b3ff20c98277ee19af863cc030c7a5fd47fea979931b28aba744f8a9de3",
+            "parameters_sha256": "232964f2b9783482f8ccb0e8812eb6e34a0d2dd6d5e8a8905a5b98377ae7fe1d",
+            "settings_sha256": "f2cf5dc4b8553460532541ecb12481edf5badfc421f29b46d6ea97b95813c1ae"
+          },
+          "filtered-after-generation": {
+            "model_sha256": "7e250b3ff20c98277ee19af863cc030c7a5fd47fea979931b28aba744f8a9de3",
+            "parameters_sha256": "232964f2b9783482f8ccb0e8812eb6e34a0d2dd6d5e8a8905a5b98377ae7fe1d",
+            "settings_sha256": "f2cf5dc4b8553460532541ecb12481edf5badfc421f29b46d6ea97b95813c1ae"
+          },
+          "unfiltered-after-generation": {
+            "model_sha256": "7e250b3ff20c98277ee19af863cc030c7a5fd47fea979931b28aba744f8a9de3",
+            "parameters_sha256": "232964f2b9783482f8ccb0e8812eb6e34a0d2dd6d5e8a8905a5b98377ae7fe1d",
+            "settings_sha256": "f2cf5dc4b8553460532541ecb12481edf5badfc421f29b46d6ea97b95813c1ae"
+          }
+        }
+      }
+    },
+    "v4": {
+      "source_commit": "e0a779808174c64057fecfd062c948b8de8e5c1f",
+      "model_git_blob": "061418836baf431e3be0c22fa70d27efcf2d00f4",
+      "lock_git_blob": "3fb57ae3f63f758f9488e0a670d3077af3aeb001",
+      "symbolica_commit": "c78cffc20f318df1fce50539a587cbe8ffc717c0",
+      "checked_in_qcd2_expectation": -186,
+      "provenance_note": "087bda82ce5a14dab092776ea470e66278dda12d changes seven snapshots and one comment, including only the separate slow::test_generate_aa_ttx_cross_section QCD2 row; it leaves failing::test_generate_aa_ttx_cross_section_slow_filter at -266. dfe6387606e44a96f110c1ce03f52d92824dbdb1 later changes the named failing row to -186. v4 follows and changes color simplification. Source history only; no v4 execution."
+    },
+    "main31": {
+      "source_commit": "191aaf7b77018e377a9e5e4e3b9c88357218aa48",
+      "model_git_blob": "061418836baf431e3be0c22fa70d27efcf2d00f4",
+      "symbolica_commit": "1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
+      "control_binary_sha256": "beb5c0aa1a2c85210eae5a89943598f1d9585d08c59f5b079eba4ac604e9c31d",
+      "control_log_sha256": "f005e664cf03464725bdd1aeb624eec85ef0d3b33dcc53511584ece330199374",
+      "lock_git_blob": "8340c09d9780402372effb23a594523d8b7e8337",
+      "lock_sha256": "def8dd7be5f208f4a290a4556081f7a63d10a5ae070c5df1808c1d350fa6161e",
+      "flake_lock_sha256": "e10c5893b513d4c7120d841b47fbfddffb3ac4f1f5cb46a18c0f7542cbde8534",
+      "feature_selection": "preparation receipt paired ci-optim test producer; default test features"
+    },
+    "candidate": {
+      "source_commit": "59b57cead76e576fa9f23e3996f5614de939fe35",
+      "model_git_blob": "061418836baf431e3be0c22fa70d27efcf2d00f4",
+      "symbolica_commit": "1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
+      "control_binary_sha256": "4a4ad5827ac3da6895075584028b143ac37cf3ebcda795b8ce785f34d01c50f2",
+      "control_log_sha256": "1e15abece850160216da837a7fc25c2a4ad1c0ad84244c3034e1b4a4e140e79f",
+      "lock_git_blob": "8340c09d9780402372effb23a594523d8b7e8337",
+      "lock_sha256": "def8dd7be5f208f4a290a4556081f7a63d10a5ae070c5df1808c1d350fa6161e",
+      "flake_lock_sha256": "e10c5893b513d4c7120d841b47fbfddffb3ac4f1f5cb46a18c0f7542cbde8534",
+      "feature_selection": "Cargo defaults; no explicit feature flags; ci-optim profile",
+      "diagnostic": {
+        "binary_path": "target/pocket-weight-diagnosis/binaries/candidate-diagnostic-final-test_feyngen",
+        "binary_sha256": "0c46a121fac8f6c4a3aa7aaf68a71637014876dc7944fcb5f845b8e6095d7b81",
+        "log_sha256": "a8e5545b7abc2ef828c35f04ee4bbc97d7db12c7cc8dea63cec778027ca5e842",
+        "log_path": "pocket-weight-build-final.log",
+        "producer_path": "/common/build-cache/lcnbr/9c/5e5e2f7a370b0f/ci-optim/deps/test_feyngen-9581d43dfd98ca33"
+      },
+      "round2": {
+        "workspace": "/shared/lcnbr/dev/gammaloop/generation-pocket-weight-diagnosis",
+        "physics_parent_commit": "59b57cead76e576fa9f23e3996f5614de939fe35",
+        "diagnostic_source_path": "tests/tests/test_feyngen.rs",
+        "diagnostic_source_sha256": "93ec878421c384058aa88291c89050c632310169e39283b6a10fa081406ec572",
+        "diagnostic_binary_path": "target/pocket-weight-diagnosis/round2/current-live-capture-final-test_feyngen",
+        "diagnostic_binary_sha256": "a4afd64bbcbfc96afe46b7348c532317df81b1fb6c3450e67cfd8db7cbfef254",
+        "diagnostic_log_path": "target/pocket-weight-diagnosis/round2-current-capture-final.log",
+        "diagnostic_log_sha256": "8eee82801016b6c9fc639855681ca7b6fb45e6481e64a4bd2ea57740ad898159",
+        "live_settings_sha256": "b85ce657b19f429ae21ccbb75493db5a8cab350ba02278fda4fb9e6fcdc731db",
+        "stage_hashes": {
+          "post-import": {
+            "model_sha256": "7e250b3ff20c98277ee19af863cc030c7a5fd47fea979931b28aba744f8a9de3",
+            "parameters_sha256": "232964f2b9783482f8ccb0e8812eb6e34a0d2dd6d5e8a8905a5b98377ae7fe1d",
+            "settings_sha256": "b85ce657b19f429ae21ccbb75493db5a8cab350ba02278fda4fb9e6fcdc731db"
+          },
+          "filtered-after-generation": {
+            "model_sha256": "7e250b3ff20c98277ee19af863cc030c7a5fd47fea979931b28aba744f8a9de3",
+            "parameters_sha256": "232964f2b9783482f8ccb0e8812eb6e34a0d2dd6d5e8a8905a5b98377ae7fe1d",
+            "settings_sha256": "b85ce657b19f429ae21ccbb75493db5a8cab350ba02278fda4fb9e6fcdc731db"
+          },
+          "unfiltered-after-generation": {
+            "model_sha256": "7e250b3ff20c98277ee19af863cc030c7a5fd47fea979931b28aba744f8a9de3",
+            "parameters_sha256": "232964f2b9783482f8ccb0e8812eb6e34a0d2dd6d5e8a8905a5b98377ae7fe1d",
+            "settings_sha256": "b85ce657b19f429ae21ccbb75493db5a8cab350ba02278fda4fb9e6fcdc731db"
+          }
+        }
+      }
+    }
+  },
+  "inputs": {
+    "model_command": "import model sm.json",
+    "process": "a a > t t~ | a t g b ghg QED^2==4",
+    "qcd_orders": [
+      0,
+      1,
+      2
+    ],
+    "generation_type": "xs",
+    "explicit_options": [
+      "--filter-zero-color",
+      "--numerator-grouping no_grouping",
+      "--filter-selfenergies true",
+      "--filter-snails true",
+      "--filter-tadpoles true",
+      "--n-cut-blobs 1 1",
+      "--n-cut-spectators 0 0"
+    ],
+    "helper_appended_options": [
+      "--clear-existing-processes",
+      "--only-diagrams"
+    ],
+    "state_lifecycle": "get_test_cli(None, dedicated state path, Some(feyngen), true); QCD 0 then 1 then 2, clearing existing processes at each generation",
+    "default_runtime_settings_sha256": "63aface25b6d5d154e28b2591b3753a03cc10c02ed87ed2054ff9c09e957a612",
+    "process_definition_sha256": {
+      "filtered": "ecafb0b7998630157c3e83b928cc0a8f2cf029e99d2daec43f283af355be1aae",
+      "unfiltered": "4b599670c5a8fc749dbfdf6dcfe18a23ddd20fdaf0c89e3ba03d8d5c56ae932a"
+    },
+    "effective_qcd2": {
+      "kind": "cross_section",
+      "forward_loops": 3,
+      "qed_squared": 4,
+      "qcd_perturbative": 2,
+      "grouping": "none",
+      "zero_color_filter": true,
+      "self_energies": {
+        "massive": true,
+        "massless": true
+      },
+      "tadpoles": {
+        "massive": true,
+        "massless": true
+      },
+      "snails": {
+        "massive": false,
+        "massless": true
+      },
+      "sewn_tadpoles": false,
+      "cut_blobs": {
+        "min": 1,
+        "max": 1
+      },
+      "cut_spectators": {
+        "min": 0,
+        "max": 0
+      },
+      "symmetrization": {
+        "initial": false,
+        "final_state": false,
+        "external_fermions": false
+      },
+      "forced_cuts": [],
+      "veto_semantics": "true means veto of matching topology, not allowance"
+    },
+    "pre_import_helper_model_sha256": "c78b7e056b430c0396c8ac471c51aa701ddb6aabf29bfbf873fb6937f1656e51",
+    "pre_import_helper_parameters_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+    "pre_import_helper_boundary": "helper SaveState before import model sm.json; restriction null, 163 vertex rules, empty parameter card",
+    "post_import_live_model_sha256": "7e250b3ff20c98277ee19af863cc030c7a5fd47fea979931b28aba744f8a9de3",
+    "post_import_live_parameters_sha256": "232964f2b9783482f8ccb0e8812eb6e34a0d2dd6d5e8a8905a5b98377ae7fe1d",
+    "post_import_restriction": "default",
+    "post_import_fingerprint": "6e16ebaf9300927398e0e73855f43d72268a46d09c8337974efacf854ea11d9b",
+    "post_import_model_and_parameters_byte_identical_across_kernels": true,
+    "post_import_settings_difference": "only isolated cli_settings.state.folder; all other serialized live fields identical",
+    "live_import_provenance_path": "docs/architecture/evidence/generation-integration/wp3/pocket-weight-diagnosis/live-import-provenance.json"
+  },
+  "pipeline": [
+    {
+      "stage": "SM source model and exact CLI test command",
+      "comparison": "identical source bytes and command text on source43, v4, MAIN31, candidate"
+    },
+    {
+      "stage": "Cargo lock and Symbolica kernel",
+      "comparison": "source43/v4 lock Symbolica and Numerica to c78cffc2 with Graphica 3.0.1 from the registry; MAIN31/candidate lock Symbolica, Numerica and Graphica to 1a1829b1; flake.lock identical"
+    },
+    {
+      "stage": "model import and effective settings",
+      "comparison": "The old persisted state/model.json is PRE-import only. Round2 direct live capture immediately after import has byte-identical source43/current restricted models (default), resolved parameter cards and settings after only state-folder normalization; values remain unchanged after both generations. Filtered/unfiltered process definitions are byte identical."
+    },
+    {
+      "stage": "staged enumeration, dressing, sewn and topology filters",
+      "comparison": "implementation differs across source43/current, but exact output physical node/edge and cut-marker inventory matches 874 filtered and 1106 unfiltered graphs"
+    },
+    {
+      "stage": "selected physical cuts and topology threshold candidates",
+      "comparison": "source43/current exact half-edge TSVs byte identical; neutral cut-incidence joins have zero unequal keys"
+    },
+    {
+      "stage": "symmetry, fermion, overall factors and zero-color membership",
+      "comparison": "source43/current raw factor heads, evaluated weights and excluded membership identical per graph"
+    },
+    {
+      "stage": "GammaLoop conversion and scalar factor sum",
+      "comparison": "source43/current/Main31/candidate return 874|-186 at QCD=2; source43 snapshot expects 874|-266"
+    }
+  ],
+  "result_matrix": {
+    "main31": [
+      {
+        "qcd": 0,
+        "graphs": 4,
+        "weight": -4
+      },
+      {
+        "qcd": 1,
+        "graphs": 40,
+        "weight": -40
+      },
+      {
+        "qcd": 2,
+        "graphs": 874,
+        "weight": -186
+      }
+    ],
+    "candidate": [
+      {
+        "qcd": 0,
+        "graphs": 4,
+        "weight": -4
+      },
+      {
+        "qcd": 1,
+        "graphs": 40,
+        "weight": -40
+      },
+      {
+        "qcd": 2,
+        "graphs": 874,
+        "weight": -186
+      }
+    ],
+    "source43": [
+      {
+        "qcd": 0,
+        "graphs": 4,
+        "weight": -4
+      },
+      {
+        "qcd": 1,
+        "graphs": 40,
+        "weight": -40
+      },
+      {
+        "qcd": 2,
+        "graphs": 874,
+        "weight": -186
+      }
+    ],
+    "v4_source_expectation_only": [
+      {
+        "qcd": 2,
+        "graphs": 874,
+        "weight": -186
+      }
+    ]
+  },
+  "retained_control_paths": [
+    "target/pocket-weight-diagnosis/control-binaries/base31-test_feyngen-9581d43dfd98ca33",
+    "target/pocket-weight-diagnosis/control-binaries/candidate-test_feyngen-9581d43dfd98ca33",
+    "target/pocket-weight-diagnosis/control-receipts/base31-aa-ttx-pocket.log",
+    "target/pocket-weight-diagnosis/control-receipts/aa-ttx-pocket.log",
+    "target/pocket-weight-diagnosis/control-receipts/sources39-43-preparation.json"
+  ],
+  "verdict": "The first OBSERVED unequal boundary is the named source43 snapshot versus its own exact locked producer. Round2 live post-import model/parameter captures close the prior provenance gap; original graph/cut/factor witnesses are unchanged and independent scope B approval remains bounded to this fixed case. No historical causal origin or general physics correctness is claimed. Stop for a NEW independent Astra scope A review before any expectation migration, production edit, or gate recertification.",
+  "author": "Lucien Huber <im@lcnbr.ch>",
+  "factor_decomposition": {
+    "filtered": [
+      {
+        "count": 500,
+        "raw": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)*AntiFermionSpinSumSign(1)/AutG(1)",
+        "weight": "-1"
+      },
+      {
+        "count": 334,
+        "raw": "ExternalFermionOrderingSign(1)*AntiFermionSpinSumSign(1)/AutG(1)",
+        "weight": "1"
+      },
+      {
+        "count": 40,
+        "raw": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)*AntiFermionSpinSumSign(1)/AutG(2)",
+        "weight": "-1/2"
+      }
+    ],
+    "filtered_sum": -186,
+    "unfiltered_sum": -40,
+    "zero_filter_removed": {
+      "graphs": 232,
+      "weight": 146,
+      "by_weight": [
+        {
+          "count": 180,
+          "weight": "1"
+        },
+        {
+          "count": 12,
+          "weight": "1/2"
+        },
+        {
+          "count": 40,
+          "weight": "-1"
+        }
+      ]
+    },
+    "grouping_factor_present": false,
+    "cut_direction_factor_note": "No separate cut-direction head appears in these overall factors; exact oriented cut incidence is certified separately, with no cross-route difference.",
+    "scope_b_independent_support": {
+      "review": "target/pocket-weight-diagnosis/review-astra-scope-b-YmoQie/review.json",
+      "verdict": "APPROVE_CERTIFICATE on a8c5a11e",
+      "filtered_closed_grassmann_components": {
+        "one": 540,
+        "two": 334
+      },
+      "filtered_parallel_edge_graphs": 40,
+      "graph_derived_sign_mismatches": 0,
+      "graph_derived_automorphism_mismatches": 0,
+      "ghost_sign_counterfactual": "40 retained graphs have one quark and one ghost loop, accepted weight +1 and weight -1 if ghost sign omitted; counterfactual total -266, not evidence of historical author intent"
+    }
+  },
+  "graph_join": {
+    "index_path": "docs/architecture/evidence/generation-integration/wp3/pocket-weight-diagnosis/graph-join-index.json",
+    "filtered": {
+      "graphs_per_route": 874,
+      "unique_neutral_physical_keys": 874,
+      "unequal_multiplicity_keys": 0,
+      "unequal_cut_factor_weight_keys": 0,
+      "full_witness_path": "target/pocket-weight-diagnosis/evidence/source43-current-graph-join.json",
+      "full_witness_sha256": "0569b1032688356f54e52a6ea21a6b322d84ddf18b012761364bde0b2f45eba3"
+    },
+    "unfiltered": {
+      "graphs_per_route": 1106,
+      "unique_neutral_physical_keys": 1106,
+      "unequal_multiplicity_keys": 0,
+      "unequal_cut_factor_weight_keys": 0,
+      "full_witness_path": "target/pocket-weight-diagnosis/evidence/source43-current-unfiltered-graph-join.json",
+      "full_witness_sha256": "02651c3afbce47c849ff82966d43949a3d7cc591a411ed927604a08e30a26887"
+    },
+    "filtered_half_edge_tsv_sha256": "ae5fd00fd9efd09e262a46f839f9fd8abee88328f98008cceaa164e26d3433f0",
+    "unfiltered_half_edge_tsv_sha256": "6a9d3d28b73c6099125c6748f392f3d0e2da071d50c38359a744b563e5bbc6e4",
+    "source43_current_tsv_byte_identical": true,
+    "physical_dot_node_edge_cut_marker_incidence_identical_by_name": true,
+    "dot_full_bytes_equal": false,
+    "round2_raw_reproduction": {
+      "each_route_filtered_and_unfiltered_dot_tsv_and_definition_byte_identical_to_round1": true,
+      "live_model_parameters_unchanged_after_generation": true,
+      "scope_b_reuse_only_on_unchanged_raw_inputs": true
+    }
+  },
+  "limitations": [
+    "v4 was inspected as source history and expectation only; no exact v4 producer was run",
+    "whole graph numerator algebra was not expanded or symbolically compared; no broad amplitude or color-zero conclusion",
+    "the zero-color toggle certifies removed membership and raw weights; it is not an independent symbolic proof of every removed graph color numerator",
+    "MAIN31/candidate per-graph comparison uses the frozen candidate checkout at 59b57 and its paired unmodified binary totals; no MAIN31 per-graph export was separately built",
+    "no CI enablement, push, upload, publication, main integration, or gate approval",
+    "the origin of the historical -266 literal is not proved; the 40-ghost-sign omission is an independent counterfactual only",
+    "round2 capture observes live owner after import and after each generation, but does not constitute an independent all-graph completeness proof",
+    "new independent scope A review is pending; scope B was approved only for unchanged round1 graph/cut/factor evidence"
+  ],
+  "round1_reference": {
+    "commit": "a8c5a11e1d3266faa478dc78db85cc111a3a05a6",
+    "bookmark": "generation-pocket-weight-diagnosis-round1",
+    "scope_a_review": "REQUEST_CHANGES",
+    "scope_b_review": "APPROVE_CERTIFICATE"
+  },
+  "snapshot_history": {
+    "source43": {
+      "failing_qcd2": {
+        "line": 1815,
+        "weight": -266
+      },
+      "slow_qcd2": {
+        "line": 2037,
+        "weight": -266
+      }
+    },
+    "087bda82ce5a14dab092776ea470e66278dda12d": {
+      "changed_files": [
+        "tests/tests/test_feyngen.rs"
+      ],
+      "change": "seven inline snapshot lines and one comment; no production or command change",
+      "failing_qcd2": {
+        "line": 1815,
+        "weight": -266,
+        "unchanged": true
+      },
+      "slow_qcd2": {
+        "line": 2037,
+        "weight": -186,
+        "changed": true
+      }
+    },
+    "dfe6387606e44a96f110c1ce03f52d92824dbdb1": {
+      "changed_files": [
+        "tests/tests/test_feyngen.rs"
+      ],
+      "change": "named failing row changes to -186",
+      "failing_qcd2": {
+        "line": 1815,
+        "weight": -186,
+        "changed": true
+      },
+      "slow_qcd2": {
+        "line": 2037,
+        "weight": -186,
+        "unchanged": true
+      }
+    },
+    "v4_source_only": "e0a779808174c64057fecfd062c948b8de8e5c1f"
+  },
+  "veto_semantics": {
+    "owner": "SpecArgs::veto with Veto::all() for self energy and tadpole, Veto::massless() for snail; SpecialTopologyVetoes::vetoes returns true to reject matching graph",
+    "self_energy_veto": {
+      "massive": true,
+      "massless": true
+    },
+    "tadpole_veto": {
+      "massive": true,
+      "massless": true
+    },
+    "snail_veto": {
+      "massive": false,
+      "massless": true
+    },
+    "sewn_tadpole_veto": false
+  },
+  "old_vs_corrected_claims": [
+    {
+      "old": "c78b7e... was an imported model hash",
+      "corrected": "it is the helper pre-import model, restriction null with empty parameter card; actual post-import live model is 7e250b3f... with restriction default and 15 resolved input values"
+    },
+    {
+      "old": "self energies and tadpoles allowed; massive snail vetoed and massless snail allowed",
+      "corrected": "massive/massless self-energy and tadpole vetoes enabled; massless snail veto enabled; massive snail veto disabled"
+    },
+    {
+      "old": "087bda82c changed the named failing row",
+      "corrected": "087bda82c changed the separate slow row at line 2037; dfe638760 changed the named failing row at line 1815"
+    }
+  ],
+  "first_observed_unequal_boundary": "The named source43 assertion expects 874|-266 while its own pristine locked producer returns 874|-186; no cross-route graph/cut/factor/weight difference was observed. This fixed-case statement does not date a first production bug or prove why the old literal was written."
+}

@@ -1,0 +1,57 @@
+{
+  "status": "bounded correction candidate; stop for new independent Astra scope-B round4 review",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports",
+  "round3_reviewed_source": "09c4411bce2276f044b16cb04049d761e131c8e2",
+  "round3_reference": "generation-frame-progress-ports-round3",
+  "controlled_red_source": "516e02d3aa41d89f8ddbf35193be48558f9ffc5a",
+  "controlled_red_reference": "generation-frame-progress-ports-round4-red",
+  "green_change": "oklkkrzs",
+  "kernel": "1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
+  "review_source": "target/review-scope-b-astra-round3-20261028T190000Z/review.json",
+  "file_inventory_since_round3": [
+    "crates/feynkit-py/src/generation/execution.rs",
+    "crates/feynkit-py/tests/fixtures/progress_cross_batch_cancel.py",
+    "docs/architecture/evidence/generation-integration/wp3/sources39-43-round4.json"
+  ],
+  "production_semantics": "The approved per-execution callback-cancelled AtomicBool and one pending snapshot queue retain their behavior. The caller-thread delivery closure was moved into a private ProgressDelivery method in its existing execution owner so the same production dispatcher can be driven by a controlled test. A Python callback returning False suppresses later nonterminal updates across batches and still receives one Done. Explicit token cancellation remains distinct; no public API, second queue or alternate production route was added.",
+  "controlled_schedule": {
+    "test": "generation::execution::tests::callback_cancellation_suppresses_a_later_drained_batch",
+    "method": "A native test worker records Skeletons(1), waits on a channel until the caller-thread Python callback returns False from the first deliver(false), then records Dressing(2), Prepare(2) and Done(2). The caller invokes the same private deliver method with force=true for the later batch. No sleep or wall-clock threshold controls this boundary.",
+    "qualification": "Controlled native scheduling through the production dispatcher and real Python callback; not a 3575-diagram generation run.",
+    "red_test_binary": "target/generation-frame-progress-ports-round4/controlled-red-test-bin",
+    "red_test_binary_sha256": "5ca59ed610eca4d805cf3bdb6c9856ffd50bb8be898db142679fb6a5ab8a283d",
+    "red_log": "target/generation-frame-progress-ports-round4/controlled-red.log",
+    "red_result": "exit 101: Python saw Skeletons(1), then later Dressing(2), Prepare(2), Done(2)",
+    "green_test_binary": "/common/build-cache/lcnbr/70/4b25d004416d5c/ci-optim/deps/feynkit_py-d1315a1f051070a0",
+    "green_test_binary_sha256": "c1dd25d7119115f9887ce492bef1dbf10ddcbc2682122fc8a4365ff807469796",
+    "green_log": "target/generation-frame-progress-ports-round4/controlled-green-final.log",
+    "green_result": "1/1 pass: only Skeletons(1) and Done(2), one terminal event; token is cancelled and no later callback occurs"
+  },
+  "real_generation": {
+    "fixture": "crates/feynkit-py/tests/fixtures/progress_cross_batch_cancel.py",
+    "fixture_sha256": "f289185c07d17d5fa1c06f53b064126373e48a1055c71f5aa227c547df6ae4e8",
+    "request": "QCD u u~ -> g g two-loop at one native thread",
+    "assertions": "Incomplete report, initial Skeletons on caller thread, one terminal Done whose count equals both returned result length and report.retained_count, no nonterminal callback after False, and no callback after return. The fixture does not require a fixed cancelled count.",
+    "normal": "3/3 exact ci-optim native binding runs pass with Done(3575); the independent uncancelled 3575 baseline remains separately qualified from earlier work.",
+    "contended": "3/3 exact final native binding runs pass under the reviewer's four-competitor one-CPU harness; valid cancelled Done counts were 2087, 2110 and 2061. The copied harness restores CPU affinity and terminates/waits for every owned bounded competitor in finally, including on failure.",
+    "harness": "target/generation-frame-progress-ports-round4/run_contended.py",
+    "contended_results": "target/generation-frame-progress-ports-round4/contended-results.json"
+  },
+  "checks": {
+    "retained_progress_controls": "10/10 exact native tests pass from the green binary; early/coalesced callback and token cancellation, exception precedence, caller thread, signal, zero-count, spinner and synthetic queue controls remain green",
+    "rust_format": "cargo fmt --all --check passed",
+    "rust_clippy": "cargo clippy --locked --profile ci-optim -p feynkit-py --tests -- -D warnings passed",
+    "pinned_ruff": "nix shell --accept-flake-config --inputs-from . nixpkgs#ruff: ruff format --check and ruff check pass for the fixture",
+    "compile_time_fixture": "Nix-backed cargo test compiled the include_str! fixture into the green test binary; the rustc dependency file lists progress_cross_batch_cancel.py",
+    "documentation": "102/102 canonical unique-anchor Git-blob scopes valid; FeynKit tutorial title matches registry",
+    "stub_disposition": "No Python annotation or public API changed. Three generated .pyi copies remain byte-identical at SHA-256 bf9d4ce3f4b5f3871c39164d3c11db248123eecd8a1939a845ad7569da4de92f; no new exporter result is claimed."
+  },
+  "unchanged_blockers": [
+    "Original source43 aa->ttbar QCD2 874|-266 gate remains with the separate physics diagnosis; no production cut code or assertion changed.",
+    "Three older frame certificates remain with the separate frame diagnosis; approved source-A frame code is unchanged.",
+    "Actual ordered sources32-36 and separately reviewed38 still precede39-43 before main integration."
+  ],
+  "protected_state": "NixCI top-level enable=false, kernel, lockfiles, uv and protected refs are unchanged except task-owned round4 references. Original round1/round2/round3 reviewer and diagnostic artifacts are retained.",
+  "limits": "No installed-extension subprocess qualification, full physics/docs build, graph numerator expansion, source44/45 snapshot edit, other diagnostic workspace edit, main integration, push, PR, upload or publication.",
+  "retained_artifacts": "target/generation-frame-progress-ports-round4 retains controlled red/green test binaries and logs, real normal and contended logs, copied bounded harness, Rust/Ruff check logs and log-sha256.txt. No task background process is retained."
+}

@@ -1,0 +1,331 @@
+{
+  "schema": 1,
+  "verdict": "APPROVE",
+  "scope": "A \u2014 imported runtime/geometry and combined regressions for ordered MAIN source38 integration",
+  "reviewer": "NEW independent Astra review; read-only; no nested agents or peer polling",
+  "time_utc": "2026-10-29T01:37:16.865999+00:00",
+  "candidate": "2f46efe7491d5cb9c028aff12ac475e44bef0a92",
+  "change": "myopqsowqovsqxxyxltyxstxzqlsvypz",
+  "parent": "2922400255b32bf63c3cffbdd3f13bb3eba91b1e",
+  "approved_predecessor": "100da20603a083d031c31bd4e8c6970fc44dda2f",
+  "approved_preparation": "861c19e3e7afc067851b13f3e7548baa923286ee",
+  "approved_runtime": "f35643bae1a67fb6ec0c30151e3624f661cf5f96",
+  "integrated_runtime": "925f739799572d23f46a762c895ebb85e5bd88d6",
+  "original_source38": "15dd7e1b188dad112d7887bdc6d769125b2697a1",
+  "bookmarks": [
+    "generation-integration",
+    "generation-integration-source38"
+  ],
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-integration-plan",
+  "review_directory": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/.local/review-main-source38-a-astra-20261029-gJuPGk",
+  "findings": [],
+  "integration_assessment": {
+    "ancestry": [
+      "2f46efe7491d5cb9c028aff12ac475e44bef0a92 2922400255b32bf63c3cffbdd3f13bb3eba91b1e record corrected source38 artifact closure without runtime input changes",
+      "2922400255b32bf63c3cffbdd3f13bb3eba91b1e ed80af5444bcc7fecdb162d5a2c649dd985f01ec keep archived source38 probe text outside runtime Rust source selection",
+      "ed80af5444bcc7fecdb162d5a2c649dd985f01ec 0c65bf7c519764460a15a922340d958a9dfa7429 bind source38 combined validation to frozen runtime and metadata sources",
+      "0c65bf7c519764460a15a922340d958a9dfa7429 925f739799572d23f46a762c895ebb85e5bd88d6 record source38 combined geometry artifact and dependency qualification",
+      "925f739799572d23f46a762c895ebb85e5bd88d6 100da20603a083d031c31bd4e8c6970fc44dda2f integrate source38 local-frame mark geometry and corrected Kurbo stroke owner"
+    ],
+    "all_five_slice_commits_conflict_free": true,
+    "complete_checkout": "All 4095 candidate entries match Git blob identities, executable/symlink modes and actual checkout before and after review.",
+    "final_inventory": "Exactly all 569 unique changed paths relative to approved source36; statuses and candidate SHA256 values checked against target/wp3-source38/final-inventory.json. No inferred count arithmetic.",
+    "final_inventory_sha256": "c941e4361fd173663ced5a074c9bd8098f97734b293af9e5c39378d0dd96cd75",
+    "cumulative_preparation": "All 466 preparation delta paths accounted for. Every path equals approved861c19e3, except the intentional leading MAIN38 status section in generation-mark-geometry.typ. All runtime, manifests, lockfiles, public adapters, fixtures and vendor bytes are exact approved preparation bytes. No missing intermediate fix or integration-specific runtime adaptation.",
+    "other_main_changes": "The additional paths are MAIN execution/replay/plan bookkeeping and source38 evidence. The 153 historical logs first omitted by ignore rules are present, explicitly tracked, and byte-identical to approved preparation; they are historical evidence, not fresh test executions.",
+    "prior_review_copies": {
+      "geometry-review.json": {
+        "sha256": "70758643a1eca19731cbc412513399839ab42f8131b837146af9dcb527dcd8c7",
+        "candidate": "7da9e92de733f544957f724ababeb87c7684c02e",
+        "verdict": "APPROVE",
+        "code": "f35643bae1a67fb6ec0c30151e3624f661cf5f96"
+      },
+      "artifact-review.json": {
+        "sha256": "9e3124ec592ed45ea8dfb531d5c6ce8bf5cd18d1e5009a3a8f3a6a6ac3a1bb60",
+        "candidate": "7da9e92de733f544957f724ababeb87c7684c02e",
+        "verdict": null,
+        "code": "f35643bae1a67fb6ec0c30151e3624f661cf5f96"
+      },
+      "attribution-review.json": {
+        "sha256": "08ccaa5d509d5503ff5d1a39ba0ed25e345bcffa0753a1d62cae04dbd0911293",
+        "candidate": "861c19e3e7afc067851b13f3e7548baa923286ee",
+        "verdict": "APPROVE",
+        "code": "f35643bae1a67fb6ec0c30151e3624f661cf5f96"
+      }
+    },
+    "source36_boundary": "Only four crate .rs files differ from source36: marks.rs, Clinnet test code, Clinnet public behavior test, and GammaLoop template tests. Production Clinnet/template prefixes are byte-identical to36; source36 resource/admission/metadata owners and physics production remain untouched. No source37 or39 replay appears in the exact five-commit slice.",
+    "geometry_contract": "Reviewed unchanged typed shape dispatch and option validation, public types/transport, first-principles mark owner, stable polygon grow/inset failures, signed/full-turn barb contacts, authoritative finite miter owner, curve/native SVG forwarding, and current public fixtures. Original polygon and full-turn barb fixes remain closed. Current nine standalone regressions and native/public suites exercise their combined bindings.",
+    "archive_correction": "Both archived .rs files were renamed .rs.txt with identical bytes. Actual scratch and preserved original .rs probes remain exact and were freshly compiled in this review. Current Nextest selection exactly equals the retained 349-case selection, with only the intentional ignored fixture writer excluded. The actual final Git commit selects 1455 inputs again; no needed executable/test input was lost."
+  },
+  "dependency_constraints": {
+    "vendor_archive_sha256": "4b60dfc32f652b926df6192e55525b16d186c69d47876c3ead4da5cc9f8450e2",
+    "published_files": 53,
+    "changed_upstream_files": [
+      "vendor/kurbo/src/stroke.rs"
+    ],
+    "version": "0.13.1",
+    "licenses": "Both upstream licenses and .cargo_vcs_info.json exactly preserved. The only published source difference is the approved authoritative stroke owner.",
+    "locks": {
+      "Cargo.lock": {
+        "before": {
+          "name": "kurbo",
+          "version": "0.13.1",
+          "source": "registry+https://github.com/rust-lang/crates.io-index",
+          "checksum": "4b60dfc32f652b926df6192e55525b16d186c69d47876c3ead4da5cc9f8450e2",
+          "dependencies": [
+            "arrayvec",
+            "euclid",
+            "polycool",
+            "smallvec"
+          ]
+        },
+        "after": {
+          "name": "kurbo",
+          "version": "0.13.1",
+          "dependencies": [
+            "arrayvec",
+            "euclid",
+            "polycool",
+            "smallvec"
+          ]
+        },
+        "other_packages_identical": 857
+      },
+      "examples/notebooks/symbolica-host/Cargo.lock": {
+        "before": {
+          "name": "kurbo",
+          "version": "0.13.1",
+          "source": "registry+https://github.com/rust-lang/crates.io-index",
+          "checksum": "4b60dfc32f652b926df6192e55525b16d186c69d47876c3ead4da5cc9f8450e2",
+          "dependencies": [
+            "arrayvec",
+            "euclid",
+            "polycool",
+            "smallvec"
+          ]
+        },
+        "after": {
+          "name": "kurbo",
+          "version": "0.13.1",
+          "dependencies": [
+            "arrayvec",
+            "euclid",
+            "polycool",
+            "smallvec"
+          ]
+        },
+        "other_packages_identical": 463
+      }
+    },
+    "other_guards": "Tydenso/uv and unrelated packages unchanged. Root/host selection chooses local Kurbo; only their Kurbo source/checksum fields change, with version/dependencies fixed. Kernel remains1a1829b1f3d0a88b53b44085b3b9f34ef77945b3. workspace-hack and CI graph unchanged; NixCI false.",
+    "authorization": "Root coordinator's narrow exact-version engineering exception within the accepted correctness task. Corrected attribution retained; no invented direct user authorization or new permission requirement."
+  },
+  "final_source_qualification": {
+    "candidate": "2f46efe7491d5cb9c028aff12ac475e44bef0a92",
+    "input": "git+file:///shared/lcnbr/dev/gammaloop/main?rev=2f46efe7491d5cb9c028aff12ac475e44bef0a92&shallow=1&allRefs=1",
+    "runtime_derivation": "/nix/store/8iq7qvzf38wcw165afivy6ipcw4sdlq9-linnest-wasm-0.1.0.drv",
+    "runtime_source": "/nix/store/j37nl8sqz8h325npwj3h3c1kwsv7a82p-source",
+    "runtime_source_NAR": "sha256-Nk3y/G7WC+2gpnulAiZro2wxL2Iwa7aacNqnamzLmyg=",
+    "runtime_inputs": 1455,
+    "features": "linnest/typst-plugin,kurvst/typst-plugin; release; wasm32-unknown-unknown; --locked",
+    "production": "/nix/store/3alhvknpmfx1sm8dgp6b7ayam1g0737m-source",
+    "test_wrapper": "/nix/store/1yifi488h39qaj242y90w11mp5374skw-nix-ci-artifact-barrier-crate-test-binaries-gammaloop-api.drv",
+    "test_producer": "/nix/store/nlvz9r7yd3fng1w8wxvaxgnk2cn6rl1w-gammaloop-crate-test-binaries-gammaloop-api-5530381da967671b-deps-0.1.0.drv",
+    "test_source": "/nix/store/a90bhaarlb4v58kqfri5riv14fqvkhhj-source",
+    "conclusion": "Fresh exact-final-commit Nix evaluation yields the approved8iq derivation, not merely equal payloads or an ancestor. All1455 selected files independently match candidate Git bytes. Production/test sources and test producer equal qualified0c65/925; both carry all53 exact vendor files. ed80's unbuilt b4nc derivation is not qualified. No runtime rebuild claimed.",
+    "evidence": "source-binding.json; source-commands.json"
+  },
+  "fresh_checks": {
+    "native_geometry_svg": {
+      "passed": 348,
+      "kurvst": 119,
+      "linnest": 229,
+      "excluded": 1,
+      "excluded_test": "ec_seed::tests::regenerate_split_seeds",
+      "features": "linnest/svg",
+      "profile": "dev-optim",
+      "run_id": "73fcfab1-8085-4976-a8b6-1c68efcd734d",
+      "selection": "Fresh Cargo Nextest list exactly equals retained MAIN selection; both binary hashes match their recorded MAIN identities."
+    },
+    "kurbo": {
+      "passed": 188,
+      "failed": 0,
+      "ignored": 0,
+      "producer": {
+        "path": "/common/build-cache/lcnbr/3b/9bb46cd5710001/debug/deps/kurbo-38c3687d89bd0ce8",
+        "sha256": "ecea65e6c07c409d30a21b3019ac0c0a46a8a37c1f83585af0e9edc6fa2d6986",
+        "manifest": "vendor/kurbo/Cargo.toml",
+        "profile": "test",
+        "tested_cases": 188
+      },
+      "command": "cargo test --locked --manifest-path vendor/kurbo/Cargo.toml --lib -- --test-threads=2"
+    },
+    "original_regressions": {
+      "old": {
+        "passed": 1,
+        "failed": 3,
+        "exit": 101
+      },
+      "current": {
+        "passed": 4,
+        "failed": 0,
+        "exit": 0
+      }
+    },
+    "adversarial_regressions": {
+      "old": {
+        "passed": 3,
+        "failed": 2,
+        "exit": 101
+      },
+      "current": {
+        "passed": 5,
+        "failed": 0,
+        "exit": 0
+      }
+    },
+    "regression_binding": "Frozen original4/adversarial5 sources hash-identical to the preparation probes, scratch sources and renamed tracked archive copies. Original old executable hashes verified. Fresh rustc links against current combined Cargo-selected rlib with SHA117f4d3f62408eb7e6d3ffd35b46a5ed004101a368f58c9b211fbe39acf7f623. Both new executables pass. These nine cases include controls and overlap suite behaviors; no claim that all nine failed before or are nine additional distinct failures.",
+    "public_geometry": {
+      "generic": 18,
+      "adversarial": 4,
+      "original": 8,
+      "mark_fixture": "compiled successfully",
+      "queries": "All current actual Kurvst WASM results exactly match retained MAIN results. Generic cases include miter clipping controls; explicit checks retain skinny tip, deep wings, tiny triangle and9.5 full-turn barb contact.",
+      "wasm_sha256": "d10e65de25d32dcc64eb7dac6830a52b2bca23abcc8a5cb8055211961ad71569"
+    },
+    "inventory_bindings": {
+      "changed_paths": 569,
+      "integration_artifacts": 93,
+      "MAIN_native_ELF_identities": 6,
+      "historical_preparation_identities": 11,
+      "historical_identity_breakdown": "9ELFs+2rlibs, identity verification only",
+      "prior_A_proof_artifacts": 69
+    },
+    "scope_boundary": "No fresh Clinnet46, packaging5 or WASM runtime-suite3 execution credited here; Scope B owns those. Public geometry queries above are separately stated."
+  },
+  "reused_evidence": [
+    "Native geometry and Kurbo Cargo cache producers were reused after current source-aware Cargo selection; executions were fresh. The two current standalone regression executables were freshly linked. No cache seeding, CARGO_TARGET_DIR override, deletion or cold-dependency build.",
+    "Prior A mathematical review and69 proof artifacts independently rehashed. Eight current geometry/curve/native SVG/Typst/stroke owners match f356 bytes. Retain the15-case exact-emitted-edge/winding and1110 generic diagnostics with their original conditioning and subnormal limitations; they were not rerun or relabelled fresh.",
+    "MAIN affected all-targets Kurvst/Linnest/Clinnet Clippy and formatting logs reused through exact unchanged source/feature binding. The two existing Clarabel dependency warnings remain visible; standalone Kurbo strict Clippy's unchanged common.rs389 warning remains qualified, not claimed pass. No new Rust-policy departure or integration adapter.",
+    "Prior B technical approval plus final attribution approval are exact copied reports. Payload/NAR/render/distribution inspection and the current independent Scope B decision belong to B; this review does not substitute for them.",
+    "Hakari/CI graph/kernel/offline-resolution receipts retained and source-bound; independently compared lock objects, unchanged graph/workspace-hack and kernel pins. No regeneration command or ref mutation was needed."
+  ],
+  "blank_raster_adjudication": "Existing accepted downstream Typst/tiny-skia precision/resolution limit retained. The extreme skinny-triangle raster crop remains blank and is NOT visual coverage proof. Exact geometry/native/public outline bindings remain approved within documented conditioning; no new byte or feature interaction warrants reopening the prior independent derivation.",
+  "guards": {
+    "tracked_entries": 4095,
+    "protected_refs": 48,
+    "all_protected_refs_match": true,
+    "tracked_bytes_and_modes_unchanged": true,
+    "frozen_local_proof_files_unchanged": 185,
+    "candidate_change_unchanged": true,
+    "source36_bookmark": "100da20603a083d031c31bd4e8c6970fc44dda2f",
+    "unrelated_shared_bookmark_activity": {
+      "generation-sunset-certificate-round4": [
+        "73f51c304f185e56a1366b518519d5f8e3081ef6",
+        "a4cd1fb4c9d10509b3f94805854f3f24e9717b11"
+      ]
+    },
+    "reviewer_ref_mutations": false,
+    "main_access": "Guidance and immutable Git object lookup only; no main checkout writes.",
+    "NixCI": false
+  },
+  "tooling_notes": [
+    "Host python3 absent: scripts use the already realized pinned Nix development shell. SYMBOLICA_LICENSE preserved or loaded silently from user config. No shared .envrc exists in this environment.",
+    "Initial ref dictionary included stale @git tracking entries; corrected to local bookmarks and independently verified direct revset identities. Initial NixCI assertion looked only near file start; corrected to the exact top-level assignment at line574. These were review-tool diagnostics, not candidate defects.",
+    "Initial vendor filesystem-set assertion included existing ignored Cargo target output; corrected to compare all53 tracked published paths against the exact archive. Existing cache preserved. Failed diagnostics retained without pass credit."
+  ],
+  "limits": [
+    "APPROVE is Scope A only for actual candidate2f46efe. Source39 may proceed only after independent Scope B ALSO approves and the parent aggregates.",
+    "No whole WP3/WP11, physics, five_a_ddx/BRST,18scripts/four expansion helpers, performance/memory/benchmark, final wheel/Pyodide/Community/install/RECORD, full-site/browser or publication qualification.",
+    "Existing source-bound full-site qualification remains a372 only. No new full-site or cold dependency determinism claim.",
+    "No universal all-f64 or all-renderer painting guarantee; prior subnormal and conditioning limits remain."
+  ],
+  "cleanup": {
+    "tracked_or_ref_edits": false,
+    "nested_agents": false,
+    "peer_polling": false,
+    "fetch_push_PR_upload_publication": false,
+    "processes_retained": [],
+    "retained": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/.local/review-main-source38-a-astra-20261029-gJuPGk",
+    "reason": "Unique ignored review receipt, commands, guards, source/producer identities, fresh outputs and two freshly linked probes retained for parent review and reproducibility. Shared caches and existing proof artifacts preserved."
+  },
+  "commands": "commands.json; native-commands.json; source-commands.json; public-commands.json; run.sh",
+  "artifact_sha256": {
+    "adversarial-compile.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "adversarial-compile.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "adversarial-new.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "adversarial-new.stdout": "a1fa78a82f263407e930668741d39bbeefd6866cdfbaeb5d412a271b596a5b21",
+    "adversarial-old.stderr": "1676f5d32204fa89ea8479f6adc3a5294c365c43abb1bb1fb345d0e3d077577b",
+    "adversarial-old.stdout": "098edd4ddcb6d6668b31369ef6e5b1a40fcf39b1d20beae33e7a4db8bac3124d",
+    "audit-initial-diagnostic.log": "dda16937cf69dc94d70268e6b99437e357176f69ce9126096467f11d449494fe",
+    "audit.json": "f0379840c91e6934214dd9453ae7a5985f44df922827da7b025f74fb609e65e4",
+    "audit.log": "f41b5217b7593611e944a6a4e54a22577dac4b240385c13b80d6b647cf3d756e",
+    "audit.py": "eca6b6eaad42edcf4635246d9ea3a14fb257c2ea144a70d1b4e69bab135a3517",
+    "bindings-initial-diagnostic.log": "cebaca397c86a26116a75f0ebd4a75c84e7f7a511f140c910273a0299feb8f18",
+    "bindings.json": "75b6e4889eef1931ade033997e8c0de7b1616199c3dd6d9588faff97c64d5bb9",
+    "bindings.log": "75b6e4889eef1931ade033997e8c0de7b1616199c3dd6d9588faff97c64d5bb9",
+    "bindings.py": "544c1279a92100bed5fdd60f0c912fc71d459d04556d158a2bff676b08ab8ebb",
+    "candidate-production.stderr": "63fb17a659f13585ae788898e612a294c4bcd430e62452dfed2ec4cd867a1602",
+    "candidate-production.stdout": "1a70c5ec3eb08e02f33c715b42b8f786c5b8d24afb0c9f6636510b526fdeb027",
+    "candidate-runtime.stderr": "63fb17a659f13585ae788898e612a294c4bcd430e62452dfed2ec4cd867a1602",
+    "candidate-runtime.stdout": "87012e996ab599389d879d94b45bdf0c0c84e491287ce434371e85678a883ea3",
+    "candidate-test.stderr": "63fb17a659f13585ae788898e612a294c4bcd430e62452dfed2ec4cd867a1602",
+    "candidate-test.stdout": "a9389f6784e038e9147b0d19a9e9cb7cbd6a0c0d9c7735fd444ab30d419d7eba",
+    "commands.json": "bb9897e86a14d6866562cd94c0c9be9d654a4ea0e5130d076b83fd0f90f31647",
+    "drv-1yifi488h39qaj242y90w11mp5374skw-nix-ci-artifact-barrier-crate-test-binaries-gammaloop-api.drv.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "drv-1yifi488h39qaj242y90w11mp5374skw-nix-ci-artifact-barrier-crate-test-binaries-gammaloop-api.drv.stdout": "a8f79906b9dfcf95d7829eb7c16ab5bf87b01550bdc0f94184ac22a586b468c7",
+    "drv-8iq7qvzf38wcw165afivy6ipcw4sdlq9-linnest-wasm-0.1.0.drv.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "drv-8iq7qvzf38wcw165afivy6ipcw4sdlq9-linnest-wasm-0.1.0.drv.stdout": "65591462a592ee7203707423a5673becc17b14e693e58a7e555edbf35220dd4f",
+    "drv-nlvz9r7yd3fng1w8wxvaxgnk2cn6rl1w-gammaloop-crate-test-binaries-gammaloop-api-5530381da967671b-deps-0.1.0.drv.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "drv-nlvz9r7yd3fng1w8wxvaxgnk2cn6rl1w-gammaloop-crate-test-binaries-gammaloop-api-5530381da967671b-deps-0.1.0.drv.stdout": "9065a4daeb5e2857e05c4aa4f1f8871957a934ae287e43a253269c19d6e77047",
+    "final-bindings.json": "e87fc7b657ca75c1cc87af06b0cf39ccdd501371fc628397a48bbc626f7746e4",
+    "finish.log": "95cf33bfb2158e9b14ba80ccc3db60a092a219abd195e3e5da557eed117af2ea",
+    "finish.py": "0404384b3b7b47a95bb3c526cc293cd407fb97b61faeeafcca3aa4cc263695e5",
+    "guard-after.json": "e4a5048d0480d8306e822b11cf471aa816ee455f4e8c69103ef2761421d83f1e",
+    "guard-after.log": "14cc9df2fe95cceaa3a97034dd58ab0cfb720f6ca49cbf3f2aaaae0935ed0233",
+    "guard-before.json": "16367607225c21cb03caa1683babdbb97aee4e99d183ee6e66fdb47620bb3dde",
+    "guard-before.log": "da50a33cd4dfd10002c7b6ec6b5e1be6453003e638b7b2e43ffe521a737b0bd7",
+    "guard-initial-diagnostic.log": "8176d162e026a32c3fdd68f3ef692fed42e29c22520d1d7cad3787f8420f89bf",
+    "kurbo-test.stderr": "8582f6f7bf81011e3724f1d18fbf5fb02c27647ab88f89ad95c41c6d39a67d22",
+    "kurbo-test.stdout": "20cc2ec32c7b6f1cba3fe0f5446c51aefdb5e75fb5bcf4590c6645e9aceb2585",
+    "kurvst-build.stderr": "78227a837a34491e3a1f6f22946f1099f687c88a1a9fe0df01ad1408fabcd7a4",
+    "kurvst-build.stdout": "179a082819cbf1bc27b2d4a959fe0cbfc469ddcccf1a56474d1160a9b9f5ae15",
+    "native-commands.json": "799c875394d8af614457addff80588915b21293b072121f1a9b31c7c0f620e2f",
+    "native-driver.log": "219d4b5887ac16bce25749a8b7a3a8267f586e5f970006c376f7cb7f7c93e44a",
+    "native-identities.json": "e024d66cd2088c017f97544c9c6eaf1a9e6adb7b077af22dc551f666d92af000",
+    "native-list.stderr": "acf5171b54d5410466be0c3f1c9cdc4199b3de9e23930c5734235d31486d82f7",
+    "native-list.stdout": "e6cccf7af9a7d8ca2655d70bfa63767c79c13a56840ebc1c0b2714cf4330a3f0",
+    "native-run.stderr": "67ba2b5d0acf3e11a5b74e6f166b8ab6bb0dccc0d802ec4a4c99c5e5ea74dd01",
+    "native-run.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "native.py": "3461a8fcc042cd2a54ce9a994b27d93aa9ce15272b455dd5768fc6dfc0238382",
+    "original-compile.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "original-compile.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "original-new.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "original-new.stdout": "cf8c0e181445c47dd1ddc7f2dacb6aabc3809c62bf6a4ceb6a344c0ae69d8d41",
+    "original-old.stderr": "8850ba63d7255848a6564c83be538237a89c7fca8fc86b2a8cbd2c38ed135d24",
+    "original-old.stdout": "dcd85e4c164972132572967a173a61551b7e27e0887061d94d7bf6bae55c7a3e",
+    "public-adversarial.stderr": "4452494f33b12671b6a3d088f8d204e29ca57ca8123470b5a2111da331268403",
+    "public-adversarial.stdout": "edab9516cbcd08d607230c6cf5a377b5f5a636ad371fd2dc9542245340220dea",
+    "public-commands.json": "42613dac1ada80a14338ebe1358d9a0e8f239af3a9d56ec12153a3d47859a60d",
+    "public-driver.log": "5133f5ba803172fd18ad68c8f258d39f0955b839b5d4846a8f553518a6e8c77e",
+    "public-fixture.pdf": "6ee456b1a10d21dc141e4621a828efffc794e90adc54df74b4c0a7356529bf2d",
+    "public-fixture.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "public-fixture.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "public-generic.stderr": "c5cdcf9a271517794815177c3c2ec9dfa57779f174b6b353e5f5f379b438c2ba",
+    "public-generic.stdout": "590a0731e331cbd78e1a1142cd716c8184119e9559526427caf49a6ae7bbe997",
+    "public-original.stderr": "75d2f78380fe64f667f30a919b68620e5c49c255425cf43c7b1ac1ce8ac6b8a5",
+    "public-original.stdout": "254ce094d753eb2776e257056dde40c51eeff379845afef7fc0cdd1494c21af0",
+    "public-results.json": "64c3d9ab3b3d625c0ae67ff770e3d33d6aff11e30fb9e9cde04934a42285702a",
+    "public.py": "9ff98cf49da84191cdfda7817e7f10665760d0d707078e82da70cbceb105d826",
+    "review-adversarial": "c9971aaeb90d4a71924a52bceb3adbd809227424ab06072ff5b183577215649c",
+    "review-original": "6827a8afecea00ac7b637ce6df9a76d744f4014f5a8a33eaf523230bb0fffadc",
+    "run.sh": "f433a6c96754fba2c12510fc168b3932ca96aecb2c8c689a4bbf778d043a6339",
+    "runtime-source-nar.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "runtime-source-nar.stdout": "503d8b13782a8fc9ed9a24fef635986a83dcf50eaa39ebf288d5fd7b2f853c87",
+    "source-binding.json": "f09d5a1252a82a06d40016c17c570f7a6333e082dfde8ca1ab6b814465fe8f35",
+    "source-commands.json": "ea64a14565b381b82bfbbbcae094eb216ea6698767cfb319ac6db9d7bb578c35",
+    "source-driver.log": "8fb3bc00528cadeb4d98b1b6279033a81cd4c17aa1e342b9c3f11d1982d8d82d",
+    "source.py": "1d0b42c5e0245544fd15498fcc91232d1eb03ef66ab9c5863d9b0a0be771bb6e",
+    "write_review.py": "81f8dd5c763e8ff66ee99ef5055a07b97e507ab80e628c2e11d27595e020a67c"
+  }
+}

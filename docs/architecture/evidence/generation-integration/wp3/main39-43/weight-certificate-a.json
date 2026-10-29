@@ -1,0 +1,504 @@
+{
+  "schema": 1,
+  "reviewer": "NEW independent Astra Scope A ROUND2",
+  "verdict": "APPROVE_CERTIFICATE",
+  "scope": "Exact producer/input, state lifecycle, live post-import provenance, veto semantics and module-qualified test history for failing::test_generate_aa_ttx_cross_section_slow_filter QCD2; preservation/reuse of peer Scope B fixed-case certificate.",
+  "candidate": {
+    "commit": "5f7d96ba675f76dcb7e814e085c5f66ece13cb2b",
+    "change": "xnymskuzlvompnlnptyxprzuzkzywyzo",
+    "bookmark": "generation-pocket-weight-diagnosis",
+    "workspace": "/shared/lcnbr/dev/gammaloop/generation-pocket-weight-diagnosis",
+    "author": "Lucien Huber <im@lcnbr.ch>",
+    "parentRound1": "a8c5a11e1d3266faa478dc78db85cc111a3a05a6",
+    "productionBase": "59b57cead76e576fa9f23e3996f5614de939fe35"
+  },
+  "historical": {
+    "source": "74fcd8e57e9fe256d4bc34b5d8ad93c97fc28848",
+    "cleanBaseline": "81f7e3c0dcf9909472d22cc70a2bb2a79cef4c7c",
+    "cleanBookmark": "generation-pocket-weight-historical-source43",
+    "originalBaseline": "aa411da5fae5eaaf20e825fd5386af62436d15f8",
+    "originalBookmark": "generation-pocket-weight-historical-source43-round1",
+    "adaptedDiagnosticSnapshot": "f20dfacc9f6d06e7bc238e01583ee03d5491e77a",
+    "adaptation": "Exactly tests/tests/test_feyngen.rs differs from source43; saved historical diagnostic source matches that recovered snapshot byte-for-byte. Both restored baseline trees equal source43. Diagnostic source was restored before this review; this reviewer made no source/ref changes."
+  },
+  "findings": [
+    {
+      "id": "A1",
+      "userAlias": "F1",
+      "status": "closed",
+      "title": "Actual post-import live model, parameters and settings are bound",
+      "evidence": "Capture closure runs after successful real import and before the first generation, borrowing the owning CLIState. Model::write_json and InputParamCard::to_file serialize owner data through &self; no source-model reload or helper-state substitution. Repeated captures after filtered and unfiltered generation have the same complete model and card bytes. Fingerprint observation only fills its existing identity cache. Independent isolated replays reproduce all prior graph witnesses, excluding an observer-induced graph-input effect in this case.",
+      "modelSha256": "7e250b3ff20c98277ee19af863cc030c7a5fd47fea979931b28aba744f8a9de3",
+      "parametersSha256": "232964f2b9783482f8ccb0e8812eb6e34a0d2dd6d5e8a8905a5b98377ae7fe1d",
+      "restriction": "default",
+      "particles": 43,
+      "vertexRules": 119,
+      "modelParameters": 118,
+      "inputValues": 15,
+      "masses": "a/g/ghG/ghG~ declare ZERO; b/b~ MB=4.9; t/t~ MT=173. Full model and all values verified; topology masslessness follows Model Particle::is_massless, not numerical guesses.",
+      "settings": "Live JSON suppresses defaults. Equality is established using fresh fully emitted helper TOML, matching default-owner definitions and unchanged default omission predicates, plus identical live nondefault fields. Only isolated state folder differs. SessionSettings is serde-skipped but its default and lifecycle were inspected: read_only=false, origin=None, warnings=[]; import does not take CLI settings and generation takes immutable global/runtime settings.",
+      "oldState": "Original c78b7e... remains correctly identified as pre-import helper snapshot: restriction null, 163 vertices, empty parameter card; original bytes preserved.",
+      "artifacts": [
+        "preservation-audit.json",
+        "settings-completeness.json",
+        "source-checks.json",
+        "producer-metadata.json",
+        "fresh-bindings.json"
+      ]
+    },
+    {
+      "id": "A2",
+      "userAlias": "F2",
+      "status": "closed",
+      "title": "Veto prose matches actual resolved schema and owner",
+      "evidence": "SpecArgs::veto uses Veto::all for the explicitly enabled self-energy/tadpole filters and Veto::massless for snails. SpecialTopologyVetoes::vetoes returns true for matching rejected topologies. Both mass classes of self-energy/tadpole vetoes are enabled; massless snail veto enabled, massive snail veto disabled; sewn tadpole veto disabled. No forced cuts; all three symmetrization flags false. Both full ProcessDefinitions are reproduced across kernels; the sole filtered/unfiltered difference is numerators/filter_zero_color.",
+      "artifacts": [
+        "input-inventory.json",
+        "correction-source.log"
+      ]
+    },
+    {
+      "id": "A3",
+      "userAlias": "F3",
+      "status": "closed",
+      "title": "Full commit and module-qualified duplicate-test chronology is corrected",
+      "evidence": "source43 -> 087bda82ce5a14dab092776ea470e66278dda12d -> dfe6387606e44a96f110c1ce03f52d92824dbdb1 -> e0a779808174c64057fecfd062c948b8de8e5c1f is the direct chain. First descendant changes seven snapshots and one comment, including slow::test_generate_aa_ttx_cross_section at historical line 2037; named failing test remains -266 at line 1815. The next commit changes only that named failing row to -186. v4 subsequently changes color simplification and is source-only evidence. Test command prefixes in the snapshot-only diffs are unchanged.",
+      "artifacts": [
+        "history-1.diff",
+        "history-2.diff",
+        "preservation-audit.json",
+        "qualified-history.log"
+      ]
+    },
+    {
+      "id": "A-registry",
+      "status": "closed",
+      "title": "Round1 registry-title observation",
+      "evidence": "Registry title now exactly equals the single Typst title. Fresh pinned Typst compile, Rustfmt check and parsed registry-title check pass."
+    }
+  ],
+  "openCertificateFindings": [],
+  "nonblockingCodeObservation": {
+    "id": "A-style",
+    "priority": "P3",
+    "status": "open; nonblocking for this provenance certificate",
+    "locations": [
+      "tests/tests/test_feyngen.rs:695",
+      "tests/tests/test_feyngen.rs:720",
+      "tests/tests/test_feyngen.rs:748"
+    ],
+    "detail": "The diagnostic retains qualified type paths fs::File::create and serde_json::Value::Array, and a qualified serde_json::json! invocation. CONTRIBUTING Imports And Paths asks for imports at ordinary use sites. File/Value paths are inherited from round1; json! occurs also in the new capture. Import-policy cleanup remains before full code-policy acceptance; no numerical or provenance consequence.",
+    "scope": "Implementation policy observation, not a provenance/physics objection. This certificate is not full Rust-policy or PR approval."
+  },
+  "scopeBPreservation": {
+    "verdict": "APPROVE_CERTIFICATE",
+    "reviewSha256": "89715339a8572c8dd0e23b5e9bb518422fdec5ecfe88b7b560c83f3c29f67254",
+    "rawBindingsSha256": "6616253307354d853e094fae964a6873525a08bb592ac9719bdfbe42cb7cfa24",
+    "rawInputsVerified": 3969,
+    "artifactsVerified": 17,
+    "sourceBinaryBindingsVerified": 22,
+    "independentMathReused": true,
+    "notReperformed": "No new graph automorphism enumeration, sign derivation, color-zero algebra or numerator expansion. Reused B independent maps, multiedges, cuts/thresholds, automorphisms, Grassmann signs and corruption controls only after all its raw inputs and 17 report-bound artifacts verified exactly.",
+    "freshWitnesses": {
+      "source43": {
+        "dotCount": 1980,
+        "sets": {
+          "filtered": {
+            "summary": "874 | -186 = -186",
+            "count": 874,
+            "selectedCuts": 2912,
+            "thresholds": 6118
+          },
+          "unfiltered": {
+            "summary": "1106 | -40 = -40",
+            "count": 1106,
+            "selectedCuts": 3416,
+            "thresholds": 7006
+          }
+        },
+        "bindings": {
+          "post-import-live-model.json": "7e250b3ff20c98277ee19af863cc030c7a5fd47fea979931b28aba744f8a9de3",
+          "post-import-live-parameters.json": "232964f2b9783482f8ccb0e8812eb6e34a0d2dd6d5e8a8905a5b98377ae7fe1d",
+          "post-import-live-settings.json": "406c157a1549233b450294ff26f44ee7accee945a4cfee73135029c89a575e9e",
+          "filtered-after-generation-live-model.json": "7e250b3ff20c98277ee19af863cc030c7a5fd47fea979931b28aba744f8a9de3",
+          "filtered-after-generation-live-parameters.json": "232964f2b9783482f8ccb0e8812eb6e34a0d2dd6d5e8a8905a5b98377ae7fe1d",
+          "filtered-after-generation-live-settings.json": "406c157a1549233b450294ff26f44ee7accee945a4cfee73135029c89a575e9e",
+          "unfiltered-after-generation-live-model.json": "7e250b3ff20c98277ee19af863cc030c7a5fd47fea979931b28aba744f8a9de3",
+          "unfiltered-after-generation-live-parameters.json": "232964f2b9783482f8ccb0e8812eb6e34a0d2dd6d5e8a8905a5b98377ae7fe1d",
+          "unfiltered-after-generation-live-settings.json": "406c157a1549233b450294ff26f44ee7accee945a4cfee73135029c89a575e9e",
+          "filtered-graph-witness.tsv": "ae5fd00fd9efd09e262a46f839f9fd8abee88328f98008cceaa164e26d3433f0",
+          "filtered-process-definition.json": "ecafb0b7998630157c3e83b928cc0a8f2cf029e99d2daec43f283af355be1aae",
+          "unfiltered-graph-witness.tsv": "6a9d3d28b73c6099125c6748f392f3d0e2da071d50c38359a744b563e5bbc6e4",
+          "unfiltered-process-definition.json": "4b599670c5a8fc749dbfdf6dcfe18a23ddd20fdaf0c89e3ba03d8d5c56ae932a",
+          "state/default_runtime_settings.toml": "63aface25b6d5d154e28b2591b3753a03cc10c02ed87ed2054ff9c09e957a612",
+          "state/global_settings.toml": "6df812e06e88a5f1c3a9877f185535ef0b205dd6f7be9db20a2d4aee8264b2ca"
+        }
+      },
+      "current": {
+        "dotCount": 1980,
+        "sets": {
+          "filtered": {
+            "summary": "874 | -186 = -186",
+            "count": 874,
+            "selectedCuts": 2912,
+            "thresholds": 6118
+          },
+          "unfiltered": {
+            "summary": "1106 | -40 = -40",
+            "count": 1106,
+            "selectedCuts": 3416,
+            "thresholds": 7006
+          }
+        },
+        "bindings": {
+          "post-import-live-model.json": "7e250b3ff20c98277ee19af863cc030c7a5fd47fea979931b28aba744f8a9de3",
+          "post-import-live-parameters.json": "232964f2b9783482f8ccb0e8812eb6e34a0d2dd6d5e8a8905a5b98377ae7fe1d",
+          "post-import-live-settings.json": "ad409e274327f08460f3f6b12a942d0ead1f4075045d921bab831241d1c7445e",
+          "filtered-after-generation-live-model.json": "7e250b3ff20c98277ee19af863cc030c7a5fd47fea979931b28aba744f8a9de3",
+          "filtered-after-generation-live-parameters.json": "232964f2b9783482f8ccb0e8812eb6e34a0d2dd6d5e8a8905a5b98377ae7fe1d",
+          "filtered-after-generation-live-settings.json": "ad409e274327f08460f3f6b12a942d0ead1f4075045d921bab831241d1c7445e",
+          "unfiltered-after-generation-live-model.json": "7e250b3ff20c98277ee19af863cc030c7a5fd47fea979931b28aba744f8a9de3",
+          "unfiltered-after-generation-live-parameters.json": "232964f2b9783482f8ccb0e8812eb6e34a0d2dd6d5e8a8905a5b98377ae7fe1d",
+          "unfiltered-after-generation-live-settings.json": "ad409e274327f08460f3f6b12a942d0ead1f4075045d921bab831241d1c7445e",
+          "filtered-graph-witness.tsv": "ae5fd00fd9efd09e262a46f839f9fd8abee88328f98008cceaa164e26d3433f0",
+          "filtered-process-definition.json": "ecafb0b7998630157c3e83b928cc0a8f2cf029e99d2daec43f283af355be1aae",
+          "unfiltered-graph-witness.tsv": "6a9d3d28b73c6099125c6748f392f3d0e2da071d50c38359a744b563e5bbc6e4",
+          "unfiltered-process-definition.json": "4b599670c5a8fc749dbfdf6dcfe18a23ddd20fdaf0c89e3ba03d8d5c56ae932a",
+          "state/default_runtime_settings.toml": "63aface25b6d5d154e28b2591b3753a03cc10c02ed87ed2054ff9c09e957a612",
+          "state/global_settings.toml": "4550f9621fdd885020d5501032356d1330620830bf6f65acfe5a14847c2b6484"
+        }
+      }
+    },
+    "graphJoinSummary": {
+      "filtered": {
+        "keys": 874,
+        "leftCount": 874,
+        "rightCount": 874,
+        "multiplicityDifferences": 0,
+        "cutFactorWeightDifferences": 0,
+        "selectedCuts": 2912,
+        "thresholds": 6118,
+        "fullWitnessSha256": "0569b1032688356f54e52a6ea21a6b322d84ddf18b012761364bde0b2f45eba3"
+      },
+      "unfiltered": {
+        "keys": 1106,
+        "leftCount": 1106,
+        "rightCount": 1106,
+        "multiplicityDifferences": 0,
+        "cutFactorWeightDifferences": 0,
+        "selectedCuts": 3416,
+        "thresholds": 7006,
+        "fullWitnessSha256": "02651c3afbce47c849ff82966d43949a3d7cc591a411ed927604a08e30a26887"
+      }
+    },
+    "arithmetic": "500*(-1) + 334*(+1) + 40*(-1/2) = -186; 232 removed members total +146; unfiltered sum -40. B independently finds 40 retained ghost graphs whose omitted ghost sign would instead yield -266; this is a counterfactual, not proof of historical author intent."
+  },
+  "freshChecks": [
+    {
+      "route": "current-diagnostic",
+      "cwd": "/shared/lcnbr/dev/gammaloop/generation-pocket-weight-diagnosis",
+      "binary": "/shared/lcnbr/dev/gammaloop/generation-pocket-weight-diagnosis/target/pocket-weight-diagnosis/round2/current-live-capture-final-test_feyngen",
+      "binarySha256": "a4afd64bbcbfc96afe46b7348c532317df81b1fb6c3450e67cfd8db7cbfef254",
+      "args": [
+        "diagnose_aa_ttx_qcd2_graphs",
+        "--exact",
+        "--nocapture",
+        "--ignored"
+      ],
+      "started": "2026-10-28T19:11:25.900Z",
+      "environment": {
+        "TESTS_GAMMALOOP_STATE_PATH": "/shared/lcnbr/dev/gammaloop/generation-pocket-weight-diagnosis/target/pocket-weight-diagnosis/review-astra-scope-a-round2-JOlXh9/current-diagnostic/states",
+        "INSTA_PENDING_DIR": "/shared/lcnbr/dev/gammaloop/generation-pocket-weight-diagnosis/target/pocket-weight-diagnosis/review-astra-scope-a-round2-JOlXh9/current-diagnostic/pending",
+        "GL_TEST_LOG_DIR": "/shared/lcnbr/dev/gammaloop/generation-pocket-weight-diagnosis/target/pocket-weight-diagnosis/review-astra-scope-a-round2-JOlXh9/current-diagnostic/logs",
+        "forbiddenVariables": [],
+        "licensePresent": true,
+        "CARGO_TARGET_DIR": null
+      },
+      "features": "retained Cargo producer: default",
+      "profile": "ci-optim",
+      "ended": "2026-10-28T19:11:57.742Z",
+      "status": 0,
+      "signal": null,
+      "error": null,
+      "logSha256": "5b4b0fc99518d2b571388c79ac84cc29d55cc7fe05d428602e548546ba43987b"
+    },
+    {
+      "route": "historical-diagnostic",
+      "cwd": "/shared/lcnbr/dev/gammaloop/generation-pocket-weight-historical-source43",
+      "binary": "/shared/lcnbr/dev/gammaloop/generation-pocket-weight-historical-source43/target/pocket-weight-diagnosis/round2/historical-live-capture-test_feyngen",
+      "binarySha256": "8b28555513a3f3839f6fcd4bd6a62c5819c3f4d19e6e1dbb6e5c8a053727a806",
+      "args": [
+        "diagnose_aa_ttx_qcd2_graphs",
+        "--exact",
+        "--nocapture",
+        "--ignored"
+      ],
+      "started": "2026-10-28T19:13:11.011Z",
+      "environment": {
+        "TESTS_GAMMALOOP_STATE_PATH": "/shared/lcnbr/dev/gammaloop/generation-pocket-weight-diagnosis/target/pocket-weight-diagnosis/review-astra-scope-a-round2-JOlXh9/historical-diagnostic/states",
+        "INSTA_PENDING_DIR": "/shared/lcnbr/dev/gammaloop/generation-pocket-weight-diagnosis/target/pocket-weight-diagnosis/review-astra-scope-a-round2-JOlXh9/historical-diagnostic/pending",
+        "GL_TEST_LOG_DIR": "/shared/lcnbr/dev/gammaloop/generation-pocket-weight-diagnosis/target/pocket-weight-diagnosis/review-astra-scope-a-round2-JOlXh9/historical-diagnostic/logs",
+        "forbiddenVariables": [],
+        "licensePresent": true,
+        "CARGO_TARGET_DIR": null
+      },
+      "features": "retained Cargo producer: default",
+      "profile": "ci-optim",
+      "ended": "2026-10-28T19:14:14.010Z",
+      "status": 0,
+      "signal": null,
+      "error": null,
+      "logSha256": "19f6c049fc41a57a731e695eb4fc22820fda99eb3e46f2732517ae877e59c3ce"
+    },
+    {
+      "check": "all original raw graph inputs and peer B artifacts rehashed; fresh per-route 1980 DOTs, TSVs and process definitions compared byte-for-byte",
+      "result": "pass"
+    },
+    {
+      "check": "full index regenerated from retained full joins; both filter reports regenerated from fresh replays",
+      "result": "all three byte-identical to tracked files"
+    },
+    {
+      "check": "validate-live-import.mjs and validate-receipt.mjs",
+      "result": "pass"
+    },
+    {
+      "check": "exact commit ranges/diffs, live raw values, default suppression/owner lifecycle, complete tracked inventories and refs",
+      "result": "pass"
+    },
+    {
+      "check": "pinned rustfmt --check --edition 2024 tests/tests/test_feyngen.rs; typst compile; parsed registry-title equality",
+      "result": "pass"
+    }
+  ],
+  "reusedChecks": [
+    {
+      "check": "Round1 Scope A pristine source43 and frozen-current QCD0/1/2 controls",
+      "result": "Rehashed both logs and corresponding distinct retained pristine producers; logs show QCD0/1 passed before unchanged QCD2 failed 874|-186 against 874|-266. No new pristine replay in this round.",
+      "bindings": {
+        "historical": {
+          "log": "target/pocket-weight-diagnosis/provenance-review-20261028-jfWbKL/historical-pristine/execution.log",
+          "sha256": "9ffc5e6e6cdb89b07018ec95f922027d90b3d148fbded4ba6a51f73089a5d572",
+          "exit": 101,
+          "result": "QCD0 4|-4 and QCD1 40|-40 pass; QCD2 874|-186 fails unchanged -266 assertion"
+        },
+        "current": {
+          "log": "target/pocket-weight-diagnosis/provenance-review-20261028-jfWbKL/current-pristine-control/execution.log",
+          "sha256": "cbcf659887b56c481b017079530f948af7d0b0cabcdd9d6c7ce6d2278acc8cd5",
+          "exit": 101,
+          "result": "QCD0 4|-4 and QCD1 40|-40 pass; QCD2 874|-186 fails unchanged -266 assertion"
+        }
+      }
+    },
+    {
+      "check": "Sol round2 historical pristine control and new diagnostic builds",
+      "result": "Logs and retained executables rehashed; recovered historical diagnostic source snapshot matched; current original Cargo producer matches new retained binary. Historical Cargo path now holds the restored pristine producer, not the diagnostic; these are explicitly separated."
+    },
+    {
+      "check": "Scope B independent graph/cut/factor/sign mathematics and corruption controls",
+      "result": "Preserved exactly, reused as bounded independent evidence."
+    },
+    {
+      "check": "MAIN31 paired control",
+      "result": "Bound producer/log hashes verified via B retained bindings and receipt validator; totals-only, no MAIN31 per-graph export."
+    },
+    {
+      "check": "v4",
+      "result": "Source and history only; no runtime claim."
+    }
+  ],
+  "sourceAndFeatureBindings": {
+    "source43": [
+      {
+        "name": "graphica",
+        "version": "3.0.1",
+        "source": "registry+https://github.com/rust-lang/crates.io-index",
+        "checksum": "118912fe5e24df9c7f36c1211bdeb1a803013b312cc149bd1794b9a0e4ef9c78"
+      },
+      {
+        "name": "numerica",
+        "version": "3.0.1",
+        "source": "git+https://github.com/symbolica-dev/symbolica?rev=c78cffc20f318df1fce50539a587cbe8ffc717c0#c78cffc20f318df1fce50539a587cbe8ffc717c0"
+      },
+      {
+        "name": "symbolica",
+        "version": "3.0.1",
+        "source": "git+https://github.com/symbolica-dev/symbolica?rev=c78cffc20f318df1fce50539a587cbe8ffc717c0#c78cffc20f318df1fce50539a587cbe8ffc717c0"
+      }
+    ],
+    "current": [
+      {
+        "name": "graphica",
+        "version": "3.0.1",
+        "source": "git+https://github.com/symbolica-dev/symbolica?branch=main#1a1829b1f3d0a88b53b44085b3b9f34ef77945b3"
+      },
+      {
+        "name": "numerica",
+        "version": "3.0.1",
+        "source": "git+https://github.com/symbolica-dev/symbolica?branch=main#1a1829b1f3d0a88b53b44085b3b9f34ef77945b3"
+      },
+      {
+        "name": "symbolica",
+        "version": "3.0.1",
+        "source": "git+https://github.com/symbolica-dev/symbolica?branch=main#1a1829b1f3d0a88b53b44085b3b9f34ef77945b3"
+      }
+    ],
+    "staticChecks": {
+      "rustfmt": "fresh pinned check passed",
+      "typst": "fresh pinned compile passed",
+      "registryTitle": "fresh parsed exact title passed"
+    },
+    "diagnosticErrorPolicy": {
+      "capture": "Result return with ? for model/card/settings serialization and IO; no swallowed errors or fallback",
+      "traits": "Write and SubSetLike imported at module scope",
+      "observer": "Borrowed &CLIState; writers take &self; fingerprint only initializes its semantic identity cache; all raw outputs reproduce prior runs",
+      "styleObservation": {
+        "priority": "P3",
+        "status": "open; nonblocking for this provenance certificate",
+        "locations": [
+          "tests/tests/test_feyngen.rs:695",
+          "tests/tests/test_feyngen.rs:720",
+          "tests/tests/test_feyngen.rs:748"
+        ],
+        "detail": "The diagnostic retains qualified type paths fs::File::create and serde_json::Value::Array, and a qualified serde_json::json! invocation. CONTRIBUTING Imports And Paths asks for imports at ordinary use sites. File/Value paths are inherited from round1; json! occurs also in the new capture. Import-policy cleanup remains before full code-policy acceptance; no numerical or provenance consequence."
+      }
+    }
+  },
+  "settingsCompleteness": {
+    "fullyEmittedGlobalSettingsEqualExceptStatePath": true,
+    "fullyEmittedRuntimeSettingsEqual": true,
+    "defaultRuntimeBytes": 3031,
+    "globalSettingsBytes": 3052,
+    "defaultRuntimeSha256": "63aface25b6d5d154e28b2591b3753a03cc10c02ed87ed2054ff9c09e957a612",
+    "cliDefinitionDefaultBlocksEqual": [
+      "pub struct CLISettings {",
+      "impl Default for CLISettings {"
+    ],
+    "runtimeSourceDifference": [
+      "crates/gammalooprs/src/settings/runtime/kinematic/improvement.rs"
+    ],
+    "onlyImportsDiffer": true,
+    "liveSettings": "Default-suppressed JSON is interpreted using the identical default owner definitions and fresh fully emitted helper settings; not assumed complete from {} alone.",
+    "session": "SessionSettings is serde-skipped and defaults read_only_state=false, origin=None, warnings=[]; helper uses RunHistory::default; import accepts only mutable State and Generate accepts immutable global/runtime settings."
+  },
+  "inventory": [
+    "A\tdocs/architecture/evidence/generation-integration/wp3/pocket-weight-diagnosis/compare-filter.mjs",
+    "A\tdocs/architecture/evidence/generation-integration/wp3/pocket-weight-diagnosis/current-filter.json",
+    "A\tdocs/architecture/evidence/generation-integration/wp3/pocket-weight-diagnosis/diagnosis.json",
+    "A\tdocs/architecture/evidence/generation-integration/wp3/pocket-weight-diagnosis/graph-join-index.json",
+    "A\tdocs/architecture/evidence/generation-integration/wp3/pocket-weight-diagnosis/index-join.mjs",
+    "A\tdocs/architecture/evidence/generation-integration/wp3/pocket-weight-diagnosis/join-graphs.mjs",
+    "A\tdocs/architecture/evidence/generation-integration/wp3/pocket-weight-diagnosis/live-import-provenance.json",
+    "A\tdocs/architecture/evidence/generation-integration/wp3/pocket-weight-diagnosis/live-post-import-current-settings.json",
+    "A\tdocs/architecture/evidence/generation-integration/wp3/pocket-weight-diagnosis/live-post-import-model.json",
+    "A\tdocs/architecture/evidence/generation-integration/wp3/pocket-weight-diagnosis/live-post-import-parameters.json",
+    "A\tdocs/architecture/evidence/generation-integration/wp3/pocket-weight-diagnosis/live-post-import-source43-settings.json",
+    "A\tdocs/architecture/evidence/generation-integration/wp3/pocket-weight-diagnosis/source43-filter.json",
+    "A\tdocs/architecture/evidence/generation-integration/wp3/pocket-weight-diagnosis/validate-live-import.mjs",
+    "A\tdocs/architecture/evidence/generation-integration/wp3/pocket-weight-diagnosis/validate-receipt.mjs",
+    "A\tdocs/architecture/generation-pocket-weight-diagnosis.typ",
+    "M\tdocs/developers.toml",
+    "M\ttests/tests/test_feyngen.rs"
+  ],
+  "protectedFiles": {
+    "Cargo.lock": {
+      "sha256": "def8dd7be5f208f4a290a4556081f7a63d10a5ae070c5df1808c1d350fa6161e",
+      "gitBlob": "8340c09d9780402372effb23a594523d8b7e8337"
+    },
+    "flake.lock": {
+      "sha256": "e10c5893b513d4c7120d841b47fbfddffb3ac4f1f5cb46a18c0f7542cbde8534",
+      "gitBlob": "c911542bae4a7396ecf759b95107ce0b9fd0fec2"
+    },
+    "nix-ci.nix": {
+      "sha256": "e031749e51a33ee48bc5c653d13c2dc7e7d3a51bddea77fc3c67d01ac217c540",
+      "gitBlob": "48afc8976a9289e1b0b298c942fe16da9209505d"
+    },
+    "nix/ci-workspace-graph.json": {
+      "sha256": "0654ccd013469a73316ac2e4441dc26297f33699acd4fd7ee28026d18ab74d1d",
+      "gitBlob": "aa7e6c92c824202a37f336df94f3610610688ab4"
+    }
+  },
+  "executionPolicy": {
+    "nixDevelopUsed": true,
+    "sharedEnvrc": "No parent .envrc present; direct nix develop used.",
+    "license": "Preserved exported SYMBOLICA_LICENSE or silently loaded current-user/XDG configuration; values not recorded.",
+    "testProducerRebuilt": false,
+    "nixSupportRealizations": "Nix realized shell/linnest-wasm/clinnet support derivations as logged; no duplicate cold test build, no manual cache seeding/deletion, no target/features override.",
+    "outputIsolation": "Each fresh run created a previously nonexistent review-owned output directory. TESTS_GAMMALOOP_STATE_PATH, GL_TEST_LOG_DIR and INSTA_PENDING_DIR point there. No expectation-record/update/bypass variables; helper clean=true and --clear-existing-processes remain active.",
+    "trackedEdits": false,
+    "refMoves": false,
+    "expectationChanges": false,
+    "productionChanges": false,
+    "nestedAgents": false,
+    "numeratorExpansion": false
+  },
+  "reviewerMechanicalFailures": {
+    "retained": true,
+    "description": "Preflight python3 was unavailable outside Nix. A review guard path replacement typo was corrected; an unsupported evolog template was replaced with default output; an audit attempted before historical replay completion was rerun after completion; a reviewer inventory-count typo (18 instead of observed 17) was corrected. These were reviewer tooling issues, not candidate failures. Logs/commands are retained. Sol initial format/registry failures and corrected final logs were also inspected and left intact."
+  },
+  "boundaryAssessment": "The first observed unequal boundary is the named source43 snapshot versus its own exact locked producer. Cross-kernel model/input and retained graph/cut/factor outputs agree. This does not date the first production bug, prove the literal author intent, or exclude a shared older physics defect.",
+  "snapshotDisposition": {
+    "bothCertificatesSupport": true,
+    "onlyRow": "failing::test_generate_aa_ttx_cross_section_slow_filter QCD2: 874 | -266 = -266 -> 874 | -186 = -186",
+    "condition": "ONLY under a separate concrete migration/test review preserving every other assertion and validating the exact unchanged process. No edit or actual recertification is performed or approved now.",
+    "basis": "Scope A provenance closure plus byte-exact preservation of Scope B complete fixed-case witnesses, independently derived factor math and bounded ghost-sign counterfactual."
+  },
+  "excluded": [
+    "Other rows, including the separate slow counterpart",
+    "General physics, independent exhaustive graph/cut enumeration, all color zeros or numerator identity",
+    "v4 runtime or MAIN31 per-graph certificate",
+    "Full WP3/39-43 integration, performance, distribution, frame proofs, CI gates, uploads, pushes, publication",
+    "Full repository Clippy/test suite or full Rust-policy acceptance"
+  ],
+  "preservation": {
+    "candidate": "5f7d96ba675f76dcb7e814e085c5f66ece13cb2b",
+    "historical": "81f7e3c0dcf9909472d22cc70a2bb2a79cef4c7c",
+    "trackedFilesMatchCommitsAndInitial": {
+      "candidate": 3555,
+      "historical": 3551
+    },
+    "allTaskReferencesUnchanged": true,
+    "scopeBRawInputsUnchanged": 3969,
+    "scopeBArtifactsUnchanged": 17,
+    "freshFilesBound": 4126,
+    "freshBindingsSha256": "4b098be6a59933d72821459f41e3c63375e2710d3d49d50674b5c8437f33591c",
+    "ownedProcesses": [],
+    "initialTrackedGuardSha256": "f347b40c11ad3d26c6bd094954ac1c6393c1e398870f5cd996ef82695f5f2d91",
+    "finalTrackedGuardSha256": "f347b40c11ad3d26c6bd094954ac1c6393c1e398870f5cd996ef82695f5f2d91",
+    "retainedDirectory": "/shared/lcnbr/dev/gammaloop/generation-pocket-weight-diagnosis/target/pocket-weight-diagnosis/review-astra-scope-a-round2-JOlXh9",
+    "retentionReason": "Independent review result, command trail, fresh live captures, original-to-fresh byte checks and final guards needed for later one-row migration review.",
+    "cleanup": "No owned background processes remain; no tracked edits or ref moves; all new retained files are under this ignored review directory. Failed reviewer logs are retained for audit rather than discarded."
+  },
+  "artifacts": {
+    "commands": "commands.json",
+    "finalGuards": "final-guards.json",
+    "fullTrackedGuards": [
+      "initial-guards.json",
+      "tracked-final.json"
+    ],
+    "freshBindings": "fresh-bindings.json",
+    "preservationAudit": "preservation-audit.json",
+    "settings": "settings-completeness.json",
+    "history": [
+      "history-1.diff",
+      "history-2.diff"
+    ],
+    "sourceChecks": "source-checks.json",
+    "inputInventory": "input-inventory.json",
+    "producerMetadata": "producer-metadata.json"
+  },
+  "artifactHashes": {
+    "commands.json": "698fec7fd1a43d6f017a8d4f6ea70739539c7ffa348a721a886f73d80177173d",
+    "final-guards.json": "d736d55d908dfe02b268432df208ebf4fdd4bfcd1d0bdae1052a2a5f85d73210",
+    "fresh-bindings.json": "4b098be6a59933d72821459f41e3c63375e2710d3d49d50674b5c8437f33591c",
+    "preservation-audit.json": "712e501935ba0519fbdf35df3186fde7701ee1bd978712dc07faa0c66617e40f",
+    "settings-completeness.json": "2358b59487d6594d15a3f959cdb2a9f0ec9bbe6def86b79c4a57216e8f0406f7",
+    "source-checks.json": "9337b903323688f14bc1fc6ca4c6ff50345c7480e93f711f54f78c4d04c0ee3c",
+    "input-inventory.json": "c62329dca7cc0ed2be93cd18ee602c81b4a0b32c950e34a379f1a5cf35c8f8e4",
+    "producer-metadata.json": "1553dcf406eef68d689f926f0533f198265ae66918af376337f41913a08d0a32",
+    "regenerated-index.json": "9cf9142426477b93aaf9fb7f88b962b346b0bce120738e16a52f7658b95dbe62",
+    "regenerated-current-filter.json": "96ffb26bdb9236b5eeeaf3106a5c9cd79306b9b29677c5dd5a8409e379938ce5",
+    "regenerated-source43-filter.json": "4d89ac92de51896cf56a5fa6bc33057371b402efd9d315e108269a5713495ff7",
+    "diagnosis.pdf": "a2ea0dd1a20d485dfed3bdfed1d498f18c4096f440272bbb910183d9862c0d8d"
+  }
+}

@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "status": "Complete cumulative source38 integrated; combined checks recorded separately; NEW independent Astra integration review required before39. WP3 incomplete.",
+  "status": "Integrated39\u201343 and specifically certified four test literals; combined validation pending. NEW independent Astra review required before44. WP3 incomplete.",
   "fixed_target": {
     "commit": "3f0df2a870806076820786994d4883decec8e9e3",
     "tree": "3c91ba47525c627fbc02d79f5afa1d58aa7c5b66",
@@ -699,7 +699,8 @@
       "planned_unit": "port-39",
       "planned_order": 34,
       "reason": "Retain compact-labelling frame anchoring and canonicalization tests on current tensor interfaces; separate stale bundled wasm output.",
-      "status": "pending"
+      "status": "Integrated candidate; combined validation and NEW Astra review pending",
+      "integration_receipt": "docs/architecture/evidence/generation-integration/wp3/main39-43/receipt.json"
     },
     {
       "commit": "f6c29e4b324692e8fa185ac356dc66e1b1edd783",
@@ -709,7 +710,8 @@
       "planned_unit": "port-40",
       "planned_order": 35,
       "reason": "Keep accurate sewn_tadpoles veto documentation on staged options.",
-      "status": "pending"
+      "status": "Integrated candidate; combined validation and NEW Astra review pending",
+      "integration_receipt": "docs/architecture/evidence/generation-integration/wp3/main39-43/receipt.json"
     },
     {
       "commit": "b69de4327cf27e8ba275300ab02d7151f472f047",
@@ -719,7 +721,8 @@
       "planned_unit": "port-41",
       "planned_order": 36,
       "reason": "Keep explicit previous filter settings in remaining run cards; adapt current schema, preserving accepted physics inventory.",
-      "status": "pending"
+      "status": "Integrated candidate; combined validation and NEW Astra review pending",
+      "integration_receipt": "docs/architecture/evidence/generation-integration/wp3/main39-43/receipt.json"
     },
     {
       "commit": "40c126b1ff91a0c8c95480cacc8f5ba3ee0f1309",
@@ -729,7 +732,8 @@
       "planned_unit": "port-42",
       "planned_order": 37,
       "reason": "Keep per-stage Python progress coalescing and caller-thread/error ordering contract.",
-      "status": "pending"
+      "status": "Integrated candidate; combined validation and NEW Astra review pending",
+      "integration_receipt": "docs/architecture/evidence/generation-integration/wp3/main39-43/receipt.json"
     },
     {
       "commit": "74fcd8e57e9fe256d4bc34b5d8ad93c97fc28848",
@@ -739,7 +743,8 @@
       "planned_unit": "port-43",
       "planned_order": 38,
       "reason": "Keep terminal-pocket cut coverage and original assertions on staged cut implementation.",
-      "status": "pending"
+      "status": "Integrated candidate; combined validation and NEW Astra review pending",
+      "integration_receipt": "docs/architecture/evidence/generation-integration/wp3/main39-43/receipt.json"
     },
     {
       "commit": "087bda82ce5a14dab092776ea470e66278dda12d",
@@ -1107,18 +1112,22 @@
     "limitation": "Seven inherited registry digests remain stale; carried explicitly for source31/final reconciliation."
   },
   "current_slice": {
-    "base": "100da20603a083d031c31bd4e8c6970fc44dda2f",
-    "source_order": 38,
-    "original_source": "15dd7e1b188dad112d7887bdc6d769125b2697a1",
-    "approved_preparation": "861c19e3e7afc067851b13f3e7548baa923286ee",
-    "approved_runtime_code": "f35643bae1a67fb6ec0c30151e3624f661cf5f96",
-    "code_commit": "925f739799572d23f46a762c895ebb85e5bd88d6",
-    "code_change": "xrvnmqsskwulwrrxoptluwlqzyykrxyz",
-    "receipt": "docs/architecture/evidence/generation-integration/wp3/source38/receipt.json",
-    "candidate_bookmark": "generation-integration-source38",
-    "status": "Complete cumulative source38 integrated; combined checks recorded separately; NEW independent Astra integration review required before39. WP3 incomplete.",
-    "accounted_source_rows": 38,
-    "accounted_planned_units": 33
+    "base": "2f46efe7491d5cb9c028aff12ac475e44bef0a92",
+    "source_order": [
+      39,
+      40,
+      41,
+      42,
+      43
+    ],
+    "approved_preparation": "595a2f4d921a119503db3d5c919b87fcc728a423",
+    "receipt": "docs/architecture/evidence/generation-integration/wp3/main39-43/receipt.json",
+    "candidate_bookmark": "generation-integration-units39-43",
+    "status": "Integrated39\u201343 and specifically certified four test literals; combined validation pending. NEW independent Astra review required before44. WP3 incomplete.",
+    "source43_algorithm": "No replay: current all_cuts production already satisfies terminal-pocket closure; original regression strengthened.",
+    "source45_later_accounting": "Only named failing aa QCD2 single-row intent is covered early under explicit approval. Source45 remains later ordered accounting; do not duplicate.",
+    "accounted_source_rows": 43,
+    "accounted_planned_units": 38
   },
   "staged_round1_review": {
     "verdict": "REQUEST_CHANGES",
@@ -1558,8 +1567,34 @@
     "code_change": "xrvnmqsskwulwrrxoptluwlqzyykrxyz",
     "receipt": "docs/architecture/evidence/generation-integration/wp3/source38/receipt.json",
     "candidate_bookmark": "generation-integration-source38",
-    "status": "Complete cumulative source38 integrated; combined checks recorded separately; NEW independent Astra integration review required before39. WP3 incomplete.",
+    "status": "APPROVED by both independent MAIN38 reviewers at2f46efe7; releases39 only; prior bindings retained.",
     "accounted_source_rows": 38,
     "accounted_planned_units": 33
+  },
+  "active_slice39_43": {
+    "base": "2f46efe7491d5cb9c028aff12ac475e44bef0a92",
+    "source_order": [
+      39,
+      40,
+      41,
+      42,
+      43
+    ],
+    "approved_preparation": "595a2f4d921a119503db3d5c919b87fcc728a423",
+    "receipt": "docs/architecture/evidence/generation-integration/wp3/main39-43/receipt.json",
+    "candidate_bookmark": "generation-integration-units39-43",
+    "status": "Integrated39\u201343 and specifically certified four test literals; combined validation pending. NEW independent Astra review required before44. WP3 incomplete.",
+    "source43_algorithm": "No replay: current all_cuts production already satisfies terminal-pocket closure; original regression strengthened.",
+    "source45_later_accounting": "Only named failing aa QCD2 single-row intent is covered early under explicit approval. Source45 remains later ordered accounting; do not duplicate.",
+    "accounted_source_rows": 43,
+    "accounted_planned_units": 38
+  },
+  "main38_review": {
+    "candidate": "2f46efe7491d5cb9c028aff12ac475e44bef0a92",
+    "verdict": "APPROVE",
+    "reviews": [
+      "docs/architecture/evidence/generation-integration/wp3/main39-43/main38-a.json",
+      "docs/architecture/evidence/generation-integration/wp3/main39-43/main38-b.json"
+    ]
   }
 }

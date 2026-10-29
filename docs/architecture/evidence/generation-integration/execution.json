@@ -645,7 +645,7 @@
     "code_change": "xrvnmqsskwulwrrxoptluwlqzyykrxyz",
     "receipt": "docs/architecture/evidence/generation-integration/wp3/source38/receipt.json",
     "candidate_bookmark": "generation-integration-source38",
-    "status": "Complete cumulative source38 integrated; combined checks recorded separately; NEW independent Astra integration review required before39. WP3 incomplete.",
+    "status": "APPROVED by both independent MAIN38 reviewers at2f46efe7; releases39 only; prior bindings retained.",
     "accounted_source_rows": 38,
     "accounted_planned_units": 33
   },
@@ -654,5 +654,31 @@
     "verdict": "APPROVE",
     "receipt": "docs/architecture/evidence/generation-integration/wp3/source38/main36-review.json",
     "scope": "Source36 only; releases38, not whole WP3."
+  },
+  "active_slice39_43": {
+    "base": "2f46efe7491d5cb9c028aff12ac475e44bef0a92",
+    "source_order": [
+      39,
+      40,
+      41,
+      42,
+      43
+    ],
+    "approved_preparation": "595a2f4d921a119503db3d5c919b87fcc728a423",
+    "receipt": "docs/architecture/evidence/generation-integration/wp3/main39-43/receipt.json",
+    "candidate_bookmark": "generation-integration-units39-43",
+    "status": "Integrated39\u201343 and specifically certified four test literals; combined validation pending. NEW independent Astra review required before44. WP3 incomplete.",
+    "source43_algorithm": "No replay: current all_cuts production already satisfies terminal-pocket closure; original regression strengthened.",
+    "source45_later_accounting": "Only named failing aa QCD2 single-row intent is covered early under explicit approval. Source45 remains later ordered accounting; do not duplicate.",
+    "accounted_source_rows": 43,
+    "accounted_planned_units": 38
+  },
+  "main38_review": {
+    "candidate": "2f46efe7491d5cb9c028aff12ac475e44bef0a92",
+    "verdict": "APPROVE",
+    "reviews": [
+      "docs/architecture/evidence/generation-integration/wp3/main39-43/main38-a.json",
+      "docs/architecture/evidence/generation-integration/wp3/main39-43/main38-b.json"
+    ]
   }
 }

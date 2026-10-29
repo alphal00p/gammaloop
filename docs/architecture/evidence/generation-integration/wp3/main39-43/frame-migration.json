@@ -1,0 +1,242 @@
+{
+  "schema": 1,
+  "reviewer": "new independent Astra MIGRATION/TEST review",
+  "verdict": "APPROVE",
+  "candidate": "a350d44c99477aa6c9dd3e23a605b3ab08ce2746",
+  "change": "orytwzvmpmuwxppznttnnvrzlzksvqyq",
+  "bookmark": "generation-frame-certificate",
+  "approved_certificate": "7dd0b0c160e9c1b62533b54217f1d62275dde157",
+  "hygiene": "8c4011890ba7cef3edc8be5d17ce3cc893c25aa6",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-frame-certificate",
+  "review_directory": "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/astra-migration-test-review-20261028T204716Z",
+  "independent_review": true,
+  "nested_agents_used": false,
+  "scope": "Prepared correction of exactly the three certified grouping-frame numerator digest literals, plus reviewed nonsemantic Python/Rust hygiene. No integration or publication approval.",
+  "blocking_findings": [],
+  "nonblocking_findings": [
+    {
+      "id": "MIGRATION-P3-IMPORT",
+      "severity": "P3",
+      "category": "Rust import policy",
+      "file": "crates/feynkit-generator/tests/generation_oracle/frames.rs",
+      "line": 97,
+      "finding": "The new diagnostic receipt closure still spells its argument type as feynkit_graph::FeynmanDiagram. CONTRIBUTING.typ requires importing the type at module scope; the prior Scope A import finding is therefore only partially closed.",
+      "requested_change": "Import FeynmanDiagram from feynkit_graph and use &FeynmanDiagram. Keep this as a small separately reviewed hygiene edit.",
+      "effect": "No semantic or fixture-dependency effect; nonblocking for this prepared three-row digest correction. Do not claim complete import-policy compliance."
+    }
+  ],
+  "exact_delta": {
+    "hygiene_files": 15,
+    "migration_files": 4,
+    "rust_migration_literal_changes": 3,
+    "other_row_fields_and_inputs_unchanged": true,
+    "production_algorithms_unchanged": true,
+    "other_source19_aa_ttbar_and_44_45_expectations_unchanged": true,
+    "default_test_selection_and_source30_source_ownership_unchanged": true
+  },
+  "literal_map": [
+    {
+      "test": "frames::comparison_frames_with_fermion_flow_reversals",
+      "case": "comparison-qed",
+      "old_hex": "0xbbb6f06b55b1dd03",
+      "old_decimal": 13526262874643750147,
+      "new_hex": "0xf2c181dfbe49930f",
+      "new_decimal": 17492405225653900047,
+      "old_hygiene_observed_actual": 17492405225653900047,
+      "expected_only_numerator_changed": true
+    },
+    {
+      "test": "frames::representative_frames_with_fermion_flow_reversals",
+      "case": "representative-qed",
+      "old_hex": "0xbd1d483fc596a496",
+      "old_decimal": 13627127486228112534,
+      "new_hex": "0x196ad47f7c361abc",
+      "new_decimal": 1831509842489383612,
+      "old_hygiene_observed_actual": 1831509842489383612,
+      "expected_only_numerator_changed": true
+    },
+    {
+      "test": "frames::representative_frames_with_left_right_symmetrization",
+      "case": "representative-lr",
+      "old_hex": "0x87988a044c993bcf",
+      "old_decimal": 9770711142649904079,
+      "new_hex": "0x9a59879459492f0e",
+      "new_decimal": 11122069825991028494,
+      "old_hygiene_observed_actual": 11122069825991028494,
+      "expected_only_numerator_changed": true
+    }
+  ],
+  "hygiene_verification": {
+    "all_12_formatter_ASTs_equal_to_exact_approved_blobs": true,
+    "retained_formatter_hashes_reproduced": 12,
+    "final_AST_equal_files": 10,
+    "remaining_final_AST_deltas": {
+      "corruption_controls.py": "exactly two set(generator) -> set-comprehension rewrites",
+      "generated_map_proof.py": "one immediately consumed lambda explicitly binds vm and external_map"
+    },
+    "explicit_lint_deltas_nonsemantic": true,
+    "exec_noqa_comment_nonsemantic": true,
+    "rust_module_order_and_import_changes_nonsemantic": true,
+    "qualified_type_residual": "MIGRATION-P3-IMPORT"
+  },
+  "fresh_checks": {
+    "tracked_blobs_match_candidate": 3558,
+    "approved_non_script_hashes_verified": 64,
+    "approved_script_blobs_verified_at_approved_commit": 12,
+    "pair_capture_manifest_entries": 2102,
+    "model_hook_manifest_entries": 18,
+    "three_preservation_tags_verified_in_jj_git_root": true,
+    "source_model_full_fingerprint_and_original_capture_bindings_reverified": true,
+    "substantive_proof_scripts": 11,
+    "positive_summary_objects_equal_frozen": 11,
+    "supplied_mutations_rejected_without_sha_guards": 19,
+    "independent_mutations_rejected_without_sha_guards": 5,
+    "old_hygiene_binary_named_failures_after_real_1_8_32_sequences": 3,
+    "old_failures_differ_only_in_numerator": true,
+    "new_named_tests_passed_per_separate_thread_setting": {
+      "1": 3,
+      "8": 3,
+      "32": 3
+    },
+    "new_named_tests_passed_with_combined_1_8_32_census_comparisons": 3,
+    "new_D65_typed_helper_passes": 1,
+    "new_live_effective_model_capture_equals_frozen": true,
+    "new_authoritative_model_fingerprint_probe_passes": 1,
+    "record_update_force_pass_modes_unset_for_all_row_assertions": true,
+    "dump_mode_unset_for_all_row_assertions": true,
+    "zero_test_row_runs": 0,
+    "ruff_format": "passed pinned 0.16.6",
+    "ruff_lint": "passed pinned 0.16.6",
+    "rustfmt": "passed pinned stable 2026-09-03",
+    "scoped_clippy": "passed with -D warnings",
+    "typst_migration_compile": "passed",
+    "registry_unique_matching_title": "passed"
+  },
+  "test_provenance": {
+    "candidate_build": "cargo test --locked -j 2 --profile ci-optim -p feynkit-generator --test generation_oracle --no-run --message-format=json",
+    "cargo_output_matches_retained_new_ELF_sha256": "0a621f4e50edc7a6c766c9e800a2c60b286b5b5622933567bec27c6f2d8c2f75",
+    "old_hygiene_retained_ELF_sha256": "917a2c341e65bdd40f8dfb4f7bb33ceffcd0549cfedd817ff8c32acd7867729a",
+    "features": [
+      "default",
+      "native"
+    ],
+    "profile": "ci-optim (inherits dev-optim; opt-level 2; debug assertions and overflow checks enabled)",
+    "current_full_locked_kernel": "1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
+    "genuine_thread_execution": "Exact compiled threads() -> census() -> Run::threads -> serial-on-caller at 1 / ThreadPoolBuilder::num_threads at 8 and 32 -> ordered generation/build/group; combined sequence asserts Scope::Exact censuses before row comparison. OS task sampling is supplemental and includes unrelated Symbolica workers, not a claimed exact Rayon worker census.",
+    "new_live_model_sha256": "37b1e770a5e33a49997bba8bb0c742aecb669efcb8841a40182bdcb343d354c8",
+    "model_fingerprint": "9d826a6ef2be57828b443ffcee31307e75f8c51d3de7c87b17817a21b5914876"
+  },
+  "fixture_readiness": {
+    "new_default_tests_requiring_ignored_local_capture_data": 0,
+    "capture_dependent_diagnostics_explicitly_ignored": true,
+    "missing_fixture_paths_fail_with_unwrap_rather_than_silently_pass": true,
+    "new_Rust_test_module_covered_by_existing_tests_rs_fileset": true,
+    "no_source_filter_broadening": true
+  },
+  "preservation": {
+    "git_root": "/shared/lcnbr/dev/gammaloop/main/.git",
+    "tags": {
+      "refs/tags/generation-frame-certificate-round1": "c5a19031d8a527ca61903728b6465187f3e87928",
+      "refs/tags/generation-frame-intermediate-diagnosis": "67f36295d41cdf872d978692c8aff93d3f3b855e",
+      "refs/tags/generation-frame-historical-original-capture": "3718714c791d40fb746dd9abc6eeb61fe86548c4"
+    },
+    "approved_and_hygiene_bookmarks_unchanged": true,
+    "approved_certificate_bytes_and_64_artifacts_unchanged": true,
+    "raw_pair_and_model_hook_evidence_unchanged": true,
+    "all_original_eight_retained_ELFs_verified": true,
+    "original_historical_rows_and_both_production_sources_preserved": true,
+    "NixCI_false_and_locks_uv_unchanged": true,
+    "historical_graphica": "Original frozen historical Cargo.lock uses Graphica 3.0.1 from crates.io; Symbolica/Numerica use c78cffc20f318df1fce50539a587cbe8ffc717c0. This review made no lock/pin change."
+  },
+  "fresh_vs_reused": {
+    "fresh": "All source/ref/hash/AST checks, 11 positive proof replays plus 24 rejecting controls, targeted old/current runtime checks, new effective-model capture, current typed helper and static checks above.",
+    "reused": "Approved Scope A/B structural equivalence and original producer qualification; historical 1/8/32 original assertions, historical typed D65 evidence, original pair observation source patches/captures. No historical cold build. Original missing pair-observation ELF limitation remains; retained later binaries are not replacements.",
+    "no_obsolete_record_relabelled_current": true,
+    "approved_certificate_not_regenerated": true
+  },
+  "review_harness_notes": [
+    "Initial preflight assumptions about optimization level (3 rather than actual 2) and embedded checkout spelling (8 rather than 7 hex digits) were corrected from Cargo/source evidence before row-result credit.",
+    "One old-binary run was terminated and awaited after a /proc thread sampling race; no result credit was taken for it, and the complete valid sequence was rerun.",
+    "An independent both-producer affine mutation rejects on the first producer before reading the second; the review harness now records the exercised read instead of requiring both producers be read after failure.",
+    "An initial historical lock assertion assumed registry Graphica was a git package; the exact frozen lock is retained and reported."
+  ],
+  "entitlement": "The frame-expectation gate can be reconciled with this certified three-row correction after actual main combined tests and a fresh independent review of that integration.",
+  "limits": [
+    "Exactly comparison-QED 60 groups/66 members, representative-QED 66/66, representative-LR 130/130; 256 groups and 262 members per original producer.",
+    "Complete factor-preserving structural and signed affine proof over qualified captures; only the D65 typed admission helper was executed in both pinned kernels in prior qualification. No private-cache identity, general grouping theorem, or graph-numerator expansion.",
+    "No authorization for other rows, general physics, full WP3, performance, distribution, integration, merge, publication, or full documentation-suite approval.",
+    "One nonblocking qualified-type import-policy residual remains."
+  ],
+  "read_only_and_cleanup": {
+    "tracked_edits": [],
+    "ref_moves": [],
+    "tracked_blobs_and_all_existing_shared_git_refs_unchanged": true,
+    "new_shared_internal_keep_refs_observed": {
+      "refs/jj/keep/3c38883164347bd376cafc5d92a0f74b1fa75b53": "3c38883164347bd376cafc5d92a0f74b1fa75b53",
+      "refs/jj/keep/58c5d8727f7f67867b723b3f67cf9e0ff763e909": "58c5d8727f7f67867b723b3f67cf9e0ff763e909",
+      "refs/jj/keep/7da9e92de733f544957f724ababeb87c7684c02e": "7da9e92de733f544957f724ababeb87c7684c02e"
+    },
+    "named_refs_moved": false,
+    "initial_guard": "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/astra-migration-test-review-20261028T204716Z/initial-guards.json",
+    "final_guard": "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/astra-migration-test-review-20261028T204716Z/final-guards.json",
+    "owned_running_processes": 0,
+    "Nix_overrides_cache_seeding_cache_deletion": false,
+    "review_outputs_ignored_under_target": true,
+    "retained": "Only this ignored review directory, including exact commands, source/ref guards, proof outputs, raw test/static logs, failure inventories, and generated migration-document PDF, for review and continuation."
+  },
+  "artifacts": {
+    "source-audit.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/astra-migration-test-review-20261028T204716Z/source-audit.json",
+      "sha256": "bf69a77960cb056bbfd93004ff88bf5d362124e8f29e1f72f0a86feddf7170f1"
+    },
+    "hygiene-audit.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/astra-migration-test-review-20261028T204716Z/hygiene-audit.json",
+      "sha256": "7b52a3185e854a87e5f9c5710a98e7d4b24a618319d2bedf5bb8c94fcff27cc6"
+    },
+    "source-controls.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/astra-migration-test-review-20261028T204716Z/source-controls.json",
+      "sha256": "ffb421b4beb11b413825a6d944b1342c8b97a2b2186d20647507f7eac7445223"
+    },
+    "candidate-build-binding.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/astra-migration-test-review-20261028T204716Z/candidate-build-binding.json",
+      "sha256": "94a4515f1a9ffb9c35d090e91a5b536bee23118c4d25bc77cea1c14d8177f43b"
+    },
+    "test-results.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/astra-migration-test-review-20261028T204716Z/test-results.json",
+      "sha256": "a2a4cae1257c2c1521d1cdbcd57acc9f5c35f958c73d8928eed8b76fdb168cec"
+    },
+    "replay-results.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/astra-migration-test-review-20261028T204716Z/replay-results.json",
+      "sha256": "a5fcf474beed5aad3f57519d43cf7b229f678dfbeb6352c813fa62d0ff10006f"
+    },
+    "static-results.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/astra-migration-test-review-20261028T204716Z/static-results.json",
+      "sha256": "264dd7b11a4fbf530c77c632842403ccf315aaff1014108ea2a31fb834b91dbf"
+    },
+    "initial-guards.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/astra-migration-test-review-20261028T204716Z/initial-guards.json",
+      "sha256": "2c489ecee5712adc3fcfdd9ae1651dc1e7ed19dd6a44924428ccb25d668d64ef"
+    },
+    "final-guards.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/astra-migration-test-review-20261028T204716Z/final-guards.json",
+      "sha256": "cf2d6b1a3b50ffebaceae35ce92149d44894ddb9f493f1f00e600ca96025f55e"
+    },
+    "evidence-hashes.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/astra-migration-test-review-20261028T204716Z/evidence-hashes.json",
+      "sha256": "9529fc2951f649b6bf5bb0bc68d96d7a57aa9e1470fcadf5c208afa9e3149683"
+    },
+    "immutable-binary-guards.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/astra-migration-test-review-20261028T204716Z/immutable-binary-guards.json",
+      "sha256": "e8fad448cd34e3adb0b4cd1b446b9fcdbdda7b29e226b921e7bf7c230a93b98b"
+    },
+    "shared-ref-observation.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/astra-migration-test-review-20261028T204716Z/shared-ref-observation.json",
+      "sha256": "3fed8ecf451a579f2c11760276cae23eed34584a2227cd62568c18443de1c77a"
+    },
+    "commands.txt": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/astra-migration-test-review-20261028T204716Z/commands.txt",
+      "sha256": "6f711aac33be90fe8ffeecd061f023c897bf7492fb1d5bc0f4d24dad657b662c"
+    }
+  },
+  "self_hash": false
+}

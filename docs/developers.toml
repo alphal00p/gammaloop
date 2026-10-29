@@ -13,6 +13,86 @@ title = "Implemented architecture"
 summary = "How the current runtime, physics layers, parsers, and symbolic engines are organized."
 
 [[section.note]]
+id = "generation-integration-units39-43"
+title = "Ordered canonical frames and generation progress integration"
+summary = "Current MAIN39–43 canonical frames, progress lifecycle, terminal-pocket coverage and specifically certified test migrations."
+source = "docs/architecture/generation-integration-units39-43.typ"
+kind = "Implementation record"
+status = "Combined candidate; NEW independent Astra review before44"
+lifecycle = "investigation"
+owner = "unassigned"
+reviewed_at = "2026-10-29"
+review_ref = "2f46efe7491d5cb9c028aff12ac475e44bef0a92"
+products = ["gammaloop", "feynkit", "linnet"]
+topics = ["generation", "canonicalization", "progress", "validation"]
+
+[[section.note.scope]]
+path = "crates/linnet/src/half_edge/canon.rs"
+symbol = "native compact canonical labelling and physical node frames"
+anchor = "pub struct CanonicalForm<"
+# Reviewed intent preserved through current staged/interop/input owners; no changed physical conventions.
+digest = "f5196064803f370751b1afc6a5869eed70de2fbc"
+
+[[section.note.scope]]
+path = "crates/feynkit-py/src/generation/execution.rs"
+symbol = "caller-thread coalescing, one execution-wide cancellation and worker lifecycle"
+anchor = "const PROGRESS_INTERVAL:"
+# Reviewed intent preserved through current staged/interop/input owners; no changed physical conventions.
+digest = "90aa937d1161c8fb8db294e10af8d468fb260e73"
+
+[[section.note.scope]]
+path = "tests/tests/test_feyngen.rs"
+symbol = "named certified QCD2 row and current physical CLI controls"
+anchor = "fn feyngen_str("
+# Reviewed intent preserved through current staged/interop/input owners; no changed physical conventions.
+digest = "8e467698064d628e8a9038559997af20b4306e67"
+
+[[section.note]]
+id = "generation-frame-certificate"
+title = "Grouping-frame numerator equivalence certificate"
+summary = "Exact bounded factor-preserving equivalence of three frame-dependent grouped generation rows, pending independent Astra review."
+source = "docs/architecture/generation-frame-certificate.typ"
+kind = "Correctness investigation"
+status = "Bounded certificate pending independent Astra review"
+lifecycle = "investigation"
+owner = "unassigned"
+captured_at = "2026-10-28"
+evidence_revision = "59b57cead76e576fa9f23e3996f5614de939fe35"
+products = ["feynkit"]
+topics = ["generation", "grouping", "numerator", "validation"]
+review_triggers = ["crates/feynkit-generator/src/**", "crates/feynkit-generator/tests/generation_oracle/frames.rs"]
+
+[[section.note]]
+id = "generation-frame-migration"
+title = "Grouping-frame numerator digest migration"
+summary = "Three reviewed native-schema digest literals with old-fail/new-pass 1, 8 and 32 thread evidence; pending independent migration review."
+source = "docs/architecture/generation-frame-migration.typ"
+kind = "Correctness investigation"
+status = "Candidate pending independent Astra migration and test review"
+lifecycle = "investigation"
+owner = "unassigned"
+captured_at = "2026-10-28"
+evidence_revision = "7dd0b0c160e9c1b62533b54217f1d62275dde157"
+products = ["feynkit"]
+topics = ["generation", "grouping", "numerator", "validation"]
+review_triggers = ["crates/feynkit-generator/tests/generation_oracle/frames.rs"]
+
+[[section.note]]
+id = "generation-pocket-weight-migration"
+title = "Photon to top-pair QCD=2 single-row snapshot migration"
+summary = "Prepared correction of only the named aa-to-top-pair QCD=2 snapshot, with isolated old-fail/new-pass evidence and independent migration review pending."
+source = "docs/architecture/generation-pocket-weight-migration.typ"
+kind = "Execution record"
+status = "Prepared · independent Astra migration/test review pending"
+lifecycle = "investigation"
+owner = "unassigned"
+reviewed_at = "2026-10-28"
+review_ref = "5f7d96ba675f76dcb7e814e085c5f66ece13cb2b"
+products = ["feynkit", "gammaloop"]
+topics = ["generation", "weights", "testing", "integration"]
+review_triggers = ["tests/tests/test_feyngen.rs", "docs/architecture/evidence/generation-integration/wp3/pocket-weight-migration/**"]
+
+[[section.note]]
 id = "generation-mark-geometry"
 title = "First-principles mark geometry"
 summary = "Source38 geometry, source/notice audit, rebuilt artifacts and bounded validation on the reviewed source36 base."
@@ -601,9 +681,13 @@ anchor = "pub enum GenerationError {"
 # Dynamic rules retain one actual-owner admission and compact materialization.
 # Integration review intent: preserve authoritative metadata and the current owner;
 # scoped source reconciliation and regression results are recorded in WP3 units03-07.
-# SOURCE31 semantic attestation (candidate, not independent approval):
+# SOURCE31 semantic attestation (historical preparation; subsequently approved):
 # Removed free generate function is replaced by staged Request methods. Keep this full generation coordination owner with unique GenerationError anchor and add explicit staged.rs ownership. Request->DiagramSet->BuiltDiagramSet, Run caller execution, class pairing and template admission remain the described current API.
-digest = "0495bd293c86f81e8b817913f3e25e1918b62779"
+# MAIN39–43 owner attestation: compact physical-node anchoring uses the current canonical
+# labeller. Reduced selectors/transport/admitted history remain intact; all_cuts production
+# is unchanged and terminal-pocket tests strengthen its boundary. Four certified literal
+# migrations are test-only, not a production physics correction.
+digest = "5ba73ee8f0b70a9dc5b500e0e84caad9819eb377"
 
 [[section.note.scope]]
 path = "crates/feynkit-model/src/model.rs"

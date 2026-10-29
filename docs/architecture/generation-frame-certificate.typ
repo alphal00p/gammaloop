@@ -1,5 +1,14 @@
 = Grouping-frame numerator equivalence certificate
 
+== MAIN39–43 integration
+
+This approved preparation record is imported into the ordered MAIN39–43 candidate.
+The original source, proof and test bindings below remain historical; current combined
+checks and approvals are recorded in #link("evidence/generation-integration/wp3/main39-43/receipt.json")[the integration receipt].
+A NEW independent Astra combined review is required before44.
+
+== Historical preparation record
+
 This is an exact, bounded factor-preserving equivalence certificate for the three original numerator-digest rows in crates/feynkit-generator/tests/generation_oracle/frames.rs. It establishes equality of the historical and current producer values, including every original grouped member, under the original frames and tensor interfaces. The expectation literals remain unchanged. A new independent Astra review is required before any targeted native-schema digest recertification.
 
 == Frozen producers and request matrix

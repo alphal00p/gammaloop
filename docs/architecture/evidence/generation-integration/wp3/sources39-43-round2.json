@@ -1,0 +1,58 @@
+{
+  "status": "bounded correction candidate; pending fresh independent Astra scope-B rereview",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports",
+  "round1_source": "59b57cead76e576fa9f23e3996f5614de939fe35",
+  "round1_reference": "generation-frame-progress-ports-round1",
+  "round2_change": "prsuouym",
+  "kernel": "1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
+  "requested_by": [
+    "target/astra-source39-review-20261028T162445Z/review.json",
+    "target/review-scope-b-astra-59b57ce-20261028/review.json"
+  ],
+  "source_a": "Bounded approval of unchanged source39 frame code remains with round1; no scope-A code was edited.",
+  "file_inventory_since_round1": [
+    "crates/feynkit-py/src/generation/execution.rs",
+    "crates/feynkit-py/src/generation/tests.rs",
+    "docs/architecture/evidence/generation-integration/wp3/sources39-43-preparation.json",
+    "docs/architecture/evidence/generation-integration/wp3/sources39-43-round2.json"
+  ],
+  "correction": "When a Python progress callback returns False while a coalesced batch is draining, the existing executor cancels its token, skips later nonterminal snapshots in that drained batch, and still delivers its already-pending Done exactly once on the caller thread. A raised callback exception still aborts delivery and takes precedence over cancellation. No queue, worker callback path or native cut/frame behavior was added.",
+  "native_regression": {
+    "test": "generation::tests::progress_cancellation_delivers_terminal_once_on_the_calling_thread",
+    "real_workload": "QED e- e+ -> a a, tree-level, two diagrams; plus an already-built selection",
+    "positions": [
+      "synchronized Selection start, before Done can be queued",
+      "delayed Skeletons callback followed by Prepare, with Done already pending in the coalesced final batch"
+    ],
+    "controls": "Both positions test callback False and explicit token cancellation, incomplete reports, exact stage order, one terminal Done, caller-thread identity and no callbacks after return. Further cases retain original exception identity when Prepare raises and when Done raises after Prepare returned False.",
+    "pre_fix_binary": "target/review-scope-b-astra-59b57ce-20261028/progress_probe",
+    "pre_fix_probe_sha256": "72a1f5a589568b401b3bf3abac120beab66faa50edbf76d1d3804a9b0ee8dc98",
+    "pre_fix_log": "target/generation-frame-progress-ports-round2/pre-fix-native.log",
+    "pre_fix_log_sha256": "a993bb37c984d6a17ef514efcfd8be8a711ee3ac042d73c4c6bf51882224b0ea",
+    "pre_fix_result": "exit 1: final Done was discarded after Prepare(2)",
+    "post_fix_test_binary": "/common/build-cache/lcnbr/70/4b25d004416d5c/ci-optim/deps/feynkit_py-d1315a1f051070a0",
+    "post_fix_test_features": ["default", "native", "ufo"],
+    "post_fix_test_binary_sha256": "d86fb66ef43baf355676a468cdc4b61f864d8363f588b7fbc4d4e3cc1b5aba51",
+    "post_fix_log": "target/generation-frame-progress-ports-round2/terminal-regression-final.log",
+    "post_fix_log_sha256": "75812a64e0f5766e69b6a07582e7c9369c215c653e37c6a6d445a9647218344e",
+    "post_fix_result": "1/1 pass in ci-optim native Python binding test; separate process registered the actual community module"
+  },
+  "other_checks": {
+    "progress_controls": "9/9 existing exact native binding tests passed in fresh processes from the same post-fix binary; target/generation-frame-progress-ports-round2/progress-controls.log",
+    "progress_controls_log_sha256": "f5f7bed42707207a6d91e16272548d6cd6e15920ff2c58e260fb008cf57fc7e2",
+    "format": "cargo fmt --all --check passed",
+    "clippy": "cargo clippy --locked --profile ci-optim -p feynkit-py --lib -- -D warnings passed",
+    "stub_owner": "fresh cargo run --locked --profile ci-optim -p alphal00p-docs-python-exporter --features feynkit -- feynkit-community docs/api/python/feynkit-community.pyi --check passed",
+    "stub_exporter_sha256": "95eee643d99be9df3de4bdd837b83a53adcbe7957e4ffabeef1722a66530a60a",
+    "stub_copies_sha256": "bf9d4ce3f4b5f3871c39164d3c11db248123eecd8a1939a845ad7569da4de92f",
+    "documentation": "102/102 canonical unique-anchor Git-blob scopes valid; FeynKit tutorial title matches registry",
+    "documentation_log_sha256": "47a81bfadc222fbef96746cd54d66b604db5c2b6c998c55d54a5c28ded4914d5",
+    "active_receipt": "Corrected real binding to 3575 actual retained diagrams and identified the separate 10000-iteration PendingProgress test as synthetic. Round1 receipt and logs remain frozen under its bookmark and target review paths."
+  },
+  "unchanged_blockers": [
+    "Original source43 aa->ttbar QCD2 874|-266 assertion still produces 874|-186 on both round1 and source31; separate generation-pocket-weight-diagnosis owns it. No assertion or weight code was edited.",
+    "Three older frame hashes remain open in separate generation-frame-certificate; source-A approval does not close them.",
+    "Ordered sources32-36 and separately reviewed source38 still precede39-43 before main integration."
+  ],
+  "limits": "No installed-extension subprocess qualification, main integration, source44/45 snapshot edit, upload, push, PR, publication or NixCI enablement. The prior physics, source19, SM and four-loop artifacts are preserved and are not claimed as new round2 runs."
+}

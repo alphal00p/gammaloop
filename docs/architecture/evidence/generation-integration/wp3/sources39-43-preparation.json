@@ -1,0 +1,128 @@
+{
+  "status": "preparation candidate; independent Astra review required; ordered main integration not authorized by this receipt",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-frame-progress-ports",
+  "base": "191aaf7b77018e377a9e5e4e3b9c88357218aa48",
+  "bookmark": "generation-frame-progress-ports",
+  "file_inventory_scope": "The 23 listed paths are the frozen round1 59b57ce candidate inventory; the round2 receipt records its four-path correction delta.",
+  "kernel": "1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
+  "sources": [
+    {
+      "order": 39,
+      "original": "854c4a7a4ac22ef6987e9446092560a3363f5d77",
+      "original_parent": "15dd7e1b188dad112d7887bdc6d769125b2697a1",
+      "prepared_change": "nkvssyzq",
+      "prepared_commit": "f34edfd3dc6ea02a310c290cbd1e594bfb276b1c",
+      "prepared_parent": "191aaf7b77018e377a9e5e4e3b9c88357218aa48",
+      "disposition": "Ported compact physical-node anchoring through current canonical labelling and retained staged child HedgeGraph import. Added original Linnet edge-order test. Historical crates/linnest/typst/linnest.wasm binary excluded; rendering lane owns reproducible asset generation. No speedup claimed."
+    },
+    {
+      "order": 40,
+      "original": "f6c29e4b324692e8fa185ac356dc66e1b1edd783",
+      "original_parent": "854c4a7a4ac22ef6987e9446092560a3363f5d77",
+      "prepared_change": "xqzwowqq",
+      "prepared_commit": "236061b45c2669eaea6bd35aaaaf0400dd67bf1a",
+      "prepared_parent": "f34edfd3dc6ea02a310c290cbd1e594bfb276b1c",
+      "disposition": "Documented true as the sewn-tadpole veto in Rust and Python source; all three generated stub copies match the final canonical exporter output. Actual passes_sewn_filter returns early only when the flag is false."
+    },
+    {
+      "order": 41,
+      "original": "b69de4327cf27e8ba275300ab02d7151f472f047",
+      "original_parent": "f6c29e4b324692e8fa185ac356dc66e1b1edd783",
+      "prepared_change": "uqwponlq",
+      "prepared_commit": "53dc17d57d57dc00db47d7faa9dd0a0abb7e1f34",
+      "prepared_parent": "236061b45c2669eaea6bd35aaaaf0400dd67bf1a",
+      "disposition": "Added only previous self-energy, snail, tadpole, blob and spectator options to five run cards. Current TOML parses and explicit flags are present; no target, tolerance, seed, normalization or default policy changed."
+    },
+    {
+      "order": 42,
+      "original": "40c126b1ff91a0c8c95480cacc8f5ba3ee0f1309",
+      "original_parent": "b69de4327cf27e8ba275300ab02d7151f472f047",
+      "prepared_change": "ooskqsmm",
+      "prepared_commit": "685288ce5696dc640f188ae467576de87e74c2f3",
+      "prepared_parent": "53dc17d57d57dc00db47d7faa9dd0a0abb7e1f34",
+      "disposition": "Coalesces latest snapshots by stage in a 150 ms interval while retaining caller-thread callback dispatch, forced Done and numerator/selection starts, cancellation, original exception order and single Marimo spinner. Canonical exporter regenerated three matching stubs."
+    },
+    {
+      "order": 43,
+      "original": "74fcd8e57e9fe256d4bc34b5d8ad93c97fc28848",
+      "original_parent": "40c126b1ff91a0c8c95480cacc8f5ba3ee0f1309",
+      "prepared_change": "wqyxrulo",
+      "prepared_parent": "685288ce5696dc640f188ae467576de87e74c2f3",
+      "disposition": "Current all_cuts already absorbs terminal-free complement components. Ported original Linnet and generator pocket regressions, retained CLI physical assertions, and refreshed the unique-anchor generation documentation digest with an explicit unresolved gate. No production cut algorithm or expected physics weights changed."
+    }
+  ],
+  "file_inventory": [
+    "benchmarks/performance/gg-hhh-topology.toml",
+    "crates/feynkit-generator/src/generation.rs",
+    "crates/feynkit-generator/src/options.rs",
+    "crates/feynkit-py/python/symbolica/community/hepkit/__init__.pyi",
+    "crates/feynkit-py/src/generation.rs",
+    "crates/feynkit-py/src/generation/execution.rs",
+    "crates/feynkit-py/src/generation/specs.rs",
+    "crates/feynkit-py/src/generation/tests.rs",
+    "crates/feynkit-py/src/progress.rs",
+    "crates/feynkit-py/tests/installed_process.py",
+    "crates/linnet/src/half_edge/canon.rs",
+    "crates/linnet/src/half_edge/canon/tests.rs",
+    "crates/linnet/src/half_edge/tests.rs",
+    "docs/api/python/feynkit-community.pyi",
+    "docs/architecture/evidence/generation-integration/wp3/sources39-43-preparation.json",
+    "docs/developers.toml",
+    "docs/products/feynkit/content/tutorial.typ",
+    "examples/cli/epem_a_ddx/NLO/epem_a_ddx_NLO.toml",
+    "examples/cli/epem_a_ttxh/NLO/epem_a_tth_NLO.toml",
+    "examples/cli/epem_a_ttxh/NNLO/epem_a_tth_NNLO.toml",
+    "examples/cli/epem_a_ttxh/NNLO_user_experiment/epem_a_tth_NNLO.toml",
+    "examples/notebooks/symbolica-host/python/symbolica/community/hepkit/__init__.pyi",
+    "tests/tests/test_feyngen.rs"
+  ],
+  "technical_dependency_deferrals": [],
+  "integration_gate": "Sources 32-36 and separately reviewed source38 must precede 39-43 on main. This workspace contains none of their unreviewed code and does not claim that gate cleared.",
+  "binary_paths": {
+    "generator_ci_optim_test": "/common/build-cache/lcnbr/70/4b25d004416d5c/ci-optim/deps/feynkit_generator-820ca450194b8779",
+    "linnet_ci_optim_test": "/common/build-cache/lcnbr/70/4b25d004416d5c/ci-optim/deps/linnet-7d8f725f1a9b558a",
+    "feynkit_py_ci_optim_test": "/common/build-cache/lcnbr/70/4b25d004416d5c/ci-optim/deps/feynkit_py-d1315a1f051070a0",
+    "four_loop_ci_optim_example": "target/ci-optim/examples/four_loop_numerator",
+    "candidate_feyngen_ci_optim_test_retained": "target/generation-frame-progress-ports/candidate-test_feyngen-9581d43dfd98ca33",
+    "base31_feyngen_ci_optim_test_retained": "target/generation-frame-progress-ports/base31-test_feyngen-9581d43dfd98ca33"
+  },
+  "binary_sha256": {
+    "generator_ci_optim_test": "659c69d9bf9fba78b3f69a3473ae242e19d34fc974caeda5fd32bce0aabb4278",
+    "linnet_ci_optim_test": "00c23f5ba5878b2e8ff5e1f976829cf668ca6a5c52013c7d12a5ee8c6692469f",
+    "feynkit_py_ci_optim_test": "1285ea4a0d841251c418ab656439657564dce4ab811dd5264ae5a291cc26682b",
+    "four_loop_ci_optim_example": "ed6a2eb809096daee6b3b09187c95cb94a7426fe1460c9599a7fd8ff8c13fe65",
+    "candidate_feyngen_ci_optim_test_retained": "4a4ad5827ac3da6895075584028b143ac37cf3ebcda795b8ce785f34d01c50f2",
+    "base31_feyngen_ci_optim_test_retained": "beb5c0aa1a2c85210eae5a89943598f1d9585d08c59f5b079eba4ac604e9c31d"
+  },
+  "checks": {
+    "canonical_physical_frames": "5/5 pass",
+    "compact_edge_order": "1/1 pass",
+    "generator_terminal_pockets": "1/1 pass",
+    "linnet_terminal_pockets": "1/1 pass",
+    "admission_transport_controls": "7/7 pass",
+    "oriented_and_zero_controls": "5/5 pass",
+    "ignored_group28_original_pair": "1/1 pass with --exact --ignored",
+    "python_streaming_real_binding": "1/1 pass; the QCD two-loop request retained 3575 actual diagrams, including final Dressing, Prepare and Done counts of 3575",
+    "python_pending_queue_synthetic": "1/1 pass; 10000 simulated diagram iterations feed 20000 alternating Dressing/Prepare snapshots to PendingProgress; this is not a real generation count",
+    "python_caller_error_cancel_marimo_controls": "7/7 pass",
+    "four_loop_inventory": "4664 retained / 306 zero at 1, 8 and 32 threads; original example assertions passed",
+    "sm_filtered_inventory": "3150 | -9861/16 at 1 and 8 threads; original two Lorentz-zero assertions passed",
+    "five_run_cards": "TOML parse and explicit current flags pass",
+    "feynkit_stub_check": "canonical exporter --check pass; three copies have identical SHA-256 bf9d4ce3f4b5f3871c39164d3c11db248123eecd8a1939a845ad7569da4de92f",
+    "focused_clippy": "ci-optim linnet, feynkit-generator and feynkit-py libs with -D warnings pass",
+    "format": "cargo fmt --all --check pass",
+    "typst": "tutorial fragment compiles with --root .",
+    "documentation_scopes": "102/102 unique-anchor Git-blob digests valid; FeynKit tutorial title matches registry"
+  },
+  "unresolved_original_case": {
+    "test": "failing::test_generate_aa_ttx_cross_section_slow_filter",
+    "inputs": "sm.json; a a > t t~; QED^2==4; QCD=0/1/2; no grouping; zero-color and self-energy/snail/tadpole filters; one blob; zero spectators",
+    "ordered_stages": "model import -> staged enumeration/dressing -> sewn and topology filtering -> cut partitions -> numerator/color work -> retained graph weights -> CLI summary",
+    "last_equal_observed_boundary": "source31 and candidate both generate 4, 40 and 874 graphs for QCD=0,1,2; QCD=0 is -4 and QCD=1 is -40 on both",
+    "first_unequal_historical_observable": "historical source43 assertion expects QCD=2 874 | -266; both source31 and candidate produce 874 | -186",
+    "exclusions": "Source39 compact anchoring and source43 test-only delta cannot explain the candidate-versus-source31 difference; their exact CLI result is identical. No arbitrary snapshot update or cut fix was made.",
+    "next_comparison": "Compare exact QCD=2 topology keys, cut provenance and per-graph weights between the historical v4 route and staged source31 before touching numerator algebra; the historical receipt supplies only its total, so this gate remains open."
+  },
+  "retained_review_artifacts": "target/generation-frame-progress-ports/ contains exact-source test binaries, paired CLI failure logs, frame and cut logs, progress logs and 1/8/32 four-loop logs. tests/artifacts/feyn_gen_generation_test is the last source31 failing aa->ttbar state; the two SM state directories are from the candidate. Shared Cargo/Nix caches are preserved. No task background process is retained.",
+  "limits": "No matched performance measurement, source19 canonical digest recertification, old three-frame-hash gate closure, installed extension subprocess check, full documentation site check, upload, push, PR, CI enablement or main integration is claimed."
+}

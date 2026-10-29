@@ -17,9 +17,8 @@
 //! open, so it is not sampled here.
 
 use feynkit_generator::{Classes, GraphGroupingOptions, Grouping, Naming, NumeratorOptions, Run};
-use feynkit_graph::FeynmanDiagram;
-use feynkit_graph::momentum_symbol;
 use feynkit_graph::symbols::vertex_index;
+use feynkit_graph::{FeynmanDiagram, momentum_symbol};
 use feynkit_model::Model;
 use serde_json::{Value, json};
 use spenso::structure::representation::{Minkowski, RepName};
