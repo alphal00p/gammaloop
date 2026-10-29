@@ -39,7 +39,10 @@ def visible_nodes(node):
 
 def visible(node):
     text = "".join(child.text or "" for child in visible_nodes(node))
-    return "".join(unicodedata.normalize("NFKC", text).split()).replace("·", "⋅")
+    text = unicodedata.normalize("NFKC", text).translate(
+        dict.fromkeys(map(ord, "\u2061\u2062\u2063\u2064"))
+    )
+    return "".join(text.split()).replace("·", "⋅")
 
 
 class OpenPortDisplayTests(unittest.TestCase):
@@ -88,18 +91,18 @@ class OpenPortDisplayTests(unittest.TestCase):
                         self.assertNotEqual(nodes[i - 1].tag, "mspace")
                         self.assertNotEqual(nodes[i + 1].tag, "mspace")
                     if value == product:
-                        self.assertIn(visible(root), ("(p⋅q)(r⋅s)", "(r⋅s)(p⋅q)"))
+                        self.assertIn(visible(root), ("p⋅qr⋅s", "r⋅sp⋅q"))
                         gaps = [
                             n for n in nodes[dots[0] + 1 : dots[1]] if n.tag == "mspace"
                         ]
                         self.assertEqual(len(gaps), 1)
-                        self.assertEqual(gaps[0].attrib["width"], "0.12em")
+                        self.assertEqual(gaps[0].attrib["width"], "0.167em")
                     else:
                         self.assertFalse(any(n.tag == "mspace" for n in nodes))
                     if value == power:
                         powers = [node for node in nodes if node.tag == "msup"]
                         self.assertEqual(len(powers), 1)
-                        self.assertEqual(visible(powers[0][0]), "(p⋅q)")
+                        self.assertEqual(visible(powers[0][0]), "p⋅q")
                         self.assertEqual(visible(powers[0][1]), "2")
                     if value == single:
                         self.assertEqual(visible(root), "p⋅q")
@@ -149,7 +152,7 @@ class OpenPortDisplayTests(unittest.TestCase):
         p = TensorName.vector("open_display::p")(Representation.mink(4))
         self.assert_renderers_agree(p, "p□")
         scalar_product = dot(p, p)
-        self.assert_renderers_agree(scalar_product**2, "(p⋅p)2")
+        self.assert_renderers_agree(scalar_product**2, "p⋅p2")
         self.assertNotIn("□", scalar_product.format_tensor())
         self.assertNotIn(r"\square", scalar_product.to_latex())
         self.assert_renderers_agree(gamma * gamma, "[γ□γ□]□0□1")
