@@ -744,20 +744,6 @@ impl ColorAlgebraSimplifier {
             && color_adjoint_dimension(&end).as_ref() == Some(&dimension)
         {
             let rep = adjoint_rep(dimension.clone());
-            if let [left, right] = factors.as_slice()
-                && let Some((left_slot, _)) = adjoint_generator(rep.as_view(), left.as_view())
-                && let Some((right_slot, _)) = adjoint_generator(rep.as_view(), right.as_view())
-                && (left_slot == end.as_view() || right_slot == start.as_view())
-                && let AtomView::Fun(chain) = chain
-                && let Ok(indexed) = self.dummies.materialize_indexed_chain(chain)
-                && let Some(reduced) =
-                    self.simplify_two_f_loop_product(&ProductView::parse(indexed.as_view()))
-            {
-                // A side port can close a loop through the opposite endpoint.
-                // Reuse the two-f owner for its summed-slot, orientation and
-                // dimension checks; publish only the contraction, not an opening.
-                return Some(reduced);
-            }
             for i in 0..factors.len().saturating_sub(1) {
                 let Some((left, left_weight)) =
                     adjoint_generator(rep.as_view(), factors[i].as_view())
@@ -803,6 +789,13 @@ impl ColorAlgebraSimplifier {
             && let Some(rewritten) = Self::simplify_separated_chain_casimir(&start, &end, &factors)
         {
             return Some(rewritten);
+        }
+
+        // Any other summed label repeated within an adjoint chain, such as an
+        // endpoint reappearing as a distant generator label, closes a cycle
+        // of structure constants inside the chain.
+        if ChainView::parse(chain).is_some_and(|line| line.closes_adjoint_cycle()) {
+            return self.simplify_opened_adjoint_cycle(&ProductView::parse(chain), &[0], false);
         }
 
         None
@@ -1279,6 +1272,7 @@ impl ColorAlgebraSimplifier {
                     .inspect(|_| self.certificate.expansion.set(true))
             })
             .or_else(|| self.simplify_adjoint_chain_connection(&product))
+            .or_else(|| self.simplify_adjoint_chain_cycle(&product, whole_term))
             .or_else(|| self.distribute_color_sum_factor(&product, complete, whole_term))
             .or_else(|| self.simplify_embedded_color_node(&product, complete, whole_term))
             .or_else(|| {
@@ -1359,6 +1353,50 @@ impl ColorAlgebraSimplifier {
             }
         }
         None
+    }
+
+    /// An adjoint chain is a path of structure constants in matrix notation,
+    /// but the loop identities read explicit structure constants only. Which
+    /// structure constants the contractor collects into chains depends on
+    /// label order, so a cycle through a chain and other factors must reduce
+    /// as the same cycle of explicit structure constants does.
+    fn simplify_adjoint_chain_cycle(
+        &self,
+        product: &ProductView,
+        whole_term: bool,
+    ) -> Option<Atom> {
+        let open = product.adjoint_chains_on_cycles();
+        if open.is_empty() {
+            return None;
+        }
+        self.simplify_opened_adjoint_cycle(product, &open, whole_term)
+    }
+
+    /// The structure-constant loop identities on `product` with the chains at
+    /// `open` written as structure constants, using the source's reserved
+    /// dummy state. Commit only a loop identity, never the opening itself,
+    /// which the contractor would collect again.
+    fn simplify_opened_adjoint_cycle(
+        &self,
+        product: &ProductView,
+        open: &[usize],
+        whole_term: bool,
+    ) -> Option<Atom> {
+        let factors = product
+            .factors
+            .iter()
+            .enumerate()
+            .map(|(index, factor)| match factor.atom {
+                AtomView::Fun(chain) if open.contains(&index) => {
+                    self.dummies.materialize_indexed_chain(chain).ok()
+                }
+                atom => Some(atom.to_owned()),
+            })
+            .collect::<Option<Vec<_>>>()?;
+        let candidate = Atom::mul_many(factors.iter());
+        let candidate = ProductView::parse(candidate.as_view());
+        self.simplify_two_f_loop_product(&candidate)
+            .or_else(|| self.simplify_adjoint_loop_product(&candidate, whole_term))
     }
 
     // Preserve main's exact singlet/adjoint projection after the local colour
@@ -3003,6 +3041,36 @@ impl<'a> ChainView<'a> {
             factors: factors.to_vec(),
         })
     }
+
+    /// The ports of an adjoint chain read as a path of structure constants:
+    /// its endpoints and the label of every generator. `None` unless every
+    /// matrix is a generator of the endpoints' adjoint representation.
+    fn adjoint_ports(&self) -> Option<Vec<AtomView<'a>>> {
+        let dimension = color_adjoint_dimension(&self.start)?;
+        if color_adjoint_dimension(&self.end).as_ref() != Some(&dimension)
+            || self.factors.is_empty()
+        {
+            return None;
+        }
+        let representation = adjoint_rep(dimension);
+        let mut ports = vec![self.start, self.end];
+        for &matrix in &self.factors {
+            ports.push(adjoint_generator(representation.as_view(), matrix)?.0);
+        }
+        Some(ports)
+    }
+
+    /// Whether a summed port repeats within this adjoint chain, closing a
+    /// cycle of structure constants inside it.
+    fn closes_adjoint_cycle(&self) -> bool {
+        let Some(ports) = self.adjoint_ports() else {
+            return false;
+        };
+        let mut matcher = SlotMatcher::default();
+        ports.iter().enumerate().any(|(position, &port)| {
+            ports[..position].contains(&port) && is_summed_loop_port(&mut matcher, port)
+        })
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -3220,6 +3288,90 @@ impl<'a> ProductView<'a> {
 
     fn len(&self) -> usize {
         self.factors.len()
+    }
+
+    /// The adjoint chains on a cycle of structure constants through other
+    /// factors. Adjoint chains and structure constants are joined by each
+    /// summed port that exactly two of them share; a port repeated within one
+    /// factor is that factor's own contraction (see
+    /// [`ChainView::closes_adjoint_cycle`]). A chain lies on a cycle when two
+    /// of its connections reach the same component of the other factors.
+    fn adjoint_chains_on_cycles(&self) -> Vec<usize> {
+        let chains = self
+            .factors
+            .iter()
+            .map(|factor| factor.chain.as_ref().and_then(ChainView::adjoint_ports))
+            .collect::<Vec<_>>();
+        if chains.iter().all(Option::is_none) {
+            return Vec::new();
+        }
+        let mut matcher = SlotMatcher::default();
+        let mut occurrences = Vec::new();
+        for (index, (factor, chain)) in self.factors.iter().zip(&chains).enumerate() {
+            let ports = match (chain, &factor.structure) {
+                (Some(ports), _) => ports.as_slice(),
+                (None, Some(structure)) => structure.args.as_slice(),
+                (None, None) => continue,
+            };
+            for &port in ports {
+                if ports.iter().filter(|&&other| other == port).count() == 1
+                    && is_summed_loop_port(&mut matcher, port)
+                {
+                    occurrences.push((port, index));
+                }
+            }
+        }
+        let connections = occurrences
+            .iter()
+            .enumerate()
+            .filter_map(|(first, (port, left))| {
+                let mut partners = occurrences
+                    .iter()
+                    .enumerate()
+                    .filter(|(other, (shared, _))| *other != first && shared == port);
+                let (second, (_, right)) = partners.next()?;
+                (second > first && partners.next().is_none()).then_some((*left, *right))
+            })
+            .collect::<Vec<_>>();
+        (0..self.len())
+            .filter(|&chain| {
+                if chains[chain].is_none() {
+                    return false;
+                }
+                let mut component = (0..self.len()).collect::<Vec<_>>();
+                for &(left, right) in &connections {
+                    if left != chain && right != chain {
+                        let (left, right) = (
+                            Self::component_root(&mut component, left),
+                            Self::component_root(&mut component, right),
+                        );
+                        component[left] = right;
+                    }
+                }
+                let mut reached = Vec::new();
+                connections.iter().any(|&(left, right)| {
+                    let other = match (left == chain, right == chain) {
+                        (true, false) => right,
+                        (false, true) => left,
+                        _ => return false,
+                    };
+                    let other = Self::component_root(&mut component, other);
+                    if reached.contains(&other) {
+                        return true;
+                    }
+                    reached.push(other);
+                    false
+                })
+            })
+            .collect()
+    }
+
+    fn component_root(component: &mut [usize], mut index: usize) -> usize {
+        while component[index] != index {
+            component[index] = component[component[index]];
+            index = component[index];
+        }
+        index
     }
 
     fn replacing_pair(&self, left_index: usize, right_index: usize, replacement: Atom) -> Atom {
@@ -3598,7 +3750,7 @@ fn adjoint_generator_slot<'a>(rep: AtomView<'a>, factor: AtomView<'a>) -> Option
     coefficient.is_one().then_some(slot)
 }
 
-fn adjoint_generator<'a>(rep: AtomView<'a>, factor: AtomView<'a>) -> Option<(AtomView<'a>, Atom)> {
+fn adjoint_generator<'a>(rep: AtomView<'_>, factor: AtomView<'a>) -> Option<(AtomView<'a>, Atom)> {
     let AtomView::Fun(representation) = rep else {
         return None;
     };
@@ -4371,17 +4523,19 @@ fn common_structure_positions<'a, A: AtomCore>(
         let right = right.iter().enumerate().position(|(right, right_arg)| {
             !right_used[right] && right_arg.as_atom_view() == left_arg.as_atom_view()
         })?;
-        let SlotMatch::Explicit(slot) = matcher.classify(left_arg.as_atom_view()) else {
-            return None;
-        };
-        // Equal fixed components are not summed edges. This guard belongs to
-        // the shared loop-edge owner; fixed uncontracted spectator ports remain.
-        if slot.is_concrete_index() {
+        if !is_summed_loop_port(&mut matcher, left_arg.as_atom_view()) {
             return None;
         }
         right_used[right] = true;
         Some(CommonStructurePosition { left, right })
     })
+}
+
+/// Whether a colour slot shared by two structure constants is a summed edge
+/// of a loop. Equal fixed components are not summed edges; fixed uncontracted
+/// spectator ports remain valid.
+fn is_summed_loop_port(matcher: &mut SlotMatcher, port: AtomView<'_>) -> bool {
+    matches!(matcher.classify(port), SlotMatch::Explicit(slot) if !slot.is_concrete_index())
 }
 
 type ColourPorts = std::collections::HashSet<Slot<LibraryRep, AbstractIndex>>;
@@ -4573,6 +4727,7 @@ fn positive_integer(expr: AtomView) -> Option<i64> {
 #[cfg(test)]
 mod reconstruction_tests {
     use super::*;
+    use crate::test_support;
     use std::sync::{Arc, Mutex};
     use symbolica::{domains::float::Float, parse, parse_lit, symbol};
 
@@ -5760,6 +5915,59 @@ mod reconstruction_tests {
         assert_eq!(
             result,
             reversed - adjoint_casimir_for_dimension(Atom::num(8)) / Atom::num(2) * bridged
+        );
+    }
+
+    #[test]
+    fn adjoint_cycle_detection_requires_summed_compatible_ports() {
+        test_support::test_initialize();
+        let [a, b, c, d, x] = adjoint_slots("cycle_admission", ["a", "b", "c", "d", "x"]);
+        let line = |start: &Atom, end: &Atom, generators: &[&Atom]| {
+            chain!(start, end; generators.iter().map(|generator| color_f!(
+                Atom::var(T.chain_in), Atom::var(T.chain_out), *generator
+            )))
+        };
+        let cycle = line(&a, &b, &[&c, &d]) * color_f!(&a, &b, &x);
+        assert_eq!(
+            ProductView::parse(cycle.as_view())
+                .adjoint_chains_on_cycles()
+                .len(),
+            1
+        );
+        let tree =
+            line(&a, &b, &[&c, &d]) * color_f!(&b, &x, &adjoint_slots("cycle_admission", ["y"])[0]);
+        assert!(
+            ProductView::parse(tree.as_view())
+                .adjoint_chains_on_cycles()
+                .is_empty()
+        );
+        let fixed = ColorAdjoint {}.to_symbolic([Atom::num(8), AIND_SYMBOLS.cind.call(0)]);
+        let fixed_connection = line(&a, &fixed, &[&c, &d]) * color_f!(&a, &fixed, &x);
+        assert!(
+            ProductView::parse(fixed_connection.as_view())
+                .adjoint_chains_on_cycles()
+                .is_empty()
+        );
+        let incompatible =
+            ColorAdjoint {}.to_symbolic([Atom::num(3), Atom::var(symbol!("cycle_admission::a"))]);
+        let incompatible_line = line(&incompatible, &b, &[&c, &d]);
+        assert!(
+            ChainView::parse(incompatible_line.as_view())
+                .unwrap()
+                .adjoint_ports()
+                .is_none()
+        );
+        let repeated_fixed = line(&fixed, &b, &[&c, &d, &fixed]);
+        assert!(
+            !ChainView::parse(repeated_fixed.as_view())
+                .unwrap()
+                .closes_adjoint_cycle()
+        );
+        let repeated_summed = line(&a, &b, &[&c, &d, &a]);
+        assert!(
+            ChainView::parse(repeated_summed.as_view())
+                .unwrap()
+                .closes_adjoint_cycle()
         );
     }
 

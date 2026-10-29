@@ -1,0 +1,154 @@
+warning: ignoring untrusted flake configuration setting 'extra-substituters'.
+Pass '--accept-flake-config' to trust it
+warning: ignoring untrusted flake configuration setting 'extra-trusted-public-keys'.
+Pass '--accept-flake-config' to trust it
+   Compiling syn v2.0.117
+   Compiling colored v2.2.0
+   Compiling xpct v0.5.1
+   Compiling adler2 v2.0.1
+   Compiling proc-macro2-diagnostics v0.10.1
+   Compiling miniz_oxide v0.8.9
+   Compiling serde_derive v1.0.228
+   Compiling zerocopy-derive v0.8.48
+   Compiling zerocopy v0.8.48
+   Compiling serde v1.0.228
+   Compiling ppv-lite86 v0.2.21
+   Compiling smallvec v1.15.1
+   Compiling rand_chacha v0.9.0
+   Compiling bincode v2.0.1
+   Compiling rand v0.9.4
+   Compiling bincode-trait-derive v0.1.1
+   Compiling rug v1.30.0
+   Compiling num-complex v0.4.6
+   Compiling tracing-attributes v0.1.31
+   Compiling tracing-serde v0.2.0
+   Compiling simba v0.9.1
+   Compiling num-bigint v0.4.6
+   Compiling ahash v0.8.12
+   Compiling smartstring v1.0.1
+   Compiling num-rational v0.4.2
+   Compiling xprec v0.2.2
+   Compiling tracing v0.1.44
+   Compiling tracing-subscriber v0.3.23
+   Compiling numerica v3.0.1 (https://github.com/symbolica-dev/symbolica?branch=main#1a1829b1)
+   Compiling parking_lot_core v0.9.12
+   Compiling derive_more-impl v2.1.1
+   Compiling derive_more v2.1.1
+   Compiling parking_lot v0.12.5
+   Compiling graphica v3.0.1 (https://github.com/symbolica-dev/symbolica?branch=main#1a1829b1)
+   Compiling symjit v2.27.3
+   Compiling rand_chacha v0.3.1
+   Compiling clap_derive v4.6.1
+   Compiling rand v0.8.6
+   Compiling symbolica v3.0.1 (https://github.com/symbolica-dev/symbolica?branch=main#1a1829b1)
+   Compiling clap v4.6.1
+   Compiling crossterm v0.29.0
+   Compiling chrono v0.4.44
+   Compiling gammaloop-workspace-hack v0.1.0 (/shared/lcnbr/dev/gammaloop/generation-color-cycles/crates/gammaloop-workspace-hack)
+   Compiling thiserror-impl v2.0.18
+   Compiling symbolica-utils v0.1.0 (/shared/lcnbr/dev/gammaloop/generation-color-cycles/crates/symbolica-utils)
+   Compiling figment v0.10.19
+   Compiling serde_repr v0.1.20
+   Compiling thiserror v2.0.18
+   Compiling duplicate v2.0.1
+   Compiling tabled_derive v0.12.0
+   Compiling linnet v0.17.0 (/shared/lcnbr/dev/gammaloop/generation-color-cycles/crates/linnet)
+   Compiling tabled v0.22.0
+   Compiling symbolica-notation v0.1.0 (/shared/lcnbr/dev/gammaloop/generation-color-cycles/crates/symbolica-notation)
+   Compiling num v0.4.3
+   Compiling delegate v0.12.0
+   Compiling spenso-macros v0.3.2 (/shared/lcnbr/dev/gammaloop/generation-color-cycles/crates/spenso-macros)
+   Compiling enum-try-as-inner v0.1.1
+   Compiling derive_more v0.99.20
+   Compiling delegate v0.13.5
+   Compiling ron v0.12.1
+   Compiling insta v1.47.2
+   Compiling spenso v0.6.0 (/shared/lcnbr/dev/gammaloop/generation-color-cycles/crates/spenso)
+   Compiling idenso v0.3.0 (/shared/lcnbr/dev/gammaloop/generation-color-cycles/crates/idenso)
+   Compiling spenso-hep-lib v0.1.7 (/shared/lcnbr/dev/gammaloop/generation-color-cycles/crates/spenso-hep-lib)
+   Compiling vectorize v0.2.0
+   Compiling feynkit-model v0.1.0 (/shared/lcnbr/dev/gammaloop/generation-color-cycles/crates/feynkit-model)
+   Compiling feynkit-kinematics v0.1.0 (/shared/lcnbr/dev/gammaloop/generation-color-cycles/crates/feynkit-kinematics)
+   Compiling feynkit-graph v0.1.0 (/shared/lcnbr/dev/gammaloop/generation-color-cycles/crates/feynkit-graph)
+   Compiling feynkit-tensor v0.1.0 (/shared/lcnbr/dev/gammaloop/generation-color-cycles/crates/feynkit-tensor)
+    Finished `dev-optim` profile [optimized + debuginfo] target(s) in 23m 55s
+────────────
+ Nextest run ID 9845106a-95ff-4b3a-bdfd-8cdf207ac89d with nextest profile: default
+    Starting 201 tests across 12 binaries (3 tests skipped)
+        FAIL [   0.013s] ( 46/201) feynkit-tensor reduction::tests::reduction_keeps_declared_spectator_axes_and_zero_interfaces
+  stdout ───
+
+    running 1 test
+    test reduction::tests::reduction_keeps_declared_spectator_axes_and_zero_interfaces ... FAILED
+
+    failures:
+
+    failures:
+        reduction::tests::reduction_keeps_declared_spectator_axes_and_zero_interfaces
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 66 filtered out; finished in 0.00s
+
+  stderr ───
+
+    thread 'reduction::tests::reduction_keeps_declared_spectator_axes_and_zero_interfaces' (2306351) panicked at crates/feynkit-tensor/src/reduction.rs:2017:9:
+    assertion `left == right` failed
+      left: Canonicalized { canonical: 
+    ╭──────────────────┬─────────────────────────────────┬─────────────────────────────────┬───────────────────────────────────────────────────────────────────────────────────────────╮
+    │ OrderedStructure │ base_start:18446744073709551615 │ dual_start:18446744073709551615 │                                                                                           │
+    ├──────────────────┼─────────────────────────────────┼─────────────────────────────────┼───────────────────────────────────────────────────────────────────────────────────────────┤
+    │ 0                │ SelfDual(1)                     │ Concrete(4)                     │ Explicit(Symbol(SerializableSymbol { symbol: feynkit_tensor::retained_reduction_left }))  │
+    │ 1                │ SelfDual(1)                     │ Concrete(4)                     │ Explicit(Symbol(SerializableSymbol { symbol: feynkit_tensor::retained_reduction_right })) │
+    │ 2                │ InlineMetric(0)                 │ Concrete(4)                     │ Explicit(Symbol(SerializableSymbol { symbol: feynkit_tensor::retained_reduction_mu }))    │
+    │ 3                │ InlineMetric(0)                 │ Concrete(4)                     │ Explicit(Symbol(SerializableSymbol { symbol: feynkit_tensor::retained_reduction_nu }))    │
+    ╰──────────────────┴─────────────────────────────────┴─────────────────────────────────┴───────────────────────────────────────────────────────────────────────────────────────────╯, layout: CanonicalLayout(Identity { order: 4 }) }
+     right: Canonicalized { canonical: 
+    ╭──────────────────┬─────────────────────────────────┬─────────────────────────────────┬───────────────────────────────────────────────────────────────────────────────────────────╮
+    │ OrderedStructure │ base_start:18446744073709551615 │ dual_start:18446744073709551615 │                                                                                           │
+    ├──────────────────┼─────────────────────────────────┼─────────────────────────────────┼───────────────────────────────────────────────────────────────────────────────────────────┤
+    │ 0                │ SelfDual(1)                     │ Concrete(4)                     │ Explicit(Symbol(SerializableSymbol { symbol: feynkit_tensor::retained_reduction_left }))  │
+    │ 1                │ SelfDual(1)                     │ Concrete(4)                     │ Explicit(Symbol(SerializableSymbol { symbol: feynkit_tensor::retained_reduction_right })) │
+    │ 2                │ InlineMetric(0)                 │ Concrete(4)                     │ Explicit(Symbol(SerializableSymbol { symbol: feynkit_tensor::retained_reduction_mu }))    │
+    │ 3                │ InlineMetric(0)                 │ Concrete(4)                     │ Explicit(Symbol(SerializableSymbol { symbol: feynkit_tensor::retained_reduction_nu }))    │
+    ╰──────────────────┴─────────────────────────────────┴─────────────────────────────────┴───────────────────────────────────────────────────────────────────────────────────────────╯, layout: CanonicalLayout(Mapped { representation: RepresentationOrder(Permutation { map: [2, 3, 0, 1], inv: [2, 3, 0, 1] }), index: IndexOrder(Permutation { map: [1, 0, 3, 2], inv: [1, 0, 3, 2] }) }) }
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+────────────
+     Summary [ 291.087s] 201 tests run: 200 passed, 1 failed, 3 skipped
+        FAIL [   0.013s] ( 46/201) feynkit-tensor reduction::tests::reduction_keeps_declared_spectator_axes_and_zero_interfaces
+  stdout ───
+
+    running 1 test
+    test reduction::tests::reduction_keeps_declared_spectator_axes_and_zero_interfaces ... FAILED
+
+    failures:
+
+    failures:
+        reduction::tests::reduction_keeps_declared_spectator_axes_and_zero_interfaces
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 66 filtered out; finished in 0.00s
+
+  stderr ───
+
+    thread 'reduction::tests::reduction_keeps_declared_spectator_axes_and_zero_interfaces' (2306351) panicked at crates/feynkit-tensor/src/reduction.rs:2017:9:
+    assertion `left == right` failed
+      left: Canonicalized { canonical: 
+    ╭──────────────────┬─────────────────────────────────┬─────────────────────────────────┬───────────────────────────────────────────────────────────────────────────────────────────╮
+    │ OrderedStructure │ base_start:18446744073709551615 │ dual_start:18446744073709551615 │                                                                                           │
+    ├──────────────────┼─────────────────────────────────┼─────────────────────────────────┼───────────────────────────────────────────────────────────────────────────────────────────┤
+    │ 0                │ SelfDual(1)                     │ Concrete(4)                     │ Explicit(Symbol(SerializableSymbol { symbol: feynkit_tensor::retained_reduction_left }))  │
+    │ 1                │ SelfDual(1)                     │ Concrete(4)                     │ Explicit(Symbol(SerializableSymbol { symbol: feynkit_tensor::retained_reduction_right })) │
+    │ 2                │ InlineMetric(0)                 │ Concrete(4)                     │ Explicit(Symbol(SerializableSymbol { symbol: feynkit_tensor::retained_reduction_mu }))    │
+    │ 3                │ InlineMetric(0)                 │ Concrete(4)                     │ Explicit(Symbol(SerializableSymbol { symbol: feynkit_tensor::retained_reduction_nu }))    │
+    ╰──────────────────┴─────────────────────────────────┴─────────────────────────────────┴───────────────────────────────────────────────────────────────────────────────────────────╯, layout: CanonicalLayout(Identity { order: 4 }) }
+     right: Canonicalized { canonical: 
+    ╭──────────────────┬─────────────────────────────────┬─────────────────────────────────┬───────────────────────────────────────────────────────────────────────────────────────────╮
+    │ OrderedStructure │ base_start:18446744073709551615 │ dual_start:18446744073709551615 │                                                                                           │
+    ├──────────────────┼─────────────────────────────────┼─────────────────────────────────┼───────────────────────────────────────────────────────────────────────────────────────────┤
+    │ 0                │ SelfDual(1)                     │ Concrete(4)                     │ Explicit(Symbol(SerializableSymbol { symbol: feynkit_tensor::retained_reduction_left }))  │
+    │ 1                │ SelfDual(1)                     │ Concrete(4)                     │ Explicit(Symbol(SerializableSymbol { symbol: feynkit_tensor::retained_reduction_right })) │
+    │ 2                │ InlineMetric(0)                 │ Concrete(4)                     │ Explicit(Symbol(SerializableSymbol { symbol: feynkit_tensor::retained_reduction_mu }))    │
+    │ 3                │ InlineMetric(0)                 │ Concrete(4)                     │ Explicit(Symbol(SerializableSymbol { symbol: feynkit_tensor::retained_reduction_nu }))    │
+    ╰──────────────────┴─────────────────────────────────┴─────────────────────────────────┴───────────────────────────────────────────────────────────────────────────────────────────╯, layout: CanonicalLayout(Mapped { representation: RepresentationOrder(Permutation { map: [2, 3, 0, 1], inv: [2, 3, 0, 1] }), index: IndexOrder(Permutation { map: [1, 0, 3, 2], inv: [1, 0, 3, 2] }) }) }
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+error: test run failed

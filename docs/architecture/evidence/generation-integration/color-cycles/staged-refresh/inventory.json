@@ -1,0 +1,41 @@
+{
+  "source": {
+    "crates/idenso/src/color/simplify.rs": "sha256:73a0b05b405d7ec72adb43e9aeb21e094963f4b4c3a50c77a4750752e6e00144",
+    "crates/idenso/src/color/test/label_order.rs": "sha256:efe36ebc795dbdac8e5f6b0b4207a20d60d6c5ddbfbbec39a29ee23275d4f1e7",
+    "crates/idenso/src/color/test/mod.rs": "sha256:d6ef94467ae038bcfafc4ecab27f20f8e72cc610830555ad12047f1a5eb674a9",
+    "approved_simplify_git_blob": "59f13bd0337c64cf8260f9876988919c0571849e"
+  },
+  "elf": {
+    "idenso-e92eab276570409a": "sha256:06da0d63bd787a6de36668f43c94f60a8a44de6ce5fa6af6d5428c5a6ffacf27",
+    "feynkit_tensor-e162253ee5a17547": "sha256:729016e6ed512a4deb81322648b79cc2fcf1d5893f1b594488878c5317583cb6",
+    "feynkit_tensor-ee9c014b7037b2dc-pristine-base": "sha256:eec16424d99fa6ca59d0f74fce357f609704a4c52a3ae520fc81ded37887cf10",
+    "generation_oracle-c4b54249fc0354d6": "sha256:fafb850b80123d2741956dec5bb1da78222c93fd11f71ecf4c6d15dd76ff1196"
+  },
+  "pins": {
+    "symbolica": "1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
+    "Cargo.lock": "sha256:0d896231393016a4df0ac9a8a2b8eddee545b4a8d62bc87cdfbd1f2e3230a2cd",
+    "flake.lock": "sha256:e10c5893b513d4c7120d841b47fbfddffb3ac4f1f5cb46a18c0f7542cbde8534",
+    "nix-ci.nix": "sha256:e031749e51a33ee48bc5c653d13c2dc7e7d3a51bddea77fc3c67d01ac217c540"
+  },
+  "logs": {
+    "clippy.txt": "sha256:9d6a134180abbe6002ae17ae5352980ccfa553da6b3adc60d455dd0d6478d694",
+    "nextest-color.txt": "sha256:d57a165cfd26b0d3ddeccb3a71507a03aadbbeee17e988510e6e3df1eec07e4e",
+    "nextest-idenso.txt": "sha256:9bdd01fd26efd07e4f92fc440cd4c798cdb5d210fa6a3dfcf0eb61dd337940e2",
+    "nextest-tensor-controls.txt": "sha256:6eff302c1ba280595937aa5e314e2fbf4e1fabfe9e716171907f13118bacd7d3",
+    "base-tensor-control.txt": "sha256:39536bc3767b3525eb9940f28e985cff1a24d188465ef6b7cf1e9aef75758378",
+    "registry-scopes.txt": "sha256:a69a7710d070c40b126887e02fc265dbd7c21f934eca2e25befa3f3673838828",
+    "source19-generation-controls.txt": "sha256:e3189b2ef2f286743e62368c351a33bf87a12d604d18811e52558793de34edd6",
+    "static-docs.txt": "sha256:82f155b58b0fdaf24a386e59ce83a4293b5640d092a2d462d132a54f50cb01c3",
+    "receipt.json": "sha256:c03b39f8f320213d0da81fa7099d5b8b21150fbc0dbf93f577e4f5e4d649da71"
+  },
+  "reviewer_bindings": {
+    "scope_a_review.json": "sha256:b781547651cca3f78ea4b5c9d13aaed4c3d6ff793d130a917bc37f4cddf08b2a",
+    "scope_b_review.json": "sha256:f4feeecb35f5369f6499d27b7f871231647463f73bd709a48163fe81b4e82b80",
+    "tensor_candidate-declared-layout.txt": "sha256:ba468b3786e8335a72b7fe0e53cdf4e61cd3bf55a3b4105b0cf1b32e0750ab6f",
+    "tensor_base-declared-layout.txt": "sha256:e21f0d622c48b1f807c86e77c2a85b7956b3a4406ffd358d8f1627a76ea9d57a",
+    "layout-probe-candidate.txt": "sha256:ef007db70076e0d44aa107cf3dca437dbc70766807152d5cbb85abe1bbe9e851",
+    "layout-probe-base.txt": "sha256:56e37b2ee3848a1ca2e618b411f7dcdfe18671abf5c86b2be0d38b4abf01e6bf",
+    "layout-probe-bindings.json": "sha256:c599ece5a690efd3ecdf70e9a6e4cdc9a687cb1772ba59583fb001012c46cb3c",
+    "execution-source-qualification.json": "sha256:1437acbc956e832cb5aa55665d23010a95ac45c952285250791d601d72f47f42"
+  }
+}

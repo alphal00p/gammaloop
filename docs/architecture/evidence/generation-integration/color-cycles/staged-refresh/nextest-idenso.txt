@@ -1,0 +1,16 @@
+warning: ignoring untrusted flake configuration setting 'extra-substituters'.
+Pass '--accept-flake-config' to trust it
+warning: ignoring untrusted flake configuration setting 'extra-trusted-public-keys'.
+Pass '--accept-flake-config' to trust it
+building '/nix/store/yp47g54isbg8akymm8j4albyvrif3mfs-linnest-wasm-0.1.0.drv'...
+building '/nix/store/2i93jm3qdb855zmjb5960q6x1imk890h-clinnet-deps-0.1.8.drv'...
+building '/nix/store/s5psnvzv8ffygcsmakxrrvmc39hc9pww-clinnet-0.1.8.drv'...
+building '/nix/store/1vzsl7cw1ws7nkgqmwldns6xmp02v8k9-nix-shell-env.drv'...
+    Finished `dev-optim` profile [optimized + debuginfo] target(s) in 0.53s
+warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+────────────
+ Nextest run ID 4e4e55ef-6716-49b7-9a4b-03997581cc19 with nextest profile: default
+    Starting 1191 tests across 5 binaries (24 tests skipped, including 2 tests via profile.default.default-filter)
+────────────
+     Summary [  68.591s] 1191 tests run: 1191 passed, 24 skipped

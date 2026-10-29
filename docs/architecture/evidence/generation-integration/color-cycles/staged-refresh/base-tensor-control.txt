@@ -1,0 +1,39 @@
+Exact-base control for the only failed consumer test
+
+Base: 158f4e1f8cdbea4d13b55f7c1fa828f75ab566f9
+Command: nix develop -c cargo nextest run -p feynkit-tensor --cargo-profile dev-optim --locked --test-threads=1 -E 'test(reduction::tests::reduction_keeps_declared_spectator_axes_and_zero_interfaces)'
+Nextest run ID: 6d178fee-125e-4333-a516-874acd920145
+Result: 0 passed, 1 failed, 67 skipped.
+
+The refreshed candidate and pristine base have the same canonical named-interface
+table, but neither preserves the declared logical order in this result. The source
+logical slots [nu, mu, right, left] become [left, right, mu, nu]. The result has
+Identity(order 4), while the source retains representation permutation [2, 3, 0, 1]
+and index permutation [1, 0, 3, 2]; those permutations encode the reversal rather
+than a redundant witness for an unchanged logical order.
+
+The existing arithmetic owner explains the boundary. TensorReduction::expression
+at crates/feynkit-tensor/src/reduction.rs:270 folds terms through
+SymbolicTensor::try_add. For a named interface, try_add projects through
+TensorInterface::into_algebra_result at crates/idenso/src/tensor/inference.rs:114
+and 1721--1736, intentionally dropping admission-layout history. Individual and
+weighted terms preserve the declared layout, while their sum canonicalizes it.
+The separate pure-zero probe also canonicalizes the named order and fails full-
+layout equality. This failing lane therefore proves neither declared logical-order
+preservation nor the later assertions that the original test does not reach.
+
+Retained reviewer evidence binds the source variants and raw witnesses:
+- candidate direct test: .local/review-color-cycles-staged-b-astra-Ry8y1K/tensor_candidate-declared-layout.txt, sha256 ba468b3786e8335a72b7fe0e53cdf4e61cd3bf55a3b4105b0cf1b32e0750ab6f;
+- pristine-base direct test: .local/review-color-cycles-staged-b-astra-Ry8y1K/tensor_base-declared-layout.txt, sha256 e21f0d622c48b1f807c86e77c2a85b7956b3a4406ffd358d8f1627a76ea9d57a;
+- candidate probe: .local/review-color-cycles-staged-b-astra-Ry8y1K/layout-probe-candidate.txt, sha256 ef007db70076e0d44aa107cf3dca437dbc70766807152d5cbb85abe1bbe9e851;
+- pristine-base probe: .local/review-color-cycles-staged-b-astra-Ry8y1K/layout-probe-base.txt, sha256 56e37b2ee3848a1ca2e618b411f7dcdfe18671abf5c86b2be0d38b4abf01e6bf;
+- source/ELF bindings: .local/review-color-cycles-staged-b-astra-Ry8y1K/layout-probe-bindings.json, sha256 c599ece5a690efd3ecdf70e9a6e4cdc9a687cb1772ba59583fb001012c46cb3c, and execution-source-qualification.json, sha256 1437acbc956e832cb5aa55665d23010a95ac45c952285250791d601d72f47f42.
+
+The candidate joint tensor/HEP run links Idenso native,reference-cases, whereas the
+base tensor-only control links Idenso native; they are not feature-identical or a
+fresh rebuild pair. Their separately bound producers nevertheless give the same
+normalized no-color failure, and reduction.rs is the same blob in both. The input
+contains only Bispinor and Minkowski slots, so this is an inherited arithmetic/
+admission-layout limitation rather than a color-cycle regression. Scope A's
+separate cycle holdouts do preserve their declared layouts; that result does not
+broaden this consumer qualification. No test expectation or owner was changed.

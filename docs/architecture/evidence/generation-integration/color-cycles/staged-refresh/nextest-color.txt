@@ -1,0 +1,32 @@
+warning: ignoring untrusted flake configuration setting 'extra-substituters'.
+Pass '--accept-flake-config' to trust it
+warning: ignoring untrusted flake configuration setting 'extra-trusted-public-keys'.
+Pass '--accept-flake-config' to trust it
+building '/nix/store/9rzs1ywbjyx9n1iw2dlg0aa9ga9hqg7f-linnest-wasm-0.1.0.drv'...
+building '/nix/store/xhjwfsw2h9fixb1mqc1i82x9kh5r4gac-clinnet-deps-0.1.8.drv'...
+building '/nix/store/kb6m9vfjgy8ykp0m61slyz4y3469yyl2-clinnet-0.1.8.drv'...
+building '/nix/store/8jcpgabnzix2119d535fdgkbyawk3fsv-nix-shell-env.drv'...
+   Compiling either v1.15.0
+   Compiling rayon v1.12.0
+   Compiling itertools v0.14.0
+   Compiling itertools v0.10.5
+   Compiling numerica v3.0.1 (https://github.com/symbolica-dev/symbolica?branch=main#1a1829b1)
+   Compiling graphica v3.0.1 (https://github.com/symbolica-dev/symbolica?branch=main#1a1829b1)
+   Compiling symjit v2.27.3
+   Compiling symbolica v3.0.1 (https://github.com/symbolica-dev/symbolica?branch=main#1a1829b1)
+   Compiling symbolica-utils v0.1.0 (/shared/lcnbr/dev/gammaloop/generation-color-cycles/crates/symbolica-utils)
+   Compiling symbolica-notation v0.1.0 (/shared/lcnbr/dev/gammaloop/generation-color-cycles/crates/symbolica-notation)
+   Compiling gammaloop-workspace-hack v0.1.0 (/shared/lcnbr/dev/gammaloop/generation-color-cycles/crates/gammaloop-workspace-hack)
+   Compiling criterion-plot v0.5.0
+   Compiling linnet v0.17.0 (/shared/lcnbr/dev/gammaloop/generation-color-cycles/crates/linnet)
+   Compiling criterion v0.5.1
+   Compiling spenso v0.6.0 (/shared/lcnbr/dev/gammaloop/generation-color-cycles/crates/spenso)
+   Compiling idenso v0.3.0 (/shared/lcnbr/dev/gammaloop/generation-color-cycles/crates/idenso)
+    Finished `dev-optim` profile [optimized + debuginfo] target(s) in 20m 59s
+warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+────────────
+ Nextest run ID e4bcb359-ddcb-460b-802b-680523ab5c43 with nextest profile: default
+    Starting 192 tests across 5 binaries (1023 tests skipped, including 2 tests via profile.default.default-filter)
+────────────
+     Summary [  10.136s] 192 tests run: 192 passed, 1023 skipped

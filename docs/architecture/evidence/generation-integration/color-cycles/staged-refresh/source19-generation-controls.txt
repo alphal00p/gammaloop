@@ -1,0 +1,19 @@
+warning: ignoring untrusted flake configuration setting 'extra-substituters'.
+Pass '--accept-flake-config' to trust it
+warning: ignoring untrusted flake configuration setting 'extra-trusted-public-keys'.
+Pass '--accept-flake-config' to trust it
+   Compiling linnet v0.17.0 (/shared/lcnbr/dev/gammaloop/generation-color-cycles/crates/linnet)
+   Compiling spenso v0.6.0 (/shared/lcnbr/dev/gammaloop/generation-color-cycles/crates/spenso)
+   Compiling idenso v0.3.0 (/shared/lcnbr/dev/gammaloop/generation-color-cycles/crates/idenso)
+   Compiling feynkit-kinematics v0.1.0 (/shared/lcnbr/dev/gammaloop/generation-color-cycles/crates/feynkit-kinematics)
+   Compiling feynkit-model v0.1.0 (/shared/lcnbr/dev/gammaloop/generation-color-cycles/crates/feynkit-model)
+   Compiling feynkit-graph v0.1.0 (/shared/lcnbr/dev/gammaloop/generation-color-cycles/crates/feynkit-graph)
+   Compiling feynkit-amplitude v0.1.0 (/shared/lcnbr/dev/gammaloop/generation-color-cycles/crates/feynkit-amplitude)
+   Compiling spenso-hep-lib v0.1.7 (/shared/lcnbr/dev/gammaloop/generation-color-cycles/crates/spenso-hep-lib)
+   Compiling feynkit-generator v0.1.0 (/shared/lcnbr/dev/gammaloop/generation-color-cycles/crates/feynkit-generator)
+    Finished `dev-optim` profile [optimized + debuginfo] target(s) in 10m 06s
+────────────
+ Nextest run ID 3de3021a-4004-4944-be78-9d0816b51cdb with nextest profile: default
+    Starting 2 tests across 1 binary (181 tests and 3 binaries skipped)
+────────────
+     Summary [  72.733s] 2 tests run: 2 passed, 181 skipped
