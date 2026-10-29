@@ -145,6 +145,7 @@
       "three-dimensional-reps",
       "vakint"
     ],
+    "gammaloop-statistics": [],
     "gammaloop-tracing-filter": [
       "gammaloop-tracing-filter-macros",
       "gammaloop-workspace-hack",
@@ -159,6 +160,7 @@
       "feynkit-graph",
       "feynkit-kinematics",
       "feynkit-model",
+      "gammaloop-statistics",
       "gammaloop-tracing-filter",
       "gammaloop-workspace-hack",
       "idenso",
@@ -458,6 +460,7 @@
       ],
       "vakint": []
     },
+    "gammaloop-statistics": {},
     "gammaloop-tracing-filter": {
       "gammaloop-tracing-filter-macros": [],
       "gammaloop-workspace-hack": [],
@@ -475,6 +478,7 @@
       "feynkit-graph": [],
       "feynkit-kinematics": [],
       "feynkit-model": [],
+      "gammaloop-statistics": [],
       "gammaloop-tracing-filter": [
         "symbolica"
       ],
@@ -620,6 +624,7 @@
     "feynkit-ufo": "crates/feynkit-ufo",
     "gammaloop-api": "crates/gammaloop-api",
     "gammaloop-integration-tests": "tests",
+    "gammaloop-statistics": "crates/gammaloop-statistics",
     "gammaloop-tracing-filter": "crates/gammaloop-tracing-filter",
     "gammaloop-tracing-filter-macros": "crates/gammaloop-tracing-filter-macros",
     "gammaloop-workspace-hack": "crates/gammaloop-workspace-hack",
@@ -660,6 +665,7 @@
     "feynkit-ufo",
     "gammaloop-api",
     "gammaloop-integration-tests",
+    "gammaloop-statistics",
     "gammaloop-tracing-filter",
     "gammaloop-tracing-filter-macros",
     "gammaloop-workspace-hack",
@@ -705,6 +711,7 @@
       "feynkit-tensor",
       "feynkit-ufo",
       "gammaloop-api",
+      "gammaloop-statistics",
       "gammaloop-tracing-filter",
       "gammaloop-tracing-filter-macros",
       "gammaloop-workspace-hack",
@@ -853,6 +860,7 @@
       "feynkit-model",
       "feynkit-tensor",
       "feynkit-ufo",
+      "gammaloop-statistics",
       "gammaloop-tracing-filter",
       "gammaloop-tracing-filter-macros",
       "gammaloop-workspace-hack",
@@ -876,6 +884,7 @@
       "feynkit-model",
       "feynkit-tensor",
       "gammaloop-api",
+      "gammaloop-statistics",
       "gammaloop-tracing-filter",
       "gammaloop-tracing-filter-macros",
       "gammaloop-workspace-hack",
@@ -890,6 +899,7 @@
       "three-dimensional-reps",
       "vakint"
     ],
+    "gammaloop-statistics": [],
     "gammaloop-tracing-filter": [
       "gammaloop-tracing-filter-macros",
       "gammaloop-workspace-hack",
@@ -909,6 +919,7 @@
       "feynkit-kinematics",
       "feynkit-model",
       "feynkit-tensor",
+      "gammaloop-statistics",
       "gammaloop-tracing-filter",
       "gammaloop-tracing-filter-macros",
       "gammaloop-workspace-hack",
@@ -1031,6 +1042,7 @@
       "feynkit-tensor",
       "feynkit-ufo",
       "gammaloop-api",
+      "gammaloop-statistics",
       "gammaloop-tracing-filter",
       "gammaloop-tracing-filter-macros",
       "gammaloop-workspace-hack",
@@ -1181,6 +1193,7 @@
       "feynkit-model",
       "feynkit-tensor",
       "feynkit-ufo",
+      "gammaloop-statistics",
       "gammaloop-tracing-filter",
       "gammaloop-tracing-filter-macros",
       "gammaloop-workspace-hack",
@@ -1204,6 +1217,7 @@
       "feynkit-model",
       "feynkit-tensor",
       "gammaloop-api",
+      "gammaloop-statistics",
       "gammaloop-tracing-filter",
       "gammaloop-tracing-filter-macros",
       "gammaloop-workspace-hack",
@@ -1218,6 +1232,7 @@
       "three-dimensional-reps",
       "vakint"
     ],
+    "gammaloop-statistics": [],
     "gammaloop-tracing-filter": [
       "gammaloop-tracing-filter-macros",
       "gammaloop-workspace-hack",
@@ -1237,6 +1252,7 @@
       "feynkit-kinematics",
       "feynkit-model",
       "feynkit-tensor",
+      "gammaloop-statistics",
       "gammaloop-tracing-filter",
       "gammaloop-tracing-filter-macros",
       "gammaloop-workspace-hack",
@@ -1348,6 +1364,7 @@
     "feynkit-ufo",
     "gammaloop-api",
     "gammaloop-integration-tests",
+    "gammaloop-statistics",
     "gammaloop-tracing-filter",
     "gammaloop-workspace-hack",
     "gammalooprs",
@@ -1377,6 +1394,7 @@
     "feynkit-ufo",
     "gammaloop-api",
     "gammaloop-integration-tests",
+    "gammaloop-statistics",
     "gammaloop-tracing-filter",
     "gammaloop-workspace-hack",
     "gammalooprs",
@@ -1542,6 +1560,7 @@
       "three-dimensional-reps",
       "vakint"
     ],
+    "gammaloop-statistics": [],
     "gammaloop-tracing-filter": [
       "gammaloop-tracing-filter-macros",
       "gammaloop-workspace-hack",
@@ -1556,6 +1575,7 @@
       "feynkit-graph",
       "feynkit-kinematics",
       "feynkit-model",
+      "gammaloop-statistics",
       "gammaloop-tracing-filter",
       "gammaloop-workspace-hack",
       "idenso",
@@ -1860,6 +1880,7 @@
       ],
       "vakint": []
     },
+    "gammaloop-statistics": {},
     "gammaloop-tracing-filter": {
       "gammaloop-tracing-filter-macros": [],
       "gammaloop-workspace-hack": [],
@@ -1877,6 +1898,7 @@
       "feynkit-graph": [],
       "feynkit-kinematics": [],
       "feynkit-model": [],
+      "gammaloop-statistics": [],
       "gammaloop-tracing-filter": [
         "symbolica"
       ],

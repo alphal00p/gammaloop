@@ -96,6 +96,7 @@
     (workspaceRoot + "/assets")
     (workspaceRoot + "/crates/clinnet/templates")
     (workspaceRoot + "/crates/feynkit-model/data/sm.json.zlib")
+    (workspaceRoot + "/crates/gammaloop-statistics/src/exact_moments.schema.json")
     (workspaceRoot + "/crates/feynkit-ufo/src/model_metadata.py")
     (workspaceRoot + "/crates/feynkit-py/src/collection.css")
     (workspaceRoot + "/crates/feynkit-py/src/collection.js")
@@ -423,6 +424,7 @@
     sortedUnique (map builtins.head sourceMatches);
 
   workspacePackageExtraSourceRoots.production = {
+    "gammaloop-statistics" = ["crates/gammaloop-statistics/src/exact_moments.schema.json"];
     linnest = [
       "crates/linnest/src/svg/interactive.css"
       "crates/linnest/src/svg/interactive.js"

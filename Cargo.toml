@@ -33,6 +33,7 @@ feynkit-py = { version = "0.1.0", path = "crates/feynkit-py/" }
 feynkit-tensor = { version = "0.1.0", path = "crates/feynkit-tensor/" }
 feynkit-ufo = { version = "0.1.0", path = "crates/feynkit-ufo/" }
 gammaloop-api = { path = "crates/gammaloop-api/" }
+gammaloop-statistics = { path = "crates/gammaloop-statistics/" }
 gammaloop-tracing-filter = { path = "crates/gammaloop-tracing-filter/" }
 gammaloop-tracing-filter-macros = { path = "crates/gammaloop-tracing-filter-macros/" }
 gammalooprs = { path = "crates/gammalooprs/" }
