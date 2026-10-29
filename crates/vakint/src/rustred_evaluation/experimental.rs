@@ -12,6 +12,7 @@ pub mod catalog;
 pub(crate) mod compressed;
 pub mod native;
 pub(crate) mod timing;
+#[cfg(feature = "experimental-rustred")]
 pub use timing::{ReductionMathTiming, ReductionTimingCapture, capture_reduction_timing};
 
 use std::collections::BTreeMap;

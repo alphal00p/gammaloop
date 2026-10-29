@@ -7,6 +7,7 @@
 mod artifact;
 pub(crate) mod data;
 pub(crate) mod masters;
+pub(crate) use experimental::timing::MathSpan;
 pub(crate) use masters::combine_exact;
 #[cfg(all(unix, not(target_arch = "wasm32")))]
 mod official;

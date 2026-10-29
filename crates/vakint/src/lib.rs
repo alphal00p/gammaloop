@@ -42,6 +42,7 @@ pub use rustred::solver::{
     CandidateRoutedCachePolicy as RustRedCachePolicy,
     CandidateRoutedCacheStatistics as RustRedCacheWorkStatistics,
 };
+use rustred_evaluation::MathSpan;
 pub use rustred_evaluation::cache::{
     RustRedCacheFileLimits, RustRedCacheFileOptions, RustRedCacheLoadOptions,
     RustRedCacheNamespaceStatistics, RustRedCachePreparationOptions, RustRedCacheRoot,
@@ -51,7 +52,6 @@ pub use rustred_evaluation::cache::{
 };
 #[cfg(all(unix, not(target_arch = "wasm32")))]
 pub use rustred_evaluation::cache::{RustRedCacheTransferOptions, RustRedCacheTransferReport};
-use rustred_evaluation::experimental::timing::MathSpan;
 pub use rustred_evaluation::five_loop::{RustRedSymbolicEvaluation, RustRedWitnessCacheStatistics};
 use rustred_evaluation::monitor::{CallerProgress, MonitorContext};
 pub use rustred_evaluation::monitor::{

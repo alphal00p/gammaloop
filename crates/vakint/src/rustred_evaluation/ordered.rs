@@ -177,7 +177,7 @@ mod tests {
 
     #[test]
     fn reduction_math_capture_observes_both_engines_without_changing_results() {
-        use crate::rustred_evaluation::experimental::capture_reduction_timing;
+        use crate::rustred_evaluation::experimental::timing::capture_reduction_timing;
 
         let engine = Vakint::new().unwrap();
         let input = vakint_parse!("topo(I1L(1,4))+2*topo(I1L(1,5))").unwrap();
