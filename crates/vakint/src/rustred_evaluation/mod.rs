@@ -234,6 +234,16 @@ impl Vakint {
         mode: RustRedMasterMode,
         observation: Option<&mut CandidateRoutedApplicationObserver<'_>>,
     ) -> Result<Atom, VakintError> {
+        // Ordinary reduction simplifies each normalized contribution before
+        // this boundary. Ordered reduction combines those contributions first,
+        // so apply the same convention once here, before master substitution.
+        let raw = if settings.rustred_application_options.reduction_strategy
+            == crate::RustRedReductionStrategy::Ordered
+        {
+            crate::utils::simplify_real(raw.as_view())
+        } else {
+            raw
+        };
         let data = self.rustred_data()?;
         let announced = self.announced_bare_masters()?;
         let result = if mode == RustRedMasterMode::Retain {

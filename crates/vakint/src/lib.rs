@@ -1952,8 +1952,17 @@ impl EvaluationMethod {
                 vakint.rustred_evaluate(settings, numerator, integral_specs, opts)
             }
         }?;
-        // Simplify logarithms and zero powers knowing that all arguments are real
-        Ok(simplify_real(result.as_view()))
+        // Ordered RustRed already applies this convention at its common
+        // pre-substitution boundary, including this direct public entry point.
+        if matches!(self, EvaluationMethod::RustRed(_))
+            && settings.rustred_application_options.reduction_strategy
+                == RustRedReductionStrategy::Ordered
+        {
+            Ok(result)
+        } else {
+            // Simplify logarithms and zero powers knowing that all arguments are real.
+            Ok(simplify_real(result.as_view()))
+        }
     }
 }
 
@@ -2644,7 +2653,16 @@ impl VakintTerm {
                         },
                     ),
                 };
-                self.numerator = simplify_real(evaluated_integral.as_view());
+                // Ordered contributions share one normalization boundary after
+                // batching and before master substitution in finalize_rustred.
+                self.numerator = if matches!(evaluation_approach, EvaluationMethod::RustRed(_))
+                    && settings.rustred_application_options.reduction_strategy
+                        == RustRedReductionStrategy::Ordered
+                {
+                    evaluated_integral
+                } else {
+                    simplify_real(evaluated_integral.as_view())
+                };
                 self.integral = Atom::num(1);
                 return Ok(stage);
             }

@@ -527,40 +527,46 @@ fn finite_custom_normalization_is_tracked_before_series_expansion() {
 fn symbolic_rustred_keeps_finite_input_uncertainty_until_numerical_evaluation() {
     Vakint::initialize_vakint_symbols();
     let engine = Vakint::new().unwrap();
-    let settings = VakintSettings {
-        evaluation_order: crate::EvaluationOrder(vec![crate::EvaluationMethod::RustRed(
-            crate::RustRedEvaluationOptions {
-                master_mode: crate::RustRedMasterMode::Symbolic,
-            },
-        )]),
-        number_of_terms_in_epsilon_expansion: 2,
-        run_time_decimal_precision: 40,
-        integral_normalization_factor: crate::LoopNormalizationFactor::FMFTandMATAD,
-        ..Default::default()
-    };
-    let input = vk_parse!(format!(
-        "(1.25-1.25*{})*topo(I1L(muvsq,1))",
-        settings.epsilon_symbol,
-    ))
-    .unwrap();
-    let symbolic = engine.evaluate(&settings, input.as_view()).unwrap();
-    assert!(
-        symbolic.contains_symbol(vk_symbol!("NumericalSource")),
-        "{symbolic}"
-    );
-    let (numerical, _) = engine
-        .numerical_evaluation(
-            &settings,
-            symbolic.as_view(),
-            &ahash::HashMap::from_iter([("muvsq".into(), settings.real_to_prec("1"))]),
-            &ahash::HashMap::default(),
-            None,
-        )
+    for strategy in [
+        crate::RustRedReductionStrategy::DepthFirst,
+        crate::RustRedReductionStrategy::Ordered,
+    ] {
+        let mut settings = VakintSettings {
+            evaluation_order: crate::EvaluationOrder(vec![crate::EvaluationMethod::RustRed(
+                crate::RustRedEvaluationOptions {
+                    master_mode: crate::RustRedMasterMode::Symbolic,
+                },
+            )]),
+            number_of_terms_in_epsilon_expansion: 2,
+            run_time_decimal_precision: 40,
+            integral_normalization_factor: crate::LoopNormalizationFactor::FMFTandMATAD,
+            ..Default::default()
+        };
+        settings.rustred_application_options.reduction_strategy = strategy;
+        let input = vk_parse!(format!(
+            "(1.25-1.25*{})*topo(I1L(muvsq,1))",
+            settings.epsilon_symbol,
+        ))
         .unwrap();
-    let coefficient = &numerical.coefficients()[&0];
-    assert!(coefficient.value().re.is_zero());
-    assert!(!coefficient.precision().real().exact_zero());
-    assert!(coefficient.to_atom().is_err());
+        let symbolic = engine.evaluate(&settings, input.as_view()).unwrap();
+        assert!(
+            symbolic.contains_symbol(vk_symbol!("NumericalSource")),
+            "{symbolic}"
+        );
+        let (numerical, _) = engine
+            .numerical_evaluation(
+                &settings,
+                symbolic.as_view(),
+                &ahash::HashMap::from_iter([("muvsq".into(), settings.real_to_prec("1"))]),
+                &ahash::HashMap::default(),
+                None,
+            )
+            .unwrap();
+        let coefficient = &numerical.coefficients()[&0];
+        assert!(coefficient.value().re.is_zero());
+        assert!(!coefficient.precision().real().exact_zero());
+        assert!(coefficient.to_atom().is_err());
+    }
 }
 
 #[test]

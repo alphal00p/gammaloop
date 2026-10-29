@@ -123,6 +123,125 @@ mod tests {
     }
 
     #[test]
+    fn ordered_msbar_retained_normalization_matches_depth_first() {
+        let engine = Vakint::new().unwrap();
+        let euler_gamma = crate::vakint_symbol!("EulerGamma");
+        for input in [
+            "topo(I1L(1,3))+2*topo(I1L(1,4))",
+            "topo(I2L(7/3,2,1,1))+2*topo(I2L(7/3,1,2,1))",
+        ] {
+            let input = vakint_parse!(input).unwrap();
+            let mut results = Vec::new();
+            for strategy in [
+                RustRedReductionStrategy::DepthFirst,
+                RustRedReductionStrategy::Ordered,
+            ] {
+                let mut settings = settings(strategy);
+                settings.integral_normalization_factor = LoopNormalizationFactor::MSbar;
+                let result = engine
+                    .evaluate_integral(&settings, input.as_view())
+                    .unwrap();
+                assert!(
+                    !result.contains_symbol(euler_gamma),
+                    "MSbar must cancel normalization exponentials before retaining masters: {result}"
+                );
+                results.push(result);
+            }
+            assert!((&results[0] - &results[1]).together().expand().is_zero());
+        }
+    }
+
+    #[test]
+    fn ordered_msbar_normalization_is_shared_by_direct_entry_points() {
+        let engine = Vakint::new().unwrap();
+        let mut settings = settings(RustRedReductionStrategy::Ordered);
+        settings.integral_normalization_factor = LoopNormalizationFactor::MSbar;
+        for integral in ["topo(I1L(1,3))", "topo(I2L(1,2,1,1))"] {
+            let integral = vakint_parse!(integral).unwrap();
+            let batched = engine
+                .evaluate_integral(&settings, integral.as_view())
+                .unwrap();
+            let mut term = crate::VakintTerm {
+                integral: integral.clone(),
+                numerator: Atom::one(),
+                vectors: Vec::new(),
+            };
+            let matched = term
+                .prepare_integral_specs(&engine, &settings, None)
+                .unwrap();
+            let direct = settings.evaluation_order.0[0]
+                .evaluate_integral(&engine, &settings, term.numerator.as_view(), &matched)
+                .unwrap();
+            let mut term = crate::VakintTerm {
+                integral,
+                numerator: Atom::one(),
+                vectors: Vec::new(),
+            };
+            term.evaluate_integral(&engine, &settings).unwrap();
+            assert_eq!(direct, batched);
+            assert_eq!(Atom::from(term), batched);
+        }
+    }
+
+    #[test]
+    fn ordered_msbar_substitution_preserves_numerical_precision() {
+        use ahash::HashMap;
+
+        let engine = Vakint::new().unwrap();
+        for (loop_count, input) in [(1, "topo(I1L(1,1))"), (2, "topo(I2L(1,1,1,1))")] {
+            let input = vakint_parse!(input).unwrap();
+            let mut values = Vec::new();
+            for mode in [RustRedMasterMode::Symbolic, RustRedMasterMode::Numerical] {
+                for strategy in [
+                    RustRedReductionStrategy::DepthFirst,
+                    RustRedReductionStrategy::Ordered,
+                ] {
+                    let mut settings = settings(strategy);
+                    settings.integral_normalization_factor = LoopNormalizationFactor::MSbar;
+                    settings.number_of_terms_in_epsilon_expansion = loop_count + 1;
+                    settings.run_time_decimal_precision = 40;
+                    settings.evaluation_order = EvaluationOrder(vec![EvaluationMethod::RustRed(
+                        RustRedEvaluationOptions { master_mode: mode },
+                    )]);
+                    let expression = engine
+                        .evaluate_integral(&settings, input.as_view())
+                        .unwrap()
+                        .replace(
+                            Atom::var(crate::vakint_symbol!(&settings.mu_r_sq_symbol)).to_pattern(),
+                        )
+                        .with(Atom::one());
+                    let (value, statistical_error) = engine
+                        .numerical_evaluation(
+                            &settings,
+                            expression.as_view(),
+                            &HashMap::default(),
+                            &HashMap::default(),
+                            None,
+                        )
+                        .unwrap();
+                    assert!(statistical_error.is_none());
+                    for coefficient in value.coefficients().values() {
+                        for part in [
+                            coefficient.precision().real(),
+                            coefficient.precision().imaginary(),
+                        ] {
+                            assert!(
+                                part.exact_zero()
+                                    || part.significant_digits().is_some_and(|digits| digits >= 37)
+                            );
+                        }
+                    }
+                    values.push(value);
+                }
+            }
+            for actual in &values[1..] {
+                let (equal, diagnostic) = actual.does_approx_match(&values[0], None, 1e-30, 5.0);
+                assert!(equal, "{diagnostic}");
+            }
+        }
+    }
+
+    #[test]
     fn two_loop_ordered_and_depth_first_agree() {
         assert_parity(&[
             "topo(I2L(muvsq,2,1,1))+2*topo(I2L(muvsq,1,2,1))",
