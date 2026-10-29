@@ -834,8 +834,8 @@ def validate(runtime_module, stub_source):
             assert!(!rendered.contains(retired), "retired Python API {retired}");
         }
         assert!(rendered.contains(
-            "Single : Select one smallest-degree rewrite per step; without `n_steps`, continue until no work remains"
+            "Single: typing.ClassVar[ExecutionMode]\n    r\"\"\"\n    Select one smallest-degree rewrite per step; without `n_steps`, continue until no work remains\n    \"\"\""
         ));
-        assert!(!rendered.contains("Single : Execute one contraction at a time"));
+        assert!(!rendered.contains("Execute one contraction at a time"));
     }
 }
