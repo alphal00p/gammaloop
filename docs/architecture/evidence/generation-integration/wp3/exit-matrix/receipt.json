@@ -1,0 +1,151 @@
+{
+  "schema": 1,
+  "scope": "WP3 rebuilt-tip exit matrix on approved TensorReduction integration; validation evidence only, not WP3 completion",
+  "base": "ead78f0460b03ec5d5dd80b8a6d47b4c357592a8",
+  "base_change": "komovntumpxxkxqploluxkslpyqsuvuy",
+  "runtime_code": "b9f788922341e7bde2e801a054423ae70ed7e9ae",
+  "runtime_change": "olwyvkywonuuoszxllzsnovoxktuolzk",
+  "evidence_change": "zqmwmtxykoptqmkzsvtwzllruxynrnzs",
+  "candidate_bookmark": "generation-integration-wp3-exit-matrix",
+  "source46_approved": "79dfeaab77958064bf802bc88db23eb86ac2f8ce",
+  "status": "INCOMPLETE: independent matrix cells pass, but the canonical fast/oracle gate fails and the current core producer does not compile",
+  "source": {
+    "uri": "git+file:///shared/lcnbr/dev/gammaloop/main?rev=b9f788922341e7bde2e801a054423ae70ed7e9ae&shallow=1&allRefs=1",
+    "full_source": "/nix/store/0dc1hvdcyvhswl4xy76r46p8n7xvgq13-source",
+    "narHash": "sha256-JpfO9NPToeweG2YnrNZOt3AaoEG4tGuT0rwheyVwYCo=",
+    "kernel": "1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
+    "compiler": "/nix/store/c3bpv60f5wgp4pmgsifaykxk214h6463-rust-stable-with-components-2026-09-03",
+    "nixci_enabled": false
+  },
+  "producers": {
+    "feynkit_generator": {
+      "archive": "/nix/store/6qnfnwfw3gqanry38hvr0bb6dbz2197q-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0/gammaloop-nextest-feynkit-feynkit-generator.tar.zst",
+      "archive_sha256": "f72323a0094ef4c88445dd95ddaeda1f5a863b3ec0fa1f75bbcce05472236225",
+      "profile": "ci-optim / ci_gammaloop",
+      "generation_oracle_elf_sha256": "1b62064514373a031d8cfc60543cb300588d6a3aa609c4729dc7b2ead32e4ee3",
+      "classification": "Scoped package archive realized and executed. The wider feynkit aggregate was intentionally stopped after this required output realized; it receives no aggregate credit."
+    },
+    "integration": {
+      "archive": "/nix/store/l2kg4q1vmk7xpfj8n7ggsym81dnnk9rd-gammaloop-nextest-binaries-integration/gammaloop-nextest-integration-gammaloop-integration-tests.tar.zst",
+      "archive_sha256": "8c4371b703a379dc7a70fb5817b5ccbb5072bfaab10707d31b28bfa2d362b337",
+      "profile": "ci-optim / ci_gammaloop",
+      "test_feyngen_elf_sha256": "03326cf24ed50b733b59ebba1cf10c6fb797a03b2f6c0ba1fc1f79f75334b907",
+      "test_nlo_acceptance_elf_sha256": "cddebe3a413172042f76d7b5869be1374346364561964f195664067209570ffb",
+      "classification": "Aggregate archive realized and executed."
+    },
+    "four_loop_example": {
+      "profile": "dev-optim",
+      "elf": "target/dev-optim/examples/four_loop_numerator",
+      "elf_sha256": "8ed78f8535d45138cccea97745efe48f843308fb81db5f65915d1f0cc377128f",
+      "build_exit": 0,
+      "classification": "Ordinary Cargo example built in the Git-pinned b9 Nix development environment; not relabelled as a Nix archive ELF."
+    },
+    "core": {
+      "exit": 1,
+      "failed_derivation": "/nix/store/zsbimjac88ifbhwsyhhal5apxbvw158n-gammaloop-crate-test-binaries-gammalooprs-2d2283bffa0a56c2-deps-0.1.0.drv",
+      "failure": "Four E0283 errors at existing assertions on lines 9054 and 9126: collect() is ambiguous for BTreeSet because alloc and rkyv PartialEq implementations both apply.",
+      "log_sha256": "f893469a6057317d21522099d3d63ba5b79585a2c11e3dfc716b640ef7863b78",
+      "effect": "Canonical core fast lane and fresh current BRST quartet execution are blocked before test execution; neither receives pass credit."
+    }
+  },
+  "matrix": {
+    "canonical_fast_oracle": {
+      "exit": 100,
+      "selected": 371,
+      "passed": 289,
+      "failed": 82,
+      "skipped": 49,
+      "duration_seconds": 456.327,
+      "failures": "81 generation-oracle historical rows differ at their summary assertions, plus grouping::tests::sampled_quotient_groups_physical_local_factors failed in the direct archive invocation because its child used the immutable /build/source path without the runtime source bind. The latter is superseded by the successful bounded source-bound B2 replay below.",
+      "log_sha256": "242642657df3ee506625beccd1fb6e7b57c3f0a91283f05ae43191b736662873",
+      "qualification": "This is a real non-green canonical FeynKit fast selection. The initial unlicensed attempt is retained as harness history and receives no credit."
+    },
+    "oracle_required_controls": {
+      "exit": 0,
+      "selected": 17,
+      "passed": 17,
+      "failed": 0,
+      "duration_seconds": 439.786,
+      "coverage": "Three certified frame hashes, both source19 rows, and 12 fresh-process registration cells at actual 1/8/32 pools.",
+      "maximum_test_seconds": 71.088,
+      "minimum_headroom_to_240_seconds": 168.912,
+      "log_sha256": "74dc8b6e7816d400c0a11433a4da00bb6e3e4757377590ee5c861f1cb1e196de"
+    },
+    "sm_three_loop_filtered": {
+      "exit": 0,
+      "selected": 1,
+      "passed": 1,
+      "internal_pools": [1, 8],
+      "assertions": "3150 diagrams, weight -9861/16 and both original Lorentz-zero controls",
+      "duration_seconds": 12.939,
+      "log_sha256": "434271335de6780d0d4dd1f9c7a93eaf6c2941dfd564a54dd72be06a63b52e0b"
+    },
+    "four_loop": {
+      "pools": [1, 8, 32],
+      "all_exit": 0,
+      "diagrams": 4664,
+      "zero_numerators": 306,
+      "durations_seconds": [50.122, 6.577, 5.946],
+      "log_sha256": ["f8c4ef5adf19644e5427d56646f3e929cee8c0c9cdc4cf892dfcbc2df6f336c9","3d686c7632fb9bd53aa8836c64f82b0fabb70f1bfbf877dc010b86ac86a493eb","c474d433edc738f45fc83ade7f7b79640a1c277f493adbf2b0778a08f015398b"],
+      "perturbation_control": {"selected":1,"passed":1,"exit":0,"log_sha256":"b8cd3d03ceb5c7667c033218ca6b981657e9ac048e7c28fe48396b68c0683b04","producer":"approved source46 Idenso archive, reused because the b9 tensor repair does not alter its filtered runtime closure"}
+    },
+    "sm_a_ddx": {
+      "fresh_processes": 5,
+      "selected_each": 1,
+      "passed_each": 1,
+      "all_exit": 0,
+      "durations_seconds": [26.561,25.700,25.872,25.553,25.519],
+      "log_sha256": ["ac6c67889eeccae899e7a3a59c8c6ec38de92e01a7f845597f09b4ea4644b284","7935932033c231c8e2f17185cec675da630ee06a3c0ddce07dcf87b0c97d6397","25e7d7feb48440e0d3e5c9a610f5e02b4085c148d418160412da3c7ab7a0dbac","497ede5c3bbedb2e9975b57a9beca912a597ef37e320f8c280f6a17f174fa744","38707c3290f5d28ca0eb0033a9606f4ad68ad424d5cb9afd85fb2600d96fdef5"]
+    },
+    "nlo_and_coolqm": {
+      "exit": 0,
+      "selected": 3,
+      "passed": 3,
+      "tests": ["epem_a_ddx::epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes","epem_a_ttx::epem_a_ttx_msbar_nlo_matches_the_published_inclusive_ratio_in_all_local_uv_routes","cool_qm_eos::cool_qm_eos_nlo_matches_example_target"],
+      "policy": "Original route, precision, normalization, seed 1337, 750000 samples and tolerances remain in the frozen test source.",
+      "duration_seconds": 160.037,
+      "log_sha256": "f5da973e132c41769af3a94c63b4b09b76183b698d334e7f86feca0c5192e54e"
+    },
+    "b2": {
+      "exit": 0,
+      "selected": 6,
+      "passed": 6,
+      "explicit_ignored_selected": "grouping::tests::vacuum_group28_original_pair_identity",
+      "identity": "N28=(7/2)N34 in the original production 4D SU(3) scope",
+      "controls": "Physical sampled quotient plus scalar-interface, undefined-ratio and nonfinite fallback/rejection controls",
+      "log_sha256": "c670ccb67b6b6fc8089ea0f6d015bb08ef3cbfc5a39e307259b360a3b2e94fa9",
+      "harness": "A bounded bubblewrap bind supplied the immutable current source at the archive's compiled /build/source path and a writable JUnit root; two failed harness attempts are retained without credit."
+    },
+    "brst_quartet": {
+      "status": "NOT EXECUTED",
+      "test": "processes::cross_section::gauge_sewing_tests::massive_tau_covariant_cuts_satisfy_the_brst_quartet_identity",
+      "reason": "The current Git-pinned core producer fails during compilation before listing or execution. No older executable receives current-tip credit."
+    }
+  },
+  "approved_omissions": [
+    "graph::parse::tests::failing::parse_local",
+    "graph::parse::tests::failing::polarizations",
+    "graph::parse::tests::failing::test_pols_tree",
+    "graph::parse::tests::failing::vertex_rules"
+  ],
+  "omission_policy": "These four helpers would expand whole graph numerators and remain deliberately omitted. They are not counted as passes. The two separate DOT-export parser exclusions are ordinary quarantined failures, not relabelled as these policy omissions.",
+  "raw_evidence": {
+    "root": "target/wp3-exit-matrix",
+    "manifest": "target/wp3-exit-matrix/artifact-manifest.sha256",
+    "entries": 98,
+    "manifest_sha256": "43759b075fb89b215f40c3018235b214582b3c867969907211e2c854ec7d9bd5"
+  },
+  "evidence_source_qualification": {"record":"target/wp3-exit-matrix/final-evidence-flake-metadata.json","classification":"Evaluated only after the evidence commit freezes; distinct from executed runtime code b9f78892 and neither built nor executed."},
+  "protected_refs": [
+    "generation-integration-wp3-exit-matrix-base=ead78f0460b03ec5d5dd80b8a6d47b4c357592a8",
+    "generation-integration-tensor-layout-code=b9f788922341e7bde2e801a054423ae70ed7e9ae",
+    "generation-integration-source46=79dfeaab77958064bf802bc88db23eb86ac2f8ce"
+  ],
+  "remaining": [
+    "The 81 oracle-row failures require factor-preserving first-boundary diagnosis and must not be snapshot-updated blindly.",
+    "The core E0283 producer defect needs a separately assigned implementation fix and NEW independent review before BRST and the canonical core fast lane can run.",
+    "Canonical whole fast lane is not green; docs parallel repairs are not imported and eight HTML inventory failures remain on this head.",
+    "Other 25 grouped snapshots, original source44 later EXIT101 cases, 18 scripts, final site/WASM/wheels/distributions, benchmarks and memory remain later gates.",
+    "No WP3, M-rebuild, performance, publication or distribution completion is claimed."
+  ]
+}
