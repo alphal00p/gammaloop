@@ -12,6 +12,7 @@ use crate::{
     },
     subtraction::generate_rstar_t_dependence_evaluator,
 };
+use linnet::half_edge::involution::EdgeIndex;
 use symbolica::atom::Atom;
 
 #[test]
@@ -826,7 +827,6 @@ fn shared_group_weights_preserve_foreign_cut_data_and_radial_derivatives() {
             .evaluate(
                 &runtime_point,
                 CutGroupId(0),
-                &[],
                 &lmbs,
                 &graph,
                 &masses,

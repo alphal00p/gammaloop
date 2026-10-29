@@ -551,9 +551,9 @@ impl Integrated<'_> {
                     .integral
                     .pattern_match(&propagator, None, None)
                 {
-                    let momentum = &matched[&W_.mom_];
+                    let momentum = matched[&W_.mom_].expand();
                     same_momentum
-                        .entry(momentum.clone().min(-momentum))
+                        .entry(momentum.clone().min((-momentum).expand()))
                         .or_default()
                         .push((
                             usize::try_from(matched[&W_.a_].as_view())

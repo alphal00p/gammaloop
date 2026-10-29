@@ -2680,6 +2680,8 @@ pub(crate) fn uv_limit<S: ForestNodeLike, M: ForestNodeLike>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::utils;
+    use crate::uv::approx::integrated::Integrated;
     use crate::{
         dot,
         graph::{GraphThreeDSource, parse::IntoGraph},
@@ -5637,8 +5639,6 @@ mod tests {
         assert!(!physical_mass.is_zero());
         assert_ne!(physical_mass, Atom::var(GS.m_uv_vacuum));
         let mass_squared = physical_mass.pow(2);
-        let current = two_point_node(&graph, ApproximationType::IR);
-        assert_eq!(current.lmb.loop_edges.len(), 2);
         let given = root_node(&graph);
         let settings = UVgenerationSettings {
             generate_integrated: true,
@@ -5647,83 +5647,104 @@ mod tests {
         let ctx = UVCtx::new(&graph, &settings);
         let mut vakint_settings = settings.vakint.true_settings();
         vakint_settings.number_of_terms_in_epsilon_expansion = 3;
-        let integrator = crate::uv::approx::integrated::Integrated::new(
-            crate::utils::vakint()?,
-            &vakint_settings,
-        );
-        let [q, l] = [3, 4].map(|edge| function!(GS.emr_mom, edge));
-        let massless_q = function!(GS.den, 2, &q, Atom::Zero);
-        let massive_q = function!(GS.den, 3, &q, &mass_squared);
-        let common =
-            function!(GS.den, 4, &l, &mass_squared) * function!(GS.den, 5, &q - &l, Atom::Zero);
-        let coefficient = parse!("(a+b)*(c+d)");
-        let mut integrals = Vec::new();
-        for (owners, denominator) in [
-            (
-                current.subgraph.clone(),
-                &massless_q * massive_q.pow(2) * &common,
-            ),
-            (
-                current
-                    .subgraph
-                    .subtract(&graph.get_edge_subgraph(EdgeIndex(2))),
-                massive_q.pow(2) * &common,
-            ),
-            (
-                current
-                    .subgraph
-                    .subtract(&graph.get_edge_subgraph(EdgeIndex(2))),
-                &massive_q * &common,
-            ),
-            (
-                current
-                    .subgraph
-                    .subtract(&graph.get_edge_subgraph(EdgeIndex(3))),
-                &massless_q * &common,
-            ),
-        ] {
-            // The numerator stays factorized. The reference sunsets contract
-            // one serial owner while retaining the full source scope and both
-            // loop coordinates; every term carries the same forest minus.
-            let local = Local4dCts(FourDSectors::new(
-                vec![FourDSector::new(
-                    -&coefficient / denominator,
-                    vec![(owners, current.subgraph.clone(), current.lmb.clone())],
-                    Vec::new(),
-                )],
-                Vec::new(),
-            ));
-            integrals.push(integrator.run(&local, &ctx, &current, &given, &current, &given)?);
-        }
-        // The repeated q denominator has the exact decomposition
-        // 1/[q²(q²-M²)²] = 1/[M²(q²-M²)²] - 1/[M⁴(q²-M²)] + 1/[M⁴q²].
-        // The remaining l and q-l denominators are unchanged, producing two
-        // MM0 sunsets (one dotted) and one M00 sunset with a common measure.
-        for finite in [false, true] {
-            let values = integrals
-                .iter()
-                .map(|integrated| {
-                    if finite {
-                        integrated.physical_finite_counterterm_atom()
-                    } else {
-                        integrated.physical_pole_atom()
-                    }
+        let integrator = Integrated::new(utils::vakint()?, &vakint_settings);
+        for loop_edges in [[3, 4], [4, 5]] {
+            let mut current = two_point_node(&graph, ApproximationType::IR);
+            current.lmb = graph
+                .generate_loop_momentum_bases_of(&current.subgraph)
+                .into_iter()
+                .find(|lmb| {
+                    loop_edges
+                        .iter()
+                        .all(|edge| lmb.loop_edges.contains(&EdgeIndex(*edge)))
                 })
-                .collect::<Vec<_>>();
-            let expected = &values[1] / &mass_squared - &values[2] / mass_squared.pow(2)
-                + &values[3] / mass_squared.pow(2);
-            let difference = &values[0] - expected;
-            assert!(
-                difference.together().cancel().is_zero(),
-                "serial mixed-mass sunset disagrees with contracted topologies for finite={finite}: {difference}",
-            );
-            assert!(!values[0].is_zero());
-            assert!(paper_has_pattern(&values[0], physical_mass.clone()));
-            assert!(
-                values
+                .expect("the serial sunset has both requested two-loop charts");
+            assert_eq!(current.lmb.loop_edges.len(), 2);
+            assert_eq!(
+                current.lmb.edge_signatures[EdgeIndex(3)]
+                    .internal
                     .iter()
-                    .all(|value| !value.contains_symbol(GS.m_uv_vacuum))
+                    .filter(|sign| !sign.is_zero())
+                    .count(),
+                if loop_edges == [3, 4] { 1 } else { 2 },
             );
+            let [q, l] = [3, 4].map(|edge| function!(GS.emr_mom, edge));
+            let massless_q = function!(GS.den, 2, &q, Atom::Zero);
+            // The alternate chart exposes the serial carrier as a sum of both
+            // loop variables, with opposite signs on its unequal-mass propagators.
+            let massive_momentum = if loop_edges == [4, 5] { -&q } else { q.clone() };
+            let massive_q = function!(GS.den, 3, massive_momentum, &mass_squared);
+            let common =
+                function!(GS.den, 4, &l, &mass_squared) * function!(GS.den, 5, &q - &l, Atom::Zero);
+            let coefficient = parse!("(a+b)*(c+d)");
+            let mut integrals = Vec::new();
+            for (owners, denominator) in [
+                (
+                    current.subgraph.clone(),
+                    &massless_q * massive_q.pow(2) * &common,
+                ),
+                (
+                    current
+                        .subgraph
+                        .subtract(&graph.get_edge_subgraph(EdgeIndex(2))),
+                    massive_q.pow(2) * &common,
+                ),
+                (
+                    current
+                        .subgraph
+                        .subtract(&graph.get_edge_subgraph(EdgeIndex(2))),
+                    &massive_q * &common,
+                ),
+                (
+                    current
+                        .subgraph
+                        .subtract(&graph.get_edge_subgraph(EdgeIndex(3))),
+                    &massless_q * &common,
+                ),
+            ] {
+                // The numerator stays factorized. The reference sunsets contract
+                // one serial owner while retaining the full source scope and both
+                // loop coordinates; every term carries the same forest minus.
+                let local = Local4dCts(FourDSectors::new(
+                    vec![FourDSector::new(
+                        -&coefficient / denominator,
+                        vec![(owners, current.subgraph.clone(), current.lmb.clone())],
+                        Vec::new(),
+                    )],
+                    Vec::new(),
+                ));
+                integrals.push(integrator.run(&local, &ctx, &current, &given, &current, &given)?);
+            }
+            // The repeated q denominator has the exact decomposition
+            // 1/[q²(q²-M²)²] = 1/[M²(q²-M²)²] - 1/[M⁴(q²-M²)] + 1/[M⁴q²].
+            // The remaining l and q-l denominators are unchanged, producing two
+            // MM0 sunsets (one dotted) and one M00 sunset with a common measure.
+            for finite in [false, true] {
+                let values = integrals
+                    .iter()
+                    .map(|integrated| {
+                        if finite {
+                            integrated.physical_finite_counterterm_atom()
+                        } else {
+                            integrated.physical_pole_atom()
+                        }
+                    })
+                    .collect::<Vec<_>>();
+                let expected = &values[1] / &mass_squared - &values[2] / mass_squared.pow(2)
+                    + &values[3] / mass_squared.pow(2);
+                let difference = &values[0] - expected;
+                assert!(
+                    difference.together().cancel().is_zero(),
+                    "serial mixed-mass sunset disagrees with contracted topologies for finite={finite}: {difference}",
+                );
+                assert!(!values[0].is_zero());
+                assert!(paper_has_pattern(&values[0], physical_mass.clone()));
+                assert!(
+                    values
+                        .iter()
+                        .all(|value| !value.contains_symbol(GS.m_uv_vacuum))
+                );
+            }
         }
         Ok(())
     }

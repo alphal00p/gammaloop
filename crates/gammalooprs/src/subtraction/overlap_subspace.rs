@@ -1696,17 +1696,18 @@ mod tests {
                 FourMomentum::from_args(F(energy), F(10.0), F(0.0), F(0.0)),
                 FourMomentum::from_args(F(-energy), F(-10.0), F(0.0), F(0.0)),
             ]);
-            radial_surface.classify_existence_subspace(
-                &zero_loop_momenta,
-                &external_momenta,
-                &subspace,
-                &all_lmbs,
-                &graph,
-                &graph.underlying.new_edgevec(|_, _, _| F(0.0)),
-                &[],
-                &F(10.0),
-                &F(crate::utils::DEFAULT_ESURFACE_EXISTENCE_THRESHOLD),
-            )
+            radial_surface
+                .classify_existence_subspace(
+                    &zero_loop_momenta,
+                    &external_momenta,
+                    &subspace,
+                    &all_lmbs,
+                    &graph,
+                    &graph.underlying.new_edgevec(|_, _, _| F(0.0)),
+                    &F(10.0),
+                    &F(crate::utils::DEFAULT_ESURFACE_EXISTENCE_THRESHOLD),
+                )
+                .unwrap()
         };
         assert!(matches!(
             classify_radial_surface(11.0),

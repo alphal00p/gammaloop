@@ -391,7 +391,13 @@ mod tests {
         .unwrap();
         let mut spec: ThresholdCountertermSpec =
             toml::from_str(&graph.global_data.statements["threshold_counterterms"]).unwrap();
-        let variant = &mut spec.cuts[0].thresholds[0].counterterms[0];
+        let variant = spec
+            .cuts
+            .iter_mut()
+            .flat_map(|cut| &mut cut.thresholds)
+            .flat_map(|threshold| &mut threshold.counterterms)
+            .find(|variant| variant.multiplier.is_some())
+            .expect("the GL638 fixture must retain a weighted threshold variant");
         variant.name = Some("quoted \"variant\" λ\\line\nend\\".into());
         variant
             .multiplier

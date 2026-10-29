@@ -2531,7 +2531,7 @@ impl CrossSectionGraph {
     //    local_prefactor + integrated_prefactor
     //}
 
-    fn build_lmbs(&mut self) -> Result<()> {
+    pub(crate) fn build_lmbs(&mut self) -> Result<()> {
         let mut lmbs: TiVec<LmbIndex, LoopMomentumBasis> = vec![].into();
 
         let externals: SuBitGraph = self.graph.empty_subgraph();

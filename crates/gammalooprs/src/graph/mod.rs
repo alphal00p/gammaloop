@@ -529,6 +529,7 @@ impl Graph {
         (source_node, target_node)
     }
 
+    #[cfg(test)]
     pub(crate) fn edge_name_to_index(&self, name: &str) -> Option<EdgeIndex> {
         for (_, edge_index, edge_data) in self.underlying.iter_edges() {
             if edge_data.data.name.value == name {

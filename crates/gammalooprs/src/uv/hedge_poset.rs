@@ -1672,6 +1672,10 @@ impl Display for Forests {
 
 #[cfg(test)]
 mod tests {
+    use crate::initialisation;
+    use crate::numerator::aind::Aind;
+    use crate::utils;
+    use crate::uv::uv_graph::UVE;
     use crate::{
         dot,
         graph::{FeynmanGraph, Graph, parse::IntoGraph},
@@ -1682,6 +1686,9 @@ mod tests {
             settings::RenormalizationPrescriptionSettings,
         },
     };
+    use idenso::IndexTooling;
+    use idenso::color::ColorSimplifySettings;
+    use idenso::shorthands::metric::MetricSimplifier;
 
     use super::*;
     use color_eyre::Result;
@@ -2726,6 +2733,93 @@ mod tests {
             cross,
             "reverse component-local replay and the produced cross sector",
         )?;
+        Ok(())
+    }
+
+    #[test]
+    fn nested_soft_top_self_energy_preserves_completed_parent_poles() -> Result<()> {
+        initialisation::test_initialise()?;
+        let model = utils::load_generic_model("sm");
+        let graph: Graph = include_str!(
+            "../../../../tests/resources/graphs/local_nested_soft_top_self_energy.dot"
+        )
+        .into_graph(&model)?;
+        let external: SuBitGraph = graph.external_filter();
+        let parent = graph.full_filter().subtract(&external);
+        assert_eq!(graph.n_loops(&parent), 2);
+        let physical_mass = graph[EdgeIndex::from(2)].mass_atom();
+        assert!(!physical_mass.is_zero());
+        assert_ne!(physical_mass, Atom::var(GS.m_uv_vacuum));
+
+        let mut completed_poles = Vec::with_capacity(2);
+        for scheme in [ApproximationType::MUV, ApproximationType::IR] {
+            let settings = GenerationSettings {
+                uv: UVgenerationSettings {
+                    generate_integrated: true,
+                    renormalization_prescription: RenormalizationPrescriptionSettings {
+                        log_divergent: scheme,
+                        massive_power_divergent: scheme,
+                        massless_power_divergent: scheme,
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                },
+                ..Default::default()
+            };
+            let mut forests = Wood::new(CutStructure::empty(&graph), &graph, &settings)?.unfold();
+            forests.integrate(&graph, utils::vakint()?, &settings.uv)?;
+            let mut pole = Atom::Zero;
+            let mut bare_parent_count = 0;
+            let mut nested_parent_count = 0;
+            let mut finite_prefix_retained = false;
+            for (_, _, operation) in forests.graph.iter_nodes() {
+                if operation.covers().as_ref() != Some(&parent) {
+                    continue;
+                }
+                let computed = forests.compute_store.require(operation)?;
+                pole += computed.integrated(operation)?.physical_pole_atom();
+                if operation.key.op_count() == 1 {
+                    bare_parent_count += 1;
+                } else {
+                    nested_parent_count += 1;
+                    finite_prefix_retained |=
+                        computed.local_4d(operation)?.active_sectors().len() > 1;
+                }
+            }
+            assert_eq!(bare_parent_count, 1);
+            assert!(nested_parent_count > 0);
+            assert!(
+                finite_prefix_retained,
+                "the nested {scheme} parent must include the integrated child's finite completion"
+            );
+            // Compare the complete parent forest, keeping its Feynman-rule numerator and
+            // finite-prefix epsilon jets. Resolve the model's color representation
+            // invariants before comparing; individual nested terms need not agree.
+            let pole = pole
+                .replace(GS.m_uv_expansion)
+                .with(GS.m_uv_vacuum)
+                .replace(GS.dim)
+                .with(4)
+                .simplify_metrics()
+                .to_dots()
+                .simplify_color_with(
+                    ColorSimplifySettings::default().with_cof_dimension_invariants(),
+                )
+                .canonize(Aind::Dummy)?
+                .collect_factors();
+            assert!(
+                !pole.is_zero(),
+                "the completed {scheme} parent pole must be nonzero"
+            );
+            completed_poles.push(pole);
+        }
+        let difference = (&completed_poles[0] - &completed_poles[1])
+            .together()
+            .cancel();
+        assert!(
+            difference.is_zero(),
+            "MUV and H must give the same completed parent poles: {difference}"
+        );
         Ok(())
     }
 

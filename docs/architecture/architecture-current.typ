@@ -721,6 +721,12 @@ native subspaces, side ownership, physical/raised-cut associations and stable va
 bases with the original declarations; the runtime evaluator registry and flattened display
 rows cannot reconstruct that generation provenance.
 
+Projected E-surface existence bounds use the surface's own signed topological
+boundary and its complete affine momentum routing in the declared parent LMB.
+The complement stays fixed as spectator data. These signs do not come from the
+hosting physical cut; sewn initial-state edges are excluded at both endpoints
+when reconstructing the boundary.
+
 `SubspaceData::solve_signature` is the shared geometry identity: selected defining edges paired
 with their full signed fundamental cycles, each normalized along its defining edge. Parent
 IDs, slot order and the complement chart are excluded. An optional explicit `group_id` refines
@@ -1237,7 +1243,11 @@ performance-heavy data.
 
 === Persistence Compatibility Contract
 <persistence-compatibility-contract>
-- State format is versioned with `state_manifest.toml` (`version = 19` currently).
+- State format is versioned with `state_manifest.toml` (`version = 20` currently).
+- Version 20 removes the persisted physical-cut reversal mask from cross-section
+  graph terms. Projected E-surface bounds use each surface's own signed boundary
+  and fixed-spectator routing. Earlier states require regeneration and are rejected
+  before model or symbolic-state import.
 - Version 19 stores ordered CFF/LTD representation payloads with the existing
   evaluator layout. Amplitude and cross-section graph terms retain each
   representation's source denominator catalogue. Earlier main and combined-feature

@@ -634,7 +634,6 @@ pub struct CrossSectionGraphTerm {
     pub covariant_cut_representatives: BTreeMap<isize, isize>,
     pub topological_threshold_esurfaces: TiVec<TopologicalThresholdId, Esurface>,
     pub cut_threshold_associations: TiVec<CutId, CutThresholdCountertermAssociations>,
-    pub reversed_edges: TiVec<CutGroupId, Vec<EdgeIndex>>,
     pub multi_channeling_setup: LmbMultiChannelingSetup,
     pub lmbs: TiVec<LmbIndex, LoopMomentumBasis>,
     pub estimated_scale: Option<F<f64>>,
@@ -1468,34 +1467,6 @@ impl CrossSectionGraphTerm {
             active_iterated_thresholds,
         };
 
-        let reversed_edges = graph
-            .derived_data
-            .cut_group_data
-            .cut_groups
-            .iter()
-            .map(|cut_group| {
-                let mut reversed_edges = HashSet::new();
-
-                cut_group.cuts.iter().for_each(|cut_id| {
-                    let cut = &graph.cuts[*cut_id];
-                    cut.cut
-                        .iter_edges(&graph.graph)
-                        .for_each(|(orientation, edge_data)| {
-                            if orientation == Orientation::Reversed {
-                                reversed_edges.insert(
-                                    graph
-                                        .graph
-                                        .edge_name_to_index(&edge_data.data.name)
-                                        .unwrap(),
-                                );
-                            }
-                        });
-                });
-
-                reversed_edges.into_iter().sorted().collect()
-            })
-            .collect();
-
         Ok((
             Self {
                 integrand,
@@ -1536,7 +1507,6 @@ impl CrossSectionGraphTerm {
                     .generation
                     .requires_complete_orientation_sum(),
                 counterterm,
-                reversed_edges,
                 cut_group_data: graph.derived_data.cut_group_data.clone(),
             },
             stats,
@@ -2762,7 +2732,6 @@ impl GraphTerm for CrossSectionGraphTerm {
                     .collect_vec(),
                 &self.graph,
                 &masses,
-                &self.reversed_edges,
                 &self.lmbs,
                 context.settings,
                 context.rotation,
@@ -3391,7 +3360,6 @@ impl GraphTerm for CrossSectionGraphTerm {
                 &deferred_points,
                 &self.graph,
                 &self.graph.get_real_mass_vector(context.model),
-                &self.reversed_edges,
                 &self.lmbs,
                 context.settings,
                 context.rotation,
@@ -3417,7 +3385,6 @@ impl GraphTerm for CrossSectionGraphTerm {
                     self.counterterm.evaluate(
                         &deferred.kinematic_point,
                         cut_group_id,
-                        &self.reversed_edges[cut_group_id],
                         &self.lmbs,
                         &self.graph,
                         &self.graph.get_real_mass_vector(context.model),

@@ -353,10 +353,9 @@ impl AmplitudeOverlapCatalogue {
                 &lmbs,
                 geometry,
                 &masses,
-                &[],
                 &e_cm,
                 &existence_tolerance,
-            );
+            )?;
             if !existence.is_existing() {
                 continue;
             }
