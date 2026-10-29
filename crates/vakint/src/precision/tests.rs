@@ -51,6 +51,94 @@ fn public_numerical_evaluation_collects_orders_beyond_the_old_i8_range() {
 }
 
 #[test]
+fn public_numerical_evaluation_preserves_namespaced_regulator_identity() {
+    let engine = Vakint::new().unwrap();
+    for name in [
+        "ordered_carrier_control::epsilon",
+        "another_regulator::epsilon",
+    ] {
+        let settings = VakintSettings {
+            epsilon_symbol: name.into(),
+            ..settings(32)
+        };
+        let epsilon = Atom::var(vk_symbol!(name));
+        let expression = epsilon.clone().pow(-129)
+            + Atom::num(2) * epsilon.clone().pow(-2)
+            + Atom::num(3)
+            + Atom::num(4) * epsilon.clone().pow(2)
+            + Atom::num(5) * epsilon.pow(128);
+        let (result, error) = engine
+            .numerical_evaluation(
+                &settings,
+                expression.as_view(),
+                &HashMap::default(),
+                &HashMap::default(),
+                None,
+            )
+            .unwrap();
+        assert!(error.is_none());
+        assert_eq!(
+            result.coefficients().keys().copied().collect::<Vec<_>>(),
+            [-129, -2, 0, 2, 128]
+        );
+        for (power, value) in [(-129, 1), (-2, 2), (0, 3), (2, 4), (128, 5)] {
+            assert_eq!(
+                result.coefficients()[&power].value().re.to_rational(),
+                value
+            );
+            assert!(
+                result.coefficients()[&power]
+                    .precision()
+                    .imaginary()
+                    .exact_zero()
+            );
+        }
+        let homonym = Atom::var(vk_symbol!("unconfigured_regulator::epsilon")).pow(2);
+        let error = engine
+            .numerical_evaluation(
+                &settings,
+                homonym.as_view(),
+                &HashMap::default(),
+                &HashMap::default(),
+                None,
+            )
+            .unwrap_err();
+        assert!(!error.to_string().is_empty());
+        assert!(
+            !error
+                .to_string()
+                .contains("epsilon power is not an integer monomial")
+        );
+    }
+}
+
+#[test]
+fn namespaced_regulators_reject_noninteger_laurent_powers_gracefully() {
+    let engine = Vakint::new().unwrap();
+    let settings = VakintSettings {
+        epsilon_symbol: "ordered_carrier_control::epsilon".into(),
+        ..settings(32)
+    };
+    for exponent in [vk_parse!("1/2").unwrap(), vk_parse!("-1/2").unwrap()] {
+        let expression = Atom::var(vk_symbol!(&settings.epsilon_symbol)).pow(exponent);
+        let error = engine
+            .numerical_evaluation(
+                &settings,
+                expression.as_view(),
+                &HashMap::default(),
+                &HashMap::default(),
+                None,
+            )
+            .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("not an integer Laurent monomial")
+        );
+    }
+}
+
+#[test]
 fn public_numerical_evaluation_rejects_oversized_degrees_before_expansion() {
     let engine = Vakint::new().unwrap();
     let settings = VakintSettings {

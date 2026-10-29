@@ -17,7 +17,6 @@ mod tests;
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, Symbol},
     domains::float::{Complex, Float, Real, RealBall, SingleFloat, TrackedComplex},
-    id::Condition,
 };
 
 pub use symbolica::domains::float::{
@@ -892,26 +891,17 @@ pub(crate) fn evaluate_series(
         } else if power == Atom::var(epsilon) {
             1
         } else {
-            let pattern = vk_parse!(format!("{}^n_", epsilon))
-                .map_err(|error| VakintError::EvaluationError(error.to_string()))?;
-            power
-                .pattern_match(
-                    &pattern.to_pattern(),
-                    Some(&Condition::from((
-                        vk_symbol!("n_"),
-                        crate::number_condition(),
-                    ))),
-                    None,
-                )
-                .next()
-                .and_then(|matched| {
-                    get_integer_from_atom(matched.get(&vk_symbol!("n_")).unwrap().as_view())
-                })
-                .ok_or_else(|| {
-                    VakintError::EvaluationError(format!(
-                        "epsilon power is not an integer monomial: {power}"
-                    ))
-                })?
+            match power.as_view() {
+                AtomView::Pow(power) if power.get_base() == Atom::var(epsilon).as_view() => {
+                    get_integer_from_atom(power.get_exp())
+                }
+                _ => None,
+            }
+            .ok_or_else(|| {
+                VakintError::EvaluationError(format!(
+                    "epsilon power is not an integer monomial: {power}"
+                ))
+            })?
         };
         let coefficient = coefficient.to_owned();
         let (coefficient, sources, origins) = if let Some(catalog) = catalog {
