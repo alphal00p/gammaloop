@@ -177,15 +177,11 @@ class SvgBrowserTests(unittest.TestCase):
                         target.dispatch_event("pointerout")
                         self.assertIn("Pinned", panel.inner_text())
                         self.assertEqual(svg.bounding_box()["height"], 360)
-                        controls = svg.locator(".linnet-toolbar").bounding_box()
                         bounds = panel.bounding_box()
-                        self.assertGreaterEqual(
-                            bounds["y"], controls["y"] + controls["height"]
-                        )
-                        self.assertLessEqual(
-                            bounds["y"] + bounds["height"],
-                            svg.bounding_box()["y"] + 360,
-                        )
+                        self.assertGreaterEqual(bounds["x"], 8)
+                        self.assertGreaterEqual(bounds["y"], 8)
+                        self.assertLessEqual(bounds["x"] + bounds["width"], 412)
+                        self.assertLessEqual(bounds["y"] + bounds["height"], 792)
                         help = svg.locator(".linnet-navigation-help")
                         help.hover()
                         self.assertTrue(
@@ -270,13 +266,12 @@ class SvgBrowserTests(unittest.TestCase):
                         other = first.locator(
                             '[data-linnet-kind="node"][data-linnet-id="1"]'
                         )
-                        panel = first.locator(".linnet-inspector")
+                        panel = page.locator(".linnet-inspector")
                         node.hover()
                         self.assertIn("Node 0", panel.inner_text())
                         self.assertGreater(
                             panel.bounding_box()["y"],
-                            camera.bounding_box()["y"]
-                            + camera.bounding_box()["height"],
+                            node.bounding_box()["y"],
                         )
                         node.click()
                         other.hover()
@@ -317,15 +312,19 @@ class SvgBrowserTests(unittest.TestCase):
                         page.keyboard.press("+")
                         self.assertNotEqual(camera.get_attribute("viewBox"), initial)
                         page.keyboard.press("0")
-                        first.get_by_role("button", name="Close graph details").click()
+                        page.get_by_role("button", name="Close graph details").click()
                         other.hover()
                         self.assertIn("Node 1", panel.inner_text())
                         other.click(modifiers=["Shift"])
                         self.assertTrue(
-                            first.locator(".linnet-inspector-construction").is_visible()
+                            page.locator(".linnet-inspector-construction").is_visible()
                         )
-                        self.assertFalse(
-                            second.locator(".linnet-inspector").is_visible()
+                        self.assertEqual(page.locator(".linnet-inspector").count(), 1)
+                        self.assertEqual(
+                            second.locator("svg[data-linnet-interactive]").evaluate(
+                                "svg => svg.linnetSelection.nodes"
+                            ),
+                            [],
                         )
 
                         # Wheel zoom is opt-in so ordinary notebook scrolling still works.
@@ -346,15 +345,24 @@ class SvgBrowserTests(unittest.TestCase):
                             page.set_viewport_size({"width": 320, "height": 1000})
                             page.wait_for_function(
                                 """() => {
-                                    const graph = document.querySelector('.linnet-viewport').getBoundingClientRect();
-                                    const panel = document.querySelector('.linnet-inspector').getBoundingClientRect();
-                                    return panel.top >= graph.bottom;
+                                    const host = document.querySelector('.linnet-inspector-popup');
+                                    const panel = host.getBoundingClientRect();
+                                    return panel.left >= 8 && panel.right <= innerWidth - 8
+                                      && panel.top >= 8 && panel.bottom <= innerHeight - 8;
                                 }"""
                             )
                             self.assertTrue(
                                 page.evaluate(
                                     "document.documentElement.scrollWidth <= innerWidth"
                                 )
+                            )
+                            self.assertEqual(
+                                panel.evaluate(
+                                    "e => getComputedStyle(e).backgroundColor"
+                                ),
+                                "rgb(37, 33, 43)"
+                                if theme == "dark"
+                                else "rgb(255, 253, 249)",
                             )
                         self.assertEqual(errors, [])
                     finally:
