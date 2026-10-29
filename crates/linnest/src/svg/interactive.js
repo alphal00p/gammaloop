@@ -342,6 +342,10 @@
     layoutObserver.observe(svg);
     layout();
     const show = (target, event) => {
+      /* Pinning holds the shared inspector even while crossing another graph
+         on the way to its floating controls. An explicit click can replace it. */
+      if (!pinned && [...popupDocument.querySelectorAll('.linnet-inspector-popup[data-pinned]')]
+        .some(previous => previous !== panel)) return;
       inspected = target;
       rememberAnchor(target, event);
       content.replaceChildren();
@@ -413,6 +417,7 @@
       if (!panel.isConnected) popupMount.append(panel);
       syncPopupTheme();
       content.setAttribute('role', pinned ? 'dialog' : 'tooltip');
+      panel.toggleAttribute('data-pinned', pinned);
       panel.style.pointerEvents = pinned ? 'auto' : 'none';
       if (!panel.matches(':popover-open')) panel.showPopover();
       positionPopup();

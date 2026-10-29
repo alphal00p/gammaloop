@@ -412,6 +412,9 @@ def main():
                 assert page.locator(".linnet-inspector-construction").is_visible()
                 second.hover()
                 assert panel.count() == 1
+                assert page.locator(".linnet-inspector-construction").is_visible()
+                second.click()
+                assert panel.count() == 1
                 assert not page.locator(".linnet-inspector-construction").count()
                 assert (
                     page.locator("#first svg[data-linnet-interactive]").evaluate(
