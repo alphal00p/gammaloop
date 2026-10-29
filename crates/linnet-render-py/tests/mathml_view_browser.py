@@ -43,7 +43,7 @@ def runtime_environment():
     return environment
 
 
-def launch(playwright, engine):
+def launch(playwright, engine, **overrides):
     options = {
         "headless": True,
         "timeout": 20000,
@@ -53,6 +53,7 @@ def launch(playwright, engine):
         options["executable_path"] = executable
     if engine == "chromium":
         options["args"] = ["--no-sandbox", "--disable-dev-shm-usage"]
+    options.update(overrides)
     return getattr(playwright, engine).launch(**options)
 
 
