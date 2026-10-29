@@ -99,16 +99,20 @@ points = np.array([
 batch = api.evaluate_samples(points, return_events=True)
 assert len(batch.samples) == 2
 assert all(sample.event_groups for sample in batch.samples)
-assert len(batch.observables["leading_jet_pt_hist"].bins) == 8
-assert len(batch.observables["jet_count_hist"].bins) == 6
-assert batch.observables["leading_jet_pt_hist"].sample_count == 2
-assert batch.observables["jet_count_hist"].sample_count == 2
+accumulator = api.observable_accumulator()
+for sample in batch.samples:
+    accumulator.add_sample(sample, sample.integrator_weight)
+histograms = accumulator.snapshot()
+assert len(histograms["leading_jet_pt_hist"].bins) == 8
+assert len(histograms["jet_count_hist"].bins) == 6
+assert histograms["leading_jet_pt_hist"].sample_count == 2
+assert histograms["jet_count_hist"].sample_count == 2
 
 print(single.integrand_result, single.generated_event_count)
 for group in single.event_groups:
     for event in group.events:
         print(event.cut_info.graph_id, event.weight, event.outgoing_momenta)
-print(batch.observables["leading_jet_pt_hist"].sample_count)
+print(histograms["leading_jet_pt_hist"].sample_count)
 ```
 
 `return_events=True` temporarily requests returned events for that call; it does not permanently
@@ -120,13 +124,29 @@ The #link("guides/conventions/")[normalization and weight contract] defines whic
 already present in an event weight and why all contributions from one Monte Carlo point must be
 committed as one statistical sample.
 
-#callout("Single and batch results have different aggregation boundaries", [
-  `evaluate_sample` returns one `EvaluationResult`: its event groups and observable snapshot
-  belong to that sample. `evaluate_samples` returns per-row `SampleEvaluationResult` objects and
-  one `BatchEvaluationResult.observables` dictionary merged across the whole batch. Do not read a
-  batch histogram as if it belonged to the last row, and do not add the same batch snapshot once
-  per sample.
+#callout("One independent sample per result", [
+  Both `evaluate_sample` and each entry of `evaluate_samples(...).samples` expose an
+  `EvaluationResult`. Evaluating does not commit observable statistics. Its complete
+  event-group list belongs to one sample; groups must not be accumulated separately.
+  Configured observables retain that payload even with diagnostic event output disabled.
 ])
+
+`ObservableAccumulator.add_sample(result, coefficient)` applies the caller's complete
+outer weight once. A zero coefficient records an attempted sample without fills.
+The payload remains reusable, for example with different stratum coefficients.
+Use the same integrand, selector, observable, and clustering definitions for evaluation
+and accumulation; changing definitions requires a fresh evaluation and accumulator.
+`merge_in_place` combines independent sample statistics. To add independent stratum
+integrals, use `ObservableAccumulator.sum_independent_estimates([stratum0, stratum1])`:
+this adds means and variances while retaining each stratum's count. Merge batches within
+each stratum first. Empty strata have unavailable means/errors; one attempt has no error
+estimate. Raw snapshots remain separate from these derived estimates.
+
+For a fixed stratified proposal with total inverse-density weight $W$ and exact
+selection probability $p_k$, add each draw only to its chosen stratum's accumulator,
+with coefficient $p_k W$ on a match and zero on a miss. The stratum mean uses its
+own attempted-draw count. Summing those means and error variances requires independent
+draws and the correct probabilities; GammaLoop does not establish these sampler guarantees.
 
 The histogram values are immutable snapshots. Inspect `bins`, underflow/overflow, raw sums of
 weights and squared weights, entry counts, and the aggregate statistics before deriving a plot.
@@ -136,7 +156,7 @@ Keep raw statistics when combining results; rounded rendered values are not a me
 
 The Rust example loads the same kind of run card through `StateLoadOption`, executes the display
 block through a CLI session, then calls the typed evaluation functions. It is a `rust-script`
-program so its dependency revision is recorded with the example:
+program whose dependencies point to the local workspace crates:
 
 // docs-example: syntax
 ```sh

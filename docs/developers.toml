@@ -22,7 +22,7 @@ status = "Implemented"
 lifecycle = "current"
 owner = "unassigned"
 reviewed_at = "2026-10-29"
-review_ref = "5c9242a3d23a1bc1aababf18997dc0c068d88451"
+review_ref = "58606e2de028c0449fee1d5f20e143ea90531d18"
 products = ["gammaloop"]
 topics = ["state", "python", "generation", "evaluation", "events", "integration", "persistence"]
 review_triggers = ["crates/gammaloop-api/src/**", "crates/gammaloop-api/python/**", "crates/gammalooprs/src/**", "crates/three-dimensional-reps/src/**"]
@@ -109,7 +109,9 @@ anchor = "pub struct EvaluationResult {"
 # Reviewed 2026-10-19: StabilityResult adds the resolved representation beside
 # precision, and diagnostic rows display both. The main numerical result,
 # normalization and event-accounting contracts remain unchanged.
-digest = "dcb75cee39e4897502eaa1a0fc765eee809cb58e"
+# Reviewed 2026-10-29: architecture-current.typ documents reusable sample
+# contributions, separate outer weights, and explicit observable accumulation.
+digest = "08e1c5149ca610d090f127503edb6419804c9ccc"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/integrands/process/mod.rs"
@@ -148,7 +150,10 @@ anchor = "pub fn warm_up(&mut self, model"
 # orientation requests on complete sums are rejected. Main parameter preparation
 # and evaluator ownership remain in place. Standalone archives use amplitude17
 # and cross-section20 with representation-indexed native programs.
-digest = "f1970c0e5b26d5c531d348d1ef5966583c137294"
+# Reviewed 2026-10-29: evaluation leaves observable statistics unchanged and
+# creates independent reducers from warmed definitions; the architecture note
+# records the evaluation/accumulation boundary and native batch retention.
+digest = "b8942b65447b66e5808a3b124cec13267dcfe9db"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/observables/events.rs"
@@ -163,7 +168,9 @@ anchor = "pub struct GenericEvent<T: FloatLike> {"
 # Reviewed 2026-10-12: The map-of-pairs serializer replaces vectorize with the
 # same ordered pair representation; event weights and persistence fields are
 # unchanged.
-digest = "6450148360cff16688c3e37986180c678682606e"
+# Reviewed 2026-10-29: sample event weights exclude the outer sampler weight;
+# the architecture note distinguishes them from weighted native event exports.
+digest = "fa6a160139593f22c9c9117d7fea471fa5a5766a"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/observables/mod.rs"
@@ -175,7 +182,25 @@ anchor = "pub struct EventProcessingRuntime {"
 # continuous checkpoint metadata, with explicit labels and merge guards retained.
 # Reviewed 2026-10-12: Capability feature names and formatting are updated;
 # the reviewed implementation and data contracts are unchanged.
-digest = "e42015d34dc3d2d1b27d75a1a35dd96002fe8604"
+# Reviewed 2026-10-29: the note covers explicit coefficients, zero attempts,
+# correlated fills, and the separation of raw snapshots from final estimates.
+digest = "8aafd909390807427f14da49abfa574e53c8f4c3"
+
+[[section.note.scope]]
+path = "crates/gammalooprs/src/observables/sample.rs"
+symbol = "gammalooprs::observables::HistogramAccumulatorState::fill_continuous_sample"
+anchor = "pub fn fill_continuous_sample("
+# Reviewed 2026-10-29: sample-level grouping includes flow bins and empty
+# attempts; the architecture note names this reducer's implementation owner.
+digest = "9c682918081351fe8cc2d6068f6d85ca3c22c65a"
+
+[[section.note.scope]]
+path = "crates/gammalooprs/src/observables/estimates.rs"
+symbol = "gammalooprs::observables::ObservableSnapshotBundle::sum_independent_estimates"
+anchor = "pub fn sum_independent_estimates<'a>("
+# Reviewed 2026-10-29: independent population means and variances are summed
+# without pooling counts; these estimates remain distinct from raw snapshots.
+digest = "ef7e9f3fd9f020f9197e8504278802e72c7762ce"
 
 [[section.note.scope]]
 path = "crates/gammaloop-api/src/python.rs"
@@ -195,7 +220,9 @@ anchor = "struct GammaLoopAPI {"
 # generated modes, native map counts, complete-sum slots and per-attempt mode.
 # get_residue_map replaces the direction-only getter and selects a persisted
 # generated representation without rebuilding it; API prose describes this boundary.
-digest = "bac1aa68e8a0b60a3906f3cbddbfd184c8015d77"
+# Reviewed 2026-10-29: single and batch calls share EvaluationResult, while
+# ObservableAccumulator explicitly reduces contributions as described in the note.
+digest = "6fba6d14f887fe18d3e6cc36c061c151d936e677"
 
 [[section.note.scope]]
 path = "crates/gammaloop-api/src/python/residue_map.rs"
@@ -267,8 +294,8 @@ kind = "Runtime presentation architecture"
 status = "Implemented"
 lifecycle = "current"
 owner = "unassigned"
-reviewed_at = "2026-10-10"
-review_ref = "4ffcfb5b5fe24b3a398ee2a2e5f7ec7147764c47"
+reviewed_at = "2026-10-29"
+review_ref = "58606e2de028c0449fee1d5f20e143ea90531d18"
 products = ["gammaloop"]
 topics = ["integration", "terminal", "ratatui", "status"]
 review_triggers = ["crates/gammaloop-api/src/commands/integrate.rs", "crates/gammalooprs/src/integrate/**"]
@@ -319,7 +346,10 @@ anchor = "mod render_ratatui;"
 # preserved.
 # Reviewed 2026-10-15: The existing workspace result-archive path helper is public;
 # integration and dashboard behavior are unchanged.
-digest = "ac4d906069e76c49e899ccd2d190bd4a30567332"
+# No dashboard impact 2026-10-29: observable accumulation moves to explicit
+# native integration calls and exported events receive their outer weight.
+# StatusUpdate assembly, renderer ownership, and terminal lifecycle are unchanged.
+digest = "1067ce0970fbbb3fbb03dcedb0a82161a5b4851a"
 
 [[section.note]]
 id = "uv-renormalization"

@@ -663,7 +663,7 @@ def validate(runtime_module, stub_source):
         for excerpt in [
             "def e(self) -> builtins.float:\n        r\"\"\"\n        Energy component.",
             "def graph_groups(self) -> builtins.list[IntegrandGraphGroup]:\n        r\"\"\"\n        Per-group graph, orientation, basis, threshold, and cut metadata.",
-            "def sample(self) -> SampleEvaluationResult:\n        r\"\"\"\n        Evaluation record for the requested sample.",
+            "def samples(self) -> builtins.list[EvaluationResult]:\n        r\"\"\"\n        Evaluation records in the same order as the requested samples.",
             "def combine_diagrams(self, value: builtins.bool) -> None:\n        r\"\"\"\n        Write all diagrams of an integrand to one file during filesystem export.",
             "Create an evenly binned continuous histogram accumulator.\n\n        Parameters\n        ----------\n        title : str",
             "Resolve a relative string path or array index.\n\n        Parameters\n        ----------\n        key : str or int",

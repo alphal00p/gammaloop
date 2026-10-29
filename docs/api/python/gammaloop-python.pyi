@@ -43,27 +43,22 @@ class AdditionalWeight:
 @typing.final
 class BatchEvaluationResult:
     r"""
-    Per-sample evaluations paired with one observable snapshot for the complete batch.
+    One evaluation record per input sample, plus optional batch stability diagnostics.
     """
     @property
-    def samples(self) -> builtins.list[SampleEvaluationResult]:
+    def samples(self) -> builtins.list[EvaluationResult]:
         r"""
         Evaluation records in the same order as the requested samples.
-        """
-    @property
-    def observables(self) -> dict:
-        r"""
-        Observable snapshots accumulated across the complete sample batch.
         """
     @property
     def numerical_stability(self) -> typing.Optional[dict]: ...
     def __str__(self) -> builtins.str:
         r"""
-        Return a human-readable batch and observable summary.
+        Return a human-readable per-sample batch summary.
         """
     def __repr__(self) -> builtins.str:
         r"""
-        Return the human-readable batch and observable summary.
+        Return the human-readable per-sample batch summary.
         """
 
 @typing.final
@@ -249,13 +244,8 @@ class DotExportSettings:
 @typing.final
 class EvaluationResult:
     r"""
-    Single-sample evaluation paired with the observable snapshot for that sample.
+    Numerical value, metadata, stability records, and generated events for one sample.
     """
-    @property
-    def sample(self) -> SampleEvaluationResult:
-        r"""
-        Evaluation record for the requested sample.
-        """
     @property
     def integrand_result(self) -> complex:
         r"""
@@ -305,20 +295,15 @@ class EvaluationResult:
     @property
     def event_groups(self) -> builtins.list[EventGroup]:
         r"""
-        Correlated event groups produced while evaluating this sample.
-        """
-    @property
-    def observables(self) -> dict:
-        r"""
-        Observable snapshots produced from the same Monte Carlo sample.
+        All correlated event groups for this sample, before the outer sampler weight.
         """
     def __str__(self) -> builtins.str:
         r"""
-        Return a human-readable evaluation and observable summary.
+        Return a human-readable evaluation summary.
         """
     def __repr__(self) -> builtins.str:
         r"""
-        Return the human-readable evaluation and observable summary.
+        Return the human-readable evaluation summary.
         """
 
 @typing.final
@@ -482,6 +467,11 @@ class GammaLoopAPI:
         """
     def is_read_only_state(self) -> builtins.bool: ...
     def state_access_mode(self) -> builtins.str: ...
+    def observable_accumulator(self, process_id: typing.Optional[builtins.int] = None, integrand_name: typing.Optional[builtins.str] = None) -> ObservableAccumulator:
+        r"""
+        Create empty observable statistics for the selected integrand.
+        Evaluation itself never commits observable moments. See ``ObservableAccumulator``.
+        """
     def evaluate_sample(self, point: typing.Sequence[builtins.float], process_id: typing.Optional[builtins.int] = None, integrand_name: typing.Optional[builtins.str] = None, use_arb_prec: builtins.bool = False, minimal_output: builtins.bool = False, return_events: typing.Optional[builtins.bool] = None, momentum_space: builtins.bool = False, integrator_weight: typing.Optional[builtins.float] = None, discrete_dim: typing.Optional[typing.Sequence[builtins.int]] = None, graph_name: typing.Optional[builtins.str] = None, orientation: typing.Optional[builtins.int] = None) -> EvaluationResult:
         r"""
         Evaluate one integration or momentum-space sample.
@@ -521,7 +511,7 @@ class GammaLoopAPI:
         Returns
         -------
         EvaluationResult
-            The sample evaluation and the observable snapshot for its one-row batch.
+            One independent sample, with an unweighted contribution for configured observables.
 
         Raises
         ------
@@ -535,8 +525,8 @@ class GammaLoopAPI:
         ``f128``, and arbitrary-precision stability ladder. ``use_arb_prec=True``
         forces arbitrary-precision (Arb) internal evaluation. Python-visible numeric
         fields use the package's ``float64`` output contract. Evaluation may
-        warm the integrand and update in-memory caches or observable snapshots even in
-        a read-only-state session.
+        warm the integrand and update in-memory caches even in a read-only-state
+        session. Observable statistics change only through explicit accumulation.
 
         See Also
         --------
@@ -607,7 +597,7 @@ class GammaLoopAPI:
         Returns
         -------
         BatchEvaluationResult
-            Per-sample evaluations and one observable snapshot for the complete batch.
+            One evaluation per input sample and optional numerical-stability diagnostics.
 
         Raises
         ------
@@ -621,7 +611,7 @@ class GammaLoopAPI:
         ``f128``, and arbitrary-precision stability ladder. ``use_arb_prec=True``
         forces arbitrary-precision (Arb) internal evaluation. Python-visible numeric
         fields use the package's ``float64`` output contract. Evaluation may
-        update in-memory caches or observable snapshots in a read-only-state session.
+        update numerical caches; observable statistics change only through explicit accumulation.
 
         See Also
         --------
@@ -630,7 +620,7 @@ class GammaLoopAPI:
 
         Examples
         --------
-        Evaluate two rows and inspect their per-sample events and batch-level histograms:
+        Evaluate two rows and explicitly accumulate their correlated observable contributions:
 
         ```python
         from pathlib import Path
@@ -651,8 +641,12 @@ class GammaLoopAPI:
         result = api.evaluate_samples(points, return_events=True)
         assert len(result.samples) == 2
         assert all(sample.event_groups for sample in result.samples)
-        assert result.observables["leading_jet_pt_hist"].sample_count == 2
-        assert len(result.observables["leading_jet_pt_hist"].bins) == 8
+        accumulator = api.observable_accumulator()
+        for sample in result.samples:
+            accumulator.add_sample(sample, sample.integrator_weight)
+        histograms = accumulator.snapshot()
+        assert histograms["leading_jet_pt_hist"].sample_count == 2
+        assert len(histograms["leading_jet_pt_hist"].bins) == 8
         ```
 
         The fixture exercises the API surface; its powered coupling selector is not a validated
@@ -1017,10 +1011,9 @@ class HistogramAccumulator:
 
     Notes
     -----
-    The example below deliberately places at most one entry in each bin. If several correlated
-    entries land in one bin, the current helper records their squared weights separately rather
-    than grouping their weights like GammaLoop's native observable pipeline. Do not replay raw
-    event groups through this class until that statistical contract is aligned.
+    Each fill call represents one independent sample. Repeated entries in a bin
+    are summed before their squared contribution is recorded, matching the native
+    observable pipeline. Empty fills still increment the sample count.
 
     Examples
     --------
@@ -1826,6 +1819,44 @@ class MaxWeightInfoEntry:
     def coordinates(self) -> typing.Optional[builtins.str]: ...
 
 @typing.final
+class ObservableAccumulator:
+    r"""
+    Independent observable statistics compiled from one integrand's definitions.
+
+    Construct with ``api.observable_accumulator()`` and add exactly one evaluation
+    record per independent draw. The coefficient is the complete outer weight;
+    zero keeps the attempted sample count without fills. Event groups stay unmodified.
+
+    Examples
+    --------
+    ```python
+    accumulator = api.observable_accumulator()
+    batch = api.evaluate_samples(points)
+    for sample in batch.samples:
+        accumulator.add_sample(sample, sample.integrator_weight)
+    histograms = accumulator.snapshot()
+    ```
+    """
+    def add_sample(self, sample: EvaluationResult, coefficient: builtins.float) -> None:
+        r"""
+        Commit one sample with an explicit outer weight, including zero-weight misses.
+        """
+    def merge_in_place(self, other: ObservableAccumulator) -> None:
+        r"""
+        Merge independent sample statistics without changing the source accumulator.
+        """
+    @staticmethod
+    def sum_independent_estimates(accumulators: typing.Sequence[ObservableAccumulator]) -> typing.Any:
+        r"""
+        Sum means and variances of independent populations, preserving their separate counts.
+        Merge batches within a stratum before passing its accumulator here.
+        """
+    def snapshot(self) -> dict:
+        r"""
+        Return mergeable raw histogram statistics, without clearing or committing them.
+        """
+
+@typing.final
 class Residue:
     r"""
     One expression-local residue entry; several native IDs can share the same key.
@@ -1962,71 +1993,6 @@ class ResidueVariant:
     def denominator(self) -> dict:
         r"""
         Native tree: root ID (or None) and nodes with surface, children and parent IDs.
-        """
-
-@typing.final
-class SampleEvaluationResult:
-    r"""
-    Numerical value, metadata, stability records, and generated events for one sample.
-    """
-    @property
-    def integrand_result(self) -> complex:
-        r"""
-        Complex physical contribution including map Jacobians and channel partitions, before the outer-grid weight.
-        """
-    @property
-    def absolute_integrand_result(self) -> typing.Optional[complex]:
-        r"""
-        Componentwise absolute physical contributions summed over channel points, before the outer-grid weight.
-        """
-    @property
-    def integrator_weight(self) -> builtins.float:
-        r"""
-        Monte Carlo weight supplied by the integrator, excluding the parameterization Jacobian.
-        """
-    @property
-    def generated_event_count(self) -> typing.Optional[builtins.int]:
-        r"""
-        Number of candidate events generated, or ``None`` when metadata was omitted.
-        """
-    @property
-    def accepted_event_count(self) -> typing.Optional[builtins.int]:
-        r"""
-        Number of generated events accepted by selectors, or ``None`` without metadata.
-        """
-    @property
-    def event_processing_time_seconds(self) -> typing.Optional[builtins.float]:
-        r"""
-        Time spent building and selecting events, in seconds, or ``None`` without metadata.
-        """
-    @property
-    def parameterization_jacobian(self) -> typing.Optional[builtins.float]:
-        r"""
-        Sample parameterization Jacobian, or ``None`` when no Jacobian was supplied.
-        """
-    @property
-    def is_nan(self) -> typing.Optional[builtins.bool]:
-        r"""
-        Whether evaluation metadata flagged a non-finite result, or ``None`` without metadata.
-        """
-    @property
-    def stability_results(self) -> typing.Optional[builtins.list[StabilityResult]]:
-        r"""
-        Ordered stability-level attempts, or ``None`` when metadata was omitted.
-        Each attempt records its precision and representation; precision may repeat.
-        """
-    @property
-    def event_groups(self) -> builtins.list[EventGroup]:
-        r"""
-        Correlated event groups produced while evaluating this sample.
-        """
-    def __str__(self) -> builtins.str:
-        r"""
-        Return a human-readable evaluation summary.
-        """
-    def __repr__(self) -> builtins.str:
-        r"""
-        Return the human-readable evaluation summary.
         """
 
 @typing.final

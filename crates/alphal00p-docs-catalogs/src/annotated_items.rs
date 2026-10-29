@@ -83,7 +83,7 @@ fn gammalooprs_runtime_settings() {}
 #[alphal00p_docs::ty(
     id = "SingleSampleEvaluationResult",
     title = "Single-sample result",
-    summary = "Returns one f64 evaluation together with the observable snapshot produced for that sample.",
+    summary = "Returns one f64 sample evaluation with its unweighted observable contribution.",
     format = "rust-markdown",
     source = "crates/gammalooprs/src/integrands/evaluation.rs",
     source_id = "gammalooprs::integrands::evaluation::SingleSampleEvaluationResult"
@@ -93,7 +93,7 @@ fn gammalooprs_single_sample_evaluation_result() {}
 #[alphal00p_docs::ty(
     id = "BatchSampleEvaluationResult",
     title = "Batch evaluation result",
-    summary = "Returns f64 sample evaluations and the observable snapshot accumulated across the complete batch.",
+    summary = "Returns one f64 evaluation per input without committing observable statistics.",
     format = "rust-markdown",
     source = "crates/gammalooprs/src/integrands/evaluation.rs",
     source_id = "gammalooprs::integrands::evaluation::BatchSampleEvaluationResult"
@@ -103,7 +103,7 @@ fn gammalooprs_batch_sample_evaluation_result() {}
 #[alphal00p_docs::ty(
     id = "PreciseSingleSampleEvaluationResult",
     title = "Precise single-sample result",
-    summary = "Retains the active numerical precision for one evaluation and its observable snapshot.",
+    summary = "Retains the active numerical precision for one evaluation and its observable contribution.",
     format = "rust-markdown",
     source = "crates/gammalooprs/src/integrands/evaluation.rs",
     source_id = "gammalooprs::integrands::evaluation::PreciseSingleSampleEvaluationResult"
@@ -113,7 +113,7 @@ fn gammalooprs_precise_single_sample_evaluation_result() {}
 #[alphal00p_docs::ty(
     id = "PreciseBatchSampleEvaluationResult",
     title = "Precise batch result",
-    summary = "Retains the active numerical precision for every sample in a batch and its observable snapshot.",
+    summary = "Retains the active numerical precision and separate contribution of every sample in a batch.",
     format = "rust-markdown",
     source = "crates/gammalooprs/src/integrands/evaluation.rs",
     source_id = "gammalooprs::integrands::evaluation::PreciseBatchSampleEvaluationResult"
@@ -423,7 +423,7 @@ fn gammaloop_api_evaluate_samples_request() {}
 #[alphal00p_docs::func(
     id = "evaluate_sample",
     title = "Evaluate one f64 sample",
-    summary = "Runs a one-row request and returns the sample plus its observable snapshot through the f64 output contract.",
+    summary = "Runs a one-row request and returns its unweighted sample contribution through the f64 output contract.",
     format = "rust-markdown",
     source = "crates/gammaloop-api/src/commands/evaluate_samples.rs",
     source_id = "gammaloop_api::commands::evaluate_samples::evaluate_sample"
@@ -433,7 +433,7 @@ fn gammaloop_api_evaluate_sample() {}
 #[alphal00p_docs::func(
     id = "evaluate_samples",
     title = "Evaluate an f64 batch",
-    summary = "Runs a batch request and returns per-sample values plus one batch-level observable snapshot.",
+    summary = "Runs a batch request and returns per-sample values and contributions for explicit accumulation.",
     format = "rust-markdown",
     source = "crates/gammaloop-api/src/commands/evaluate_samples.rs",
     source_id = "gammaloop_api::commands::evaluate_samples::evaluate_samples"
@@ -463,7 +463,7 @@ fn gammaloop_api_evaluate_sample_precise() {}
 #[alphal00p_docs::func(
     id = "evaluate_samples_precise",
     title = "Evaluate a precision-preserving batch",
-    summary = "Returns every sample in the active precision together with one batch-level observable snapshot.",
+    summary = "Returns every sample and its contribution in the active precision for explicit accumulation.",
     format = "rust-markdown",
     source = "crates/gammaloop-api/src/commands/evaluate_samples.rs",
     source_id = "gammaloop_api::commands::evaluate_samples::evaluate_samples_precise"

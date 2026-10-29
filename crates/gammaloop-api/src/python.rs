@@ -1,10 +1,11 @@
+use crate::commands::evaluate_samples;
 use gammaloop_tracing_filter::LogFormat;
+use gammalooprs::observables::{EventProcessingRuntime, ObservableSnapshotBundle};
+use gammalooprs::utils::F;
 use gammalooprs::{
     feyngen::diagram_generator::evaluate_overall_factor,
     graph::{FeynmanGraph, Graph, LMBext},
-    integrands::evaluation::{
-        BatchSampleEvaluationResult, SampleEvaluationResult, SingleSampleEvaluationResult,
-    },
+    integrands::evaluation::{BatchSampleEvaluationResult, SampleEvaluationResult},
     observables::{
         AdditionalWeightKey, DiscreteBinOrdering, Event, EventGroup, GenericAdditionalWeightInfo,
         GenericThresholdCountertermComponentWeight, GenericThresholdCountertermEventInfo,
@@ -23,6 +24,7 @@ use gammalooprs::{
 };
 use idenso::shorthands::{metric::to_dots_impl, schoonschip::Schoonschip};
 use numpy::{PyReadonlyArray1, PyReadonlyArray2};
+use std::fmt::Display;
 
 mod residue_map;
 use residue_map::{
@@ -201,7 +203,6 @@ fn register_python_api(m: &Bound<PyModule>) -> PyResult<()> {
     m.add_class::<DotExportSettings>()?;
     m.add_class::<PyEvaluationResult>()?;
     m.add_class::<PyBatchEvaluationResult>()?;
-    m.add_class::<PySampleEvaluationResult>()?;
     m.add_class::<PyEventGroup>()?;
     m.add_class::<PyEvent>()?;
     m.add_class::<PyThresholdCountertermEventInfo>()?;
@@ -227,6 +228,7 @@ fn register_python_api(m: &Bound<PyModule>) -> PyResult<()> {
     m.add_class::<PyIntegrandThresholdEsurfaceInfo>()?;
     m.add_class::<PyAdditionalWeight>()?;
     m.add_class::<PyHistogramAccumulator>()?;
+    m.add_class::<PyObservableAccumulator>()?;
     m.add_class::<PyHistogramSnapshot>()?;
     m.add_class::<PyHistogramBinSnapshot>()?;
     m.add_class::<PyHistogramStatisticsSnapshot>()?;
@@ -1325,14 +1327,74 @@ pub struct PyEventGroup {
     pub events: Vec<PyEvent>,
 }
 
+/// Independent observable statistics compiled from one integrand's definitions.
+///
+/// Construct with ``api.observable_accumulator()`` and add exactly one evaluation
+/// record per independent draw. The coefficient is the complete outer weight;
+/// zero keeps the attempted sample count without fills. Event groups stay unmodified.
+///
+/// Examples
+/// --------
+/// ```python
+/// accumulator = api.observable_accumulator()
+/// batch = api.evaluate_samples(points)
+/// for sample in batch.samples:
+///     accumulator.add_sample(sample, sample.integrator_weight)
+/// histograms = accumulator.snapshot()
+/// ```
+#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[pyclass(name = "ObservableAccumulator", skip_from_py_object)]
+pub struct PyObservableAccumulator {
+    inner: EventProcessingRuntime,
+}
+
+#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[pymethods]
+impl PyObservableAccumulator {
+    /// Commit one sample with an explicit outer weight, including zero-weight misses.
+    fn add_sample(&mut self, sample: &PyEvaluationResult, coefficient: f64) -> PyResult<()> {
+        self.inner
+            .accumulate_sample(&sample.inner.evaluation.event_groups, &F(coefficient))
+            .map_err(to_py_value_error)
+    }
+
+    /// Merge independent sample statistics without changing the source accumulator.
+    fn merge_in_place(&mut self, other: &PyObservableAccumulator) -> PyResult<()> {
+        self.inner
+            .merge_snapshot(&other.inner.snapshot_bundle())
+            .map_err(to_py_value_error)
+    }
+
+    /// Sum means and variances of independent populations, preserving their separate counts.
+    /// Merge batches within a stratum before passing its accumulator here.
+    #[staticmethod]
+    fn sum_independent_estimates<'py>(
+        py: Python<'py>,
+        accumulators: Vec<PyRef<'py, PyObservableAccumulator>>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let snapshots = accumulators
+            .iter()
+            .map(|accumulator| accumulator.inner.snapshot_bundle())
+            .collect::<Vec<_>>();
+        let estimates = ObservableSnapshotBundle::sum_independent_estimates(&snapshots)
+            .map_err(to_py_value_error)?;
+        let json = serde_json::to_value(estimates.histograms).map_err(to_py_value_error)?;
+        py_builtin_from_json_value(py, &json)
+    }
+
+    /// Return mergeable raw histogram statistics, without clearing or committing them.
+    fn snapshot<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        py_observable_dict_from_bundle(py, &self.inner.snapshot_bundle())
+    }
+}
+
 /// Mutable continuous or discrete histogram accumulator with sample-level statistics.
 ///
 /// Notes
 /// -----
-/// The example below deliberately places at most one entry in each bin. If several correlated
-/// entries land in one bin, the current helper records their squared weights separately rather
-/// than grouping their weights like GammaLoop's native observable pipeline. Do not replay raw
-/// event groups through this class until that statistical contract is aligned.
+/// Each fill call represents one independent sample. Repeated entries in a bin
+/// are summed before their squared contribution is recorded, matching the native
+/// observable pipeline. Empty fills still increment the sample count.
 ///
 /// Examples
 /// --------
@@ -1944,15 +2006,15 @@ pub struct PyStabilityResult {
 
 /// Numerical value, metadata, stability records, and generated events for one sample.
 #[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(from_py_object, name = "SampleEvaluationResult")]
+#[pyclass(from_py_object, name = "EvaluationResult")]
 #[derive(Clone)]
-pub struct PySampleEvaluationResult {
+pub struct PyEvaluationResult {
     inner: SampleEvaluationResult,
 }
 
 #[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
-impl PySampleEvaluationResult {
+impl PyEvaluationResult {
     /// Complex physical contribution including map Jacobians and channel partitions, before the outer-grid weight.
     #[getter]
     fn integrand_result<'py>(&self, py: Python<'py>) -> Bound<'py, PyComplex> {
@@ -2056,7 +2118,7 @@ impl PySampleEvaluationResult {
             })
     }
 
-    /// Correlated event groups produced while evaluating this sample.
+    /// All correlated event groups for this sample, before the outer sampler weight.
     #[getter]
     fn event_groups(&self) -> Vec<PyEventGroup> {
         self.inner
@@ -2078,108 +2140,7 @@ impl PySampleEvaluationResult {
     }
 }
 
-/// Single-sample evaluation paired with the observable snapshot for that sample.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(from_py_object, name = "EvaluationResult")]
-#[derive(Clone)]
-pub struct PyEvaluationResult {
-    inner: SingleSampleEvaluationResult,
-}
-
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[pymethods]
-impl PyEvaluationResult {
-    /// Evaluation record for the requested sample.
-    #[getter]
-    fn sample(&self) -> PySampleEvaluationResult {
-        PySampleEvaluationResult {
-            inner: self.inner.sample.clone(),
-        }
-    }
-
-    /// Complex physical contribution including map Jacobians and channel partitions, before the outer-grid weight.
-    #[getter]
-    fn integrand_result<'py>(&self, py: Python<'py>) -> Bound<'py, PyComplex> {
-        self.sample().integrand_result(py)
-    }
-
-    /// Componentwise absolute physical contributions summed over channel points, before the outer-grid weight.
-    #[getter]
-    fn absolute_integrand_result<'py>(&self, py: Python<'py>) -> Option<Bound<'py, PyComplex>> {
-        self.sample().absolute_integrand_result(py)
-    }
-
-    /// Monte Carlo weight supplied by the integrator, excluding the parameterization Jacobian.
-    #[getter]
-    fn integrator_weight(&self) -> f64 {
-        self.inner.sample.evaluation.integrator_weight.0
-    }
-
-    /// Number of candidate events generated, or ``None`` when metadata was omitted.
-    #[getter]
-    fn generated_event_count(&self) -> Option<usize> {
-        self.sample().generated_event_count()
-    }
-
-    /// Number of generated events accepted by selectors, or ``None`` without metadata.
-    #[getter]
-    fn accepted_event_count(&self) -> Option<usize> {
-        self.sample().accepted_event_count()
-    }
-
-    /// Time spent building and selecting events, in seconds, or ``None`` without metadata.
-    #[getter]
-    fn event_processing_time_seconds(&self) -> Option<f64> {
-        self.sample().event_processing_time_seconds()
-    }
-
-    /// Sample parameterization Jacobian, or ``None`` when no Jacobian was supplied.
-    #[getter]
-    fn parameterization_jacobian(&self) -> Option<f64> {
-        self.inner
-            .sample
-            .evaluation
-            .parameterization_jacobian
-            .map(|jac| jac.0)
-    }
-
-    /// Whether evaluation metadata flagged a non-finite result, or ``None`` without metadata.
-    #[getter]
-    fn is_nan(&self) -> Option<bool> {
-        self.sample().is_nan()
-    }
-
-    /// Ordered stability-level attempts, or ``None`` when metadata was omitted.
-    /// Each attempt records its precision and representation; precision may repeat.
-    #[getter]
-    fn stability_results(&self) -> Option<Vec<PyStabilityResult>> {
-        self.sample().stability_results()
-    }
-
-    /// Correlated event groups produced while evaluating this sample.
-    #[getter]
-    fn event_groups(&self) -> Vec<PyEventGroup> {
-        self.sample().event_groups()
-    }
-
-    /// Observable snapshots produced from the same Monte Carlo sample.
-    #[getter]
-    fn observables<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
-        py_observable_dict_from_bundle(py, &self.inner.observables)
-    }
-
-    /// Return a human-readable evaluation and observable summary.
-    fn __str__(&self) -> String {
-        self.inner.to_string()
-    }
-
-    /// Return the human-readable evaluation and observable summary.
-    fn __repr__(&self) -> String {
-        self.__str__()
-    }
-}
-
-/// Per-sample evaluations paired with one observable snapshot for the complete batch.
+/// One evaluation record per input sample, plus optional batch stability diagnostics.
 #[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "BatchEvaluationResult")]
 #[derive(Clone)]
@@ -2192,19 +2153,13 @@ pub struct PyBatchEvaluationResult {
 impl PyBatchEvaluationResult {
     /// Evaluation records in the same order as the requested samples.
     #[getter]
-    fn samples(&self) -> Vec<PySampleEvaluationResult> {
+    fn samples(&self) -> Vec<PyEvaluationResult> {
         self.inner
             .samples
             .iter()
             .cloned()
-            .map(|inner| PySampleEvaluationResult { inner })
+            .map(|inner| PyEvaluationResult { inner })
             .collect()
-    }
-
-    /// Observable snapshots accumulated across the complete sample batch.
-    #[getter]
-    fn observables<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
-        py_observable_dict_from_bundle(py, &self.inner.observables)
     }
 
     #[getter]
@@ -2218,12 +2173,12 @@ impl PyBatchEvaluationResult {
             .transpose()
     }
 
-    /// Return a human-readable batch and observable summary.
+    /// Return a human-readable per-sample batch summary.
     fn __str__(&self) -> String {
         self.inner.to_string()
     }
 
-    /// Return the human-readable batch and observable summary.
+    /// Return the human-readable per-sample batch summary.
     fn __repr__(&self) -> String {
         self.__str__()
     }
@@ -2654,7 +2609,7 @@ fn py_discrete_ordering(ordering: &str) -> PyResult<DiscreteBinOrdering> {
     }
 }
 
-fn to_py_value_error(error: eyre::Report) -> PyErr {
+fn to_py_value_error(error: impl Display) -> PyErr {
     exceptions::PyValueError::new_err(error.to_string())
 }
 
@@ -3804,6 +3759,31 @@ impl GammaLoopAPI {
         self.cli_settings.state.folder.display().to_string()
     }
 
+    /// Create empty observable statistics for the selected integrand.
+    /// Evaluation itself never commits observable moments. See ``ObservableAccumulator``.
+    #[pyo3(signature = (process_id=None, integrand_name=None))]
+    pub fn observable_accumulator(
+        &mut self,
+        process_id: Option<usize>,
+        integrand_name: Option<String>,
+    ) -> Result<PyObservableAccumulator> {
+        let process_ref = process_id.map(ProcessRef::Id);
+        let (process_id, integrand_name) = self
+            .gammaloop_state
+            .find_integrand_ref(process_ref.as_ref(), integrand_name.as_ref())?;
+        evaluate_samples::with_warmed_integrand(
+            &mut self.gammaloop_state,
+            process_id,
+            &integrand_name,
+            None,
+            |integrand, _| {
+                Ok(PyObservableAccumulator {
+                    inner: integrand.new_observable_accumulator()?,
+                })
+            },
+        )
+    }
+
     /// Evaluate one integration or momentum-space sample.
     ///
     /// Parameters
@@ -3841,7 +3821,7 @@ impl GammaLoopAPI {
     /// Returns
     /// -------
     /// EvaluationResult
-    ///     The sample evaluation and the observable snapshot for its one-row batch.
+    ///     One independent sample, with an unweighted contribution for configured observables.
     ///
     /// Raises
     /// ------
@@ -3855,8 +3835,8 @@ impl GammaLoopAPI {
     /// ``f128``, and arbitrary-precision stability ladder. ``use_arb_prec=True``
     /// forces arbitrary-precision (Arb) internal evaluation. Python-visible numeric
     /// fields use the package's ``float64`` output contract. Evaluation may
-    /// warm the integrand and update in-memory caches or observable snapshots even in
-    /// a read-only-state session.
+    /// warm the integrand and update in-memory caches even in a read-only-state
+    /// session. Observable statistics change only through explicit accumulation.
     ///
     /// See Also
     /// --------
@@ -3934,18 +3914,12 @@ impl GammaLoopAPI {
         .run(&mut self.gammaloop_state)?;
         let gammalooprs::integrands::evaluation::BatchSampleEvaluationResult {
             mut samples,
-            observables,
             numerical_stability: _,
         } = res;
         let value = samples.pop().ok_or_else(|| {
             eyre!("evaluate_sample did not return any result for the single input sample")
         })?;
-        Ok(PyEvaluationResult {
-            inner: SingleSampleEvaluationResult {
-                sample: value,
-                observables,
-            },
-        })
+        Ok(PyEvaluationResult { inner: value })
     }
 
     /// Evaluate a batch of integration or momentum-space samples.
@@ -3985,7 +3959,7 @@ impl GammaLoopAPI {
     /// Returns
     /// -------
     /// BatchEvaluationResult
-    ///     Per-sample evaluations and one observable snapshot for the complete batch.
+    ///     One evaluation per input sample and optional numerical-stability diagnostics.
     ///
     /// Raises
     /// ------
@@ -3999,7 +3973,7 @@ impl GammaLoopAPI {
     /// ``f128``, and arbitrary-precision stability ladder. ``use_arb_prec=True``
     /// forces arbitrary-precision (Arb) internal evaluation. Python-visible numeric
     /// fields use the package's ``float64`` output contract. Evaluation may
-    /// update in-memory caches or observable snapshots in a read-only-state session.
+    /// update numerical caches; observable statistics change only through explicit accumulation.
     ///
     /// See Also
     /// --------
@@ -4008,7 +3982,7 @@ impl GammaLoopAPI {
     ///
     /// Examples
     /// --------
-    /// Evaluate two rows and inspect their per-sample events and batch-level histograms:
+    /// Evaluate two rows and explicitly accumulate their correlated observable contributions:
     ///
     /// ```python
     /// from pathlib import Path
@@ -4029,8 +4003,12 @@ impl GammaLoopAPI {
     /// result = api.evaluate_samples(points, return_events=True)
     /// assert len(result.samples) == 2
     /// assert all(sample.event_groups for sample in result.samples)
-    /// assert result.observables["leading_jet_pt_hist"].sample_count == 2
-    /// assert len(result.observables["leading_jet_pt_hist"].bins) == 8
+    /// accumulator = api.observable_accumulator()
+    /// for sample in result.samples:
+    ///     accumulator.add_sample(sample, sample.integrator_weight)
+    /// histograms = accumulator.snapshot()
+    /// assert histograms["leading_jet_pt_hist"].sample_count == 2
+    /// assert len(histograms["leading_jet_pt_hist"].bins) == 8
     /// ```
     ///
     /// The fixture exercises the API surface; its powered coupling selector is not a validated

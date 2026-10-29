@@ -1024,11 +1024,8 @@ fn format_significant(value: f64, significant_digits: usize) -> String {
 mod tests {
     use std::time::Duration;
 
-    use gammalooprs::{
-        integrands::evaluation::{
-            BatchSampleEvaluationResult, EvaluationResult, SampleEvaluationResult,
-        },
-        observables::ObservableSnapshotBundle,
+    use gammalooprs::integrands::evaluation::{
+        BatchSampleEvaluationResult, EvaluationResult, SampleEvaluationResult,
     };
 
     use super::{
@@ -1128,7 +1125,6 @@ mod tests {
                     Duration::from_micros(2),
                 ),
             ],
-            observables: ObservableSnapshotBundle::default(),
             numerical_stability: None,
         };
 

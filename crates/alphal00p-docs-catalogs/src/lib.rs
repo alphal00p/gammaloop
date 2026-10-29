@@ -910,7 +910,7 @@ fn python_required_exports(component: &str) -> Result<&'static [&'static str]> {
             "IntegrandLoopMomentumBasis",
             "IntegrandOrientation",
             "IntegrandThresholdEsurface",
-            "SampleEvaluationResult",
+            "ObservableAccumulator",
             "SettingsValue",
             "StabilityResult",
             "atom_to_canonical_string",
@@ -1181,7 +1181,7 @@ mod tests {
             .values()
             .flat_map(|item| item.members.iter().map(move |member| (item, member)))
             .collect::<Vec<_>>();
-        assert_eq!(members.len(), 71);
+        assert_eq!(members.len(), 67);
         let undocumented = members
             .iter()
             .filter(|(_, member)| {

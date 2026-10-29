@@ -258,7 +258,8 @@ pub struct GeneralSettings {
     /// Omit the incoming-state flux factor from the returned integrand value.
     #[serde(skip_serializing_if = "is_false")]
     pub disable_flux_factor: bool,
-    /// Return generated events in addition to accumulating integration statistics.
+    /// Request diagnostic events even without configured observables.
+    /// Observable evaluation always retains the complete per-sample contribution.
     #[serde(skip_serializing_if = "is_false")]
     pub generate_events: bool,
     /// Persist every configured additional weight on each generated event.

@@ -395,7 +395,8 @@ pub struct GenericEvent<T: FloatLike> {
         SmallVec<[FourMomentum<F<T>>; 4]>,
     ),
     pub cut_info: CutInfo,
-    // Stores the fully normalized contribution associated with this event.
+    /// Contribution at the current normalization boundary. Sample evaluation
+    /// excludes the outer sampler weight; native integration event export includes it.
     pub weight: Complex<F<T>>,
     // Contains additional partial weights for future use to do post-processing reweighting.
     pub additional_weights: GenericAdditionalWeightInfo<T>,

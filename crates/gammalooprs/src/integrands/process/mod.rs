@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
+use std::result::Result as StdResult;
 
 use crate::cff::expression::OrientationID;
 use crate::graph::{FeynmanGraph, Graph, GraphGroup, GroupId, LmbIndex, LoopMomentumBasis};
@@ -15,7 +16,8 @@ use crate::momentum::sample::{BareMomentumSample, LoopIndex, LoopMomenta, Moment
 use crate::momentum::{Rotation, ThreeMomentum};
 use crate::observables::{
     AdditionalWeightKey, EventProcessingRuntime, GenericEvent, HistogramProcessInfo,
-    ObservableAccumulatorBundle, ObservableFileFormat, ObservableSnapshotBundle,
+    ObservableAccumulationError, ObservableAccumulatorBundle, ObservableFileFormat,
+    ObservableSnapshotBundle,
 };
 use crate::processes::{
     CutGroupId, GraphGenerationStats, GraphGroupSelectionSpec, StandaloneExportSettings,
@@ -1117,15 +1119,13 @@ impl ProcessIntegrand {
                 ProcessIntegrand::Amplitude(integrand) => evaluate!(integrand),
                 ProcessIntegrand::CrossSection(integrand) => evaluate!(integrand),
             }?;
-            let mut result = match target {
+            let result = match target {
                 EvaluationTarget::Reference(reference) => reference.integration_report(precise)?,
                 EvaluationTarget::Physical(_) => precise.try_into_f64()?,
                 #[cfg(test)]
                 EvaluationTarget::SamplingLaw(_) => precise.try_into_f64()?,
             };
 
-            self.process_evaluation_result(&result);
-            maybe_discard_generated_events_in_result(self.get_settings(), &mut result);
             results.push(result);
             if stop_on_interrupt && crate::is_interrupted() {
                 break;
@@ -1146,7 +1146,7 @@ impl ProcessIntegrand {
     ) -> Result<RawBatchEvaluationResult> {
         let mut results = Vec::with_capacity(inputs.len());
         for input in inputs {
-            let mut result = match self {
+            let result = match self {
                 ProcessIntegrand::Amplitude(integrand) => evaluate_momentum_configuration(
                     integrand,
                     model,
@@ -1165,8 +1165,6 @@ impl ProcessIntegrand {
                 ),
             }?;
 
-            self.process_evaluation_result(&result);
-            maybe_discard_generated_events_in_result(self.get_settings(), &mut result);
             results.push(result);
         }
 
@@ -1215,7 +1213,31 @@ impl ProcessIntegrand {
         Ok(RawPreciseBatchEvaluationResult { samples: results })
     }
 
-    pub fn process_evaluation_result(&mut self, result: &EvaluationResult) {
+    /// Create independent observable statistics using this integrand's compiled definitions.
+    ///
+    /// Warm the integrand first. An integrand without observables returns an empty
+    /// accumulator. This does not copy the integrand or its numerical evaluator.
+    /// See [`EventProcessingRuntime::accumulate_sample`] for accumulation semantics.
+    ///
+    /// # Errors
+    /// Returns an error if observables are configured but the integrand has not been warmed up.
+    pub fn new_observable_accumulator(
+        &self,
+    ) -> StdResult<EventProcessingRuntime, ObservableAccumulationError> {
+        let runtime = match self {
+            Self::Amplitude(integrand) => integrand.event_processing_runtime(),
+            Self::CrossSection(integrand) => integrand.event_processing_runtime(),
+        };
+        match runtime {
+            Some(runtime) => Ok(runtime.cleared_observable_clone()),
+            None if self.get_settings().observables.is_empty() => {
+                Ok(EventProcessingRuntime::default())
+            }
+            None => Err(ObservableAccumulationError::NotInitialized),
+        }
+    }
+
+    pub fn process_evaluation_result(&mut self, result: &EvaluationResult) -> Result<()> {
         match self {
             ProcessIntegrand::Amplitude(integrand) => {
                 process_evaluation_result_runtime(integrand, result)
@@ -1273,50 +1295,6 @@ impl ProcessIntegrand {
         match self {
             ProcessIntegrand::Amplitude(integrand) => observable_snapshot_bundle(integrand),
             ProcessIntegrand::CrossSection(integrand) => observable_snapshot_bundle(integrand),
-        }
-    }
-
-    pub fn build_observable_snapshots_for_result(
-        &self,
-        result: &EvaluationResult,
-    ) -> Option<ObservableSnapshotBundle> {
-        match self {
-            ProcessIntegrand::Amplitude(integrand) => {
-                build_observable_snapshots_for_result(integrand, result)
-            }
-            ProcessIntegrand::CrossSection(integrand) => {
-                build_observable_snapshots_for_result(integrand, result)
-            }
-        }
-    }
-
-    pub fn build_observable_snapshots_for_precise_result(
-        &self,
-        result: &PreciseEvaluationResult,
-    ) -> Option<ObservableSnapshotBundle> {
-        match self {
-            ProcessIntegrand::Amplitude(integrand) => match result {
-                PreciseEvaluationResult::Double(result) => {
-                    build_observable_snapshots_for_event_groups(integrand, &result.event_groups)
-                }
-                PreciseEvaluationResult::Quad(result) => {
-                    build_observable_snapshots_for_event_groups(integrand, &result.event_groups)
-                }
-                PreciseEvaluationResult::Arb(result) => {
-                    build_observable_snapshots_for_event_groups(integrand, &result.event_groups)
-                }
-            },
-            ProcessIntegrand::CrossSection(integrand) => match result {
-                PreciseEvaluationResult::Double(result) => {
-                    build_observable_snapshots_for_event_groups(integrand, &result.event_groups)
-                }
-                PreciseEvaluationResult::Quad(result) => {
-                    build_observable_snapshots_for_event_groups(integrand, &result.event_groups)
-                }
-                PreciseEvaluationResult::Arb(result) => {
-                    build_observable_snapshots_for_event_groups(integrand, &result.event_groups)
-                }
-            },
         }
     }
 
@@ -1610,21 +1588,11 @@ pub(crate) fn prepare_buffered_event<T: FloatLike>(
 fn process_evaluation_result_runtime<I: ProcessIntegrandImpl>(
     integrand: &mut I,
     result: &EvaluationResult,
-) {
-    if let Some(runtime) = integrand.event_processing_runtime_mut()
-        && runtime.has_observables()
-    {
-        runtime.process_event_groups(&result.event_groups);
+) -> Result<()> {
+    if let Some(runtime) = integrand.event_processing_runtime_mut() {
+        runtime.accumulate_sample(&result.event_groups, &result.integrator_weight)?;
     }
-}
-
-fn maybe_discard_generated_events_in_result(
-    settings: &RuntimeSettings,
-    result: &mut EvaluationResult,
-) {
-    if !settings.should_return_generated_events() {
-        result.event_groups.clear();
-    }
+    Ok(())
 }
 
 fn merge_event_processing_runtime<I: ProcessIntegrandImpl>(
@@ -1664,27 +1632,6 @@ fn observable_snapshot_bundle<I: ProcessIntegrandImpl>(
         .map(EventProcessingRuntime::snapshot_bundle)
 }
 
-fn build_observable_snapshots_for_result<I: ProcessIntegrandImpl>(
-    integrand: &I,
-    result: &EvaluationResult,
-) -> Option<ObservableSnapshotBundle> {
-    build_observable_snapshots_for_event_groups(integrand, &result.event_groups)
-}
-
-fn build_observable_snapshots_for_event_groups<I: ProcessIntegrandImpl, T: FloatLike>(
-    integrand: &I,
-    event_groups: &crate::observables::GenericEventGroupList<T>,
-) -> Option<ObservableSnapshotBundle> {
-    let runtime = integrand.event_processing_runtime()?;
-    if !runtime.has_observables() {
-        return None;
-    }
-
-    let mut runtime = runtime.cleared_observable_clone();
-    runtime.process_event_groups(event_groups);
-    Some(runtime.snapshot_bundle())
-}
-
 fn restore_observable_snapshot_bundle<I: ProcessIntegrandImpl>(
     integrand: &mut I,
     bundle: &ObservableSnapshotBundle,
@@ -1708,7 +1655,7 @@ fn full_event_multiplicative_factor_precise<T: FloatLike>(
     Complex::new_re(jacobian * integrator_weight)
 }
 
-pub(super) fn apply_full_event_multiplicative_factor_precise<T: FloatLike>(
+pub(crate) fn apply_full_event_multiplicative_factor_precise<T: FloatLike>(
     event_groups: &mut crate::observables::GenericEventGroupList<T>,
     full_factor: &Complex<F<T>>,
 ) {
@@ -5787,9 +5734,11 @@ fn finalize_precise_evaluation_result<T: FloatLike>(
     let mut event_groups = result.graph_result.event_groups;
     let integrator_weight = F::<T>::from_ff64(integrator_weight);
     let parameterization_jacobian = result.parameterization_jacobian;
+    // Event contributions include native Jacobians/partitions, but the outer
+    // sampler weight is applied only when committing observable statistics.
     let full_factor = full_event_multiplicative_factor_precise(
         parameterization_jacobian.clone(),
-        integrator_weight.clone(),
+        integrator_weight.one(),
     );
     apply_full_event_multiplicative_factor_precise(&mut event_groups, &full_factor);
 
@@ -8321,10 +8270,11 @@ pub(crate) mod tests {
                 .contains("absolute_integrand_result.re")
         );
         underflow.absolute_integrand_result = None;
-        // Event totals are already weighted; do not apply the outer weight twice.
-        assert_eq!(
-            underflow.clone().try_into_f64().unwrap().event_groups[0][0].weight,
-            Complex::new_zero()
+        // Events now retain their unapplied outer factor too: a raw event that
+        // underflows cannot be silently dropped if accumulation would promote it.
+        assert!(
+            format!("{:#}", underflow.clone().try_into_f64().unwrap_err())
+                .contains("event_groups[0][0].weight.re")
         );
         underflow.integrator_weight = one.clone();
         underflow.parameterization_jacobian = Some(one.from_usize(10).powi(100));

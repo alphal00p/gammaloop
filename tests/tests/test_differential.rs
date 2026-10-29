@@ -636,8 +636,8 @@ fn event_processing_runtime_filters_events_and_builds_snapshots() -> Result<()> 
     assert!(selector_runtime.process_event(&mut accepted_event));
     assert!(!selector_runtime.process_event(&mut rejected_event));
 
-    observable_runtime.process_event_groups(&singleton_groups(accepted_event.clone()));
-    observable_runtime.process_event_groups(&singleton_groups(accepted_event));
+    observable_runtime.accumulate_sample(&singleton_groups(accepted_event.clone()), &F(1.0))?;
+    observable_runtime.accumulate_sample(&singleton_groups(accepted_event), &F(1.0))?;
     observable_runtime.update_results(0);
 
     let snapshot = observable_runtime.snapshot_bundle();
@@ -711,10 +711,10 @@ fn event_processing_runtime_merges_worker_results_and_batch_histograms() -> Resu
     );
 
     let mut master = EventProcessingRuntime::from_settings(&settings)?;
-    master.process_event_groups(&singleton_groups(left_event.clone()));
+    master.accumulate_sample(&singleton_groups(left_event.clone()), &F(1.0))?;
 
     let mut worker = master.cleared_observable_clone();
-    worker.process_event_groups(&singleton_groups(right_event.clone()));
+    worker.accumulate_sample(&singleton_groups(right_event.clone()), &F(1.0))?;
     master.merge_samples(&mut worker)?;
     master.update_results(0);
 
@@ -733,9 +733,9 @@ fn event_processing_runtime_merges_worker_results_and_batch_histograms() -> Resu
     );
 
     let mut batch_master = EventProcessingRuntime::from_settings(&settings)?;
-    batch_master.process_event_groups(&singleton_groups(left_event));
+    batch_master.accumulate_sample(&singleton_groups(left_event), &F(1.0))?;
     let mut batch_worker = batch_master.cleared_observable_clone();
-    batch_worker.process_event_groups(&singleton_groups(right_event));
+    batch_worker.accumulate_sample(&singleton_groups(right_event), &F(1.0))?;
     let mut bundle = batch_worker.accumulator_bundle();
     batch_master.merge_accumulator_bundle(&mut bundle)?;
     batch_master.update_results(0);
@@ -778,7 +778,7 @@ fn event_group_contributions_fill_multiple_bins_with_one_sample_per_bin() -> Res
         make_event(0.75, 0.0, 0.0, 0.75, 1, (3.0, 0.0), []),
     ]);
     process_all_events(&mut runtime, &mut groups);
-    runtime.process_event_groups(&groups);
+    runtime.accumulate_sample(&groups, &F(1.0))?;
     runtime.update_results(0);
 
     let histogram = &runtime.snapshot_bundle().histograms["pt_real"];
@@ -812,11 +812,11 @@ fn grouped_histogram_updates_keep_same_bin_entries_correlated() -> Result<()> {
         make_event(0.75, 0.0, 0.0, 0.75, 1, (4.0, 0.0), []),
     ]);
     process_all_events(&mut runtime, &mut first_groups);
-    runtime.process_event_groups(&first_groups);
+    runtime.accumulate_sample(&first_groups, &F(1.0))?;
 
     let mut second_groups = single_group([make_event(0.25, 0.0, 0.0, 0.25, 1, (5.0, 0.0), [])]);
     process_all_events(&mut runtime, &mut second_groups);
-    runtime.process_event_groups(&second_groups);
+    runtime.accumulate_sample(&second_groups, &F(1.0))?;
     runtime.update_results(0);
 
     let histogram = &runtime.snapshot_bundle().histograms["pt_real"];
@@ -865,11 +865,11 @@ fn scalar_quantities_project_particle_and_jet_momenta() -> Result<()> {
 
     let mut particle_groups = singleton_groups(make_event(0.3, -0.4, 0.6, 0.5, 1, (1.0, 0.0), []));
     process_all_events(&mut runtime, &mut particle_groups);
-    runtime.process_event_groups(&particle_groups);
+    runtime.accumulate_sample(&particle_groups, &F(1.0))?;
 
     let mut jet_groups = singleton_groups(make_event(0.3, -0.4, 0.6, 0.5, 21, (1.0, 0.0), []));
     process_all_events(&mut runtime, &mut jet_groups);
-    runtime.process_event_groups(&jet_groups);
+    runtime.accumulate_sample(&jet_groups, &F(1.0))?;
     runtime.update_results(0);
 
     let snapshot = runtime.snapshot_bundle();
@@ -908,7 +908,7 @@ fn count_and_pair_quantities_handle_exact_counts_and_delta_r() -> Result<()> {
     ];
     let mut groups = singleton_groups(make_multi_event(&outgoing, (1.0, 0.0), []));
     process_all_events(&mut runtime, &mut groups);
-    runtime.process_event_groups(&groups);
+    runtime.accumulate_sample(&groups, &F(1.0))?;
     runtime.update_results(0);
 
     let snapshot = runtime.snapshot_bundle();
@@ -979,7 +979,7 @@ fn leading_only_uses_configured_particle_ordering() -> Result<()> {
         )?;
         let mut groups = singleton_groups(make_multi_event(&outgoing, (1.0, 0.0), []));
         process_all_events(&mut runtime, &mut groups);
-        runtime.process_event_groups(&groups);
+        runtime.accumulate_sample(&groups, &F(1.0))?;
         runtime.update_results(0);
 
         let histogram = &runtime.snapshot_bundle().histograms[observable_name];
@@ -1035,7 +1035,7 @@ fn leading_only_uses_pt_for_default_jet_ordering() -> Result<()> {
     let outgoing = [(0.9, 0.0, 0.1, 1.2, 21), (0.1, 0.0, 2.0, 2.1, 21)];
     let mut groups = singleton_groups(make_multi_event(&outgoing, (1.0, 0.0), []));
     process_all_events(&mut runtime, &mut groups);
-    runtime.process_event_groups(&groups);
+    runtime.accumulate_sample(&groups, &F(1.0))?;
     runtime.update_results(0);
 
     let histogram = &runtime.snapshot_bundle().histograms["jet_energy_leading"];
@@ -1066,7 +1066,7 @@ fn pair_quantities_respect_order_direction_for_leading_only() -> Result<()> {
     )?;
     let mut descending_groups = singleton_groups(make_multi_event(&outgoing, (1.0, 0.0), []));
     process_all_events(&mut descending_runtime, &mut descending_groups);
-    descending_runtime.process_event_groups(&descending_groups);
+    descending_runtime.accumulate_sample(&descending_groups, &F(1.0))?;
     descending_runtime.update_results(0);
     let descending_histogram =
         &descending_runtime.snapshot_bundle().histograms["particle_delta_r_leading"];
@@ -1077,11 +1077,53 @@ fn pair_quantities_respect_order_direction_for_leading_only() -> Result<()> {
     )?;
     let mut ascending_groups = singleton_groups(make_multi_event(&outgoing, (1.0, 0.0), []));
     process_all_events(&mut ascending_runtime, &mut ascending_groups);
-    ascending_runtime.process_event_groups(&ascending_groups);
+    ascending_runtime.accumulate_sample(&ascending_groups, &F(1.0))?;
     ascending_runtime.update_results(0);
     let ascending_histogram =
         &ascending_runtime.snapshot_bundle().histograms["particle_delta_r_leading"];
     assert_eq!(ascending_histogram.bins[0].entry_count, 1);
 
+    Ok(())
+}
+
+#[test]
+fn sample_coefficients_preserve_correlations_and_zero_attempts_without_mutating_events()
+-> Result<()> {
+    let mut settings = runtime_settings();
+    settings.selectors.clear();
+    let mut runtime = EventProcessingRuntime::from_settings(&settings)?;
+    // Different graph groups are nevertheless correlated within this one draw.
+    let mut groups = singleton_groups(make_event(0.25, 0.0, 0.0, 0.25, 1, (10.0, 0.0), []));
+    groups.append(&mut singleton_groups(make_event(
+        0.25,
+        0.0,
+        0.0,
+        0.25,
+        1,
+        (-9.0, 0.0),
+        [],
+    )));
+    process_all_events(&mut runtime, &mut groups);
+    runtime.accumulate_sample(&groups, &F(3.0))?;
+    runtime.accumulate_sample(&groups, &F(0.0))?;
+    let snapshot = runtime.snapshot_bundle();
+    let histogram = &snapshot.histograms["pt_real"];
+    assert_eq!(histogram.sample_count, 2);
+    assert_eq!(histogram.bins[0].sum_weights, 3.0);
+    assert_eq!(histogram.bins[0].sum_weights_squared, 9.0);
+    assert_eq!(histogram.bins[0].entry_count, 2);
+    assert_eq!(histogram.bins[0].error(2), 1.5);
+    assert_eq!(groups[0][0].weight.re, F(10.0));
+    assert_eq!(groups[1][0].weight.re, F(-9.0));
+    assert!(runtime.accumulate_sample(&groups, &F(f64::NAN)).is_err());
+    assert_eq!(runtime.snapshot_bundle(), snapshot);
+    let mut restored = runtime.cleared_observable_clone();
+    restored.restore_snapshot_bundle(&snapshot)?;
+    restored.merge_snapshot(&snapshot)?;
+    assert_eq!(
+        restored.snapshot_bundle().histograms["pt_real"].sample_count,
+        4
+    );
+    assert_eq!(runtime.snapshot_bundle(), snapshot);
     Ok(())
 }
