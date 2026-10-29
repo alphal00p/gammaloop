@@ -1,0 +1,14 @@
+{
+  "base": "100da20603a083d031c31bd4e8c6970fc44dda2f",
+  "source_order": 38,
+  "original_source": "15dd7e1b188dad112d7887bdc6d769125b2697a1",
+  "approved_preparation": "861c19e3e7afc067851b13f3e7548baa923286ee",
+  "approved_runtime_code": "f35643bae1a67fb6ec0c30151e3624f661cf5f96",
+  "code_commit": "925f739799572d23f46a762c895ebb85e5bd88d6",
+  "code_change": "xrvnmqsskwulwrrxoptluwlqzyykrxyz",
+  "receipt": "docs/architecture/evidence/generation-integration/wp3/source38/receipt.json",
+  "candidate_bookmark": "generation-integration-source38",
+  "status": "Complete cumulative source38 integrated; combined checks recorded separately; NEW independent Astra integration review required before39. WP3 incomplete.",
+  "accounted_source_rows": 38,
+  "accounted_planned_units": 33
+}

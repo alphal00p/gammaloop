@@ -1,6 +1,17 @@
 = First-principles mark geometry
 
-== Source and review boundary
+== Ordered MAIN38 integration
+
+The complete approved preparation through `861c19e3` is integrated onto approved
+MAIN36 `100da206`. Runtime code `925f7397` preserves the approved preparation
+owners byte-for-byte. Its exact Git-pinned runtime source selects the approved
+WASM derivation, not merely matching delivered bytes. Fresh combined checks,
+source/binary identities and archived independent preparation approvals are in
+#link("evidence/generation-integration/wp3/source38/receipt.json")[the integration receipt].
+This MAIN38 candidate requires NEW independent Astra integration review before39.
+Full WP3, final distribution and performance gates remain open.
+
+== Approved preparation boundary (historical)
 
 This separate WP11 drawing lane starts at approved source36 integration
 `100da20603a083d031c31bd4e8c6970fc44dda2f`. Its prerequisite review approved

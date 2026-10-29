@@ -1,0 +1,812 @@
+error: heading is not allowed at the top-level in bundle export
+  ┌─ docs/architecture/generation-mark-geometry.typ:1:0
+  │
+1 │ = First-principles mark geometry
+  │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  │
+  = hint: try wrapping the content in a `document` instead
+
+error: heading is not allowed at the top-level in bundle export
+  ┌─ docs/architecture/generation-mark-geometry.typ:3:0
+  │
+3 │ == Source and review boundary
+  │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  │
+  = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+  ┌─ docs/architecture/generation-mark-geometry.typ:5:0
+  │
+5 │ This separate WP11 drawing lane starts at approved source36 integration
+  │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  │
+  = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+  ┌─ docs/architecture/generation-mark-geometry.typ:6:0
+  │
+6 │ `100da20603a083d031c31bd4e8c6970fc44dda2f`. Its prerequisite review approved
+  │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  │
+  = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+  ┌─ docs/architecture/generation-mark-geometry.typ:6:42
+  │
+6 │ `100da20603a083d031c31bd4e8c6970fc44dda2f`. Its prerequisite review approved
+  │                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  │
+  = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+  ┌─ docs/architecture/generation-mark-geometry.typ:7:0
+  │
+7 │ asset diagnostics and cleared the drawing gate, not all WP3 or final packaging.
+  │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  │
+  = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+  ┌─ docs/architecture/generation-mark-geometry.typ:8:0
+  │
+8 │ The original drawing bookmark `generation-drawing-ports` remains at `98cbf5b8`.
+  │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  │
+  = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+  ┌─ docs/architecture/generation-mark-geometry.typ:8:30
+  │
+8 │ The original drawing bookmark `generation-drawing-ports` remains at `98cbf5b8`.
+  │                               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  │
+  = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+  ┌─ docs/architecture/generation-mark-geometry.typ:8:57
+  │
+8 │ The original drawing bookmark `generation-drawing-ports` remains at `98cbf5b8`.
+  │                                                          ^^^^^^^^^^
+  │
+  = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+  ┌─ docs/architecture/generation-mark-geometry.typ:8:68
+  │
+8 │ The original drawing bookmark `generation-drawing-ports` remains at `98cbf5b8`.
+  │                                                                     ^^^^^^^^^^
+  │
+  = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+  ┌─ docs/architecture/generation-mark-geometry.typ:8:78
+  │
+8 │ The original drawing bookmark `generation-drawing-ports` remains at `98cbf5b8`.
+  │                                                                               ^
+  │
+  = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+  ┌─ docs/architecture/generation-mark-geometry.typ:9:0
+  │
+9 │ The new bookmark is `generation-mark-geometry`; main integration is untouched.
+  │ ^^^^^^^^^^^^^^^^^^^
+  │
+  = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+  ┌─ docs/architecture/generation-mark-geometry.typ:9:20
+  │
+9 │ The new bookmark is `generation-mark-geometry`; main integration is untouched.
+  │                     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  │
+  = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+  ┌─ docs/architecture/generation-mark-geometry.typ:9:46
+  │
+9 │ The new bookmark is `generation-mark-geometry`; main integration is untouched.
+  │                                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  │
+  = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:10:0
+   │
+10 │ Source38 `15dd7e1b188dad112d7887bdc6d769125b2697a1` is reconciled here; no
+   │ ^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:10:9
+   │
+10 │ Source38 `15dd7e1b188dad112d7887bdc6d769125b2697a1` is reconciled here; no
+   │          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:10:52
+   │
+10 │ Source38 `15dd7e1b188dad112d7887bdc6d769125b2697a1` is reconciled here; no
+   │                                                     ^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:11:0
+   │
+11 │ source39–46 change or historical binary is imported. This implementation awaits
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:12:0
+   │
+12 │ NEW independent Astra review. WP11/13 final artifact gates remain open.
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:14:0
+   │
+14 │ The #link("evidence/generation-integration/mark-geometry/receipt.json")[receipt]
+   │ ^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: link is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:14:5
+   │
+14 │ The #link("evidence/generation-integration/mark-geometry/receipt.json")[receipt]
+   │      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:15:0
+   │
+15 │ records exact source, tool, package, notice and output identities, changed-file
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:16:0
+   │
+16 │ and asset inventories, fresh versus reused validation and reproducibility limits.
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:17:0
+   │
+17 │ The #link("evidence/generation-integration/mark-geometry/audit.json")[audit]
+   │ ^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: link is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:17:5
+   │
+17 │ The #link("evidence/generation-integration/mark-geometry/audit.json")[audit]
+   │      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:18:0
+   │
+18 │ records provenance and notice-owner decisions.
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: heading is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:20:0
+   │
+20 │ == Geometry and public contract
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:22:0
+   │
+22 │ Kurvst's existing MarkSpec owner constructs thirteen leaf shapes or a composite
+   │ ^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: smartquote is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:22:6
+   │
+22 │ Kurvst's existing MarkSpec owner constructs thirteen leaf shapes or a composite
+   │       ^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:22:7
+   │
+22 │ Kurvst's existing MarkSpec owner constructs thirteen leaf shapes or a composite
+   │        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:23:0
+   │
+23 │ in a local tip/shaft frame. Public shape names, accepted fields, Typst data and
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:24:0
+   │
+24 │ Python options remain unchanged. Composite children still omit fit/shorten;
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:25:0
+   │
+25 │ finite checks, selected versus candidate batching, carrier clamping, native SVG,
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:26:0
+   │
+26 │ MathML, static notebook output and optional-widget contracts remain owned by
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:27:0
+   │
+27 │ their existing implementations. This drawing geometry intentionally uses f64;
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:28:0
+   │
+28 │ no physics, numerator factorization or general generation code changes.
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:30:0
+   │
+30 │ A polygon's vertices move along intersections of its offset edges. Its sharpest
+   │ ^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: smartquote is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:30:9
+   │
+30 │ A polygon's vertices move along intersections of its offset edges. Its sharpest
+   │          ^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:30:10
+   │
+30 │ A polygon's vertices move along intersections of its offset edges. Its sharpest
+   │           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:31:0
+   │
+31 │ corner determines its miter limit, with numerical headroom. A head that cannot
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:32:0
+   │
+32 │ hold its stroke grows before an inset edge collapses or reverses, including deep
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:33:0
+   │
+33 │ stealth notches. Paint keeps the nominal box when that box can hold the stroke.
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:34:0
+   │
+34 │ The drawn rear intersection stops the shaft and places the next composite part.
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:35:0
+   │
+35 │ The straight chevron uses tangents from the tip to its round caps; TikZ uses
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:36:0
+   │
+36 │ quarter-circle arms; round darts use the inner box. Chord-fitted heads rotate
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:37:0
+   │
+37 │ with the changed contact. The default diamond is exactly the default square
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:38:0
+   │
+38 │ rotated 45 degrees. Default ray spoke sets retain their previous visual phase
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:39:0
+   │
+39 │ except counts divisible by four from eight onward; explicit phases are retained.
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:40:0
+   │
+40 │ Leaf/composite enums remove unreachable string-dispatch fallbacks.
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:42:0
+   │
+42 │ Tests exercise mathematical bounds and contacts, sharp miters, scaling and
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:43:0
+   │
+43 │ stroke-dominated growth, deep notches, reversal, gaps/composites, ray symmetry,
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:44:0
+   │
+44 │ diamond rotation, curve fitting, painted coverage and packed/native transport.
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:45:0
+   │
+45 │ Intended visible changes are those geometry/contact rules, not new label or
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:46:0
+   │
+46 │ physics conventions. Updated expectations express the changed geometric formula;
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:47:0
+   │
+47 │ no tolerance or golden snapshot is loosened.
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: heading is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:49:0
+   │
+49 │ == Source and notice audit
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:51:0
+   │
+51 │ The pre-port Rust mark owner equals source38's parent. It explicitly credits
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: smartquote is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:51:44
+   │
+51 │ The pre-port Rust mark owner equals source38's parent. It explicitly credits
+   │                                             ^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:51:45
+   │
+51 │ The pre-port Rust mark owner equals source38's parent. It explicitly credits
+   │                                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:52:0
+   │
+52 │ Tiptoe 0.4.0 and reproduces its per-shape geometry. The pinned Nix Tiptoe source
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:53:0
+   │
+53 │ and MIT permission text were inspected, including its marks, line, stroke/dimension
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:54:0
+   │
+54 │ utility and curve fitting owners. The replacement comes from source38's local
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: smartquote is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:54:69
+   │
+54 │ utility and curve fitting owners. The replacement comes from source38's local
+   │                                                                      ^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:54:70
+   │
+54 │ utility and curve fitting owners. The replacement comes from source38's local
+   │                                                                       ^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:55:0
+   │
+55 │ polygon-offset, tangent and Kurbo-arc constructions, not a new transcription of
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:56:0
+   │
+56 │ Tiptoe or LGPL CeTZ code. It removes the old trigonometric dart formula, fixed
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:57:0
+   │
+57 │ miter limit, TikZ magic control points, manual arc builder and old branch fallback.
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:59:0
+   │
+59 │ Retained shape names, public field vocabulary, dimensional defaults and simple
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:60:0
+   │
+60 │ bar/arc/rectangle meanings preserve the earlier API. Those compatibility data
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:61:0
+   │
+61 │ and elementary constructions are documented provenance; no Tiptoe package source,
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:62:0
+   │
+62 │ renderer, resource or material per-shape implementation is retained in the new
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:63:0
+   │
+63 │ runtime geometry. Existing Rust serialization, batching and carrier/path owners
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:64:0
+   │
+64 │ are GammaLoop/Kurvst implementation, not the Tiptoe renderer. Historical notes,
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:65:0
+   │
+65 │ archived evidence, old revisions and the read-only audit source keep their history.
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:67:0
+   │
+67 │ Consequently the obsolete Kurvst and notebook-host Tiptoe license copies are
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:68:0
+   │
+68 │ removed with their embedding assertions and Nix input references. Standalone
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:69:0
+   │
+69 │ Linnet packaging is absent and is not revived. Common root-license selectors
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:70:0
+   │
+70 │ are unchanged. Clarabel and NetworkX notices remain byte-exact and delivered.
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:71:0
+   │
+71 │ Both sync recipes remove only the obsolete generated Tiptoe notice, copy every
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:72:0
+   │
+72 │ remaining package notice and preserve unrelated files. Upgrade tests require
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:73:0
+   │
+73 │ idempotence, restored missing root licenses and preserved user notices; sdist,
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:74:0
+   │
+74 │ API extraction, Nix payload and fixture-wheel checks reject obsolete attribution.
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: heading is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:76:0
+   │
+76 │ == Validation and remaining gates
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:78:0
+   │
+78 │ Changed WASM and the manual/example/website outputs use the canonical current
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:79:0
+   │
+79 │ Nix and timestamp-zero Typst owners. Visual checks cover representative marks,
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:80:0
+   │
+80 │ curves and stroked composites plus affected diagrams in both themes. Native
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:81:0
+   │
+81 │ checks compile current Rust owners; an old notebook-host extension is never used
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:82:0
+   │
+82 │ as evidence for changed marks. Public API/stub metadata is unchanged.
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:84:0
+   │
+84 │ Source-qualified build provenance and independent byte reproduction are distinct.
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:85:0
+   │
+85 │ Nix output/derivation and installed asset identities are recorded. Any remaining
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:86:0
+   │
+86 │ Linnest data/name-section byte mismatch is explicitly qualified even when its
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:87:0
+   │
+87 │ executable sections agree. Cached reuse alone is not reproducibility evidence.
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:88:0
+   │
+88 │ The canonical site qualification remains frozen at `a372`; this lane supplies
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:88:51
+   │
+88 │ The canonical site qualification remains frozen at `a372`; this lane supplies
+   │                                                    ^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:88:57
+   │
+88 │ The canonical site qualification remains frozen at `a372`; this lane supplies
+   │                                                          ^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:89:0
+   │
+89 │ bounded evidence for its changed documentation and figures.
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:91:0
+   │
+91 │ Fresh independent Astra review is required before parent integration. Complete
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:92:0
+   │
+92 │ repaired/compressed native/Pyodide and externally locked Community wheels still
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:93:0
+   │
+93 │ need METADATA/RECORD/notices and installed-behavior inspection. Fixture wheels
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:94:0
+   │
+94 │ are packaging tests, not those release artifacts. No solver replacement, callback
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-mark-geometry.typ:95:0
+   │
+95 │ fix, frame/weight diagnostics, full-site or physics qualification is claimed.
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+warning: bundle export is experimental
+ = hint: its behaviour may change at any time
+ = hint: do not rely on this feature for production use cases
+

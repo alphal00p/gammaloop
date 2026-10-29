@@ -1,0 +1,46 @@
+   Compiling kurvst v0.1.0 (/shared/lcnbr/dev/gammaloop/generation-drawing-ports/crates/kurvst)
+    Finished `dev-optim` profile [optimized + debuginfo] target(s) in 8.97s
+────────────
+ Nextest run ID d8b282a4-500e-4445-85b6-d7b5e6731d4c with nextest profile: default
+    Starting 1 test across 1 binary (118 tests skipped)
+        FAIL [   0.008s] (1/1) kurvst marks::tests::painted_miters_preserve_complete_grown_polygon_bounds
+  stdout ───
+
+    running 1 test
+    test marks::tests::painted_miters_preserve_complete_grown_polygon_bounds ... FAILED
+
+    failures:
+
+    failures:
+        marks::tests::painted_miters_preserve_complete_grown_polygon_bounds
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 118 filtered out; finished in 0.00s
+
+  stderr ───
+
+    thread 'marks::tests::painted_miters_preserve_complete_grown_polygon_bounds' (2543072) panicked at crates/kurvst/src/marks.rs:2438:21:
+    stealth width=8 inset=0.99999999 scale=0.000001: -271.9508170486256 versus -271.95082022160324
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+────────────
+     Summary [   0.011s] 1 test run: 0 passed, 1 failed, 118 skipped
+        FAIL [   0.008s] (1/1) kurvst marks::tests::painted_miters_preserve_complete_grown_polygon_bounds
+  stdout ───
+
+    running 1 test
+    test marks::tests::painted_miters_preserve_complete_grown_polygon_bounds ... FAILED
+
+    failures:
+
+    failures:
+        marks::tests::painted_miters_preserve_complete_grown_polygon_bounds
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 118 filtered out; finished in 0.00s
+
+  stderr ───
+
+    thread 'marks::tests::painted_miters_preserve_complete_grown_polygon_bounds' (2543072) panicked at crates/kurvst/src/marks.rs:2438:21:
+    stealth width=8 inset=0.99999999 scale=0.000001: -271.9508170486256 versus -271.95082022160324
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+error: test run failed

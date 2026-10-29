@@ -1,0 +1,61 @@
+📦 Including license file `LICENSE`
+🍹 Building a mixed python/rust project
+🔗 Found pyo3 bindings with abi3-py3.7 support
+📡 Using build options features, no-default-features from pyproject.toml
+From `cargo package --list --allow-dirty --manifest-path /shared/lcnbr/dev/gammaloop/generation-drawing-ports/crates/gammaloop-tracing-filter/Cargo.toml`:
+warning: manifest has no description, license, license-file, documentation, homepage or repository
+  |
+  = note: see https://doc.rust-lang.org/cargo/reference/manifest.html#package-metadata for more info
+From `cargo package --list --allow-dirty --manifest-path /shared/lcnbr/dev/gammaloop/generation-drawing-ports/crates/gammaloop-workspace-hack/Cargo.toml`:
+warning: manifest has no license, license-file, documentation, homepage or repository
+  |
+  = note: see https://doc.rust-lang.org/cargo/reference/manifest.html#package-metadata for more info
+From `cargo package --list --allow-dirty --manifest-path /shared/lcnbr/dev/gammaloop/generation-drawing-ports/crates/symbolica-utils/Cargo.toml`:
+warning: manifest has no license, license-file, documentation, homepage or repository
+  |
+  = note: see https://doc.rust-lang.org/cargo/reference/manifest.html#package-metadata for more info
+From `cargo package --list --allow-dirty --manifest-path /shared/lcnbr/dev/gammaloop/generation-drawing-ports/crates/three-dimensional-reps/Cargo.toml`:
+warning: manifest has no documentation, homepage or repository
+  |
+  = note: see https://doc.rust-lang.org/cargo/reference/manifest.html#package-metadata for more info
+From `cargo package --list --allow-dirty --manifest-path /shared/lcnbr/dev/gammaloop/generation-drawing-ports/crates/spenso-macros/Cargo.toml`:
+warning: manifest has no license, license-file, documentation, homepage or repository
+  |
+  = note: see https://doc.rust-lang.org/cargo/reference/manifest.html#package-metadata for more info
+From `cargo package --list --allow-dirty --manifest-path /shared/lcnbr/dev/gammaloop/generation-drawing-ports/crates/linnet/Cargo.toml`:
+warning: manifest has no documentation, homepage or repository
+  |
+  = note: see https://doc.rust-lang.org/cargo/reference/manifest.html#package-metadata for more info
+From `cargo package --list --allow-dirty --manifest-path /shared/lcnbr/dev/gammaloop/generation-drawing-ports/crates/spenso-hep-lib/Cargo.toml`:
+warning: manifest has no license, license-file, documentation, homepage or repository
+  |
+  = note: see https://doc.rust-lang.org/cargo/reference/manifest.html#package-metadata for more info
+From `cargo package --list --allow-dirty --manifest-path /shared/lcnbr/dev/gammaloop/generation-drawing-ports/crates/symbolica-notation/Cargo.toml`:
+warning: manifest has no documentation, homepage or repository
+  |
+  = note: see https://doc.rust-lang.org/cargo/reference/manifest.html#package-metadata for more info
+From `cargo package --list --allow-dirty --manifest-path /shared/lcnbr/dev/gammaloop/generation-drawing-ports/crates/gammaloop-tracing-filter-macros/Cargo.toml`:
+warning: manifest has no description, license, license-file, documentation, homepage or repository
+  |
+  = note: see https://doc.rust-lang.org/cargo/reference/manifest.html#package-metadata for more info
+From `cargo package --list --allow-dirty --manifest-path /shared/lcnbr/dev/gammaloop/generation-drawing-ports/crates/idenso/Cargo.toml`:
+warning: manifest has no license, license-file, documentation, homepage or repository
+  |
+  = note: see https://doc.rust-lang.org/cargo/reference/manifest.html#package-metadata for more info
+📦 Including files matching "vendor/kurbo/**/*"
+📦 Including files matching "crates/linnest/build_assets.rs"
+📦 Including files matching "crates/linnest/Cargo.toml"
+📦 Including files matching "crates/linnest/src/**/*.rs"
+📦 Including files matching "crates/kurvst/Cargo.toml"
+📦 Including files matching "crates/kurvst/src/**/*.rs"
+📦 Including files matching "assets/embedded/**/*"
+📦 Including files matching "assets/models/json/**/*"
+📦 Including files matching "crates/linnest/typst/src/**/*.typ"
+📦 Including files matching "crates/linnest/typst/typst.toml"
+📦 Including files matching "crates/linnest/typst/linnest.wasm"
+📦 Including files matching "crates/linnest/typst/LICENSE*"
+📦 Including files matching "crates/kurvst/typst/src/**/*.typ"
+📦 Including files matching "crates/kurvst/typst/typst.toml"
+📦 Including files matching "crates/kurvst/typst/kurvst.wasm"
+📦 Including files matching "crates/kurvst/typst/LICENSE*"
+📦 Built source distribution to /shared/lcnbr/dev/gammaloop/generation-drawing-ports/target/mark-geometry-round3/sdist-final/gammaloop-0.3.4.tar.gz

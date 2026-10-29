@@ -1,0 +1,8 @@
+warning: could not read HEAD ref from repo at '/shared/lcnbr/dev/gammaloop/main', using 'master'
+warning: ignoring untrusted flake configuration setting 'extra-substituters'.
+Pass '--accept-flake-config' to trust it
+warning: ignoring untrusted flake configuration setting 'extra-trusted-public-keys'.
+Pass '--accept-flake-config' to trust it
+this derivation will be built:
+  /nix/store/l3djqdwd6mhl5vh7dnnz01j7mh7nb5r0-linnest-wasm-0.1.0.drv
+building '/nix/store/l3djqdwd6mhl5vh7dnnz01j7mh7nb5r0-linnest-wasm-0.1.0.drv'...

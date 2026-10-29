@@ -1,0 +1,10 @@
+
+running 5 tests
+test deeper_positive_stealth_preserves_uniform_grown_wings ... ok
+test nearby_stealth_control_preserves_grown_wings ... ok
+test thin_positive_triangle_keeps_the_miter_tip ... ok
+test nearby_triangle_control_still_reaches_tip ... ok
+test signed_exact_and_adjacent_barb_contacts_remain_correct ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

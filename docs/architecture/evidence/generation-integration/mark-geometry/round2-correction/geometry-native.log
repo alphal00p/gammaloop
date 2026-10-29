@@ -1,0 +1,33 @@
+   Compiling kurbo v0.13.1 (/shared/lcnbr/dev/gammaloop/generation-drawing-ports/vendor/kurbo)
+warning: unused import: `super::super::traits::*`
+   --> vendor/clarabel/src/solver/core/solver.rs:470:9
+    |
+470 |     use super::super::traits::*;
+    |         ^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+  --> vendor/clarabel/src/solver/core/kktsolvers/direct/quasidef/datamaps.rs:26:39
+   |
+26 |     pub(crate) fn to_sparse_expansion(&self) -> Option<SparseExpansionCone<T>> {
+   |                                       ^^^^^            ^^^^^^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+   |                                       |
+   |                                       the lifetime is elided here
+   |
+   = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+   = note: `#[warn(mismatched_lifetime_syntaxes)]` on by default
+help: use `'_` for type paths
+   |
+26 |     pub(crate) fn to_sparse_expansion(&self) -> Option<SparseExpansionCone<'_, T>> {
+   |                                                                            +++
+
+warning: `clarabel` (lib) generated 2 warnings (run `cargo fix --lib -p clarabel` to apply 2 suggestions)
+   Compiling kurvst v0.1.0 (/shared/lcnbr/dev/gammaloop/generation-drawing-ports/crates/kurvst)
+   Compiling linnest v0.1.0 (/shared/lcnbr/dev/gammaloop/generation-drawing-ports/crates/linnest)
+    Finished `dev-optim` profile [optimized + debuginfo] target(s) in 2m 56s
+────────────
+ Nextest run ID 7aae1ca0-be6e-4b20-a2a6-fc9f01836bf2 with nextest profile: default
+    Starting 348 tests across 2 binaries (1 test skipped)
+────────────
+     Summary [   2.081s] 348 tests run: 348 passed, 1 skipped

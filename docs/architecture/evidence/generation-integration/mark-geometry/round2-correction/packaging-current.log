@@ -1,0 +1,10 @@
+test_api_embedded_payload (__main__.DrawingNotices.test_api_embedded_payload) ... ok
+test_copies_preserve_upstream_bytes (__main__.DrawingNotices.test_copies_preserve_upstream_bytes) ... ok
+test_development_sync_upgrades_notice_payload (__main__.DrawingNotices.test_development_sync_upgrades_notice_payload) ... ok
+test_gammaloop_sdist_payload (__main__.DrawingNotices.test_gammaloop_sdist_payload) ... ok
+test_host_wheel_license_payload (__main__.DrawingNotices.test_host_wheel_license_payload) ... ok
+
+----------------------------------------------------------------------
+Ran 5 tests in 34.522s
+
+OK

@@ -1,0 +1,212 @@
+{
+  "schema": 1,
+  "decision": "APPROVE",
+  "findings": [],
+  "reviewer": "NEW independent Astra review; read-only; no nested agents",
+  "reviewed_at": "2026-10-28T17:18:27.923772+00:00",
+  "approval_scope": "Combined SOURCE36 asset-diagnostics integration onto approved MAIN32\u201335 only",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-integration-plan",
+  "identities": {
+    "candidate": "100da20603a083d031c31bd4e8c6970fc44dda2f",
+    "change": "vpnpkmnslswqzrvtsqkztpvypuspwvmu",
+    "base": "510d79d94bbaf57aaaa992c641e7496905763324",
+    "code": "0d3ddb5246416427be56c57c91ec1a095037e818",
+    "validation_metadata": "31387fde705e39ca29c9373e3ae13315a1893406",
+    "original_source36": "5a99afbd1645250715ecf59361beb7ab4826d083",
+    "approved_preparation_code": "6e9e5a245302806d872271861dd59b47dfcd4b86",
+    "approved_preparation_candidate": "277d2f8b0051e0a41194b369fa683db550098bbb",
+    "bookmarks": [
+      "generation-integration",
+      "generation-integration-source36"
+    ],
+    "authors": {
+      "0d3ddb5246416427be56c57c91ec1a095037e818": "Lucien Huber <im@lcnbr.ch>",
+      "31387fde705e39ca29c9373e3ae13315a1893406": "Lucien Huber <im@lcnbr.ch>",
+      "100da20603a083d031c31bd4e8c6970fc44dda2f": "Lucien Huber <im@lcnbr.ch>"
+    }
+  },
+  "source_review": [
+    {
+      "file": "crates/symbolica-data/src/lib.rs",
+      "lines": [
+        68,
+        101,
+        107,
+        117,
+        138,
+        142
+      ],
+      "conclusion": "Whole file, including tests, exactly equals approved preparation (Git blob be8392d004f1369bfc2cab83a01bb79c0d606acf; SHA256 c9a5c55204a8cf9528e76462d926be118975399cf208634c4a6d63e0e3167168). Upgrade guidance remains in existing Asset owner. Private bytes_from preserves shared-lock extent, ordered roots, NotFound-only continuation, first nonmissing/raw OS error precedence, bounded size+1 read, exact size/hash verification, successful cache key/insertion and retries. No fallback, alias, installed-order change or source25 replay."
+    },
+    {
+      "file": "crates/symbolica-data/src/lib.rs",
+      "lines": [
+        216,
+        220,
+        221,
+        225,
+        245,
+        252,
+        288,
+        298,
+        307,
+        316,
+        323,
+        327
+      ],
+      "conclusion": "Missing and incompatible lookups inspect the actual local Data cache used by bytes_from. File/ErrorKind imports are at test-module scope. Filesystem failure/raw error, both hash and size corruption, verified retry and post-removal cache are meaningful; host install test separately retains global semantics. No new Rust policy exception or structured-error flattening."
+    },
+    {
+      "file": "crates/symbolica-data/src/python.rs",
+      "lines": [
+        10,
+        30,
+        31,
+        39
+      ],
+      "conclusion": "Implementation probe calls public symbolica_data::python::register from the actual current Cargo rlib, then its exported setter and manifest. Official host uses this same registration at examples/notebooks/symbolica-host/src/lib.rs:35; spynso3 reexports linnet-render-py assets. New independent probe imports actual symbolica/data.py via a package shell backed by real registered native functions; no copied helper or mock resource owner. Public manifest/configure/set_directory exercise corrupt-first failure, environment-ordered paths, missing-root continuation, verified retry and cache."
+    },
+    {
+      "file": "docs/developers.toml",
+      "lines": [
+        1860,
+        1880,
+        1885
+      ],
+      "conclusion": "65 titles and 103 scopes pass independent authoritative unique start/end/range/Git-hash validation. All 102 prior scopes and complete prior note objects are unchanged. Added whole-file contract is justified by direct code/test review; no blind digest refresh. 16 oracle controls pass against the audited production SiteBuilder algorithm."
+    },
+    {
+      "file": "docs/architecture/generation-asset-diagnostics-staged.typ",
+      "lines": [
+        3,
+        10,
+        14,
+        17,
+        24,
+        51
+      ],
+      "conclusion": "Correctly separates historical main30 prep (28/101 inherited failures) from clean combined current103/65 and SOURCE36 implementation. Actual note/plan source bytes match code0d3ddb52. Both affected PDF/HTML outputs and the canonical single-note bundle reproduce exactly. Historical prep receipt byte-identical; all four review/command copies match originals."
+    },
+    {
+      "file": "nix/rust-workspace.nix",
+      "lines": [
+        714,
+        758,
+        780,
+        788
+      ],
+      "conclusion": "Current source30 selection and resource closure stay unchanged; production Rust source selection includes symbolica-data and the real graph font manifest/build inputs. Documentation scope owner includes current resource source in documentationSrc; changed code and metadata imply a distinct source identity. No old host/site output relabelled as candidate36."
+    },
+    {
+      "file": "docs/architecture/evidence/generation-integration/wp3/source36/receipt.json",
+      "lines": [
+        20,
+        57,
+        64
+      ],
+      "conclusion": "Code0d3ddb52, validation31387fde and final22-file candidate100da206 remain distinct. All22 final hashes, 20 frozen-validation hashes, 1719 cumulative entries, 49 retained artifact hashes and linked logs verify. Source36 mapping is correct; prior31\u201335 code/native/browser/source-selection inputs preserved; source38 remains pending."
+    }
+  ],
+  "checks_freshly_executed": {
+    "resource_tests": {
+      "unique": 3,
+      "feature_configurations": [
+        [],
+        [
+          "python"
+        ]
+      ],
+      "executions": 6,
+      "runtime_doctest_credit": 0,
+      "python_compile_only_doctest": 1,
+      "result": "PASS"
+    },
+    "clippy": "PASS --all-targets --all-features -D warnings",
+    "rustfmt": "PASS pinned edition2024 check",
+    "kernel": "PASS official isolation check, fixed three lock kernels and463-host subset; uv and all locks unchanged",
+    "packaging": "PASS all5 tests, no skips; fixture wheels plus actual recipe/sdist/embedding/notice owners; no final release artifact qualification",
+    "delivery": "PASS current Asset::generate/current resource owner against real552168-byte STIX source-matched Nix font payload; missing, hash/size, raw OS precedence, retry, identical Arc cache",
+    "python": "PASS freshly compiled official register/setter/manifest probe plus actual Python public wrapper probe",
+    "documentation": "PASS independent103 scopes/65 titles/16 controls; affected note+plan PDF/HTML and single-note bundle exactly reproduce",
+    "integrity": "PASS all3584 tracked candidate files, final22-file inventory, protected39 refs plus2 candidate refs"
+  },
+  "fresh_vs_reused": [
+    "Both test configurations executed freshly. Cargo reused the source/feature-matching default test binary; python feature rebuilt. Both test executable hashes match implementation evidence, and immutable review copies are retained.",
+    "Probe harness logic for generate/delivery/official Python registration was inspected and reused with review-owned output paths, then compiled afresh against review Cargo artifacts. Actual Python public-wrapper probe is independent. No old Community extension loaded.",
+    "Unchanged Nix render-data closure reused only after matching actual font/OFL source bytes, NAR hash and deriver. No Nix source/site/final distribution claim added.",
+    "Previously approved31\u201335 source/native/browser semantics are preserved by exact diff and registry-object checks; their old runtime suites and a372 site are historical source-bound evidence, not fresh candidate36 certification."
+  ],
+  "shared_artifact_note": {
+    "path": "/common/build-cache/lcnbr/4b/842977226ffc97/debug/deps/libsymbolica_data-0705424e3d0e4996.rlib",
+    "implementation_record_sha256": "b81bfaece966ac82b2a482c3579ac1fca7d41c2fc5d0eefad7597421eb3247f6",
+    "review_sha256": "71f349bacb4dbefc9e201dd7778da3a759f06bb5c910f4cc108a015907831ec5",
+    "qualification": "The shared python-feature rlib was rebuilt by this review. Retained old test and probe executable hashes were verified; all fresh probes use the current Cargo artifact and its newly recorded hash. No claim that this mutable rlib still has its prior hash."
+  },
+  "environment": {
+    "cwd": "/shared/lcnbr/dev/gammaloop/generation-integration-plan",
+    "license": "Already exported SYMBOLICA_LICENSE preserved, otherwise loaded silently from XDG config; never output",
+    "test_entry": [
+      "bash target/review-source36-astra-20261028-zh1h44ul/run.sh",
+      "bash target/review-source36-astra-20261028-zh1h44ul/post.sh"
+    ],
+    "final_probe_entry": "nix develop /nix/store/akp2f8cnvmklnxvfllrd1bbnqz2ymg6d-nix-shell-env.drv -c python3 target/review-source36-astra-20261028-zh1h44ul/finalize.py",
+    "cache": "Normal shared caches; no target override, manual seeding, cache deletion or uploads",
+    "nix_setup": "The default Nix shell realized its clinnet/linnest-WASM prerequisites during entry; these are environment setup, not final WASM/distribution qualification. Final probe cleanup reused the same realized shell.",
+    "tooling": "Preliminary review harness assumptions were corrected (Python outside Nix unavailable, Git store path, Jujutsu/Git inventory sort, remote bookmark shadow). Successful audit uses exact set/content and local bookmark identities; none were candidate defects."
+  },
+  "scope_limits": [
+    "Not fullWP3 approval.",
+    "No general physics, five_a_ddx, BRST, performance or graph numerator expansion.",
+    "No new complete host wheel, installed Community distribution, full-site, NixCI, finalWASM or final-distribution qualification. Prior latest-site success remains a3729fe5d880f0db5f09d9ce7d0ef592bfc4d161 only.",
+    "18 unrun scripts, three older frame hashes/failures, four expansion helpers, and unrelated frame/progress/weight expectations remain open. Prior two SOURCE19 passing hashes are not rerun here."
+  ],
+  "gate": "The combined asset-diagnostics gate clears. Drawing geometry38 may proceed under its own Sol implementation and NEW independent Astra review requirements.",
+  "final_guard": {
+    "candidate": "100da20603a083d031c31bd4e8c6970fc44dda2f",
+    "change": "vpnpkmnslswqzrvtsqkztpvypuspwvmu",
+    "tracked_files_checked": 3584,
+    "tracked_match_candidate": true,
+    "tracked_unchanged_since_review_start": true,
+    "protected_refs_checked": 39,
+    "review_refs_unchanged": 41,
+    "kernel": "1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
+    "host_lock_subset": 463,
+    "locks_unchanged": true,
+    "nixci": false,
+    "source36": {
+      "commit": "5a99afbd1645250715ecf59361beb7ab4826d083",
+      "tree": "4eb3de2216d88ac9e1b86aa86eb19b3bad9f0918",
+      "parents": [
+        "8c12968bde84643623ca2f5099e0175180a73dc6"
+      ],
+      "subject": "name the upgrade in missing data asset errors",
+      "source_change": "ylkykurolvlzqqlkqsvyyruupktpvvws",
+      "source_order": 36,
+      "disposition": "retain",
+      "reason": "Keep actionable data-asset upgrade errors; preserve installed resource discovery.",
+      "source_pr": null,
+      "upstream_match": null,
+      "planned_unit": "port-36",
+      "planned_order": 32,
+      "depends_on": [
+        "port-35"
+      ]
+    },
+    "source38_pending": true,
+    "shared_rlib": {
+      "path": "/common/build-cache/lcnbr/4b/842977226ffc97/debug/deps/libsymbolica_data-0705424e3d0e4996.rlib",
+      "implementation_record_sha256": "b81bfaece966ac82b2a482c3579ac1fca7d41c2fc5d0eefad7597421eb3247f6",
+      "review_sha256": "71f349bacb4dbefc9e201dd7778da3a759f06bb5c910f4cc108a015907831ec5",
+      "qualification": "The shared python-feature rlib was rebuilt by this review. Retained old test and probe executable hashes were verified; all fresh probes use the current Cargo artifact and its newly recorded hash. No claim that this mutable rlib still has its prior hash."
+    },
+    "review_owned_background_processes": []
+  },
+  "commands": "commands.json",
+  "producer_identities": "producers.json",
+  "scope_inventory": "audit.json",
+  "retention": "Unique ignored review directory retains review/commands/guards, probe sources/binaries, copied test binaries, exact logs/generated assets and focused renders for continuation and review. No unnecessary scratch fixtures remain; shared caches and other workspaces preserved.",
+  "processes_retained": [],
+  "tracked_edits": false,
+  "ref_changes": false,
+  "integration_or_publication": false
+}

@@ -1,0 +1,23 @@
+
+running 5 tests
+
+thread 'deeper_positive_stealth_preserves_uniform_grown_wings' (2415484) panicked at .local/review-mark-geometry-round2-a-astra/adversarial.rs:38:5:
+grown left expected -271950820.2216033, actual bounds=(-2692583.910418358, 5.10702591327572e-15, 1077033.4156110627)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+thread 'thin_positive_triangle_keeps_the_miter_tip' (2415488) panicked at .local/review-mark-geometry-round2-a-astra/adversarial.rs:26:5:
+nominal tip is 0, actual paint bounds=(-101000000.505, -100000000.0, 0.505000002525)
+test nearby_triangle_control_still_reaches_tip ... ok
+test deeper_positive_stealth_preserves_uniform_grown_wings ... FAILED
+test nearby_stealth_control_preserves_grown_wings ... ok
+test thin_positive_triangle_keeps_the_miter_tip ... FAILED
+test signed_exact_and_adjacent_barb_contacts_remain_correct ... ok
+
+failures:
+
+failures:
+    deeper_positive_stealth_preserves_uniform_grown_wings
+    thin_positive_triangle_keeps_the_miter_tip
+
+test result: FAILED. 3 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

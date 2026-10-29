@@ -1,0 +1,15 @@
+warning: ignoring untrusted flake configuration setting 'extra-substituters'.
+Pass '--accept-flake-config' to trust it
+warning: ignoring untrusted flake configuration setting 'extra-trusted-public-keys'.
+Pass '--accept-flake-config' to trust it
+these 3 derivations will be built:
+  /nix/store/42ckgz5xvrv0p4qlf6ssplq9ds4qn6mn-vendor-registry.drv
+  /nix/store/j3s3y5y16wcfvcyaryj1klq5gj9vfhqa-vendor-cargo-deps.drv
+  /nix/store/lkaxsjw1x03yj6ycsa5b10jwqwmzshaz-gammaloop-guppy-workspace-graph.json.drv
+building '/nix/store/42ckgz5xvrv0p4qlf6ssplq9ds4qn6mn-vendor-registry.drv'...
+building '/nix/store/j3s3y5y16wcfvcyaryj1klq5gj9vfhqa-vendor-cargo-deps.drv'...
+building '/nix/store/lkaxsjw1x03yj6ycsa5b10jwqwmzshaz-gammaloop-guppy-workspace-graph.json.drv'...
+warning: ignoring untrusted flake configuration setting 'extra-substituters'.
+Pass '--accept-flake-config' to trust it
+warning: ignoring untrusted flake configuration setting 'extra-trusted-public-keys'.
+Pass '--accept-flake-config' to trust it

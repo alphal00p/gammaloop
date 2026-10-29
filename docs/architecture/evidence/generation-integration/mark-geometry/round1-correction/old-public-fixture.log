@@ -1,0 +1,6 @@
+error: assertion failed
+    ┌─ crates/kurvst/typst/tests/mark-geometry.typ:214:2
+    │
+214 │   assert(head.paths.first().outline-bounds.all(box => box.right <= 100.0 + 1e-8))
+    │   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+

@@ -1,0 +1,1300 @@
+error: heading is not allowed at the top-level in bundle export
+  ┌─ docs/architecture/generation-drawing-notices.typ:1:0
+  │
+1 │ = Generation drawing notice delivery
+  │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  │
+  = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+  ┌─ docs/architecture/generation-drawing-notices.typ:3:0
+  │
+3 │ The #link("generation-mark-geometry.typ")[separate source38 lane] replaces the
+  │ ^^^
+  │
+  = hint: try wrapping the content in a `document` instead
+
+error: link is not allowed at the top-level in bundle export
+  ┌─ docs/architecture/generation-drawing-notices.typ:3:5
+  │
+3 │ The #link("generation-mark-geometry.typ")[separate source38 lane] replaces the
+  │      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  │
+  = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+  ┌─ docs/architecture/generation-drawing-notices.typ:3:66
+  │
+3 │ The #link("generation-mark-geometry.typ")[separate source38 lane] replaces the
+  │                                                                   ^^^^^^^^^^^^
+  │
+  = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+  ┌─ docs/architecture/generation-drawing-notices.typ:4:0
+  │
+4 │ Tiptoe-derived runtime geometry and removes its obsolete copies after source audit.
+  │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  │
+  = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+  ┌─ docs/architecture/generation-drawing-notices.typ:5:0
+  │
+5 │ The staged correction and earlier artifact statements below retain their original
+  │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  │
+  = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+  ┌─ docs/architecture/generation-drawing-notices.typ:6:0
+  │
+6 │ source-bound context. Clarabel/NetworkX notice delivery remains required.
+  │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  │
+  = hint: try wrapping the content in a `document` instead
+
+error: heading is not allowed at the top-level in bundle export
+  ┌─ docs/architecture/generation-drawing-notices.typ:8:0
+  │
+8 │ == Scope and ownership
+  │ ^^^^^^^^^^^^^^^^^^^^^^
+  │
+  = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:10:0
+   │
+10 │ This is the notices portion of WP11, implementing the accepted decision to retain
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:11:0
+   │
+11 │ Clarabel. The original notice change was independently approved before this
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:12:0
+   │
+12 │ drawing replay; this reconciled slice awaits its own review. The original base is
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:13:0
+   │
+13 │ `3f0df2a870806076820786994d4883decec8e9e3`; historical M7 findings and frozen v4
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:13:42
+   │
+13 │ `3f0df2a870806076820786994d4883decec8e9e3`; historical M7 findings and frozen v4
+   │                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:14:0
+   │
+14 │ `e0a779808174c64057fecfd062c948b8de8e5c1f` are provenance, not present-day
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:14:43
+   │
+14 │ `e0a779808174c64057fecfd062c948b8de8e5c1f` are provenance, not present-day
+   │                                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:15:0
+   │
+15 │ artifact validation. Solver replacement, label placement and the kkumutpy port
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:16:0
+   │
+16 │ are separate work.
+   │ ^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:18:0
+   │
+18 │ Clarabel is enabled by Linnet's `drawing` feature and consumed by Linnest,
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: smartquote is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:18:29
+   │
+18 │ Clarabel is enabled by Linnet's `drawing` feature and consumed by Linnest,
+   │                              ^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:18:30
+   │
+18 │ Clarabel is enabled by Linnet's `drawing` feature and consumed by Linnest,
+   │                               ^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:18:32
+   │
+18 │ Clarabel is enabled by Linnet's `drawing` feature and consumed by Linnest,
+   │                                 ^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:18:42
+   │
+18 │ Clarabel is enabled by Linnet's `drawing` feature and consumed by Linnest,
+   │                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:19:0
+   │
+19 │ Linnet's Python bindings and the local Symbolica notebook host, including its
+   │ ^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: smartquote is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:19:6
+   │
+19 │ Linnet's Python bindings and the local Symbolica notebook host, including its
+   │       ^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:19:7
+   │
+19 │ Linnet's Python bindings and the local Symbolica notebook host, including its
+   │        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:20:0
+   │
+20 │ `wasm` feature selection. Linnest's `ec_seed/coordinates.rs` contains the
+   │ ^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:20:7
+   │
+20 │ `wasm` feature selection. Linnest's `ec_seed/coordinates.rs` contains the
+   │        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: smartquote is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:20:33
+   │
+20 │ `wasm` feature selection. Linnest's `ec_seed/coordinates.rs` contains the
+   │                                  ^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:20:34
+   │
+20 │ `wasm` feature selection. Linnest's `ec_seed/coordinates.rs` contains the
+   │                                   ^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:20:36
+   │
+20 │ `wasm` feature selection. Linnest's `ec_seed/coordinates.rs` contains the
+   │                                     ^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:20:61
+   │
+20 │ `wasm` feature selection. Linnest's `ec_seed/coordinates.rs` contains the
+   │                                                              ^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:21:0
+   │
+21 │ NetworkX-derived coordinate algorithm. These source and feature relationships,
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:22:0
+   │
+22 │ rather than searches for binary symbols, establish notice requirements.
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:24:0
+   │
+24 │ At this base `crates/linnet-py` is an rlib, with no standalone wheel manifest or
+   │ ^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:24:13
+   │
+24 │ At this base `crates/linnet-py` is an rlib, with no standalone wheel manifest or
+   │              ^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:24:32
+   │
+24 │ At this base `crates/linnet-py` is an rlib, with no standalone wheel manifest or
+   │                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:25:0
+   │
+25 │ extension-module entrypoint. The historical standalone wheel cannot be rebuilt
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:26:0
+   │
+26 │ from this checkout. The in-repository wheel owner is
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:27:0
+   │
+27 │ `examples/notebooks/symbolica-host`, which owns both native and Pyodide builds.
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:27:35
+   │
+27 │ `examples/notebooks/symbolica-host`, which owns both native and Pyodide builds.
+   │                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:28:0
+   │
+28 │ The separately maintained Symbolica Community distribution is outside this
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:29:0
+   │
+29 │ repository; its packager must collect the same notices when consuming these
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:30:0
+   │
+30 │ crates. No external repository was modified.
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: heading is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:32:0
+   │
+32 │ == Delivery
+   │ ^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:34:0
+   │
+34 │ The complete Clarabel license, including the University of Oxford copyright,
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:35:0
+   │
+35 │ comes from `vendor/clarabel/LICENSE.md`. The complete BSD notice and contributor
+   │ ^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:35:11
+   │
+35 │ comes from `vendor/clarabel/LICENSE.md`. The complete BSD notice and contributor
+   │            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:35:39
+   │
+35 │ comes from `vendor/clarabel/LICENSE.md`. The complete BSD notice and contributor
+   │                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:36:0
+   │
+36 │ credits come from `crates/linnest/layout/native/LICENSE.networkx`. Delivery copies
+   │ ^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:36:18
+   │
+36 │ credits come from `crates/linnest/layout/native/LICENSE.networkx`. Delivery copies
+   │                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:36:65
+   │
+36 │ credits come from `crates/linnest/layout/native/LICENSE.networkx`. Delivery copies
+   │                                                                  ^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:37:0
+   │
+37 │ are byte-identical to these sources. There is no separate Clarabel NOTICE file
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:38:0
+   │
+38 │ in the vendored source. The subsequent drawing replay removes the unused OGDF
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:39:0
+   │
+39 │ Typst plugin and its `LICENSE.ec-layout`; the local-only native reference engine
+   │ ^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:39:21
+   │
+39 │ Typst plugin and its `LICENSE.ec-layout`; the local-only native reference engine
+   │                      ^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:39:40
+   │
+39 │ Typst plugin and its `LICENSE.ec-layout`; the local-only native reference engine
+   │                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:40:0
+   │
+40 │ remains. The Rust coordinate implementation still requires its NetworkX notice.
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:42:0
+   │
+42 │ The Typst package now carries `LICENSE.networkx` beside `linnest.wasm` and declares
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:42:30
+   │
+42 │ The Typst package now carries `LICENSE.networkx` beside `linnest.wasm` and declares
+   │                               ^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:42:49
+   │
+42 │ The Typst package now carries `LICENSE.networkx` beside `linnest.wasm` and declares
+   │                                                  ^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:42:56
+   │
+42 │ The Typst package now carries `LICENSE.networkx` beside `linnest.wasm` and declares
+   │                                                         ^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:42:71
+   │
+42 │ The Typst package now carries `LICENSE.networkx` beside `linnest.wasm` and declares
+   │                                                                        ^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:43:0
+   │
+43 │ BSD-3-Clause in its package license expression. The shared
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:44:0
+   │
+44 │ `crates/linnest/build_assets.rs` selector always includes root package licenses,
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:44:33
+   │
+44 │ `crates/linnest/build_assets.rs` selector always includes root package licenses,
+   │                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:45:0
+   │
+45 │ so both Clinnet and GammaLoop extraction carry the same notice bytes alongside
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:46:0
+   │
+46 │ their embedded plugins. Existing MIT package licenses accompany Linnest and
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:47:0
+   │
+47 │ Kurvst too. Nix source filters, bundle installation and reconstructed drawing
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:48:0
+   │
+48 │ inputs retain these files. The root GammaLoop sdist explicitly includes them.
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:50:0
+   │
+50 │ The local Symbolica host uses Maturin's `project.license-files` with `licenses/*`.
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: smartquote is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:50:37
+   │
+50 │ The local Symbolica host uses Maturin's `project.license-files` with `licenses/*`.
+   │                                      ^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:50:38
+   │
+50 │ The local Symbolica host uses Maturin's `project.license-files` with `licenses/*`.
+   │                                       ^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:50:40
+   │
+50 │ The local Symbolica host uses Maturin's `project.license-files` with `licenses/*`.
+   │                                         ^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:50:64
+   │
+50 │ The local Symbolica host uses Maturin's `project.license-files` with `licenses/*`.
+   │                                                                 ^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:50:69
+   │
+50 │ The local Symbolica host uses Maturin's `project.license-files` with `licenses/*`.
+   │                                                                      ^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:50:81
+   │
+50 │ The local Symbolica host uses Maturin's `project.license-files` with `licenses/*`.
+   │                                                                                  ^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:51:0
+   │
+51 │ This ships readable notices under wheel `.dist-info/licenses/` and advertises
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:51:40
+   │
+51 │ This ships readable notices under wheel `.dist-info/licenses/` and advertises
+   │                                         ^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:51:63
+   │
+51 │ This ships readable notices under wheel `.dist-info/licenses/` and advertises
+   │                                                                ^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:52:0
+   │
+52 │ them through `License-File` metadata. Copies live in that existing conventional
+   │ ^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:52:13
+   │
+52 │ them through `License-File` metadata. Copies live in that existing conventional
+   │              ^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:52:28
+   │
+52 │ them through `License-File` metadata. Copies live in that existing conventional
+   │                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:53:0
+   │
+53 │ packaging location; no general license framework or runtime notice API was added.
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: heading is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:55:0
+   │
+55 │ == Focused validation and limits
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:57:0
+   │
+57 │ The structured #link("evidence/generation-drawing-notices/receipt.json")[receipt]
+   │ ^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: link is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:57:16
+   │
+57 │ The structured #link("evidence/generation-drawing-notices/receipt.json")[receipt]
+   │                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:58:0
+   │
+58 │ records commands, outcomes, source/output hashes and retained logs. Packaging
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:59:0
+   │
+59 │ regression coverage compiles the actual GammaLoop build script and extraction
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:60:0
+   │
+60 │ module in a small Cargo fixture, then compares extracted license and plugin bytes.
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:61:0
+   │
+61 │ A second fixture builds a wheel using the real host Python tree, pyproject and
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:62:0
+   │
+62 │ licenses with only a small substitute Rust module; it verifies license contents,
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:63:0
+   │
+63 │ metadata and RECORD hashes. This validates packaging, not the full host runtime.
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:64:0
+   │
+64 │ Clinnet tests exercise production embedding and staging. The Nix WASM check
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:65:0
+   │
+65 │ compares licenses in its built bundle against their authoritative sources and
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:66:0
+   │
+66 │ validates the plugins. The original notice-only change did not regenerate WASM. The subsequent drawing
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:67:0
+   │
+67 │ replay rebuilds the bundles from its current sources.
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:68:0
+   │
+68 │ The source archive test also verifies all four package/license payloads.
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:69:0
+   │
+69 │ Targeted Clippy, changed-file Rust formatting, Python formatting and Typst
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:70:0
+   │
+70 │ compilation pass. The original workspace-wide `just fmt --check` recorded pre-existing
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:70:46
+   │
+70 │ compilation pass. The original workspace-wide `just fmt --check` recorded pre-existing
+   │                                               ^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:70:65
+   │
+70 │ compilation pass. The original workspace-wide `just fmt --check` recorded pre-existing
+   │                                                                  ^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:71:0
+   │
+71 │ formatting drift in `crates/linnet/src/permutation.rs`. The drawing replay
+   │ ^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:71:20
+   │
+71 │ formatting drift in `crates/linnet/src/permutation.rs`. The drawing replay
+   │                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:71:54
+   │
+71 │ formatting drift in `crates/linnet/src/permutation.rs`. The drawing replay
+   │                                                       ^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:72:0
+   │
+72 │ passes the current workspace-wide formatting check.
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:73:0
+   │
+73 │ The modified Rust follows the current repository policy with no departures.
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:75:0
+   │
+75 │ Real host metadata was inspected for native and Emscripten targets. The native
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:76:0
+   │
+76 │ fixture wheel was also passed through the production Pyodide compression script,
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:77:0
+   │
+77 │ which preserves its payload bytes. This is not a compiled Pyodide host wheel,
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:78:0
+   │
+78 │ nor a standalone Linnet wheel. Final integration must inspect the complete
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:79:0
+   │
+79 │ native/Pyodide host wheels and any restored standalone wheel, and verify the
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:80:0
+   │
+80 │ external Community packager includes both notices. Historical standalone
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:81:0
+   │
+81 │ `license-files = ["LICENSE", "licenses/*"]` can retain its owner: when replay
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:81:44
+   │
+81 │ `license-files = ["LICENSE", "licenses/*"]` can retain its owner: when replay
+   │                                             ^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:81:64
+   │
+81 │ `license-files = ["LICENSE", "licenses/*"]` can retain its owner: when replay
+   │                                                                 ^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:81:66
+   │
+81 │ `license-files = ["LICENSE", "licenses/*"]` can retain its owner: when replay
+   │                                                                   ^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:82:0
+   │
+82 │ restores that wheel, add Clarabel to its license directory and verify NetworkX
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:83:0
+   │
+83 │ against the authoritative source. Do not restore the obsolete standalone
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:84:0
+   │
+84 │ distribution as part of this notice-only change.
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:86:0
+   │
+86 │ The original workspace and bookmark `generation-drawing-notices` are retained
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:86:36
+   │
+86 │ The original workspace and bookmark `generation-drawing-notices` are retained
+   │                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:86:65
+   │
+86 │ The original workspace and bookmark `generation-drawing-notices` are retained
+   │                                                                  ^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:87:0
+   │
+87 │ unchanged. The drawing replay preserves the common license selector and
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:88:0
+   │
+88 │ NetworkX/Clarabel files; see #link("generation-drawing-ports.typ")[its receipt]
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: link is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:88:30
+   │
+88 │ NetworkX/Clarabel files; see #link("generation-drawing-ports.typ")[its receipt]
+   │                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:89:0
+   │
+89 │ for current validation and deferred mark-engine work.
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: heading is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:91:0
+   │
+91 │ == Staged drawing correction review
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:93:0
+   │
+93 │ The bounded D1–D3 correction starts from the frozen staged candidate
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:94:0
+   │
+94 │ `817b5886a50276efea05ab860d22016e1fb0c203`. Both development sync recipes now copy
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:94:42
+   │
+94 │ `817b5886a50276efea05ab860d22016e1fb0c203`. Both development sync recipes now copy
+   │                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:95:0
+   │
+95 │ all Kurvst root licenses, including retained Tiptoe attribution, alongside the
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:96:0
+   │
+96 │ shared mark source. The packaging regression upgrades an existing extracted
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:97:0
+   │
+97 │ bundle with its Tiptoe notice deliberately absent and compares every restored
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:98:0
+   │
+98 │ root notice byte for both recipes. The common production asset selector and
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/generation-drawing-notices.typ:99:0
+   │
+99 │ authoritative Clarabel, NetworkX and Tiptoe license texts remain unchanged.
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/generation-drawing-notices.typ:101:0
+    │
+101 │ The Community WASM workflow installs its declared Rust toolchain, Python 3.13
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/generation-drawing-notices.typ:102:0
+    │
+102 │ and pinned Maturin before the packaging gate. An explicit online preparation
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/generation-drawing-notices.typ:103:0
+    │
+103 │ step in the existing packaging test owner fetches the same two fixture manifests
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/generation-drawing-notices.typ:104:0
+    │
+104 │ used by the offline build tests; preparation errors propagate before tests run.
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/generation-drawing-notices.typ:105:0
+    │
+105 │ New shared-mark adapters use explicit module-scope type imports. The
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: link is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/generation-drawing-notices.typ:106:1
+    │
+106 │ #link("evidence/generation-drawing-notices/staged-corrections.json")[correction receipt]
+    │  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/generation-drawing-notices.typ:107:0
+    │
+107 │ records the exact changes, commands, results, identities and retained evidence.
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/generation-drawing-notices.typ:108:0
+    │
+108 │ This correction awaits a new independent Astra review before integration.
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/generation-drawing-notices.typ:110:0
+    │
+110 │ Artifact certification remains narrower than source validation. The previous
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/generation-drawing-notices.typ:111:0
+    │
+111 │ canonical Nix Kurvst WASM reproduces its committed bytes. The previous fresh
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/generation-drawing-notices.typ:112:0
+    │
+112 │ Linnest WASM differs from the committed artifact in data and name sections,
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/generation-drawing-notices.typ:113:0
+    │
+113 │ although executable/code sections match. Compile-time AHash RNG and source
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/generation-drawing-notices.typ:114:0
+    │
+114 │ location changes are plausible causes, not a proven explanation. Final source,
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/generation-drawing-notices.typ:115:0
+    │
+115 │ seed and source-location auditing and renewed bundle/runtime/SVG certification
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/generation-drawing-notices.typ:116:0
+    │
+116 │ remain required; this correction performs no determinism refactor.
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/generation-drawing-notices.typ:118:0
+    │
+118 │ The committed Kurvst manual PDF still lacks the new mark-specification section,
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/generation-drawing-notices.typ:119:0
+    │
+119 │ although the manual source compiles. Generated manual work belongs to source31
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/generation-drawing-notices.typ:120:0
+    │
+120 │ and the final documentation gate. Actual final repaired/compressed native,
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/generation-drawing-notices.typ:121:0
+    │
+121 │ Pyodide and externally locked Community wheels still require installed behavior
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/generation-drawing-notices.typ:122:0
+    │
+122 │ checks and inspection of METADATA License-File entries, notice bytes and RECORD
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/generation-drawing-notices.typ:123:0
+    │
+123 │ hashes. Fixture wheels do not certify those distributions. Standalone Linnet
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/generation-drawing-notices.typ:124:0
+    │
+124 │ packaging remains absent; restoration must carry its root and third-party
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/generation-drawing-notices.typ:125:0
+    │
+125 │ licenses, including Tiptoe while this engine remains present.
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/generation-drawing-notices.typ:127:0
+    │
+127 │ Three historical frame-hash assertions and the seven inherited plus twenty new
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/generation-drawing-notices.typ:128:0
+    │
+128 │ documentation-scope issues remain parent review items. Their expectations and
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/generation-drawing-notices.typ:129:0
+    │
+129 │ unrelated scope digests are unchanged. No full-candidate, physics, final manual,
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/generation-drawing-notices.typ:130:0
+    │
+130 │ distribution or WP3 approval is claimed here.
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+warning: bundle export is experimental
+ = hint: its behaviour may change at any time
+ = hint: do not rely on this feature for production use cases
+

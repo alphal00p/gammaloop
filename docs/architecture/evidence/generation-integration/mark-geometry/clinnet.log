@@ -1,0 +1,8 @@
+   Compiling serde_json v1.0.149
+   Compiling clinnet v0.1.8 (/shared/lcnbr/dev/gammaloop/generation-drawing-ports/crates/clinnet)
+    Finished `dev-optim` profile [optimized + debuginfo] target(s) in 28.04s
+────────────
+ Nextest run ID 33e2b3a4-598b-46a0-98b7-e8804df70fd0 with nextest profile: default
+    Starting 46 tests across 4 binaries
+────────────
+     Summary [ 330.996s] 46 tests run: 46 passed, 0 skipped

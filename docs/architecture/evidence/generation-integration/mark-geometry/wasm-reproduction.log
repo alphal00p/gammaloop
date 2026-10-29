@@ -1,0 +1,5 @@
+warning: ignoring untrusted flake configuration setting 'extra-substituters'.
+Pass '--accept-flake-config' to trust it
+warning: ignoring untrusted flake configuration setting 'extra-trusted-public-keys'.
+Pass '--accept-flake-config' to trust it
+checking outputs of '/nix/store/9vbk12yrd64s095px6g254rypcr0pkyk-linnest-wasm-0.1.0.drv'...

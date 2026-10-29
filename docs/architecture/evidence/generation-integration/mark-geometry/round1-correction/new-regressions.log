@@ -1,0 +1,9 @@
+
+running 4 tests
+test ordinary_ninety_percent_notch_is_a_control ... ok
+test full_turn_barb_must_stop_at_rear_axis_crossing ... ok
+test positive_area_deep_notch_must_not_paint_past_tip ... ok
+test tiny_positive_triangle_must_grow_to_hold_stroke ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

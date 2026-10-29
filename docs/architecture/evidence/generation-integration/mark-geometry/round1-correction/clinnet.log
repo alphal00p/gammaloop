@@ -1,0 +1,7 @@
+   Compiling clinnet v0.1.8 (/shared/lcnbr/dev/gammaloop/generation-drawing-ports/crates/clinnet)
+    Finished `dev-optim` profile [optimized + debuginfo] target(s) in 7.66s
+────────────
+ Nextest run ID 4fc1b978-4d3a-4ddc-bf3b-0574d489df3b with nextest profile: default
+    Starting 46 tests across 4 binaries
+────────────
+     Summary [ 326.426s] 46 tests run: 46 passed, 0 skipped

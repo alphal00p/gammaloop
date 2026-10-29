@@ -1,0 +1,41 @@
+    Checking arrayvec v0.7.6
+    Checking smallvec v1.15.1
+    Checking polycool v0.4.0
+    Checking kurbo v0.13.1 (/shared/lcnbr/dev/gammaloop/generation-drawing-ports/vendor/kurbo)
+error: unneeded late initialization
+   --> src/common.rs:389:5
+    |
+389 | /     if rescale {
+390 | |         let a_prime_s = a_prime / K_C;
+391 | |         let b_prime_s = b_prime / K_C;
+392 | |         let c_prime_s = c_prime / K_C;
+...   |
+405 | |                 - a_prime.powi(2) * d_prime;
+406 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#needless_late_init
+    = note: `-D clippy::needless-late-init` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::needless_late_init)]`
+help: move the declarations here and remove the assignments from the branches
+    |
+386 ~     
+387 ~     
+388 |     const K_C: f64 = 3.49e102;
+389 ~     let (g_prime, h_prime) = if rescale {
+390 |         let a_prime_s = a_prime / K_C;
+...
+393 |         let d_prime_s = d_prime / K_C;
+394 ~         (a_prime_s * c_prime_s - (4. / K_C) * d_prime_s - (1. / 3.) * b_prime_s.powi(2), (a_prime_s * c_prime_s + (8. / K_C) * d_prime_s - (2. / 9.) * b_prime_s.powi(2))
+395 +             * (1. / 3.)
+396 +             * b_prime_s
+397 +             - c_prime_s * (c_prime_s / K_C)
+398 +             - a_prime_s.powi(2) * d_prime_s)
+399 |     } else {
+400 ~         (a_prime * c_prime - 4. * d_prime - (1. / 3.) * b_prime.powi(2), (a_prime * c_prime + 8. * d_prime - (2. / 9.) * b_prime.powi(2)) * (1. / 3.) * b_prime
+401 +                 - c_prime.powi(2)
+402 +                 - a_prime.powi(2) * d_prime)
+403 ~     };
+    |
+
+error: could not compile `kurbo` (lib) due to 1 previous error

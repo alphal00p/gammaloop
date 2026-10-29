@@ -1,0 +1,48 @@
+   Compiling num-traits v0.2.19
+   Compiling either v1.15.0
+   Compiling rkyv v0.7.46
+   Compiling clarabel v0.11.1 (/shared/lcnbr/dev/gammaloop/generation-drawing-ports/vendor/clarabel)
+   Compiling serde_json v1.0.149
+   Compiling num-integer v0.1.46
+   Compiling num-bigint v0.4.6
+   Compiling approx v0.4.0
+   Compiling amd v0.2.2
+   Compiling itertools v0.11.0
+warning: unused import: `super::super::traits::*`
+   --> vendor/clarabel/src/solver/core/solver.rs:470:9
+    |
+470 |     use super::super::traits::*;
+    |         ^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+  --> vendor/clarabel/src/solver/core/kktsolvers/direct/quasidef/datamaps.rs:26:39
+   |
+26 |     pub(crate) fn to_sparse_expansion(&self) -> Option<SparseExpansionCone<T>> {
+   |                                       ^^^^^            ^^^^^^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+   |                                       |
+   |                                       the lifetime is elided here
+   |
+   = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+   = note: `#[warn(mismatched_lifetime_syntaxes)]` on by default
+help: use `'_` for type paths
+   |
+26 |     pub(crate) fn to_sparse_expansion(&self) -> Option<SparseExpansionCone<'_, T>> {
+   |                                                                            +++
+
+   Compiling cgmath v0.18.0
+warning: `clarabel` (lib) generated 2 warnings (run `cargo fix --lib -p clarabel` to apply 2 suggestions)
+   Compiling num-rational v0.4.2
+   Compiling twofloat v0.8.4
+   Compiling kurvst v0.1.0 (/shared/lcnbr/dev/gammaloop/generation-drawing-ports/crates/kurvst)
+   Compiling itertools v0.14.0
+   Compiling linnet v0.17.0 (/shared/lcnbr/dev/gammaloop/generation-drawing-ports/crates/linnet)
+   Compiling roxmltree v0.21.1
+   Compiling linnest v0.1.0 (/shared/lcnbr/dev/gammaloop/generation-drawing-ports/crates/linnest)
+    Finished `dev-optim` profile [optimized + debuginfo] target(s) in 3m 53s
+────────────
+ Nextest run ID 7042d843-74c5-48b9-ad7c-f407d47b2839 with nextest profile: default
+    Starting 344 tests across 2 binaries (1 test skipped)
+────────────
+     Summary [   2.002s] 344 tests run: 344 passed, 1 skipped

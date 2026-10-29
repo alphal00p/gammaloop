@@ -1,5 +1,5 @@
 {
-  "date": "2026-10-28",
+  "date": "2026-10-29",
   "scope": "WP0, WP1 and WP2 approved; WP3 in progress",
   "authorization": "Implement the plan, have Astra review at each impl step, and have sol implement",
   "implementer": "Sol",
@@ -610,9 +610,9 @@
     "validation_metadata_commit": "783e3281d01134f8fe2e44eab366d0414c63b852",
     "source_binding": "docs/architecture/evidence/generation-integration/wp3/main32-35/metadata-source.json"
   },
-  "current_implementation_code_commit": "0d3ddb5246416427be56c57c91ec1a095037e818",
+  "current_implementation_code_commit": "925f739799572d23f46a762c895ebb85e5bd88d6",
   "current_documentation_code_commit": "a3729fe5d880f0db5f09d9ce7d0ef592bfc4d161",
-  "current_implementation_change": "tznypqqkntuqtksqvrpomtnystqumqrw",
+  "current_implementation_change": "xrvnmqsskwulwrrxoptluwlqzyykrxyz",
   "main32_35_review": {
     "candidate": "510d79d94bbaf57aaaa992c641e7496905763324",
     "verdict": "APPROVE",
@@ -628,11 +628,31 @@
     "approved_code": "6e9e5a245302806d872271861dd59b47dfcd4b86",
     "receipt": "docs/architecture/evidence/generation-integration/wp3/source36/receipt.json",
     "candidate_bookmark": "generation-integration-source36",
-    "status": "Source36-only integrated and focused combined validation complete; STOP for NEW independent Astra review before38",
+    "status": "APPROVED at100da206; historical checks remain bound to original source/binary identities; releases38 only.",
     "source25": "Already integrated; no replay",
     "canonical_docs": "Earlier a372 success remains bound to a372; no new cold full-site qualification",
     "code_commit": "0d3ddb5246416427be56c57c91ec1a095037e818",
     "code_change": "tznypqqkntuqtksqvrpomtnystqumqrw",
     "validation": "docs/architecture/evidence/generation-integration/wp3/source36/validation.json"
+  },
+  "active_slice38": {
+    "base": "100da20603a083d031c31bd4e8c6970fc44dda2f",
+    "source_order": 38,
+    "original_source": "15dd7e1b188dad112d7887bdc6d769125b2697a1",
+    "approved_preparation": "861c19e3e7afc067851b13f3e7548baa923286ee",
+    "approved_runtime_code": "f35643bae1a67fb6ec0c30151e3624f661cf5f96",
+    "code_commit": "925f739799572d23f46a762c895ebb85e5bd88d6",
+    "code_change": "xrvnmqsskwulwrrxoptluwlqzyykrxyz",
+    "receipt": "docs/architecture/evidence/generation-integration/wp3/source38/receipt.json",
+    "candidate_bookmark": "generation-integration-source38",
+    "status": "Complete cumulative source38 integrated; combined checks recorded separately; NEW independent Astra integration review required before39. WP3 incomplete.",
+    "accounted_source_rows": 38,
+    "accounted_planned_units": 33
+  },
+  "main36_review": {
+    "candidate": "100da20603a083d031c31bd4e8c6970fc44dda2f",
+    "verdict": "APPROVE",
+    "receipt": "docs/architecture/evidence/generation-integration/wp3/source38/main36-review.json",
+    "scope": "Source36 only; releases38, not whole WP3."
   }
 }

@@ -1,0 +1,94 @@
+warning: ignoring untrusted flake configuration setting 'extra-substituters'.
+Pass '--accept-flake-config' to trust it
+warning: ignoring untrusted flake configuration setting 'extra-trusted-public-keys'.
+Pass '--accept-flake-config' to trust it
+this derivation will be built:
+  /nix/store/9vbk12yrd64s095px6g254rypcr0pkyk-linnest-wasm-0.1.0.drv
+building '/nix/store/9vbk12yrd64s095px6g254rypcr0pkyk-linnest-wasm-0.1.0.drv'...
+linnest-wasm> Running phase: unpackPhase
+linnest-wasm> unpacking source archive /nix/store/00ahch8yyhn0q11m87rl62m1lmy1kb21-source
+linnest-wasm> source root is source
+linnest-wasm> Running phase: patchPhase
+linnest-wasm> Executing configureCargoCommonVars
+linnest-wasm> decompressing cargo artifacts from /nix/store/h4wd59kik80s4njbv6a18qfljf39ma2w-linnest-wasm-deps-deps-0.1.0/target.tar.zst to target
+linnest-wasm> Running phase: updateAutotoolsGnuConfigScriptsPhase
+linnest-wasm> Running phase: configurePhase
+linnest-wasm> will append /build/source/.cargo-home/config.toml with contents of /nix/store/9619qg4vmdl3x44six7q3r6i56lxq99p-vendor-cargo-deps/config.toml
+linnest-wasm> default configurePhase, nothing to do
+linnest-wasm> Running phase: buildPhase
+linnest-wasm> +++ command cargo --version
+linnest-wasm> cargo 1.98.1 (797e8a9bc 2026-08-05)
+linnest-wasm> +++ command cargo build --release --message-format json-render-diagnostics --locked -p linnest -p kurvst --features linnest/typst-plugin,kurvst/typst-plugin --target wasm32-unknown-unknown
+linnest-wasm>    Compiling clarabel v0.11.1 (/build/source/vendor/clarabel)
+linnest-wasm>    Compiling kurvst v0.1.0 (/build/source/crates/kurvst)
+linnest-wasm> warning: unused import: `super::super::traits::*`
+linnest-wasm>    --> vendor/clarabel/src/solver/core/solver.rs:470:9
+linnest-wasm>     |
+linnest-wasm> 470 |     use super::super::traits::*;
+linnest-wasm>     |         ^^^^^^^^^^^^^^^^^^^^^^^
+linnest-wasm>     |
+linnest-wasm>     = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+linnest-wasm> 
+linnest-wasm> warning: hiding a lifetime that's elided elsewhere is confusing
+linnest-wasm>   --> vendor/clarabel/src/solver/core/kktsolvers/direct/quasidef/datamaps.rs:26:39
+linnest-wasm>    |
+linnest-wasm> 26 |     pub(crate) fn to_sparse_expansion(&self) -> Option<SparseExpansionCone<T>> {
+linnest-wasm>    |                                       ^^^^^            ^^^^^^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+linnest-wasm>    |                                       |
+linnest-wasm>    |                                       the lifetime is elided here
+linnest-wasm>    |
+linnest-wasm>    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+linnest-wasm>    = note: `#[warn(mismatched_lifetime_syntaxes)]` on by default
+linnest-wasm> help: use `'_` for type paths
+linnest-wasm>    |
+linnest-wasm> 26 |     pub(crate) fn to_sparse_expansion(&self) -> Option<SparseExpansionCone<'_, T>> {
+linnest-wasm>    |                                                                            +++
+linnest-wasm> 
+linnest-wasm> warning: `clarabel` (lib) generated 2 warnings (run `cargo fix --lib -p clarabel` to apply 2 suggestions)
+linnest-wasm>    Compiling linnet v0.17.0 (/build/source/crates/linnet)
+linnest-wasm>    Compiling linnest v0.1.0 (/build/source/crates/linnest)
+linnest-wasm>     Finished `release` profile [optimized] target(s) in 56.85s
+linnest-wasm> searching for bins/libs to install from cargo build log at cargoBuildLogrPbp.json
+linnest-wasm> installing /build/source/target/wasm32-unknown-unknown/release/kurvst.wasm in postBuildInstallFromCargoBuildLogOutTempc9l/lib
+linnest-wasm> installing /build/source/target/wasm32-unknown-unknown/release/linnest.wasm in postBuildInstallFromCargoBuildLogOutTempc9l/lib
+linnest-wasm> searching for bins/libs complete
+linnest-wasm> buildPhase completed in 58 seconds
+linnest-wasm> Running phase: installPhase
+linnest-wasm> stripping references to Rust toolchain
+linnest-wasm> Rust toolchain at: /nix/store/k18y2b9cpvn9szc9i7ac1dahipsg2dyk-rust-mixed
+linnest-wasm> stripping Rust toolchain references done
+linnest-wasm> stripping references to cargoVendorDir from:
+linnest-wasm> /nix/store/2311zgm13mbrpnazihzd2v7x8p4303kc-linnest-wasm-0.1.0/kurvst.wasm
+linnest-wasm> /nix/store/2311zgm13mbrpnazihzd2v7x8p4303kc-linnest-wasm-0.1.0/linnest.wasm
+linnest-wasm> /nix/store/2311zgm13mbrpnazihzd2v7x8p4303kc-linnest-wasm-0.1.0/templates/crates/kurvst/typst/LICENSE
+linnest-wasm> /nix/store/2311zgm13mbrpnazihzd2v7x8p4303kc-linnest-wasm-0.1.0/templates/crates/kurvst/typst/kurvst.wasm
+linnest-wasm> /nix/store/2311zgm13mbrpnazihzd2v7x8p4303kc-linnest-wasm-0.1.0/templates/crates/kurvst/typst/src/impl.typ
+linnest-wasm> /nix/store/2311zgm13mbrpnazihzd2v7x8p4303kc-linnest-wasm-0.1.0/templates/crates/kurvst/typst/src/lib.typ
+linnest-wasm> /nix/store/2311zgm13mbrpnazihzd2v7x8p4303kc-linnest-wasm-0.1.0/templates/crates/kurvst/typst/src/mark.typ
+linnest-wasm> /nix/store/2311zgm13mbrpnazihzd2v7x8p4303kc-linnest-wasm-0.1.0/templates/crates/kurvst/typst/typst.toml
+linnest-wasm> /nix/store/2311zgm13mbrpnazihzd2v7x8p4303kc-linnest-wasm-0.1.0/templates/crates/linnest/typst/LICENSE
+linnest-wasm> /nix/store/2311zgm13mbrpnazihzd2v7x8p4303kc-linnest-wasm-0.1.0/templates/crates/linnest/typst/LICENSE.clarabel
+linnest-wasm> /nix/store/2311zgm13mbrpnazihzd2v7x8p4303kc-linnest-wasm-0.1.0/templates/crates/linnest/typst/LICENSE.networkx
+linnest-wasm> /nix/store/2311zgm13mbrpnazihzd2v7x8p4303kc-linnest-wasm-0.1.0/templates/crates/linnest/typst/linnest.wasm
+linnest-wasm> /nix/store/2311zgm13mbrpnazihzd2v7x8p4303kc-linnest-wasm-0.1.0/templates/crates/linnest/typst/src/curve.typ
+linnest-wasm> /nix/store/2311zgm13mbrpnazihzd2v7x8p4303kc-linnest-wasm-0.1.0/templates/crates/linnest/typst/src/draw.typ
+linnest-wasm> /nix/store/2311zgm13mbrpnazihzd2v7x8p4303kc-linnest-wasm-0.1.0/templates/crates/linnest/typst/src/graph.typ
+linnest-wasm> /nix/store/2311zgm13mbrpnazihzd2v7x8p4303kc-linnest-wasm-0.1.0/templates/crates/linnest/typst/src/impl/draw.typ
+linnest-wasm> /nix/store/2311zgm13mbrpnazihzd2v7x8p4303kc-linnest-wasm-0.1.0/templates/crates/linnest/typst/src/impl/graph.typ
+linnest-wasm> /nix/store/2311zgm13mbrpnazihzd2v7x8p4303kc-linnest-wasm-0.1.0/templates/crates/linnest/typst/src/impl/identity-targets.typ
+linnest-wasm> /nix/store/2311zgm13mbrpnazihzd2v7x8p4303kc-linnest-wasm-0.1.0/templates/crates/linnest/typst/src/impl/subgraph.typ
+linnest-wasm> /nix/store/2311zgm13mbrpnazihzd2v7x8p4303kc-linnest-wasm-0.1.0/templates/crates/linnest/typst/src/layout.typ
+linnest-wasm> /nix/store/2311zgm13mbrpnazihzd2v7x8p4303kc-linnest-wasm-0.1.0/templates/crates/linnest/typst/src/lib.typ
+linnest-wasm> /nix/store/2311zgm13mbrpnazihzd2v7x8p4303kc-linnest-wasm-0.1.0/templates/crates/linnest/typst/src/render/figure.typ
+linnest-wasm> /nix/store/2311zgm13mbrpnazihzd2v7x8p4303kc-linnest-wasm-0.1.0/templates/crates/linnest/typst/src/render/layout.typ
+linnest-wasm> /nix/store/2311zgm13mbrpnazihzd2v7x8p4303kc-linnest-wasm-0.1.0/templates/crates/linnest/typst/src/render/network.typ
+linnest-wasm> /nix/store/2311zgm13mbrpnazihzd2v7x8p4303kc-linnest-wasm-0.1.0/templates/crates/linnest/typst/src/subgraph.typ
+linnest-wasm> /nix/store/2311zgm13mbrpnazihzd2v7x8p4303kc-linnest-wasm-0.1.0/templates/crates/linnest/typst/typst.toml
+linnest-wasm> /nix/store/2311zgm13mbrpnazihzd2v7x8p4303kc-linnest-wasm-0.1.0/templates/figure.typ
+linnest-wasm> /nix/store/2311zgm13mbrpnazihzd2v7x8p4303kc-linnest-wasm-0.1.0/templates/grid.typ
+linnest-wasm> /nix/store/2311zgm13mbrpnazihzd2v7x8p4303kc-linnest-wasm-0.1.0/templates/layout.typ
+linnest-wasm> stripping references done
+linnest-wasm> Running phase: fixupPhase
+linnest-wasm> shrinking RPATHs of ELF executables and libraries in /nix/store/2311zgm13mbrpnazihzd2v7x8p4303kc-linnest-wasm-0.1.0
+linnest-wasm> checking for references to /build/ in /nix/store/2311zgm13mbrpnazihzd2v7x8p4303kc-linnest-wasm-0.1.0...
+linnest-wasm> patching script interpreter paths in /nix/store/2311zgm13mbrpnazihzd2v7x8p4303kc-linnest-wasm-0.1.0

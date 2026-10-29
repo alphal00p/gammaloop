@@ -1,0 +1,3 @@
+warning: the `typst query` subcommand is deprecated
+ = hint: use `typst eval 'query(<boundary-results>).map(it => it.value)' --in .local/review-mark-geometry-a/boundaries.typ` instead
+

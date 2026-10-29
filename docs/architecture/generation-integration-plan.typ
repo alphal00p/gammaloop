@@ -237,7 +237,7 @@ own workspace. Bounded: one regression, one bisect, one written verdict.
   historical code and validation identities remain unchanged. The coordinator
   released source19–21 as the next bounded slice. It requires NEW independent
   Astra review before22; no whole-WP3 or performance/distribution approval is claimed.
-  Source38 awaits the reviewed transplant and prerequisites through port36.
+  Historical gate: Source38 awaited the transplant and prerequisites through port36; these are approved through `100da206`. Ordered38 is now integrated, pending its own review.
   Approved input25/36 and cumulative sampling27–29 remain separate for later
   integration; no benchmark milestone is claimed. Full rebuilt-tip validation
   and M-rebuild remain pending. See
@@ -328,7 +328,20 @@ own workspace. Bounded: one regression, one bisect, one written verdict.
   `evidence/generation-integration/wp3/source36/receipt.json`.
   Existing102 scopes are preserved; the explicit resource owner adds one scope.
   Prior canonical documentation success stays bound to `a3729fe5`.
-  NEW independent Astra integration review is required before geometry38.
+  Independent Astra APPROVE at `100da206` releases geometry38 only.
+
+- #strong[Source38 ordered geometry integration 2026-10-29:]
+  complete approved `100da206..861c19e3` preparation is integrated, including
+  local-frame marks, generic Kurbo stroke correctness repairs, native/public
+  WASM assets and source-backed Tiptoe retirement. Clarabel/NetworkX remain.
+  The root coordinator authorized the exact Kurbo0.13.1 local patch; only its
+  root/host lock selection changes. No physics or later source is replayed.
+  Current combined qualification and exact identities are recorded in
+  `evidence/generation-integration/wp3/source38/receipt.json`.
+  Native outline and public transport checks do not certify every extreme
+  rasterization: the blank skinny-triangle crop remains a documented limit.
+  NEW independent Astra integration review is required before39. WP3, final
+  distributions, performance and full physics remain incomplete.
 
 - `jj duplicate` the v4 chain (`kursouxx::kpslpwqz`) onto the WP2 base; do not
   rebase in place, so the 19 live workspaces on older lines stay valid.

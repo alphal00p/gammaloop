@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "status": "Source36-only integrated and focused combined validation complete; STOP for NEW independent Astra review before38",
+  "status": "Complete cumulative source38 integrated; combined checks recorded separately; NEW independent Astra integration review required before39. WP3 incomplete.",
   "fixed_target": {
     "commit": "3f0df2a870806076820786994d4883decec8e9e3",
     "tree": "3c91ba47525c627fbc02d79f5afa1d58aa7c5b66",
@@ -649,7 +649,7 @@
       "planned_unit": "port-36",
       "planned_order": 32,
       "reason": "Keep actionable data-asset upgrade errors; preserve installed resource discovery.",
-      "status": "Integrated and focused validation passes; NEW Astra review pending before38",
+      "status": "APPROVED by independent Astra at100da206; new source38 candidate separately reviewed.",
       "integration_receipt": "docs/architecture/evidence/generation-integration/wp3/source36/receipt.json",
       "integration_commit": "0d3ddb5246416427be56c57c91ec1a095037e818"
     },
@@ -685,7 +685,11 @@
       "planned_unit": "port-38",
       "planned_order": 33,
       "reason": "Retain first-principles mark geometry, with source/license audit in WP11; reproduce generated assets there rather than copying historical binaries.",
-      "status": "pending"
+      "status": "Complete cumulative source38 integrated; combined checks recorded separately; NEW independent Astra integration review required before39. WP3 incomplete.",
+      "new_commit": "925f739799572d23f46a762c895ebb85e5bd88d6",
+      "new_change": "xrvnmqsskwulwrrxoptluwlqzyykrxyz",
+      "receipt": "docs/architecture/evidence/generation-integration/wp3/source38/receipt.json",
+      "preparation": "861c19e3e7afc067851b13f3e7548baa923286ee"
     },
     {
       "commit": "854c4a7a4ac22ef6987e9446092560a3363f5d77",
@@ -1103,21 +1107,18 @@
     "limitation": "Seven inherited registry digests remain stale; carried explicitly for source31/final reconciliation."
   },
   "current_slice": {
-    "base": "510d79d94bbaf57aaaa992c641e7496905763324",
-    "source_order": 36,
-    "original_source": "5a99afbd1645250715ecf59361beb7ab4826d083",
-    "approved_preparation": "277d2f8b0051e0a41194b369fa683db550098bbb",
-    "approved_code": "6e9e5a245302806d872271861dd59b47dfcd4b86",
-    "receipt": "docs/architecture/evidence/generation-integration/wp3/source36/receipt.json",
-    "candidate_bookmark": "generation-integration-source36",
-    "status": "Source36-only integrated and focused combined validation complete; STOP for NEW independent Astra review before38",
-    "source25": "Already integrated; no replay",
-    "canonical_docs": "Earlier a372 success remains bound to a372; no new cold full-site qualification",
-    "accounted_source_rows": 37,
-    "accounted_planned_units": 32,
-    "code_commit": "0d3ddb5246416427be56c57c91ec1a095037e818",
-    "code_change": "tznypqqkntuqtksqvrpomtnystqumqrw",
-    "validation": "docs/architecture/evidence/generation-integration/wp3/source36/validation.json"
+    "base": "100da20603a083d031c31bd4e8c6970fc44dda2f",
+    "source_order": 38,
+    "original_source": "15dd7e1b188dad112d7887bdc6d769125b2697a1",
+    "approved_preparation": "861c19e3e7afc067851b13f3e7548baa923286ee",
+    "approved_runtime_code": "f35643bae1a67fb6ec0c30151e3624f661cf5f96",
+    "code_commit": "925f739799572d23f46a762c895ebb85e5bd88d6",
+    "code_change": "xrvnmqsskwulwrrxoptluwlqzyykrxyz",
+    "receipt": "docs/architecture/evidence/generation-integration/wp3/source38/receipt.json",
+    "candidate_bookmark": "generation-integration-source38",
+    "status": "Complete cumulative source38 integrated; combined checks recorded separately; NEW independent Astra integration review required before39. WP3 incomplete.",
+    "accounted_source_rows": 38,
+    "accounted_planned_units": 33
   },
   "staged_round1_review": {
     "verdict": "REQUEST_CHANGES",
@@ -1486,9 +1487,9 @@
     "evidence_change": "rsnwxksqkumlppzknlkkqvkrvpyrrzrt",
     "metadata_snapshot_commit": "2990045ccc658413f2eb2c07fe21e9d811ac4da8"
   },
-  "current_implementation_code_commit": "0d3ddb5246416427be56c57c91ec1a095037e818",
+  "current_implementation_code_commit": "925f739799572d23f46a762c895ebb85e5bd88d6",
   "current_documentation_code_commit": "a3729fe5d880f0db5f09d9ce7d0ef592bfc4d161",
-  "current_implementation_change": "tznypqqkntuqtksqvrpomtnystqumqrw",
+  "current_implementation_change": "xrvnmqsskwulwrrxoptluwlqzyykrxyz",
   "main32_35_review": {
     "candidate": "510d79d94bbaf57aaaa992c641e7496905763324",
     "verdict": "APPROVE",
@@ -1504,7 +1505,7 @@
     "approved_code": "6e9e5a245302806d872271861dd59b47dfcd4b86",
     "receipt": "docs/architecture/evidence/generation-integration/wp3/source36/receipt.json",
     "candidate_bookmark": "generation-integration-source36",
-    "status": "Source36-only integrated and focused combined validation complete; STOP for NEW independent Astra review before38",
+    "status": "APPROVED at100da206; historical checks remain bound to original source/binary identities; releases38 only.",
     "source25": "Already integrated; no replay",
     "canonical_docs": "Earlier a372 success remains bound to a372; no new cold full-site qualification",
     "code_commit": "0d3ddb5246416427be56c57c91ec1a095037e818",
@@ -1546,5 +1547,19 @@
     "code_change": "vvxwvmpnulrtxorvyxvwwrwpuprtoxtt",
     "evidence_change": "snxolylkullnovwylnponpvtozuqusuu",
     "metadata_snapshot_commit": "783e3281d01134f8fe2e44eab366d0414c63b852"
+  },
+  "active_slice38": {
+    "base": "100da20603a083d031c31bd4e8c6970fc44dda2f",
+    "source_order": 38,
+    "original_source": "15dd7e1b188dad112d7887bdc6d769125b2697a1",
+    "approved_preparation": "861c19e3e7afc067851b13f3e7548baa923286ee",
+    "approved_runtime_code": "f35643bae1a67fb6ec0c30151e3624f661cf5f96",
+    "code_commit": "925f739799572d23f46a762c895ebb85e5bd88d6",
+    "code_change": "xrvnmqsskwulwrrxoptluwlqzyykrxyz",
+    "receipt": "docs/architecture/evidence/generation-integration/wp3/source38/receipt.json",
+    "candidate_bookmark": "generation-integration-source38",
+    "status": "Complete cumulative source38 integrated; combined checks recorded separately; NEW independent Astra integration review required before39. WP3 incomplete.",
+    "accounted_source_rows": 38,
+    "accounted_planned_units": 33
   }
 }

@@ -1,0 +1,3390 @@
+error: heading is not allowed at the top-level in bundle export
+  ┌─ docs/architecture/kurvst-arrowhead-engine.typ:1:0
+  │
+1 │ = Kurvst Arrowhead Engine
+  │ ^^^^^^^^^^^^^^^^^^^^^^^^^
+  │
+  = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+  ┌─ docs/architecture/kurvst-arrowhead-engine.typ:3:0
+  │
+3 │ SOURCE31 classifies this as a historical design and implementation investigation,
+  │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  │
+  = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+  ┌─ docs/architecture/kurvst-arrowhead-engine.typ:4:0
+  │
+4 │ preserved from frozen `a517ca563d78d161cff17fe60e661f80529c9a83`. Status,
+  │ ^^^^^^^^^^^^^^^^^^^^^
+  │
+  = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+  ┌─ docs/architecture/kurvst-arrowhead-engine.typ:4:22
+  │
+4 │ preserved from frozen `a517ca563d78d161cff17fe60e661f80529c9a83`. Status,
+  │                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  │
+  = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+  ┌─ docs/architecture/kurvst-arrowhead-engine.typ:4:64
+  │
+4 │ preserved from frozen `a517ca563d78d161cff17fe60e661f80529c9a83`. Status,
+  │                                                                 ^^^^^^^^^
+  │
+  = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+  ┌─ docs/architecture/kurvst-arrowhead-engine.typ:5:0
+  │
+5 │ “today” and migration statements below describe their original staged context,
+  │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  │
+  = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+  ┌─ docs/architecture/kurvst-arrowhead-engine.typ:6:0
+  │
+6 │ not a fresh certification of every API example. Current native graph construction
+  │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  │
+  = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+  ┌─ docs/architecture/kurvst-arrowhead-engine.typ:7:0
+  │
+7 │ uses Node/Edge/HalfEdge Spec values and `symbolica.community.graph`; current
+  │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  │
+  = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+  ┌─ docs/architecture/kurvst-arrowhead-engine.typ:7:40
+  │
+7 │ uses Node/Edge/HalfEdge Spec values and `symbolica.community.graph`; current
+  │                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  │
+  = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+  ┌─ docs/architecture/kurvst-arrowhead-engine.typ:7:67
+  │
+7 │ uses Node/Edge/HalfEdge Spec values and `symbolica.community.graph`; current
+  │                                                                    ^^^^^^^^^
+  │
+  = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+  ┌─ docs/architecture/kurvst-arrowhead-engine.typ:8:0
+  │
+8 │ rendering owns native SVG and static fallbacks. Source38 geometry and notice changes now have a separate
+  │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  │
+  = hint: try wrapping the content in a `document` instead
+
+error: link is not allowed at the top-level in bundle export
+  ┌─ docs/architecture/kurvst-arrowhead-engine.typ:9:1
+  │
+9 │ #link("generation-mark-geometry.typ")[execution record]. The original design
+  │  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  │
+  = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+  ┌─ docs/architecture/kurvst-arrowhead-engine.typ:9:55
+  │
+9 │ #link("generation-mark-geometry.typ")[execution record]. The original design
+  │                                                        ^^^^^^^^^^^^^^^^^^^^^
+  │
+  = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:10:0
+   │
+10 │ and Tiptoe comparisons below remain historical provenance, not current geometry
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:11:0
+   │
+11 │ or notice requirements. Reported measurements retain their stated old baseline.
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:12:0
+   │
+12 │ The current Kurvst manual and registered drawing architecture own usage guidance.
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: quote is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:14:1
+   │  
+14 │   #quote(block: true)[
+   │ ╭──^
+15 │ │ *Status: Accepted design, recorded 2026-10-04; P0–P7 implemented.*
+16 │ │ Linnest draws with stock CeTZ 0.5.2 and the shared Kurvst mark engine; no CeTZ
+17 │ │ is vendored. Performance and image acceptance remain open decisions.
+18 │ │ ]
+   │ ╰─^
+   │  
+   = hint: try wrapping the content in a `document` instead
+
+error: heading is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:20:0
+   │
+20 │ == Decision and delivery boundary
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:22:0
+   │
+22 │ Move numeric arrowhead geometry, label-candidate footprints, hit-area placement,
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:23:0
+   │
+23 │ and collision sampling into Kurvst. One Rust geometry engine serves native
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:24:0
+   │
+24 │ Python SVG and Typst Wasm; stock CeTZ paints finished geometry. Kurvst owns
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:25:0
+   │
+25 │ curve and mark geometry; Linnest owns placement decisions, label search, and
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:26:0
+   │
+26 │ link semantics; CeTZ owns painting and its existing Boolean operations.
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:27:0
+   │
+27 │ Eventually delete the vendored CeTZ tree: 47 files, five core patches, and its
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:27:40
+   │
+27 │ Eventually delete the vendored CeTZ tree: 47 files, five core patches, and its
+   │                                         ^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:27:42
+   │
+27 │ Eventually delete the vendored CeTZ tree: 47 files, five core patches, and its
+   │                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:28:0
+   │
+28 │ pinned rebuild recipe. Do not port LGPL CeTZ patches into the new MIT engine.
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:30:0
+   │
+30 │ The prerequisite Kurvst consolidation lands with this note: the shared curve
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:30:58
+   │
+30 │ The prerequisite Kurvst consolidation lands with this note: the shared curve
+   │                                                           ^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:30:60
+   │
+30 │ The prerequisite Kurvst consolidation lands with this note: the shared curve
+   │                                                             ^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:31:0
+   │
+31 │ API, stroke outlines, arcs, pattern splitting, and removal of the `optimize`
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:31:66
+   │
+31 │ API, stroke outlines, arcs, pattern splitting, and removal of the `optimize`
+   │                                                                   ^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:32:0
+   │
+32 │ and close-mode options. Delivery order is: consolidate, capture the P0 corpus
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:32:41
+   │
+32 │ and close-mode options. Delivery order is: consolidate, capture the P0 corpus
+   │                                          ^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:32:43
+   │
+32 │ and close-mode options. Delivery order is: consolidate, capture the P0 corpus
+   │                                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:33:0
+   │
+33 │ baseline against the consolidated base, then implement the phases below.
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: heading is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:35:0
+   │
+35 │ == Mark catalogue and data contract
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:37:0
+   │
+37 │ `kurvst.mark` constructors produce data only. The Python `Mark(name, ...)` of
+   │ ^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:37:14
+   │
+37 │ `kurvst.mark` constructors produce data only. The Python `Mark(name, ...)` of
+   │               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:37:57
+   │
+37 │ `kurvst.mark` constructors produce data only. The Python `Mark(name, ...)` of
+   │                                                          ^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:37:75
+   │
+37 │ `kurvst.mark` constructors produce data only. The Python `Mark(name, ...)` of
+   │                                                                            ^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:38:0
+   │
+38 │ `linnet_py` and `symbolica.community.graph` mirrors the same names, fields, and
+   │ ^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:38:12
+   │
+38 │ `linnet_py` and `symbolica.community.graph` mirrors the same names, fields, and
+   │             ^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:38:16
+   │
+38 │ `linnet_py` and `symbolica.community.graph` mirrors the same names, fields, and
+   │                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:38:44
+   │
+38 │ `linnet_py` and `symbolica.community.graph` mirrors the same names, fields, and
+   │                                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:39:0
+   │
+39 │ defaults and serializes the same dictionary; there is no Python `kurvst` module. Names, parameters, and defaults follow
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:39:64
+   │
+39 │ defaults and serializes the same dictionary; there is no Python `kurvst` module. Names, parameters, and defaults follow
+   │                                                                 ^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:39:73
+   │
+39 │ defaults and serializes the same dictionary; there is no Python `kurvst` module. Names, parameters, and defaults follow
+   │                                                                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: link is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:40:1
+   │
+40 │ #link("https://typst.app/universe/package/tiptoe/0.4.0/")[tiptoe 0.4.0 (MIT)],
+   │  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:40:77
+   │
+40 │ #link("https://typst.app/universe/package/tiptoe/0.4.0/")[tiptoe 0.4.0 (MIT)],
+   │                                                                              ^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:41:0
+   │
+41 │ with attribution retained in the fresh implementation.
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:43:0
+   │
+43 │ The catalogue has thirteen shapes plus `combine`. Percent lengths below are
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:43:39
+   │
+43 │ The catalogue has thirteen shapes plus `combine`. Percent lengths below are
+   │                                        ^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:43:48
+   │
+43 │ The catalogue has thirteen shapes plus `combine`. Percent lengths below are
+   │                                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:44:0
+   │
+44 │ ratios of line stroke thickness, not path length. Mixed dimensions add fixed
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:45:0
+   │
+45 │ length and stroke-relative length.
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: table is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:47:1
+   │  
+47 │   #table(
+   │ ╭──^
+48 │ │   columns: (auto, 1fr, 1fr),
+49 │ │   table.header([*Mark*], [*Accepted size / shape defaults*], [*Placement / prior use*]),
+50 │ │   [`triangle`], [Stealth geometry with inset 0%], [Native flow today],
+   · │
+63 │ │   [`combine`], [Marks and gaps in sequence], [One composite],
+64 │ │ )
+   │ ╰─^
+   │  
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:66:0
+   │
+66 │ Parameters include `length`, `width`, `inset`, `fill`, `stroke`, `rev`,
+   │ ^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:66:19
+   │
+66 │ Parameters include `length`, `width`, `inset`, `fill`, `stroke`, `rev`,
+   │                    ^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:66:27
+   │
+66 │ Parameters include `length`, `width`, `inset`, `fill`, `stroke`, `rev`,
+   │                            ^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:66:29
+   │
+66 │ Parameters include `length`, `width`, `inset`, `fill`, `stroke`, `rev`,
+   │                              ^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:66:36
+   │
+66 │ Parameters include `length`, `width`, `inset`, `fill`, `stroke`, `rev`,
+   │                                     ^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:66:38
+   │
+66 │ Parameters include `length`, `width`, `inset`, `fill`, `stroke`, `rev`,
+   │                                       ^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:66:45
+   │
+66 │ Parameters include `length`, `width`, `inset`, `fill`, `stroke`, `rev`,
+   │                                              ^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:66:47
+   │
+66 │ Parameters include `length`, `width`, `inset`, `fill`, `stroke`, `rev`,
+   │                                                ^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:66:53
+   │
+66 │ Parameters include `length`, `width`, `inset`, `fill`, `stroke`, `rev`,
+   │                                                      ^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:66:55
+   │
+66 │ Parameters include `length`, `width`, `inset`, `fill`, `stroke`, `rev`,
+   │                                                        ^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:66:63
+   │
+66 │ Parameters include `length`, `width`, `inset`, `fill`, `stroke`, `rev`,
+   │                                                                ^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:66:65
+   │
+66 │ Parameters include `length`, `width`, `inset`, `fill`, `stroke`, `rev`,
+   │                                                                  ^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:66:70
+   │
+66 │ Parameters include `length`, `width`, `inset`, `fill`, `stroke`, `rev`,
+   │                                                                       ^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:67:0
+   │
+67 │ `align`, `arc`, `n`, and `phase`. Automatic width follows the per-shape ratios.
+   │ ^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:67:7
+   │
+67 │ `align`, `arc`, `n`, and `phase`. Automatic width follows the per-shape ratios.
+   │        ^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:67:9
+   │
+67 │ `align`, `arc`, `n`, and `phase`. Automatic width follows the per-shape ratios.
+   │          ^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:67:14
+   │
+67 │ `align`, `arc`, `n`, and `phase`. Automatic width follows the per-shape ratios.
+   │               ^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:67:16
+   │
+67 │ `align`, `arc`, `n`, and `phase`. Automatic width follows the per-shape ratios.
+   │                 ^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:67:19
+   │
+67 │ `align`, `arc`, `n`, and `phase`. Automatic width follows the per-shape ratios.
+   │                    ^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:67:25
+   │
+67 │ `align`, `arc`, `n`, and `phase`. Automatic width follows the per-shape ratios.
+   │                          ^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:67:32
+   │
+67 │ `align`, `arc`, `n`, and `phase`. Automatic width follows the per-shape ratios.
+   │                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:68:0
+   │
+68 │ Lengths may be fixed, stroke-width ratios, or mixed, such as `3pt + 450%`.
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:68:61
+   │
+68 │ Lengths may be fixed, stroke-width ratios, or mixed, such as `3pt + 450%`.
+   │                                                              ^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:68:73
+   │
+68 │ Lengths may be fixed, stroke-width ratios, or mixed, such as `3pt + 450%`.
+   │                                                                          ^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:69:0
+   │
+69 │ Fill defaults to the line stroke paint; sizing uses the line stroke thickness.
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:70:0
+   │
+70 │ The tiptoe end distance defines the shaft stop, including the stealth inset
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:71:0
+   │
+71 │ notch. Arrow tips land on the path end. Bar, circle, square, diamond, and rays
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:72:0
+   │
+72 │ are centred unless `align: "end"`.
+   │ ^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:72:19
+   │
+72 │ are centred unless `align: "end"`.
+   │                    ^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:72:33
+   │
+72 │ are centred unless `align: "end"`.
+   │                                  ^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:74:0
+   │
+74 │ `combine` is one composite with aggregate contacts, end distance, and footprint.
+   │ ^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:74:10
+   │
+74 │ `combine` is one composite with aggregate contacts, end distance, and footprint.
+   │           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:75:0
+   │
+75 │ Apply the end fit once to the composite, not independently to its children.
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: heading is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:77:0
+   │
+77 │ == Carrier, placement, and curved-end fits
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:79:0
+   │
+79 │ Preserve `mark-position`, `mark-orientation`, `mark-direction`, and `mark-shift`,
+   │ ^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:79:9
+   │
+79 │ Preserve `mark-position`, `mark-orientation`, `mark-direction`, and `mark-shift`,
+   │          ^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:79:24
+   │
+79 │ Preserve `mark-position`, `mark-orientation`, `mark-direction`, and `mark-shift`,
+   │                         ^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:79:26
+   │
+79 │ Preserve `mark-position`, `mark-orientation`, `mark-direction`, and `mark-shift`,
+   │                           ^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:79:44
+   │
+79 │ Preserve `mark-position`, `mark-orientation`, `mark-direction`, and `mark-shift`,
+   │                                             ^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:79:46
+   │
+79 │ Preserve `mark-position`, `mark-orientation`, `mark-direction`, and `mark-shift`,
+   │                                               ^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:79:62
+   │
+79 │ Preserve `mark-position`, `mark-orientation`, `mark-direction`, and `mark-shift`,
+   │                                                               ^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:79:68
+   │
+79 │ Preserve `mark-position`, `mark-orientation`, `mark-direction`, and `mark-shift`,
+   │                                                                     ^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:79:80
+   │
+79 │ Preserve `mark-position`, `mark-orientation`, `mark-direction`, and `mark-shift`,
+   │                                                                                 ^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:80:0
+   │
+80 │ including centre placement, arc-length ratios, signed shifts, inward endpoint
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:81:0
+   │
+81 │ clamping, and label footprints. Stations and shifts use the derived visible
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:82:0
+   │
+82 │ carrier *after offsets and node outsets, before arrow shortening or bending*.
+   │ ^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: strong is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:82:8
+   │
+82 │ carrier *after offsets and node outsets, before arrow shortening or bending*.
+   │         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:82:76
+   │
+82 │ carrier *after offsets and node outsets, before arrow shortening or bending*.
+   │                                                                             ^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:83:0
+   │
+83 │ Footprints and collision geometry instead consume the painted shaft.
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:84:0
+   │
+84 │ Kurvst arc length is the chosen source of truth: accept its tiny numerical drift
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:84:47
+   │
+84 │ Kurvst arc length is the chosen source of truth: accept its tiny numerical drift
+   │                                                ^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:84:49
+   │
+84 │ Kurvst arc length is the chosen source of truth: accept its tiny numerical drift
+   │                                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:85:0
+   │
+85 │ while keeping Python and Typst geometry identical.
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: table is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:87:1
+   │  
+87 │   #table(
+   │ ╭──^
+88 │ │   columns: (auto, 1fr),
+89 │ │   table.header([*Fit*], [*Accepted rule*]),
+90 │ │   [`chord` (default)],
+   · │
+96 │ │    is 100%; 0% is unbent.],
+97 │ │ )
+   │ ╰─^
+   │  
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+   ┌─ docs/architecture/kurvst-arrowhead-engine.typ:99:0
+   │
+99 │ Fits apply at ends. Interior marks straddle their station on a chord.
+   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:100:0
+    │
+100 │ The painted shaft owns footprint and collision geometry; path patterns follow
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:101:0
+    │
+101 │ the bent base when `bend` is selected, including phase behavior.
+    │ ^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:101:19
+    │
+101 │ the bent base when `bend` is selected, including phase behavior.
+    │                    ^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:101:26
+    │
+101 │ the bent base when `bend` is selected, including phase behavior.
+    │                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:103:0
+    │
+103 │ The curved-end comparison has no image asset in this workspace. Its intended
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:104:0
+    │
+104 │ reference uses the same cubic and a 22 × 16pt triangle: `bend` with `shorten: 0%`
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:104:39
+    │
+104 │ reference uses the same cubic and a 22 × 16pt triangle: `bend` with `shorten: 0%`
+    │                                        ^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:104:54
+    │
+104 │ reference uses the same cubic and a 22 × 16pt triangle: `bend` with `shorten: 0%`
+    │                                                       ^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:104:56
+    │
+104 │ reference uses the same cubic and a 22 × 16pt triangle: `bend` with `shorten: 0%`
+    │                                                         ^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:104:63
+    │
+104 │ reference uses the same cubic and a 22 × 16pt triangle: `bend` with `shorten: 0%`
+    │                                                                ^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:104:68
+    │
+104 │ reference uses the same cubic and a 22 × 16pt triangle: `bend` with `shorten: 0%`
+    │                                                                     ^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:105:0
+    │
+105 │ leaves the line exiting the side; `bend` at 100% reshapes the endpoint to the
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:105:34
+    │
+105 │ leaves the line exiting the side; `bend` at 100% reshapes the endpoint to the
+    │                                   ^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:105:41
+    │
+105 │ leaves the line exiting the side; `bend` at 100% reshapes the endpoint to the
+    │                                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:106:0
+    │
+106 │ head centre; `chord` turns the head to the original carrier while leaving the
+    │ ^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:106:13
+    │
+106 │ head centre; `chord` turns the head to the original carrier while leaving the
+    │              ^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:106:21
+    │
+106 │ head centre; `chord` turns the head to the original carrier while leaving the
+    │                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:107:0
+    │
+107 │ curve unchanged. Large heads exaggerate the differences. P0 will generate real
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:108:0
+    │
+108 │ references; no missing `curved-ends.png` is linked here.
+    │ ^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:108:23
+    │
+108 │ references; no missing `curved-ends.png` is linked here.
+    │                        ^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:108:41
+    │
+108 │ references; no missing `curved-ends.png` is linked here.
+    │                                          ^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: heading is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:110:0
+    │
+110 │ == Execution boundary: two bounded batches
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:112:0
+    │
+112 │ Each drawing uses *two bounded batches*, both sharing templates and the engine:
+    │ ^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: strong is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:112:18
+    │
+112 │ Each drawing uses *two bounded batches*, both sharing templates and the engine:
+    │                   ^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:112:39
+    │
+112 │ Each drawing uses *two bounded batches*, both sharing templates and the engine:
+    │                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:112:78
+    │
+112 │ Each drawing uses *two bounded batches*, both sharing templates and the engine:
+    │                                                                               ^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: item is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:114:0
+    │
+114 │ + Prepare candidate geometry and footprints for Linnest's label search.
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: item is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:115:0
+    │
+115 │ + Paint the selected placements using finished geometry.
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:117:0
+    │
+117 │ This is not a one-call design. Candidate preparation avoids repeated Typst
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:118:0
+    │
+118 │ geometry evaluation; numeric hitboxes and prepared content drawables avoid
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:119:0
+    │
+119 │ per-target painting work. Link target selection and semantics remain Linnest
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:120:0
+    │
+120 │ responsibilities, separate from the mark catalogue.
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: heading is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:122:0
+    │
+122 │ == API and migration
+    │ ^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:124:0
+    │
+124 │ Mark constructors, the native Python configuration and the Typst renderer
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:125:0
+    │
+125 │ migration are implemented as sketched below.
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:127:0
+    │  
+127 │ ╭ ```typst
+128 │ │ #import "../../crates/kurvst/typst/lib.typ": kurvst
+129 │ │ #let flow = kurvst.mark.triangle(length: 0.21cm, width: 0.1575cm)
+130 │ │ #let momentum = kurvst.mark.straight(length: 0.16cm, width: 0.12cm)
+    · │
+139 │ │ // source-style is supplied to the drawing style configuration.
+140 │ │ ```
+    │ ╰───^
+    │  
+    = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:142:0
+    │  
+142 │ ╭ ```python
+143 │ │ from symbolica.community.graph import GraphStyleOptions, Mark, RenderSettings
+144 │ │ 
+145 │ │ flow = Mark("triangle", length="0.21cm", width="0.1575cm")
+    · │
+152 │ │ diagram.render(config=settings, momenta=True)
+153 │ │ ```
+    │ ╰───^
+    │  
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:155:0
+    │
+155 │ Native configuration gains `flow-arrow` and `momentum-arrow`. Reject CeTZ mark
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:155:27
+    │
+155 │ Native configuration gains `flow-arrow` and `momentum-arrow`. Reject CeTZ mark
+    │                            ^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:155:40
+    │
+155 │ Native configuration gains `flow-arrow` and `momentum-arrow`. Reject CeTZ mark
+    │                                         ^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:155:44
+    │
+155 │ Native configuration gains `flow-arrow` and `momentum-arrow`. Reject CeTZ mark
+    │                                             ^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:155:60
+    │
+155 │ Native configuration gains `flow-arrow` and `momentum-arrow`. Reject CeTZ mark
+    │                                                             ^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:156:0
+    │
+156 │ dictionaries with an error showing the replacement; remove the Python `Mark` CeTZ
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:156:70
+    │
+156 │ dictionaries with an error showing the replacement; remove the Python `Mark` CeTZ
+    │                                                                       ^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:156:77
+    │
+156 │ dictionaries with an error showing the replacement; remove the Python `Mark` CeTZ
+    │                                                                              ^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:157:0
+    │
+157 │ fields `scale`, `anchor`, and `shorten_to`, with useful migration errors.
+    │ ^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:157:7
+    │
+157 │ fields `scale`, `anchor`, and `shorten_to`, with useful migration errors.
+    │        ^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:157:14
+    │
+157 │ fields `scale`, `anchor`, and `shorten_to`, with useful migration errors.
+    │               ^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:157:16
+    │
+157 │ fields `scale`, `anchor`, and `shorten_to`, with useful migration errors.
+    │                 ^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:157:24
+    │
+157 │ fields `scale`, `anchor`, and `shorten_to`, with useful migration errors.
+    │                         ^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:157:30
+    │
+157 │ fields `scale`, `anchor`, and `shorten_to`, with useful migration errors.
+    │                               ^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:157:42
+    │
+157 │ fields `scale`, `anchor`, and `shorten_to`, with useful migration errors.
+    │                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:158:0
+    │
+158 │ Switch physics `fermion-arrow-mark` and `momentum-arrow-mark` together with
+    │ ^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:158:15
+    │
+158 │ Switch physics `fermion-arrow-mark` and `momentum-arrow-mark` together with
+    │                ^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:158:36
+    │
+158 │ Switch physics `fermion-arrow-mark` and `momentum-arrow-mark` together with
+    │                                     ^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:158:40
+    │
+158 │ Switch physics `fermion-arrow-mark` and `momentum-arrow-mark` together with
+    │                                         ^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:158:62
+    │
+158 │ Switch physics `fermion-arrow-mark` and `momentum-arrow-mark` together with
+    │                                                               ^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:159:0
+    │
+159 │ documentation and examples. Preserve the notebook look using explicit existing
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:160:0
+    │
+160 │ sizes: tiptoe defaults are larger (roughly 7.5pt for straight at a 1pt line,
+    │ ^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:160:5
+    │
+160 │ sizes: tiptoe defaults are larger (roughly 7.5pt for straight at a 1pt line,
+    │      ^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:160:7
+    │
+160 │ sizes: tiptoe defaults are larger (roughly 7.5pt for straight at a 1pt line,
+    │        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:160:34
+    │
+160 │ sizes: tiptoe defaults are larger (roughly 7.5pt for straight at a 1pt line,
+    │                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:161:0
+    │
+161 │ versus roughly 4.5pt today).
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:163:0
+    │
+163 │ On the measured feynkit revision, native marks are hardcoded: momentum chevron
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:163:60
+    │
+163 │ On the measured feynkit revision, native marks are hardcoded: momentum chevron
+    │                                                             ^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:163:62
+    │
+163 │ On the measured feynkit revision, native marks are hardcoded: momentum chevron
+    │                                                               ^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:164:0
+    │
+164 │ 0.16 × 0.12cm and flow triangle 0.21 × 0.1575cm. There are no native arrow options
+    │ ^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:164:5
+    │
+164 │ 0.16 × 0.12cm and flow triangle 0.21 × 0.1575cm. There are no native arrow options
+    │      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:164:37
+    │
+164 │ 0.16 × 0.12cm and flow triangle 0.21 × 0.1575cm. There are no native arrow options
+    │                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:165:0
+    │
+165 │ there. Current Typst vendored-only calls are `mark.geometry`, `mark.footprints`,
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:165:45
+    │
+165 │ there. Current Typst vendored-only calls are `mark.geometry`, `mark.footprints`,
+    │                                              ^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:165:60
+    │
+165 │ there. Current Typst vendored-only calls are `mark.geometry`, `mark.footprints`,
+    │                                                             ^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:165:62
+    │
+165 │ there. Current Typst vendored-only calls are `mark.geometry`, `mark.footprints`,
+    │                                                               ^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:165:79
+    │
+165 │ there. Current Typst vendored-only calls are `mark.geometry`, `mark.footprints`,
+    │                                                                                ^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:166:0
+    │
+166 │ and `draw.content-many`; their replacements are planned, not present here.
+    │ ^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:166:4
+    │
+166 │ and `draw.content-many`; their replacements are planned, not present here.
+    │     ^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:166:23
+    │
+166 │ and `draw.content-many`; their replacements are planned, not present here.
+    │                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: heading is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:168:0
+    │
+168 │ == Reported measurements and rationale
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:170:0
+    │
+170 │ These figures were supplied with the accepted plan and were *not reproduced*
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: strong is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:170:60
+    │
+170 │ These figures were supplied with the accepted plan and were *not reproduced*
+    │                                                             ^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:171:0
+    │
+171 │ for this documentation change. Context: 24 drawing-corpus diagrams, Typst
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:171:38
+    │
+171 │ for this documentation change. Context: 24 drawing-corpus diagrams, Typst
+    │                                       ^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:171:40
+    │
+171 │ for this documentation change. Context: 24 drawing-corpus diagrams, Typst
+    │                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:172:0
+    │
+172 │ 0.15.0, feynkit `78c33d71`, measured 2026-10-04; medians of three interleaved runs.
+    │ ^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:172:16
+    │
+172 │ 0.15.0, feynkit `78c33d71`, measured 2026-10-04; medians of three interleaved runs.
+    │                 ^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:172:26
+    │
+172 │ 0.15.0, feynkit `78c33d71`, measured 2026-10-04; medians of three interleaved runs.
+    │                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: table is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:174:1
+    │  
+174 │   #table(
+    │ ╭──^
+175 │ │   columns: (1fr, auto, auto, auto),
+176 │ │   table.header([*Renderer*], [*Total*], [*Momentum*], [*Plain*]),
+177 │ │   [Vendored CeTZ], [26.7s], [~1.3s], [~1.0s],
+178 │ │   [Vendored, three Linnest batched calls replaced], [42.3s], [~2.4s], [~1.2s],
+179 │ │   [Stock CeTZ 0.5.1], [70.0s], [~5.5s], [~1.5s],
+180 │ │ )
+    │ ╰─^
+    │  
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:182:0
+    │
+182 │ Stock rasterized all 24 diagrams to the same pixels in that reported comparison;
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:183:0
+    │
+183 │ SVG differences were roughly 300 invisible hit rectangles. This observation is
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:184:0
+    │
+184 │ not a blanket pixel-identity requirement for the migration.
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:186:0
+    │
+186 │ Of stock's extra ~4.75s momentum time, candidate footprints account for 79%,
+    │ ^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: smartquote is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:186:8
+    │
+186 │ Of stock's extra ~4.75s momentum time, candidate footprints account for 79%,
+    │         ^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:186:9
+    │
+186 │ Of stock's extra ~4.75s momentum time, candidate footprints account for 79%,
+    │          ^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:186:17
+    │
+186 │ Of stock's extra ~4.75s momentum time, candidate footprints account for 79%,
+    │                  ^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:186:18
+    │
+186 │ Of stock's extra ~4.75s momentum time, candidate footprints account for 79%,
+    │                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:187:0
+    │
+187 │ hit areas 16%, collision lines 2%, and generic drawing 3%. Of the extra ~0.6s
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:187:72
+    │
+187 │ hit areas 16%, collision lines 2%, and generic drawing 3%. Of the extra ~0.6s
+    │                                                                         ^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:187:73
+    │
+187 │ hit areas 16%, collision lines 2%, and generic drawing 3%. Of the extra ~0.6s
+    │                                                                          ^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:188:0
+    │
+188 │ plain time, hit areas account for ~75%, collision lines ~14%, and generic
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:188:34
+    │
+188 │ plain time, hit areas account for ~75%, collision lines ~14%, and generic
+    │                                   ^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:188:35
+    │
+188 │ plain time, hit areas account for ~75%, collision lines ~14%, and generic
+    │                                    ^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:188:56
+    │
+188 │ plain time, hit areas account for ~75%, collision lines ~14%, and generic
+    │                                                         ^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:188:57
+    │
+188 │ plain time, hit areas account for ~75%, collision lines ~14%, and generic
+    │                                                          ^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:189:0
+    │
+189 │ drawing ~9%. Stock momentum used 2.7 million Typst calls versus 186 thousand;
+    │ ^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:189:8
+    │
+189 │ drawing ~9%. Stock momentum used 2.7 million Typst calls versus 186 thousand;
+    │         ^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:189:9
+    │
+189 │ drawing ~9%. Stock momentum used 2.7 million Typst calls versus 186 thousand;
+    │          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:190:0
+    │
+190 │ the Wasm interpreter was reported to cost roughly 20 times native execution.
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:191:0
+    │
+191 │ These observations motivate numeric preparation rather than merely replacing
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:192:0
+    │
+192 │ the painter. P0 must record host, toolchain, cache state, timing boundaries, and
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:193:0
+    │
+193 │ paired baseline comparisons before using these figures as performance gates.
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: heading is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:195:0
+    │
+195 │ == Delivery phases and evidence
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:197:0
+    │
+197 │ Each phase is its own change after the consolidated base, with corpus
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:198:0
+    │
+198 │ timings recorded. S/M/L are planning sizes, not completion indicators.
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: heading is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:200:0
+    │
+200 │ === P0 — S: reproducible corpus and visual policy
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:202:0
+    │
+202 │ Check in the 24-diagram corpus, regenerated templates, median timing script,
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:203:0
+    │
+203 │ and PNG references. Establish explicit lenient tolerances and image-diff review
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:204:0
+    │
+204 │ for arrows and labels, *not blanket pixel identity*. Require cross-renderer
+    │ ^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: strong is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:204:23
+    │
+204 │ for arrows and labels, *not blanket pixel identity*. Require cross-renderer
+    │                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:204:51
+    │
+204 │ for arrows and labels, *not blanket pixel identity*. Require cross-renderer
+    │                                                    ^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:205:0
+    │
+205 │ outline agreement and correct link targets and hit areas. Record provenance
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:206:0
+    │
+206 │ (host, toolchain, cache, timing boundaries) and paired baseline comparison.
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:207:0
+    │
+207 │ Regenerate this baseline only after consolidation.
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:209:0
+    │
+209 │ The P0 harness, immutable input corpus, and reference images are recorded in
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:210:0
+    │
+210 │ `tests/drawing-bench/`. The captured three-round baseline is 15.010 s on M4 Pro with
+    │ ^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:210:22
+    │
+210 │ `tests/drawing-bench/`. The captured three-round baseline is 15.010 s on M4 Pro with
+    │                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:211:0
+    │
+211 │ Typst 0.15.1, with 24/24 reference PNGs byte-identical to the supplied
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:212:0
+    │
+212 │ snapshot at 150 ppi; the consolidated sources reproduce all 24 PNGs
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:213:0
+    │
+213 │ byte-for-byte on Linux. Source, package, host, and raw timing identities
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:214:0
+    │
+214 │ accompany the images. Numerical tolerances for future arrow/label changes
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:215:0
+    │
+215 │ still require explicit review; renderer migration is not claimed.
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: heading is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:217:0
+    │
+217 │ === P1 — L: shared geometry engine, no renderer migration
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:219:0
+    │
+219 │ Implement fresh MIT Kurvst templates for all thirteen marks and combine,
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:220:0
+    │
+220 │ sizing, end distances, placement, both fits, inward clamps, contacts, painted
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:221:0
+    │
+221 │ shaft, and footprints. Add batched native/plugin APIs and data constructors.
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:222:0
+    │
+222 │ No user-visible renderer migration yet. Compare straight shapes and end
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:223:0
+    │
+223 │ distances with tiptoe; test bend/shorten including short last segments,
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:224:0
+    │
+224 │ painted-footprint coverage, shaft/back contact, zero-length paths, and near-end
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:225:0
+    │
+225 │ placement.
+    │ ^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:227:0
+    │
+227 │ P1 now provides the shared native/Wasm engine and strict data-only Typst
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:228:0
+    │
+228 │ constructors for thirteen shapes and composites. Its 110 native tests and
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:229:0
+    │
+229 │ native/Wasm parity checks pass. The approved parity tolerance is
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:230:0
+    │
+230 │ `1e-12 * max(1, abs(actual), abs(expected))` for geometry coordinates and
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:230:45
+    │
+230 │ `1e-12 * max(1, abs(actual), abs(expected))` for geometry coordinates and
+    │                                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:231:0
+    │
+231 │ lengths only; structure, styles, indices, and other data remain exact.
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:232:0
+    │
+232 │ Candidate results remain independent, while selected results share one
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:233:0
+    │
+233 │ authoritative painted shaft per carrier.
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: heading is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:235:0
+    │
+235 │ === P2 — M: native and Python
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:237:0
+    │
+237 │ Replace hardcoded `linnest::svg::marks` with the engine, add native
+    │ ^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:237:18
+    │
+237 │ Replace hardcoded `linnest::svg::marks` with the engine, add native
+    │                   ^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:237:40
+    │
+237 │ Replace hardcoded `linnest::svg::marks` with the engine, add native
+    │                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:238:0
+    │
+238 │ `flow-arrow` / `momentum-arrow` and the Python mirror. Preserve the default
+    │ ^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:238:13
+    │
+238 │ `flow-arrow` / `momentum-arrow` and the Python mirror. Preserve the default
+    │              ^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:238:15
+    │
+238 │ `flow-arrow` / `momentum-arrow` and the Python mirror. Preserve the default
+    │                ^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:238:32
+    │
+238 │ `flow-arrow` / `momentum-arrow` and the Python mirror. Preserve the default
+    │                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:239:0
+    │
+239 │ notebook look with explicit sizes.
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:241:0
+    │
+241 │ The native renderer uses one drawing-wide candidate call and one selected
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:242:0
+    │
+242 │ call, with deduplicated templates and one painted shaft per carrier. Linnest's
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: smartquote is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:242:76
+    │
+242 │ call, with deduplicated templates and one painted shaft per carrier. Linnest's
+    │                                                                             ^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:242:77
+    │
+242 │ call, with deduplicated templates and one painted shaft per carrier. Linnest's
+    │                                                                              ^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:243:0
+    │
+243 │ SVG tests cover the call count, every catalogue shape and composites with both
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:244:0
+    │
+244 │ fits, independent leaf paints and hit areas, and painted candidate bounds.
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:245:0
+    │
+245 │ Native configuration reads `flow-arrow` and `momentum-arrow` from the graph
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:245:27
+    │
+245 │ Native configuration reads `flow-arrow` and `momentum-arrow` from the graph
+    │                            ^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:245:40
+    │
+245 │ Native configuration reads `flow-arrow` and `momentum-arrow` from the graph
+    │                                         ^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:245:44
+    │
+245 │ Native configuration reads `flow-arrow` and `momentum-arrow` from the graph
+    │                                             ^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:245:61
+    │
+245 │ Native configuration reads `flow-arrow` and `momentum-arrow` from the graph
+    │                                                              ^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:246:0
+    │
+246 │ edge style (`GraphStyleOptions.edge_style`); linnet-py turns `Mark` values and their public
+    │ ^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:246:11
+    │
+246 │ edge style (`GraphStyleOptions.edge_style`); linnet-py turns `Mark` values and their public
+    │            ^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:246:12
+    │
+246 │ edge style (`GraphStyleOptions.edge_style`); linnet-py turns `Mark` values and their public
+    │             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:246:42
+    │
+246 │ edge style (`GraphStyleOptions.edge_style`); linnet-py turns `Mark` values and their public
+    │                                           ^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:246:61
+    │
+246 │ edge style (`GraphStyleOptions.edge_style`); linnet-py turns `Mark` values and their public
+    │                                                              ^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:246:68
+    │
+246 │ edge style (`GraphStyleOptions.edge_style`); linnet-py turns `Mark` values and their public
+    │                                                                     ^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:247:0
+    │
+247 │ dictionaries into the numeric `MarkSpec` and its leaf paints on every native
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:247:30
+    │
+247 │ dictionaries into the numeric `MarkSpec` and its leaf paints on every native
+    │                               ^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:247:41
+    │
+247 │ dictionaries into the numeric `MarkSpec` and its leaf paints on every native
+    │                                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:248:0
+    │
+248 │ path, for ordinary graphs and domain scenes alike. It checks them, and
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:249:0
+    │
+249 │ dictionaries under the Typst `mark` key, when a style is configured, so a CeTZ
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:249:29
+    │
+249 │ dictionaries under the Typst `mark` key, when a style is configured, so a CeTZ
+    │                              ^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:249:36
+    │
+249 │ dictionaries under the Typst `mark` key, when a style is configured, so a CeTZ
+    │                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:250:0
+    │
+250 │ dictionary or an invalid mark is an error before either renderer is chosen. A
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:251:0
+    │
+251 │ domain scene whose other settings need Typst draws the same configured heads
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:252:0
+    │
+252 │ there. Named paints resolve through
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:253:0
+    │
+253 │ Typst's own color constants, not CSS names. Painted head outlines count in the
+    │ ^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: smartquote is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:253:5
+    │
+253 │ Typst's own color constants, not CSS names. Painted head outlines count in the
+    │      ^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:253:6
+    │
+253 │ Typst's own color constants, not CSS names. Painted head outlines count in the
+    │       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:254:0
+    │
+254 │ native label-overlap score, so label feedback moves labels off heads as well as
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:255:0
+    │
+255 │ shafts.
+    │ ^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:257:0
+    │
+257 │ The maintainer approved the shared engine's default appearance on 2026-10-09:
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: smartquote is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:257:41
+    │
+257 │ The maintainer approved the shared engine's default appearance on 2026-10-09:
+    │                                          ^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:257:42
+    │
+257 │ The maintainer approved the shared engine's default appearance on 2026-10-09:
+    │                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:257:76
+    │
+257 │ The maintainer approved the shared engine's default appearance on 2026-10-09:
+    │                                                                             ^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:258:0
+    │
+258 │ retain the explicit physical sizes and inset stroke geometry rather than
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:259:0
+    │
+259 │ recreating legacy protruding miters. The isolated raw-paint comparison at
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:260:0
+    │
+260 │ 150ppi changed 67/2814 pixels for the flow triangle and 74/2814 for momentum;
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:261:0
+    │
+261 │ maximum bounding-extent changes were 0.4272pt and 1.6512pt respectively.
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:262:0
+    │
+262 │ This approval does not waive corpus image review or native/Typst parity.
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: heading is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:264:0
+    │
+264 │ === P3 — M: Typst painting
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:266:0
+    │
+266 │ Replace `mark.geometry` with engine geometry painted through CeTZ; accept only
+    │ ^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:266:8
+    │
+266 │ Replace `mark.geometry` with engine geometry painted through CeTZ; accept only
+    │         ^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:266:24
+    │
+266 │ Replace `mark.geometry` with engine geometry painted through CeTZ; accept only
+    │                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:267:0
+    │
+267 │ Kurvst marks. Migrate physics, manual, and map-style uses. Remove one of the
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:268:0
+    │
+268 │ three vendored-only calls.
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:270:0
+    │
+270 │ The Typst route consumes the shared candidate and selected batches. Physics
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:271:0
+    │
+271 │ templates, the map-style example, linnet-py's scene template and Python
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: smartquote is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:271:43
+    │
+271 │ templates, the map-style example, linnet-py's scene template and Python
+    │                                            ^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:271:44
+    │
+271 │ templates, the map-style example, linnet-py's scene template and Python
+    │                                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:272:0
+    │
+272 │ selectors use canonical mark data; CeTZ edge-mark dictionaries are rejected.
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:273:0
+    │
+273 │ All Clinnet tests, including the native/Wasm mark parity checks, pass with
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:274:0
+    │
+274 │ stock CeTZ 0.5.2 as the only package source. Named preparation
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:275:0
+    │
+275 │ anchors remain on the unshortened reference carrier; final painted heads
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:276:0
+    │
+276 │ contribute their engine outlines to conservative canvas bounds.
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: heading is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:278:0
+    │
+278 │ === P4 — M: candidate footprints
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:280:0
+    │
+280 │ Replace `mark.footprints` and the slow paint fallback with shared candidate-batch
+    │ ^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:280:8
+    │
+280 │ Replace `mark.footprints` and the slow paint fallback with shared candidate-batch
+    │         ^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:280:26
+    │
+280 │ Replace `mark.footprints` and the slow paint fallback with shared candidate-batch
+    │                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:281:0
+    │
+281 │ engine footprints. This addresses the main 79% momentum penalty.
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:283:0
+    │
+283 │ Candidate templates and placement indices are collected drawing-wide before
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:284:0
+    │
+284 │ label search. Outlines determine collision boxes; retained sizing thickness
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:285:0
+    │
+285 │ cannot turn a shaft with no paint into an obstacle. This is implemented and
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:286:0
+    │
+286 │ covered by focused tests, not yet a corpus performance claim.
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: heading is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:288:0
+    │
+288 │ === P5 — S: hit areas
+    │ ^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:290:0
+    │
+290 │ Use numeric hitboxes and prepared content drawables instead of per-target CeTZ
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:291:0
+    │
+291 │ `content-many`. Address roughly 75% of the plain penalty and 16% of momentum's;
+    │ ^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:291:14
+    │
+291 │ `content-many`. Address roughly 75% of the plain penalty and 16% of momentum's;
+    │               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: smartquote is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:291:76
+    │
+291 │ `content-many`. Address roughly 75% of the plain penalty and 16% of momentum's;
+    │                                                                             ^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:291:77
+    │
+291 │ `content-many`. Address roughly 75% of the plain penalty and 16% of momentum's;
+    │                                                                              ^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:292:0
+    │
+292 │ keep link semantics separate from the catalogue.
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:294:0
+    │
+294 │ The authored fixed-size identity-target helper passes focused stock CeTZ checks,
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:295:0
+    │
+295 │ preserving both expected SVG links. A document whose own canvas uses stock CeTZ
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:296:0
+    │
+296 │ 0.5.1 or 0.5.2 can embed Linnest edge halves, Kurvst paths and a full drawing
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:297:0
+    │
+297 │ with Kurvst heads; both produce the same SVG.
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: heading is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:299:0
+    │
+299 │ === P6 — S: collision sampling
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:301:0
+    │
+301 │ Land the collision-sampling prototype JJ change `tvxztqnq` with one plugin batch.
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:301:48
+    │
+301 │ Land the collision-sampling prototype JJ change `tvxztqnq` with one plugin batch.
+    │                                                 ^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:301:59
+    │
+301 │ Land the collision-sampling prototype JJ change `tvxztqnq` with one plugin batch.
+    │                                                            ^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:302:0
+    │
+302 │ Its reported vendored-corpus improvement was 1.8%; collision accounts for
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:303:0
+    │
+303 │ roughly 2–14% of the stock penalty. These figures are not new measurements.
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:305:0
+    │
+305 │ The prototype revision was unavailable. The implementation instead reuses the
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:306:0
+    │
+306 │ existing Linnest `label_stroke_lines` owner, with strict numeric validation and
+    │ ^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:306:17
+    │
+306 │ existing Linnest `label_stroke_lines` owner, with strict numeric validation and
+    │                  ^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:306:38
+    │
+306 │ existing Linnest `label_stroke_lines` owner, with strict numeric validation and
+    │                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:307:0
+    │
+307 │ one batched traversal of painted strokes. Twenty-three label-placement tests
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:308:0
+    │
+308 │ and a focused stock-CeTZ fixture pass. The drawing owner now gathers all
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:309:0
+    │
+309 │ painted strokes for one traversal; timing acceptance remains pending.
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: heading is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:311:0
+    │
+311 │ === P7 — M: stock CeTZ and vendor removal
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:313:0
+    │
+313 │ Target *stock CeTZ 0.5.2* (the measurements above used 0.5.1). Delete vendor,
+    │ ^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: strong is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:313:7
+    │
+313 │ Target *stock CeTZ 0.5.2* (the measurements above used 0.5.1). Delete vendor,
+    │        ^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:313:26
+    │
+313 │ Target *stock CeTZ 0.5.2* (the measurements above used 0.5.1). Delete vendor,
+    │                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:314:0
+    │
+314 │ patches, and `REBUILD`; migrate behavior fixtures and Nix packaging; rerun the
+    │ ^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:314:13
+    │
+314 │ patches, and `REBUILD`; migrate behavior fixtures and Nix packaging; rerun the
+    │              ^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:314:22
+    │
+314 │ patches, and `REBUILD`; migrate behavior fixtures and Nix packaging; rerun the
+    │                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:315:0
+    │
+315 │ corpus. Generic bounds/sample speedups may optionally be upstreamed.
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:317:0
+    │
+317 │ The patched 47-file package tree, five patches and rebuild recipe are deleted,
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:318:0
+    │
+318 │ and no CeTZ copy remains in the repository or the wheels. Nix selects stock
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:319:0
+    │
+319 │ CeTZ 0.5.2 for the documentation and the development shell. linnet-py's Typst
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: smartquote is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:319:69
+    │
+319 │ CeTZ 0.5.2 for the documentation and the development shell. linnet-py's Typst
+    │                                                                      ^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:319:70
+    │
+319 │ CeTZ 0.5.2 for the documentation and the development shell. linnet-py's Typst
+    │                                                                       ^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:320:0
+    │
+320 │ route reads `@preview/cetz:0.5.2` from the local package path and cache, in the
+    │ ^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: raw is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:320:12
+    │
+320 │ route reads `@preview/cetz:0.5.2` from the local package path and cache, in the
+    │             ^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:320:34
+    │
+320 │ route reads `@preview/cetz:0.5.2` from the local package path and cache, in the
+    │                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:321:0
+    │
+321 │ Typst CLI's order, and never downloads; a missing package is reported with the
+    │ ^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: smartquote is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:321:9
+    │
+321 │ Typst CLI's order, and never downloads; a missing package is reported with the
+    │          ^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:321:10
+    │
+321 │ Typst CLI's order, and never downloads; a missing package is reported with the
+    │           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:322:0
+    │
+322 │ directories searched. Native rendering needs no Typst package.
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: heading is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:324:0
+    │
+324 │ == Validation and remaining acceptance
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:326:0
+    │
+326 │ Measured on itphlies (AMD EPYC 9754, Linux, Typst 0.15.1) at a shared-host load
+    │ ^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:326:21
+    │
+326 │ Measured on itphlies (AMD EPYC 9754, Linux, Typst 0.15.1) at a shared-host load
+    │                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:327:0
+    │
+327 │ average near 70. The 24-case corpus compiles with stock CeTZ 0.5.2 as the only
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:328:0
+    │
+328 │ package source. At 150 ppi, six PNGs equal P0 byte for byte and eighteen
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:329:0
+    │
+329 │ differ. Every momentum case redraws its momentum heads, and particle-flow
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:330:0
+    │
+330 │ heads are filled with the line paint instead of ink, with the engine's explicit
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: smartquote is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:330:68
+    │
+330 │ heads are filled with the line paint instead of ink, with the engine's explicit
+    │                                                                     ^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:330:69
+    │
+330 │ heads are filled with the line paint instead of ink, with the engine's explicit
+    │                                                                      ^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:331:0
+    │
+331 │ sizes and inset stroke geometry. Label search places labels differently in
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:332:0
+    │
+332 │ some momentum cases: nonplanar K3,3 no longer overlaps two labels, the Higgs
+    │ ^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:332:19
+    │
+332 │ some momentum cases: nonplanar K3,3 no longer overlaps two labels, the Higgs
+    │                    ^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:332:21
+    │
+332 │ some momentum cases: nonplanar K3,3 no longer overlaps two labels, the Higgs
+    │                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:333:0
+    │
+333 │ scattering figure is 8 px shorter, and in the six-leg Higgs theta figure one
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:334:0
+    │
+334 │ label now crosses a dotted edge. Image review remains required.
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:336:0
+    │
+336 │ Paired, interleaved fresh-process compiles over five rounds compare these
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:337:0
+    │
+337 │ sources with the P0 sources and the formerly vendored, patched CeTZ 0.5.1:
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:337:73
+    │
+337 │ sources with the P0 sources and the formerly vendored, patched CeTZ 0.5.1:
+    │                                                                          ^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:338:0
+    │
+338 │ stock CeTZ is 1.167 times slower in the median round (range 1.164–1.224), with
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:338:53
+    │
+338 │ stock CeTZ is 1.167 times slower in the median round (range 1.164–1.224), with
+    │                                                      ^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:339:0
+    │
+339 │ sums of case medians of 32.6 s against 27.7 s. Momentum cases take 1.23–1.40
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:340:0
+    │
+340 │ times as long; particle and notebook cases 0.97–1.02 times. Performance
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:341:0
+    │
+341 │ acceptance is therefore still open; the M4 Pro ceilings above are not
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:342:0
+    │
+342 │ comparable on this host.
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: heading is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:344:0
+    │
+344 │ == Acceptance and risks
+    │ ^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:346:0
+    │
+346 │ On the recorded reference setup, with paired comparisons, the stock corpus
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:347:0
+    │
+347 │ must reach at most 26.7s total, 1.3s momentum, and 1.0s plain. Native rendering
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:348:0
+    │
+348 │ must not regress from the reported 60–100ms four-loop baseline. P0 must make
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:349:0
+    │
+349 │ the reference setup reproducible rather than treating these numbers as portable.
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:351:0
+    │
+351 │ Both renderers must use the same geometry for thirteen marks plus combine.
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:352:0
+    │
+352 │ Bend must match tiptoe within the recorded tolerance; chord must match current
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:353:0
+    │
+353 │ arrows under the P0 visual policy. Cross-renderer outlines, correct links and
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:354:0
+    │
+354 │ hit areas, painted footprint coverage, and shaft contacts remain correctness
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:355:0
+    │
+355 │ requirements. Completion also requires no vendored-only calls, vendor removal,
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:356:0
+    │
+356 │ and passing stock-CeTZ tests.
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: item is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:358:0
+    │  
+358 │ ╭ - Interpreter fuel and instruction count: keep candidate loops free of
+359 │ │   trigonometry and powers; cache templates and arc-length tables.
+    │ ╰─────────────────────────────────────────────────────────────────^
+    │  
+    = hint: try wrapping the content in a `document` instead
+
+error: item is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:360:0
+    │  
+360 │ ╭ - Label drift: review image differences with explicit lenient tolerances;
+361 │ │   tiny Kurvst arc-length drift is chosen, not hidden by separate renderer rules.
+    │ ╰────────────────────────────────────────────────────────────────────────────────^
+    │  
+    = hint: try wrapping the content in a `document` instead
+
+error: item is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:362:0
+    │  
+362 │ ╭ - Breaking API: migrate both arrow options, examples, and physics styles
+363 │ │   together; reject obsolete dictionaries and fields with actionable errors.
+    │ ╰───────────────────────────────────────────────────────────────────────────^
+    │  
+    = hint: try wrapping the content in a `document` instead
+
+error: item is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:364:0
+    │
+364 │ - Bent path patterns: validate phase against the painted bent base.
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: item is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:365:0
+    │  
+365 │ ╭ - Licensing: fresh MIT geometry with tiptoe attribution, not copied LGPL
+366 │ │   CeTZ patch code.
+    │ ╰──────────────────^
+    │  
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:368:0
+    │
+368 │ P0–P7 are implemented. The performance targets and the image review above
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+error: text is not allowed at the top-level in bundle export
+    ┌─ docs/architecture/kurvst-arrowhead-engine.typ:369:0
+    │
+369 │ remain open acceptance decisions.
+    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    │
+    = hint: try wrapping the content in a `document` instead
+
+warning: bundle export is experimental
+ = hint: its behaviour may change at any time
+ = hint: do not rely on this feature for production use cases
+

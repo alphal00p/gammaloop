@@ -1,0 +1,236 @@
+{
+  "schema": 1,
+  "verdict": "APPROVE",
+  "date": "2026-10-29T00:51:14.942660+00:00",
+  "reviewer": "NEW independent Astra focused attribution/evidence review; read-only; no nested agents",
+  "candidate": "861c19e3e7afc067851b13f3e7548baa923286ee",
+  "change": "qwykruqykqrltupmwwtzklkkyltkqrpx",
+  "parent": "7da9e92de733f544957f724ababeb87c7684c02e",
+  "qualified_runtime_code": "f35643bae1a67fb6ec0c30151e3624f661cf5f96",
+  "bookmark": "generation-mark-geometry",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports",
+  "review_directory": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/.local/review-mark-attribution-astra-20261029-gDqTOd",
+  "scope": "Focused correction of B3-P3-1 and preservation of completed source38 geometry/artifact qualifications; no implementation review rerun or integration performed.",
+  "findings": [],
+  "closed_findings": [
+    {
+      "id": "B3-P3-1",
+      "priority": "P3",
+      "status": "CLOSED",
+      "locations": [
+        "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/receipt.json:25",
+        "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/package-evidence.py:22",
+        "docs/architecture/generation-mark-geometry.typ:164"
+      ],
+      "conclusion": "All current authoritative copies credit the root coordinator with a narrow engineering authorization within the accepted correctness task: exact Kurbo0.13.1 owner patch and only necessary root/notebook-host patch-selection changes, preserving unrelated versions/pins/locks including the kernel. No direct user statement is invented; no additional permission is required."
+    }
+  ],
+  "bounded_delta": {
+    "existing_files": 4,
+    "new_files": 17,
+    "new_inventory_rows": 16,
+    "inventory_own_file_excluded": true,
+    "exact_paths": "audit.json: exact_changed_paths",
+    "receipt": "Parsed objects equal except dependency_exception.authorization; raw bytes also equal after the single intended string replacement.",
+    "generator": "Exact same string replacement only. Normalized ASTs identical; all artifact selection, copy/check/provenance code and prior failure handling unchanged. Statically compiled without execution to avoid mutating frozen proof outputs. No runtime packaging behavior changed or qualified anew.",
+    "old_inventory": "Same174 rows/order; only receipt.json and package-evidence.py SHA/size fields updated. All174 old parent blobs and all174 current entries independently hashed.",
+    "new_inventory": "All16 listed paths, sizes and SHA256 values exact; directory contains exactly those16 files plus inventory.json. All17 are tracked in the candidate.",
+    "frozen_proofs": "Parent receipt recovered from preserved7da9 Git object and matches prior B guard SHA; all other prior tracked proof files unchanged. Frozen reproducer source text/bytes exact; A/B review copies byte-identical and69/122 artifact hashes verified."
+  },
+  "fresh_checks": {
+    "complete_checkout": "3995 candidate Git blob identities and executable/symlink modes matched checkout; four-file plus17-file whitelist excludes all production/vendor/locks/manifests/assets/notices/tests changes from parent.",
+    "runtime_sources": 1455,
+    "payload_files": 29,
+    "retained_native_identities": 11,
+    "binding": "Complete filtered store file set and1455 bytes match current checkout and candidate/parent/f356 Git trees; entire29-file package set/bytes match delivered owners; all11 retained native binary/rlib hashes match old and new receipts.",
+    "nix": "Fresh exact-commit evaluation for candidate andf356 yields identical filtered runtime source/derivation. Package NAR independently rehashed. Distinct full code and candidate source NARs also independently rehashed; no runtime build.",
+    "docs": {
+      "scopes": 107,
+      "titles": 66,
+      "canonical_controls": 16,
+      "headers": {
+        "crates/kurvst/typst/docs/manual.typ": 0,
+        "docs/architecture/generation-integration-plan.typ": 3,
+        "docs/architecture/generation-integration-wp1.typ": 1,
+        "docs/architecture/kurvst-arrowhead-engine.typ": 3
+      },
+      "reference_tiptoe_source_files": 14,
+      "pdf_html": "Two independent timestamp-zero runs with pinned Typst0.15.1; exact correction PDF and HTML bytes each reproduced; corrected attribution verified in HTML. Fresh outputs bound to current note SHA, not old note renders."
+    },
+    "static": "Four Python files parsed/compiled without execution or pycache; both new shell scripts pass bash -n.",
+    "whitespace": "Authored/generated source diff passes. Full git diff --check exits2 only for the exact captured Typst bundle-warning log blank EOF; fresh render stderr reproduces those bytes, retained unchanged as raw evidence.",
+    "commands": "commands.json records check argv/status and separate stdout/stderr. Audit/guard invocations below use the same licensed Nix wrapper."
+  },
+  "source_qualification": {
+    "runtime_source_and_derivation_unchanged": {
+      "derivation": "/nix/store/8iq7qvzf38wcw165afivy6ipcw4sdlq9-linnest-wasm-0.1.0.drv",
+      "source": "/nix/store/j37nl8sqz8h325npwj3h3c1kwsv7a82p-source"
+    },
+    "reused_package_nar": "sha256-GBMop/R/i6hSu9DGsZlmo7yv7YR7uSdj9QtYhvrizZc=",
+    "full_source_snapshots": {
+      "candidate": {
+        "path": "/nix/store/scwz910miz80l1lg2vbifrwn47005g85-source",
+        "narHash": "sha256-2lI5MDsK+QU80Qp/gr+/2gi1T5e157hzrjQUuh7zbtg=",
+        "rev": "861c19e3e7afc067851b13f3e7548baa923286ee"
+      },
+      "code": {
+        "path": "/nix/store/lb69zn54c7bm035522sg51rpk47rghga-source",
+        "narHash": "sha256-L2XgWdME8dFQ4vgaO7a+U3FwlODBW0z0DQqYKGvehzY=",
+        "rev": "f35643bae1a67fb6ec0c30151e3624f661cf5f96"
+      }
+    },
+    "qualification": "Full candidate source/doc snapshot has a distinct NAR and is not a freshly built runtime. Only the f356-qualified filtered runtime source/derivation/package and retained test producers are reused. New timestamp-zero PDF/HTML are bound to current corrected note SHA.",
+    "note_source_sha256": "d3feb0f14219d5518f69b49765c4b02faea2b492829206a40b3e7b668b82cd84",
+    "pdf_sha256": "376dabda35155dfda103bea7f7801a83ca7223f4ceb8cb118b39c83c90f81212",
+    "html_sha256": "06fba8ec5ca274c0172c435d67f0a142fea9c0d69c0be537f18edb9017c995ec",
+    "fresh_reproductions": 2,
+    "html_correct_attribution": true,
+    "preserved_parent_receipt_matches_prior_B_guard": true,
+    "old_source_and_rebuild_proof_match_prior_B_guard": true,
+    "whitespace": "Authored/generated source delta passes; full diff reports only raw Typst HTML warning-log blank EOF, reproduced byte-exact and retained without normalization."
+  },
+  "reused_evidence": [
+    "A APPROVE at parent7da9/codef356: fresh-in-A348 geometry/nativeSVG,188 Kurbo,26 public integration,3 runtime; unchanged old/new probes, independent math and explicitly qualified blank extreme raster crop. Verified exact A report and all69 artifacts; no fresh re-execution of those tests claimed here.",
+    "B technical PASS at parent7da9/codef356: exact53-file Kurbo vendor/license audit, only2 selection-only lock changes, kernel/host subset/hakari, actual source delivery,5 packaging,46 Clinnet,3 runtime and exact ordinary renders. Sole B request B3-P3-1 is closed here. Verified exact B report and all122 artifacts.",
+    "Final f356 producer --rebuild/daemon log, fullbuild payload reproduction, scoped Clippy/fmt and source inventories reused after exact binding; normal dependencies reused. No heavy WASM rebuild, cold build, or new runtime suite is credited.",
+    "Earlier complete review conclusions and limits read, historical refs/proofs retained. Standalone upstream Kurbo common.rs:389 needless_late_init remains qualified; no claim of full strict vendor Clippy."
+  ],
+  "nonblocking_notes": [
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round3-attribution/note-first-html.log",
+      "line": 4,
+      "note": "Raw upstream warning has a blank final line. Full whitespace diagnostic retained and reproduced, not silently called a pass; no requested change to frozen capture."
+    }
+  ],
+  "cumulative_disposition": "Cumulative SOURCE38 preparation technical approval is retained: A geometry approval plus B technical artifact/dependency approval and this closure of B3-P3-1. Parent may proceed to ordered integration with fresh combined checks and a new integrated review.",
+  "limits": [
+    "This does NOT approve actual main integration or whole WP3/WP11 completion.",
+    "No new performance, physics, general generation, full-site/browser/widget/GPU, final native/Pyodide/Community/installed-host/repaired-compressed distribution, upload or publication qualification.",
+    "The extreme skinny-triangle raster crop remains blank and explicitly is not visual-coverage proof. Existing numerical/renderer limits and upstream lint qualification remain.",
+    "New full source/doc NAR is distinct from built f356 code; new note rendering is fresh, runtime/build evidence is reused only through exact unchanged filtered source/producer identity. No cold dependency or historical determinism claim."
+  ],
+  "guards": {
+    "tracked_entries": 3995,
+    "protected_local_and_prior_B_artifacts": 612,
+    "protected_target_proofs": 425,
+    "tracked_bytes_modes_unchanged": true,
+    "old_artifact_bytes_modes_unchanged": true,
+    "candidate_change_unchanged": true,
+    "all_git_refs_unchanged": false,
+    "all_bookmarks_unchanged": false,
+    "shared_ref_deltas": {
+      "git_refs": {
+        "removed": [],
+        "added": [
+          "cf7f44dc304229a5c7ac9361a437039a4f68e5e6 refs/jj/keep/cf7f44dc304229a5c7ac9361a437039a4f68e5e6"
+        ]
+      },
+      "bookmarks": {
+        "removed": [
+          "generation-sunset-certificate-round3: wmuropzp bff64e1c (empty) bind sunset global owners and complete external input card"
+        ],
+        "added": [
+          "generation-sunset-certificate-round3: wmuropzp cf7f44dc bind sunset global owners and complete external input card"
+        ]
+      }
+    },
+    "reviewer_ref_mutations": false,
+    "nixci_enable": false,
+    "main_access": "Read-only guidance and immutable object/store lookup; no main file edits"
+  },
+  "review_commands": [
+    "bash .local/review-mark-attribution-astra-20261029-gDqTOd/run.sh python3 .local/review-mark-attribution-astra-20261029-gDqTOd/guard.py before|after",
+    "Same wrapper: extra-guard.py before|after, audit.py, checks.py, final-bind.py, finish.py, finalize.py",
+    "All commands executed from the feature workspace. run.sh preserves exported SYMBOLICA_LICENSE or loads the current user config silently, then direnv exec .. nix develop -c. No CARGO_TARGET_DIR override, manual seeding or cache deletion."
+  ],
+  "tooling_qualification": [
+    "Initial bare git lookup did not discover this jj workspace; subsequent Git reads use explicit ../main/.git, all jj commands --ignore-working-copy.",
+    "Review-only audit initially assumed a redundant target receipt copy existed; recovered actual preserved parent Git receipt and verified its recorded prior-review hash instead. Failed diagnostic retained.",
+    "Current Nix derivation-show uses a derivations envelope; corrected review parser and retained initial KeyError log. No source/proof change.",
+    "Full whitespace result intentionally remains nonzero for byte-exact raw warning log; authored-source exclusion check and exact warning reproduction recorded. No normalized or suppressed historical failure.",
+    "One ignored Nix SQLite eval-cache busy diagnostic occurred during concurrent ordinary shell entry; checks completed successfully. Shared caches and other contributors processes untouched."
+  ],
+  "cleanup": {
+    "tracked_edits": false,
+    "refs_changed_by_reviewer": false,
+    "nested_agents": false,
+    "peer_polling": false,
+    "uploads_or_publication": false,
+    "processes_retained": [],
+    "removed": "Own transient inspect.py and redundant readable historical-review excerpts after retaining review identities; all useful scripts/logs/guards/source snapshots and two-pass note outputs retained.",
+    "retained": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/.local/review-mark-attribution-astra-20261029-gDqTOd",
+    "reason": "Durable ignored independent review receipt and reproducible evidence for the parent integration decision."
+  },
+  "artifact_sha256": {
+    "audit-initial.log": "07ce2e5f65d4df2410498122c7b282c142b93db519d735b11e70c4d38ce5a824",
+    "audit.json": "717d0edb2755c7ddd96175186c104c105c05115adeda8a8988d5dcc2331c9aaa",
+    "audit.log": "720cf36e1c0dc7ff4a5235c04b0214a71ca24d1fb1d1197ed05d51acd23ed0a5",
+    "audit.py": "20f72a59fa0d43c33eb487e1c9464b6f93882165318b6c180059a81ed301559e",
+    "binding-audit.json": "4e95156cfc182a55704735390588803708c7d21a3a32c949c3f18dbaaf9963f3",
+    "candidate-metadata.log": "613228d48dd639e1d9f8b8151506f09d8e9b9b27166687df7ff4c947e219cb15",
+    "candidate-metadata.out": "8d794c79e15ba5e7a22b3f6168dc144e786fe6a9d9b53137a61a19aa902d36fa",
+    "candidate-runtime.log": "63fb17a659f13585ae788898e612a294c4bcd430e62452dfed2ec4cd867a1602",
+    "candidate-runtime.out": "434c7f0e0ecbdf95cd081a65caa77a5424504400f638c2475f7a55f7e3b3b1bf",
+    "candidate-source-nar.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "candidate-source-nar.out": "ea9d859583b403e911356ffa5b824a2fffaca22e5600863a7b58bf3c3c8282d5",
+    "captured-parent-receipt.json": "8f552641205096681a01c8e6b6f41f8b553f2315546facc80b1082064b384de5",
+    "checks-initial.log": "0b92a2f95bb2863206bd66328c66dd4473cb5ff7a00bc1661cc3b6db6c6e8587",
+    "checks.log": "500a6cf0af5145c2b92db37dd16dc3a59c62a2e1b6a7b945cc7f3eb204f946f8",
+    "checks.py": "19e0560d811545516854bb16f5e910dee8b6aa0487595d07f1e6704fb50c3839",
+    "code-metadata.log": "613228d48dd639e1d9f8b8151506f09d8e9b9b27166687df7ff4c947e219cb15",
+    "code-metadata.out": "94abdb8b9f270b6cf90735de807df7599b84456a140fe776c265fea74cd4294b",
+    "code-runtime.log": "63fb17a659f13585ae788898e612a294c4bcd430e62452dfed2ec4cd867a1602",
+    "code-runtime.out": "434c7f0e0ecbdf95cd081a65caa77a5424504400f638c2475f7a55f7e3b3b1bf",
+    "code-source-nar.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "code-source-nar.out": "7767f224544f038b54452c59b242d004a833a1d293a44c8772ca8495250f77a5",
+    "commands.json": "09bd32bd720b988ed915e28691b3b2e5c91ae9fa5e273293f5ed6f881c40497c",
+    "derivation.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "derivation.out": "65591462a592ee7203707423a5673becc17b14e693e58a7e555edbf35220dd4f",
+    "docs-audit.json": "d6cad38493a70646d184b7a32b06fb35c156e1823bc9bc6c6a0c6ac91153208d",
+    "docs-audit.py": "7206cb36b702ded1d1677199b12926b91d4484bce288cc95bdb30a1327157c3c",
+    "extra-guard-after.log": "12fde3324d6160c4c17cf033aacdd95e24c93267819a76422c0927acb5c56779",
+    "extra-guard-before.log": "12fde3324d6160c4c17cf033aacdd95e24c93267819a76422c0927acb5c56779",
+    "extra-guard.py": "88f37e819f3c8a51024e9c6ef4c86b542f2b4a696cf84da0afd32d87f9915922",
+    "extra-guards-after.json": "beb73108f8305b76454511b18e38a0bd55c904a1123563f4b20ce6dabb58a4b3",
+    "extra-guards-before.json": "beb73108f8305b76454511b18e38a0bd55c904a1123563f4b20ce6dabb58a4b3",
+    "final-bind-initial.log": "00f80cafc23d16edec745fc54db4480828aeccdbf31137644cea2a112fcb8505",
+    "final-bind.log": "3568a5a806e694948f3a2617fbee599f15417cceaddcaefc96046700e98a7712",
+    "final-bind.py": "8381e522e1501299fb067ea6381121f4cfc281e0016f1ef73858c9feb48be0fe",
+    "finalize.py": "b99c958494006cba2299b8ca909827b4595d90a2510c6f24458c281b7a473c9e",
+    "finish.log": "1be18e1cac72a96867575ae3d092908f08f98ebfb29d2cc79bb6e748464560d4",
+    "finish.py": "87a0eb353e1776384822bfdffbc512a9655f2c55376d4557fd3956134b7fd1a5",
+    "guard-after.log": "054d6db0815869bea1082069cd8b3c09be533a50e6f8ea53539745e91789e688",
+    "guard-before.log": "15eebe50df2062fe858bc586d10bb5ad3f0b3c67504b79f92c72a95b8d5d169f",
+    "guard.py": "8d7fa859128d5bf82420d2f549ef36d6107ad8b5fd1bc7e767a95b45e5ab3c22",
+    "guards-after.json": "cc6ad85472a90ded22a0046c2eede7a7d786e555738d125d01e17c35c9f84ff0",
+    "guards-before.json": "f315ef600c71d6010a4fa1001e0ce999bc5a2482d88b7e6e455636664d666bfe",
+    "historical-review-identities.json": "f6d20e19c609a58f72967e683adda527e80dda3bae01229ffcfe483a063bb02a",
+    "html-first/index.html": "06fba8ec5ca274c0172c435d67f0a142fea9c0d69c0be537f18edb9017c995ec",
+    "html-first.log": "f6291bee2aca5f6a6694512616225bc21e5352431485b391daf60be2898ee573",
+    "html-first.out": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "html-second/index.html": "06fba8ec5ca274c0172c435d67f0a142fea9c0d69c0be537f18edb9017c995ec",
+    "html-second.log": "f6291bee2aca5f6a6694512616225bc21e5352431485b391daf60be2898ee573",
+    "html-second.out": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "note-first.pdf": "376dabda35155dfda103bea7f7801a83ca7223f4ceb8cb118b39c83c90f81212",
+    "note-second.pdf": "376dabda35155dfda103bea7f7801a83ca7223f4ceb8cb118b39c83c90f81212",
+    "package-nar.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "package-nar.out": "2461e0beb23f3214497c22abebb2b827b9ecbb7247bc1bd1a264baa493417369",
+    "pdf-first.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "pdf-first.out": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "pdf-second.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "pdf-second.out": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "registry.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "registry.out": "b9839f0800b8dae51ca2a36b3bb053cdba8cecb547f2abfd2af8a51f34b1c255",
+    "run.sh": "b416518ab75491a2520227997dab98e36174023cd589556059a3b6ab81e44d3f",
+    "shell-render-static.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "shell-render-static.out": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "shell-static.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "shell-static.out": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "typst-version.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "typst-version.out": "20ad20e86d85d168643624dc3e3388e7cbcc5a8384d17835db3a0ab04c496fba",
+    "whitespace-authored.out": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "whitespace.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "whitespace.out": "a9ceed4d4b5da36dbd65becb72f247f013bfe2536dfeef5ac95fc3b589287346",
+    "wrapper.typ": "04968950f00c842f0698d7f5b2d7634f2068462a4032a210e40cf9ce10217cb6"
+  }
+}

@@ -1,0 +1,48 @@
+    Checking either v1.15.0
+    Checking memchr v2.8.0
+    Checking num-traits v0.2.19
+    Checking serde_json v1.0.149
+   Compiling clinnet v0.1.8 (/shared/lcnbr/dev/gammaloop/generation-drawing-ports/crates/clinnet)
+    Checking indenter v0.3.4
+    Checking eyre v0.6.12
+    Checking rayon v1.12.0
+    Checking kurvst v0.1.0 (/shared/lcnbr/dev/gammaloop/generation-drawing-ports/crates/kurvst)
+    Checking num-integer v0.1.46
+    Checking num-bigint v0.4.6
+    Checking amd v0.2.2
+    Checking approx v0.4.0
+    Checking itertools v0.11.0
+    Checking rkyv v0.7.46
+    Checking clarabel v0.11.1 (/shared/lcnbr/dev/gammaloop/generation-drawing-ports/vendor/clarabel)
+warning: unused import: `super::super::traits::*`
+   --> vendor/clarabel/src/solver/core/solver.rs:470:9
+    |
+470 |     use super::super::traits::*;
+    |         ^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+    Checking cgmath v0.18.0
+warning: hiding a lifetime that's elided elsewhere is confusing
+  --> vendor/clarabel/src/solver/core/kktsolvers/direct/quasidef/datamaps.rs:26:39
+   |
+26 |     pub(crate) fn to_sparse_expansion(&self) -> Option<SparseExpansionCone<T>> {
+   |                                       ^^^^^            ^^^^^^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+   |                                       |
+   |                                       the lifetime is elided here
+   |
+   = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+   = note: `#[warn(mismatched_lifetime_syntaxes)]` on by default
+help: use `'_` for type paths
+   |
+26 |     pub(crate) fn to_sparse_expansion(&self) -> Option<SparseExpansionCone<'_, T>> {
+   |                                                                            +++
+
+warning: `clarabel` (lib) generated 2 warnings (run `cargo clippy --fix --lib -p clarabel -- --deny warnings` to apply 2 suggestions)
+    Checking num-rational v0.4.2
+    Checking twofloat v0.8.4
+    Checking itertools v0.14.0
+    Checking roxmltree v0.21.1
+    Checking linnet v0.17.0 (/shared/lcnbr/dev/gammaloop/generation-drawing-ports/crates/linnet)
+    Checking linnest v0.1.0 (/shared/lcnbr/dev/gammaloop/generation-drawing-ports/crates/linnest)
+    Finished `dev-optim` profile [optimized + debuginfo] target(s) in 20.43s
