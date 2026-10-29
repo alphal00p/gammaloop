@@ -1,0 +1,186 @@
+{
+  "schema": 1,
+  "status": "candidate_pending_new_independent_Astra_migration_and_test_review",
+  "scope": "Only three named grouping-frame numerator digest literals; no production or other expectation change.",
+  "approved_certificate": {
+    "commit": "7dd0b0c160e9c1b62533b54217f1d62275dde157",
+    "jj_bookmark": "generation-frame-certificate-approved",
+    "certificate_json": "docs/architecture/evidence/generation-frame-certificate/certificate.json",
+    "certificate_sha256": "d146336ccdeb926e295a60b4a602326207a6efb6fbd3284b402b64121ea6ce58",
+    "reviews": [
+      {
+        "path": "target/astra-r2-scope-a-20261028T200300Z/review.json",
+        "sha256": "e3e9ae201bf8d1590fb8b58cada4785a7327d4f346cfbd7ada92fbfd5e56a1a5",
+        "verdict": "APPROVE_CERTIFICATE"
+      },
+      {
+        "path": "target/astra-frame-scope-b-round2-20261028T200020Z/review.json",
+        "sha256": "be92752b4ceac6f8ce6991c36309ec75424ab810a4b2d8e50167745de7c94374",
+        "verdict": "APPROVE_CERTIFICATE"
+      }
+    ]
+  },
+  "preservation_refs": {
+    "jj_git_root": "/shared/lcnbr/dev/gammaloop/main/.git",
+    "command": "jj git root; git --git-dir=<jj git root> rev-parse <ref>; jj log -r generation-frame-certificate-approved",
+    "resolved_git_tags": {
+      "refs/tags/generation-frame-certificate-round1": "c5a19031d8a527ca61903728b6465187f3e87928",
+      "refs/tags/generation-frame-intermediate-diagnosis": "67f36295d41cdf872d978692c8aff93d3f3b855e",
+      "refs/tags/generation-frame-historical-original-capture": "3718714c791d40fb746dd9abc6eeb61fe86548c4"
+    },
+    "resolved_jj_approved_bookmark": "7dd0b0c160e9c1b62533b54217f1d62275dde157",
+    "visibility_resolution": "All three old tags resolve in the shared Git store; Scope B detailed fields also list their commits."
+  },
+  "hygiene": {
+    "commit": "8c4011890ba7cef3edc8be5d17ce3cc893c25aa6",
+    "change": "onlxuuzovztqwlqzvtkklvurquvsyxxo",
+    "pinned_ruff": "0.16.6",
+    "pinned_rustfmt": "stable 2026-09-03",
+    "python_formatter_ast_equal_count": 12,
+    "explicit_lint_changes": "C401 set comprehensions and B023 immediate lambda binding; S102 intentional exec annotated",
+    "substantive_proofs_replayed": 11,
+    "mathematical_summaries_equal_frozen": true,
+    "old_literal_binary": "target/frame-certificate/migration-r1/hygiene-old-literals-binary",
+    "old_literal_binary_sha256": "917a2c341e65bdd40f8dfb4f7bb33ceffcd0549cfedd817ff8c32acd7867729a",
+    "old_fail_log": "target/frame-certificate/migration-r1/hygiene-old-literals-1-8-32.log",
+    "old_fail_log_sha256": "c37c3be9d609a4e25d0b830e55747fac68cd7c61fa45b2b8f4d8cc8c8c13708a",
+    "old_fail_exit": 101,
+    "old_fail_threads": [
+      1,
+      8,
+      32
+    ]
+  },
+  "migration": {
+    "candidate_bookmark": "generation-frame-certificate",
+    "test_source": "crates/feynkit-generator/tests/generation_oracle/frames.rs",
+    "test_source_sha256": "d426e86d6f24af9a6de2c97dc3ac0f46a848d943827bfef9d6f0a323058093c5",
+    "binary": "target/frame-certificate/migration-r1/new-literals-binary",
+    "binary_sha256": "0a621f4e50edc7a6c766c9e800a2c60b286b5b5622933567bec27c6f2d8c2f75",
+    "profile": "ci-optim",
+    "features": "default + native",
+    "current_locked_symbolica": "1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
+    "rows": [
+      {
+        "test": "frames::comparison_frames_with_fermion_flow_reversals",
+        "case": "comparison-qed",
+        "old_hex": "0xbbb6f06b55b1dd03",
+        "old_decimal": 13526262874643750147,
+        "new_hex": "0xf2c181dfbe49930f",
+        "new_decimal": 17492405225653900047,
+        "old_hygiene_observed_actual": 17492405225653900047,
+        "expected_only_numerator_changed": true
+      },
+      {
+        "test": "frames::representative_frames_with_fermion_flow_reversals",
+        "case": "representative-qed",
+        "old_hex": "0xbd1d483fc596a496",
+        "old_decimal": 13627127486228112534,
+        "new_hex": "0x196ad47f7c361abc",
+        "new_decimal": 1831509842489383612,
+        "old_hygiene_observed_actual": 1831509842489383612,
+        "expected_only_numerator_changed": true
+      },
+      {
+        "test": "frames::representative_frames_with_left_right_symmetrization",
+        "case": "representative-lr",
+        "old_hex": "0x87988a044c993bcf",
+        "old_decimal": 9770711142649904079,
+        "new_hex": "0x9a59879459492f0e",
+        "new_decimal": 11122069825991028494,
+        "old_hygiene_observed_actual": 11122069825991028494,
+        "expected_only_numerator_changed": true
+      }
+    ],
+    "new_runs": [
+      {
+        "threads": 1,
+        "tests_passed": 3,
+        "tests_failed": 0,
+        "ignored_diagnostic": 1,
+        "record_mode": "unset",
+        "force_pass_mode": "unset",
+        "log": "target/frame-certificate/migration-r1/new-literals-threads-1.log",
+        "log_sha256": "67bbf9c7142933e05c7ab39385b412c45d4588af56d81c7b111b33d9607cd076"
+      },
+      {
+        "threads": 8,
+        "tests_passed": 3,
+        "tests_failed": 0,
+        "ignored_diagnostic": 1,
+        "record_mode": "unset",
+        "force_pass_mode": "unset",
+        "log": "target/frame-certificate/migration-r1/new-literals-threads-8.log",
+        "log_sha256": "679a3e0c6c79bd7758763adb176fcee756de3b21e71fc3f80407016ae5fae842"
+      },
+      {
+        "threads": 32,
+        "tests_passed": 3,
+        "tests_failed": 0,
+        "ignored_diagnostic": 1,
+        "record_mode": "unset",
+        "force_pass_mode": "unset",
+        "log": "target/frame-certificate/migration-r1/new-literals-threads-32.log",
+        "log_sha256": "29d61c2978b95fe5da41d78456b1480b11f85baec8b88b11001b905280261959"
+      }
+    ],
+    "typed_d65_diagnostic": {
+      "log": "target/frame-certificate/migration-r1/new-d65-typed.log",
+      "sha256": "0129aa41411addddf755e202ee6ccc6c6883a5a9cd87bf69047a98e678cd1858",
+      "passed": true
+    },
+    "model_fingerprint_diagnostic": {
+      "log": "target/frame-certificate/migration-r1/new-model-fingerprint.log",
+      "sha256": "c06fa6dfa8780a8a136d1e51a632a029305286b0d5df9f754c22d983bc87b507",
+      "fingerprint": "9d826a6ef2be57828b443ffcee31307e75f8c51d3de7c87b17817a21b5914876",
+      "passed": true
+    }
+  },
+  "preserved_evidence": {
+    "preserved_approved_non_script_artifact_hashes": 64,
+    "old_script_hashes_archived_at_approved_commit": 12,
+    "pair_capture_manifest_entries": 2102,
+    "model_hook_manifest_entries": 18
+  },
+  "validation": {
+    "command_record": {
+      "path": "target/frame-certificate/migration-r1/commands.txt",
+      "sha256": "b7ee4308b7eb90ca0dfc910857bfbad889aaa920dd434370e7c849fb9b6eb855"
+    },
+    "ruff_format": {
+      "exit": 0,
+      "log": "target/frame-certificate/migration-r1/ruff-format-check.log",
+      "sha256": "cfe5c6461b42a90595a492aed11f2c8e6eb98b7c4caf2cc9f47e3333185e3f33"
+    },
+    "ruff_lint": {
+      "exit": 0,
+      "log": "target/frame-certificate/migration-r1/ruff-lint-check.log",
+      "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+    },
+    "rustfmt": {
+      "exit": 0,
+      "log": "target/frame-certificate/migration-r1/rustfmt-check.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "scoped_clippy": {
+      "exit": 0,
+      "log": "target/frame-certificate/migration-r1/scoped-clippy.log",
+      "sha256": "f0c88988af96e41b4b6b5d087a127555355e4b63e815ede3ddc13b2275d8e64c"
+    },
+    "typst_migration_record": {
+      "exit": 0,
+      "log": "target/frame-certificate/migration-r1/typst.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "full_effective_model_sha256": "37b1e770a5e33a49997bba8bb0c742aecb669efcb8841a40182bdcb343d354c8",
+    "current_production_staged_sha256": "6c8ebb4abd42e875742bb1fdfdfa5c6fc0ecff4e9c0c4adff8f49306b4110b21"
+  },
+  "qualification": "Exact structural and signed affine replay over qualified producer captures; only D65 typed helper executed in both kernels. No claim about private cache identity or general grouping equivalence.",
+  "limits": [
+    "New independent Astra migration/test review required before integration.",
+    "No full docs suite claimed; unrelated catalog exporter remains unavailable."
+  ],
+  "no_recursion": {
+    "receipt_self_hashed": false
+  }
+}

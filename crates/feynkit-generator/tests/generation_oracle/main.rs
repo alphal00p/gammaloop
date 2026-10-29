@@ -29,6 +29,7 @@
 mod cases;
 mod census;
 mod classes;
+mod frame_certificate;
 mod frames;
 
 use feynkit_graph::symbols;

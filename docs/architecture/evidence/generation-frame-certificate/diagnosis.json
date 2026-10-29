@@ -1,0 +1,100 @@
+{
+  "schema": 1,
+  "verdict": "intermediate_67f36295_diagnosis_only_exact_equivalence_not_yet_established_at_that_step",
+  "superseded_by": "docs/architecture/evidence/generation-frame-certificate/certificate.json",
+  "scope": "Three grouping-frame numerator-digest rows only; no production, expectation, lock, CI, or other-lane changes",
+  "source": {
+    "historical": "8d49e6ecf0d8fb1169e7433f2c0b41048aa92e60",
+    "current_parent": "59b57cead76e576fa9f23e3996f5614de939fe35",
+    "historical_frames_sha256": "0868d08d3d4bbe3609c08cc2558c581194e698fcad0d633f0c4a9e28b36929b1",
+    "current_frames_sha256": "abbf1d2ced487c3275cbc1de4569a26ce2ce62636875ce8efaf14118a1f985a1",
+    "frames_semantic_difference": "None: import formatting and current-only mismatch capture",
+    "cases_semantic_difference": "None in these cases: a nearby canonical-scalar comment changed"
+  },
+  "kernels": {
+    "historical": "c78cffc20f318df1fce50539a587cbe8ffc717c0",
+    "current": "1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
+    "lockfiles_changed": false
+  },
+  "binaries": {
+    "historical_original": {
+      "path": "/common/build-cache/lcnbr/7b/12be5b14aa9826/ci-optim/deps/generation_oracle-de23d835aff56301",
+      "sha256": "d0460027ee6715cdafa89e7a811267d8a0fbcaf51f610bb8edbf153c8c4f86b0",
+      "original_assertions": "3_pass_0_fail_record_mode_unset",
+      "log": "target/frame-certificate/baseline-unmodified.log"
+    },
+    "current": {
+      "path": "/common/build-cache/lcnbr/70/4b25d004416d5c/ci-optim/deps/generation_oracle-513b63cbc76b9164",
+      "sha256": "6f981704844025425817b1694958bf82a517fd9ed21ba181ae8b0ac3c766e9b1",
+      "original_assertions": "0_pass_3_fail_only_numerator_digest_record_mode_unset",
+      "log": "target/frame-certificate/current/run.log"
+    }
+  },
+  "input_pipeline": {
+    "shared_test_request": "Massless u,d,s and antiparticles, adjusted propagator numerator and denominator, Classes::Auto, Naming::prefix(D), two-pass initial named LMB extraction then prefactor build, comparison or representative grouping",
+    "prefactor": "dot(0,4,0)+dot(1,6,1)",
+    "projector": "default external-state projector",
+    "amplitude": "e- e+ to a a, one loop, no self loops, UpToSign default or Identical with differentiate_particle_masses_only=false",
+    "cross_section": "a a to e- e+, two forward loops, one blob, zero spectators, left/right symmetrization, no self loops, Identical with differentiate_particle_masses_only=false",
+    "ordered_stages": ["model transformation", "request and enumeration", "initial named build for LMBs", "prefactor and named-LMB build", "comparison and representative re-preparation", "FrameMap options and separate LMB transport", "grouping", "representative finalization", "exact census serializer"],
+    "stage_matrix": [
+      {"stage": "model transformation and request", "status": "shared", "evidence": "Test source semantic equality; final embedded model JSON literally equal on every joined graph"},
+      {"stage": "enumeration and assignment", "status": "shared at final graph-key and census level", "evidence": "60/66/130 exact full-key joins; assignments 66/66/3456 and topology counts equal"},
+      {"stage": "initial named build for per-diagram LMBs", "status": "source procedure shared, initial records not separately captured", "evidence": "Final diagram names and loop bases literally equal on every joined graph"},
+      {"stage": "prefactor and named-LMB build", "status": "requested options shared; local output representation differs", "evidence": "Source call identical; current and historical prefactor strings differ in all joined graphs"},
+      {"stage": "comparison and representative re-preparation", "status": "internal pair not separately captured", "evidence": "Final full graph keys and all nonnumerator physical fields agree; frame-map source body is semantically unchanged"},
+      {"stage": "signed frame option and LMB transport", "status": "final LMB equal; prefactor strings differ", "evidence": "FrameMap::options and named basis mapping traced in staged.rs; exact old/new factor identity pending"},
+      {"stage": "grouping and finalization", "status": "source/group provenance equal; numerator representation differs", "evidence": "All exact group records, source ratios, weights, cuts and output fields outside listed local paths equal"},
+      {"stage": "census serialization", "status": "different numerator digest only", "evidence": "Original assertions pass in frozen producer; current assertions fail only numerator digest"}
+    ],
+    "last_confirmed_shared_boundary": "Complete final full graph keys, identities, named loop bases, nonnumerator physical fields, and group/source membership and ratio records",
+    "first_observed_difference": "Serialized local edge numerator heads, explicit local num_interface fields, aggregate numerator strings, and transported prefactor strings; exact first semantic boundary remains unproved"
+  },
+  "rows": [
+    {"test": "frames::comparison_frames_with_fermion_flow_reversals", "case": "qed_eeaa_sign_L1", "diagrams": 60, "topologies": 20, "assignments": 66, "weight": 42, "expected_numerators": 13526262874643750147, "current_numerators": 17492405225653900047, "groups": 60, "members": 66, "current_capture_sha256": "4eb086c8ac5156be5be4cd94d51c0507b64984f5a81b1d6dbc389dbb5ac5f2cd"},
+    {"test": "frames::representative_frames_with_fermion_flow_reversals", "case": "qed_eeaa_sign_L1", "diagrams": 66, "topologies": 20, "assignments": 66, "weight": 42, "expected_numerators": 13627127486228112534, "current_numerators": 1831509842489383612, "groups": 66, "members": 66, "current_capture_sha256": "91b8969d450231181c4f12b25c0b8402db4dc216c480fb8ced278ca02b3da3d0"},
+    {"test": "frames::representative_frames_with_left_right_symmetrization", "case": "xs_qed_aaee_lr_L2", "diagrams": 130, "topologies": 75, "assignments": 3456, "weight": 176, "expected_numerators": 9770711142649904079, "current_numerators": 11122069825991028494, "groups": 130, "members": 130, "current_capture_sha256": "dc0458581a3f4f995f904931a4fc79a0777e4c0f44a455d6184480e095f7c9ae"}
+  ],
+  "historical_capture": {
+    "status": "complete_3_original_assertions_pass_record_mode_unset",
+    "workspace": "/shared/lcnbr/dev/gammaloop/generation-frame-historical-diagnostic",
+    "source_control": "Only historical frames.rs gained a FEYNKIT_ORACLE_DUMP guarded call to its existing Census::write_exact_dump after summary; original assertions remained live",
+    "diagnostic_binary_sha256": "3b72eb053839b0ce05f7288bd17ab452faa000e2890808b714d4dbf9776fa0dc",
+    "build_run_log": "/shared/lcnbr/dev/gammaloop/generation-frame-historical-diagnostic/target/frame-certificate-capture/build-run.log",
+    "historical_frozen_captures": [
+      {"case": "comparison-qed", "path": "target/frame-certificate/historical-frozen/comparison-qed.json", "sha256": "477199a2e53e36136eefecab9613bf38ae452203579ae14f15c1e7957c8cfebc"},
+      {"case": "representative-qed", "path": "target/frame-certificate/historical-frozen/representative-qed.json", "sha256": "e18db375eb717c9a52b4eece5ecee57a0393e12bede78d28a860d2b2889f9c92"},
+      {"case": "representative-lr", "path": "target/frame-certificate/historical-frozen/representative-lr.json", "sha256": "27da99a7536b7ef97fc7c78ac40a5ddfe489ec1aedb889d2e9430d04afa63921"}
+    ]
+  },
+  "current_frozen_captures": [
+    {"case": "comparison-qed", "path": "target/frame-certificate/current-frozen/comparison-qed.json", "sha256": "4eb086c8ac5156be5be4cd94d51c0507b64984f5a81b1d6dbc389dbb5ac5f2cd"},
+    {"case": "representative-qed", "path": "target/frame-certificate/current-frozen/representative-qed.json", "sha256": "91b8969d450231181c4f12b25c0b8402db4dc216c480fb8ced278ca02b3da3d0"},
+    {"case": "representative-lr", "path": "target/frame-certificate/current-frozen/representative-lr.json", "sha256": "dc0458581a3f4f995f904931a4fc79a0777e4c0f44a455d6184480e095f7c9ae"}
+  ],
+  "join": {
+    "status": "exact_full_key_and_group_record_join_passes_while_local_factor_certificate_pending",
+    "comparison_qed": {"old": 60, "current": 60, "full_key_matches": 60, "exact_group_records_equal": true, "members": 66, "different_raw_paths": {"edges.*.*.num_interface": 70, "edges.*.*.numerator": 180, "numerator": 60, "numerator_prefactor": 60, "vertices.*.num_interface": 95}},
+    "representative_qed": {"old": 66, "current": 66, "full_key_matches": 66, "exact_group_records_equal": true, "members": 66, "different_raw_paths": {"edges.*.*.num_interface": 84, "edges.*.*.numerator": 198, "numerator": 66, "numerator_prefactor": 66, "vertices.*.num_interface": 118}},
+    "representative_lr": {"old": 130, "current": 130, "full_key_matches": 130, "exact_group_records_equal": true, "members": 130, "different_raw_paths": {"edges.*.*.num_interface": 168, "edges.*.*.numerator": 780, "numerator": 130, "numerator_prefactor": 130, "vertices.*.num_interface": 388}},
+    "equal_raw_fields": "For every joined graph: full key, id, name, symmetry factor, loop basis, overall factor, all other serialized payload fields and all group records including master index, source index, id/name, exact ratio and source overall factor. Within edges and vertices, only the listed paths differ; particle, orientation, endpoints, slots and all other fields are exactly equal.",
+    "raw_first_boundary": "Q and index constructor spelling plus explicit num_interface fields are visible in a minimal D65 prefactor/edge example; this is an observed serialized boundary, not an exact semantic certificate. No original local factor, prefactor, or interface was dropped or rewritten in the comparisons.",
+    "minimal_raw_witnesses": [
+      {"case": "comparison-qed", "diagram": "D65", "field": "payload.numerator_prefactor", "historical_head": "gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:q}::Q", "current_head": "gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q", "first_coefficient": "-1", "first_momentum_edge": 2, "semantic_verdict": "unproved"},
+      {"case": "comparison-qed", "diagram": "D19", "field": "payload.edges[4][1].num_interface", "historical": "absent", "current": "present with four declared ports", "semantic_verdict": "unproved"}
+    ],
+    "comparison_artifacts": ["target/frame-certificate/comparison-qed-join.json", "target/frame-certificate/representative-qed-join.json", "target/frame-certificate/representative-lr-join.json", "target/frame-certificate/comparison-qed-detail.json", "target/frame-certificate/representative-qed-detail.json", "target/frame-certificate/representative-lr-detail.json"]
+  },
+  "certificate": {"status": "withheld", "local_factors": null, "prefactor_projector": null, "interfaces": null, "member_ratios": null, "kernel_crosscheck": null},
+  "corruption_controls": {"status": "not_run", "sign": null, "coefficient": null, "owner_map": null, "dimension_interface": null, "prefactor_lmb": null, "ratio": null},
+  "comparison_method": "Read-only JSON tree and full-key comparisons. No algebraic normalization, constructor substitution, interface omission, whole-graph numerator expansion, hidden Dirac distribution, or numerical point evaluation was performed.",
+  "validation": {
+    "original_historical_binary": "3/3 passed without record mode",
+    "historical_capture_binary": "3/3 passed without record mode",
+    "current_binary": "0/3 passed: exactly three expected numerator-digest assertion failures; every other census field matched",
+    "structured_json": "jq parsed diagnosis.json",
+    "registry": "alphal00p-docs-builder reached generated catalog exporter after developer-note validation; end-to-end check could not complete because the gammalooprs catalog exporter executable was absent",
+    "full_docs_check": "stopped after finding the broad recipe begins with unrelated Python stub builds; no pass credit"
+  },
+  "limits": ["Raw full-key and group-record joins pass, but exact factor-preserving local and frame-dependent identities are unproved", "Earlier source19 proof does not cover frame-dependent prefactor, named LMB, or group ratio provenance", "The staged constructor-spelling and interface-omission hash recovery is diagnostic only", "No whole-graph numerator expansion, physics, performance, or distribution claim", "New independent Astra review is required before any recertification"]
+}

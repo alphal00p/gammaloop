@@ -1,0 +1,1488 @@
+{
+  "schema": 2,
+  "verdict": "exact_bounded_factor_preserving_equivalence_established_pending_new_independent_Astra_review",
+  "scope": "Exactly three original grouping-frame numerator-digest rows. No expectation or production algorithm change; no recertification.",
+  "intermediate_diagnosis": {
+    "commit": "67f36295d41cdf872d978692c8aff93d3f3b855e",
+    "durable_ref": "refs/tags/generation-frame-intermediate-diagnosis",
+    "file": "docs/architecture/evidence/generation-frame-certificate/diagnosis.json"
+  },
+  "round1_review": {
+    "commit": "c5a19031d8a527ca61903728b6465187f3e87928",
+    "durable_ref": "refs/tags/generation-frame-certificate-round1",
+    "scope_a": "target/astra-certificate-provenance-20261028T190253Z/scope-a-review.json",
+    "scope_b": "target/astra-frame-scope-b-review-20261028T2010Z/review.typ",
+    "verdicts": [
+      "REQUEST_CHANGES",
+      "REQUEST_CHANGES"
+    ],
+    "old_verifier_failures": {
+      "scope_a": [
+        "changed detached model accepted by denominator proof",
+        "one-sided final edge numerator accepted by final join"
+      ],
+      "scope_b": [
+        "trailing prefactor coefficient or scalar accepted by old parser",
+        "changed contracted dimension accepted by old parser",
+        "both-producer effective prefactor mutation accepted by old replay",
+        "both-producer D65 routing coefficient mutation accepted by old replay",
+        "final aggregate and swapped master changes accepted by old replay"
+      ]
+    },
+    "new_semantic_replay": "19 injections rejected by their owning proof scripts without SHA guards; exact per-case outcomes are in proofs.corruption_controls."
+  },
+  "sources": {
+    "historical": "8d49e6ecf0d8fb1169e7433f2c0b41048aa92e60",
+    "current_frozen_parent": "59b57cead76e576fa9f23e3996f5614de939fe35",
+    "historical_kernel": "c78cffc20f318df1fce50539a587cbe8ffc717c0",
+    "current_kernel": "1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
+    "historical_original_capture_commit": "3718714c791d40fb746dd9abc6eeb61fe86548c4",
+    "historical_original_capture_ref": "refs/tags/generation-frame-historical-original-capture",
+    "constructor_source_sha256": {
+      "historical_graph_symbols": "0a13fee39574d1f8a819cdac3ecc0c9607a266b765907fcae0eaaaf146da174b",
+      "current_graph_symbols": "b580b7c70db4f11bf79fd02f8109a715c01b74d63a560a54d49868b8e5c4aa9d",
+      "historical_tensor_printer": "a5b0f848341c92e73c49ae95312ef29b48d15a2e5a3072b7e9d6ac8933c0d146",
+      "current_tensor_printer": "c6dd2a9cc7f5e8536caf1bc27b840360ecadd160967bd21caffd72df9bb6e4ae"
+    },
+    "qualified_five_constructor_bridge": {
+      "path": "../generation-integration-plan/target/wp3-drawing-transplant/frame-digest-boundary.json",
+      "sha256": "d16204ba54f1d113da343c7aa0e1ad5472f05207bd22aa81bca46e9eacf1c3a3",
+      "semantic_argument": "The old q/e/v tags are consumed only as presentation labels by the old tensor printer. The current declarations retain the same names, rank-one/tensor/index/component tags and arguments and register q/e/v as presentation notation. K and P have the same bounded contract. No representation, dimension, variance, dummy scope or coefficient is removed."
+    },
+    "restored_production_source_controls": {
+      "current_staged_sha256": "6c8ebb4abd42e875742bb1fdfdfa5c6fc0ecff4e9c0c4adff8f49306b4110b21",
+      "historical_staged_sha256": "aeac316e293542fa45ee665696eef1d5e5a7826c2dc64763a9714223495ff6c5",
+      "current_staged_matches_frozen_parent_sha256": "6c8ebb4abd42e875742bb1fdfdfa5c6fc0ecff4e9c0c4adff8f49306b4110b21",
+      "historical_staged_matches_frozen_source_sha256": "aeac316e293542fa45ee665696eef1d5e5a7826c2dc64763a9714223495ff6c5",
+      "current_nixci_enabled": false,
+      "historical_nixci_enabled": false,
+      "lockfiles_and_uv_changed": false
+    }
+  },
+  "producers": {
+    "historical_unmodified": {
+      "binary": "/common/build-cache/lcnbr/7b/12be5b14aa9826/ci-optim/deps/generation_oracle-de23d835aff56301",
+      "sha256": "d0460027ee6715cdafa89e7a811267d8a0fbcaf51f610bb8edbf153c8c4f86b0",
+      "original_assertions": "3 passed, 0 failed, record mode unset, one thread",
+      "log": "target/frame-certificate/baseline-unmodified.log",
+      "profile_and_features": "ci-optim, default + native, original locked kernel"
+    },
+    "current_unmodified": {
+      "binary": "/common/build-cache/lcnbr/70/4b25d004416d5c/ci-optim/deps/generation_oracle-513b63cbc76b9164",
+      "sha256": "6f981704844025425817b1694958bf82a517fd9ed21ba181ae8b0ac3c766e9b1",
+      "original_assertions": "0 passed, 3 expected numerator-digest failures, every other census field equal, record mode unset, one thread",
+      "log": "target/frame-certificate/current/run.log",
+      "profile_and_features": "ci-optim, default + native, original locked kernel"
+    },
+    "observational_current": {
+      "reused_cache_path_at_capture": "/common/build-cache/lcnbr/00/0198baa63d28f1/ci-optim/deps/generation_oracle-513b63cbc76b9164",
+      "graphproof_sha256_at_capture": "0bdb82d0dea6cc8f456dbeada912aad96535b238df0e412abf5afb83d4ea3a0f",
+      "temporary_source_patch": "target/frame-certificate/current-staged-observation.patch",
+      "source_restored_to_parent": true,
+      "frozen_final_capture_bytes_equal_original": true,
+      "binary_retention": "The ordinary shared cache path was reused by final test recompilation. The exact patch, build identity, source control, logs and immutable capture bytes are retained."
+    },
+    "observational_historical": {
+      "reused_cache_path_at_capture": "/common/build-cache/lcnbr/42/739ef72d4e7b05/ci-optim/deps/generation_oracle-de23d835aff56301",
+      "graphproof_sha256_at_capture": "019c405cb24b299027667b58a5b6df956252a9bd9414f05750eab684cb83d516",
+      "temporary_source_patch": "target/frame-certificate/historical-staged-observation.patch",
+      "source_restored_to_parent": true,
+      "frozen_final_capture_bytes_equal_original": true,
+      "binary_retention": "The ordinary shared cache path was reused by final test recompilation. The exact patch, build identity, source control, logs and immutable capture bytes are retained."
+    }
+  },
+  "immutable_binaries": {
+    "current-before-model-hook": {
+      "path": "target/frame-certificate/binaries/current-before-model-hook",
+      "sha256": "9a2297a7794aedb674a6480716035f443ddde72c4fac29be9ed883193c269d27"
+    },
+    "current-fingerprint-probe": {
+      "path": "target/frame-certificate/binaries/current-fingerprint-probe",
+      "sha256": "9b2078d797a35b6f6d7b7c05aba340d215b6d946774a697bf2f957bbed6a3da0"
+    },
+    "current-model-hook": {
+      "path": "target/frame-certificate/binaries/current-model-hook",
+      "sha256": "7bc224f62520683dc30ba5255451a6e58158ff88fb1616214a789c1b8ddea16c"
+    },
+    "current-original-source39": {
+      "path": "target/frame-certificate/binaries/current-original-source39",
+      "sha256": "6f981704844025425817b1694958bf82a517fd9ed21ba181ae8b0ac3c766e9b1"
+    },
+    "historical-before-model-hook": {
+      "path": "target/frame-certificate/binaries/historical-before-model-hook",
+      "sha256": "1eaba7417f8a53a12fd1d2db12f9e8416dbb62c591de12d3a66bf40220e99fc7"
+    },
+    "historical-fingerprint-probe": {
+      "path": "target/frame-certificate/binaries/historical-fingerprint-probe",
+      "sha256": "25c180e59ff86791f3dc17e333c95b2ebfe0b4725c9fbe1d204ef31ef2440bb7"
+    },
+    "historical-model-hook": {
+      "path": "target/frame-certificate/binaries/historical-model-hook",
+      "sha256": "d88dfb388e44fc2c5c20e6dea56fbc2ceda0fa0e776c90e051f4ab48821c1d73"
+    },
+    "historical-original-source19": {
+      "path": "target/frame-certificate/binaries/historical-original-source19",
+      "sha256": "d0460027ee6715cdafa89e7a811267d8a0fbcaf51f610bb8edbf153c8c4f86b0"
+    }
+  },
+  "observational_source_patches": {
+    "current_test_only": {
+      "path": "target/frame-certificate/current-model-hook-source.patch",
+      "sha256": "786ace158e98fa1d2aa5498bd3514768d2419dffb6fc5bc295543764711554dc"
+    },
+    "historical_test_only": {
+      "path": "target/frame-certificate/historical-model-hook-source.patch",
+      "sha256": "9b7ca4721e772333c805bb2bfcfe383df3f13ed3fba19fd834b6744a1b053674"
+    },
+    "production_generation_staged_restored": true
+  },
+  "inputs_and_pipeline": {
+    "shared_test_request": "Massless u,d,s and antiparticles, adjusted propagator numerator and denominator, Classes::Auto, Naming::prefix(D), two-pass initial named LMB extraction then prefactor build, comparison or representative grouping",
+    "prefactor": "dot(0,4,0)+dot(1,6,1)",
+    "projector": "default external-state projector",
+    "amplitude": "e- e+ to a a, one loop, no self loops, UpToSign default or Identical with differentiate_particle_masses_only=false",
+    "cross_section": "a a to e- e+, two forward loops, one blob, zero spectators, left/right symmetrization, no self loops, Identical with differentiate_particle_masses_only=false",
+    "ordered_stages": [
+      "model transformation",
+      "request and enumeration",
+      "initial named build for LMBs",
+      "prefactor and named-LMB build",
+      "comparison and representative re-preparation",
+      "FrameMap options and separate LMB transport",
+      "grouping",
+      "representative finalization",
+      "exact census serializer"
+    ],
+    "stage_matrix": [
+      {
+        "stage": "model transformation and request",
+        "status": "shared",
+        "evidence": "Six live full effective-model receipts are literally equal. Each producer kernel recomputes the authoritative BLAKE3 ModelDefinition fingerprint; all 1,572 pair-stage and 512 final graph 32-byte owner fields match it."
+      },
+      {
+        "stage": "enumeration and assignment",
+        "status": "shared",
+        "evidence": "Complete 66/66/130 source pair captures and 60/66/130 final full graph-key joins."
+      },
+      {
+        "stage": "initial named build for per-diagram LMBs",
+        "status": "shared",
+        "evidence": "Live first-build and second-build named basis receipts retained for both producers; final internal-edge bijection replays each assignment."
+      },
+      {
+        "stage": "prefactor and named-LMB build",
+        "status": "shared value in different constructor schema",
+        "evidence": "Complete typed two-term Q grammar, 1,048 provisional signed transports, 1,572 effective graph tensor bindings, and exact within-route affine basis transport."
+      },
+      {
+        "stage": "comparison and representative re-preparation",
+        "status": "shared value",
+        "evidence": "Every actual pair captured before grouping, with exact old/current physical records, factors, maps and typed axis bijections."
+      },
+      {
+        "stage": "grouping and finalization",
+        "status": "shared value",
+        "evidence": "All 262 source members, 256 groups, six merged-member ratio identities, cuts, signs and denominator mappings checked."
+      },
+      {
+        "stage": "census serialization",
+        "status": "different native-schema numerator digest",
+        "evidence": "Only old/current constructor presentation and explicit interface serialization differ; original historical assertions pass and current hashes fail."
+      }
+    ],
+    "last_confirmed_shared_boundary": "Complete source, comparison and representative physical graph records, signed frame maps, named final LMBs, local factors, live typed ports, group membership, cuts and source factors.",
+    "first_observed_difference": "Historical constructor presentation tags and current explicit logical-interface fields; both are certified semantic representation changes in this bounded case."
+  },
+  "rows": [
+    {
+      "test": "frames::comparison_frames_with_fermion_flow_reversals",
+      "case": "qed_eeaa_sign_L1",
+      "diagrams": 60,
+      "topologies": 20,
+      "assignments": 66,
+      "weight": 42,
+      "expected_numerators": 13526262874643750147,
+      "current_numerators": 17492405225653900047,
+      "groups": 60,
+      "members": 66,
+      "current_capture_sha256": "4eb086c8ac5156be5be4cd94d51c0507b64984f5a81b1d6dbc389dbb5ac5f2cd"
+    },
+    {
+      "test": "frames::representative_frames_with_fermion_flow_reversals",
+      "case": "qed_eeaa_sign_L1",
+      "diagrams": 66,
+      "topologies": 20,
+      "assignments": 66,
+      "weight": 42,
+      "expected_numerators": 13627127486228112534,
+      "current_numerators": 1831509842489383612,
+      "groups": 66,
+      "members": 66,
+      "current_capture_sha256": "91b8969d450231181c4f12b25c0b8402db4dc216c480fb8ced278ca02b3da3d0"
+    },
+    {
+      "test": "frames::representative_frames_with_left_right_symmetrization",
+      "case": "xs_qed_aaee_lr_L2",
+      "diagrams": 130,
+      "topologies": 75,
+      "assignments": 3456,
+      "weight": 176,
+      "expected_numerators": 9770711142649904079,
+      "current_numerators": 11122069825991028494,
+      "groups": 130,
+      "members": 130,
+      "current_capture_sha256": "dc0458581a3f4f995f904931a4fc79a0777e4c0f44a455d6184480e095f7c9ae"
+    }
+  ],
+  "complete_pair_capture": {
+    "historical": "target/frame-certificate/pair-captures-historical-graphproof",
+    "current": "target/frame-certificate/pair-captures-current-graphproof",
+    "files_per_side": 1051,
+    "sha256_manifest": "target/frame-certificate/pair-graphproof-sha256.txt",
+    "counts_original_sources": {
+      "comparison_qed": 66,
+      "representative_qed": 66,
+      "representative_lr": 130
+    },
+    "all_old_current_source_comparison_representative_physical_records_equal": true
+  },
+  "proofs": {
+    "effective_model_and_graph_fingerprint_binding": {
+      "rows": [
+        {
+          "side": "historical",
+          "case": "comparison-qed",
+          "fingerprint": "9d826a6ef2be57828b443ffcee31307e75f8c51d3de7c87b17817a21b5914876",
+          "full_model_sha256": "37b1e770a5e33a49997bba8bb0c742aecb669efcb8841a40182bdcb343d354c8",
+          "parameters": 118,
+          "propagators": 19,
+          "first_build_names_and_bases": 66,
+          "second_build_names_and_bases": 66,
+          "grouped_owner_fingerprints": 60,
+          "pair_stage_graph_fingerprints": 198,
+          "final_graph_fingerprints": 60,
+          "kernel_fingerprint_probe_executions": 1
+        },
+        {
+          "side": "historical",
+          "case": "representative-qed",
+          "fingerprint": "9d826a6ef2be57828b443ffcee31307e75f8c51d3de7c87b17817a21b5914876",
+          "full_model_sha256": "37b1e770a5e33a49997bba8bb0c742aecb669efcb8841a40182bdcb343d354c8",
+          "parameters": 118,
+          "propagators": 19,
+          "first_build_names_and_bases": 66,
+          "second_build_names_and_bases": 66,
+          "grouped_owner_fingerprints": 66,
+          "pair_stage_graph_fingerprints": 198,
+          "final_graph_fingerprints": 66,
+          "kernel_fingerprint_probe_executions": 1
+        },
+        {
+          "side": "historical",
+          "case": "representative-lr",
+          "fingerprint": "9d826a6ef2be57828b443ffcee31307e75f8c51d3de7c87b17817a21b5914876",
+          "full_model_sha256": "37b1e770a5e33a49997bba8bb0c742aecb669efcb8841a40182bdcb343d354c8",
+          "parameters": 118,
+          "propagators": 19,
+          "first_build_names_and_bases": 130,
+          "second_build_names_and_bases": 130,
+          "grouped_owner_fingerprints": 130,
+          "pair_stage_graph_fingerprints": 390,
+          "final_graph_fingerprints": 130,
+          "kernel_fingerprint_probe_executions": 1
+        },
+        {
+          "side": "current",
+          "case": "comparison-qed",
+          "fingerprint": "9d826a6ef2be57828b443ffcee31307e75f8c51d3de7c87b17817a21b5914876",
+          "full_model_sha256": "37b1e770a5e33a49997bba8bb0c742aecb669efcb8841a40182bdcb343d354c8",
+          "parameters": 118,
+          "propagators": 19,
+          "first_build_names_and_bases": 66,
+          "second_build_names_and_bases": 66,
+          "grouped_owner_fingerprints": 60,
+          "pair_stage_graph_fingerprints": 198,
+          "final_graph_fingerprints": 60,
+          "kernel_fingerprint_probe_executions": 1
+        },
+        {
+          "side": "current",
+          "case": "representative-qed",
+          "fingerprint": "9d826a6ef2be57828b443ffcee31307e75f8c51d3de7c87b17817a21b5914876",
+          "full_model_sha256": "37b1e770a5e33a49997bba8bb0c742aecb669efcb8841a40182bdcb343d354c8",
+          "parameters": 118,
+          "propagators": 19,
+          "first_build_names_and_bases": 66,
+          "second_build_names_and_bases": 66,
+          "grouped_owner_fingerprints": 66,
+          "pair_stage_graph_fingerprints": 198,
+          "final_graph_fingerprints": 66,
+          "kernel_fingerprint_probe_executions": 1
+        },
+        {
+          "side": "current",
+          "case": "representative-lr",
+          "fingerprint": "9d826a6ef2be57828b443ffcee31307e75f8c51d3de7c87b17817a21b5914876",
+          "full_model_sha256": "37b1e770a5e33a49997bba8bb0c742aecb669efcb8841a40182bdcb343d354c8",
+          "parameters": 118,
+          "propagators": 19,
+          "first_build_names_and_bases": 130,
+          "second_build_names_and_bases": 130,
+          "grouped_owner_fingerprints": 130,
+          "pair_stage_graph_fingerprints": 390,
+          "final_graph_fingerprints": 130,
+          "kernel_fingerprint_probe_executions": 1
+        }
+      ],
+      "all_six_effective_model_definitions_literal_equal": true,
+      "authoritative_contract": "Model::fingerprint hashes the canonical ModelDefinition with BLAKE3; DiagramSerde.model stores its 32 bytes. Each producer probe reparses the full effective JSON with its own locked kernel and recomputes that fingerprint."
+    },
+    "full_final_graph_key_and_group_join": [
+      {
+        "case": "comparison-qed",
+        "full_graph_key_matches": 60,
+        "unmatched_keys": 0,
+        "exact_groups": 60,
+        "source_members": 66,
+        "historical_final_representative_field_bindings": 660,
+        "current_final_representative_field_bindings": 660,
+        "old_current_final_factorized_expression_bindings": 900,
+        "old_current_final_physical_field_bindings": 720,
+        "complete_final_master_and_group_weight_binding": true
+      },
+      {
+        "case": "representative-qed",
+        "full_graph_key_matches": 66,
+        "unmatched_keys": 0,
+        "exact_groups": 66,
+        "source_members": 66,
+        "historical_final_representative_field_bindings": 726,
+        "current_final_representative_field_bindings": 726,
+        "old_current_final_factorized_expression_bindings": 990,
+        "old_current_final_physical_field_bindings": 792,
+        "complete_final_master_and_group_weight_binding": true
+      },
+      {
+        "case": "representative-lr",
+        "full_graph_key_matches": 130,
+        "unmatched_keys": 0,
+        "exact_groups": 130,
+        "source_members": 130,
+        "historical_final_representative_field_bindings": 1430,
+        "current_final_representative_field_bindings": 1430,
+        "old_current_final_factorized_expression_bindings": 2340,
+        "old_current_final_physical_field_bindings": 1560,
+        "complete_final_master_and_group_weight_binding": true
+      }
+    ],
+    "axis_and_frame": [
+      {
+        "case": "comparison-qed",
+        "counts": {
+          "source_pairs": 66,
+          "requested_prefactor_exact": 66,
+          "comparison_prefactor_exact": 66,
+          "representative_prefactor_exact": 66,
+          "source_routing_equal": 66,
+          "owners": 2772,
+          "axes": 5760,
+          "permuted_owners": 579,
+          "current_explicit_interfaces": 579,
+          "comparison_routing_equal": 66,
+          "representative_routing_equal": 66
+        },
+        "first": {}
+      },
+      {
+        "case": "representative-qed",
+        "counts": {
+          "source_pairs": 66,
+          "requested_prefactor_exact": 66,
+          "comparison_prefactor_exact": 66,
+          "representative_prefactor_exact": 66,
+          "source_routing_equal": 66,
+          "owners": 2772,
+          "axes": 5760,
+          "permuted_owners": 597,
+          "current_explicit_interfaces": 597,
+          "comparison_routing_equal": 66,
+          "representative_routing_equal": 66
+        },
+        "first": {}
+      },
+      {
+        "case": "representative-lr",
+        "counts": {
+          "source_pairs": 130,
+          "requested_prefactor_exact": 130,
+          "comparison_prefactor_exact": 130,
+          "representative_prefactor_exact": 130,
+          "source_routing_equal": 130,
+          "owners": 6630,
+          "axes": 16056,
+          "permuted_owners": 1676,
+          "current_explicit_interfaces": 1676,
+          "comparison_routing_equal": 130,
+          "representative_routing_equal": 130
+        },
+        "first": {}
+      }
+    ],
+    "factorized_stage_expressions": [
+      {
+        "case": "comparison-qed",
+        "counts": {
+          "source_diagrams": 66,
+          "expression_factors": 2970,
+          "comparison_diagrams": 66,
+          "representative_diagrams": 66
+        },
+        "first": {}
+      },
+      {
+        "case": "representative-qed",
+        "counts": {
+          "source_diagrams": 66,
+          "expression_factors": 2970,
+          "comparison_diagrams": 66,
+          "representative_diagrams": 66
+        },
+        "first": {}
+      },
+      {
+        "case": "representative-lr",
+        "counts": {
+          "source_diagrams": 130,
+          "expression_factors": 7020,
+          "comparison_diagrams": 130,
+          "representative_diagrams": 130
+        },
+        "first": {}
+      }
+    ],
+    "generated_signed_maps": [
+      {
+        "case": "comparison-qed",
+        "sources": 66,
+        "counts": {
+          "comparison_vertex_bijections": 66,
+          "comparison_edge_bijections": 66,
+          "comparison_vertices": 264,
+          "comparison_edges": 528,
+          "comparison_flips": 175,
+          "comparison_particle_changes": 175,
+          "representative_vertex_bijections": 66,
+          "representative_edge_bijections": 66,
+          "representative_vertices": 264,
+          "representative_edges": 528,
+          "representative_flips": 0
+        },
+        "first": {}
+      },
+      {
+        "case": "representative-qed",
+        "sources": 66,
+        "counts": {
+          "comparison_vertex_bijections": 66,
+          "comparison_edge_bijections": 66,
+          "comparison_vertices": 264,
+          "comparison_edges": 528,
+          "comparison_flips": 169,
+          "comparison_particle_changes": 154,
+          "representative_vertex_bijections": 66,
+          "representative_edge_bijections": 66,
+          "representative_vertices": 264,
+          "representative_edges": 528,
+          "representative_flips": 15
+        },
+        "first": {}
+      },
+      {
+        "case": "representative-lr",
+        "sources": 130,
+        "counts": {
+          "comparison_vertex_bijections": 130,
+          "comparison_edge_bijections": 130,
+          "comparison_lr_swapped_sources": 40,
+          "comparison_vertices": 780,
+          "comparison_edges": 1430,
+          "comparison_flips": 456,
+          "comparison_particle_changes": 395,
+          "representative_vertex_bijections": 130,
+          "representative_edge_bijections": 130,
+          "representative_lr_swapped_sources": 40,
+          "representative_vertices": 780,
+          "representative_edges": 1430,
+          "representative_flips": 309
+        },
+        "first": {}
+      }
+    ],
+    "signed_affine_routing_and_named_lmb": [
+      {
+        "case": "comparison-qed",
+        "counts": {
+          "historical_comparison_transported_edges": 528,
+          "historical_comparison_basis_coordinates": 330,
+          "historical_comparison_complete_signed_affine_checks": 66,
+          "historical_representative_transported_edges": 528,
+          "historical_representative_basis_coordinates": 330,
+          "historical_representative_complete_signed_affine_checks": 66,
+          "current_comparison_transported_edges": 528,
+          "current_comparison_basis_coordinates": 330,
+          "current_comparison_complete_signed_affine_checks": 66,
+          "current_representative_transported_edges": 528,
+          "current_representative_basis_coordinates": 330,
+          "current_representative_complete_signed_affine_checks": 66,
+          "source_old_current_exact_basis_pairs": 66,
+          "comparison_old_current_exact_basis_pairs": 66,
+          "representative_old_current_exact_basis_pairs": 66
+        }
+      },
+      {
+        "case": "representative-qed",
+        "counts": {
+          "historical_comparison_transported_edges": 528,
+          "historical_comparison_basis_coordinates": 330,
+          "historical_comparison_complete_signed_affine_checks": 66,
+          "historical_representative_transported_edges": 528,
+          "historical_representative_basis_coordinates": 330,
+          "historical_representative_complete_signed_affine_checks": 66,
+          "current_comparison_transported_edges": 528,
+          "current_comparison_basis_coordinates": 330,
+          "current_comparison_complete_signed_affine_checks": 66,
+          "current_representative_transported_edges": 528,
+          "current_representative_basis_coordinates": 330,
+          "current_representative_complete_signed_affine_checks": 66,
+          "source_old_current_exact_basis_pairs": 66,
+          "comparison_old_current_exact_basis_pairs": 66,
+          "representative_old_current_exact_basis_pairs": 66
+        }
+      },
+      {
+        "case": "representative-lr",
+        "counts": {
+          "historical_comparison_transported_edges": 1170,
+          "historical_comparison_basis_coordinates": 520,
+          "historical_comparison_complete_signed_affine_checks": 130,
+          "historical_representative_transported_edges": 1170,
+          "historical_representative_basis_coordinates": 520,
+          "historical_representative_complete_signed_affine_checks": 130,
+          "current_comparison_transported_edges": 1170,
+          "current_comparison_basis_coordinates": 520,
+          "current_comparison_complete_signed_affine_checks": 130,
+          "current_representative_transported_edges": 1170,
+          "current_representative_basis_coordinates": 520,
+          "current_representative_complete_signed_affine_checks": 130,
+          "source_old_current_exact_basis_pairs": 130,
+          "comparison_old_current_exact_basis_pairs": 130,
+          "representative_old_current_exact_basis_pairs": 130
+        }
+      }
+    ],
+    "two_term_prefactor_transport": [
+      {
+        "side": "historical",
+        "case": "comparison-qed",
+        "counts": {
+          "complete_effective_tensor_bindings": 198,
+          "provisional_to_final_edges": 1584,
+          "provisional_signed_transport": 132
+        }
+      },
+      {
+        "side": "historical",
+        "case": "representative-qed",
+        "counts": {
+          "complete_effective_tensor_bindings": 198,
+          "provisional_to_final_edges": 1584,
+          "provisional_signed_transport": 132
+        }
+      },
+      {
+        "side": "historical",
+        "case": "representative-lr",
+        "counts": {
+          "complete_effective_tensor_bindings": 390,
+          "provisional_to_final_edges": 4290,
+          "provisional_signed_transport": 260
+        }
+      },
+      {
+        "side": "current",
+        "case": "comparison-qed",
+        "counts": {
+          "complete_effective_tensor_bindings": 198,
+          "provisional_to_final_edges": 1584,
+          "provisional_signed_transport": 132
+        }
+      },
+      {
+        "side": "current",
+        "case": "representative-qed",
+        "counts": {
+          "complete_effective_tensor_bindings": 198,
+          "provisional_to_final_edges": 1584,
+          "provisional_signed_transport": 132
+        }
+      },
+      {
+        "side": "current",
+        "case": "representative-lr",
+        "counts": {
+          "complete_effective_tensor_bindings": 390,
+          "provisional_to_final_edges": 4290,
+          "provisional_signed_transport": 260
+        }
+      }
+    ],
+    "source_members_and_ratios": [
+      {
+        "side": "historical",
+        "case": "comparison-qed",
+        "groups": 60,
+        "sources": 66,
+        "counts": {
+          "final_representative_fields": 660,
+          "members": 66,
+          "additional_members": 6
+        },
+        "first": {}
+      },
+      {
+        "side": "historical",
+        "case": "representative-qed",
+        "groups": 66,
+        "sources": 66,
+        "counts": {
+          "final_representative_fields": 726,
+          "members": 66
+        },
+        "first": {}
+      },
+      {
+        "side": "historical",
+        "case": "representative-lr",
+        "groups": 130,
+        "sources": 130,
+        "counts": {
+          "final_representative_fields": 1430,
+          "members": 130
+        },
+        "first": {}
+      },
+      {
+        "side": "current",
+        "case": "comparison-qed",
+        "groups": 60,
+        "sources": 66,
+        "counts": {
+          "final_representative_fields": 660,
+          "members": 66,
+          "additional_members": 6
+        },
+        "first": {}
+      },
+      {
+        "side": "current",
+        "case": "representative-qed",
+        "groups": 66,
+        "sources": 66,
+        "counts": {
+          "final_representative_fields": 726,
+          "members": 66
+        },
+        "first": {}
+      },
+      {
+        "side": "current",
+        "case": "representative-lr",
+        "groups": 130,
+        "sources": 130,
+        "counts": {
+          "final_representative_fields": 1430,
+          "members": 130
+        },
+        "first": {}
+      }
+    ],
+    "merged_member_denominators": [
+      {
+        "side": "historical",
+        "counts": {
+          "edges": 48,
+          "particle_switches": 14,
+          "merged_pairs": 6
+        },
+        "witnesses": [
+          {
+            "members": [
+              "D19",
+              "D20"
+            ],
+            "switches": [
+              {
+                "edge": 4,
+                "old": "d",
+                "new": "s"
+              },
+              {
+                "edge": 6,
+                "old": "d~",
+                "new": "s~"
+              },
+              {
+                "edge": 7,
+                "old": "d",
+                "new": "s"
+              }
+            ]
+          },
+          {
+            "members": [
+              "D13",
+              "D14"
+            ],
+            "switches": [
+              {
+                "edge": 4,
+                "old": "d~",
+                "new": "s~"
+              },
+              {
+                "edge": 6,
+                "old": "d",
+                "new": "s"
+              },
+              {
+                "edge": 7,
+                "old": "d~",
+                "new": "s~"
+              }
+            ]
+          },
+          {
+            "members": [
+              "D31",
+              "D32"
+            ],
+            "switches": [
+              {
+                "edge": 5,
+                "old": "d~",
+                "new": "s~"
+              },
+              {
+                "edge": 6,
+                "old": "d",
+                "new": "s"
+              }
+            ]
+          },
+          {
+            "members": [
+              "D40",
+              "D41"
+            ],
+            "switches": [
+              {
+                "edge": 4,
+                "old": "d~",
+                "new": "s~"
+              },
+              {
+                "edge": 5,
+                "old": "d",
+                "new": "s"
+              }
+            ]
+          },
+          {
+            "members": [
+              "D49",
+              "D50"
+            ],
+            "switches": [
+              {
+                "edge": 5,
+                "old": "d~",
+                "new": "s~"
+              },
+              {
+                "edge": 6,
+                "old": "d",
+                "new": "s"
+              }
+            ]
+          },
+          {
+            "members": [
+              "D58",
+              "D59"
+            ],
+            "switches": [
+              {
+                "edge": 4,
+                "old": "d~",
+                "new": "s~"
+              },
+              {
+                "edge": 5,
+                "old": "d",
+                "new": "s"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "side": "current",
+        "counts": {
+          "edges": 48,
+          "particle_switches": 14,
+          "merged_pairs": 6
+        },
+        "witnesses": [
+          {
+            "members": [
+              "D19",
+              "D20"
+            ],
+            "switches": [
+              {
+                "edge": 4,
+                "old": "d",
+                "new": "s"
+              },
+              {
+                "edge": 6,
+                "old": "d~",
+                "new": "s~"
+              },
+              {
+                "edge": 7,
+                "old": "d",
+                "new": "s"
+              }
+            ]
+          },
+          {
+            "members": [
+              "D13",
+              "D14"
+            ],
+            "switches": [
+              {
+                "edge": 4,
+                "old": "d~",
+                "new": "s~"
+              },
+              {
+                "edge": 6,
+                "old": "d",
+                "new": "s"
+              },
+              {
+                "edge": 7,
+                "old": "d~",
+                "new": "s~"
+              }
+            ]
+          },
+          {
+            "members": [
+              "D31",
+              "D32"
+            ],
+            "switches": [
+              {
+                "edge": 5,
+                "old": "d~",
+                "new": "s~"
+              },
+              {
+                "edge": 6,
+                "old": "d",
+                "new": "s"
+              }
+            ]
+          },
+          {
+            "members": [
+              "D40",
+              "D41"
+            ],
+            "switches": [
+              {
+                "edge": 4,
+                "old": "d~",
+                "new": "s~"
+              },
+              {
+                "edge": 5,
+                "old": "d",
+                "new": "s"
+              }
+            ]
+          },
+          {
+            "members": [
+              "D49",
+              "D50"
+            ],
+            "switches": [
+              {
+                "edge": 5,
+                "old": "d~",
+                "new": "s~"
+              },
+              {
+                "edge": 6,
+                "old": "d",
+                "new": "s"
+              }
+            ]
+          },
+          {
+            "members": [
+              "D58",
+              "D59"
+            ],
+            "switches": [
+              {
+                "edge": 4,
+                "old": "d~",
+                "new": "s~"
+              },
+              {
+                "edge": 5,
+                "old": "d",
+                "new": "s"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "cut_sign_and_source_provenance": [
+      {
+        "case": "comparison-qed",
+        "original_interaction_assignments": 66,
+        "post_physical_selection_built_sources": 66,
+        "group_representatives": 60,
+        "group_members": 66,
+        "removed_after_built_source_boundary": 0,
+        "counts": {
+          "source_cuts": 0,
+          "source_sources": 66,
+          "comparison_cuts": 0,
+          "comparison_sources": 66,
+          "representative_cuts": 0,
+          "representative_sources": 66,
+          "historical_comparison_transported_cuts": 0,
+          "historical_comparison_mirrored_sources": 0,
+          "historical_representative_transported_cuts": 0,
+          "historical_representative_mirrored_sources": 0,
+          "current_comparison_transported_cuts": 0,
+          "current_comparison_mirrored_sources": 0,
+          "current_representative_transported_cuts": 0,
+          "current_representative_mirrored_sources": 0
+        }
+      },
+      {
+        "case": "representative-qed",
+        "original_interaction_assignments": 66,
+        "post_physical_selection_built_sources": 66,
+        "group_representatives": 66,
+        "group_members": 66,
+        "removed_after_built_source_boundary": 0,
+        "counts": {
+          "source_cuts": 0,
+          "source_sources": 66,
+          "comparison_cuts": 0,
+          "comparison_sources": 66,
+          "representative_cuts": 0,
+          "representative_sources": 66,
+          "historical_comparison_transported_cuts": 0,
+          "historical_comparison_mirrored_sources": 0,
+          "historical_representative_transported_cuts": 0,
+          "historical_representative_mirrored_sources": 0,
+          "current_comparison_transported_cuts": 0,
+          "current_comparison_mirrored_sources": 0,
+          "current_representative_transported_cuts": 0,
+          "current_representative_mirrored_sources": 0
+        }
+      },
+      {
+        "case": "representative-lr",
+        "original_interaction_assignments": 3456,
+        "post_physical_selection_built_sources": 130,
+        "group_representatives": 130,
+        "group_members": 130,
+        "removed_after_built_source_boundary": 0,
+        "counts": {
+          "source_cuts": 144,
+          "source_sources": 130,
+          "comparison_cuts": 144,
+          "comparison_sources": 130,
+          "representative_cuts": 144,
+          "representative_sources": 130,
+          "historical_comparison_transported_cuts": 144,
+          "historical_comparison_mirrored_sources": 40,
+          "historical_representative_transported_cuts": 144,
+          "historical_representative_mirrored_sources": 40,
+          "current_comparison_transported_cuts": 144,
+          "current_comparison_mirrored_sources": 40,
+          "current_representative_transported_cuts": 144,
+          "current_representative_mirrored_sources": 40
+        }
+      }
+    ],
+    "corruption_controls": {
+      "positive_replays": 6,
+      "semantic_mutation_rejections": 19,
+      "sha_integrity_guards_used": false,
+      "controls": [
+        {
+          "case": "model_mass",
+          "semantic_script": "model_binding",
+          "changed_reads": [
+            "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/frame-certificate/model-hooks-historical/comparison-qed/effective-model.json",
+            "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/frame-certificate/model-hooks-historical/representative-qed/effective-model.json",
+            "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/frame-certificate/model-hooks-historical/representative-lr/effective-model.json",
+            "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/frame-certificate/model-hooks-current/comparison-qed/effective-model.json",
+            "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/frame-certificate/model-hooks-current/representative-qed/effective-model.json",
+            "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/frame-certificate/model-hooks-current/representative-lr/effective-model.json",
+            "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/frame-certificate/frame-model.json"
+          ],
+          "passed": false,
+          "error_type": "AssertionError",
+          "error": "d",
+          "site": "validate_light_model"
+        },
+        {
+          "case": "model_denominator",
+          "semantic_script": "model_binding",
+          "changed_reads": [
+            "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/frame-certificate/model-hooks-historical/comparison-qed/effective-model.json",
+            "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/frame-certificate/model-hooks-historical/representative-qed/effective-model.json",
+            "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/frame-certificate/model-hooks-historical/representative-lr/effective-model.json",
+            "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/frame-certificate/model-hooks-current/comparison-qed/effective-model.json",
+            "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/frame-certificate/model-hooks-current/representative-qed/effective-model.json",
+            "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/frame-certificate/model-hooks-current/representative-lr/effective-model.json",
+            "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/frame-certificate/frame-model.json"
+          ],
+          "passed": false,
+          "error_type": "AssertionError",
+          "error": "",
+          "site": "validate_light_model"
+        },
+        {
+          "case": "model_parameter",
+          "semantic_script": "model_binding",
+          "changed_reads": [
+            "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/frame-certificate/model-hooks-historical/comparison-qed/effective-model.json",
+            "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/frame-certificate/model-hooks-historical/representative-qed/effective-model.json",
+            "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/frame-certificate/model-hooks-historical/representative-lr/effective-model.json",
+            "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/frame-certificate/model-hooks-current/comparison-qed/effective-model.json",
+            "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/frame-certificate/model-hooks-current/representative-qed/effective-model.json",
+            "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/frame-certificate/model-hooks-current/representative-lr/effective-model.json",
+            "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/frame-certificate/frame-model.json"
+          ],
+          "passed": false,
+          "error_type": "AssertionError",
+          "error": "",
+          "site": "<module>"
+        },
+        {
+          "case": "prefactor_trailing_coefficient",
+          "semantic_script": "prefactor_proof",
+          "changed_reads": [
+            "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/frame-certificate/pair-captures-historical-graphproof/comparison-qed/frame-pairs/source-65/frame.txt",
+            "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/frame-certificate/pair-captures-historical-graphproof/comparison-qed/frame-pairs/source-65/comparison.json",
+            "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/frame-certificate/pair-captures-current-graphproof/comparison-qed/frame-pairs/source-65/frame.txt",
+            "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/frame-certificate/pair-captures-current-graphproof/comparison-qed/frame-pairs/source-65/comparison.json"
+          ],
+          "passed": false,
+          "error_type": "AssertionError",
+          "error": "gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(1,spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::vertex(1,9)))*gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(6,spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::vertex(1,9)))*2",
+          "site": "terms"
+        },
+        {
+          "case": "prefactor_trailing_symbol",
+          "semantic_script": "prefactor_proof",
+          "changed_reads": [
+            "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/frame-certificate/pair-captures-historical-graphproof/comparison-qed/frame-pairs/source-65/frame.txt",
+            "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/frame-certificate/pair-captures-historical-graphproof/comparison-qed/frame-pairs/source-65/comparison.json",
+            "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/frame-certificate/pair-captures-current-graphproof/comparison-qed/frame-pairs/source-65/frame.txt",
+            "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/frame-certificate/pair-captures-current-graphproof/comparison-qed/frame-pairs/source-65/comparison.json"
+          ],
+          "passed": false,
+          "error_type": "AssertionError",
+          "error": "gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(1,spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::vertex(1,9)))*gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(6,spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::vertex(1,9)))*review::z",
+          "site": "terms"
+        },
+        {
+          "case": "prefactor_dimension",
+          "semantic_script": "prefactor_proof",
+          "changed_reads": [
+            "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/frame-certificate/pair-captures-historical-graphproof/comparison-qed/frame-pairs/source-65/frame.txt",
+            "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/frame-certificate/pair-captures-historical-graphproof/comparison-qed/frame-pairs/source-65/comparison.json",
+            "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/frame-certificate/pair-captures-current-graphproof/comparison-qed/frame-pairs/source-65/frame.txt",
+            "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/frame-certificate/pair-captures-current-graphproof/comparison-qed/frame-pairs/source-65/comparison.json"
+          ],
+          "passed": false,
+          "error_type": "AssertionError",
+          "error": "-1*gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(0,spenso::{spenso::representation,spenso::self_dual}::mink(5,gammalooprs::{spenso::index}::vertex(0,9)))*gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(4,spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::vertex(0,9)))",
+          "site": "terms"
+        },
+        {
+          "case": "prefactor_representation",
+          "semantic_script": "prefactor_proof",
+          "changed_reads": [
+            "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/frame-certificate/pair-captures-historical-graphproof/comparison-qed/frame-pairs/source-65/frame.txt",
+            "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/frame-certificate/pair-captures-historical-graphproof/comparison-qed/frame-pairs/source-65/comparison.json",
+            "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/frame-certificate/pair-captures-current-graphproof/comparison-qed/frame-pairs/source-65/frame.txt",
+            "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/frame-certificate/pair-captures-current-graphproof/comparison-qed/frame-pairs/source-65/comparison.json"
+          ],
+          "passed": false,
+          "error_type": "AssertionError",
+          "error": "-1*gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(0,spenso::{spenso::representation,spenso::self_dual}::euc(4,gammalooprs::{spenso::index}::vertex(0,9)))*gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(4,spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::vertex(0,9)))",
+          "site": "terms"
+        },
+        {
+          "case": "prefactor_dummy",
+          "semantic_script": "prefactor_proof",
+          "changed_reads": [
+            "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/frame-certificate/pair-captures-historical-graphproof/comparison-qed/frame-pairs/source-65/frame.txt",
+            "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/frame-certificate/pair-captures-historical-graphproof/comparison-qed/frame-pairs/source-65/comparison.json",
+            "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/frame-certificate/pair-captures-current-graphproof/comparison-qed/frame-pairs/source-65/frame.txt",
+            "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/frame-certificate/pair-captures-current-graphproof/comparison-qed/frame-pairs/source-65/comparison.json"
+          ],
+          "passed": false,
+          "error_type": "AssertionError",
+          "error": "-1*gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(0,spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::vertex(0,8)))*gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(4,spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::vertex(0,9)))",
+          "site": "terms"
+        },
+        {
+          "case": "prefactor_owner",
+          "semantic_script": "prefactor_proof",
+          "changed_reads": [
+            "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/frame-certificate/pair-captures-historical-graphproof/comparison-qed/frame-pairs/source-65/frame.txt",
+            "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/frame-certificate/pair-captures-historical-graphproof/comparison-qed/frame-pairs/source-65/comparison.json",
+            "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/frame-certificate/pair-captures-current-graphproof/comparison-qed/frame-pairs/source-65/frame.txt",
+            "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/frame-certificate/pair-captures-current-graphproof/comparison-qed/frame-pairs/source-65/comparison.json"
+          ],
+          "passed": false,
+          "error_type": "AssertionError",
+          "error": "",
+          "site": "terms"
+        },
+        {
+          "case": "prefactor_effective_only",
+          "semantic_script": "prefactor_proof",
+          "changed_reads": [
+            "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/frame-certificate/pair-captures-historical-graphproof/comparison-qed/frame-pairs/source-65/comparison.json",
+            "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/frame-certificate/pair-captures-current-graphproof/comparison-qed/frame-pairs/source-65/comparison.json"
+          ],
+          "passed": false,
+          "error_type": "AssertionError",
+          "error": "('historical', 'comparison-qed', 'source-65', 'comparison')",
+          "site": "<module>"
+        },
+        {
+          "case": "routing_both_producers",
+          "semantic_script": "routing_proof",
+          "changed_reads": [
+            "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/frame-certificate/pair-captures-historical-graphproof/comparison-qed/frame-pairs/source-65/comparison.json",
+            "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/frame-certificate/pair-captures-current-graphproof/comparison-qed/frame-pairs/source-65/comparison.json"
+          ],
+          "passed": false,
+          "error_type": "AssertionError",
+          "error": "(5, 5, [Fraction(2, 1), Fraction(0, 1), Fraction(0, 1), Fraction(0, 1), Fraction(0, 1)], [Fraction(1, 1), Fraction(0, 1), Fraction(0, 1), Fraction(0, 1), Fraction(0, 1)], {0: (0, 1), 1: (1, 1), 2: (2, 1), 3: (3, 1), 4: (4, 1)})",
+          "site": "replay"
+        },
+        {
+          "case": "final_edge",
+          "semantic_script": "full_key_join",
+          "changed_reads": [
+            "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/frame-certificate/current-frozen/comparison-qed.json"
+          ],
+          "passed": false,
+          "error_type": "AssertionError",
+          "error": "('current', 'comparison-qed', 0, 'edges')",
+          "site": "<module>"
+        },
+        {
+          "case": "final_aggregate",
+          "semantic_script": "full_key_join",
+          "changed_reads": [
+            "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/frame-certificate/current-frozen/comparison-qed.json"
+          ],
+          "passed": false,
+          "error_type": "AssertionError",
+          "error": "('current', 'comparison-qed', 0, 'numerator')",
+          "site": "<module>"
+        },
+        {
+          "case": "final_interface",
+          "semantic_script": "full_key_join",
+          "changed_reads": [
+            "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/frame-certificate/current-frozen/comparison-qed.json"
+          ],
+          "passed": false,
+          "error_type": "AssertionError",
+          "error": "('current', 'comparison-qed', 0, 'edges')",
+          "site": "<module>"
+        },
+        {
+          "case": "master_swap_both",
+          "semantic_script": "full_key_join",
+          "changed_reads": [
+            "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/frame-certificate/historical-frozen/comparison-qed.json",
+            "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/frame-certificate/current-frozen/comparison-qed.json"
+          ],
+          "passed": false,
+          "error_type": "AssertionError",
+          "error": "",
+          "site": "<module>"
+        },
+        {
+          "case": "member_ratio",
+          "semantic_script": "member_proof",
+          "changed_reads": [
+            "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/frame-certificate/historical-frozen/comparison-qed.json",
+            "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/frame-certificate/current-frozen/comparison-qed.json"
+          ],
+          "passed": false,
+          "error_type": "AssertionError",
+          "error": "",
+          "site": "<module>"
+        },
+        {
+          "case": "signed_edge_map",
+          "semantic_script": "generated_map_proof",
+          "changed_reads": [
+            "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/frame-certificate/pair-captures-historical-graphproof/comparison-qed/frame-pairs/source-65/frame.txt",
+            "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/frame-certificate/pair-captures-current-graphproof/comparison-qed/frame-pairs/source-65/frame.txt"
+          ],
+          "passed": false,
+          "error_type": "AssertionError",
+          "error": "",
+          "site": "<module>"
+        },
+        {
+          "case": "combined_prefactor_routing",
+          "semantic_script": "prefactor_proof",
+          "changed_reads": [
+            "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/frame-certificate/pair-captures-historical-graphproof/comparison-qed/frame-pairs/source-65/comparison.json",
+            "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/frame-certificate/pair-captures-current-graphproof/comparison-qed/frame-pairs/source-65/comparison.json"
+          ],
+          "passed": false,
+          "error_type": "AssertionError",
+          "error": "-1*gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::vertex(1,9)))*gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(5,spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::vertex(1,9)))*2",
+          "site": "terms"
+        },
+        {
+          "case": "combined_prefactor_routing",
+          "semantic_script": "routing_proof",
+          "changed_reads": [
+            "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/frame-certificate/pair-captures-historical-graphproof/comparison-qed/frame-pairs/source-65/comparison.json",
+            "/shared/lcnbr/dev/gammaloop/generation-frame-certificate/target/frame-certificate/pair-captures-current-graphproof/comparison-qed/frame-pairs/source-65/comparison.json"
+          ],
+          "passed": false,
+          "error_type": "AssertionError",
+          "error": "(5, 5, [Fraction(2, 1), Fraction(0, 1), Fraction(0, 1), Fraction(0, 1), Fraction(0, 1)], [Fraction(1, 1), Fraction(0, 1), Fraction(0, 1), Fraction(0, 1), Fraction(0, 1)], {0: (0, 1), 1: (1, 1), 2: (2, 1), 3: (3, 1), 4: (4, 1)})",
+          "site": "replay"
+        }
+      ]
+    }
+  },
+  "derived_totals": {
+    "full_final_graph_key_joins": 256,
+    "final_groups": 256,
+    "original_source_members_per_side": 262,
+    "extra_merged_members_per_side": 6,
+    "factorized_expression_fields": 12960,
+    "live_local_tensor_owners": 12174,
+    "live_typed_axes": 27576,
+    "uniquely_permuted_owners": 2852,
+    "current_explicit_interfaces_matching_live_logical_order": 2852,
+    "provisional_signed_two_term_prefactor_transports_both_producers": 1048,
+    "complete_effective_prefactor_tensor_bindings_both_producers": 1572,
+    "within_route_exact_affine_edge_signature_checks_both_producers": 8904,
+    "final_graph_master_representative_payload_bindings_both_producers": 512,
+    "full_effective_model_fingerprint_kernel_probe_executions": 6,
+    "left_right_external_swaps_per_side": 40,
+    "cross_section_cut_records_per_stage": 144,
+    "cross_section_cut_transports_per_producer": 288,
+    "semantic_adversarial_rejections_without_sha_guards": 19,
+    "zero_local_or_aggregate_factors_in_captured_pairs": 0,
+    "removed_after_built_source_boundary": 0
+  },
+  "model_and_merged_denominators": {
+    "effective_model_definition_per_producer": [
+      "target/frame-certificate/model-hooks-historical/comparison-qed/effective-model.json",
+      "target/frame-certificate/model-hooks-current/comparison-qed/effective-model.json"
+    ],
+    "effective_model_sha256": "37b1e770a5e33a49997bba8bb0c742aecb669efcb8841a40182bdcb343d354c8",
+    "graph_model_field_contract": "Only a 32-byte fingerprint is serialized per graph; six independently captured full effective models and producer-kernel probes bind those owner bytes to the literal model definition.",
+    "d_particle_ids": [
+      7,
+      8
+    ],
+    "s_particle_ids": [
+      9,
+      10
+    ],
+    "d_and_s_and_antiparticles_mass": "ZERO",
+    "d_and_s_propagator_denominator": "(P(idx(1,1)))^2",
+    "d_and_s_propagator_numerators": [
+      "(𝑖)*PSlash(idx(1,2),idx(1,1))",
+      "(-𝑖)*PSlash(idx(1,1),idx(1,2))"
+    ],
+    "six_merged_pairs_denominator_and_signed_basis_equality": true
+  },
+  "typed_constructor_crosscheck": {
+    "current_kernel_D65_prefactor": "passed after audited Q/vertex constructor binding; direct cross-tag parse rejected by Symbolica as expected",
+    "historical_kernel_D65_prefactor": "passed after inverse audited constructor binding",
+    "current_log": "target/frame-certificate/d65-typed-bridge.log",
+    "historical_log": "/shared/lcnbr/dev/gammaloop/generation-frame-historical-diagnostic/target/frame-certificate-capture/d65-typed-old-kernel.log",
+    "coverage_limit": "Only the D65 typed admission helper executed in both kernels. The all-graph factor and transport proofs are exact structural replay of qualified producer captures, not script executions inside both kernels."
+  },
+  "final_validation": {
+    "current_final_test_binary_sha256": "9a2297a7794aedb674a6480716035f443ddde72c4fac29be9ed883193c269d27",
+    "historical_final_test_binary_sha256": "1eaba7417f8a53a12fd1d2db12f9e8416dbb62c591de12d3a66bf40220e99fc7",
+    "current_original_rows": "0 passed, 3 expected numerator-digest failures, 1 diagnostic ignored",
+    "historical_original_rows": "3 passed, 0 failed, 1 diagnostic ignored",
+    "current_D65_typed": "1 passed",
+    "historical_D65_typed": "1 passed",
+    "logs": [
+      "target/frame-certificate/final-current-rows.log",
+      "target/frame-certificate/final-current-d65.log",
+      "/shared/lcnbr/dev/gammaloop/generation-frame-historical-diagnostic/target/frame-certificate-capture/final-historical-rows.log",
+      "/shared/lcnbr/dev/gammaloop/generation-frame-historical-diagnostic/target/frame-certificate-capture/final-historical-d65.log"
+    ],
+    "reused_source39_Astra_review_sha256": "dc4093c671d7fd08d3427da8d34fc8e178304e731cd5f58fd362ce81c4363672",
+    "frozen_pair_manifest": "2102/2102 SHA-256 entries verified after cleanup",
+    "frozen_pair_manifest_check_log": "target/frame-certificate/pair-manifest-check.log",
+    "new_certificate_Astra_review": "required and not yet performed",
+    "documentation_registry": "The builder accepted the investigation entry and continued to catalog export. End-to-end docs-check is unavailable here because the unrelated gammalooprs catalog exporter executable is absent; no full docs pass is claimed."
+  },
+  "factor_preservation_audit": {
+    "proof_actions": [
+      "read frozen JSON and live metadata",
+      "bind full effective models to 32-byte graph fingerprints using each producer kernel",
+      "decode historical reversible index labels with historical CookSettings::uncook",
+      "bind only audited constructor presentation names",
+      "compare exact local and aggregate factorized strings through the actual final master",
+      "check complete finite two-term Q prefactor maps and actual effective tensors",
+      "replay exact signed affine routing under captured basis coordinates",
+      "check graph maps and member ratios"
+    ],
+    "excluded_actions": [
+      "whole-graph numerator expansion",
+      "Dirac trace or algebra preparation",
+      "distribution of original mass-plus-slash factors",
+      "interface omission",
+      "arbitrary coefficient normalization",
+      "numerical-point inference"
+    ],
+    "aggregate_export_owner": "FeynmanDiagram::numerator derives a product with SymbolicTensor::multiply_many; named_product_expression uses Atom::mul_many and compact rank-one dot contraction. NumeratorInterface::export may re-admit that aggregate to decide optional interface serialization; admission-only DotNormalizer::nested_vectors, tensor-power lowering and normalize_products were inspected and do not distribute an original sum under graph multiplication or call Dirac algebra. The proof does not additionally prepare or expand the aggregate.",
+    "audited_source_owners": [
+      "crates/feynkit-graph/src/lib.rs:718",
+      "crates/feynkit-graph/src/lib.rs:727",
+      "crates/feynkit-graph/src/numerator_interface.rs:157",
+      "crates/idenso/src/tensor/inference.rs:799",
+      "crates/idenso/src/tensor/composition.rs:190",
+      "crates/idenso/src/tensor/composition/product.rs:311",
+      "crates/idenso/src/shorthands/schoonschip/normalize_dots.rs:102"
+    ],
+    "typed_zero_history": "No original local or aggregate factor in the 262 source/comparison/representative pairs is literal zero; no hidden-zero equivalence is inferred."
+  },
+  "artifact_sha256": {
+    "target/frame-certificate/frame-model.json": "37b1e770a5e33a49997bba8bb0c742aecb669efcb8841a40182bdcb343d354c8",
+    "target/frame-certificate/all-pair-axis-maps.jsonl": "c20422f2b380884dc6f214ee7d4ee23c80b2520e32af39778c395dc667a189b6",
+    "target/frame-certificate/pair-graphproof-sha256.txt": "44003869e3298fb4d1ca7005d8c23dc4b7780cf7059b07a7c7b4988e43554c21",
+    "target/frame-certificate/model-hooks-sha256.txt": "73511c4374abb346199f8347e52cbed725b7c767727a959966fc6b640016035f",
+    "target/frame-certificate/cut-sign-provenance-full.json": "12310b750c1e93f0bf73f4fb3c3066ebd84dd558f29b031516d8ed79b8e47b72",
+    "target/frame-certificate/current-staged-observation.patch": "b42fecacf85999452bf87ea809a3ca69b2bbd5952a2889327cb9ecf6003a3893",
+    "target/frame-certificate/historical-staged-observation.patch": "1e694b3c0b7d83f685ef3aff858663474c56ba81fbbdbbc785f9731e2e06a64e",
+    "target/frame-certificate/current-model-hook-source.patch": "786ace158e98fa1d2aa5498bd3514768d2419dffb6fc5bc295543764711554dc",
+    "target/frame-certificate/historical-model-hook-source.patch": "9b7ca4721e772333c805bb2bfcfe383df3f13ed3fba19fd834b6744a1b053674",
+    "target/frame-certificate/historical-frozen/comparison-qed.json": "477199a2e53e36136eefecab9613bf38ae452203579ae14f15c1e7957c8cfebc",
+    "target/frame-certificate/historical-frozen/representative-qed.json": "e18db375eb717c9a52b4eece5ecee57a0393e12bede78d28a860d2b2889f9c92",
+    "target/frame-certificate/historical-frozen/representative-lr.json": "27da99a7536b7ef97fc7c78ac40a5ddfe489ec1aedb889d2e9430d04afa63921",
+    "target/frame-certificate/current-frozen/comparison-qed.json": "4eb086c8ac5156be5be4cd94d51c0507b64984f5a81b1d6dbc389dbb5ac5f2cd",
+    "target/frame-certificate/current-frozen/representative-qed.json": "91b8969d450231181c4f12b25c0b8402db4dc216c480fb8ced278ca02b3da3d0",
+    "target/frame-certificate/current-frozen/representative-lr.json": "dc0458581a3f4f995f904931a4fc79a0777e4c0f44a455d6184480e095f7c9ae",
+    "target/frame-certificate/binaries/current-before-model-hook": "9a2297a7794aedb674a6480716035f443ddde72c4fac29be9ed883193c269d27",
+    "target/frame-certificate/binaries/current-fingerprint-probe": "9b2078d797a35b6f6d7b7c05aba340d215b6d946774a697bf2f957bbed6a3da0",
+    "target/frame-certificate/binaries/current-model-hook": "7bc224f62520683dc30ba5255451a6e58158ff88fb1616214a789c1b8ddea16c",
+    "target/frame-certificate/binaries/current-original-source39": "6f981704844025425817b1694958bf82a517fd9ed21ba181ae8b0ac3c766e9b1",
+    "target/frame-certificate/binaries/historical-before-model-hook": "1eaba7417f8a53a12fd1d2db12f9e8416dbb62c591de12d3a66bf40220e99fc7",
+    "target/frame-certificate/binaries/historical-fingerprint-probe": "25c180e59ff86791f3dc17e333c95b2ebfe0b4725c9fbe1d204ef31ef2440bb7",
+    "target/frame-certificate/binaries/historical-model-hook": "d88dfb388e44fc2c5c20e6dea56fbc2ceda0fa0e776c90e051f4ab48821c1d73",
+    "target/frame-certificate/binaries/historical-original-source19": "d0460027ee6715cdafa89e7a811267d8a0fbcaf51f610bb8edbf153c8c4f86b0",
+    "target/frame-certificate/model-hooks-current/comparison-qed/effective-bindings.json": "ac0fe25d48c42758eab2e15404c111a761b24adcf5045320cd3c81d70b79f8f7",
+    "target/frame-certificate/model-hooks-current/comparison-qed/effective-model.json": "37b1e770a5e33a49997bba8bb0c742aecb669efcb8841a40182bdcb343d354c8",
+    "target/frame-certificate/model-hooks-current/comparison-qed/oracle-failure-qed_eeaa_sign_L1_recorded_frame_row-1267214/left.json": "4eb086c8ac5156be5be4cd94d51c0507b64984f5a81b1d6dbc389dbb5ac5f2cd",
+    "target/frame-certificate/model-hooks-current/representative-lr/effective-bindings.json": "3dadeba7cf04b263ba6281187238b292b30c7b1911e341290244bcf7dc8d86db",
+    "target/frame-certificate/model-hooks-current/representative-lr/effective-model.json": "37b1e770a5e33a49997bba8bb0c742aecb669efcb8841a40182bdcb343d354c8",
+    "target/frame-certificate/model-hooks-current/representative-lr/oracle-failure-xs_qed_aaee_lr_L2_recorded_frame_row-1281590/left.json": "dc0458581a3f4f995f904931a4fc79a0777e4c0f44a455d6184480e095f7c9ae",
+    "target/frame-certificate/model-hooks-current/representative-qed/effective-bindings.json": "568b2d74e3677652663b6cb0f7cc78ed318c1ab4916c7e151b527728df85d458",
+    "target/frame-certificate/model-hooks-current/representative-qed/effective-model.json": "37b1e770a5e33a49997bba8bb0c742aecb669efcb8841a40182bdcb343d354c8",
+    "target/frame-certificate/model-hooks-current/representative-qed/oracle-failure-qed_eeaa_sign_L1_recorded_frame_row-1273917/left.json": "91b8969d450231181c4f12b25c0b8402db4dc216c480fb8ced278ca02b3da3d0",
+    "target/frame-certificate/model-hooks-historical/comparison-qed/effective-bindings.json": "4fc30307ec32233a72e479bea1927549765420f7a688048684ce35d540bb944d",
+    "target/frame-certificate/model-hooks-historical/comparison-qed/effective-model.json": "37b1e770a5e33a49997bba8bb0c742aecb669efcb8841a40182bdcb343d354c8",
+    "target/frame-certificate/model-hooks-historical/comparison-qed/frame-bbb6f06b55b1dd03.json": "477199a2e53e36136eefecab9613bf38ae452203579ae14f15c1e7957c8cfebc",
+    "target/frame-certificate/model-hooks-historical/representative-lr/effective-bindings.json": "e74fa8737fd981aa20024bff5aaf5adb8d1f2da3f7b4c94cf5a03064f38812cd",
+    "target/frame-certificate/model-hooks-historical/representative-lr/effective-model.json": "37b1e770a5e33a49997bba8bb0c742aecb669efcb8841a40182bdcb343d354c8",
+    "target/frame-certificate/model-hooks-historical/representative-lr/frame-87988a044c993bcf.json": "27da99a7536b7ef97fc7c78ac40a5ddfe489ec1aedb889d2e9430d04afa63921",
+    "target/frame-certificate/model-hooks-historical/representative-qed/effective-bindings.json": "bbfe7d0c50edffa5c6a9faaba343286519bb8366efed7cfe3b17ef44e41a9216",
+    "target/frame-certificate/model-hooks-historical/representative-qed/effective-model.json": "37b1e770a5e33a49997bba8bb0c742aecb669efcb8841a40182bdcb343d354c8",
+    "target/frame-certificate/model-hooks-historical/representative-qed/frame-bd1d483fc596a496.json": "e18db375eb717c9a52b4eece5ecee57a0393e12bede78d28a860d2b2889f9c92",
+    "target/frame-certificate/axis-and-frame-summary.json": "4b439aa09ddde9576a58b07cfe26f3fccbfbc6d2b9cfafa85cbec446e6a080f4",
+    "target/frame-certificate/corruption-summary.json": "cf9a29bbe6eb3114bef79345218864e2261a999ce8aafc0cdc46445f9eb76999",
+    "target/frame-certificate/cut-sign-provenance-summary.json": "35562ce665ffa4c2b218f05acffa85e0f1fbbe7063cf9d06b55740375cec304f",
+    "target/frame-certificate/full-key-join-summary.json": "8d00168c9c6af3179d31069ec3dd25999d2b87f42bcdf6f4292c3deb2d8b68d2",
+    "target/frame-certificate/generated-map-summary.json": "29eb28b20af13ef31a47fac6d233e2eb13d1af7e72f50130b3bc4de3dc8332e8",
+    "target/frame-certificate/member-denominator-summary.json": "4c77fe381e221a2e257ed06b4395720c173908508a5862946452f46e58cb12c5",
+    "target/frame-certificate/member-summary.json": "a08ada7de33b3ff0e8e73970f94a53e759c9f1802338ceb6c8a15a1ceebffa2a",
+    "target/frame-certificate/model-binding-summary.json": "e274422f1f26e30af23c453c6f5a232897e02dbaaa385624269d32729fb4d1a2",
+    "target/frame-certificate/pair-expression-summary.json": "a8a2563f310679d59a6c86f82ce0f2d7d0b3a1a42561d2a681eeb081f254b646",
+    "target/frame-certificate/prefactor-summary.json": "a5601ed1e407f5b3ec40b96a1cae2f48d96ba9d46b32c078cb2568faab47e110",
+    "target/frame-certificate/routing-summary.json": "836ec988d94ab38e629905b8694384ec4de5c27b504b74fb1938edb3724b509b",
+    "target/frame-certificate/axis_and_frame_proof-run.log": "4b439aa09ddde9576a58b07cfe26f3fccbfbc6d2b9cfafa85cbec446e6a080f4",
+    "target/frame-certificate/build-certificate-run.log": "8336a08e541b5741d8539e8aa1be06b41f39ddb7847c17d75f490fe4ec6801db",
+    "target/frame-certificate/corruption-run.log": "b72db784324218c52144f65922c1988b39b06f317b758b72d87aad3fc2496e85",
+    "target/frame-certificate/cut_sign_provenance-run.log": "35562ce665ffa4c2b218f05acffa85e0f1fbbe7063cf9d06b55740375cec304f",
+    "target/frame-certificate/full-key-join-run.log": "8d00168c9c6af3179d31069ec3dd25999d2b87f42bcdf6f4292c3deb2d8b68d2",
+    "target/frame-certificate/generated_map_proof-run.log": "29eb28b20af13ef31a47fac6d233e2eb13d1af7e72f50130b3bc4de3dc8332e8",
+    "target/frame-certificate/member-denominator-run.log": "4c77fe381e221a2e257ed06b4395720c173908508a5862946452f46e58cb12c5",
+    "target/frame-certificate/member_proof-run.log": "a08ada7de33b3ff0e8e73970f94a53e759c9f1802338ceb6c8a15a1ceebffa2a",
+    "target/frame-certificate/model-binding-run.log": "e274422f1f26e30af23c453c6f5a232897e02dbaaa385624269d32729fb4d1a2",
+    "target/frame-certificate/pair_expression_proof-run.log": "a8a2563f310679d59a6c86f82ce0f2d7d0b3a1a42561d2a681eeb081f254b646",
+    "target/frame-certificate/prefactor-run.log": "a5601ed1e407f5b3ec40b96a1cae2f48d96ba9d46b32c078cb2568faab47e110",
+    "target/frame-certificate/routing-run.log": "836ec988d94ab38e629905b8694384ec4de5c27b504b74fb1938edb3724b509b",
+    "docs/architecture/evidence/generation-frame-certificate/scripts/axis_and_frame_proof.py": "15698db230307f44fc966a2713c4769454344bc0da9a55c30f3d20575632b8ea",
+    "docs/architecture/evidence/generation-frame-certificate/scripts/build_certificate.py": "6e93ced580ed7cebca2fd26a66ad12193b4474a5f6cf187ead7c64b2c42fa3e2",
+    "docs/architecture/evidence/generation-frame-certificate/scripts/corruption_controls.py": "3e3e1be91be0e7a856849e0f5bdd712ae05cdb422c3619b7c0818b45a9d76c9d",
+    "docs/architecture/evidence/generation-frame-certificate/scripts/cut_sign_provenance.py": "ac114b4f12870a3f207d664c141ee0ebfed57f2d129348a4c71f09430d5ac1d4",
+    "docs/architecture/evidence/generation-frame-certificate/scripts/full_key_join.py": "fc0b5af20965313457cf98abc46bc00e115fb47881f8dcc060194760188a246c",
+    "docs/architecture/evidence/generation-frame-certificate/scripts/generated_map_proof.py": "92a5412f010bc191a15e5851f4cad3151d8ec95402a4622c445e5c5be404642a",
+    "docs/architecture/evidence/generation-frame-certificate/scripts/member_denominators.py": "9280ea8a1c273b037cf473a55a7b19852891cc246efc61857e4d2d0a01016a4f",
+    "docs/architecture/evidence/generation-frame-certificate/scripts/member_proof.py": "77b2c123aaa34830f39a9c0c3d4f3d8616252f1b4df1401b34b830c3a54e82d5",
+    "docs/architecture/evidence/generation-frame-certificate/scripts/model_binding.py": "1d0dcf8aae1685103fcea506981ea56a6f874875d01a23abf9e8476def85369b",
+    "docs/architecture/evidence/generation-frame-certificate/scripts/pair_expression_proof.py": "d4054edb4bdd6aae58d69b21d514ed3ca8fbf093dd2ea44bf49e4166a2a243f7",
+    "docs/architecture/evidence/generation-frame-certificate/scripts/prefactor_proof.py": "394c26dd24d024518f8be5db57a828c155e5c0774ef232c8a1c60ed0fe3ea819",
+    "docs/architecture/evidence/generation-frame-certificate/scripts/routing_proof.py": "cfe18cc483a51f68a0348021ed2ef72d1d7aee0d84be11fda0d893925deb16af"
+  },
+  "limits": [
+    "This is exact equivalence for the three frozen producer rows and their original members, not a general grouping or physics theorem.",
+    "It certifies labelled tensor value under explicit axis bijections, not identity of private proof caches, archived intermediate histories, or future collision-check state.",
+    "No performance or distribution result is claimed.",
+    "Historical expected hashes and all production algorithms remain unchanged.",
+    "New independent Astra review is required before any targeted native-schema digest recertification; combined-tree validation follows that review."
+  ]
+}
