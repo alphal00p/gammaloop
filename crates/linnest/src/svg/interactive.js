@@ -28,11 +28,15 @@
     let scale = 1;
     let fitted = true;
     let pinned = false;
+    let hoverDismissed = false;
     let dragging = false;
     let suppressClick = false;
     let inspected;
     let resize;
     let resizeFrame = () => {};
+    let closePopup = () => {};
+    let syncPopupTheme = () => {};
+    const lifecycle = new AbortController();
     const frames = [];
 
     /* Notebook components can put their iframe inside a shadow root or slot.
@@ -59,7 +63,10 @@
       return null;
     };
     const syncHost = () => {
-      if (!svg.isConnected || frames.some(frame => !frame.isConnected)) {
+      if (!svg.isConnected || frames.some(frame => !frame.isConnected)
+          || frames[0] && frames[0].contentDocument !== document) {
+        closePopup();
+        lifecycle.abort();
         observer.disconnect();
         if (resize) resize.disconnect();
         return;
@@ -77,6 +84,7 @@
       const value = theme();
       if (value) svg.setAttribute('data-theme', value);
       else svg.removeAttribute('data-theme');
+      syncPopupTheme();
       try {
         const frame = window.frameElement;
         if (frame && frame.parentElement && document.body) {
@@ -155,6 +163,7 @@
     const paintCamera = () => {
       viewport.setAttribute('viewBox', `${camera.x} ${camera.y} ${camera.width} ${camera.height}`);
       zoomLabel.textContent = `${Math.round(100 * scale)}%`;
+      schedulePopupPosition();
     };
     const zoom = (factor, anchor = { x: camera.x + camera.width / 2, y: camera.y + camera.height / 2 }) => {
       const next = Math.max(Math.min(.25, fitScale()), Math.min(20, scale * factor));
@@ -184,24 +193,108 @@
     help.append(hint);
     controls.append(help);
     toolbar.append(controls);
-    const panel = svgElement('foreignObject');
+    /* Use the accessible notebook document's top layer. Neither SVG bounds
+       nor a notebook scroll pane should clip details or change graph geometry.
+       Opaque sandbox frames keep their popup in their own document. */
+    const popupDocument = frames.at(-1)?.ownerDocument || document;
+    const panel = html('div');
+    panel.className = 'linnet-inspector-popup';
+    panel.setAttribute('popover', 'manual');
+    panel.style.cssText = 'position:fixed;inset:auto;margin:0;padding:0;border:0;'
+      + 'background:transparent;width:320px;max-width:calc(100vw - 16px);overflow:visible;';
+    const popupRoot = panel.attachShadow({mode:'open'});
+    const popupStyle = html('style');
+    /* The SVG stylesheet remains the sole owner of inspector styling. Copy
+       its rules into the portal's shadow root, without notebook CSS resets. */
+    const prefix = 'svg[data-linnet-interactive] ';
+    const inspectorRules = new Set();
+    for (const sheet of document.styleSheets) {
+      let rules;
+      try { rules = sheet.cssRules; } catch (_) { continue; }
+      for (const rule of rules) {
+        if (rule.selectorText?.startsWith(prefix + '.linnet-inspector'))
+          inspectorRules.add(rule.cssText.replaceAll(prefix, ''));
+      }
+    }
+    popupStyle.textContent = [...inspectorRules].join('\n');
     const content = html('div');
     content.className = 'linnet-inspector';
-    content.setAttribute('role', 'status');
-    panel.append(content);
-    svg.append(panel, toolbar);
+    content.style.cssText = 'max-height:calc(100vh - 16px);overflow:auto;text-align:left;';
+    popupRoot.append(popupStyle, content);
+    svg.append(toolbar);
+    let anchor = {x:.5, y:.5};
+    let positionFrame;
+    const positionPopup = () => {
+      positionFrame = null;
+      if (!panel.isConnected || !inspected?.isConnected) return;
+      const target = inspected.getBoundingClientRect();
+      let x = target.left + anchor.x * target.width;
+      let y = target.top + anchor.y * target.height;
+      for (const frame of frames) {
+        const rect = frame.getBoundingClientRect();
+        const sx = rect.width / frame.offsetWidth, sy = rect.height / frame.offsetHeight;
+        x = rect.left + (frame.clientLeft + x) * sx;
+        y = rect.top + (frame.clientTop + y) * sy;
+      }
+      const view = popupDocument.defaultView;
+      const width = panel.offsetWidth, height = panel.offsetHeight;
+      const right = view.innerWidth - 8, bottom = view.innerHeight - 8;
+      panel.style.left = Math.max(8, Math.min(right - width,
+        x + 12 + width <= right ? x + 12 : x - width - 12)) + 'px';
+      panel.style.top = Math.max(8, Math.min(bottom - height,
+        y + 12 + height <= bottom ? y + 12 : y - height - 12)) + 'px';
+    };
+    const schedulePopupPosition = () => {
+      if (!panel.isConnected || positionFrame) return;
+      positionFrame = requestAnimationFrame(positionPopup);
+    };
+    syncPopupTheme = () => {
+      const style = getComputedStyle(svg);
+      for (const name of ['--linnet-selection', '--linnet-panel-bg', '--linnet-panel-ink'])
+        panel.style.setProperty(name, style.getPropertyValue(name));
+    };
+    const rememberAnchor = (target, event) => {
+      const rect = target.getBoundingClientRect();
+      anchor = event?.type.startsWith('pointer') || event?.type === 'click' && event.detail > 0
+        ? {x:(event.clientX - rect.left) / (rect.width || 1), y:(event.clientY - rect.top) / (rect.height || 1)}
+        : {x:.5, y:.5};
+    };
+    /* An SVG document has no HTML body. A zero-sized foreignObject supplies
+       the HTML mounting context; the popover still paints in the top layer. */
+    const popupMount = popupDocument.body || svg.appendChild(svgElement('foreignObject'));
+    const close = event => {
+      /* Removing a pinned popup can expose a hit target under its Close
+         button. Resume previews on pointer motion, not that synthetic enter. */
+      if (event?.type === 'click' || event?.type === 'keydown') hoverDismissed = true;
+      if (panel.matches(':popover-open')) panel.hidePopover();
+      panel.remove();
+      content.replaceChildren();
+      cancelAnimationFrame(positionFrame);
+      positionFrame = null;
+      pinned = false;
+    };
+    closePopup = close;
+    panel.addEventListener('linnet-close', close);
+    panel.addEventListener('keydown', event => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      inspected?.focus({preventScroll:true});
+      close(event);
+    });
+    for (const view of new Set([window, ...frames.map(frame => frame.ownerDocument.defaultView)])) {
+      view.addEventListener('scroll', schedulePopupPosition, {capture:true, passive:true, signal:lifecycle.signal});
+      view.addEventListener('resize', schedulePopupPosition, {passive:true, signal:lifecycle.signal});
+    }
+    for (const frame of frames) frame.addEventListener('load', syncHost, {signal:lifecycle.signal});
+    window.addEventListener('pagehide', close, {signal:lifecycle.signal});
+    window.matchMedia('(prefers-color-scheme: dark)')
+      .addEventListener('change', syncPopupTheme, {signal:lifecycle.signal});
     let layoutWidth = 0;
     const layout = () => {
       const screenWidth = Math.max(1, svg.getBoundingClientRect().width);
       const width = embedded ? box.width : screenWidth;
       layoutWidth = screenWidth;
       const fixedHeight = Number(svg.dataset.linnetViewportHeight) || 0;
-      /* A hover must not change the iframe's height. Sandboxed notebook
-         frames cannot reserve a scrollbar gutter in their outer document;
-         growing that document can move the target out from under the pointer.
-         Only an explicitly pinned standalone inspector opens below the graph. */
-      const overlay = !pinned || embedded || fixedHeight > 0;
-      const panelWidth = overlay ? Math.min(300, width) : width;
       const graphWidth = width;
       /* Keep the graph and caption centered without reserving empty space for
          an inspector. The camera height follows the bounded initial drawing size. */
@@ -230,31 +323,13 @@
       panSurface.setAttribute('y', 0);
       panSurface.setAttribute('width', graphWidth);
       panSurface.setAttribute('height', graphHeight);
-      /* Overlay details leave the floating controls accessible without
-         reserving any part of the graph's canvas for navigation. */
-      const panelTop = overlay ? Math.min(36, graphHeight) : graphHeight + 12;
-      const panelRoom = Math.max(0, graphHeight - panelTop);
-      panel.setAttribute('x', overlay ? width - panelWidth : 0);
-      panel.setAttribute('y', panelTop);
-      panel.setAttribute('width', panelWidth);
-      content.style.maxHeight = overlay ? `${panelRoom}px` : '';
-      content.style.overflowY = overlay ? 'auto' : '';
-      const panelHeight = panel.style.display === 'none' ? 0 : content.offsetHeight;
-      panel.setAttribute('height', overlay ? Math.min(panelHeight, panelRoom) : panelHeight);
-      panel.style.pointerEvents = overlay && !pinned ? 'none' : '';
-      const height = graphHeight + (!overlay && panelHeight ? panelHeight + 12 : 0);
+      const height = graphHeight;
       if (!embedded) {
         svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
         svg.setAttribute('height', height);
         svg.style.height = `${height}px`;
       }
       requestAnimationFrame(resizeFrame);
-    };
-    const close = () => {
-      pinned = false;
-      content.replaceChildren();
-      panel.style.display = 'none';
-      layout();
     };
     if (!embedded) {
       svg.style.width = '100%';
@@ -265,16 +340,17 @@
       if (Math.abs(svg.getBoundingClientRect().width - layoutWidth) > .5) requestAnimationFrame(layout);
     });
     layoutObserver.observe(svg);
-    close();
-    const show = target => {
+    layout();
+    const show = (target, event) => {
       inspected = target;
+      rememberAnchor(target, event);
       content.replaceChildren();
-      panel.style.display = '';
       const kind = target.dataset.linnetKind;
       const id = Number(target.dataset.linnetId);
       const detail = JSON.parse(target.dataset.linnetDetail);
       const dismiss = html('button', '×');
       dismiss.setAttribute('aria-label', 'Close graph details');
+      dismiss.hidden = !pinned;
       dismiss.addEventListener('click', close);
       const header = html('div');
       header.className = 'linnet-inspector-header';
@@ -331,7 +407,15 @@
       const shortcuts = html('div', `${pinned ? 'Pinned · Close to resume hover' : 'Preview · Click or Enter/Space to pin'} · Shift/Ctrl/⌘-click: toggle selection`);
       shortcuts.className = 'linnet-inspector-shortcuts';
       content.append(shortcuts);
-      layout();
+      for (const previous of popupDocument.querySelectorAll('.linnet-inspector-popup')) {
+        if (previous !== panel) previous.dispatchEvent(new CustomEvent('linnet-close'));
+      }
+      if (!panel.isConnected) popupMount.append(panel);
+      syncPopupTheme();
+      content.setAttribute('role', pinned ? 'dialog' : 'tooltip');
+      panel.style.pointerEvents = pinned ? 'auto' : 'none';
+      if (!panel.matches(':popover-open')) panel.showPopover();
+      positionPopup();
       svg.dispatchEvent(new CustomEvent('linnet-inspect', { bubbles: true, detail: { kind, id, data: detail } }));
     };
     const activate = (target, event) => {
@@ -345,7 +429,7 @@
         svg.dispatchEvent(new CustomEvent('linnet-selection-change', { bubbles: true, detail: selection() }));
       }
       pinned = true;
-      show(target);
+      show(target, event);
     };
     const targetOf = event => event.target.closest && event.target.closest('[data-linnet-kind]');
     /* Domain overlays and hover share the native structural half-edge paths.
@@ -389,9 +473,13 @@
         group.setAttribute('filter', `url(#${filter.id})`);
         group.style.opacity = '1';
       }
-      const inverse = viewport.getCTM().inverse();
+      /* Measure a child of the camera: Firefox's matrix for a nested <svg>
+         omits its own viewBox transform. The empty layer has no painted ink. */
+      viewport.append(group);
+      const inverse = group.getScreenCTM().inverse();
+      group.remove();
       const place = (copy, original) => {
-        const transform = inverse.multiply(original.getCTM());
+        const transform = inverse.multiply(original.getScreenCTM());
         copy.setAttribute('transform', `matrix(${transform.a} ${transform.b} ${transform.c} ${transform.d} ${transform.e} ${transform.f})`);
         group.append(copy);
       };
@@ -423,7 +511,7 @@
           /* Join selected vertices to their incident halves even when labels
              reserved a larger vertex disc in the original drawing. */
           const center = new DOMPoint(node.cx.baseVal.value, node.cy.baseVal.value)
-            .matrixTransform(original.getCTM().inverse().multiply(node.getCTM()));
+            .matrixTransform(original.getScreenCTM().inverse().multiply(node.getScreenCTM()));
           d = detail.flow === 'source' ? `M${center.x} ${center.y} L${d.slice(1)}` : `${d} L${center.x} ${center.y}`;
         }
         path.setAttribute('d', d);
@@ -481,6 +569,15 @@
       suppressClick = false;
     });
     svg.addEventListener('pointermove', event => {
+      if (hoverDismissed) {
+        hoverDismissed = false;
+        const target = targetOf(event);
+        if (!pinned && target) show(target, event);
+      }
+      if (!pinned && panel.isConnected && inspected) {
+        rememberAnchor(inspected, event);
+        schedulePopupPosition();
+      }
       if (!pointer || pointer.id !== event.pointerId) return;
       if (!(event.buttons & 1)) { endPan(event); return; }
       const dx = event.clientX - pointer.x, dy = event.clientY - pointer.y;
@@ -523,14 +620,14 @@
     }, true);
     svg.addEventListener('click', event => {
       const target = targetOf(event);
-      if (target) { activate(target, event); highlightEdge(target, false); }
+      if (target) { activate(target, event); highlightEdge(target, target.hasAttribute('data-linnet-active')); }
     });
     svg.addEventListener('keydown', event => {
-      if (event.key === 'Escape') { if (inspected) inspected.focus(); close(); }
+      if (event.key === 'Escape') { if (inspected) inspected.focus(); close(event); }
       const target = targetOf(event);
       if (target && (event.key === 'Enter' || event.key === ' ')) {
         activate(target, event);
-        highlightEdge(target, false);
+        highlightEdge(target, target.hasAttribute('data-linnet-active'));
       }
     });
     for (const [name, active] of [['pointerover', true], ['pointerout', false], ['focusin', true], ['focusout', false]]) {
@@ -540,8 +637,9 @@
         const related = event.relatedTarget?.closest?.('[data-linnet-kind]');
         if (related && svg.contains(related) && related.dataset.linnetKind === target.dataset.linnetKind && related.dataset.linnetId === target.dataset.linnetId) return;
         if (!pinned) {
-          if (active) show(target);
-          else close();
+          if (name === 'focusin') hoverDismissed = false;
+          if (active && !hoverDismissed) show(target, event);
+          else if (!active) close();
         }
         highlightEdge(target, active);
         for (const item of targets) {

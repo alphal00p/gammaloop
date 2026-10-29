@@ -339,9 +339,17 @@ def main():
                                     '[data-linnet-kind="node"][tabindex="0"]'
                                 ).first.press("Shift+Enter")
                                 settle(frame)
-                                item["inspector"] = assert_fits(
-                                    frame, ".linnet-inspector"
-                                )
+                                item["inspector"] = assert_fits(frame)
+                                popup = page.locator(".linnet-inspector").bounding_box()
+                                assert popup["x"] >= 0 and popup["y"] >= 0, popup
+                                assert (
+                                    popup["x"] + popup["width"]
+                                    <= page.viewport_size["width"]
+                                ), popup
+                                assert (
+                                    popup["y"] + popup["height"]
+                                    <= page.viewport_size["height"]
+                                ), popup
                                 screenshot(
                                     page,
                                     page.locator("#host"),

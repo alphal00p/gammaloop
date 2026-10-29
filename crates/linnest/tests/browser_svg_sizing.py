@@ -266,17 +266,17 @@ def main():
             height = svg.bounding_box()["height"]
             target = compact.locator('[data-linnet-kind="node"]')
             target.hover()
-            panel = compact.locator(".linnet-inspector")
+            panel = page.locator(".linnet-inspector")
             assert panel.is_visible()
-            assert (
-                panel.bounding_box()["y"]
-                >= camera.bounding_box()["y"] + camera.bounding_box()["height"]
-            )
+            target_box, popup_box = target.bounding_box(), panel.bounding_box()
+            assert popup_box["x"] >= target_box["x"] + target_box["width"] / 2
+            assert popup_box["y"] >= target_box["y"] + target_box["height"] / 2
+            assert svg.bounding_box()["height"] == height
             assert label.bounding_box() == before
             target.click()
             page.mouse.move(1000, 700)
             assert panel.is_visible() and label.bounding_box() == before
-            compact.get_by_role("button", name="Close graph details").click()
+            page.get_by_role("button", name="Close graph details").click()
             assert not panel.is_visible() and svg.bounding_box()["height"] == height
             camera.press("+")
             assert svg.locator("output").inner_text() == "105%"
@@ -373,13 +373,17 @@ def main():
                 original_canvas = canvas.evaluate(canvas_geometry)
                 original = svg.bounding_box()
                 svg.locator('[data-linnet-kind="node"]').dispatch_event("click")
-                panel = svg.locator(".linnet-inspector")
+                panel = page.locator(".linnet-inspector")
                 assert "Pinned" in panel.inner_text()
-                controls = svg.locator(".linnet-toolbar").bounding_box()
                 bounds = panel.bounding_box()
-                assert bounds["y"] >= controls["y"] + controls["height"]
-                assert bounds["y"] + bounds["height"] <= original["y"] + 180
-                assert panel.evaluate("e => getComputedStyle(e).maxHeight") == "144px"
+                assert bounds["x"] >= 8 and bounds["y"] >= 8
+                assert bounds["x"] + bounds["width"] <= 1200 - 8
+                assert bounds["y"] + bounds["height"] <= 800 - 8
+                page.set_viewport_size({"width": 1200, "height": 200})
+                assert panel.evaluate("e => e.clientHeight < e.scrollHeight"), (
+                    "Long details remain scrollable"
+                )
+                page.set_viewport_size({"width": 1200, "height": 800})
                 assert svg.bounding_box() == original
                 camera = svg.locator(".linnet-viewport")
                 assert camera.get_attribute("y") == "0"
@@ -401,7 +405,7 @@ def main():
                 assert canvas.evaluate(canvas_geometry) == original_canvas
                 page.mouse.move(0, 0)
                 assert not hint.is_visible()
-                svg.get_by_role("button", name="Close graph details").click()
+                page.get_by_role("button", name="Close graph details").click()
                 assert not panel.is_visible()
             assert not errors, errors
             print("Pinned bounded and embedded inspector controls remain accessible")
