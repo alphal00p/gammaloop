@@ -755,6 +755,10 @@ impl IndexAliases {
     }
 
     fn for_atom(atom: &Atom, style: &str) -> Self {
+        Self::for_atom_with_aliases(atom, style, &Self::default())
+    }
+
+    fn for_atom_with_aliases(atom: &Atom, style: &str, established: &Self) -> Self {
         let mut slots = Vec::new();
         let mut source_indices = HashMap::new();
         let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
@@ -835,6 +839,12 @@ impl IndexAliases {
             ..Self::default()
         };
         for (_, (representation, index, source, palette)) in pending {
+            if let Some(existing) = established.entries.get(&(representation, index.clone())) {
+                aliases
+                    .entries
+                    .insert((representation, index), existing.clone());
+                continue;
+            }
             let IndexPalette::Cyclic { start, .. } = &palette else {
                 unreachable!()
             };
@@ -872,7 +882,13 @@ impl IndexAliases {
                     let Some(display) = palette.resolve(position) else {
                         break None;
                     };
-                    if used.insert(Self::label_key(&display)) {
+                    let label = Self::label_key(&display);
+                    if !established
+                        .reserved_labels
+                        .get(&representation)
+                        .is_some_and(|reserved| reserved.contains(&label))
+                        && used.insert(label)
+                    {
                         break Some(display);
                     }
                     let Some(next) = position
@@ -892,6 +908,12 @@ impl IndexAliases {
         }
         let mut scoped_displays = Vec::new();
         for (representation, index, scopes, base) in scoped {
+            if let Some(existing) = established.entries.get(&(representation, index.clone())) {
+                aliases
+                    .entries
+                    .insert((representation, index), existing.clone());
+                continue;
+            }
             let Some(metadata) = RepresentationMetadata::from_symbol(representation) else {
                 continue;
             };
@@ -941,9 +963,12 @@ impl IndexAliases {
                     })
                     .collect::<Vec<_>>();
                 if decorated.iter().all(|(rep, _, display)| {
-                    !occupied
-                        .get(rep)
-                        .is_some_and(|used| used.contains(&Self::label_key(display)))
+                    let label = Self::label_key(display);
+                    !occupied.get(rep).is_some_and(|used| used.contains(&label))
+                        && !established
+                            .reserved_labels
+                            .get(rep)
+                            .is_some_and(|used| used.contains(&label))
                 }) {
                     break decorated;
                 }
@@ -3418,6 +3443,43 @@ mod tests {
             base.clone().with_top(IndexDisplay::text("′′").unwrap())
         );
         assert_eq!(atom, original);
+    }
+
+    #[test]
+    fn incremental_scoped_aliases_use_established_base_labels() {
+        let rep = ExtendibleReps::MINKOWSKI.symbol();
+        let mut established = IndexAliases::default();
+        let mut labels = HashSet::new();
+        for position in [0, 1, 2, 0, 2, 1] {
+            let index = graph_index("display_index_tests::hedge", &[position, 1]);
+            let scoped = Atom::from(
+                AbstractIndex::try_from(index.as_view())
+                    .unwrap()
+                    .scoped(symbol!("display_index_tests::bra")),
+            );
+            let atom = indexed_test_tensor([index.clone(), scoped.clone()]);
+            let aliases = IndexAliases::for_atom_with_aliases(&atom, "alphabet", &established);
+            let base = &aliases.entries[&(rep, index.clone())].1;
+            assert_eq!(
+                aliases.entries[&(rep, scoped.clone())].1,
+                base.clone().with_top(IndexDisplay::text("′").unwrap())
+            );
+            for (key, alias) in aliases.entries {
+                if let Some(previous) = established.entries.get(&key) {
+                    assert_eq!(previous, &alias);
+                } else {
+                    let label = IndexAliases::label_key(&alias.1);
+                    assert!(labels.insert(label.clone()));
+                    established
+                        .reserved_labels
+                        .entry(rep)
+                        .or_default()
+                        .insert(label);
+                    established.entries.insert(key, alias);
+                }
+            }
+        }
+        assert_eq!(labels.len(), 6);
     }
 
     #[test]

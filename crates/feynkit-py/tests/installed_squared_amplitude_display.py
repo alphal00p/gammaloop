@@ -19,6 +19,49 @@ assert squared.expression().rank == 8
 assert fermions.expression().rank == 4
 assert fermions.spin_summed == [0, 1]
 
+
+def assert_tensor_notation(page):
+    for layout in [page, *page.get("layouts", [])]:
+        for internal in ("index_scope", ">bis<", ">hedge<", ">gamma<"):
+            assert internal not in layout["html"], (internal, layout["html"])
+
+
+# Electron–positron annihilation: the two spin projectors use distinct primed
+# copies of their fermion indices. Allocating each leaf independently used to
+# discard the second primed alias and expose bis(4,index_scope(bra,...)).
+for value in (squared, fermions):
+    exact = value.expression().to_expression()
+    viewer = value.paged()
+    try:
+        page = viewer.page()
+        assert_tensor_notation(page)
+        for layout in [page, *page["layouts"]]:
+            for path, _ in layout["markers"]:
+                for popup in (False, True):
+                    _, preview = viewer.handle_message(
+                        {
+                            "action": "preview",
+                            "value": path,
+                            "layout": layout["layout"],
+                            "popup": popup,
+                        }
+                    )
+                    assert_tensor_notation(preview)
+        compact = page["layouts"][-1]
+        if compact["markers"]:
+            _, expanded = viewer.handle_message(
+                {
+                    "action": "expand",
+                    "value": compact["markers"][0][0],
+                    "layout": compact["layout"],
+                    "size": 25,
+                }
+            )
+            assert_tensor_notation(expanded)
+        assert value.expression().to_expression() == exact
+    finally:
+        viewer.close()
+
 # SquaredAmplitude must retain the tensor's live notebook path, including after
 # summing spins. Static HTML alone bypasses inspection and keyboard zoom.
 for value in (squared, fermions):
