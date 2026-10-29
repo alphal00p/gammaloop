@@ -18,7 +18,7 @@ guide] for the scientific fixture, strategy selection and progress semantics.
 Through four loops, use #raw("--engine both") for exact and tracked-numerical
 functional parity. Use separate #raw("--engine dfs") and
 #raw("--engine ordered") invocations,
-with the same prepared input and normal release executable, for fresh-process
+with #raw("--no-monitor"), the same prepared input and normal release executable, for fresh-process
 measurements. Do not promote same-process functional timings or historical
 five-loop baselines into matched fresh-process speedup claims.
 Five-loop physical runs use ordered reduction only, first zero momentum and
@@ -148,9 +148,63 @@ self-hash remain admissible without a performance protocol.
 Use three samples per engine for final comparisons and retain median/range.
 Release status is not inferred from #raw("debug_assertions=false").
 
-Report #raw("retained_reduction_seconds") as *public retained evaluation*,
-including routing, lowering and finalization. It is not pure IBP time. Loading
-is separate; #raw("completed_seconds") starts after scalar preparation and
+The headline is #raw("reduction_math_seconds"), using fixed scope
+#raw("vakint.rustred.reduction-math.v1"): non-overlapping IBP/routing and exact
+weighted terminal-coefficient assembly/grouping spans, including required
+terminal substitutions, projections, lower-factor reductions and request-local
+reducer/dispatch state construction in both engines. Immutable artifact loading,
+deserialization/program import are excluded, along with graph/data preparation,
+matching, initial scalar lowering, MATAD normalization,
+master numerical evaluation and serialization. This is not a pure Native-kernel
+IBP timer. Gross math time minus measured lazy owner-preparation wall time gives
+the checked net. The collector fixes owner preparation to one worker; the
+subtracted native wall-time counters must not be interpreted as CPU time.
+The gross is a semantic sum of disjoint blocks, not a contiguous interval ending
+at normalization. Later exact combination and natural request-state cleanup
+inside the call remain counted; normalization work and engine-lifetime teardown
+after the call remain excluded. No forced cache clear is added.
+
+The report contract preserves unavailable measurements explicitly:
+
+```json
+{
+  "reduction_math_seconds": null,
+  "reduction_math_timing": {
+    "scope_id": "vakint.rustred.reduction-math.v1",
+    "complete": false,
+    "gross_seconds": null,
+    "measured_owner_preparation_seconds": null,
+    "interval_count": 0,
+    "incompleteness_reason": "math capture feature disabled"
+  }
+}
+```
+
+With complete telemetry, gross, preparation and net are measured numbers; net
+must equal the checked difference, with valid non-overlapping interval scope.
+An invalid preparation delta produces incomplete telemetry and a null net, not
+a physics failure. Optional capture requires #raw("experimental-rustred").
+The adapter keeps gross/deduction/count metadata, rejects scope or deduction
+inconsistency, and requires complete math telemetry for every qualified sample.
+Missing measurements stay null: no subtraction of unrelated public stages,
+no partial-sample median, and no fallback to the whole public timer.
+Qualified headline comparisons require #raw("monitoring_enabled=false") in
+both reports and #raw("--no-monitor") in each bound launch command. The command
+must not enable terminal or snapshot observation. Monitoring and logging inside
+math spans contribute real wall time; no observer-overhead subtraction is
+invented. Monitored functional/dashboard runs, including five-loop examples,
+remain diagnostic and cannot supply a qualified ratio. Independent OS/RAM
+guarding is unaffected.
+
+Record #raw("worker_policy.owner_preparation_workers=1") and the actual
+#raw("cache_policy"): prepared caches not loaded, previous-run caches not
+restored, explicit intrinsic DFS memoization policy, and ordered result cache
+unsupported. This is measurement metadata, not a new cache toggle. Keep the
+runtime policy unchanged unless the user explicitly chooses otherwise.
+
+Retain #raw("retained_reduction_seconds") separately as *public retained
+evaluation*, including frontend lowering and finalization. Loading is separate;
+#raw("completed_seconds") starts after scalar preparation and
 includes subsequent numerical reference generation when enabled. Whole-process
 peak RSS includes earlier stages, including previous engines in a same-process
 functional pair. Unavailable pure-IBP, isolated routing/lowering, terminal
@@ -158,10 +212,13 @@ substitution and ordered-progress observations remain #raw("null"), never zero.
 Phases refer to one native request and are not a wall-time percentage.
 
 The benchmark keeps the existing large colored cells. Its ordered multiplier is
-*ordered ÷ DFS*; original RustRed/FMFT multipliers retain their original meaning.
+*ordered net reduction math ÷ DFS net reduction math*; original RustRed/FMFT
+multipliers retain their original meaning.
 An independent historical 40-hour five-loop baseline remains labeled with its
 original source, cache and input cohort. It cannot qualify through this matched
 new-report protocol or silently become a new uncached sample.
+Its reduction-math time remains unknown; the historical 40-hour public-call
+duration must never populate that field.
 
 For a completed new ordered zero-momentum run, use
 #raw("--historical-parity PATH") to append a separate historical comparison.

@@ -15,6 +15,7 @@ use symbolica::id::Replacement;
 use symbolica::poly::series::SeriesDepth;
 
 use super::data::{FileReference, LoopData, checked_bytes, failure};
+use super::experimental::timing::MathSpan;
 use super::{
     CandidateRoutedApplicationObserver, MonitorContext, RustRedEvaluationError, RustRedMasterMode,
 };
@@ -595,7 +596,10 @@ impl MasterCatalog {
             "retained_catalogue_exact_combination",
             Some(raw.as_view()),
         );
-        let raw = Self::combine_master_coefficients(raw);
+        let raw = {
+            let _math = MathSpan::new();
+            Self::combine_master_coefficients(raw)
+        };
         log::debug!(target: "vakint::saved_application", "phase=retained_catalogue_exact_combination elapsed_seconds={:.6}", started.elapsed().as_secs_f64());
         let started = std::time::Instant::now();
         MonitorContext::native_phase(

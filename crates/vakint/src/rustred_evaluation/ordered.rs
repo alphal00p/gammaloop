@@ -176,6 +176,35 @@ mod tests {
     }
 
     #[test]
+    fn reduction_math_capture_observes_both_engines_without_changing_results() {
+        use crate::rustred_evaluation::experimental::capture_reduction_timing;
+
+        let engine = Vakint::new().unwrap();
+        let input = vakint_parse!("topo(I1L(1,4))+2*topo(I1L(1,5))").unwrap();
+        for strategy in [
+            RustRedReductionStrategy::DepthFirst,
+            RustRedReductionStrategy::Ordered,
+        ] {
+            let settings = settings(strategy);
+            let expected = engine
+                .evaluate_integral(&settings, input.as_view())
+                .unwrap();
+            let captured =
+                capture_reduction_timing(|| engine.evaluate_integral(&settings, input.as_view()));
+            let actual = captured.result.unwrap();
+            assert!((actual - expected).together().expand().is_zero());
+            assert!(captured.timing.complete, "{:?}", captured.timing);
+            assert_eq!(captured.timing.scope_id, "vakint.rustred.reduction-math.v1");
+            assert!(captured.timing.interval_count > 0);
+            assert_eq!(
+                captured.timing.measured_owner_preparation,
+                std::time::Duration::ZERO
+            );
+            assert_eq!(captured.timing.reduction_math, Some(captured.timing.gross));
+        }
+    }
+
+    #[test]
     fn ordered_normal_monitor_reports_all_loop_batches_and_mass_cohorts() {
         let engine = Vakint::new().unwrap();
         let settings = settings(RustRedReductionStrategy::Ordered);

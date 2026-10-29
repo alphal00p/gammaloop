@@ -83,6 +83,15 @@ class OrderedReportContractTests(unittest.TestCase):
                 "projection": "zero-momentum-metric",
                 "strategy": strategy,
                 "persistent_cache": False,
+                "monitoring_enabled": False,
+                "dfs_request_memoization": "SYNTHETIC normal per-run memoization",
+                "cache_policy": {
+                    "prepared_cache_loaded": False,
+                    "previous_run_cache_restored": False,
+                    "depth_first_intrinsic_memoization": "SYNTHETIC normal per-run memoization",
+                    "ordered_result_cache": "not supported",
+                },
+                "worker_policy": {"owner_preparation_workers": 1},
                 "reduction_completed": True,
                 "catalogue_closure": {"closed": True, "master_count": 1, "unknown": []},
                 "input_sha256": "3" * 64,
@@ -96,6 +105,15 @@ class OrderedReportContractTests(unittest.TestCase):
                 "normalization": "MSbar",
                 "loading_seconds": 2,
                 "retained_reduction_seconds": 10 if engine == "dfs" else 5,
+                "reduction_math_seconds": 4 if engine == "dfs" else 1,
+                "reduction_math_timing": {
+                    "scope_id": merge.MATH_SCOPE,
+                    "complete": True,
+                    "gross_seconds": 5 if engine == "dfs" else 2,
+                    "measured_owner_preparation_seconds": 1,
+                    "interval_count": 2 if engine == "dfs" else 1,
+                    "incompleteness_reason": None,
+                },
                 "completed_seconds": 12 if engine == "dfs" else 7,
                 "retained": {
                     "file": payload.name,
@@ -177,6 +195,7 @@ class OrderedReportContractTests(unittest.TestCase):
                         "zero-momentum",
                         "--build-profile",
                         "release",
+                        "--no-monitor",
                         "--work-dir",
                         str(report.parent.parent),
                     ],
@@ -334,13 +353,93 @@ class OrderedReportContractTests(unittest.TestCase):
         result = merge.append(self.base, "test", [self.parity], self.protocol())
         row = result["ordered_rung_runs"]["test"]["summary"][0]
         self.assertTrue(row["performance_eligible"])
-        self.assertEqual(row["ordered_over_dfs"], 0.5)
+        self.assertEqual(row["ordered_over_dfs"], 0.25)
+        self.assertEqual(
+            row["metrics"]["dfs"]["public_retained_seconds"]["median_seconds"], 10
+        )
+        self.assertEqual(
+            row["metrics"]["dfs"]["reduction_math_seconds"]["median_seconds"], 4
+        )
 
     def test_changed_report_is_rejected(self):
         raw = merge.read(self.parity)
         path = Path(raw["reports"]["ordered"]["path"])
         path.write_text(path.read_text() + " ")
         with self.assertRaisesRegex(ValueError, "changed evidence"):
+            merge.append(self.base, "test", [self.parity])
+
+    def test_missing_math_measurement_never_falls_back_to_public_timer(self):
+        for name in ("dfs", "ordered"):
+            self.update_report(
+                name,
+                lambda row: (
+                    row.pop("reduction_math_seconds"),
+                    row.pop("reduction_math_timing"),
+                ),
+            )
+        result = merge.append(self.base, "test", [self.parity])
+        row = result["ordered_rung_runs"]["test"]["summary"][0]
+        self.assertIsNone(row["metrics"]["dfs"]["reduction_math_seconds"])
+        self.assertIsNone(row["ordered_over_dfs"])
+        with self.assertRaisesRegex(ValueError, "complete reduction-math telemetry"):
+            merge.append(self.base, "test", [self.parity], self.protocol())
+
+    def test_monitoring_is_diagnostic_only_for_wall_time_comparison(self):
+        for name in ("dfs", "ordered"):
+            self.update_report(name, lambda row: row.update(monitoring_enabled=True))
+        result = merge.append(self.base, "test", [self.parity])
+        self.assertIsNone(
+            result["ordered_rung_runs"]["test"]["summary"][0]["ordered_over_dfs"]
+        )
+        with self.assertRaisesRegex(ValueError, "requires monitoring disabled"):
+            merge.append(self.base, "test", [self.parity], self.protocol())
+
+    def test_incomplete_math_telemetry_preserves_physics_without_net_time(self):
+        self.update_report(
+            "ordered",
+            lambda row: row.update(
+                reduction_math_seconds=None,
+                reduction_math_timing={
+                    "scope_id": merge.MATH_SCOPE,
+                    "complete": False,
+                    "gross_seconds": None,
+                    "measured_owner_preparation_seconds": None,
+                    "interval_count": 0,
+                    "incompleteness_reason": "SYNTHETIC feature disabled",
+                },
+            ),
+        )
+        result = merge.append(self.base, "test", [self.parity])
+        row = result["ordered_rung_runs"]["test"]["summary"][0]
+        self.assertTrue(row["exact_retained_equality"])
+        self.assertIsNone(row["metrics"]["ordered"]["reduction_math_seconds"])
+        with self.assertRaisesRegex(ValueError, "complete reduction-math telemetry"):
+            merge.append(self.base, "test", [self.parity], self.protocol())
+
+    def test_complete_math_deduction_scope_and_workers_are_checked(self):
+        self.update_report(
+            "ordered",
+            lambda row: row["reduction_math_timing"].update(
+                measured_owner_preparation_seconds=3
+            ),
+        )
+        with self.assertRaisesRegex(ValueError, "invalid owner-preparation deduction"):
+            merge.append(self.base, "test", [self.parity])
+        self.parity = self.pair("timing-scope")
+        self.update_report(
+            "ordered",
+            lambda row: row["reduction_math_timing"].update(
+                scope_id="SYNTHETIC_OTHER_SCOPE"
+            ),
+        )
+        with self.assertRaisesRegex(ValueError, "invalid reduction-math scope"):
+            merge.append(self.base, "test", [self.parity])
+        self.parity = self.pair("timing-workers")
+        self.update_report(
+            "ordered",
+            lambda row: row["worker_policy"].update(owner_preparation_workers=2),
+        )
+        with self.assertRaisesRegex(ValueError, "worker policy"):
             merge.append(self.base, "test", [self.parity])
 
     def test_changed_retained_payload_is_rejected(self):
@@ -519,6 +618,7 @@ class OrderedReportContractTests(unittest.TestCase):
         reference = run["historical_comparisons"][0]
         self.assertIsNone(reference["ordered_over_dfs"])
         self.assertFalse(reference["performance_eligible"])
+        self.assertIsNone(reference["historical"]["reduction_math_seconds"])
         self.assertEqual(reference["historical"]["public_retained_seconds"], 100)
         self.assertEqual(result["historical"], self.base["historical"])
 

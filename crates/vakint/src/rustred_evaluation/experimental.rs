@@ -11,6 +11,8 @@
 pub mod catalog;
 pub(crate) mod compressed;
 pub mod native;
+pub(crate) mod timing;
+pub use timing::{ReductionMathTiming, ReductionTimingCapture, capture_reduction_timing};
 
 use std::collections::BTreeMap;
 use std::fmt::Debug;
@@ -256,6 +258,7 @@ impl ExperimentalRustRed {
         )?;
         let mut contributions = BTreeMap::<Atom, Atom>::new();
         for term in terms {
+            let _math = timing::MathSpan::new();
             let reduction = match cached(&term.target)? {
                 Some(value) => value,
                 None => self
@@ -290,9 +293,13 @@ impl ExperimentalRustRed {
         }
         let mut value = Atom::Zero;
         for (mass, raw) in contributions {
+            let raw = {
+                let _math = timing::MathSpan::new();
+                super::combine_exact(raw)
+            };
             let normalized = crate::matad::MATAD::with_settings(settings.clone())
                 .finalize_reduced_masters(
-                    super::combine_exact(raw),
+                    raw,
                     4,
                     None,
                     &mass,
@@ -303,7 +310,10 @@ impl ExperimentalRustRed {
                         direct_numerical_substition: false,
                     },
                 )?;
-            value += normalized;
+            {
+                let _math = timing::MathSpan::new();
+                value += normalized;
+            }
         }
         Ok(value)
     }

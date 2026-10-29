@@ -12,6 +12,7 @@ use crate::symbols::S;
 use crate::utils::vakint_macros::{vk_parse, vk_symbol};
 use crate::{MATADOptions, VakintSettings};
 
+use super::experimental::timing::MathSpan;
 use super::matching::MatchedScalarFamily;
 use super::{RustRedEvaluationError, RustRedEvaluationOptions};
 
@@ -43,6 +44,19 @@ pub(super) fn evaluate(
             ) => false,
             Err(error) => return Err(super::data::failure(error)),
         };
+        // Immutable artifacts and scalar lowering precede this boundary.
+        // Request-local native state/dispatch setup is execution work in both
+        // engines, alongside IBPs and the old weighted terminal assembly.
+        // An attached DFS backend can perform reductions on a cache miss.
+        let _math = MathSpan::new();
+        let cached = if admitted {
+            vakint.cached_closed_homogeneous(matched.family, lowered.integral())?
+        } else {
+            None
+        };
+        if admitted && cached.is_none() && reducer.is_none() {
+            reducer = Some(Reducer::new(artifact).map_err(super::data::failure)?);
+        }
         let terms = if !admitted {
             log::warn!(
                 "RustRed {}L input {:?} is outside the certified root domain; there is no guarantee of a complete reduction to the known masters",
@@ -54,20 +68,14 @@ pub(super) fn evaluate(
                 artifact.coefficient_context().one(),
             )]
         } else {
-            let decomposition =
-                match vakint.cached_closed_homogeneous(matched.family, lowered.integral())? {
-                    Some(decomposition) => decomposition,
-                    None => {
-                        if reducer.is_none() {
-                            reducer = Some(Reducer::new(artifact).map_err(super::data::failure)?);
-                        }
-                        reducer
-                            .as_mut()
-                            .unwrap()
-                            .reduce_with_common_mass_homogeneity(lowered.integral())
-                            .map_err(super::data::failure)?
-                    }
-                };
+            let decomposition = match cached {
+                Some(decomposition) => decomposition,
+                None => reducer
+                    .as_mut()
+                    .unwrap()
+                    .reduce_with_common_mass_homogeneity(lowered.integral())
+                    .map_err(super::data::failure)?,
+            };
             decomposition
                 .terms()
                 .iter()
@@ -112,9 +120,13 @@ pub(super) fn evaluate(
         i64::try_from(matched.loop_count).map_err(|_| RustRedEvaluationError::Reduction {
             detail: "matched loop count does not fit Vakint's normalization exponent".to_owned(),
         })?;
+    let raw_masters = {
+        let _math = MathSpan::new();
+        super::combine_exact(raw_masters)
+    };
     let raw = MATAD::with_settings(settings.clone())
         .finalize_reduced_masters(
-            super::combine_exact(raw_masters),
+            raw_masters,
             loop_count,
             None,
             &matched.mass_squared,
@@ -126,6 +138,12 @@ pub(super) fn evaluate(
             },
         )
         .map_err(super::data::failure)?;
+    // This request-owned memo would naturally drop on return. Time that
+    // cleanup without including the preceding MATAD normalization interval.
+    {
+        let _math = MathSpan::new();
+        drop(reducer);
+    }
     Ok(raw)
 }
 
@@ -337,6 +355,7 @@ pub(super) fn evaluate_ordered_batch(
         if let Some(progress) = progress {
             progress.cohorts(cohort_index, cohort_total);
         }
+        let _math = MathSpan::new();
         let reduction = match observation.as_deref_mut() {
             Some(observer) => {
                 observer.clear_native_summary();
@@ -390,9 +409,13 @@ pub(super) fn evaluate_ordered_batch(
     }
     let mut value = Atom::Zero;
     for (mass, raw) in raw {
-        value += MATAD::with_settings(settings.clone())
+        let raw = {
+            let _math = MathSpan::new();
+            super::combine_exact(raw)
+        };
+        let normalized = MATAD::with_settings(settings.clone())
             .finalize_reduced_masters(
-                super::combine_exact(raw),
+                raw,
                 first.loop_count as i64,
                 None,
                 &mass,
@@ -404,6 +427,10 @@ pub(super) fn evaluate_ordered_batch(
                 },
             )
             .map_err(super::data::failure)?;
+        {
+            let _math = MathSpan::new();
+            value += normalized;
+        }
     }
     Ok(value)
 }

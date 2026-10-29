@@ -14,6 +14,7 @@ use std::{
     sync::{Arc, LazyLock, Mutex},
 };
 
+use super::experimental::timing::MathSpan;
 use super::monitor::{MonitorContext, RustRedMonitorOptions, RustRedMonitorScope};
 use rustred::algebra::Coefficient;
 use rustred::family::IntegralKey;
@@ -762,9 +763,12 @@ impl Vakint {
                 let result = result?;
                 let merge_started = std::time::Instant::now();
                 MonitorContext::native_phase(observation.as_deref_mut(), "caller_result_merge", Some(result.value.as_view()));
-                value += result.value;
-                conditions.extend(result.nonzero_conditions);
-                families.extend(result.families);
+                {
+                    let _math = MathSpan::new();
+                    value += result.value;
+                    conditions.extend(result.nonzero_conditions);
+                    families.extend(result.families);
+                }
                 log::debug!(target: "vakint::saved_application", "phase=caller_result_merge elapsed_seconds={:.6}", merge_started.elapsed().as_secs_f64());
             }
             if !ordered_contributions.is_empty() {
@@ -774,9 +778,12 @@ impl Vakint {
                     observation.as_deref_mut(),
                     progress,
                 )?;
-                value += result.value;
-                conditions.extend(result.nonzero_conditions);
-                families.extend(result.families);
+                {
+                    let _math = MathSpan::new();
+                    value += result.value;
+                    conditions.extend(result.nonzero_conditions);
+                    families.extend(result.families);
+                }
             } else if ordered && let Some(progress) = progress {
                 progress.cohorts(0, 0);
             }
@@ -1174,6 +1181,7 @@ impl SavedApplication {
         let mut ordered_products = if settings.rustred_application_options.reduction_strategy
             == crate::RustRedReductionStrategy::Ordered
         {
+            let _math = MathSpan::new();
             let anchor = application
                 .output_family_shared(application.family().fingerprint())
                 .ok_or_else(|| failure("saved application has no output family"))?;
@@ -1199,6 +1207,12 @@ impl SavedApplication {
             if let Some(progress) = cohort_progress {
                 progress.cohorts(cohort_index, cohort_total);
             }
+            // Declare this before the returned native values: the complete
+            // exact reduction/assembly interval includes their natural cleanup.
+            let math = MathSpan::new();
+            if settings.rustred_application_options.preparation_workers != 1 {
+                math.invalidate("net timing requires one owner-preparation worker");
+            }
             let spectator = spectator
                 .replace(dimension.to_pattern())
                 .with(physical_dimension.to_pattern());
@@ -1209,7 +1223,19 @@ impl SavedApplication {
                 "saved_rule_application",
                 None,
             );
+            let preparation_before = math
+                .is_active()
+                .then(|| application.owner_preparation_statistics().preparation_time);
             let reduced = self.reduce_saved(&mut application, terms, observation.as_deref_mut())?;
+            if let Some(before) = preparation_before {
+                // Native reports elapsed WALL time for each deferred owner.
+                // The prepared-owner mutex and one-worker qualification keep
+                // these intervals serial and enclosed by this math span.
+                math.owner_preparation(
+                    before,
+                    application.owner_preparation_statistics().preparation_time,
+                );
+            }
             log::debug!(target: "vakint::saved_application", "phase=saved_rule_application elapsed_seconds={:.6}", application_started.elapsed().as_secs_f64());
             MonitorContext::native_phase(observation.as_deref_mut(), "terminal_geometry", None);
             let products_started = std::time::Instant::now();
@@ -1462,6 +1488,12 @@ impl SavedApplication {
             "normalized_retained_output",
             Some(result.value.as_view()),
         );
+        // The ordered product memo is request-owned; the DFS product memo
+        // belongs to the engine and keeps its existing lifetime and policy.
+        if let Some(products) = ordered_products {
+            let _math = MathSpan::new();
+            drop(products);
+        }
         Ok(result)
     }
 }

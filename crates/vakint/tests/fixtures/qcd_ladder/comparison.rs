@@ -28,6 +28,52 @@ pub struct CompletedRun {
     pub report: serde_json::Value,
 }
 
+/// Capture the retained call only. Symbolic expansion and numerical references
+/// happen after this closure has returned and its instrumentation has closed.
+fn capture_retained_call<T, E>(
+    evaluate: impl FnOnce() -> std::result::Result<T, E>,
+) -> (std::result::Result<T, E>, serde_json::Value) {
+    #[cfg(feature = "experimental-rustred")]
+    {
+        let capture =
+            super::super::vakint::rustred_evaluation::experimental::capture_reduction_timing(
+                evaluate,
+            );
+        let timing = capture.timing;
+        (
+            capture.result,
+            serde_json::json!({
+                "reduction_math_seconds":timing.reduction_math.map(|duration| duration.as_secs_f64()),
+                "reduction_math_timing":{
+                    "scope_id":timing.scope_id,
+                    "complete":timing.complete,
+                    "gross_seconds":timing.gross.as_secs_f64(),
+                    "measured_owner_preparation_seconds":timing.measured_owner_preparation.as_secs_f64(),
+                    "interval_count":timing.interval_count,
+                    "incompleteness_reason":timing.incompleteness_reason,
+                },
+            }),
+        )
+    }
+    #[cfg(not(feature = "experimental-rustred"))]
+    {
+        (
+            evaluate(),
+            serde_json::json!({
+                "reduction_math_seconds":null,
+                "reduction_math_timing":{
+                    "scope_id":"vakint.rustred.reduction-math.v1",
+                    "complete":false,
+                    "gross_seconds":null,
+                    "measured_owner_preparation_seconds":null,
+                    "interval_count":0,
+                    "incompleteness_reason":"build lacks the experimental-rustred timing capture feature",
+                },
+            }),
+        )
+    }
+}
+
 fn sha256(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
@@ -196,6 +242,9 @@ fn run_scoped(
         ..Default::default()
     };
     settings.rustred_application_options.reduction_strategy = options.strategy;
+    // Native owner-preparation diagnostics sum worker wall times. Keep one
+    // worker so subtracting measured preparation from math spans is valid.
+    settings.rustred_application_options.preparation_workers = 1;
     // Bind the fixture's exact native trace dimension identically for both
     // public evaluators; the raw prepared scalar payload remains unchanged.
     let native_d = super::dimension()?;
@@ -206,31 +255,34 @@ fn run_scoped(
         .replace(native_d.clone())
         .with(physical_d.clone());
     let reduction = Instant::now();
-    let (value, guards) = if prepared.loop_count == 5 {
-        let output = if let Some(scope) = scope.as_deref_mut() {
-            engine.evaluate_rustred_symbolic_in_scope(
-                &settings,
-                evaluation_input.as_view(),
-                scope,
-            )?
+    let (retained_result, math_timing) = capture_retained_call(|| -> Result<_> {
+        if prepared.loop_count == 5 {
+            let output = if let Some(scope) = scope.as_deref_mut() {
+                engine.evaluate_rustred_symbolic_in_scope(
+                    &settings,
+                    evaluation_input.as_view(),
+                    scope,
+                )?
+            } else {
+                engine.evaluate_rustred_symbolic_with_monitor(
+                    &settings,
+                    evaluation_input.as_view(),
+                    &options.monitor,
+                )?
+            };
+            Ok((output.value, Some(output.nonzero_conditions)))
         } else {
-            engine.evaluate_rustred_symbolic_with_monitor(
-                &settings,
-                evaluation_input.as_view(),
-                &options.monitor,
-            )?
-        };
-        (output.value, Some(output.nonzero_conditions))
-    } else {
-        (
-            engine.evaluate_with_monitor(
-                &settings,
-                evaluation_input.as_view(),
-                &options.monitor,
-            )?,
-            None,
-        )
-    };
+            Ok((
+                engine.evaluate_with_monitor(
+                    &settings,
+                    evaluation_input.as_view(),
+                    &options.monitor,
+                )?,
+                None,
+            ))
+        }
+    });
+    let (value, guards) = retained_result?;
     let reduction_seconds = reduction.elapsed().as_secs_f64();
     let retained_memory = process_memory();
     if let Some(scope) = scope.as_deref_mut() {
@@ -303,6 +355,11 @@ fn run_scoped(
         "loop_count":prepared.loop_count,"gluon_rungs":prepared.loop_count-1,"projection":prepared.projection,
         "strategy":format!("{:?}",options.strategy),"persistent_cache":false,
         "dfs_request_memoization":"normal native behavior retained; no completed result cache attached",
+        "cache_policy":{"prepared_cache_loaded":false,"previous_run_cache_restored":false,
+            "depth_first_intrinsic_memoization":"normal native per-run memoization retained",
+            "ordered_result_cache":"not supported"},
+        "worker_policy":{"owner_preparation_workers":1,
+            "scope":"single owner preparation worker required for native timing subtraction"},
         "input_sha256":sha256(prepared.input.to_canonical_string().as_bytes()),
         "evaluated_input_sha256":sha256(evaluation_input.to_canonical_string().as_bytes()),
         "dimension_binding":{"source":native_d.to_canonical_string(),"target":physical_d.to_canonical_string(),"scope":"exact fixture trace dimension; all public evaluations share this binding"},
@@ -312,6 +369,9 @@ fn run_scoped(
             "timing_scope":"scalar preparation precedes retained evaluation; loaded-bundle historical work is not added to current timing"},
         "contributions":prepared.contributions,"data":data,"loading_seconds":loading_seconds,
         "retained_reduction_seconds":reduction_seconds,"retained":retained,"guards":guards,
+        "reduction_math_seconds":math_timing["reduction_math_seconds"],
+        "reduction_math_timing":math_timing["reduction_math_timing"],
+        "retained_reduction_seconds_scope":"complete retained public call, including frontend and finalization; separate from reduction math",
         "reduction_completed":unknown.is_empty(),"catalogue_closure":{"closed":unknown.is_empty(),"master_count":masters.intersection(&catalogue).count(),"unknown_count":unknown.len(),"unknown":unknown},
         "memory_after_retained_reduction":retained_memory,"monitoring_enabled":options.monitor.enabled(),
         "normalization":"MSbar","numerical_reference":null});

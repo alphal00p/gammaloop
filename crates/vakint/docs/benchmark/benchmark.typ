@@ -1208,16 +1208,25 @@ Refresh and validation contract: #raw("maintenance.typ").]
   assert(run.persistent_caches == false)
   let rows = run.summary
   let label(row) = [*#(str(row.loop_count) + "L")* · #if row.projection == "zero-momentum-metric" [zero momentum] else [quadratic]]
+  let math-duration(value) = if value >= 1 { timing(value) + " s" } else if value >= 0.001 {
+    fixed(value * 1000, 3) + " ms"
+  } else { fixed(value * 1000000, 3) + " µs" }
   let measured-cell(row, engine) = {
-    let metric = row.metrics.at(engine).public_retained_seconds
+    let metric = row.metrics.at(engine).reduction_math_seconds
     let ratio = row.ordered_over_dfs
     table.cell(fill: if engine == "ordered" and ratio != none and ratio > 0 { ratio-fill(ratio) } else { pale }, {
-      text(15pt, weight: "bold")[#timing(metric.median_seconds) s]
-      linebreak()
-      text(8pt)[#timing(metric.min_seconds)–#timing(metric.max_seconds) s · n = #row.sample_count]
-      if engine == "ordered" and ratio != none {
+      if metric == none {
+        text(15pt, weight: "bold")[—]
         linebreak()
-        text(10pt, weight: "bold")[×#multiplier(ratio)]
+        text(8pt)[Math timing unavailable]
+      } else {
+        text(15pt, weight: "bold")[#math-duration(metric.median_seconds)]
+        linebreak()
+        text(8pt)[#math-duration(metric.min_seconds)–#math-duration(metric.max_seconds) · n = #row.sample_count]
+        if engine == "ordered" and ratio != none {
+          linebreak()
+          text(10pt, weight: "bold")[×#multiplier(ratio)]
+        }
       }
     })
   }
@@ -1239,16 +1248,19 @@ Refresh and validation contract: #raw("maintenance.typ").]
   align(center)[
     #text(22pt, weight: "bold", fill: navy)[Ordered reduction · physical rung fixtures]
     #v(0.2em)
-    #text(11.5pt, fill: luma(80))[Exact engine parity · persistent caches disabled]
+    #text(11.5pt, fill: luma(80))[Reduction math · exact engine parity · persistent caches disabled]
   ]
   v(0.5em)
   block(fill: pale, inset: 10pt, radius: 4pt, width: 100%)[
     *Reading guide.* One loop has no vertical gluon rungs. Both engines receive
-    the same authenticated scalar input and retain masters in MSbar. Times cover the
-    *public retained call*: routing, scalar lowering and finalization are
-    included; data loading and later numerical-reference evaluation are excluded.
-    DFS retains normal request memoization. Qualified multipliers are
-    _ordered ÷ DFS_: green means faster. Without a bound fresh-process release
+    the same authenticated scalar input and retain masters in MSbar. Headline
+    times measure *IBP/routing plus exact weighted terminal-coefficient assembly
+    and grouping*, including request-local reduction state, with measured lazy
+    owner preparation deducted. Immutable artifact/program import, graph/data
+    preparation, matching, initial scalar lowering, MATAD normalization, numerical
+    evaluation and serialization are excluded. Gross math and the preparation
+    deduction remain in the raw record. Qualified multipliers are
+    _ordered ÷ DFS net math time_: green means faster. Without a bound fresh-process release
     protocol, observations remain diagnostic and have no ratio.
   ]
   v(0.4em)
@@ -1269,27 +1281,39 @@ Refresh and validation contract: #raw("maintenance.typ").]
     )
   }
   v(0.5em)
-  text(12pt, weight: "bold", fill: navy)[Collector and memory scope]
+  text(12pt, weight: "bold", fill: navy)[Public pipeline, collector and memory]
   v(0.2em)
   table(
-    columns: (1.1fr, 1.2fr, 1.2fr, 0.65fr),
+    columns: (1.1fr, 1.1fr, 1.1fr, 1.1fr, 0.65fr),
     inset: 7pt, stroke: 0.4pt + luma(225),
-    table.header(..([Case], [Collector s · DFS / ordered], [Peak RSS · DFS / ordered], [Phases]).map(body =>
+    table.header(..([Case], [Public retained s · DFS / ordered], [Collector s · DFS / ordered], [Peak RSS · DFS / ordered], [Phases]).map(body =>
       table.cell(fill: navy, text(fill: white, weight: "bold", size: 8.5pt, body)))),
     ..for row in rows { (
       label(row),
+      [#timing(row.metrics.dfs.public_retained_seconds.median_seconds) / #timing(row.metrics.ordered.public_retained_seconds.median_seconds)],
       [#timing(row.metrics.dfs.collector_seconds.median_seconds) / #timing(row.metrics.ordered.collector_seconds.median_seconds)],
       [#peak(row.metrics.dfs.peak_rss_bytes) / #peak(row.metrics.ordered.peak_rss_bytes)],
       progress(row),
     ) },
   )
   v(0.2em)
-  text(8pt)[Collector time begins after scalar-input preparation and includes
+  text(8pt)[Public retained time includes matching/lowering and finalization;
+  it is not substituted for an unavailable math timer. Collector time begins after scalar-input preparation and includes
   numerical-reference generation when requested. RSS is the whole-process
   high-water mark, including earlier stages; a same-process pair shares that
   history. Phases refer to the last recorded native request, not all public-call
   channels. A dash means unavailable; isolated pure-IBP, routing/lowering and
   terminal-substitution timings remain null. No zero duration is imputed.]
+  v(0.2em)
+  text(8pt)[Prepared caches and previous-run results are not loaded. The actual
+  intrinsic DFS memoization policy is recorded per case; cache-off does not
+  silently change that algorithm. Owner preparation uses one worker so its
+  measured wall-time deduction is valid. Net math includes necessary terminal
+  substitutions/projections and lower-factor reductions, not just the Native kernel.]
+  v(0.2em)
+  text(8pt)[Qualified samples disable monitoring in both engines; RAM guarding
+  remains independent. Dashboard/snapshot runs retain their observer overhead
+  and remain diagnostic, including the large five-loop examples.]
   v(0.35em)
   text(12pt, weight: "bold", fill: navy)[Ordered frontier and grouping]
   v(0.2em)
@@ -1364,11 +1388,11 @@ Refresh and validation contract: #raw("maintenance.typ").]
       columns: (1.1fr, 1fr, 1fr),
       inset: (x: 10pt, y: 16pt), stroke: 0.4pt + luma(225),
       align: center + horizon,
-      table.header(..([Historical DFS · pySecDec], [Ordered · MSbar], [Validation]).map(body =>
+      table.header(..([Historical DFS math], [Ordered math · MSbar], [Validation]).map(body =>
         table.cell(fill: navy, text(fill: white, weight: "bold", body)))),
-      table.cell(fill: pale, [#text(18pt, weight: "bold")[#timing(old.public_retained_seconds) s]
-        #linebreak() n = 1 · historical capture]),
-      table.cell(fill: pale, [#text(18pt, weight: "bold")[#timing(entry.ordered.public_retained_seconds) s]
+      table.cell(fill: pale, [#text(18pt, weight: "bold")[—]
+        #linebreak() Historical math unmeasured]),
+      table.cell(fill: pale, [#text(18pt, weight: "bold")[#if entry.ordered.reduction_math_seconds == none [—] else [#math-duration(entry.ordered.reduction_math_seconds)]]
         #linebreak() n = 1 · ordered cache off]),
       [*Converted exact ✓* #linebreak() Ratio — #linebreak() Numerical —],
     )
@@ -1376,6 +1400,11 @@ Refresh and validation contract: #raw("maintenance.typ").]
     text(9pt)[*Historical scope.* #old.scope It closed on #old.master_count
     declared individual masters. This is the saved public-pipeline reference,
     separate from the earlier 63-master Native-only cohort.]
+    v(0.3em)
+    text(9pt)[*Public retained calls, separately:* historical pySecDec
+    #timing(old.public_retained_seconds) s; new MSbar
+    #timing(entry.ordered.public_retained_seconds) s. The historical public timer
+    cannot supply a reduction-math duration.]
     v(0.3em)
     text(9pt)[*Normalization proof.* The immutable old payload is converted with
     #raw(entry.historical.normalization_conversion.api), using its exact

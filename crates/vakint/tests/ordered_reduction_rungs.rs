@@ -37,6 +37,26 @@ fn compare(loop_count: usize, projection: fixture::Projection) -> fixture::Resul
     let dfs = run("dfs", RustRedReductionStrategy::DepthFirst)?;
     let ordered = run("ordered", RustRedReductionStrategy::Ordered)?;
     fixture::comparison::compare(&dfs, &ordered)?;
+    #[cfg(feature = "experimental-rustred")]
+    for result in [&dfs, &ordered] {
+        let timing = &result.report["reduction_math_timing"];
+        assert_eq!(timing["scope_id"], "vakint.rustred.reduction-math.v1");
+        assert_eq!(timing["complete"], true);
+        assert!(timing["interval_count"].as_u64().unwrap_or(0) > 0);
+        let math_seconds = result.report["reduction_math_seconds"]
+            .as_f64()
+            .ok_or("completed native reduction has no mathematical timing")?;
+        assert!(math_seconds.is_finite() && math_seconds >= 0.0);
+        assert!(
+            math_seconds
+                <= result.report["retained_reduction_seconds"]
+                    .as_f64()
+                    .unwrap()
+        );
+        // The separately evaluated numerical reference is present, while the
+        // completed capture above covers only the earlier retained call.
+        assert!(result.report["numerical_reference"]["seconds"].is_number());
+    }
     let reference = match (loop_count, projection) {
         (1, fixture::Projection::ZeroMomentumMetric) => Some("1L-zero-momentum.json"),
         (1, fixture::Projection::QuadraticTransverse) => Some("1L-quadratic.json"),

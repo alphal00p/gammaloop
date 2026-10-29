@@ -19,6 +19,8 @@ from datetime import datetime
 from itertools import pairwise
 from pathlib import Path
 
+MATH_SCOPE = "vakint.rustred.reduction-math.v1"
+
 
 def require(condition, message):
     if not condition:
@@ -68,6 +70,62 @@ def summary(values):
     }
 
 
+def reduction_math(report):
+    """Return checked net math time, never infer it from public-call duration."""
+    value = report.get("reduction_math_seconds")
+    timing = report.get("reduction_math_timing")
+    if timing is None:
+        require(value is None, "math duration lacks its timing scope")
+        return None
+    require(
+        timing["scope_id"] == MATH_SCOPE
+        and type(timing["complete"]) is bool
+        and type(timing["interval_count"]) is int
+        and timing["interval_count"] >= 0,
+        "invalid reduction-math scope/count",
+    )
+    gross = timing["gross_seconds"]
+    preparation = timing["measured_owner_preparation_seconds"]
+    for observed in (gross, preparation):
+        if observed is not None:
+            seconds(observed)
+    if not timing["complete"]:
+        require(
+            value is None
+            and isinstance(timing.get("incompleteness_reason"), str)
+            and timing["incompleteness_reason"],
+            "incomplete math telemetry must retain a reason and no net duration",
+        )
+        return None
+    require(
+        gross is not None
+        and preparation is not None
+        and preparation <= gross
+        and (timing["interval_count"] > 0 or gross == 0)
+        and type(report.get("worker_policy", {}).get("owner_preparation_workers"))
+        is int
+        and report.get("worker_policy", {}).get("owner_preparation_workers") == 1
+        and timing.get("incompleteness_reason") is None,
+        "complete math timing has invalid owner-preparation deduction or worker policy",
+    )
+    seconds(value)
+    # Preserve Duration's nanosecond resolution and f64 serialization rounding.
+    rounding = (
+        2
+        * max(
+            math.ulp(x)
+            for x in (value, gross, preparation, report["retained_reduction_seconds"])
+        )
+        + 1e-9
+    )
+    require(
+        abs(value - (gross - preparation)) <= rounding
+        and gross <= report["retained_reduction_seconds"] + rounding,
+        "net math duration differs from its checked non-overlapping scope",
+    )
+    return value
+
+
 def validate_report(path, expected_strategy):
     raw = read(path)
     require(
@@ -86,6 +144,9 @@ def validate_report(path, expected_strategy):
         "unknown physical projection",
     )
     require(raw["persistent_cache"] is False, "ordered comparison attaches a cache")
+    require(
+        type(raw["monitoring_enabled"]) is bool, "missing effective monitoring policy"
+    )
     require(raw["reduction_completed"] is True, "physical reduction is incomplete")
     closure = raw["catalogue_closure"]
     require(
@@ -124,6 +185,7 @@ def validate_report(path, expected_strategy):
     )
     for key in ("loading_seconds", "retained_reduction_seconds", "completed_seconds"):
         seconds(raw[key])
+    reduction_math(raw)
     if raw["numerical_reference"] is not None:
         require(raw["loop_count"] <= 4, "uncomputed 5L numerical masters claimed")
         seconds(raw["numerical_reference"]["seconds"])
@@ -285,6 +347,9 @@ def validate_protocol(path, pairs):
                 == str(report["raw"]["loop_count"])
                 and checked_option(command, "--projection") == projection
                 and checked_option(command, "--build-profile") == "release"
+                and command.count("--no-monitor") == 1
+                and "--monitor" not in command
+                and "--progress-snapshot" not in command
                 and Path(checked_option(command, "--work-dir")).resolve()
                 == Path(report["evidence"]["path"]).parent.parent,
                 "guard command does not bind the reported case/engine/profile",
@@ -315,6 +380,10 @@ def validate_protocol(path, pairs):
         )
         for item in pair["reports"].values():
             require(
+                item["raw"]["monitoring_enabled"] is False,
+                "qualified performance requires monitoring disabled",
+            )
+            require(
                 item["raw"]["producer"]["debug_assertions"] is False
                 and item["raw"]["producer"]["build_profile"] == "release"
                 and item["raw"]["producer"]["commit"] == sources["main_revision"]
@@ -326,6 +395,19 @@ def validate_protocol(path, pairs):
                 and item["raw"]["producer"]["comparison_process"]
                 == "one engine in this process",
                 "producer is not the matched fresh-process release cohort",
+            )
+            require(
+                reduction_math(item["raw"]) is not None,
+                "qualified performance requires complete reduction-math telemetry",
+            )
+            cache = item["raw"].get("cache_policy", {})
+            require(
+                cache.get("prepared_cache_loaded") is False
+                and cache.get("previous_run_cache_restored") is False
+                and isinstance(cache.get("depth_first_intrinsic_memoization"), str)
+                and cache["depth_first_intrinsic_memoization"]
+                and cache.get("ordered_result_cache") == "not supported",
+                "qualified performance requires an explicit unchanged cache policy",
             )
     return {
         "evidence": evidence(path),
@@ -352,12 +434,15 @@ def load_pair(path):
         )
         reports[name] = {"evidence": evidence(report_path), "raw": report}
     dfs, ordered = (reports[name]["raw"] for name in ("dfs", "ordered"))
+    for key in ("worker_policy", "cache_policy"):
+        require(dfs.get(key) == ordered.get(key), f"paired {key} differs")
     for key in (
         "loop_count",
         "projection",
         "input_sha256",
         "evaluated_input_sha256",
         "dimension_binding",
+        "monitoring_enabled",
         "data",
         "normalization",
         "producer",
@@ -520,12 +605,14 @@ def load_historical(path):
             "definition": {"evidence": evidence(definition_path), "raw": definition},
             "normalization_conversion": conversion,
             "public_retained_seconds": observed,
+            "reduction_math_seconds": None,
             "master_count": acceptance["catalogue_closure"]["master_count"],
             "scope": acceptance["measurement_scope"],
         },
         "ordered": {
             "report": {"evidence": evidence(ordered_path), "raw": ordered},
             "public_retained_seconds": ordered["retained_reduction_seconds"],
+            "reduction_math_seconds": reduction_math(ordered),
         },
         "exact_retained_equality": True,
         "performance_eligible": False,
@@ -557,6 +644,16 @@ def append(base, run_id, receipts, protocol=None, historical_receipts=()):
             current = sample["reports"]["dfs"]["raw"]
             for name in ("producer", "data"):
                 require(current[name] == first[name], f"sample cohort {name} differs")
+            for name in (
+                "worker_policy",
+                "cache_policy",
+                "dfs_request_memoization",
+                "monitoring_enabled",
+            ):
+                require(
+                    current.get(name) == first.get(name),
+                    f"sample cohort {name} differs",
+                )
             require(
                 sample["parity"]["raw"]["numerical_enclosures_agree"]
                 is samples[0]["parity"]["raw"]["numerical_enclosures_agree"],
@@ -565,7 +662,30 @@ def append(base, run_id, receipts, protocol=None, historical_receipts=()):
         metrics = {}
         for name in ("dfs", "ordered"):
             values = [sample["reports"][name]["raw"] for sample in samples]
+            math_values = [reduction_math(row) for row in values]
+            math_complete = all(value is not None for value in math_values)
             metrics[name] = {
+                "reduction_math_seconds": summary(math_values)
+                if math_complete
+                else None,
+                "math_gross_seconds": summary(
+                    [row["reduction_math_timing"]["gross_seconds"] for row in values]
+                )
+                if math_complete
+                else None,
+                "measured_owner_preparation_seconds": summary(
+                    [
+                        row["reduction_math_timing"][
+                            "measured_owner_preparation_seconds"
+                        ]
+                        for row in values
+                    ]
+                )
+                if math_complete
+                else None,
+                "math_timing_samples": [
+                    row.get("reduction_math_timing") for row in values
+                ],
                 "public_retained_seconds": summary(
                     [row["retained_reduction_seconds"] for row in values]
                 ),
@@ -582,7 +702,8 @@ def append(base, run_id, receipts, protocol=None, historical_receipts=()):
                 ],
                 "ordered_progress": [row.get("ordered_progress") for row in values],
             }
-        baseline = metrics["dfs"]["public_retained_seconds"]["median_seconds"]
+        baseline = metrics["dfs"]["reduction_math_seconds"]
+        ordered = metrics["ordered"]["reduction_math_seconds"]
         rows.append(
             {
                 "loop_count": loops,
@@ -591,12 +712,20 @@ def append(base, run_id, receipts, protocol=None, historical_receipts=()):
                 "sample_count": len(samples),
                 "data": first["data"],
                 "producer": first["producer"],
+                "dfs_request_memoization": first["dfs_request_memoization"],
+                "cache_policy": first.get("cache_policy"),
+                "worker_policy": first.get("worker_policy"),
+                "monitoring_enabled": first["monitoring_enabled"],
+                "headline_timing_metric": "reduction_math_seconds",
+                "math_scope_id": MATH_SCOPE,
                 "metrics": metrics,
                 "performance_eligible": qualified is not None,
                 "ordered_over_dfs": (
-                    metrics["ordered"]["public_retained_seconds"]["median_seconds"]
-                    / baseline
-                    if qualified is not None and baseline > 0
+                    ordered["median_seconds"] / baseline["median_seconds"]
+                    if qualified is not None
+                    and baseline is not None
+                    and ordered is not None
+                    and baseline["median_seconds"] > 0
                     else None
                 ),
                 "exact_retained_equality": True,
@@ -610,7 +739,8 @@ def append(base, run_id, receipts, protocol=None, historical_receipts=()):
     result.setdefault("ordered_rung_runs", {})[run_id] = {
         "schema": "vakint.ordered-rung-report.v1",
         "persistent_caches": False,
-        "dfs_request_memoization": "normal behavior retained",
+        "dfs_request_memoization": "recorded per row from the actual DFS report; persistent caches remain off",
+        "headline_timing_scope": "net checked non-overlapping reduction-math spans: request-local reducer/dispatch state, IBP/routing and exact weighted terminal-coefficient assembly/grouping; immutable artifact/program import and measured lazy owner preparation excluded",
         "timing_scope": "public retained evaluation includes routing/lowering/finalization; loading and later numerical reference excluded",
         "collector_scope": "prepared-input generation excluded; numerical reference included when present",
         "protocol": qualified,

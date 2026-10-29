@@ -207,14 +207,14 @@ From the repository workspace root, for a functional comparison:
 
 ```sh
 cargo run --locked --release -p vakint \
-  --features feynkit-ingress --example ordered_reduction_rungs -- \
+  --features feynkit-ingress,experimental-rustred --example ordered_reduction_rungs -- \
   --work-dir /absolute/workspace/rung-L1-q0 \
   --loops 1 --projection zero-momentum --engine both --build-profile release
 ```
 
 Through four loops, use separate #raw("--engine dfs") and
-#raw("--engine ordered") invocations with fixed affinity and a release build
-for fresh-process timing. Declare the actual build with #raw("--build-profile");
+#raw("--engine ordered") invocations with fixed affinity, #raw("--no-monitor")
+and a release build for qualified fresh-process timing. Declare the actual build with #raw("--build-profile");
 this is a label, not compiler introspection. The
 #raw("--engine both") mode creates fresh engines in one process and is useful
 for exact parity; it is not two fresh-process measurements. Existing report
@@ -233,9 +233,36 @@ serialized numerical centers/error estimates without reducing again. These are
 mathematical bounds only for components marked #raw("Bounded"). It writes a bound
 #raw("parity.json") suitable for the benchmark adapter.
 
-The retained timer covers the complete public retained evaluation, including
-routing, scalar lowering and finalization. It is *not* a pure-IBP timer.
-Data loading and the subsequent numerical reference calculation are separate.
+The comparison headline is #raw("reduction_math_seconds"): measured
+non-overlapping math spans covering IBP/routing and exact weighted terminal
+coefficient assembly/grouping. Necessary terminal substitutions, projections
+and lower-factor reductions are included, as is request-local reducer/dispatch
+state construction for both engines. Immutable artifact loading, deserialization
+and program import, graph/data preparation, matching,
+initial scalar lowering, MATAD normalization, numerical evaluation and
+serialization are excluded. This is broader than a Native-kernel IBP timer.
+It sums disjoint math blocks, including later exact coefficient combination;
+normalization intervals themselves remain outside. Natural request-state cleanup
+inside the current call is included, while engine-lifetime teardown after the
+call is excluded. No forced cache clearing changes the execution path.
+
+The collector retains gross math time and subtracts the *measured* lazy owner
+preparation wall time, with one owner-preparation worker. The checked net,
+interval count, fixed scope and completeness flag remain in the report. Invalid
+telemetry makes the net unavailable without invalidating the scientific result.
+The optional capture requires #raw("experimental-rustred"); a build without it
+reports no math duration. The public #raw("retained_reduction_seconds") timer
+remains separate and includes frontend lowering/finalization. Missing math
+times never fall back to that public timer. In particular, the historical
+40-hour public observation supplies no isolated reduction-math duration.
+
+Prepared caches and previous-run result caches remain unloaded for these
+comparisons. The actual intrinsic DFS per-run memoization policy is stated in
+each report; this timing instrumentation does not change it. Data loading and
+the subsequent numerical reference calculation remain separate.
+Qualified comparisons disable monitoring in both engines. Dashboard/snapshot
+checks, including the large five-loop runs, retain their observer overhead and
+are diagnostic observations; independent RAM guarding remains active.
 For one through four loops the collector chooses the smallest validated finite
 source cap among surviving dependencies, or an explicit 300-digit target if
 all are arbitrary precision. It records achieved component accuracy and errors

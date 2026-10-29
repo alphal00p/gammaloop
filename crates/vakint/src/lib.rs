@@ -51,6 +51,7 @@ pub use rustred_evaluation::cache::{
 };
 #[cfg(all(unix, not(target_arch = "wasm32")))]
 pub use rustred_evaluation::cache::{RustRedCacheTransferOptions, RustRedCacheTransferReport};
+use rustred_evaluation::experimental::timing::MathSpan;
 pub use rustred_evaluation::five_loop::{RustRedSymbolicEvaluation, RustRedWitnessCacheStatistics};
 use rustred_evaluation::monitor::{CallerProgress, MonitorContext};
 pub use rustred_evaluation::monitor::{
@@ -4512,7 +4513,10 @@ impl VakintExpression {
                         let (raw, vectors) = reductions
                             .entry((loop_count, mode))
                             .or_insert_with(|| (Atom::Zero, std::collections::BTreeSet::new()));
-                        *raw += term.numerator.clone();
+                        {
+                            let _math = MathSpan::new();
+                            *raw += term.numerator.clone();
+                        }
                         vectors.extend(term.vectors.iter().cloned());
                     }
                 }
@@ -4537,10 +4541,13 @@ impl VakintExpression {
                     observation.as_deref_mut(),
                     progress,
                 )?;
-                reductions
-                    .get_mut(&key)
-                    .expect("ordered group retains its metadata")
-                    .0 += raw;
+                {
+                    let _math = MathSpan::new();
+                    reductions
+                        .get_mut(&key)
+                        .expect("ordered group retains its metadata")
+                        .0 += raw;
+                }
             }
             if batch_total != 0
                 && let Some(progress) = progress

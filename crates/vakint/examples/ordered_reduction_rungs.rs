@@ -1,6 +1,8 @@
 //! Compare native massless-quark rung fixtures using identical scalar inputs.
-//! Build with `--release --features feynkit-ingress`; run one engine per fresh
-//! process for performance measurements, or `--engine both` for exact parity.
+//! Build with `--release --features feynkit-ingress,experimental-rustred`;
+//! run one engine per fresh process for performance measurements, or
+//! `--engine both` for exact parity. Reduction math and the complete
+//! retained public call have separate timing scopes.
 
 use ::vakint;
 #[path = "../tests/fixtures/qcd_ladder/mod.rs"]
@@ -21,6 +23,7 @@ fn main() -> fixture::Result<()> {
     let mut prepared_input = None;
     let mut numerical = true;
     let mut tui = false;
+    let mut no_monitor = false;
     let mut snapshot = None;
     let mut build_profile = None;
     let mut compare_reports = None;
@@ -87,6 +90,7 @@ fn main() -> fixture::Result<()> {
             }
             "--no-numerical-reference" => numerical = false,
             "--monitor" => tui = true,
+            "--no-monitor" => no_monitor = true,
             "--progress-snapshot" => {
                 snapshot = Some(PathBuf::from(
                     arguments.next().ok_or("--progress-snapshot needs a path")?,
@@ -94,12 +98,15 @@ fn main() -> fixture::Result<()> {
             }
             "--help" => {
                 println!(
-                    "ordered_reduction_rungs --work-dir PATH --build-profile release [--loops N] [--projection zero-momentum|quadratic] [--engine dfs|ordered|both] [--artifacts PATH] [--prepared-input PATH] [--prepare-only] [--no-numerical-reference] [--monitor] [--progress-snapshot PATH]\nFor completed fresh processes: --work-dir OUT --compare-reports DFS_DIRECTORY ORDERED_DIRECTORY.\nDefault: one loop, zero momentum; both engines through four loops, ordered-only from five loops; tracked numerical reference through four loops. Saved inputs under work-dir/input-LN-projection are authenticated and reused; --prepared-input selects a shared or legacy bundle. Caches remain disabled. Retained timings exclude numerical reference generation. Use a release build without profile overrides for performance comparisons."
+                    "ordered_reduction_rungs --work-dir PATH --build-profile release [--loops N] [--projection zero-momentum|quadratic] [--engine dfs|ordered|both] [--artifacts PATH] [--prepared-input PATH] [--prepare-only] [--no-numerical-reference] [--no-monitor | --monitor] [--progress-snapshot PATH]\nFor completed fresh processes: --work-dir OUT --compare-reports DFS_DIRECTORY ORDERED_DIRECTORY.\nDefault: one loop, zero momentum; both engines through four loops, ordered-only from five loops; tracked numerical reference through four loops. Saved inputs under work-dir/input-LN-projection are authenticated and reused; --prepared-input selects a shared or legacy bundle. Prepared caches remain unloaded. Reduction math is captured with the experimental-rustred feature; the complete retained public call is timed separately. Both timings exclude the subsequent numerical reference. Use --no-monitor for qualified performance comparisons: it disables both dashboard and snapshot callbacks and conflicts with --monitor and --progress-snapshot. Use a release build without profile overrides."
                 );
                 return Ok(());
             }
             _ => return Err(format!("unknown argument {argument}").into()),
         }
+    }
+    if no_monitor && (tui || snapshot.is_some()) {
+        return Err("--no-monitor conflicts with --monitor and --progress-snapshot".into());
     }
     if loop_count == 0 {
         return Err("--loops must be positive".into());
@@ -186,12 +193,12 @@ fn main() -> fixture::Result<()> {
             artifacts: artifacts.clone(),
             numerical_reference: numerical && loop_count <= 4,
             monitor: RustRedMonitorOptions {
-                display: if tui {
+                display: if !no_monitor && tui {
                     RustRedMonitorDisplay::Tui
                 } else {
                     RustRedMonitorDisplay::Off
                 },
-                progress_snapshot: snapshot.as_ref().map(|path| {
+                progress_snapshot: snapshot.as_ref().filter(|_| !no_monitor).map(|path| {
                     if engine == "both" {
                         path.with_extension(format!("{name}.json"))
                     } else {
@@ -223,12 +230,18 @@ fn main() -> fixture::Result<()> {
             directory.join("report.json"),
             serde_json::to_vec_pretty(&run.report)?,
         )?;
-        println!(
-            "{name}: {:.6}s retained evaluation",
-            run.report["retained_reduction_seconds"]
-                .as_f64()
-                .unwrap_or_default()
-        );
+        let public_seconds = run.report["retained_reduction_seconds"]
+            .as_f64()
+            .unwrap_or_default();
+        if let Some(math_seconds) = run.report["reduction_math_seconds"].as_f64() {
+            println!(
+                "{name}: {math_seconds:.6}s reduction math; {public_seconds:.6}s complete retained public call"
+            );
+        } else {
+            println!(
+                "{name}: reduction math unavailable; {public_seconds:.6}s complete retained public call"
+            );
+        }
         run_directories.push(directory);
     }
     if let [dfs, ordered] = run_directories.as_slice() {

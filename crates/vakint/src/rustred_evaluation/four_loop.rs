@@ -23,6 +23,7 @@ use symbolica::function;
 use super::experimental::ExperimentalRustRed;
 use super::experimental::catalog::OfflineTerminalCatalog;
 use super::experimental::native::NativeCandidate;
+use super::experimental::timing::MathSpan;
 use super::{RustRedEvaluationError, RustRedEvaluationOptions};
 use crate::symbols::S;
 use crate::utils::vakint_macros::vk_symbol;
@@ -446,6 +447,7 @@ pub(super) fn evaluate_ordered_batch(
         if let Some(progress) = progress {
             progress.cohorts(cohort_index, cohort_total);
         }
+        let _math = MathSpan::new();
         let program = &programs.programs[index];
         let reduced = program.native.reduce_linear_combination_ordered(
             terms,
@@ -475,18 +477,27 @@ pub(super) fn evaluate_ordered_batch(
     }
     let mut value = Atom::Zero;
     for (mass, raw) in raw {
-        value += crate::matad::MATAD::with_settings(settings.clone()).finalize_reduced_masters(
-            super::combine_exact(raw),
-            4,
-            None,
-            &mass,
-            &crate::MATADOptions {
-                expand_masters: false,
-                susbstitute_masters: false,
-                substitute_hpls: false,
-                direct_numerical_substition: false,
-            },
-        )?;
+        let raw = {
+            let _math = MathSpan::new();
+            super::combine_exact(raw)
+        };
+        let normalized = crate::matad::MATAD::with_settings(settings.clone())
+            .finalize_reduced_masters(
+                raw,
+                4,
+                None,
+                &mass,
+                &crate::MATADOptions {
+                    expand_masters: false,
+                    susbstitute_masters: false,
+                    substitute_hpls: false,
+                    direct_numerical_substition: false,
+                },
+            )?;
+        {
+            let _math = MathSpan::new();
+            value += normalized;
+        }
     }
     Ok(value)
 }
