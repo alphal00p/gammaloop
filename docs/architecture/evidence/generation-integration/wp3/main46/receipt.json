@@ -4,9 +4,10 @@
   "base_main44_45": "217d61c3b78fb8a21adf5f48aa7f6f65235de614",
   "built_code_source": "610b83fac3d4bfd7d0a92dd912191062d18a2fbe",
   "built_code_change": "utsstkpwqqkxuuuxokskrnupnlsyxpxn",
-  "evidence_change": "owkmmxskzttysxrkyuknvmwsmylznkyy",
+  "evidence_change": "nouotqsxvrzvtxzlsrpryylmzssynpwk",
   "round2_correction": "docs/architecture/evidence/generation-integration/wp3/main46/round2-correction.json",
   "round3_correction": "docs/architecture/evidence/generation-integration/wp3/main46/round3-correction.json",
+  "round4_correction": "docs/architecture/evidence/generation-integration/wp3/main46/round4-correction.json",
   "source_mapping": {
     "order": 46,
     "original_source": "e0a779808174c64057fecfd062c948b8de8e5c1f",
@@ -30,7 +31,8 @@
     "round1_total_paths_against_217d": 24,
     "corrected_code_total_paths_against_217d": 25,
     "round2_final_candidate_paths_against_217d": 27,
-    "current_final_candidate_paths_against_217d": 28,
+    "round3_final_candidate_paths_against_217d": 28,
+    "current_final_candidate_paths_against_217d": 30,
     "rust_paths": 3,
     "runtime_or_test_changes_outside_approved_paths": 0,
     "manifest_lock_vendor_kernel_asset_changes": 0,
@@ -45,7 +47,7 @@
     "current_physical_capture": {"rows":4159,"exact":true,"normalized_sha256":"7df7aac4a48754ac23c6f8dfa0c177cb40d82972f4d12cff2675ee140a3fa747","current_only_mutation_rejected":true,"record":"current-ghost-comparison.json"},
     "current_internal_frames": {"capture_files":88,"exact_after_capture_path_normalization":true,"normalized_sha256":"d4efa4634b0996bd0d10e6440a4678179e9d6706af17e7e4b4091d7307023361","record":"current-internal-frame-comparison.json"},
     "shared_process_cook": {"passed":1,"failed":1,"exit":101,"classification":"diagnostic inherited symbol-collision failure; isolated Nextest selections are authoritative and no suppression is applied"},
-    "static": {"fmt":0,"registry":0,"registry_scopes":110,"registry_titles":76,"pdf":0,"bundle_html_round3":0,"round2_plain_html":"failed and superseded; no credit","full_docs_check":"not passed; inherited eight inventory entries and scratch issues remain","hakari":0,"kernel":0,"ci_graph":0,"nix_parse":0,"target_fixture":0,"nixfmt":"Inherited whole-file formatting failure retained; changed owner is parsed and fixture-qualified without broad rewrite.","clippy":"Approved prepared source-bound clippy log reused after exact three-Rust-blob verification; producer correction changes only Nix metadata ownership."}
+    "static": {"fmt":0,"registry":0,"registry_scopes":110,"registry_titles":76,"pdf":0,"bundle_html_round4":0,"round3_stale_plan_bundle":"failed current-source qualification; retained with no credit","round2_plain_html":"failed and superseded; no credit","full_docs_check":"not passed; inherited eight inventory entries and scratch issues remain","hakari":0,"kernel":0,"ci_graph":0,"nix_parse":0,"target_fixture":0,"nixfmt":"Inherited whole-file formatting failure retained; changed owner is parsed and fixture-qualified without broad rewrite.","clippy":"Approved prepared source-bound clippy log reused after exact three-Rust-blob verification; producer correction changes only Nix metadata ownership."}
   },
   "producer_qualification": {
     "git_uri": "git+file:///shared/lcnbr/dev/gammaloop/main?rev=610b83fac3d4bfd7d0a92dd912191062d18a2fbe&shallow=1&allRefs=1#checks.x86_64-linux.gammaloop-nextest-binaries-spenso",

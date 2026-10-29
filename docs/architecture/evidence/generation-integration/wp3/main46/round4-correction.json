@@ -1,0 +1,55 @@
+{
+  "schema": 1,
+  "base_candidate": "e3c716cf349f79146ce7ef47f9b97b3e754304b1",
+  "base_change": "owkmmxskzttysxrkyuknvmwsmylznkyy",
+  "built_code_source": "610b83fac3d4bfd7d0a92dd912191062d18a2fbe",
+  "scope": "Final plan bundle binding only; no prose, parser, Rust, Nix, config, manifest, lock, expectation, asset or runtime change.",
+  "reviews": [
+    {"scope":"round3 A","path":".local/review-main46-round3-a-opus-YSkTdSCC/review.json","sha256":"95e25e2036bcb630fccb80e5bd6f2f10ac1be1d096a7483d44fc2b540291f2f3","verdict":"APPROVE"},
+    {"scope":"round3 B","path":".local/review-main46-round3-b-opus-eoPcdKMt/review.json","sha256":"193c3fd0e14b99b84d805dbf28b3593394cfb0dceed937c5f3671e58713fcad2","verdict":"REQUEST_CHANGES","finding":"MAIN46-R3B1 only"}
+  ],
+  "plan_bundle": {
+    "source": "docs/architecture/generation-integration-plan.typ",
+    "source_sha256": "e1ff7645596b88d02de20dc21316c890888746a5768443e4e5d0e33bf506ee85",
+    "source_revision": "e3c716cf349f79146ce7ef47f9b97b3e754304b1",
+    "tool": "/nix/store/wzpxqpc3v2xxah69rqifq5kac67hx36g-typst-0.15.1/bin/typst",
+    "wrapper": "target/wp3-source44/generation-integration-plan-wrapper.typ",
+    "wrapper_sha256": "3a9deca513708fd960c6b91612311a4799b7b18ecd5de0425f35b17a17ef3103",
+    "argv": "target/wp3-source46-round4/plan-bundle.argv",
+    "argv_sha256": "ec9ec57c1e20ea65a20b86d85f6c3b0b61de86d1159e18239f9ff6f898ff4700",
+    "creation_timestamp": 0,
+    "exit": 0,
+    "log": "target/wp3-source46-round4/plan-bundle.log",
+    "output": "target/wp3-source46-round4/generation-integration-plan-bundle/index.html",
+    "output_sha256": "626f89df70bd7f65a64a7c7ba8fcfda83f07ab31f7f93eaee70d61866fd2eacd",
+    "expected_current_text": "passes 192 profile tests plus 2 separately selected default-filter controls"
+  },
+  "semantic_check": {
+    "script": "docs/architecture/evidence/generation-integration/wp3/main46/check-plan-bundle.mjs",
+    "script_sha256": "abac31b04c3d18a7847fce3ef529c2c9910b7fc617431c2a0f4e17d49a3eb622",
+    "argv": "target/wp3-source46-round4/semantic-check.argv",
+    "argv_sha256": "eba075b5d1ef28fc1f4aa0be059660f26906e3aff53b5c350b961d2df6ecb721",
+    "exit": 0,
+    "result": "target/wp3-source46-round4/semantic-check.json",
+    "result_sha256": "ffe6e10beb75df83fb3d55014338a2afb857b17fd6bca3dd3611f57102801ec5",
+    "stale_control": "target/wp3-source46-round3/generation-integration-plan-bundle.html.txt/index.html",
+    "stale_control_sha256": "fd5f11c55b247eadad8518bace3d9d35b6b823fb253cd59d5cfe65172f309539",
+    "stale_as_current_exit": 1,
+    "stale_negative_argv": "target/wp3-source46-round4/semantic-stale-negative.argv",
+    "stale_negative_argv_sha256": "063e9f808ad7d7ccf8a9a2f1b462486de5c8cea49f0f22705f9fc351f3cc5b43",
+    "stale_negative_log_sha256": "7b58b6c6d47430e895292d195234683bbc024b8a06cf6fa7dc23b4477c64442a"
+  },
+  "other_render_bindings": {
+    "source46_bundle_argv": "target/wp3-source46-round3/source46-bundle.argv",
+    "source46_bundle_argv_sha256": "98ae8c9cfc7a8bf857e950355969cdddf78a1320ce0bc2e3acb33a08389b99f2",
+    "source46_bundle_output_sha256": "417295f60012f1bd62988278a940bd655e1389486fbb1e3613f56394f69b8de6",
+    "source46_pdf_sha256": "5aa33158218fa1f7f621e55f4f315752bb5cbf87e3318fc2e6d80adeb4ae02a9",
+    "source46_pdf_creation_timestamp": 315532800,
+    "bundle_creation_timestamp": 0
+  },
+  "superseded": "The fd5f11c5 plan bundle and prior broad semantic marker are retained but receive no current-source pass credit.",
+  "reused_approvals": "Round3 A accounting approval and round3 B target/features/dep-info/producer closures remain valid because all their inputs are invariant.",
+  "inventory": {"round3_paths":28,"current_paths":30,"round4_delta_paths":5,"round4_delta":"target/wp3-source46-round4/correction-inventory.txt","round4_delta_sha256":"8a3db573ef46d247a507f0848ade667edfe7002bbcb5f41b0ee55a369e9ca8dc","nonself_entries":29,"nonself_inventory":"target/wp3-source46-round4/final-inventory-nonself.sha256","nonself_inventory_sha256":"570c05cf806d14122f3d539869a38625c31769f24a1e6fc542177eceae7058b5","qualification":"round4-correction.json is excluded to avoid a circular self-hash; its own hash is recorded after freeze."},
+  "evidence_source_qualification": {"record":"target/wp3-source46-round4/final-evidence-flake-metadata.json","classification":"Evaluated after freeze, distinct from built code610 and not built or executed; ignored evidence avoids a circular self-hash."},
+  "limits": ["No full-docs pass; eight inherited failures remain.","No runtime or producer rerun.","Tensor, consumer, source44 and aggregate-evaluated-only limits remain unchanged."]
+}
