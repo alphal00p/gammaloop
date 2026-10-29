@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "scope": "Close round2 findings A2-R2 current internal comparison frames and A3-R2 current16-worker vacuum parity; production remains8c6d8aff",
+  "base": "9429c3e03ed8814d606718c2f092d7f330f9572a",
+  "built_code_source": "8c6d8aff7e7b3da312e30d3daa403b5b90c8cede",
+  "built_code_change": "uxrqorwvkuzxyyqzqksvrntllsluqntp",
+  "reviews": [
+    {"path":".local/review-main44-45-round2-a-astra-kTMCsc/review.json","sha256":"c25796ff11d0d339a24fee86bb9d6ee246f5e1517a56cc150645457e6ac64315"},
+    {"path":".local/review-main44-45-round2-b-astra-T6LsSiQH/review.json","sha256":"39d47a3f3794aa378f1fb63fc46142504be115ef7f40fe695f002003bc34ff28"}
+  ],
+  "currentInternalFrames": {
+    "observerPatch": {"path":"docs/architecture/evidence/generation-integration/wp3/main44-45/source44_internal_frame_observer.patch.txt","sha256":"2cf8fe07be37020326c34ae4899405a47a48500c558df10c41fb1b411da10ba1","baseProductionSha256":"6c8ebb4abd42e875742bb1fdfdfa5c6fc0ecff4e9c0c4adff8f49306b4110b21","observedProductionSha256":"0336cb957963630ac0431b3d0a759dd6dcce0b9112d0ab110ce15e03b68574b2","restoredProductionSha256":"6c8ebb4abd42e875742bb1fdfdfa5c6fc0ecff4e9c0c4adff8f49306b4110b21"},
+    "captureTestSource": {"immutable":"0ac5b580fe73cc97c7b18949cefa1440d9dea9fb:tests/tests/test_feyngen.rs","sha256":"471e2af3171af92839f8e632f98cc4a85dcfec063c60318c83531f2da4458cfa"},
+    "elf": {"sha256":"fd58f1f44a7ad2d84e143273b6b3e7b2f9fa88f4d3a5e7c68947f31722a02e88","features":"default","profile":"ci-optim"},
+    "argv": ["diagnose_two_loop_vacuum_sunsets","--exact","--ignored","--nocapture","--test-threads=1"],
+    "environment": {"SUNSET_FRAME_CAPTURE":"target/wp3-source44/round3-current-frames","INSTA_UPDATE":"no"},
+    "comparison": "docs/architecture/evidence/generation-integration/wp3/main44-45/round3/current-internal-frame-comparison.json",
+    "result": "88 actual current files cover22 source occurrences and four run/file variants. Approved frame.mjs and internal-frame.mjs pass against explicit current/historical frame and capture roots. Internal comparison/representative tensors, interfaces, prefactors, signed maps/flips and graph owners are observed, not reconstructed. Mutation of a new current comparison prefactor is rejected."
+  },
+  "currentVacuum16": {
+    "preservedVacuum2": "Round2 capture remains correctly qualified at2 workers; no identity changed.",
+    "observerOverlay": {"path":"docs/architecture/evidence/generation-integration/wp3/main44-45/source44_ghost_capture16_overlay.rs.txt","sha256":"acc62fba8e5177ef57ac73c40238cc59a8de83710119ffe3a969fe0f029ec67d","adaptation":"Only Some(2) to Some(16), separate source identity."},
+    "fullSourceSha256": "aee3c94db98e3a67b440defbe4bbb54c975a417750e0bf20eda4fb84692be650",
+    "elf": {"sha256":"b3c397724d705162baa56276956df7c5f16e3dad33e3fae6700de179dd7e6523","features":"default","profile":"ci-optim"},
+    "argv": ["diagnose_source44_ungrouped_weights","--exact","--ignored","--nocapture","--test-threads=1"],
+    "rawCapture": "target/wp3-source44/round3-current-ghost16/ghost_weight_certificate",
+    "settings": "pre-generation and L2/L3/L4 after-generation records each assert global.n_cores.feyngen=16",
+    "completeJoin": {"path":"target/wp3-source44/round3-analyzer16/current-full.json","sha256":"f0a9293ff81dfc8ce0b792997a69f1d2c77b6c81826d87378a9ea19404034be0"},
+    "comparison": "docs/architecture/evidence/generation-integration/wp3/main44-45/round3/current-ghost16-comparison.json",
+    "result": "Full graph/node/edge/direction/cut/threshold/raw-factor/evaluated-weight output equals both current2 and approved records after only capture-root normalization; normalized hash7df7aac4 is identical."
+  },
+  "preservation": {
+    "sevenLiteralsAndProduction": "unchanged from8c6d8aff",
+    "temporaryLiveSources": "removed after archive/source/ELF binding",
+    "manifestLockKernelNix": "unchanged",
+    "other25GroupedRows": "pending",
+    "source46": "pending",
+    "wholeWP3": false
+  }
+}

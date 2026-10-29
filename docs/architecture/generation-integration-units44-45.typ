@@ -42,3 +42,23 @@ approved certificate domains exactly; disposable current-side mutations fail
 both comparisons while frozen preparation inputs remain unchanged. Temporary
 live observer sources are removed after their source, feature, command and ELF
 bindings are recorded. A NEW independent A/B review remains required before46.
+
+== Round-three internal frames and worker parity
+
+The #link("evidence/generation-integration/wp3/main44-45/round3/receipt.json")[round-three receipt]
+adds the two observations still missing after round two. A source-qualified,
+temporary current-code observer records the internal source/comparison/
+representative tensors and interfaces, requested and transported prefactors,
+vertex maps, signed edge maps and flips, final owners and graph endpoint/
+particle/direction inventories for all 22 source occurrences. The complete
+88-file current family passes the approved `frame.mjs` and `internal-frame.mjs`
+boundaries; a mutated current comparison prefactor is rejected. Production is
+restored byte-exactly afterward.
+
+The earlier current ungrouped capture is retained accurately as a two-worker
+diagnostic. A separately archived and source/ELF-qualified observer changes only
+that diagnostic's vacuum worker setting to 16. Its pre-generation and L2/L3/L4
+after-generation settings record 16, and its complete physical join equals both
+the two-worker current capture and approved certificate after capture-root
+normalization only. Cross-section worker policy remains unchanged. A NEW
+independent combined review remains required before46.

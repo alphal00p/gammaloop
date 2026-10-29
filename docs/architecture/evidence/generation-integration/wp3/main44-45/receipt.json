@@ -103,6 +103,11 @@
     "production_source": "unchanged 8c6d8aff7e7b3da312e30d3daa403b5b90c8cede",
     "reviewed_round1": "a30c343a6ac5a77d7e9dcc75181152c32471d472"
   },
+  "round3_correction": {
+    "path": "docs/architecture/evidence/generation-integration/wp3/main44-45/round3/receipt.json",
+    "status": "Fresh current internal comparison-frame observations and separate current16-worker vacuum parity recorded; production remains8c6. NEW independent combined review required before46.",
+    "round2_two_worker_capture": "Preserved and relabelled accurately as2 workers; not rewritten or superseded."
+  },
   "limits": [
     "All other25 grouped snapshots remain pending.",
     "No whole slow-function pass, whole WP3, source46, general grouping/physics theorem, performance, memory, full-site, WASM asset, wheel, Pyodide, Community, cold build, upload, publication or CI approval.",

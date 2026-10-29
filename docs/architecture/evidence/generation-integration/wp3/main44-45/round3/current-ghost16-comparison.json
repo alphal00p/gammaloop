@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "exact": true,
+  "currentPath": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-source44/round3-analyzer16/current-full.json",
+  "approvedPath": "/shared/lcnbr/dev/gammaloop/generation-pocket-weight-diagnosis/target/ghost-weight-certificate/round3/full-physical-joins.json",
+  "observedRoots": {
+    "current": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-source44/round3-current-ghost16/ghost_weight_certificate",
+    "historical": "/shared/lcnbr/dev/gammaloop/generation-pocket-weight-historical-source43/target/ghost-weight-certificate/historical/states/ghost_weight_certificate"
+  },
+  "normalizedPaths": 4159,
+  "normalizedSha256": "7df7aac4a48754ac23c6f8dfa0c177cb40d82972f4d12cff2675ee140a3fa747",
+  "mutation": {
+    "target": "first current evaluatedWeight",
+    "frozenPreparationInputUnchanged": true,
+    "rejected": true
+  }
+}

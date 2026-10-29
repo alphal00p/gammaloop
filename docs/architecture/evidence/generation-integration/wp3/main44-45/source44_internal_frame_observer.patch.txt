@@ -1,0 +1,106 @@
+diff --git a/crates/feynkit-generator/src/generation/staged.rs b/crates/feynkit-generator/src/generation/staged.rs
+index 4c1ca2bb58..69434da12f 100644
+--- a/crates/feynkit-generator/src/generation/staged.rs
++++ b/crates/feynkit-generator/src/generation/staged.rs
+@@ -21,8 +21,15 @@
+ #[cfg(not(target_arch = "wasm32"))]
+ use rayon::prelude::{IntoParallelIterator, ParallelIterator};
+ use std::collections::HashSet;
++use std::fs;
+ use std::fmt::{Debug, Formatter, Result as FmtResult};
++use std::path::PathBuf;
+ use std::slice::Iter;
++use std::sync::atomic::{AtomicUsize, Ordering};
++use crate::generation::graph::Endpoint;
++use symbolica::atom::AtomCore;
++
++static SUNSET_CAPTURE_RUN: AtomicUsize = AtomicUsize::new(0);
+ 
+ /// Exact physical totals at one loop order, before numerator construction.
+ #[derive(Clone, Debug, Default, PartialEq, Eq)]
+@@ -1166,6 +1173,9 @@
+         if matches!(grouping, Grouping::None) {
+             return Ok(self.done(run));
+         }
++        let sunset_capture = std::env::var_os("SUNSET_FRAME_CAPTURE").map(|root| {
++            (PathBuf::from(root), SUNSET_CAPTURE_RUN.fetch_add(1, Ordering::SeqCst))
++        });
+         let Some(prepared) = self.prepared.clone() else {
+             return Err(GenerationError::InvalidRequest("group an ungrouped built set; grouping a collapsed set would lose its source terms".into()));
+         };
+@@ -1213,11 +1223,31 @@
+             // Both preparations reframe the same assignment: move the requested factors from
+             // the ungrouped physical frame into the comparison and representative frames.
+             let ungrouped = &source.input.representative.graph;
+-            let comparison_options = ungrouped
+-                .frame_map(&input.comparison.graph)
+-                .options(&self.options)?;
++            let comparison_frame = ungrouped.frame_map(&input.comparison.graph);
++            let comparison_options = comparison_frame.options(&self.options)?;
+             let representative_frame = ungrouped.frame_map(&input.representative.graph);
+             let representative_options = representative_frame.options(&self.options)?;
++            let captured_graphs = sunset_capture.as_ref().map(|_| {
++                let mut records = String::new();
++                for (name, graph) in [("source", ungrouped),
++                    ("comparison", &input.comparison.graph),
++                    ("representative", &input.representative.graph)] {
++                    for (id, rule) in graph.vertices().enumerate() {
++                        records.push_str(&format!("graph_vertex\t{name}\t{id}\t{rule:?}\n"));
++                    }
++                    for (id, edge) in graph.edges().enumerate() {
++                        let endpoint = |value| match value {
++                            Endpoint::Vertex(vertex) => format!("v:{vertex}"),
++                            Endpoint::External(external) => format!("x:{}:{:?}:{:?}",
++                                external.index, external.state, external.particle),
++                        };
++                        records.push_str(&format!("graph_edge\t{name}\t{id}\t{}\t{}\t{:?}\t{}\n",
++                            endpoint(edge.source), endpoint(edge.sink), edge.particle,
++                            u8::from(edge.directed)));
++                    }
++                }
++                records
++            });
+             let new_internal = input
+                 .representative
+                 .graph
+@@ -1309,6 +1339,40 @@
+                     .collect::<Result<Vec<_>, _>>()?;
+                 pair = pair.with_loop_momentum_edges(&basis)?;
+             }
++            if let Some((root, run_index)) = &sunset_capture {
++                let folder = root.join(format!("run-{run_index}"));
++                fs::create_dir_all(&folder).expect("diagnostic frame folder");
++                for (name, diagram) in [("source", &self.diagrams[index]),
++                    ("comparison", pair.comparison()),
++                    ("representative", pair.representative())] {
++                    fs::write(folder.join(format!("source-{}-{name}.json", self.sources[index])),
++                        diagram.to_json().expect("diagnostic diagram JSON"))
++                        .expect("diagnostic diagram write");
++                }
++                let mut record = format!(
++                    "run_index\t{run_index}\nsource_index\t{}\nsource_name\t{}\ndistinct\t{}\nrequested_prefactor\t{}\ncomparison_prefactor\t{}\nrepresentative_prefactor\t{}\n",
++                    self.sources[index], self.diagrams[index].name().unwrap(),
++                    u8::from(matches!(pair, DiagramPair::Distinct { .. })),
++                    self.options.prefactor.to_canonical_string(),
++                    comparison_options.prefactor.to_canonical_string(),
++                    representative_options.prefactor.to_canonical_string());
++                for (name, frame) in [("comparison", &comparison_frame),
++                    ("representative", &representative_frame)] {
++                    for (old, new) in frame.vertices.iter().enumerate() {
++                        record.push_str(&format!("vertex_map\t{name}\t{old}\t{new}\n"));
++                    }
++                    for (old, (new, flipped)) in frame.edges.iter().enumerate() {
++                        record.push_str(&format!("edge_map\t{name}\t{old}\t{new}\t{}\n",
++                            u8::from(*flipped)));
++                    }
++                }
++                for (old, new) in &map {
++                    record.push_str(&format!("final_edge_map\t{}\t{}\n", old.0, new.0));
++                }
++                record.push_str(&captured_graphs.unwrap());
++                fs::write(folder.join(format!("source-{}.txt", self.sources[index])), record)
++                    .expect("diagnostic frame write");
++            }
+             Ok(Some(pair))
+         };
+         let pairs = run
