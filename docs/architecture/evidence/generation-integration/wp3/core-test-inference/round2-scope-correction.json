@@ -16,10 +16,18 @@
   },
   "before": {
     "candidate": "004d82f348e4157a50adefef01b0b105d239e5ee",
-    "record": "target/wp3-core-test-inference-round2/scopes-before.txt",
+    "record": ".local/review-main-core-test-inference-opus-20261029T190454Z-1747112/scopes-004.txt",
     "record_sha256": "1baa6025891913837b2f9e34a86041622e1f691b997f9309a4952887f31fc375",
     "scopes": 110,
     "bad": 2
+  },
+  "superseded_invalid_before_artifact": {
+    "path": "target/wp3-core-test-inference-round2/scopes-before.txt",
+    "sha256": "782a0115d8504e6c4c8a8bf45bf0557b2ce2ef503a6e57f79e5ae4169eac2f2b",
+    "round2_manifest": "target/wp3-core-test-inference-round2/manifest.sha256",
+    "round2_manifest_sha256": "fbae53a7b0e05dd77a00b7144089f366a3518d141bdf083d404eea73a5eebb56",
+    "content": "Three corrected OK rows and scopes110 bad0 followed by a stray '110 bad 2' line; it is not a capture of candidate004 and receives no before-state credit.",
+    "generation": "The exact producing shell state was not retained. The bytes are consistent with corrected working-copy stdout followed by an appended summary, but that causal reconstruction is inference and is not asserted as fact."
   },
   "corrections": [
     {

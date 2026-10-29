@@ -1,0 +1,7 @@
+1baa6025891913837b2f9e34a86041622e1f691b997f9309a4952887f31fc375  .local/review-main-core-test-inference-opus-20261029T190454Z-1747112/scopes-004.txt
+7c65577d308b5dceaa60bc88bd01cb325b827aa3fbb734a154ff8bd9e78eefb7  target/wp3-core-test-inference-round2/scopes-after.txt
+782a0115d8504e6c4c8a8bf45bf0557b2ce2ef503a6e57f79e5ae4169eac2f2b  target/wp3-core-test-inference-round2/scopes-before.txt
+fbae53a7b0e05dd77a00b7144089f366a3518d141bdf083d404eea73a5eebb56  target/wp3-core-test-inference-round2/manifest.sha256
+80200d9ab34e59a1cfe772fd32dba7739ad969be20d69f35a068773a74299ed0  .local/review-main-core-scope-round2-opus-20261029T191535Z-2142322/scopes-004d82f3.json
+93a92627cb7a110d6a1a6f34db29e1ba107561b84bd96bfa47e660d8129486d1  .local/review-main-core-scope-round2-opus-20261029T191535Z-2142322/scopes-5126de4f.json
+894ab276002c0356f1a4f769d309e875e490f6b6d383cfaa6bd4b39569fc7e7f  target/wp3-core-test-inference-round3/validation.json

@@ -1,0 +1,33 @@
+{
+  "schema": 1,
+  "scope": "Evidence-path correction only: replace the invalid round2 before-state pointer with a genuine immutable candidate004 capture; registry and runtime results unchanged.",
+  "round2_candidate": "5126de4ff2500f4e2f0547c080af230d32cd0fcd",
+  "round2_change": "pwkyskzryprtwwzqwmlktuyvuntsxmxn",
+  "runtime_code": "8bd39ede19825d73ec25e9e31dcb9267461b916e",
+  "evidence_change": "qoluqoslxqyuosqsvuospmlrtsznyskr",
+  "review": {"path":".local/review-main-core-scope-round2-opus-20261029T191535Z-2142322/review.json","sha256":"4f077fa877ccc0597dd97605e49602c1267611d2285c4327025a047ba11ad7f2","verdict":"REQUEST_CHANGES","finding":"R2-F1"},
+  "active_before": {"revision":"004d82f348e4157a50adefef01b0b105d239e5ee","path":".local/review-main-core-test-inference-opus-20261029T190454Z-1747112/scopes-004.txt","sha256":"1baa6025891913837b2f9e34a86041622e1f691b997f9309a4952887f31fc375","content":"110 scopes, exactly two mismatches: generation-sampling-staged reflection controls and gammaloop-architecture warm_up. Reproduced byte-for-byte from immutable candidate004 by both focused reviewers."},
+  "active_after": {"revision":"5126de4ff2500f4e2f0547c080af230d32cd0fcd","path":"target/wp3-core-test-inference-round2/scopes-after.txt","sha256":"7c65577d308b5dceaa60bc88bd01cb325b827aa3fbb734a154ff8bd9e78eefb7","content":"110 scopes, zero mismatches. Registry bytes are unchanged in this round3 correction."},
+  "independent_source_specific_checks": {
+    "script": ".local/review-main-core-scope-round2-opus-20261029T191535Z-2142322/scopes.py",
+    "script_sha256": "fea683f34d835314226622e7d685ecaee6ea4949dadd79dc0fd31d19c549ee25",
+    "before_json": {"path":".local/review-main-core-scope-round2-opus-20261029T191535Z-2142322/scopes-004d82f3.json","sha256":"80200d9ab34e59a1cfe772fd32dba7739ad969be20d69f35a068773a74299ed0","scopes":110,"bad":2},
+    "after_json": {"path":".local/review-main-core-scope-round2-opus-20261029T191535Z-2142322/scopes-5126de4f.json","sha256":"93a92627cb7a110d6a1a6f34db29e1ba107561b84bd96bfa47e660d8129486d1","scopes":110,"bad":0},
+    "qualification": "Inputs are pinned git blobs. Ordered scope keys are identical; only the two expected digests change, while actual source digests are identical."
+  },
+  "failed_artifact": {
+    "path": "target/wp3-core-test-inference-round2/scopes-before.txt",
+    "sha256": "782a0115d8504e6c4c8a8bf45bf0557b2ce2ef503a6e57f79e5ae4169eac2f2b",
+    "manifest": "target/wp3-core-test-inference-round2/manifest.sha256",
+    "manifest_sha256": "fbae53a7b0e05dd77a00b7144089f366a3518d141bdf083d404eea73a5eebb56",
+    "credit": "NONE",
+    "known": "Its actual bytes contain corrected110/0 output plus a stray '110 bad 2' line.",
+    "unknown": "The exact producing shell command/state was not retained.",
+    "inference_only": "The shape is consistent with corrected working-copy stdout followed by an appended summary; this is not asserted as provenance."
+  },
+  "validator": {"path":"docs/architecture/evidence/generation-integration/wp3/core-test-inference/validate-scope-round3.mjs","script_sha256":"0d9f98b4cd8fb6d238192d2ccd84eacc8b4e11b79282564a60c4d84ecf4babeb","result":"target/wp3-core-test-inference-round3/validation.json","result_sha256":"894ab276002c0356f1a4f769d309e875e490f6b6d383cfaa6bd4b39569fc7e7f","exit":0,"coverage":"Hashes every active/failed artifact; validates exact before mismatch identities and values, zero after mismatches, ordered scope-key identity, exactly two expected digest changes, current registry bytes and active receipt/correction pointers."},
+  "supplemental_manifest": {"path":"docs/architecture/evidence/generation-integration/wp3/core-test-inference/round3-supplemental.sha256","entries":7,"sha256":"2ce17afcdde94b010e31b1c1d0c619cdec2bbc84438000dc3b1e335b4ff148a3"},
+  "runtime_reuse": {"code":"8bd39ede19825d73ec25e9e31dcb9267461b916e","producer":"/nix/store/smwx0dns2bln927v1hly8dqwi6562jnr-gammaloop-nextest-binaries-core-gammalooprs-0.1.0.drv","archive_sha256":"a3aeba1bed31f3a648093d00cfbc590617fcaa5b7f57b9c9625b43d52073a61c","elf_sha256":"5916fc2731a912f80899bc2396c847428aa650eb6707a66f2e83ec5ac0dd3bcc","execution":"Existing fresh combined3/3 exit0 remains approved; no rerun or rebuild."},
+  "inventory": {"paths":7,"items":["docs/architecture/evidence/generation-integration/execution.json","docs/architecture/evidence/generation-integration/wp3/core-test-inference/receipt.json","docs/architecture/evidence/generation-integration/wp3/core-test-inference/round2-scope-correction.json","docs/architecture/evidence/generation-integration/wp3/core-test-inference/round3-evidence-correction.json","docs/architecture/evidence/generation-integration/wp3/core-test-inference/round3-supplemental.sha256","docs/architecture/evidence/generation-integration/wp3/core-test-inference/validate-scope-round3.mjs","docs/architecture/evidence/generation-integration/wp3/replay.json"]},
+  "limits": ["No registry digest, runtime result or producer identity changes in round3.","No aggregate/core-fast/WP3 approval.","No API/docs/QED import, publication or CI enablement."]
+}
