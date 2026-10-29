@@ -376,9 +376,18 @@ own workspace. Bounded: one regression, one bisect, one written verdict.
   Nix Cargo-target owner now includes immediate child-directory `main.rs` targets;
   the corrected Git-pinned Idenso archive realizes and passes 192 profile tests plus 2
   separately selected default-filter controls. The inherited
-  TensorReduction declared-layout consumer remains failed and separately owned.
-  A NEW independent Opus A/B review is required before the WP3 rebuilt-tip
-  exit matrix; replay completion alone does not complete WP3.
+  TensorReduction declared-layout consumer remained a separate gate. Final Opus
+  review APPROVES the cumulative source46 candidate at `79dfeaab`; WP3 remains incomplete.
+
+- #strong[TensorReduction declared-layout integration 2026-10-29:]
+  approved preparation `97269ac1` is reconciled byte-for-byte onto approved MAIN46.
+  Checked positional sums retain their established correspondence; other sums are
+  restored through the reducer-owned source carrier, while generic Idenso arithmetic
+  remains canonical. Fresh bounded consumer, held-out, color, Python and Vakint
+  validation is recorded in
+  `evidence/generation-integration/wp3/tensor-layout/receipt.json`. A NEW independent
+  Opus integration review is required before the rebuilt-tip WP3 exit matrix; this
+  integration does not complete WP3.
 
 - `jj duplicate` the v4 chain (`kursouxx::kpslpwqz`) onto the WP2 base; do not
   rebase in place, so the 19 live workspaces on older lines stay valid.

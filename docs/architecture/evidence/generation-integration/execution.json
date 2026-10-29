@@ -610,9 +610,9 @@
     "validation_metadata_commit": "783e3281d01134f8fe2e44eab366d0414c63b852",
     "source_binding": "docs/architecture/evidence/generation-integration/wp3/main32-35/metadata-source.json"
   },
-  "current_implementation_code_commit": "610b83fac3d4bfd7d0a92dd912191062d18a2fbe",
+  "current_implementation_code_commit": "b9f788922341e7bde2e801a054423ae70ed7e9ae",
   "current_documentation_code_commit": "a3729fe5d880f0db5f09d9ce7d0ef592bfc4d161",
-  "current_implementation_change": "utsstkpwqqkxuuuxokskrnupnlsyxpxn",
+  "current_implementation_change": "olwyvkywonuuoszxllzsnovoxktuolzk",
   "main32_35_review": {
     "candidate": "510d79d94bbaf57aaaa992c641e7496905763324",
     "verdict": "APPROVE",
@@ -705,8 +705,17 @@
     "code_change": "utsstkpwqqkxuuuxokskrnupnlsyxpxn",
     "receipt": "docs/architecture/evidence/generation-integration/wp3/main46/receipt.json",
     "candidate_bookmark": "generation-integration-source46",
-    "status": "Corrected source46 candidate awaiting NEW independent Opus A/B review before WP3 exit matrix. WP3 incomplete.",
+    "status": "APPROVED at79dfeaab by cumulative independent Opus review; source46 runtime code610 and realized Idenso archive remain separately bound. WP3 incomplete.",
     "accounted_source_rows": 46,
     "accounted_planned_units": 41
+  },
+  "active_tensor_layout": {
+    "base": "79dfeaab77958064bf802bc88db23eb86ac2f8ce",
+    "approved_preparation": "97269ac1739ef02711a845e0de4fef23cfb4cada",
+    "code_commit": "b9f788922341e7bde2e801a054423ae70ed7e9ae",
+    "code_change": "olwyvkywonuuoszxllzsnovoxktuolzk",
+    "receipt": "docs/architecture/evidence/generation-integration/wp3/tensor-layout/receipt.json",
+    "candidate_bookmark": "generation-integration-tensor-layout",
+    "status": "Integrated and bounded combined validation complete; awaiting NEW independent Opus integration review before the WP3 exit matrix."
   }
 }

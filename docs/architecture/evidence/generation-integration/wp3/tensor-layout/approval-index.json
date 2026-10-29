@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "integration_base": "79dfeaab77958064bf802bc88db23eb86ac2f8ce",
+  "main46_review": {"path":".local/review-main46-round4-opus-rZyrnOS8/review.json","sha256":"ee6e37ee207747d4f65c6a45b619412738af3248a65301b396768f27f5227e22","verdict":"APPROVE"},
+  "preparation": {"workspace":"/shared/lcnbr/dev/gammaloop/generation-tensor-reduction-layout","base":"217d61c3b78fb8a21adf5f48aa7f6f65235de614","candidate":"97269ac1739ef02711a845e0de4fef23cfb4cada","change":"otwqkwnmrrqxkrpqwkovxoyxuutkvtxs"},
+  "preparation_review": {"path":"/shared/lcnbr/dev/gammaloop/generation-tensor-reduction-layout/.local/review-tensor-reduction-layout-round3-astra-6quw2qdi/review.json","sha256":"348655b56753e4015732bf452890de5a4913da16bd9e6a04abfb895c0e855ed7","verdict":"APPROVE","qualification":"Historical completed preparation review, before the switch to Opus for new reviews."},
+  "preparation_manifest": {"path":"/shared/lcnbr/dev/gammaloop/generation-tensor-reduction-layout/.local/tensor-reduction-layout-round3-evidence/manifest.json","sha256":"6da1d91e9ad4ee11ac03481a0f7a5acbc634076f9c3f6d4c118e6bafdf8bbbde"},
+  "intermediate_refs": ["5a649588","f87ab47d"],
+  "integration_code": "b9f788922341e7bde2e801a054423ae70ed7e9ae",
+  "integration_code_change": "olwyvkywonuuoszxllzsnovoxktuolzk"
+}

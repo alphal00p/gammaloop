@@ -18,7 +18,7 @@ title = "Generation adjoint colour cycle slice"
 summary = "Approved source46 implementation on current colour owners, guarded adjoint cycle identities and registration-order evidence."
 source = "docs/architecture/generation-color-cycles.typ"
 kind = "Execution record"
-status = "Integrated candidate · NEW independent Opus A/B review before WP3 replay completion"
+status = "Approved at 79dfeaab · cumulative independent Opus review"
 lifecycle = "investigation"
 owner = "unassigned"
 reviewed_at = "2026-10-29"
@@ -26,6 +26,21 @@ review_ref = "eca80902435889580f462d07601d7e0187c47ec7"
 products = ["idenso", "gammaloop"]
 topics = ["generation", "integration", "color", "testing"]
 review_triggers = ["crates/idenso/src/color/**", "nix/rust-workspace.nix", "docs/architecture/evidence/generation-integration/color-cycles/**"]
+
+[[section.note]]
+id = "generation-integration-tensor-layout"
+title = "TensorReduction declared-layout integration"
+summary = "Approved reducer-specific restoration of declared tensor layouts on the cumulative source46 head."
+source = "docs/architecture/generation-integration-tensor-layout.typ"
+kind = "Execution record"
+status = "Integrated candidate · NEW independent Opus review before WP3 exit matrix"
+lifecycle = "investigation"
+owner = "unassigned"
+reviewed_at = "2026-10-29"
+review_ref = "97269ac1739ef02711a845e0de4fef23cfb4cada"
+products = ["feynkit", "vakint", "idenso"]
+topics = ["generation", "tensor reduction", "interfaces", "validation"]
+review_triggers = ["crates/feynkit-tensor/src/reduction.rs", "crates/feynkit-tensor/src/reduction/blocks.rs", "docs/architecture/vakint-architecture.typ", "docs/architecture/evidence/generation-integration/wp3/tensor-layout/**"]
 
 [[section.note]]
 id = "generation-integration-units44-45"
