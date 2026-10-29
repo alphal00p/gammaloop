@@ -911,7 +911,7 @@
       "bytes": 887,
       "sha256": "8c098d4d7d86334fa1ac58c44300024521e0b25584dbc657c070cb3100cbf54d"
     },
-    "current_derivation_graph": {
+    "local_checkout_derivation_graph": {
       "path": "target/wp3-units39-43/feynkit-nix-derivation.json",
       "bytes": 5986,
       "sha256": "9a3a34a78c88164796b582eb063e22cb5c2723ec9075ed4734287c66db1fc216"
@@ -921,7 +921,13 @@
       "bytes": 245,
       "sha256": "9464a53e4daf37cd0daaaeb42f50edc10a5da3ffac6c4f240981125db29d14e8"
     },
-    "qualification": "Current code source 66c2aed4 was evaluated for the selected FeynKit/NixCI and linnest-wasm attributes; historical source38 outputs are not relabelled."
+    "local_checkout_qualification": "This local-checkout evaluation includes three ignored vendor/kurbo/target files and is not the exact Git-pinned code66 or dfe52 producer identity. It evaluated derivations only; its listed bundle and generator outputs are not realized or executed.",
+    "git_pinned_correction": {
+      "path": "docs/architecture/evidence/generation-integration/wp3/main39-43/producer-metadata-correction.json",
+      "bytes": 6706,
+      "sha256": "ba2a1bc0e051c5af955b703a2f7e825f5bd30122a703af10cf3ea46c04dccc87"
+    },
+    "qualification": "Independent Git-pinned evaluations bind code66 and reviewed dfe52 to distinct full-source NARs and identical filtered FeynKit producer graphs. Exact URIs, bundle/generator derivations, filtered source identity and evaluation-versus-execution classification are in the correction record. The separately qualified WASM evidence is unchanged."
   },
   "validated_contracts": {
     "python_progress": "All 45 feynkit-py tests passed, including deterministic two-drain cancellation suppression, exactly one terminal Done, caller-thread delivery, pending Done preservation, worker join/error precedence, native fixture cancellation and normal/contention controls. The fixture reports its actual retained_count; 10,000 is confined to the synthetic coalescing unit test.",

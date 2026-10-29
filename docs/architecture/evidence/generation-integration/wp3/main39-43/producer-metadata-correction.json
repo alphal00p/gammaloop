@@ -1,0 +1,116 @@
+{
+  "schema": 1,
+  "scope": "Metadata-only correction for MAIN39–43 FeynKit Nextest producer identities; runtime semantics and WASM evidence unchanged",
+  "reviewed_candidate": {
+    "commit": "dfe52ccd829c4bc7a5f9ff40ab0d1d8c2ade833a",
+    "change": "rvyuvwsmvwztvromvvxonntqtwptoorz",
+    "bookmark": "generation-integration-units39-43-round1"
+  },
+  "implementation": {
+    "commit": "66c2aed45d83b54f55b39bf2fc2f88c2066d6343",
+    "change": "ymkxyqsovlsnotwqtmqzwwrwkvzsklox"
+  },
+  "review_findings": [
+    {
+      "id": "MAIN39-43-A-P2-NIX-SOURCE",
+      "report": "target/review-main39-43-scope-a-astra-20261029-JIyGrj/review.json",
+      "report_sha256": "183a5492e3368ecfe2d1f227bc66064d469336af227c119fda6c3cf28a99098c"
+    },
+    {
+      "id": "B1",
+      "report": ".local/review-main39-43-b-astra-bRznnLLr/review.json",
+      "report_sha256": "03850d3224b968677176275b13941fb1a3b29f961911c4386efb1a0e462e799e"
+    }
+  ],
+  "original_local_checkout_evaluation": {
+    "classification": "Derivations evaluated only; listed bundle and generator outputs are not realized and were not executed",
+    "derivation_graph": "target/wp3-units39-43/feynkit-nix-derivation.json",
+    "derivation_graph_sha256": "9a3a34a78c88164796b582eb063e22cb5c2723ec9075ed4734287c66db1fc216",
+    "query_log": "target/wp3-units39-43/feynkit-nix-derivation.log",
+    "query_log_sha256": "9464a53e4daf37cd0daaaeb42f50edc10a5da3ffac6c4f240981125db29d14e8",
+    "bundle_derivation": "/nix/store/y1ivy8wknsagcwq35kb7chjvlha0rg18-gammaloop-nextest-binaries-feynkit.drv",
+    "bundle_output": "/nix/store/38y7vk8hm961sxiqm30z2rnszcki4d24-gammaloop-nextest-binaries-feynkit",
+    "generator_derivation": "/nix/store/dz6ngj4mpybf08l7iqy6v6vsw7aswh8a-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0.drv",
+    "generator_output": "/nix/store/f4g8y9zyjckdy75jjwsdhd0m2341payz-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0",
+    "filtered_source": {
+      "path": "/nix/store/sc1s9ggx9chg9p5jr8773cl87rgmcc74-source",
+      "narHash": "sha256-FUgZCViDDC2gEpCrYkHAzmLK1HhSXi+gFbvr8NFz/Oo=",
+      "narSize": 14660744,
+      "selected_files": 673
+    },
+    "ignored_extras": [
+      {
+        "path": "vendor/kurbo/target/CACHEDIR.TAG",
+        "sha256": "6d9d1d216e0f83abc5e5662ca62c92b4f23009466b54fa27321a69acdb778bb2"
+      },
+      {
+        "path": "vendor/kurbo/target/debug/.cargo-artifact-lock",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "vendor/kurbo/target/debug/.cargo-lock",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ]
+  },
+  "git_pinned_evaluations": {
+    "classification": "Derivations evaluated only; listed bundle and generator outputs are not realized or executed. Runtime approvals use separately hash-bound retained Cargo ELFs.",
+    "attribute": "checks.x86_64-linux.gammaloop-nextest-binaries-feynkit",
+    "code66": {
+      "uri": "git+file:///shared/lcnbr/dev/gammaloop/main?rev=66c2aed45d83b54f55b39bf2fc2f88c2066d6343&shallow=1&allRefs=1#checks.x86_64-linux.gammaloop-nextest-binaries-feynkit",
+      "full_source": {
+        "path": "/nix/store/b2f0d0js69afpsr4hykgm2hvpii76242-source",
+        "narHash": "sha256-UKGWJANySz2lD2ekG0GvwEovOg/9JBQZbeBRPN1HOPw=",
+        "narSize": 117055720
+      },
+      "bundle_record": {
+        "path": "target/review-main39-43-scope-a-astra-20261029-JIyGrj/code66-feynkit-derivation.json",
+        "sha256": "37deabdc39bed66c297a1f1ea7eb641db0c5a37145d81109ead7d25b60d580e0"
+      },
+      "generator_record": {
+        "path": "target/review-main39-43-scope-a-astra-20261029-JIyGrj/generator-producer-derivation.json",
+        "sha256": "688d688e48b87e918d0ab3563fa39c8cada7a708fa20ed07d95f15e0ffa09044"
+      }
+    },
+    "reviewed_final": {
+      "uri": "git+file:///shared/lcnbr/dev/gammaloop/main?rev=dfe52ccd829c4bc7a5f9ff40ab0d1d8c2ade833a&shallow=1&allRefs=1#checks.x86_64-linux.gammaloop-nextest-binaries-feynkit",
+      "full_source": {
+        "path": "/nix/store/25sn3nmjp3y82aq87n6hp001s3qzwdcn-source",
+        "narHash": "sha256-ovAVFsv9xcKC9fgoBio3wF+t43md3dnB1LGHO0B1FEM=",
+        "narSize": 117101800
+      },
+      "bundle_record": {
+        "path": "target/review-main39-43-scope-a-astra-20261029-JIyGrj/final-feynkit-correct-derivation.json",
+        "sha256": "37deabdc39bed66c297a1f1ea7eb641db0c5a37145d81109ead7d25b60d580e0"
+      },
+      "generator_record": {
+        "path": "target/review-main39-43-scope-a-astra-20261029-JIyGrj/final-generator-producer-derivation.json",
+        "sha256": "ba97e4f38280d41eac5257506d7d3db5b62b21843d5449d72d9ab0b5943ad7dd"
+      }
+    },
+    "shared_filtered_producer": {
+      "bundle_derivation": "/nix/store/8bqckv8jxxk2v0skcj95xhx9phwwmvgd-gammaloop-nextest-binaries-feynkit.drv",
+      "bundle_output": "/nix/store/0gwlpfpz05s7cibbhh972pb0zx3slkvp-gammaloop-nextest-binaries-feynkit",
+      "generator_derivation": "/nix/store/zd7l2aalpn5l03hwag3pjgrh052r2qnz-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0.drv",
+      "generator_output": "/nix/store/kzhjqdnx7qvlgd46m0w529z2n115sxnb-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0",
+      "filtered_source": {
+        "path": "/nix/store/mvrjqh7j7dpz7ghxily97s9jxycl7zbl-source",
+        "narHash": "sha256-7meeVyQHZix55glue2AzCsFib3BUo2pNvX9u3RXIKUY=",
+        "narSize": 14659640,
+        "selected_files": 670
+      }
+    },
+    "identity_statement": "Code66 and reviewed final dfe52 have distinct full-source NARs but byte-identical filtered FeynKit producer graphs. The metadata-only correction touches excluded documentation/evidence paths and does not broaden the producer filter."
+  },
+  "independent_source_comparison": {
+    "path": "target/review-main39-43-scope-a-astra-20261029-JIyGrj/nix-source-check.json",
+    "sha256": "294bd7d90f0378bc7bcc25622287924a19576b12049651138ce45546aa3db703",
+    "common_selected_files_equal": 670
+  },
+  "preserved_runtime_approvals": "Scope A freshly passed 112 native executions including frames at 1/8/32, B2, source19, named-aa, SM and four-loop. Scope B freshly passed 45 Python, 15 contention and 3 current-WASM runtime executions plus stubs/static/docs. No runtime rerun is credited to this metadata correction.",
+  "limits": [
+    "No FeynKit Nextest Nix producer was built or executed by these derivation evaluations.",
+    "The separately qualified current-source WASM record is unchanged; committed Linnest asset and final distribution/full-site gates remain distinct and open.",
+    "No whole WP3, source44/46, full site, final wheel, performance, memory, upload, publication or CI approval is claimed."
+  ]
+}
