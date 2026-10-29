@@ -4,9 +4,10 @@
   "base": "ddbee21256bb36bf202b0a8ce12c09207a7c8c14",
   "built_code_source": "8bd39ede19825d73ec25e9e31dcb9267461b916e",
   "built_code_change": "tmxvnovqoxurumoxrwzruptmtqrvooyv",
-  "evidence_change": "musnkpwxpxnzltryqrlsxpuzoulrmmlq",
+  "evidence_change": "pwkyskzryprtwwzqwmlktuyvuntsxmxn",
   "candidate_bookmark": "generation-integration-core-test-inference",
   "approval_index": "docs/architecture/evidence/generation-integration/wp3/core-test-inference/approval-index.json",
+  "scope_correction": "docs/architecture/evidence/generation-integration/wp3/core-test-inference/round2-scope-correction.json",
   "code_delta": {
     "paths": 1,
     "files": [{"path":"crates/gammalooprs/src/integrands/process/mod.rs","sha256":"2fdacba25abf4f60b41340247a5aaefc155f8177e8314d184e518e576f38af85"}],
@@ -51,7 +52,7 @@
     "rustfmt": {"scope":"process/mod.rs","exit":0,"argv_sha256":"9e3d932aa5c3e474e0e34705276e4668a8b9d5f9c3398eb8b1c4f53225384031","log_sha256":"63fb17a659f13585ae788898e612a294c4bcd430e62452dfed2ec4cd867a1602"},
     "clippy": {"classification":"Reused exact preparation source/features","scope":"gammalooprs --lib --tests --profile ci-optim --features python_stubgen -- -D warnings","exit":0,"argv_sha256":"0bec9fd455ff815f6e06cbd4bb8df4a0e064dd7ae29261cca341357c22fa3f0f","log_sha256":"2c0e2bf7018993c407130d956298a101c55471552a31cc0acdb5cc8db5bab86a","limit":"Two vendored Clarabel dependency warnings were reported; no gammalooprs warning failed the scoped -D warnings check."},
     "ci_graph": {"base_derivation":"/nix/store/dx2vmh8k9vhxrf3953xchxb4rwd1ds1i-gammaloop-guppy-workspace-graph-check.drv","code_derivation":"/nix/store/dx2vmh8k9vhxrf3953xchxb4rwd1ds1i-gammaloop-guppy-workspace-graph-check.drv","invariant":true},
-    "registry": {"notes":78,"unique_ids":78,"unique_titles":78,"scopes":110,"result_sha256":"cf3a2027867fefff517627ec049b9fb4a2425ec198f45536d6cd94bcfd16e701"},
+    "registry": {"authoritative_algorithm":"docs-builder anchor..end_anchor or whole-file git hash-object","script":".local/review-main-core-test-inference-opus-20261029T190454Z-1747112/check-scopes.py","script_sha256":"7a782fbf0ecf8939a031cabc219d198ebcbfe6c32956a75d06b420e46d899c20","before":{"scopes":110,"bad":2,"result_sha256":"1baa6025891913837b2f9e34a86041622e1f691b997f9309a4952887f31fc375"},"after":{"scopes":110,"bad":0,"result_sha256":"7c65577d308b5dceaa60bc88bd01cb325b827aa3fbb734a154ff8bd9e78eefb7"},"titles":{"notes":78,"unique_ids":78,"unique_titles":78,"result_sha256":"cf3a2027867fefff517627ec049b9fb4a2425ec198f45536d6cd94bcfd16e701"},"qualification":"Only the two reviewed process/mod.rs scope digests changed; explicit comments bind code8bd/preparation62/Opus review and attest unchanged production warm_up plus reflection/routing/numerator/partition semantics."},
     "invariance": {"Cargo.lock":"0d896231393016a4df0ac9a8a2b8eddee545b4a8d62bc87cdfbd1f2e3230a2cd","Cargo.toml":"bf968d49de81d06aa62e12793cfb6d66b46064d55090c2bb3413f883765e63dd","nix-ci.nix":"e031749e51a33ee48bc5c653d13c2dc7e7d3a51bddea77fc3c67d01ac217c540","nextest":"03e166fbe150d150450df98ebfa00e3b823b487cab5f6f9ff3d4cfb4bff4b09f","nix_workspace":"74be4a4be2afc9b7d3e122c1789c506edb8ed1ab55b747aa606a645d90810ea8","kernel":"1a1829b1f3d0a88b53b44085b3b9f34ef77945b3","nixci_enabled":false}
   },
   "documentation": {
@@ -60,8 +61,8 @@
     "plan":{"source_sha256":"8237d9e510366f9be072bf75dafc68695acdefc93a6c3f99147d398e475b5f39","wrapper_sha256":"3a9deca513708fd960c6b91612311a4799b7b18ecd5de0425f35b17a17ef3103","pdf_sha256":"4601a1149ef22f0784776243e4f2b89500fcf2be2f50cac1caf7aae0c6b88523","html_sha256":"f8c402f337d07e6dac6cad224926296fd867fd86b675ecf2a3da8d6198723e8a"},
     "semantic_check":{"script":"target/wp3-core-test-inference/check-renders.mjs","script_sha256":"a11f325168f79747eb66a9bf7a967190268ef1a0faafb79ae899bb2645518092","result_sha256":"052b847c276ed7d96e390ab8f48ecd6e83786d2e10dc75f219248f8054f04566","exit":0}
   },
-  "candidate_inventory": {"code_paths":1,"metadata_paths":7,"total_paths":8,"paths":["crates/gammalooprs/src/integrands/process/mod.rs","docs/architecture/evidence/generation-integration/execution.json","docs/architecture/evidence/generation-integration/wp3/core-test-inference/approval-index.json","docs/architecture/evidence/generation-integration/wp3/core-test-inference/receipt.json","docs/architecture/evidence/generation-integration/wp3/replay.json","docs/architecture/generation-integration-core-test-inference.typ","docs/architecture/generation-integration-plan.typ","docs/developers.toml"]},
-  "raw_evidence": {"root":"target/wp3-core-test-inference","manifest":"target/wp3-core-test-inference/artifact-manifest.sha256","entries":46,"manifest_sha256":"f1e217354548c3c178c518a8c68a5f863c276f8f90d192f43036530afa78510c","source_copy_limit":"The writable filtered-source copy and extracted target payload are retained for review but excluded from the compact manifest except for the executed JUnit and exact non-target comparison."},
+  "candidate_inventory": {"code_paths":1,"metadata_paths":8,"total_paths":9,"paths":["crates/gammalooprs/src/integrands/process/mod.rs","docs/architecture/evidence/generation-integration/execution.json","docs/architecture/evidence/generation-integration/wp3/core-test-inference/approval-index.json","docs/architecture/evidence/generation-integration/wp3/core-test-inference/receipt.json","docs/architecture/evidence/generation-integration/wp3/core-test-inference/round2-scope-correction.json","docs/architecture/evidence/generation-integration/wp3/replay.json","docs/architecture/generation-integration-core-test-inference.typ","docs/architecture/generation-integration-plan.typ","docs/developers.toml"]},
+  "raw_evidence": {"root":"target/wp3-core-test-inference","manifest":"target/wp3-core-test-inference/artifact-manifest.sha256","entries":46,"manifest_sha256":"f1e217354548c3c178c518a8c68a5f863c276f8f90d192f43036530afa78510c","source_copy_limit":"The writable filtered-source copy and extracted target payload are retained for review but excluded from the compact manifest except for the executed JUnit and exact non-target comparison.","scope_correction":{"root":"target/wp3-core-test-inference-round2","manifest":"target/wp3-core-test-inference-round2/manifest.sha256","entries":6,"manifest_sha256":"fbae53a7b0e05dd77a00b7144089f366a3518d141bdf083d404eea73a5eebb56"}},
   "history": {
     "original_b9_matrix": "The frozen b9 exit matrix retains four E0283 compile errors and no BRST/core-fast execution credit. This new execution is credited only to combined code8bd.",
     "exit_matrix_evidence": "ddbee212 APPROVE_EVIDENCE; original98-entry manifest and two supplemental JUnit bindings remain unchanged.",
@@ -70,6 +71,7 @@
   "protected_refs": [
     "generation-integration-core-test-inference-base=ddbee21256bb36bf202b0a8ce12c09207a7c8c14",
     "generation-integration-core-test-inference-code=8bd39ede19825d73ec25e9e31dcb9267461b916e",
+    "generation-integration-core-test-inference-round1=004d82f348e4157a50adefef01b0b105d239e5ee",
     "generation-integration-wp3-exit-matrix-round1=863f506c5211afef007d975387af86d8052d646e",
     "generation-integration-wp3-exit-matrix-round2=ddbee21256bb36bf202b0a8ce12c09207a7c8c14",
     "generation-core-test-inference=62faff443524a436678c6a2fb5fca80bde9d6e99"

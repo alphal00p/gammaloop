@@ -343,7 +343,11 @@ path = "crates/gammalooprs/src/integrands/process/mod.rs"
 symbol = "graph-derived reflection controls"
 anchor = "    fn lmb_sampling_detects_only_oppositely_stored_parallel_edges()"
 end_anchor = "    fn canonical_lmb_density_partition_matches_inverse_jacobians()"
-digest = "a07a79ea2a2ab2ba9e0544357f113fd7ceaf2a60"
+# Core test-inference no-impact attestation 2026-10-29: reviewed code8bd39ede
+# (preparation62faff44; Opus review e237268c) changes only the test-module
+# BTreeSet import and explicit collection result types. Signed routing, the odd
+# local numerator, reflection ownership and partition assertions are unchanged.
+digest = "a5d00202b935534a9afd09dd37a5d7484ccbfea9"
 
 [[section.note.scope]]
 path = "tests/tests/test_nlo_acceptance/cool_qm_eos.rs"
@@ -689,7 +693,11 @@ anchor = "pub fn warm_up(&mut self, model"
 # sum certifies partition unity, not independent full-evaluator multiplicity.
 # Source27–29 acceptance remains bound to its approved cb585c98 receipt; this
 # annotation adds no physics or performance certification.
-digest = "b1711442cd184b4e9776b84d92c313d85f70b7b0"
+# Core test-inference no-impact attestation 2026-10-29: reviewed code8bd39ede
+# (preparation62faff44; Opus review e237268c) changes only test type inference
+# and a test-module import. Production ProcessIntegrand::warm_up behavior and
+# ownership are unchanged; this whole-file digest records the reviewed test edit.
+digest = "2f6aea58d34fcb798c742d41feac8240dfc5ae55"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/observables/events.rs"

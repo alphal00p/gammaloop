@@ -1655,6 +1655,6 @@
     "code_change": "tmxvnovqoxurumoxrwzruptmtqrvooyv",
     "receipt": "docs/architecture/evidence/generation-integration/wp3/core-test-inference/receipt.json",
     "candidate_bookmark": "generation-integration-core-test-inference",
-    "status": "Candidate pending NEW independent Opus review: compile ambiguity closed on combined code and named inference/BRST selection 3/3. Separate API fixture blocker, 81 oracle rows and broader WP3 gates remain open."
+    "status": "Runtime/producer/3-test scope approved; Opus F1 registry correction now records both no-impact attestations and authoritative 110-scope pass. Awaiting NEW focused review; API fixture blocker, 81 oracle rows and broader WP3 gates remain open."
   }
 }

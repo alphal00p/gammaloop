@@ -1,0 +1,69 @@
+{
+  "schema": 1,
+  "scope": "Metadata-only correction of two existing developers.toml scope digests after reviewed test-only code8bd; runtime code and executions unchanged.",
+  "round1_candidate": "004d82f348e4157a50adefef01b0b105d239e5ee",
+  "round1_change": "musnkpwxpxnzltryqrlsxpuzoulrmmlq",
+  "runtime_code": "8bd39ede19825d73ec25e9e31dcb9267461b916e",
+  "preparation": "62faff443524a436678c6a2fb5fca80bde9d6e99",
+  "evidence_change": "pwkyskzryprtwwzqwmlktuyvuntsxmxn",
+  "review": {"path":".local/review-main-core-test-inference-opus-20261029T190454Z-1747112/review.json","sha256":"e237268c0cf939e30eeaef3a40a64eccadf57d6f6d988c5908d9bd0a7f51d7ce","verdict":"REQUEST_CHANGES","finding":"F1"},
+  "authoritative_algorithm": {
+    "owner": "crates/alphal00p-docs-builder/src/lib.rs:926-1003",
+    "review_script": ".local/review-main-core-test-inference-opus-20261029T190454Z-1747112/check-scopes.py",
+    "review_script_sha256": "7a782fbf0ecf8939a031cabc219d198ebcbfe6c32956a75d06b420e46d899c20",
+    "method": "For every declared scope, require exactly one anchor and optional end_anchor; hash anchor..end_anchor, or the whole file when end_anchor is absent, with git hash-object.",
+    "scope_count": 110
+  },
+  "before": {
+    "candidate": "004d82f348e4157a50adefef01b0b105d239e5ee",
+    "record": "target/wp3-core-test-inference-round2/scopes-before.txt",
+    "record_sha256": "1baa6025891913837b2f9e34a86041622e1f691b997f9309a4952887f31fc375",
+    "scopes": 110,
+    "bad": 2
+  },
+  "corrections": [
+    {
+      "note": "gammaloop-architecture",
+      "path": "crates/gammalooprs/src/integrands/process/mod.rs",
+      "symbol": "gammalooprs::integrands::process::ProcessIntegrand::warm_up",
+      "anchor": "pub fn warm_up(&mut self, model",
+      "end_anchor": null,
+      "hash_domain": "whole file",
+      "old_digest": "b1711442cd184b4e9776b84d92c313d85f70b7b0",
+      "new_digest": "2f6aea58d34fcb798c742d41feac8240dfc5ae55",
+      "qualification": "Reviewed code8bd/preparation62 adds only a test-module BTreeSet import and two explicit collection result types. Production ProcessIntegrand::warm_up behavior and ownership are unchanged; the whole-file digest necessarily records the test edit."
+    },
+    {
+      "note": "generation-sampling-staged",
+      "path": "crates/gammalooprs/src/integrands/process/mod.rs",
+      "symbol": "graph-derived reflection controls",
+      "anchor": "    fn lmb_sampling_detects_only_oppositely_stored_parallel_edges()",
+      "end_anchor": "    fn canonical_lmb_density_partition_matches_inverse_jacobians()",
+      "hash_domain": "anchor..end_anchor",
+      "old_digest": "a07a79ea2a2ab2ba9e0544357f113fd7ceaf2a60",
+      "new_digest": "a5d00202b935534a9afd09dd37a5d7484ccbfea9",
+      "qualification": "Only inferred collection types and the test-module import change. Signed routing, odd local numerator, reflection ownership and partition assertions remain unchanged."
+    }
+  ],
+  "after": {
+    "record": "target/wp3-core-test-inference-round2/scopes-after.txt",
+    "record_sha256": "7c65577d308b5dceaa60bc88bd01cb325b827aa3fbb734a154ff8bd9e78eefb7",
+    "scopes": 110,
+    "bad": 0,
+    "titles": {"record":"target/wp3-core-test-inference-round2/registry-titles.json","record_sha256":"cf3a2027867fefff517627ec049b9fb4a2425ec198f45536d6cd94bcfd16e701","notes":78,"unique_ids":78,"unique_titles":78}
+  },
+  "runtime_reuse": {
+    "code_file_sha256": "2fdacba25abf4f60b41340247a5aaefc155f8177e8314d184e518e576f38af85",
+    "producer_derivation": "/nix/store/smwx0dns2bln927v1hly8dqwi6562jnr-gammaloop-nextest-binaries-core-gammalooprs-0.1.0.drv",
+    "archive_sha256": "a3aeba1bed31f3a648093d00cfbc590617fcaa5b7f57b9c9625b43d52073a61c",
+    "elf_sha256": "5916fc2731a912f80899bc2396c847428aa650eb6707a66f2e83ec5ac0dd3bcc",
+    "execution": "Existing fresh combined3/3 exit0 remains approved in scope; no runtime rerun or rebuild for this metadata correction."
+  },
+  "shared_index_qualification": {
+    "record": "/shared/lcnbr/dev/gammaloop/generation-rendered-evidence/.local/review-rendered-evidence-round4-opus-20261029T183451Z/review.json",
+    "sha256": "6721dfd9ddc1b1b4bddb5b24b50939e75fee157005c733807e1c4b925532db33",
+    "qualification": "That independent review refreshed only the physical main Git index stat cache; index content and heads were unchanged. This correction does not restore or attribute that external metadata refresh."
+  },
+  "inventory": {"paths":5,"items":["docs/architecture/evidence/generation-integration/execution.json","docs/architecture/evidence/generation-integration/wp3/core-test-inference/receipt.json","docs/architecture/evidence/generation-integration/wp3/core-test-inference/round2-scope-correction.json","docs/architecture/evidence/generation-integration/wp3/replay.json","docs/developers.toml"]},
+  "limits": ["Full canonical docs builder remains separately qualified with eight inherited HTML inventory failures.","No API fixture, rendered-docs, QED or other lane is imported.","No aggregate/core-fast/WP3 completion, publication or runtime outcome change is claimed."]
+}

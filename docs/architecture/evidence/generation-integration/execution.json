@@ -731,6 +731,6 @@
     "code_change": "tmxvnovqoxurumoxrwzruptmtqrvooyv",
     "receipt": "docs/architecture/evidence/generation-integration/wp3/core-test-inference/receipt.json",
     "candidate_bookmark": "generation-integration-core-test-inference",
-    "status": "Integrated one-file test-only repair and fresh 3/3 combined selection; awaiting NEW independent Opus integration review. API fixture aggregate blocker and 81 oracle failures remain open."
+    "status": "Runtime/producer/3-test scope approved by Opus; two registry scope digests corrected with authoritative 110/110 validation. Awaiting NEW focused Opus review. API fixture aggregate blocker and 81 oracle failures remain open."
   }
 }
