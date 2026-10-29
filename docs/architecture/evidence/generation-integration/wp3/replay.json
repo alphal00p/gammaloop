@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "status": "Source46 implemented candidate awaiting NEW independent Astra review before WP3 rebuilt-tip exit matrix. WP3 incomplete.",
+  "status": "Source46 corrected candidate awaiting NEW independent Opus A/B review before WP3 rebuilt-tip exit matrix. WP3 incomplete.",
   "fixed_target": {
     "commit": "3f0df2a870806076820786994d4883decec8e9e3",
     "tree": "3c91ba47525c627fbc02d79f5afa1d58aa7c5b66",
@@ -779,9 +779,9 @@
       "planned_unit": "port-46",
       "planned_order": 41,
       "reason": "Port order-independent structure-constant cycle reduction onto #210 colour completion and #209 tensor metadata; preserve symbol-registration perturbation tests.",
-      "status": "Implemented candidate at09c88ef5 from approved eca809 preparation; awaiting NEW independent Astra combined review; WP3 exit matrix still pending",
-      "integration_commit": "09c88ef5b2eebed113a3f82d87b4b64296beff0c",
-      "integration_change": "olqyyyntvuprnssplwuwxtmtvwrvwtuy",
+      "status": "Corrected candidate at610b83fa; source46 runtime remains approved eca809 bytes and Cargo directory-target discovery is repaired; awaiting NEW independent Opus A/B review; WP3 exit matrix still pending",
+      "integration_commit": "610b83fac3d4bfd7d0a92dd912191062d18a2fbe",
+      "integration_change": "utsstkpwqqkxuuuxokskrnupnlsyxpxn",
       "integration_receipt": "docs/architecture/evidence/generation-integration/wp3/main46/receipt.json"
     }
   ],
@@ -1504,9 +1504,9 @@
     "evidence_change": "rsnwxksqkumlppzknlkkqvkrvpyrrzrt",
     "metadata_snapshot_commit": "2990045ccc658413f2eb2c07fe21e9d811ac4da8"
   },
-  "current_implementation_code_commit": "09c88ef5b2eebed113a3f82d87b4b64296beff0c",
+  "current_implementation_code_commit": "610b83fac3d4bfd7d0a92dd912191062d18a2fbe",
   "current_documentation_code_commit": "a3729fe5d880f0db5f09d9ce7d0ef592bfc4d161",
-  "current_implementation_change": "olqyyyntvuprnssplwuwxtmtvwrvwtuy",
+  "current_implementation_change": "utsstkpwqqkxuuuxokskrnupnlsyxpxn",
   "main32_35_review": {
     "candidate": "510d79d94bbaf57aaaa992c641e7496905763324",
     "verdict": "APPROVE",
@@ -1625,11 +1625,11 @@
     "original_source": "e0a779808174c64057fecfd062c948b8de8e5c1f",
     "approved_preparation": "eca80902435889580f462d07601d7e0187c47ec7",
     "approved_code": "eb173840edf54173110a6e9288ee599691ccf3d3",
-    "code_commit": "09c88ef5b2eebed113a3f82d87b4b64296beff0c",
-    "code_change": "olqyyyntvuprnssplwuwxtmtvwrvwtuy",
+    "code_commit": "610b83fac3d4bfd7d0a92dd912191062d18a2fbe",
+    "code_change": "utsstkpwqqkxuuuxokskrnupnlsyxpxn",
     "receipt": "docs/architecture/evidence/generation-integration/wp3/main46/receipt.json",
     "candidate_bookmark": "generation-integration-source46",
-    "status": "Implemented source46 candidate awaiting NEW independent Astra combined review; rebuilt-tip WP3 exit matrix remains pending.",
+    "status": "Corrected source46 candidate awaiting NEW independent Opus A/B review; rebuilt-tip WP3 exit matrix remains pending.",
     "accounted_source_rows": 46,
     "accounted_planned_units": 41
   }

@@ -372,9 +372,12 @@ own workspace. Bounded: one regression, one bisect, one written verdict.
   is reconciled onto approved MAIN44–45. Current Idenso owners remain authoritative;
   only reducing adjoint-cycle identities publish a rewrite, with sixteen networks
   and 17,484 fresh registration-order permutations retained. Combined evidence is
-  recorded in `evidence/generation-integration/wp3/main46/receipt.json`. The inherited
+  recorded in `evidence/generation-integration/wp3/main46/receipt.json`. The generic
+  Nix Cargo-target owner now includes immediate child-directory `main.rs` targets;
+  the corrected Git-pinned Idenso archive realizes and passes192 profile tests plus2
+  separately selected default-filter controls. The inherited
   TensorReduction declared-layout consumer remains failed and separately owned.
-  A NEW independent Astra combined review is required before the WP3 rebuilt-tip
+  A NEW independent Opus A/B review is required before the WP3 rebuilt-tip
   exit matrix; replay completion alone does not complete WP3.
 
 - `jj duplicate` the v4 chain (`kursouxx::kpslpwqz`) onto the WP2 base; do not

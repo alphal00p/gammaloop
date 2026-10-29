@@ -18,6 +18,6 @@ Exact preparation and review bindings are recorded in
 #link("evidence/generation-integration/wp3/main46/approval-index.json")[the approval index].
 Current producer, execution and limitation evidence is recorded in
 #link("evidence/generation-integration/wp3/main46/receipt.json")[the integration receipt].
-This candidate stops for a NEW independent Astra combined integration review.
+This candidate stops for a NEW independent Opus A/B integration review.
 It does not complete WP3 or authorize names, routing, Classes, performance,
 memory, slow-snapshot, benchmark, distribution or publication work.
