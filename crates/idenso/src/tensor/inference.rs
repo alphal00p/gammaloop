@@ -656,7 +656,8 @@ impl SymbolicTensor<PartialStructure> {
     ) -> Self {
         let is_metric =
             matches!(expression.as_view(), AtomView::Fun(fun) if fun.get_symbol() == ETS.metric);
-        let is_composite = !matches!(expression.as_view(), AtomView::Fun(_));
+        let is_composite = !matches!(expression.as_view(), AtomView::Fun(function)
+            if !function.get_symbol().has_tag(&SPENSO_TAG.tensor_word));
         let structure = if structure.has_unresolved_ports() {
             structure.canonicalize_open_ports()
         } else {
@@ -1062,7 +1063,8 @@ impl SymbolicTensor<PartialStructure> {
             proofs.normalized_product = Default::default();
             self.expression = expression;
             self.is_metric = matches!(self.expression.as_view(), AtomView::Fun(fun) if fun.get_symbol() == ETS.metric);
-            self.is_composite = !matches!(self.expression.as_view(), AtomView::Fun(_));
+            self.is_composite = !matches!(self.expression.as_view(), AtomView::Fun(function)
+                if !function.get_symbol().has_tag(&SPENSO_TAG.tensor_word));
             self.proofs = proofs;
         }
         // The construction owner already established this interface. Finishing
@@ -2567,6 +2569,12 @@ impl InterfaceInference {
         }
 
         match value {
+            AtomView::Var(variable) if variable.get_symbol().has_tag(&SPENSO_TAG.tensor_word) => {
+                syntax_error = Some(TensorInferenceError::invalid(format!(
+                    "tensor word symbol `{}` must be called with operands",
+                    variable.get_symbol()
+                )));
+            }
             AtomView::Var(variable) if variable.get_symbol().has_tag(&SPENSO_TAG.tensor) => {
                 syntax_error = Some(TensorInferenceError::invalid(format!(
                     "tensor symbol `{}` must be called with at least one structural port",
@@ -2580,6 +2588,57 @@ impl InterfaceInference {
                     return false;
                 }
                 let symbol = function.get_symbol();
+                if symbol.has_tag(&SPENSO_TAG.tensor_word) {
+                    if symbol.is_scalar()
+                        || symbol.has_tag(&SPENSO_TAG.tensor)
+                        || symbol.has_tag(&SPENSO_TAG.rank1)
+                        || symbol.has_tag(&SPENSO_TAG.representation)
+                        || symbol.has_tag(&SPENSO_TAG.broadcast)
+                    {
+                        syntax_error = Some(TensorInferenceError::invalid(
+                            "a tensor word head must carry only the tensor-word structural role",
+                        ));
+                        return false;
+                    }
+                    if function.get_nargs() == 0 {
+                        syntax_error = Some(TensorInferenceError::invalid(
+                            "tensor words require at least one operand; use the typed word constructor for the identity",
+                        ));
+                        return false;
+                    }
+                    for argument in function.iter() {
+                        if !SymbolicTensor::<PartialStructure>::is_word_operand(symbol, argument) {
+                            syntax_error = Some(TensorInferenceError::invalid(
+                                "word operands must be individual generators or same-head words with scalar coefficients; keep commuting tensor coefficients outside the word",
+                            ));
+                            return false;
+                        }
+                        if self.slots.parse::<LibraryRep, AbstractIndex>(argument).is_ok()
+                            || self.slots.parse_representation::<LibraryRep>(argument).is_ok()
+                        {
+                            syntax_error = Some(TensorInferenceError::invalid(
+                                "tensor word operands must be tensors or coefficients, not bare structural ports",
+                            ));
+                            return false;
+                        }
+                        if Self::has_structured_syntax(argument) {
+                            match self.infer_view(argument) {
+                                Ok(interface) if interface.open_positions().is_empty() => {}
+                                Ok(_) => {
+                                    syntax_error = Some(TensorInferenceError::invalid(
+                                        "tensor words with unresolved operands require the typed word constructor",
+                                    ));
+                                    return false;
+                                }
+                                Err(error) => {
+                                    syntax_error = Some(error);
+                                    return false;
+                                }
+                            }
+                        }
+                    }
+                    return true;
+                }
                 // Explicit scalar functions own their metadata, which may itself
                 // contain tensor syntax without exposing any tensor ports.
                 if SPENSO_TAG.is_scalar_metadata(symbol)
@@ -3155,7 +3214,7 @@ impl InterfaceInference {
                     .map(TensorInterface::into_algebra_result);
             }
 
-            if symbol == SPENSO_TAG.bracket {
+            if symbol == SPENSO_TAG.bracket || symbol.has_tag(&SPENSO_TAG.tensor_word) {
                 let mut interfaces = Vec::new();
                 for argument in arguments {
                     if !Self::has_structured_syntax(argument) {
@@ -3163,7 +3222,7 @@ impl InterfaceInference {
                     }
                     interfaces.push(self.infer_view(argument)?);
                 }
-                if interfaces.is_empty() {
+                if interfaces.is_empty() && !symbol.has_tag(&SPENSO_TAG.tensor_word) {
                     return Err(TensorInferenceError::invalid(
                         "ordered tensor products require at least one tensor operand",
                     ));
@@ -3490,27 +3549,40 @@ impl InterfaceInference {
     }
 
     pub fn additive_interfaces_match(left: &PartialStructure, right: &PartialStructure) -> bool {
-        // Unresolved ports remain positional; only explicit indices identify ports across terms.
+        // Anonymous occurrences retain their syntax order. Explicit identities
+        // can move across them without changing that ordered correspondence.
         let left_slots = left.logical_slots();
         let mut right_slots = right.logical_slots();
         if left_slots == right_slots {
             return true;
         }
-        if left_slots.len() != right_slots.len()
-            || left_slots
-                .iter()
-                .chain(&right_slots)
-                .any(|slot| matches!(slot.aind, PartialIndex::Open(_)))
-        {
+        if left_slots.len() != right_slots.len() {
             return false;
         }
-        if left.canonical() == right.canonical() {
+        let anonymous = |slot: &&PartialSlot| matches!(slot.aind, PartialIndex::Open(_));
+        let has_anonymous = left_slots
+            .iter()
+            .chain(&right_slots)
+            .any(|slot| matches!(slot.aind, PartialIndex::Open(_)));
+        if has_anonymous {
+            if !left_slots
+                .iter()
+                .filter(anonymous)
+                .eq(right_slots.iter().filter(anonymous))
+            {
+                return false;
+            }
+            right_slots.retain(|slot| !matches!(slot.aind, PartialIndex::Open(_)));
+        } else if left.canonical() == right.canonical() {
             return true;
         }
         // Symbolic dimensions need not have a total canonical ordering. Compare
         // complete explicit ports by equality, retaining multiplicity and the
         // caller's logical order instead of trusting their storage permutation.
         for slot in left_slots {
+            if matches!(slot.aind, PartialIndex::Open(_)) {
+                continue;
+            }
             let Some(position) = right_slots.iter().position(|candidate| *candidate == slot) else {
                 return false;
             };
@@ -6109,7 +6181,9 @@ pub(crate) mod tests {
             spin.slot(PartialIndex::open(1)),
             mink.slot(PartialIndex::Explicit(mu)),
         ]);
-        assert!(!InterfaceInference::additive_interfaces_match(
+        // Explicit labels may interleave around the same ordered anonymous
+        // endpoints. Their encoded owner/axis identities above still cannot change.
+        assert!(InterfaceInference::additive_interfaces_match(
             &source.structure,
             &reordered
         ));
@@ -6117,16 +6191,22 @@ pub(crate) mod tests {
             .add_arg(spin.to_symbolic([]))
             .add_arg(mink.slot::<AbstractIndex, _>(mu).to_atom())
             .finish();
-        let invalid = SymbolicTensor::new(
+        let anonymous = SymbolicTensor::new(
             anonymous,
             PartialStructure::from_logical_slots([
                 mink.slot(PartialIndex::Explicit(mu)),
                 spin.slot(PartialIndex::open(0)),
             ]),
         )
-        .unwrap_err();
-        assert!(matches!(invalid, TensorInferenceError::Invalid(message)
-            if message.contains("compatible tensor interface")));
+        .unwrap();
+        let scaled = anonymous
+            .with_rewritten_expression(Atom::num(2) * &anonymous.expression)
+            .unwrap();
+        assert_eq!(scaled.expression, Atom::num(2) * &anonymous.expression);
+        assert_eq!(
+            scaled.structure.logical_slots(),
+            anonymous.structure.logical_slots()
+        );
     }
 
     #[test]
