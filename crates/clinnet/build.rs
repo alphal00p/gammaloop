@@ -18,7 +18,7 @@ fn main() -> std::io::Result<()> {
     build_assets::embed_typst_packages(
         &mut output,
         &manifest.join(".."),
-        &["ec-layout.wasm", "LICENSE.ec-layout", "LICENSE.clarabel"],
+        &["LICENSE.clarabel", "LICENSE.networkx"],
     )?;
     Ok(())
 }
