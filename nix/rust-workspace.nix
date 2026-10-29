@@ -267,15 +267,20 @@
       dir: let
         entries = builtins.readDir (workspaceRoot + "/${dir}");
       in
-        map (name: "${dir}/${name}") (
-          lib.filter (
-            name:
-              entries.${name}
-              == "regular"
+        lib.concatMap (
+          name:
+            if
+              entries.${name} == "regular"
               && lib.hasSuffix ".rs" name
               && name != "mod.rs"
-          ) (builtins.attrNames entries)
-        )
+            then ["${dir}/${name}"]
+            else if
+              entries.${name} == "directory"
+              && builtins.pathExists (workspaceRoot + "/${dir}/${name}/main.rs")
+              && (builtins.readDir (workspaceRoot + "/${dir}/${name}"))."main.rs" == "regular"
+            then ["${dir}/${name}/main.rs"]
+            else []
+        ) (builtins.attrNames entries)
     )
     autoCargoTargetDirs
   );
