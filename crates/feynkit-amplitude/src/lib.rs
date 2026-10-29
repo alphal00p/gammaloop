@@ -37,12 +37,9 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     sync::Arc,
 };
-use symbolica::{
-    atom::{Atom, AtomCore, Symbol},
-    function,
-    id::Replacement,
-    symbol,
-};
+use symbolica::atom::{Atom, AtomCore, Symbol};
+use symbolica::id::{Pattern, Replacement};
+use symbolica::{function, symbol};
 use thiserror::Error;
 
 /// Invalid diagram collection or unsupported external-state operation.
@@ -324,12 +321,17 @@ impl Amplitude {
             .filter(|p| p.parameter_type == ParameterType::Real)
         {
             let real = Atom::var(symbol!(&format!("UFO::{}", parameter.name)));
-            rules.push(Replacement::new(conjugate.call(&real).to_pattern(), real));
+            // Model and user assumptions identify exact expressions. Their
+            // names may end in underscores without becoming pattern wildcards.
+            rules.push(Replacement::new(
+                Pattern::Literal(conjugate.call(&real)),
+                Pattern::Literal(real),
+            ));
         }
         for real in &self.options.real {
             rules.push(Replacement::new(
-                conjugate.call(real).to_pattern(),
-                real.clone(),
+                Pattern::Literal(conjugate.call(real)),
+                Pattern::Literal(real.clone()),
             ));
         }
         let args = symbol!("feynkit_amplitude::args___");
@@ -352,8 +354,8 @@ impl Amplitude {
         }
         let dimension = self.options.dimension.to_symbolic();
         rules.push(Replacement::new(
-            conjugate.call(&dimension).to_pattern(),
-            dimension,
+            Pattern::Literal(conjugate.call(&dimension)),
+            Pattern::Literal(dimension),
         ));
         Ok(expression.with_checked_expression(expression.expression().replace_multiple(rules))?)
     }
