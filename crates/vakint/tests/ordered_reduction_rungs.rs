@@ -94,6 +94,7 @@ fn compare(loop_count: usize, projection: fixture::Projection) -> fixture::Resul
         (2, fixture::Projection::QuadraticTransverse) => Some("2L-quadratic.json"),
         (3, fixture::Projection::ZeroMomentumMetric) => Some("3L-zero-momentum.json"),
         (3, fixture::Projection::QuadraticTransverse) => Some("3L-quadratic.json"),
+        (4, fixture::Projection::ZeroMomentumMetric) => Some("4L-zero-momentum.json"),
         _ => None,
     };
     if let Some(reference) = reference {
