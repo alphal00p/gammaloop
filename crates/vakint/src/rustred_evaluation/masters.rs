@@ -8,10 +8,12 @@ use std::sync::Arc;
 
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
-use symbolica::atom::{Atom, AtomCore, AtomView};
+use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
 use symbolica::coefficient::CoefficientView;
-use symbolica::domains::rational::Rational;
+use symbolica::domains::integer::Z;
+use symbolica::domains::rational::{Q, Rational};
 use symbolica::id::Replacement;
+use symbolica::poly::factor::Factorize;
 use symbolica::poly::series::SeriesDepth;
 
 use super::data::{FileReference, LoopData, checked_bytes, failure};
@@ -93,8 +95,151 @@ pub(crate) fn combine_exact(expression: Atom) -> Atom {
     if MasterCatalog::has_floating_coefficients(&expression) {
         expression
     } else {
-        expression.together()
+        together_over_shared_remainder(&expression).unwrap_or_else(|| expression.together())
     }
+}
+
+/// `together` of an expanded sum whose terms differ only by rational multiples
+/// of powers of one symbol, computed from a single term.
+///
+/// `together` converts every term separately and factors each polynomial
+/// denominator it meets, over Q(i) when the measure contributes the imaginary
+/// unit. An exact coefficient expanded in the regulator repeats one large
+/// denominator in every term, which is then factored once per regulator power.
+/// Here the terms are first summed into one polynomial times their common
+/// remainder, whose univariate denominators are factored once over Z.
+///
+/// The normal form depends on the variable order only through the sign and
+/// leading coefficient of multivariate numerators and denominator factors.
+/// Both are order independent when the numerator is a univariate polynomial
+/// times a monomial and every polynomial denominator is univariate and
+/// nonzero, which is required here. Returns `None` otherwise.
+fn together_over_shared_remainder(expanded: &Atom) -> Option<Atom> {
+    let AtomView::Add(sum) = expanded.as_view() else {
+        return None;
+    };
+    let terms: Vec<_> = sum.iter().map(SplitTerm::new).collect();
+    // Every term must share its remainder; exactly one symbol carries the
+    // varying integer powers.
+    let mut varying = None;
+    for term in &terms[1..] {
+        if term.remainder != terms[0].remainder {
+            return None;
+        }
+        for (symbol, _) in term.powers.iter().chain(&terms[0].powers) {
+            if term.power(*symbol) != terms[0].power(*symbol) {
+                match varying {
+                    None => varying = Some(*symbol),
+                    Some(variable) if variable == *symbol => {}
+                    Some(_) => return None,
+                }
+            }
+        }
+    }
+    let variable = varying?;
+    let mut remainder = Vec::with_capacity(terms[0].remainder.len());
+    for factor in &terms[0].remainder {
+        remainder.push(univariate_denominator_factors(*factor)?);
+    }
+    let polynomial = Atom::add_many(terms.iter().map(|term| {
+        term.coefficient.to_owned() * Atom::var(variable).pow(Atom::num(term.power(variable)))
+    }));
+    let fixed = terms[0]
+        .powers
+        .iter()
+        .filter(|(symbol, _)| *symbol != variable)
+        .map(|(symbol, power)| Atom::var(*symbol).pow(Atom::num(*power)));
+    let combined = Atom::mul_many(std::iter::once(polynomial).chain(fixed).chain(remainder));
+    Some(combined.together())
+}
+
+/// One expanded term: its rational coefficient, its integer powers of bare
+/// symbols, and all remaining factors in canonical order.
+struct SplitTerm<'a> {
+    coefficient: Atom,
+    powers: Vec<(Symbol, i64)>,
+    remainder: Vec<AtomView<'a>>,
+}
+
+impl<'a> SplitTerm<'a> {
+    fn new(term: AtomView<'a>) -> Self {
+        let factors: Vec<_> = match term {
+            AtomView::Mul(product) => product.iter().collect(),
+            view => vec![view],
+        };
+        let mut split = Self {
+            coefficient: Atom::num(1),
+            powers: Vec::new(),
+            remainder: Vec::new(),
+        };
+        for factor in factors {
+            match factor {
+                AtomView::Num(_) => split.coefficient *= factor.to_owned(),
+                AtomView::Var(variable) => split.powers.push((variable.get_symbol(), 1)),
+                AtomView::Pow(power) => match power.get_base_exp() {
+                    (AtomView::Var(variable), exponent)
+                        if let Some(exponent) = get_integer_from_atom(exponent) =>
+                    {
+                        split.powers.push((variable.get_symbol(), exponent));
+                    }
+                    _ => split.remainder.push(factor),
+                },
+                _ => split.remainder.push(factor),
+            }
+        }
+        split
+    }
+
+    fn power(&self, symbol: Symbol) -> i64 {
+        self.powers
+            .iter()
+            .find(|(candidate, _)| *candidate == symbol)
+            .map_or(0, |(_, power)| *power)
+    }
+}
+
+/// Keep a remainder factor whose conversion is a monomial or a nonzero
+/// univariate polynomial denominator; the latter is replaced by its
+/// factorization over Z. Returns `None` for any other polynomial factor.
+fn univariate_denominator_factors(factor: AtomView) -> Option<Atom> {
+    let (base, exponent) = match factor {
+        AtomView::Add(_) => return None,
+        AtomView::Pow(power) => match power.get_base_exp() {
+            (base @ AtomView::Add(_), exponent) => (base, exponent),
+            _ => return Some(factor.to_owned()),
+        },
+        _ => return Some(factor.to_owned()),
+    };
+    // A sum raised to a symbolic power becomes an independent variable.
+    let Some(exponent) = get_integer_from_atom(exponent) else {
+        return Some(factor.to_owned());
+    };
+    if exponent >= 0 {
+        return None;
+    }
+    let polynomial = base.try_to_polynomial::<_, u32>(&Q, None).ok()?;
+    if polynomial.nvars() != 1 || polynomial.is_zero() {
+        return None;
+    }
+    // Factoring over Z leaves only small factors for an extension field.
+    let Ok(polynomial) = base.try_to_polynomial::<_, u32>(&Z, None) else {
+        return Some(factor.to_owned());
+    };
+    let factors = polynomial.factor();
+    let mut product = polynomial.one();
+    for (factor, multiplicity) in &factors {
+        product = product * &factor.pow(*multiplicity);
+    }
+    if product != polynomial {
+        return Some(factor.to_owned());
+    }
+    Some(Atom::mul_many(factors.iter().map(
+        |(factor, multiplicity)| {
+            factor
+                .to_expression()
+                .pow(Atom::num(exponent * *multiplicity as i64))
+        },
+    )))
 }
 
 impl MasterCatalog {
@@ -1015,6 +1160,10 @@ impl MasterCatalog {
 mod acceptance_tests;
 
 #[cfg(test)]
+#[path = "masters_proxy_tests.rs"]
+pub(crate) mod proxy_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use std::collections::HashMap;
@@ -1176,6 +1325,63 @@ mod tests {
                 combine_exact(expression)
             );
         }
+    }
+
+    #[test]
+    fn shared_remainder_combination_matches_whole_term_canonicalization() {
+        crate::Vakint::initialize_vakint_symbols();
+        let shared = [
+            // One denominator repeated over regulator powers, with a complex
+            // measure and non-polynomial scale factors in the remainder.
+            "(3+2*ep+ep^2)*(1-2*ep)^-2*(3-ep)^-1*𝑖*exp(-ep*EulerGamma)*mUV^(-2*ep)*GC^10*m^2",
+            "(7*ep^3-ep+5/3)*(4-2*ep)^-1*(9*ep^2-1)^-2*𝜋^(-5*ep)*(m^2)^(10-5*ep)",
+            "(ep+ep^2)*(1+x^2)^-1",
+            "(2+ep)*(1+ep^2)^-1*𝑖",
+            "(ep-1)*(ep^2-1)^-1*x",
+        ];
+        let whole_term = [
+            // Distinct remainders, several varying symbols or multivariate
+            // denominators keep the whole-term canonicalization.
+            "ep^-2*((1-ep)^-1-1-ep)-(1-ep)^-1",
+            "(1-ep)^-1-1-ep*(1-ep)^-1",
+            "(x+y*ep)*(1-ep)^-1",
+            "(1+ep)*(x-ep)^-1",
+            "(1+ep)*(1-ep)^-1+x*(1-ep)^-1",
+            "(1+ep)*(1-ep)^-1+(1+ep)*(2-ep)^-1",
+        ];
+        for (input, combined) in shared
+            .iter()
+            .map(|input| (input, true))
+            .chain(whole_term.iter().map(|input| (input, false)))
+        {
+            let expression = vk_parse!(input).unwrap();
+            assert_eq!(
+                together_over_shared_remainder(&expression.expand()).is_some(),
+                combined,
+                "{input}"
+            );
+            assert_eq!(
+                combine_exact(expression.clone()),
+                proxy_tests::reference_combine_exact(expression),
+                "{input}"
+            );
+        }
+        let floating = vk_parse!("(1/2*ep+0.5*ep^3)*(1-ep)^-1").unwrap();
+        assert_eq!(
+            combine_exact(floating.clone()),
+            proxy_tests::reference_combine_exact(floating)
+        );
+    }
+
+    #[test]
+    #[ignore = "five-loop q0 proxy: complete retained combination against the previous canonicalization"]
+    fn retained_q0_proxy_matches_whole_term_canonicalization() {
+        // Two complete master products keep this explicit check below a minute.
+        let raw = crate::utils::simplify_real(proxy_tests::five_loop_proxy_raw(2).as_view());
+        assert_eq!(
+            MasterCatalog::combine_master_coefficients(raw.clone()),
+            proxy_tests::reference_combine_master_coefficients(raw)
+        );
     }
 
     #[test]

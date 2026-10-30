@@ -942,7 +942,10 @@ impl SavedApplication {
         head.call(&arguments)
     }
 
-    fn normalization(settings: &VakintSettings, loop_count: usize) -> Result<Atom, VakintError> {
+    pub(super) fn normalization(
+        settings: &VakintSettings,
+        loop_count: usize,
+    ) -> Result<Atom, VakintError> {
         let normalization = settings
             .get_staged_integral_normalization_factor_atom()?
             .replace(S.n_loops.to_pattern())
