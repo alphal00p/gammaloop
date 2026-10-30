@@ -228,6 +228,9 @@ pub fn run(
     if prepared.loop_count == 5 && options.strategy != RustRedReductionStrategy::Ordered {
         return Err("five-loop physical benchmarks permit only ordered reduction; use the preserved historical DFS result for comparison".into());
     }
+    // The asynchronous publisher may write its first frame immediately when
+    // the scope starts. Its evidence directory must already exist.
+    std::fs::create_dir_all(directory)?;
     if prepared.loop_count == 5 && options.monitor.enabled() {
         RustRedMonitorScope::run(&options.monitor, |scope| {
             run_scoped(prepared, directory, options, Some(scope))
@@ -252,9 +255,18 @@ fn five_loop_benchmarks_reject_both_depth_first_strategies_before_loading() {
         prepared_input: None,
     };
     let directory = tempfile::tempdir().unwrap();
-    // An invalid local manifest prevents network access even if this guard
-    // regresses and the loader is accidentally reached.
-    std::fs::write(directory.path().join("manifest.json"), "{}").unwrap();
+    // A recognized but incomplete external-data manifest prevents network
+    // access even if this guard regresses and the loader is reached.
+    let manifest: serde_json::Value = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/data/manifest.json"
+    )))
+    .unwrap();
+    std::fs::write(
+        directory.path().join("manifest.json"),
+        serde_json::to_vec(&serde_json::json!({"schema":manifest["schema"]})).unwrap(),
+    )
+    .unwrap();
     let output = directory.path().join("must-not-create");
     for strategy in [
         RustRedReductionStrategy::DepthFirst,
@@ -277,13 +289,76 @@ fn five_loop_benchmarks_reject_both_depth_first_strategies_before_loading() {
     }
 }
 
+#[cfg(test)]
+#[test]
+fn five_loop_loading_error_publishes_snapshot_in_fresh_evidence_directory() {
+    let prepared = LadderFixture {
+        loop_count: 5,
+        input: Atom::one(),
+        preparation_seconds: 0.0,
+        scalar_terms: 1,
+        contributions: 1,
+        nonzero_conditions: Vec::new(),
+        projection: Projection::ZeroMomentumMetric,
+        timings: super::PreparationTimings::default(),
+        prepared_input: None,
+    };
+    let directory = tempfile::tempdir().unwrap();
+    let artifacts = directory.path().join("invalid-external-data");
+    std::fs::create_dir(&artifacts).unwrap();
+    // Use the exact registered schema, but omit the required release fields.
+    // This must be rejected locally before network or reduction preparation.
+    let manifest: serde_json::Value = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/data/manifest.json"
+    )))
+    .unwrap();
+    std::fs::write(
+        artifacts.join("manifest.json"),
+        serde_json::to_vec(&serde_json::json!({"schema":manifest["schema"]})).unwrap(),
+    )
+    .unwrap();
+    let evidence = directory.path().join("fresh-evidence");
+    let snapshot = evidence.join("monitor.json");
+    assert!(!evidence.exists());
+    let error = run(
+        &prepared,
+        &evidence,
+        &RunOptions {
+            strategy: RustRedReductionStrategy::Ordered,
+            artifacts: Some(artifacts.clone()),
+            monitor: RustRedMonitorOptions {
+                progress_snapshot: Some(snapshot.clone()),
+                ..Default::default()
+            },
+            numerical_reference: false,
+        },
+    )
+    .err()
+    .expect("invalid local data must return its loading error");
+    assert!(
+        error.to_string().contains("missing field `version`"),
+        "{error}"
+    );
+    assert!(!artifacts.join(".vakint-external-data").exists());
+    assert!(evidence.is_dir());
+    // Monitor scope teardown drains the final snapshot; no sleep or timing
+    // assumption is needed to inspect the completed loading-failure record.
+    let document: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(snapshot).unwrap()).unwrap();
+    assert_eq!(document["monitor"]["scope_kind"], "job");
+    assert_eq!(document["monitor"]["status"], "Failed");
+    assert_eq!(document["monitor"]["api_status"], "NotStarted");
+    assert_eq!(document["monitor"]["job_finished"], true);
+    assert!(!evidence.join("report.json").exists());
+}
+
 fn run_scoped(
     prepared: &LadderFixture,
     directory: &Path,
     options: &RunOptions,
     mut scope: Option<&mut RustRedMonitorScope<'_, '_>>,
 ) -> Result<CompletedRun> {
-    std::fs::create_dir_all(directory)?;
     let total = Instant::now();
     let loading = Instant::now();
     if let Some(scope) = scope.as_deref_mut() {
