@@ -232,6 +232,13 @@ retain explicitly aged recorded values, while host memory can refresh independen
 and drawing remain responsive when producer updates stop. If OS sampling itself stalls,
 the displayed sample age continues to grow instead of claiming fresh memory readings.
 
+`VakintSettings.rustred_application_options.reduction_strategy` selects the native scalar
+scheduler at every loop count: memoized depth-first, depth-first without memoization, or
+Ordered. Ordered contributions are first grouped by source and master mode, then reduced
+together on one weighted frontier. They share a single real-argument simplification after
+batching and before master substitution, so the per-integral simplification is skipped for
+that strategy. Ordered and non-memoized depth-first requests bypass depth-first result caches.
+
 Five-loop retained evaluation also reports coverage/mass batching (with actual lowered
 keys checked), guard and coefficient materialization, normalization and notation conversion,
 catalogue coefficient combination, residual catalogue classification,

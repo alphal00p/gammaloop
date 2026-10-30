@@ -636,7 +636,11 @@ anchor = "pub struct Vakint {"
 # directly to the shared catalogue combination owner. Symbolic/Numerical modes
 # retain their precombination boundary; scalar spectators, mass/normalization,
 # source identities and existing resource budgets keep the same owners.
-digest = "558bd7b98932b410822cb447412fedad044b3827"
+# Reviewed 2026-10-30 against dbd1cc72: the public exports add the native
+# reduction-strategy selector; Ordered requests batch matched contributions per
+# source and master mode and share one real simplification before master
+# substitution. Other strategies, guards and ownership are unchanged.
+digest = "a07af269eb5477002698030f4c3ca11e7edf2e81"
 
 [[section.note.scope]]
 path = "crates/vakint/src/lorentz.rs"
@@ -698,7 +702,10 @@ anchor = "pub struct VakintWrapper {"
 # Reviewed 2026-10-28: the explicit cache_hit_diagnostic keyword forwards the
 # existing native observer through the monitored path without changing its false
 # default, presentation exclusion, reduction semantics or cache ownership.
-digest = "319a6fda0681ed73c9ef8e9c3751b330982e6aed"
+# Reviewed 2026-10-30 against dbd1cc72: Python settings expose
+# rustred_reduction_strategy; explicit cache operations and prepared-cache
+# loading require depth_first. Wrapper ownership and data loading are unchanged.
+digest = "9c4bfb10afc57e13c69ac7c8cdb63059245e7efa"
 
 [[section.note.scope]]
 path = "crates/vakint/src/symbolica_community_module/numerical.rs"
@@ -733,7 +740,10 @@ anchor = "pub(crate) struct RustRedData {"
 # Reviewed 2026-10-27: The note records authenticated optional cache
 # snapshots, same-root reuse, staged activation, and prepared-cache opt-out
 # within immutable registry ownership.
-digest = "714b4c397e4d75785e4ee62c346bfe90a8243df8"
+# Reviewed 2026-10-30 against dbd1cc72: external-data activation takes an
+# explicit prepared-cache flag; the default loaders still import them.
+# Validation and data ownership are unchanged.
+digest = "c97d9ff088ff602ad091f1e0a8bf54e7d2e14cd4"
 
 [[section.note.scope]]
 path = "crates/vakint/src/rustred_evaluation/masters.rs"
@@ -765,7 +775,9 @@ anchor = "pub(crate) struct MasterCatalog {"
 # Reviewed 2026-10-28: the exact saved fixture authenticates the original Brotli
 # archive and its mechanically decoded raw Atom companion. Decoding is a
 # development-only step; runtime tests import raw bytes without codec dependencies.
-digest = "cc38e4ba594979281ca7dac46b4d2cb2ee1166ec"
+# Reviewed 2026-10-30 against dbd1cc72: master coefficient combination is
+# wrapped in a timing span only; catalogue ownership is unchanged.
+digest = "59c9d081838c48e135c3b348fb4d8b52cd21da85"
 
 [[section.note.scope]]
 path = "crates/vakint/src/precision.rs"
@@ -789,7 +801,9 @@ anchor = "pub struct NumericalEvaluationResult {"
 # Reviewed 2026-10-27: The note distinguishes the retained evaluated
 # midpoint/enclosure from checked precision-enforcing export; one-pass source-
 # aware evaluation, component accuracy, and lookup capping are preserved.
-digest = "138634833a29768eb4ee069904216626aef08fa8"
+# Reviewed 2026-10-30 against dbd1cc72: epsilon-power extraction matches the
+# power atom directly instead of a pattern; accepted orders and errors are unchanged.
+digest = "f87697e6fc7f5010741390ceb26282597768fe90"
 
 [[section.note.scope]]
 path = "crates/vakint/src/inspection.rs"
