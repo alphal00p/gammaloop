@@ -1,0 +1,81 @@
+{
+  "code": "5ea149ffd88ae3afc4072a38c0871c1329be8424",
+  "kernel": "8eb7c3729d6abefc916decc1bdf0c06536f8af80",
+  "status": "SOURCE MANIFEST ONLY; not compiled or current-kernel qualified",
+  "one_generator_archive": "nix/rust-workspace.nix::nextestPackageArchiveFor target=feynkit package=feynkit-generator; gammaloop-nextest-feynkit-feynkit-generator.tar.zst (single package archive, not aggregate feynkit binary set)",
+  "observer_limit": "Approved retained observer sources remain historical inputs; canonicalize ONE observation entry point for all case selectors before compilation. Completed portable checker source paths from proof coordinator must join this same manifest; not imported by this rebase. No claim these bounded observer entry points already cover every new proof lane.",
+  "files": [
+    {
+      "path": "Cargo.toml",
+      "git_blob": "a7033cd4a8c4cb83ddb176e2be32eb3a50bfe787",
+      "sha256": "fbc0408bac3bdf1ed16eb9276d1db34923280b23300801555ca97afee6511478"
+    },
+    {
+      "path": "Cargo.lock",
+      "git_blob": "ceae72cbcbf552aff4b969c1ce81a8930dfc03ea",
+      "sha256": "e111296686b2573ac88b9274cac2bf1e10aad07669f8fc6d243ac5b47d985ae0"
+    },
+    {
+      "path": "crates/gammaloop-workspace-hack/Cargo.toml",
+      "git_blob": "133909f508070791d039ed1a3e41dbe75ccbfa90",
+      "sha256": "23b70d6e8e330ffb8cd46a3d83e9b014832d0c6547fcf1f2eb0b370503f5065d"
+    },
+    {
+      "path": "nix/rust-workspace.nix",
+      "git_blob": "18781b7bd8576c4b63e2643f3e982216e717d0e1",
+      "sha256": "dc123de5ae0ad443ba2993cb3765d7fb228582697ba702c0f40ca41876409038"
+    },
+    {
+      "path": "crates/feynkit-generator/Cargo.toml",
+      "git_blob": "4d1480d35cb0f499ddfb484e64065b6834d6890e",
+      "sha256": "07f9c77b96b4ef7e92d461e8076696adc008edae2797b0a11dbe11aadaf50c59"
+    },
+    {
+      "path": "crates/feynkit-generator/tests/generation_oracle/main.rs",
+      "git_blob": "d61a4beebfc1b0d650cd17b001a1fdc6433b60d5",
+      "sha256": "aedd07670ad16ae72ae1c96970668c80ea0ecd5d6d5992c736af71de7d00999b"
+    },
+    {
+      "path": "crates/feynkit-generator/tests/generation_oracle/cases.rs",
+      "git_blob": "e0c3235eb25c007886e3b1ec6d4dede4c14d0b2a",
+      "sha256": "e3ef8ec52578364ef24cf278965eaba2ec967f1f626c707bb7667c2834e319a2"
+    },
+    {
+      "path": "crates/feynkit-generator/tests/generation_oracle/census.rs",
+      "git_blob": "9c9f8833a274e9e42ab6abd58e46d4315b5990f5",
+      "sha256": "b46641d3c13dd70304a457ad4f884cedd486f188ce86dd92c73328a6b1da05d3"
+    },
+    {
+      "path": "crates/feynkit-generator/tests/generation_oracle/classes.rs",
+      "git_blob": "533273bf1a8c1f7a0e992a775a4f638d6ed8fca2",
+      "sha256": "f605e4436ff0a2225155840fdad2065d50e74fd88b34979faaa97f7153a3e4fe"
+    },
+    {
+      "path": "crates/feynkit-generator/tests/generation_oracle/frames.rs",
+      "git_blob": "84c159216b9bacf950aeb6574a1cabfc2f374db2",
+      "sha256": "790ae305010fd13614506e8d9ffb758cd5506abb38e77a0c6173f2a3bb658e1f"
+    },
+    {
+      "path": "crates/feynkit-generator/tests/generation_oracle/frame_certificate.rs",
+      "git_blob": "160c4aec0cc20b158ce39dbd43d22d11c57b260a",
+      "sha256": "09db7e9b990a2992c0fec1b0a105d9d4ff0b0782e518ba2af96498f724052845"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-family-migration/observer-source.rs.txt",
+      "git_blob": "8876a2c2b0f867a4dd124283c2483c3560c393a0",
+      "sha256": "cfee35ed6510afdda3cb36d7b0904a43e722a89da76e081d616b1913d1a7ff43"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-xs-qed-l2/observer.rs.txt",
+      "git_blob": "344ac578630116eb362c1273b908da12dee2c755",
+      "sha256": "2eb5dabdf0b8dab9f47e1898895f830ba820e46c141d3b981d0df01aabb56b5e"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-family-diagnosis/round2/archived-sources/oracle_family_exact.rs",
+      "git_blob": "9f4ca55423c1b5369105226c1a2b568ffbb11616",
+      "sha256": "ebf20ee5fd6520c319f4f7f904ca2de13f083cb09f978a190833d800c143d969"
+    }
+  ],
+  "native_checker": "docs/architecture/evidence/generation-oracle-family-diagnosis/round2/archived-sources/oracle_family_exact.rs; compile unchanged parser/equality/control core once against current8eb7. Its atom equality is one shared algebra admission component, not a proof of graph membership/physical equivalence; lane-specific portable source/witness/control validators remain mandatory and must be manifested before execution.",
+  "archive_selection_limit": "Package archive is internal to the existing feynkit linkFarm. Select its existing drv/package output after explicit immutable unlicensed evaluation; do not build the group merely to obtain this one archive. No derivation/store query performed in this task."
+}

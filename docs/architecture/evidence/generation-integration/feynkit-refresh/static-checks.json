@@ -1,0 +1,23 @@
+{
+  "code": "5ea149ffd88ae3afc4072a38c0871c1329be8424",
+  "static_lock_triples": "PASS",
+  "notebook_lock_subset": "PASS",
+  "changed_python_ast": "PASS",
+  "historical_evidence_byte_identity": "PASS",
+  "historical_evidence_files": 1204,
+  "oracle_path_byte_identity": "PASS",
+  "oracle_paths": 243,
+  "main_index_sha256": "36fca2996228d0adb018933745a106061d3febe8921980864b5cc50dbad4af5d",
+  "scope_counts": {
+    "valid": 116,
+    "stale-digest": 2
+  },
+  "runtime_credit": "NONE; no compilation, licensed execution, Nix or browser captures performed",
+  "replayed_commits": 106,
+  "conflicted_replayed_commits": 0,
+  "refresh_path_count": 66,
+  "final_scope_counts": {
+    "valid": 118
+  },
+  "scope_counts_qualification": "scope_counts is pre-reconciliation registry audit; scope-final.json has final registry"
+}

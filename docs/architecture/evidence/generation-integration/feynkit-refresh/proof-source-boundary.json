@@ -1,0 +1,65 @@
+[
+  {
+    "path": "crates/feynkit-generator",
+    "approved_object": "c44f77609a555afaad953995d5464e466d33c35a",
+    "candidate_object": "c44f77609a555afaad953995d5464e466d33c35a",
+    "byte_identical": true,
+    "changed_paths": []
+  },
+  {
+    "path": "crates/feynkit-model",
+    "approved_object": "4014101be6b9aad9aecf68159b45049db57fc4a6",
+    "candidate_object": "4014101be6b9aad9aecf68159b45049db57fc4a6",
+    "byte_identical": true,
+    "changed_paths": []
+  },
+  {
+    "path": "crates/feynkit-amplitude",
+    "approved_object": "3853fddab36ae794cce1ed73051aafb2e10c0b10",
+    "candidate_object": "3853fddab36ae794cce1ed73051aafb2e10c0b10",
+    "byte_identical": true,
+    "changed_paths": []
+  },
+  {
+    "path": "crates/feynkit-graph/src",
+    "approved_object": "a98726767ec54f82b7703a78bc810040d51ca03f",
+    "candidate_object": "12d7d08dfa09aff6076b126a5b9192dc13f0cb10",
+    "byte_identical": false,
+    "changed_paths": [
+      "crates/feynkit-graph/src/integrals.rs",
+      "crates/feynkit-graph/src/integrals/partial_fraction.rs"
+    ]
+  },
+  {
+    "path": "crates/idenso/src",
+    "approved_object": "71326180b896fc5552ef23562e8755d9794136ef",
+    "candidate_object": "c0a3542c232faad305016740594ebff33dbb1f6c",
+    "byte_identical": false,
+    "changed_paths": [
+      "crates/idenso/src/color/mod.rs"
+    ]
+  },
+  {
+    "path": "crates/spenso/src",
+    "approved_object": "f7f761416dff21d629275662bf52a19c52655765",
+    "candidate_object": "008f0d2f25642bf642595b8537737e5a1a5f0f00",
+    "byte_identical": false,
+    "changed_paths": [
+      "crates/spenso/src/network/tags/mathml.rs"
+    ]
+  },
+  {
+    "path": "crates/feynkit-py/src/generation",
+    "approved_object": "5163d336d1e7af0b3c0ce700105c107ad56abe40",
+    "candidate_object": "5163d336d1e7af0b3c0ce700105c107ad56abe40",
+    "byte_identical": true,
+    "changed_paths": []
+  },
+  {
+    "path": "tests/tests/test_feyngen.rs",
+    "approved_object": "35431963b1bc751b00a7a1bb1e834faa815c0f50",
+    "candidate_object": "35431963b1bc751b00a7a1bb1e834faa815c0f50",
+    "byte_identical": true,
+    "changed_paths": []
+  }
+]

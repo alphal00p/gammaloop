@@ -1,0 +1,156 @@
+FeynKit community refresh reconciliation — 2026-10-30
+
+BOUNDARY AND IDENTITIES
+Old accepted base: 3f0df2a870806076820786994d4883decec8e9e3.
+Approved integration: fdff0d18953348b84a0f1b7e6ab5ef703a5090de.
+Exact advanced upstream: 9102f885722e856e30227ed46e685e5c465905f7.
+Resolved clean replay CODE: 5ea149ffd88ae3afc4072a38c0871c1329be8424,
+bookmarks generation-feynkit-refresh-clean-code and -clean-replay.
+106 original changes duplicated onto upstream, then conflicts resolved at their
+introduction points on a second task-owned duplicate. All 106 replay revisions
+are conflict-free. The initial108 count was an uncredited estimate, corrected
+by the exact native JJ106-revision enumeration. replay-map.json binds every original to its resolved replay.
+No original reviewed history, generation-integration ref or other workspace was
+rewritten. Historical receipts retain original source/kernel/test identities.
+
+Preserved first attempt: generation-feynkit-refresh-replay, 218a6a488df0...
+(conflicted history); generation-feynkit-refresh-code, c5af4f76a55d...
+(clean final tree only). These are superseded attempts, not current candidates.
+The clean replay additionally restores the approved historical QCD validation
+paragraph, avoiding upstream's stale antighost-momentum wording. No new physical
+convention or numerical expectation was inferred from matching hashes.
+
+EXACT OVERLAP
+path-inventory.json contains all 12 upstream commits, all 106 integration
+commits, every upstream path's original/upstream/approved/resolved blob, and
+per-path overlapping commit identities. Upstream changes 69 paths; integration
+changes 2723; 27 overlap and 42 are upstream-only. Resolved refresh changes 66
+paths relative to approved (initial final-tree attempt changed 67).
+All refresh source paths belong to the 69 upstream paths; no unrelated upgrade.
+Upstream formatting of idenso reference timing is already byte-subsumed by the
+approved stack. Its linnet permutation formatting has no net effect on approved
+source. Upstream FeynCalc physical-model documentation is superseded by approved
+model/canonical momentum-conservation sources, not adopted as a model change.
+The duplicated inherited-formatting commit is empty on upstream and retained.
+
+BOUNDED RESOLUTIONS
+1. The duplicated ghost restoration change resolves feyncalc-coverage.typ to
+   approved canonical UUV1 P(3,2)+P(3,3), reduced to -P(3,1), and retains the
+   approved historical validation paragraph. Model and fixture trees themselves
+   are byte-identical to fdff. No new ghost/crossing output was recorded.
+2. The duplicated staged-owner reconciliation keeps upstream linked
+   SECTOR_DECOMPOSE ExtensionPoint, including registration, missing-backend and
+   observer exception tests. Old Python module import forwarding and its import
+   formatting repair are obsolete under upstream's explicitly linked backend.
+3. The duplicated native-display boundary change resolves the ghost test by
+   using the already fetched scalar prefactor.to_expression(). Source proof:
+   graph.rs::numerator_prefactor_expression clones inner.numerator_prefactor();
+   feynkit-graph::FeynmanDiagram::numerator_prefactor returns the immutable stored
+   tensor; TensorExpression::is_scalar checks rank zero; ::to_expression clones
+   exactly self.atom(), whose owner returns value.expression(). Therefore reusing
+   the asserted-scalar local changes neither the atom nor its rank/interface;
+   it avoids a second identical immutable getter. No oracle normalization,
+   simplification, output recapture or expectation replacement establishes this.
+4. At that same duplicated boundary, browser tests retain upstream readable
+   preview scales (3,4/3,4/3,520/900), 2.25 label ratio, 3.15 zoom, and fixed
+   viewport/popup changes. Approved stable node-id=0 locator, delta=1e-4 scale
+   tolerance and places=2 label tolerance remain. New expected scales come from
+   upstream's changed renderer contract; they are not newly recorded outputs.
+
+SOURCE AND PROOF PORTABILITY
+proof-source-boundary.json records exact tree/blob identities. Generator, model,
+amplitude, Python generation bridge and test_feyngen owners are unchanged.
+All 243 oracle-named/test_feyngen paths and 1204 historical evidence files are
+byte-identical; all eight approved literal migrations remain untouched.
+Graph changes are partial-fraction resource checkpoints/error propagation, not
+raw-generation owners. Idenso change is color MathML alias parentheses; Spenso
+change is MathML display. Spinor/raw generation/algebra source inputs remain
+portable as source inputs only. This does not establish new-kernel algebra,
+counts, physical equivalence, imports or runtime passes.
+Renderer geometry/MathML/paging, graph iframe/display resources and API stubs
+changed. Old renderer captures and display test results cannot certify them.
+Current browser overlap includes preview sizing, graph hover popup/viewport,
+scoped labels, iframe/widget mounting, and amplitude pager zoom. Browser changes
+also touch nix/browser-check.py; no browser session or fresh failure was run.
+
+KERNEL AND REGISTRY
+Symbolica/Numerica/Graphica 3.0.1 all resolve to community commit
+8eb7c3729d6abefc916decc1bdf0c06536f8af80 in root, Tydenso and notebook locks.
+Root/Tydenso/notebook manifests, uv source and Hakari choose community. Existing
+workspace-hack inherits workspace pins and retains native integer-gmp,
+float-mpfr/native_code_generation features. No unrelated dependency updates.
+Static notebook package-subset check passes; Cargo offline metadata remains due.
+
+Registry classifications, review refs and historical owner notes are preserved.
+Pre-reconciliation audit:116 valid,2 stale,0 anchor errors (118 total). Both stale
+scopes hash nix/rust-workspace.nix. Upstream adds iframe.js twice (resource and
+package closure), evaluator_horner.py and installed_squared_amplitude_display.py
+as literal compile-time inputs, plus a widget browser invocation. This is a source-delivery and runtime-coverage extension: it changes the browser
+check behavior and delivered input set. The existing rooted resource ownership,
+compile-time include coverage, source filtering and cache-selection algorithms
+remain intact: the diff adds declared paths and a browser command, without
+replacing those rules. Physical generation owners are unchanged. No historical
+browser pass certifies the added widget check or current renderer behavior. Exactly these two
+scope digests were reconciled, with rationale beside them:
+ generation-test-source-closure -> a6b344e5a569991441e6b3677616855df98d32a2
+ nix-crane-cache-reuse -> 7105f205fa57a2e8ca470614d15176310d8787dc
+No anchors or other scope digests changed. scope-impact.json preserves the before
+checks; scope-final.json records118 valid. These are structural checks, not a
+full-site pass or independent review of the expanded producer.
+
+ONE SHARED NEXT QUALIFICATION
+Do not build until root freezes the combined observer/checker source manifest.
+Use one package-specific feynkit-generator Nextest archive from this exact
+candidate and8eb7, not the all-package aggregate or an old1a archive. Existing
+nextestPackageArchiveFor is the owner; target=feynkit/package=feynkit-generator
+produces gammaloop-nextest-feynkit-feynkit-generator.tar.zst. Select that
+package derivation rather than building the full linkFarm; source-set JSON
+identifies input blobs.
+Record immutable source URI, filtered source, lock hash, compiler/toolchain,
+features, package context, dependency/test-binary/archive identities, archive
+SHA256 and Nextest binary listing once; every lane reuses that producer.
+
+Shared native atom admission owner: archived-sources/oracle_family_exact.rs in
+generation-oracle-family-diagnosis/round2 (exact SHA in source-set JSON). It
+parses both atoms, checks atom/canonical equality and sign/coefficient/power
+negative controls. This is reusable admission, not a universal physical proof.
+Use one compiled native checker/observer source set on that SAME8eb7/lock/compiler
+closure. Manifest approved generation_oracle cases/census/classes/frames,
+retained exact observer sources, SymbolicTensor owners and coordinator-delivered
+portable exact checker/control sources. The two historical observers are bounded
+entry points, not two requested builds and not universal checkers. A single
+case-selecting observer and exact checker must be bound before compilation;
+unsupported lane selection/control coverage is an explicit remaining source
+check. No unfinished grouped/raw proof artifact is imported by this replay.
+Capture once per required case/mode/pool and distribute immutable raw atoms,
+ports, owner/physical witness maps and result manifests to all lanes. Re-run
+constructor/parser admission, exact differences and corruption/negative controls
+with this current checker. Do not re-record expected digests automatically.
+
+Narrow API qualification before proof execution: community PythonExpression and
+ExtensionPoint signatures/registration; Spensor evaluator horner_use_cpe;
+resource error conversion/checkpoints; installed scalar-prefactor boundary;
+current generated stub parity. Separately qualify upstream MathML scripts,
+iframe/widget mount, readable-scale/viewport/hover tests on one current installed
+host. A Python/browser host is a separate required runtime for display lanes,
+not a reason to rebuild the raw generator per proof family.
+
+No compiler, formatter, Clippy, licensed execution, Nix evaluation/build, browser
+capture or full documentation run was performed here. All current runtime credit
+is NONE. NixCI remains false. Future Nix commands must follow root's explicit
+immutable URI, neutral cwd and both-license-variable unset boundary; no licensed
+Nix results. The separate license15c8/budget work is not included.
+
+GUARDS AND RETAINED ARTIFACTS
+Main index SHA256 remains36fca2996228d0adb018933745a106061d3febe8921980864b5cc50dbad4af5d.
+Only task-owned workspace files and shared JJ metadata were changed; no fetch,
+export, push, upload, PR, store/credential action or other workspace edit.
+Cumulative binary diff is retained under ignored .local/feynkit-refresh because
+it is ~57MiB; cumulative.sha256 binds it. It can be reproduced with git diff
+--binary --full-index 9102... 5ea149... against the shared Git object store.
+The smaller upstream-on-approved.patch is tracked and hash-bound. Named source,
+upstream, attempts and final checkpoints are retained for independent review.
+No task background processes remain. Static Python parsing, lock/subset checks,
+source/evidence identity and scope checks pass. Cumulative whitespace checking
+also detects inherited approved fixture/DOT trailing spaces; no broad formatting
+cleanup was made. A new independent combined review remains mandatory.

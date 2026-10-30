@@ -1,0 +1,1078 @@
+{
+  "old_base": "3f0df2a870806076820786994d4883decec8e9e3",
+  "upstream": "9102f885722e856e30227ed46e685e5c465905f7",
+  "approved": "fdff0d18953348b84a0f1b7e6ab5ef703a5090de",
+  "code": "5ea149ffd88ae3afc4072a38c0871c1329be8424",
+  "upstream_commits": [
+    "9102f885722e856e30227ed46e685e5c465905f7 Float graph inspectors beside the cursor and restore hover highlighting (#241)",
+    "3d82fd2ab91d2145b910f4d6de829c188f2b7b2e keep graph hover previews inside the fixed viewport (#240)",
+    "8386b99bb155a281932bd225c7392a041747d10f Stabilize graph hover resizing and scoped tensor labels (#239)",
+    "b4b3b56022d07418ab77fac7ba36a775fd112087 Reduce redundant tensor MathML script wrappers (#237)",
+    "b5e751ca3463026bd4a0601c283c0610889aac3c remove redundant dot-product parentheses in MathML (#236)",
+    "b15275da97299493599dd619289345f04c504cdc stabilize graph inspector scroll container sizing (#235)",
+    "83a312f26e7c7b60ba371acf4a5ef65edb2fb529 Refine notebook tensor previews and diagram controls (#234)",
+    "67c6a664953142ced1e14bc21227ca5e7349c215 Isolate Marimo graph output without AnyWidget",
+    "57d8c4d0c749f060bde494746051c15e607c3d05 Restore amplitude pager zoom and readable graph previews (#232)",
+    "a6ee249b83901a480744f6abbb9a3739c66d2bdd compact tensor scripts without empty spacer columns (#231)",
+    "d13a5ae34a3573e6a6b11e5646800e49a95ab941 omit parentheses around color invariant aliases in powers (#230)",
+    "bbe81189ff04be164135c3bff7969ef38dc3336b Support current Symbolica community and linked sector backends (#225)"
+  ],
+  "integration_commits": [
+    "fdff0d18953348b84a0f1b7e6ab5ef703a5090de record bounded combined xs qed L2 validation",
+    "eae78e11e4d27df2539700fa4d4d71cdcb3a4804 integrate certified xs qed eemm L2 numerator digest",
+    "69fda047e378d4114f47ec9a10517e44adb57eaa correct family execution closure and report qualifications",
+    "1f3bb33b44e506af041fa124ea419d5b1ba41e5e qualify supporting dependency source identity",
+    "a86d252c3f0003392cd660b7808c63f625b8cf4a record combined four-family oracle validation",
+    "8dcebc2591ab04d10026fbd47a45e8d31f911ef3 integrate four reviewed family oracle digests",
+    "30f02f79c2bcabfadcd8081e1add3d5afe6e91d2 record combined three-row QED migration validation",
+    "b1c836680256d033620d32d844c1d3c41ed478f9 integrate certified three-row QED oracle digest migration",
+    "e20acd85a8e5f07375352e3b2ea571f1364a092e correct core docs stage and binding evidence",
+    "8f874aa727f3a5e702d3a4b1c30f7798bb0d33d3 record combined core fixture and generated evidence validation",
+    "9b18f329e992ccc642c2cdaa62e934318f55fa76 integrate approved core API fixture and rendered evidence owners",
+    "aa841fde3195270cc00328a9356dfe523c0d7a85 correct core scope evidence baseline binding",
+    "5126de4ff2500f4e2f0547c080af230d32cd0fcd correct core integration registry scope bindings",
+    "004d82f348e4157a50adefef01b0b105d239e5ee record combined core test inference integration evidence",
+    "8bd39ede19825d73ec25e9e31dcb9267461b916e integrate approved core test inference repair",
+    "ddbee21256bb36bf202b0a8ce12c09207a7c8c14 correct WP3 exit-matrix evidence bindings",
+    "863f506c5211afef007d975387af86d8052d646e record WP3 rebuilt-tip exit matrix",
+    "ead78f0460b03ec5d5dd80b8a6d47b4c357592a8 correct TensorReduction top-level test accounting",
+    "3d573dd46f92e1e7c61c33146daefee6e114f7d7 record combined TensorReduction layout validation evidence",
+    "b9f788922341e7bde2e801a054423ae70ed7e9ae integrate approved TensorReduction layout restoration",
+    "79dfeaab77958064bf802bc88db23eb86ac2f8ce bind final source46 plan bundle to frozen prose",
+    "e3c716cf349f79146ce7ef47f9b97b3e754304b1 correct source46 evidence accounting and producer metadata",
+    "6aba82b65d50cd51cd87bbb99c0c37add650d13c record corrected source46 producer and execution evidence",
+    "610b83fac3d4bfd7d0a92dd912191062d18a2fbe repair Cargo directory target discovery for source46 producer",
+    "56fd4640a5b62d0065d5c7474bc527d8b5f071bd record combined source46 validation evidence",
+    "09c88ef5b2eebed113a3f82d87b4b64296beff0c integrate approved source46 color cycles",
+    "217d61c3b78fb8a21adf5f48aa7f6f65235de614 record current internal frames and 16 worker parity",
+    "9429c3e03ed8814d606718c2f092d7f330f9572a bind current source44 captures and correct replay ledger",
+    "a30c343a6ac5a77d7e9dcc75181152c32471d472 record combined source44 to45 validation evidence",
+    "8c6d8aff7e7b3da312e30d3daa403b5b90c8cede integrate certified source44 rows and account source45",
+    "158f4e1f8cdbea4d13b55f7c1fa828f75ab566f9 correct pinned generator evidence pointer",
+    "8d95c3f83abc3861e3de836e5f6c7a3581d9f61d correct main39 to43 source and producer metadata",
+    "dfe52ccd829c4bc7a5f9ff40ab0d1d8c2ade833a finish combined source39 to43 validation evidence",
+    "372a94fe6991c58d1fd26c87b29a3470e01f248d record combined source39 to43 validation and certified gate closures",
+    "66c2aed45d83b54f55b39bf2fc2f88c2066d6343 regenerate current stubs and reconcile source39 to43 contracts and evidence",
+    "c0abf0822fb1c71339892d88113262818e3fe883 integrate certified named top pair QCD2 weight migration",
+    "a9b23d72bdbfab9e6e7c2753613de146b19ed8fa integrate certified frame evidence and three native numerator digests",
+    "038079d8f78a003e3103a583ee1cf043944f66d3 integrate source43 terminal pocket cut regressions",
+    "57b896bd20335af0008b283aded4566cea016544 integrate source42 caller-thread progress coalescing and reviewed cancellation corrections",
+    "e449e3c2d12c48215915a3365e864e544d0fbf4c integrate source41 explicit generation card filters",
+    "ed2857cfc36200d7e9b004c9ed202dfd068ec691 integrate source40 sewn tadpole veto documentation",
+    "9fa2b9fd7022b980d891281fa63bc04cbda0ddcc integrate source39 physical-node canonical frame anchoring",
+    "2f46efe7491d5cb9c028aff12ac475e44bef0a92 record corrected source38 artifact closure without runtime input changes",
+    "2922400255b32bf63c3cffbdd3f13bb3eba91b1e keep archived source38 probe text outside runtime Rust source selection",
+    "ed80af5444bcc7fecdb162d5a2c649dd985f01ec bind source38 combined validation to frozen runtime and metadata sources",
+    "0c65bf7c519764460a15a922340d958a9dfa7429 record source38 combined geometry artifact and dependency qualification",
+    "925f739799572d23f46a762c895ebb85e5bd88d6 integrate source38 local-frame mark geometry and corrected Kurbo stroke owner",
+    "100da20603a083d031c31bd4e8c6970fc44dda2f bind source36 review inventory to frozen source and validation identities",
+    "31387fde705e39ca29c9373e3ae13315a1893406 record source36 combined owner delivery Python embedding and packaging validation",
+    "0d3ddb5246416427be56c57c91ec1a095037e818 integrate source36 actionable asset diagnostics without changing resource lookup",
+    "510d79d94bbaf57aaaa992c641e7496905763324 bind source32\u201335 review evidence to frozen validation revision and metadata source",
+    "783e3281d01134f8fe2e44eab366d0414c63b852 record source32\u201335 combined native and canonical latest-site validation",
+    "a3729fe5d880f0db5f09d9ce7d0ef592bfc4d161 reconcile source32\u201335 current plan and provenance before canonical documentation qualification",
+    "2ea39fd3ec164516b8e68775554fa2021998975a integrate sources32\u201335 native graph displays and Python expression boundaries",
+    "191aaf7b77018e377a9e5e4e3b9c88357218aa48 record source31 annotation correction source and validation provenance",
+    "2f500641ddbf08a57c5420194398aa68e761f41f correct source31 sampling and source-closure registry attestations",
+    "3a90bc05e1e50fc85b0f7541ef82086a0e2db873 finalize source31 canonical artifact and metadata provenance",
+    "d7568e9e91df26aa771bdd5cecbfd67887b9b6ad qualify final source31 Git-pinned documentation and evidence",
+    "ecd901151e9c6a4b30df75198c7613f1532416b1 bind source31 registry status and current semantic evidence to ordered base",
+    "cde7b7e2e0a68feb5615829755da054d8b8e0c8d reconcile source31 documentation with approved sampling and source closure",
+    "7587d0c768363f200e89250683e7836c867c9b81 finalize source30 combined producer review candidate",
+    "2990045ccc658413f2eb2c07fe21e9d811ac4da8 qualify final source30 producer inputs and artifact evidence",
+    "f99fe4bf25db77df58ce4619e2ff176268499a58 select declared local Cargo patches for filtered producer inputs",
+    "29cc026df9c9ca4f31be9b0e851ad6f076c475c7 include literal Clinnet Typst test fixtures in its producer source",
+    "26d439003bb52bd19299e77e542198cf7c50d90f integrate approved generation test source closure",
+    "cb585c98a474628ca9c55bb17cf1e680450b8ef9 finalize combined sampling27\u201329 review candidate receipts",
+    "130b857ef74218cbb8e3b68409dca5a4641b367c record combined sampling27\u201329 integration and validation evidence",
+    "c2cce079a92c66fd1435a2ad42d86c17e16353be integrate reviewed signed sampling and fixed CoolQM acceptance",
+    "a517ca563d78d161cff17fe60e661f80529c9a83 finalize source22\u201326 combined validation receipts for review",
+    "19907c61153d1a16c6b9f2805ad6b4b79a91f2fa record source22\u201326 ownership approvals and canonical scope correction",
+    "2eb0d9db13caed01cb589f869089bc0753ab429b integrate reviewed staged physical flow projector and native input contracts",
+    "0a38ee4e3e7d16af3978f2c6ccde04dc176dfea9 record approved row certificate and combined oracle validation",
+    "35b444d09d739bd5532deac21ec013ed7422d35b recertify source19 oracle rows and integrate bounded registration controls",
+    "df55185059f31bea548a5de27c95828656fbdc52 record source19-21 grouping reconciliation and validation evidence",
+    "82c1eb5b40c4911e59dfc25c9ba1786e282e111c reject nonfinite grouping operands before comparison",
+    "c75ab826e6eb69c711130803bd54223664c9879a normalize completed sampled grouping quotients with original witnesses",
+    "4aa4d3d88394fd39be75f460b3ace4bc72a48894 reconcile deterministic grouping oracle controls for source19",
+    "d48f9d1aedc766eea5cb185ab6029d1f04462043 record complete staged correction integration and focused validation",
+    "d109e898ecf569eeab1b568ce80462ee6094e58d integrate approved cumulative staged graph and Python corrections",
+    "2c2e3c6ae3b9e8a19dbce7411268f938fff113f0 record combined staged correction validation and review gates",
+    "1263f4fdbdffeb48a16a6c835c056e4e99c0d135 combine approved staged transport runtime and drawing corrections",
+    "edabf052c5780be6460a9043cb9704e1583a2e4c correct staged evidence provenance and record independent review findings",
+    "817b5886a50276efea05ab860d22016e1fb0c203 record drawing and staged integration review candidate",
+    "f264028690d117b4b99c320b61b7f2d5d89222d0 reconcile resolved staged generation with admitted tensor owners",
+    "8430e701d858b07e40203a25bfc3b1fa61b15f4a integrate approved drawing costs and common notice delivery",
+    "438b61500da4b32841c64211103e5da6fc4c4a72 record approved prerequisite ports and combined validation",
+    "739b1f6a0066e7661327be439aaf3f69dcfb5c86 assert rendered Single execution semantics through current stub exporter",
+    "c5d0380c9c7f8e33c77e918f477708b525a61775 integrate approved scalar admission through authoritative metadata",
+    "3dd25d67d4009e663e05186a573da2a4c1381383 integrate approved native numeric comparison corrections",
+    "9e2c4c23f3c48fb5df41edd2f5880097867dd117 import tensor symbol macro in scoped contraction regression",
+    "1df953e95ebf77f0f8cc222fee17cc54ca186253 record source03\u201307 reconciliation and validation for independent review",
+    "f689e5b61c8b4dcc80c6d983b442e89b7a5c9852 canonicalize inferred source ports without discarding tensor metadata",
+    "56aa1c91cd0d9573a03c5122769c02ae0364e9e3 register coupling and bookkeeping symbols in deterministic order",
+    "df66f21394ed47a86e8cbf0b9d8da5c9b47cc7bc share colour representation ownership and document deferred contractions",
+    "b2da32765318cac573e908fed5f0af9319141503 scope partner copies to bound non-colour antisymmetric ports",
+    "f6ba968d51644c360a2be32118fba1d193110d0e plan contractions around immutable tensor spectators",
+    "74cebf6c8f673f5849b26afe55fa98035d5eba1d preserve raw interaction admission before momentum reduction",
+    "a677fcf880d315951b101ffb06c001140777403e record WP3 prefix validation and preserved kernel alignment",
+    "821c0e7544f183dd5385d4f3933b4fe2cb57090b restore FeynRules ghost vertex through admitted interaction templates",
+    "52ac2eee4a1487bc79014c4f33f22b2854f80090 repair inherited formatting and diagnostic Clippy gates",
+    "b4772772c20dc06d1f8a2adbed013de2e0768cdc record approved prerequisites and begin WP3 rebuild",
+    "5226894ee1af61797e6b819d7e801a22bf17bace correct WP3 registration coverage and repeated-run failure gates",
+    "e8910d5d2f93e54066101cbc4661d0508d102c3f record exact generation integration base and dependency manifest",
+    "dc6f0b6b79f77c482e8747af0c7f12b817ffdaca preserve historical handoff as literal Typst payload",
+    "12582cbd19f7c20fca07dbce1bd2437b717e3f49 preserve generation integration evidence and source availability",
+    "4374f72027b75df9ff95c5c7a725ee75beac27a8 draft revised combined generation integration plan"
+  ],
+  "counts": {
+    "upstream": 69,
+    "integration": 2723,
+    "overlap": 27,
+    "upstream_only": 42,
+    "integration_commits": 106
+  },
+  "paths": [
+    {
+      "path": ".config/hakari.toml",
+      "integration_overlap": false,
+      "old_base_blob": "a770005d1cab94927057e3a38702b7d8bd920ca0",
+      "upstream_blob": "84aea75daf3f254baf145c560cd15acda53bfcbc",
+      "approved_blob": "a770005d1cab94927057e3a38702b7d8bd920ca0",
+      "candidate_blob": "84aea75daf3f254baf145c560cd15acda53bfcbc",
+      "upstream_commits": [
+        "bbe81189ff04be164135c3bff7969ef38dc3336b Support current Symbolica community and linked sector backends (#225)"
+      ],
+      "integration_commits": []
+    },
+    {
+      "path": "Cargo.lock",
+      "integration_overlap": true,
+      "old_base_blob": "b7113a0f517044ea25812cab6e58ce008387912a",
+      "upstream_blob": "a28ed68546258aeb8b699cc58445c200cc91493e",
+      "approved_blob": "106b5c2d942755a7fc8c898445d13da4c8486f84",
+      "candidate_blob": "ceae72cbcbf552aff4b969c1ce81a8930dfc03ea",
+      "upstream_commits": [
+        "83a312f26e7c7b60ba371acf4a5ef65edb2fb529 Refine notebook tensor previews and diagram controls (#234)",
+        "bbe81189ff04be164135c3bff7969ef38dc3336b Support current Symbolica community and linked sector backends (#225)"
+      ],
+      "integration_commits": [
+        "9b18f329e992ccc642c2cdaa62e934318f55fa76 integrate approved core API fixture and rendered evidence owners",
+        "925f739799572d23f46a762c895ebb85e5bd88d6 integrate source38 local-frame mark geometry and corrected Kurbo stroke owner",
+        "f264028690d117b4b99c320b61b7f2d5d89222d0 reconcile resolved staged generation with admitted tensor owners"
+      ]
+    },
+    {
+      "path": "Cargo.toml",
+      "integration_overlap": true,
+      "old_base_blob": "5d6b2e9f0625702a04dbeb4f6eb463cb6c53f47b",
+      "upstream_blob": "e969a6f11a9a96fdd6e791d5a65590ad7aa573a5",
+      "approved_blob": "ca684b654392fef94059dc84455f70294cc23ba2",
+      "candidate_blob": "a7033cd4a8c4cb83ddb176e2be32eb3a50bfe787",
+      "upstream_commits": [
+        "bbe81189ff04be164135c3bff7969ef38dc3336b Support current Symbolica community and linked sector backends (#225)"
+      ],
+      "integration_commits": [
+        "925f739799572d23f46a762c895ebb85e5bd88d6 integrate source38 local-frame mark geometry and corrected Kurbo stroke owner",
+        "f264028690d117b4b99c320b61b7f2d5d89222d0 reconcile resolved staged generation with admitted tensor owners"
+      ]
+    },
+    {
+      "path": "crates/feynkit-graph/src/integrals.rs",
+      "integration_overlap": false,
+      "old_base_blob": "99a8baf597bd7d645d57f2176963adc46759e775",
+      "upstream_blob": "30099163ff35eecc3821b4062b95eae385ad9b9c",
+      "approved_blob": "99a8baf597bd7d645d57f2176963adc46759e775",
+      "candidate_blob": "30099163ff35eecc3821b4062b95eae385ad9b9c",
+      "upstream_commits": [
+        "bbe81189ff04be164135c3bff7969ef38dc3336b Support current Symbolica community and linked sector backends (#225)"
+      ],
+      "integration_commits": []
+    },
+    {
+      "path": "crates/feynkit-graph/src/integrals/partial_fraction.rs",
+      "integration_overlap": false,
+      "old_base_blob": "2a42beec579966af290890a7b9583dc5ccd1e457",
+      "upstream_blob": "e28af2720117a2e30fc549664aa5c117639173af",
+      "approved_blob": "2a42beec579966af290890a7b9583dc5ccd1e457",
+      "candidate_blob": "e28af2720117a2e30fc549664aa5c117639173af",
+      "upstream_commits": [
+        "bbe81189ff04be164135c3bff7969ef38dc3336b Support current Symbolica community and linked sector backends (#225)"
+      ],
+      "integration_commits": []
+    },
+    {
+      "path": "crates/feynkit-py/python/symbolica/community/hepkit/__init__.pyi",
+      "integration_overlap": true,
+      "old_base_blob": "aa399db9f90986fde131040ff73c6ce5316ffc86",
+      "upstream_blob": "14f7280410ca301d82260dea0174f527147df6b2",
+      "approved_blob": "7ec22b14f6339d3b282ca3fa5893ecb338221e68",
+      "candidate_blob": "390ba4e3bdf2a22222fd88f8194f8dd95bc0a91f",
+      "upstream_commits": [
+        "83a312f26e7c7b60ba371acf4a5ef65edb2fb529 Refine notebook tensor previews and diagram controls (#234)",
+        "57d8c4d0c749f060bde494746051c15e607c3d05 Restore amplitude pager zoom and readable graph previews (#232)",
+        "bbe81189ff04be164135c3bff7969ef38dc3336b Support current Symbolica community and linked sector backends (#225)"
+      ],
+      "integration_commits": [
+        "66c2aed45d83b54f55b39bf2fc2f88c2066d6343 regenerate current stubs and reconcile source39 to43 contracts and evidence",
+        "d109e898ecf569eeab1b568ce80462ee6094e58d integrate approved cumulative staged graph and Python corrections"
+      ]
+    },
+    {
+      "path": "crates/feynkit-py/src/amplitude.rs",
+      "integration_overlap": true,
+      "old_base_blob": "feb1329d7dde795802d353367e9b57ff820d2d18",
+      "upstream_blob": "8eb07a3eeca162eb3814d74f32fce4f29903dfa6",
+      "approved_blob": "1adc9f2dc590a9dc900a2ad6dfcc2bcca9860df3",
+      "candidate_blob": "34bfc894ebd6629da2eafbb01be4679878937a7b",
+      "upstream_commits": [
+        "83a312f26e7c7b60ba371acf4a5ef65edb2fb529 Refine notebook tensor previews and diagram controls (#234)",
+        "57d8c4d0c749f060bde494746051c15e607c3d05 Restore amplitude pager zoom and readable graph previews (#232)"
+      ],
+      "integration_commits": [
+        "f264028690d117b4b99c320b61b7f2d5d89222d0 reconcile resolved staged generation with admitted tensor owners"
+      ]
+    },
+    {
+      "path": "crates/feynkit-py/src/display.rs",
+      "integration_overlap": true,
+      "old_base_blob": "fd56576c25ecc1243a4fbb7c622c243ac55c7125",
+      "upstream_blob": "59661638b1dd684e6b84d3e9638a1c731af77dd4",
+      "approved_blob": "725939fc1b402e87a8f6229058562558ae5389ca",
+      "candidate_blob": "5c2e690810f81881bfe549375e59d590bd40394e",
+      "upstream_commits": [
+        "83a312f26e7c7b60ba371acf4a5ef65edb2fb529 Refine notebook tensor previews and diagram controls (#234)"
+      ],
+      "integration_commits": [
+        "f264028690d117b4b99c320b61b7f2d5d89222d0 reconcile resolved staged generation with admitted tensor owners"
+      ]
+    },
+    {
+      "path": "crates/feynkit-py/src/error.rs",
+      "integration_overlap": true,
+      "old_base_blob": "660959b9fc99e9cbddfdb42ca438df1ebd8d44c9",
+      "upstream_blob": "acc948b7f6f24fb15a196fc8232438a4e81fb3f2",
+      "approved_blob": "07256c2059fdea48ccd1e13e96f7726e3a854616",
+      "candidate_blob": "03a5b0d09e742aad68f4c05a63ac2851fff2cb83",
+      "upstream_commits": [
+        "bbe81189ff04be164135c3bff7969ef38dc3336b Support current Symbolica community and linked sector backends (#225)"
+      ],
+      "integration_commits": [
+        "f264028690d117b4b99c320b61b7f2d5d89222d0 reconcile resolved staged generation with admitted tensor owners"
+      ]
+    },
+    {
+      "path": "crates/feynkit-py/src/lib.rs",
+      "integration_overlap": true,
+      "old_base_blob": "5625e50257b0aea686ac47ff3a350f693a94ddf6",
+      "upstream_blob": "0516124c5f757231e1ca406e68ba838bcdd433d6",
+      "approved_blob": "48c7914abd77b6186a1b6080864de49035ab2531",
+      "candidate_blob": "a581bc34a0ef85685eae8b6d83def0cad3619fd6",
+      "upstream_commits": [
+        "bbe81189ff04be164135c3bff7969ef38dc3336b Support current Symbolica community and linked sector backends (#225)"
+      ],
+      "integration_commits": [
+        "f264028690d117b4b99c320b61b7f2d5d89222d0 reconcile resolved staged generation with admitted tensor owners"
+      ]
+    },
+    {
+      "path": "crates/feynkit-py/src/model.rs",
+      "integration_overlap": true,
+      "old_base_blob": "c6a3a6bc1c2471db66c40f6e88bbce52fb06c62a",
+      "upstream_blob": "0764f0467f8c1f384e58f410e907bb0b3772f68e",
+      "approved_blob": "fc4e3bbc4c6fe87cc49ed4b421d19cd0234346c1",
+      "candidate_blob": "deb24707152d20827c93c0385cb4182aa9db34e1",
+      "upstream_commits": [
+        "bbe81189ff04be164135c3bff7969ef38dc3336b Support current Symbolica community and linked sector backends (#225)"
+      ],
+      "integration_commits": [
+        "f264028690d117b4b99c320b61b7f2d5d89222d0 reconcile resolved staged generation with admitted tensor owners"
+      ]
+    },
+    {
+      "path": "crates/feynkit-py/src/sector_decomposition.rs",
+      "integration_overlap": true,
+      "old_base_blob": "6a5cec42f3f8289fe25bbb9435b51e5efa1e7d9f",
+      "upstream_blob": "e31adcf9695b9b9184be7de717c67d4c4f8dc47a",
+      "approved_blob": "c3b6e65916623ca2449cf2a725a41e930b759082",
+      "candidate_blob": "e31adcf9695b9b9184be7de717c67d4c4f8dc47a",
+      "upstream_commits": [
+        "bbe81189ff04be164135c3bff7969ef38dc3336b Support current Symbolica community and linked sector backends (#225)"
+      ],
+      "integration_commits": [
+        "f264028690d117b4b99c320b61b7f2d5d89222d0 reconcile resolved staged generation with admitted tensor owners"
+      ]
+    },
+    {
+      "path": "crates/feynkit-py/tests/combined_community.rs",
+      "integration_overlap": true,
+      "old_base_blob": "9048680f01cd8d864c8b6fb515ccf70d624fbe9f",
+      "upstream_blob": "75b5e8d370609764c225590799316695f41a383f",
+      "approved_blob": "4b600f213ace680264e64adb44e1608f17916edd",
+      "candidate_blob": "915b040d0cf6b3bde8be674ff44534911c114324",
+      "upstream_commits": [
+        "57d8c4d0c749f060bde494746051c15e607c3d05 Restore amplitude pager zoom and readable graph previews (#232)"
+      ],
+      "integration_commits": [
+        "f264028690d117b4b99c320b61b7f2d5d89222d0 reconcile resolved staged generation with admitted tensor owners"
+      ]
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_feyncalc_qcd_ghost_vertex.py",
+      "integration_overlap": true,
+      "old_base_blob": "33bec2608e5ca55c518e529993bbf555d3009e1a",
+      "upstream_blob": "52794d000cd1d38aa688f6b524ea69dd5cd04bf7",
+      "approved_blob": "1d5b444ba867aa38187322d5160501358e3e00e6",
+      "candidate_blob": "fa61ef9f93995cfc7fb20344cdbcd06d1f9f08ea",
+      "upstream_commits": [
+        "bbe81189ff04be164135c3bff7969ef38dc3336b Support current Symbolica community and linked sector backends (#225)"
+      ],
+      "integration_commits": [
+        "2ea39fd3ec164516b8e68775554fa2021998975a integrate sources32\u201335 native graph displays and Python expression boundaries",
+        "f264028690d117b4b99c320b61b7f2d5d89222d0 reconcile resolved staged generation with admitted tensor owners"
+      ]
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_squared_amplitude_display.py",
+      "integration_overlap": false,
+      "old_base_blob": null,
+      "upstream_blob": "4a289d77b7392cf9ed0582f197b4d4394b2603ab",
+      "approved_blob": null,
+      "candidate_blob": "4a289d77b7392cf9ed0582f197b4d4394b2603ab",
+      "upstream_commits": [
+        "8386b99bb155a281932bd225c7392a041747d10f Stabilize graph hover resizing and scoped tensor labels (#239)",
+        "83a312f26e7c7b60ba371acf4a5ef65edb2fb529 Refine notebook tensor previews and diagram controls (#234)",
+        "57d8c4d0c749f060bde494746051c15e607c3d05 Restore amplitude pager zoom and readable graph previews (#232)"
+      ],
+      "integration_commits": []
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_ufo_ghost_crossing.py",
+      "integration_overlap": true,
+      "old_base_blob": "80c897e3e1720e27939545ac49d7bae6a6e00aeb",
+      "upstream_blob": "2fd1a3181afbde334a41249f8e3931fc98a55792",
+      "approved_blob": "e6189fd911097d565850f3f1e285deb098a7db3b",
+      "candidate_blob": "f12f4733145e7597983acc63ed880dea3f8a26b6",
+      "upstream_commits": [
+        "bbe81189ff04be164135c3bff7969ef38dc3336b Support current Symbolica community and linked sector backends (#225)"
+      ],
+      "integration_commits": [
+        "2ea39fd3ec164516b8e68775554fa2021998975a integrate sources32\u201335 native graph displays and Python expression boundaries",
+        "f264028690d117b4b99c320b61b7f2d5d89222d0 reconcile resolved staged generation with admitted tensor owners",
+        "821c0e7544f183dd5385d4f3933b4fe2cb57090b restore FeynRules ghost vertex through admitted interaction templates"
+      ]
+    },
+    {
+      "path": "crates/idenso/src/color/mod.rs",
+      "integration_overlap": false,
+      "old_base_blob": "b2700d26987c83595fdbf758e73ea4ff6a2cda2a",
+      "upstream_blob": "e42c90bf9d61c5c3eec808a790e1e08c26f8f8bd",
+      "approved_blob": "b2700d26987c83595fdbf758e73ea4ff6a2cda2a",
+      "candidate_blob": "e42c90bf9d61c5c3eec808a790e1e08c26f8f8bd",
+      "upstream_commits": [
+        "d13a5ae34a3573e6a6b11e5646800e49a95ab941 omit parentheses around color invariant aliases in powers (#230)"
+      ],
+      "integration_commits": []
+    },
+    {
+      "path": "crates/idenso/src/reference_cases/timing.rs",
+      "integration_overlap": true,
+      "old_base_blob": "473287e6a22b0160fef3461ba2b01fd01c3491e7",
+      "upstream_blob": "8013a4569cf703209f00b9362df84096f79dca85",
+      "approved_blob": "8013a4569cf703209f00b9362df84096f79dca85",
+      "candidate_blob": "8013a4569cf703209f00b9362df84096f79dca85",
+      "upstream_commits": [
+        "57d8c4d0c749f060bde494746051c15e607c3d05 Restore amplitude pager zoom and readable graph previews (#232)"
+      ],
+      "integration_commits": [
+        "52ac2eee4a1487bc79014c4f33f22b2854f80090 repair inherited formatting and diagnostic Clippy gates"
+      ]
+    },
+    {
+      "path": "crates/linnest/src/svg/interactive.css",
+      "integration_overlap": false,
+      "old_base_blob": "fe35e1388b31a859aaef284a5a1d709b85bc9017",
+      "upstream_blob": "b25102c054da976693a84d472dad639c9517c7ff",
+      "approved_blob": "fe35e1388b31a859aaef284a5a1d709b85bc9017",
+      "candidate_blob": "b25102c054da976693a84d472dad639c9517c7ff",
+      "upstream_commits": [
+        "83a312f26e7c7b60ba371acf4a5ef65edb2fb529 Refine notebook tensor previews and diagram controls (#234)"
+      ],
+      "integration_commits": []
+    },
+    {
+      "path": "crates/linnest/src/svg/interactive.js",
+      "integration_overlap": false,
+      "old_base_blob": "d68b74300adc9ee91cddce65a6db8ae4bfaa6309",
+      "upstream_blob": "fe7861f2a0410ad4da6b1a815c67ab09e15ce9fd",
+      "approved_blob": "d68b74300adc9ee91cddce65a6db8ae4bfaa6309",
+      "candidate_blob": "fe7861f2a0410ad4da6b1a815c67ab09e15ce9fd",
+      "upstream_commits": [
+        "9102f885722e856e30227ed46e685e5c465905f7 Float graph inspectors beside the cursor and restore hover highlighting (#241)",
+        "3d82fd2ab91d2145b910f4d6de829c188f2b7b2e keep graph hover previews inside the fixed viewport (#240)",
+        "8386b99bb155a281932bd225c7392a041747d10f Stabilize graph hover resizing and scoped tensor labels (#239)",
+        "b15275da97299493599dd619289345f04c504cdc stabilize graph inspector scroll container sizing (#235)",
+        "83a312f26e7c7b60ba371acf4a5ef65edb2fb529 Refine notebook tensor previews and diagram controls (#234)",
+        "57d8c4d0c749f060bde494746051c15e607c3d05 Restore amplitude pager zoom and readable graph previews (#232)"
+      ],
+      "integration_commits": []
+    },
+    {
+      "path": "crates/linnest/tests/browser_svg_sizing.py",
+      "integration_overlap": false,
+      "old_base_blob": "6d645cb51e1790e0ace413a9cd1b4c4334cd21fc",
+      "upstream_blob": "a9bf775d98e11a511311a4e0d3864ca7a6382b94",
+      "approved_blob": "6d645cb51e1790e0ace413a9cd1b4c4334cd21fc",
+      "candidate_blob": "a9bf775d98e11a511311a4e0d3864ca7a6382b94",
+      "upstream_commits": [
+        "9102f885722e856e30227ed46e685e5c465905f7 Float graph inspectors beside the cursor and restore hover highlighting (#241)",
+        "83a312f26e7c7b60ba371acf4a5ef65edb2fb529 Refine notebook tensor previews and diagram controls (#234)",
+        "57d8c4d0c749f060bde494746051c15e607c3d05 Restore amplitude pager zoom and readable graph previews (#232)"
+      ],
+      "integration_commits": []
+    },
+    {
+      "path": "crates/linnet-py/python/symbolica/community/graph/__init__.pyi",
+      "integration_overlap": true,
+      "old_base_blob": "028aed0cf67a95bdfb66f42c3097a8aa5a5a6130",
+      "upstream_blob": "dacf1860f85052a1629ad3e70cfd1699741452c6",
+      "approved_blob": "d555b577e5a3c73167cbc2c12cef49ba3fbd6d46",
+      "candidate_blob": "9a59909af4b2cffac8c57a14a8070a3ec171d212",
+      "upstream_commits": [
+        "83a312f26e7c7b60ba371acf4a5ef65edb2fb529 Refine notebook tensor previews and diagram controls (#234)"
+      ],
+      "integration_commits": [
+        "d109e898ecf569eeab1b568ce80462ee6094e58d integrate approved cumulative staged graph and Python corrections"
+      ]
+    },
+    {
+      "path": "crates/linnet-py/tests/test_svg_browser.py",
+      "integration_overlap": true,
+      "old_base_blob": "d14149f36373c664ce0375cbbc743b24c452ada4",
+      "upstream_blob": "0569b4d70b03474bcb08b920c498d88d135635c6",
+      "approved_blob": "c5affbd51089f56b46e3374738237ebbf481305d",
+      "candidate_blob": "7e55fdda21eab70772d5fdd2fef734722aacdd0b",
+      "upstream_commits": [
+        "9102f885722e856e30227ed46e685e5c465905f7 Float graph inspectors beside the cursor and restore hover highlighting (#241)",
+        "83a312f26e7c7b60ba371acf4a5ef65edb2fb529 Refine notebook tensor previews and diagram controls (#234)",
+        "57d8c4d0c749f060bde494746051c15e607c3d05 Restore amplitude pager zoom and readable graph previews (#232)"
+      ],
+      "integration_commits": [
+        "2ea39fd3ec164516b8e68775554fa2021998975a integrate sources32\u201335 native graph displays and Python expression boundaries"
+      ]
+    },
+    {
+      "path": "crates/linnet-render-py/python/symbolica/community/graph/__init__.pyi",
+      "integration_overlap": false,
+      "old_base_blob": "f69734da975ebec0710331cfc0666210102316fe",
+      "upstream_blob": "ab13eb4a65ad17f5916fa131f7aee567d05c33ff",
+      "approved_blob": "f69734da975ebec0710331cfc0666210102316fe",
+      "candidate_blob": "ab13eb4a65ad17f5916fa131f7aee567d05c33ff",
+      "upstream_commits": [
+        "83a312f26e7c7b60ba371acf4a5ef65edb2fb529 Refine notebook tensor previews and diagram controls (#234)"
+      ],
+      "integration_commits": []
+    },
+    {
+      "path": "crates/linnet-render-py/src/iframe.js",
+      "integration_overlap": false,
+      "old_base_blob": null,
+      "upstream_blob": "29b7c7d62cfa69ebde825145b7ea2e46983dd841",
+      "approved_blob": null,
+      "candidate_blob": "29b7c7d62cfa69ebde825145b7ea2e46983dd841",
+      "upstream_commits": [
+        "83a312f26e7c7b60ba371acf4a5ef65edb2fb529 Refine notebook tensor previews and diagram controls (#234)"
+      ],
+      "integration_commits": []
+    },
+    {
+      "path": "crates/linnet-render-py/src/view.js",
+      "integration_overlap": false,
+      "old_base_blob": "f4d0e231ad38db8e7422e57d4abd1e6ace8dad7a",
+      "upstream_blob": "674952c3c3f2fd8e30afc09214a8ea1487ad2a9e",
+      "approved_blob": "f4d0e231ad38db8e7422e57d4abd1e6ace8dad7a",
+      "candidate_blob": "674952c3c3f2fd8e30afc09214a8ea1487ad2a9e",
+      "upstream_commits": [
+        "83a312f26e7c7b60ba371acf4a5ef65edb2fb529 Refine notebook tensor previews and diagram controls (#234)"
+      ],
+      "integration_commits": []
+    },
+    {
+      "path": "crates/linnet-render-py/src/view.py",
+      "integration_overlap": false,
+      "old_base_blob": "399258d30a75e10981c81fcc4544a93a96b6d45b",
+      "upstream_blob": "713774416d8ff36eaf6f9cae207cf44da10e304b",
+      "approved_blob": "399258d30a75e10981c81fcc4544a93a96b6d45b",
+      "candidate_blob": "713774416d8ff36eaf6f9cae207cf44da10e304b",
+      "upstream_commits": [
+        "83a312f26e7c7b60ba371acf4a5ef65edb2fb529 Refine notebook tensor previews and diagram controls (#234)"
+      ],
+      "integration_commits": []
+    },
+    {
+      "path": "crates/linnet-render-py/src/view.rs",
+      "integration_overlap": true,
+      "old_base_blob": "f0a572ad5d945fcf2949b8cb3cc9a117c65132c6",
+      "upstream_blob": "f176d6a0faaa428806e4a46d51ba575db7d50a7d",
+      "approved_blob": "d734e84428900b4855a69194d48526d5e6644495",
+      "candidate_blob": "b373b368b7b83a08685ef8cbb182b2d8aaa49659",
+      "upstream_commits": [
+        "83a312f26e7c7b60ba371acf4a5ef65edb2fb529 Refine notebook tensor previews and diagram controls (#234)",
+        "67c6a664953142ced1e14bc21227ca5e7349c215 Isolate Marimo graph output without AnyWidget"
+      ],
+      "integration_commits": [
+        "f264028690d117b4b99c320b61b7f2d5d89222d0 reconcile resolved staged generation with admitted tensor owners"
+      ]
+    },
+    {
+      "path": "crates/linnet-render-py/tests/browser_widget_mount.py",
+      "integration_overlap": false,
+      "old_base_blob": null,
+      "upstream_blob": "29ad3a3e7614e1ce8dd7a59e30648006ab64657a",
+      "approved_blob": null,
+      "candidate_blob": "29ad3a3e7614e1ce8dd7a59e30648006ab64657a",
+      "upstream_commits": [
+        "83a312f26e7c7b60ba371acf4a5ef65edb2fb529 Refine notebook tensor previews and diagram controls (#234)"
+      ],
+      "integration_commits": []
+    },
+    {
+      "path": "crates/linnet-render-py/tests/graph_reuse_browser.js",
+      "integration_overlap": false,
+      "old_base_blob": "860a5753a58365c4bd648a9b3543517e081e66cd",
+      "upstream_blob": "451a7234588cd3365a379c77296f015b65e843f1",
+      "approved_blob": "860a5753a58365c4bd648a9b3543517e081e66cd",
+      "candidate_blob": "451a7234588cd3365a379c77296f015b65e843f1",
+      "upstream_commits": [
+        "83a312f26e7c7b60ba371acf4a5ef65edb2fb529 Refine notebook tensor previews and diagram controls (#234)"
+      ],
+      "integration_commits": []
+    },
+    {
+      "path": "crates/linnet-render-py/tests/iframe_display_browser.py",
+      "integration_overlap": false,
+      "old_base_blob": null,
+      "upstream_blob": "3073a0189f26f10891888d613a33326424575edd",
+      "approved_blob": null,
+      "candidate_blob": "3073a0189f26f10891888d613a33326424575edd",
+      "upstream_commits": [
+        "9102f885722e856e30227ed46e685e5c465905f7 Float graph inspectors beside the cursor and restore hover highlighting (#241)",
+        "83a312f26e7c7b60ba371acf4a5ef65edb2fb529 Refine notebook tensor previews and diagram controls (#234)"
+      ],
+      "integration_commits": []
+    },
+    {
+      "path": "crates/linnet-render-py/tests/inspector_resize_browser.py",
+      "integration_overlap": false,
+      "old_base_blob": null,
+      "upstream_blob": "ebe8103db5f6c054d98fe424fe0b8275e5402c1e",
+      "approved_blob": null,
+      "candidate_blob": "ebe8103db5f6c054d98fe424fe0b8275e5402c1e",
+      "upstream_commits": [
+        "9102f885722e856e30227ed46e685e5c465905f7 Float graph inspectors beside the cursor and restore hover highlighting (#241)",
+        "3d82fd2ab91d2145b910f4d6de829c188f2b7b2e keep graph hover previews inside the fixed viewport (#240)",
+        "8386b99bb155a281932bd225c7392a041747d10f Stabilize graph hover resizing and scoped tensor labels (#239)",
+        "b15275da97299493599dd619289345f04c504cdc stabilize graph inspector scroll container sizing (#235)"
+      ],
+      "integration_commits": []
+    },
+    {
+      "path": "crates/linnet-render-py/tests/mathml_view_browser.js",
+      "integration_overlap": false,
+      "old_base_blob": "beb362b980013e1a07baf213e83a4a8842bae823",
+      "upstream_blob": "d69e90bbecbfcc3c9cf60eddee00b62cdc1caf9b",
+      "approved_blob": "beb362b980013e1a07baf213e83a4a8842bae823",
+      "candidate_blob": "d69e90bbecbfcc3c9cf60eddee00b62cdc1caf9b",
+      "upstream_commits": [
+        "83a312f26e7c7b60ba371acf4a5ef65edb2fb529 Refine notebook tensor previews and diagram controls (#234)"
+      ],
+      "integration_commits": []
+    },
+    {
+      "path": "crates/linnet-render-py/tests/mathml_view_browser.py",
+      "integration_overlap": false,
+      "old_base_blob": "39afdc82e562c0c5d2eb572955ee3859006ec136",
+      "upstream_blob": "d4132375ea2dae153be8fa04f6b75137798239f4",
+      "approved_blob": "39afdc82e562c0c5d2eb572955ee3859006ec136",
+      "candidate_blob": "d4132375ea2dae153be8fa04f6b75137798239f4",
+      "upstream_commits": [
+        "b15275da97299493599dd619289345f04c504cdc stabilize graph inspector scroll container sizing (#235)"
+      ],
+      "integration_commits": []
+    },
+    {
+      "path": "crates/linnet/src/permutation.rs",
+      "integration_overlap": true,
+      "old_base_blob": "c83e888ec2b45a62c2053090b6a57f796b406c28",
+      "upstream_blob": "c977bb41200c47b1dc2783421281f7b5bc65b0d0",
+      "approved_blob": "4987cc1c7a2254b713c1d57086c102b4d2bad945",
+      "candidate_blob": "4987cc1c7a2254b713c1d57086c102b4d2bad945",
+      "upstream_commits": [
+        "57d8c4d0c749f060bde494746051c15e607c3d05 Restore amplitude pager zoom and readable graph previews (#232)"
+      ],
+      "integration_commits": [
+        "f264028690d117b4b99c320b61b7f2d5d89222d0 reconcile resolved staged generation with admitted tensor owners",
+        "52ac2eee4a1487bc79014c4f33f22b2854f80090 repair inherited formatting and diagnostic Clippy gates"
+      ]
+    },
+    {
+      "path": "crates/spenso/src/network/tags/mathml.rs",
+      "integration_overlap": false,
+      "old_base_blob": "5488effeb3222c0dfbbe66ef69cff06a6824a777",
+      "upstream_blob": "7061bbe919ad08d4aa795ccaf20531b9906e422e",
+      "approved_blob": "5488effeb3222c0dfbbe66ef69cff06a6824a777",
+      "candidate_blob": "7061bbe919ad08d4aa795ccaf20531b9906e422e",
+      "upstream_commits": [
+        "b4b3b56022d07418ab77fac7ba36a775fd112087 Reduce redundant tensor MathML script wrappers (#237)",
+        "b5e751ca3463026bd4a0601c283c0610889aac3c remove redundant dot-product parentheses in MathML (#236)",
+        "a6ee249b83901a480744f6abbb9a3739c66d2bdd compact tensor scripts without empty spacer columns (#231)"
+      ],
+      "integration_commits": []
+    },
+    {
+      "path": "crates/spynso3/src/display.rs",
+      "integration_overlap": false,
+      "old_base_blob": "b92032001cd4e5614c65966695cdace178704baf",
+      "upstream_blob": "d6ab8c54150861ed7e4ebc8f2c86676a437210e6",
+      "approved_blob": "b92032001cd4e5614c65966695cdace178704baf",
+      "candidate_blob": "d6ab8c54150861ed7e4ebc8f2c86676a437210e6",
+      "upstream_commits": [
+        "8386b99bb155a281932bd225c7392a041747d10f Stabilize graph hover resizing and scoped tensor labels (#239)",
+        "83a312f26e7c7b60ba371acf4a5ef65edb2fb529 Refine notebook tensor previews and diagram controls (#234)"
+      ],
+      "integration_commits": []
+    },
+    {
+      "path": "crates/spynso3/src/display/paging.rs",
+      "integration_overlap": false,
+      "old_base_blob": "15a28b019f885dfcaaca82c508eae89356331acf",
+      "upstream_blob": "b75789b2a316da9ee4e3bdf4c057936cab3e11d2",
+      "approved_blob": "15a28b019f885dfcaaca82c508eae89356331acf",
+      "candidate_blob": "b75789b2a316da9ee4e3bdf4c057936cab3e11d2",
+      "upstream_commits": [
+        "8386b99bb155a281932bd225c7392a041747d10f Stabilize graph hover resizing and scoped tensor labels (#239)",
+        "83a312f26e7c7b60ba371acf4a5ef65edb2fb529 Refine notebook tensor previews and diagram controls (#234)"
+      ],
+      "integration_commits": []
+    },
+    {
+      "path": "crates/spynso3/src/documentation.rs",
+      "integration_overlap": false,
+      "old_base_blob": "819ee9e828011b62480bbb15d18a9486e00ef0f8",
+      "upstream_blob": "2a82743f2077b05a65e1d606e76083efee25ad4c",
+      "approved_blob": "819ee9e828011b62480bbb15d18a9486e00ef0f8",
+      "candidate_blob": "2a82743f2077b05a65e1d606e76083efee25ad4c",
+      "upstream_commits": [
+        "bbe81189ff04be164135c3bff7969ef38dc3336b Support current Symbolica community and linked sector backends (#225)"
+      ],
+      "integration_commits": []
+    },
+    {
+      "path": "crates/spynso3/src/evaluator.rs",
+      "integration_overlap": false,
+      "old_base_blob": "f6a3bc5d88eef7836615ba8e44d4dab9ea031cee",
+      "upstream_blob": "d907dfc6d1f08aa3981cde7f1dc23a6dbe36068e",
+      "approved_blob": "f6a3bc5d88eef7836615ba8e44d4dab9ea031cee",
+      "candidate_blob": "d907dfc6d1f08aa3981cde7f1dc23a6dbe36068e",
+      "upstream_commits": [
+        "bbe81189ff04be164135c3bff7969ef38dc3336b Support current Symbolica community and linked sector backends (#225)"
+      ],
+      "integration_commits": []
+    },
+    {
+      "path": "crates/spynso3/src/expression.rs",
+      "integration_overlap": false,
+      "old_base_blob": "99503691fcd0ac3508a98e1ec76b11637aceaa79",
+      "upstream_blob": "ea81fa5a6ec41d22483d51751629e6bebd2328db",
+      "approved_blob": "99503691fcd0ac3508a98e1ec76b11637aceaa79",
+      "candidate_blob": "ea81fa5a6ec41d22483d51751629e6bebd2328db",
+      "upstream_commits": [
+        "83a312f26e7c7b60ba371acf4a5ef65edb2fb529 Refine notebook tensor previews and diagram controls (#234)",
+        "bbe81189ff04be164135c3bff7969ef38dc3336b Support current Symbolica community and linked sector backends (#225)"
+      ],
+      "integration_commits": []
+    },
+    {
+      "path": "crates/spynso3/src/stubs.rs",
+      "integration_overlap": false,
+      "old_base_blob": "b4142edfe13c92911b16a78ad5dc867d0e039f6c",
+      "upstream_blob": "acc6c07ce9202a95ec48d4dd6f46dd10b71e8761",
+      "approved_blob": "b4142edfe13c92911b16a78ad5dc867d0e039f6c",
+      "candidate_blob": "acc6c07ce9202a95ec48d4dd6f46dd10b71e8761",
+      "upstream_commits": [
+        "bbe81189ff04be164135c3bff7969ef38dc3336b Support current Symbolica community and linked sector backends (#225)"
+      ],
+      "integration_commits": []
+    },
+    {
+      "path": "crates/spynso3/tests/api_typing.py",
+      "integration_overlap": false,
+      "old_base_blob": "f95959cb0a33a9cadcbd3d4d79ae5e716d242de7",
+      "upstream_blob": "6e78a28c74f8a96b01d32c061369a23fecc8a08d",
+      "approved_blob": "f95959cb0a33a9cadcbd3d4d79ae5e716d242de7",
+      "candidate_blob": "6e78a28c74f8a96b01d32c061369a23fecc8a08d",
+      "upstream_commits": [
+        "bbe81189ff04be164135c3bff7969ef38dc3336b Support current Symbolica community and linked sector backends (#225)"
+      ],
+      "integration_commits": []
+    },
+    {
+      "path": "crates/spynso3/tests/evaluator_horner.py",
+      "integration_overlap": false,
+      "old_base_blob": null,
+      "upstream_blob": "56f3747b3d92e1caf76c187ff29e0708b4306089",
+      "approved_blob": null,
+      "candidate_blob": "56f3747b3d92e1caf76c187ff29e0708b4306089",
+      "upstream_commits": [
+        "bbe81189ff04be164135c3bff7969ef38dc3336b Support current Symbolica community and linked sector backends (#225)"
+      ],
+      "integration_commits": []
+    },
+    {
+      "path": "crates/spynso3/tests/evaluator_horner.rs",
+      "integration_overlap": false,
+      "old_base_blob": null,
+      "upstream_blob": "5015a0abf9ea42c65551e6d640d6fd0f4c76de22",
+      "approved_blob": null,
+      "candidate_blob": "5015a0abf9ea42c65551e6d640d6fd0f4c76de22",
+      "upstream_commits": [
+        "bbe81189ff04be164135c3bff7969ef38dc3336b Support current Symbolica community and linked sector backends (#225)"
+      ],
+      "integration_commits": []
+    },
+    {
+      "path": "crates/spynso3/tests/installed_api_operations.py",
+      "integration_overlap": false,
+      "old_base_blob": "fb4d82c29f92469fa2cf72762e2305793984b670",
+      "upstream_blob": "6b54774e078c69e100fbe86573fc1b0afebe8cf5",
+      "approved_blob": "fb4d82c29f92469fa2cf72762e2305793984b670",
+      "candidate_blob": "6b54774e078c69e100fbe86573fc1b0afebe8cf5",
+      "upstream_commits": [
+        "bbe81189ff04be164135c3bff7969ef38dc3336b Support current Symbolica community and linked sector backends (#225)"
+      ],
+      "integration_commits": []
+    },
+    {
+      "path": "crates/spynso3/tests/installed_open_port_display.py",
+      "integration_overlap": false,
+      "old_base_blob": "5f0d8fe2501ac8685090ac75a46c4ff399f5653d",
+      "upstream_blob": "cf3c4f6a8b5005bb113ff1a1d20ac3a973b94e1e",
+      "approved_blob": "5f0d8fe2501ac8685090ac75a46c4ff399f5653d",
+      "candidate_blob": "cf3c4f6a8b5005bb113ff1a1d20ac3a973b94e1e",
+      "upstream_commits": [
+        "b5e751ca3463026bd4a0601c283c0610889aac3c remove redundant dot-product parentheses in MathML (#236)"
+      ],
+      "integration_commits": []
+    },
+    {
+      "path": "crates/spynso3/tests/installed_symbolic_preview.py",
+      "integration_overlap": false,
+      "old_base_blob": "9345d463cf8e130ee3953f5d8e497bbc06a86e37",
+      "upstream_blob": "2536252a22deb77b4dd5ffaaac4df9eb080a0e7e",
+      "approved_blob": "9345d463cf8e130ee3953f5d8e497bbc06a86e37",
+      "candidate_blob": "2536252a22deb77b4dd5ffaaac4df9eb080a0e7e",
+      "upstream_commits": [
+        "a6ee249b83901a480744f6abbb9a3739c66d2bdd compact tensor scripts without empty spacer columns (#231)"
+      ],
+      "integration_commits": []
+    },
+    {
+      "path": "crates/spynso3/tests/installed_tensor_paging.py",
+      "integration_overlap": false,
+      "old_base_blob": "ad281db9525e141302026a8ffa806708dd73790b",
+      "upstream_blob": "d29f9d9a3334969140fcca6a64f6982b4a960479",
+      "approved_blob": "ad281db9525e141302026a8ffa806708dd73790b",
+      "candidate_blob": "d29f9d9a3334969140fcca6a64f6982b4a960479",
+      "upstream_commits": [
+        "b5e751ca3463026bd4a0601c283c0610889aac3c remove redundant dot-product parentheses in MathML (#236)",
+        "83a312f26e7c7b60ba371acf4a5ef65edb2fb529 Refine notebook tensor previews and diagram controls (#234)"
+      ],
+      "integration_commits": []
+    },
+    {
+      "path": "crates/spynso3/tests/typing_tensor_products.py",
+      "integration_overlap": false,
+      "old_base_blob": null,
+      "upstream_blob": "4d942372c0b66c90f88e32889f324c22273796fa",
+      "approved_blob": null,
+      "candidate_blob": "4d942372c0b66c90f88e32889f324c22273796fa",
+      "upstream_commits": [
+        "bbe81189ff04be164135c3bff7969ef38dc3336b Support current Symbolica community and linked sector backends (#225)"
+      ],
+      "integration_commits": []
+    },
+    {
+      "path": "docs/api/python/feynkit-community.pyi",
+      "integration_overlap": true,
+      "old_base_blob": "aa399db9f90986fde131040ff73c6ce5316ffc86",
+      "upstream_blob": "14f7280410ca301d82260dea0174f527147df6b2",
+      "approved_blob": "7ec22b14f6339d3b282ca3fa5893ecb338221e68",
+      "candidate_blob": "390ba4e3bdf2a22222fd88f8194f8dd95bc0a91f",
+      "upstream_commits": [
+        "83a312f26e7c7b60ba371acf4a5ef65edb2fb529 Refine notebook tensor previews and diagram controls (#234)",
+        "57d8c4d0c749f060bde494746051c15e607c3d05 Restore amplitude pager zoom and readable graph previews (#232)",
+        "bbe81189ff04be164135c3bff7969ef38dc3336b Support current Symbolica community and linked sector backends (#225)"
+      ],
+      "integration_commits": [
+        "66c2aed45d83b54f55b39bf2fc2f88c2066d6343 regenerate current stubs and reconcile source39 to43 contracts and evidence",
+        "d109e898ecf569eeab1b568ce80462ee6094e58d integrate approved cumulative staged graph and Python corrections"
+      ]
+    },
+    {
+      "path": "docs/api/python/linnet-graph.pyi",
+      "integration_overlap": true,
+      "old_base_blob": "028aed0cf67a95bdfb66f42c3097a8aa5a5a6130",
+      "upstream_blob": "dacf1860f85052a1629ad3e70cfd1699741452c6",
+      "approved_blob": "d555b577e5a3c73167cbc2c12cef49ba3fbd6d46",
+      "candidate_blob": "9a59909af4b2cffac8c57a14a8070a3ec171d212",
+      "upstream_commits": [
+        "83a312f26e7c7b60ba371acf4a5ef65edb2fb529 Refine notebook tensor previews and diagram controls (#234)"
+      ],
+      "integration_commits": [
+        "d109e898ecf569eeab1b568ce80462ee6094e58d integrate approved cumulative staged graph and Python corrections"
+      ]
+    },
+    {
+      "path": "docs/api/python/spynso3.pyi",
+      "integration_overlap": false,
+      "old_base_blob": "035434835d03abf94e94ba756190a425b00e71cc",
+      "upstream_blob": "4aa836029060afb5ba9bdf1d80948eb4597142ba",
+      "approved_blob": "035434835d03abf94e94ba756190a425b00e71cc",
+      "candidate_blob": "4aa836029060afb5ba9bdf1d80948eb4597142ba",
+      "upstream_commits": [
+        "83a312f26e7c7b60ba371acf4a5ef65edb2fb529 Refine notebook tensor previews and diagram controls (#234)",
+        "bbe81189ff04be164135c3bff7969ef38dc3336b Support current Symbolica community and linked sector backends (#225)"
+      ],
+      "integration_commits": []
+    },
+    {
+      "path": "docs/products/feynkit/content/community-host.typ",
+      "integration_overlap": true,
+      "old_base_blob": "ba1c6a166aa8e5e5d87e63ab98c3e01a8676bab0",
+      "upstream_blob": "faa314883469473f048cec55a470c7e4d84cb9d3",
+      "approved_blob": "e605eb87e0fdb1cf3b53af83268719bbcafbb98d",
+      "candidate_blob": "f0fa544a710d69d556df679c97a38824a60b55b8",
+      "upstream_commits": [
+        "bbe81189ff04be164135c3bff7969ef38dc3336b Support current Symbolica community and linked sector backends (#225)"
+      ],
+      "integration_commits": [
+        "f264028690d117b4b99c320b61b7f2d5d89222d0 reconcile resolved staged generation with admitted tensor owners"
+      ]
+    },
+    {
+      "path": "docs/products/feynkit/content/feyncalc-coverage.typ",
+      "integration_overlap": true,
+      "old_base_blob": "4dd569755f729e5f2bac459ba60b380983961f95",
+      "upstream_blob": "c0d425ecabb5dc2cf534ae554b1cb332aa1e2240",
+      "approved_blob": "8c12e11957bee460fa19b69373ae80ae4ba20a58",
+      "candidate_blob": "8c12e11957bee460fa19b69373ae80ae4ba20a58",
+      "upstream_commits": [
+        "bbe81189ff04be164135c3bff7969ef38dc3336b Support current Symbolica community and linked sector backends (#225)"
+      ],
+      "integration_commits": [
+        "f264028690d117b4b99c320b61b7f2d5d89222d0 reconcile resolved staged generation with admitted tensor owners",
+        "821c0e7544f183dd5385d4f3933b4fe2cb57090b restore FeynRules ghost vertex through admitted interaction templates"
+      ]
+    },
+    {
+      "path": "docs/products/linnet/content/python-rendering.typ",
+      "integration_overlap": false,
+      "old_base_blob": "399ef5d87f3eba1b1a35ada0060f099ed070c1d4",
+      "upstream_blob": "a746498a60f597fdf2ea48bb71e3b720df899ccf",
+      "approved_blob": "399ef5d87f3eba1b1a35ada0060f099ed070c1d4",
+      "candidate_blob": "a746498a60f597fdf2ea48bb71e3b720df899ccf",
+      "upstream_commits": [
+        "83a312f26e7c7b60ba371acf4a5ef65edb2fb529 Refine notebook tensor previews and diagram controls (#234)",
+        "57d8c4d0c749f060bde494746051c15e607c3d05 Restore amplitude pager zoom and readable graph previews (#232)"
+      ],
+      "integration_commits": []
+    },
+    {
+      "path": "docs/products/spenso/content/python.typ",
+      "integration_overlap": false,
+      "old_base_blob": "a62b109b2355518d0226fa0ad508fd8492561dac",
+      "upstream_blob": "bff104611a6432d389dd7416fc05b143b3816641",
+      "approved_blob": "a62b109b2355518d0226fa0ad508fd8492561dac",
+      "candidate_blob": "bff104611a6432d389dd7416fc05b143b3816641",
+      "upstream_commits": [
+        "83a312f26e7c7b60ba371acf4a5ef65edb2fb529 Refine notebook tensor previews and diagram controls (#234)"
+      ],
+      "integration_commits": []
+    },
+    {
+      "path": "examples/notebooks/symbolica-host/Cargo.lock",
+      "integration_overlap": true,
+      "old_base_blob": "892776ba6fd38965c3927b92dace20c892841b19",
+      "upstream_blob": "493da0415de5810eeed1df9f7ecd4c949f650782",
+      "approved_blob": "32bd82a16b2d50db8666259d2a2eabb496ec0b61",
+      "candidate_blob": "08e2323d149469b98372c2e657c4d0c8515c8d1f",
+      "upstream_commits": [
+        "83a312f26e7c7b60ba371acf4a5ef65edb2fb529 Refine notebook tensor previews and diagram controls (#234)",
+        "bbe81189ff04be164135c3bff7969ef38dc3336b Support current Symbolica community and linked sector backends (#225)"
+      ],
+      "integration_commits": [
+        "925f739799572d23f46a762c895ebb85e5bd88d6 integrate source38 local-frame mark geometry and corrected Kurbo stroke owner",
+        "f264028690d117b4b99c320b61b7f2d5d89222d0 reconcile resolved staged generation with admitted tensor owners"
+      ]
+    },
+    {
+      "path": "examples/notebooks/symbolica-host/Cargo.toml",
+      "integration_overlap": true,
+      "old_base_blob": "b5535a2687ea903f49b652491e1d8249ff4211ca",
+      "upstream_blob": "97addb6ad6964ca1d5f70500bbd6c28972b70a38",
+      "approved_blob": "407bed52ecd2cef6df55b9f0a071c536399a1dbb",
+      "candidate_blob": "45d41bc95443350f9de6110cbae10d23ed08e2fa",
+      "upstream_commits": [
+        "bbe81189ff04be164135c3bff7969ef38dc3336b Support current Symbolica community and linked sector backends (#225)"
+      ],
+      "integration_commits": [
+        "925f739799572d23f46a762c895ebb85e5bd88d6 integrate source38 local-frame mark geometry and corrected Kurbo stroke owner",
+        "f264028690d117b4b99c320b61b7f2d5d89222d0 reconcile resolved staged generation with admitted tensor owners"
+      ]
+    },
+    {
+      "path": "examples/notebooks/symbolica-host/python/symbolica/community/graph/__init__.pyi",
+      "integration_overlap": true,
+      "old_base_blob": "028aed0cf67a95bdfb66f42c3097a8aa5a5a6130",
+      "upstream_blob": "dacf1860f85052a1629ad3e70cfd1699741452c6",
+      "approved_blob": "d555b577e5a3c73167cbc2c12cef49ba3fbd6d46",
+      "candidate_blob": "9a59909af4b2cffac8c57a14a8070a3ec171d212",
+      "upstream_commits": [
+        "83a312f26e7c7b60ba371acf4a5ef65edb2fb529 Refine notebook tensor previews and diagram controls (#234)"
+      ],
+      "integration_commits": [
+        "d109e898ecf569eeab1b568ce80462ee6094e58d integrate approved cumulative staged graph and Python corrections"
+      ]
+    },
+    {
+      "path": "examples/notebooks/symbolica-host/python/symbolica/community/tensor/__init__.pyi",
+      "integration_overlap": false,
+      "old_base_blob": "035434835d03abf94e94ba756190a425b00e71cc",
+      "upstream_blob": "4aa836029060afb5ba9bdf1d80948eb4597142ba",
+      "approved_blob": "035434835d03abf94e94ba756190a425b00e71cc",
+      "candidate_blob": "4aa836029060afb5ba9bdf1d80948eb4597142ba",
+      "upstream_commits": [
+        "83a312f26e7c7b60ba371acf4a5ef65edb2fb529 Refine notebook tensor previews and diagram controls (#234)",
+        "bbe81189ff04be164135c3bff7969ef38dc3336b Support current Symbolica community and linked sector backends (#225)"
+      ],
+      "integration_commits": []
+    },
+    {
+      "path": "justfile",
+      "integration_overlap": false,
+      "old_base_blob": "0cfc74e2555686e2e58a88f7db8ef34baefd765c",
+      "upstream_blob": "322a16c00fb189a981a539717715f6fb36ff6726",
+      "approved_blob": "0cfc74e2555686e2e58a88f7db8ef34baefd765c",
+      "candidate_blob": "322a16c00fb189a981a539717715f6fb36ff6726",
+      "upstream_commits": [
+        "bbe81189ff04be164135c3bff7969ef38dc3336b Support current Symbolica community and linked sector backends (#225)"
+      ],
+      "integration_commits": []
+    },
+    {
+      "path": "nix/browser-check.py",
+      "integration_overlap": false,
+      "old_base_blob": "96d4ef03edd95b19771cbe2e939dea1eb43d41e1",
+      "upstream_blob": "dd1cb6a16cb0c01ca298f26e35d4ae9f361dec5d",
+      "approved_blob": "96d4ef03edd95b19771cbe2e939dea1eb43d41e1",
+      "candidate_blob": "dd1cb6a16cb0c01ca298f26e35d4ae9f361dec5d",
+      "upstream_commits": [
+        "b15275da97299493599dd619289345f04c504cdc stabilize graph inspector scroll container sizing (#235)",
+        "83a312f26e7c7b60ba371acf4a5ef65edb2fb529 Refine notebook tensor previews and diagram controls (#234)"
+      ],
+      "integration_commits": []
+    },
+    {
+      "path": "nix/rust-workspace.nix",
+      "integration_overlap": true,
+      "old_base_blob": "1dd207004fbb0a3aed1a449763089d1191536592",
+      "upstream_blob": "f394270cf194d44229afbb32a5031e9d25633293",
+      "approved_blob": "e28b23f4ec75ca16a33e79a76616db92c62f327b",
+      "candidate_blob": "18781b7bd8576c4b63e2643f3e982216e717d0e1",
+      "upstream_commits": [
+        "83a312f26e7c7b60ba371acf4a5ef65edb2fb529 Refine notebook tensor previews and diagram controls (#234)",
+        "57d8c4d0c749f060bde494746051c15e607c3d05 Restore amplitude pager zoom and readable graph previews (#232)"
+      ],
+      "integration_commits": [
+        "9b18f329e992ccc642c2cdaa62e934318f55fa76 integrate approved core API fixture and rendered evidence owners",
+        "610b83fac3d4bfd7d0a92dd912191062d18a2fbe repair Cargo directory target discovery for source46 producer",
+        "925f739799572d23f46a762c895ebb85e5bd88d6 integrate source38 local-frame mark geometry and corrected Kurbo stroke owner",
+        "f99fe4bf25db77df58ce4619e2ff176268499a58 select declared local Cargo patches for filtered producer inputs",
+        "29cc026df9c9ca4f31be9b0e851ad6f076c475c7 include literal Clinnet Typst test fixtures in its producer source",
+        "26d439003bb52bd19299e77e542198cf7c50d90f integrate approved generation test source closure",
+        "82c1eb5b40c4911e59dfc25c9ba1786e282e111c reject nonfinite grouping operands before comparison",
+        "f264028690d117b4b99c320b61b7f2d5d89222d0 reconcile resolved staged generation with admitted tensor owners",
+        "8430e701d858b07e40203a25bfc3b1fa61b15f4a integrate approved drawing costs and common notice delivery"
+      ]
+    },
+    {
+      "path": "pyproject.toml",
+      "integration_overlap": true,
+      "old_base_blob": "2d0a326c94137138cd423dd4543d3bb316c8a6ec",
+      "upstream_blob": "3e7dcce0ac94c70fd52852a098805be4462483f0",
+      "approved_blob": "9f055c28af1cd9d9f96fe6bb2a0c8a1aa83a1c54",
+      "candidate_blob": "349359c8ea70c53405aa5de10b0df65d64b9805b",
+      "upstream_commits": [
+        "bbe81189ff04be164135c3bff7969ef38dc3336b Support current Symbolica community and linked sector backends (#225)"
+      ],
+      "integration_commits": [
+        "925f739799572d23f46a762c895ebb85e5bd88d6 integrate source38 local-frame mark geometry and corrected Kurbo stroke owner",
+        "f264028690d117b4b99c320b61b7f2d5d89222d0 reconcile resolved staged generation with admitted tensor owners",
+        "8430e701d858b07e40203a25bfc3b1fa61b15f4a integrate approved drawing costs and common notice delivery"
+      ]
+    },
+    {
+      "path": "tydenso/Cargo.lock",
+      "integration_overlap": true,
+      "old_base_blob": "6e4c7fdac32580ccd2f1b79e5d152a275d044904",
+      "upstream_blob": "171ed9d451ae8cb37462908d78051d9dc42dbe18",
+      "approved_blob": "ae10b503ef49b56a97d0c6fb295c7d0f42176872",
+      "candidate_blob": "0fd55f283348dcf4ee17a4a2745cafa28c032d14",
+      "upstream_commits": [
+        "83a312f26e7c7b60ba371acf4a5ef65edb2fb529 Refine notebook tensor previews and diagram controls (#234)",
+        "bbe81189ff04be164135c3bff7969ef38dc3336b Support current Symbolica community and linked sector backends (#225)"
+      ],
+      "integration_commits": [
+        "f264028690d117b4b99c320b61b7f2d5d89222d0 reconcile resolved staged generation with admitted tensor owners"
+      ]
+    },
+    {
+      "path": "tydenso/Cargo.toml",
+      "integration_overlap": false,
+      "old_base_blob": "c4c46d4134fe4bc2796c97c1407181cd44fdf85d",
+      "upstream_blob": "b5426d32b605a58be952399695388de3ed6b5a79",
+      "approved_blob": "c4c46d4134fe4bc2796c97c1407181cd44fdf85d",
+      "candidate_blob": "b5426d32b605a58be952399695388de3ed6b5a79",
+      "upstream_commits": [
+        "bbe81189ff04be164135c3bff7969ef38dc3336b Support current Symbolica community and linked sector backends (#225)"
+      ],
+      "integration_commits": []
+    },
+    {
+      "path": "tydenso/Justfile",
+      "integration_overlap": false,
+      "old_base_blob": "5031ba323c0dc527fa9c7b56bcfbbcb962af4648",
+      "upstream_blob": "3f2d7cf2b4d1311cca16b16096d31d336bb65d54",
+      "approved_blob": "5031ba323c0dc527fa9c7b56bcfbbcb962af4648",
+      "candidate_blob": "3f2d7cf2b4d1311cca16b16096d31d336bb65d54",
+      "upstream_commits": [
+        "bbe81189ff04be164135c3bff7969ef38dc3336b Support current Symbolica community and linked sector backends (#225)"
+      ],
+      "integration_commits": []
+    },
+    {
+      "path": "uv.lock",
+      "integration_overlap": false,
+      "old_base_blob": "89586a2b88043244700683e20acbc1e588626a81",
+      "upstream_blob": "4362f5efcd3dd608aafd0d64d28a4a91bd8eb08f",
+      "approved_blob": "89586a2b88043244700683e20acbc1e588626a81",
+      "candidate_blob": "4362f5efcd3dd608aafd0d64d28a4a91bd8eb08f",
+      "upstream_commits": [
+        "83a312f26e7c7b60ba371acf4a5ef65edb2fb529 Refine notebook tensor previews and diagram controls (#234)",
+        "bbe81189ff04be164135c3bff7969ef38dc3336b Support current Symbolica community and linked sector backends (#225)"
+      ],
+      "integration_commits": []
+    }
+  ],
+  "initial_final_tree_attempt": "c5af4f76a55dab1b277afdd5df79fd65a92c68c4"
+}

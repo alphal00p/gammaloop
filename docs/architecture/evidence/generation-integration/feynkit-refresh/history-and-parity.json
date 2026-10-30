@@ -1,0 +1,32 @@
+{
+  "code": "5ea149ffd88ae3afc4072a38c0871c1329be8424",
+  "native_jj_conflict_query": "conflicts() & (9102f885722e..generation-feynkit-refresh-clean-code)",
+  "conflicted_commits": 0,
+  "native_jj_revision_count": 106,
+  "initial_final_tree_attempt": "c5af4f76a55dab1b277afdd5df79fd65a92c68c4",
+  "native_jj_parity_delta": [
+    "M docs/products/feynkit/content/feyncalc-coverage.typ"
+  ],
+  "deliberate_parity_exception": "Only feyncalc-coverage historical QCD paragraph differs from initial final-tree attempt: restored exact approved document, not upstream antighost prose. Native JJ diff of this document between fdff and clean code is empty. All other files exactly match first clean final-tree attempt.",
+  "resolution_introduction_points": [
+    {
+      "original": "821c0e7544f1",
+      "resolved": "e94c5aed",
+      "path": "docs/products/feynkit/content/feyncalc-coverage.typ"
+    },
+    {
+      "original": "f264028690d1",
+      "resolved_change": "rrnkxlxknowsnnotyqnkkyontoymotyw",
+      "path": "crates/feynkit-py/src/sector_decomposition.rs"
+    },
+    {
+      "original": "2ea39fd3ec16",
+      "resolved_change": "nrxvmnnwlmmkpqpyqwnnzyorrstvrynp",
+      "paths": [
+        "crates/feynkit-py/tests/installed_feyncalc_qcd_ghost_vertex.py",
+        "crates/linnet-py/tests/test_svg_browser.py"
+      ]
+    }
+  ],
+  "no_late_file_transplant": "Resolved conflicts at their introduction points using each revision local content and preserved upstream side where superseded; later descendant changes replayed by JJ. Replay-map.json binds exact resolved commit IDs."
+}

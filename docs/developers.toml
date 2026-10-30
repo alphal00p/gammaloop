@@ -322,7 +322,9 @@ end_anchor = "  workspacePackageExtraSourceRoots.runtimeTest = {"
 # a33052fa adds only the existing gg-hhh topology card to gammaloop-api's
 # compile-time test source owner. The card and consumer bytes are unchanged;
 # the reviewed complete15-site include audit finds no other omitted input.
-digest = "9f26523be340699df1b29b8144f5aa1f7a1e1c7f"
+# Community refresh extends explicit iframe/test source delivery and runs the widget browser check.
+# Existing input ownership/filter and cache-selection rules remain; added coverage has no old pass credit.
+digest = "a6b344e5a569991441e6b3677616855df98d32a2"
 
 
 [[section.note.scope]]
@@ -3038,7 +3040,9 @@ end_anchor = "workspacePackageExtraSourceRootsForSourcePackages ="
 # declares benchmarks/performance/gg-hhh-topology.toml as gammaloop-api
 # compile-time test input. Production/runtime partitions, Cargo target selection,
 # Nextest scheduling and all other package source owners remain unchanged.
-digest = "be1f856bd75cbdac5fcd3c511d3bb691462b44b7"
+# Community refresh extends explicit iframe/test source delivery and runs the widget browser check.
+# Existing input ownership/filter and cache-selection rules remain; added coverage has no old pass credit.
+digest = "7105f205fa57a2e8ca470614d15176310d8787dc"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"
