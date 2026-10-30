@@ -240,11 +240,7 @@ fn five_loop_zero_momentum_ordered_matches_saved_depth_first_result() -> fixture
         std::env::var_os("VAKINT_ORDERED_RUN_EVIDENCE")
             .ok_or("set VAKINT_ORDERED_RUN_EVIDENCE to the completed run directory")?,
     );
-    fixture::comparison::historical::compare_saved_zero_momentum(
-        &payload,
-        &completed,
-        &evidence,
-    )?;
+    fixture::comparison::historical::compare_saved_zero_momentum(&payload, &completed, &evidence)?;
     Ok(())
 }
 
