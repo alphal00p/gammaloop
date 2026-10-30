@@ -1,0 +1,1013 @@
+{
+  "schema": 1,
+  "cases": [
+    {
+      "case": "xs_qed_eemm_L1",
+      "actual": {
+        "status": "ok",
+        "passed": 1,
+        "failed": 0,
+        "filtered": 182,
+        "exit": 0
+      },
+      "built_code": "5ea149ffd88ae3afc4072a38c0871c1329be8424",
+      "equivalent_generator_input_code": "5ba04864ca506e259d9eef4a54f65acdd8323fc2",
+      "kernel": "8eb7c3729d6abefc916decc1bdf0c06536f8af80",
+      "pristine_root": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eemm_L1",
+      "observer_root": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qed_eemm_L1",
+      "pristine_command": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eemm_L1/command.json",
+        "sha256": "c044453a3de4853fe44d6dbf1033d2eb877bb98da4f414c9c841dbab211bd40e"
+      },
+      "observer_command": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qed_eemm_L1/command.json",
+        "sha256": "ead630f2c33a5aa935fa2b8bf33fde669760907b6112db54343c68847a92c222"
+      },
+      "capture_binding": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qed_eemm_L1/capture-binding.json",
+        "sha256": "78748dbde40e8308c0bfe9f2af8ec234d0c14b1b155763c5342580a7f6877b21"
+      },
+      "ledger": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qed_eemm_L1/world.jsonl",
+        "sha256": "a2f235d760fb4f090d328869bccc24b3917d11ba4d609d58e66dff5755482130"
+      },
+      "actual_public_joins": [
+        {
+          "file": "xs_qed_eemm_L1.census",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eemm_L1/dumps/xs_qed_eemm_L1.census",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qed_eemm_L1/dumps/xs_qed_eemm_L1.census",
+          "sha256": "6dba87641522f1b7f28dcaf8155851ec2082a341b1433290e7f9fc7259b9f71d"
+        },
+        {
+          "file": "xs_qed_eemm_L1.classes-None-t1.json",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eemm_L1/dumps/xs_qed_eemm_L1.classes-None-t1.json",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qed_eemm_L1/dumps/xs_qed_eemm_L1.classes-None-t1.json",
+          "sha256": "7353727c6fa396655cc3cb1406a0abbd9b938df9c95e9d9f2264448ed1dc59a0"
+        },
+        {
+          "file": "xs_qed_eemm_L1.classes-None-t1.sources.json",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eemm_L1/dumps/xs_qed_eemm_L1.classes-None-t1.sources.json",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qed_eemm_L1/dumps/xs_qed_eemm_L1.classes-None-t1.sources.json",
+          "sha256": "7353727c6fa396655cc3cb1406a0abbd9b938df9c95e9d9f2264448ed1dc59a0"
+        },
+        {
+          "file": "xs_qed_eemm_L1.classes-Auto-t1.json",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eemm_L1/dumps/xs_qed_eemm_L1.classes-Auto-t1.json",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qed_eemm_L1/dumps/xs_qed_eemm_L1.classes-Auto-t1.json",
+          "sha256": "7353727c6fa396655cc3cb1406a0abbd9b938df9c95e9d9f2264448ed1dc59a0"
+        },
+        {
+          "file": "xs_qed_eemm_L1.classes-Auto-t1.sources.json",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eemm_L1/dumps/xs_qed_eemm_L1.classes-Auto-t1.sources.json",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qed_eemm_L1/dumps/xs_qed_eemm_L1.classes-Auto-t1.sources.json",
+          "sha256": "7353727c6fa396655cc3cb1406a0abbd9b938df9c95e9d9f2264448ed1dc59a0"
+        }
+      ],
+      "actual_census_file": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eemm_L1/dumps/xs_qed_eemm_L1.census",
+        "sha256": "6dba87641522f1b7f28dcaf8155851ec2082a341b1433290e7f9fc7259b9f71d"
+      },
+      "cell_sources": {
+        "None": {
+          "payload": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eemm_L1/dumps/xs_qed_eemm_L1.classes-None-t1.json",
+          "source_companion": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eemm_L1/dumps/xs_qed_eemm_L1.classes-None-t1.sources.json",
+          "diagrams": 1,
+          "owners": 13,
+          "metadata_owner": "actual batch-live-inputs in ledger (model/request/options/Run), no descriptor synthesis"
+        },
+        "Auto": {
+          "payload": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eemm_L1/dumps/xs_qed_eemm_L1.classes-Auto-t1.json",
+          "source_companion": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eemm_L1/dumps/xs_qed_eemm_L1.classes-Auto-t1.sources.json",
+          "diagrams": 1,
+          "owners": 13,
+          "metadata_owner": "actual batch-live-inputs in ledger (model/request/options/Run), no descriptor synthesis"
+        }
+      }
+    },
+    {
+      "case": "xs_qed_eedd_L1",
+      "actual": {
+        "status": "ok",
+        "passed": 1,
+        "failed": 0,
+        "filtered": 182,
+        "exit": 0
+      },
+      "built_code": "5ea149ffd88ae3afc4072a38c0871c1329be8424",
+      "equivalent_generator_input_code": "5ba04864ca506e259d9eef4a54f65acdd8323fc2",
+      "kernel": "8eb7c3729d6abefc916decc1bdf0c06536f8af80",
+      "pristine_root": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eedd_L1",
+      "observer_root": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qed_eedd_L1",
+      "pristine_command": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eedd_L1/command.json",
+        "sha256": "cdb30f3a8807b9733572a34fc663804116ff82bc49a5dae8d80d426767788fe5"
+      },
+      "observer_command": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qed_eedd_L1/command.json",
+        "sha256": "8b8e43c5a1a703cfdd0f06d12db4841a646c5c4713111fa26d879695639de788"
+      },
+      "capture_binding": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qed_eedd_L1/capture-binding.json",
+        "sha256": "2030c8a8145a4b152a3b2b953bfcad515b22f2735b0c26d1e5c4b5bd01c8829a"
+      },
+      "ledger": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qed_eedd_L1/world.jsonl",
+        "sha256": "2d2459a788ecfbc7774a9afb00c7ada9052321ef2f196332d154a8f7ff7f0f38"
+      },
+      "actual_public_joins": [
+        {
+          "file": "xs_qed_eedd_L1.census",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eedd_L1/dumps/xs_qed_eedd_L1.census",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qed_eedd_L1/dumps/xs_qed_eedd_L1.census",
+          "sha256": "b5a1b8a14e0e63d5c10e12117d70650eb581073b4053831bb6766db6b32d385c"
+        },
+        {
+          "file": "xs_qed_eedd_L1.classes-None-t1.json",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eedd_L1/dumps/xs_qed_eedd_L1.classes-None-t1.json",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qed_eedd_L1/dumps/xs_qed_eedd_L1.classes-None-t1.json",
+          "sha256": "72035c7055f26bc8ff1119b5960537fd6ca8bbed9f7d18e4b269e079fb379b5e"
+        },
+        {
+          "file": "xs_qed_eedd_L1.classes-None-t1.sources.json",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eedd_L1/dumps/xs_qed_eedd_L1.classes-None-t1.sources.json",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qed_eedd_L1/dumps/xs_qed_eedd_L1.classes-None-t1.sources.json",
+          "sha256": "72035c7055f26bc8ff1119b5960537fd6ca8bbed9f7d18e4b269e079fb379b5e"
+        },
+        {
+          "file": "xs_qed_eedd_L1.classes-Auto-t1.json",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eedd_L1/dumps/xs_qed_eedd_L1.classes-Auto-t1.json",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qed_eedd_L1/dumps/xs_qed_eedd_L1.classes-Auto-t1.json",
+          "sha256": "72035c7055f26bc8ff1119b5960537fd6ca8bbed9f7d18e4b269e079fb379b5e"
+        },
+        {
+          "file": "xs_qed_eedd_L1.classes-Auto-t1.sources.json",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eedd_L1/dumps/xs_qed_eedd_L1.classes-Auto-t1.sources.json",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qed_eedd_L1/dumps/xs_qed_eedd_L1.classes-Auto-t1.sources.json",
+          "sha256": "72035c7055f26bc8ff1119b5960537fd6ca8bbed9f7d18e4b269e079fb379b5e"
+        }
+      ],
+      "actual_census_file": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eedd_L1/dumps/xs_qed_eedd_L1.census",
+        "sha256": "b5a1b8a14e0e63d5c10e12117d70650eb581073b4053831bb6766db6b32d385c"
+      },
+      "cell_sources": {
+        "None": {
+          "payload": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eedd_L1/dumps/xs_qed_eedd_L1.classes-None-t1.json",
+          "source_companion": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eedd_L1/dumps/xs_qed_eedd_L1.classes-None-t1.sources.json",
+          "diagrams": 1,
+          "owners": 13,
+          "metadata_owner": "actual batch-live-inputs in ledger (model/request/options/Run), no descriptor synthesis"
+        },
+        "Auto": {
+          "payload": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eedd_L1/dumps/xs_qed_eedd_L1.classes-Auto-t1.json",
+          "source_companion": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eedd_L1/dumps/xs_qed_eedd_L1.classes-Auto-t1.sources.json",
+          "diagrams": 1,
+          "owners": 13,
+          "metadata_owner": "actual batch-live-inputs in ledger (model/request/options/Run), no descriptor synthesis"
+        }
+      }
+    },
+    {
+      "case": "xs_qed_eeee_1pi_L1",
+      "actual": {
+        "status": "ok",
+        "passed": 1,
+        "failed": 0,
+        "filtered": 182,
+        "exit": 0
+      },
+      "built_code": "5ea149ffd88ae3afc4072a38c0871c1329be8424",
+      "equivalent_generator_input_code": "5ba04864ca506e259d9eef4a54f65acdd8323fc2",
+      "kernel": "8eb7c3729d6abefc916decc1bdf0c06536f8af80",
+      "pristine_root": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eeee_1pi_L1",
+      "observer_root": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qed_eeee_1pi_L1",
+      "pristine_command": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eeee_1pi_L1/command.json",
+        "sha256": "7d74ff7b67481faa773a8d84080fd835fe9992abbf6a523f73e2f23747c14946"
+      },
+      "observer_command": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qed_eeee_1pi_L1/command.json",
+        "sha256": "5c00b540a45d2c6c47654d05eb6189167c14a0ea807c67f9dba958e2b04feac6"
+      },
+      "capture_binding": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qed_eeee_1pi_L1/capture-binding.json",
+        "sha256": "973b47fe94b337f1e9a3cf7c053bc8f5a685d125b5737b51b6f16280de43486f"
+      },
+      "ledger": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qed_eeee_1pi_L1/world.jsonl",
+        "sha256": "1b8e2aa1b63b77685e7cb6a19995f5381c6e4c978586558702423f6999e97c7a"
+      },
+      "actual_public_joins": [
+        {
+          "file": "xs_qed_eeee_1pi_L1.census",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eeee_1pi_L1/dumps/xs_qed_eeee_1pi_L1.census",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qed_eeee_1pi_L1/dumps/xs_qed_eeee_1pi_L1.census",
+          "sha256": "5dc77cc90073841daa31424a017a7b822e4ad3fd330b80d049b74e21c25cad90"
+        },
+        {
+          "file": "xs_qed_eeee_1pi_L1.classes-None-t1.json",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eeee_1pi_L1/dumps/xs_qed_eeee_1pi_L1.classes-None-t1.json",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qed_eeee_1pi_L1/dumps/xs_qed_eeee_1pi_L1.classes-None-t1.json",
+          "sha256": "0b41b239ff6db92cdbcdddb90aa1118ea4fbc71ceae9c4a72caad8c875a872e6"
+        },
+        {
+          "file": "xs_qed_eeee_1pi_L1.classes-None-t1.sources.json",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eeee_1pi_L1/dumps/xs_qed_eeee_1pi_L1.classes-None-t1.sources.json",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qed_eeee_1pi_L1/dumps/xs_qed_eeee_1pi_L1.classes-None-t1.sources.json",
+          "sha256": "0b41b239ff6db92cdbcdddb90aa1118ea4fbc71ceae9c4a72caad8c875a872e6"
+        },
+        {
+          "file": "xs_qed_eeee_1pi_L1.classes-Auto-t1.json",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eeee_1pi_L1/dumps/xs_qed_eeee_1pi_L1.classes-Auto-t1.json",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qed_eeee_1pi_L1/dumps/xs_qed_eeee_1pi_L1.classes-Auto-t1.json",
+          "sha256": "0b41b239ff6db92cdbcdddb90aa1118ea4fbc71ceae9c4a72caad8c875a872e6"
+        },
+        {
+          "file": "xs_qed_eeee_1pi_L1.classes-Auto-t1.sources.json",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eeee_1pi_L1/dumps/xs_qed_eeee_1pi_L1.classes-Auto-t1.sources.json",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qed_eeee_1pi_L1/dumps/xs_qed_eeee_1pi_L1.classes-Auto-t1.sources.json",
+          "sha256": "0b41b239ff6db92cdbcdddb90aa1118ea4fbc71ceae9c4a72caad8c875a872e6"
+        }
+      ],
+      "actual_census_file": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eeee_1pi_L1/dumps/xs_qed_eeee_1pi_L1.census",
+        "sha256": "5dc77cc90073841daa31424a017a7b822e4ad3fd330b80d049b74e21c25cad90"
+      },
+      "cell_sources": {
+        "None": {
+          "payload": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eeee_1pi_L1/dumps/xs_qed_eeee_1pi_L1.classes-None-t1.json",
+          "source_companion": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eeee_1pi_L1/dumps/xs_qed_eeee_1pi_L1.classes-None-t1.sources.json",
+          "diagrams": 1,
+          "owners": 13,
+          "metadata_owner": "actual batch-live-inputs in ledger (model/request/options/Run), no descriptor synthesis"
+        },
+        "Auto": {
+          "payload": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eeee_1pi_L1/dumps/xs_qed_eeee_1pi_L1.classes-Auto-t1.json",
+          "source_companion": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eeee_1pi_L1/dumps/xs_qed_eeee_1pi_L1.classes-Auto-t1.sources.json",
+          "diagrams": 1,
+          "owners": 13,
+          "metadata_owner": "actual batch-live-inputs in ledger (model/request/options/Run), no descriptor synthesis"
+        }
+      }
+    },
+    {
+      "case": "qed_eemm_L1",
+      "actual": {
+        "status": "ok",
+        "passed": 1,
+        "failed": 0,
+        "filtered": 182,
+        "exit": 0
+      },
+      "built_code": "5ea149ffd88ae3afc4072a38c0871c1329be8424",
+      "equivalent_generator_input_code": "5ba04864ca506e259d9eef4a54f65acdd8323fc2",
+      "kernel": "8eb7c3729d6abefc916decc1bdf0c06536f8af80",
+      "pristine_root": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/qed_eemm_L1",
+      "observer_root": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/qed_eemm_L1",
+      "pristine_command": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/qed_eemm_L1/command.json",
+        "sha256": "17466999322b2d3300230761566532f13f860f3285f9e19589b92769417f87ac"
+      },
+      "observer_command": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/qed_eemm_L1/command.json",
+        "sha256": "1f22d252aa97855095b86c24e122994ff27ace47c76fa17ab8fe0eec70ac64ca"
+      },
+      "capture_binding": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/qed_eemm_L1/capture-binding.json",
+        "sha256": "b9a9a7d1417fc601c0fa877b4c84b7a3979f5820dab7931cad6457a6afa2e48a"
+      },
+      "ledger": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/qed_eemm_L1/world.jsonl",
+        "sha256": "4c05dbcaaadf2bcf597adfd855b7c50bd0efc43590b5aee8c56bd435e67c3314"
+      },
+      "actual_public_joins": [
+        {
+          "file": "qed_eemm_L1.census",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/qed_eemm_L1/dumps/qed_eemm_L1.census",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/qed_eemm_L1/dumps/qed_eemm_L1.census",
+          "sha256": "ac3dd43afb9ab696c84cbc47d83a1b14dbaf5f5872032a434c7e0c7094dfe3a9"
+        },
+        {
+          "file": "qed_eemm_L1.classes-None-t1.json",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/qed_eemm_L1/dumps/qed_eemm_L1.classes-None-t1.json",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/qed_eemm_L1/dumps/qed_eemm_L1.classes-None-t1.json",
+          "sha256": "e4fb87ff9d740293b12a6147f80345a804df45aedcba561282b8b0c8770efd1c"
+        },
+        {
+          "file": "qed_eemm_L1.classes-None-t1.sources.json",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/qed_eemm_L1/dumps/qed_eemm_L1.classes-None-t1.sources.json",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/qed_eemm_L1/dumps/qed_eemm_L1.classes-None-t1.sources.json",
+          "sha256": "e4fb87ff9d740293b12a6147f80345a804df45aedcba561282b8b0c8770efd1c"
+        },
+        {
+          "file": "qed_eemm_L1.classes-Auto-t1.json",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/qed_eemm_L1/dumps/qed_eemm_L1.classes-Auto-t1.json",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/qed_eemm_L1/dumps/qed_eemm_L1.classes-Auto-t1.json",
+          "sha256": "e4fb87ff9d740293b12a6147f80345a804df45aedcba561282b8b0c8770efd1c"
+        },
+        {
+          "file": "qed_eemm_L1.classes-Auto-t1.sources.json",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/qed_eemm_L1/dumps/qed_eemm_L1.classes-Auto-t1.sources.json",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/qed_eemm_L1/dumps/qed_eemm_L1.classes-Auto-t1.sources.json",
+          "sha256": "e4fb87ff9d740293b12a6147f80345a804df45aedcba561282b8b0c8770efd1c"
+        }
+      ],
+      "actual_census_file": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/qed_eemm_L1/dumps/qed_eemm_L1.census",
+        "sha256": "ac3dd43afb9ab696c84cbc47d83a1b14dbaf5f5872032a434c7e0c7094dfe3a9"
+      },
+      "cell_sources": {
+        "None": {
+          "payload": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/qed_eemm_L1/dumps/qed_eemm_L1.classes-None-t1.json",
+          "source_companion": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/qed_eemm_L1/dumps/qed_eemm_L1.classes-None-t1.sources.json",
+          "diagrams": 17,
+          "owners": 255,
+          "metadata_owner": "actual batch-live-inputs in ledger (model/request/options/Run), no descriptor synthesis"
+        },
+        "Auto": {
+          "payload": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/qed_eemm_L1/dumps/qed_eemm_L1.classes-Auto-t1.json",
+          "source_companion": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/qed_eemm_L1/dumps/qed_eemm_L1.classes-Auto-t1.sources.json",
+          "diagrams": 17,
+          "owners": 255,
+          "metadata_owner": "actual batch-live-inputs in ledger (model/request/options/Run), no descriptor synthesis"
+        }
+      }
+    },
+    {
+      "case": "ctorder_qcd_uugg_L1",
+      "actual": {
+        "status": "ok",
+        "passed": 1,
+        "failed": 0,
+        "filtered": 182,
+        "exit": 0
+      },
+      "built_code": "5ea149ffd88ae3afc4072a38c0871c1329be8424",
+      "equivalent_generator_input_code": "5ba04864ca506e259d9eef4a54f65acdd8323fc2",
+      "kernel": "8eb7c3729d6abefc916decc1bdf0c06536f8af80",
+      "pristine_root": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/ctorder_qcd_uugg_L1",
+      "observer_root": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/ctorder_qcd_uugg_L1",
+      "pristine_command": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/ctorder_qcd_uugg_L1/command.json",
+        "sha256": "6f84407cb87667ccb21952bcc41becc72ccb1952e26d85edf896acf145f4c4af"
+      },
+      "observer_command": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/ctorder_qcd_uugg_L1/command.json",
+        "sha256": "d421412dd7f8e9a8bb31508a5b5c125b6577c4fdb1f48db5d0693b29a8aaadda"
+      },
+      "capture_binding": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/ctorder_qcd_uugg_L1/capture-binding.json",
+        "sha256": "3575fd70d2226f720b47a8e985f4f14f62c72f09ca747cff1651ad504b8226ab"
+      },
+      "ledger": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/ctorder_qcd_uugg_L1/world.jsonl",
+        "sha256": "d1e88ed1d655559c49e93a925f2b46402ca637c670986065641def891d9b1f32"
+      },
+      "actual_public_joins": [
+        {
+          "file": "ctorder_qcd_uugg_L1.census",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/ctorder_qcd_uugg_L1/dumps/ctorder_qcd_uugg_L1.census",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/ctorder_qcd_uugg_L1/dumps/ctorder_qcd_uugg_L1.census",
+          "sha256": "9a2b37e4efa16679d29400abc5fa2dacef20d672c4a0fe1a3c1980e0f2934082"
+        },
+        {
+          "file": "ctorder_qcd_uugg_L1.classes-None-t1.json",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/ctorder_qcd_uugg_L1/dumps/ctorder_qcd_uugg_L1.classes-None-t1.json",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/ctorder_qcd_uugg_L1/dumps/ctorder_qcd_uugg_L1.classes-None-t1.json",
+          "sha256": "85a70e591007edeb41414c130a36e941811a18072f378638c80180aeaf89c406"
+        },
+        {
+          "file": "ctorder_qcd_uugg_L1.classes-None-t1.sources.json",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/ctorder_qcd_uugg_L1/dumps/ctorder_qcd_uugg_L1.classes-None-t1.sources.json",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/ctorder_qcd_uugg_L1/dumps/ctorder_qcd_uugg_L1.classes-None-t1.sources.json",
+          "sha256": "85a70e591007edeb41414c130a36e941811a18072f378638c80180aeaf89c406"
+        },
+        {
+          "file": "ctorder_qcd_uugg_L1.classes-Auto-t1.json",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/ctorder_qcd_uugg_L1/dumps/ctorder_qcd_uugg_L1.classes-Auto-t1.json",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/ctorder_qcd_uugg_L1/dumps/ctorder_qcd_uugg_L1.classes-Auto-t1.json",
+          "sha256": "9d3130c655f578f40387c0bfdfd2182980fd8c9cc0e9aa44f02083ec033394d2"
+        },
+        {
+          "file": "ctorder_qcd_uugg_L1.classes-Auto-t1.sources.json",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/ctorder_qcd_uugg_L1/dumps/ctorder_qcd_uugg_L1.classes-Auto-t1.sources.json",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/ctorder_qcd_uugg_L1/dumps/ctorder_qcd_uugg_L1.classes-Auto-t1.sources.json",
+          "sha256": "9d3130c655f578f40387c0bfdfd2182980fd8c9cc0e9aa44f02083ec033394d2"
+        }
+      ],
+      "actual_census_file": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/ctorder_qcd_uugg_L1/dumps/ctorder_qcd_uugg_L1.census",
+        "sha256": "9a2b37e4efa16679d29400abc5fa2dacef20d672c4a0fe1a3c1980e0f2934082"
+      },
+      "cell_sources": {
+        "None": {
+          "payload": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/ctorder_qcd_uugg_L1/dumps/ctorder_qcd_uugg_L1.classes-None-t1.json",
+          "source_companion": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/ctorder_qcd_uugg_L1/dumps/ctorder_qcd_uugg_L1.classes-None-t1.sources.json",
+          "diagrams": 268,
+          "owners": 4004,
+          "metadata_owner": "actual batch-live-inputs in ledger (model/request/options/Run), no descriptor synthesis"
+        },
+        "Auto": {
+          "payload": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/ctorder_qcd_uugg_L1/dumps/ctorder_qcd_uugg_L1.classes-Auto-t1.json",
+          "source_companion": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/ctorder_qcd_uugg_L1/dumps/ctorder_qcd_uugg_L1.classes-Auto-t1.sources.json",
+          "diagrams": 268,
+          "owners": 4004,
+          "metadata_owner": "actual batch-live-inputs in ledger (model/request/options/Run), no descriptor synthesis"
+        }
+      }
+    },
+    {
+      "case": "sm_eemm_L0",
+      "actual": {
+        "status": "ok",
+        "passed": 1,
+        "failed": 0,
+        "filtered": 182,
+        "exit": 0
+      },
+      "built_code": "5ea149ffd88ae3afc4072a38c0871c1329be8424",
+      "equivalent_generator_input_code": "5ba04864ca506e259d9eef4a54f65acdd8323fc2",
+      "kernel": "8eb7c3729d6abefc916decc1bdf0c06536f8af80",
+      "pristine_root": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/sm_eemm_L0",
+      "observer_root": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/sm_eemm_L0",
+      "pristine_command": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/sm_eemm_L0/command.json",
+        "sha256": "8c1c2ff4a9ce8cb480199740729cd3414ef8f0c15811f55e1bfd26e54bbc056b"
+      },
+      "observer_command": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/sm_eemm_L0/command.json",
+        "sha256": "6282ea7e3a86838db24505acfc8b970d2a64bee7418f81b84daf6ec30e31d681"
+      },
+      "capture_binding": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/sm_eemm_L0/capture-binding.json",
+        "sha256": "8beceb60604fe9a199908beae992c4c7893712488f1c2f62f160948143a52ddc"
+      },
+      "ledger": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/sm_eemm_L0/world.jsonl",
+        "sha256": "fb1e592f88c0228598a213201193edc628d9d83a7c84fe3cc1824ec818ef5418"
+      },
+      "actual_public_joins": [
+        {
+          "file": "sm_eemm_L0.census",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/sm_eemm_L0/dumps/sm_eemm_L0.census",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/sm_eemm_L0/dumps/sm_eemm_L0.census",
+          "sha256": "2ae212b5308653ec1113aa383de32abe5982bcc277f48ed1c730e163c64f9816"
+        },
+        {
+          "file": "sm_eemm_L0.classes-None-t1.json",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/sm_eemm_L0/dumps/sm_eemm_L0.classes-None-t1.json",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/sm_eemm_L0/dumps/sm_eemm_L0.classes-None-t1.json",
+          "sha256": "c2f388d85626096d775548765dc1454ad4d7aff2301c5576bbe7bff54a5aeaf9"
+        },
+        {
+          "file": "sm_eemm_L0.classes-None-t1.sources.json",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/sm_eemm_L0/dumps/sm_eemm_L0.classes-None-t1.sources.json",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/sm_eemm_L0/dumps/sm_eemm_L0.classes-None-t1.sources.json",
+          "sha256": "c2f388d85626096d775548765dc1454ad4d7aff2301c5576bbe7bff54a5aeaf9"
+        },
+        {
+          "file": "sm_eemm_L0.classes-Auto-t1.json",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/sm_eemm_L0/dumps/sm_eemm_L0.classes-Auto-t1.json",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/sm_eemm_L0/dumps/sm_eemm_L0.classes-Auto-t1.json",
+          "sha256": "c2f388d85626096d775548765dc1454ad4d7aff2301c5576bbe7bff54a5aeaf9"
+        },
+        {
+          "file": "sm_eemm_L0.classes-Auto-t1.sources.json",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/sm_eemm_L0/dumps/sm_eemm_L0.classes-Auto-t1.sources.json",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/sm_eemm_L0/dumps/sm_eemm_L0.classes-Auto-t1.sources.json",
+          "sha256": "c2f388d85626096d775548765dc1454ad4d7aff2301c5576bbe7bff54a5aeaf9"
+        }
+      ],
+      "actual_census_file": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/sm_eemm_L0/dumps/sm_eemm_L0.census",
+        "sha256": "2ae212b5308653ec1113aa383de32abe5982bcc277f48ed1c730e163c64f9816"
+      },
+      "cell_sources": {
+        "None": {
+          "payload": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/sm_eemm_L0/dumps/sm_eemm_L0.classes-None-t1.json",
+          "source_companion": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/sm_eemm_L0/dumps/sm_eemm_L0.classes-None-t1.sources.json",
+          "diagrams": 4,
+          "owners": 40,
+          "metadata_owner": "actual batch-live-inputs in ledger (model/request/options/Run), no descriptor synthesis"
+        },
+        "Auto": {
+          "payload": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/sm_eemm_L0/dumps/sm_eemm_L0.classes-Auto-t1.json",
+          "source_companion": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/sm_eemm_L0/dumps/sm_eemm_L0.classes-Auto-t1.sources.json",
+          "diagrams": 4,
+          "owners": 40,
+          "metadata_owner": "actual batch-live-inputs in ledger (model/request/options/Run), no descriptor synthesis"
+        }
+      }
+    },
+    {
+      "case": "ym_g6_L0",
+      "actual": {
+        "status": "ok",
+        "passed": 1,
+        "failed": 0,
+        "filtered": 182,
+        "exit": 0
+      },
+      "built_code": "5ea149ffd88ae3afc4072a38c0871c1329be8424",
+      "equivalent_generator_input_code": "5ba04864ca506e259d9eef4a54f65acdd8323fc2",
+      "kernel": "8eb7c3729d6abefc916decc1bdf0c06536f8af80",
+      "pristine_root": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/ym_g6_L0",
+      "observer_root": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/ym_g6_L0",
+      "pristine_command": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/ym_g6_L0/command.json",
+        "sha256": "5b2c19497bbb750edc9f31b694ad7ec21f0f01128c21d34f3fc1a414b14f77b5"
+      },
+      "observer_command": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/ym_g6_L0/command.json",
+        "sha256": "97f072f1019e13d3d1188dd0ed333ecbe10c677d73f5f070f38ded0f374e7c2e"
+      },
+      "capture_binding": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/ym_g6_L0/capture-binding.json",
+        "sha256": "48ba71fde7c99b4e6ceea20a7a59d165fbf80f12aa0ac1410581abc3fda5c1e9"
+      },
+      "ledger": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/ym_g6_L0/world.jsonl",
+        "sha256": "f3c5c85f5d70107a5139f9983e0d276e2cedf6508b6bf8546042e6bce0a78644"
+      },
+      "actual_public_joins": [
+        {
+          "file": "ym_g6_L0.census",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/ym_g6_L0/dumps/ym_g6_L0.census",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/ym_g6_L0/dumps/ym_g6_L0.census",
+          "sha256": "ecc1ac30edfa7a2049e31429594adf9cc9231f69db23385e884b335522fd653b"
+        },
+        {
+          "file": "ym_g6_L0.classes-None-t1.json",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/ym_g6_L0/dumps/ym_g6_L0.classes-None-t1.json",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/ym_g6_L0/dumps/ym_g6_L0.classes-None-t1.json",
+          "sha256": "2a8c23f6fa77e779b3fe5a7b72075375422ee46d655949000f2a5aee2871bbb0"
+        },
+        {
+          "file": "ym_g6_L0.classes-None-t1.sources.json",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/ym_g6_L0/dumps/ym_g6_L0.classes-None-t1.sources.json",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/ym_g6_L0/dumps/ym_g6_L0.classes-None-t1.sources.json",
+          "sha256": "2a8c23f6fa77e779b3fe5a7b72075375422ee46d655949000f2a5aee2871bbb0"
+        },
+        {
+          "file": "ym_g6_L0.classes-Auto-t1.json",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/ym_g6_L0/dumps/ym_g6_L0.classes-Auto-t1.json",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/ym_g6_L0/dumps/ym_g6_L0.classes-Auto-t1.json",
+          "sha256": "2a8c23f6fa77e779b3fe5a7b72075375422ee46d655949000f2a5aee2871bbb0"
+        },
+        {
+          "file": "ym_g6_L0.classes-Auto-t1.sources.json",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/ym_g6_L0/dumps/ym_g6_L0.classes-Auto-t1.sources.json",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/ym_g6_L0/dumps/ym_g6_L0.classes-Auto-t1.sources.json",
+          "sha256": "2a8c23f6fa77e779b3fe5a7b72075375422ee46d655949000f2a5aee2871bbb0"
+        }
+      ],
+      "actual_census_file": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/ym_g6_L0/dumps/ym_g6_L0.census",
+        "sha256": "ecc1ac30edfa7a2049e31429594adf9cc9231f69db23385e884b335522fd653b"
+      },
+      "cell_sources": {
+        "None": {
+          "payload": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/ym_g6_L0/dumps/ym_g6_L0.classes-None-t1.json",
+          "source_companion": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/ym_g6_L0/dumps/ym_g6_L0.classes-None-t1.sources.json",
+          "diagrams": 220,
+          "owners": 3270,
+          "metadata_owner": "actual batch-live-inputs in ledger (model/request/options/Run), no descriptor synthesis"
+        },
+        "Auto": {
+          "payload": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/ym_g6_L0/dumps/ym_g6_L0.classes-Auto-t1.json",
+          "source_companion": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/ym_g6_L0/dumps/ym_g6_L0.classes-Auto-t1.sources.json",
+          "diagrams": 220,
+          "owners": 3270,
+          "metadata_owner": "actual batch-live-inputs in ledger (model/request/options/Run), no descriptor synthesis"
+        }
+      }
+    },
+    {
+      "case": "xs_qed_eemm_L2",
+      "actual": {
+        "status": "ok",
+        "passed": 1,
+        "failed": 0,
+        "filtered": 182,
+        "exit": 0
+      },
+      "built_code": "5ea149ffd88ae3afc4072a38c0871c1329be8424",
+      "equivalent_generator_input_code": "5ba04864ca506e259d9eef4a54f65acdd8323fc2",
+      "kernel": "8eb7c3729d6abefc916decc1bdf0c06536f8af80",
+      "pristine_root": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eemm_L2",
+      "observer_root": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qed_eemm_L2",
+      "pristine_command": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eemm_L2/command.json",
+        "sha256": "c14e1618ec84aa08c9c67c81ec4837960317f6b7e0e016e81476a0e8cedd5898"
+      },
+      "observer_command": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qed_eemm_L2/command.json",
+        "sha256": "ac3225be1b65d4a09f7c425a6dec2459ce1d7528b7c69a172d7813641e286597"
+      },
+      "capture_binding": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qed_eemm_L2/capture-binding.json",
+        "sha256": "ea3d30b3aa0e612b0e1a17be438fd67b7c4a52ca996bfd7ed36fe029cf43d860"
+      },
+      "ledger": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qed_eemm_L2/world.jsonl",
+        "sha256": "cc03022445a798e20bd3d1539a947f286acc49d7248f4398f3e8633c607a7e41"
+      },
+      "actual_public_joins": [
+        {
+          "file": "xs_qed_eemm_L2.census",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eemm_L2/dumps/xs_qed_eemm_L2.census",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qed_eemm_L2/dumps/xs_qed_eemm_L2.census",
+          "sha256": "3fd621b0f2487218d29f83a79114145f2b1cd051bc1bb1e663a06a3d1973b46c"
+        },
+        {
+          "file": "xs_qed_eemm_L2.classes-None-t1.json",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eemm_L2/dumps/xs_qed_eemm_L2.classes-None-t1.json",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qed_eemm_L2/dumps/xs_qed_eemm_L2.classes-None-t1.json",
+          "sha256": "08ebf574d98a7d953fa7ed582d2c61b5b7091515866cadd5b378b0c79916af93"
+        },
+        {
+          "file": "xs_qed_eemm_L2.classes-None-t1.sources.json",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eemm_L2/dumps/xs_qed_eemm_L2.classes-None-t1.sources.json",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qed_eemm_L2/dumps/xs_qed_eemm_L2.classes-None-t1.sources.json",
+          "sha256": "08ebf574d98a7d953fa7ed582d2c61b5b7091515866cadd5b378b0c79916af93"
+        },
+        {
+          "file": "xs_qed_eemm_L2.classes-Auto-t1.json",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eemm_L2/dumps/xs_qed_eemm_L2.classes-Auto-t1.json",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qed_eemm_L2/dumps/xs_qed_eemm_L2.classes-Auto-t1.json",
+          "sha256": "33a8a36d030a7362c9c3984c86354722a54266596d35d486fb66511f47ecfcbf"
+        },
+        {
+          "file": "xs_qed_eemm_L2.classes-Auto-t1.sources.json",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eemm_L2/dumps/xs_qed_eemm_L2.classes-Auto-t1.sources.json",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qed_eemm_L2/dumps/xs_qed_eemm_L2.classes-Auto-t1.sources.json",
+          "sha256": "33a8a36d030a7362c9c3984c86354722a54266596d35d486fb66511f47ecfcbf"
+        }
+      ],
+      "actual_census_file": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eemm_L2/dumps/xs_qed_eemm_L2.census",
+        "sha256": "3fd621b0f2487218d29f83a79114145f2b1cd051bc1bb1e663a06a3d1973b46c"
+      },
+      "cell_sources": {
+        "None": {
+          "payload": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eemm_L2/dumps/xs_qed_eemm_L2.classes-None-t1.json",
+          "source_companion": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eemm_L2/dumps/xs_qed_eemm_L2.classes-None-t1.sources.json",
+          "diagrams": 30,
+          "owners": 540,
+          "metadata_owner": "actual batch-live-inputs in ledger (model/request/options/Run), no descriptor synthesis"
+        },
+        "Auto": {
+          "payload": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eemm_L2/dumps/xs_qed_eemm_L2.classes-Auto-t1.json",
+          "source_companion": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eemm_L2/dumps/xs_qed_eemm_L2.classes-Auto-t1.sources.json",
+          "diagrams": 30,
+          "owners": 540,
+          "metadata_owner": "actual batch-live-inputs in ledger (model/request/options/Run), no descriptor synthesis"
+        }
+      }
+    },
+    {
+      "case": "qed_ee4f_L0",
+      "actual": {
+        "status": "FAILED",
+        "passed": 0,
+        "failed": 1,
+        "filtered": 182,
+        "exit": 101
+      },
+      "built_code": "5ea149ffd88ae3afc4072a38c0871c1329be8424",
+      "equivalent_generator_input_code": "5ba04864ca506e259d9eef4a54f65acdd8323fc2",
+      "kernel": "8eb7c3729d6abefc916decc1bdf0c06536f8af80",
+      "pristine_root": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/qed_ee4f_L0",
+      "observer_root": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/qed_ee4f_L0",
+      "pristine_command": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/qed_ee4f_L0/command.json",
+        "sha256": "7661e2fc2f73727a089a8236ec1a11ca666aea5316fbc5eb5fb2a27d0f64e164"
+      },
+      "observer_command": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/qed_ee4f_L0/command.json",
+        "sha256": "81201b76530ee1a47c3c79007084b9d9347b3a8d0cead5cc7b130ce685079d68"
+      },
+      "capture_binding": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/qed_ee4f_L0/capture-binding.json",
+        "sha256": "e2d368860f59a69850d2139ae79f0a8ef66407fe77837d644a4ebbe5b80e992b"
+      },
+      "ledger": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/qed_ee4f_L0/world.jsonl",
+        "sha256": "7fb856f066610f2025b883b69107a8781cafa00b559504b96d4744997f103cb6"
+      },
+      "actual_public_joins": [
+        {
+          "file": "qed_ee4f_L0.census",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/qed_ee4f_L0/dumps/qed_ee4f_L0.census",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/qed_ee4f_L0/dumps/qed_ee4f_L0.census",
+          "sha256": "567391c51101889748f8aec467b7d961ad0b070b983c037c06ada75c0705c789"
+        },
+        {
+          "file": "qed_ee4f_L0.classes-None-t1.json",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/qed_ee4f_L0/dumps/qed_ee4f_L0.classes-None-t1.json",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/qed_ee4f_L0/dumps/qed_ee4f_L0.classes-None-t1.json",
+          "sha256": "1c12989d75e7f9e12513d0c726e3f700cba9e8088630ab9c43260b961e2a811e"
+        },
+        {
+          "file": "qed_ee4f_L0.classes-None-t1.sources.json",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/qed_ee4f_L0/dumps/qed_ee4f_L0.classes-None-t1.sources.json",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/qed_ee4f_L0/dumps/qed_ee4f_L0.classes-None-t1.sources.json",
+          "sha256": "1c12989d75e7f9e12513d0c726e3f700cba9e8088630ab9c43260b961e2a811e"
+        },
+        {
+          "file": "qed_ee4f_L0.classes-Auto-t1.json",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/qed_ee4f_L0/dumps/qed_ee4f_L0.classes-Auto-t1.json",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/qed_ee4f_L0/dumps/qed_ee4f_L0.classes-Auto-t1.json",
+          "sha256": "49f3993180875dbf3d06adf86b5714b888b3db7a3b109237b1a747769f2a4f34"
+        },
+        {
+          "file": "qed_ee4f_L0.classes-Auto-t1.sources.json",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/qed_ee4f_L0/dumps/qed_ee4f_L0.classes-Auto-t1.sources.json",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/qed_ee4f_L0/dumps/qed_ee4f_L0.classes-Auto-t1.sources.json",
+          "sha256": "49f3993180875dbf3d06adf86b5714b888b3db7a3b109237b1a747769f2a4f34"
+        }
+      ],
+      "actual_census_file": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/qed_ee4f_L0/dumps/qed_ee4f_L0.census",
+        "sha256": "567391c51101889748f8aec467b7d961ad0b070b983c037c06ada75c0705c789"
+      },
+      "cell_sources": {
+        "None": {
+          "payload": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/qed_ee4f_L0/dumps/qed_ee4f_L0.classes-None-t1.json",
+          "source_companion": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/qed_ee4f_L0/dumps/qed_ee4f_L0.classes-None-t1.sources.json",
+          "diagrams": 6,
+          "owners": 96,
+          "metadata_owner": "actual batch-live-inputs in ledger (model/request/options/Run), no descriptor synthesis"
+        },
+        "Auto": {
+          "payload": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/qed_ee4f_L0/dumps/qed_ee4f_L0.classes-Auto-t1.json",
+          "source_companion": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/qed_ee4f_L0/dumps/qed_ee4f_L0.classes-Auto-t1.sources.json",
+          "diagrams": 6,
+          "owners": 96,
+          "metadata_owner": "actual batch-live-inputs in ledger (model/request/options/Run), no descriptor synthesis"
+        }
+      }
+    },
+    {
+      "case": "xs_qed_eeee_L1",
+      "actual": {
+        "status": "FAILED",
+        "passed": 0,
+        "failed": 1,
+        "filtered": 182,
+        "exit": 101
+      },
+      "built_code": "5ea149ffd88ae3afc4072a38c0871c1329be8424",
+      "equivalent_generator_input_code": "5ba04864ca506e259d9eef4a54f65acdd8323fc2",
+      "kernel": "8eb7c3729d6abefc916decc1bdf0c06536f8af80",
+      "pristine_root": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eeee_L1",
+      "observer_root": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qed_eeee_L1",
+      "pristine_command": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eeee_L1/command.json",
+        "sha256": "bdc65716ad8704299f20431032f15485a2b3402950d9d84236a486b3291371fe"
+      },
+      "observer_command": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qed_eeee_L1/command.json",
+        "sha256": "501a00162ffa1ae63232264eeba9fd5df343f29351aeda1741423c67529b8a66"
+      },
+      "capture_binding": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qed_eeee_L1/capture-binding.json",
+        "sha256": "6d8e4e5b0e7108748d6dbc6397e21b421450d39419bebefe6ef1fa4ad12ad98c"
+      },
+      "ledger": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qed_eeee_L1/world.jsonl",
+        "sha256": "5fbf261d0c831cbfc18f2d10e3ce56168981d5df5bfa334c40d7e3972584c87a"
+      },
+      "actual_public_joins": [
+        {
+          "file": "xs_qed_eeee_L1.census",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eeee_L1/dumps/xs_qed_eeee_L1.census",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qed_eeee_L1/dumps/xs_qed_eeee_L1.census",
+          "sha256": "07fb1b099af1b8fe7a9d09d6cab48119a7888b8d785c26f46a7460008fc52497"
+        },
+        {
+          "file": "xs_qed_eeee_L1.classes-None-t1.json",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eeee_L1/dumps/xs_qed_eeee_L1.classes-None-t1.json",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qed_eeee_L1/dumps/xs_qed_eeee_L1.classes-None-t1.json",
+          "sha256": "fb3fb55248f0eb4c0407db787f9c3753a251ed2357a623f60c88e484f89505b5"
+        },
+        {
+          "file": "xs_qed_eeee_L1.classes-None-t1.sources.json",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eeee_L1/dumps/xs_qed_eeee_L1.classes-None-t1.sources.json",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qed_eeee_L1/dumps/xs_qed_eeee_L1.classes-None-t1.sources.json",
+          "sha256": "fb3fb55248f0eb4c0407db787f9c3753a251ed2357a623f60c88e484f89505b5"
+        },
+        {
+          "file": "xs_qed_eeee_L1.classes-Auto-t1.json",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eeee_L1/dumps/xs_qed_eeee_L1.classes-Auto-t1.json",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qed_eeee_L1/dumps/xs_qed_eeee_L1.classes-Auto-t1.json",
+          "sha256": "fb3fb55248f0eb4c0407db787f9c3753a251ed2357a623f60c88e484f89505b5"
+        },
+        {
+          "file": "xs_qed_eeee_L1.classes-Auto-t1.sources.json",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eeee_L1/dumps/xs_qed_eeee_L1.classes-Auto-t1.sources.json",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qed_eeee_L1/dumps/xs_qed_eeee_L1.classes-Auto-t1.sources.json",
+          "sha256": "fb3fb55248f0eb4c0407db787f9c3753a251ed2357a623f60c88e484f89505b5"
+        }
+      ],
+      "actual_census_file": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eeee_L1/dumps/xs_qed_eeee_L1.census",
+        "sha256": "07fb1b099af1b8fe7a9d09d6cab48119a7888b8d785c26f46a7460008fc52497"
+      },
+      "cell_sources": {
+        "None": {
+          "payload": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eeee_L1/dumps/xs_qed_eeee_L1.classes-None-t1.json",
+          "source_companion": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eeee_L1/dumps/xs_qed_eeee_L1.classes-None-t1.sources.json",
+          "diagrams": 4,
+          "owners": 52,
+          "metadata_owner": "actual batch-live-inputs in ledger (model/request/options/Run), no descriptor synthesis"
+        },
+        "Auto": {
+          "payload": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eeee_L1/dumps/xs_qed_eeee_L1.classes-Auto-t1.json",
+          "source_companion": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eeee_L1/dumps/xs_qed_eeee_L1.classes-Auto-t1.sources.json",
+          "diagrams": 4,
+          "owners": 52,
+          "metadata_owner": "actual batch-live-inputs in ledger (model/request/options/Run), no descriptor synthesis"
+        }
+      }
+    },
+    {
+      "case": "sm_eeww_L0",
+      "actual": {
+        "status": "FAILED",
+        "passed": 0,
+        "failed": 1,
+        "filtered": 182,
+        "exit": 101
+      },
+      "built_code": "5ea149ffd88ae3afc4072a38c0871c1329be8424",
+      "equivalent_generator_input_code": "5ba04864ca506e259d9eef4a54f65acdd8323fc2",
+      "kernel": "8eb7c3729d6abefc916decc1bdf0c06536f8af80",
+      "pristine_root": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/sm_eeww_L0",
+      "observer_root": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/sm_eeww_L0",
+      "pristine_command": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/sm_eeww_L0/command.json",
+        "sha256": "5eae8a0e8e9e982dcbcbbf18995ac832b89eefe773043b11df5d76fda2d462b3"
+      },
+      "observer_command": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/sm_eeww_L0/command.json",
+        "sha256": "15cedb13342fd839cfc47b4269260c2e9af3cdeed2e35edf64cca38078e43e68"
+      },
+      "capture_binding": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/sm_eeww_L0/capture-binding.json",
+        "sha256": "5000a9ae5f1409d420fb49a6ec98460962d04e9f895d2474b5830719154e21a6"
+      },
+      "ledger": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/sm_eeww_L0/world.jsonl",
+        "sha256": "c348d6fa0a19c6158d6f5f9e8d89e5f4ce390c04f48939ea67ca871165eeb675"
+      },
+      "actual_public_joins": [
+        {
+          "file": "sm_eeww_L0.census",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/sm_eeww_L0/dumps/sm_eeww_L0.census",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/sm_eeww_L0/dumps/sm_eeww_L0.census",
+          "sha256": "329517427420d1c6c498c04ac2761c04608d61b1bd0cd13dfcc9926e1411317c"
+        },
+        {
+          "file": "sm_eeww_L0.classes-None-t1.json",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/sm_eeww_L0/dumps/sm_eeww_L0.classes-None-t1.json",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/sm_eeww_L0/dumps/sm_eeww_L0.classes-None-t1.json",
+          "sha256": "c61eb6dd91e664deabd0caa93b149801b041f31869f024325d5b86137e862738"
+        },
+        {
+          "file": "sm_eeww_L0.classes-None-t1.sources.json",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/sm_eeww_L0/dumps/sm_eeww_L0.classes-None-t1.sources.json",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/sm_eeww_L0/dumps/sm_eeww_L0.classes-None-t1.sources.json",
+          "sha256": "c61eb6dd91e664deabd0caa93b149801b041f31869f024325d5b86137e862738"
+        },
+        {
+          "file": "sm_eeww_L0.classes-Auto-t1.json",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/sm_eeww_L0/dumps/sm_eeww_L0.classes-Auto-t1.json",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/sm_eeww_L0/dumps/sm_eeww_L0.classes-Auto-t1.json",
+          "sha256": "c61eb6dd91e664deabd0caa93b149801b041f31869f024325d5b86137e862738"
+        },
+        {
+          "file": "sm_eeww_L0.classes-Auto-t1.sources.json",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/sm_eeww_L0/dumps/sm_eeww_L0.classes-Auto-t1.sources.json",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/sm_eeww_L0/dumps/sm_eeww_L0.classes-Auto-t1.sources.json",
+          "sha256": "c61eb6dd91e664deabd0caa93b149801b041f31869f024325d5b86137e862738"
+        }
+      ],
+      "actual_census_file": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/sm_eeww_L0/dumps/sm_eeww_L0.census",
+        "sha256": "329517427420d1c6c498c04ac2761c04608d61b1bd0cd13dfcc9926e1411317c"
+      },
+      "cell_sources": {
+        "None": {
+          "payload": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/sm_eeww_L0/dumps/sm_eeww_L0.classes-None-t1.json",
+          "source_companion": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/sm_eeww_L0/dumps/sm_eeww_L0.classes-None-t1.sources.json",
+          "diagrams": 4,
+          "owners": 40,
+          "metadata_owner": "actual batch-live-inputs in ledger (model/request/options/Run), no descriptor synthesis"
+        },
+        "Auto": {
+          "payload": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/sm_eeww_L0/dumps/sm_eeww_L0.classes-Auto-t1.json",
+          "source_companion": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/sm_eeww_L0/dumps/sm_eeww_L0.classes-Auto-t1.sources.json",
+          "diagrams": 4,
+          "owners": 40,
+          "metadata_owner": "actual batch-live-inputs in ledger (model/request/options/Run), no descriptor synthesis"
+        }
+      }
+    },
+    {
+      "case": "xs_qcd_gguu_1pi_L1",
+      "actual": {
+        "status": "FAILED",
+        "passed": 0,
+        "failed": 1,
+        "filtered": 182,
+        "exit": 101
+      },
+      "built_code": "5ea149ffd88ae3afc4072a38c0871c1329be8424",
+      "equivalent_generator_input_code": "5ba04864ca506e259d9eef4a54f65acdd8323fc2",
+      "kernel": "8eb7c3729d6abefc916decc1bdf0c06536f8af80",
+      "pristine_root": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qcd_gguu_1pi_L1",
+      "observer_root": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qcd_gguu_1pi_L1",
+      "pristine_command": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qcd_gguu_1pi_L1/command.json",
+        "sha256": "908dded5f106714a896ac8d4f4af948931cee5bab4bb08e457345a3878490cd2"
+      },
+      "observer_command": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qcd_gguu_1pi_L1/command.json",
+        "sha256": "0dc41dc287446d2ce1d72b9f7a49999a50a26a1764d40cf7a2ec52b09dc0b842"
+      },
+      "capture_binding": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qcd_gguu_1pi_L1/capture-binding.json",
+        "sha256": "e00634261b6f840f3055a4e80f06fc8e633de1bd1f809a8accbe64c676326610"
+      },
+      "ledger": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qcd_gguu_1pi_L1/world.jsonl",
+        "sha256": "c4d4058f10ad2491719479bf88c1ec64495c7f53723a94d18f4c2ccee4574a86"
+      },
+      "actual_public_joins": [
+        {
+          "file": "xs_qcd_gguu_1pi_L1.census",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qcd_gguu_1pi_L1/dumps/xs_qcd_gguu_1pi_L1.census",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qcd_gguu_1pi_L1/dumps/xs_qcd_gguu_1pi_L1.census",
+          "sha256": "fbbcf106715b8952970e0d70abbd96fa582e851fc9f86064c031d10eeee5dec4"
+        },
+        {
+          "file": "xs_qcd_gguu_1pi_L1.classes-None-t1.json",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qcd_gguu_1pi_L1/dumps/xs_qcd_gguu_1pi_L1.classes-None-t1.json",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qcd_gguu_1pi_L1/dumps/xs_qcd_gguu_1pi_L1.classes-None-t1.json",
+          "sha256": "d1d7a59c555387b6fadef81ed52aa2615f455aedcb14c416fabf61fe44b1ed15"
+        },
+        {
+          "file": "xs_qcd_gguu_1pi_L1.classes-None-t1.sources.json",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qcd_gguu_1pi_L1/dumps/xs_qcd_gguu_1pi_L1.classes-None-t1.sources.json",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qcd_gguu_1pi_L1/dumps/xs_qcd_gguu_1pi_L1.classes-None-t1.sources.json",
+          "sha256": "d1d7a59c555387b6fadef81ed52aa2615f455aedcb14c416fabf61fe44b1ed15"
+        },
+        {
+          "file": "xs_qcd_gguu_1pi_L1.classes-Auto-t1.json",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qcd_gguu_1pi_L1/dumps/xs_qcd_gguu_1pi_L1.classes-Auto-t1.json",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qcd_gguu_1pi_L1/dumps/xs_qcd_gguu_1pi_L1.classes-Auto-t1.json",
+          "sha256": "d1d7a59c555387b6fadef81ed52aa2615f455aedcb14c416fabf61fe44b1ed15"
+        },
+        {
+          "file": "xs_qcd_gguu_1pi_L1.classes-Auto-t1.sources.json",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qcd_gguu_1pi_L1/dumps/xs_qcd_gguu_1pi_L1.classes-Auto-t1.sources.json",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qcd_gguu_1pi_L1/dumps/xs_qcd_gguu_1pi_L1.classes-Auto-t1.sources.json",
+          "sha256": "d1d7a59c555387b6fadef81ed52aa2615f455aedcb14c416fabf61fe44b1ed15"
+        }
+      ],
+      "actual_census_file": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qcd_gguu_1pi_L1/dumps/xs_qcd_gguu_1pi_L1.census",
+        "sha256": "fbbcf106715b8952970e0d70abbd96fa582e851fc9f86064c031d10eeee5dec4"
+      },
+      "cell_sources": {
+        "None": {
+          "payload": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qcd_gguu_1pi_L1/dumps/xs_qcd_gguu_1pi_L1.classes-None-t1.json",
+          "source_companion": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qcd_gguu_1pi_L1/dumps/xs_qcd_gguu_1pi_L1.classes-None-t1.sources.json",
+          "diagrams": 4,
+          "owners": 52,
+          "metadata_owner": "actual batch-live-inputs in ledger (model/request/options/Run), no descriptor synthesis"
+        },
+        "Auto": {
+          "payload": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qcd_gguu_1pi_L1/dumps/xs_qcd_gguu_1pi_L1.classes-Auto-t1.json",
+          "source_companion": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qcd_gguu_1pi_L1/dumps/xs_qcd_gguu_1pi_L1.classes-Auto-t1.sources.json",
+          "diagrams": 4,
+          "owners": 52,
+          "metadata_owner": "actual batch-live-inputs in ledger (model/request/options/Run), no descriptor synthesis"
+        }
+      }
+    }
+  ],
+  "observed_result": {
+    "passed": 8,
+    "failed": 4,
+    "exact_cases": 12,
+    "pool": 1
+  },
+  "mode_scope": [
+    "None",
+    "Auto"
+  ],
+  "source_of_descriptors": "actual completed capture-binding.json and command.json files, untouched; indexes are separate",
+  "proof_credit": "NONE; characterization/source joins only, independent lane replays and review required"
+}

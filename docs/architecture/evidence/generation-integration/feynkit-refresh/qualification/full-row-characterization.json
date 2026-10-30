@@ -1,0 +1,53 @@
+{
+  "passed_cases": [
+    "xs_qed_eemm_L1",
+    "xs_qed_eedd_L1",
+    "xs_qed_eeee_1pi_L1",
+    "qed_eemm_L1",
+    "ctorder_qcd_uugg_L1",
+    "sm_eemm_L0",
+    "ym_g6_L0",
+    "xs_qed_eemm_L2"
+  ],
+  "failed_cases": [
+    {
+      "case": "qed_ee4f_L0",
+      "actual_asserted_summary": "Summary { diagrams: 6, topologies: 7, assignments: 6, inverse_symmetry: Fraction { numerator: 6, denominator: 1 }, weights: Fraction { numerator: -6, denominator: 1 }, symmetry_factors: [(1, 6)], content: 7418213026047758212, numerators: 2094309210284571858, named: 9955192864026428413, ids: 15420108436151051566 }",
+      "expected_literal_summary": "Summary { diagrams: 6, topologies: 7, assignments: 6, inverse_symmetry: Fraction { numerator: 6, denominator: 1 }, weights: Fraction { numerator: -6, denominator: 1 }, symmetry_factors: [(1, 6)], content: 7418213026047758212, numerators: 9163194314104926076, named: 9955192864026428413, ids: 15420108436151051566 }",
+      "differing_asserted_fields": [
+        "numerators"
+      ],
+      "qualification": "Asserted table scope is the harness-returned particle/None reference. Auto live counts/census remain independently captured; no fabricated Auto fullRow."
+    },
+    {
+      "case": "xs_qed_eeee_L1",
+      "actual_asserted_summary": "Summary { diagrams: 4, topologies: 17, assignments: 34, inverse_symmetry: Fraction { numerator: 4, denominator: 1 }, weights: Fraction { numerator: 0, denominator: 1 }, symmetry_factors: [(1, 4)], content: 3022486068726070230, numerators: 8589669465914692809, named: 13426690394181497681, ids: 18306469787178189955 }",
+      "expected_literal_summary": "Summary { diagrams: 4, topologies: 17, assignments: 34, inverse_symmetry: Fraction { numerator: 4, denominator: 1 }, weights: Fraction { numerator: 0, denominator: 1 }, symmetry_factors: [(1, 4)], content: 3022486068726070230, numerators: 10282495408798671266, named: 13426690394181497681, ids: 18306469787178189955 }",
+      "differing_asserted_fields": [
+        "numerators"
+      ],
+      "qualification": "Asserted table scope is the harness-returned particle/None reference. Auto live counts/census remain independently captured; no fabricated Auto fullRow."
+    },
+    {
+      "case": "sm_eeww_L0",
+      "actual_asserted_summary": "Summary { diagrams: 4, topologies: 2, assignments: 4, inverse_symmetry: Fraction { numerator: 4, denominator: 1 }, weights: Fraction { numerator: -4, denominator: 1 }, symmetry_factors: [(1, 4)], content: 8392395207565614451, numerators: 42963035440195323, named: 5198450464672462412, ids: 17749905428536467506 }",
+      "expected_literal_summary": "Summary { diagrams: 4, topologies: 2, assignments: 4, inverse_symmetry: Fraction { numerator: 4, denominator: 1 }, weights: Fraction { numerator: -4, denominator: 1 }, symmetry_factors: [(1, 4)], content: 8392395207565614451, numerators: 17019130910645736421, named: 5198450464672462412, ids: 17749905428536467506 }",
+      "differing_asserted_fields": [
+        "numerators"
+      ],
+      "qualification": "Asserted table scope is the harness-returned particle/None reference. Auto live counts/census remain independently captured; no fabricated Auto fullRow."
+    },
+    {
+      "case": "xs_qcd_gguu_1pi_L1",
+      "actual_asserted_summary": "Summary { diagrams: 4, topologies: 12, assignments: 54, inverse_symmetry: Fraction { numerator: 4, denominator: 1 }, weights: Fraction { numerator: -4, denominator: 1 }, symmetry_factors: [(1, 4)], content: 13292509521889608637, numerators: 7142019012713190507, named: 15278292068172816218, ids: 9379374420500739387 }",
+      "expected_literal_summary": "Summary { diagrams: 4, topologies: 12, assignments: 54, inverse_symmetry: Fraction { numerator: 4, denominator: 1 }, weights: Fraction { numerator: -4, denominator: 1 }, symmetry_factors: [(1, 4)], content: 13292509521889608637, numerators: 8501616522639327483, named: 15278292068172816218, ids: 9379374420500739387 }",
+      "differing_asserted_fields": [
+        "numerators"
+      ],
+      "qualification": "Asserted table scope is the harness-returned particle/None reference. Auto live counts/census remain independently captured; no fabricated Auto fullRow."
+    }
+  ],
+  "expectation_edits": false,
+  "cases_added": false,
+  "all_other_rows_pools_lanes": "not run"
+}

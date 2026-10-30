@@ -1,0 +1,171 @@
+{
+  "schema": 1,
+  "scope": "One pure package archive, shared exact8eb helper compilation and exactly12pool1 characterization/source joins; no integration/proof/migration/source approval",
+  "code_source": "5ba04864ca506e259d9eef4a54f65acdd8323fc2",
+  "source_evidence": "2c7dbbb0c117e0ac5e8089fc5906fa2515e170ab",
+  "actual_build_source": "5ea149ffd88ae3afc4072a38c0871c1329be8424",
+  "final_metadata_runtime_built": false,
+  "producer_invariance": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/precision-producer-invariance.json",
+    "sha256": "0998a48178184e8e52ffe4e059552ec5d87759d7f2b5eb485ca928bc8a6d797f",
+    "selected_drv": "/nix/store/5pxm7dg3gnz25a30iqzmyvh7kwcrwbsq-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0.drv",
+    "identical_to_actual_build": true,
+    "fields": "package and recursive dependency filtered sources, synthetic inputs, phase commands, compiler/profile/Rust flags; source corrections excluded from same47immutable inputs"
+  },
+  "archive": {
+    "path": "/nix/store/l9l9l807yqwlpqislciy2mcgjbahrm6r-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0/gammaloop-nextest-feynkit-feynkit-generator.tar.zst",
+    "sha256": "9688999459ceb9e3747f35e5ed599437fbdf64ef03a4564ca537b3254c0dac1e",
+    "NAR": {
+      "/nix/store/l9l9l807yqwlpqislciy2mcgjbahrm6r-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0": {
+        "ca": null,
+        "deriver": "/nix/store/5pxm7dg3gnz25a30iqzmyvh7kwcrwbsq-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0.drv",
+        "narHash": "sha256-nOv94t7Ku88AU8Z3ZsLB8AMP+kfgLSbAlscRNFwoJvA=",
+        "narSize": 86344336,
+        "references": [],
+        "registrationTime": 1793386399,
+        "signatures": [],
+        "storeDir": "/nix/store",
+        "ultimate": true,
+        "version": 1
+      }
+    },
+    "root_fingerprint": "feynkit-generator-3892f55f31822180",
+    "dependency_units": 452,
+    "layers": [
+      {
+        "source": "/nix/store/kck3a2p03gvd9162cnkl6g96viy1bpp1-gammaloop-crate-test-dependencies-b6f177b7bc15beb1-inputs/target.tar.zst",
+        "sha256": "06efc2c933e9103e1b8ba5fe597834b2e8b1af355aa7444567fdb3ded778427f",
+        "entries": 8752
+      },
+      {
+        "source": "/nix/store/cx447jb5zb3gxcpslza3gkldr2vs7kah-gammaloop-crate-test-dependencies-b6f177b7bc15beb1-deps-0.1.0/target.tar.zst",
+        "sha256": "ee04a717e612ac9e599614998271fa420858c122ad9a247fa06cb49d5dfd7018",
+        "entries": 246
+      },
+      {
+        "source": "/nix/store/h2xam7y7dhqfq333sml2wcv9r5xn8gcj-gammaloop-crate-test-binaries-feynkit-generator-b6f177b7bc15beb1-deps-0.1.0/target.tar.zst",
+        "sha256": "3924fae0fa419d4bcf1612296342acdd8ab3427b89bf5cf7d068514ef7897f48",
+        "entries": 288
+      }
+    ],
+    "qualification": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/archive-qualification.json",
+    "qualification_sha256": "bd79086b059d9336382adbd8a36dd0279d1ff62d0795756aa6fb11c6b0ff9f3c",
+    "ELF_hash_scope": "Archive ELF and layered artifact ELF are distinctbytes; qualified comparison and actualNIX_NO_SELF_RPATH difference in separate records; no relink/normalization"
+  },
+  "kernel": "8eb7c3729d6abefc916decc1bdf0c06536f8af80",
+  "root_lock_sha256": "e111296686b2573ac88b9274cac2bf1e10aad07669f8fc6d243ac5b47d985ae0",
+  "helpers": {
+    "feynkit_generator": {
+      "artifact": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/helper-build/feynkit_generator/libfeynkit_generator-1ce0203f10a65182.rlib",
+      "sha256": "f4d3041be9be546f99cd5b53068890dcff2c7a17cf580d972ce5ca6b95e9826d",
+      "qualification": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/helper-build/feynkit_generator/qualification.json",
+      "qualification_sha256": "149804c00c8824a7fdc4504a5aeb0ee9fa983722d626693d1c70c11cdd6fbcac",
+      "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/helper-build/feynkit_generator/command.json",
+      "command_sha256": "e266cb113aa9536a50882f47e0db9749427bc033f2330e10189d905ccf37a0e6"
+    },
+    "generation_oracle": {
+      "artifact": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/helper-build/generation_oracle/generation_oracle-68d1b7f3e1ca788b",
+      "sha256": "30eaae032dc0c0c5d789eda9f75c3cca7a7dafd4368fb31f81e1c01f3de5a527",
+      "qualification": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/helper-build/generation_oracle/qualification.json",
+      "qualification_sha256": "df80596d40095d52c1884f80a51b9c1c7a25fb53c07123d235532fe25009a4fa",
+      "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/helper-build/generation_oracle/command.json",
+      "command_sha256": "d6bd88b3f46288457589b895cc661a5ddac5da808311311db8cebe4e940c8c50"
+    },
+    "oracle_family_capture": {
+      "artifact": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/helper-build/oracle_family_capture/oracle_family_capture-8b031f1efb29659a",
+      "sha256": "214bf0a9c13d27ebf385bbf48b31ce58f8b6542a7d2c1d29555af1ba4c26b369",
+      "qualification": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/helper-build/oracle_family_capture/qualification.json",
+      "qualification_sha256": "841de2cfdc28b29995edd730bf358bdc87b6bcf35979dd093987095a322036d8",
+      "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/helper-build/oracle_family_capture/command.json",
+      "command_sha256": "05be646e6ca5cad5c26b797c01845c1c624d43e4617fb9ca85ecf5e9978eb511"
+    },
+    "oracle_family_exact": {
+      "artifact": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/helper-build/oracle_family_exact/oracle_family_exact-350edf2766083f3f",
+      "sha256": "5141d8fddacf40a81f5452e212cd788daa15c3cb3e6d2290fbfc6b65f76c48e1",
+      "qualification": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/helper-build/oracle_family_exact/qualification.json",
+      "qualification_sha256": "8e817df3d4c78f44607635899f7170828cf56c457187df0e50dc42fd42a04d68",
+      "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/helper-build/oracle_family_exact/command.json",
+      "command_sha256": "93a2dff8d919354dbf32df7a906f882d6d529150d53d33e42e2b4f6a85699b25"
+    }
+  },
+  "source_manifests": {
+    "Rust": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/helper-source-manifest.json",
+      "sha256": "46980d764e8161030d85f0e528c3de59362ec9c589f81e01da1fbd9cd6d905a2",
+      "files": 673,
+      "all_rehashed_before_compilation": true
+    },
+    "lane_Python": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/additive-lane-source-manifest.json",
+      "sha256": "ec8362d699be0eaae5b68ac4e25afe233039cf884f6cb88b8e175bce19984c9b",
+      "scope": "22direct/local-import/dynamic-owner source bindings only; not Rust/Nix inputs, actual lane executable/schema/data/source closure must be requalified by its owner before execution"
+    }
+  },
+  "runtime": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/summary.json",
+    "sha256": "00c3021d0bf0f8fb10e5b8f5fb74285a0839216ebbc287352b4b51b4b8f844ae",
+    "actual_passed": 8,
+    "actual_failed": 4,
+    "cases": 12,
+    "pools": [
+      1
+    ],
+    "classes": [
+      "None",
+      "Auto"
+    ],
+    "pristine_and_observer_invocations": 24,
+    "extra_case_runs": 0,
+    "record_update_flags": "absent in actual safe child environments",
+    "joined_companions_per_case": 5,
+    "raw_stages": [
+      "batch-live-inputs",
+      "batch-raw-diagrams",
+      "batch-raw-census"
+    ],
+    "capture_index": "capture-index.json",
+    "failure_fields": "full-row-characterization.json",
+    "completed_commands_and_captures": "immutable, separate indexes only",
+    "limits": "asserted fullRow is particle/None; Auto actual ledger/publicdata independently bound, no copied counters or fabricated qualificationfields"
+  },
+  "runtime_containment": {
+    "network_preflight": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/network-preflight.json",
+    "network_preflight_sha256": "4757c271f471a7898803a1e4abf46c42f6f02fffa556bd3da5bed12f1ff02454",
+    "method": "distinct bwrap --unshare-all net namespace; explicit safe ELF/store closure mounts; private anonymous license pipe then direct ELF exec; no Nix/network after own private-runtime boundary begins",
+    "Nix": "every child bothlicensevariablesunset; validated40hexGitURI/shallow/allRefs or exactstorepath; neutralcwd; normal locked fetch/substitution NOT called offline",
+    "license_values": "never output, hashed, snapshotted, stored in Nix, recorded in commands or committed"
+  },
+  "metadata": {
+    "typst_record": "docs/architecture/generation-feynkit-community-refresh.typ",
+    "typst_sha256": "778188778168f212e270bb32803d51d9e892e740fa7ff918a624e58e2ffe8067",
+    "new_registry_note": "generation-feynkit-community-refresh",
+    "classification": "investigation, unassignedowner, independent combined evidence/source review pending",
+    "existing_scopes": 118,
+    "scope_key_digest_changes_vs_source_evidence": 0,
+    "original_doc_wip": {
+      "bookmark": "generation-feynkit-refresh-qualification-doc-wip",
+      "commit": "43bdb85918367e8472dad0b1d85295a5318fff0a",
+      "preserved": true
+    },
+    "historical_reconciliation_txt": "unchanged; superseded roundoneclaims remain historical"
+  },
+  "pending": [
+    "fresh source round3 review owned by root",
+    "independent raw/spinor/gauge/sewing pair/schema/definition/mode/source/control replay and review",
+    "separate evidence/Typst/registry review of this metadata head",
+    "installed-host and generated-stub parity on current corrected source",
+    "actual Chromium/WebKit browser/regime/precision checks",
+    "whole-workspace8eb compatibility/Clippy/full-site, not run here"
+  ],
+  "not_performed": [
+    "extra12case run",
+    "pools8/32",
+    "grouped observer build/capture (separate root task)",
+    "fullhost/browser/site/benchmark",
+    "expectation re-recording",
+    "license15c8/budget policy import",
+    "push/export/fetchorigin/upload/PR/realCI/storeGC/credential mutation"
+  ],
+  "retained": "allown source copies, layer extraction, helper artifacts, completed capture/command roots and logs retained unchanged for active root-owned read-only proof and grouped qualification; no othercontributor work/caches touched",
+  "main_index_sha256": "36fca2996228d0adb018933745a106061d3febe8921980864b5cc50dbad4af5d"
+}
