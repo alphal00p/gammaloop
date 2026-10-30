@@ -24,6 +24,14 @@ fn finite_constant(catalog: &mut MasterCatalog, name: &str) -> Atom {
             source_sha256: "test-certified-primitive".into(),
         },
     );
+    let definition = definitions::external_fallback(&symbol, &serde_json::Value::Null, &[])
+        .unwrap()
+        .unwrap_or_else(|| {
+            vk_parse!("vakint::Integral(vakint::t^2,vakint::Interval(vakint::t,0,1))").unwrap()
+        });
+    catalog
+        .constant_definitions
+        .insert(symbol.clone(), definition);
     symbol
 }
 
@@ -102,8 +110,12 @@ fn estimated_named_periods_share_formula_sources_without_becoming_exact() {
 
     let catalog = Arc::new(catalog);
     let constant = catalog
-        .get_constant(ConstantSymbol::try_from(period).unwrap(), 40)
+        .get_constant(ConstantSymbol::try_from(period.clone()).unwrap(), 40)
         .unwrap();
+    assert_eq!(
+        constant.definition(),
+        &catalog.constant_definitions[&period]
+    );
     assert_eq!(
         constant.available_precision(),
         AvailablePrecision::FixedPrecision(30)
@@ -365,9 +377,10 @@ fn legacy_sources_remain_opaque_and_loaded_primitives_supersede_them() {
 
 fn legacy_lookup_leaf() -> (Atom, FiniteSource) {
     crate::Vakint::initialize_vakint_symbols();
+    // A historical leaf names a table position; the value is this fixture's own.
     let staged = precision::legacy::stage_table(
-        vk_parse!("legacy_lookup_fixture").unwrap().as_view(),
-        vk_parse!("3.25`30*ep^-2").unwrap().as_view(),
+        vk_parse!("miD6").unwrap().as_view(),
+        vk_parse!("3.25`30*ep^-1").unwrap().as_view(),
         vk_symbol!("ep"),
         "MATAD",
     )
@@ -402,13 +415,17 @@ fn legacy_leaf_constant_lookup_retains_its_cap_and_source_provenance() {
         constant.provenance().master_id(),
         source.master_id.as_deref()
     );
-    assert_eq!(constant.provenance().epsilon_power(), Some(-2));
+    assert_eq!(constant.provenance().epsilon_power(), Some(-1));
+    assert_eq!(
+        constant.definition(),
+        &definitions::matad_master("miD6", -1).unwrap()
+    );
     assert!(constant.warnings().iter().any(|warning| {
         warning.requested_decimal_precision == requested
             && warning.sources.iter().any(|contributor| {
                 contributor.source_sha256 == source.source_sha256
                     && contributor.available_decimal_precision == Some(source.significant_digits)
-                    && contributor.epsilon_power == Some(-2)
+                    && contributor.epsilon_power == Some(-1)
             })
     }));
     assert!(constant.to_atom().is_ok());
@@ -452,4 +469,80 @@ fn legacy_leaf_constant_lookup_rejects_malformed_or_corrupted_identities() {
             InspectionError::UnknownConstant { .. }
         ))
     ));
+}
+
+#[test]
+fn constant_records_expose_their_defining_integrals() {
+    let mut catalog = empty_catalog();
+    let moment = finite_constant(&mut catalog, "K5Moment(1)");
+    let undefined = finite_constant(&mut catalog, "undefined_period");
+    catalog.constant_definitions.remove(&undefined);
+    let catalog = Arc::new(catalog);
+    let record = catalog
+        .get_constant(ConstantSymbol::try_from(moment).unwrap(), 20)
+        .unwrap();
+    assert_eq!(
+        record.definition(),
+        &vk_parse!("vakint::Integral(vakint::t*symbolica::bessel_k(0,vakint::t)^5,vakint::Interval(vakint::t,0,∞))").unwrap()
+    );
+    assert!(matches!(
+        catalog.get_constant(ConstantSymbol::try_from(undefined).unwrap(), 20),
+        Err(VakintError::Inspection(
+            InspectionError::UndefinedConstant { .. }
+        ))
+    ));
+    let zeta = catalog
+        .get_constant("z3".parse::<ConstantSymbol>().unwrap(), 20)
+        .unwrap();
+    assert_eq!(
+        zeta.definition(),
+        &definitions::builtin(vk_parse!("z3").unwrap().as_view())
+            .unwrap()
+            .unwrap()
+    );
+    assert!(zeta.definition().contains_symbol(vk_symbol!("Integral")));
+}
+
+#[test]
+fn recorded_period_aliases_define_the_bound_master_coefficient() {
+    let mut catalog = empty_catalog();
+    let _ = add_master(&mut catalog, 1, "primitive", "PR4", None, 20);
+    let catalog = Arc::new(catalog);
+    let record = catalog
+        .get_constant("PR4fin".parse::<ConstantSymbol>().unwrap(), 16)
+        .unwrap();
+    let definition = record.definition();
+    assert_eq!(definition, &definitions::fmft_master("PR4", 0).unwrap());
+    let AtomView::Fun(series) = definition.as_view() else {
+        panic!("{definition} is not a series coefficient")
+    };
+    let arguments = series.iter().collect::<Vec<_>>();
+    assert_eq!(series.get_symbol(), vk_symbol!("SeriesCoefficient"));
+    assert_eq!(arguments[1], Atom::var(vk_symbol!("ep")).as_view());
+    assert_eq!(arguments[3], Atom::Zero.as_view());
+    let mut loop_integral = None;
+    arguments[0].to_owned().visitor(&mut |part| {
+        if let AtomView::Fun(function) = part
+            && function.get_symbol() == vk_symbol!("LoopIntegral")
+        {
+            loop_integral = Some(
+                function
+                    .iter()
+                    .map(|part| part.to_owned())
+                    .collect::<Vec<_>>(),
+            );
+            return false;
+        }
+        true
+    });
+    let loop_integral = loop_integral.unwrap();
+    // Dimension, integrand and four loop momenta.
+    assert_eq!(loop_integral.len(), 6);
+    let AtomView::Mul(denominators) = loop_integral[1].as_view() else {
+        panic!("product of propagators expected")
+    };
+    // PR4 has five unit propagator powers, so the Wick sign is negative.
+    assert_eq!(denominators.get_nargs(), 5);
+    assert!(matches!(arguments[0], AtomView::Mul(product)
+        if product.iter().any(|factor| factor == Atom::num(-1).as_view())));
 }

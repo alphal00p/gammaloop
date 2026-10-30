@@ -72,6 +72,8 @@ pub(crate) struct MasterCatalog {
     coefficient_tag: Atom,
     pub(crate) masters: BTreeMap<Atom, Master>,
     pub(crate) constants: BTreeMap<Atom, crate::inspection::FiniteSource>,
+    /// Defining integrals of `constants`, from data or the legacy fallback.
+    pub(crate) constant_definitions: BTreeMap<Atom, Atom>,
     family_graphs: BTreeMap<Atom, String>,
     basis_aliases: BTreeMap<Atom, Atom>,
 }
@@ -126,6 +128,7 @@ impl MasterCatalog {
             coefficient_tag: Atom::Zero,
             masters: BTreeMap::new(),
             constants: BTreeMap::new(),
+            constant_definitions: BTreeMap::new(),
             family_graphs: BTreeMap::new(),
             basis_aliases: BTreeMap::new(),
         };
@@ -298,6 +301,10 @@ impl MasterCatalog {
             absolute_error: String,
             error_quality: String,
             definition: String,
+            /// Defining integral in the inert heads of `inspection::definitions`.
+            /// Older packs omit it; their known records use the legacy fallback.
+            #[serde(default)]
+            symbolic_definition: Option<String>,
             provenance: serde_json::Value,
         }
         let Some(file) = &data.manifest.constant_bindings else {
@@ -316,6 +323,7 @@ impl MasterCatalog {
                     || head.get_evaluation_info().is_some()
                     || crate::symbols::SYMBOL_REGISTRY.contains(&head)
                     || head == vk_symbol!("NumericalSource")
+                    || crate::inspection::definitions::is_definition_head(head)
                     || (head.get_namespace() == crate::NAMESPACE
                         && head.get_stripped_name().starts_with("RustRed"))
             });
@@ -360,6 +368,12 @@ impl MasterCatalog {
                 "estimated" => false,
                 _ => return Err(failure("unknown finite constant error quality")),
             };
+            let definition = Self::recorded_definition(
+                &symbol,
+                constant.symbolic_definition.as_deref(),
+                &constant.provenance,
+                data,
+            )?;
             let source = crate::inspection::FiniteSource {
                 value: constant.value,
                 significant_digits: constant.significant_digits,
@@ -374,13 +388,55 @@ impl MasterCatalog {
                     Sha256::digest(serde_json::to_vec(&entry).map_err(failure)?)
                 ),
             };
-            if self.constants.insert(symbol, source).is_some() {
+            if self.constants.insert(symbol.clone(), source).is_some() {
                 return Err(failure(
                     "duplicate finite constant identity across loop packs",
                 ));
             }
+            if let Some(definition) = definition {
+                self.constant_definitions.insert(symbol, definition);
+            }
         }
         Ok(())
+    }
+
+    /// A recorded `symbolic_definition` must parse, bind all of its variables and
+    /// agree with the definition reconstructed from legacy metadata, if any.
+    fn recorded_definition(
+        symbol: &Atom,
+        recorded: Option<&str>,
+        provenance: &serde_json::Value,
+        data: &LoopData,
+    ) -> Result<Option<Atom>, RustRedEvaluationError> {
+        use crate::inspection::definitions;
+        let name = symbol.to_canonical_string();
+        let fallback = definitions::external_fallback(symbol, provenance, &data.manifest.families)
+            .map_err(|detail| {
+                failure(format!(
+                    "finite constant {name} has inconsistent definition metadata: {detail}"
+                ))
+            })?;
+        let Some(recorded) = recorded else {
+            return Ok(fallback);
+        };
+        let definition = vk_parse!(recorded).map_err(|error| {
+            failure(format!(
+                "finite constant {name} has an unparseable symbolic definition: {error}"
+            ))
+        })?;
+        definitions::validate(definition.as_view()).map_err(|detail| {
+            failure(format!(
+                "finite constant {name} has an invalid symbolic definition: {detail}"
+            ))
+        })?;
+        if let Some(expected) = &fallback
+            && !definitions::agree(&definition, expected)
+        {
+            return Err(failure(format!(
+                "finite constant {name} symbolic definition {definition} contradicts its definition metadata {expected}"
+            )));
+        }
+        Ok(Some(definition))
     }
 
     fn load_basis_aliases(&mut self, expressions: Vec<(usize, Atom, Atom)>) {
@@ -1027,6 +1083,7 @@ mod tests {
             coefficient_tag: Atom::var(vk_symbol!("test_master_data")),
             masters: BTreeMap::new(),
             constants: BTreeMap::new(),
+            constant_definitions: BTreeMap::new(),
             family_graphs: BTreeMap::new(),
             basis_aliases: BTreeMap::new(),
         };

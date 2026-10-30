@@ -162,6 +162,7 @@ engine = Vakint(evaluation_order=[])
 constant = engine.get_constant(ConstantSymbol("z3"), prec=40)
 print(constant.available_precision.kind)
 print(constant.precision.real.significant_digits)
+print(constant.definition)  # 1/2*vakint::Integral((1-vakint::t)^-1*log(vakint::t)^2, vakint::Interval(vakint::t,0,1))
 
 master = engine.get_master(engine.master_symbols()[0], prec=32)
 for power, coefficient in master.coefficients.items():
@@ -176,6 +177,9 @@ terminal representations and `to_html()` / `_repr_html_()` notebook views. Nativ
 rendering preserves long formulas and numbers behind expandable sections, and visible warnings
 explain precision shortfalls.
 Loaded finite constants such as `K5Moment(1)` report their validated source cap.
+`constant.definition` is the defining multiple integral as an exact `Expression` in inert
+`vakint::Integral`, `vakint::LoopIntegral` and `vakint::SeriesCoefficient` heads; it is never
+evaluated. Constants without a defining integral, such as runtime input literals, raise an error.
 Master formulas retain their original snapshot internally; notebook and terminal views show the
 mathematical names, while the expression getter preserves the binding needed for evaluation.
 Symbolic reductions preserve the same finite-period bindings when their formulas are evaluated

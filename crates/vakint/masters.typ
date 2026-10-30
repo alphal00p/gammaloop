@@ -150,6 +150,63 @@ with the external data. There is no runtime finite HPL substitution table.
 Zeta and square-root constants use native exact functions; Clausen and `S2`
 use the same HPL evaluator. Finite opaque constants retain honest precision caps.
 
+=== Defining integrals of constants
+
+Every `VakintConstant` record carries `definition()` (Python: `definition`), an
+exact Symbolica atom of the multiple integral that defines the constant. It is
+documentation, not an evaluation route: the heads below are inert `vakint`
+functions without evaluation rules.
+
+#table(
+  columns: 2,
+  [*Head*], [*Meaning*],
+  [`Integral(f, Interval(x1,a1,b1), …, Interval(xn,an,bn))`],
+  [Iterated definite integral with the first interval outermost, as in
+   Mathematica's `Integrate`. Inner bounds may depend on outer variables;
+   bounds may be `∞`.],
+  [`LoopIntegral(D, f, k(1), …, k(L))`],
+  [`∏_i ∫ d^D k_i / π^(D/2) f` over Euclidean momenta, with `f` rational in
+   `EuclideanDot` and analytic continuation in `D` where needed.],
+  [`SeriesCoefficient(f, x, x0, n)`],
+  [The coefficient of `(x-x0)^n`, not the `n`-th derivative.],
+  [`EuclideanDot(p, q)`],
+  [Symmetric, linear Euclidean scalar product, distinct from `dot`.],
+)
+
+Bound variables are `t`, `x(i)`, `k(i)`, `ep` (`d=4-2*ep`) and `delta`
+(`D=2-2*delta`); the only free symbols are `𝜋`, `𝑒` and `γ`. Admitted native
+functions are `real_part`, `imaginary_part`, `exp`, `log`, `sin`, `gamma`,
+`zeta`, `polylog`, `bessel_k` and `bessel_i`. Every normalization appears
+explicitly outside the heads:
+
+- A public FMFT/MATAD master with Minkowski rows `D_M = c_0 + Σ c_j q_j` is
+  `(-1)^(Σ a) exp(L γ ep) LoopIntegral(4-2 ep, ∏ D_E^(-a))` with
+  `D_E = Σ c_j q_j^E - c_0`. The one-loop tadpole is `-exp(γ ep) Γ(-1+ep)`.
+- MATAD internal masters (`miT111`, `miD6`, …) are Euclidean without a sign:
+  `exp(L γ ep) LoopIntegral(4-2 ep, …)`. `D6`, `T1ep` and `T1ep2` are their
+  coefficients; the external sunset is `-miT111`.
+- `D=2` periods are `LoopIntegral(2, ∏ 1/(q_E²+1))` and their `D=2-2δ` jets are
+  `SeriesCoefficient(exp(L γ delta) LoopIntegral(2-2 delta, …), delta, 0, n)`.
+- `K5Moment(k) = Integral(t^k bessel_k(0,t)^5, Interval(t,0,∞))` and
+  `K5LogMoment(k) = 3 Integral(t^k bessel_k(0,t)^5 (log t + γ - log 2), …)`.
+- `π`, `γ`, `ζ(n)`, `Li_n`, `Cl_2(π/3)` and `S2 = 4/(9√3) Cl_2(π/3)` use
+  one-dimensional integrals; `𝑒` and square roots are their own elementary
+  definitions.
+- `HR`/`HI(a1,…,an, z)` are `real_part`/`imaginary_part` of the
+  radial-path HPL at `z=(1±𝑖√3)/2`; each letter contributes `z f_a(z s_i)` over
+  `1 > s_1 > … > 0`, trailing zeros become the innermost `log(z s_k)^m/m!`.
+  `GPLReal`/`GPLImag` use the kernel `1/(t-a)` on `[0,1]`.
+- Recorded period aliases such as `PR4fin` are the stated coefficient of their
+  bound master. Historical FMFT and MATAD `NumericalSource` leaves are the complete
+  Laurent coefficient they tabulate. Runtime inputs, pySecDec estimates,
+  AlphaLoop literals and incomplete table entries (`PR3ep2`, `PR13ep1`) have no
+  defining integral; `get_constant` reports `InspectionError::UndefinedConstant`.
+
+The momentum routing transcribes the master's family rows in family order.
+External records supply the atom in `symbolic_definition`; records of older
+packs are reconstructed from their definition metadata
+(#link("src/inspection/definitions.rs")[definitions.rs]).
+
 Numerical mode prefers an available exact formula and evaluates it at the user's
 requested precision. A numerical-only coefficient enforces its validated digit
 limit. Symbolic mode retains snapshot-qualified symbols for numerical-only

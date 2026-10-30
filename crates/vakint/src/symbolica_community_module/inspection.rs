@@ -374,6 +374,12 @@ record!(VakintConstantWrapper, "VakintConstant", VakintConstant, {
     fn symbol(&self) -> ConstantSymbolWrapper {
         self.value.symbol().clone().into()
     }
+    /// The defining (multiple) integral in Vakint's inert `Integral`,
+    /// `LoopIntegral` and `SeriesCoefficient` heads; never evaluated.
+    #[getter]
+    fn definition(&self) -> PythonExpression {
+        self.value.definition().clone().into()
+    }
     #[getter]
     fn available_precision(&self) -> AvailablePrecisionWrapper {
         self.value.available_precision().into()

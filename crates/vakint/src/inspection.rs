@@ -20,6 +20,7 @@ use crate::{
 };
 
 pub(crate) mod constants;
+pub(crate) mod definitions;
 mod graph;
 mod registry;
 
@@ -46,6 +47,10 @@ pub enum InspectionError {
     UnavailableGraph { master: String, detail: String },
     #[error("registered constant {symbol} does not have a real numerical value")]
     NonRealConstant { symbol: String },
+    #[error("registered constant {symbol} has no defining integral: {reason}")]
+    UndefinedConstant { symbol: String, reason: String },
+    #[error("invalid definition of constant {symbol}: {detail}")]
+    InvalidDefinition { symbol: String, detail: String },
     #[error(
         "parameter {symbol} would override a registered constant or master source; use an ordinary parameter symbol"
     )]
@@ -167,6 +172,7 @@ pub enum MasterSymbolicExpression {
 #[derive(Clone, Debug)]
 pub struct VakintConstant {
     symbol: ConstantSymbol,
+    definition: Atom,
     requested_decimal_precision: u32,
     available_precision: AvailablePrecision,
     numerical: NumericalCoefficient,
@@ -182,6 +188,19 @@ impl VakintConstant {
     }
     pub fn symbol(&self) -> &ConstantSymbol {
         &self.symbol
+    }
+    /// The defining (multiple) integral of this constant as an exact atom.
+    ///
+    /// It uses inert `vakint` heads that are never evaluated:
+    /// `Integral(f, Interval(x1,a1,b1), …)` is an iterated definite integral
+    /// with the first interval outermost; `LoopIntegral(D, f, k(1), …, k(L))`
+    /// is `∏ ∫ d^D k_i / π^(D/2) f` over Euclidean momenta with `f` rational in
+    /// `EuclideanDot`; `SeriesCoefficient(f, x, x0, n)` is the coefficient of
+    /// `(x-x0)^n`. Signs, `exp(L γ ep)` factors and real/imaginary projections
+    /// are explicit outside these heads. The only free symbols are `𝜋`, `𝑒`
+    /// and `γ`; see the masters documentation for all conventions.
+    pub fn definition(&self) -> &Atom {
+        &self.definition
     }
     pub fn available_precision(&self) -> AvailablePrecision {
         self.available_precision

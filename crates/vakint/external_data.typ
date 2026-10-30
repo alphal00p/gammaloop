@@ -113,6 +113,19 @@ products and normalization, after exact cancellation. Missing entries are not ze
 Errors name the integral, coefficient power, requested capability, available data,
 and package version. This source-data check is not a final-result error estimate.
 
+Records of `constants.json` may carry `symbolic_definition`, the defining
+integral printed by Symbolica with full namespaces in the inert heads of
+#link("masters.typ")[the masters documentation]. The prose `definition` field is
+unchanged. The loader parses it, requires every variable to be bound and every
+head to be admitted, and compares it with the definition reconstructed from the
+record's `definition_metadata` when that exists; a different loop-momentum
+routing of the same propagators, related by a linear change of loop momenta
+with unit Jacobian, agrees. Unparseable, unbound or contradicting definitions
+reject the pack. Packs without the field remain valid:
+the four `K5Moment`/`K5LogMoment` records and the `PR7D2`, `PR10D2`, `PR15D2`,
+`PR7D2Eps1` and `PR10D2Eps1` periods use that reconstruction, and any other
+record reports an undefined constant on inspection.
+
 HPLs at `exp(±i*pi/3)` use Symbolica's arbitrary-precision numerical algorithms.
 The same evaluator supplies FORM-backed HPL substitution. Finite constants without
 an evaluatable exact definition retain explicit numerical precision; resizing a

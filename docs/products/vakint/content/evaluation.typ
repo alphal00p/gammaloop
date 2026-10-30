@@ -167,7 +167,9 @@ and `master_symbols()`. Friendly names must be unambiguous within the snapshot.
 
 Constant records expose `AvailablePrecision::ArbitraryPrecision` or
 `AvailablePrecision::FixedPrecision(maximum_digits)`, a numerical value, achieved precision,
-warnings, and provenance. An exact expression depending on a finite period inherits that
+warnings, provenance, and `definition`: the exact defining multiple integral, written with the
+inert `Integral`, `LoopIntegral` and `SeriesCoefficient` heads and explicit normalization
+factors described in the masters documentation. An exact expression depending on a finite period inherits that
 period's limit. Master records contain every available Laurent order in their recorded
 unit-mass normalization, independent of the engine's usual expansion depth. Each coefficient
 has its own availability and either `MasterSymbolicExpression::Expression` or

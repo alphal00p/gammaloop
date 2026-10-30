@@ -854,6 +854,12 @@ class VakintConstant:
     @property
     def symbol(self) -> ConstantSymbol: ...
     @property
+    def definition(self) -> Expression:
+        r"""
+        The defining (multiple) integral in Vakint's inert `Integral`,
+        `LoopIntegral` and `SeriesCoefficient` heads; never evaluated.
+        """
+    @property
     def available_precision(self) -> AvailablePrecision: ...
     @property
     def numerical_value(self) -> Float: ...

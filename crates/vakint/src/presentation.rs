@@ -422,6 +422,7 @@ impl Present for VakintConstant {
             "Symbol",
             Content::Expression(self.symbol().as_atom().clone()),
         );
+        card.field("Definition", Content::Expression(self.definition().clone()));
         card.field(
             "Available precision",
             self.available_precision().to_string(),

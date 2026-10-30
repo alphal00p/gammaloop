@@ -10,7 +10,8 @@ use symbolica::{
 
 use super::{
     ConstantSymbol, DataProvenance, FiniteSource, InspectionError, MasterCoefficient, MasterSymbol,
-    MasterSymbolicExpression, PreparedExpression, VakintConstant, VakintMaster, constants, graph,
+    MasterSymbolicExpression, PreparedExpression, VakintConstant, VakintMaster, constants,
+    definitions, graph,
 };
 use crate::{
     VakintError, VakintSettings, precision,
@@ -150,6 +151,82 @@ impl MasterCatalog {
                 })
         });
         Ok(candidate.map(|(master, _)| self.coefficient_symbol(master, power)))
+    }
+
+    /// The defining integral of a constant admitted by [`Self::get_constant`].
+    ///
+    /// Historical table leaves come first, then authenticated external records,
+    /// recorded period aliases and finally the built-in constants. A constant
+    /// without a definition is an error, never a placeholder.
+    pub(crate) fn constant_definition(&self, symbol: AtomView<'_>) -> Result<Atom, VakintError> {
+        let undefined = |reason: &str| -> VakintError {
+            InspectionError::UndefinedConstant {
+                symbol: symbol.to_canonical_string(),
+                reason: reason.into(),
+            }
+            .into()
+        };
+        if let Some(definition) = definitions::legacy_source(symbol)? {
+            return Ok(definition);
+        }
+        if let Some((identity, _)) = self.constant_source(symbol)? {
+            return self.constant_definitions.get(identity).cloned().ok_or_else(|| {
+                undefined("its external data record has no symbolic_definition and no recorded fallback")
+            });
+        }
+        if let Some(definition) = self.period_definition(symbol)? {
+            return Ok(definition);
+        }
+        definitions::builtin(symbol)?.ok_or_else(|| undefined("it is not a registered constant"))
+    }
+
+    /// A recorded period alias is the stated Laurent coefficient of its bound master.
+    /// Authenticated family data define the integral; otherwise the FMFT basis name does.
+    fn period_definition(&self, symbol: AtomView<'_>) -> Result<Option<Atom>, VakintError> {
+        let Some((_, basis, power)) = PERIOD_BINDINGS
+            .into_iter()
+            .find(|(name, _, _)| symbol == Atom::var(vk_symbol!(name)).as_view())
+        else {
+            return Ok(None);
+        };
+        let Some(binding) = self.period_binding(symbol)? else {
+            return Ok(None);
+        };
+        let (master, _, bound_power) = self.coefficient(&binding)?;
+        let family = master.data.as_ref().and_then(|data| {
+            data.manifest
+                .families
+                .iter()
+                .find(|family| family["sha256"] == master.metadata["family_sha256"])
+        });
+        let powers = master.metadata["powers"].as_array().map(|powers| {
+            powers
+                .iter()
+                .map(|power| power.as_i64())
+                .collect::<Option<Vec<_>>>()
+        });
+        let definition = match (family, powers) {
+            (Some(family), Some(Some(powers))) => {
+                if let Some(normalization) =
+                    master.metadata["graph_definition"]["normalization"].as_str()
+                    && normalization
+                        != format!(
+                            "(i*pi^(d/2)*exp(-EulerGamma*epsilon))^(-{})",
+                            master.loop_count
+                        )
+                {
+                    return Err(invalid(format!(
+                        "period {symbol} is bound to a master with normalization {normalization}"
+                    )));
+                }
+                definitions::EuclideanFamily::from_json(family)
+                    .and_then(|family| family.public_master(&powers, bound_power))
+                    .map_err(|detail| invalid(format!("period {symbol}: {detail}")))?
+            }
+            _ => definitions::fmft_master(basis, power)
+                .ok_or_else(|| invalid(format!("period {symbol} has no FMFT master definition")))?,
+        };
+        Ok(Some(definition))
     }
 
     /// Bind finite leaves without expanding definitions or selecting numerical payloads.
@@ -643,6 +720,7 @@ impl MasterCatalog {
             }
             .into());
         }
+        let definition = self.constant_definition(symbol.as_atom().as_view())?;
         let prepared = self.prepare_evaluation(symbol.as_atom().clone())?;
         let available_precision = prepared.available_precision();
         let settings = VakintSettings {
@@ -696,6 +774,7 @@ impl MasterCatalog {
 
         Ok(VakintConstant {
             symbol,
+            definition,
             requested_decimal_precision: prec,
             available_precision,
             numerical: number,

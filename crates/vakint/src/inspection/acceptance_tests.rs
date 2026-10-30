@@ -462,3 +462,106 @@ fn public_engine_independent_d2_periods_and_formula_inventory() {
         inventory.len()
     );
 }
+
+#[test]
+#[ignore = "checks the definitions of every four-loop constant; set VAKINT_TEST_EXTERNAL_DATA"]
+fn public_engine_four_loop_constants_have_definitions() {
+    use super::definitions;
+    use crate::utils::vakint_macros::vk_symbol;
+    use symbolica::atom::{Atom, AtomView};
+    let root = std::env::var_os("VAKINT_TEST_EXTERNAL_DATA")
+        .map(PathBuf::from)
+        .expect("set VAKINT_TEST_EXTERNAL_DATA to the external-data checkout");
+    let manifest: Value =
+        serde_json::from_slice(&fs::read(root.join("4L/manifest.json")).unwrap()).unwrap();
+    let families = manifest["families"].as_array().unwrap();
+    let mut engine = Vakint::new().unwrap();
+    engine.load_external_data(&root, 4).unwrap();
+
+    for symbol in engine.constant_symbols().unwrap() {
+        let constant = engine.get_constant(&symbol, 16).unwrap();
+        definitions::validate(constant.definition().as_view())
+            .unwrap_or_else(|error| panic!("{symbol}: {error}"));
+    }
+
+    // Every external record has a definition: its own symbolic_definition, or
+    // for older packs the reconstruction from its definition metadata.
+    let path = manifest["constant_bindings"]["path"].as_str().unwrap();
+    let entries: Vec<Value> =
+        serde_json::from_slice(&fs::read(root.join("4L").join(path)).unwrap()).unwrap();
+    let mut recorded = 0;
+    for entry in &entries {
+        let symbol: ConstantSymbol = entry["symbol"].as_str().unwrap().parse().unwrap();
+        let constant = engine.get_constant(&symbol, 16).unwrap();
+        if let Some(text) = entry["symbolic_definition"].as_str() {
+            assert_eq!(constant.definition(), &vk_parse!(text).unwrap(), "{symbol}");
+            recorded += 1;
+        }
+        if let Some(fallback) =
+            definitions::external_fallback(symbol.as_atom(), &entry["provenance"], families)
+                .unwrap()
+        {
+            assert!(
+                definitions::agree(constant.definition(), &fallback),
+                "{symbol}: {} versus metadata {fallback}",
+                constant.definition()
+            );
+        }
+    }
+    println!(
+        "{} external constants, {recorded} with symbolic_definition",
+        entries.len()
+    );
+
+    for name in ["PR4fin", "PR4dfin", "PR11dep0", "PR4ep1", "PR4dep1"] {
+        let symbol: ConstantSymbol = name.parse().unwrap();
+        let constant = engine.get_constant(&symbol, 16).unwrap();
+        assert!(
+            matches!(constant.definition().as_view(), AtomView::Fun(function)
+            if function.get_symbol() == vk_symbol!("SeriesCoefficient"))
+        );
+    }
+
+    // The data-independent FMFT table transcribes the manifest families and powers.
+    let mut transcribed = 0;
+    for (name, family_h, powers) in definitions::FMFT_MASTERS {
+        let digest = if family_h {
+            "eb225daea1ddc8a4d61675a26b9b487f90278190fe874e314b7253aee632a5e7"
+        } else {
+            "693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1"
+        };
+        let master = manifest["masters"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|master| {
+                master["family_sha256"] == digest
+                    && master["powers"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .map(|power| power.as_i64().unwrap())
+                        .eq(powers)
+            })
+            .unwrap_or_else(|| panic!("{name}: no manifest master with these powers"));
+        assert_eq!(
+            vk_parse!(master["exact_basis_expression"].as_str().unwrap()).unwrap(),
+            vk_parse!(name).unwrap(),
+            "{name}"
+        );
+        let family = families
+            .iter()
+            .find(|family| family["sha256"] == digest)
+            .unwrap();
+        assert_eq!(
+            definitions::EuclideanFamily::from_json(family)
+                .unwrap()
+                .public_master(&powers, 0)
+                .unwrap(),
+            definitions::fmft_master(name, 0).unwrap(),
+            "{name}"
+        );
+        transcribed += 1;
+    }
+    assert_eq!(transcribed, definitions::FMFT_MASTERS.len());
+}
