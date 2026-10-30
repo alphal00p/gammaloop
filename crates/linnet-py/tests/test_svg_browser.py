@@ -3,6 +3,7 @@
 import importlib.util
 import math
 import os
+import struct
 import unittest
 import xml.etree.ElementTree as ET
 
@@ -93,10 +94,14 @@ class SvgBrowserTests(unittest.TestCase):
                             x, y, w, h = map(
                                 float, camera.get_attribute("viewBox").split()
                             )
+                            # The camera's box comes from float32 SVGRect values.
+                            width32, height32 = struct.unpack(
+                                "!2f", struct.pack("!2f", width, height)
+                            )
                             self.assertLessEqual(x, 1e-6)
                             self.assertLessEqual(y, 1e-6)
-                            self.assertGreaterEqual(x + w, width - 1e-6)
-                            self.assertGreaterEqual(y + h, height - 1e-6)
+                            self.assertGreaterEqual(x + w, width32 - 1e-6)
+                            self.assertGreaterEqual(y + h, height32 - 1e-6)
                             labels.append(
                                 owner.locator(
                                     '[data-linnet-kind="node"][data-linnet-id="0"]'
@@ -112,11 +117,14 @@ class SvgBrowserTests(unittest.TestCase):
                             self.assertAlmostEqual(
                                 label["width"] * ratio, labels[0]["width"], places=2
                             )
-                        self.assertGreaterEqual(
+                        # Natural height has no toolbar slack; allow one CSS
+                        # layout unit (1/64px) for the outer SVG's snapped height.
+                        self.assertAlmostEqual(
                             page.locator("#graph-2 > figure > svg").bounding_box()[
                                 "height"
                             ],
                             4 / 3 * sizes[2][1],
+                            delta=1 / 64,
                         )
 
                         first = page.locator("#graph-0")
