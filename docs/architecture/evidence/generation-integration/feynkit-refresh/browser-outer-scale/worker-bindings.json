@@ -1,0 +1,106 @@
+{
+  "target/refresh-browser-outer-scale-source-fix-20261030-sol61-r4/after-test_svg_browser.py": {
+    "sha256": "4eb29a5a8ce73c8a8833786bba4e6e63f8fdfa91f7002fd22573b5fdaed1802e",
+    "bytes": 24189
+  },
+  "target/refresh-browser-outer-scale-source-fix-20261030-sol61-r4/artifact-hashes.json": {
+    "sha256": "2f228b0065c40a101162efe66fa58b564ebe86a9a05334bb22d382aa222cc3a2",
+    "bytes": 2390
+  },
+  "target/refresh-browser-outer-scale-source-fix-20261030-sol61-r4/browser-input.json": {
+    "sha256": "6ad122c07f5d317a4bcf4f2b9bb0e5ca3786136ad06ab1ea2e852744c2ba402b",
+    "bytes": 47204
+  },
+  "target/refresh-browser-outer-scale-source-fix-20261030-sol61-r4/browser-lifecycle.json": {
+    "sha256": "748184a733efb8bc1138f70835ecd6fcd85358153b84ba3eef43b2b64e3eb87f",
+    "bytes": 434
+  },
+  "target/refresh-browser-outer-scale-source-fix-20261030-sol61-r4/browser-results.json": {
+    "sha256": "76954046c215645f1db3e4550d9baf670e58272f4a35663b74ec151be18390c4",
+    "bytes": 14035
+  },
+  "target/refresh-browser-outer-scale-source-fix-20261030-sol61-r4/changed-file-hashes.json": {
+    "sha256": "de611ebc202bea83947126a9768b8268c3fa2f1a0f2c08a24dd93bdd0d2d5288",
+    "bytes": 501
+  },
+  "target/refresh-browser-outer-scale-source-fix-20261030-sol61-r4/discovery-errors.txt": {
+    "sha256": "7c4a7fa5308b51b4361398002be6e7fad01b3fb18df531943af282d84c7e4164",
+    "bytes": 704
+  },
+  "target/refresh-browser-outer-scale-source-fix-20261030-sol61-r4/fixture.html": {
+    "sha256": "9824bef3f35f350b592bd686e85b730d3c4011314130b868cbbe4273ecdac49f",
+    "bytes": 45569
+  },
+  "target/refresh-browser-outer-scale-source-fix-20261030-sol61-r4/fixtures.json": {
+    "sha256": "76f123f8abd6c3eb79d4ecf9e3862f52051752fec5f861fe9336754f8434799c",
+    "bytes": 466
+  },
+  "target/refresh-browser-outer-scale-source-fix-20261030-sol61-r4/handoff.json": {
+    "sha256": "43d8a74b822838cba6d4b272350ffcc2082fc930bb604dc9e89a4f0a13c0ece7",
+    "bytes": 1847
+  },
+  "target/refresh-browser-outer-scale-source-fix-20261030-sol61-r4/outer-scale.patch": {
+    "sha256": "33c60f14fbcc48e702ef7d47225b287c5a3f9b74ebadf737b8b28b5859118bf9",
+    "bytes": 5052
+  },
+  "target/refresh-browser-outer-scale-source-fix-20261030-sol61-r4/prepare-v1.py": {
+    "sha256": "0666977d944ed31d7259f806317c0b740da927470a6c98c975b1ff31c80d86b8",
+    "bytes": 7012
+  },
+  "target/refresh-browser-outer-scale-source-fix-20261030-sol61-r4/prepare-v2.py": {
+    "sha256": "697d0c03c04d9a0d3d539ad6b6d19233f8010cf51fc16a415b93c964f4f0863d",
+    "bytes": 7023
+  },
+  "target/refresh-browser-outer-scale-source-fix-20261030-sol61-r4/prepare.py": {
+    "sha256": "8385e1d3a8ec7858afb4ef219b26a397a1e8de919361cbb52921163b45d50656",
+    "bytes": 7001
+  },
+  "target/refresh-browser-outer-scale-source-fix-20261030-sol61-r4/probe.js": {
+    "sha256": "cbfde00962a52ba66ea64c5c584ba4a7c468fcc9a60669bf8d522495261a5214",
+    "bytes": 3404
+  },
+  "target/refresh-browser-outer-scale-source-fix-20261030-sol61-r4/rationale.typ": {
+    "sha256": "96e04c96e05cc0e94b3bdd90fcb5aaac75d158397d9a9663356e058818fe0f85",
+    "bytes": 8549
+  },
+  "target/refresh-browser-outer-scale-source-fix-20261030-sol61-r4/review.json": {
+    "sha256": "41d01ed9f2fda6b85eefc7d5bea0877e18da7a2a29c196e36cec2dd001349953",
+    "bytes": 26419
+  },
+  "target/refresh-browser-outer-scale-source-fix-20261030-sol61-r4/source/crates/linnest/src/svg/interactive.css": {
+    "sha256": "a6632174166d1e7c9492ce8d88f785e5de2acb5d9e754459d7e3d43354722bf8",
+    "bytes": 7360
+  },
+  "target/refresh-browser-outer-scale-source-fix-20261030-sol61-r4/source/crates/linnest/src/svg/interactive.js": {
+    "sha256": "bcd57a63dd409bf4e61b063a47e212826512dd0f151e025d0cd919f57df0671a",
+    "bytes": 34323
+  },
+  "target/refresh-browser-outer-scale-source-fix-20261030-sol61-r4/source/crates/linnest/src/svg/output.rs": {
+    "sha256": "dcbcaef7a41d35d0253ed607e61e464516db534b0a7b5d9b9abadfd79842ae06",
+    "bytes": 17911
+  },
+  "target/refresh-browser-outer-scale-source-fix-20261030-sol61-r4/source/crates/linnest/tests/browser_svg_sizing.py": {
+    "sha256": "129efcf99d5e367812849f7d81b5ec4ffd29b18af33df8b697db62bcb329c487",
+    "bytes": 28494
+  },
+  "target/refresh-browser-outer-scale-source-fix-20261030-sol61-r4/source/crates/linnet-py/tests/test_svg_browser.py": {
+    "sha256": "286caaae70befa262d8300bfb7ac6e53df23fe36df9ec978d51af4d701529d75",
+    "bytes": 21703
+  },
+  "target/refresh-browser-outer-scale-source-fix-20261030-sol61-r4/source-bindings.json": {
+    "sha256": "8676041a9ed7210cf292ea825e6f774be661c816376208b7ef8b7f87c23accab",
+    "bytes": 732
+  },
+  "target/refresh-browser-outer-scale-source-fix-20261030-sol61-r4/validate.py": {
+    "sha256": "e2087554fc23acc94a222426d55a39a4e7d3e62820f30801787509e77c72fcd2",
+    "bytes": 6899
+  },
+  "target/refresh-browser-outer-scale-source-fix-20261030-sol61-r4/validation.json": {
+    "sha256": "a98a349071893fb7f22077b8ba4ba46f3cb2a6633536076c59a8dee405518f89",
+    "bytes": 4632
+  },
+  "target/refresh-browser-outer-scale-source-fix-20261030-sol61-r4/validation.log": {
+    "sha256": "ce45a93197dad10f4d64e53b85ff8bb8c503b0d3577e62184d038ab238888142",
+    "bytes": 110
+  }
+}

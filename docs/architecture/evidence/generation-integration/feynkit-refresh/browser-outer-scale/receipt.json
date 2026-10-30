@@ -1,0 +1,72 @@
+{
+  "schema": 1,
+  "status": "SOURCE_CORRECTION_CANDIDATE_REQUIRES_NEW_ROOT_ASSIGNED_REVIEW",
+  "base_code": "5ba04864ca506e259d9eef4a54f65acdd8323fc2",
+  "base_evidence": "2c7dbbb0c117e0ac5e8089fc5906fa2515e170ab",
+  "parent_shared_metadata": "c3449988839d9ad3389dd9fd4c4b8bb9ec447055",
+  "code": "f47f27213a1c55291239c9bc0f334a7ea1cd1cc1",
+  "review": {
+    "sha256": "41d01ed9f2fda6b85eefc7d5bea0877e18da7a2a29c196e36cec2dd001349953",
+    "verdict": "REQUEST_CHANGES",
+    "finding": "R3-1",
+    "all_earlier_findings_and_invariants": "review reported pass; no source approval inferred"
+  },
+  "worker": {
+    "patch_sha256": "33c60f14fbcc48e702ef7d47225b287c5a3f9b74ebadf737b8b28b5859118bf9",
+    "handoff_sha256": "43d8a74b822838cba6d4b272350ffcc2082fc930bb604dc9e89a4f0a13c0ece7",
+    "after_sha256": "4eb29a5a8ce73c8a8833786bba4e6e63f8fdfa91f7002fd22573b5fdaed1802e",
+    "after_blob": "551bafdfc9331fb6ce629977eda0665d0ff895ff",
+    "full_packet_manifest": "worker-bindings.json"
+  },
+  "source": {
+    "path": "crates/linnet-py/tests/test_svg_browser.py",
+    "sha256": "ee700e0629fad62358e1f0a778353757a9a305bdbc131f2ae2675b7b74d82c6c",
+    "git_blob": "f033cecad28f6c33cbf66353ff6ff4d89320a374",
+    "worker_AST_equal": true
+  },
+  "comment_only_departure": {
+    "authorization": "explicit root instruction",
+    "worker": "one layout unit is a CSS pixel",
+    "integrated": "one layout unit is 1/64 of a CSS pixel",
+    "code_or_allowance_change": false,
+    "worker_after_hash_equality_claim": false
+  },
+  "correction": "OptionA: normalize camera CTM and node-label dimensions by validated positive uniform outer SVG screen scale; independently check outer viewport/viewBox dimensions, meet matrix and one-layout-unit plus source-derived gamma5 bound. Resize rereads outer scale.",
+  "preserved": "camera delta1e-4, label places2, R2 binary32 authored containment1e-6, tall height1/64, fixture geometry and source formulas/guards/locators; no producer/physics/expectation change",
+  "fixture_evidence": {
+    "owner": "retained worker real Chromium blank-tab current-JS/static-SVG fixture",
+    "initial_fixtures": 9,
+    "plus_resize_reset_sequences": 3,
+    "rejected_real_DOM_controls": 6,
+    "Chromium_UA": "Chrome/154.0.0.0",
+    "WebKit": false,
+    "installed_current_host": false,
+    "product_test_credit": false,
+    "simulations": "separate source math, not additional runtime evidence"
+  },
+  "validation": {
+    "syntax_AST": "PASS",
+    "git_diff_check": "PASS",
+    "sole_preexisting_tracked_delta": [
+      "crates/linnet-py/tests/test_svg_browser.py"
+    ],
+    "preexisting_tracked_files_bound": 4601,
+    "all_other_tracked_files_unchanged": true,
+    "registry_scopes_verified": 118,
+    "registry_bytes_unchanged": true,
+    "scope_bindings_changed": 0,
+    "selected_generator_drv_invariant": true,
+    "new_build_or_captures": false,
+    "main_index_sha256": "36fca2996228d0adb018933745a106061d3febe8921980864b5cc50dbad4af5d"
+  },
+  "historical_qualification": "c344 and all bound shared artifacts remain immutable; new code has same selected generator drv, not a new runtime build. Prior-eight sealed application unchanged; no control batch rerun.",
+  "supersession": "Prior selected-case tiny-crop either-axis prose is not universal; worker rationale additively qualifies horizontal slack. Original evidence unchanged.",
+  "registry_classification": "Additive evidence under existing generation-feynkit-community-refresh investigation review trigger; existing118 scopes unchanged; no registry edit or approval relabel.",
+  "NixCI": false,
+  "pending": [
+    "NEW root-assigned focused R4 source review",
+    "installed-current-host Playwright Chromium/WebKit execution; no skip pass",
+    "source-derived gamma5 and preserved tall allowance require installed-host qualification",
+    "independent shared ScopeA and later combined review remain separate"
+  ]
+}

@@ -1,0 +1,144 @@
+{
+  "code": "f47f27213a1c55291239c9bc0f334a7ea1cd1cc1",
+  "uri": "git+file:///shared/lcnbr/dev/gammaloop/main?rev=f47f27213a1c55291239c9bc0f334a7ea1cd1cc1&shallow=1&allRefs=1",
+  "fetched_source": "/nix/store/0vsa28jjcrwyrna4iflavxm0gc8msqxm-source",
+  "group_drv": "/nix/store/s1qxkc07vzsk1q5zyl76adkbg33lfhnm-gammaloop-nextest-binaries-feynkit.drv",
+  "selected_archive_drv": "/nix/store/5pxm7dg3gnz25a30iqzmyvh7kwcrwbsq-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0.drv",
+  "same_as_5ba_and_5ea_selected_drv": true,
+  "field_checks": {
+    "src": {
+      "equal": true,
+      "sha256": "5b7de4eb1c6e5bb154c05d760627aca2612eab89598dd2d45459271f20a71750"
+    },
+    "cargoArtifacts": {
+      "equal": true,
+      "sha256": "4ddef83a74ece58477544c2c3da63fd73f8d9f2e6ed321144619bc05f7ea6e20"
+    },
+    "postPatch": {
+      "equal": true,
+      "sha256": "a1601881c726dceab09d6482640b9e9b9bf897ef1fa108e2f79f58edfe5b34f3"
+    },
+    "buildPhase": {
+      "equal": true,
+      "sha256": "10d5fb24bc7ecadcee6ed9e248f98825ff880acda81ac23526da91e03d524ad3"
+    },
+    "configurePhase": {
+      "equal": true,
+      "sha256": "61d0a92814b244c5d3178093e33cba3591ee245b1cc498203b1eee7eada1a646"
+    },
+    "installPhase": {
+      "equal": true,
+      "sha256": "ff3901dcc2338fd5b1293ac8b463909684785dbf120e6220ab215c3b03a588a0"
+    },
+    "cargoProfile": {
+      "equal": true,
+      "sha256": "dc937b59892604f5a86ac96936cd7ff09e25f18ae6b758e8014a24c7fa039e91"
+    },
+    "RUSTFLAGS": {
+      "equal": true,
+      "sha256": "8c33d5dd3d1cd3b0fddd23250a39ba31fde8ea271661385b72fb4f8e2f416239"
+    }
+  },
+  "package_filtered_source": "/nix/store/w2mb00qab6ql3ir9fcqwkn083133321p-source",
+  "package_test_source": "/nix/store/gkgmvpwlhps4268kcz20m940sv69l5wy-source",
+  "all_47_filtered_sources": [
+    "/nix/store/w2mb00qab6ql3ir9fcqwkn083133321p-source",
+    "/nix/store/gkgmvpwlhps4268kcz20m940sv69l5wy-source",
+    "/nix/store/lwhscixz3iizgv0zaqj2x256hg0dy5vv-source",
+    "/nix/store/1j4yxsr4511mwi9jn9b4dg7wh3xb150p-source",
+    "/nix/store/z08gyafn9a4kljl8i03rwc8lq1vic2fk-source",
+    "/nix/store/2s3gy7lk06j0nslcbbhfkjs6m41ivjcd-source",
+    "/nix/store/q6jalljs7y1s3avjrn1llhxrxh3s5rm4-source",
+    "/nix/store/6fgr72v25z03krqlaiawsp5x32jligd7-source",
+    "/nix/store/yy9sxjcys3wmlkmyp4ly3zb53vwx7abr-source",
+    "/nix/store/7qdq6yqdja3x9wzc3b39cx0bjgrykapc-source",
+    "/nix/store/ca3y48wnpkdnhpw8j5rx9fk3ixrxcj7m-source",
+    "/nix/store/sk0x9nfwr0wccr262j3pnggkqncd68hs-source",
+    "/nix/store/mil9nzsmpflsyzy0zvgvklai4r6hqjyq-source",
+    "/nix/store/77pdz651l3q73cf0xb0gzrxcdy7xnz1b-source",
+    "/nix/store/9w4vhbkv4rni6abfzmmj9vpbnvls3nyy-source",
+    "/nix/store/i2ca1c11sf4nhssg99ah0g8cb0y5cdkd-source",
+    "/nix/store/8428hpl2bbzf8z0r82c6iiqg40vhxr5r-source",
+    "/nix/store/5njqwkl1mq4drxvj96lj49n25hzzb08n-source",
+    "/nix/store/i9znpbq4n77j58snlaq9gb51c31yw7lr-source",
+    "/nix/store/nh8r9qzjnf18254kwzpawnk1ybj3ric0-source",
+    "/nix/store/w2q2m0rj4l69dby65g9xakq8936iqlxv-source",
+    "/nix/store/6y5cqwzz6dkk3zx297s5d02la2g23ibm-source",
+    "/nix/store/947q0w91gfz77gf0mrqgq8sqh4wisj0y-source",
+    "/nix/store/0ivjr8h2kbv5agj37a46w7xsbq2yzybc-source",
+    "/nix/store/97slr4kk940rn1j6x2pivplmn7fwq491-source",
+    "/nix/store/q4l6x1pv7vdxigdm1wrhms0hwk1srz9b-source",
+    "/nix/store/lzxnkw5z6bnww1f315is5iwzqsjjh550-source",
+    "/nix/store/p11h44jnlfpnqsr9lkzf0nzb0mydqjy2-source",
+    "/nix/store/sbr56x8ycsz29wrlsigxcpr6aivrdmac-source",
+    "/nix/store/3hhfdbbkz02hfsfrfja9lg92d42nxim1-source",
+    "/nix/store/pagalpry33bly24s2f8fqjfl0si1i7nr-source",
+    "/nix/store/zq1k16d0fm7ixzbiz2wniwz43d31gqnd-source",
+    "/nix/store/01ddvzy7pf5jzi7avh9lmxfzjbxg237f-source",
+    "/nix/store/rmid07y1z7qj10k2x56hqpjwpzrdkif5-source",
+    "/nix/store/h3k7f18n0hp0a27b9jabyk2zyqyjmray-source",
+    "/nix/store/72zx92rplyw30gql8klyplcv3bikj50k-source",
+    "/nix/store/qs65wj2mvi52a7w4hvhcf5wbkdlwx505-source",
+    "/nix/store/6i6ascg4jkvfckgjdiask0p7jhcb2n2f-source",
+    "/nix/store/5x64ki64zy3an3s6n4ylrcdyxqnnak10-source",
+    "/nix/store/jj2jd9cy135n6qxismqnxxsybh6b1agc-source",
+    "/nix/store/qll499dhy58qlv7swxv6sil88y39r48i-source",
+    "/nix/store/6d77asy3z5g31z0zcbihjaja4pjrzngk-source",
+    "/nix/store/pxrgh6ybnb0j1dwfx5ihvqww413p6pzy-source",
+    "/nix/store/yra1f7nd0yhkr7iyv1bzrwyxwnic5s0l-source",
+    "/nix/store/zy04cdqid8yn7y7i506ay4n3gsj0lxry-source",
+    "/nix/store/jazwlgygl2s0h4id1c30zby5b92ir31m-source",
+    "/nix/store/9hwzpfblzwpa9gibrbw2bsdm3zh8bhvm-source"
+  ],
+  "browser_path_absent_from_every_selected_filter": true,
+  "source_binding": "same immutable selected drv binds identical recursively qualified source/lock/compiler/features/synthetic dependencies/phases; full fetched source differs only by carried metadata and this browser test",
+  "network": "normal pure evaluation; no offline claim or build; locked input resolution/substitution may occur",
+  "built_new_head": false,
+  "commands": [
+    {
+      "argv": [
+        "nix",
+        "eval",
+        "--json",
+        "--expr",
+        "let f=builtins.getFlake \"git+file:///shared/lcnbr/dev/gammaloop/main?rev=f47f27213a1c55291239c9bc0f334a7ea1cd1cc1&shallow=1&allRefs=1\"; in {source=f.outPath; drvPath=f.checks.x86_64-linux.gammaloop-nextest-binaries-feynkit.drvPath;}"
+      ],
+      "cwd": "/tmp",
+      "both_license_variables_absent": true,
+      "exit": 0
+    },
+    {
+      "argv": [
+        "nix",
+        "derivation",
+        "show",
+        "/nix/store/s1qxkc07vzsk1q5zyl76adkbg33lfhnm-gammaloop-nextest-binaries-feynkit.drv"
+      ],
+      "cwd": "/tmp",
+      "both_license_variables_absent": true,
+      "exit": 0
+    },
+    {
+      "argv": [
+        "nix",
+        "derivation",
+        "show",
+        "/nix/store/35k6kqrpijnqcvgbqc0ar1fc8qkjhzj8-gammaloop-nextest-binaries-feynkit-feynkit-kinematics-0.1.0.drv",
+        "/nix/store/5pxm7dg3gnz25a30iqzmyvh7kwcrwbsq-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0.drv",
+        "/nix/store/7lgw47mivd6hq2rgvrjrvcdq2dc2rj6j-gammaloop-nextest-binaries-feynkit-feynkit-cff-0.1.0.drv",
+        "/nix/store/9ias2v2xlw2q7zxvfw4znwp3j9hwnsss-gammaloop-nextest-binaries-feynkit-feynkit-py-0.1.0.drv",
+        "/nix/store/fay0gd8jfxgxkr3i0g05dk86ywmk4q9x-gammaloop-nextest-binaries-feynkit-feynkit-tensor-0.1.0.drv",
+        "/nix/store/gzadqn6n1ajy9fql21qf1izw2dg4fs7g-gammaloop-nextest-binaries-feynkit-feynkit-amplitude-0.1.0.drv",
+        "/nix/store/m64jd37862c5lmcg8y7s797vrnn266cl-stdenv-linux-no-cc.drv",
+        "/nix/store/pnczqlpna9w28x9yhjkvrr5f8llrz5w4-gammaloop-nextest-binaries-feynkit-feynkit-model-0.1.0.drv",
+        "/nix/store/rd04775wk6vm40zq8wc51bxxwpjvcbh1-gammaloop-nextest-binaries-feynkit-feynkit-ufo-0.1.0.drv",
+        "/nix/store/rv9r3rgsphlmjjwgabq6g3chq6vkyy6r-gammaloop-nextest-binaries-feynkit-feynkit-0.1.0.drv",
+        "/nix/store/s3s5s80y5sq8fvxivxxz3bqfpyhx8cb4-bash-5.3p15.drv",
+        "/nix/store/s6q02lh8hm98vh9vmnn8ckg622rnx8sq-gammaloop-nextest-binaries-feynkit-feynkit-graph-0.1.0.drv"
+      ],
+      "cwd": "/tmp",
+      "both_license_variables_absent": true,
+      "exit": 0
+    }
+  ]
+}
