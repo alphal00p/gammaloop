@@ -1,0 +1,128 @@
+{
+  "schema": 1,
+  "status": "BOUNDED_METADATA_CHECKS_PASS_NO_REVIEW_VERDICT",
+  "base": "cacd5182704082df929a066548e3501be22c9533",
+  "method": "Pinned Python3.14.7 -B stdlib under env -i; read-only Git with explicit main/.git and GIT_OPTIONAL_LOCKS=0; no product imports or licensed/native/runtime/build/docs-builder execution.",
+  "json_parse": "All newly copied/authored JSON parses",
+  "verbatim_reviews": 6,
+  "copied_files": [
+    {
+      "path": "reviews/source-r4/review.json",
+      "sha256": "5d9db6c6d385bd25ea9e276a2a1ebd2e95c0678171854e4ccb73a1362130e1af",
+      "bytes": 29924
+    },
+    {
+      "path": "reviews/source-r4/SHA256SUMS",
+      "sha256": "a854f5ba735ff347aa86452cb4383d5f58d93a29e4ca67d2944b4a7c6f3a9a48",
+      "bytes": 12068
+    },
+    {
+      "path": "reviews/shared-scope-a/review.json",
+      "sha256": "565caeace0112a30fb9118f94b2bb759e4267d2b802395c314e485b89b4b2b70",
+      "bytes": 74728
+    },
+    {
+      "path": "reviews/shared-scope-a/review.json.sha256",
+      "sha256": "1d0f84671fafe09ed11cda384230acd6f57d5624e19558697b3026e853d63f1a",
+      "bytes": 78
+    },
+    {
+      "path": "reviews/prior-eight/review.json",
+      "sha256": "5a50135038065414bc667667244378677ff44ac4f632e733b8bbd0bba451cf8b",
+      "bytes": 46366
+    },
+    {
+      "path": "reviews/prior-eight/manifest.json",
+      "sha256": "998a72d9ba2ee35dc5f4f721b23bf4379c5666c4031b98a58313e89c7966dbbc",
+      "bytes": 211876
+    },
+    {
+      "path": "reviews/raw-four-dispositions/review.json",
+      "sha256": "6e4410dd16ef6c2366b08793af0e835c21e55526bf124a2d3581283c32f1a9a2",
+      "bytes": 29704
+    },
+    {
+      "path": "reviews/raw-four-dispositions/MANIFEST.sha256",
+      "sha256": "e3b2a6a0bb112c26c014e1a0b8c31c3a049daccfc0a16c6879dbcca214d9c5de",
+      "bytes": 6306
+    },
+    {
+      "path": "reviews/grouped-none-provenance/review.json",
+      "sha256": "d5e93e0a03d1a5fd7a8e8b08e1ae9a4577917b1c03256d0d5b23607df0909387",
+      "bytes": 54596
+    },
+    {
+      "path": "reviews/grouped-none-provenance/MANIFEST.sha256",
+      "sha256": "27d165716965aeae38fd15f41951f1ee01e7de9a280457a2825a788b06e739c2",
+      "bytes": 765025
+    },
+    {
+      "path": "reviews/grouped-none-math/review.json",
+      "sha256": "b5e0f3d4fff0b43cd8fbc955140e6d62938be02c9cfc8d943206e1effcf5a01a",
+      "bytes": 28959
+    },
+    {
+      "path": "reviews/grouped-none-math/results/manifest.json",
+      "sha256": "8e5c2cb18896f9a89c3edbe0a9fcfa9aac9c0f86b867e0b57d02298980e5cb8a",
+      "bytes": 74358
+    }
+  ],
+  "toml_parse": "PASS",
+  "review_ref_pairing": {
+    "before_unpaired": [
+      "generation-feynkit-community-refresh"
+    ],
+    "after_unpaired": [],
+    "notes_checked": 95,
+    "no_review_date_or_approval_added": true
+  },
+  "registry_changes": "Only generation-feynkit-community-refresh summary/status and review_ref->evidence_revision; all other parsed registry data unchanged.",
+  "title_and_registry_source_linkage": "Unique source, exactly one title matching registry; PASS",
+  "typst_checks": [
+    {
+      "path": "docs/architecture/generation-feynkit-community-refresh.typ",
+      "local_links": 6,
+      "structure": "PASS; bounded source check, no Typst parser/renderer"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/review-aggregation-20261030/receipt.typ",
+      "local_links": 2,
+      "structure": "PASS; bounded source check, no Typst parser/renderer"
+    }
+  ],
+  "scopes": {
+    "count": 118,
+    "ordered_inventory_unchanged": true,
+    "inventory_sha256": "f4dde6dc50f6bf64bde7da46d3c79ad5c36c36adc7565e002b424e5ef933b25c",
+    "all_region_digests_valid": true,
+    "covered_bindings_changed": 0,
+    "algorithm": "Builder start-inclusive/end-exclusive anchors, or whole UTF-8 source if no end anchor; Git blob SHA1 computed in stdlib."
+  },
+  "pre_existing_files": {
+    "paths": 4608,
+    "modified": [
+      "docs/architecture/generation-feynkit-community-refresh.typ",
+      "docs/developers.toml"
+    ],
+    "all_other_4606_paths_unchanged": true,
+    "all_old_evidence_unchanged": true
+  },
+  "base_tree_preserved": "548845549f5f3086e55443d2f1a3c35e5d32811a",
+  "pre_existing_git_refs_unchanged": {
+    "count": 4179,
+    "baseline_sha256": "c75b979a0a53c48dc6db692f8a4571d5c898f572339e1168355fd927b9d2d0b8"
+  },
+  "main_index_before_and_after": {
+    "sha256": "36fca2996228d0adb018933745a106061d3febe8921980864b5cc50dbad4af5d",
+    "size": 284370,
+    "mtime_ns": 1793300285824951442,
+    "inode": 211879321,
+    "mode": "0o100600"
+  },
+  "integration_jj_bookmark": "fdff0d18953348b84a0f1b7e6ab5ef703a5090de",
+  "nix_ci_enable": false,
+  "canonical_note_sha256": "8f16edb8231c8f18c66c67091ec7c0fe91bf439aa8be460649c70ccd429e9f01",
+  "registry_sha256": "15dc386eb2a7d757986d67abea390f8bed462a4549e24d44006df1de93ce53bc",
+  "receipt_sha256": "7eeb075125c0b249e1af3334b3167a6b053020326ec2f4a88775832effc7edb5",
+  "not_claimed": "No independent/self-review verdict, full Typst syntax/render/docs-builder/full-site result, runtime or proof-control rerun, migration or integration approval. Final snapshot/diff/bookmark guards are retained separately in the task audit directory."
+}

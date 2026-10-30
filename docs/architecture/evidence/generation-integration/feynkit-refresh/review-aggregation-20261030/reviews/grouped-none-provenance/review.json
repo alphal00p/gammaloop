@@ -1,0 +1,1068 @@
+{
+  "schema": "review-identical-grouped8eb-provenance/v1",
+  "verdict": "REQUEST_CHANGES",
+  "verdict_summary": "The grouped None observation itself is source-exact, consistently built, correctly gated, internally complete and byte-reproducible (fresh pristine+observer reruns reproduce all six public outputs AND the ledger/FinalFrames/gate byte-for-byte). Changes are requested only for qualification-record accuracy: undisclosed lossy u128->f64 DiagramId in every captured diagram JSON (F1), overstated 'read-only hooks' side-effect claim (F2), and producer-validator coverage overstated for several receipt/record claims (F3), plus minor disclosures (F4-F9). No recapture, rebuild or rerun is required to resolve them.",
+  "scope": {
+    "reviewed": "ONE current8eb grouped-None observational producer/capture: xs_qed_eemm_identical_L2, pool1, Classes::None NamingD internal hooks; narrow extension of shared archive provenance",
+    "not_reviewed_or_approved": [
+      "grouped mathematical certificate",
+      "source-reconciliation approval",
+      "Auto theorem or migration",
+      "tensor transport / 11->9 sewing / D22-D23 transport mathematics",
+      "raw->decoded admission",
+      "spinor native admission or fresh pair math",
+      "combined/WP3 credit",
+      "test pass (Row assertion FAILS on numerators only)"
+    ],
+    "shared_scope_a_dependency": "Shared ScopeA review of c3449988839d9ad3389dd9fd4c4b8bb9ec447055 (dir .local/review-feynkit-refresh-shared-provenance-opus-20261030T193404Z-3c0453ff) was IN PROGRESS (no review.json) when this review ran; all archive/third-party/kernel/compiler/layer bindings below are REUSED WITH ATTRIBUTION and remain PENDING that review."
+  },
+  "reviewer": {
+    "role": "independent Scope A review sub-agent",
+    "review_dir": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-identical-grouped8eb-provenance-opus-20261030T194220Z-caaf7f95",
+    "started_at": "2026-10-30T19:42:20Z",
+    "finished_at": "2026-10-30T20:27:54.965Z"
+  },
+  "guidance_read": [
+    "/shared/lcnbr/dev/gammaloop/AGENTS.md",
+    "/shared/lcnbr/dev/gammaloop/main/AGENTS.md",
+    "/shared/lcnbr/dev/gammaloop/main/CONTRIBUTING.typ",
+    "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/AGENTS.md",
+    "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/CONTRIBUTING.typ"
+  ],
+  "constraints_observed": {
+    "writes": "only this new ignored .local review dir (git check-ignore .gitignore:151 .local/)",
+    "git": "read-only, explicit --git-dir=/shared/lcnbr/dev/gammaloop/main/.git with GIT_OPTIONAL_LOCKS=0 (cat-file, log, merge-base, diff, ls-tree, show, archive to private scratch); no jj command issued",
+    "no": [
+      "Nix",
+      "Cargo",
+      "rustc/compiler/build",
+      "network",
+      "tracked/ref/index/snapshot change",
+      "browser/site/renderer",
+      "upload/CI",
+      "deletion of shared/old evidence"
+    ],
+    "pinned_tools_used": {
+      "node": "/nix/store/lfaydgacdyngci7p60s8wwvgdm74fjkx-nodejs-24.19.0/bin/node",
+      "jq": "system",
+      "python_for_retained_validator_probes_only": "/nix/store/4168xqs4l5jbfc7xyi9zrhdhszx0pnlb-python3-3.13.16/bin/python3.13 (sha256 b50993d6...; -I -S -B, env -i)",
+      "bwrap": "/nix/store/dk9qhjgg469lv6mriys7v4c59igarmvx-bubblewrap-0.11.1/bin/bwrap (sha256 2b321b83...)"
+    },
+    "runtime_invocations": "exactly two retained-ELF invocations (pristine, observer) plus one unlicensed Python-only containment preflight (no ELF, no license)",
+    "license": "read from the established config file only by the driver, written to the exec child's anonymous stdin pipe; never printed, hashed, stored or placed in argv/env/Nix; no leak scan performed (would use the secret outside the runtime child)"
+  },
+  "bound_inputs_verified": {
+    "G/receipt.json": "96253d3441679f8684348230cce8502846d55ef4b0bafe64a43afb37a4245d11",
+    "G/seal.json": "77c9599ba8c4da8d8907315acda9665f547e5fd2c0f20127bea4d4837c484d3c",
+    "G/record.typ": "ddefbce2bb19aff9ed022832879cac41f764eee5fe7bb5ae7dcfee63fc3b1833",
+    "request": "2444bd0f7df5af4ae110de5b4eb1a5e97065419422f05a388e3ea2e55f64053e",
+    "old_base_patch": "7e55ba7b0315acce0d6bfbabba2df0f48494f2a050f510da10807ea99fd8edfc",
+    "current_patch": "5de3e290402b284f0824145a5fcbe8baa6507de4dbf3f062391a22b427bbcf92",
+    "source_manifest": "83e0cffa4173a1da769d431595094d3198380346bdc3df309b652ba407ad5d3a",
+    "archive_qualification": "bd79086b059d9336382adbd8a36dd0279d1ff62d0795756aa6fb11c6b0ff9f3c",
+    "precision_producer_invariance": "0998a48178184e8e52ffe4e059552ec5d87759d7f2b5eb485ca928bc8a6d797f",
+    "compiled_layer_kernel_qualification": "4c72461f749ffff9d042ec4ad890f423098badd858838e4c1d4962e327878e9b",
+    "compiler_json": "122199dc5dc4565cbd7627473d90f4e46101974e177a1c6cc14f655081e07cfa",
+    "observer_ELF": "ce8747a8ebeec34234fcadfca881c50812c1bbac5576844f36e53dcc2c5c9f4f",
+    "pristine_ELF": "f02e219c96f287849f2678445207a1adfd42f9da3ca5fe732212d1e9d2ade2b5",
+    "private_graph_rlib": "15814c0ffcb91eaa4286f1b2bb9f229a4f61227710e37cfdc4fc0c0ddec94eb1",
+    "private_amplitude_rlib": "2f7f9da20879f2778edeb85c79e1725410ef25744dd768f34d32a0c5efcc43ed",
+    "private_generator_rlib": "5f0fb7e82a0cf958f6c01386b3848e577b614b9f0e13f717ae86122d0178870b",
+    "ledger": "2f3f5b2879c0295e473d0d753c39adee46329d31d8d9663eacb5e5ccd3356771",
+    "finalframes": "6f8ee1a327268292bb6a0262c4a61553311f6519d3d98106677cb063d3b1fb1e",
+    "stage_manifest": "297d53ce6fbe4ada20d120b533aee72e02016ac05f3e61d5f676678750b76381",
+    "occurrence_ledger": "24a140324b5c5590f6f762b971b943c86c878dd6211f76f634fba27eaccddc67",
+    "observer_runtime_command": "b16433c57c6c09a2b97fbd181a231ca81151215b97bc31097804ebdf4dbf89f2",
+    "pristine_runtime_command": "a857f5c182c148680f2740cc876bcff5ad4884c0539650e04a19f18ff6a3afd3",
+    "spinor_contract": "fd1f6e21c1d75bc67dcf3cacf9d57388d60405c5535c0b8118b9974ff722d71b",
+    "spinor_capture_join_py": "de0b74a20acf71ad72190546813d01422d2d4da9252d9340bd35c8ac1093d5de",
+    "helper_source_manifest": "46980d764e8161030d85f0e528c3de59362ec9c589f81e01da1fbd9cd6d905a2",
+    "rustc": "6bb1c5b8a8034b62bcb3683f5969bb83a555a24128c2fdfcc9d20ea33bc0e1e5",
+    "seal": "4676/4676 sealed files match (sha256+bytes) at start and end; only seal.json unsealed; 11 symlinks under source/ are unsealed but equal Git 5ba mode-120000 entries",
+    "final_guard": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-identical-grouped8eb-provenance-opus-20261030T194220Z-caaf7f95/guards/final/expected-check.log",
+      "sha256": "37578fbf069efb8154b2be52feb743c5d6e285d35ed5c2cb41250e67475b60c2"
+    }
+  },
+  "objectives": {
+    "1_ported_source": {
+      "status": "PASS (with disclosure finding F2)",
+      "fresh": [
+        "git archive 5ba04864 + current patch reconstructed privately; patch applies with zero offset/fuzz; diff -r --no-dereference vs G/source: identical (4597 paths incl. 11 symlinks); all 4586 source-manifest sha256 match",
+        "current patch 5de3 is a file-order permutation of the old-base patch 7e55: all 9 per-file sections byte-identical (+172/-8 lines; 8 removed lines all re-expressed)",
+        "the 7 modified files are byte-identical between old base fdff0d18 and 5ba (within the three crates only feynkit-graph/src/integrals{,/partial_fraction}.rs differ), so the port is exact, no upstream code is lost and no whole-file transplant occurred; request pristine hashes == git 5ba blobs; request observational hashes == reconstructed files",
+        "5ea..5ba (4 commits, 21 files) touches only feynkit-py, Python tests and docs; none is in the 452-unit generator test closure (297 crate names; feynkit-py/linnet-py absent), corroborating the shared drv-invariance claim at source level",
+        "semantic review of all 9 paths: compare() result bound once with original map_err/?; same if-let; cancellation boolean bound once with original negation; comparison frame_map named once, options() called once with ?; representative overall-factor call bound then returned; harness gains only begin()/event() calls; no production expectation changed (main.rs Row unchanged)",
+        "FinalFrame hook records after the last mutation of the finalized diagram and before return; input hook at finalize() entry"
+      ],
+      "side_effects": "see F2 (gate-file read on every finalize whenever OBS_FINALFRAME_GATE is set, file appends, observer-only expect/unwrap panic paths, potential Symbolica symbol interning via uncook->dimension_payload->Atom::parse (not exercised: 0 cooked symbols, decoded==raw everywhere), serde_json crate dependency)"
+    },
+    "2_build_chain": {
+      "status": "PASS (minor disclosures F4, F5)",
+      "fresh": [
+        "5 compile commands (graph, amplitude, generator attempt-2 exit 1, generator attempt-3, generation_oracle) all used rustc sha256 6bb1c5b8 (= compiler.json path); inputs_before == inputs_after; no license keys in env",
+        "flags: --edition=2024 (workspace edition), opt-level=2, debuginfo=0, debug-assertions=on, overflow-checks=on (= ci-optim->dev-optim->dev for workspace members), linker gcc-wrapper-15.3.0 (= pristine unit rustflags); cfg features equal pristine units (graph default,native,svg; others default,native); -C metadata = sha256(crate_name + 7e55-patch-sha)[:16] reproduces a76dc56b64f52d29/2f32ef1290fc56e8/f4d6b3f6ff39e78c/4a69d7280aae76d2",
+        "externs: private graph/amplitude/generator only; every shared extern is the pristine dependency unit's artifact; only extra extern is serde_json for the generator (F4)",
+        "no old/new mixing: the only shared unit depending on graph/amplitude is the crane dummy anchor gammaloop_ci_test_binary_dependencies (source `pub fn main() {}`); its rlib (619d2491, 5070 B) contains no feynkit_* crate names (positive control: private amplitude rlib names feynkit_graph 51x); observer ELF has exactly ONE v0 crate disambiguator each for feynkit_graph/amplitude/generator/generation_oracle, all distinct from the pristine ELF's; serde_json disambiguator identical to pristine",
+        "source binding of artifacts independent of labels: rustc-embedded MD5 source digests present for 23/23 graph, 3/3 amplitude, 12/12 generator dep-info sources from G/source; private graph rlib contains the patched finalization.rs digest and not the pristine one; the shared pristine graph rlib shows the reverse",
+        "dep-info env-dep: only CARGO_CRATE_NAME (correct per crate) and, for the test, CARGO_MANIFEST_DIR were consumed (F5 harmless)",
+        "unsuffixed fallback used once (linnest for graph); liblinnest.rlib 8082229c equals layer h2xam7y7 member; original graph affa9405, amplitude 9592bd2c, anchor 619d2491 equal layer members; injected serde_json 8782c9ef equals inputs-layer kck3a2p0 member",
+        "observer ELF: same interpreter, NEEDED and 4-entry RUNPATH as pristine (rpath reproduced via -Wl,-rpath)",
+        "failed attempts retained: attempt-1 pre-rustc lookup failure (records/attempt-1.json, empty target/feynkit_graph), attempt-2 generator exit 1 (13 unresolved serde_json errors), validation attempt-1 failure"
+      ],
+      "qualification_labels": "per-build qualification.json code=5ea and dependency source_unit/source_fp describe the archive dependency units (disclosed in receipt); actual 5ba+patch identity proven above by reconstruction, argv paths, manifest and embedded digests, NOT by those labels (probe: relabelled code is accepted by the validator -> reviewer-manual)"
+    },
+    "3_mode_gating": {
+      "status": "PASS",
+      "fresh": [
+        "live-inputs.request.classes present and == \"None\"; naming {named:{prefix:D}}; grouping Identical; Run \"Run { threads: Some(1), parallel: true, ... }\"; missing/null/Auto variants rejected by both validator and reviewer analyzer (probes)",
+        "harness gate source: begin(false) at each mode start, begin(matches!(mode, Classes::None)) immediately before the NamingD build, begin(false) after final-census-ready; NamingNone minimal build runs before activation (thread 0) or after deactivation",
+        "empirical: exactly one live-inputs event; ledger seq 0..279 contiguous from live-inputs to final-census-ready; 90 FinalFrames whose names D00..D29 appear exactly 3x each (raw+comparison+representative) and none null -> neither the unnamed minimal builds nor Auto builds were captured; final gate 'inactive'",
+        "group-entry.classes is JSON null = self.relation.as_ref().map(..) bucket (no class relation), recorded but NOT used as mode proof; per-diagram class vector all 0"
+      ]
+    },
+    "4_stage_data_completeness": {
+      "status": "PASS for counts/joins/maps (fidelity finding F1)",
+      "retained_analysis": {
+        "checks": 113,
+        "passed": 111,
+        "failed": [
+          "FIDELITY: raw diagram json.id is an exact integer (not lossy f64)",
+          "FIDELITY: FinalFrame output.json.id is an exact integer (not lossy f64)"
+        ]
+      },
+      "fresh_analysis": {
+        "checks": 113,
+        "passed": 111,
+        "failed": [
+          "FIDELITY: raw diagram json.id is an exact integer (not lossy f64)",
+          "FIDELITY: FinalFrame output.json.id is an exact integer (not lossy f64)"
+        ]
+      },
+      "facts": {
+        "stage_counts": {
+          "live-inputs": 1,
+          "into-representative": 59,
+          "raw-diagrams": 1,
+          "raw-census": 1,
+          "staged-order": 1,
+          "staged-pair": 30,
+          "staged-pair-final": 30,
+          "group-entry": 1,
+          "prepare-zero": 30,
+          "sample-zero": 30,
+          "comparison-decision": 3,
+          "groups-pre-cancellation": 1,
+          "group-cancellation": 29,
+          "groups-post-cancellation": 1,
+          "collapse-entry": 1,
+          "collapse-plan": 29,
+          "representative-output": 29,
+          "final-diagrams": 1,
+          "final-census": 1,
+          "final-census-ready": 1
+        },
+        "comparison_decisions": [
+          {
+            "candidate_retained": 11,
+            "master_retained": 10,
+            "candidate_source": 1,
+            "master_source": 2,
+            "candidate_name": "D01",
+            "master_name": "D02",
+            "ratio": null
+          },
+          {
+            "candidate_retained": 9,
+            "master_retained": 8,
+            "candidate_source": 3,
+            "master_source": 4,
+            "candidate_name": "D03",
+            "master_name": "D04",
+            "ratio": null
+          },
+          {
+            "candidate_retained": 15,
+            "master_retained": 12,
+            "candidate_source": 23,
+            "master_source": 22,
+            "candidate_name": "D23",
+            "master_name": "D22",
+            "ratio": "1"
+          }
+        ],
+        "buckets": {
+          "count": 27,
+          "multi_member": [
+            [
+              {
+                "retained": 8,
+                "source": 4,
+                "name": "D04"
+              },
+              {
+                "retained": 9,
+                "source": 3,
+                "name": "D03"
+              }
+            ],
+            [
+              {
+                "retained": 10,
+                "source": 2,
+                "name": "D02"
+              },
+              {
+                "retained": 11,
+                "source": 1,
+                "name": "D01"
+              }
+            ],
+            [
+              {
+                "retained": 12,
+                "source": 22,
+                "name": "D22"
+              },
+              {
+                "retained": 15,
+                "source": 23,
+                "name": "D23"
+              }
+            ]
+          ]
+        },
+        "merged_groups": [
+          [
+            {
+              "source": 22,
+              "retained": 12,
+              "name": "D22",
+              "ratio": "1"
+            },
+            {
+              "source": 23,
+              "retained": 15,
+              "name": "D23",
+              "ratio": "1"
+            }
+          ]
+        ],
+        "selected_by_merge_membership": [
+          {
+            "source_index": 22,
+            "raw_position": 22,
+            "sorted_position": 12,
+            "name": "D22",
+            "id": "02957fc4e974ffa2c5b5785e8683a949",
+            "multiplicity": 1,
+            "aut": 1,
+            "group_pair_sha256": "e2498b7762febfdb3ec75ed7d6cf1ea910e59485a2007addc44c736d7657276e"
+          },
+          {
+            "source_index": 23,
+            "raw_position": 23,
+            "sorted_position": 15,
+            "name": "D23",
+            "id": "5b4c349a74178fbed0bf4321725f53a3",
+            "multiplicity": 1,
+            "aut": 1,
+            "group_pair_sha256": "5728ad00fc6aacac49557aa6b9a58fb12c8ebb4b3d6c950bb0ba7df231eb45ed"
+          }
+        ],
+        "group_weights_histogram": {
+          "1": 17,
+          "-1": 11,
+          "-2": 1
+        },
+        "finalframe_units": {
+          "input_vertex_tensors": 540,
+          "input_edge_tensors": 990,
+          "nonunit": [],
+          "nonunit_count": 0
+        },
+        "finalframe_map_stats": {
+          "sewn_collisions": 180,
+          "reversed_true": 180,
+          "canonical_order_present": 90
+        },
+        "finalframe_delta_path_classes": {
+          "edges.*.*.numerator": 630,
+          "numerator": 90,
+          "projector": 90,
+          "vertices.*.numerator": 540,
+          "vertices.*.num_interface": 96,
+          "edges.*.*.num_interface": 72
+        },
+        "collapse_master_comparison_delta_paths": {
+          "overall_factor": 1
+        },
+        "frame_relations": {
+          "pairs": 30,
+          "sides": 60,
+          "vertex_checks": 360,
+          "edge_checks": 660,
+          "flips": 117,
+          "failures": 0,
+          "final_edge_checks": 630,
+          "final_failures": 0
+        },
+        "tensor_stats_decoded_differs_total": 0,
+        "tensor_stats_total": 10908
+      },
+      "observed_vs_proved": {
+        "observed": [
+          "30 source occurrences with exact hex ids/names/full keys/multiplicity/aut",
+          "30 comparison + 30 representative frames x 18 owners (raw, decoded, ordered ports, flags)",
+          "90 FinalFrame provisional->final maps (edges incl. 2 sewn initial-state collisions per record, half-edges, provisional endpoints, reversal, vertex count, canonical internal order)",
+          "unit input/output tensors at finalization",
+          "post-finalization field deltas (numerator/projector/num_interface only)",
+          "3 comparison decisions, 29 cancellation and 29 collapse plans, 29 representative outputs, final census"
+        ],
+        "independently_checked_consistency": [
+          "call-order + name + whole-geometry association of all 90 FinalFrames",
+          "staged FrameMap (raw->comparison/representative) vs FinalFrame inputs: vertex interactions, mapped/swapped endpoints, particle conjugation under flips (0/1020 failures)",
+          "FinalFrame provisional->final maps vs final diagram edges (0/630 failures)",
+          "merge derivation of D22/D23 from decisions and groups"
+        ],
+        "NOT_proved": [
+          "any tensor identity or sewing theorem (FinalFrame tensors are units)",
+          "raw->decoded admission (decoded==raw for every captured tensor: identity decode here)",
+          "D22/D23 transport",
+          "Auto behaviour",
+          "general non-interference of observer side effects beyond this row/pool1 byte-join"
+        ]
+      }
+    },
+    "5_fresh_runtime_reruns": {
+      "status": "PASS",
+      "preflight": {
+        "exit": 0,
+        "host_netns": "net:[4026531833]",
+        "sandbox": {
+          "netns": "net:[4026538804]",
+          "license_env": [],
+          "root": [
+            "dev",
+            "nix",
+            "proc",
+            "tmp"
+          ],
+          "store": [
+            "3sj8msrsym648f35mk3gb3pp385hhk8r-gcc-16.2.0-libgcc",
+            "4168xqs4l5jbfc7xyi9zrhdhszx0pnlb-python3-3.13.16",
+            "7a2cjhcgzyym5zaz6m4fksw47qvm150w-gcc-16.2.0-lib",
+            "pqyiidz5mi73wv5f91d48s9plcqyj5bz-glibc-2.44-57"
+          ],
+          "donor_present": false,
+          "host_workspace_present": false,
+          "home_present": false,
+          "uid": 1001,
+          "pid": 2
+        }
+      },
+      "pristine": {
+        "exit": 101,
+        "seconds": 3.84679263,
+        "inputs_unchanged": true,
+        "closure_after_equal": true,
+        "store_packages": [
+          "/nix/store/3sj8msrsym648f35mk3gb3pp385hhk8r-gcc-16.2.0-libgcc",
+          "/nix/store/4168xqs4l5jbfc7xyi9zrhdhszx0pnlb-python3-3.13.16",
+          "/nix/store/604gsr59rj7dzd0nrhp143rpvf7gyiaz-gcc-15.3.0-lib",
+          "/nix/store/7a2cjhcgzyym5zaz6m4fksw47qvm150w-gcc-16.2.0-lib",
+          "/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84",
+          "/nix/store/pqyiidz5mi73wv5f91d48s9plcqyj5bz-glibc-2.44-57",
+          "/nix/store/wj1f56qky4pmjc7l0r6b6l7whnnw7hp6-python3-3.13.15",
+          "/nix/store/wkiqjb44n5k0fwhmc523dvflspd47q3b-gcc-15.3.0-libgcc"
+        ],
+        "stdout_sha256": "b602b52142bb7c02a73765344f384900b8a66effaa7a7d37e96152f795b98621",
+        "stderr_sha256": "ae9a7909d13dcf40e1d10c4e7cc5919f6a3d7f6eae1dea31ff38ef137fe5df03",
+        "record": {
+          "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-identical-grouped8eb-provenance-opus-20261030T194220Z-caaf7f95/runtime/pristine-record/command.json",
+          "sha256": "b494304caccfa3f7de6d9e4d090d2530fb2cbccade6b12c6a4c0cbff4943e4f7"
+        }
+      },
+      "observer": {
+        "exit": 101,
+        "seconds": 23.145156161,
+        "inputs_unchanged": true,
+        "closure_after_equal": true,
+        "store_packages": [
+          "/nix/store/3sj8msrsym648f35mk3gb3pp385hhk8r-gcc-16.2.0-libgcc",
+          "/nix/store/4168xqs4l5jbfc7xyi9zrhdhszx0pnlb-python3-3.13.16",
+          "/nix/store/604gsr59rj7dzd0nrhp143rpvf7gyiaz-gcc-15.3.0-lib",
+          "/nix/store/7a2cjhcgzyym5zaz6m4fksw47qvm150w-gcc-16.2.0-lib",
+          "/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84",
+          "/nix/store/pqyiidz5mi73wv5f91d48s9plcqyj5bz-glibc-2.44-57",
+          "/nix/store/wj1f56qky4pmjc7l0r6b6l7whnnw7hp6-python3-3.13.15",
+          "/nix/store/wkiqjb44n5k0fwhmc523dvflspd47q3b-gcc-15.3.0-libgcc"
+        ],
+        "stdout_sha256": "b85c00f7ea0fe2a9dfbb51d389caf35bb9962a02dc49e36721f8aafc6266ec9b",
+        "stderr_sha256": "e1a2979d6b2092090e6c7fd64e7d44f1c2994c00daba76c0fd784044716d2786",
+        "record": {
+          "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-identical-grouped8eb-provenance-opus-20261030T194220Z-caaf7f95/runtime/observer-record/command.json",
+          "sha256": "eb16f6b24e1323357b919213150dfb1c6758aca3872de5bffe0c256027e16a91"
+        }
+      },
+      "containment": "bwrap 0.11.1 --unshare-all (distinct netns), empty root, read-only 8-package store closure WITHOUT donor l9l9 output, ELF+retained exec_child.py (28cdc997) read-only at /input placed outside the writable root, only fresh /work and /home/runtime writable, record outside sandbox; RUNPATH: only libgcc_s empty entry (cwd=/input holds only program/exec.py) and absent donor lib dir; dynamic metadata equal before/after",
+      "results": [
+        "both exit 101; 'running 1 test', '0 passed; 1 failed; 0 ignored; 0 measured; 182 filtered out'; Summary left/right differ only in numerators (11965487560827894243 vs 70588155281068377)",
+        "all 6 public outputs byte-identical across fresh pristine, fresh observer, retained pristine and retained observer (incl. oracle-failure-..-2/left.json, PID 2 in both namespaces)",
+        "fresh observer ledger.jsonl, finalframes.jsonl and gate byte-identical to the retained ones; pristine wrote no captures; no state/cache/home/tmp writes",
+        "log order reproduced exactly in this rerun; NOT claimed deterministic in general (Census::of uses its own 8-thread pool; see F7)"
+      ],
+      "row_recomputation": {
+        "from": "public .census text, FNV-1a + exact rationals (independent of harness code)",
+        "recomputed": {
+          "diagrams": 29,
+          "topologies": 157,
+          "assignments": 714,
+          "inverse_symmetry": "29/1",
+          "weights": "4/1",
+          "symmetry_factors": [
+            [
+              1,
+              29
+            ]
+          ],
+          "content": "14332662944654766447",
+          "numerators": "11965487560827894243",
+          "named": "4427813161249353281",
+          "ids": "14779335372597709007"
+        },
+        "expected_row": {
+          "diagrams": 29,
+          "topologies": 157,
+          "assignments": 714,
+          "inverse_symmetry": "29/1",
+          "weights": "4/1",
+          "symmetry_factors": [
+            [
+              1,
+              29
+            ]
+          ],
+          "content": "14332662944654766447",
+          "numerators": "70588155281068377",
+          "named": "4427813161249353281",
+          "ids": "14779335372597709007"
+        },
+        "differs_in": [
+          "numerators"
+        ],
+        "equals_harness_left_summary": "all 10 fields, retained and fresh"
+      }
+    },
+    "6_probes": {
+      "status": "DONE (gaps -> F3)",
+      "method": "private trees (read-only symlinks into G + mutated private copies); retained validate.py copied byte-identically and run with pinned python -I -S -B; reviewer analyzer run on the same tree",
+      "baseline": "validator VALIDATED; validator-written receipt keys equal retained receipt; occurrence-ledger/finalframe-association/stage-manifest byte-identical; finalizer-to-built-deltas content-equal (Python set order differs)",
+      "matrix": [
+        {
+          "probe": "baseline",
+          "make_exit": 0,
+          "validator_exit": 0,
+          "validator_result": "VALIDATED 30 sources 90 FinalFrames 6 byte-exact public outputs",
+          "analyzer_rejects": false,
+          "analyzer_failed_checks": [],
+          "analyzer_exception": null
+        },
+        {
+          "probe": "bucket-missing",
+          "make_exit": 0,
+          "validator_exit": 1,
+          "validator_result": "KeyError: 'classes'",
+          "analyzer_rejects": true,
+          "analyzer_failed_checks": [
+            "group-entry: keys present (classes, source_indices, pairs)",
+            "group-entry: classes bucket is JSON null (Option topology bucket, not mode proof)"
+          ],
+          "analyzer_exception": null
+        },
+        {
+          "probe": "bucket-nonnull",
+          "make_exit": 0,
+          "validator_exit": 1,
+          "validator_result": "RuntimeError: actual bucket separately None",
+          "analyzer_rejects": true,
+          "analyzer_failed_checks": [
+            "group-entry: classes bucket is JSON null (Option topology bucket, not mode proof)"
+          ],
+          "analyzer_exception": null
+        },
+        {
+          "probe": "cancelled-true",
+          "make_exit": 0,
+          "validator_exit": 0,
+          "validator_result": "VALIDATED 30 sources 90 FinalFrames 6 byte-exact public outputs",
+          "analyzer_rejects": true,
+          "analyzer_failed_checks": [
+            "cancellation: one decision per pre group, in order, none cancelled"
+          ],
+          "analyzer_exception": null
+        },
+        {
+          "probe": "drop-collapse-entry-renumber",
+          "make_exit": 0,
+          "validator_exit": 1,
+          "validator_result": "RuntimeError: stage domain",
+          "analyzer_rejects": true,
+          "analyzer_failed_checks": [],
+          "analyzer_exception": "const one = (s) => { const v = get(s); if (v.length !== 1) throw new Error(\"not unique: \" + s); return v[0]; };"
+        },
+        {
+          "probe": "drop-comparison-gap",
+          "make_exit": 0,
+          "validator_exit": 1,
+          "validator_result": "RuntimeError: event sequence",
+          "analyzer_rejects": true,
+          "analyzer_failed_checks": [
+            "ledger: sequence contiguous from 0",
+            "ledger: stage domain and counts equal the receipt claim",
+            "comparisons: decisions exactly reproduce the bucket algorithm over multi-member buckets"
+          ],
+          "analyzer_exception": null
+        },
+        {
+          "probe": "drop-comparison-renumber",
+          "make_exit": 0,
+          "validator_exit": 0,
+          "validator_result": "VALIDATED 30 sources 90 FinalFrames 6 byte-exact public outputs",
+          "analyzer_rejects": true,
+          "analyzer_failed_checks": [
+            "ledger: stage domain and counts equal the receipt claim",
+            "comparisons: decisions exactly reproduce the bucket algorithm over multi-member buckets"
+          ],
+          "analyzer_exception": null
+        },
+        {
+          "probe": "drop-finalframe",
+          "make_exit": 0,
+          "validator_exit": 1,
+          "validator_result": "RuntimeError: all raw and two grouped finalizers",
+          "analyzer_rejects": true,
+          "analyzer_failed_checks": [],
+          "analyzer_exception": "TypeError: Cannot read properties of undefined (reading 'frame')"
+        },
+        {
+          "probe": "finalframe-geometry",
+          "make_exit": 0,
+          "validator_exit": 1,
+          "validator_result": "RuntimeError: only source-owned post-finalization numerator construction differs",
+          "analyzer_rejects": true,
+          "analyzer_failed_checks": [
+            "finalframes[0] only numerator-construction fields differ"
+          ],
+          "analyzer_exception": null
+        },
+        {
+          "probe": "gate-active",
+          "make_exit": 0,
+          "validator_exit": 1,
+          "validator_result": "RuntimeError: gate disabled after NamingD",
+          "analyzer_rejects": true,
+          "analyzer_failed_checks": [
+            "gate: final gate content is 'inactive'"
+          ],
+          "analyzer_exception": null
+        },
+        {
+          "probe": "merge-ratio-null",
+          "make_exit": 0,
+          "validator_exit": 0,
+          "validator_result": "VALIDATED 30 sources 90 FinalFrames 6 byte-exact public outputs",
+          "analyzer_rejects": true,
+          "analyzer_failed_checks": [
+            "comparisons: exactly one merging decision with ratio \"1\"",
+            "groups: exactly one two-member group, matching the merging decision"
+          ],
+          "analyzer_exception": null
+        },
+        {
+          "probe": "mode-auto",
+          "make_exit": 0,
+          "validator_exit": 1,
+          "validator_result": "RuntimeError: actual Classes::None",
+          "analyzer_rejects": true,
+          "analyzer_failed_checks": [
+            "mode: request.classes present (missing != null) and equals \"None\""
+          ],
+          "analyzer_exception": null
+        },
+        {
+          "probe": "mode-missing",
+          "make_exit": 0,
+          "validator_exit": 1,
+          "validator_result": "KeyError: 'classes'",
+          "analyzer_rejects": true,
+          "analyzer_failed_checks": [
+            "mode: request.classes present (missing != null) and equals \"None\""
+          ],
+          "analyzer_exception": null
+        },
+        {
+          "probe": "mode-null",
+          "make_exit": 0,
+          "validator_exit": 1,
+          "validator_result": "RuntimeError: actual Classes::None",
+          "analyzer_rejects": true,
+          "analyzer_failed_checks": [
+            "mode: request.classes present (missing != null) and equals \"None\""
+          ],
+          "analyzer_exception": null
+        },
+        {
+          "probe": "naming-E",
+          "make_exit": 0,
+          "validator_exit": 1,
+          "validator_result": "RuntimeError: actual NamingD",
+          "analyzer_rejects": true,
+          "analyzer_failed_checks": [
+            "mode: options.naming present and is named prefix D"
+          ],
+          "analyzer_exception": null
+        },
+        {
+          "probe": "nonunit-finalframe-input",
+          "make_exit": 0,
+          "validator_exit": 0,
+          "validator_result": "VALIDATED 30 sources 90 FinalFrames 6 byte-exact public outputs",
+          "analyzer_rejects": true,
+          "analyzer_failed_checks": [
+            "finalframes: every INPUT vertex/edge/aggregate tensor is a unit (raw and decoded \"1\")"
+          ],
+          "analyzer_exception": null
+        },
+        {
+          "probe": "prepare-zero-true",
+          "make_exit": 0,
+          "validator_exit": 0,
+          "validator_result": "VALIDATED 30 sources 90 FinalFrames 6 byte-exact public outputs",
+          "analyzer_rejects": true,
+          "analyzer_failed_checks": [
+            "prepare-zero: no zero; complete/simplified tensors present"
+          ],
+          "analyzer_exception": null
+        },
+        {
+          "probe": "pristine-exit0",
+          "make_exit": 0,
+          "validator_exit": 1,
+          "validator_result": "RuntimeError: genuine failure exit",
+          "analyzer_rejects": false,
+          "analyzer_failed_checks": [],
+          "analyzer_exception": null
+        },
+        {
+          "probe": "public-byte",
+          "make_exit": 0,
+          "validator_exit": 1,
+          "validator_result": "RuntimeError: public bytes xs_qed_eemm_identical_L2.census",
+          "analyzer_rejects": true,
+          "analyzer_failed_checks": [
+            "public: identical relative file domains",
+            "public: all files byte-identical"
+          ],
+          "analyzer_exception": null
+        },
+        {
+          "probe": "qualification-code-relabel",
+          "make_exit": 0,
+          "validator_exit": 0,
+          "validator_result": "VALIDATED 30 sources 90 FinalFrames 6 byte-exact public outputs",
+          "analyzer_rejects": false,
+          "analyzer_failed_checks": [],
+          "analyzer_exception": null
+        },
+        {
+          "probe": "qualification-sha-mismatch",
+          "make_exit": 0,
+          "validator_exit": 1,
+          "validator_result": "RuntimeError: ELF/rlib unchanged",
+          "analyzer_rejects": false,
+          "analyzer_failed_checks": [],
+          "analyzer_exception": null
+        },
+        {
+          "probe": "record-flag",
+          "make_exit": 0,
+          "validator_exit": 1,
+          "validator_result": "RuntimeError: absent record/update flags",
+          "analyzer_rejects": false,
+          "analyzer_failed_checks": [],
+          "analyzer_exception": null
+        },
+        {
+          "probe": "run-threads8",
+          "make_exit": 0,
+          "validator_exit": 1,
+          "validator_result": "RuntimeError: actual Run/pool",
+          "analyzer_rejects": true,
+          "analyzer_failed_checks": [
+            "mode: Run delivers threads Some(1)"
+          ],
+          "analyzer_exception": null
+        },
+        {
+          "probe": "source-tamper",
+          "make_exit": 0,
+          "validator_exit": 1,
+          "validator_result": "RuntimeError: source unchanged crates/feynkit-generator/src/identical_observation.rs",
+          "analyzer_rejects": false,
+          "analyzer_failed_checks": [],
+          "analyzer_exception": null
+        },
+        {
+          "probe": "staged-source-swap",
+          "make_exit": 0,
+          "validator_exit": 1,
+          "validator_result": "RuntimeError: staged source join",
+          "analyzer_rejects": true,
+          "analyzer_failed_checks": [
+            "staged: staged-pair-final raw/source index equal staged-pair"
+          ],
+          "analyzer_exception": null
+        },
+        {
+          "probe": "staged-source-swap-SETUP-ERROR-attempt1",
+          "make_exit": 1,
+          "validator_exit": 1,
+          "validator_result": "FileNotFoundError: [Errno 2] No such file or directory: '/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-identical-grouped8eb-provenance-op",
+          "analyzer_rejects": true,
+          "analyzer_failed_checks": [],
+          "analyzer_exception": "Error: ENOENT: no such file or directory, open '/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-identical-grouped8eb-provenance-opus-20261030T194220Z-caaf7f95/probes/staged-source-swap/observer-runtime/captures/ledger.jsonl'"
+        },
+        {
+          "probe": "swap-pair-sides",
+          "make_exit": 0,
+          "validator_exit": 1,
+          "validator_result": "RuntimeError: only source-owned post-finalization numerator construction differs",
+          "analyzer_rejects": true,
+          "analyzer_failed_checks": [
+            "finalframes[30] only numerator-construction fields differ",
+            "finalframes[31] only numerator-construction fields differ"
+          ],
+          "analyzer_exception": null
+        },
+        {
+          "probe": "swap-raw-finalframes",
+          "make_exit": 0,
+          "validator_exit": 1,
+          "validator_result": "RuntimeError: finalizer call order/name association",
+          "analyzer_rejects": true,
+          "analyzer_failed_checks": [],
+          "analyzer_exception": "if (a.length !== b.length) throw new Error(\"unexpected differing list lengths at \" + JSON.stringify(path));"
+        },
+        {
+          "probe": "threads8-env",
+          "make_exit": 0,
+          "validator_exit": 1,
+          "validator_result": "RuntimeError: pool1 delivery",
+          "analyzer_rejects": false,
+          "analyzer_failed_checks": [],
+          "analyzer_exception": null
+        }
+      ],
+      "matrix_file": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-identical-grouped8eb-provenance-opus-20261030T194220Z-caaf7f95/guards/probe-matrix.json",
+        "sha256": "f8dd5ecc0e618c03980331cf97e3af988ad26a02771e5704576fd034ca4f2e6f"
+      },
+      "setup_errors_not_counted": [
+        "staged-source-swap-SETUP-ERROR-attempt1 (reviewer pattern assumed a trailing comma; probe file not created)"
+      ],
+      "guard_classification": {
+        "producer_validator_executable": [
+          "request.classes/naming/Run",
+          "group-entry bucket null + key presence",
+          "event sequence contiguity",
+          "stage domain as a SET",
+          "30 staged pairs and source join",
+          "90 FinalFrames, name/call-order association, allowed delta paths, OUTPUT unit tensors",
+          "public byte parity",
+          "final gate inactive",
+          "exits 101, flags absent, FEYNKIT_ORACLE_THREADS=1, numerator-only Summary",
+          "source manifest",
+          "artifact sha vs qualification.json"
+        ],
+        "reviewer_analyzer_executable_only": [
+          "stage multiplicities",
+          "comparison decisions reproduce the bucket algorithm",
+          "single merge",
+          "no prepared/sample zero",
+          "no cancellation",
+          "pre==post groups and member coverage",
+          "collapse/representative consistency",
+          "INPUT unit tensors",
+          "frame-map structure and relations",
+          "exact-id fidelity",
+          "Row recomputation"
+        ],
+        "reviewer_manual": [
+          "qualification.json code/source_unit/source_fp labels",
+          "side-effect qualification (F2)",
+          "donor-mount containment of the original runtime"
+        ]
+      }
+    },
+    "7_spinor_contract_binding": {
+      "status": "AVAILABLE (availability/source binding only; capture_join.py not executed)",
+      "checks": {
+        "passed": 34,
+        "failed": 0
+      },
+      "adapter": [
+        {
+          "field": "case",
+          "contract_value": "xs_qed_eemm_identical_L2",
+          "source": "live-inputs",
+          "status": "xs_qed_eemm_identical_L2 (case name not a receipt field)"
+        },
+        {
+          "field": "classes",
+          "contract_value": null,
+          "source": "group-entry.classes",
+          "status": "null bucket; NOT mode proof (mode: live-inputs.request.classes=\"None\")"
+        },
+        {
+          "field": "pool",
+          "contract_value": 1,
+          "source": "live-inputs.Run / command env FEYNKIT_ORACLE_THREADS",
+          "status": "not a receipt field"
+        },
+        {
+          "field": "code",
+          "contract_value": "5ea149ffd88ae3afc4072a38c0871c1329be8424",
+          "source": "receipt.dependency_archive_code",
+          "status": "contract requires 5ea149ffd88ae3afc4072a38c0871c1329be8424; receipt.code=5ba04864ca506e259d9eef4a54f65acdd8323fc2 is the ACTUAL source; adapter must not relabel source identity"
+        },
+        {
+          "field": "kernel",
+          "contract_value": "8eb7c3729d6abefc916decc1bdf0c06536f8af80",
+          "source": "receipt.kernel",
+          "status": "match"
+        },
+        {
+          "field": "archive_qualification_sha256",
+          "contract_value": "bd79086b059d9336382adbd8a36dd0279d1ff62d0795756aa6fb11c6b0ff9f3c",
+          "source": "receipt.shared_qualification_bindings",
+          "status": "match"
+        },
+        {
+          "field": "helper_source_manifest_sha256",
+          "contract_value": "46980d764e8161030d85f0e528c3de59362ec9c589f81e01da1fbd9cd6d905a2",
+          "source": "shared ScopeA handoff (not in grouped receipt)",
+          "status": "file matches contract value; binding pending shared ScopeA review"
+        },
+        {
+          "field": "ledger_sha256",
+          "contract_value": "root-supplied actual hash",
+          "source": "receipt.ledger_sha256",
+          "status": "match"
+        },
+        {
+          "field": "observer_ELF_sha256",
+          "contract_value": "root-qualified actual hash",
+          "source": "receipt.observer_ELF_sha256",
+          "status": "present"
+        },
+        {
+          "field": "observer_source_sha256",
+          "contract_value": "root-qualified actual hash",
+          "source": "receipt.source_manifest_sha256 / current_patch_sha256",
+          "status": "no single field; adapter must choose and disclose"
+        },
+        {
+          "field": "runtime_command_sha256",
+          "contract_value": "root-qualified actual hash",
+          "source": "receipt.observer_runtime_command_sha256",
+          "status": "renamed field"
+        },
+        {
+          "field": "record_mode",
+          "contract_value": false,
+          "source": "command env (no RECORD/UPDATE keys)",
+          "status": "not a receipt field"
+        },
+        {
+          "field": "completed",
+          "contract_value": true,
+          "source": "final census report completed=true",
+          "status": "not a receipt field"
+        },
+        {
+          "field": "old_bound_model",
+          "contract_value": "exact model from sealed checker-run-6/matrices.json.bindings[current].model",
+          "source": "external sealed old model",
+          "status": "spinor/primary worker obligation; live model available in live-inputs"
+        }
+      ],
+      "notes": [
+        "fresh sorted positions of sources 22/23 are 12/15, equal to the contract's old_sorted_index",
+        "capture_join.py excludes json id/name/model from graph equality, so F1 does not affect it",
+        "contract code=5ea vs actual source 5ba -> F6"
+      ],
+      "file": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-identical-grouped8eb-provenance-opus-20261030T194220Z-caaf7f95/guards/spinor-availability.json",
+        "sha256": "9d8cb51a5a0e2ccf090bb167a56a32b38b12a9f61c95fd93d2500a17a7cb5afb"
+      }
+    },
+    "8_report_accuracy": {
+      "status": "CHANGES REQUESTED",
+      "see": [
+        "F1",
+        "F2",
+        "F3",
+        "F4",
+        "F7",
+        "F8"
+      ]
+    }
+  },
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "major",
+      "blocking": true,
+      "title": "Lossy u128->f64 DiagramId in every captured diagram JSON, undisclosed",
+      "evidence": "identical_observation::diagram and identical_final_observation::record parse d.to_json() into serde_json::Value, which cannot hold u128: all 416 ledger json.id values (raw-diagrams, staged-pair/-final, group-entry, collapse-entry, into-representative, representative-output, final-diagrams) and all 90 FinalFrame output.json.id are f64 approximations (e.g. D00 exact 240124890194191393657841613544593172197 -> 2.401248901941914e+38). Exact ids survive only as the ledger's separate hex `id` and in the census; FinalFrame records carry no exact id, and id equality in the retained FinalFrame->built deltas is only ~53-bit.",
+      "required_change": "Disclose in record/receipt; add an additive exact-id binding (ledger hex ids; FinalFrame line -> exact hex id via the validated association); state that consumers must never use json.id. No recapture needed."
+    },
+    {
+      "id": "F2",
+      "severity": "major",
+      "blocking": true,
+      "title": "'Only its read-only hooks' overstates observer non-interference",
+      "evidence": "When OBS_* is set: every finalize() in the process (incl. Auto and NamingNone builds) reads the gate env/file; begin() writes the gate file with unwrap; serialization adds expect/unwrap panic paths absent from pristine; uncook(ReversibleEncoding)->dimension_payload->Atom::parse can intern symbols in Symbolica's process-global table (not exercised here: 0 cooked symbols, decoded==raw for all captured tensors); feynkit_generator gains a serde_json dependency. Only the byte-join of this row/pool1 shows no observable effect.",
+      "required_change": "Replace with an explicit side-effect and scope-limited non-interference statement."
+    },
+    {
+      "id": "F3",
+      "severity": "major",
+      "blocking": true,
+      "title": "Producer validator coverage overstated for several record/receipt claims",
+      "evidence": "Retained validate.py VALIDATES private copies with a dropped (renumbered) comparison-decision, prepare-zero zero=true, group-cancellation cancelled=true, merge ratio set to null, a non-unit FinalFrame INPUT tensor, or a relabelled qualification code. It checks the stage domain only as a set and only OUTPUT unit tensors, yet record.typ attributes 'stage coverage' and the phase claim to it. The facts themselves are TRUE (verified by this review's analyzer on retained and fresh captures).",
+      "required_change": "Extend validate.py or cite an executable guard (e.g. this review's analyze-capture.mjs) for these claims; mark code-label binding reviewer-manual."
+    },
+    {
+      "id": "F4",
+      "severity": "minor",
+      "blocking": false,
+      "title": "serde_json extern injected into the private feynkit_generator not disclosed in record/receipt",
+      "evidence": "Not a [dependencies] entry (dev-dependency only); attempt-2 failed with 13 unresolved serde_json errors; compile.py adds the root unit's serde_json. Same qualified artifact as the pristine test's serde_json (layer member 8782c9ef; identical v0 disambiguator in both ELFs).",
+      "required_change": "Disclose."
+    },
+    {
+      "id": "F5",
+      "severity": "minor",
+      "blocking": false,
+      "title": "compile.py hardcodes CARGO_PKG_NAME/DESCRIPTION of feynkit-generator for graph and amplitude builds",
+      "evidence": "dep-info env-dep shows only CARGO_CRATE_NAME (correct) consumed, so no compiled effect.",
+      "required_change": "Note; fix in any future build."
+    },
+    {
+      "id": "F6",
+      "severity": "integration",
+      "blocking": false,
+      "title": "Spinor contract producer-binding adapter mismatch",
+      "evidence": "capture_join.py requires receipt code == 5ea149ff (the dependency archive code); grouped receipt.code is the actual source 5ba04864 with dependency_archive_code 5ea; runtime_command_sha256 renamed, observer_source_sha256/case/pool/record_mode/completed/old_bound_model absent; helper_source_manifest_sha256 (46980d76, file matches) bound only via shared ScopeA (pending).",
+      "required_change": "Adapter (spinor/primary owners) must map dependency_archive_code->contract.code with disclosure and never relabel the actual source identity."
+    },
+    {
+      "id": "F7",
+      "severity": "minor",
+      "blocking": false,
+      "title": "'pool 1' needs qualification",
+      "evidence": "Run::threads(1) governs generation; harness Census::of uses a static 8-thread rayon pool and summary() the global pool. Events come only from the generation path and harness main thread; ledger writes are mutex-serialized with contiguous sequence.",
+      "required_change": "Qualify wording."
+    },
+    {
+      "id": "F8",
+      "severity": "minor",
+      "blocking": false,
+      "title": "Provenance bookkeeping gaps",
+      "evidence": "receipt.json carries 14 keys added after validate.py by an unretained step (all values verified MATCH here); runtime execute() driver invocation not retained (command.json complete); failures_retained uses imprecise paths (records/attempt-1.json, records/build.stderr) and omits the validation-attempt-1 failure; finalizer-to-built-deltas.json order depends on Python set iteration (content-equal on regeneration).",
+      "required_change": "Retain/describe the augmentation step; correct paths."
+    },
+    {
+      "id": "F9",
+      "severity": "minor",
+      "blocking": false,
+      "title": "Original runtime containment imprecision",
+      "evidence": "Original runtimes bind-mounted the donor store output l9l9... (contains only a tarball; its RUNPATH lib dir does not exist) because closure() mounts RUNPATH carriers; /input was also writable via /work/input and command.json sat in the writable root. Fresh reruns without these reproduced byte-identical outputs and captures.",
+      "required_change": "None for this capture; note."
+    }
+  ],
+  "notes": [
+    "N1 decoded == raw for all captured tensors (identity decode, no cooked symbols); raw/decoded admission remains an external obligation.",
+    "N2 FinalFrame input is a selected-field projection of the builder (no model, edge_orientations, half_edge_order or requested-basis flags).",
+    "N3 G/target/generated/bincode/*.rs are bincode_derive/virtue export side-effect files (walk up from CARGO_MANIFEST_DIR to G/target created by attempt-1); harmless and sealed.",
+    "N4 source-manifest.overlay_patch_sha256 is the old-base 7e55 while receipt.current_patch_sha256 is 5de3; per-file sections identical, both reproduce the private tree.",
+    "N5 retained receipt selects D22/D23 by name after a complete 30-source join; this review derives the same pair from merged-group membership.",
+    "N6 compiled-layer-kernel-qualification records ELF_bit_identity=false between archive and layer ELFs (shared ScopeA scope); this review used the archive pristine ELF f02e219c, which matches archive-qualification."
+  ],
+  "fresh_versus_reused": {
+    "fresh_by_this_review": [
+      "seal verification (start/end)",
+      "git archive 5ba + patch reconstruction and tree/manifest equality",
+      "patch section identity old vs current",
+      "fdff/5ea/5ba diffs and closure membership",
+      "build-chain extern/feature/flag/profile/env/dep-info analysis",
+      "rlib metadata crate-name controls",
+      "ELF symbol disambiguators, NEEDED/RUNPATH",
+      "embedded MD5 source digests",
+      "layer member hashes for linnest/graph/amplitude/anchor/serde_json",
+      "independent ledger/FinalFrame/census analysis incl. Row recomputation",
+      "frame-relation checks",
+      "tensor stats",
+      "28 valid probe runs (baseline + 27 mutations) plus 1 retained setup error",
+      "unlicensed preflight",
+      "two fresh licensed runtime reruns",
+      "spinor availability guard",
+      "final hash guards"
+    ],
+    "reused_with_attribution_pending_shared_scope_a": [
+      "archive extraction and pristine ELF identity (archive-qualification bd79086b)",
+      "452-unit closure fingerprints and compiled-target provenance beyond the five layer members spot-checked",
+      "precision-producer-invariance (5ba drv == 5ea drv 5pxm7dg3...)",
+      "compiled-layer-kernel-qualification (4c72461f)",
+      "compiler.json (122199dc)",
+      "helper-source-manifest (46980d76)",
+      "kernel 8eb identity and third-party/kernel units"
+    ],
+    "not_rerun": [
+      "native spinor batch",
+      "old captures",
+      "any build",
+      "any other case or Auto deep capture"
+    ]
+  },
+  "failed_attempts": {
+    "producer": [
+      "compile attempt-1: pre-rustc unsuffixed liblinnest lookup failure (records/attempt-1.json)",
+      "compile attempt-2: feynkit_generator exit 1 (unresolved serde_json)",
+      "validation attempt-1: rejected newly present num_interface fields (records/validation-attempt-1.stderr)"
+    ],
+    "reviewer": [
+      "scripts/build-chain-attempt1-precision-bug.mjs: u64 fingerprint precision loss in Node JSON.parse (script bug, logs/build-chain-attempt1.log)",
+      "guards/analysis-retained-attempt1-wrong-frame-and-collapse-assumptions.json: reviewer assumed FinalFrame edges were a permutation and collapse inputs unchanged; corrected from source",
+      "probes/staged-source-swap-SETUP-ERROR-attempt1 (scripts/make-probe-attempt1-staged-pattern-bug.mjs): mutation pattern mismatch, not counted",
+      "guards/layer-members.sha256 serde_json probe of the wrong layer (empty-stream hash), corrected in-file"
+    ]
+  },
+  "retained_artifacts": {
+    "review_dir": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-identical-grouped8eb-provenance-opus-20261030T194220Z-caaf7f95",
+    "contents": "scripts/ (all reviewer scripts), guards/ (all guard outputs), logs/, probes/ (29 private probe trees: 28 valid + 1 retained setup error, with validator outputs; symlinks point read-only into G), probes/_results/, runtime/ (preflight, pristine/observer inputs, work trees and records), scratch/src-5ba-plus-patch (independent reconstruction) and pristine-5ba-files",
+    "purpose": "hash-bound evidence for this review and its continuation; nothing shared, tracked or old was modified or deleted"
+  },
+  "processes": "no owned process remains (guards/final/owned-processes.txt empty)",
+  "artifact_manifest": {
+    "manifest": "MANIFEST.sha256",
+    "manifest_sha256": "27d165716965aeae38fd15f41951f1ee01e7de9a280457a2825a788b06e739c2",
+    "regular_files": 5061,
+    "symlinks_list": "SYMLINKS.txt",
+    "symlinks_list_sha256": "38f098db90740d0731757c5acb8e52d66d9975c2e84dbb60aeab2d53f47c07c3",
+    "symlinks": 5069,
+    "note": "every regular file in the review dir except review.json, review.json.sha256, MANIFEST.sha256 and SYMLINKS.txt; symlinks are read-only probe links into G/source/target trees; review.json was produced by scripts/write-review.mjs then this artifact_manifest key was appended with jq"
+  }
+}

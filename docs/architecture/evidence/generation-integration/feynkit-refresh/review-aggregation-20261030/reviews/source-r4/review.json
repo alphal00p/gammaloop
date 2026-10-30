@@ -1,0 +1,191 @@
+{
+ "review": "NEW focused round-four SOURCE RECONCILIATION review of the FeynKit community refresh: R3-1 Option A one-file correction f47f2721 plus additive evidence cacd5182, with carried source/history invariants (fresh delegated review; not a continuation of R1/R2/R3)",
+ "reviewer": "claude-opus-5-5 review sub-agent",
+ "date": "2026-10-30",
+ "workspace": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh",
+ "scratch_dir": ".local/review-feynkit-refresh-source-opus-round4-20261030T201146Z-697912d5",
+ "verdict": "APPROVE_SOURCE_RECONCILIATION",
+ "verdict_scope": "SOURCE_RECONCILIATION only. Covers the reconciled source content through code f47f27213a1c55291239c9bc0f334a7ea1cd1cc1: the prior reviewed source (106-commit replay plus the f842/5ba0 repairs, carried by invariance) and the one-file R3-1 correction. Also covers the truthfulness of the additive cacd evidence. EXCLUDES the c3449988 shared metadata (docs/developers.toml note, docs/architecture/generation-feynkit-community-refresh.typ and qualification/*.json), which has its own active ScopeA review; see XS-1. Grants no installed-host, runtime, WebKit, product-rendering, proof, stub-parity, full-site, budget, migration, WP3 or combined approval.",
+ "verdict_summary": "The f47f delta is exactly the root-selected Option A for R3-1, confined to crates/linnet-py/tests/test_svg_browser.py. The final blob f033ceca (sha256 ee700e06) is AST-identical to the worker output; the only token difference is the root-authorized comment correction to '1/64 of a CSS pixel'. After undoing only the Option A edits, the whole-module AST equals c344 (and so 5ba0/2c7d). Every prior R2 fix, guard, formula, locator and tolerance (delta=1e-4 x2, places=2 x2, 1e-6 x4, tall delta=1/64) is unchanged. The independent derivation agrees with the helper's units, axes, expected height, roundoff count (gamma5) and resize reread. Its outer bounds keep normalization from hiding wrong camera scale, outer transforms, CSS zoom, renderer scale, label factors, caps or crops. Fresh actual-engine evidence: the EXACT final test method, run unmodified in pre-existing local Playwright Chromium 153 at DPR 1 (the product-lane regime, 1/64 CSS px snapping), passes on static current-JS fixtures for the R2 best-estimate geometry and for near-maximal-residual geometries (slack up to 0.992). Seven negative controls fail at the intended assertions. In the same runs the old c344 assertions miss by exactly R3's modeled -1.869e-4/-2.173e-4/-1.961e-4, so R3-1 was real and is fixed. Carried invariants all hold. Remaining items are nonblocking calibration/cosmetic notes, one executed pre-existing rare residual (R4-N3), and pending engine/host obligations.",
+ "identities": {
+  "code": "f47f27213a1c55291239c9bc0f334a7ea1cd1cc1 (tree 501fc63d; parent c3449988; bookmark generation-feynkit-refresh-outer-scale-code)",
+  "evidence": "cacd5182704082df929a066548e3501be22c9533 (tree 54884554; parent f47f; bookmark generation-feynkit-refresh-outer-scale-evidence)",
+  "parent_shared_metadata_excluded": "c3449988839d9ad3389dd9fd4c4b8bb9ec447055 (parent 2c7d; bookmark generation-feynkit-refresh-qualified-candidate; separate ScopeA review)",
+  "previous_source": "5ba04864ca506e259d9eef4a54f65acdd8323fc2 / evidence 2c7dbbb0c117e0ac5e8089fc5906fa2515e170ab (unchanged; bookmarks unchanged)",
+  "final_browser_blob": "f033cecad28f6c33cbf66353ff6ff4d89320a374, sha256 ee700e0629fad62358e1f0a778353757a9a305bdbc131f2ae2675b7b74d82c6c (Git object and physical file)",
+  "worker_after": "551bafdfc9331fb6ce629977eda0665d0ff895ff, sha256 4eb29a5a8ce73c8a8833786bba4e6e63f8fdfa91f7002fd22573b5fdaed1802e",
+  "community_kernel": "8eb7c3729d6abefc916decc1bdf0c06536f8af80",
+  "root_Cargo.lock_sha256": "e111296686b2573ac88b9274cac2bf1e10aad07669f8fc6d243ac5b47d985ae0 (at cacd)",
+  "main_index_sha256": "36fca2996228d0adb018933745a106061d3febe8921980864b5cc50dbad4af5d (before and after)"
+ },
+ "inputs_verified": {
+  "R1_review.json": "f5b33bc4ca307d62e7270737295141457ecf1d5f2754d65699eeabc3d3c8f06f (REQUEST_CHANGES record, unchanged; 415 scratch files)",
+  "R2_review.json": "a29edac9e9d9f9138115053dfd7c69f160a55f570e784db2c174499e42d73700 (REQUEST_CHANGES record, unchanged; SHA256SUMS 136/136 OK after review)",
+  "R3_review.json": "41d01ed9f2fda6b85eefc7d5bea0877e18da7a2a29c196e36cec2dd001349953 (REQUEST_CHANGES record, read in full, unchanged; SHA256SUMS 77/77 OK after review)",
+  "evidence_files": {
+   "receipt.json": "796291a7fb0264f12ad27338329f2ade80c9a99eff59683d6d1689cfc16b610d",
+   "integration.patch": "a58299d53f633bff36da8394776d937d8d946b20bde47d7704d70c9d6e5e21f9 (byte-identical to `git diff c344 f47f`; differs from --full-index only in the abbreviated index line)",
+   "producer-invariance.json": "37d79c4bbd8ef67c94cf0c718a771be8189725c13e705963350bfb483b863564",
+   "integration.typ": "aef98fca945d417655ef9edd9d408e71055d92c5d055e89814fb8c17047f7abb",
+   "worker-rationale.typ": "96e04c96e05cc0e94b3bdd90fcb5aaac75d158397d9a9663356e058818fe0f85 (byte-identical to worker rationale.typ, verbatim)",
+   "worker-bindings.json": "4ccb0b6f6889e8d4cefbddee7e178af561ec19b2e7d3b4d12727597d390d69c6 (26 entries; every listed hash matches the packet)",
+   "physical_copies": "all six equal their cacd Git objects"
+  },
+  "worker_packet": "target/refresh-browser-outer-scale-source-fix-20261030-sol61-r4: outer-scale.patch 33c60f14..., handoff.json 43d8a74b..., 26/26 files unchanged during review (sha256 -c); source/ copies equal the f47f renderer blobs and the c344/2c7d test blob",
+  "patch_replay": "GNU patch -F0 on scratch copies of the c344 blob: worker outer-scale.patch -> 4eb29a5a (blob 551bafdf); integration.patch -> ee700e06 (blob f033ceca)"
+ },
+ "integration_binding": {
+  "one_file": "c344->f47f modifies only crates/linnet-py/tests/test_svg_browser.py (bb7a217a -> f033ceca); f47f->cacd adds only the six browser-outer-scale evidence files; 2c7d->cacd has 13 paths with exactly two non-additive ones (c344 developers.toml, f47f test)",
+  "comment_only_departure": "VERIFIED: worker after vs final have equal ASTs and equal non-comment token streams; the sole comment change is '# viewBox and screen matrix; one layout unit is a CSS pixel.' -> '# viewBox and screen matrix; one layout unit is 1/64 of a CSS' + '# pixel.'. The corrected statement is accurate (Blink/WebKit LayoutUnit at DPR 1; an upper bound at higher DPR). Worker hash inequality is intended and correctly not claimed",
+  "ast_delta": "After undoing ONLY the Option A edits (remove the local outer_scale def, two `outer = outer_scale(...)` reads, two `/ outer` divisions, restore labels.append(bounding_box()), and move the side-effect-free scale read back before natural), the final whole-module AST equals c344 (probes/ast_delta_r4.out). Tolerances: delta=1e-4 x2, places=2 x2, 1e-6 x4 unchanged; the R2 tall delta=1/64 is unchanged; the new 1/64, 2**-23 and 2**-24 terms appear only in the helper. Node-0 locator unchanged. Other test methods unchanged",
+  "assertion_sequence": "Per index: outer helper -> normalized camera (delta=1e-4) -> percent -> R2 binary32 containment (1e-6) -> normalized node-0 label dims. Then relational labels (places=2), the preserved R2 tall height, '+', 300px resize, wait for viewBox width 300, outer reread, normalized zoom CTM (1.05*natural, delta=1e-4), '105%', '0', '100%'. The full sequence is retained and was executed (see fresh_execution)"
+ },
+ "option_a_derivation": {
+  "units_axes": "The outer viewBox is '0 0 width graphHeight' in CSS px (width = the svg's getBoundingClientRect width = column), so outer a is close to 1 and dimensionless. Camera screen CTM = outer_a * (naturalScale*scale) and node-0 screen size = outer_a * camera; dividing by outer_a gives viewBox units. a==d and b==c==0 make the division valid on both axes; translations are irrelevant to sizes",
+  "expected_height": "JS graphHeight = H32*naturalScale*min(1, 520/(W32*naturalScale)) = H32*min(naturalScale, 520/W32), the binary32 image of Python expected*height. After the 300px resize the guard W0*natural0 <= 300 keeps fitWidth = 1, so natural0*H0 is correct; the worker's 120x80 fixture violates that guard and was correctly special-cased in its validator only",
+  "outer_bounds": "Under truncation H_L = floor(f32(gH)*k)/k with vbh = f32(gH), so vbh - H_L lies in [0, 1/k) with k=64 at DPR 1. Hence |H_L - expected| <= 1/64 + |f32(gH) - expected|, |vbh - expected| <= representation, meet = min(W/vw, H/vh), and (1-a)*vbh = vbh - H_L <= 1/64 (CSS px). The combined allowance on raw camera values equals R3's Option B propagated term, plus structural checks. Normalization therefore cannot absorb more than one layout unit",
+  "gamma5": "Higham gamma_n bound for products/quotients of n relative roundings. Branches: A-branch H32*Aw/W32 (W's parse rounding cancels; H32 + pt->px conversion = 2, or 3 if the 4/3 constant is float), 450/W32 and fit branches 2, 300/H32 branch 0; then +1 for the viewBox read and +1 for a float screen matrix gives <= 5. Binary64 noise (~1e-15) is far below gamma5 - 5u ~ 25u^2. Observed in Chromium: CSS length = f32(gH) (812.40624 -> 812.40625 snapped), a = H/vh exactly in double, so the matrix term is unused. The view_height check used <= 0.358 of representation in all engine samples",
+  "residual_limits": "Parser: gamma5 is rigorous only for correctly rounded parsing. Chromium parsed correctly in every observed case (24/24 viewBox reads equal f32 of the JS shortest repr; the model reproduces 9/9 worker and 15/15 own values), so digit-accumulation excess is modeled only; WebKit is unknown. Tall: see R4-N3 (executed)"
+ },
+ "fresh_execution": {
+  "E1_T3_tab": "Own incognito tab tab_1p_495b2629-6da6-423a-b7ed-acd2edd67c9b (preview_open reuseExistingTab=false, open=false; about:blank; closed). Chrome/154.0.0.0, DPR 2, 1280x800, 0 resource requests. Engine-fact probe without product JS on 15 outer-SVG cases: H = floor(f32(gH)*128)/128, vh = f32(gH), a = min(1, H/vh) exactly (15/15). Layout uses the full float32 length, not the 6-significant-digit CSSOM serialization. The worker's recorded a/H for its four fractional regimes reproduced bit-exactly",
+  "E2_local_playwright": "Pre-existing local Playwright 1.61.0 (driver 1.61.1, node 24.20.0) + Chromium 153.0.8010.36, offline under unshare -rnm, writes confined to scratch (browser/local-run-environment.json). Runs the EXACT final test method AST-extracted from the f47f blob with original line numbers. Static fixtures mimic renderer output shape: figure > svg, node-0 <a> square of 36.0156, exact interactive.css/js blobs b25102c0/fe7861f2 appended inside the svg as the product does. Transparent logging proxies; LINNET_TEST_BROWSER_ENGINES=chromium",
+  "results": {
+   "pass_runs": "6/6 PASS: set A (R2 best estimate 58.1542x69.3064, 339.3064x69.3064, 58.1542x609.3064, 906.3064x69.3064), set B (near-max 1/64 residual), set C (near-max 1/128 residual), each at DPR 1 and Playwright-emulated DPR 2. Headless Playwright snapped at 1/64 CSS px in both, unlike the headful T3 DPR-2 tab at 1/128. Max helper slack 0.992 (height/unity), view_height <= 0.358, meet 0.000, normalized camera |err| <= 1.8e-7, R2 tall slack <= 0.9925. Outputs '105%'/'100%'. 0 requests, 0 page errors, 0 console messages",
+   "old_assertion_counterfactual": "Same DPR-1 runs, raw (pre-f47f) CTM errors: small -1.869e-4, fit -2.173e-4, zoom -1.961e-4 (fail delta=1e-4), equal to R3's modeled values. The old raw label-ratio check misses places=2 by 0.00642 px at set-A index 2 (R3 predicted 0.0064), and by up to 0.0141 px in sets B/C. Normalized label differences are <= 3.5e-5 px (browser/label_counterfactual.out). R3-1 is confirmed in an actual engine and fixed by normalization",
+   "controls": "7/7 rejected by the exact method: outer transform 1.01 -> line 78 view_width (the JS lays out from the transformed rect); CSS zoom 1.01 -> line 78; tall max-height 300px -> line 87 helper height; renderer authored-width scale 1.01 -> line 87 helper height; camera-only viewBox/1.01 -> line 137 normalized camera; pure pan crop (+60 user units, scale unchanged) -> line 149 containment; node-0 width 1.02 -> line 163 relational label at places=2",
+   "r2_tall_residual_probe": "Set R (tall 48.9831x620.3672, model-selected) fails only at the preserved R2 tall assertion (line 171): 827.140625 vs 827.1562667, excess 1.67e-5 px over 1/64. The new helper's index-2 height check (1/64 + representation) passes. See R4-N3"
+  }
+ },
+ "worker_evidence_assessment": {
+  "integrity": "VERIFIED: fixture.html equals browser-input html; exact interactive.js/css embedded once; CSP default-src 'none'; no src/href; 0 recorded resources. All 9 initial records reproduce from the source pipeline model (bit-exact vbh and snapped H). The four fractional regimes were independently reproduced bit-exactly in my own Chrome 154 tab. Recorded counts 9/3/6 are true. The exact final helper (from f47f, not the worker copy), run on the recorded geometry with expectations recomputed from the HTML attribute strings, passes all 9 initial and 6 transition samples. Observed values were never copied into expectations",
+  "semantics": "Real Chromium, real DOM handlers, but synthetic untrusted KeyboardEvents (the JS does not check isTrusted). Labels measured with getBoundingClientRect, not Playwright bounding_box. Headful DPR 2 snapped at 1/128 CSS px (R4-N1). Those distinctions are now covered by E2",
+  "credit": "Isolated exact-JS/static-SVG Chromium fixture evidence only, as the receipt states. No installed-host, product, WebKit or full-test credit claimed. Simulations labeled separately. Transport failures (truncated input, 64 KB expression limit, trailing whitespace) and prepare-v1/v2 drafts retained in discovery-errors.txt. Supersession of the overbroad 1e-5 either-axis crop prose is additive and accurate"
+ },
+ "prior_findings_disposition": {
+  "R1": "REQUEST_CHANGES record f5b33bc4 unchanged and not approval. F1, F2 RESOLVED (carried; files e7e5f7d2/73fe5f5c unchanged f842..cacd). F3 RESOLVED at source (0d0eeb7e unchanged; runtime pending). F4 RESOLVED at source (a3d59bb6 unchanged; generated-stub parity pending). F5 formulas RESOLVED; their screen-space representation is now RESOLVED via R3-1. N1/N2/N5 RESOLVED. N3 OPEN nonblocking (Typst integration lives in c344/ScopeA). N4 OPEN nonblocking (upstream ci.typ browser inventory). N6 OPEN nonblocking (new-kernel runtime)",
+  "R2": "REQUEST_CHANGES record a29edac9 unchanged and not approval. R2-1 RESOLVED (source), preserved verbatim; its rare residual is now EXECUTED (R4-N3). R2-2 RESOLVED (source), preserved; parser residual not observed in Chromium, WebKit unknown. R2-N1 carried (no scope covers the browser path). R2-N2 resolved. R2-N3 OPEN (stub parity). R2-N4 -> R3-N6 -> c344 (ScopeA). R2-N5 superseded by R3-1",
+  "R3": "REQUEST_CHANGES record 41d01ed9 unchanged and not approval. R3-1 RESOLVED at source by Option A (f47f) and confirmed by fresh actual-engine execution at DPR 1 (E2). R3-N1 fused-token prose persists in the new receipt (cosmetic). R3-N2: new commits carry their own 20:00:51/20:02:34 timestamps; content identity rests on hashes. R3-N3 Gecko 1/60 caveat still applies to the 1/64 allowance. R3-N4 addressed by the worker's additive supersession. R3-N5 execution-path caveat persists (skip is not a pass). R3-N6 c344 is now f47f's parent, still excluded (XS-1)"
+ },
+ "new_findings": [],
+ "non_blocking_notes": [
+  {
+   "id": "R4-N1",
+   "note": "Evidence calibration: the worker's T3 tab ran at DPR 2. Headful Chromium snapped the outer SVG at 1/128 CSS px (every recorded height is a multiple of 1/128 and four are odd multiples), so the worker evidence exercised at most half of the 1/64 allowance (max helper slack 0.463). The rationale does not mention this. E2 now covers the DPR-1 1/64 regime with near-maximal residuals. Future receipts should record DPR and snapping granularity."
+  },
+  {
+   "id": "R4-N2",
+   "note": "Control attribution: in product assertion order the worker's 10x10 camera crop is rejected first by the camera-scale assertion (normalized 20.79 vs 3), not by containment. Its label control used an absolute oracle (36.0156*e) rather than the product's relational check. Both conclusions hold. E2's pure-pan crop isolates containment (line 149), and its label control fails the product relational check (line 163)."
+  },
+  {
+   "id": "R4-N3",
+   "note": "Executed pre-existing residual: the preserved R2 tall assertion (delta=1/64, no representation term) fails in actual Chromium 153 for the rare model-selected tall geometry 48.9831x620.3672 pt, by 1.67e-5 px. The helper's own index-2 height check passes. The Chromium-validated model gives 21/300,000 random tall geometries (0.007%); the R2 best estimate passes with slack 0.146. Root explicitly preserved R2 verbatim, so this is nonblocking. If the installed lane fails there by <= gamma5*height, diagnose representation, not capping. A future authorized change could align that delta with the helper's 1/64 + representation."
+  },
+  {
+   "id": "R4-N4",
+   "note": "Formatting: ruff's default 88 columns would rewrap new line 157 (91 chars, the label dict comprehension). Neither the worker nor this review ran ruff (absent on PATH; disclosed). AST-neutral, and ruff is not CI-enforced."
+  },
+  {
+   "id": "R4-N5",
+   "note": "Prose/Typst: integration.typ says 'all other 4,600 previously tracked files', but c344 has 4,602 tree entries (4,567 regular, 24 executable, 11 symlinks), i.e. 4,601 others, consistent with the receipt's 4601. The substantive claim (only one path changed) is verified. worker-rationale.typ line 89 has an unpaired '*' in '(120*3 > 300)' that Typst would parse as an unclosed strong delimiter if compiled, and lines 68/128 render '_' pairs as emphasis. The file is verbatim by design, and no registered note includes it, so the docs check does not compile it. The receipt keeps the R3-N1 fused-token style."
+  }
+ ],
+ "cross_scope_observations": [
+  {
+   "id": "XS-1",
+   "for": "c3449988 ScopeA review (NOT part of this verdict; c344 is not approved here)",
+   "observation": "c344 adds developer note generation-feynkit-community-refresh with review_ref = 5ba0... but no reviewed_at. alphal00p-docs-builder check_with_catalogs, called from pub fn check(), runs ensure!(note.reviewed_at.is_some() == note.review_ref.is_some(), 'must pair reviewed_at with review_ref') for every note. The documentation check would therefore hard-fail at c344 and at every descendant, including f47f and cacd, until fixed. At 2c7d all 64 review_ref notes are paired; c344 introduces the only unpaired note (carry/review-ref-pairing.out). Static derivation; no build run. The note's review_triggers include the browser test and the feynkit-refresh evidence glob, so its status/review_ref text also needs updating for f47f."
+  }
+ ],
+ "invariance_gates": {
+  "lineage": "PASS: cacd^=f47f, f47f^=c344, c344^=2c7d, 2c7d^=5ba0, 5ba0^=594c",
+  "history": "PASS: 3f0d..fdff 106; 9102..5ea1 106; 9102..2c7d 111; 9102..cacd 114 linear, 0 merges; jj: 0 conflicted or divergent commits in 9102..cacd; 218a still conflicted (preserved attempt)",
+  "preserved_refs": "PASS: all 828 bookmarks unchanged before/after, including generation-feynkit-refresh-{base->fdff, replay->218a, code->c5af, clean-replay->5ea1, candidate->0afe, corrected-code->f842, correction-evidence->594c, precision-code->5ba0, precision-evidence->2c7d, qualified-candidate->c344, outer-scale-code->f47f, outer-scale-evidence->cacd}; generation-integration->fdff; feynkit@origin->9102",
+  "four_repaired_files": "PASS: e7e5f7d2, 73fe5f5c, 0d0eeb7e, a3d59bb6 identical at f842/2c7d/cacd",
+  "protected": "PASS: feynkit-generator c44f7760, feynkit-model 4014101b, feynkit-amplitude 3853fdda, feynkit-py/src/generation 5163d336, test_feyngen.rs 35431963, generation_oracle/main.rs d61a4bee equal fdff. The 1204 historical evidence files and 243 oracle paths carry, because 2c7d->cacd only adds files and modifies developers.toml and the browser test. Literal-migration path entries 258/258 equal fdff (excluding developers.toml)",
+  "kernel_build": "PASS: root Cargo.lock sha256 e1112966...; 3 community#8eb7 entries in each of the three locks (9); lock blobs, uv.lock, hakari, nix/rust-workspace.nix, nix-ci.nix, flake.*, pyproject.toml, Cargo.toml and the workspace-hack manifest equal 2c7d",
+  "registry": "PASS: 118/118 scopes valid at c344, f47f and cacd; ordered keys identical; 0 digest changes c344->f47f->cacd (and 2c7d->c344); no scope covers the browser test or the feynkit-refresh evidence. developers.toml bytes at f47f/cacd equal c344 (af7356a2...)",
+  "nixci_isolation": "PASS: top-level nix-ci.nix `enable = false;` (line 574); 15c8687b, 43bdb859, 218a and c5af are not ancestors of cacd; the delta contains only prose mentions of licenses (no values, budget or envelope content)",
+  "producer_invariance": "READ, not re-evaluated: the record binds f47f, group drv s1qxkc07 and selected archive drv 5pxm7dg3gnz25a30iqzmyvh7kwcrwbsq-...-feynkit-generator-0.1.0.drv (same as recorded at 2c7d), 47 filtered sources and browser_path_absent=true. Store spot-check, read-only: both drvs exist, all 47 sources exist, none contains the browser test, and the fetched source's browser test has sha256 ee700e06. Broader host/browser producers remain unbuilt and unqualified"
+ },
+ "remaining_limits_and_pending": [
+  "WebKit not exercised anywhere (no Playwright WebKit locally; T3 tabs are Chromium). WebKit LayoutUnit/parse/matrix behavior is source-modeled only",
+  "No installed-current-host or product-renderer run. Fixtures emulate the renderer's HTML shape and the R2 best-estimate geometry; product sizes and node-0 geometry are unknown. pinned_drawing/the native renderer were not executed (license/native boundary). Skip is not a pass",
+  "Local Chromium 153 matches the repo runtime lane's kind (pkgs.chromium + python313 playwright), but pin equality was not verified (no Nix eval). T3 Chrome is 154",
+  "Gecko (1/60 px app units) is outside the 1/64 allowance (R3-N3)",
+  "Pending: installed-host Chromium+WebKit test_svg_browser with Playwright; generated-stub parity; feynkit-py nextest/ghost scripts on the 8eb7 host; runtime/proof rebinding; ScopeA review of c344 including XS-1; N3/N4/N6; combined, full-site, budget and WP3 reviews"
+ ],
+ "guards": {
+  "main_index_sha256": "36fca2996228d0adb018933745a106061d3febe8921980864b5cc50dbad4af5d before and after",
+  "git_refs": "4179 before and after; empty diff",
+  "jj_op_head": "80f7fe941c0297ff before and after; every jj call used --ignore-working-copy; this review created no operation",
+  "bookmarks": "828 before and after; empty diff",
+  "pinned": "physical test_svg_browser.py (ee700e06), interactive.js (fe7861f2) and six evidence files equal their Git objects; worker packet 26/26; R2 136/136 and R3 77/77 SHA256SUMS OK"
+ },
+ "method_and_safety": {
+  "tools": "git read-only plumbing with --git-dir=main/.git and GIT_OPTIONAL_LOCKS=0 (hash-object without -w); jj 0.45.1 --ignore-working-copy; python -I -B 3.13.16 (stdlib) for analysis; GNU patch on scratch copies; T3 preview tools on one own incognito tab; pre-existing local Playwright/Chromium offline in a private namespace",
+  "not_performed": "No Nix command, build, compiler, formatter, native/producer/licensed execution, installed host, network, download/install, upload, CI, ref/index/snapshot/tracked edit, or deletion of others' evidence. No license/config/key read. No product module imported. No subordinate reviews or workers. No background process; none left",
+  "process_disclosure": [
+   "Local attempt 1 failed before any page (Chromium FATAL 'Socket path too long' for SingletonSocket under the long scratch TMPDIR). Its record, script and empty profile dir are retained. The fix bind-mounts scratch tmp onto /tmp inside a private mount namespace only",
+   "One needless transient write outside scratch: a command redirected `git show` output to /tmp/.r4-unused and deleted it in the same command; nothing was retained",
+   "First stress-selection run hit an IndexError: no 127/128 residual exists for tall heights because of the 4/3 lattice. Its output is retained in probes/select_stress.out; a second query picked 126/128",
+   "harness.py was amended additively (set R); the original is retained as harness.v1.py",
+   "The first `git check-ignore` call omitted --git-dir and failed harmlessly"
+  ],
+  "scratch_retained": "All inputs, probes, runs, guards and outputs are retained and bound by SHA256SUMS"
+ },
+ "records_sha256": {
+  "files/test_svg_browser.f47f.py": "ee700e0629fad62358e1f0a778353757a9a305bdbc131f2ae2675b7b74d82c6c",
+  "files/test_svg_browser.c344.py": "286caaae70befa262d8300bfb7ac6e53df23fe36df9ec978d51af4d701529d75",
+  "diffs/c344-f47f.default.diff": "a58299d53f633bff36da8394776d937d8d946b20bde47d7704d70c9d6e5e21f9",
+  "diffs/c344-f47f.full-index.diff": "aa40c878b2c2bf255c70357c1d711d1e8c94b74c56743464b8ec311bcc4ee127",
+  "patchapply/worker/test_svg_browser.py": "4eb29a5a8ce73c8a8833786bba4e6e63f8fdfa91f7002fd22573b5fdaed1802e",
+  "patchapply/integration/test_svg_browser.py": "ee700e0629fad62358e1f0a778353757a9a305bdbc131f2ae2675b7b74d82c6c",
+  "probes/ast_tokens.out": "a7eed7c2a6ea6274338b2a4232084070c8f9feba491d29bd599a44836bad5004",
+  "probes/ast_delta_r4.out": "4b622198cc0294d917772eba0dbce2ece23b8887db2bc97326f23218574ab90b",
+  "probes/recorded_check.out": "95e8523b6e48220b411591c0f7d9dc4ee2636a69d4d4b12e7c69c4cb10c1dbff",
+  "probes/pipeline_model_validation.out": "21898b53a75de0fc1301b53cf22804fac21e47e2d370969300f93c3a088d7355",
+  "probes/select_stress.out": "324a5b29e61789d8b3da75028905dfeb74641af0d9c3fa49cbced8f15d19bc1a",
+  "probes/tall_residual_scan.out": "7ecd9b42352224799c04879db353049b1372c22ccdc974b6431b69f33e0ae37a",
+  "probes/tall_residual_random.out": "4f63270c2b479d356bd31b2a81fb94a972ccbd1b35e587d4dbbfc0369bad9e8d",
+  "probes/scopes_r4.out": "56000f93d455bd198b777875d9f58bc905d24355d3918a8f39efaedd51a50814",
+  "probes/typst_lint.out": "55eabca4dd062dbf019d659b6ff462573f6edf530ddcfbdb0a20423001f37889",
+  "browser/t3-lifecycle.json": "690aaa655f862a462f4f86ce6efe24354e9269f072a435ba995a78c4b9278706",
+  "browser/t3-probe1-result.json": "74c16d094c117f33377b76e8a1724ef8b099a7a56b9006f88ac5a24855a69a5a",
+  "browser/t3-probe2-result.json": "42b630f0d3dbe8e66b574d6965d534b58dfd3a3416a22885523dc21c1a5493a6",
+  "browser/t3-probe-analysis.out": "cf24b8f0c122b1633ea46ac2418dfafd6acc59d5f620908ceb2ce6565bee0abc",
+  "browser/local-run-environment.json": "5f69e6cd7867ca7536e5ef16fa9a9943b4b797d016386802a52d2c602997e60b",
+  "browser/matrix.out": "69444e318ba0a397c7e0006a4c721ab184e9da7703731be95c8da8360de65883",
+  "browser/controls.out": "fd9f4ef0603d3848938152510be52ab7cc24388f34c0bce1dec8f070635b884a",
+  "browser/analyze_runs.out": "19017fcfdd7ef15b2540a7527738af8507527b0998baa643b71468659305405d",
+  "browser/label_counterfactual.out": "fa5d05942908893135cd967a59010c30b3d65c17e35f06a84f2993f93b813741",
+  "browser/runs/A-dpr-default.json": "2136a725c5a43e8f9955db744178bcf7ae90a741575137f7e4d2b64d7fbc43d6",
+  "browser/runs/A-dpr1.json": "39036908e8553e42e751912f1ebf1bc991d5e4c6c0ca4c7036dfde1a4e44c5ab",
+  "browser/runs/A-dpr2.json": "7517fd6c133f985cf7b7a1b26187c21226df21ce4ca4d43285f6f007748c0001",
+  "browser/runs/B-dpr1.json": "68023f002202dec68f2d74d365fa6e8c279d52da5c20f402182493de968d9480",
+  "browser/runs/B-dpr2.json": "98628721d134d0894546b2fd570102c522f512da58377037e303348f55e2dc50",
+  "browser/runs/C-dpr1.json": "59952a4de8e794a7884b976a6950607811ea2c39de693c2ebe1f07282632828c",
+  "browser/runs/C-dpr2.json": "79b8aace57c2064b68302c4b4b4fb412eca0f4cf3947cb1b219b3b9ae9e51a15",
+  "browser/runs/R-dpr1-r2-tall-residual.json": "52ecdb10334492726daaee9ef6a27a7edb0fe33884f646eee5d024c286fcae8c",
+  "browser/runs/attempt1-A-dpr-default.socket-path-too-long.json": "a7b05a1357a273a3576224afacf8514b56ad6cc368b749d04981292a1606e101",
+  "browser/runs/control-A-dpr1-camera-scale.json": "d2a78f1d22802c103daf82e05606cca788a13d58014f6454bff0501b65d01eb0",
+  "browser/runs/control-A-dpr1-crop.json": "ba26753c4fd2624f751e94b0ee793db2538a7d521a8aab0f5d14e371c643b162",
+  "browser/runs/control-A-dpr1-css-zoom.json": "48132d5a15103e541ee281783a32e465f897331f14b809c7f1e7d64beeee1017",
+  "browser/runs/control-A-dpr1-label-factor.json": "107e563be5fc7edffea2cbdb5c913e9a695b587a0caf8a320d4c2496a20d50cc",
+  "browser/runs/control-A-dpr1-outer-transform.json": "9487434aaf8ed278e54b922dc752b4646ba482ef6021f5d6dba4e10a5c173763",
+  "browser/runs/control-A-dpr1-renderer-scale.json": "e85466a01a2e1d73bc29d1238b1eb62ca8db8af27e2a7443ce6a617de1663f77",
+  "browser/runs/control-A-dpr1-tall-cap.json": "5d0e56642ca26f344893e83caf6e31cf88e79ad080f03d76ab3e9c2fe1ed0a7f",
+  "carry/carry_r4.out": "e2bbb8efa5869131202c0a41a6def8203c6297fae6309a6fe332569c25d00cad",
+  "carry/litmig.out": "7ff3e2513c714cb9139f08af5ba020684e8d5ca2a7deb83bd491f198f41a7937",
+  "carry/producer-invariance-check.out": "040aa9efa82e83d7c4f7c88e7d2f4aaba01e8cdfc941bddf404eaa7515fb29d1",
+  "carry/review-ref-pairing.out": "450cdfc7bf3122e3419d4b2bf4c308e2e3fd52b914d49575ac8098811d75fa41",
+  "carry/renderer-blobs.txt": "ae860151beeea533af3626783021352561a5aa8089e79ea3db5d8aebc23d77b2",
+  "guard/main-index.before": "6c0e3d127edf882820431ac9afebee5c1131cd3d49afcc3a27881d40b8593b57",
+  "guard/main-index.after": "6c0e3d127edf882820431ac9afebee5c1131cd3d49afcc3a27881d40b8593b57",
+  "guard/git-refs.diff": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "guard/bookmarks.diff": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "guard/jj-op.before": "69478bf23b2c7cefd35ceb2dc2a235a85a41ed41c01f48ca3a315ef106b170f0",
+  "guard/jj-op.after": "2e4c7b73c4ed03b8e3d29a50b50d220bb16733211ea7facf58183a86022a8d95",
+  "inputs/worker-packet.sha256sums": "039ee23b2ce4df2e5dec41274f0c77b5dc809605f9539a846bdb88fd1b328d13"
+ }
+}

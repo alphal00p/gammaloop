@@ -1,0 +1,186 @@
+{
+  "schema": "feynkit-refresh-review-aggregation/1",
+  "status": "UNREVIEWED_METADATA_CANDIDATE_FOR_NEW_INDEPENDENT_REVIEW",
+  "created_date": "2026-10-30",
+  "parent_evidence_revision": "cacd5182704082df929a066548e3501be22c9533",
+  "source_code_revision": "f47f27213a1c55291239c9bc0f334a7ea1cd1cc1",
+  "historical_shared_metadata_revision": "c3449988839d9ad3389dd9fd4c4b8bb9ec447055",
+  "approved_integration_jj_bookmark_unchanged": "generation-integration=fdff0d18953348b84a0f1b7e6ab5ef703a5090de",
+  "author": "Lucien Huber <im@lcnbr.ch>",
+  "approval_boundary": "This implementation aggregates attributed bounded review dispositions. It supplies no independent review, combined approval or integration advancement; no verdict is upgraded by conjunction.",
+  "verbatim_copy_manifest": "reviews/manifest.json",
+  "review_dispositions": [
+    {
+      "id": "source-r4",
+      "verdict": "APPROVE_SOURCE_RECONCILIATION",
+      "review_sha256": "5d9db6c6d385bd25ea9e276a2a1ebd2e95c0678171854e4ccb73a1362130e1af",
+      "actual_scope": "Source reconciliation through f47f27213a1c55291239c9bc0f334a7ea1cd1cc1 plus truthfulness of cacd5182704082df929a066548e3501be22c9533 evidence; c344 metadata expressly excluded.",
+      "limits": "No installed-host/product/WebKit/stub/full-site, mathematics, migration, combined, WP3 or integration approval."
+    },
+    {
+      "id": "shared-scope-a",
+      "verdict": "APPROVE_SHARED_SCOPE_A",
+      "review_sha256": "565caeace0112a30fb9118f94b2bb759e4267d2b802395c314e485b89b4b2b70",
+      "actual_scope": "Twelve-case pool1 provenance/runtime/evidence and shared provenance of both raw certificate lanes.",
+      "limits": "No source reconciliation, mathematics/native-control, Scope B, migration, combined or integration approval; metadata was not rendered."
+    },
+    {
+      "id": "prior-eight",
+      "verdict": "APPROVE_PRIOR_EIGHT_FINITE_APPLICATION",
+      "review_sha256": "5a50135038065414bc667667244378677ff44ac4f632e733b8bbd0bba451cf8b",
+      "actual_scope": "Finite application of three already-approved certificates to eight fresh8eb GroupingNone pool1 rows, Classes None and Auto independently (16 cells), proof source 5ba / built 5ea / helper 5141d8 / kernel 8eb.",
+      "limits": "No new review of original physics, four new rows, new migration/literals, grouped modes, pools8/32, full371, source/shared-scope approval or combined/WP3 approval."
+    },
+    {
+      "id": "raw-four-dispositions",
+      "verdict": "APPROVE_CORRECTED_SCOPE_B_PREPARATIONS",
+      "review_sha256": "6e4410dd16ef6c2366b08793af0e835c21e55526bf124a2d3581283c32f1a9a2",
+      "actual_scope": "Corrected Scope B preparations/reporting only for qed_ee4f_L0, xs_qed_eeee_L1, sm_eeww_L0, xs_qcd_gguu_1pi_L1; None/Auto, GroupingNone, pool1.",
+      "limits": "No Row/literal migration or adoption of explicit-interface/order policy. r4 pure wrappers approved only as bounded license-free validation wrappers for that packet; common.run reuse is blocked and native adapter unexecuted."
+    },
+    {
+      "id": "grouped-none-provenance",
+      "verdict": "REQUEST_CHANGES",
+      "review_sha256": "d5e93e0a03d1a5fd7a8e8b08e1ae9a4577917b1c03256d0d5b23607df0909387",
+      "actual_scope": "No approval: REQUEST_CHANGES remains active for the grouped-None observational qualification record.",
+      "limits": "F1 lossy u128-to-f64 JSON DiagramIds, F2 observer side effects and F3 validator coverage remain pending additive disposition; F4-F9 and N1-N6 remain disclosed."
+    },
+    {
+      "id": "grouped-none-math",
+      "verdict": "APPROVE_CERTIFICATE_SCOPE_B_NONE",
+      "review_sha256": "b5e0f3d4fff0b43cd8fbc955140e6d62938be02c9cfc8d943206e1effcf5a01a",
+      "actual_scope": "Finite capture-premised decoded-numerator Scope B certificate for xs_qed_eemm_identical_L2, Classes None, GroupingIdentical, NamingD, pool1, proof5ba / dependency5ea / kernel8eb.",
+      "limits": "Aggregate certificate requires separate grouped-observation provenance approval and root aggregation. No Auto/Sign/Scalar, migration, historical-to-current grouped equivalence, denominators/full integrand, raw-cook/decoded identity, positional/free-index/locality theorem, source/docs/combined/WP3 approval."
+    }
+  ],
+  "registry_xs1_repair": {
+    "note": "generation-feynkit-community-refresh",
+    "canonical_source": "docs/architecture/generation-feynkit-community-refresh.typ",
+    "title": "FeynKit community refresh and shared qualification",
+    "old": "review_ref=5ba04864ca506e259d9eef4a54f65acdd8323fc2 without reviewed_at; only unpaired note at cacd",
+    "new": "evidence_revision=cacd5182704082df929a066548e3501be22c9533; review_ref and reviewed_at both absent; investigation remains unreviewed metadata candidate",
+    "rule_owner": "crates/alphal00p-docs-builder/src/lib.rs check_with_catalogs: note.reviewed_at.is_some() == note.review_ref.is_some()",
+    "scope_changes": 0,
+    "covered_binding_changes": 0,
+    "historical_note": "Original c344 narrative and all ancestor evidence remain immutable in their original commits; only the current canonical note is updated."
+  },
+  "source_r4_nonblockers": {
+    "attribution": "source-r4 review.json non_blocking_notes; preserved in full in the verbatim copy",
+    "R4-N1": "Worker headful DPR2 used 1/128 CSS-pixel snapping; reviewer exact-method fixture runs additionally exercised DPR1 1/64 near-maximal residuals. Future receipts should record DPR/granularity.",
+    "R4-N2": "Worker crop first failed camera scale and worker label used an absolute oracle; reviewer pure-pan crop and relational-label controls reached product assertions in actual order.",
+    "R4-N3": "ACTUALLY EXECUTED pre-existing Chromium153 rare tall residual: 48.9831x620.3672pt fails preserved R2 tall delta1/64 by 1.67e-5px; helper height check passes. Nonblocking because root explicitly preserved R2. 21/300000 geometries is model-only frequency. No fix/rerun here.",
+    "R4-N4": "Ruff rewrap nit at line157; formatter was not run by worker/reviewer.",
+    "R4-N5": "Historical integration.typ file-count prose off by one; verbatim worker rationale has Typst markup nits and is not imported into the registered note. Historical evidence untouched.",
+    "remaining": "WebKit untested, Gecko1/60 outside allowance, isolated Chromium fixtures do not certify installed host/product geometry, pinned lane browser equality or stub parity; prior nonblockers remain as recorded."
+  },
+  "shared_scope_a_nonblockers": {
+    "attribution": "shared-scope-a review.json observations_non_blocking, copied verbatim",
+    "retained": [
+      "D identical_observation.rs doc comment says only None is observed while both None and Auto are observed (private untracked diagnostic source; no evidence impact).",
+      "runtime-owner common.py/runtime.py carry unused leftovers from the identical lane (CASE, REVS, pristine()); characterize.py uses only execute()/helpers.",
+      "QED r3 join-runtime consumed earlier bytes of external-inputs.json and copied-records.json later regenerated by prepare_inputs.py and not retained; the join command record retains all 69 consumed input hashes, which rehash unchanged. Lane-internal; for the QED ScopeB reviewer.",
+      "Historical producer was built in a shared Cargo target and its graphica came from crates.io 3.0.1; closures 336/341 (dev-optim, no CI anchor) are distinct from the 452-unit CI closure.",
+      "Git-colocated ref generation-integration@git = 863f506c (last jj export 2026-10-29T17:32Z) differs from the jj bookmark fdff0d18; pre-existing and unchanged; the note's 'reference stays at fdff' holds for the jj bookmark.",
+      "External root activity during review: new change nuzquozx/f47f2721 and cacd5182 on top of c344 in this workspace with new bookmarks generation-feynkit-refresh-outer-scale-{code,evidence} (browser test/evidence only) and matching refs/jj/keep entries; no frozen bookmark, commit or bound file changed."
+    ],
+    "status_update": "Historical pending-ScopeA wording in other sealed packets is superseded only for the exact shared provenance/runtime/evidence scope. It does not discharge grouped-provenance REQUEST_CHANGES or approve r4 wrappers."
+  },
+  "prior_eight_reporting": {
+    "status": "F1-F7_REPORTING_CLOSED_ADDITIVELY_WITH_REVIEWER_ATTRIBUTION",
+    "attribution": "Independent Opus review prior-eight, SHA256 5a50135038065414bc667667244378677ff44ac4f632e733b8bbd0bba451cf8b; findings and accounting; no new execution in this aggregation",
+    "dispositions": [
+      {
+        "id": "F1",
+        "status": "REPORTING_CLOSED",
+        "statement": "Historical c78 native leg is carried by exact pair/input invariance: every nonempty stage pair file is JSON-identical to the approved forward/reverse pairs accepted by ELF 1ae86d. Old1a ELF41c680 leg is superseded and not credited; fresh8eb leg uses helper5141d8. No historical rerun."
+      },
+      {
+        "id": "F2",
+        "status": "REPORTING_CLOSED",
+        "statement": "L2 capture.json grouping constant None is a presentation map of asserted live none; built_len is len(C raw built diagrams), equal to the old value. Both are consumed by the L2 run-provenance checks; timing fields are unconsumed."
+      },
+      {
+        "id": "F3",
+        "status": "REPORTING_CLOSED",
+        "statement": "Reviewer verified fresh QED None/Auto dumps byte-equal to each other and old current, source companions equal, census completed with D0. FNV equality follows from input byte identity. Frozen outer validate.mjs still rejects docs/developers.toml; no new outer-validator pass."
+      },
+      {
+        "id": "F4",
+        "status": "REPORTING_CLOSED",
+        "statement": "Reserved additive witness can alone satisfy sign/coefficient/power booleans. Mathematical content is parsed/canonical equality, injective under additive cancellation in Symbolica sum normal form; these are not five independent mathematical checks."
+      },
+      {
+        "id": "F5",
+        "status": "REPORTING_CLOSED",
+        "statement": "Original adapter takes old typed-owner order. Reviewer independently used a C-only fixed tail rotation to reproduce identical bytes; raw-C-order variant also accepts with identical obligation multisets. No positional-consumer theorem."
+      },
+      {
+        "id": "F6",
+        "status": "REPORTING_CLOSED",
+        "statement": "Original packet exposed the whole runtime root writable at /work, including runner-written command/stdout/stderr. Helper wrote results.json and reviewer independently reproduced results; the original containment caveat is retained, not retroactively repaired."
+      },
+      {
+        "id": "F7",
+        "status": "REPORTING_CLOSED",
+        "statement": "Inherited anchor_self_comparisons now counts C-versus-B cross-capture anchors. The label and sealed outputs are unchanged; empty token-tree-equal native anchor stages receive no execution credit."
+      }
+    ],
+    "control_accounting": "428 pure rejections and 115 approved QED controls carry only through complete source/input invariance; 194 historical-only records remain uncredited. Reviewer-owned fresh 8208-pair replay and named held-outs belong to that review, not this implementation. No fresh full-validator mutant-suite claim.",
+    "retained_premises": [
+      "old QED Request/Run were never serialized: equality remains source-constructor qualified exactly as in the original round2 receipt",
+      "producer-observed cook/decoded association, ordered ports, metric/composite flags are capture-bound, not theorems",
+      "L2 prepared/built report texts and millis timings are not consumed (report texts nonetheless equal fresh live report)",
+      "native license validity in restricted mode is not established by exit status",
+      "symbol registration identity is not certified natively; carried by Python definition tables and the QED JS closed head inventory"
+    ]
+  },
+  "raw_four_pending": {
+    "wrapper_errata_owner_path": "../generation-oracle-numerator-families/target/raw-four-wrapper-errata-20261030-r5",
+    "status": "IN_PROGRESS_NOT_REVIEWED_OR_APPROVED_HERE",
+    "retained_findings": [
+      "R1 common.run exclusive-write failure",
+      "R2 historical license-piped Python exposure (14 records)",
+      "R3 pure/native separation only in r4 copies; native adapter unexecuted",
+      "R4 initial gauge draft inverted permutation convention",
+      "R5 exact patched-finish r4/r3 source combination",
+      "R6 minor provenance nits",
+      "R7 gauge generation unrecorded",
+      "R8 historical ScopeA-pending wording"
+    ],
+    "interface_gates": "QED four explicit current interfaces per cell; QCD32 explicit/permuted interfaces per payload/mode; SM0 explicit both routes. Capture-bound, uncertified representation policy; separate migration acceptance required."
+  },
+  "grouped_none_pending": {
+    "provenance_disposition_path": ".local/feynkit-refresh/grouped-none-provenance-disposition-20261030-r2",
+    "provenance_status": "IN_PROGRESS_REQUEST_CHANGES_REMAINS_NO_APPROVAL",
+    "blocking_findings": [
+      "F1 exact ids must use ledger hex/census plus additive FinalFrame association, never lossy json.id",
+      "F2 disclose gate I/O, panic paths, possible symbol interning and diagnostic serde_json dependency; only bounded byte-join establishes non-interference",
+      "F3 distinguish producer-validator executable checks, reviewer analyzer checks and manual source-label binding"
+    ],
+    "other_findings": "Provenance F4-F9/N1-N6 and math S1-S7 remain in full copied records; none is silently discharged.",
+    "math_scope": "Decoded-numerator capture-premised None only; raw11-to-final9 sewing, D22/D23 exact relation and observed30-to29 partition with total weight4. Captured request/options/maps/interfaces/decoding remain premises; sampled non-merges are not certified non-relations or maximality.",
+    "math_options": {
+      "check_canonical_numerator": false,
+      "number_of_numerical_samples": 5,
+      "seed": 3,
+      "differentiate_particle_masses_only": true,
+      "fully_numerical_substitution": false,
+      "symmetric_polarizations": false
+    },
+    "durability_gate": "Hash-bound unsnapshotted helper sources in numerator-families remain retained but not under a durable named reference (math S4); preserve durably before integration/migration. They are not vendored by this receipt.",
+    "aggregate_gate": "Grouped-observation provenance approval plus root aggregation are still required. Auto and migration remain unproved/unapproved; historical FinalFrames are qualified consistency evidence, not migration basis."
+  },
+  "retention": "Six reviews plus listed original manifests/sidecar are verbatim durable copies. All referenced original evidence, scratch, captures, failed attempts, helper sources, binary inputs/results and symlink targets remain in place and are NOT all vendored. Copied original manifest paths retain their original context. No historical file or old review is rewritten or deleted.",
+  "implementation_validation": "validation.json; pure safe-environment pinned Python3.14.7 -B, stdlib only, plus local read-only Git plumbing with explicit main/.git and GIT_OPTIONAL_LOCKS=0 and jj metadata operations. Structural Typst checks only; no builder/renderer or full docs pass.",
+  "remaining_gates": [
+    "NEW independent metadata review of this receipt/note/registry change",
+    "Grouped provenance corrective packet review and root aggregation before any aggregate None certificate",
+    "Raw-four wrapper errata review before runner reuse; native adapter remains unexecuted",
+    "Durable preservation of referenced unsnapshotted grouped certificate helper sources before integration/migration",
+    "Separate representation/migration approvals; no expectation/literal updates authorized by these reviews",
+    "Auto grouped theorem, other rows, pools8/32 and broader371 lane remain unapproved here",
+    "Installed host, generated-stub parity, product Chromium/WebKit/widget, canonical Typst/full-site and broader kernel/runtime qualification",
+    "Combined FeynKit/WP3/M-rebuild/performance/budget/integration gates"
+  ],
+  "not_performed": "No build, Nix, licensed/native helper execution, capture, network, push, PR, delegation, self-review, integration advancement or historical cleanup. NixCI remains false."
+}

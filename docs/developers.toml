@@ -2196,14 +2196,14 @@ summary = "Dated measurements and diagnostic records. Treat their results as exp
 [[section.note]]
 id = "generation-feynkit-community-refresh"
 title = "FeynKit community refresh and shared qualification"
-summary = "Non-destructive upstream reconciliation, explicit source-review corrections and one source-bound community-kernel producer qualification."
+summary = "Non-destructive source reconciliation and separately bounded provenance, finite-application and certificate reviews; aggregation remains unreviewed."
 source = "docs/architecture/generation-feynkit-community-refresh.typ"
 kind = "Integration investigation"
-status = "Source and bounded shared qualification candidate; independent combined review pending"
+status = "Bounded reviews recorded; metadata candidate and independent combined review pending"
 lifecycle = "investigation"
 owner = "unassigned"
 captured_at = "2026-10-30"
-review_ref = "5ba04864ca506e259d9eef4a54f65acdd8323fc2"
+evidence_revision = "cacd5182704082df929a066548e3501be22c9533"
 products = ["gammaloop", "feynkit", "linnet", "spenso"]
 topics = ["generation", "integration", "community", "validation"]
 review_triggers = ["Cargo.lock", "crates/feynkit-py/src/sector_decomposition.rs", "crates/feynkit-py/tests/installed_ufo_ghost_crossing.py", "crates/feynkit-py/tests/installed_feyncalc_qcd_ghost_vertex.py", "crates/feynkit-py/tests/installed_squared_amplitude_display.py", "crates/linnet-py/tests/test_svg_browser.py", "nix/rust-workspace.nix", "docs/architecture/evidence/generation-integration/feynkit-refresh/**"]

@@ -1,0 +1,265 @@
+{
+ "schema": "review-raw-four-dispositions/1",
+ "reviewer": "NEW independent focused follow-up review (Opus 5.5); no delegation, no subordinate review",
+ "created_utc": "2026-10-30T20:50:50.168881+00:00",
+ "review_directory": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-raw-four-dispositions-opus-20261030T202304Z-196212",
+ "verdict": "APPROVE_CORRECTED_SCOPE_B_PREPARATIONS",
+ "verdict_per_lane": {
+  "gauge (r4 report 1371ad05 / active 700af2b3 / seal e11f8511)": {
+   "sm_eeww_L0 (None, Auto; pool1; Grouping None)": "APPROVE corrected Scope B preparation: disclosure now matches data (3-symbol respelling only, 0 explicit interfaces both routes).",
+   "xs_qcd_gguu_1pi_L1 (None, Auto; pool1; Grouping None)": "APPROVE corrected Scope B preparation (disclosure). Prior blocking F1 closed. The interface representation change (32 explicit, permuted num_interface arrays per payload/mode) remains capture-pinned and UNCERTIFIED; any Row/literal migration still needs separate review and explicit acceptance.",
+   "prior_status": "Prior gauge review 1591408c was REQUEST_CHANGES with mathematics passed and report-only blockers; this review closes those report blockers only."
+  },
+  "qed (r4 report-final 5849899d / FINAL-SEAL f67f9e26)": {
+   "qed_ee4f_L0 (None, Auto; pool1; Grouping None)": "APPROVE corrected Scope B preparation (F1-F6 dispositions accurate).",
+   "xs_qed_eeee_L1 (None, Auto; pool1; Grouping None)": "APPROVE corrected Scope B preparation (F1-F6 dispositions accurate).",
+   "prior_status": "Prior QED review b5f46f1b APPROVE_SCOPE_B (bounded preparation only) is retained unchanged; this review approves the corrected reporting and the r4 pure-wrapper safeguards ONLY as license-free validation wrappers for this packet (see wrapper_assessment limits)."
+  }
+ },
+ "not_approved": [
+  "Any literal/expectation change or Row migration (all four rows).",
+  "Adoption of any interface explicitness/order policy (QCD 32 interfaces; QED 4 per cell).",
+  "r4 wrappers as a general future runner: common.run is broken by the r4 exclusive-write patch (finding R1) and the native adapter is unexecuted.",
+  "Native execution path, other rows/pools/grouped modes, FeynKit/WP3/CI/docs/full-site, combined or integration approval.",
+  "Broader-source credit (5ba frozen proof source only; f47f2721 R4 source activity is a separate gate)."
+ ],
+ "bound_inputs_verified_at_start_and_end": {
+  "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-feynkit-refresh-shared-provenance-opus-20261030T193404Z-3c0453ff/review.json": "565caeace0112a30fb9118f94b2bb759e4267d2b802395c314e485b89b4b2b70",
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-small-qed-fresh8eb-math-opus-20261030T192901Z-3624403/review.json": "b5f46f1b682a5f5ed8191bcc591003d4d553173e105c26b88094ae7ba7660433",
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-small-gauge-fresh8eb-math-opus-20261030T192536Z-3568994/review.json": "1591408caad7566439fcd54a1c76398691473bb4e41c59ddd3cb85a5e1337823",
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/small-gauge-raw-review-disposition-20261030-sol-r4/report.json": "1371ad05510d2c934ee69218ae082bee59d09dc09c3c9e87fc67452e88926975",
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/small-gauge-raw-review-disposition-20261030-sol-r4/active.json": "700af2b347d0607a1328769255046169c0e64cd7a83a8cfc3cda48264bf33ff4",
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/small-gauge-raw-review-disposition-20261030-sol-r4/seal.json": "e11f851106ad0c67218c925235ee50d534188d5b06cd77a253af6d0b2cb59bcb",
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/small-gauge-raw-fresh8eb-join-20261030-sol-r3/report.json": "5ac05cf4f26453e2297b6562d4c0dd7cf7efffa51b2b70dc02e8309849c4133f",
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/small-gauge-raw-fresh8eb-join-20261030-sol-r3/seal.json": "efd989a6fe808f0926f194168610e526271b1dc38baa9691e3367efd28f0b4e3",
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/small-qed-raw-review-disposition-20261030-sol-r4/report-final.json": "5849899d80689fbe4bf5ed472a7efbf6250f222250973c1f9e76a57b0cbb67e1",
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/small-qed-raw-review-disposition-20261030-sol-r4/FINAL-SEAL.json": "f67f9e265f261e5b468e1796ea8b06c5b17f28712a76536e3821e979630720cb",
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/small-qed-raw-review-disposition-20261030-sol-r4/patches/runtime.py.patch": "687f423cdef1232a8e41f5ea696aaebf7586cd25e4a7146af2d231b0eb6f401a",
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/small-qed-raw-review-disposition-20261030-sol-r4/patches/common.py.patch": "4217a0a54318cb5cf027d044da3922f065c264e2efad5430c04f6334ee71716c",
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/small-qed-raw-review-disposition-20261030-sol-r4/patches/finish_check.py.patch": "cd754cbbfe75231516956e70c12ec149ae538d5e129ab73efc2d36e320261d84",
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/small-qed-raw-review-disposition-20261030-sol-r4/runtime.py": "f238d7a350d366bb32061ce8878e6866272d4ee83b96dfae89af1eedb0de2b3c",
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/small-qed-raw-review-disposition-20261030-sol-r4/common.py": "be7073b519c07f539f8061128e44c19aadedce33e0ad5be10cd3a5f3c6eea7e1",
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/small-qed-raw-review-disposition-20261030-sol-r4/finish_check.py": "e0cb49047dfab7bb12f588d3e90c8f6cef1b0635b16823b3291f9de6b556009f",
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/small-qed-raw-fresh8eb-join-20261030-sol-r3/report.json": "774efc6fc03f8bc394569c1a22ea6ce102f519dd0e85ce1d81ffd05dd11e64f7",
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/small-qed-raw-fresh8eb-join-20261030-sol-r3/seal.json": "9b7bd41109a617a6cd25a02d4dced6ef84cdaedc2d0a1f4125a8358c09df45bd",
+  "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/archive-qualification.json": "bd79086b059d9336382adbd8a36dd0279d1ff62d0795756aa6fb11c6b0ff9f3c",
+  "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/helper-build/oracle_family_exact/oracle_family_exact-350edf2766083f3f": "5141d8fddacf40a81f5452e212cd788daa15c3cb3e6d2290fbfc6b65f76c48e1",
+  "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/helper-build/oracle_family_exact/qualification.json": "8e817df3d4c78f44607635899f7170828cf56c457187df0e50dc42fd42a04d68",
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-eemm-identical/native-build/historical/qualification.json": "9f29586abcbe1cefe0d364c671b0280a5571d2b260db7387db185796fc254ed2",
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-eemm-identical/bin/historical/oracle_identical_exact": "d5f41949153560d3ff9eda7367ff26fc6dadfcaabf846b6dcf17c25cdfd6b996",
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/small-gauge-raw-fresh8eb-join-20261030-sol-r3/prepared/xs_qcd_gguu_1pi_L1/None/baseline/ports.json": "3e0f4ff11aa35d2046e054f4ea2d39cb202d38fdf97787378f3f5222bf1d769b",
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/small-gauge-raw-fresh8eb-join-20261030-sol-r3/source/crates/feynkit-generator/tests/generation_oracle/classes.rs": "b1216a37c970ca2a56b56754dfbe79826b13bb17a3f2c1ef8c4e77c50f4729f9",
+  "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime-owner/runtime.py": "56c53ab8ace027a1338c28b5276aaf9d898727500cf2977868a483deba66509f"
+ },
+ "carried_by_verified_invariance": {
+  "gauge": "Mathematics verified by prior review 1591408c is carried unchanged: r1/r2/r3 gauge sealed packets re-verified (1534/1278/790 files, 0 mismatch, only root seal/manifest unsealed); all 15 r4 guard inputs (incl. reviewer row-attribution 6c14df71, structural 912539f8, QCD ports 3e0f4ff1, classes.rs b1216a37) unchanged; r4 disclose.py is report-only (hash asserts on reviewer outputs; no proof/native/producer call); gauge r4 report.json/report.typ patches reproduce old->new exactly.",
+  "qed": "Mathematics verified by prior review b5f46f1b is carried unchanged: r1/r2/r3 QED manifests re-verified (370/104/154 files; byte totals equal seals; r3 nested r2 seal/manifest copies equal r2 originals); initial-input-bindings (7) and guards/preparation-inputs-v1 (87) unchanged; r4 license-free replays reproduce r3 join (4 outputs) and finish (2 outputs) plus stdout/stderr byte-for-byte; zero native executions.",
+  "not_recomputed": "No Row digest, decomposition, local/aggregate expression, native or producer recomputation. \"Neither alone / both together\" attributions are carried by hash-bound reviewer evidence (gauge row-attribution.json 6c14df71; QED probes-heldout-digest.json 6d70060e, byte-identical to r4 decomposition_by_cell)."
+ },
+ "gauge_dispositions": {
+  "F1": {
+   "status": "CLOSED",
+   "fresh_checks": "Structural only (probes/gauge-interfaces.json, gauge-spellings.json): SM differing spellings exactly gammalooprs::Q/edge/vertex (one display tag each, one spelling per route), 0 explicit interfaces historical/current; QCD differing spellings Q/edge, 32 explicit interfaces per payload/mode = 16 edges at positions 2-5 of each diagram (particle 3, mass UFO::MU: quark) + 16 vertices (4 per diagram); permutations edge (3,2,0,1) x16, vertex (5,4,0,1,2,3) x16; convention historical_ports[i]==current_ports[permutation[i]] holds for all; explicit interfaces equal ports.json current exactly on the non-trivial set; None and Auto identical.",
+   "reused": "map-only/interfaces-only/combined attribution from reviewer row-attribution.json (hash-bound).",
+   "limit_retained": "Explicitness/order capture-pinned and NOT certified; migration gate stated."
+  },
+  "F2": {
+   "status": "CLOSED",
+   "evidence": "definition_identity_obligation matches reviewer H1/Q1-Q6; 28/28 reversed-order hardening attributed to the reviewer, not rerun, not author evidence."
+  },
+  "F3": {
+   "status": "CLOSED",
+   "fresh_checks": "Source at 5ea (git, read-only): main.rs check() asserts Summary of classes::check(case), whose return is the Classes::None particle reference; Auto is only assert_class_equivalent. Ledgers (probes/ledger-mode-diff.json): live None/Auto differ only at /mode and /request/classes; raw diagrams and raw census only at /mode; payload bytes identical None/Auto for current and historical."
+  },
+  "F4": {
+   "status": "CLOSED (attribution)",
+   "evidence": "Synthetic ingress vs reviewer native empty run (P7) attributed to reviewer; no author runtime credit claimed."
+  },
+  "F5": {
+   "status": "CLOSED (attribution)",
+   "fresh_checks": "Retained classes.rs b1216a37 != git 5ea f605e443; main.rs/census.rs/cases.rs equal 5ea; generation_oracle tree identical at 5ea and 5ba."
+  },
+  "F6": {
+   "status": "CLOSED (attribution)",
+   "fresh_checks": "common.py CASE (xs_qed_eemm_identical_L2) and approved-family-parser CASES/ROOTS/ELFS name other families; ROOTS/ELFS/CASES are used only in parser validate/run_exact/main, none called by proof.py (uses cyclic/definitions/owners/permutation/Reject/render); join_domains V.CASES is proof.CASES = the two gauge cases."
+  },
+  "F7": {
+   "status": "CLOSED (attribution)",
+   "evidence": "Stricter charge-flow check labelled reviewer-only evidence; no author theorem."
+  }
+ },
+ "qed_dispositions": {
+  "F1": {
+   "status": "CLOSED",
+   "fresh_checks": "Structural only (probes/qed-interfaces.json): every cell 0 historical -> 4 current explicit vertex interfaces, exactly the 4 non-trivial [1,0,2] owners in r3 ports.json; explicit interfaces equal ports current; report owners_by_actual_cell equals observed (ids, names incl. Auto D5/D3 renaming, owners, permutations) for all 4 cells.",
+   "reused": "decomposition_by_cell is byte-identical to reviewer probes-heldout-digest.json for all 4 cells; unchanged literals 0x7f2a34ae141a6f7c=9163194314104926076 and 0x8eb2c3186607a1a2=10282495408798671266 match r3 expected_unchanged numerators.",
+   "limit_retained": "Interface explicitness/order capture-bound; migration must accept the representation change."
+  },
+  "F2": {
+   "status": "CLOSED",
+   "evidence": "Native tag-subset limitation and load-bearing Python precondition stated; reviewer H-N4/H-N16/H-N17 attributed."
+  },
+  "F3": {
+   "status": "CLOSED",
+   "fresh_checks": "r3 fresh-controls.json: 48 = 12 kinds x 4 cells; the only value mutations are aggregate-coefficient and local/aggregate-coefficient (no full-path sign/power). Reviewer held-out labels match declared/fullpath-expected.json: F01/F03 sign, F02 power, F20 prefactor, F14 distribution (amplitude only), F04-F06 schema; F19 mirrored mass and F21 mirrored projector accepted by analyzer. Labelled reviewer evidence, 0 reruns, not author reruns."
+  },
+  "F4": {
+   "status": "CLOSED for the r4 pure path, with limitations R2/R3",
+   "fresh_checks": "Code: runtime._execute pure path builds an explicit allowlisted env (no os.environ/config read), rejects both license names in extra, stdin DEVNULL, exec_pure.py asserts both names absent and empty stdin; execute = execute_pure requires pinned Python; native only via native_runtime.execute_native with explicit non-empty bytes (rejects Python); no license/config lookup anywhere in active r4 code (only the retained original-sources/runtime.py snapshot). Records (probes/pure-run-audit.json): 4 sandboxed pure runs with env keys GL_TEST_LOG_DIR/HOME/LANG/LC_ALL/PATH/PYTHONDONTWRITEBYTECODE/TMPDIR/USER/XDG_CACHE_HOME only, runner exec_pure.py, program pinned Python, only /work and /home/runtime writable, no home/config mounts, all /data sources regular files under the gammaloop tree, --unshare-all, exit 0, inputs unchanged; join/finish outputs+streams byte-equal r3; patched-finish differs only in the two full11->full10 claim strings. 5 host preparation commands ran with explicit 6-key env (HOME=/nonexistent), exit 0, inputs unchanged."
+  },
+  "F5": {
+   "status": "CLOSED",
+   "fresh_checks": "Row struct has 10 fields at 5ea; new active narrative (report-final.json/.typ) and patched finish use ten; the only full11 string in report-final is the supersession sentence; validation/finish/full-row-assertion-binding.json reproduces full11 by design as the byte-equal frozen replay."
+  },
+  "F6": {
+   "status": "CLOSED",
+   "fresh_checks": "Historical gaps disclosed, not reconstructed (r3 nested r2 seal/manifest unlisted but equal to originals). Reviewer metadata probe (probes/binding-probe.json) on copied native_binding.py/common.py: 8/8 actual records accept; 24/24 mutants reject at the exact intended C.require predicate (author 8: wrong/missing hash, wrong/missing program mount; reviewer 16: kernel-label swap, duplicate mount, after-hash differs, nonzero exit, other input changed, binding relabel, qualification hash wrong, unsupported kernel) with no unchecked exception. Write-once (probes/writeonce-probe.json): journal.write_once and common.write refuse overwrite and symlink plant, bytes preserved; sealed write-once-control.json still {\"first\": true}. Command records: unique dirs, exclusive start/result; recorded_run v1 (dfe4a583) for prepare/validation/disposition and v2 (45d77416) for future-record-demo/seal-packet, both retained; all 17 source-versions verify."
+  }
+ },
+ "wrapper_assessment": {
+  "patch_identity": "runtime.py.patch 687f423c, common.py.patch 4217a0a5, finish_check.py.patch cd754cbb apply to original-sources (== untouched r3 originals a8c5c25c/3d3bae56/0b021750) to give r4 f238d7a3/be7073b5/e0cb4904 exactly; added-file patches and recorded_run v1->v2 patch reproduce exactly. No original helper overwritten (r2/r3 copies unchanged).",
+  "active_runner_status": "Within r4 the pure runner (execute_pure) and host recorder (recorded_run.py/journal.run) are safe and actually exercised by validate.py (4 sandboxed runs) - not dead controls. require_program is exercised inside patched-finish (8 real records) and binding-controls. Nothing outside r4 imports these wrappers.",
+  "limits": [
+   "R1 common.run broken by exclusive write (see findings).",
+   "R3 separation local to r4; shared ScopeA runtime-owner and frozen lane runtimes keep a generic license-reading/piping execute(); currently used for native ELFs only (runtime12 24 + grouped-none 2 + gauge 148 records, 0 Python programs).",
+   "Native adapter (execute_native, exec_child path of _execute) never executed in r4; _execute itself does not enforce Python<->no-payload (only the public adapters do).",
+   "patched-finish validated r4 finish_check.py/native_binding.py with r3 ORIGINAL common.py/analyze.py mounted; r4 common.py exercised only by binding-controls.",
+   "runtime patch also removes pristine()/CLI and renames command.json -> command-start.json/command-result.json; require_program validated only on old single-file command.json records (command-result.json carries the needed fields)."
+  ],
+  "scopeA_relation": "Shared ScopeA review 565caeac (completed 2026-10-30T20:17:30Z, after both r4 seals) approves only its exact provenance/runtime/evidence scope; it does not cover these r4 wrappers. This review covers them only for license-free pure/metadata/write-once behaviour."
+ },
+ "shared_issue_assessment": {
+  "license_to_python (QED F4)": "QED-specific. License-piped Python stage records: QED r1 6 (checker-runtime x4 incl. 2 failed attempts, infrastructure x2), r2 1 (structural-old-capture-controls), r3 7 (event x2, finish, join, supplement, fresh-infrastructure x2). Gauge r1/r2/r3: 0 Python programs through the runtime; gauge join_domains.py ran via host common.run with an allowlisted env and no pipe (probes/runtime-program-kinds.json).",
+  "Auto Row wording (gauge F3)": "Does not recur in QED: QED r3 states the Row per case against the native (None-reference) assertion and never claims an Auto Row.",
+  "reuse program binding (QED F6)": "Gauge reuse binds each reused run to the qualified 8eb ELF via verdict ELF_sha256 == qualified helper hash plus command hash and full inputs_before rehash; single kernel. No undisclosed shared gap.",
+  "tag-subset native limitation (F2)": "Shared; disclosed in both r4 packets with correct attribution."
+ },
+ "findings": [
+  {
+   "id": "R1",
+   "severity": "LOW (blocks reuse of common.run, not the preparation)",
+   "lane": "QED wrapper",
+   "location": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/small-qed-raw-review-disposition-20261030-sol-r4/common.py:37 (write) with run() writes at :198 and :223",
+   "title": "Exclusive-write patch breaks common.run()",
+   "detail": "Demonstrated on a scratch copy with /run/current-system/sw/bin/true (probes/commonrun-probe.json): the command executes and stdout/stderr are written, then FileExistsError at common.py:37; command.json keeps only the start record (no exit). No r4 caller uses common.run, but `python common.py <label> ...` and gauge-style orchestrators that call C.run would run side effects without a result record.",
+   "required_before_reuse": "Remove run()/__main__ from r4 common.py or convert it to journal-style start/result write_once files; disclose."
+  },
+  {
+   "id": "R2",
+   "severity": "LOW (disclosure precision)",
+   "lane": "QED F4",
+   "location": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/small-qed-raw-review-disposition-20261030-sol-r4/report-final.json findings.F4.historical_disclosure",
+   "title": "Historical license exposure not enumerated",
+   "detail": "Generic statement is true but omits that r1 and r2 Python stages were also license-piped (14 records total; see shared_issue_assessment). Reviewer count-only no-leak scan (b5f46f1b) covered r3, r2, sol-01 and runtime12; this review did no secret scan."
+  },
+  {
+   "id": "R3",
+   "severity": "LOW (limitation to state)",
+   "lane": "QED wrapper / shared",
+   "location": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/small-qed-raw-review-disposition-20261030-sol-r4/runtime.py; /shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime-owner/runtime.py:192-200",
+   "title": "Pure/native separation exists only in r4 copies",
+   "detail": "ScopeA runtime-owner (56c53ab8) and frozen copies (QED r1 56c53ab8, QED r2/r3 a8c5c25c, gauge r2/r3 208ab663) keep execute() that reads SYMBOLICA_LICENSE or ~/.config/symbolica/license and pipes it into any program. No current pure-stage use found, but r4 should state that future pure stages must use r4 execute_pure (or equivalent) and never these runners; consider enforcing the Python<->no-payload invariant inside _execute."
+  },
+  {
+   "id": "R4",
+   "severity": "LOW (packaging clarity)",
+   "lane": "gauge",
+   "location": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/small-gauge-raw-review-disposition-20261030-sol-r4/drafts/initial/report.typ:7 and drafts/initial/disclose.py:42,51",
+   "title": "Sealed initial draft states the inverted permutation convention without an erratum",
+   "detail": "Draft says current ports select historical positions (3,2,0,1)/(5,4,0,1,2,3); data satisfy historical[i]==current[perm[i]] (the inverses are [2,3,1,0]/[2,3,4,5,1,0]). Final report/typ/active pointer are correct and drafts/initial/active.json fails closed (draft hash 97364bbf vs root 1371ad05), but nothing labels the draft as erroneous/superseded."
+  },
+  {
+   "id": "R5",
+   "severity": "INFO",
+   "lane": "QED wrapper",
+   "location": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/small-qed-raw-review-disposition-20261030-sol-r4/validation/patched-finish/command-start.json",
+   "title": "Exact validated combination not stated",
+   "detail": "patched-finish mounted r4 finish_check.py/native_binding.py/bindings/qualification with r3 original common.py (3d3bae56) and analyze.py; records are exact, narrative silent. runtime patch also removes pristine()/CLI and renames the command record (see wrapper limits)."
+  },
+  {
+   "id": "R6",
+   "severity": "INFO",
+   "lane": "QED provenance",
+   "location": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/small-qed-raw-review-disposition-20261030-sol-r4/disposition.py, validate.py:35, binding_controls.py:22, final_close.py, manifest.sha256",
+   "title": "Minor provenance nits",
+   "detail": "(a) named_port_permutation [1,0,2] is a hard-coded constant (reviewer probe has no permutation field) - value confirmed by this review against r3 ports.json; (b) the patched-finish exception text is attached to join/finish results too; (c) binding_controls counts KeyError as rejection and records no predicate - this review shows all rejections hit intended predicates; (d) final_close.py ran outside recorded_run.py and self-asserts exit 0; (e) preliminary manifest.sha256 has one stale entry (seal-packet-v1/stdout recorded empty), disclosed in packaging_history; FINAL-MANIFEST verifies 165/165."
+  },
+  {
+   "id": "R7",
+   "severity": "INFO",
+   "lane": "gauge provenance",
+   "location": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/small-gauge-raw-review-disposition-20261030-sol-r4/disclose.py",
+   "title": "Gauge r4 generation not command-recorded",
+   "detail": "No argv/env/exit record for running disclose.py (unlike QED recorded_run). Content verified directly here; guard.json shows inputs unchanged."
+  },
+  {
+   "id": "R8",
+   "severity": "INFO",
+   "lane": "both",
+   "location": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/small-qed-raw-review-disposition-20261030-sol-r4/report-final.json remaining_gates[0]; /shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/small-gauge-raw-review-disposition-20261030-sol-r4/report.json source_stage_profile_limits",
+   "title": "ScopeA status now superseded",
+   "detail": "Both r4 packets predate the shared ScopeA approval (gauge 20:11Z, QED 20:16Z; ScopeA 20:17:30Z). \"ScopeA pending\" was accurate when written; ScopeA is now approved only for its exact provenance/runtime/evidence scope, not these wrappers."
+  }
+ ],
+ "fresh_checks_this_review": [
+  "26 named input hashes at start and end (probes/guard-1.json)",
+  "gauge r4 seal/manifest 20+1 files; QED r4 FINAL-MANIFEST 165 files + 3 declared exclusions; no unlisted files",
+  "old packets: gauge 1534/1278/790 sealed files; QED 370/104/154 manifest files",
+  "patch application old->new for gauge report.json/report.typ and all QED wrapper patches",
+  "structural interface/spelling/permutation/ledger-mode checks (no numerator algebra)",
+  "git (read-only) source facts at 5ea/5ba for F3/F5",
+  "runtime record program classification across 7 lane packets + ScopeA runtime12/grouped-none",
+  "pure-run record audit (env key names only), metadata binding probe (24 mutants), write-once probe, harmless common.run probe"
+ ],
+ "reused_invariants": [
+  "Prior reviewer mathematics/native/full-path results (b5f46f1b, 1591408c) via hash-bound evidence",
+  "ScopeA provenance facts (565caeac) by hash only",
+  "Reviewer count-only no-leak scan (no secret scan here)"
+ ],
+ "unresolved_assumptions": [
+  "Negative r4 claims (no license/config reads, no network) during unrecorded bootstrap file creation are author statements; recorded environments are allowlisted and active code has no lookup",
+  "Native adapter behaviour untested at runtime",
+  "Typst sources not rendered (no full-site claim)",
+  "Interface explicitness/order and historical raw-cook association remain capture-bound"
+ ],
+ "pending_separate_gates": [
+  "Separate source review/source integration (5ba frozen proof source; f47f2721 R4 activity separate; no broader-source credit)",
+  "Separate migration review accepting respelling plus explicit-interface/order representation for each row before any literal change",
+  "Any future native execution or general use of r4 wrappers (fix R1, state R3, review execute_native)",
+  "Other rows/pools 8/32/grouped modes, FeynKit integration/WP3, CI, docs/full-site, combined approval"
+ ],
+ "process": {
+  "tools": "python3.13 /nix/store/4168xqs4l5jbfc7xyi9zrhdhszx0pnlb-python3-3.13.16 with -I, env -i, no license variables (names-only check); jq/sha256sum/cmp/diff/patch; git --git-dir main/.git with GIT_OPTIONAL_LOCKS=0 (cat-file/ls-tree/show); no jj, Nix, build, Cargo, native, producer/observer, network, license/config read",
+  "writes": "Only this ignored .local review directory, plus one transient /tmp file holding only this directory path, created and deleted at review start (disclosed deviation)",
+  "harmless_executions": "common.run on /run/current-system/sw/bin/true in scratch (completed)",
+  "retained": "All scripts, probes and scratch copies retained; no failed probes discarded",
+  "owned_processes": "none"
+ },
+ "artifacts": {
+  "probes/binding-probe.json": "1c30512407885cf99be7a744502d678736853da10eeca4a02f5832c1d93f4eb2",
+  "probes/commonrun-probe.json": "45c872659f0571a8510487bb8fe23f0cab0a8edc06566fc54a09ea2eb01b94e3",
+  "probes/gauge-interfaces.json": "e5fcb4f7ccf91e5a19e504b4699e2d90855fbfc0bc544f950f6959f90565704b",
+  "probes/gauge-old-seals.json": "b1b5e7046aa4bed13c75ff824df7ca5a946ca6b34a03e0e964d23b90a21769cc",
+  "probes/gauge-spellings.json": "576d8858af2d68ed838a3d73b80f43e0ac6f6f830fb9972b1d7e8734df9bf863",
+  "probes/git-source-checks.txt": "1e3392012f49a20a4bf2a47bd42abd9570b92e665aafb515a18c365c334e0b3a",
+  "probes/guard-1.json": "8fc535dc312caf185ae4583e7b7845ff597c7183dc4947696f5ce6ce853a72a5",
+  "probes/ledger-mode-diff.json": "87ea7548e03a4d51013f7bb125da1c3f8524ee177f686959fcc24ffaf2d9fe5c",
+  "probes/pure-run-audit.json": "714e28f0a90f21a521e511ad1b5e5ea05fabb872309e8557dbfc2f821e67e286",
+  "probes/qed-interfaces.json": "245c69e73ba13003638a3535b91e1f06704e62ff0f7d1783ae6f3a40afe68555",
+  "probes/qed-old-manifests.txt": "b152206b8ff22aaff0618b976cc8e69762cb73c9b4bba41f289ac320d32046ae",
+  "probes/runtime-program-kinds-scopeA.json": "527de777186537a48382cd81681ad28f8c5f09bd0f00a5068ab0075ab806442c",
+  "probes/runtime-program-kinds.json": "b0feed131d41c7f1e8a7aa8f0651e518a37f51d0a238500586c5032231ee0f49",
+  "probes/writeonce-probe.json": "506a5b37d04b9c8dc244a180828951960b10a81e1ba822b94cb5d56b5fec4716",
+  "scripts/binding_probe.py": "969b80c269067551dc90d7ef9647bc5e5e99da7f44c18a516e0a088d3efaf09a",
+  "scripts/commonrun_probe.py": "c0b5519047649694808d029df5c06c339b1e60b9548e7f6f41dd111c3b775d5d",
+  "scripts/gauge_interfaces.py": "7a5c2c7116cfb3f8a7e36c83625379762f31d6835efdc047c5007c1633848aa1",
+  "scripts/guard.py": "7a2c0297282669bd273720ee94608c41b12005312b2ed5499adb0a9764fc80d7",
+  "scripts/ledger_mode_diff.py": "0a6b22a6e022164e9c79b5e7b783b048124390b40702ee08a491522873e6b138",
+  "scripts/program_kinds.py": "7a8c29e422a985ea982d9d75002c96f6deaba622624ec19281f23e67014193e3",
+  "scripts/pure_runs.py": "efbdc793fec43edbe22429943d0ec752563c37d7e4a49c4ea94c8254d5573a87",
+  "scripts/qed_interfaces.py": "96b760671af7f82c06a3caf167999475ab2e833bba68024dfef72cdfdd93a26d",
+  "scripts/sealcheck.py": "85c80aa8afb6811e15f8c9248cbaa065216ee0f3081eb936f793c749426e09af",
+  "scripts/spellings.py": "ab4c2ba5ad6bf14494bc2a09133a8f37f4d75ddf54fd1be019d5a0f59da8e7fb",
+  "scripts/writeonce_probe.py": "96f66e38e6178ecab0009d6dd50016666e8d863c5138891f569531a1109e9b40"
+ }
+}

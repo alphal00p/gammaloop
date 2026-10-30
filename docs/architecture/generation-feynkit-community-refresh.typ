@@ -10,6 +10,14 @@ locks retain one shared Symbolica/Numerica/Graphica 3.0.1 identity; the uv,
 Hakari and workspace-hack inputs stay aligned. This is a source reconciliation
 and bounded qualification record, not integration approval.
 
+The account originally added at #raw("c3449988839d9ad3389dd9fd4c4b8bb9ec447055")
+is preserved in that commit. The additive review aggregation below updates its
+pending-review language only within each reviewer's actual scope. This updated
+note and receipt remain an unreviewed metadata candidate. The registry uses
+#raw("evidence_revision") at #raw("cacd5182704082df929a066548e3501be22c9533"),
+without #raw("review_ref") or #raw("reviewed_at"): XS-1's paired-field defect is
+repaired without inventing approval of the new note.
+
 == Source history and corrections
 
 The original 106 reviewed changes and their evidence remain immutable. A
@@ -52,15 +60,48 @@ The prior CODEf842/EVIDENCE594c and the independent reviews stay unchanged.
 
 The additive
 #link("evidence/generation-integration/feynkit-refresh/corrections/receipt.json")[correction receipt]
-binds the review, worker patches and exact five-file delta. A new independent
-source review is required; no runtime, installed-host, browser or generated-stub
-pass follows from these source checks. The original handoff prose
+binds the review, worker patches and exact five-file delta. At c344 a new
+independent source review was still required; source R4 below supplies that
+bounded verdict. No runtime, installed-host, browser or generated-stub pass
+follows from these source checks. The original handoff prose
 #raw("reconciliation.txt") remains historical round-one evidence. Its incomplete
 semantic judgments are superseded by this correction record, not silently
 rewritten. The old hash handoff combines CODE5ea and EVIDENCE0afe inputs; the
 additive receipt explicitly names both identities. Original replay52's crossing
 prefactor conversion was already present upstream, independently of the ghost
 expectation corrections.
+
+== Outer SVG normalization and source R4
+
+Code #raw("f47f27213a1c55291239c9bc0f334a7ea1cd1cc1") implements the selected
+Option A correction in the browser test alone. Camera CTM and node-label
+dimensions are divided by the validated positive uniform outer SVG screen
+scale. Independent viewport/viewBox, meet-matrix, one-layout-unit and
+source-derived gamma5 bounds constrain that normalization; resize rereads the
+outer scale. Camera delta 1e-4, label places 2, binary32 authored containment
+1e-6 and the R2 tall allowance 1/64 remain unchanged. Additive evidence
+#raw("cacd5182704082df929a066548e3501be22c9533") retains the exact worker
+rationale and explicitly identifies the root-authorized comment-only departure.
+
+Independent Opus source R4 approves source reconciliation through f47f and
+the truthfulness of cacd's evidence. It expressly excludes c344's shared
+metadata; its approval cannot be extended to this new note. The reviewer
+executed the exact final test method with static current-JS/SVG fixtures in
+Chromium 153, including near-maximal layout residuals, and seven negative
+controls. This is isolated fixture evidence, not an installed product-renderer
+or WebKit pass. Worker headful DPR 2 snapped at 1/128 CSS pixel; the reviewer
+also exercised the DPR 1, 1/64 regime. Crop and label control attribution was
+checked in the actual assertion order.
+
+R4-N3 is an #emph[executed] pre-existing residual: Chromium's preserved tall
+assertion fails for 48.9831 by 620.3672 pt by 1.67e-5 pixel beyond its 1/64
+allowance, while the new helper's representation-aware height check passes.
+The reviewer classifies it as nonblocking because R2 was explicitly preserved.
+The model's 21 failures in 300,000 random tall geometries are simulation,
+not additional browser executions. Installed-host qualification remains open;
+WebKit parsing is untested and Gecko's 1/60 unit lies outside this allowance.
+R4's formatting and verbatim-rationale Typst nits remain disclosed in the
+copied review; the historical rationale is not imported into this note.
 
 == One shared producer boundary
 
@@ -160,14 +201,18 @@ and
 point to actual completed records without altering them. These are current8eb
 runtime characterization and source joins only. Independent lane schema,
 definition, source-factor, exact-pair, mode-correspondence and adversarial
-replays remain necessary before any new certificate or migration approval.
+replays were still pending at c344; the separately bounded reviews below now
+record their actual dispositions. Migration approval remains separate.
 Old-capture admission on the new checker is not a fresh producer certificate.
-No extra rows, pools8/32, grouped adapter, installed host or browser were run.
+Those c344 characterizations added no extra rows, pools8/32, grouped adapter,
+installed-host or browser execution.
 
-The metadata-only final documentation/evidence head is not separately
+The c344 metadata-only documentation/evidence head was not separately
 runtime-built. The actual build source remains CODE5ea, with explicit identical
 selected-producer transfer to CODE5ba; the new metadata files are outside the
-recorded generator input set. Full installed-host, generated-stub parity,
+recorded generator input set. Source R4 also read cacd's recorded selected-
+producer invariance through f47f; it did not re-evaluate or rebuild it.
+Full installed-host, generated-stub parity,
 Chromium/WebKit including regime guards, browser/widget and full-site checks
 remain pending. The 452-unit build does not establish whole-workspace kernel
 compatibility. Source review, arithmetic controls, compilation, licensed
@@ -192,3 +237,90 @@ work is removed. The physical main index guard remains unchanged, the approved
 integration reference stays at fdff, and top-level NixCI enable remains false.
 This record and its registry note are a separate unreviewed evidence candidate.
 A new combined review remains necessary before integration approval.
+
+== Separately bounded review dispositions
+
+The
+#link("evidence/generation-integration/feynkit-refresh/review-aggregation-20261030/receipt.json")[review receipt]
+and its
+#link("evidence/generation-integration/feynkit-refresh/review-aggregation-20261030/receipt.typ")[scope record]
+bind six verbatim independent review JSON records, their original hashes,
+source locations and available manifests. Referenced scratch, captures, helper
+sources and native results remain retained in their original locations; they
+are not all vendored here. Earlier reviews, attempts and evidence files remain
+unchanged. No review here approves the conjunction of all lanes.
+
+- #strong[Shared Scope A:] Opus approves the twelve-case pool1 provenance,
+  runtime and evidence chain and the shared provenance for both new raw lanes.
+  It excludes source reconciliation, mathematics, Scope B, migration and
+  combined approval. Its nonblockers retain the historical shared-target and
+  crates.io Graphica qualification, lane-internal QED input-version history,
+  diagnostic comment/unused-helper nits, and the pre-existing Git-colocated
+  integration ref at 863f506c; the authoritative jj bookmark remains fdff.
+- #strong[Prior eight:] Opus approves finite application of the three already
+  approved certificates to fresh 8eb pool1, Grouping None, Classes None and
+  Auto independently (16 cells). It does not re-review the original physics or
+  approve new literals, grouped modes or pools 8/32.
+- #strong[Four new raw rows:] Opus approves corrected Scope B preparations
+  only. QED's four newly explicit interfaces per cell and QCD's 32 permuted
+  explicit interfaces per payload/mode remain capture-bound and uncertified;
+  migration must explicitly accept the representation changes. SM has zero
+  explicit interfaces on both routes. Raw-four wrapper findings R1–R8 remain
+  attributed to that review; separate errata work at
+  #raw("target/raw-four-wrapper-errata-20261030-r5") in the numerator-families
+  workspace is pending, with no general-runner or native-adapter approval here.
+- #strong[Grouped None provenance:] the review remains
+  #raw("REQUEST_CHANGES"). Lossy JSON DiagramIds, observer side effects and
+  overstated producer-validator coverage require additive disposition. The
+  correction packet
+  #raw(".local/feynkit-refresh/grouped-none-provenance-disposition-20261030-r2")
+  remains pending and unapproved. Shared Scope A approval covers its shared
+  dependencies only; it does not discharge this rejection.
+- #strong[Grouped None mathematics:] Opus approves the finite capture-premised
+  decoded-numerator certificate for #raw("xs_qed_eemm_identical_L2"), NamingD,
+  Classes None, Grouping Identical with the captured five-sample/seed-3 options,
+  pool1, proof source 5ba, dependency archive 5ea and kernel 8eb. It proves the
+  signed sewing, D22/D23 relation and observed 30-to-29 collapse within those
+  premises. Aggregate certification still requires grouped provenance approval
+  and root aggregation. Raw-cook/decoded identity, ordered interfaces and
+  historical FinalFrame provenance remain qualified. S1–S7, including the
+  separate one-shot transport/spinor checks, chart-invertibility assertion gap
+  and unsnapshotted helper sources, remain disclosed. Auto and migration remain
+  unproved and unapproved.
+
+== Prior-eight reporting dispositions
+
+F1–F7 reporting is closed additively here, using the independent prior-eight
+Opus review's checks and attribution; this metadata change reruns no proof or
+control and changes no sealed packet.
+
+- #strong[F1:] the historical c78 kernel leg carries by exact pair/input
+  invariance; the old 1a current-kernel leg is superseded and gets no fresh
+  credit; the 8eb leg is fresh in the reviewed packet and reviewer replay.
+- #strong[F2:] L2's constant #raw("None") maps asserted live #raw("none");
+  #raw("built_len") is the length of C's raw built-diagram list, equal to the
+  old value. This is an explicit presentation map.
+- #strong[F3:] the reviewer verified fresh QED None/Auto and old-current dump
+  byte equality, matching source companions and completed D0 census. FNV
+  equality follows from byte identity; the frozen outer validator still rejects
+  the changed registry and receives no new pass.
+- #strong[F4:] with the reserved additive witness, sign/coefficient/power
+  booleans may be satisfied by the witness alone. Mathematical content is
+  parsed/canonical equality with additive cancellation, not five independent
+  mathematical checks.
+- #strong[F5:] the original adapter used old typed-owner order. The reviewer
+  independently reproduced it with a C-only fixed tail rotation and accepted
+  raw C order with identical obligation multisets.
+- #strong[F6:] the original sandbox exposed the whole runtime root writable,
+  including command/stdout/stderr records. Independent reproduction supports
+  the results; the original containment caveat remains.
+- #strong[F7:] the inherited #raw("anchor_self_comparisons") label now counts
+  C-versus-B cross-capture anchors; it remains unchanged in the sealed outputs.
+
+The reviewer carries 428 pure rejections and 115 QED controls only by complete
+source/input invariance. The 194 historical-only control records are not
+upgraded to current credit. The reviewer executed named held-outs; this change
+claims no fresh full-validator mutant suite. All decoded/capture, definition,
+ordered-interface and old QED Request/Run source-constructor limitations remain.
+No full documentation, runtime, installed-host, browser, migration, combined,
+WP3 or integration gate is closed by this metadata aggregation.

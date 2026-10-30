@@ -1,0 +1,611 @@
+{
+ "schema": 1,
+ "reviewer": "independent Opus review subagent (claude-opus-5-5); no delegation",
+ "review_directory": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-prior-eight-fresh8eb-math-opus-20261030T202304Z-bf443319",
+ "completed_utc": "2026-10-30T20:56:04.500040+00:00",
+ "verdict": "APPROVE_PRIOR_EIGHT_FINITE_APPLICATION",
+ "verdict_scope": "Finite application/rebinding of the eight already-approved old-base numerator certificates (QED round4: xs_qed_eemm_L1, xs_qed_eedd_L1, xs_qed_eeee_1pi_L1; family round3: qed_eemm_L1, ctorder_qcd_uugg_L1, sm_eemm_L0, ym_g6_L0; xs_qed_eemm_L2) to the fresh 8eb pool-1 GroupingNone captures, Classes None and Auto independently (16 cells), under the frozen proof source 5ba04864ca506e259d9eef4a54f65acdd8323fc2 / built 5ea149ffd88ae3afc4072a38c0871c1329be8424 / kernel 8eb7c3729d6abefc916decc1bdf0c06536f8af80 / helper 5141d8fddacf40a81f5452e212cd788daa15c3cb3e6d2290fbfc6b65f76c48e1. NOT: a new review of the original physics, migration/literal update, expectation changes, the four new QED/gauge rows, grouped modes, pools 8/32, broader 371-lane credit, source R4, shared ScopeA, combined FeynKit or WP3 approval.",
+ "packet": {
+  "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/prior-eight-proof-rebind-20261030-sol-r1",
+  "report.json": "b62edcfd184616798ac5b80b5a806594a8bccff12b8a027e514c097f1936e086",
+  "report.typ": "e1c89bef6593ca430fd58fed8a1ed631d4338cd5225a58b1e070a54ec0f9e1eb",
+  "manifest.json": "02b172dc5b76625d1e268c5224c4b8fdd0c2149199e26c763c1ab2d2f15876f4",
+  "external-input-manifest.json": "41bae86b153532dc18e762317970b88e84b08f240d855df8a02b15404f7ff0f8",
+  "seal.json": "0d64152b5f726838a159e74bea08fbb3dde7901d0fb8f6c85b4ffa8784acc641",
+  "verification": "all 5 hashes match; 827/827 manifest entries match (829 files = 827 + manifest + seal, no extra/missing/symlink); 137/137 external inputs match"
+ },
+ "reused_reviews": {
+  "shared_scope_a": {
+   "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-feynkit-refresh-shared-provenance-opus-20261030T193404Z-3c0453ff/review.json",
+   "sha256": "565caeace0112a30fb9118f94b2bb759e4267d2b802395c314e485b89b4b2b70",
+   "used_for": "provenance of runtime12 captures, producer/helper/ELF/build, 452-unit archive qualification (archive-qualification.json bd79086b059d9336382adbd8a36dd0279d1ff62d0795756aa6fb11c6b0ff9f3c); packet world.jsonl ledgers and public dumps are byte-identical to ScopeA independent fresh observer reruns (all 16 cells)",
+   "not_used_for": "mathematics, controls, source reconciliation, migration"
+  },
+  "original_approvals_verified_on_disk": {
+   "QED_round4_combined_certificate_review": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/docs/architecture/evidence/generation-oracle-numerator-migration/review/approved-certificate-review.json",
+    "sha256": "1202230f36622faf1f9dbcf23c29eba8c8ba8c512ae3da14b901194a349e4b30",
+    "verdict": "APPROVE_CERTIFICATE",
+    "certificate_commit": "16bfd2c84ea1fdeba0c8087cc6cdc8f1082f11a8"
+   },
+   "QED_round4_receipt_reviews": {
+    "math": "92b5eb1ab217ac9bc5ccbf55e9b088669b47c609144679d390300f88700cd439",
+    "provenance": "fc62d653d85163bc31379571451b2c745d8d80d69a42ebd41cfb2a0c15ad2354"
+   },
+   "family_round3": {
+    "approval_a": {
+     "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-migration/approval-a.json",
+     "sha256": "45482a7440a8dd5bb808d41176b40b9950865c344fb03f07510411e025783bc8"
+    },
+    "approval_b": {
+     "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-migration/approval-b.json",
+     "sha256": "6ceec9c3de1180b4901f9bca6548589adb16b4688e97e162177a61d864f0792d"
+    },
+    "commit": "87fa13a93b1c0b3e5792fd56937486ad962b2b55"
+   },
+   "xs_qed_eemm_L2": {
+    "review_a": {
+     "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-a-opus-20261030T063905Z/review.json",
+     "sha256": "f5173b1d86a44c18d11179b13a0542eb0282097cb303079d709ab75d2184c554"
+    },
+    "review_b": {
+     "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-b-opus-20261030T063831Z/review.json",
+     "sha256": "5c97912c4b6fa9660c55b3bf03b785b37b36f2d3a042d677acd388f12ec8346b"
+    },
+    "commit": "c95e7f6e77994779929115a156654cfce3bd1e53"
+   },
+   "receipts": {
+    "round3": "1ed0d3b904129234677b3dca68e1d9d057532be9fa507d73c501b9344d90057e",
+    "L2": "bc81b9833e3b2bbb265922b4eb02563ce2ad96b3c11aa20b38d4fa06f5d8a9b1",
+    "round4": "5c9866e1289539cfdecd70b7d075b2444db9c377c352bd7db47f7febc7d52838"
+   }
+  }
+ },
+ "cells": [
+  {
+   "case": "xs_qed_eemm_L1",
+   "mode": "None",
+   "certificate": "QED round4 (16bfd2c; combined review 1202230f36622faf1f9dbcf23c29eba8c8ba8c512ae3da14b901194a349e4b30)",
+   "capture": "fresh dump bytes == old current/xs_qed_eemm_L1.json bytes (None and Auto byte-identical); metadata case/grouping/model/numerators/report/diagrams(owner order exact) value-equal after the observer-name inverse map numerator_prefactor->prefactor (old observer patched-main.rs:196); one diagram each route",
+   "pure_checks": "approved semantic-validate.mjs re-executed fresh (no failures, axes 28, transports 0); identical output on original approved inputs",
+   "native_8eb_fresh": {
+    "pairs": 41,
+    "faithfulness": 11,
+    "cross_all_owners_both_orders": 26,
+    "aggregate_both_routes_both_orders": 4,
+    "status": "additive to the approved JS certificate (round4 had no exact-expression native leg)"
+   },
+   "controls": "5 native boundary controls verified from raw evidence; 115 approved QED controls carried only by complete input/helper invariance (not re-run)",
+   "open": [
+    "old Request/Run never serialized: source-constructor trace only (cases/classes/frames/census/frame_certificate blobs identical b9f788->5ba; main.rs differs only by eight in-scope numerators literals; feynkit-generator/src unchanged; kernel pin 1a1829b->8eb7c37)",
+    "raw cook/decoded association, ports/flags/order are capture-bound observations",
+    "QED native obligations cover payload expressions, not port texts (ports are covered by the JS slot algebra)"
+   ]
+  },
+  {
+   "case": "xs_qed_eemm_L1",
+   "mode": "Auto",
+   "certificate": "QED round4 (16bfd2c; combined review 1202230f36622faf1f9dbcf23c29eba8c8ba8c512ae3da14b901194a349e4b30)",
+   "capture": "fresh dump bytes == old current/xs_qed_eemm_L1.json bytes (None and Auto byte-identical); metadata case/grouping/model/numerators/report/diagrams(owner order exact) value-equal after the observer-name inverse map numerator_prefactor->prefactor (old observer patched-main.rs:196); one diagram each route",
+   "pure_checks": "approved semantic-validate.mjs re-executed fresh (no failures, axes 28, transports 0); identical output on original approved inputs",
+   "native_8eb_fresh": {
+    "pairs": 41,
+    "faithfulness": 11,
+    "cross_all_owners_both_orders": 26,
+    "aggregate_both_routes_both_orders": 4,
+    "status": "additive to the approved JS certificate (round4 had no exact-expression native leg)"
+   },
+   "controls": "5 native boundary controls verified from raw evidence; 115 approved QED controls carried only by complete input/helper invariance (not re-run)",
+   "open": [
+    "old Request/Run never serialized: source-constructor trace only (cases/classes/frames/census/frame_certificate blobs identical b9f788->5ba; main.rs differs only by eight in-scope numerators literals; feynkit-generator/src unchanged; kernel pin 1a1829b->8eb7c37)",
+    "raw cook/decoded association, ports/flags/order are capture-bound observations",
+    "QED native obligations cover payload expressions, not port texts (ports are covered by the JS slot algebra)"
+   ]
+  },
+  {
+   "case": "xs_qed_eedd_L1",
+   "mode": "None",
+   "certificate": "QED round4 (16bfd2c; combined review 1202230f36622faf1f9dbcf23c29eba8c8ba8c512ae3da14b901194a349e4b30)",
+   "capture": "fresh dump bytes == old current/xs_qed_eedd_L1.json bytes (None and Auto byte-identical); metadata case/grouping/model/numerators/report/diagrams(owner order exact) value-equal after the observer-name inverse map numerator_prefactor->prefactor (old observer patched-main.rs:196); one diagram each route",
+   "pure_checks": "approved semantic-validate.mjs re-executed fresh (no failures, axes 36, transports 4); identical output on original approved inputs",
+   "native_8eb_fresh": {
+    "pairs": 41,
+    "faithfulness": 11,
+    "cross_all_owners_both_orders": 26,
+    "aggregate_both_routes_both_orders": 4,
+    "status": "additive to the approved JS certificate (round4 had no exact-expression native leg)"
+   },
+   "controls": "5 native boundary controls verified from raw evidence; 115 approved QED controls carried only by complete input/helper invariance (not re-run)",
+   "open": [
+    "old Request/Run never serialized: source-constructor trace only (cases/classes/frames/census/frame_certificate blobs identical b9f788->5ba; main.rs differs only by eight in-scope numerators literals; feynkit-generator/src unchanged; kernel pin 1a1829b->8eb7c37)",
+    "raw cook/decoded association, ports/flags/order are capture-bound observations",
+    "QED native obligations cover payload expressions, not port texts (ports are covered by the JS slot algebra)"
+   ]
+  },
+  {
+   "case": "xs_qed_eedd_L1",
+   "mode": "Auto",
+   "certificate": "QED round4 (16bfd2c; combined review 1202230f36622faf1f9dbcf23c29eba8c8ba8c512ae3da14b901194a349e4b30)",
+   "capture": "fresh dump bytes == old current/xs_qed_eedd_L1.json bytes (None and Auto byte-identical); metadata case/grouping/model/numerators/report/diagrams(owner order exact) value-equal after the observer-name inverse map numerator_prefactor->prefactor (old observer patched-main.rs:196); one diagram each route",
+   "pure_checks": "approved semantic-validate.mjs re-executed fresh (no failures, axes 36, transports 4); identical output on original approved inputs",
+   "native_8eb_fresh": {
+    "pairs": 41,
+    "faithfulness": 11,
+    "cross_all_owners_both_orders": 26,
+    "aggregate_both_routes_both_orders": 4,
+    "status": "additive to the approved JS certificate (round4 had no exact-expression native leg)"
+   },
+   "controls": "5 native boundary controls verified from raw evidence; 115 approved QED controls carried only by complete input/helper invariance (not re-run)",
+   "open": [
+    "old Request/Run never serialized: source-constructor trace only (cases/classes/frames/census/frame_certificate blobs identical b9f788->5ba; main.rs differs only by eight in-scope numerators literals; feynkit-generator/src unchanged; kernel pin 1a1829b->8eb7c37)",
+    "raw cook/decoded association, ports/flags/order are capture-bound observations",
+    "QED native obligations cover payload expressions, not port texts (ports are covered by the JS slot algebra)"
+   ]
+  },
+  {
+   "case": "xs_qed_eeee_1pi_L1",
+   "mode": "None",
+   "certificate": "QED round4 (16bfd2c; combined review 1202230f36622faf1f9dbcf23c29eba8c8ba8c512ae3da14b901194a349e4b30)",
+   "capture": "fresh dump bytes == old current/xs_qed_eeee_1pi_L1.json bytes (None and Auto byte-identical); metadata case/grouping/model/numerators/report/diagrams(owner order exact) value-equal after the observer-name inverse map numerator_prefactor->prefactor (old observer patched-main.rs:196); one diagram each route",
+   "pure_checks": "approved semantic-validate.mjs re-executed fresh (no failures, axes 28, transports 2); identical output on original approved inputs",
+   "native_8eb_fresh": {
+    "pairs": 41,
+    "faithfulness": 11,
+    "cross_all_owners_both_orders": 26,
+    "aggregate_both_routes_both_orders": 4,
+    "status": "additive to the approved JS certificate (round4 had no exact-expression native leg)"
+   },
+   "controls": "5 native boundary controls verified from raw evidence; 115 approved QED controls carried only by complete input/helper invariance (not re-run)",
+   "open": [
+    "old Request/Run never serialized: source-constructor trace only (cases/classes/frames/census/frame_certificate blobs identical b9f788->5ba; main.rs differs only by eight in-scope numerators literals; feynkit-generator/src unchanged; kernel pin 1a1829b->8eb7c37)",
+    "raw cook/decoded association, ports/flags/order are capture-bound observations",
+    "QED native obligations cover payload expressions, not port texts (ports are covered by the JS slot algebra)"
+   ]
+  },
+  {
+   "case": "xs_qed_eeee_1pi_L1",
+   "mode": "Auto",
+   "certificate": "QED round4 (16bfd2c; combined review 1202230f36622faf1f9dbcf23c29eba8c8ba8c512ae3da14b901194a349e4b30)",
+   "capture": "fresh dump bytes == old current/xs_qed_eeee_1pi_L1.json bytes (None and Auto byte-identical); metadata case/grouping/model/numerators/report/diagrams(owner order exact) value-equal after the observer-name inverse map numerator_prefactor->prefactor (old observer patched-main.rs:196); one diagram each route",
+   "pure_checks": "approved semantic-validate.mjs re-executed fresh (no failures, axes 28, transports 2); identical output on original approved inputs",
+   "native_8eb_fresh": {
+    "pairs": 41,
+    "faithfulness": 11,
+    "cross_all_owners_both_orders": 26,
+    "aggregate_both_routes_both_orders": 4,
+    "status": "additive to the approved JS certificate (round4 had no exact-expression native leg)"
+   },
+   "controls": "5 native boundary controls verified from raw evidence; 115 approved QED controls carried only by complete input/helper invariance (not re-run)",
+   "open": [
+    "old Request/Run never serialized: source-constructor trace only (cases/classes/frames/census/frame_certificate blobs identical b9f788->5ba; main.rs differs only by eight in-scope numerators literals; feynkit-generator/src unchanged; kernel pin 1a1829b->8eb7c37)",
+    "raw cook/decoded association, ports/flags/order are capture-bound observations",
+    "QED native obligations cover payload expressions, not port texts (ports are covered by the JS slot algebra)"
+   ]
+  },
+  {
+   "case": "qed_eemm_L1",
+   "mode": "None",
+   "certificate": "family round3 (87fa13a; approvals A 45482a7440a8dd5bb808d41176b40b9950865c344fb03f07510411e025783bc8, B 6ceec9c3de1180b4901f9bca6548589adb16b4688e97e162177a61d864f0792d)",
+   "capture": "model/request/options/grouping/payload value-equal to old B; typed owners per-owner exact with ids in identical order; only presentation difference is the uniform tail rotation [numerator,numerator_prefactor,projector]->[numerator_prefactor,projector,numerator]",
+   "pure_checks": "unchanged approved validator re-executed fresh on reviewer-adapted inputs (accept); all 7 output documents byte-identical to the approved run and the packet; raw-C-order variant also accepts with identical obligation multisets",
+   "figures": {
+    "graphs": 17,
+    "owners": 255,
+    "nontrivial_cross_permutations": 24,
+    "distinct_native_texts": 104,
+    "nonliteral_cross": 0
+   },
+   "native_8eb_fresh": {
+    "pairs": 172,
+    "faithfulness": 104,
+    "nonliteral_cross_both_orders": 0,
+    "aggregate_both_routes_both_orders": 68,
+    "anchor": "all C-vs-B anchors token-tree-equal; empty native stage, no credit"
+   },
+   "historical_kernel_leg": "invariant reuse: every nonempty stage pair file is JSON-identical to the approved forward/reverse pair files accepted by 1ae86d (c78) and 41c680 (1a); the 1a leg is superseded by fresh 8eb, not credited",
+   "controls": "5 native boundary controls verified; pure rejections reused only via complete source/input invariance",
+   "open": [
+    "historical raw cook/decoded association and observed ports/flags/order capture-bound",
+    "no positional downstream-consumer theorem"
+   ]
+  },
+  {
+   "case": "qed_eemm_L1",
+   "mode": "Auto",
+   "certificate": "family round3 (87fa13a; approvals A 45482a7440a8dd5bb808d41176b40b9950865c344fb03f07510411e025783bc8, B 6ceec9c3de1180b4901f9bca6548589adb16b4688e97e162177a61d864f0792d)",
+   "capture": "model/request/options/grouping/payload value-equal to old B; typed owners per-owner exact with ids in identical order; only presentation difference is the uniform tail rotation [numerator,numerator_prefactor,projector]->[numerator_prefactor,projector,numerator]",
+   "pure_checks": "unchanged approved validator re-executed fresh on reviewer-adapted inputs (accept); all 7 output documents byte-identical to the approved run and the packet; raw-C-order variant also accepts with identical obligation multisets",
+   "figures": {
+    "graphs": 17,
+    "owners": 255,
+    "nontrivial_cross_permutations": 24,
+    "distinct_native_texts": 104,
+    "nonliteral_cross": 0
+   },
+   "native_8eb_fresh": {
+    "pairs": 172,
+    "faithfulness": 104,
+    "nonliteral_cross_both_orders": 0,
+    "aggregate_both_routes_both_orders": 68,
+    "anchor": "all C-vs-B anchors token-tree-equal; empty native stage, no credit"
+   },
+   "historical_kernel_leg": "invariant reuse: every nonempty stage pair file is JSON-identical to the approved forward/reverse pair files accepted by 1ae86d (c78) and 41c680 (1a); the 1a leg is superseded by fresh 8eb, not credited",
+   "controls": "5 native boundary controls verified; pure rejections reused only via complete source/input invariance",
+   "open": [
+    "historical raw cook/decoded association and observed ports/flags/order capture-bound",
+    "no positional downstream-consumer theorem"
+   ]
+  },
+  {
+   "case": "ctorder_qcd_uugg_L1",
+   "mode": "None",
+   "certificate": "family round3 (87fa13a; approvals A 45482a7440a8dd5bb808d41176b40b9950865c344fb03f07510411e025783bc8, B 6ceec9c3de1180b4901f9bca6548589adb16b4688e97e162177a61d864f0792d)",
+   "capture": "model/request/options/grouping/payload value-equal to old B; typed owners per-owner exact with ids in identical order; only presentation difference is the uniform tail rotation [numerator,numerator_prefactor,projector]->[numerator_prefactor,projector,numerator]",
+   "pure_checks": "unchanged approved validator re-executed fresh on reviewer-adapted inputs (accept); all 7 output documents byte-identical to the approved run and the packet; raw-C-order variant also accepts with identical obligation multisets",
+   "figures": {
+    "graphs": 268,
+    "owners": 4004,
+    "nontrivial_cross_permutations": 1550,
+    "distinct_native_texts": 431,
+    "nonliteral_cross": 16
+   },
+   "native_8eb_fresh": {
+    "pairs": 1535,
+    "faithfulness": 431,
+    "nonliteral_cross_both_orders": 32,
+    "aggregate_both_routes_both_orders": 1072,
+    "anchor": "all C-vs-B anchors token-tree-equal; empty native stage, no credit"
+   },
+   "historical_kernel_leg": "invariant reuse: every nonempty stage pair file is JSON-identical to the approved forward/reverse pair files accepted by 1ae86d (c78) and 41c680 (1a); the 1a leg is superseded by fresh 8eb, not credited",
+   "controls": "5 native boundary controls verified; pure rejections reused only via complete source/input invariance",
+   "open": [
+    "historical raw cook/decoded association and observed ports/flags/order capture-bound",
+    "no positional downstream-consumer theorem",
+    "ct provenance re-executed fresh on both routes"
+   ]
+  },
+  {
+   "case": "ctorder_qcd_uugg_L1",
+   "mode": "Auto",
+   "certificate": "family round3 (87fa13a; approvals A 45482a7440a8dd5bb808d41176b40b9950865c344fb03f07510411e025783bc8, B 6ceec9c3de1180b4901f9bca6548589adb16b4688e97e162177a61d864f0792d)",
+   "capture": "model/request/options/grouping/payload value-equal to old B; typed owners per-owner exact with ids in identical order; only presentation difference is the uniform tail rotation [numerator,numerator_prefactor,projector]->[numerator_prefactor,projector,numerator]",
+   "pure_checks": "unchanged approved validator re-executed fresh on reviewer-adapted inputs (accept); all 7 output documents byte-identical to the approved run and the packet; raw-C-order variant also accepts with identical obligation multisets",
+   "figures": {
+    "graphs": 268,
+    "owners": 4004,
+    "nontrivial_cross_permutations": 1550,
+    "distinct_native_texts": 431,
+    "nonliteral_cross": 16
+   },
+   "native_8eb_fresh": {
+    "pairs": 1535,
+    "faithfulness": 431,
+    "nonliteral_cross_both_orders": 32,
+    "aggregate_both_routes_both_orders": 1072,
+    "anchor": "all C-vs-B anchors token-tree-equal; empty native stage, no credit"
+   },
+   "historical_kernel_leg": "invariant reuse: every nonempty stage pair file is JSON-identical to the approved forward/reverse pair files accepted by 1ae86d (c78) and 41c680 (1a); the 1a leg is superseded by fresh 8eb, not credited",
+   "controls": "5 native boundary controls verified; pure rejections reused only via complete source/input invariance",
+   "open": [
+    "historical raw cook/decoded association and observed ports/flags/order capture-bound",
+    "no positional downstream-consumer theorem",
+    "ct provenance re-executed fresh on both routes"
+   ]
+  },
+  {
+   "case": "sm_eemm_L0",
+   "mode": "None",
+   "certificate": "family round3 (87fa13a; approvals A 45482a7440a8dd5bb808d41176b40b9950865c344fb03f07510411e025783bc8, B 6ceec9c3de1180b4901f9bca6548589adb16b4688e97e162177a61d864f0792d)",
+   "capture": "model/request/options/grouping/payload value-equal to old B; typed owners per-owner exact with ids in identical order; only presentation difference is the uniform tail rotation [numerator,numerator_prefactor,projector]->[numerator_prefactor,projector,numerator]",
+   "pure_checks": "unchanged approved validator re-executed fresh on reviewer-adapted inputs (accept); all 7 output documents byte-identical to the approved run and the packet; raw-C-order variant also accepts with identical obligation multisets",
+   "figures": {
+    "graphs": 4,
+    "owners": 40,
+    "nontrivial_cross_permutations": 0,
+    "distinct_native_texts": 22,
+    "nonliteral_cross": 0
+   },
+   "native_8eb_fresh": {
+    "pairs": 38,
+    "faithfulness": 22,
+    "nonliteral_cross_both_orders": 0,
+    "aggregate_both_routes_both_orders": 16,
+    "anchor": "all C-vs-B anchors token-tree-equal; empty native stage, no credit"
+   },
+   "historical_kernel_leg": "invariant reuse: every nonempty stage pair file is JSON-identical to the approved forward/reverse pair files accepted by 1ae86d (c78) and 41c680 (1a); the 1a leg is superseded by fresh 8eb, not credited",
+   "controls": "5 native boundary controls verified; pure rejections reused only via complete source/input invariance",
+   "open": [
+    "historical raw cook/decoded association and observed ports/flags/order capture-bound",
+    "no positional downstream-consumer theorem"
+   ]
+  },
+  {
+   "case": "sm_eemm_L0",
+   "mode": "Auto",
+   "certificate": "family round3 (87fa13a; approvals A 45482a7440a8dd5bb808d41176b40b9950865c344fb03f07510411e025783bc8, B 6ceec9c3de1180b4901f9bca6548589adb16b4688e97e162177a61d864f0792d)",
+   "capture": "model/request/options/grouping/payload value-equal to old B; typed owners per-owner exact with ids in identical order; only presentation difference is the uniform tail rotation [numerator,numerator_prefactor,projector]->[numerator_prefactor,projector,numerator]",
+   "pure_checks": "unchanged approved validator re-executed fresh on reviewer-adapted inputs (accept); all 7 output documents byte-identical to the approved run and the packet; raw-C-order variant also accepts with identical obligation multisets",
+   "figures": {
+    "graphs": 4,
+    "owners": 40,
+    "nontrivial_cross_permutations": 0,
+    "distinct_native_texts": 22,
+    "nonliteral_cross": 0
+   },
+   "native_8eb_fresh": {
+    "pairs": 38,
+    "faithfulness": 22,
+    "nonliteral_cross_both_orders": 0,
+    "aggregate_both_routes_both_orders": 16,
+    "anchor": "all C-vs-B anchors token-tree-equal; empty native stage, no credit"
+   },
+   "historical_kernel_leg": "invariant reuse: every nonempty stage pair file is JSON-identical to the approved forward/reverse pair files accepted by 1ae86d (c78) and 41c680 (1a); the 1a leg is superseded by fresh 8eb, not credited",
+   "controls": "5 native boundary controls verified; pure rejections reused only via complete source/input invariance",
+   "open": [
+    "historical raw cook/decoded association and observed ports/flags/order capture-bound",
+    "no positional downstream-consumer theorem"
+   ]
+  },
+  {
+   "case": "ym_g6_L0",
+   "mode": "None",
+   "certificate": "family round3 (87fa13a; approvals A 45482a7440a8dd5bb808d41176b40b9950865c344fb03f07510411e025783bc8, B 6ceec9c3de1180b4901f9bca6548589adb16b4688e97e162177a61d864f0792d)",
+   "capture": "model/request/options/grouping/payload value-equal to old B; typed owners per-owner exact with ids in identical order; only presentation difference is the uniform tail rotation [numerator,numerator_prefactor,projector]->[numerator_prefactor,projector,numerator]",
+   "pure_checks": "unchanged approved validator re-executed fresh on reviewer-adapted inputs (accept); all 7 output documents byte-identical to the approved run and the packet; raw-C-order variant also accepts with identical obligation multisets",
+   "figures": {
+    "graphs": 220,
+    "owners": 3270,
+    "nontrivial_cross_permutations": 198,
+    "distinct_native_texts": 588,
+    "nonliteral_cross": 240
+   },
+   "native_8eb_fresh": {
+    "pairs": 1948,
+    "faithfulness": 588,
+    "nonliteral_cross_both_orders": 480,
+    "aggregate_both_routes_both_orders": 880,
+    "anchor": "all C-vs-B anchors token-tree-equal; empty native stage, no credit"
+   },
+   "historical_kernel_leg": "invariant reuse: every nonempty stage pair file is JSON-identical to the approved forward/reverse pair files accepted by 1ae86d (c78) and 41c680 (1a); the 1a leg is superseded by fresh 8eb, not credited",
+   "controls": "5 native boundary controls verified; pure rejections reused only via complete source/input invariance",
+   "open": [
+    "historical raw cook/decoded association and observed ports/flags/order capture-bound",
+    "no positional downstream-consumer theorem"
+   ]
+  },
+  {
+   "case": "ym_g6_L0",
+   "mode": "Auto",
+   "certificate": "family round3 (87fa13a; approvals A 45482a7440a8dd5bb808d41176b40b9950865c344fb03f07510411e025783bc8, B 6ceec9c3de1180b4901f9bca6548589adb16b4688e97e162177a61d864f0792d)",
+   "capture": "model/request/options/grouping/payload value-equal to old B; typed owners per-owner exact with ids in identical order; only presentation difference is the uniform tail rotation [numerator,numerator_prefactor,projector]->[numerator_prefactor,projector,numerator]",
+   "pure_checks": "unchanged approved validator re-executed fresh on reviewer-adapted inputs (accept); all 7 output documents byte-identical to the approved run and the packet; raw-C-order variant also accepts with identical obligation multisets",
+   "figures": {
+    "graphs": 220,
+    "owners": 3270,
+    "nontrivial_cross_permutations": 198,
+    "distinct_native_texts": 588,
+    "nonliteral_cross": 240
+   },
+   "native_8eb_fresh": {
+    "pairs": 1948,
+    "faithfulness": 588,
+    "nonliteral_cross_both_orders": 480,
+    "aggregate_both_routes_both_orders": 880,
+    "anchor": "all C-vs-B anchors token-tree-equal; empty native stage, no credit"
+   },
+   "historical_kernel_leg": "invariant reuse: every nonempty stage pair file is JSON-identical to the approved forward/reverse pair files accepted by 1ae86d (c78) and 41c680 (1a); the 1a leg is superseded by fresh 8eb, not credited",
+   "controls": "5 native boundary controls verified; pure rejections reused only via complete source/input invariance",
+   "open": [
+    "historical raw cook/decoded association and observed ports/flags/order capture-bound",
+    "no positional downstream-consumer theorem"
+   ]
+  },
+  {
+   "case": "xs_qed_eemm_L2",
+   "mode": "None",
+   "certificate": "xs_qed_eemm_L2 (c95e7f6; approvals A f5173b1d86a44c18d11179b13a0542eb0282097cb303079d709ab75d2184c554, B 5c97912c4b6fa9660c55b3bf03b785b37b36f2d3a042d677acd388f12ec8346b)",
+   "capture": "model/request/options/grouping/payload value-equal to old B; typed owners per-owner exact with ids in identical order; only presentation difference is the uniform tail rotation [numerator,numerator_prefactor,projector]->[numerator_prefactor,projector,numerator]; L2 capture.json case/classes/run/prepared_len/built_len equal old values, grouping None is a fixed presentation map of asserted live none, timing fields unconsumed",
+   "pure_checks": "unchanged approved validator re-executed fresh on reviewer-adapted inputs (accept); all 7 output documents byte-identical to the approved run and the packet; raw-C-order variant also accepts with identical obligation multisets",
+   "figures": {
+    "graphs": 30,
+    "owners": 540,
+    "nontrivial_cross_permutations": 56,
+    "distinct_native_texts": 168,
+    "nonliteral_cross": 0
+   },
+   "native_8eb_fresh": {
+    "pairs": 288,
+    "faithfulness": 168,
+    "nonliteral_cross_both_orders": 0,
+    "aggregate_both_routes_both_orders": 120,
+    "anchor": "all C-vs-B anchors token-tree-equal; empty native stage, no credit"
+   },
+   "historical_kernel_leg": "invariant reuse: every nonempty stage pair file is JSON-identical to the approved forward/reverse pair files accepted by 1ae86d (c78) and 41c680 (1a); the 1a leg is superseded by fresh 8eb, not credited",
+   "controls": "5 native boundary controls verified; pure rejections reused only via complete source/input invariance",
+   "open": [
+    "historical raw cook/decoded association and observed ports/flags/order capture-bound",
+    "no positional downstream-consumer theorem"
+   ]
+  },
+  {
+   "case": "xs_qed_eemm_L2",
+   "mode": "Auto",
+   "certificate": "xs_qed_eemm_L2 (c95e7f6; approvals A f5173b1d86a44c18d11179b13a0542eb0282097cb303079d709ab75d2184c554, B 5c97912c4b6fa9660c55b3bf03b785b37b36f2d3a042d677acd388f12ec8346b)",
+   "capture": "model/request/options/grouping/payload value-equal to old B; typed owners per-owner exact with ids in identical order; only presentation difference is the uniform tail rotation [numerator,numerator_prefactor,projector]->[numerator_prefactor,projector,numerator]; L2 capture.json case/classes/run/prepared_len/built_len equal old values, grouping None is a fixed presentation map of asserted live none, timing fields unconsumed",
+   "pure_checks": "unchanged approved validator re-executed fresh on reviewer-adapted inputs (accept); all 7 output documents byte-identical to the approved run and the packet; raw-C-order variant also accepts with identical obligation multisets",
+   "figures": {
+    "graphs": 30,
+    "owners": 540,
+    "nontrivial_cross_permutations": 56,
+    "distinct_native_texts": 168,
+    "nonliteral_cross": 0
+   },
+   "native_8eb_fresh": {
+    "pairs": 288,
+    "faithfulness": 168,
+    "nonliteral_cross_both_orders": 0,
+    "aggregate_both_routes_both_orders": 120,
+    "anchor": "all C-vs-B anchors token-tree-equal; empty native stage, no credit"
+   },
+   "historical_kernel_leg": "invariant reuse: every nonempty stage pair file is JSON-identical to the approved forward/reverse pair files accepted by 1ae86d (c78) and 41c680 (1a); the 1a leg is superseded by fresh 8eb, not credited",
+   "controls": "5 native boundary controls verified; pure rejections reused only via complete source/input invariance",
+   "open": [
+    "historical raw cook/decoded association and observed ports/flags/order capture-bound",
+    "no positional downstream-consumer theorem"
+   ]
+  }
+ ],
+ "accounting": {
+  "fresh_in_this_review": [
+   "complete per-cell capture equality recomputed from raw C ledgers/dumps vs old B / QED metadata, every old capture file enumerated (p03)",
+   "approved sources extracted from git at 16bfd2c/87fa13a/c95e7f6; all 56 frozen packet sources byte-identical to approved, fdff, 5ba and workspace (p04)",
+   "reviewer-owned adapter from raw C only (fixed tail-rotation rule; plus raw C order variant) (p12_adapter)",
+   "unchanged approved family/L2 validators re-executed on 10 cells x 2 variants with a collector that applies the original reserved-marker definition pre-check and wrapping; 7 documents byte-identical to approved runs and packet; collected pairs equal packet batch slices (p12/p13)",
+   "approved QED semantic-validate.mjs re-executed in a no-network sandbox on fresh None/Auto and on the original approved inputs: identical output, report equal to approved rows (p14)",
+   "QED additive native obligations reconstructed independently; 8208 index mapping verified per cell/stage/order (p15)",
+   "independent 8208-pair batch built from the reviewer replay (byte-identical to packet pairs 374904cd...) and executed once with the retained helper in a reviewer-owned minimal bwrap: exit 0, results sha256 c968ae441b7b5e99ffec541c8ff2e994990a9a7d49c71726b303a538ac0a40c1 (identical), every row exact five-true (p16-p18)",
+   "6 native held-outs: empty batch (vacuous exit0, justifies no empty-stage credit); unwrapped 1 and 0 trip the sign/coefficient/power safeguard (exit101 at that assertion); witness-wrapped 0/1 admitted; tag-subset spelling accepted when superset registered first, reverse order is a parse error (native does not certify tag identity) (scratch/native/h*)",
+   "10 pure held-outs through the unchanged validators/JS: owner-record swap and owner-label swap (payload-live-link), consistent tag respelling (cross-ports; and cross-definitions for an expression-only symbol), request.classes flip (selected-mode), L2 built_len and Run threads (run-provenance), QED missing rename / swapped prefactor-projector / changed report (JS failures)",
+   "old-ELF guard: original round3 native() raises unqualified ELF for 5141d with zero executions (p21); QED outer validate.mjs passes its 26-entry manifest and first fails on docs/developers.toml (p22)",
+   "all 80 packet native controls re-audited from raw runtime evidence and recorded labels (p06/p07); all 81 packet native command records satisfy the sandbox contract (p25)",
+   "622 reuse records re-audited; 428 reused pure rejections at pre-native stages only; all 2694 recorded source hashes equal approved frozen sources (p10)",
+   "approved runs input invariance: all recorded historical and old-current inputs of the 10 approved family/L2 runs still byte-identical (p24)",
+   "guards mid/final identical and equal to ScopeA final (index 36fca299..., git refs 592dbe0f..., bookmarks incl. approved 16bfd2c/87fa13a/c95e7f6) (p23)"
+  ],
+  "invariant_reuse": [
+   "ScopeA provenance (no producer/build/helper rerun)",
+   "historical-kernel native leg (c78, ELF 1ae86d) on pair files JSON-identical to the approved ones",
+   "approved QED 115 controls and 428 family/L2 pure rejections by complete source/input invariance",
+   "original approved mathematics/theorems of the three certificates (not re-reviewed from scratch)"
+  ],
+  "historical_only_not_credited": [
+   "old 1a current-kernel native results (41c680)",
+   "194 control records with native execution, non-pure stage, accepts, harness errors, or changed auxiliary L2 source inventory (56)",
+   "old QED outer validate.mjs approval (guard still rejects)"
+  ],
+  "unresolved_assumptions": [
+   "old QED Request/Run were never serialized: equality remains source-constructor qualified exactly as in the original round2 receipt",
+   "producer-observed cook/decoded association, ordered ports, metric/composite flags are capture-bound, not theorems",
+   "L2 prepared/built report texts and millis timings are not consumed (report texts nonetheless equal fresh live report)",
+   "native license validity in restricted mode is not established by exit status",
+   "symbol registration identity is not certified natively; carried by Python definition tables and the QED JS closed head inventory"
+  ]
+ },
+ "findings": [
+  {
+   "id": "F1",
+   "severity": "low",
+   "location": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/prior-eight-proof-rebind-20261030-sol-r1/report.json (limits; native_boundary_controls) and report.typ section Current execution",
+   "summary": "The original family round3 and L2 theorems require native faithfulness/aggregate admission in BOTH kernels; the packet reruns only the 8eb leg and labels old native results historical-only without stating how the historical-kernel (1ae86d) leg is carried. I verified that every nonempty stage pair file is JSON-identical to the approved forward/reverse pair files accepted by 1ae86d and 41c680, so the leg carries by exact input invariance. Recommend stating: historical-kernel leg invariant reuse, 1a leg superseded, 8eb leg fresh.",
+   "blocking": false
+  },
+  {
+   "id": "F2",
+   "severity": "low",
+   "location": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/prior-eight-proof-rebind-20261030-sol-r1/prepare.py (L2 capture.json writer)",
+   "summary": "capture.json grouping is the hard-coded constant None (presentation of the asserted live none) and built_len is len(C raw built diagrams); both equal the old values and the L2 run-provenance checks consume them, but the constant mapping should be documented explicitly as such.",
+   "blocking": false
+  },
+  {
+   "id": "F3",
+   "severity": "low",
+   "location": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/prior-eight-proof-rebind-20261030-sol-r1/frozen-outer-guard-preservation.json",
+   "summary": "The QED outer capture-validate.mjs checks (None==Auto bytes, source companions, census completion, numerator FNV) are not mapped to fresh evidence in the packet. Verified here on fresh data: None/Auto dumps byte-identical to each other and to old current (so FNV identical as input identity, not a theorem), companions equal, census completed with D0 key.",
+   "blocking": false
+  },
+  {
+   "id": "F4",
+   "severity": "info",
+   "location": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/prior-eight-proof-rebind-20261030-sol-r1/native.py; helper oracle_family_exact.rs:39-45",
+   "summary": "With the reserved additive witness, sign/coefficient/power booleans are satisfied by the witness coefficient alone and carry no information about the pair; the mathematical content is parsed/canonical equality, which is injective under additive cancellation in Symbolica sum normal form. This matches the approved round3 design; the phrase five predicates should not be read as five independent checks.",
+   "blocking": false
+  },
+  {
+   "id": "F5",
+   "severity": "info",
+   "location": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/prior-eight-proof-rebind-20261030-sol-r1/prepare.py (typed owner reorder)",
+   "summary": "The packet adapter takes owner order from the old typed-owners file per diagram. A C-only fixed tail rotation reproduces identical bytes, and raw C order is accepted with identical obligation multisets, so there is no hidden dependence on old values.",
+   "blocking": false
+  },
+  {
+   "id": "F6",
+   "severity": "info",
+   "location": "qualification/runtime-owner/runtime.py execute()",
+   "summary": "The packet sandbox binds the whole runtime root (including runner-written command/stdout/stderr) writable at /work; the helper writes only results.json and the results were reproduced independently, so there is no impact; separating evidence records from the writable bind would tighten containment.",
+   "blocking": false
+  },
+  {
+   "id": "F7",
+   "severity": "info",
+   "location": "obligations/*/summary.json",
+   "summary": "Inherited label anchor_self_comparisons now counts C-vs-B cross-capture anchors (current anchors point to old B), which is stronger than the approved self-comparison; the label is inherited byte-identically.",
+   "blocking": false
+  }
+ ],
+ "counts_note": "297 is a crate-name count, not package identities; not propagated. 452 actual units per ScopeA.",
+ "probes_sha256": {
+  "probes/p01_verify_manifest.out.json": "d80dc2a6e9cab1cc65e6acc9aa3c5728486a8a219dcf6918bb0a11a6ed8d7a91",
+  "probes/p01_verify_manifest.py": "f1bcc84021b2728690442719c1b1af7c1b92f6c4576ac492c1b0fc4443942b1e",
+  "probes/p02_bind_captures.out.json": "e1436a5c3371ce9d4dd598b2509a7d5ebe773bd154d5ffa1bf4a2d65232ec4e5",
+  "probes/p02_bind_captures.py": "5c7719c678cbb67e862b79c7529e4f5701040ad6d5699a99e3b2a877e401de15",
+  "probes/p03_complete_capture_equality.out.json": "2d95de5bdf6d496b96dc7dedf78a9490ea325c2877a47d285d26280d06f79f98",
+  "probes/p03_complete_capture_equality.py": "3c7c8797a98ffdc90ec9248c3c2b228061a2fb4c08f2b90c9961e21ed821fd03",
+  "probes/p04_frozen_vs_approved.out.json": "b151031da9f7678323bcdbac0c8ddf7385e7da3ec1b612a9636c47358ea40ab4",
+  "probes/p04_frozen_vs_approved.py": "d600600f67ed3ffd08559bc1cf141f038293d07077e5113659524938c6895635",
+  "probes/p05_obligations_vs_old.out.json": "3eb4f9f9ddcbd61813cd120b2724df2525b7b194378084342cbb6390e3240bd4",
+  "probes/p05_obligations_vs_old.py": "52769ecc2de20e12bed25326451809311f405a3b6f7137c1c9e40aab3b22650a",
+  "probes/p06_controls_audit.out.json": "d9583b84397bb3b83529fd85f69b1e0f724ad3f1fc882d660cd48b4216889fd8",
+  "probes/p06_controls_audit.py": "56ca4c04a720a44d195b433c91536e3ddcaf7ebc6efd0f318fe6fee6e34b7ff0",
+  "probes/p07_controls_by_label.out.json": "20e5d200d66707d71020ed368e1358ca1312ada3a3d9259031f952c54312f9c6",
+  "probes/p07_controls_by_label.py": "9bdf2b1c4aaf6e83c0fb492776b5874c88fc8126c04f8551a3ef7ed8c30281e2",
+  "probes/p08_elf_closure.out.json": "714ce36d22dda317bf4d4d6ab3f391402ea9332d3522f58356bfdf22792fbd6a",
+  "probes/p08_elf_closure.py": "c28b38ddf5b553158d222041a396258e725b3632dd33a3fe18f93e31172eb5eb",
+  "probes/p08b_node_closure.out.json": "67f73297cc7ebe52ce3b82d4e66cbd79073ce7682867867e2e71316de4ce5cab",
+  "probes/p10_reuse_sources.out.json": "fa3df28233fc17b23227ae3c2aae023585bab6fc65b6ab3c155aa9010e56921c",
+  "probes/p10_reuse_sources.py": "8e2f92d596f27d34d8deced1e2359c30609ac99826c518a369ca49b5c550e31f",
+  "probes/p11_external_manifest.out.json": "048200415ded3e9ff3cc84b7b80ee9391e0b9f5caf01ad546578302d61744d5c",
+  "probes/p11_external_manifest.py": "dd067acd47b245c5af8473e4c9294f7b4e7392ad70c8fd6744f5d2bfad77f90b",
+  "probes/p12_adapter.py": "4bb583e9046eea75e5cc51c6f264f4f9cc1aec8f1356a20de1686286a38381e3",
+  "probes/p12_runner.py": "3e4a8918aab04eba723354572d3c62cc378e899949debc26a02eb535d110ca38",
+  "probes/p13_compare_replay.out.json": "2b1356ae4a5e1570522e7de1bc23f98094f90f737d17f14e6694d1d0dc8d3a4e",
+  "probes/p13_compare_replay.py": "96a5096ee2cce24289613f5a149c178d4606a65dbd4af7e65ab0d193fc540ae3",
+  "probes/p14_js_sandbox.py": "98936c912f496ba4aabca04d6f0ba0aaf4edb0470ab8667b269ec2be390e8944",
+  "probes/p15_qed_obligations.out.json": "42474a3616c82eac71d78993b42d42fc35096edeb1c42e5df671090a30a76acc",
+  "probes/p15_qed_obligations.py": "26e5a81731a665d94d7b2103defd7b2470561fedab961c12e36f06ffc7f41d7b",
+  "probes/p16_build_batch.py": "4460f1f42c73f09f8d5538b24c1347f27ae7584b84b06ae1aa4e1e16f46ee73b",
+  "probes/p17_exec_child.py": "188b2f5c6100bfa17223719587d5a73d221a489d842d5a1db6f3bc971164330c",
+  "probes/p17_native_runner.py": "ed377a854d693d7a57c13490523411664fe67b6d8dc46ba3844321fb69066eca",
+  "probes/p18_native_results_check.out.json": "ea275845842c4e39e7471ee486b4eeb364af166267fb478972b18082080337ba",
+  "probes/p19_symbol_spellings.out.json": "22028aa2fd628ed1e8204238ac1fd1701a815da15dad85c6aa8ba3ff943adffe",
+  "probes/p20_make_heldouts.py": "284f7667f8bbfcf0ae2746cdc737912a2340f8dae471d3eaa8254ab61e0efd82",
+  "probes/p21_old_elf_guard.out.json": "9c0bc61494936f6d70348fcbc9dde8694e809d5add6393245591d46dee998fec",
+  "probes/p21_old_elf_guard.py": "0d2acd5c8765bf48f19e40631c2897ec5244284cab05e6ebc4f90aaad48b3d3a",
+  "probes/p22_qed_outer_guard.out.json": "5d2d74f4588dd708e9788d03daa29de086c0dfd695568379ca58b9238d7c4e4d",
+  "probes/p23_guard.py": "b21edf5356d4ae61aa2fe498205a6e8e76f0a440988dc2a7d8e5c5df1648df6c",
+  "probes/p24_historical_input_invariance.out.json": "f0061c7879d6029cf66900cdf045c4e5d7f01ce40fa4045ff5820975c064f24e",
+  "probes/p25_packet_sandbox_records.out.json": "4bf18ac98519f30328bb4a31b4eb7430c1a9f57ec8cc877c0dcd42d1d422d6bb",
+  "probes/p99_write_review.py": "03bedb397dfedbb86303d36b2ad1de90bd8370e0d9634fd74c7fb61abf9dce98"
+ },
+ "key_outputs_sha256": {
+  "scratch/native/review-pairs.json": "374904cd3e41ef502eabdd8a629f89beae11ef142853a1ff91c57c3c53e8a5fd",
+  "scratch/native/review-index.json": "3b93f87d7ca913d00a35cbd28124f4ece009be0419534ae4c41f6180d21d4638",
+  "scratch/native/baseline-8208/work/results.json": "c968ae441b7b5e99ffec541c8ff2e994990a9a7d49c71726b303a538ac0a40c1",
+  "scratch/native/baseline-8208/command.json": "33ed204315aca919697bd32bed3e00719270606fbccec449d9f7d6158f83345a",
+  "logs/js-fresh-None/stdout.json": "746e5869cb4a1a0bb9c9031ecebf5fa81b691f81d7f7fc1fc655dbcdce484c5e",
+  "logs/js-fresh-Auto/stdout.json": "746e5869cb4a1a0bb9c9031ecebf5fa81b691f81d7f7fc1fc655dbcdce484c5e",
+  "logs/js-original-approved-inputs/stdout.json": "746e5869cb4a1a0bb9c9031ecebf5fa81b691f81d7f7fc1fc655dbcdce484c5e",
+  "guards/mid.json": "1b6b0faabc6f3b0fa538a1ecefba5d699b65fcfdc2cebfbb212020304632cd65",
+  "guards/final.json": "d9ae9b0db7784e9fdbed3dfcde1ca44fe49792a3375cf583c4831c64b2f35dac",
+  "logs/p12_replay.log": "0bc45c65a1a2e30a53e72bfc990d678baaa797b597bed29e154f59b2b40a734b"
+ },
+ "remaining_gates": [
+  "source R4 (f47f27213a1c55291239c9bc0f334a7ea1cd1cc1; own delta only crates/linnet-py/tests/test_svg_browser.py) independent review",
+  "QED/gauge ScopeB for the four new rows",
+  "grouped None/Identical, pools 8/32, full 371-lane",
+  "migration/literal review of the eight main.rs numerators literals (exactly the eight in-scope rows changed b9f788->5ba)",
+  "combined FeynKit/WP3 review, Typst render, installed host/browser parity"
+ ],
+ "processes": "no owned processes remain; two bwrap processes observed at 20:53Z belong to the separate grouped-none-qualification-20261030T191919 work and were not touched",
+ "mutations": "writes only inside this ignored review directory; no tracked/ref/index/snapshot change, no Nix/build/Cargo/producer/observer, no network/upload; license only via private stdin pipe to the immediate native exec child (never printed/hashed/stored, absent from argv and parent env); pure Python/JS analysis received no license",
+ "retention": "all scratch inputs, replays, held-outs, native runs, logs and guards retained in place"
+}
