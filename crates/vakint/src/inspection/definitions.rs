@@ -192,6 +192,20 @@ fn clausen() -> Atom {
     )
 }
 
+/// `Cl_4(π/3) = Im Li_4(e^(iπ/3)) = √3/12 ∫_0^1 (-log t)³/(1-t+t²) dt`.
+fn clausen4() -> Atom {
+    sqrt3() / Atom::num(12)
+        * integral(
+            (-log(t())).pow(Atom::num(3)) / (Atom::num(1) - t() + t().pow(Atom::num(2))),
+            vec![(t(), Atom::Zero, Atom::num(1))],
+        )
+}
+
+/// `log(q) = ∫_1^q dt/t` for a positive rational `q`.
+fn logarithm(point: Atom) -> Atom {
+    integral(Atom::num(1) / t(), vec![(t(), Atom::num(1), point)])
+}
+
 /// `H(a1,…,an; z)` at `z = (1 + sign i √3)/2` on the straight path `t = z s`.
 ///
 /// Each letter contributes `z f_a(z s_i)` with `f_0 = 1/t`, `f_1 = 1/(1-t)`
@@ -661,8 +675,8 @@ const MATAD_MASTERS: [(&str, usize, MatadLines); 10] = [
     ),
 ];
 
-/// `[ep^order]` of a MATAD master integral, `e^(L γ ep) LoopIntegral(4-2ep, …)`.
-pub(crate) fn matad_master(name: &str, order: i64) -> Option<Atom> {
+/// The Euclidean integrand and loop count of a MATAD master topology.
+fn matad_topology(name: &str) -> Option<(Atom, usize)> {
     let (_, loops, lines) = MATAD_MASTERS
         .iter()
         .find(|(master, _, _)| *master == name)?;
@@ -671,9 +685,57 @@ pub(crate) fn matad_master(name: &str, order: i64) -> Option<Atom> {
         .fold(Atom::num(1), |product, (momentum, massive)| {
             product / propagator(&momentum[..*loops], *massive)
         });
+    Some((integrand, *loops))
+}
+
+/// `[ep^order]` of a MATAD master integral, `e^(L γ ep) LoopIntegral(4-2ep, …)`.
+pub(crate) fn matad_master(name: &str, order: i64) -> Option<Atom> {
+    let (integrand, loops) = matad_topology(name)?;
     Some(series_coefficient(
-        euclidean_master(integrand, *loops),
+        euclidean_master(integrand, loops),
         epsilon(),
+        order,
+    ))
+}
+
+/// `Xbar(order)` of `matad.rs`: `[ep^order]` of the MATAD prefactor times the master.
+///
+/// `matad.rs` writes `miD5`, `miD6 = (Xbar(0) + ep Xbar(1) + … + 2ζ₃/ep)/((1-2ep)(1-ep))`,
+/// `miBN = e^(3γep) Γ(1+ep)³ (4/ep³ - 44/(3ep²) + Σ_(k≥1) ep^k BNbar(k))/((1-ep)(1-2ep)(1-3ep)(2-3ep))`
+/// and `miT111 = e^(2γep) Γ(1+ep)² (3√3/(2ep²) + Σ_(k≥0) ep^k T111bar(k))/(√3 (1-2ep)(ep-1))`.
+/// With `mi = e^(L γ ep) LoopIntegral(4-2ep, …)` the explicit `e^(L γ ep)` of BN and
+/// T111 cancels, and the pole terms do not contribute at the admitted orders.
+pub(crate) fn matad_bar(family: &str, order: i64) -> Option<Atom> {
+    let ep = epsilon();
+    // a - b ep
+    let linear = |a: i64, b: i64| Atom::num(a) - Atom::num(b) * &ep;
+    let inverse_gamma = |power: i64| call(gamma(), vec![Atom::num(1) + &ep]).pow(Atom::num(-power));
+    let (master, prefactor, minimum_order) = match family {
+        "D5bar" | "D6bar" => (
+            if family == "D5bar" { "miD5" } else { "miD6" },
+            linear(1, 2) * linear(1, 1) * exp(Atom::num(3) * Atom::var(euler_gamma()) * &ep),
+            0,
+        ),
+        "BNbar" => (
+            "miBN",
+            linear(1, 1) * linear(1, 2) * linear(1, 3) * linear(2, 3) * inverse_gamma(3),
+            1,
+        ),
+        "T111bar" => (
+            "miT111",
+            sqrt3() * linear(1, 2) * (ep.clone() - Atom::num(1)) * inverse_gamma(2),
+            0,
+        ),
+        _ => return None,
+    };
+    if order < minimum_order {
+        return None;
+    }
+    let (integrand, loops) = matad_topology(master)?;
+    let dimension = Atom::num(4) - Atom::num(2) * &ep;
+    Some(series_coefficient(
+        prefactor * loop_integral(dimension, integrand, loops),
+        ep,
         order,
     ))
 }
@@ -717,6 +779,13 @@ pub(crate) fn builtin(source: AtomView<'_>) -> Result<Option<Atom>, VakintError>
                 matad_master("miT111", 1).ok_or_else(unsupported)?
             } else if symbol == vk_symbol!("T1ep2") {
                 matad_master("miT111", 2).ok_or_else(unsupported)?
+            } else if symbol == vk_symbol!("cl4") {
+                clausen4()
+            } else if let Some((_, family, order)) = super::constants::MATAD_BARS
+                .iter()
+                .find(|(bar, _, _)| symbol == vk_symbol!(bar))
+            {
+                matad_bar(family, *order).ok_or_else(unsupported)?
             } else if let Some(order) = name
                 .strip_prefix('z')
                 .and_then(|order| order.parse::<u32>().ok())
@@ -781,6 +850,11 @@ pub(crate) fn builtin(source: AtomView<'_>) -> Result<Option<Atom>, VakintError>
                 };
                 let order = get_integer_from_atom(*order).ok_or_else(unsupported)? as u32;
                 polylogarithm(order, point.to_owned())
+            } else if symbol == Symbol::LOG {
+                let [point] = arguments.as_slice() else {
+                    return Err(unsupported());
+                };
+                logarithm(point.to_owned())
             } else {
                 return Err(unsupported());
             }
@@ -1378,9 +1452,30 @@ pub(crate) fn agree(left: &Atom, right: &Atom) -> bool {
 }
 
 /// Check that every variable is bound and only definition heads occur.
+///
+/// A definition never references another named constant: its only free symbols
+/// are `𝜋`, `𝑒` and `γ`, and the other heads are the inert definition heads and
+/// native elementary or special functions. `zeta` and `polylog` are admitted
+/// only as the complete definition of that standard function at exact numbers;
+/// anywhere else they must be written as their integrals.
 pub(crate) fn validate(definition: AtomView) -> Result<(), String> {
+    if let AtomView::Fun(function) = definition
+        && [zeta(), polylog()].contains(&function.get_symbol())
+    {
+        return function
+            .iter()
+            .try_for_each(|argument| check(argument, &mut Vec::new()));
+    }
     let mut scope = Vec::new();
     check(definition, &mut scope)
+}
+
+fn named_constant_hint(symbol: Symbol) -> &'static str {
+    if symbol.get_namespace() == crate::NAMESPACE || [zeta(), polylog()].contains(&symbol) {
+        " (a definition must not reference another named constant; write its defining integral)"
+    } else {
+        ""
+    }
 }
 
 fn bound_variable(view: AtomView) -> Option<Atom> {
@@ -1425,7 +1520,7 @@ fn check(view: AtomView, scope: &mut Vec<Atom>) -> Result<(), String> {
             {
                 Ok(())
             } else {
-                Err(format!("free symbol {view}"))
+                Err(format!("free symbol {view}{}", named_constant_hint(symbol)))
             }
         }
         AtomView::Pow(power) => {
@@ -1521,8 +1616,6 @@ fn check(view: AtomView, scope: &mut Vec<Atom>) -> Result<(), String> {
                 Symbol::LOG,
                 Symbol::SIN,
                 gamma(),
-                zeta(),
-                polylog(),
                 bessel_k(),
                 bessel_i(),
             ]
@@ -1532,12 +1625,117 @@ fn check(view: AtomView, scope: &mut Vec<Atom>) -> Result<(), String> {
                     .iter()
                     .try_for_each(|argument| check(*argument, scope))
             } else {
-                Err(format!("head {} is not admitted in a definition", symbol))
+                Err(format!(
+                    "head {} is not admitted in a definition{}",
+                    symbol,
+                    named_constant_hint(symbol)
+                ))
             };
             scope.truncate(depth);
             result
         }
     }
+}
+
+/// Plain-language normalization statements, one per class of definition.
+const PLAIN_INTEGRAL: &str = "Plain real number: the convergent integral shown, first interval outermost; no loop measure and no further factor.";
+const ALGEBRAIC: &str = "Exact algebraic or elementary number; no integral is needed.";
+const CLAUSEN: &str = "Clausen value at π/3, a plain real number: Cl2(π/3) = Im Li2(e^(iπ/3)) = -∫_0^(π/3) log(2 sin(t/2)) dt, Cl4(π/3) = Im Li4(e^(iπ/3)); the MATAD constant S2 = 4/(9√3) Cl2(π/3).";
+const HPL: &str = "Real (HR) or imaginary (HI) part of the harmonic polylogarithm H(w; z) at z = (1 ± i√3)/2 = e^(±iπ/3): iterated integral on the straight path t = z s with 1 > s1 > … > sk > 0 (first interval outermost), letters 1/t, 1/(1-t), 1/(1+t) for 0, 1, -1, trailing zeros as log(z s)^m/m! on the principal branch; a plain number.";
+const GPL: &str = "Real or imaginary part of the Goncharov polylogarithm G(a1,…,an; 1) = ∫_(1>t1>…>tn>0) ∏ dt_i/(t_i - a_i), first interval outermost, letters among 0, ±1 and the sixth roots of unity; it converges without shuffle regularization and is a plain number.";
+const POLYLOG_PROJECTION: &str = "Real or imaginary part of Li_n(z) = z/(n-1)! ∫_0^1 (-log t)^(n-1)/(1 - z t) dt at the complex point shown; a plain number.";
+const BESSEL_MOMENT: &str = "One-dimensional Bessel moment ∫_0^∞ t^k K_0(t)^5 dt (position-space form of the equal-mass four-loop banana in D = 2); K5LogMoment carries the factor 3 and log t + γ - log 2 as shown. A plain number.";
+const BESSEL_TAYLOR: &str = "Coefficient of ε^j of the Taylor expansion (not the j-th derivative) of the ε-deformed Bessel moment (e^γ/2)^(3ε) ∫_0^∞ t^(k+3ε) K_ε(t)^5 dt; a plain number.";
+const MATAD_MASTER: &str = "MATAD normalization: Euclidean measure d^dk/π^(d/2) per loop with d = 4-2ε, unit masses, no sign, factor e^(γε) per loop; coefficient of ε^n of the Laurent expansion (not the n-th derivative). T1ep and T1ep2 are coefficients of miT111 itself (the external sunset master is -miT111).";
+const MATAD_BAR: &str = "MATAD bar Xbar(n) of Vakint's matad.rs: coefficient of ε^n of the Laurent expansion (not the n-th derivative) of the MATAD master (Euclidean measure d^dk/π^(d/2) per loop, d = 4-2ε, unit masses, no sign, e^(γε) per loop) times its matad.rs prefactor: (1-2ε)(1-ε) for D5 and D6; (1-ε)(1-2ε)(1-3ε)(2-3ε)/Γ(1+ε)^3 for BN and √3(1-2ε)(ε-1)/Γ(1+ε)^2 for T111, whose explicit e^(Lγε) cancels the per-loop factor.";
+const PUBLIC_MASTER: &str = "Public Vakint/FMFT master normalization: Minkowski measure (iπ^(d/2) e^(-γε))^(-1) per loop, written as the Euclidean integral with the sign (-1)^(Σa) of the propagator powers a, factor e^(γε) per loop and d^dk/π^(d/2) per loop, d = 4-2ε, unit masses; coefficient of ε^n of the Laurent expansion (not the n-th derivative).";
+const D2_PERIOD: &str = "Euclidean measure d^2k/π per loop in D = 2, unit masses, positive (hat) sign convention: no (-1)^(Σa) and no exponential factor; the integral converges as written.";
+
+fn loop_integral_shape(definition: &Atom) -> Option<(Atom, usize)> {
+    let mut shape = None;
+    definition.visitor(&mut |part| {
+        if let AtomView::Fun(function) = part
+            && function.get_symbol() == HEADS.loop_integral
+        {
+            let arguments = function.iter().collect::<Vec<_>>();
+            shape = Some((arguments[0].to_owned(), arguments.len().saturating_sub(2)));
+            return false;
+        }
+        shape.is_none()
+    });
+    shape
+}
+
+fn named(symbol: AtomView, names: &[&str]) -> bool {
+    let head = match symbol {
+        AtomView::Var(variable) => variable.get_symbol(),
+        AtomView::Fun(function) => function.get_symbol(),
+        _ => return false,
+    };
+    names.iter().any(|name| head == vk_symbol!(name))
+}
+
+/// A plain-language statement of the normalization conventions of a definition.
+///
+/// The statement depends on the class of the constant: elementary integrals,
+/// HPL/GPL projections, Bessel moments, MATAD and public four-dimensional
+/// masters, and D = 2 periods and jets. Without a definition it records why.
+pub(crate) fn normalisation(
+    symbol: AtomView,
+    definition: Option<&Atom>,
+    unavailable: Option<&str>,
+) -> String {
+    let Some(definition) = definition else {
+        return format!(
+            "No defining integral is registered ({}); the numerical value is the recorded source value.",
+            unavailable.unwrap_or("no definition")
+        );
+    };
+    if let Some((dimension, loops)) = loop_integral_shape(definition) {
+        if dimension == Atom::num(2) {
+            return format!("{D2_PERIOD} Loops: {loops}.");
+        }
+        if dimension.contains_symbol(HEADS.delta) {
+            return format!(
+                "Euclidean measure d^Dk/π^(D/2) per loop with D = 2-2δ, unit masses, positive (hat) sign convention: no (-1)^(Σa); factor e^(γδ) per loop (e^({loops}γδ) for {loops} loops); coefficient of δ^n of the Taylor expansion (not the n-th derivative)."
+            );
+        }
+        let bar = named(
+            symbol,
+            &super::constants::MATAD_BARS.map(|(name, _, _)| name),
+        ) || matches!(symbol, AtomView::Var(variable)
+                if variable.get_symbol().get_stripped_name().trim_end_matches(|c: char| c.is_ascii_digit()).ends_with("bar"));
+        return if bar {
+            MATAD_BAR.into()
+        } else if loops == 4 {
+            PUBLIC_MASTER.into()
+        } else {
+            MATAD_MASTER.into()
+        };
+    }
+    if definition.contains_symbol(bessel_k()) {
+        return if definition.contains_symbol(HEADS.series_coefficient) {
+            BESSEL_TAYLOR.into()
+        } else {
+            BESSEL_MOMENT.into()
+        };
+    }
+    if named(symbol, &["HR", "HI"]) {
+        return HPL.into();
+    }
+    if named(symbol, &["GPLReal", "GPLImag"]) {
+        return GPL.into();
+    }
+    if named(symbol, &["PolylogReal", "PolylogImag"]) {
+        return POLYLOG_PROJECTION.into();
+    }
+    if named(symbol, &["cl2", "cl4", "S2"]) {
+        return CLAUSEN.into();
+    }
+    if !definition.contains_symbol(HEADS.integral) {
+        return ALGEBRAIC.into();
+    }
+    PLAIN_INTEGRAL.into()
 }
 
 #[cfg(test)]

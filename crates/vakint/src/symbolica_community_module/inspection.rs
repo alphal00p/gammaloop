@@ -375,10 +375,24 @@ record!(VakintConstantWrapper, "VakintConstant", VakintConstant, {
         self.value.symbol().clone().into()
     }
     /// The defining (multiple) integral in Vakint's inert `Integral`,
-    /// `LoopIntegral` and `SeriesCoefficient` heads; never evaluated.
+    /// `LoopIntegral` and `SeriesCoefficient` heads; never evaluated. `None`
+    /// when no definition is registered (see `definition_unavailable_reason`).
     #[getter]
-    fn definition(&self) -> PythonExpression {
-        self.value.definition().clone().into()
+    fn definition(&self) -> Option<PythonExpression> {
+        self.value.definition().cloned().map(Into::into)
+    }
+    /// Why `definition` is `None`, or `None` when a definition exists.
+    #[getter]
+    fn definition_unavailable_reason(&self) -> Option<String> {
+        self.value
+            .definition_unavailable_reason()
+            .map(str::to_owned)
+    }
+    /// Plain-language normalization of the definition: loop measure, masses,
+    /// signs, exponential factors and which expansion coefficient is meant.
+    #[getter]
+    fn normalisation(&self) -> String {
+        self.value.normalisation().to_owned()
     }
     #[getter]
     fn available_precision(&self) -> AvailablePrecisionWrapper {

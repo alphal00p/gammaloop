@@ -176,8 +176,11 @@ functions without evaluation rules.
 Bound variables are `t`, `x(i)`, `k(i)`, `ep` (`d=4-2*ep`) and `delta`
 (`D=2-2*delta`); the only free symbols are `𝜋`, `𝑒` and `γ`. Admitted native
 functions are `real_part`, `imaginary_part`, `exp`, `log`, `sin`, `gamma`,
-`zeta`, `polylog`, `bessel_k` and `bessel_i`. Every normalization appears
-explicitly outside the heads:
+`bessel_k` and `bessel_i`. A definition never references another named
+constant: no `vakint` constant, HPL, GPL or master symbol appears inside it,
+and `zeta`/`polylog` are admitted only as the complete definition of that
+standard function. Every defining integral and every normalization factor is
+written out explicitly outside the heads:
 
 - A public FMFT/MATAD master with Minkowski rows `D_M = c_0 + Σ c_j q_j` is
   `(-1)^(Σ a) exp(L γ ep) LoopIntegral(4-2 ep, ∏ D_E^(-a))` with
@@ -185,13 +188,20 @@ explicitly outside the heads:
 - MATAD internal masters (`miT111`, `miD6`, …) are Euclidean without a sign:
   `exp(L γ ep) LoopIntegral(4-2 ep, …)`. `D6`, `T1ep` and `T1ep2` are their
   coefficients; the external sunset is `-miT111`.
+- MATAD bars invert the expansions of `matad.rs`: `D5bar1`, `D5bar2`, `D6bar1`
+  and `D6bar2` are `SeriesCoefficient((1-2 ep)(1-ep) exp(3 γ ep) LoopIntegral(4-2 ep, …), ep, 0, n)`,
+  `BNbar4` uses `(1-ep)(1-2 ep)(1-3 ep)(2-3 ep)/Γ(1+ep)^3` and `T111bar4` uses
+  `√3 (1-2 ep)(ep-1)/Γ(1+ep)^2`; their values are the tabulated HPL combinations.
+  The weight-seven bars `D5bar3`, `T111bar5` and `BNbar5` come from external data
+  with the same conventions.
 - `D=2` periods are `LoopIntegral(2, ∏ 1/(q_E²+1))` and their `D=2-2δ` jets are
   `SeriesCoefficient(exp(L γ delta) LoopIntegral(2-2 delta, …), delta, 0, n)`.
 - `K5Moment(k) = Integral(t^k bessel_k(0,t)^5, Interval(t,0,∞))` and
   `K5LogMoment(k) = 3 Integral(t^k bessel_k(0,t)^5 (log t + γ - log 2), …)`.
-- `π`, `γ`, `ζ(n)`, `Li_n`, `Cl_2(π/3)` and `S2 = 4/(9√3) Cl_2(π/3)` use
-  one-dimensional integrals; `𝑒` and square roots are their own elementary
-  definitions.
+- `π`, `γ`, `ζ(n)`, `Li_n`, `log(q) = Integral(1/t, Interval(t,1,q))`,
+  `Cl_2(π/3)`, `Cl_4(π/3) = √3/12 ∫_0^1 (-log t)^3/(1-t+t^2) dt` (`cl4`) and
+  `S2 = 4/(9√3) Cl_2(π/3)` use one-dimensional integrals; `𝑒` and square roots
+  are their own elementary definitions.
 - `HR`/`HI(a1,…,an, z)` are `real_part`/`imaginary_part` of the
   radial-path HPL at `z=(1±𝑖√3)/2`; each letter contributes `z f_a(z s_i)` over
   `1 > s_1 > … > 0`, trailing zeros become the innermost `log(z s_k)^m/m!`.
@@ -200,7 +210,70 @@ explicitly outside the heads:
   bound master. Historical FMFT and MATAD `NumericalSource` leaves are the complete
   Laurent coefficient they tabulate. Runtime inputs, pySecDec estimates,
   AlphaLoop literals and incomplete table entries (`PR3ep2`, `PR13ep1`) have no
-  defining integral; `get_constant` reports `InspectionError::UndefinedConstant`.
+  defining integral: `get_constant` still returns their value, `definition()` is
+  `None` and `definition_unavailable_reason()` states why.
+
+Every record also carries `normalisation()`, a plain-language statement of the
+conventions of its definition class, shown as "Normalisation" on the constant
+card:
+
+#table(
+  columns: 3,
+  [*Class*], [*Examples*], [*Normalisation*],
+  [Elementary and polylogarithmic numbers],
+  [`𝜋`, `γ`, `zeta(n)`, `log(q)`, `polylog(n,q)`, `s6weak`],
+  [Plain real number given by the convergent integral shown, first interval
+   outermost; no loop measure and no further factor.],
+  [Clausen values],
+  [`cl2`, `cl4`, `S2`],
+  [`Cl_n(π/3) = Im Li_n(exp(i π/3))`, with `Cl_2(π/3) = -∫_0^(π/3) log(2 sin(t/2)) dt`
+   and `S2 = 4/(9√3) Cl_2(π/3)`; plain real numbers.],
+  [HPL projections],
+  [`HR(w, z)`, `HI(w, z)`],
+  [Real or imaginary part of `H(w; z)` at `z = (1±i√3)/2` on the straight path
+   `t = z s`, `1 > s_1 > … > 0`; letters `1/t`, `1/(1-t)`, `1/(1+t)`; trailing zeros
+   become `log(z s)^m/m!` on the principal branch.],
+  [GPL and polylogarithm projections],
+  [`GPLReal`, `GPLImag`, `PolylogReal`, `PolylogImag`],
+  [Real or imaginary part of `G(a_1,…,a_n; 1) = ∫_(1>t_1>…>t_n>0) ∏ dt_i/(t_i-a_i)`,
+   resp. `Li_n(z) = z/(n-1)! ∫_0^1 (-log t)^(n-1)/(1-z t) dt`.],
+  [Bessel moments],
+  [`K5Moment(k)`, `K5LogMoment(k)`, `K5MomentTaylor(k, j)`],
+  [`∫_0^∞ t^k K_0(t)^5 dt`; `3 ∫_0^∞ t^k K_0(t)^5 (log t + γ - log 2) dt`; the
+   coefficient of `ε^j` of the Taylor expansion (not the derivative) of
+   `(e^γ/2)^(3ε) ∫_0^∞ t^(k+3ε) K_ε(t)^5 dt`.],
+  [MATAD masters],
+  [`D6`, `T1ep`, `T1ep2`, MATAD `NumericalSource` leaves],
+  [Euclidean measure `d^d k/π^(d/2)` per loop, `d = 4-2ε`, unit masses, no sign,
+   factor `e^(γε)` per loop; the coefficient of `ε^n` of the Laurent expansion,
+   not the derivative.],
+  [MATAD bars],
+  [`D5bar1`, `D5bar2`, `D5bar3`, `D6bar1`, `D6bar2`, `T111bar4`, `T111bar5`,
+   `BNbar4`, `BNbar5`],
+  [The coefficient of `ε^n` of a MATAD master times its `matad.rs` prefactor:
+   `(1-2ε)(1-ε)` for D5 and D6; `(1-ε)(1-2ε)(1-3ε)(2-3ε)/Γ(1+ε)^3` for BN and
+   `√3 (1-2ε)(ε-1)/Γ(1+ε)^2` for T111, whose explicit `e^(Lγε)` cancels the
+   per-loop factor.],
+  [Public four-loop masters],
+  [`PR4fin`, `PR4dfin`, `PR11dep0`, `PR4ep1`, `PR4dep1`, `PR14ep2`, `PR14ep3`,
+   FMFT `NumericalSource` leaves],
+  [Minkowski measure `(i π^(d/2) e^(-γε))^(-1)` per loop written as
+   `(-1)^(Σa) e^(4γε) LoopIntegral(4-2ε, ∏ D_E^(-a))`, unit masses; the
+   coefficient of `ε^n` of the Laurent expansion, not the derivative.],
+  [`D = 2` periods],
+  [`PR7D2`, `PR10D2`, `PR15D2`],
+  [`LoopIntegral(2, ∏ 1/(q_E²+1))`: measure `d^2 k/π` per loop, unit masses,
+   positive (hat) sign convention without `(-1)^(Σa)`, no exponential factor.],
+  [`D = 2-2δ` jets],
+  [`PR7D2Eps1`, …, `PR11dD2Eps4`, `PR0D2Eps2`],
+  [The coefficient of `δ^n` of the Taylor expansion (not the derivative) of
+   `e^(Lγδ) LoopIntegral(2-2δ, ∏ 1/(q_E²+1))`: measure `d^D k/π^(D/2)` per
+   loop, unit masses, positive (hat) sign convention, `e^(4γδ)` for four loops.],
+  [No definition],
+  [runtime inputs, pySecDec estimates, AlphaLoop literals, `PR3ep2`, `PR13ep1`],
+  [`definition` is `None`; the value is the recorded source value and
+   `definition_unavailable_reason` states why.],
+)
 
 The momentum routing transcribes the master's family rows in family order.
 External records supply the atom in `symbolic_definition`; records of older

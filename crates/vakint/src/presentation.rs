@@ -422,7 +422,18 @@ impl Present for VakintConstant {
             "Symbol",
             Content::Expression(self.symbol().as_atom().clone()),
         );
-        card.field("Definition", Content::Expression(self.definition().clone()));
+        match self.definition() {
+            Some(definition) => card.field("Definition", Content::Expression(definition.clone())),
+            None => card.field(
+                "Definition",
+                format!(
+                    "none registered: {}",
+                    self.definition_unavailable_reason()
+                        .unwrap_or("no defining integral")
+                ),
+            ),
+        }
+        card.field("Normalisation", self.normalisation());
         card.field(
             "Available precision",
             self.available_precision().to_string(),

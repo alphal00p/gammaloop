@@ -854,10 +854,22 @@ class VakintConstant:
     @property
     def symbol(self) -> ConstantSymbol: ...
     @property
-    def definition(self) -> Expression:
+    def definition(self) -> typing.Optional[Expression]:
         r"""
         The defining (multiple) integral in Vakint's inert `Integral`,
-        `LoopIntegral` and `SeriesCoefficient` heads; never evaluated.
+        `LoopIntegral` and `SeriesCoefficient` heads; never evaluated. `None`
+        when no definition is registered (see `definition_unavailable_reason`).
+        """
+    @property
+    def definition_unavailable_reason(self) -> typing.Optional[builtins.str]:
+        r"""
+        Why `definition` is `None`, or `None` when a definition exists.
+        """
+    @property
+    def normalisation(self) -> builtins.str:
+        r"""
+        Plain-language normalization of the definition: loop measure, masses,
+        signs, exponential factors and which expansion coefficient is meant.
         """
     @property
     def available_precision(self) -> AvailablePrecision: ...

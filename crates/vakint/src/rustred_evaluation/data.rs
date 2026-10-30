@@ -1151,6 +1151,33 @@ mod tests {
                 "not admitted",
             ),
             ("vakint::new_period", "2.5`30", "exact"),
+            // An explicit definition never refers to another named constant.
+            (
+                "vakint::new_period",
+                "4/27*3^(1/2)*vakint::cl2",
+                "must not reference another named constant",
+            ),
+            (
+                "vakint::new_period",
+                "vakint::Integral(symbolica::zeta(3)*vakint::t,vakint::Interval(vakint::t,0,1))",
+                "must not reference another named constant",
+            ),
+            (
+                "vakint::new_period",
+                "vakint::SeriesCoefficient(vakint::HR(1,0,vakint::om1)*vakint::ep,vakint::ep,0,1)",
+                "must not reference another named constant",
+            ),
+            // Built-in constants cannot be redefined by data.
+            (
+                "vakint::D6bar1",
+                "vakint::Integral(vakint::t^2,vakint::Interval(vakint::t,0,1))",
+                "invalid finite constant identity",
+            ),
+            (
+                "vakint::cl4",
+                "vakint::Integral(vakint::t^2,vakint::Interval(vakint::t,0,1))",
+                "invalid finite constant identity",
+            ),
             (
                 "vakint::K5Moment(1)",
                 "vakint::Integral(vakint::t^3*symbolica::bessel_k(0,vakint::t)^5,vakint::Interval(vakint::t,0,∞))",

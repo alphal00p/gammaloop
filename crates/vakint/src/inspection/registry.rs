@@ -14,7 +14,8 @@ use super::{
     definitions, graph,
 };
 use crate::{
-    VakintError, VakintSettings, precision,
+    VakintError, VakintSettings,
+    precision::{self, NumericalCoefficient, PrecisionWarning},
     rustred_evaluation::{
         RustRedEvaluationError,
         masters::{Master, MasterCatalog, combine_exact},
@@ -28,6 +29,9 @@ fn invalid(detail: impl std::fmt::Display) -> VakintError {
     }
     .into()
 }
+
+/// Decimal digits carried beyond a finite cap when a request exceeds it.
+const CAPPED_EVALUATION_GUARD_DIGITS: u32 = 64;
 
 // These names identify recorded coefficients, not independent decimal tables.
 const PERIOD_BINDINGS: [(&str, &str, i64); 5] = [
@@ -720,29 +724,24 @@ impl MasterCatalog {
             }
             .into());
         }
-        let definition = self.constant_definition(symbol.as_atom().as_view())?;
+        // A missing definition never hides the value: legacy runtime inputs,
+        // estimates and truncated table literals keep their numbers.
+        let (definition, definition_unavailable_reason) =
+            match self.constant_definition(symbol.as_atom().as_view()) {
+                Ok(definition) => (Some(definition), None),
+                Err(error) => {
+                    log::debug!("constant {symbol} has no definition: {error}");
+                    (None, Some(error.to_string()))
+                }
+            };
+        let normalisation = definitions::normalisation(
+            symbol.as_atom().as_view(),
+            definition.as_ref(),
+            definition_unavailable_reason.as_deref(),
+        );
         let prepared = self.prepare_evaluation(symbol.as_atom().clone())?;
         let available_precision = prepared.available_precision();
-        let settings = VakintSettings {
-            run_time_decimal_precision: prec,
-            ..Default::default()
-        };
-        let (number, mut warnings) = precision::evaluate_coefficient(
-            prepared.expression.as_view(),
-            &prepared.sources,
-            &HashMap::new(),
-            &settings,
-        )?;
-        let cap = match available_precision {
-            precision::AvailablePrecision::FixedPrecision(cap) => cap.min(prec),
-            precision::AvailablePrecision::ArbitraryPrecision => prec,
-        };
-        let number = number.capped_decimal_precision(cap);
-        for warning in &mut warnings {
-            if warning.achieved_decimal_precision.is_some() {
-                warning.achieved_decimal_precision = number.precision().real().significant_digits();
-            }
-        }
+        let (number, mut warnings) = Self::evaluate_prepared(&prepared, prec)?;
         number.real_midpoint()?;
         let mut provenance = prepared.sources.values().next().map_or_else(
             || DataProvenance {
@@ -775,6 +774,8 @@ impl MasterCatalog {
         Ok(VakintConstant {
             symbol,
             definition,
+            definition_unavailable_reason,
+            normalisation,
             requested_decimal_precision: prec,
             available_precision,
             numerical: number,
@@ -782,6 +783,40 @@ impl MasterCatalog {
             provenance,
             _snapshot: Arc::clone(self),
         })
+    }
+
+    /// Evaluate a prepared coefficient and cap it at its available precision.
+    ///
+    /// Finite sources cap the result below an unreachable request, so the
+    /// arithmetic stops [`CAPPED_EVALUATION_GUARD_DIGITS`] beyond that cap: a
+    /// 20,000-digit request for a 520-digit formula then costs about as much as
+    /// a 584-digit evaluation. Warnings still report the request.
+    fn evaluate_prepared(
+        prepared: &PreparedExpression,
+        prec: u32,
+    ) -> Result<(NumericalCoefficient, Vec<PrecisionWarning>), VakintError> {
+        let cap = match prepared.available_precision() {
+            precision::AvailablePrecision::FixedPrecision(cap) => cap.min(prec),
+            precision::AvailablePrecision::ArbitraryPrecision => prec,
+        };
+        let settings = VakintSettings {
+            run_time_decimal_precision: prec,
+            ..Default::default()
+        };
+        let (number, mut warnings) = precision::evaluate_coefficient_with_working_precision(
+            prepared.expression.as_view(),
+            &prepared.sources,
+            &HashMap::new(),
+            &settings,
+            cap.saturating_add(CAPPED_EVALUATION_GUARD_DIGITS).min(prec),
+        )?;
+        let number = number.capped_decimal_precision(cap);
+        for warning in &mut warnings {
+            if warning.achieved_decimal_precision.is_some() {
+                warning.achieved_decimal_precision = number.precision().real().significant_digits();
+            }
+        }
+        Ok((number, warnings))
     }
 
     pub(crate) fn get_master(
@@ -799,30 +834,10 @@ impl MasterCatalog {
             })?;
         let graph = graph::master_graph(data, &master.metadata)?;
         let mut coefficients = BTreeMap::new();
-        let settings = VakintSettings {
-            run_time_decimal_precision: prec,
-            ..Default::default()
-        };
         for (&power, coefficient) in &master.coefficients {
             let identity = self.coefficient_symbol(&symbol, power);
             let prepared = self.prepare_evaluation(identity.clone())?;
-            let (number, mut warnings) = precision::evaluate_coefficient(
-                prepared.expression.as_view(),
-                &prepared.sources,
-                &HashMap::new(),
-                &settings,
-            )?;
-            let cap = match prepared.available_precision() {
-                precision::AvailablePrecision::FixedPrecision(cap) => cap.min(prec),
-                precision::AvailablePrecision::ArbitraryPrecision => prec,
-            };
-            let number = number.capped_decimal_precision(cap);
-            for warning in &mut warnings {
-                if warning.achieved_decimal_precision.is_some() {
-                    warning.achieved_decimal_precision =
-                        number.precision().real().significant_digits();
-                }
-            }
+            let (number, mut warnings) = Self::evaluate_prepared(&prepared, prec)?;
             precision::attach_origins(
                 &mut warnings,
                 &prepared.origins,

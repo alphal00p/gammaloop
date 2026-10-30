@@ -54,10 +54,14 @@ fn every_builtin_constant_has_a_valid_round_tripping_definition() {
             "HR(0,0,om1)",
             "HI(1,-1,0,1,0,0,(1-3^(1/2)*𝑖)/2)",
             "GPLImag(0,1,(1+3^(1/2)*𝑖)/2,1)",
+            "symbolica::log(2)",
+            "symbolica::log(3)",
+            "symbolica::log(1/2)",
         ]
         .map(|text| vk_parse!(text).unwrap()),
     );
     assert!(symbols.len() > 40);
+    let advertised = symbols.clone();
     for symbol in symbols {
         let definition = builtin(symbol.as_view())
             .unwrap()
@@ -70,6 +74,14 @@ fn every_builtin_constant_has_a_valid_round_tripping_definition() {
             "{symbol}: the HPL endpoint must be explicit"
         );
     }
+    for name in [
+        "cl4", "D5bar1", "D5bar2", "D6bar1", "D6bar2", "T111bar4", "BNbar4",
+    ] {
+        assert!(
+            advertised.contains(&vk_parse!(name).unwrap()),
+            "{name} must be advertised"
+        );
+    }
     for invalid in ["Zeta(1)", "Sqrt(-1)", "HR(2,om1)", "HI(1,0,1/2)"] {
         assert!(
             builtin(vk_parse!(invalid).unwrap().as_view()).is_err(),
@@ -79,7 +91,11 @@ fn every_builtin_constant_has_a_valid_round_tripping_definition() {
     for foreign in [
         "user_space::HR(1,0,vakint::om1)",
         "user_space::D6",
+        "user_space::D6bar1",
         "PR4fin",
+        "symbolica::log(x)",
+        "symbolica::log(-2)",
+        "symbolica::log(2.0`20)",
     ] {
         assert!(
             builtin(vk_parse!(foreign).unwrap().as_view())
@@ -152,6 +168,247 @@ fn validation_rejects_free_misplaced_and_unknown_symbols() {
         let error = validate(vk_parse!(invalid).unwrap().as_view()).unwrap_err();
         assert!(error.contains(reason), "{invalid}: {error}");
     }
+}
+
+#[test]
+fn definitions_never_reference_another_named_constant() {
+    Vakint::initialize_vakint_symbols();
+    for (invalid, reason) in [
+        (
+            "4/27*3^(1/2)*vakint::cl2",
+            "must not reference another named constant",
+        ),
+        (
+            "vakint::Integral(vakint::S2*vakint::t,vakint::Interval(vakint::t,0,1))",
+            "must not reference another named constant",
+        ),
+        (
+            "vakint::Integral(vakint::HR(1,0,vakint::om1)*vakint::t,vakint::Interval(vakint::t,0,1))",
+            "must not reference another named constant",
+        ),
+        (
+            "vakint::SeriesCoefficient(vakint::miD6*vakint::ep,vakint::ep,0,1)",
+            "must not reference another named constant",
+        ),
+        (
+            "symbolica::zeta(3)+vakint::Integral(vakint::t,vakint::Interval(vakint::t,0,1))",
+            "must not reference another named constant",
+        ),
+        (
+            "vakint::Integral(symbolica::polylog(4,1/2)*vakint::t,vakint::Interval(vakint::t,0,1))",
+            "must not reference another named constant",
+        ),
+        ("symbolica::zeta(vakint::t)", "free symbol"),
+    ] {
+        let error = validate(vk_parse!(invalid).unwrap().as_view()).unwrap_err();
+        assert!(error.contains(reason), "{invalid}: {error}");
+    }
+    // The standard function itself is admitted as its own definition.
+    for valid in [
+        "symbolica::zeta(3)",
+        "symbolica::polylog(6,1/2)",
+        "vakint::Integral(log(2)*vakint::t,vakint::Interval(vakint::t,0,1))",
+    ] {
+        validate(vk_parse!(valid).unwrap().as_view())
+            .unwrap_or_else(|error| panic!("{valid}: {error}"));
+    }
+}
+
+#[test]
+fn logarithms_and_clausen_four_have_explicit_integrals() {
+    Vakint::initialize_vakint_symbols();
+    for (point, upper) in [("2", "2"), ("3", "3"), ("1/2", "1/2")] {
+        assert_eq!(
+            builtin(
+                vk_parse!(&format!("symbolica::log({point})"))
+                    .unwrap()
+                    .as_view()
+            )
+            .unwrap()
+            .unwrap(),
+            vk_parse!(&format!(
+                "vakint::Integral(vakint::t^-1,vakint::Interval(vakint::t,1,{upper}))"
+            ))
+            .unwrap()
+        );
+    }
+    let clausen = builtin(vk_parse!("cl4").unwrap().as_view())
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        clausen,
+        vk_parse!("1/12*3^(1/2)*vakint::Integral(-log(vakint::t)^3/(1-vakint::t+vakint::t^2),vakint::Interval(vakint::t,0,1))")
+            .unwrap()
+    );
+    // Its registered value is Im Li4(e^(iπ/3)) = Cl4(π/3) = 0.9158… (PARI/GP;
+    // one-dimensional quadrature of the definition is done offline to 30+ digits).
+    let value = numerical(
+        &super::super::constants::builtin_definition(vk_parse!("cl4").unwrap().as_view())
+            .unwrap()
+            .unwrap(),
+        40,
+    );
+    let reference = Float::parse(
+        "0.915846884830522100578455735461555406632521802453609282232131",
+        Some(300),
+    )
+    .unwrap();
+    assert!((value.re - reference).norm() < Float::with_val(300, 1e-38));
+}
+
+#[test]
+fn matad_bar_definitions_invert_the_matad_expansions() {
+    Vakint::initialize_vakint_symbols();
+    let ep = Atom::var(vk_symbol!("ep"));
+    for (name, family, order) in super::super::constants::MATAD_BARS {
+        let definition = builtin(vk_parse!(name).unwrap().as_view())
+            .unwrap()
+            .unwrap();
+        assert_eq!(definition, matad_bar(family, order).unwrap(), "{name}");
+        let [function, variable, center, power] = arguments(definition.as_view())[..] else {
+            panic!("{name}: {definition} is not a series coefficient")
+        };
+        assert_eq!(
+            head(definition.as_view()),
+            Some(vk_symbol!("SeriesCoefficient"))
+        );
+        assert_eq!(variable, ep.as_view(), "{name}");
+        assert!(center.is_zero(), "{name}");
+        assert_eq!(power, Atom::num(order).as_view(), "{name}");
+        let master = match family {
+            "D5bar" => "miD5",
+            "D6bar" => "miD6",
+            "BNbar" => "miBN",
+            _ => "miT111",
+        };
+        let (integrand, loops) = matad_topology(master).unwrap();
+        let integral = loop_integral(Atom::num(4) - Atom::num(2) * &ep, integrand, loops);
+        assert_eq!(
+            unique_loop_integral(&function.to_owned()),
+            Some(integral.clone()),
+            "{name}"
+        );
+        // Undo the definition: LoopIntegral = e^(-L γ ep) mi, with mi the matad.rs
+        // expansion in terms of the bars themselves. The stated coefficient
+        // must then be exactly that bar.
+        let expansion = &crate::matad::MASTERS_EXPANSION[&vk_parse!(master).unwrap()].0;
+        let expansion = Vakint::normalize_gamma_functions(expansion.as_view())
+            .replace(vk_parse!("Oep(x_,y_)").unwrap().to_pattern())
+            .with(Atom::Zero);
+        let expansion = crate::hpl::normalize_constants(expansion.as_view()).unwrap();
+        let measure = exp(-Atom::num(loops as i64) * Atom::var(euler_gamma()) * &ep);
+        let substituted = function
+            .to_owned()
+            .replace(integral.to_pattern())
+            .with((measure * expansion).to_pattern());
+        let series = substituted
+            .series(
+                vk_symbol!("ep"),
+                Atom::Zero.as_view(),
+                Rational::from(order + 1),
+            )
+            .unwrap()
+            .to_atom();
+        let coefficient = series
+            .coefficient_list::<i32>(std::slice::from_ref(&ep))
+            .into_iter()
+            .find(|(monomial, _)| *monomial == ep.pow(Atom::num(order)))
+            .map(|(_, coefficient)| coefficient)
+            .unwrap_or_else(|| panic!("{name}: no ep^{order} term in {series}"));
+        let expected = vk_parse!(&format!("{family}({order})")).unwrap();
+        let residual = ((coefficient - expected) * sqrt3()).expand().together();
+        assert!(residual.is_zero(), "{name}: residual {residual}");
+    }
+    assert!(matad_bar("BNbar", 0).is_none());
+    assert!(matad_bar("D6bar", -1).is_none());
+    assert!(matad_bar("E3bar", 1).is_none());
+}
+
+#[test]
+fn normalisation_statements_follow_the_definition_class() {
+    Vakint::initialize_vakint_symbols();
+    let statement = |text: &str| {
+        let symbol = vk_parse!(text).unwrap();
+        let definition = builtin(symbol.as_view()).unwrap().unwrap();
+        normalisation(symbol.as_view(), Some(&definition), None)
+    };
+    for (symbol, start) in [
+        ("𝜋", "Plain real number"),
+        ("z3", "Plain real number"),
+        ("symbolica::log(3)", "Plain real number"),
+        ("symbolica::polylog(6,1/2)", "Plain real number"),
+        ("sqrt3", "Exact algebraic"),
+        ("cl2", "Clausen value"),
+        ("cl4", "Clausen value"),
+        ("S2", "Clausen value"),
+        (
+            "HR(1,0,1,om1)",
+            "Real (HR) or imaginary (HI) part of the harmonic",
+        ),
+        (
+            "GPLImag(0,1,(1+3^(1/2)*𝑖)/2,1)",
+            "Real or imaginary part of the Goncharov",
+        ),
+        (
+            "PolylogImag(4,(1+3^(1/2)*𝑖)/2)",
+            "Real or imaginary part of Li_n",
+        ),
+        ("D6", "MATAD normalization"),
+        ("T1ep2", "MATAD normalization"),
+        ("D6bar2", "MATAD bar"),
+        ("T111bar4", "MATAD bar"),
+        ("BNbar4", "MATAD bar"),
+    ] {
+        assert!(
+            statement(symbol).starts_with(start),
+            "{symbol}: {}",
+            statement(symbol)
+        );
+    }
+    let family = EuclideanFamily::from_momenta(
+        4,
+        &FAMILY_4L_X
+            .iter()
+            .map(|momentum| (momentum.as_slice(), true))
+            .collect::<Vec<_>>(),
+    );
+    let powers = [0, 1, 0, 0, 1, 1, 1, 1, 1, 0];
+    let anonymous = vk_parse!("anonymous_period").unwrap();
+    for (definition, start) in [
+        (
+            family.d2_period(&powers).unwrap(),
+            "Euclidean measure d^2k/π per loop in D = 2",
+        ),
+        (
+            family.d2_jet(&powers, 2).unwrap(),
+            "Euclidean measure d^Dk/π^(D/2) per loop with D = 2-2δ",
+        ),
+        (
+            fmft_master("PR4", 1).unwrap(),
+            "Public Vakint/FMFT master normalization",
+        ),
+        (
+            external_fallback(
+                &vk_parse!("K5LogMoment(3)").unwrap(),
+                &serde_json::Value::Null,
+                &[],
+            )
+            .unwrap()
+            .unwrap(),
+            "One-dimensional Bessel moment",
+        ),
+    ] {
+        let text = normalisation(anonymous.as_view(), Some(&definition), None);
+        assert!(text.starts_with(start), "{definition}: {text}");
+    }
+    let jet = normalisation(
+        anonymous.as_view(),
+        Some(&family.d2_jet(&powers, 1).unwrap()),
+        None,
+    );
+    assert!(jet.contains("e^(4γδ) for 4 loops") && jet.contains("not the n-th derivative"));
+    let missing = normalisation(anonymous.as_view(), None, Some("a runtime input"));
+    assert!(missing.starts_with("No defining integral") && missing.contains("a runtime input"));
 }
 
 /// Count the nested intervals and find the innermost logarithm power.
@@ -711,6 +968,9 @@ fn dump_definitions_for_offline_validation() {
         "PolylogImag(3,3^(1/2)*𝑖/3)",
         "GPLReal(0,1,(1+3^(1/2)*𝑖)/2,1)",
         "GPLImag(-1,0,(1-3^(1/2)*𝑖)/2,1)",
+        "symbolica::log(2)",
+        "symbolica::log(3)",
+        "symbolica::log(1/2)",
     ] {
         symbols.insert(vk_parse!(text).unwrap());
     }
@@ -724,7 +984,8 @@ fn dump_definitions_for_offline_validation() {
             .unwrap();
         records.push(serde_json::json!({
             "symbol": symbol.to_canonical_string(),
-            "definition": constant.definition().to_canonical_string(),
+            "definition": constant.definition().map(|definition| definition.to_canonical_string()),
+            "normalisation": constant.normalisation(),
             "value": constant.numerical_value().to_string(),
             "source": "get_constant(prec=45)",
         }));

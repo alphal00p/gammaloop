@@ -13,6 +13,11 @@ use crate::{
 };
 
 const CERTIFIED_DIGITS: u32 = 20_000;
+/// Validated digits of the independently computed D = 2 periods and their jets.
+const D2_DIGITS: u32 = 520;
+/// D2-dependent coefficient cells of the takeover closures (`PR7D2`, `PR10D2`,
+/// `PR15D2` and their jets): the original 15 plus the 43 closed formulas' cells.
+const D2_DEPENDENT_CELLS: usize = 62;
 
 /// Parse a finite decimal as an exact rational. In particular, this comparison
 /// never rounds a 20,008-digit reference or its tiny error radius to f64.
@@ -344,7 +349,7 @@ fn public_engine_certified_periods_at_20000_digits() {
         );
         assert_eq!(
             master.coefficients()[&1].available_precision(),
-            AvailablePrecision::FixedPrecision(200),
+            AvailablePrecision::FixedPrecision(D2_DIGITS),
             "{name} epsilon^1"
         );
     }
@@ -372,11 +377,11 @@ fn public_engine_independent_d2_periods_and_formula_inventory() {
     for name in ["PR7D2", "PR10D2", "PR15D2"] {
         let symbol: ConstantSymbol = name.parse().unwrap();
         assert!(inventory.contains(&symbol));
-        for requested in [16, 216] {
+        for requested in [16, D2_DIGITS + 1] {
             let constant = engine.get_constant(&symbol, requested).unwrap();
             assert_eq!(
                 constant.available_precision(),
-                AvailablePrecision::FixedPrecision(215)
+                AvailablePrecision::FixedPrecision(D2_DIGITS)
             );
             assert_eq!(
                 constant.precision().real().quality(),
@@ -385,23 +390,23 @@ fn public_engine_independent_d2_periods_and_formula_inventory() {
             assert!(constant.precision().imaginary().exact_zero());
             assert_eq!(constant.provenance().version(), version);
             assert!(constant.to_atom().is_ok());
-            if requested == 216 {
+            if requested > D2_DIGITS {
                 assert!(constant.warnings().iter().any(|warning| {
                     warning.requested_decimal_precision == requested
                         && warning.data_version == version
                         && warning.sources.iter().any(|source| {
                             source.identity.contains(name)
-                                && source.available_decimal_precision == Some(215)
+                                && source.available_decimal_precision == Some(D2_DIGITS)
                         })
                 }));
-                assert!(constant.numerical_value().prec() <= decimal_bits(215));
+                assert!(constant.numerical_value().prec() <= decimal_bits(D2_DIGITS));
             }
         }
     }
 
-    // These archived coefficients were independently computed before the new
-    // exact formulas were published. Compare all fifteen affected cells, not
-    // an expression obtained by solving the new formula for its period.
+    // These archived coefficients were computed independently of the exact
+    // formulas (the 43 closures against the 500-digit physical values). Compare
+    // every affected cell, not an expression solved for its period.
     let mut checked = 0;
     for metadata in manifest["masters"].as_array().unwrap() {
         let symbolic_path = metadata["files"]["symbolic.json"]["path"].as_str().unwrap();
@@ -429,14 +434,12 @@ fn public_engine_independent_d2_periods_and_formula_inventory() {
         let master = engine.get_master(&identity, 80).unwrap();
         for (power, _) in affected {
             let coefficient = &master.coefficients()[power];
-            assert_eq!(
-                coefficient.available_precision(),
-                AvailablePrecision::FixedPrecision(215),
-                "{identity} epsilon^{power}"
-            );
-            assert_eq!(
-                coefficient.precision().real().quality(),
-                ErrorQuality::Estimated
+            // A D2 period caps the formula; a better archived value may win.
+            assert!(
+                matches!(coefficient.available_precision(),
+                    AvailablePrecision::FixedPrecision(digits) if digits >= D2_DIGITS),
+                "{identity} epsilon^{power}: {}",
+                coefficient.available_precision()
             );
             let reference = exact_decimal(&references.iter().find(|(p, _)| p == power).unwrap().1);
             let difference = coefficient.numerical_value().to_rational() - &reference;
@@ -454,7 +457,7 @@ fn public_engine_independent_d2_periods_and_formula_inventory() {
         }
     }
     assert_eq!(
-        checked, 15,
+        checked, D2_DEPENDENT_CELLS,
         "the published D2-dependent cells must all be checked"
     );
     eprintln!(
@@ -480,7 +483,10 @@ fn public_engine_four_loop_constants_have_definitions() {
 
     for symbol in engine.constant_symbols().unwrap() {
         let constant = engine.get_constant(&symbol, 16).unwrap();
-        definitions::validate(constant.definition().as_view())
+        let definition = constant
+            .definition()
+            .unwrap_or_else(|| panic!("{symbol} has no definition"));
+        definitions::validate(definition.as_view())
             .unwrap_or_else(|error| panic!("{symbol}: {error}"));
     }
 
@@ -493,8 +499,11 @@ fn public_engine_four_loop_constants_have_definitions() {
     for entry in &entries {
         let symbol: ConstantSymbol = entry["symbol"].as_str().unwrap().parse().unwrap();
         let constant = engine.get_constant(&symbol, 16).unwrap();
+        let definition = constant
+            .definition()
+            .unwrap_or_else(|| panic!("{symbol} has no definition"));
         if let Some(text) = entry["symbolic_definition"].as_str() {
-            assert_eq!(constant.definition(), &vk_parse!(text).unwrap(), "{symbol}");
+            assert_eq!(definition, &vk_parse!(text).unwrap(), "{symbol}");
             recorded += 1;
         }
         if let Some(fallback) =
@@ -502,9 +511,8 @@ fn public_engine_four_loop_constants_have_definitions() {
                 .unwrap()
         {
             assert!(
-                definitions::agree(constant.definition(), &fallback),
-                "{symbol}: {} versus metadata {fallback}",
-                constant.definition()
+                definitions::agree(definition, &fallback),
+                "{symbol}: {definition} versus metadata {fallback}"
             );
         }
     }
@@ -517,7 +525,7 @@ fn public_engine_four_loop_constants_have_definitions() {
         let symbol: ConstantSymbol = name.parse().unwrap();
         let constant = engine.get_constant(&symbol, 16).unwrap();
         assert!(
-            matches!(constant.definition().as_view(), AtomView::Fun(function)
+            matches!(constant.definition().unwrap().as_view(), AtomView::Fun(function)
             if function.get_symbol() == vk_symbol!("SeriesCoefficient"))
         );
     }
@@ -564,4 +572,194 @@ fn public_engine_four_loop_constants_have_definitions() {
         transcribed += 1;
     }
     assert_eq!(transcribed, definitions::FMFT_MASTERS.len());
+}
+
+/// Leaves of a published formula: every symbol and every outermost function
+/// call. A Symbolica polylogarithm at a complex point is not a real constant;
+/// its Vakint normalization splits it into real and imaginary projections,
+/// whose leaves are collected instead.
+fn collect_leaves(
+    expression: symbolica::atom::AtomView,
+    leaves: &mut std::collections::BTreeMap<symbolica::atom::Atom, usize>,
+) {
+    use symbolica::atom::{AtomCore, AtomView};
+    expression.visitor(&mut |part| match part {
+        AtomView::Num(_) => false,
+        AtomView::Var(_) => {
+            *leaves.entry(part.to_owned()).or_default() += 1;
+            false
+        }
+        AtomView::Fun(function) => {
+            if function.get_symbol() == symbolica::transcendental::polylog()
+                && super::constants::builtin_definition(part)
+                    .unwrap()
+                    .is_none()
+            {
+                let projected = crate::hpl::normalize_constants(part).unwrap();
+                assert_ne!(
+                    projected.as_view(),
+                    part,
+                    "unrecognized polylogarithm {part}"
+                );
+                collect_leaves(projected.as_view(), leaves);
+            } else {
+                *leaves.entry(part.to_owned()).or_default() += 1;
+            }
+            false
+        }
+        _ => true,
+    });
+}
+
+/// An explicit definition names no constant: only inert heads, bound
+/// variables, exact numbers, `𝜋`, `𝑒`, `γ` and native functions occur. This
+/// is checked independently of `definitions::validate`.
+fn assert_explicit(leaf: &symbolica::atom::Atom, definition: &symbolica::atom::Atom) {
+    use crate::utils::vakint_macros::vk_symbol;
+    use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
+    use symbolica::transcendental::{
+        bessel_i, bessel_k, euler_gamma, gamma, imaginary_part, polylog, real_part, zeta,
+    };
+    let heads = [
+        "Integral",
+        "Interval",
+        "LoopIntegral",
+        "SeriesCoefficient",
+        "EuclideanDot",
+        "x",
+        "k",
+    ]
+    .map(|name| vk_symbol!(name));
+    let variables = ["t", "ep", "delta"].map(|name| vk_symbol!(name));
+    let native = [
+        real_part(),
+        imaginary_part(),
+        Symbol::EXP,
+        Symbol::LOG,
+        Symbol::SIN,
+        gamma(),
+        bessel_k(),
+        bessel_i(),
+    ];
+    // The standard function itself at exact arguments is its own definition.
+    if let AtomView::Fun(function) = definition.as_view()
+        && [zeta(), polylog()].contains(&function.get_symbol())
+    {
+        assert!(
+            function.iter().all(|argument| argument.is_constant()),
+            "{leaf}: {definition}"
+        );
+        return;
+    }
+    definition.visitor(&mut |part| {
+        match part {
+            AtomView::Var(variable) => {
+                let symbol = variable.get_symbol();
+                assert!(
+                    [Symbol::PI, Symbol::E, euler_gamma()].contains(&symbol)
+                        || variables.contains(&symbol),
+                    "{leaf}: definition references the symbol {part}: {definition}"
+                );
+            }
+            AtomView::Fun(function) => {
+                let symbol = function.get_symbol();
+                assert!(
+                    heads.contains(&symbol) || native.contains(&symbol),
+                    "{leaf}: definition references the function {part}: {definition}"
+                );
+            }
+            AtomView::Num(number) => assert!(
+                !matches!(
+                    number.get_coeff_view(),
+                    symbolica::coefficient::CoefficientView::Float(..)
+                ),
+                "{leaf}: inexact number in {definition}"
+            ),
+            _ => {}
+        }
+        true
+    });
+}
+
+/// Gate for the published coefficients: every leaf of every 1L–4L formula of
+/// the external data has an explicit definition in Vakint, built in or from
+/// its `symbolic_definition`, and a normalization statement.
+///
+/// `VAKINT_TEST_EXTRA_FORMULAS` may name a JSON array of further formula strings,
+/// for example a basis rewrite prepared for a later data release, whose leaves
+/// are checked against the same loaded data.
+#[test]
+#[ignore = "checks every leaf of every published 1L-4L formula; set VAKINT_TEST_EXTERNAL_DATA"]
+fn public_engine_every_published_leaf_has_an_explicit_definition() {
+    use std::collections::BTreeMap;
+    let root = std::env::var_os("VAKINT_TEST_EXTERNAL_DATA")
+        .map(PathBuf::from)
+        .expect("set VAKINT_TEST_EXTERNAL_DATA to the external-data checkout");
+    let mut engine = Vakint::new().unwrap();
+    engine.load_external_data(&root, 4).unwrap();
+
+    let mut leaves = BTreeMap::new();
+    let mut formulas = 0;
+    for loops in 1..=4 {
+        let directory = root.join(format!("{loops}L"));
+        let manifest: Value =
+            serde_json::from_slice(&fs::read(directory.join("manifest.json")).unwrap()).unwrap();
+        for master in manifest["masters"].as_array().unwrap() {
+            let Some(path) = master["files"]["symbolic.json"]["path"].as_str() else {
+                continue;
+            };
+            let rows: Vec<(i64, String)> =
+                serde_json::from_slice(&fs::read(directory.join(path)).unwrap()).unwrap();
+            for (power, formula) in rows {
+                let expression = vk_parse!(&formula)
+                    .unwrap_or_else(|error| panic!("{loops}L {path} ε^{power}: {error}"));
+                collect_leaves(expression.as_view(), &mut leaves);
+                formulas += 1;
+            }
+        }
+    }
+    if let Some(path) = std::env::var_os("VAKINT_TEST_EXTRA_FORMULAS") {
+        let extra: Vec<String> = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        for formula in &extra {
+            let expression =
+                vk_parse!(formula).unwrap_or_else(|error| panic!("{formula}: {error}"));
+            collect_leaves(expression.as_view(), &mut leaves);
+        }
+        eprintln!("{} further formulas from {}", extra.len(), path.display());
+        formulas += extra.len();
+    }
+    let mut by_class = BTreeMap::<String, usize>::new();
+    for leaf in leaves.keys() {
+        let symbol = ConstantSymbol::try_from(leaf.clone())
+            .unwrap_or_else(|error| panic!("{leaf} is not a constant symbol: {error}"));
+        let constant = engine
+            .get_constant(&symbol, 16)
+            .unwrap_or_else(|error| panic!("{leaf} is not a registered constant: {error}"));
+        let definition = constant.definition().unwrap_or_else(|| {
+            panic!(
+                "{leaf} has no definition: {}",
+                constant.definition_unavailable_reason().unwrap_or_default()
+            )
+        });
+        super::definitions::validate(definition.as_view())
+            .unwrap_or_else(|error| panic!("{leaf}: {error}"));
+        assert_explicit(leaf, definition);
+        let normalisation = constant.normalisation();
+        assert!(
+            !normalisation.is_empty() && !normalisation.starts_with("No defining integral"),
+            "{leaf}"
+        );
+        *by_class
+            .entry(normalisation.split([':', '.']).next().unwrap().to_owned())
+            .or_default() += 1;
+    }
+    eprintln!(
+        "{formulas} published 1L-4L formulas, {} distinct leaves, every one explicitly defined",
+        leaves.len()
+    );
+    for (class, count) in &by_class {
+        eprintln!("  {count:4}  {class}");
+    }
+    assert!(formulas >= 739, "{formulas} formulas");
+    assert!(leaves.len() >= 300, "{} leaves", leaves.len());
 }

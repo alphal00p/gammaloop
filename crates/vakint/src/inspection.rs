@@ -172,7 +172,9 @@ pub enum MasterSymbolicExpression {
 #[derive(Clone, Debug)]
 pub struct VakintConstant {
     symbol: ConstantSymbol,
-    definition: Atom,
+    definition: Option<Atom>,
+    definition_unavailable_reason: Option<String>,
+    normalisation: String,
     requested_decimal_precision: u32,
     available_precision: AvailablePrecision,
     numerical: NumericalCoefficient,
@@ -189,18 +191,33 @@ impl VakintConstant {
     pub fn symbol(&self) -> &ConstantSymbol {
         &self.symbol
     }
-    /// The defining (multiple) integral of this constant as an exact atom.
+    /// The defining (multiple) integral of this constant as an exact atom, or
+    /// `None` for a constant without a registered definition (for example a
+    /// runtime input or a historical estimate; see
+    /// [`Self::definition_unavailable_reason`]). The value is returned either way.
     ///
     /// It uses inert `vakint` heads that are never evaluated:
     /// `Integral(f, Interval(x1,a1,b1), …)` is an iterated definite integral
     /// with the first interval outermost; `LoopIntegral(D, f, k(1), …, k(L))`
     /// is `∏ ∫ d^D k_i / π^(D/2) f` over Euclidean momenta with `f` rational in
     /// `EuclideanDot`; `SeriesCoefficient(f, x, x0, n)` is the coefficient of
-    /// `(x-x0)^n`. Signs, `exp(L γ ep)` factors and real/imaginary projections
-    /// are explicit outside these heads. The only free symbols are `𝜋`, `𝑒`
-    /// and `γ`; see the masters documentation for all conventions.
-    pub fn definition(&self) -> &Atom {
-        &self.definition
+    /// `(x-x0)^n`, not the n-th derivative. Signs, `exp(L γ ep)` factors,
+    /// prefactors and real/imaginary projections are explicit outside these
+    /// heads. A definition never references another named constant: its only
+    /// free symbols are `𝜋`, `𝑒` and `γ`; see the masters documentation for all
+    /// conventions and [`Self::normalisation`] for a plain-language summary.
+    pub fn definition(&self) -> Option<&Atom> {
+        self.definition.as_ref()
+    }
+    /// Why [`Self::definition`] is `None`; `None` when a definition exists.
+    pub fn definition_unavailable_reason(&self) -> Option<&str> {
+        self.definition_unavailable_reason.as_deref()
+    }
+    /// A plain-language statement of the normalization used by the definition:
+    /// loop measure, masses, sign and exponential factors, prefactors and which
+    /// expansion coefficient is meant.
+    pub fn normalisation(&self) -> &str {
+        &self.normalisation
     }
     pub fn available_precision(&self) -> AvailablePrecision {
         self.available_precision

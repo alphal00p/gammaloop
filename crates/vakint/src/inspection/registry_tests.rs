@@ -114,8 +114,10 @@ fn estimated_named_periods_share_formula_sources_without_becoming_exact() {
         .unwrap();
     assert_eq!(
         constant.definition(),
-        &catalog.constant_definitions[&period]
+        Some(&catalog.constant_definitions[&period])
     );
+    assert!(constant.definition_unavailable_reason().is_none());
+    assert!(constant.normalisation().starts_with("Plain real number"));
     assert_eq!(
         constant.available_precision(),
         AvailablePrecision::FixedPrecision(30)
@@ -418,8 +420,9 @@ fn legacy_leaf_constant_lookup_retains_its_cap_and_source_provenance() {
     assert_eq!(constant.provenance().epsilon_power(), Some(-1));
     assert_eq!(
         constant.definition(),
-        &definitions::matad_master("miD6", -1).unwrap()
+        Some(&definitions::matad_master("miD6", -1).unwrap())
     );
+    assert!(constant.normalisation().starts_with("MATAD normalization"));
     assert!(constant.warnings().iter().any(|warning| {
         warning.requested_decimal_precision == requested
             && warning.sources.iter().any(|contributor| {
@@ -483,24 +486,42 @@ fn constant_records_expose_their_defining_integrals() {
         .unwrap();
     assert_eq!(
         record.definition(),
-        &vk_parse!("vakint::Integral(vakint::t*symbolica::bessel_k(0,vakint::t)^5,vakint::Interval(vakint::t,0,∞))").unwrap()
+        Some(&vk_parse!("vakint::Integral(vakint::t*symbolica::bessel_k(0,vakint::t)^5,vakint::Interval(vakint::t,0,∞))").unwrap())
     );
-    assert!(matches!(
-        catalog.get_constant(ConstantSymbol::try_from(undefined).unwrap(), 20),
-        Err(VakintError::Inspection(
-            InspectionError::UndefinedConstant { .. }
-        ))
-    ));
+    // A record without a definition still returns its value, with the reason.
+    let undefined = catalog
+        .get_constant(ConstantSymbol::try_from(undefined).unwrap(), 20)
+        .unwrap();
+    assert!(undefined.definition().is_none());
+    assert!(
+        undefined
+            .definition_unavailable_reason()
+            .unwrap()
+            .contains("has no defining integral")
+    );
+    assert!(
+        undefined
+            .normalisation()
+            .starts_with("No defining integral")
+    );
+    assert!(undefined.numerical_value().as_raw().is_finite());
     let zeta = catalog
         .get_constant("z3".parse::<ConstantSymbol>().unwrap(), 20)
         .unwrap();
     assert_eq!(
         zeta.definition(),
-        &definitions::builtin(vk_parse!("z3").unwrap().as_view())
-            .unwrap()
-            .unwrap()
+        Some(
+            &definitions::builtin(vk_parse!("z3").unwrap().as_view())
+                .unwrap()
+                .unwrap()
+        )
     );
-    assert!(zeta.definition().contains_symbol(vk_symbol!("Integral")));
+    assert!(
+        zeta.definition()
+            .unwrap()
+            .contains_symbol(vk_symbol!("Integral"))
+    );
+    assert!(zeta.normalisation().starts_with("Plain real number"));
 }
 
 #[test]
@@ -511,8 +532,9 @@ fn recorded_period_aliases_define_the_bound_master_coefficient() {
     let record = catalog
         .get_constant("PR4fin".parse::<ConstantSymbol>().unwrap(), 16)
         .unwrap();
-    let definition = record.definition();
+    let definition = record.definition().unwrap();
     assert_eq!(definition, &definitions::fmft_master("PR4", 0).unwrap());
+    assert!(record.normalisation().starts_with("Public Vakint/FMFT"));
     let AtomView::Fun(series) = definition.as_view() else {
         panic!("{definition} is not a series coefficient")
     };
@@ -545,4 +567,106 @@ fn recorded_period_aliases_define_the_bound_master_coefficient() {
     assert_eq!(denominators.get_nargs(), 5);
     assert!(matches!(arguments[0], AtomView::Mul(product)
         if product.iter().any(|factor| factor == Atom::num(-1).as_view())));
+}
+
+#[test]
+fn constants_without_a_definition_keep_their_values_and_reason() {
+    // get_constant must not start failing for legacy leaves that have no
+    // defining integral: runtime inputs, estimates and incomplete literals.
+    use crate::presentation::Present;
+    use symbolica::domains::float::Real;
+    let catalog = Arc::new(empty_catalog());
+    for (backend, original, table, expected) in [
+        ("FMFT", "PR3ep2", "717.31`50", "717.31"),
+        ("FMFT", "PR13ep1", "27.25`50", "27.25"),
+        ("Input", "input_coefficient", "0.5`20", "0.5"),
+        ("PySecDec", "pysecdec_result", "0.75`20", "0.75"),
+        ("AlphaLoop", "MASTER2m22EP", "0.625`30", "0.625"),
+    ] {
+        let staged = precision::legacy::stage_table(
+            vk_parse!(original).unwrap().as_view(),
+            vk_parse!(table).unwrap().as_view(),
+            vk_symbol!("ep"),
+            backend,
+        )
+        .unwrap();
+        let (leaf, _) = precision::legacy::collect_sources(staged.as_view())
+            .unwrap()
+            .pop_first()
+            .unwrap();
+        let constant = catalog
+            .get_constant(ConstantSymbol::try_from(leaf).unwrap(), 12)
+            .unwrap_or_else(|error| panic!("{backend} {original}: {error}"));
+        assert!(constant.definition().is_none(), "{backend} {original}");
+        let reason = constant.definition_unavailable_reason().unwrap();
+        assert!(reason.contains("no defining integral"), "{reason}");
+        assert!(constant.normalisation().contains(reason));
+        let difference =
+            constant.numerical_value().clone() - Float::parse(expected, Some(128)).unwrap();
+        assert!(
+            difference.norm() < Float::with_val(128, 1e-10),
+            "{backend} {original}"
+        );
+        let card = format!("{:#}", constant.presentation());
+        assert!(card.contains("none registered"), "{card}");
+        assert!(card.contains("Normalisation"), "{card}");
+    }
+    let defined = catalog
+        .get_constant("cl4".parse::<ConstantSymbol>().unwrap(), 30)
+        .unwrap();
+    let card = format!("{:#}", defined.presentation());
+    assert!(
+        card.contains("Definition") && card.contains("Integral"),
+        "{card}"
+    );
+    assert!(
+        card.contains("Normalisation") && card.contains("Clausen value"),
+        "{card}"
+    );
+}
+
+#[test]
+fn capped_formulas_are_evaluated_near_their_cap() {
+    use symbolica::domains::float::Real;
+    // A request far above a finite cap is evaluated at the cap plus a guard;
+    // the capped value, precision and warnings equal those of a request at
+    // the cap plus one digit.
+    let mut catalog = empty_catalog();
+    let period = finite_constant(&mut catalog, "K5Moment(1)");
+    let coefficient = add_master(
+        &mut catalog,
+        1,
+        "capped-master",
+        "PR4",
+        Some("2*K5Moment(1)+vakint::D6bar2"),
+        20,
+    );
+    let catalog = Arc::new(catalog);
+    let prepared = catalog.prepare_evaluation(coefficient).unwrap();
+    assert_eq!(
+        prepared.available_precision(),
+        AvailablePrecision::FixedPrecision(30)
+    );
+    let started = std::time::Instant::now();
+    let (far, far_warnings) = MasterCatalog::evaluate_prepared(&prepared, 20_000).unwrap();
+    assert!(started.elapsed().as_secs() < 120, "{:?}", started.elapsed());
+    let (near, _) = MasterCatalog::evaluate_prepared(&prepared, 31).unwrap();
+    let difference = far.value().re.clone() - near.value().re.clone();
+    assert!(difference.norm() < near.value().re.clone().norm() * Float::with_val(128, 1e-28));
+    for number in [&far, &near] {
+        assert!(
+            number
+                .precision()
+                .real()
+                .significant_digits()
+                .is_some_and(|digits| (29..=30).contains(&digits))
+        );
+    }
+    assert!(!far_warnings.is_empty());
+    assert!(
+        far_warnings
+            .iter()
+            .all(|warning| warning.requested_decimal_precision == 20_000)
+    );
+    assert!(catalog.constants.contains_key(&period));
 }

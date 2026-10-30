@@ -121,10 +121,76 @@ head to be admitted, and compares it with the definition reconstructed from the
 record's `definition_metadata` when that exists; a different loop-momentum
 routing of the same propagators, related by a linear change of loop momenta
 with unit Jacobian, agrees. Unparseable, unbound or contradicting definitions
-reject the pack. Packs without the field remain valid:
+reject the pack. A recorded definition must be explicit: it may not reference
+another named constant (no `vakint` constant, HPL, GPL or master symbol, and
+`zeta`/`polylog` only as the complete definition of that standard function), and
+every normalization factor is written out. The data definition is authoritative
+for its symbol. Names of built-in constants, such as `cl2`, `cl4`, `D5bar1`,
+`D5bar2`, `D6bar1`, `D6bar2`, `T111bar4`, `BNbar4`, `D6`, `T1ep`, `T1ep2` or `S2`,
+cannot be redefined by a record. Packs without the field remain valid:
 the four `K5Moment`/`K5LogMoment` records and the `PR7D2`, `PR10D2`, `PR15D2`,
 `PR7D2Eps1` and `PR10D2Eps1` periods use that reconstruction, and any other
-record reports an undefined constant on inspection.
+record is returned without a definition, with the reason, on inspection.
+
+The constant card states the normalization of each definition class:
+
+#table(
+  columns: 3,
+  [*Class*], [*Examples*], [*Normalisation*],
+  [Elementary and polylogarithmic numbers],
+  [`𝜋`, `γ`, `zeta(n)`, `log(q)`, `polylog(n,q)`, `s6weak`],
+  [Plain real number given by the convergent integral shown, first interval
+   outermost; no loop measure and no further factor.],
+  [Clausen values],
+  [`cl2`, `cl4`, `S2`],
+  [`Cl_n(π/3) = Im Li_n(exp(i π/3))`, with `Cl_2(π/3) = -∫_0^(π/3) log(2 sin(t/2)) dt`
+   and `S2 = 4/(9√3) Cl_2(π/3)`; plain real numbers.],
+  [HPL projections],
+  [`HR(w, z)`, `HI(w, z)`],
+  [Real or imaginary part of `H(w; z)` at `z = (1±i√3)/2` on the straight path
+   `t = z s`, `1 > s_1 > … > 0`; letters `1/t`, `1/(1-t)`, `1/(1+t)`; trailing zeros
+   become `log(z s)^m/m!` on the principal branch.],
+  [GPL and polylogarithm projections],
+  [`GPLReal`, `GPLImag`, `PolylogReal`, `PolylogImag`],
+  [Real or imaginary part of `G(a_1,…,a_n; 1) = ∫_(1>t_1>…>t_n>0) ∏ dt_i/(t_i-a_i)`,
+   resp. `Li_n(z) = z/(n-1)! ∫_0^1 (-log t)^(n-1)/(1-z t) dt`.],
+  [Bessel moments],
+  [`K5Moment(k)`, `K5LogMoment(k)`, `K5MomentTaylor(k, j)`],
+  [`∫_0^∞ t^k K_0(t)^5 dt`; `3 ∫_0^∞ t^k K_0(t)^5 (log t + γ - log 2) dt`; the
+   coefficient of `ε^j` of the Taylor expansion (not the derivative) of
+   `(e^γ/2)^(3ε) ∫_0^∞ t^(k+3ε) K_ε(t)^5 dt`.],
+  [MATAD masters],
+  [`D6`, `T1ep`, `T1ep2`, MATAD `NumericalSource` leaves],
+  [Euclidean measure `d^d k/π^(d/2)` per loop, `d = 4-2ε`, unit masses, no sign,
+   factor `e^(γε)` per loop; the coefficient of `ε^n` of the Laurent expansion,
+   not the derivative.],
+  [MATAD bars],
+  [`D5bar1`, `D5bar2`, `D5bar3`, `D6bar1`, `D6bar2`, `T111bar4`, `T111bar5`,
+   `BNbar4`, `BNbar5`],
+  [The coefficient of `ε^n` of a MATAD master times its `matad.rs` prefactor:
+   `(1-2ε)(1-ε)` for D5 and D6; `(1-ε)(1-2ε)(1-3ε)(2-3ε)/Γ(1+ε)^3` for BN and
+   `√3 (1-2ε)(ε-1)/Γ(1+ε)^2` for T111, whose explicit `e^(Lγε)` cancels the
+   per-loop factor.],
+  [Public four-loop masters],
+  [`PR4fin`, `PR4dfin`, `PR11dep0`, `PR4ep1`, `PR4dep1`, `PR14ep2`, `PR14ep3`,
+   FMFT `NumericalSource` leaves],
+  [Minkowski measure `(i π^(d/2) e^(-γε))^(-1)` per loop written as
+   `(-1)^(Σa) e^(4γε) LoopIntegral(4-2ε, ∏ D_E^(-a))`, unit masses; the
+   coefficient of `ε^n` of the Laurent expansion, not the derivative.],
+  [`D = 2` periods],
+  [`PR7D2`, `PR10D2`, `PR15D2`],
+  [`LoopIntegral(2, ∏ 1/(q_E²+1))`: measure `d^2 k/π` per loop, unit masses,
+   positive (hat) sign convention without `(-1)^(Σa)`, no exponential factor.],
+  [`D = 2-2δ` jets],
+  [`PR7D2Eps1`, …, `PR11dD2Eps4`, `PR0D2Eps2`],
+  [The coefficient of `δ^n` of the Taylor expansion (not the derivative) of
+   `e^(Lγδ) LoopIntegral(2-2δ, ∏ 1/(q_E²+1))`: measure `d^D k/π^(D/2)` per
+   loop, unit masses, positive (hat) sign convention, `e^(4γδ)` for four loops.],
+  [No definition],
+  [runtime inputs, pySecDec estimates, AlphaLoop literals, `PR3ep2`, `PR13ep1`],
+  [`definition` is `None`; the value is the recorded source value and
+   `definition_unavailable_reason` states why.],
+)
 
 HPLs at `exp(±i*pi/3)` use Symbolica's arbitrary-precision numerical algorithms.
 The same evaluator supplies FORM-backed HPL substitution. Finite constants without
