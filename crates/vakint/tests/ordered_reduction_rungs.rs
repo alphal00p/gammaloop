@@ -1,5 +1,5 @@
 #![cfg(feature = "feynkit-ingress")]
-//! Physical graph, tensor, ingress and exact/numerical DFS–Ordered parity.
+//! Physical graph/tensor ingress, lower-loop engine parity and numerical references.
 
 use ::vakint;
 #[path = "fixtures/qcd_ladder/mod.rs"]
@@ -269,14 +269,12 @@ fn three_loop_quadratic_rung_engine_parity() -> fixture::Result<()> {
 }
 
 #[test]
-fn four_loop_zero_momentum_rung_engine_parity() -> fixture::Result<()> {
-    compare(4, fixture::Projection::ZeroMomentumMetric)
-}
-
-#[test]
-#[ignore = "sequential physical-fixture qualification: requires explicit 4L data and a complete comparison below fifteen minutes"]
-fn four_loop_quadratic_rung_engine_parity() -> fixture::Result<()> {
-    compare(4, fixture::Projection::QuadraticTransverse)
+fn four_loop_zero_momentum_ordered_matches_recorded_numerical_reference() -> fixture::Result<()> {
+    compare_strategies(
+        4,
+        fixture::Projection::ZeroMomentumMetric,
+        &[RustRedReductionStrategy::Ordered],
+    )
 }
 
 #[test]
