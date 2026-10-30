@@ -91,7 +91,9 @@ fn coefficients(
         // polynomial variable map. Expand only this one scalar coefficient,
         // allowing its common Euler/phase/pi factors to cancel exactly.
         let scalar = canonical_retained(&(scalar / common))?.expand();
-        let scalar = scalar.replace(epsilon).with(&physical_epsilon);
+        let scalar = scalar
+            .replace(epsilon.as_view())
+            .with(physical_epsilon.as_view());
         let coefficient = scalar
             .as_view()
             .try_to_rational_polynomial(&Q, &Z, Some(variables.clone()))
