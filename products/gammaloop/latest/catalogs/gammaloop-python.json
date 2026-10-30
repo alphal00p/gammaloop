@@ -167,9 +167,9 @@
             ],
             "docs": {
               "format": "python-docstring",
-              "body": "Per-sample evaluations paired with one observable snapshot for the complete batch."
+              "body": "One evaluation record per input sample, plus optional batch stability diagnostics."
             },
-            "summary": "Per-sample evaluations paired with one observable snapshot for the complete batch.",
+            "summary": "One evaluation record per input sample, plus optional batch stability diagnostics.",
             "signature": "class BatchEvaluationResult:",
             "since": null,
             "keywords": [],
@@ -184,18 +184,7 @@
                   "format": "python-docstring",
                   "body": "Evaluation records in the same order as the requested samples."
                 },
-                "signature": "def samples(self) -> list[SampleEvaluationResult]:",
-                "default": null,
-                "members": []
-              },
-              {
-                "name": "observables",
-                "kind": "getter",
-                "docs": {
-                  "format": "python-docstring",
-                  "body": "Observable snapshots accumulated across the complete sample batch."
-                },
-                "signature": "def observables(self) -> dict:",
+                "signature": "def samples(self) -> list[EvaluationResult]:",
                 "default": null,
                 "members": []
               },
@@ -212,7 +201,7 @@
                 "kind": "method",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Return a human-readable batch and observable summary."
+                  "body": "Return a human-readable per-sample batch summary."
                 },
                 "signature": "def __str__(self) -> str:",
                 "default": null,
@@ -223,7 +212,7 @@
                 "kind": "method",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Return the human-readable batch and observable summary."
+                  "body": "Return the human-readable per-sample batch summary."
                 },
                 "signature": "def __repr__(self) -> str:",
                 "default": null,
@@ -280,7 +269,7 @@
             "source": {
               "identifier": "gammaloop-python::ComponentDiscreteBreakdown",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 70,
+              "line": 65,
               "column": 1
             }
           },
@@ -399,7 +388,7 @@
             "source": {
               "identifier": "gammaloop-python::CutInfo",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 80,
+              "line": 75,
               "column": 1
             }
           },
@@ -454,7 +443,7 @@
             "source": {
               "identifier": "gammaloop-python::DiscreteBreakdown",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 126,
+              "line": 121,
               "column": 1
             }
           },
@@ -541,7 +530,7 @@
             "source": {
               "identifier": "gammaloop-python::DiscreteBreakdownEntry",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 138,
+              "line": 133,
               "column": 1
             }
           },
@@ -596,7 +585,7 @@
             "source": {
               "identifier": "gammaloop-python::DiscreteCoordinate",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 158,
+              "line": 153,
               "column": 1
             }
           },
@@ -855,7 +844,7 @@
             "source": {
               "identifier": "gammaloop-python::DotExportSettings",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 170,
+              "line": 165,
               "column": 1
             }
           },
@@ -872,9 +861,9 @@
             ],
             "docs": {
               "format": "python-docstring",
-              "body": "Single-sample evaluation paired with the observable snapshot for that sample."
+              "body": "Numerical value, metadata, stability records, and generated events for one sample."
             },
-            "summary": "Single-sample evaluation paired with the observable snapshot for that sample.",
+            "summary": "Numerical value, metadata, stability records, and generated events for one sample.",
             "signature": "class EvaluationResult:",
             "since": null,
             "keywords": [],
@@ -882,17 +871,6 @@
             "returns": null,
             "examples": [],
             "members": [
-              {
-                "name": "sample",
-                "kind": "getter",
-                "docs": {
-                  "format": "python-docstring",
-                  "body": "Evaluation record for the requested sample."
-                },
-                "signature": "def sample(self) -> SampleEvaluationResult:",
-                "default": null,
-                "members": []
-              },
               {
                 "name": "integrand_result",
                 "kind": "getter",
@@ -997,20 +975,9 @@
                 "kind": "getter",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Correlated event groups produced while evaluating this sample."
+                  "body": "All correlated event groups for this sample, before the outer sampler weight."
                 },
                 "signature": "def event_groups(self) -> list[EventGroup]:",
-                "default": null,
-                "members": []
-              },
-              {
-                "name": "observables",
-                "kind": "getter",
-                "docs": {
-                  "format": "python-docstring",
-                  "body": "Observable snapshots produced from the same Monte Carlo sample."
-                },
-                "signature": "def observables(self) -> dict:",
                 "default": null,
                 "members": []
               },
@@ -1019,7 +986,7 @@
                 "kind": "method",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Return a human-readable evaluation and observable summary."
+                  "body": "Return a human-readable evaluation summary."
                 },
                 "signature": "def __str__(self) -> str:",
                 "default": null,
@@ -1030,7 +997,7 @@
                 "kind": "method",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Return the human-readable evaluation and observable summary."
+                  "body": "Return the human-readable evaluation summary."
                 },
                 "signature": "def __repr__(self) -> str:",
                 "default": null,
@@ -1040,7 +1007,7 @@
             "source": {
               "identifier": "gammaloop-python::EvaluationResult",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 250,
+              "line": 245,
               "column": 1
             }
           },
@@ -1159,7 +1126,7 @@
             "source": {
               "identifier": "gammaloop-python::Event",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 325,
+              "line": 310,
               "column": 1
             }
           },
@@ -1223,7 +1190,7 @@
             "source": {
               "identifier": "gammaloop-python::EventGroup",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 369,
+              "line": 354,
               "column": 1
             }
           },
@@ -1298,7 +1265,7 @@
             "source": {
               "identifier": "gammaloop-python::FourMomentum",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 388,
+              "line": 373,
               "column": 1
             }
           },
@@ -1507,11 +1474,39 @@
                 "members": []
               },
               {
+                "name": "observable_accumulator",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Create empty observable statistics for the selected integrand.\nEvaluation itself never commits observable moments. See ``ObservableAccumulator``."
+                },
+                "signature": "def observable_accumulator(self, process_id: Optional[int] = None, integrand_name: Optional[str] = None) -> ObservableAccumulator:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "process_id",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "Optional[int]",
+                    "default": "None",
+                    "members": []
+                  },
+                  {
+                    "name": "integrand_name",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "Optional[str]",
+                    "default": "None",
+                    "members": []
+                  }
+                ]
+              },
+              {
                 "name": "evaluate_sample",
                 "kind": "method",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Evaluate one integration or momentum-space sample.\n\nParameters\n----------\npoint : Sequence[float]\n    Coordinates for one sample. In integration space, the length must match\n    the selected integrand and ``discrete_dim``. In momentum space, values\n    are grouped as ``(px, py, pz)`` with one triplet per independent loop\n    momentum. Energy components and external momenta are not accepted.\nprocess_id : int, optional\n    Process containing the integrand. Supply this when selection is ambiguous.\nintegrand_name : str, optional\n    Integrand to evaluate. Supply this when selection is ambiguous.\nuse_arb_prec : bool, default=False\n    Force arbitrary-precision (Arb) internal evaluation instead of following\n    the configured stability ladder.\n    Returned numeric fields remain ``float64``.\nminimal_output : bool, default=False\n    Omit the optional evaluation metadata from the returned sample.\nreturn_events : bool, optional\n    Temporarily override event generation for this call. The integrand setting\n    is restored afterward.\nmomentum_space : bool, default=False\n    Interpret ``point`` as consecutive spatial loop-momentum ``(px, py, pz)``\n    triplets instead of integration-space coordinates.\nintegrator_weight : float, optional\n    Weight associated with this sample. The default is 1.0.\ndiscrete_dim : Sequence[int], optional\n    Discrete integration coordinates used to determine the expected dimension.\ngraph_name : str, optional\n    Graph selected for momentum-space evaluation.\norientation : int, optional\n    Orientation index for ``graph_name`` in momentum-space evaluation.\n\nReturns\n-------\nEvaluationResult\n    The sample evaluation and the observable snapshot for its one-row batch.\n\nRaises\n------\nException\n    If integrand selection is ambiguous or invalid, dimensions do not match,\n    graph or orientation selection is invalid, or warm-up/evaluation fails.\n\nNotes\n-----\nWith ``use_arb_prec=False``, evaluation follows the configured ``f64``,\n``f128``, and arbitrary-precision stability ladder. ``use_arb_prec=True``\nforces arbitrary-precision (Arb) internal evaluation. Python-visible numeric\nfields use the package's ``float64`` output contract. Evaluation may\nwarm the integrand and update in-memory caches or observable snapshots even in\na read-only-state session.\n\nSee Also\n--------\nGammaLoop's sample-evaluation contract in the interface guide and the\nmaintained events-and-observables example.\n\nExamples\n--------\nEvaluate one point from the repository's differential API regression fixture:\n\n```python\nfrom pathlib import Path\n\nfrom gammaloop import GammaLoopAPI\n\nexample = Path(\"examples/api/python/epem_a_ddxg_xs_LO\")\napi = GammaLoopAPI(\n    state_folder=example / \"state\",\n    boot_commands_path=example / \"run.toml\",\n    clean_state=True,\n)\npoint = [0.17, 0.31, 0.53, 0.23, 0.41, 0.67]\nresult = api.evaluate_sample(point, return_events=True)\nassert result.parameterization_jacobian is not None\nassert result.stability_results\nassert result.event_groups\n```\n\nThis card verifies API and event plumbing. Its powered coupling selector is not an\nindependently reviewed perturbative-order definition or normalization benchmark."
+                  "body": "Evaluate one integration or momentum-space sample.\n\nParameters\n----------\npoint : Sequence[float]\n    Coordinates for one sample. In integration space, the length must match\n    the selected integrand and ``discrete_dim``. In momentum space, values\n    are grouped as ``(px, py, pz)`` with one triplet per independent loop\n    momentum. Energy components and external momenta are not accepted.\nprocess_id : int, optional\n    Process containing the integrand. Supply this when selection is ambiguous.\nintegrand_name : str, optional\n    Integrand to evaluate. Supply this when selection is ambiguous.\nuse_arb_prec : bool, default=False\n    Force arbitrary-precision (Arb) internal evaluation instead of following\n    the configured stability ladder.\n    Returned numeric fields remain ``float64``.\nminimal_output : bool, default=False\n    Omit the optional evaluation metadata from the returned sample.\nreturn_events : bool, optional\n    Temporarily override event generation for this call. The integrand setting\n    is restored afterward.\nmomentum_space : bool, default=False\n    Interpret ``point`` as consecutive spatial loop-momentum ``(px, py, pz)``\n    triplets instead of integration-space coordinates.\nintegrator_weight : float, optional\n    Weight associated with this sample. The default is 1.0.\ndiscrete_dim : Sequence[int], optional\n    Discrete integration coordinates used to determine the expected dimension.\ngraph_name : str, optional\n    Graph selected for momentum-space evaluation.\norientation : int, optional\n    Orientation index for ``graph_name`` in momentum-space evaluation.\n\nReturns\n-------\nEvaluationResult\n    One independent sample, with an unweighted contribution for configured observables.\n\nRaises\n------\nException\n    If integrand selection is ambiguous or invalid, dimensions do not match,\n    graph or orientation selection is invalid, or warm-up/evaluation fails.\n\nNotes\n-----\nWith ``use_arb_prec=False``, evaluation follows the configured ``f64``,\n``f128``, and arbitrary-precision stability ladder. ``use_arb_prec=True``\nforces arbitrary-precision (Arb) internal evaluation. Python-visible numeric\nfields use the package's ``float64`` output contract. Evaluation may\nwarm the integrand and update in-memory caches even in a read-only-state\nsession. Observable statistics change only through explicit accumulation.\n\nSee Also\n--------\nGammaLoop's sample-evaluation contract in the interface guide and the\nmaintained events-and-observables example.\n\nExamples\n--------\nEvaluate one point from the repository's differential API regression fixture:\n\n```python\nfrom pathlib import Path\n\nfrom gammaloop import GammaLoopAPI\n\nexample = Path(\"examples/api/python/epem_a_ddxg_xs_LO\")\napi = GammaLoopAPI(\n    state_folder=example / \"state\",\n    boot_commands_path=example / \"run.toml\",\n    clean_state=True,\n)\npoint = [0.17, 0.31, 0.53, 0.23, 0.41, 0.67]\nresult = api.evaluate_sample(point, return_events=True)\nassert result.parameterization_jacobian is not None\nassert result.stability_results\nassert result.event_groups\n```\n\nThis card verifies API and event plumbing. Its powered coupling selector is not an\nindependently reviewed perturbative-order definition or normalization benchmark."
                 },
                 "signature": "def evaluate_sample(self, point: Sequence[float], process_id: Optional[int] = None, integrand_name: Optional[str] = None, use_arb_prec: bool = False, minimal_output: bool = False, return_events: Optional[bool] = None, momentum_space: bool = False, integrator_weight: Optional[float] = None, discrete_dim: Optional[Sequence[int]] = None, graph_name: Optional[str] = None, orientation: Optional[int] = None) -> EvaluationResult:",
                 "default": null,
@@ -1644,7 +1639,7 @@
                 "kind": "method",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Evaluate a batch of integration or momentum-space samples.\n\nParameters\n----------\npoints : numpy.ndarray[numpy.float64]\n    Two-dimensional array with one sample per row. Integration-space columns\n    must match the selected integrand; momentum-space columns are flattened\n    ``(px, py, pz)`` groups with one triplet per independent loop momentum.\n    Energy components and external momenta are not accepted.\nprocess_id : int, optional\n    Process containing the integrand. Supply this when selection is ambiguous.\nintegrand_name : str, optional\n    Integrand to evaluate. Supply this when selection is ambiguous.\nuse_arb_prec : bool, default=False\n    Force arbitrary-precision (Arb) internal evaluation instead of following\n    the configured stability ladder.\n    Returned numeric fields remain ``float64``.\nminimal_output : bool, default=False\n    Omit the optional evaluation metadata from every returned sample.\nreturn_events : bool, optional\n    Temporarily override event generation for this call. The integrand setting\n    is restored afterward.\nmomentum_space : bool, default=False\n    Interpret each row as consecutive spatial loop-momentum ``(px, py, pz)``\n    triplets instead of integration-space coordinates.\nintegrator_weights : numpy.ndarray[numpy.float64], optional\n    One weight per row. Defaults to 1.0 for every sample.\ndiscrete_dims : numpy.ndarray[numpy.unsignedinteger], optional\n    Two-dimensional array with one row of discrete coordinates per sample.\ngraph_names : Sequence[str | None], optional\n    Momentum-space graph selection for each sample.\norientations : Sequence[int | None], optional\n    Momentum-space orientation selection for each sample.\n\nReturns\n-------\nBatchEvaluationResult\n    Per-sample evaluations and one observable snapshot for the complete batch.\n\nRaises\n------\nException\n    If integrand selection is ambiguous or invalid, array or option lengths do\n    not match, dimensions are invalid, or warm-up/evaluation fails.\n\nNotes\n-----\nWith ``use_arb_prec=False``, evaluation follows the configured ``f64``,\n``f128``, and arbitrary-precision stability ladder. ``use_arb_prec=True``\nforces arbitrary-precision (Arb) internal evaluation. Python-visible numeric\nfields use the package's ``float64`` output contract. Evaluation may\nupdate in-memory caches or observable snapshots in a read-only-state session.\n\nSee Also\n--------\nGammaLoop's sample-evaluation contract in the interface guide and the\nmaintained events-and-observables example.\n\nExamples\n--------\nEvaluate two rows and inspect their per-sample events and batch-level histograms:\n\n```python\nfrom pathlib import Path\n\nimport numpy as np\nfrom gammaloop import GammaLoopAPI\n\nexample = Path(\"examples/api/python/epem_a_ddxg_xs_LO\")\napi = GammaLoopAPI(\n    state_folder=example / \"state\",\n    boot_commands_path=example / \"run.toml\",\n    clean_state=True,\n)\npoints = np.array([\n    [0.17, 0.31, 0.53, 0.23, 0.41, 0.67],\n    [0.11, 0.29, 0.47, 0.19, 0.37, 0.59],\n], dtype=float)\nresult = api.evaluate_samples(points, return_events=True)\nassert len(result.samples) == 2\nassert all(sample.event_groups for sample in result.samples)\nassert result.observables[\"leading_jet_pt_hist\"].sample_count == 2\nassert len(result.observables[\"leading_jet_pt_hist\"].bins) == 8\n```\n\nThe fixture exercises the API surface; its powered coupling selector is not a validated\nperturbative-order or normalization benchmark."
+                  "body": "Evaluate a batch of integration or momentum-space samples.\n\nParameters\n----------\npoints : numpy.ndarray[numpy.float64]\n    Two-dimensional array with one sample per row. Integration-space columns\n    must match the selected integrand; momentum-space columns are flattened\n    ``(px, py, pz)`` groups with one triplet per independent loop momentum.\n    Energy components and external momenta are not accepted.\nprocess_id : int, optional\n    Process containing the integrand. Supply this when selection is ambiguous.\nintegrand_name : str, optional\n    Integrand to evaluate. Supply this when selection is ambiguous.\nuse_arb_prec : bool, default=False\n    Force arbitrary-precision (Arb) internal evaluation instead of following\n    the configured stability ladder.\n    Returned numeric fields remain ``float64``.\nminimal_output : bool, default=False\n    Omit the optional evaluation metadata from every returned sample.\nreturn_events : bool, optional\n    Temporarily override event generation for this call. The integrand setting\n    is restored afterward.\nmomentum_space : bool, default=False\n    Interpret each row as consecutive spatial loop-momentum ``(px, py, pz)``\n    triplets instead of integration-space coordinates.\nintegrator_weights : numpy.ndarray[numpy.float64], optional\n    One weight per row. Defaults to 1.0 for every sample.\ndiscrete_dims : numpy.ndarray[numpy.unsignedinteger], optional\n    Two-dimensional array with one row of discrete coordinates per sample.\ngraph_names : Sequence[str | None], optional\n    Momentum-space graph selection for each sample.\norientations : Sequence[int | None], optional\n    Momentum-space orientation selection for each sample.\n\nReturns\n-------\nBatchEvaluationResult\n    One evaluation per input sample and optional numerical-stability diagnostics.\n\nRaises\n------\nException\n    If integrand selection is ambiguous or invalid, array or option lengths do\n    not match, dimensions are invalid, or warm-up/evaluation fails.\n\nNotes\n-----\nWith ``use_arb_prec=False``, evaluation follows the configured ``f64``,\n``f128``, and arbitrary-precision stability ladder. ``use_arb_prec=True``\nforces arbitrary-precision (Arb) internal evaluation. Python-visible numeric\nfields use the package's ``float64`` output contract. Evaluation may\nupdate numerical caches; observable statistics change only through explicit accumulation.\n\nSee Also\n--------\nGammaLoop's sample-evaluation contract in the interface guide and the\nmaintained events-and-observables example.\n\nExamples\n--------\nEvaluate two rows and explicitly accumulate their correlated observable contributions:\n\n```python\nfrom pathlib import Path\n\nimport numpy as np\nfrom gammaloop import GammaLoopAPI\n\nexample = Path(\"examples/api/python/epem_a_ddxg_xs_LO\")\napi = GammaLoopAPI(\n    state_folder=example / \"state\",\n    boot_commands_path=example / \"run.toml\",\n    clean_state=True,\n)\npoints = np.array([\n    [0.17, 0.31, 0.53, 0.23, 0.41, 0.67],\n    [0.11, 0.29, 0.47, 0.19, 0.37, 0.59],\n], dtype=float)\nresult = api.evaluate_samples(points, return_events=True)\nassert len(result.samples) == 2\nassert all(sample.event_groups for sample in result.samples)\naccumulator = api.observable_accumulator()\nfor sample in result.samples:\n    accumulator.add_sample(sample, sample.integrator_weight)\nhistograms = accumulator.snapshot()\nassert histograms[\"leading_jet_pt_hist\"].sample_count == 2\nassert len(histograms[\"leading_jet_pt_hist\"].bins) == 8\n```\n\nThe fixture exercises the API surface; its powered coupling selector is not a validated\nperturbative-order or normalization benchmark."
                 },
                 "signature": "def evaluate_samples(self, points: numpy.NDArray[numpy.float64], process_id: Optional[int] = None, integrand_name: Optional[str] = None, use_arb_prec: bool = False, minimal_output: bool = False, return_events: Optional[bool] = None, momentum_space: bool = False, integrator_weights: Optional[numpy.NDArray[numpy.float64]] = None, discrete_dims: numpy.NDArray[numpy.unsignedinteger] | None = None, graph_names: Optional[Sequence[Optional[str]]] = None, orientations: Optional[Sequence[Optional[int]]] = None) -> BatchEvaluationResult:",
                 "default": null,
@@ -2258,7 +2253,7 @@
             "source": {
               "identifier": "gammaloop-python::GammaLoopAPI",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 414,
+              "line": 399,
               "column": 1
             }
           },
@@ -2275,7 +2270,7 @@
             ],
             "docs": {
               "format": "python-docstring",
-              "body": "Mutable continuous or discrete histogram accumulator with sample-level statistics.\n\nNotes\n-----\nThe example below deliberately places at most one entry in each bin. If several correlated\nentries land in one bin, the current helper records their squared weights separately rather\nthan grouping their weights like GammaLoop's native observable pipeline. Do not replay raw\nevent groups through this class until that statistical contract is aligned.\n\nExamples\n--------\nMerge two pending, statistically independent samples before committing them:\n\n```python\nfrom gammaloop import HistogramAccumulator\n\nleft = HistogramAccumulator.continuous(\"energy\", 0.0, 4.0, 4)\nright = HistogramAccumulator.continuous(\"energy\", 0.0, 4.0, 4)\nleft.fill_continuous_sample([(0.5, 2.0)])\nright.fill_continuous_sample([(2.5, 3.0)])\nleft.merge_in_place(right)\nleft.update_results()\n\nsnapshot = left.snapshot()\nassert snapshot.sample_count == 2\nassert snapshot.bins[0].sum_weights == 2.0\nassert snapshot.bins[0].sum_weights_squared == 4.0\nassert snapshot.bins[0].sum_weights / snapshot.sample_count == 1.0\nassert snapshot.bins[2].sum_weights == 3.0\nassert snapshot.bins[2].sum_weights_squared == 9.0\nassert right.snapshot().sample_count == 0\nassert len(left.rebin(2).snapshot().bins) == 2\n```"
+              "body": "Mutable continuous or discrete histogram accumulator with sample-level statistics.\n\nNotes\n-----\nEach fill call represents one independent sample. Repeated entries in a bin\nare summed before their squared contribution is recorded, matching the native\nobservable pipeline. Empty fills still increment the sample count.\n\nExamples\n--------\nMerge two pending, statistically independent samples before committing them:\n\n```python\nfrom gammaloop import HistogramAccumulator\n\nleft = HistogramAccumulator.continuous(\"energy\", 0.0, 4.0, 4)\nright = HistogramAccumulator.continuous(\"energy\", 0.0, 4.0, 4)\nleft.fill_continuous_sample([(0.5, 2.0)])\nright.fill_continuous_sample([(2.5, 3.0)])\nleft.merge_in_place(right)\nleft.update_results()\n\nsnapshot = left.snapshot()\nassert snapshot.sample_count == 2\nassert snapshot.bins[0].sum_weights == 2.0\nassert snapshot.bins[0].sum_weights_squared == 4.0\nassert snapshot.bins[0].sum_weights / snapshot.sample_count == 1.0\nassert snapshot.bins[2].sum_weights == 3.0\nassert snapshot.bins[2].sum_weights_squared == 9.0\nassert right.snapshot().sample_count == 0\nassert len(left.rebin(2).snapshot().bins) == 2\n```"
             },
             "summary": "Mutable continuous or discrete histogram accumulator with sample-level statistics.",
             "signature": "class HistogramAccumulator:",
@@ -2660,7 +2655,7 @@
             "source": {
               "identifier": "gammaloop-python::HistogramAccumulator",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1014,
+              "line": 1008,
               "column": 1
             }
           },
@@ -2825,7 +2820,7 @@
             "source": {
               "identifier": "gammaloop-python::HistogramBin",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1191,
+              "line": 1184,
               "column": 1
             }
           },
@@ -3043,7 +3038,7 @@
             "source": {
               "identifier": "gammaloop-python::HistogramSnapshot",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1265,
+              "line": 1258,
               "column": 1
             }
           },
@@ -3107,7 +3102,7 @@
             "source": {
               "identifier": "gammaloop-python::HistogramStats",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1356,
+              "line": 1349,
               "column": 1
             }
           },
@@ -3194,7 +3189,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegralEstimate",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1377,
+              "line": 1370,
               "column": 1
             }
           },
@@ -3247,7 +3242,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrandActiveThresholdCut",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1397,
+              "line": 1390,
               "column": 1
             }
           },
@@ -3333,7 +3328,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrandCut",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1413,
+              "line": 1406,
               "column": 1
             }
           },
@@ -3419,7 +3414,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrandCutThreshold",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1444,
+              "line": 1437,
               "column": 1
             }
           },
@@ -3516,7 +3511,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrandGraph",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1475,
+              "line": 1468,
               "column": 1
             }
           },
@@ -3646,7 +3641,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrandGraphGroup",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1511,
+              "line": 1504,
               "column": 1
             }
           },
@@ -3809,7 +3804,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrandInfo",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1562,
+              "line": 1555,
               "column": 1
             }
           },
@@ -3884,7 +3879,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrandLoopMomentumBasis",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1628,
+              "line": 1621,
               "column": 1
             }
           },
@@ -3937,7 +3932,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrandOrientation",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1654,
+              "line": 1647,
               "column": 1
             }
           },
@@ -4023,7 +4018,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrandThresholdEsurface",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1670,
+              "line": 1663,
               "column": 1
             }
           },
@@ -4086,7 +4081,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrationOutput",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1701,
+              "line": 1694,
               "column": 1
             }
           },
@@ -4150,7 +4145,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrationResult",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1714,
+              "line": 1707,
               "column": 1
             }
           },
@@ -4301,7 +4296,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrationStatisticsSnapshot",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1724,
+              "line": 1717,
               "column": 1
             }
           },
@@ -4396,7 +4391,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrationTableComponentResult",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1760,
+              "line": 1753,
               "column": 1
             }
           },
@@ -4507,7 +4502,7 @@
             "source": {
               "identifier": "gammaloop-python::LinearEnergyExpression",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1782,
+              "line": 1775,
               "column": 1
             }
           },
@@ -4570,7 +4565,117 @@
             "source": {
               "identifier": "gammaloop-python::MaxWeightInfoEntry",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1815,
+              "line": 1808,
+              "column": 1
+            }
+          },
+          "ObservableAccumulator": {
+            "id": "ObservableAccumulator",
+            "name": "ObservableAccumulator",
+            "title": "ObservableAccumulator",
+            "kind": "python-class",
+            "supported": true,
+            "required_features": [
+              "python",
+              "abi3",
+              "python-stubs"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Independent observable statistics compiled from one integrand's definitions.\n\nConstruct with ``api.observable_accumulator()`` and add exactly one evaluation\nrecord per independent draw. The coefficient is the complete outer weight;\nzero keeps the attempted sample count without fills. Event groups stay unmodified.\n\nExamples\n--------\n```python\naccumulator = api.observable_accumulator()\nbatch = api.evaluate_samples(points)\nfor sample in batch.samples:\n    accumulator.add_sample(sample, sample.integrator_weight)\nhistograms = accumulator.snapshot()\n```"
+            },
+            "summary": "Independent observable statistics compiled from one integrand's definitions.",
+            "signature": "class ObservableAccumulator:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [],
+            "members": [
+              {
+                "name": "add_sample",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Commit one sample with an explicit outer weight, including zero-weight misses."
+                },
+                "signature": "def add_sample(self, sample: EvaluationResult, coefficient: float) -> None:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "sample",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "EvaluationResult",
+                    "default": null,
+                    "members": []
+                  },
+                  {
+                    "name": "coefficient",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "float",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "merge_in_place",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Merge independent sample statistics without changing the source accumulator."
+                },
+                "signature": "def merge_in_place(self, other: ObservableAccumulator) -> None:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "other",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "ObservableAccumulator",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "sum_independent_estimates",
+                "kind": "associated-function",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Sum means and variances of independent populations, preserving their separate counts.\nMerge batches within a stratum before passing its accumulator here."
+                },
+                "signature": "def sum_independent_estimates(accumulators: Sequence[ObservableAccumulator]) -> Any:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "accumulators",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "Sequence[ObservableAccumulator]",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "snapshot",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Return mergeable raw histogram statistics, without clearing or committing them."
+                },
+                "signature": "def snapshot(self) -> dict:",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammaloop-python::ObservableAccumulator",
+              "file": "docs/api/python/gammaloop-python.pyi",
+              "line": 1822,
               "column": 1
             }
           },
@@ -4636,7 +4741,7 @@
             "source": {
               "identifier": "gammaloop-python::Residue",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1829,
+              "line": 1860,
               "column": 1
             }
           },
@@ -4746,7 +4851,7 @@
             "source": {
               "identifier": "gammaloop-python::ResidueMap",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1846,
+              "line": 1877,
               "column": 1
             }
           },
@@ -4846,7 +4951,7 @@
             "source": {
               "identifier": "gammaloop-python::ResidueMapKey",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1887,
+              "line": 1918,
               "column": 1
             }
           },
@@ -4984,170 +5089,7 @@
             "source": {
               "identifier": "gammaloop-python::ResidueVariant",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1915,
-              "column": 1
-            }
-          },
-          "SampleEvaluationResult": {
-            "id": "SampleEvaluationResult",
-            "name": "SampleEvaluationResult",
-            "title": "SampleEvaluationResult",
-            "kind": "python-class",
-            "supported": true,
-            "required_features": [
-              "python",
-              "abi3",
-              "python-stubs"
-            ],
-            "docs": {
-              "format": "python-docstring",
-              "body": "Numerical value, metadata, stability records, and generated events for one sample."
-            },
-            "summary": "Numerical value, metadata, stability records, and generated events for one sample.",
-            "signature": "class SampleEvaluationResult:",
-            "since": null,
-            "keywords": [],
-            "params": [],
-            "returns": null,
-            "examples": [],
-            "members": [
-              {
-                "name": "integrand_result",
-                "kind": "getter",
-                "docs": {
-                  "format": "python-docstring",
-                  "body": "Complex physical contribution including map Jacobians and channel partitions, before the outer-grid weight."
-                },
-                "signature": "def integrand_result(self) -> complex:",
-                "default": null,
-                "members": []
-              },
-              {
-                "name": "absolute_integrand_result",
-                "kind": "getter",
-                "docs": {
-                  "format": "python-docstring",
-                  "body": "Componentwise absolute physical contributions summed over channel points, before the outer-grid weight."
-                },
-                "signature": "def absolute_integrand_result(self) -> Optional[complex]:",
-                "default": null,
-                "members": []
-              },
-              {
-                "name": "integrator_weight",
-                "kind": "getter",
-                "docs": {
-                  "format": "python-docstring",
-                  "body": "Monte Carlo weight supplied by the integrator, excluding the parameterization Jacobian."
-                },
-                "signature": "def integrator_weight(self) -> float:",
-                "default": null,
-                "members": []
-              },
-              {
-                "name": "generated_event_count",
-                "kind": "getter",
-                "docs": {
-                  "format": "python-docstring",
-                  "body": "Number of candidate events generated, or ``None`` when metadata was omitted."
-                },
-                "signature": "def generated_event_count(self) -> Optional[int]:",
-                "default": null,
-                "members": []
-              },
-              {
-                "name": "accepted_event_count",
-                "kind": "getter",
-                "docs": {
-                  "format": "python-docstring",
-                  "body": "Number of generated events accepted by selectors, or ``None`` without metadata."
-                },
-                "signature": "def accepted_event_count(self) -> Optional[int]:",
-                "default": null,
-                "members": []
-              },
-              {
-                "name": "event_processing_time_seconds",
-                "kind": "getter",
-                "docs": {
-                  "format": "python-docstring",
-                  "body": "Time spent building and selecting events, in seconds, or ``None`` without metadata."
-                },
-                "signature": "def event_processing_time_seconds(self) -> Optional[float]:",
-                "default": null,
-                "members": []
-              },
-              {
-                "name": "parameterization_jacobian",
-                "kind": "getter",
-                "docs": {
-                  "format": "python-docstring",
-                  "body": "Sample parameterization Jacobian, or ``None`` when no Jacobian was supplied."
-                },
-                "signature": "def parameterization_jacobian(self) -> Optional[float]:",
-                "default": null,
-                "members": []
-              },
-              {
-                "name": "is_nan",
-                "kind": "getter",
-                "docs": {
-                  "format": "python-docstring",
-                  "body": "Whether evaluation metadata flagged a non-finite result, or ``None`` without metadata."
-                },
-                "signature": "def is_nan(self) -> Optional[bool]:",
-                "default": null,
-                "members": []
-              },
-              {
-                "name": "stability_results",
-                "kind": "getter",
-                "docs": {
-                  "format": "python-docstring",
-                  "body": "Ordered stability-level attempts, or ``None`` when metadata was omitted.\nEach attempt records its precision and representation; precision may repeat."
-                },
-                "signature": "def stability_results(self) -> Optional[list[StabilityResult]]:",
-                "default": null,
-                "members": []
-              },
-              {
-                "name": "event_groups",
-                "kind": "getter",
-                "docs": {
-                  "format": "python-docstring",
-                  "body": "Correlated event groups produced while evaluating this sample."
-                },
-                "signature": "def event_groups(self) -> list[EventGroup]:",
-                "default": null,
-                "members": []
-              },
-              {
-                "name": "__str__",
-                "kind": "method",
-                "docs": {
-                  "format": "python-docstring",
-                  "body": "Return a human-readable evaluation summary."
-                },
-                "signature": "def __str__(self) -> str:",
-                "default": null,
-                "members": []
-              },
-              {
-                "name": "__repr__",
-                "kind": "method",
-                "docs": {
-                  "format": "python-docstring",
-                  "body": "Return the human-readable evaluation summary."
-                },
-                "signature": "def __repr__(self) -> str:",
-                "default": null,
-                "members": []
-              }
-            ],
-            "source": {
-              "identifier": "gammaloop-python::SampleEvaluationResult",
-              "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1968,
+              "line": 1946,
               "column": 1
             }
           },
@@ -5368,7 +5310,7 @@
             "source": {
               "identifier": "gammaloop-python::SettingsValue",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 2033,
+              "line": 1999,
               "column": 1
             }
           },
@@ -5482,7 +5424,7 @@
             "source": {
               "identifier": "gammaloop-python::SlotIntegrationResult",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 2125,
+              "line": 2091,
               "column": 1
             }
           },
@@ -5587,7 +5529,7 @@
             "source": {
               "identifier": "gammaloop-python::StabilityResult",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 2154,
+              "line": 2120,
               "column": 1
             }
           },
@@ -5645,7 +5587,7 @@
             "source": {
               "identifier": "gammaloop-python::ThermalDistributionFactor",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 2192,
+              "line": 2158,
               "column": 1
             }
           },
@@ -5692,7 +5634,7 @@
             "source": {
               "identifier": "gammaloop-python::ThermalNumerator",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 2207,
+              "line": 2173,
               "column": 1
             }
           },
@@ -5747,7 +5689,7 @@
             "source": {
               "identifier": "gammaloop-python::ThermalWeight",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 2217,
+              "line": 2183,
               "column": 1
             }
           },
@@ -5826,7 +5768,7 @@
             "source": {
               "identifier": "gammaloop-python::ThresholdCountertermAssociationMetadata",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 2229,
+              "line": 2195,
               "column": 1
             }
           },
@@ -5905,7 +5847,7 @@
             "source": {
               "identifier": "gammaloop-python::ThresholdCountertermComponentMetadata",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 2247,
+              "line": 2213,
               "column": 1
             }
           },
@@ -5984,7 +5926,7 @@
             "source": {
               "identifier": "gammaloop-python::ThresholdCountertermComponentOccurrence",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 2265,
+              "line": 2231,
               "column": 1
             }
           },
@@ -6071,7 +6013,7 @@
             "source": {
               "identifier": "gammaloop-python::ThresholdCountertermComponentWeight",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 2283,
+              "line": 2249,
               "column": 1
             }
           },
@@ -6166,7 +6108,7 @@
             "source": {
               "identifier": "gammaloop-python::ThresholdCountertermDirective",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 2303,
+              "line": 2269,
               "column": 1
             }
           },
@@ -6237,7 +6179,7 @@
             "source": {
               "identifier": "gammaloop-python::ThresholdCountertermEvaluatorMetadata",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 2325,
+              "line": 2291,
               "column": 1
             }
           },
@@ -6284,7 +6226,7 @@
             "source": {
               "identifier": "gammaloop-python::ThresholdCountertermEventInfo",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 2341,
+              "line": 2307,
               "column": 1
             }
           },
@@ -6347,7 +6289,7 @@
             "source": {
               "identifier": "gammaloop-python::ThresholdCountertermMetadataRegistry",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 2351,
+              "line": 2317,
               "column": 1
             }
           },
@@ -6410,7 +6352,7 @@
             "source": {
               "identifier": "gammaloop-python::ThresholdCountertermMultiplierMetadata",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 2365,
+              "line": 2331,
               "column": 1
             }
           },
@@ -6561,7 +6503,7 @@
             "source": {
               "identifier": "gammaloop-python::ThresholdCountertermVariantMetadata",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 2379,
+              "line": 2345,
               "column": 1
             }
           },
@@ -6658,7 +6600,7 @@
             "source": {
               "identifier": "gammaloop-python::LogLevel",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 2415,
+              "line": 2381,
               "column": 1
             }
           },
@@ -6688,7 +6630,7 @@
             "source": {
               "identifier": "gammaloop-python::atom_to_canonical_string",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 2441,
+              "line": 2407,
               "column": 1
             }
           },
@@ -6718,7 +6660,7 @@
             "source": {
               "identifier": "gammaloop-python::evaluate_graph_overall_factor",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 2469,
+              "line": 2435,
               "column": 1
             }
           },
@@ -6748,7 +6690,7 @@
             "source": {
               "identifier": "gammaloop-python::to_dots",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 2499,
+              "line": 2465,
               "column": 1
             }
           }

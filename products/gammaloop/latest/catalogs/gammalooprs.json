@@ -584,9 +584,9 @@
             "required_features": [],
             "docs": {
               "format": "rust-markdown",
-              "body": "Returns one f64 evaluation together with the observable snapshot produced for that sample."
+              "body": "Returns one f64 sample evaluation with its unweighted observable contribution."
             },
-            "summary": "Returns one f64 evaluation together with the observable snapshot produced for that sample.",
+            "summary": "Returns one f64 sample evaluation with its unweighted observable contribution.",
             "signature": "pub struct SingleSampleEvaluationResult {}",
             "since": null,
             "keywords": [],
@@ -610,23 +610,12 @@
                 "signature": "SampleEvaluationResult",
                 "default": null,
                 "members": []
-              },
-              {
-                "name": "observables",
-                "kind": "field",
-                "docs": {
-                  "format": "rust-markdown",
-                  "body": "Persistent runtime-observable snapshot after processing the requested sample.\n\nThe snapshot can include samples accumulated by earlier API calls."
-                },
-                "signature": "ObservableSnapshotBundle",
-                "default": null,
-                "members": []
               }
             ],
             "source": {
               "identifier": "gammalooprs::integrands::evaluation::SingleSampleEvaluationResult",
               "file": "crates/gammalooprs/src/integrands/evaluation.rs",
-              "line": 600,
+              "line": 579,
               "column": 1
             }
           },
@@ -639,9 +628,9 @@
             "required_features": [],
             "docs": {
               "format": "rust-markdown",
-              "body": "Returns f64 sample evaluations and the observable snapshot accumulated across the complete batch."
+              "body": "Returns one f64 evaluation per input without committing observable statistics."
             },
-            "summary": "Returns f64 sample evaluations and the observable snapshot accumulated across the complete batch.",
+            "summary": "Returns one f64 evaluation per input without committing observable statistics.",
             "signature": "pub struct BatchSampleEvaluationResult {}",
             "since": null,
             "keywords": [],
@@ -667,17 +656,6 @@
                 "members": []
               },
               {
-                "name": "observables",
-                "kind": "field",
-                "docs": {
-                  "format": "rust-markdown",
-                  "body": "Persistent runtime-observable snapshot after processing the requested batch.\n\nThe snapshot can include samples accumulated by earlier API calls."
-                },
-                "signature": "ObservableSnapshotBundle",
-                "default": null,
-                "members": []
-              },
-              {
                 "name": "numerical_stability",
                 "kind": "field",
                 "docs": {
@@ -692,7 +670,7 @@
             "source": {
               "identifier": "gammalooprs::integrands::evaluation::BatchSampleEvaluationResult",
               "file": "crates/gammalooprs/src/integrands/evaluation.rs",
-              "line": 826,
+              "line": 801,
               "column": 1
             }
           },
@@ -705,9 +683,9 @@
             "required_features": [],
             "docs": {
               "format": "rust-markdown",
-              "body": "Retains the active numerical precision for one evaluation and its observable snapshot."
+              "body": "Retains the active numerical precision for one evaluation and its observable contribution."
             },
-            "summary": "Retains the active numerical precision for one evaluation and its observable snapshot.",
+            "summary": "Retains the active numerical precision for one evaluation and its observable contribution.",
             "signature": "pub struct PreciseSingleSampleEvaluationResult {}",
             "since": null,
             "keywords": [],
@@ -731,23 +709,12 @@
                 "signature": "PreciseSampleEvaluationResult",
                 "default": null,
                 "members": []
-              },
-              {
-                "name": "observables",
-                "kind": "field",
-                "docs": {
-                  "format": "rust-markdown",
-                  "body": "Observable snapshot produced from the same Monte Carlo sample."
-                },
-                "signature": "ObservableSnapshotBundle",
-                "default": null,
-                "members": []
               }
             ],
             "source": {
               "identifier": "gammalooprs::integrands::evaluation::PreciseSingleSampleEvaluationResult",
               "file": "crates/gammalooprs/src/integrands/evaluation.rs",
-              "line": 844,
+              "line": 815,
               "column": 1
             }
           },
@@ -760,9 +727,9 @@
             "required_features": [],
             "docs": {
               "format": "rust-markdown",
-              "body": "Retains the active numerical precision for every sample in a batch and its observable snapshot."
+              "body": "Retains the active numerical precision and separate contribution of every sample in a batch."
             },
-            "summary": "Retains the active numerical precision for every sample in a batch and its observable snapshot.",
+            "summary": "Retains the active numerical precision and separate contribution of every sample in a batch.",
             "signature": "pub struct PreciseBatchSampleEvaluationResult {}",
             "since": null,
             "keywords": [],
@@ -786,23 +753,12 @@
                 "signature": "Vec < PreciseSampleEvaluationResult >",
                 "default": null,
                 "members": []
-              },
-              {
-                "name": "observables",
-                "kind": "field",
-                "docs": {
-                  "format": "rust-markdown",
-                  "body": "Observable snapshot accumulated across the complete sample batch."
-                },
-                "signature": "ObservableSnapshotBundle",
-                "default": null,
-                "members": []
               }
             ],
             "source": {
               "identifier": "gammalooprs::integrands::evaluation::PreciseBatchSampleEvaluationResult",
               "file": "crates/gammalooprs/src/integrands/evaluation.rs",
-              "line": 852,
+              "line": 821,
               "column": 1
             }
           },
@@ -1022,7 +978,7 @@
             "source": {
               "identifier": "gammalooprs::observables::HistogramSnapshot",
               "file": "crates/gammalooprs/src/observables/mod.rs",
-              "line": 1986,
+              "line": 1994,
               "column": 1
             }
           },
@@ -1072,7 +1028,7 @@
             "source": {
               "identifier": "gammalooprs::observables::HistogramSnapshot::merge",
               "file": "crates/gammalooprs/src/observables/mod.rs",
-              "line": 2082,
+              "line": 2090,
               "column": 1
             }
           },
@@ -1122,7 +1078,7 @@
             "source": {
               "identifier": "gammalooprs::observables::HistogramSnapshot::rebin",
               "file": "crates/gammalooprs/src/observables/mod.rs",
-              "line": 2211,
+              "line": 2245,
               "column": 1
             }
           },
@@ -1353,7 +1309,7 @@
             "source": {
               "identifier": "gammalooprs::observables::HistogramAccumulatorState",
               "file": "crates/gammalooprs/src/observables/mod.rs",
-              "line": 2271,
+              "line": 2305,
               "column": 1
             }
           },
@@ -1396,7 +1352,7 @@
             "source": {
               "identifier": "gammalooprs::observables::HistogramAccumulatorState::snapshot",
               "file": "crates/gammalooprs/src/observables/mod.rs",
-              "line": 2509,
+              "line": 2543,
               "column": 1
             }
           },

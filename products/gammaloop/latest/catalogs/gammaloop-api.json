@@ -1803,7 +1803,7 @@
             "source": {
               "identifier": "gammaloop_api::commands::evaluate_samples::EvaluateSamples",
               "file": "crates/gammaloop-api/src/commands/evaluate_samples.rs",
-              "line": 77,
+              "line": 76,
               "column": 1
             }
           },
@@ -1818,7 +1818,7 @@
               "format": "rust-markdown",
               "body": "Evaluate exactly one sample through the ordinary `f64` result boundary.\n\nThis rejects requests whose [`EvaluateSamples::points`] view does not have exactly\none row. See [`EvaluateSamples`] for the remaining contract."
             },
-            "summary": "Runs a one-row request and returns the sample plus its observable snapshot through the f64 output contract.",
+            "summary": "Runs a one-row request and returns its unweighted sample contribution through the f64 output contract.",
             "signature": "fn evaluate_sample < 'a >\n(state : & mut State, request : & EvaluateSamples < 'a > ,) -> Result <\nSingleSampleEvaluationResult >",
             "since": null,
             "keywords": [],
@@ -1853,7 +1853,7 @@
             "source": {
               "identifier": "gammaloop_api::commands::evaluate_samples::evaluate_sample",
               "file": "crates/gammaloop-api/src/commands/evaluate_samples.rs",
-              "line": 366,
+              "line": 360,
               "column": 1
             }
           },
@@ -1868,7 +1868,7 @@
               "format": "rust-markdown",
               "body": "Evaluate a batch through the ordinary `f64` result boundary.\n\nSee [`EvaluateSamples`] for the coordinate, validation, and precision contract."
             },
-            "summary": "Runs a batch request and returns per-sample values plus one batch-level observable snapshot.",
+            "summary": "Runs a batch request and returns per-sample values and contributions for explicit accumulation.",
             "signature": "fn evaluate_samples < 'a >\n(state : & mut State, request : & EvaluateSamples < 'a > ,) -> Result <\nBatchSampleEvaluationResult >",
             "since": null,
             "keywords": [],
@@ -1903,7 +1903,7 @@
             "source": {
               "identifier": "gammaloop_api::commands::evaluate_samples::evaluate_samples",
               "file": "crates/gammaloop-api/src/commands/evaluate_samples.rs",
-              "line": 355,
+              "line": 349,
               "column": 1
             }
           },
@@ -2057,7 +2057,7 @@
             "source": {
               "identifier": "gammaloop_api::commands::evaluate_samples::EvaluateSamplesPrecise",
               "file": "crates/gammaloop-api/src/commands/evaluate_samples.rs",
-              "line": 202,
+              "line": 199,
               "column": 1
             }
           },
@@ -2107,7 +2107,7 @@
             "source": {
               "identifier": "gammaloop_api::commands::evaluate_samples::evaluate_sample_precise",
               "file": "crates/gammaloop-api/src/commands/evaluate_samples.rs",
-              "line": 335,
+              "line": 330,
               "column": 1
             }
           },
@@ -2122,7 +2122,7 @@
               "format": "rust-markdown",
               "body": "Evaluate a batch while retaining each sample's active numeric result type.\n\nSee [`EvaluateSamplesPrecise`] for the coordinate, validation, and precision contract."
             },
-            "summary": "Returns every sample in the active precision together with one batch-level observable snapshot.",
+            "summary": "Returns every sample and its contribution in the active precision for explicit accumulation.",
             "signature": "fn evaluate_samples_precise < 'a >\n(state : & mut State, request : & EvaluateSamplesPrecise < 'a > ,) -> Result <\nPreciseBatchSampleEvaluationResult >",
             "since": null,
             "keywords": [],
@@ -2157,7 +2157,7 @@
             "source": {
               "identifier": "gammaloop_api::commands::evaluate_samples::evaluate_samples_precise",
               "file": "crates/gammaloop-api/src/commands/evaluate_samples.rs",
-              "line": 324,
+              "line": 319,
               "column": 1
             }
           },
