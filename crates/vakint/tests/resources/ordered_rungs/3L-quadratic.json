@@ -1,0 +1,269 @@
+{
+  "schema": "vakint.ordered-rung-numerical-reference.v1",
+  "loop_count": 3,
+  "projection": "quadratic-transverse",
+  "normalization": "MSbar",
+  "source_input_sha256": "ae62eeb11d6ef31928c480b8fd03daee9c2d5649d47b22c0ac7abe558d68fc05",
+  "evaluated_input_sha256": "c21383b91b87be34f6dcc49e657b7505a9f36e1e15e71ff2603c31ba5e6390e1",
+  "dimension_binding": {
+    "scope": "exact fixture trace dimension; all public evaluations share this binding",
+    "source": "rustred::{}::d",
+    "target": "-2*vakint::{}::ε+4"
+  },
+  "data": {
+    "manifest_sha256": "028b4e66affca59138c7913c0ee718de6a4d07913e9a88bd905bd5d850e902f2",
+    "path": "/shared/codex-1/vakint_rustred/workspace/5l-push/external-light-profile-v2-20261027",
+    "version": "v0.1.2"
+  },
+  "numerical_reference": {
+    "coefficients": [
+      {
+        "epsilon_power": -3,
+        "imaginary": "-3.1351317554490146848772594609441473515094952697944697016325045371834434010448798526684592791435728088427507765127865452290017898358627678096559929282192772414932275885888010325236151492676232859594299555072977460623641250187825407861500506065589313975669927454905701915466149349045298332118446303078418229577469540849503808564001080e-9",
+        "imaginary_absolute_error": "1.8855480039317973290990462514710290425955430920609738639914252185071053616220366594824133649112282415999949271474485698042004937955968191799724790872339749215437872971087245910931318132624855143724462384196515575683466940903406860623232986011584025910786894276103920172064153157986344458093013233699204564582296278369619426702040411e-340",
+        "imaginary_error_exact_rational": "11/58338477604720181915314096183019377526412786239090727853961370058936784549800833055292953432233783523860783106683262869400462158541713858270963303461275697408737633677940961888417990872398332976924946605817630693519704607081254671658561832577037833065891115159868968841194918254390384672272725781030585515463396294754824202789953344735543296",
+        "imaginary_error_quality": "Bounded",
+        "imaginary_exact_rational": "-182898813703109413349980434549454655281476902328200390281224620042731869694367231028490524608652372025608287054212482388107435402525721791993794426819814756943069176204689650355090960547440841311047507645568160866993852523594971958680002012847296261490339695387090013361664205770574212411458713557405566046384231985901864035013107979/58338477604720181915314096183019377526412786239090727853961370058936784549800833055292953432233783523860783106683262869400462158541713858270963303461275697408737633677940961888417990872398332976924946605817630693519704607081254671658561832577037833065891115159868968841194918254390384672272725781030585515463396294754824202789953344735543296",
+        "imaginary_exact_zero": false,
+        "imaginary_significant_digits": 331,
+        "real": "0",
+        "real_absolute_error": "0",
+        "real_error_exact_rational": "0",
+        "real_error_quality": "Bounded",
+        "real_exact_rational": "0",
+        "real_exact_zero": true,
+        "real_significant_digits": null
+      },
+      {
+        "epsilon_power": -2,
+        "imaginary": "-1.2801788001416809963248809465521935018663772351660751281666060193499060554266592731729542056502922302774565670760545059685090641829772968556095304456895382069430679320070937549471428526176128417667672318321465796421320177160028708210112706643448969873398553710753161615482010984193496818948365573757020777077466729180214055163633774e-8",
+        "imaginary_absolute_error": "1.5084384031454378632792370011768232340764344736487790911931401748056842892976293275859306919289825932799959417179588558433603950364774553439779832697871799372350298376869796728745054506099884114979569907357212460546773552722725488498586388809267220728629515420883136137651322526389075566474410586959363651665837022695695541361632329e-339",
+        "imaginary_error_exact_rational": "11/7292309700590022739414262022877422190801598279886340981745171257367098068725104131911619179029222940482597888335407858675057769817714232283870412932659462176092204209742620236052248859049791622115618325727203836689963075885156833957320229072129729133236389394983621105149364781798798084034090722628823189432924536844353025348744168091942912",
+        "imaginary_error_quality": "Bounded",
+        "imaginary_exact_rational": "-11669325353453595383006564183493851704156729445419035317421883310018048977895825938015671491958289361008862064656785985699562935838229645582937404836160056107044778169309626129426376389094532844064229003428176930316014028198116700488698045090517600016961777440061732623335346461924656781460256463949053042021910634517176220983909233/911538712573752842426782752859677773850199784985792622718146407170887258590638016488952397378652867560324736041925982334382221227214279035483801616582432772011525526217827529506531107381223952764452290715900479586245384485644604244665028634016216141654548674372952638143670597724849760504261340328602898679115567105544128168593021011492864",
+        "imaginary_exact_zero": false,
+        "imaginary_significant_digits": 330,
+        "real": "0",
+        "real_absolute_error": "0",
+        "real_error_exact_rational": "0",
+        "real_error_quality": "Bounded",
+        "real_exact_rational": "0",
+        "real_exact_zero": true,
+        "real_significant_digits": null
+      },
+      {
+        "epsilon_power": -1,
+        "imaginary": "7.1345935142433823247078576282375203824380427483738149123515979179395895817223425681624057617614132625658410668499571436534373217128333389990520663015911279947793711420713725042626198078178228396315969295640668470475334294576498997045142355849952431888084905782856166511706821280215275659366969055123013407968218876629110663901500025e-8",
+        "imaginary_absolute_error": "1.0920545515717280880009574347792499551719175976681288336932446450984134005682364466512106962041496163495068801331942858540168038102265330343002788697524714680149894195821846657184919642252457921641027537657263377346389624042063336382485687811043676272228546273249540267800006551922912925561419650028144397855096337630858273926135929e-335",
+        "imaginary_error_exact_rational": "19909/1823077425147505684853565505719355547700399569971585245436292814341774517181276032977904794757305735120649472083851964668764442454428558070967603233164865544023051052435655059013062214762447905528904581431800959172490768971289208489330057268032432283309097348745905276287341195449699521008522680657205797358231134211088256337186042022985728",
+        "imaginary_error_quality": "Bounded",
+        "imaginary_exact_rational": "130069163734209193742891917355205953387835586407538625275510575163928329904700406125076915817882653675247581784977243360865150546181505894520800187489810188177664921671559456220957865411969451201608714416455094709538027232995425990909337937233856922689239127343848798780231326258877891184440517254809243247132260695452602981642916203/1823077425147505684853565505719355547700399569971585245436292814341774517181276032977904794757305735120649472083851964668764442454428558070967603233164865544023051052435655059013062214762447905528904581431800959172490768971289208489330057268032432283309097348745905276287341195449699521008522680657205797358231134211088256337186042022985728",
+        "imaginary_exact_zero": false,
+        "imaginary_significant_digits": 327,
+        "real": "0",
+        "real_absolute_error": "0",
+        "real_error_exact_rational": "0",
+        "real_error_quality": "Bounded",
+        "real_exact_rational": "0",
+        "real_exact_zero": true,
+        "real_significant_digits": null
+      },
+      {
+        "epsilon_power": 0,
+        "imaginary": "-2.0803390617518945968537475569047004522688624447473595453601474640576290162743821383866911310013752792624062486926379740585181375576420868112086890975593748449890311432263525242673115067457113862292200959646834720484984800238733360273577412806836630258529879832452759947565753362252812138709530039527247671691175428224622492620649346e-7",
+        "imaginary_absolute_error": "3.3892252269538525012316418791314105218822381288983815360894539545064938910538101970452728283289586280037470998566394682407534822033773202285374700316459720508314716587989322699456188248501849442661114958173415089263860132012447528307212927600900541375443862717404050629106452600910308324233970044696820115703966222753679099954938570e-334",
+        "imaginary_error_exact_rational": "308941/911538712573752842426782752859677773850199784985792622718146407170887258590638016488952397378652867560324736041925982334382221227214279035483801616582432772011525526217827529506531107381223952764452290715900479586245384485644604244665028634016216141654548674372952638143670597724849760504261340328602898679115567105544128168593021011492864",
+        "imaginary_error_quality": "Bounded",
+        "imaginary_exact_rational": "-47407739751655272856686003896983301171281498266003949400039117156151373517066365430587108134113561730362848434694377127528056004313208684172973281633206687037319492688508345288941813474789755093014391072218450006757571905770807797577250546032163956505439219528414769932439413989243054366439543652809407446868178638959201358848881417/227884678143438210606695688214919443462549946246448155679536601792721814647659504122238099344663216890081184010481495583595555306803569758870950404145608193002881381554456882376632776845305988191113072678975119896561346121411151061166257158504054035413637168593238159535917649431212440126065335082150724669778891776386032042148255252873216",
+        "imaginary_exact_zero": false,
+        "imaginary_significant_digits": 326,
+        "real": "0",
+        "real_absolute_error": "0",
+        "real_error_exact_rational": "0",
+        "real_error_quality": "Bounded",
+        "real_exact_rational": "0",
+        "real_exact_zero": true,
+        "real_significant_digits": null
+      }
+    ],
+    "coupling_definitions": "exact expansion through the authenticated native QCD model (GC_11=i*G)",
+    "epsilon_range": "all available poles through epsilon^0; remainder O(epsilon)",
+    "point": {
+      "UFO_G": 1,
+      "mUV": 1,
+      "mu_r_squared": 1
+    },
+    "selection": {
+      "requested_decimal_precision": 300,
+      "selection": "all surviving dependencies arbitrary precision; explicit 300-digit comparison target, not a source maximum",
+      "surviving_dependencies": [
+        {
+          "available_precision": "ArbitraryPrecision",
+          "data_version": "exact-definition",
+          "identity": "𝑒",
+          "source_sha256": "9fc618f12d8374d2dfccf75e3ce454989e34fc0b1a351675f543101e3622a0e5"
+        },
+        {
+          "available_precision": "ArbitraryPrecision",
+          "data_version": "exact-definition",
+          "identity": "𝜋",
+          "source_sha256": "4c1b1e82246d0173024bf1ca8474de481e9aba48c1e2cc7643c38ae25b69b151"
+        },
+        {
+          "available_precision": "ArbitraryPrecision",
+          "data_version": "exact-definition",
+          "identity": "vakint::{}::EulerGamma",
+          "source_sha256": "5f3704513d63e509f4ec88f4fad0c5bd00a7ae3c5e5b1576b0fb17b8499adc33"
+        },
+        {
+          "available_precision": "ArbitraryPrecision",
+          "data_version": "exact-definition",
+          "identity": "symbolica::{}::zeta(3)",
+          "source_sha256": "c34fc864824ae227b9f5c96b87243986de2aea8ea70f0109e0c9efdb6d69a5a9"
+        },
+        {
+          "available_precision": "ArbitraryPrecision",
+          "data_version": "exact-definition",
+          "identity": "vakint::{}::HR(1,1,0,vakint::{}::om1)",
+          "source_sha256": "fa4bb974b4e7d8ac4643193dca2fc4b7e288c768eebe7b3a07d65fe09dab5e00"
+        },
+        {
+          "available_precision": "ArbitraryPrecision",
+          "data_version": "exact-definition",
+          "identity": "vakint::{}::HI(1,0,vakint::{}::om1)",
+          "source_sha256": "51b2480e00c2597df0ad0714d66ca1234facdb78e87b6d7e35e9303e97d7e3e8"
+        },
+        {
+          "available_precision": "ArbitraryPrecision",
+          "data_version": "exact-definition",
+          "identity": "vakint::{}::HI(1,1,1,vakint::{}::om1)",
+          "source_sha256": "213b32fce3e261470e88247fa7168aa32c9073cc9b7cea974e1d9e2c65609832"
+        },
+        {
+          "available_precision": "ArbitraryPrecision",
+          "data_version": "exact-definition",
+          "identity": "vakint::{}::HI(1,-1,0,vakint::{}::om1)",
+          "source_sha256": "8094fe2a6eaa03c4cddda95ceac111ce6491de8abac63bffd66aea7b67a2af42"
+        },
+        {
+          "available_precision": "ArbitraryPrecision",
+          "data_version": "exact-definition",
+          "identity": "vakint::{}::HI(-1,1,0,vakint::{}::om1)",
+          "source_sha256": "2b72fd028156740e44aa53bc0badfa01a22daf9223331e11599b0da68cbe1656"
+        }
+      ]
+    },
+    "warnings": []
+  },
+  "minimum_achieved_decimal_precision": 300,
+  "provenance": {
+    "selection": "first Ordered report in the first completed sample; deterministic, not selected by value, precision or performance",
+    "collector_report": {
+      "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L3-quadratic-three-arm-release-01/sample-01/ordered/work/L3-quadratic-ordered/report.json",
+      "bytes": 16518,
+      "sha256": "e8f57b8b8c46a336eb137144cd3cbb25b0303b1d040879e3b10d4a632604e704"
+    },
+    "producer": {
+      "allowed_cpus": "168",
+      "build_profile": "release",
+      "cargo_lock_sha256": "9338911038cac4c53515170535f87f9fabb6bf1004fd75317068c5fd06a9ab13",
+      "commit": "047e5ccd730988edd91ee461c3b665d059b491cf",
+      "comparison_process": "one engine in this process",
+      "debug_assertions": false,
+      "executable_identity_scope": "release: streamed once; DEV: use the supervising original-process launch receipt",
+      "executable_sha256": "7306c9db8b7615673a277ec71c47cd4a36a57e4948db89b63c4a6ff84d12f0fc",
+      "native_runtime_arities": "1,3,6,10,15",
+      "profile_contract": "caller must build --release with no profile overrides; debug_assertions is not compiler-profile introspection"
+    },
+    "build_receipt": {
+      "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/build/release-047e5ccd7/build-receipt.json",
+      "bytes": 4328,
+      "sha256": "7165a7bc0d089755f9d0782242254586b69792674b5b0086379ecb3b36c14a79"
+    },
+    "actual_unique_execution_counts": {
+      "dfs": 1,
+      "dfs_no_memo": 1,
+      "ordered": 3
+    },
+    "all_five_unique_executed_reports": [
+      {
+        "arm": "dfs",
+        "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L3-quadratic-three-arm-release-01/sample-01/dfs/work/L3-quadratic-dfs/report.json",
+        "bytes": 16013,
+        "sha256": "7d17195623bd90d5c3c4ee2fa0b425ac2909aef3557e2e07b5195dd8a4fd43ce"
+      },
+      {
+        "arm": "dfs_no_memo",
+        "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L3-quadratic-three-arm-release-01/sample-01/dfs_no_memo/work/L3-quadratic-dfs-no-memo/report.json",
+        "bytes": 16040,
+        "sha256": "93e1be6fb6c238feb56c57087ea552d3c55a8332cd39b1fb7826b8c79614f919"
+      },
+      {
+        "arm": "ordered",
+        "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L3-quadratic-three-arm-release-01/sample-01/ordered/work/L3-quadratic-ordered/report.json",
+        "bytes": 16518,
+        "sha256": "e8f57b8b8c46a336eb137144cd3cbb25b0303b1d040879e3b10d4a632604e704"
+      },
+      {
+        "arm": "ordered",
+        "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L3-quadratic-three-arm-release-01/sample-02/ordered/work/L3-quadratic-ordered/report.json",
+        "bytes": 16514,
+        "sha256": "228cf8c6f58e8a03bcdda58863069e66c8a6ba0d6efdee46d800c5754532b3a8"
+      },
+      {
+        "arm": "ordered",
+        "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L3-quadratic-three-arm-release-01/sample-03/ordered/work/L3-quadratic-ordered/report.json",
+        "bytes": 16511,
+        "sha256": "76b8e54d71adaf8b97eb8a341355a3548c323fb1d3002a50bd862e16eb8091f4"
+      }
+    ],
+    "all_three_exact_parity_receipts": [
+      {
+        "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L3-quadratic-three-arm-release-01/sample-01/comparison/work/parity.json",
+        "bytes": 2129,
+        "sha256": "2766d579df2422f7007b88b758f1903043973233f26f00fbe91651920441c1b5"
+      },
+      {
+        "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L3-quadratic-three-arm-release-01/sample-02/comparison/work/parity.json",
+        "bytes": 2129,
+        "sha256": "3c1de20df8a41108d21e034cf3edb671b339b84469aa10e5f126d5a35d956e43"
+      },
+      {
+        "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L3-quadratic-three-arm-release-01/sample-03/comparison/work/parity.json",
+        "bytes": 2129,
+        "sha256": "6fc44321aebb0b33fb2256f57529c944b44bfd6a6c3a96acd2899047e0da86fd"
+      }
+    ],
+    "baseline_reference_reuse": "the three parity checks reuse the same immutable DFS and DFS-no-memo reports; these are five executed workers, never nine independent executions",
+    "validation": "all five unique completed reports authenticated by the existing strict report adapter; all ten report pairs agree using exact binary-rational tracked error radii at every Laurent order; every nonzero component has at least 300 measured digits",
+    "source_capability": "all surviving sources are arbitrary precision; 300 is the explicit comparison target, never a source-data maximum",
+    "comparison_role": "immutable MSbar scientific numerical reference at mUV=mu_r_squared=UFO_G=1; runtime regression accepts scientifically equivalent authenticated data snapshots without demanding identical paths or versions",
+    "qualified_protocol": {
+      "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L3-quadratic-three-arm-release-01/protocol.json",
+      "bytes": 6110,
+      "sha256": "bc80769c4ea354480adbd7a98a00ecf5aba4d41372d7c610e10c32c3fefbf3bf"
+    },
+    "qualified_collection": {
+      "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L3-quadratic-three-arm-release-01/collection-v3.json",
+      "bytes": 3045,
+      "sha256": "4346b77f8c1adef1478eb5ac1c2a91fd1f7e7b6e52682579f0cb76980921f7be"
+    },
+    "prepared_input": {
+      "manifest": {
+        "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L3-quadratic-prepare-01/work/input-L3-quadratic/prepared-input.json",
+        "bytes": 2374,
+        "sha256": "829b6c4b9d55d75045b09d33791d1e597834588eb086cdbc7b75f6a6aa52bb04"
+      },
+      "input": {
+        "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L3-quadratic-prepare-01/work/input-L3-quadratic/vakint-input.symbolica",
+        "bytes": 122849,
+        "sha256": "ae62eeb11d6ef31928c480b8fd03daee9c2d5649d47b22c0ac7abe558d68fc05"
+      },
+      "nonzero_conditions": {
+        "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L3-quadratic-prepare-01/work/input-L3-quadratic/projector-conditions.symbolica",
+        "bytes": 103,
+        "sha256": "bc23ecdd82b5c54269b27c5b39b3769f3500cbe62c5f93c2e391267cd1035af9"
+      }
+    }
+  }
+}
