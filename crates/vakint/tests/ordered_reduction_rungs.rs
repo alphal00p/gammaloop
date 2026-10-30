@@ -20,6 +20,22 @@ fn golden_precision_target_respects_the_selected_source_cap() {
 }
 
 fn compare(loop_count: usize, projection: fixture::Projection) -> fixture::Result<()> {
+    compare_strategies(
+        loop_count,
+        projection,
+        &[
+            RustRedReductionStrategy::DepthFirst,
+            RustRedReductionStrategy::Ordered,
+        ],
+    )
+}
+
+fn compare_strategies(
+    loop_count: usize,
+    projection: fixture::Projection,
+    strategies: &[RustRedReductionStrategy],
+) -> fixture::Result<()> {
+    assert!(!strategies.is_empty());
     let temporary = tempfile::tempdir()?;
     let directory = if let Some(root) = std::env::var_os("VAKINT_ORDERED_RUN_EVIDENCE") {
         let root = std::path::PathBuf::from(root);
@@ -64,14 +80,25 @@ fn compare(loop_count: usize, projection: fixture::Projection) -> fixture::Resul
             },
         )
     };
-    let dfs = run("dfs", RustRedReductionStrategy::DepthFirst)?;
-    let ordered = run("ordered", RustRedReductionStrategy::Ordered)?;
-    fixture::comparison::compare(&dfs, &ordered)?;
     // The occurrence-local no-memo strategy has separate native regression and
-    // benchmark coverage. CI compares the two required public engines without
-    // repeating that optional, potentially much slower benchmark baseline.
-    let results = [&dfs, &ordered];
-    for (result, memoization) in [(&dfs, true), (&ordered, false)] {
+    // benchmark coverage. CI exercises the required engines with one shared
+    // input and validates each completed result against the recorded reference.
+    let results = strategies
+        .iter()
+        .map(|strategy| match strategy {
+            RustRedReductionStrategy::DepthFirst => run("dfs", *strategy),
+            RustRedReductionStrategy::Ordered => run("ordered", *strategy),
+            RustRedReductionStrategy::DepthFirstWithoutMemoization => {
+                Err("no-memo timing baselines belong to the benchmark collector".into())
+            }
+        })
+        .collect::<fixture::Result<Vec<_>>>()?;
+    for pair in results.windows(2) {
+        fixture::comparison::compare(&pair[0], &pair[1])?;
+    }
+    for (strategy, result) in strategies.iter().zip(&results) {
+        assert_eq!(result.report["strategy"], format!("{strategy:?}"));
+        let memoization = *strategy == RustRedReductionStrategy::DepthFirst;
         assert_eq!(result.report["intrinsic_memoization"], memoization);
         assert_eq!(
             result.report["cache_policy"]["depth_first_intrinsic_memoization"],
@@ -87,7 +114,7 @@ fn compare(loop_count: usize, projection: fixture::Projection) -> fixture::Resul
         );
     }
     #[cfg(feature = "experimental-rustred")]
-    for result in results {
+    for result in &results {
         let timing = &result.report["reduction_math_timing"];
         assert_eq!(timing["scope_id"], "vakint.rustred.reduction-math.v1");
         assert_eq!(timing["complete"], true);
@@ -114,6 +141,7 @@ fn compare(loop_count: usize, projection: fixture::Projection) -> fixture::Resul
         (3, fixture::Projection::ZeroMomentumMetric) => Some("3L-zero-momentum.json"),
         (3, fixture::Projection::QuadraticTransverse) => Some("3L-quadratic.json"),
         (4, fixture::Projection::ZeroMomentumMetric) => Some("4L-zero-momentum.json"),
+        (4, fixture::Projection::QuadraticTransverse) => Some("4L-quadratic.json"),
         _ => None,
     };
     if let Some(reference) = reference {
@@ -123,16 +151,19 @@ fn compare(loop_count: usize, projection: fixture::Projection) -> fixture::Resul
                 .join(reference),
         )?)?;
         assert_eq!(reference["normalization"], "MSbar");
-        assert_eq!(reference["source_input_sha256"], dfs.report["input_sha256"]);
+        assert_eq!(
+            reference["source_input_sha256"],
+            results[0].report["input_sha256"]
+        );
         assert_eq!(
             reference["evaluated_input_sha256"],
-            dfs.report["evaluated_input_sha256"]
+            results[0].report["evaluated_input_sha256"]
         );
         assert_eq!(
             reference["dimension_binding"],
-            dfs.report["dimension_binding"]
+            results[0].report["dimension_binding"]
         );
-        for result in results {
+        for result in &results {
             if let Some(minimum_digits) = reference["minimum_achieved_decimal_precision"].as_u64() {
                 let requested = result.report["numerical_reference"]["selection"]
                     ["requested_decimal_precision"]
@@ -163,7 +194,7 @@ fn compare(loop_count: usize, projection: fixture::Projection) -> fixture::Resul
             )?;
         }
     }
-    assert!(!dfs.value.is_zero());
+    assert!(results.iter().all(|result| !result.value.is_zero()));
     Ok(())
 }
 
@@ -246,6 +277,16 @@ fn four_loop_zero_momentum_rung_engine_parity() -> fixture::Result<()> {
 #[ignore = "sequential physical-fixture qualification: requires explicit 4L data and a complete comparison below fifteen minutes"]
 fn four_loop_quadratic_rung_engine_parity() -> fixture::Result<()> {
     compare(4, fixture::Projection::QuadraticTransverse)
+}
+
+#[test]
+#[ignore = "enable after the complete fresh-preparation Ordered quadratic case qualifies below fifteen minutes"]
+fn four_loop_quadratic_ordered_matches_recorded_numerical_reference() -> fixture::Result<()> {
+    compare_strategies(
+        4,
+        fixture::Projection::QuadraticTransverse,
+        &[RustRedReductionStrategy::Ordered],
+    )
 }
 
 #[test]

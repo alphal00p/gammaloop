@@ -1,0 +1,442 @@
+{
+  "schema": "vakint.ordered-rung-numerical-reference.v1",
+  "loop_count": 4,
+  "projection": "quadratic-transverse",
+  "normalization": "MSbar",
+  "source_input_sha256": "050c3d0fbd9b87046986de5f458b6626bdd5652aea464cd932fbe6c43f2abaa8",
+  "evaluated_input_sha256": "6aef1c6de7703e2e3476c0dde43dfd5ffc40565c2d5d4459dc44001332ee6b6e",
+  "dimension_binding": {
+    "scope": "exact fixture trace dimension; all public evaluations share this binding",
+    "source": "rustred::{}::d",
+    "target": "-2*vakint::{}::ε+4"
+  },
+  "data": {
+    "manifest_sha256": "028b4e66affca59138c7913c0ee718de6a4d07913e9a88bd905bd5d850e902f2",
+    "path": "/shared/codex-1/vakint_rustred/workspace/5l-push/external-light-profile-v2-20261027",
+    "version": "v0.1.2"
+  },
+  "numerical_reference": {
+    "coefficients": [
+      {
+        "epsilon_power": -4,
+        "imaginary": "1.654454480920700047053093416206298438747997938795532826563712020951665570800982677619374496524374527763935590073885761761288022557485724998683655990379192532260782562439599657356351901065372610982425353853640250439954158013675757742231315536629353e-12",
+        "imaginary_absolute_error": "1.560935561947423022723426444842499703984055703625171173461184720034471337514668142052201705163945631957094267340541698588976164861726884480573651423117883162288040365633679960473148334475174630025811766821125412179856332361842244637091690864633152e-258",
+        "imaginary_error_exact_rational": "3/1921924308174003258872616370050369756495810455948672905389542244035233680030523317234537010836564833497229828911284598430510768810573374275010933992099815720970170092183271059798176857571621225553914820586983072295508566795439261982531741155133337002515103744",
+        "imaginary_error_quality": "Bounded",
+        "imaginary_exact_rational": "12718945134595584448578754858336910671144599898956821044746478843436980176727953527658571425138460706113484829423298915229195059728874924126010413584534558581145607176731195377344530013387056530679677849628233176335174942054802091447819788209899427/7687697232696013035490465480201479025983241823794691621558168976140934720122093268938148043346259333988919315645138393722043075242293497100043735968399262883880680368733084239192707430286484902215659282347932289182034267181757047930126964620533348010060414976",
+        "imaginary_exact_zero": false,
+        "imaginary_significant_digits": 245,
+        "real": "0",
+        "real_absolute_error": "0",
+        "real_error_exact_rational": "0",
+        "real_error_quality": "Bounded",
+        "real_exact_rational": "0",
+        "real_exact_zero": true,
+        "real_significant_digits": null
+      },
+      {
+        "epsilon_power": -3,
+        "imaginary": "1.364924946759577538818802068370196211967098299506314581915062417285124095910810709035983959632608985405246861810955753453062618609925723123914016192062833839115145614012669717318990318378932404060500916929253206612962180361282500137340835317719216e-11",
+        "imaginary_absolute_error": "1.248748449557938418178741155873999763187244562900136938768947776027577070011734513641761364131156505565675413872433358871180931889381507584458921138494306529830432292506943968378518667580139704020649413456900329743885065889473795709673352691706522e-257",
+        "imaginary_error_exact_rational": "3/240240538521750407359077046256296219561976306993584113173692780504404210003815414654317126354570604187153728613910574803813846101321671784376366749012476965121271261522908882474772107196452653194239352573372884036938570849429907747816467644391667125314387968",
+        "imaginary_error_quality": "Bounded",
+        "imaginary_exact_rational": "26232824340103392925193681895319878259235737291598443404789612614588771614501404150795803564348075206359062460685554012660214810690804531009896478018102527073612814802008090465773093152610804094526835564858230926191298317988029313611128313182917565/1921924308174003258872616370050369756495810455948672905389542244035233680030523317234537010836564833497229828911284598430510768810573374275010933992099815720970170092183271059798176857571621225553914820586983072295508566795439261982531741155133337002515103744",
+        "imaginary_exact_zero": false,
+        "imaginary_significant_digits": 245,
+        "real": "0",
+        "real_absolute_error": "0",
+        "real_error_exact_rational": "0",
+        "real_error_quality": "Bounded",
+        "real_exact_rational": "0",
+        "real_exact_zero": true,
+        "real_significant_digits": null
+      },
+      {
+        "epsilon_power": -2,
+        "imaginary": "-6.487831554381341777185437449959038008226047471476690660220188596619873016837505149157780414467025042710866938537231392713571360660157063010783791668371088249931455461798922327598429453146936346992203035551434385916168174141300861759375220251873931e-11",
+        "imaginary_absolute_error": "6.687880446349132188292611383809184731709819464038833398400227972478360261292846143560726612498430524974568958229462258994421344222230894119833828644062674338261851881236356246645886477336701541499924708670672532665000451215391825222440585899216228e-254",
+        "imaginary_error_exact_rational": "16067/240240538521750407359077046256296219561976306993584113173692780504404210003815414654317126354570604187153728613910574803813846101321671784376366749012476965121271261522908882474772107196452653194239352573372884036938570849429907747816467644391667125314387968",
+        "imaginary_error_quality": "Bounded",
+        "imaginary_exact_rational": "-974150091539361601305277947094849960286762348123507895526641858298146318117233880315396689594571345274975937927815800174945301387994774419318140688713018465637433865676263974658731469158630721715483581682300692624704321461001912258906875969088799/15015033657609400459942315391018513722623519187099007073355798781525263125238463415894820397160662761697108038369410925238365381332604486523522921813279810320079453845181805154673256699778290824639959535835805252308660678089369234238529227774479195332149248",
+        "imaginary_exact_zero": false,
+        "imaginary_significant_digits": 242,
+        "real": "0",
+        "real_absolute_error": "0",
+        "real_error_exact_rational": "0",
+        "real_error_quality": "Bounded",
+        "real_exact_rational": "0",
+        "real_exact_zero": true,
+        "real_significant_digits": null
+      },
+      {
+        "epsilon_power": -1,
+        "imaginary": "1.209659443240164816704506013446209486496767590721150707208056321196033832440245252155765239902083729760751689448157947947358571990626716526016968512998657352742904345824074997808201886968867719084473894574163433121406485372200359184653237561063971e-10",
+        "imaginary_absolute_error": "1.625537481737887036890539987306381291732942489012538257760164951647631324603275207557935493068330795178358542084875584354578591738137554472942992943349321953431268062899372528437263700211320524047146696477295722571939986437191022335138792310550769e-252",
+        "imaginary_error_exact_rational": "48815/30030067315218800919884630782037027445247038374198014146711597563050526250476926831789640794321325523394216076738821850476730762665208973047045843626559620640158907690363610309346513399556581649279919071671610504617321356178738468477058455548958390664298496",
+        "imaginary_error_quality": "Bounded",
+        "imaginary_exact_rational": "454076931362403071953237880331130008658561290203874315650162625560239317863726569265586097273701006152071763884389251811412103403625152205971025906434646078608779984667143516492432368806908527777508271335657123634516067155170729033315363340513537/3753758414402350114985578847754628430655879796774751768338949695381315781309615853973705099290165690424277009592352731309591345333151121630880730453319952580019863461295451288668314174944572706159989883958951313077165169522342308559632306943619798833037312",
+        "imaginary_exact_zero": false,
+        "imaginary_significant_digits": 241,
+        "real": "0",
+        "real_absolute_error": "0",
+        "real_error_exact_rational": "0",
+        "real_error_quality": "Bounded",
+        "real_exact_rational": "0",
+        "real_exact_zero": true,
+        "real_significant_digits": null
+      },
+      {
+        "epsilon_power": 0,
+        "imaginary": "1.935326213929194881036390088370980229264090538482254338501509363790686915248550290823079041451535691387829200377759838765607179707916487040290059053842280833514920911464700889180803639610411505256452631464404160672879630082406024352152498119737802e-11",
+        "imaginary_absolute_error": "1.233564324779068252675466190350609656224399629344757849795716834869767771307557399207661014831612790839216412994799500810720256241376204640390881280993259448844710939367905623629403596963529069927944124745819751903581695491405410954079731617489697e-224",
+        "imaginary_error_exact_rational": "2963521576861427771185776169936545/240240538521750407359077046256296219561976306993584113173692780504404210003815414654317126354570604187153728613910574803813846101321671784376366749012476965121271261522908882474772107196452653194239352573372884036938570849429907747816467644391667125314387968",
+        "imaginary_error_quality": "Estimated",
+        "imaginary_exact_rational": "9298876236992202252345721424224821751484139766893904266941841173510597179200102273790041019460086653849082237958461412260553116671207315926890285426582138843422022409327917419031003920730751760673749954387037714930840307751007007817049695007307931/480481077043500814718154092512592439123952613987168226347385561008808420007630829308634252709141208374307457227821149607627692202643343568752733498024953930242542523045817764949544214392905306388478705146745768073877141698859815495632935288783334250628775936",
+        "imaginary_exact_zero": false,
+        "imaginary_significant_digits": 213,
+        "real": "0",
+        "real_absolute_error": "0",
+        "real_error_exact_rational": "0",
+        "real_error_quality": "Estimated",
+        "real_exact_rational": "0",
+        "real_exact_zero": true,
+        "real_significant_digits": null
+      }
+    ],
+    "coupling_definitions": "exact expansion through the authenticated native QCD model (GC_11=i*G)",
+    "epsilon_range": "all available poles through epsilon^0; remainder O(epsilon)",
+    "point": {
+      "UFO_G": 1,
+      "mUV": 1,
+      "mu_r_squared": 1
+    },
+    "selection": {
+      "requested_decimal_precision": 215,
+      "selection": "minimum validated fixed precision among surviving dependencies",
+      "surviving_dependencies": [
+        {
+          "available_precision": "ArbitraryPrecision",
+          "data_version": "exact-definition",
+          "identity": "𝜋",
+          "source_sha256": "4c1b1e82246d0173024bf1ca8474de481e9aba48c1e2cc7643c38ae25b69b151"
+        },
+        {
+          "available_precision": "ArbitraryPrecision",
+          "data_version": "exact-definition",
+          "identity": "vakint::{}::T1ep",
+          "source_sha256": "7748ecaabf6444350eb8eb6c67da2f90e7ea0df499c578cbc828fbec15f95d75"
+        },
+        {
+          "available_precision": "ArbitraryPrecision",
+          "data_version": "exact-definition",
+          "identity": "vakint::{}::T1ep2",
+          "source_sha256": "1febeecf8a2bc6d62b910ff562dca140be923a71084bab3413c4770f9e1ab718"
+        },
+        {
+          "available_precision": "ArbitraryPrecision",
+          "data_version": "exact-definition",
+          "identity": "symbolica::{}::zeta(3)",
+          "source_sha256": "c34fc864824ae227b9f5c96b87243986de2aea8ea70f0109e0c9efdb6d69a5a9"
+        },
+        {
+          "available_precision": "ArbitraryPrecision",
+          "data_version": "exact-definition",
+          "identity": "vakint::{}::HR(1,1,0,vakint::{}::om1)",
+          "source_sha256": "fa4bb974b4e7d8ac4643193dca2fc4b7e288c768eebe7b3a07d65fe09dab5e00"
+        },
+        {
+          "available_precision": "ArbitraryPrecision",
+          "data_version": "exact-definition",
+          "identity": "vakint::{}::HR(1,0,1,0,vakint::{}::om1)",
+          "source_sha256": "2889a7b866e962eefba3cad2d0570f8d414b68528122099c6bacea2f74458f33"
+        },
+        {
+          "available_precision": "ArbitraryPrecision",
+          "data_version": "exact-definition",
+          "identity": "vakint::{}::HR(1,1,0,-1,vakint::{}::om1)",
+          "source_sha256": "bf0da8df352c10fbd54ca2a181c0f2571c02867259e897757ecb3687e8843a70"
+        },
+        {
+          "available_precision": "ArbitraryPrecision",
+          "data_version": "exact-definition",
+          "identity": "vakint::{}::HR(1,1,1,1,vakint::{}::om1)",
+          "source_sha256": "16cf3486d9561d943f9de628c7fc9cc2ee364e967446feb8d12fa7d9c864473b"
+        },
+        {
+          "available_precision": "ArbitraryPrecision",
+          "data_version": "exact-definition",
+          "identity": "vakint::{}::HR(1,1,1,-1,vakint::{}::om1)",
+          "source_sha256": "3e7371fc48f53de0373d9d77661283ffa841290addc62d94e3f18003f96ba532"
+        },
+        {
+          "available_precision": "ArbitraryPrecision",
+          "data_version": "exact-definition",
+          "identity": "vakint::{}::HR(1,1,-1,0,vakint::{}::om1)",
+          "source_sha256": "de3929acb2c70e275e440a5d8f71f27cfaa36b46bb959eaa31c67ce2a30bea50"
+        },
+        {
+          "available_precision": "ArbitraryPrecision",
+          "data_version": "exact-definition",
+          "identity": "vakint::{}::HR(1,1,-1,1,vakint::{}::om1)",
+          "source_sha256": "f4a785868b711399504a9a166f94069833afbdd9c7b7b3f5b8522ff83b8e11ad"
+        },
+        {
+          "available_precision": "ArbitraryPrecision",
+          "data_version": "exact-definition",
+          "identity": "vakint::{}::HR(1,-1,1,0,vakint::{}::om1)",
+          "source_sha256": "9b9bde7fe5ea82d6ff789a57a0db65a34939c463a5a55506b5a2f7fed91df004"
+        },
+        {
+          "available_precision": "ArbitraryPrecision",
+          "data_version": "exact-definition",
+          "identity": "vakint::{}::HR(1,-1,1,1,vakint::{}::om1)",
+          "source_sha256": "78abf47bd5780c3f7fcecf35f47c09f4f97502683910591bc50c2746769157f4"
+        },
+        {
+          "available_precision": "ArbitraryPrecision",
+          "data_version": "exact-definition",
+          "identity": "vakint::{}::HR(-1,1,1,0,vakint::{}::om1)",
+          "source_sha256": "314ae1860df579fa1af227c69cc1333c411b3b1f558daf904f435619233ff0cf"
+        },
+        {
+          "available_precision": "ArbitraryPrecision",
+          "data_version": "exact-definition",
+          "identity": "vakint::{}::HI(1,0,vakint::{}::om1)",
+          "source_sha256": "51b2480e00c2597df0ad0714d66ca1234facdb78e87b6d7e35e9303e97d7e3e8"
+        },
+        {
+          "available_precision": "ArbitraryPrecision",
+          "data_version": "exact-definition",
+          "identity": "vakint::{}::HI(1,1,1,vakint::{}::om1)",
+          "source_sha256": "213b32fce3e261470e88247fa7168aa32c9073cc9b7cea974e1d9e2c65609832"
+        },
+        {
+          "available_precision": "ArbitraryPrecision",
+          "data_version": "exact-definition",
+          "identity": "vakint::{}::HI(1,-1,0,vakint::{}::om1)",
+          "source_sha256": "8094fe2a6eaa03c4cddda95ceac111ce6491de8abac63bffd66aea7b67a2af42"
+        },
+        {
+          "available_precision": "ArbitraryPrecision",
+          "data_version": "exact-definition",
+          "identity": "vakint::{}::HI(-1,1,0,vakint::{}::om1)",
+          "source_sha256": "2b72fd028156740e44aa53bc0badfa01a22daf9223331e11599b0da68cbe1656"
+        },
+        {
+          "available_precision": "ArbitraryPrecision",
+          "data_version": "exact-definition",
+          "identity": "vakint::{}::HI(1,0,1,1,vakint::{}::om1)",
+          "source_sha256": "fcd7095eab05ba538e4119ce5ce45dd27d92091b8600c244cc10bf7d1b540f9b"
+        },
+        {
+          "available_precision": "ArbitraryPrecision",
+          "data_version": "exact-definition",
+          "identity": "vakint::{}::HI(1,1,0,1,vakint::{}::om1)",
+          "source_sha256": "489744cfe2fbf207e8a48fff292a827ae2e0e09908074d60492e42265866f68a"
+        },
+        {
+          "available_precision": "ArbitraryPrecision",
+          "data_version": "exact-definition",
+          "identity": "vakint::{}::HI(1,1,1,0,vakint::{}::om1)",
+          "source_sha256": "afe4794d5249007c6e562afdd3654c28d615df4546ad4c52967940f2b18d4a20"
+        },
+        {
+          "available_precision": "ArbitraryPrecision",
+          "data_version": "exact-definition",
+          "identity": "vakint::{}::HI(1,1,1,-1,vakint::{}::om1)",
+          "source_sha256": "2026dade3ca8901de77141d274c61d1ea798afff22b055059e039ec3b9f82747"
+        },
+        {
+          "available_precision": "ArbitraryPrecision",
+          "data_version": "exact-definition",
+          "identity": "vakint::{}::HI(1,1,-1,0,vakint::{}::om1)",
+          "source_sha256": "93b5c0bebf16ecfca9e7a76b514e53010150d518ed9ef6532bcb18eeb6df8a2b"
+        },
+        {
+          "available_precision": "ArbitraryPrecision",
+          "data_version": "exact-definition",
+          "identity": "vakint::{}::HI(1,1,-1,1,vakint::{}::om1)",
+          "source_sha256": "6a46b5a6d3c3f88e7e8e50821714ee0b8d746ee468b685bb5a855ce8edb10944"
+        },
+        {
+          "available_precision": "ArbitraryPrecision",
+          "data_version": "exact-definition",
+          "identity": "vakint::{}::HI(1,1,-1,-1,vakint::{}::om1)",
+          "source_sha256": "7842ec9830b1774ee3909185649e21a891e57b0f0e7beff48f1e8ba529128f7f"
+        },
+        {
+          "available_precision": "ArbitraryPrecision",
+          "data_version": "exact-definition",
+          "identity": "vakint::{}::HI(1,-1,1,0,vakint::{}::om1)",
+          "source_sha256": "dc8dd1e64c0cc0a7304552f01e5fc03f2cae3defdbb63aca12ef3e31d2d6bd88"
+        },
+        {
+          "available_precision": "ArbitraryPrecision",
+          "data_version": "exact-definition",
+          "identity": "vakint::{}::HI(1,-1,1,1,vakint::{}::om1)",
+          "source_sha256": "372ef49e5dc01631239ddc1966766dfba9fe5e8832c1779fb97f8dd5885e54ab"
+        },
+        {
+          "available_precision": "ArbitraryPrecision",
+          "data_version": "exact-definition",
+          "identity": "vakint::{}::HI(1,-1,1,-1,vakint::{}::om1)",
+          "source_sha256": "4697ac541b1abe79192b00d7afb9ee8c690c1acc048f67fe3735afbc5affbdf8"
+        },
+        {
+          "available_precision": "ArbitraryPrecision",
+          "data_version": "exact-definition",
+          "identity": "vakint::{}::HI(1,-1,-1,1,vakint::{}::om1)",
+          "source_sha256": "c677ed81340edaf2b3dd0b6244f1c2fa8c40480309aadf564f8ae21ce5aed39a"
+        },
+        {
+          "available_precision": "ArbitraryPrecision",
+          "data_version": "exact-definition",
+          "identity": "vakint::{}::HI(-1,1,1,1,vakint::{}::om1)",
+          "source_sha256": "cff010256b8ec64edd17f222058294951cf583c38a78e4b1deb7258eca70396d"
+        },
+        {
+          "available_precision": "ArbitraryPrecision",
+          "data_version": "exact-definition",
+          "identity": "vakint::{}::HI(-1,1,-1,0,vakint::{}::om1)",
+          "source_sha256": "f54bd1ace73948682edd6957ceea4827bad1cc59a3a5df7ff2f2ad7f7c784eca"
+        },
+        {
+          "available_precision": "ArbitraryPrecision",
+          "data_version": "exact-definition",
+          "identity": "vakint::{}::HI(-1,-1,1,0,vakint::{}::om1)",
+          "source_sha256": "b918c0554c665985847ad4129b4c25222a08e01dd53552611cae879babcddf07"
+        },
+        {
+          "available_precision": "FixedPrecision(20000)",
+          "data_version": "v0.1.2",
+          "identity": "vakint::{}::RustRedCoefficient(vakint::{}::rustred_data_25fc8afb194db4209319b0753ea8ba4b5b5bd5a9726de5a111c6384f86e73de0,vakint::{}::RustRedMaster(vakint::{}::rustred_family_eb225daea1ddc8a4d61675a26b9b487f90278190fe874e314b7253aee632a5e7,0,1,0,0,1,1,1,0,1,0),0)",
+          "source_sha256": "f0ad5c640955434f32f331234ad8d3ea2c4917eb5d91f6c5d9e2f914600615d7"
+        },
+        {
+          "available_precision": "FixedPrecision(20000)",
+          "data_version": "v0.1.2",
+          "identity": "vakint::{}::RustRedCoefficient(vakint::{}::rustred_data_25fc8afb194db4209319b0753ea8ba4b5b5bd5a9726de5a111c6384f86e73de0,vakint::{}::RustRedMaster(vakint::{}::rustred_family_eb225daea1ddc8a4d61675a26b9b487f90278190fe874e314b7253aee632a5e7,0,3,0,0,1,1,1,0,1,0),0)",
+          "source_sha256": "1d37969f6d70fff8024da11b0b7fe26eee4607cb7a8b7beb782b00a5c2e1d922"
+        },
+        {
+          "available_precision": "FixedPrecision(215)",
+          "data_version": "v0.1.2",
+          "identity": "vakint::{}::RustRedConstant(vakint::{}::rustred_data_25fc8afb194db4209319b0753ea8ba4b5b5bd5a9726de5a111c6384f86e73de0,vakint::{}::PR7D2)",
+          "source_sha256": "462d80225362bf57f0210aa5550e9c154eef7f95ec03915710db2ffa6e59494a"
+        },
+        {
+          "available_precision": "FixedPrecision(215)",
+          "data_version": "v0.1.2",
+          "identity": "vakint::{}::RustRedConstant(vakint::{}::rustred_data_25fc8afb194db4209319b0753ea8ba4b5b5bd5a9726de5a111c6384f86e73de0,vakint::{}::PR10D2)",
+          "source_sha256": "84e020d42c37e6fda4150caf7c8d636126aa9e5c2b8ac8d7edb18b3453690c43"
+        },
+        {
+          "available_precision": "FixedPrecision(20000)",
+          "data_version": "v0.1.2",
+          "identity": "vakint::{}::RustRedConstant(vakint::{}::rustred_data_25fc8afb194db4209319b0753ea8ba4b5b5bd5a9726de5a111c6384f86e73de0,vakint::{}::K5Moment(1))",
+          "source_sha256": "161af012748e8dc44cc241750a3d55f6f3219b5f7bd6cfc9c6192f346af5094d"
+        },
+        {
+          "available_precision": "FixedPrecision(20000)",
+          "data_version": "v0.1.2",
+          "identity": "vakint::{}::RustRedConstant(vakint::{}::rustred_data_25fc8afb194db4209319b0753ea8ba4b5b5bd5a9726de5a111c6384f86e73de0,vakint::{}::K5Moment(3))",
+          "source_sha256": "e8988c691db8e11a773106fa0304e9dca80d616e4e33e12468124f3486ad1dcc"
+        }
+      ]
+    },
+    "warnings": [
+      "source uncertainty, cancellation and rounding limit this Laurent coefficient [requested 215 digits; achieved 213 digits; data v0.1.2]; ε^0; vakint::{}::PR7D2 (215 source digits); vakint::{}::PR10D2 (215 source digits); vakint::{}::K5Moment(1) (20000 source digits); vakint::{}::K5Moment(3) (20000 source digits); 𝜋; vakint::{}::T1ep; vakint::{}::T1ep2; symbolica::{}::zeta(3); vakint::{}::HR(1,1,0,vakint::{}::om1); vakint::{}::HR(1,0,1,0,vakint::{}::om1); vakint::{}::HR(1,1,0,-1,vakint::{}::om1); vakint::{}::HR(1,1,1,1,vakint::{}::om1); vakint::{}::HR(1,1,1,-1,vakint::{}::om1); vakint::{}::HR(1,1,-1,0,vakint::{}::om1); vakint::{}::HR(1,1,-1,1,vakint::{}::om1); vakint::{}::HR(1,-1,1,0,vakint::{}::om1); vakint::{}::HR(1,-1,1,1,vakint::{}::om1); vakint::{}::HR(-1,1,1,0,vakint::{}::om1); vakint::{}::HI(1,0,vakint::{}::om1); vakint::{}::HI(1,1,1,vakint::{}::om1); vakint::{}::HI(1,-1,0,vakint::{}::om1); vakint::{}::HI(-1,1,0,vakint::{}::om1); vakint::{}::HI(1,0,1,1,vakint::{}::om1); vakint::{}::HI(1,1,0,1,vakint::{}::om1); vakint::{}::HI(1,1,1,0,vakint::{}::om1); vakint::{}::HI(1,1,1,-1,vakint::{}::om1); vakint::{}::HI(1,1,-1,0,vakint::{}::om1); vakint::{}::HI(1,1,-1,1,vakint::{}::om1); vakint::{}::HI(1,1,-1,-1,vakint::{}::om1); vakint::{}::HI(1,-1,1,0,vakint::{}::om1); vakint::{}::HI(1,-1,1,1,vakint::{}::om1); vakint::{}::HI(1,-1,1,-1,vakint::{}::om1); vakint::{}::HI(1,-1,-1,1,vakint::{}::om1); vakint::{}::HI(-1,1,1,1,vakint::{}::om1); vakint::{}::HI(-1,1,-1,0,vakint::{}::om1); vakint::{}::HI(-1,-1,1,0,vakint::{}::om1); L4_eb225daea1ddc8a4d61675a26b9b487f90278190fe874e314b7253aee632a5e7_p0_p1_p0_p0_p1_p1_p1_p0_p1_p0 epsilon^0 [master L4_eb225daea1ddc8a4d61675a26b9b487f90278190fe874e314b7253aee632a5e7_p0_p1_p0_p0_p1_p1_p1_p0_p1_p0] ε^0 (20000 source digits); L4_eb225daea1ddc8a4d61675a26b9b487f90278190fe874e314b7253aee632a5e7_p0_p3_p0_p0_p1_p1_p1_p0_p1_p0 epsilon^0 [master L4_eb225daea1ddc8a4d61675a26b9b487f90278190fe874e314b7253aee632a5e7_p0_p3_p0_p0_p1_p1_p1_p0_p1_p0] ε^0 (20000 source digits)"
+    ]
+  },
+  "minimum_achieved_decimal_precision": 213,
+  "provenance": {
+    "status": "scientific reference validated by completed Ordered numerical evaluation and exact saved DFS retained-expression equality; fresh full Ordered CI wall qualification remains pending",
+    "selection": "the single authorized current-source Ordered numerical run; values copied verbatim without numerical reevaluation or choice by performance",
+    "collector_report": {
+      "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-ordered-numeric-222-01/work/L4-quadratic-ordered/report.json",
+      "bytes": 27703,
+      "sha256": "8c90946e04b6a2b50684cc5ae62779b6bfc7e1e34da3b2f1e454239bad2b8fb5"
+    },
+    "producer": {
+      "allowed_cpus": "169",
+      "build_profile": "release",
+      "cargo_lock_sha256": "9338911038cac4c53515170535f87f9fabb6bf1004fd75317068c5fd06a9ab13",
+      "commit": "222df4cb1f35a8c79927df1dd72a56110fa333bd",
+      "comparison_process": "one engine in this process",
+      "debug_assertions": false,
+      "executable_identity_scope": "release: streamed once; DEV: use the supervising original-process launch receipt",
+      "executable_sha256": "99b29a8144f00820c80db33d37357e0656ff6f6364135f2b814199c93ded5108",
+      "native_runtime_arities": "1,3,6,10,15",
+      "profile_contract": "caller must build --release with no profile overrides; debug_assertions is not compiler-profile introspection"
+    },
+    "build_receipt": {
+      "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/build/release-222df4cb1/example/build-receipt.json",
+      "bytes": 5761,
+      "sha256": "fe6a42fe1f793ee38f2ab77509da3c63ebf46020237bc71bf869a2c733b76b42"
+    },
+    "launch": {
+      "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-ordered-numeric-222-01/guard/launch.json",
+      "bytes": 1619,
+      "sha256": "d912717daad4d9ebabf9cee8a22d5a4711afad9c31007a672599d232afae3529"
+    },
+    "completion": {
+      "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-ordered-numeric-222-01/guard/completion.json",
+      "bytes": 184,
+      "sha256": "27c29ec6ab177524b1f21e7014f0f398dc9a59f15aff5e09ccee86fa704d0506"
+    },
+    "completion_validation": {
+      "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-ordered-numeric-222-01/completion-validation.json",
+      "bytes": 2876,
+      "sha256": "c19f05d5f85db6e0a5562f0176362f4f94cf0f3df3ab0c665b22ad93e8aa9719"
+    },
+    "exact_saved_depth_first_reference": {
+      "proof": {
+        "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-saved-pair-current222-proof-01/proof/functional-pair.json",
+        "bytes": 1342,
+        "sha256": "56f6cf733474741f913cf4d1508b08b7c42857ca54cf7ab53adfad5ec5136f45"
+      },
+      "depth_first_report": {
+        "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-dfs-manual-reference-047-01/work/L4-quadratic-dfs/report.json",
+        "bytes": 4333,
+        "sha256": "5152f228b54518f615815be6e925e8d0cc726de0afb45c41b00cb569ace4e2c8"
+      },
+      "depth_first_retained": {
+        "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-dfs-manual-reference-047-01/work/L4-quadratic-dfs/retained.symbolica",
+        "bytes": 22078,
+        "sha256": "6986f629362956bf28bfbb3bf5a941e5d1f4df667a626d93395dbde8059a8f77"
+      },
+      "ordered_retained": {
+        "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-ordered-numeric-222-01/work/L4-quadratic-ordered/retained.symbolica",
+        "bytes": 22078,
+        "sha256": "6986f629362956bf28bfbb3bf5a941e5d1f4df667a626d93395dbde8059a8f77"
+      },
+      "scope": "saved retained expressions are exactly equal with identical input, dimension, normalization and data bindings; the older DFS run has no numerical reference, and no additional DFS numerical evaluation is claimed"
+    },
+    "source_capability": "PR7D2 and PR10D2 have 215 validated source digits in data v0.1.2. The selected request is 215; cancellation and tracked source errors leave 213 achieved imaginary digits at epsilon zero, explicitly warned rather than retried.",
+    "error_quality": "pole coefficients have Bounded tracked errors; epsilon-zero errors are Estimated from finite validated source digits, not rigorous mathematical bounds. Exact-zero real components retain their reported quality metadata.",
+    "precision_floor": "213 is this quadratic case's conservative observed regression floor. The separate zero-momentum reference and 214-digit floor are unchanged; future source caps use the selected request, never achieved digits, when capping the regression target.",
+    "prepared_input": {
+      "manifest": {
+        "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-prepare-01/work/input-L4-quadratic/prepared-input.json",
+        "bytes": 2375,
+        "sha256": "c38ad4bf9f14b51ecbfea62d8552ea5b73f0f430f5154604422981c9fe6c474d"
+      },
+      "input": {
+        "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-prepare-01/work/input-L4-quadratic/vakint-input.symbolica",
+        "bytes": 1672532,
+        "sha256": "050c3d0fbd9b87046986de5f458b6626bdd5652aea464cd932fbe6c43f2abaa8"
+      },
+      "nonzero_conditions": {
+        "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-prepare-01/work/input-L4-quadratic/projector-conditions.symbolica",
+        "bytes": 103,
+        "sha256": "bc23ecdd82b5c54269b27c5b39b3769f3500cbe62c5f93c2e391267cd1035af9"
+      }
+    },
+    "comparison_role": "MSbar scientific reference at mUV=mu_r_squared=UFO_G=1. Runtime accepts equivalent authenticated snapshots without requiring identical version/path; the exact retained proof plus unchanged registry binds both engines to the same mathematical numerical value.",
+    "ci_qualification": {
+      "status": "pending",
+      "full_depth_first_ordered_pair": "remains ignored after the 900-second whole-case budget; a new fresh-preparation Ordered-only golden test must qualify separately",
+      "performance_eligible": false
+    }
+  }
+}
