@@ -1,0 +1,140 @@
+"""Walk the actual Cargo fingerprint closure of the executed generation_oracle unit.
+
+Reads the crane artifact chain (top layer overrides lower layers), the executed
+nextest archive, and computes:
+  * sha256 of the generation_oracle ELF in the deps layer and in the archive;
+  * transitive unit closure from the generation_oracle test fingerprint, with
+    per-unit features/profile/rustc and the layer each record came from.
+Read-only; streams tarballs through a pinned zstd. Writes one JSON report.
+Usage: fingerprint_closure.py <zstd> <out.json> <unit-dir> <unit-json> <elf-name> <archive> <layer>...
+"""
+import hashlib
+import json
+import subprocess
+import sys
+import tarfile
+from collections import Counter, deque
+
+zstd, out_path, unit_dir, unit_json, elf_name, archive = sys.argv[1:7]
+layers = sys.argv[7:]
+
+records = {}  # member -> (layer_index, bytes)
+elf_hashes = {}
+
+
+def stream(path, want_member):
+    proc = subprocess.Popen([zstd, "-dc", path], stdout=subprocess.PIPE)
+    with tarfile.open(fileobj=proc.stdout, mode="r|") as tar:
+        for m in tar:
+            if not m.isfile():
+                continue
+            name = m.name
+            kind = want_member(name)
+            if kind is None:
+                continue
+            f = tar.extractfile(m)
+            if kind == "fp":
+                yield name, f.read()
+            elif kind == "elf":
+                h = hashlib.sha256()
+                for b in iter(lambda: f.read(1 << 22), b""):
+                    h.update(b)
+                yield name, ("ELF", h.hexdigest(), m.size)
+    assert proc.wait() == 0, path
+
+
+def want(name):
+    if "/.fingerprint/" in name:
+        base = name.rsplit("/", 1)[-1]
+        if base.endswith(".json") or not ("." in base or base.startswith("dep-") or base == "invoked.timestamp" or base.startswith("output-")):
+            return "fp"
+        return None
+    if name.endswith("/deps/" + elf_name) or name.endswith("/" + elf_name):
+        return "elf"
+    return None
+
+
+# lowest layer first so higher layers override
+for idx in reversed(range(len(layers))):
+    for name, data in stream(layers[idx], want):
+        if isinstance(data, tuple):
+            elf_hashes[f"layer{idx}:{name}"] = {"sha256": data[1], "bytes": data[2]}
+        else:
+            key = name[2:] if name.startswith("./") else name
+            records[key] = (idx, data)
+
+for name, data in stream(archive, want):
+    if isinstance(data, tuple):
+        elf_hashes[f"archive:{name}"] = {"sha256": data[1], "bytes": data[2]}
+
+# hex fingerprint -> json member
+hex_to_json = {}
+for key, (idx, data) in records.items():
+    if key.endswith(".json"):
+        continue
+    try:
+        hx = data.decode().strip()
+    except UnicodeDecodeError:
+        continue
+    if len(hx) == 16 and all(c in "0123456789abcdef" for c in hx):
+        jkey = key + ".json"
+        if jkey in records:
+            hex_to_json.setdefault(hx, set()).add(jkey)
+
+start = None
+for key in records:
+    if key.endswith(f".fingerprint/{unit_dir}/{unit_json}"):
+        start = key
+assert start, "start fingerprint not found"
+
+closure = {}
+missing = []
+queue = deque([start])
+while queue:
+    key = queue.popleft()
+    if key in closure:
+        continue
+    idx, data = records[key]
+    fp = json.loads(data)
+    closure[key] = {"layer": idx, "features": fp.get("features"), "profile": fp.get("profile"),
+                    "rustc": fp.get("rustc"), "target": fp.get("target"), "compile_kind": fp.get("compile_kind"),
+                    "rustflags": fp.get("rustflags"), "deps": [[d[1], d[3]] for d in fp.get("deps", [])],
+                    "sha256": hashlib.sha256(data).hexdigest()}
+    for dep in fp.get("deps", []):
+        hx = int(dep[3]).to_bytes(8, "little").hex()
+        targets = hex_to_json.get(hx)
+        if not targets:
+            missing.append({"from": key, "dep": dep[1], "hex": hx})
+            continue
+        if len(targets) > 1:
+            missing.append({"from": key, "dep": dep[1], "hex": hx, "ambiguous": sorted(targets)})
+        for t in targets:
+            queue.append(t)
+
+by_pkg = {}
+for key, v in closure.items():
+    unit = key.split("/.fingerprint/")[1].split("/")[0]
+    pkg = unit.rsplit("-", 1)[0]
+    by_pkg.setdefault(pkg, []).append({"unit": unit, "file": key.rsplit("/", 1)[1], "features": v["features"], "layer": v["layer"]})
+
+wasm_units = sorted(k for k, v in closure.items() if v["features"] and "wasm" in json.loads(v["features"]))
+rustcs = Counter(v["rustc"] for v in closure.values())
+report = {
+    "layers": layers,
+    "archive": archive,
+    "start": start,
+    "elf_hashes": elf_hashes,
+    "records_total": sum(1 for k in records if k.endswith(".json")),
+    "closure_units": len(closure),
+    "closure_missing_or_ambiguous": missing,
+    "closure_layers": dict(Counter(v["layer"] for v in closure.values())),
+    "rustc_values": {str(k): n for k, n in rustcs.items()},
+    "units_with_wasm_feature": wasm_units,
+    "packages": {k: by_pkg[k] for k in sorted(by_pkg)},
+    "closure": closure,
+}
+open(out_path, "w").write(json.dumps(report, indent=1) + "\n")
+print("records", report["records_total"], "closure", len(closure), "missing", len(missing), "wasm_units", len(wasm_units))
+print("layers", report["closure_layers"], "rustc", report["rustc_values"])
+for k, v in elf_hashes.items():
+    print("ELF", k, v)

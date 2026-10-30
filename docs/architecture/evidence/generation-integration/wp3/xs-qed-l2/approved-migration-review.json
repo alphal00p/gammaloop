@@ -1,0 +1,2248 @@
+{
+  "schema": "xs-qed-l2-independent-astra-migration-review/1",
+  "finalized": true,
+  "title": "Independent Astra fallback migration/test review of the single xs_qed_eemm_L2 numerator literal",
+  "reviewer": "Astra (gpt-6-astra), independent review sub-agent; no subreviews",
+  "review_window_utc": [
+    "2026-10-30T09:41:05Z",
+    "2026-10-30T10:12:02.115440+00:00"
+  ],
+  "verdict": "APPROVED_MIGRATION_PREPARATION_WITH_NONBLOCKING_QUALIFICATIONS",
+  "blocking_findings": [],
+  "verdict_summary": "Candidate 19b516a43dda31a4403dd2a170f2e837934617ce is approved only as migration preparation for xs_qed_eemm_L2.numerators. Independent exact source checking finds precisely the authorized token substitution and seven declared paths. Fresh old/current test runs at pools 1/8/32 each select and execute one test (182 filtered): three old full-Row failures, differing only in numerators, and three new full-Row passes. Independent integer/Fraction census recomputation, all twelve retained route/pool/mode captures and fresh counterparts, complete same-mode observer bindings, source/compiler/dependency provenance, two finite proof replays, required controls, final report rendering and preservation checks passed. No MAIN/WP3 or larger mathematical approval is given.",
+  "scope": {
+    "case": "xs_qed_eemm_L2",
+    "grouping": "None",
+    "classes": [
+      "None",
+      "Auto"
+    ],
+    "asserted_reference": "Classes None returned by classes::check; Auto independently generated and compared",
+    "literal": {
+      "field": "numerators",
+      "old_hex": "0xf36c3111407873cc",
+      "new_hex": "0xf889b37c1fd93143",
+      "old_integer": 17540448598867080140,
+      "new_integer": 17909042738907132227
+    },
+    "current_runtime_pools": [
+      1,
+      8,
+      32
+    ],
+    "mathematical_certificate": "Only approved pool1 captured representation equivalence, None and Auto separately, historical 2b1ef4f0/kernel c78cffc2 versus current 3432ac3f/kernel 1a1829b1",
+    "MAIN": false,
+    "WP3": false,
+    "no_approval_for": [
+      "other literals/rows/groupings",
+      "historical pool8/32 theorem",
+      "general physics, locality, free-index typing or positional consumer correctness",
+      "full docs/catalog/CI/publication",
+      "whole-file donor transplant"
+    ],
+    "handoff_constraint": "Root must apply only this one-line patch in any subsequent separately approved MAIN reconciliation; donor contains the four prior family migrations and still-old three QED L1 literals."
+  },
+  "frozen_bindings": {
+    "candidate": "19b516a43dda31a4403dd2a170f2e837934617ce",
+    "candidate_tree": "b0a3c8026b5de8ba302cee0b6a3dafc75bbf4966",
+    "parent_certificate": "c95e7f6e77994779929115a156654cfce3bd1e53",
+    "bookmark": "generation-xs-qed-l2-migration",
+    "empty_holder": "8026f44b70069cd03f5d6a80a95c5e58d69b14cd",
+    "historical_holder": "6d476227597e72d9ef3504f0c99fc5c6806d235f",
+    "handoff": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-l2-migration/handoff.json",
+      "sha256": "941ad3e54fc0abeeecfceffbe2cffdaa138dc786aec13ef20a303717cfa6d86f",
+      "bytes": 1733
+    },
+    "freeze": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-l2-migration/freeze.json",
+      "sha256": "ef486d7ecc89133e77b0a3e74b62291ead7fd87a109245e4b02e6be096f2be62",
+      "bytes": 1498
+    },
+    "receipt": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-xs-qed-l2-migration/receipt.json",
+      "sha256": "c6965a9aa7acb407dc76c924ab07d5def384d2c61a82356b322f2a6379cdc44d",
+      "bytes": 173786
+    },
+    "main_rs_old_sha256": "3459e671163389a5dba83b990efa6d2f6d784e83e644bd1a213df0a746c35a98",
+    "main_rs_new_sha256": "df04a696c4b530a9d92b531ea9bab647ac2db5faf2380424d75cf005c42e666a",
+    "seven_changed_paths": [
+      "M\tcrates/feynkit-generator/tests/generation_oracle/main.rs",
+      "A\tdocs/architecture/evidence/generation-xs-qed-l2-migration/common.py",
+      "A\tdocs/architecture/evidence/generation-xs-qed-l2-migration/handoff.py",
+      "A\tdocs/architecture/evidence/generation-xs-qed-l2-migration/migrate.py",
+      "A\tdocs/architecture/evidence/generation-xs-qed-l2-migration/receipt.json",
+      "A\tdocs/architecture/generation-xs-qed-l2-migration.typ",
+      "M\tdocs/developers.toml"
+    ],
+    "all_other_source_bytes_unchanged": true,
+    "all_148_other_oracle_rows_unchanged": true,
+    "approvals": {
+      "A": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-a-opus-20261030T063905Z/review.json",
+        "sha256": "f5173b1d86a44c18d11179b13a0542eb0282097cb303079d709ab75d2184c554",
+        "verdict": "APPROVED_SCOPE_A_WITH_NONBLOCKING_NOTES"
+      },
+      "B": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-b-opus-20261030T063831Z/review.json",
+        "sha256": "5c97912c4b6fa9660c55b3bf03b785b37b36f2d3a042d677acd388f12ec8346b",
+        "verdict": "APPROVED_SCOPE_B_WITH_NONBLOCKING_FINDINGS"
+      }
+    }
+  },
+  "fresh_runtime": [
+    {
+      "route": "old",
+      "pool": 1,
+      "selected": 1,
+      "executed": 1,
+      "passed": 0,
+      "failed": 1,
+      "ignored": 0,
+      "filtered": 182,
+      "exit": 101,
+      "elf": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-l2/bin/current/generation_oracle",
+      "elf_sha256": "7da2b7619edb99cc215e298b9dcb4616ce7eab5fea3195174a9692ad705dfd3c",
+      "record": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/old/pool1/record.json",
+        "sha256": "56ac6b60eaa9219e028099cb0cf39a0349f15247a2c19c557ae8cbbd96dd93d6",
+        "bytes": 8172
+      },
+      "argv": [
+        "/nix/store/v24sx9l1jmvvia3z8iznrd7jwhvc8kcf-bubblewrap-0.11.2/bin/bwrap",
+        "--unshare-all",
+        "--die-with-parent",
+        "--new-session",
+        "--ro-bind",
+        "/",
+        "/",
+        "--dev",
+        "/dev",
+        "--proc",
+        "/proc",
+        "--bind",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/old/pool1",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/old/pool1",
+        "--bind",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/old/pool1/tmp",
+        "/tmp",
+        "--bind",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/old/pool1/cache",
+        "/home/lcnbr/.cache",
+        "--chdir",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/old/pool1/cwd",
+        "--clearenv",
+        "--setenv",
+        "FEYNKIT_ORACLE_DUMP",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/old/pool1/dumps",
+        "--setenv",
+        "FEYNKIT_ORACLE_THREADS",
+        "1",
+        "--setenv",
+        "GL_TEST_LOG_DIR",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/old/pool1/state",
+        "--setenv",
+        "HOME",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/old/pool1/home",
+        "--setenv",
+        "PATH",
+        "/nix/store/3qgy8q2j64v2m9jy3a5jmssacbblhd4r-coreutils-9.11/bin",
+        "--setenv",
+        "PYTHONDONTWRITEBYTECODE",
+        "1",
+        "--setenv",
+        "PYTHONNOUSERSITE",
+        "1",
+        "--setenv",
+        "TMPDIR",
+        "/tmp",
+        "--setenv",
+        "XDG_CACHE_HOME",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/old/pool1/cache",
+        "--setenv",
+        "XDG_CONFIG_HOME",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/old/pool1/config",
+        "--",
+        "/nix/store/4168xqs4l5jbfc7xyi9zrhdhszx0pnlb-python3-3.13.16/bin/python3",
+        "-I",
+        "-B",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/scripts/child.py",
+        "license",
+        "/home/lcnbr/.config/symbolica/license",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/old/pool1/child-result.json",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/old/pool1/stdout.txt",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/old/pool1/stderr.txt",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/old/pool1/dumps",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-l2/bin/current/generation_oracle",
+        "xs_qed_eemm_L2",
+        "--exact",
+        "--test-threads",
+        "1",
+        "--nocapture"
+      ],
+      "environment": {
+        "PATH": "/nix/store/3qgy8q2j64v2m9jy3a5jmssacbblhd4r-coreutils-9.11/bin",
+        "HOME": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/old/pool1/home",
+        "TMPDIR": "/tmp",
+        "XDG_CACHE_HOME": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/old/pool1/cache",
+        "XDG_CONFIG_HOME": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/old/pool1/config",
+        "GL_TEST_LOG_DIR": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/old/pool1/state",
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "PYTHONNOUSERSITE": "1",
+        "FEYNKIT_ORACLE_THREADS": "1",
+        "FEYNKIT_ORACLE_DUMP": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/old/pool1/dumps"
+      },
+      "thread_observation": {
+        "peak_threads": 394,
+        "samples": 151
+      }
+    },
+    {
+      "route": "old",
+      "pool": 8,
+      "selected": 1,
+      "executed": 1,
+      "passed": 0,
+      "failed": 1,
+      "ignored": 0,
+      "filtered": 182,
+      "exit": 101,
+      "elf": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-l2/bin/current/generation_oracle",
+      "elf_sha256": "7da2b7619edb99cc215e298b9dcb4616ce7eab5fea3195174a9692ad705dfd3c",
+      "record": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/old/pool8/record.json",
+        "sha256": "e8307276c54920e1151fd13558d4c0b8d0e2ed8c63596d0dad88029f5e6363ea",
+        "bytes": 8174
+      },
+      "argv": [
+        "/nix/store/v24sx9l1jmvvia3z8iznrd7jwhvc8kcf-bubblewrap-0.11.2/bin/bwrap",
+        "--unshare-all",
+        "--die-with-parent",
+        "--new-session",
+        "--ro-bind",
+        "/",
+        "/",
+        "--dev",
+        "/dev",
+        "--proc",
+        "/proc",
+        "--bind",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/old/pool8",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/old/pool8",
+        "--bind",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/old/pool8/tmp",
+        "/tmp",
+        "--bind",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/old/pool8/cache",
+        "/home/lcnbr/.cache",
+        "--chdir",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/old/pool8/cwd",
+        "--clearenv",
+        "--setenv",
+        "FEYNKIT_ORACLE_DUMP",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/old/pool8/dumps",
+        "--setenv",
+        "FEYNKIT_ORACLE_THREADS",
+        "8",
+        "--setenv",
+        "GL_TEST_LOG_DIR",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/old/pool8/state",
+        "--setenv",
+        "HOME",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/old/pool8/home",
+        "--setenv",
+        "PATH",
+        "/nix/store/3qgy8q2j64v2m9jy3a5jmssacbblhd4r-coreutils-9.11/bin",
+        "--setenv",
+        "PYTHONDONTWRITEBYTECODE",
+        "1",
+        "--setenv",
+        "PYTHONNOUSERSITE",
+        "1",
+        "--setenv",
+        "TMPDIR",
+        "/tmp",
+        "--setenv",
+        "XDG_CACHE_HOME",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/old/pool8/cache",
+        "--setenv",
+        "XDG_CONFIG_HOME",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/old/pool8/config",
+        "--",
+        "/nix/store/4168xqs4l5jbfc7xyi9zrhdhszx0pnlb-python3-3.13.16/bin/python3",
+        "-I",
+        "-B",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/scripts/child.py",
+        "license",
+        "/home/lcnbr/.config/symbolica/license",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/old/pool8/child-result.json",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/old/pool8/stdout.txt",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/old/pool8/stderr.txt",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/old/pool8/dumps",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-l2/bin/current/generation_oracle",
+        "xs_qed_eemm_L2",
+        "--exact",
+        "--test-threads",
+        "1",
+        "--nocapture"
+      ],
+      "environment": {
+        "PATH": "/nix/store/3qgy8q2j64v2m9jy3a5jmssacbblhd4r-coreutils-9.11/bin",
+        "HOME": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/old/pool8/home",
+        "TMPDIR": "/tmp",
+        "XDG_CACHE_HOME": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/old/pool8/cache",
+        "XDG_CONFIG_HOME": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/old/pool8/config",
+        "GL_TEST_LOG_DIR": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/old/pool8/state",
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "PYTHONNOUSERSITE": "1",
+        "FEYNKIT_ORACLE_THREADS": "8",
+        "FEYNKIT_ORACLE_DUMP": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/old/pool8/dumps"
+      },
+      "thread_observation": {
+        "peak_threads": 402,
+        "samples": 105
+      }
+    },
+    {
+      "route": "old",
+      "pool": 32,
+      "selected": 1,
+      "executed": 1,
+      "passed": 0,
+      "failed": 1,
+      "ignored": 0,
+      "filtered": 182,
+      "exit": 101,
+      "elf": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-l2/bin/current/generation_oracle",
+      "elf_sha256": "7da2b7619edb99cc215e298b9dcb4616ce7eab5fea3195174a9692ad705dfd3c",
+      "record": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/old/pool32/record.json",
+        "sha256": "225cfe76d2287a55fe4a9e63270057870bef7af71922e204df259711e6725005",
+        "bytes": 8201
+      },
+      "argv": [
+        "/nix/store/v24sx9l1jmvvia3z8iznrd7jwhvc8kcf-bubblewrap-0.11.2/bin/bwrap",
+        "--unshare-all",
+        "--die-with-parent",
+        "--new-session",
+        "--ro-bind",
+        "/",
+        "/",
+        "--dev",
+        "/dev",
+        "--proc",
+        "/proc",
+        "--bind",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/old/pool32",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/old/pool32",
+        "--bind",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/old/pool32/tmp",
+        "/tmp",
+        "--bind",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/old/pool32/cache",
+        "/home/lcnbr/.cache",
+        "--chdir",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/old/pool32/cwd",
+        "--clearenv",
+        "--setenv",
+        "FEYNKIT_ORACLE_DUMP",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/old/pool32/dumps",
+        "--setenv",
+        "FEYNKIT_ORACLE_THREADS",
+        "32",
+        "--setenv",
+        "GL_TEST_LOG_DIR",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/old/pool32/state",
+        "--setenv",
+        "HOME",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/old/pool32/home",
+        "--setenv",
+        "PATH",
+        "/nix/store/3qgy8q2j64v2m9jy3a5jmssacbblhd4r-coreutils-9.11/bin",
+        "--setenv",
+        "PYTHONDONTWRITEBYTECODE",
+        "1",
+        "--setenv",
+        "PYTHONNOUSERSITE",
+        "1",
+        "--setenv",
+        "TMPDIR",
+        "/tmp",
+        "--setenv",
+        "XDG_CACHE_HOME",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/old/pool32/cache",
+        "--setenv",
+        "XDG_CONFIG_HOME",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/old/pool32/config",
+        "--",
+        "/nix/store/4168xqs4l5jbfc7xyi9zrhdhszx0pnlb-python3-3.13.16/bin/python3",
+        "-I",
+        "-B",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/scripts/child.py",
+        "license",
+        "/home/lcnbr/.config/symbolica/license",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/old/pool32/child-result.json",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/old/pool32/stdout.txt",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/old/pool32/stderr.txt",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/old/pool32/dumps",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-l2/bin/current/generation_oracle",
+        "xs_qed_eemm_L2",
+        "--exact",
+        "--test-threads",
+        "1",
+        "--nocapture"
+      ],
+      "environment": {
+        "PATH": "/nix/store/3qgy8q2j64v2m9jy3a5jmssacbblhd4r-coreutils-9.11/bin",
+        "HOME": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/old/pool32/home",
+        "TMPDIR": "/tmp",
+        "XDG_CACHE_HOME": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/old/pool32/cache",
+        "XDG_CONFIG_HOME": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/old/pool32/config",
+        "GL_TEST_LOG_DIR": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/old/pool32/state",
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "PYTHONNOUSERSITE": "1",
+        "FEYNKIT_ORACLE_THREADS": "32",
+        "FEYNKIT_ORACLE_DUMP": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/old/pool32/dumps"
+      },
+      "thread_observation": {
+        "peak_threads": 426,
+        "samples": 105
+      }
+    },
+    {
+      "route": "new",
+      "pool": 1,
+      "selected": 1,
+      "executed": 1,
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0,
+      "filtered": 182,
+      "exit": 0,
+      "elf": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-l2-migration/bin/generation_oracle",
+      "elf_sha256": "4048a4ee1dcd4f7ad6e7af3865be29eac0a92e6b792493611df087b055425958",
+      "record": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/new/pool1/record.json",
+        "sha256": "6cda9f93c3b09880c0f6ee05e099928e7b7432bb41cc1201f98d3e53022905be",
+        "bytes": 8106
+      },
+      "argv": [
+        "/nix/store/v24sx9l1jmvvia3z8iznrd7jwhvc8kcf-bubblewrap-0.11.2/bin/bwrap",
+        "--unshare-all",
+        "--die-with-parent",
+        "--new-session",
+        "--ro-bind",
+        "/",
+        "/",
+        "--dev",
+        "/dev",
+        "--proc",
+        "/proc",
+        "--bind",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/new/pool1",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/new/pool1",
+        "--bind",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/new/pool1/tmp",
+        "/tmp",
+        "--bind",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/new/pool1/cache",
+        "/home/lcnbr/.cache",
+        "--chdir",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/new/pool1/cwd",
+        "--clearenv",
+        "--setenv",
+        "FEYNKIT_ORACLE_DUMP",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/new/pool1/dumps",
+        "--setenv",
+        "FEYNKIT_ORACLE_THREADS",
+        "1",
+        "--setenv",
+        "GL_TEST_LOG_DIR",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/new/pool1/state",
+        "--setenv",
+        "HOME",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/new/pool1/home",
+        "--setenv",
+        "PATH",
+        "/nix/store/3qgy8q2j64v2m9jy3a5jmssacbblhd4r-coreutils-9.11/bin",
+        "--setenv",
+        "PYTHONDONTWRITEBYTECODE",
+        "1",
+        "--setenv",
+        "PYTHONNOUSERSITE",
+        "1",
+        "--setenv",
+        "TMPDIR",
+        "/tmp",
+        "--setenv",
+        "XDG_CACHE_HOME",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/new/pool1/cache",
+        "--setenv",
+        "XDG_CONFIG_HOME",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/new/pool1/config",
+        "--",
+        "/nix/store/4168xqs4l5jbfc7xyi9zrhdhszx0pnlb-python3-3.13.16/bin/python3",
+        "-I",
+        "-B",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/scripts/child.py",
+        "license",
+        "/home/lcnbr/.config/symbolica/license",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/new/pool1/child-result.json",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/new/pool1/stdout.txt",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/new/pool1/stderr.txt",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/new/pool1/dumps",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-l2-migration/bin/generation_oracle",
+        "xs_qed_eemm_L2",
+        "--exact",
+        "--test-threads",
+        "1",
+        "--nocapture"
+      ],
+      "environment": {
+        "PATH": "/nix/store/3qgy8q2j64v2m9jy3a5jmssacbblhd4r-coreutils-9.11/bin",
+        "HOME": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/new/pool1/home",
+        "TMPDIR": "/tmp",
+        "XDG_CACHE_HOME": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/new/pool1/cache",
+        "XDG_CONFIG_HOME": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/new/pool1/config",
+        "GL_TEST_LOG_DIR": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/new/pool1/state",
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "PYTHONNOUSERSITE": "1",
+        "FEYNKIT_ORACLE_THREADS": "1",
+        "FEYNKIT_ORACLE_DUMP": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/new/pool1/dumps"
+      },
+      "thread_observation": {
+        "peak_threads": 394,
+        "samples": 176
+      }
+    },
+    {
+      "route": "new",
+      "pool": 8,
+      "selected": 1,
+      "executed": 1,
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0,
+      "filtered": 182,
+      "exit": 0,
+      "elf": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-l2-migration/bin/generation_oracle",
+      "elf_sha256": "4048a4ee1dcd4f7ad6e7af3865be29eac0a92e6b792493611df087b055425958",
+      "record": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/new/pool8/record.json",
+        "sha256": "fbfa25e98d93dad8f38b6b59e43516c3f7ac29cb09f0061433ee8b9ce1a245fa",
+        "bytes": 8107
+      },
+      "argv": [
+        "/nix/store/v24sx9l1jmvvia3z8iznrd7jwhvc8kcf-bubblewrap-0.11.2/bin/bwrap",
+        "--unshare-all",
+        "--die-with-parent",
+        "--new-session",
+        "--ro-bind",
+        "/",
+        "/",
+        "--dev",
+        "/dev",
+        "--proc",
+        "/proc",
+        "--bind",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/new/pool8",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/new/pool8",
+        "--bind",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/new/pool8/tmp",
+        "/tmp",
+        "--bind",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/new/pool8/cache",
+        "/home/lcnbr/.cache",
+        "--chdir",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/new/pool8/cwd",
+        "--clearenv",
+        "--setenv",
+        "FEYNKIT_ORACLE_DUMP",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/new/pool8/dumps",
+        "--setenv",
+        "FEYNKIT_ORACLE_THREADS",
+        "8",
+        "--setenv",
+        "GL_TEST_LOG_DIR",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/new/pool8/state",
+        "--setenv",
+        "HOME",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/new/pool8/home",
+        "--setenv",
+        "PATH",
+        "/nix/store/3qgy8q2j64v2m9jy3a5jmssacbblhd4r-coreutils-9.11/bin",
+        "--setenv",
+        "PYTHONDONTWRITEBYTECODE",
+        "1",
+        "--setenv",
+        "PYTHONNOUSERSITE",
+        "1",
+        "--setenv",
+        "TMPDIR",
+        "/tmp",
+        "--setenv",
+        "XDG_CACHE_HOME",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/new/pool8/cache",
+        "--setenv",
+        "XDG_CONFIG_HOME",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/new/pool8/config",
+        "--",
+        "/nix/store/4168xqs4l5jbfc7xyi9zrhdhszx0pnlb-python3-3.13.16/bin/python3",
+        "-I",
+        "-B",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/scripts/child.py",
+        "license",
+        "/home/lcnbr/.config/symbolica/license",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/new/pool8/child-result.json",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/new/pool8/stdout.txt",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/new/pool8/stderr.txt",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/new/pool8/dumps",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-l2-migration/bin/generation_oracle",
+        "xs_qed_eemm_L2",
+        "--exact",
+        "--test-threads",
+        "1",
+        "--nocapture"
+      ],
+      "environment": {
+        "PATH": "/nix/store/3qgy8q2j64v2m9jy3a5jmssacbblhd4r-coreutils-9.11/bin",
+        "HOME": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/new/pool8/home",
+        "TMPDIR": "/tmp",
+        "XDG_CACHE_HOME": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/new/pool8/cache",
+        "XDG_CONFIG_HOME": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/new/pool8/config",
+        "GL_TEST_LOG_DIR": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/new/pool8/state",
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "PYTHONNOUSERSITE": "1",
+        "FEYNKIT_ORACLE_THREADS": "8",
+        "FEYNKIT_ORACLE_DUMP": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/new/pool8/dumps"
+      },
+      "thread_observation": {
+        "peak_threads": 402,
+        "samples": 102
+      }
+    },
+    {
+      "route": "new",
+      "pool": 32,
+      "selected": 1,
+      "executed": 1,
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0,
+      "filtered": 182,
+      "exit": 0,
+      "elf": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-l2-migration/bin/generation_oracle",
+      "elf_sha256": "4048a4ee1dcd4f7ad6e7af3865be29eac0a92e6b792493611df087b055425958",
+      "record": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/new/pool32/record.json",
+        "sha256": "c0c97063b4e2782f3aa00e4206d6338cdf551e62ed9533532acc60641ffc4481",
+        "bytes": 8132
+      },
+      "argv": [
+        "/nix/store/v24sx9l1jmvvia3z8iznrd7jwhvc8kcf-bubblewrap-0.11.2/bin/bwrap",
+        "--unshare-all",
+        "--die-with-parent",
+        "--new-session",
+        "--ro-bind",
+        "/",
+        "/",
+        "--dev",
+        "/dev",
+        "--proc",
+        "/proc",
+        "--bind",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/new/pool32",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/new/pool32",
+        "--bind",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/new/pool32/tmp",
+        "/tmp",
+        "--bind",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/new/pool32/cache",
+        "/home/lcnbr/.cache",
+        "--chdir",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/new/pool32/cwd",
+        "--clearenv",
+        "--setenv",
+        "FEYNKIT_ORACLE_DUMP",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/new/pool32/dumps",
+        "--setenv",
+        "FEYNKIT_ORACLE_THREADS",
+        "32",
+        "--setenv",
+        "GL_TEST_LOG_DIR",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/new/pool32/state",
+        "--setenv",
+        "HOME",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/new/pool32/home",
+        "--setenv",
+        "PATH",
+        "/nix/store/3qgy8q2j64v2m9jy3a5jmssacbblhd4r-coreutils-9.11/bin",
+        "--setenv",
+        "PYTHONDONTWRITEBYTECODE",
+        "1",
+        "--setenv",
+        "PYTHONNOUSERSITE",
+        "1",
+        "--setenv",
+        "TMPDIR",
+        "/tmp",
+        "--setenv",
+        "XDG_CACHE_HOME",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/new/pool32/cache",
+        "--setenv",
+        "XDG_CONFIG_HOME",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/new/pool32/config",
+        "--",
+        "/nix/store/4168xqs4l5jbfc7xyi9zrhdhszx0pnlb-python3-3.13.16/bin/python3",
+        "-I",
+        "-B",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/scripts/child.py",
+        "license",
+        "/home/lcnbr/.config/symbolica/license",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/new/pool32/child-result.json",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/new/pool32/stdout.txt",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/new/pool32/stderr.txt",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/new/pool32/dumps",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-l2-migration/bin/generation_oracle",
+        "xs_qed_eemm_L2",
+        "--exact",
+        "--test-threads",
+        "1",
+        "--nocapture"
+      ],
+      "environment": {
+        "PATH": "/nix/store/3qgy8q2j64v2m9jy3a5jmssacbblhd4r-coreutils-9.11/bin",
+        "HOME": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/new/pool32/home",
+        "TMPDIR": "/tmp",
+        "XDG_CACHE_HOME": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/new/pool32/cache",
+        "XDG_CONFIG_HOME": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/new/pool32/config",
+        "GL_TEST_LOG_DIR": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/new/pool32/state",
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "PYTHONNOUSERSITE": "1",
+        "FEYNKIT_ORACLE_THREADS": "32",
+        "FEYNKIT_ORACLE_DUMP": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/new/pool32/dumps"
+      },
+      "thread_observation": {
+        "peak_threads": 426,
+        "samples": 90
+      }
+    }
+  ],
+  "selection_controls": {
+    "lists": "Both ELFs list 183 tests, 44 ignored; --list --exact selects xs_qed_eemm_L2 once. Target is not ignored.",
+    "zero_selection": {
+      "selected": 0,
+      "executed": 0,
+      "passed": 0,
+      "filtered": 183,
+      "exit": 0,
+      "pass_credit": 0,
+      "record": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/negatives/zero-selection-new/record.json",
+        "sha256": "4888b9fb0aa5119d103e41a9f611574a67fba9f45d6f26ea2aef63ed257710fc",
+        "bytes": 7967
+      }
+    },
+    "record_mode_old": {
+      "selected": 1,
+      "executed": 1,
+      "reported_passed": 1,
+      "filtered": 182,
+      "exit": 0,
+      "pass_credit": 0,
+      "reason": "FEYNKIT_ORACLE_RECORD=1 bypasses Row assertion; recorded as explicit negative control",
+      "record": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/runtime/negatives/record-mode-old/record.json",
+        "sha256": "c5e416ef3311dc8ca33a7cbbcf54b78937c3f4e80223d1284768097a52097601",
+        "bytes": 8450
+      }
+    }
+  },
+  "rows_and_capture_binding": {
+    "method": "New independent implementation of census.rs Digest/Entry::digest_json/Summary, exact FNV-1a u64 wrapping and rational Fraction arithmetic, strict allowed bookkeeping heads; no candidate or previous-review Row helper imported. Canonical JSON roundtrips are byte-identical.",
+    "domains_recomputed": 28,
+    "complete_Rows": {
+      "certificate/historical/None": {
+        "diagrams": 30,
+        "topologies": 157,
+        "assignments": 714,
+        "inverse_symmetry": [
+          30,
+          1
+        ],
+        "weights": [
+          4,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            30
+          ]
+        ],
+        "content": 8056915727855707115,
+        "numerators": 17540448598867080140,
+        "named": 811150720901089260,
+        "ids": 14290904471616678913
+      },
+      "certificate/historical/Auto": {
+        "diagrams": 30,
+        "topologies": 157,
+        "assignments": 714,
+        "inverse_symmetry": [
+          30,
+          1
+        ],
+        "weights": [
+          4,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            30
+          ]
+        ],
+        "content": 8056915727855707115,
+        "numerators": 17540448598867080140,
+        "named": 14666857465192919060,
+        "ids": 14290904471616678913
+      },
+      "certificate/current/None": {
+        "diagrams": 30,
+        "topologies": 157,
+        "assignments": 714,
+        "inverse_symmetry": [
+          30,
+          1
+        ],
+        "weights": [
+          4,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            30
+          ]
+        ],
+        "content": 8056915727855707115,
+        "numerators": 17909042738907132227,
+        "named": 811150720901089260,
+        "ids": 14290904471616678913
+      },
+      "certificate/current/Auto": {
+        "diagrams": 30,
+        "topologies": 157,
+        "assignments": 714,
+        "inverse_symmetry": [
+          30,
+          1
+        ],
+        "weights": [
+          4,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            30
+          ]
+        ],
+        "content": 8056915727855707115,
+        "numerators": 17909042738907132227,
+        "named": 14666857465192919060,
+        "ids": 14290904471616678913
+      }
+    },
+    "old_full_Summary_checks": 6,
+    "per_diagram_compact_digests": "All fresh and retained None census lines match independently recomputed full key, ID, symmetry, frame, numerator, factor and basis.",
+    "twelve_retained_domains": "old/new x pools1/8/32 x None/Auto; payload==sources companion==matching observer payload. All 8 non-timing capture files equal the corresponding approved same-mode capture byte-for-byte. capture.json differs only in declared Run threads and measured timings.",
+    "fresh_observers": "Migration observer freshly run once at each pool (shared source/ELF for old and new assertion routes), plus fresh approved current observer pool1; their full capture bytes match approved domains. No duplicate observer run claimed.",
+    "counter_origin": "Each mode uses its own same-pool built-report.txt, checked against its own prepared-report.txt; Auto counters are not taken from the None census in this review. Metadata is separate observer-process evidence.",
+    "counts": {
+      "graphs": 30,
+      "topologies": 157,
+      "assignments": 714,
+      "inverse_symmetry": [
+        30,
+        1
+      ],
+      "weights": [
+        4,
+        1
+      ],
+      "positive": 17,
+      "negative": 13,
+      "symmetry_histogram": [
+        [
+          1,
+          30
+        ]
+      ],
+      "owners_per_mode": 540,
+      "axes_per_mode": 1296
+    },
+    "None_to_Auto_cycle": [
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      21,
+      12
+    ],
+    "mode_join": "Complete canonical-key multiplicities, unique IDs, per-graph payload/factor equality, positional Dnn names and singleton master/member/source_index/ratio chains verified. 20 and all other positions fixed; no global mode byte-identity assumption.",
+    "pool_delivery": "FEYNKIT_ORACLE_THREADS -> threads() -> classes::check Run::default().threads(count); assertion-written t1/t8/t32 paths and same-pool observer metadata corroborate. Best-effort OS samples include global worker threads (old/new peaks394/402/426); these are not direct Run-pool-size measurements."
+  },
+  "producer_provenance": {
+    "new_test": {
+      "closure_units": 341,
+      "command": [
+        "nix",
+        "develop",
+        "git+file:///shared/lcnbr/dev/gammaloop/main?rev=c95e7f6e77994779929115a156654cfce3bd1e53&shallow=1&allRefs=1",
+        "-c",
+        "cargo",
+        "test",
+        "--locked",
+        "--profile",
+        "dev-optim",
+        "-p",
+        "feynkit-generator",
+        "--test",
+        "generation_oracle",
+        "--no-run",
+        "--message-format",
+        "json-render-diagnostics"
+      ],
+      "command_sources_before": {
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-xs-qed-l2-migration/common.py": "c7baf204fe429a9799d3e333842588c21647175d17e338c166c8b6868dbca230",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-xs-qed-l2-migration/migrate.py": "a89c874cd85491964f30269bad3d355f8a2c5e37fdf38c964c5ffb95d7c84141"
+      },
+      "compiler_artifacts": 302,
+      "cwd": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-l2-migration/source",
+      "elf": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-l2-migration/bin/generation_oracle",
+      "elf_sha256": "4048a4ee1dcd4f7ad6e7af3865be29eac0a92e6b792493611df087b055425958",
+      "emitted_profile": {
+        "debug_assertions": true,
+        "debuginfo": 2,
+        "opt_level": "2",
+        "overflow_checks": true,
+        "test": true
+      },
+      "emitted_source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-l2-migration/source/crates/feynkit-generator/tests/generation_oracle/main.rs",
+      "ended": "2026-10-30T07:49:55.539396+00:00",
+      "exit": 0,
+      "fingerprint_files": 342,
+      "fresh_counts": {
+        "False": 302
+      },
+      "kernel_manifests": [
+        "/home/lcnbr/.cargo/git/checkouts/symbolica-db3dbb7e8d40efb5/1a1829b/lib/graphica/Cargo.toml",
+        "/home/lcnbr/.cargo/git/checkouts/symbolica-db3dbb7e8d40efb5/1a1829b/lib/graphica/Cargo.toml",
+        "/home/lcnbr/.cargo/git/checkouts/symbolica-db3dbb7e8d40efb5/1a1829b/lib/numerica/Cargo.toml",
+        "/home/lcnbr/.cargo/git/checkouts/symbolica-db3dbb7e8d40efb5/1a1829b/lib/numerica/Cargo.toml",
+        "/home/lcnbr/.cargo/git/checkouts/symbolica-db3dbb7e8d40efb5/1a1829b/Cargo.toml",
+        "/home/lcnbr/.cargo/git/checkouts/symbolica-db3dbb7e8d40efb5/1a1829b/Cargo.toml"
+      ],
+      "logs": {
+        "stderr": "4a995be3dc57d930c29272c5189713609a8844f09be6e3765f08ee732b4dc78d",
+        "stdout": "f1139e1bec03746fe400eb19ac127969ac9eaab0354a851a7e75b5dcac211ebf"
+      },
+      "qualification": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-l2-migration/build/generation_oracle/qualification-v2.json",
+      "root": {
+        "compile_kind": 0,
+        "config": 1282902399306750302,
+        "declared_features": "[\"default\", \"native\", \"wasm\"]",
+        "deps": [
+          [
+            824141387789191317,
+            "feynkit_amplitude",
+            false,
+            13611294576759734899
+          ],
+          [
+            1819191786676615155,
+            "symbolica",
+            false,
+            8733751457237103206
+          ],
+          [
+            2448563160050429386,
+            "thiserror",
+            false,
+            14988705748843364414
+          ],
+          [
+            2819946551904607991,
+            "num_rational",
+            false,
+            5778992470114351987
+          ],
+          [
+            2878135982285137535,
+            "linnet",
+            false,
+            12903416352381907435
+          ],
+          [
+            4479790829530052811,
+            "spenso",
+            false,
+            15220877334906709214
+          ],
+          [
+            4796842932013701455,
+            "spenso_hep_lib",
+            false,
+            6959222433131316232
+          ],
+          [
+            5156925218712681703,
+            "feynkit_generator",
+            false,
+            11376181199922372863
+          ],
+          [
+            7497922256016908689,
+            "feynkit_model",
+            false,
+            10248970427235924126
+          ],
+          [
+            9723370144619655183,
+            "tempfile",
+            false,
+            547565590720721789
+          ],
+          [
+            9917544417685332479,
+            "idenso",
+            false,
+            4206616244766757193
+          ],
+          [
+            11862723254873017773,
+            "bincode",
+            false,
+            6631853023524186807
+          ],
+          [
+            11910974697091955563,
+            "rayon",
+            false,
+            11877852922918096788
+          ],
+          [
+            12405394076909343869,
+            "bincode_trait_derive",
+            false,
+            17611430304621818071
+          ],
+          [
+            12528732512569713347,
+            "num_bigint",
+            false,
+            13204048225933623953
+          ],
+          [
+            13548984313718623784,
+            "serde",
+            false,
+            564428995990595922
+          ],
+          [
+            13795362694956882968,
+            "serde_json",
+            false,
+            16481522055930497761
+          ],
+          [
+            17109794424245468765,
+            "regex",
+            false,
+            1335493534740192595
+          ],
+          [
+            17283853990992084357,
+            "feynkit_graph",
+            false,
+            2499557065589647207
+          ]
+        ],
+        "features": "[\"default\", \"native\"]",
+        "local": [
+          {
+            "CheckDepInfo": {
+              "checksum": false,
+              "dep_info": "dev-optim/.fingerprint/feynkit-generator-c4b54249fc0354d6/dep-test-integration-test-generation_oracle"
+            }
+          }
+        ],
+        "path": 15726402853306774164,
+        "profile": 1235621381506040755,
+        "rustc": 1625334936438085654,
+        "rustflags": [
+          "-C",
+          "linker=/nix/store/z4c6k0mrlkwl3s4w9ysxc8vq1wylm3ms-gcc-wrapper-15.3.0/bin/gcc"
+        ],
+        "target": 11526694154387375423
+      },
+      "sha256": "ed19003b00d20c875e000c07a3ad5d2ed7366d394f8f0fda04188c4997e8901a",
+      "started": "2026-10-30T07:43:16.938042+00:00"
+    },
+    "new_observer": {
+      "closure_units": 341,
+      "command": [
+        "nix",
+        "develop",
+        "git+file:///shared/lcnbr/dev/gammaloop/main?rev=c95e7f6e77994779929115a156654cfce3bd1e53&shallow=1&allRefs=1",
+        "-c",
+        "cargo",
+        "build",
+        "--locked",
+        "--profile",
+        "dev-optim",
+        "-p",
+        "feynkit-generator",
+        "--example",
+        "oracle_xs_qed_l2_migration_capture",
+        "--message-format",
+        "json-render-diagnostics"
+      ],
+      "command_sources_before": {
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-xs-qed-l2-migration/common.py": "dad374820e75cd99d7f5150381eaf09f104766d393d152aad2e4ff108434da16",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-xs-qed-l2-migration/handoff.py": "bfcbe7cb1c6441828cf8ec5916f3608eb5318cb1d79a71563ace5738cedf9d57",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-xs-qed-l2-migration/migrate.py": "26c7ea62b263f38d910a3b31e69e95c319747ad08c0d94638efa8249210b3e01"
+      },
+      "compiler_artifacts": 302,
+      "cwd": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-l2-migration/source",
+      "elf": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-l2-migration/bin/oracle_xs_qed_l2_migration_capture",
+      "elf_sha256": "9a479c8ebcdd38324019f6fcc0de0719e03c223507df9a3005463c260fb1a9d2",
+      "emitted_profile": {
+        "debug_assertions": true,
+        "debuginfo": 2,
+        "opt_level": "2",
+        "overflow_checks": true,
+        "test": false
+      },
+      "emitted_source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-l2-migration/source/crates/feynkit-generator/examples/oracle_xs_qed_l2_migration_capture.rs",
+      "ended": "2026-10-30T07:50:27.415547+00:00",
+      "exit": 0,
+      "fingerprint_files": 342,
+      "fresh_counts": {
+        "False": 1,
+        "True": 301
+      },
+      "kernel_manifests": [
+        "/home/lcnbr/.cargo/git/checkouts/symbolica-db3dbb7e8d40efb5/1a1829b/lib/numerica/Cargo.toml",
+        "/home/lcnbr/.cargo/git/checkouts/symbolica-db3dbb7e8d40efb5/1a1829b/lib/numerica/Cargo.toml",
+        "/home/lcnbr/.cargo/git/checkouts/symbolica-db3dbb7e8d40efb5/1a1829b/lib/graphica/Cargo.toml",
+        "/home/lcnbr/.cargo/git/checkouts/symbolica-db3dbb7e8d40efb5/1a1829b/lib/graphica/Cargo.toml",
+        "/home/lcnbr/.cargo/git/checkouts/symbolica-db3dbb7e8d40efb5/1a1829b/Cargo.toml",
+        "/home/lcnbr/.cargo/git/checkouts/symbolica-db3dbb7e8d40efb5/1a1829b/Cargo.toml"
+      ],
+      "logs": {
+        "stderr": "3b92263fe884264515a8510c85938e66cb5c5f7d2bd8df397af4e26b9c943af2",
+        "stdout": "49bd5d380466eb535d084ffaf222df4608e25982e0525d65d049a85ac2c5cb9a"
+      },
+      "qualification": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-l2-migration/build/oracle_xs_qed_l2_migration_capture/qualification-v2.json",
+      "root": {
+        "compile_kind": 0,
+        "config": 1282902399306750302,
+        "declared_features": "[\"default\", \"native\", \"wasm\"]",
+        "deps": [
+          [
+            824141387789191317,
+            "feynkit_amplitude",
+            false,
+            13611294576759734899
+          ],
+          [
+            1819191786676615155,
+            "symbolica",
+            false,
+            8733751457237103206
+          ],
+          [
+            2448563160050429386,
+            "thiserror",
+            false,
+            14988705748843364414
+          ],
+          [
+            2819946551904607991,
+            "num_rational",
+            false,
+            5778992470114351987
+          ],
+          [
+            2878135982285137535,
+            "linnet",
+            false,
+            12903416352381907435
+          ],
+          [
+            4479790829530052811,
+            "spenso",
+            false,
+            15220877334906709214
+          ],
+          [
+            4796842932013701455,
+            "spenso_hep_lib",
+            false,
+            6959222433131316232
+          ],
+          [
+            5156925218712681703,
+            "feynkit_generator",
+            false,
+            11376181199922372863
+          ],
+          [
+            7497922256016908689,
+            "feynkit_model",
+            false,
+            10248970427235924126
+          ],
+          [
+            9723370144619655183,
+            "tempfile",
+            false,
+            547565590720721789
+          ],
+          [
+            9917544417685332479,
+            "idenso",
+            false,
+            4206616244766757193
+          ],
+          [
+            11862723254873017773,
+            "bincode",
+            false,
+            6631853023524186807
+          ],
+          [
+            11910974697091955563,
+            "rayon",
+            false,
+            11877852922918096788
+          ],
+          [
+            12405394076909343869,
+            "bincode_trait_derive",
+            false,
+            17611430304621818071
+          ],
+          [
+            12528732512569713347,
+            "num_bigint",
+            false,
+            13204048225933623953
+          ],
+          [
+            13548984313718623784,
+            "serde",
+            false,
+            564428995990595922
+          ],
+          [
+            13795362694956882968,
+            "serde_json",
+            false,
+            16481522055930497761
+          ],
+          [
+            17109794424245468765,
+            "regex",
+            false,
+            1335493534740192595
+          ],
+          [
+            17283853990992084357,
+            "feynkit_graph",
+            false,
+            2499557065589647207
+          ]
+        ],
+        "features": "[\"default\", \"native\"]",
+        "local": [
+          {
+            "CheckDepInfo": {
+              "checksum": false,
+              "dep_info": "dev-optim/.fingerprint/feynkit-generator-935e87d7983cee88/dep-example-oracle_xs_qed_l2_migration_capture"
+            }
+          }
+        ],
+        "path": 5844617864856939887,
+        "profile": 15396524706607348604,
+        "rustc": 1625334936438085654,
+        "rustflags": [
+          "-C",
+          "linker=/nix/store/z4c6k0mrlkwl3s4w9ysxc8vq1wylm3ms-gcc-wrapper-15.3.0/bin/gcc"
+        ],
+        "target": 15517893606322947360
+      },
+      "sha256": "ccecdfcbcfe2251257e1bb30c5dc42ecf5f0805cf18ac786cdd5b9a7c221b54e",
+      "started": "2026-10-30T07:49:58.972400+00:00"
+    },
+    "old_test": {
+      "closure_units": 341,
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--profile",
+        "dev-optim",
+        "-p",
+        "feynkit-generator",
+        "--test",
+        "generation_oracle",
+        "--no-run",
+        "--message-format",
+        "json-render-diagnostics"
+      ],
+      "command_sources_before": {
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-xs-qed-l2/build.py": "0a10149f4512ae35bef80d72b62f184ac29302bb4cc466f7b5c3c5c2b1a9976c",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-xs-qed-l2/common.py": "bb4293deb969f905835ae89764d4cb73e6f43f3beaba8220807da552f989bd5e",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-xs-qed-l2/fingerprints.py": "27ae390c5e9ee99661ef71dffd807d8c23ab3beca2db8f9d4ce4d8da20e862e1",
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-xs-qed-l2/prepare.py": "92f8375e315520f2034b5d1733eddc975196a9ebeba865ff10dd5144d7cbf578"
+      },
+      "compiler_artifacts": 302,
+      "cwd": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-l2/source/current",
+      "elf": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-l2/bin/current/generation_oracle",
+      "elf_sha256": "7da2b7619edb99cc215e298b9dcb4616ce7eab5fea3195174a9692ad705dfd3c",
+      "emitted_profile": {
+        "debug_assertions": true,
+        "debuginfo": 2,
+        "opt_level": "2",
+        "overflow_checks": true,
+        "test": true
+      },
+      "emitted_source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-l2/source/current/crates/feynkit-generator/tests/generation_oracle/main.rs",
+      "ended": "2026-10-30T06:07:11.137975+00:00",
+      "exit": 0,
+      "fingerprint_files": 342,
+      "fresh_counts": {
+        "False": 302
+      },
+      "kernel_manifests": [
+        "/home/lcnbr/.cargo/git/checkouts/symbolica-db3dbb7e8d40efb5/1a1829b/lib/graphica/Cargo.toml",
+        "/home/lcnbr/.cargo/git/checkouts/symbolica-db3dbb7e8d40efb5/1a1829b/lib/graphica/Cargo.toml",
+        "/home/lcnbr/.cargo/git/checkouts/symbolica-db3dbb7e8d40efb5/1a1829b/lib/numerica/Cargo.toml",
+        "/home/lcnbr/.cargo/git/checkouts/symbolica-db3dbb7e8d40efb5/1a1829b/lib/numerica/Cargo.toml",
+        "/home/lcnbr/.cargo/git/checkouts/symbolica-db3dbb7e8d40efb5/1a1829b/Cargo.toml",
+        "/home/lcnbr/.cargo/git/checkouts/symbolica-db3dbb7e8d40efb5/1a1829b/Cargo.toml"
+      ],
+      "logs": {
+        "stderr": "e739d61b716d8b8a3632bf46d62568467729b713a9ecdbc4c73e6b7daeaa1911",
+        "stdout": "7b8e91cf28a959ad72c1a1c5d88cb101853ef0616195f9714ef56f05a7f7b09a"
+      },
+      "qualification": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-l2/build/current/generation_oracle/qualification.json",
+      "root": {
+        "compile_kind": 0,
+        "config": 1282902399306750302,
+        "declared_features": "[\"default\", \"native\", \"wasm\"]",
+        "deps": [
+          [
+            824141387789191317,
+            "feynkit_amplitude",
+            false,
+            11183499268761127495
+          ],
+          [
+            1819191786676615155,
+            "symbolica",
+            false,
+            8733751457237103206
+          ],
+          [
+            2448563160050429386,
+            "thiserror",
+            false,
+            14988705748843364414
+          ],
+          [
+            2819946551904607991,
+            "num_rational",
+            false,
+            5778992470114351987
+          ],
+          [
+            2878135982285137535,
+            "linnet",
+            false,
+            5166083995697563608
+          ],
+          [
+            4479790829530052811,
+            "spenso",
+            false,
+            2534291485254820390
+          ],
+          [
+            4796842932013701455,
+            "spenso_hep_lib",
+            false,
+            17754944024376666196
+          ],
+          [
+            5156925218712681703,
+            "feynkit_generator",
+            false,
+            21585031869705047
+          ],
+          [
+            7497922256016908689,
+            "feynkit_model",
+            false,
+            18276266328149583097
+          ],
+          [
+            9723370144619655183,
+            "tempfile",
+            false,
+            547565590720721789
+          ],
+          [
+            9917544417685332479,
+            "idenso",
+            false,
+            13663330488262378203
+          ],
+          [
+            11862723254873017773,
+            "bincode",
+            false,
+            6631853023524186807
+          ],
+          [
+            11910974697091955563,
+            "rayon",
+            false,
+            11877852922918096788
+          ],
+          [
+            12405394076909343869,
+            "bincode_trait_derive",
+            false,
+            17611430304621818071
+          ],
+          [
+            12528732512569713347,
+            "num_bigint",
+            false,
+            13204048225933623953
+          ],
+          [
+            13548984313718623784,
+            "serde",
+            false,
+            564428995990595922
+          ],
+          [
+            13795362694956882968,
+            "serde_json",
+            false,
+            16481522055930497761
+          ],
+          [
+            17109794424245468765,
+            "regex",
+            false,
+            1335493534740192595
+          ],
+          [
+            17283853990992084357,
+            "feynkit_graph",
+            false,
+            10742091209756229733
+          ]
+        ],
+        "features": "[\"default\", \"native\"]",
+        "local": [
+          {
+            "CheckDepInfo": {
+              "checksum": false,
+              "dep_info": "dev-optim/.fingerprint/feynkit-generator-c4b54249fc0354d6/dep-test-integration-test-generation_oracle"
+            }
+          }
+        ],
+        "path": 15726402853306774164,
+        "profile": 1235621381506040755,
+        "rustc": 1625334936438085654,
+        "rustflags": [
+          "-C",
+          "linker=/nix/store/z4c6k0mrlkwl3s4w9ysxc8vq1wylm3ms-gcc-wrapper-15.3.0/bin/gcc"
+        ],
+        "target": 11526694154387375423
+      },
+      "sha256": "07fba54d0ad5ec307c7cff427d65151909d350722ef3096883abf6f0fca5a4fc",
+      "started": "2026-10-30T06:01:06.362833+00:00"
+    },
+    "old_and_current_observer_exact_units": 341,
+    "historical_test_observer_exact_units": 336,
+    "new_test_observer_exact_units": 341,
+    "independent_raw_traversal": true,
+    "old_vs_new": "Same341 unit IDs/kinds, complete feature/profile/rustc/rustflags projections and assertion root compiler/profile/flags/target/config/path. Eleven raw fingerprint records differ only by one workspace-hack local timestamp fingerprint and its dependency cascade. Do not claim all old/new raw fingerprints identical.",
+    "source_copy_inventory": {
+      "generation_oracle": {
+        "before_after_qualification_equal": true,
+        "changed_from_archive": [
+          "crates/feynkit-generator/tests/generation_oracle/main.rs"
+        ],
+        "extra_observer_only": [],
+        "files": 4316
+      },
+      "oracle_xs_qed_l2_migration_capture": {
+        "before_after_qualification_equal": true,
+        "changed_from_archive": [
+          "crates/feynkit-generator/tests/generation_oracle/main.rs"
+        ],
+        "extra_observer_only": [
+          "crates/feynkit-generator/examples/oracle_xs_qed_l2_migration_capture.rs"
+        ],
+        "files": 4317
+      }
+    },
+    "observer_overlay": "Exactly the approved observer plus explicit checked pool parameterization; no assertion in-memory instrumentation.",
+    "compiler": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8\n",
+    "cargo": "cargo 1.98.1 (797e8a9bc 2026-08-05)\n",
+    "historical_graphica": "Historical graphica3.0.1 is registry-sourced; historical Symbolica/Numerica use c78cffc. Current graphica/numerica/symbolica resolve to1a1829b.",
+    "no_builds_here": true,
+    "native_engines": "Retained1ae86dce/41c68004 used as previously reviewed mechanisms only; original native/helper build-log qualifications retained."
+  },
+  "finite_proof": {
+    "fresh_baselines": {
+      "None": {
+        "summary": {
+          "case": "xs_qed_eemm_L2",
+          "mode": "None",
+          "graphs": 30,
+          "owners": 540,
+          "nontrivial_cross_permutations": 56,
+          "distinct_native_texts": 168,
+          "anchor_self_comparisons": 1080,
+          "nonliteral_cross": 0,
+          "ct": {}
+        },
+        "pairs": {
+          "cross-pairs.json": "da61804e2ad174efe21b6b156fdb4866f1afe70b039f478cfd68a3913d93f119",
+          "aggregate-pairs.json": "1b2c003e4c7b0956e0e964a8ee35307ca3e1c4bb0c3421fbc7efc437d03c78b8",
+          "faithfulness.json": "70544721950327f2ca8731e645cba4b5b23bbd767542770b0993182fbe68c00e",
+          "anchor-pairs.json": "b9705422b6f354ba91d3f6ccbbfefbd321f43ee3b2d31b47028e0dbb90ec461b",
+          "cross-ports.json": "37b987739d66376137bcb9abea199f68ac9ff2106e5da4ae794be0bb01103a8b",
+          "definitions.json": "b40189dc8dad125bfbb99d1e4deac4fca4d44b7256833a2b13d81a68eed1b482"
+        },
+        "native_commands": [
+          {
+            "command": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/proof/None/result/native-faithfulness/historical-forward/command.json",
+            "sha256": "cb33eed6405f065ec538d09cab031cb0b9d950faa92ea641e8a6bb0ac34a19eb",
+            "pair_sha256": "ce71113dccc38727a5ee2ca57962b71798ebdebc4923b29bd9ecb62a8246ed06",
+            "elf_sha256": "1ae86dcea5b15ff04274a91557a28dcf75d57154ee0882ed51d5c86c53be81b6",
+            "exit": 0
+          },
+          {
+            "command": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/proof/None/result/native-faithfulness/current-forward/command.json",
+            "sha256": "38982f0591a5c75f6e0448a88fd29b315cb954f6198a50a46ddae4cb02ea4023",
+            "pair_sha256": "ce71113dccc38727a5ee2ca57962b71798ebdebc4923b29bd9ecb62a8246ed06",
+            "elf_sha256": "41c68004f03d25e4a47c58cc5d2bb75e04af39cebe525313fab67873127108ae",
+            "exit": 0
+          },
+          {
+            "command": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/proof/None/result/native-aggregate/historical-reverse/command.json",
+            "sha256": "825c9d149f7ef9da76dab4f44617aaa9cf194946dd35035a37a58c8bc2d1f954",
+            "pair_sha256": "d41bba55253cc3d8f84fb3634682df3e629421a676259f9f9206feb49b93a1a8",
+            "elf_sha256": "1ae86dcea5b15ff04274a91557a28dcf75d57154ee0882ed51d5c86c53be81b6",
+            "exit": 0
+          },
+          {
+            "command": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/proof/None/result/native-aggregate/historical-forward/command.json",
+            "sha256": "ee6c4d1d967fa9679df803f98e95977e032dd6e827b69c5b2dd4820f65248693",
+            "pair_sha256": "869d9c72a5b0ef33ac2055d15d15bf10efad355fcf0c5484b98d64a25c64d211",
+            "elf_sha256": "1ae86dcea5b15ff04274a91557a28dcf75d57154ee0882ed51d5c86c53be81b6",
+            "exit": 0
+          },
+          {
+            "command": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/proof/None/result/native-aggregate/current-forward/command.json",
+            "sha256": "ed73345dd2473d47694a2534f488906b7b263f01012e5e23cb713dca203cd048",
+            "pair_sha256": "869d9c72a5b0ef33ac2055d15d15bf10efad355fcf0c5484b98d64a25c64d211",
+            "elf_sha256": "41c68004f03d25e4a47c58cc5d2bb75e04af39cebe525313fab67873127108ae",
+            "exit": 0
+          },
+          {
+            "command": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/proof/None/result/native-aggregate/current-reverse/command.json",
+            "sha256": "417b8a86711a7456601c0a6dd04348bc7d42ed49d2e6656ab8459edd950c53ab",
+            "pair_sha256": "d41bba55253cc3d8f84fb3634682df3e629421a676259f9f9206feb49b93a1a8",
+            "elf_sha256": "41c68004f03d25e4a47c58cc5d2bb75e04af39cebe525313fab67873127108ae",
+            "exit": 0
+          }
+        ],
+        "command_sha256": "6a062624a5530a02dd064574b8952d44d5340bf14411d2298022b0f36e56b8e2"
+      },
+      "Auto": {
+        "summary": {
+          "case": "xs_qed_eemm_L2",
+          "mode": "Auto",
+          "graphs": 30,
+          "owners": 540,
+          "nontrivial_cross_permutations": 56,
+          "distinct_native_texts": 168,
+          "anchor_self_comparisons": 1080,
+          "nonliteral_cross": 0,
+          "ct": {}
+        },
+        "pairs": {
+          "cross-pairs.json": "123efa5bde5c0dcd74ba3e77ee9f41350ccdf1afe24564171cb08f36851ffb8b",
+          "aggregate-pairs.json": "bbabd17f73de09c4f99048e6d743f218eb4319849bc33e50edb69998ef3b50e6",
+          "faithfulness.json": "e4e0b9e274cda301a87efc126ddd13b617bbe401380179a46c0ba7dcb7c4c64f",
+          "anchor-pairs.json": "3465d3421c421bf721f51362a94c37a27228d19086dbfdd226819447ac2a1328",
+          "cross-ports.json": "cec65c02fe76af71fd271669979b07a29139e63c5d574a7a43d9bea41377ec31",
+          "definitions.json": "b40189dc8dad125bfbb99d1e4deac4fca4d44b7256833a2b13d81a68eed1b482"
+        },
+        "native_commands": [
+          {
+            "command": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/proof/Auto/result/native-faithfulness/current-forward/command.json",
+            "sha256": "fec6ae8d64ca6af8731b6009cda42310355df8fe9194df74fe495ea9d97ff0ee",
+            "pair_sha256": "470eb52d756bbf54f36b7b848f8376075402b97c8b959e3ce92e0dfcae5f4e63",
+            "elf_sha256": "41c68004f03d25e4a47c58cc5d2bb75e04af39cebe525313fab67873127108ae",
+            "exit": 0
+          },
+          {
+            "command": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/proof/Auto/result/native-faithfulness/historical-forward/command.json",
+            "sha256": "1cd514f19a19fd33cd53bcd198e75bef7cd499f12d8d3cec658f69c779c1357c",
+            "pair_sha256": "470eb52d756bbf54f36b7b848f8376075402b97c8b959e3ce92e0dfcae5f4e63",
+            "elf_sha256": "1ae86dcea5b15ff04274a91557a28dcf75d57154ee0882ed51d5c86c53be81b6",
+            "exit": 0
+          },
+          {
+            "command": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/proof/Auto/result/native-aggregate/current-reverse/command.json",
+            "sha256": "a9bba49db4c9707b69ca796d2688f7b6918ae852f3d7a531e91170d029c240a9",
+            "pair_sha256": "60ac004e232947c43f5e6d4e9fa4507052c4be0f6a0630e6bdef81852e84eab3",
+            "elf_sha256": "41c68004f03d25e4a47c58cc5d2bb75e04af39cebe525313fab67873127108ae",
+            "exit": 0
+          },
+          {
+            "command": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/proof/Auto/result/native-aggregate/current-forward/command.json",
+            "sha256": "705726cf262e53af3477714d072b53348a77891dcc1d14cbef8c08658f94fbdc",
+            "pair_sha256": "a060f7be6adfb1dbf513138d1777d409d223c64079959367bf3e38758937198b",
+            "elf_sha256": "41c68004f03d25e4a47c58cc5d2bb75e04af39cebe525313fab67873127108ae",
+            "exit": 0
+          },
+          {
+            "command": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/proof/Auto/result/native-aggregate/historical-forward/command.json",
+            "sha256": "2d69b4078cb31e26e47055693c7ce536b536983a84f4c9d1111017035e4553e2",
+            "pair_sha256": "a060f7be6adfb1dbf513138d1777d409d223c64079959367bf3e38758937198b",
+            "elf_sha256": "1ae86dcea5b15ff04274a91557a28dcf75d57154ee0882ed51d5c86c53be81b6",
+            "exit": 0
+          },
+          {
+            "command": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/proof/Auto/result/native-aggregate/historical-reverse/command.json",
+            "sha256": "1fa02d8869ac4a94cc138bce612f79b4b66e103751475ded159859ba83d8a870",
+            "pair_sha256": "60ac004e232947c43f5e6d4e9fa4507052c4be0f6a0630e6bdef81852e84eab3",
+            "elf_sha256": "1ae86dcea5b15ff04274a91557a28dcf75d57154ee0882ed51d5c86c53be81b6",
+            "exit": 0
+          }
+        ],
+        "command_sha256": "087086ad8b8bb36fe4499be8da4d9eb58b00441e2242777ebf66b0b5699be94d"
+      }
+    },
+    "fresh_controls": {
+      "valid-copy": {
+        "exit": 0,
+        "verdict": {
+          "disposition": "accept",
+          "stage": "complete",
+          "exit": 0,
+          "mode": "None",
+          "case": "xs_qed_eemm_L2"
+        },
+        "command": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/proof/controls/valid-copy/command.json",
+        "command_sha256": "49f945ed4ce1071156a535a15e23dba973303c8e32309d79588a1e4e7ba916b1",
+        "missing_input_credit": null
+      },
+      "missing-current-typed-owners": {
+        "exit": 3,
+        "verdict": {
+          "disposition": "harness-error",
+          "stage": "infrastructure",
+          "exception": "FileNotFoundError",
+          "detail": "[Errno 2] No such file or directory: '/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/scratch/proof-fixtures/missing/current/xs_qed_eemm_L2/classes-None-t1/typed-owners.json'",
+          "exit": 3,
+          "mode": "None",
+          "case": "xs_qed_eemm_L2"
+        },
+        "command": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/proof/controls/missing-current-typed-owners/command.json",
+        "command_sha256": "71d90ac878e24089e4bfdcc9a09543ca3d9c2bd569b27468595f543826a9a7d3",
+        "missing_input_credit": "infrastructure/no acceptance; not semantic rejection"
+      },
+      "current-only-edge-sign": {
+        "exit": 2,
+        "verdict": {
+          "disposition": "reject",
+          "stage": "cross-equality",
+          "detail": "cross-equality: [('equality', 'historical'), ('equality', 'current')]; /shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/proof/controls/current-only-edge-sign/result/native-cross",
+          "exit": 2,
+          "mode": "None",
+          "case": "xs_qed_eemm_L2"
+        },
+        "command": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/proof/controls/current-only-edge-sign/command.json",
+        "command_sha256": "42f3cf90e4eeeccebdbc4b287c5966b61db009c04eabdaed67132bf69cd95ef5",
+        "missing_input_credit": null
+      }
+    },
+    "independent_of_migrated_literal": true,
+    "required_manifests_and_design_pins": "Explicit mandatory source inventory, schema, frozen checker/common/boundary, round3 common/validate/suite/schema, round2 validate/controls and archived native source checked against immutable certificate blobs before and after each replay. No optional existence filter used by reviewer pins.",
+    "outer_source_guard": "Expected rejection on docs/developers.toml insertion, zero credit; not a full outer-validator pass.",
+    "pair_bindings": "All six semantic pair/port/definition files per mode byte-equal approved proof and migration replay. Each native invocation separately binds actual pair SHA and ELF SHA; all-true result JSON hashes are not pair identity.",
+    "counts": "30 graphs,540owners,56nontrivial named port permutations/current interfaces(32vertices24edges),168native texts,1080anchor self-comparisons,0nonliteral cross pairs per mode.",
+    "math_limits": "Named repeat-free axis multiset transport only. Aggregate is prefactor times local factors with sums kept whole and projector outside; no expansion/distribution/traces/numeric sampling/parameter-at-one probes. Only Q480/edge960 over both modes exercised; K/P/vertex remain uncredited. Pre-map spelling consistency is observed in actual data; exact post-map Python definition gates remain load-bearing because native registration tolerates subsets."
+  },
+  "reused_controls": {
+    "fresh_here": false,
+    "candidate_semantic_capture": 96,
+    "candidate_infrastructure": 4,
+    "candidate_direct_native": 4,
+    "binding": "Both original82control+18supplement sets independently checked against original raw inputs/source/ELF hashes and against approved B fresh results, including full location-specific verdict detail after only the workspace path prefix substitution. Four direct native probes bound through bwrap/runtime_exec argv to exact ELF/pair inputs and actual native parse failure at archived source line35.",
+    "review_B_heldouts": {
+      "classification": "attributed review-only coverage, not permanent suite",
+      "fresh_here": false,
+      "rows": 104,
+      "sha256": "79791f15956a48a10de8821075ede8d6b638fdc4476191746a0b5b3ca8941ca9"
+    },
+    "partial_account1_checks_resolved": {
+      "controls_79_of_82_stable": "Three source directory inventories gained auxiliary files; no existing executed source/input changed. Exact changed paths recorded above; B repeated all controls on frozen complete sources.",
+      "native_argv0_not_ELF": "The outer command is bwrap; ELF is the argument following runtime_exec.py. Actual recorded input hash and parse-failure stderr bind all four probes."
+    },
+    "no_massive_prior_family_rerun": true
+  },
+  "docs": {
+    "altered_html_sha256": "4f9096e3ecc3840deec33c5547161117bbfbcdf115ac1d67f5271277bedbb012",
+    "altered_pdf_sha256": "468b38cf79ff6a65857ba3eb2475c438d578e97b275c5369683734185bb5cbc0",
+    "altered_source_sha256": "614e6cfe6fd8dbb432282a6c5c5b608cfdb748c678eb633c60cff41f22acd091",
+    "builder": {
+      "exact_inherited_paths": [
+        ".local/review-family-r2-b-20261030T010814/commands.md",
+        "docs/architecture/evidence/generation-integration/mark-geometry/generation-drawing-notices-html/index.html",
+        "docs/architecture/evidence/generation-integration/mark-geometry/generation-drawing-ports-html/index.html",
+        "docs/architecture/evidence/generation-integration/mark-geometry/generation-mark-geometry-html/index.html",
+        "docs/architecture/evidence/generation-integration/mark-geometry/kurvst-arrowhead-engine-html/index.html",
+        "docs/architecture/evidence/generation-integration/mark-geometry/nix-crane-cache-reuse-html/index.html",
+        "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/generation-mark-geometry-html/index.html",
+        "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/note-first-html/index.html",
+        "docs/architecture/evidence/generation-integration/mark-geometry/round3-attribution/note-html/index.html"
+      ],
+      "exit": 1,
+      "full_site_pass": false,
+      "stderr_sha256": "09f52fe1b2183fc7eee7372ea34439ad9cd908a3d8c8ff1751f8516dea72235f"
+    },
+    "entry": {
+      "evidence_revision": "c95e7f6e77994779929115a156654cfce3bd1e53",
+      "id": "generation-xs-qed-l2-migration",
+      "kind": "Migration preparation record",
+      "lifecycle": "investigation",
+      "owner": "unassigned",
+      "products": [
+        "feynkit",
+        "gammaloop"
+      ],
+      "review_ref": "pending",
+      "review_triggers": [
+        "crates/feynkit-generator/tests/generation_oracle/**",
+        "docs/architecture/evidence/generation-xs-qed-l2-migration/**"
+      ],
+      "reviewed_at": "2026-10-30",
+      "source": "docs/architecture/generation-xs-qed-l2-migration.typ",
+      "status": "Candidate · NEW independent migration/test review required",
+      "summary": "Separate one-literal xs_qed_eemm_L2 preparation with old/new pool 1/8/32 runtime and immutable finite-proof bindings; no MAIN integration.",
+      "title": "Two-loop QED cross-section oracle migration preparation",
+      "topics": [
+        "generation",
+        "oracles",
+        "validation"
+      ]
+    },
+    "fresh_scoped_checks": {
+      "ruff-check": {
+        "argv": [
+          "/nix/store/v24sx9l1jmvvia3z8iznrd7jwhvc8kcf-bubblewrap-0.11.2/bin/bwrap",
+          "--unshare-all",
+          "--die-with-parent",
+          "--new-session",
+          "--ro-bind",
+          "/",
+          "/",
+          "--dev",
+          "/dev",
+          "--proc",
+          "/proc",
+          "--bind",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/docs-v2",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/docs-v2",
+          "--bind",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/docs-v2/ruff-check/tmp",
+          "/tmp",
+          "--bind",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/docs-v2/ruff-check/cache",
+          "/home/lcnbr/.cache",
+          "--chdir",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families",
+          "--",
+          "/nix/store/0zh3g7fz7h3nh34cnzda1dbvg0cgwfsy-ruff-0.16.6/bin/ruff",
+          "check",
+          "--no-cache",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-xs-qed-l2-migration"
+        ],
+        "bwrap_sha256": "3f4227c0fbbcf400a236eb7dde1a63b3a2feaa22187cb6026054444c58f8c535",
+        "ended_utc": "2026-10-30T09:58:15.333615+00:00",
+        "env": {
+          "FONTCONFIG_FILE": "/nix/store/4vmi16yyb241hpsx3mrssvlylc8gl4yh-fonts.conf",
+          "HOME": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/docs-v2/ruff-check/home",
+          "LANG": "C.UTF-8",
+          "PATH": "/var/empty",
+          "PYTHONDONTWRITEBYTECODE": "1",
+          "TMPDIR": "/tmp",
+          "XDG_CACHE_HOME": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/docs-v2/ruff-check/cache"
+        },
+        "exit": 0,
+        "receipt_sha256": "c6965a9aa7acb407dc76c924ab07d5def384d2c61a82356b322f2a6379cdc44d",
+        "registry_sha256": "518dcf99430357105f46e3bc4028945ca05761f98694e5f5ab77831985be1c90",
+        "source_sha256": "56e5869947b552bdc2ff8453e1b35bad82d5eb9a75ec74d7e478ef5e05ab8143",
+        "started_utc": "2026-10-30T09:58:15.111470+00:00",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+        "tool_sha256": "8a8371704c3ee87ef3469f9320c62330cc7d667fc251f77517f6f19d10dc46cb"
+      },
+      "ruff-format": {
+        "argv": [
+          "/nix/store/v24sx9l1jmvvia3z8iznrd7jwhvc8kcf-bubblewrap-0.11.2/bin/bwrap",
+          "--unshare-all",
+          "--die-with-parent",
+          "--new-session",
+          "--ro-bind",
+          "/",
+          "/",
+          "--dev",
+          "/dev",
+          "--proc",
+          "/proc",
+          "--bind",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/docs-v2",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/docs-v2",
+          "--bind",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/docs-v2/ruff-format/tmp",
+          "/tmp",
+          "--bind",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/docs-v2/ruff-format/cache",
+          "/home/lcnbr/.cache",
+          "--chdir",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families",
+          "--",
+          "/nix/store/0zh3g7fz7h3nh34cnzda1dbvg0cgwfsy-ruff-0.16.6/bin/ruff",
+          "format",
+          "--no-cache",
+          "--check",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-xs-qed-l2-migration"
+        ],
+        "bwrap_sha256": "3f4227c0fbbcf400a236eb7dde1a63b3a2feaa22187cb6026054444c58f8c535",
+        "ended_utc": "2026-10-30T09:58:15.481315+00:00",
+        "env": {
+          "FONTCONFIG_FILE": "/nix/store/4vmi16yyb241hpsx3mrssvlylc8gl4yh-fonts.conf",
+          "HOME": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/docs-v2/ruff-format/home",
+          "LANG": "C.UTF-8",
+          "PATH": "/var/empty",
+          "PYTHONDONTWRITEBYTECODE": "1",
+          "TMPDIR": "/tmp",
+          "XDG_CACHE_HOME": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/docs-v2/ruff-format/cache"
+        },
+        "exit": 0,
+        "receipt_sha256": "c6965a9aa7acb407dc76c924ab07d5def384d2c61a82356b322f2a6379cdc44d",
+        "registry_sha256": "518dcf99430357105f46e3bc4028945ca05761f98694e5f5ab77831985be1c90",
+        "source_sha256": "56e5869947b552bdc2ff8453e1b35bad82d5eb9a75ec74d7e478ef5e05ab8143",
+        "started_utc": "2026-10-30T09:58:15.334160+00:00",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_sha256": "eee76f865de5a9f2456950f710ae5d5f9b5bd0ea02aa54f614c5eed6642a0bfd",
+        "tool_sha256": "8a8371704c3ee87ef3469f9320c62330cc7d667fc251f77517f6f19d10dc46cb"
+      },
+      "rustfmt": {
+        "argv": [
+          "/nix/store/v24sx9l1jmvvia3z8iznrd7jwhvc8kcf-bubblewrap-0.11.2/bin/bwrap",
+          "--unshare-all",
+          "--die-with-parent",
+          "--new-session",
+          "--ro-bind",
+          "/",
+          "/",
+          "--dev",
+          "/dev",
+          "--proc",
+          "/proc",
+          "--bind",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/docs-v2",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/docs-v2",
+          "--bind",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/docs-v2/rustfmt/tmp",
+          "/tmp",
+          "--bind",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/docs-v2/rustfmt/cache",
+          "/home/lcnbr/.cache",
+          "--chdir",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families",
+          "--",
+          "/nix/store/12b271ipi4g995hlyfcp9ll5clz0na8f-rustfmt-preview-stable-2026-09-03/bin/rustfmt",
+          "--edition",
+          "2024",
+          "--check",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/crates/feynkit-generator/tests/generation_oracle/main.rs"
+        ],
+        "bwrap_sha256": "3f4227c0fbbcf400a236eb7dde1a63b3a2feaa22187cb6026054444c58f8c535",
+        "ended_utc": "2026-10-30T09:58:15.110860+00:00",
+        "env": {
+          "FONTCONFIG_FILE": "/nix/store/4vmi16yyb241hpsx3mrssvlylc8gl4yh-fonts.conf",
+          "HOME": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/docs-v2/rustfmt/home",
+          "LANG": "C.UTF-8",
+          "PATH": "/var/empty",
+          "PYTHONDONTWRITEBYTECODE": "1",
+          "TMPDIR": "/tmp",
+          "XDG_CACHE_HOME": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/docs-v2/rustfmt/cache"
+        },
+        "exit": 0,
+        "receipt_sha256": "c6965a9aa7acb407dc76c924ab07d5def384d2c61a82356b322f2a6379cdc44d",
+        "registry_sha256": "518dcf99430357105f46e3bc4028945ca05761f98694e5f5ab77831985be1c90",
+        "source_sha256": "56e5869947b552bdc2ff8453e1b35bad82d5eb9a75ec74d7e478ef5e05ab8143",
+        "started_utc": "2026-10-30T09:58:14.955920+00:00",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "tool_sha256": "0c922eec8fad715512cb7f0393c0c58fbdddd64c5ed9e7657d125257c0d6f33a"
+      }
+    },
+    "html_sha256": "5fca7461fa249c9a62350d763bc3346853518ef439098f13f9e63e21cda75b60",
+    "inherited_later_gates": "A reviewed masked sunset owner then source46; no new masked/catalog execution here",
+    "pdf_sha256": "a746b1079a452ca3a72d26d71afedeef74da7a946a0cf409cf75918c23958d0a",
+    "real_altered_source_negative_detected": true,
+    "retention": "Both generated HTML files renamed .html.txt without discarding bytes; all source variants and outputs retained.",
+    "reused_clippy": {
+      "command_path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-l2-migration/checks/clippy/command.json",
+      "command_sha256": "b6f4e573991c5eaa81b955c0c48cb9a332740752a52bea98c42e9f4781ae7fca",
+      "exit": 0,
+      "source_identity": "df04a696c4b530a9d92b531ea9bab647ac2db5faf2380424d75cf005c42e666a"
+    },
+    "rustfmt_limit": "oracle! invocation contents are not reformatted; exact text-substitution guard is authoritative",
+    "same_as_retained": true,
+    "semantic_heading": [
+      "Two-loop QED cross-section oracle migration preparation"
+    ],
+    "semantic_tables": [
+      [
+        [
+          "Field",
+          "Historical / old expectation",
+          "Current"
+        ],
+        [
+          "Numerator integer",
+          "17540448598867080140",
+          "17909042738907132227"
+        ],
+        [
+          "Numerator hex",
+          "f36c3111407873cc",
+          "f889b37c1fd93143"
+        ],
+        [
+          "Graphs / topologies / assignments",
+          "30 / 157 / 714",
+          "30 / 157 / 714"
+        ],
+        [
+          "Inverse symmetry / weight",
+          "30/1 / 4/1",
+          "30/1 / 4/1"
+        ],
+        [
+          "Symmetry histogram",
+          "1: 30",
+          "1: 30"
+        ],
+        [
+          "Content",
+          "8056915727855707115",
+          "8056915727855707115"
+        ],
+        [
+          "Named",
+          "811150720901089260",
+          "811150720901089260"
+        ],
+        [
+          "IDs",
+          "14290904471616678913",
+          "14290904471616678913"
+        ]
+      ],
+      [
+        [
+          "Assertion route",
+          "Requested pool",
+          "Passed / failed / ignored",
+          "Exit"
+        ],
+        [
+          "old",
+          "1",
+          "0 / 1 / 0",
+          "101"
+        ],
+        [
+          "old",
+          "8",
+          "0 / 1 / 0",
+          "101"
+        ],
+        [
+          "old",
+          "32",
+          "0 / 1 / 0",
+          "101"
+        ],
+        [
+          "new",
+          "1",
+          "1 / 0 / 0",
+          "0"
+        ],
+        [
+          "new",
+          "8",
+          "1 / 0 / 0",
+          "0"
+        ],
+        [
+          "new",
+          "32",
+          "1 / 0 / 0",
+          "0"
+        ]
+      ]
+    ],
+    "source_sha256": "56e5869947b552bdc2ff8453e1b35bad82d5eb9a75ec74d7e478ef5e05ab8143",
+    "wrapper_sha256": "933f6af9e938d60b4e0d9d9184e80fc4a98ac81de8410e56fb6a7b65797476bc"
+  },
+  "findings": [
+    {
+      "id": "QM-N1",
+      "severity": "nonblocking",
+      "title": "Original migration binder borrows None compact counters for Auto",
+      "detail": "migrate.binding calls derive.summary with the shared None .census for both modes. It separately binds every mode report byte-for-byte to its approved same-mode report. This review independently parsed each actual same-mode report for157/714/30/0/completed and recomputed every mode Row, closing the numeric evidence gap without changing the helper."
+    },
+    {
+      "id": "QM-N2",
+      "severity": "nonblocking",
+      "title": "Renderer font configuration is part of exact PDF provenance",
+      "detail": "A first minimal-env render produced byte-identical semantic HTML but a different embedded DejaVuSansMono variant/PDF ID. Explicit FONTCONFIG_FILE=/nix/store/4vmi16yyb241hpsx3mrssvlylc8gl4yh-fonts.conf reproduced the retained PDF and HTML exactly. Both attempts retained; no source change. The credited commands record this environment."
+    },
+    {
+      "id": "QM-N3",
+      "severity": "nonblocking",
+      "title": "Three old control source-directory inventories grew during execution",
+      "detail": "Only previously absent native_controls.py, qualify.py or supplements.py appeared; consumed inputs and executed proof closure were stable in all82 commands. B repeated all82 using frozen complete sources and matched full verdicts. Do not describe all original sources_before/after dictionaries as identical."
+    },
+    {
+      "id": "QM-N4",
+      "severity": "nonblocking",
+      "title": "Original helper/build chronology and inherited boundaries remain qualified",
+      "detail": "The failed first helper is not a build/test pass; actual successful Cargo emissions, qualification-v2, raw fingerprints and source manifests supply new ELF provenance. Early preparatory tool-only transcripts are not retroactively fabricated. Final credited binding/replay/receipt/docs/seal use helper hashes identical to the final committed helpers. Earlier frozen helper variants and native build-log gaps remain attributed."
+    }
+  ],
+  "inherited_qualifications_preserved": [
+    "Both complete approved A/B review.json files read and hashes verified; all13 A notes and9 B notes remain exactly in candidate receipt and are retained verbatim in out/reuse/audit.json.",
+    "Interface presence/order are capture-integrity anchor checks; ports/free-index typing, locality, historical raw-cook association and positional consumers are capture-bound. Baseline anchors self-compare.",
+    "Run/request/model/options are separate observer facts joined by source/dependency/payload identity, not assertion in-memory serialization.",
+    "B104 held-outs cover predicates missing from permanent suite; do not claim permanent suite coverage.",
+    "Source copies and target trees are compilation evidence, not shared cache transplantation. Non-store RUNPATH candidates, including outputs/out/lib in both workspaces and source copy, remained absent.",
+    "Full docs remains inherited first gate exactly8HTML+R2B commands.md; A masked later unknown sunset owner/source46 gates are attributed, catalog exporter unexercised. No full-site/CI pass.",
+    "Archived sources affect broad source filters; no evaluated derivation/NAR source-invariance assertion. No Nix/store/credential action performed."
+  ],
+  "fresh_vs_reused": {
+    "fresh": [
+      "exact Git blob/tree/Row/registry/source-copy comparison and complete tracked byte/mode guards",
+      "six direct assertion runs, six list checks, two zero-credit runtime controls, four observer invocations",
+      "independent exact integer/rational Row/per-diagram reconstruction and all mode/pool/route joins",
+      "raw compiled dependency graph traversal and original Cargo artifact/source/log audit (no compilation)",
+      "two finite proof replays plus valid-copy/current-only-sign/missing-input controls",
+      "PDF/semantic HTML exact rerender with real altered-source negative, ruff checks, edition2024 rustfmt check",
+      "full150942-file existing evidence closure verification and after-guard"
+    ],
+    "reused": [
+      "original compiled artifacts and successful Cargo/Clippy logs, independently source/hash/command-bound",
+      "approved A/B certificate judgments within captured pool1 scope",
+      "96semantic/capture+4infrastructure+4native controls and B104held-outs after exact binding",
+      "borrowed partial-account2 runtime/guard launcher code, reviewed and re-rooted; own fresh execution results; hashes in out/borrowed-launcher.json"
+    ],
+    "unfinalized_partial_reviews": "Both migration partial directories unchanged; no draft or stage output treated as approval. Own Row and producer/proof/docs judgments independently completed."
+  },
+  "own_uncredited_attempts": [
+    "Unqualified python3 absent from PATH; selected existing pinned Python. Initial Git diff without --git-dir was rejected as no-index; corrected without mutation.",
+    "Static helper initially expected rust-toolchain.toml; verified it is absent in both immutable revisions and current tree, then corrected the review check.",
+    "Build audit initially assumed historical graphica shares Symbolica git checkout; actual Cargo artifact and immutable lock establish registry graphica3.0.1; reviewed corrected distinction.",
+    "First minimal-env PDF failed byte-identity due to system font choice; preserved under out/docs. Explicit fontconfig render retained under out/docs-v2 matches exactly.",
+    "First semantic parser expected h1; actual bundle wrapper emits a single h2 title. Corrected parser on already-rendered hash-bound output, no unnecessary rerender.",
+    "Native parser audit initially required the literal word parse in stderr; actual archived-source line35 unwrap reports Error at line1...unexpected delimiter. Checked exact location and real errors instead. No native rerun required."
+  ],
+  "preservation": {
+    "tracked_current": 4322,
+    "tracked_historical": 3551,
+    "tracked_modes_bytes_index_and_workspace_state_unchanged": true,
+    "relevant_refs_and_op_head_unchanged": true,
+    "review_and_certificate_tree_guards_byte_identical": true,
+    "broader_existing_files_verified": 150942,
+    "inventories": {
+      "equal": true,
+      "files": 150942,
+      "manifests": 5,
+      "mismatches": []
+    },
+    "before_scope_note": "Initial detailed guard covered both partial reviews/certificate trees/selected oracle sources/refs. Full tracked and extended prior-evidence guards were additionally taken during this entirely read-only/sandboxed review and compared at completion; no retroactive timing claim."
+  },
+  "containment": {
+    "Nix_invocations": 0,
+    "producer_builds": 0,
+    "tracked_ref_index_mutations": 0,
+    "subreviews": 0,
+    "explicit_scratch_deletions": 0,
+    "network": "all runtime/proof/render/builder children run under pinned bwrap --unshare-all and read-only host root; only own outputs/tmp/cache writable",
+    "licenses": "ordinary review commands strip normal/signed license variables. Only direct runtime ELFs receive the established license privately after sandbox entry. No license value in argv/output/files/hashes. Runtime stdout/stderr/dumps leak scan recorded false.",
+    "shadow_RUNPATH": "actual non-store candidates checked absent before and after every native/test/observer run; none created",
+    "private_source_store_copies": 0,
+    "publishing_or_CI": false,
+    "live_owned_processes": []
+  },
+  "retention": {
+    "workspace": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families",
+    "review_root": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z",
+    "all_own_and_previous_review_files_retained": true,
+    "purpose": "durable scoped verdict, exact command/provenance records, raw fresh tests/controls, failed attempts, source variants, renders and preservation inventories for root review/continuation",
+    "generated_HTML": "Renamed generated HTML to .html.txt with all bytes preserved before docs source scan; no content discarded.",
+    "artifact_manifest": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/artifact-manifest.json",
+      "sha256": "8e57e196bf49cfb3cc34a52ead053977ba701dbcd6b563a52dbb3d950b068c22",
+      "bytes": 90687
+    },
+    "owned_files_in_manifest": 485,
+    "owned_bytes_in_manifest": 213616984,
+    "processes_retained": []
+  },
+  "evidence_bindings": {
+    "out/static/source-audit.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/static/source-audit.json",
+      "sha256": "87b69bbb9d8f77bfc48390ca78faa424c0eeaeb0cba1fb516487476bf337b5e4",
+      "bytes": 2481
+    },
+    "out/static/source-copies.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/static/source-copies.json",
+      "sha256": "c75263d691424c580cbc562eeb2efc8863162f7d62473fb0c8562ac5cfd99140",
+      "bytes": 3156018
+    },
+    "out/rows/rows.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/rows/rows.json",
+      "sha256": "f62b167af53c9e55b80088ae4d43aed9c92fcc42ad8faab1c41cab1d4981ea27",
+      "bytes": 81368
+    },
+    "out/rows/per-diagram.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/rows/per-diagram.json",
+      "sha256": "416d4bd6533069ba074ef8c7298efd6c3e348c214496cca131cde8708bef0f30",
+      "bytes": 1406578
+    },
+    "out/build/audit.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/build/audit.json",
+      "sha256": "c48c93d89a67eb932b536066106bcca3c9c72eda512409c86de0c43f198eeae6",
+      "bytes": 74933
+    },
+    "out/build/raw-fingerprint-keys.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/build/raw-fingerprint-keys.json",
+      "sha256": "2cca9a4670415a6ca9d4354360ffc2040400365c621653cb8c14de8e10f1c82c",
+      "bytes": 488078
+    },
+    "out/proof/summary.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/proof/summary.json",
+      "sha256": "453a6da540dfd7726cd398db74708c397654a4aa992a0aabd96bf7bccebb2255",
+      "bytes": 19402
+    },
+    "out/reuse/audit.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/reuse/audit.json",
+      "sha256": "c56c35abe4afb60f088122c4b5f39e999782e90efe27cdce335156ff97d372ce",
+      "bytes": 229788
+    },
+    "out/reuse/checked-file-hashes.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/reuse/checked-file-hashes.json",
+      "sha256": "cafc3fa207f7575f8196efabcab1fe6a261cf8d4b3c325392f815c71779329d3",
+      "bytes": 1090619
+    },
+    "out/docs/summary.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/docs/summary.json",
+      "sha256": "de4dbd28c0dfcfb384a7f8f1a8eac6a59e63e222fd48b3ca006c2a5bf60ceb00",
+      "bytes": 12599
+    },
+    "out/helper-chronology.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/helper-chronology.json",
+      "sha256": "b8a25b21cb87ae129d47a0b1e0451ed7bb2dfce3c3e771463fceb0d3b1ed3102",
+      "bytes": 26330
+    },
+    "out/helper-dependencies.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/helper-dependencies.json",
+      "sha256": "ab578f8b6476e37654368c5bdf9c33ad5269485ec052b95ca6ff38ebf171e888",
+      "bytes": 4750
+    },
+    "out/borrowed-launcher.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/out/borrowed-launcher.json",
+      "sha256": "b0b8ae80def3fb9ac2f1a814d133b153c47a6e5bb757508e7c8d9cfee722979d",
+      "bytes": 426
+    },
+    "guards/before.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/guards/before.json",
+      "sha256": "b910d194aece4dd8a826cb1b20c629dabe77785ecd7229d5c56bd346ee672470",
+      "bytes": 7297431
+    },
+    "guards/after.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/guards/after.json",
+      "sha256": "b910d194aece4dd8a826cb1b20c629dabe77785ecd7229d5c56bd346ee672470",
+      "bytes": 7297431
+    },
+    "guards/tracked-before.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/guards/tracked-before.json",
+      "sha256": "c22323090b82b8e89a335f77e4eeb31b86818b6e6cd5bd7112c2bbef9695ac9a",
+      "bytes": 2032361
+    },
+    "guards/tracked-after.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/guards/tracked-after.json",
+      "sha256": "c22323090b82b8e89a335f77e4eeb31b86818b6e6cd5bd7112c2bbef9695ac9a",
+      "bytes": 2032361
+    },
+    "guards/tracked-comparison.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/guards/tracked-comparison.json",
+      "sha256": "9b4c269e6bd44c50366eec4621195491db74d34414a3fa696c4a724be494779e",
+      "bytes": 47
+    },
+    "guards/full-inventory-before.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/guards/full-inventory-before.json",
+      "sha256": "1f76086c2e1aa5e74986989971de21894125f4c497ede3f9779f0510d6996563",
+      "bytes": 57620472
+    },
+    "guards/full-inventory-after.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/guards/full-inventory-after.json",
+      "sha256": "4a9fbe080b9d8f91c31893d701d8fbf38b1e5c43490a0dca7118e17423ad30f9",
+      "bytes": 57620471
+    },
+    "guards/full-inventory-comparison.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/guards/full-inventory-comparison.json",
+      "sha256": "099db60bab2357ddbeff5ace5b76c0860b6c187239b4a0f23b364997dac1169b",
+      "bytes": 73
+    }
+  }
+}

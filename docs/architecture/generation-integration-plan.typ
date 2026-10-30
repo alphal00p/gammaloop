@@ -2,7 +2,8 @@
 <generation-integration-plan>
 #quote(block: true)[
 #strong[Status:] accepted for execution on 2026-10-27. Sol implements each
-bounded step; parent Astra assigns independent Astra review after each step.
+bounded step; root assigns NEW independent review (Opus when available,
+Astra fallback) after each step.
 WP0 evidence preservation and source availability was approved by Astra round 2
 (P2 closed, no remaining findings). WP1 corrected certificate `f473709c` and WP2 correction `5226894e` were
 approved by Astra round 2. B2 is closed for the original GL028/GL034 pair,
@@ -438,6 +439,19 @@ own workspace. Bounded: one regression, one bisect, one written verdict.
   order, typing/locality and historical cook qualifications remain explicit.
   NEW independent combined review is required; no other oracle migration,
   license-runtime repair, M-rebuild or WP3 completion is claimed.
+
+- #strong[Two-loop QED cross-section integration 2026-10-30:]
+  cumulative MAIN `69fda047` is approved. Certificate `c95e7f6e` and separately
+  reviewed migration `19b516a4` supply only the `xs_qed_eemm_L2` numerator token;
+  all seven prior migrations stay intact. Fresh combined checks are bound to
+  code `eae78e11`, not donor dev-optim binaries. Eight exact rows pass at each
+  pool 1/8/32. The complete scoped lane has 298 passes, 73 failures and 49
+  Rust-ignored tests; failed names are the actual prior 74 minus this row.
+  The finite theorem remains pool-1, None/Auto separately, with explicit mode
+  correspondence and observer-only metadata qualifications. Receipts, source
+  identities, controls and final docs are in
+  `evidence/generation-integration/wp3/xs-qed-l2/receipt.json`. NEW independent
+  combined review is required; other failures and WP3/M-rebuild remain open.
 
 - `jj duplicate` the v4 chain (`kursouxx::kpslpwqz`) onto the WP2 base; do not
   rebase in place, so the 19 live workspaces on older lines stay valid.

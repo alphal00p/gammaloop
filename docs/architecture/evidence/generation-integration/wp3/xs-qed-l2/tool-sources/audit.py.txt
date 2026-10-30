@@ -1,0 +1,73 @@
+"""Exact imported/source/scope/proof preservation inventory."""
+from pathlib import Path
+import hashlib
+import json
+import os
+import re
+import subprocess
+import sys
+import tomllib
+sys.path.insert(0,str(Path(__file__).resolve().parent))
+from record import ROOT,OUT,bind,sha,nix_env
+
+BASE='69fda047e378d4114f47ec9a10517e44adb57eaa'
+DONOR='19b516a43dda31a4403dd2a170f2e837934617ce'
+def blob(rev,p):return subprocess.check_output(['git','-C',str(ROOT.parent/'main'),'show',rev+':'+p],env=nix_env())
+def main():
+    old=json.loads((ROOT/'target/wp3-xs-qed-l2-preflight-69fd-19b5-20261030/source-inventory.json').read_text())
+    imports=[]
+    for item in old['closure_inventory']:
+        if item['exists_in_MAIN']:continue
+        data=blob(DONOR,item['path']);assert (ROOT/item['path']).read_bytes()==data
+        imports.append({'path':item['path'],'sha256':sha(ROOT/item['path']),'bytes':len(data),'revision':DONOR})
+    original=blob(BASE,'crates/feynkit-generator/tests/generation_oracle/main.rs')
+    actual=(ROOT/'crates/feynkit-generator/tests/generation_oracle/main.rs').read_bytes()
+    assert original.count(b'f36c3111407873cc')==1
+    assert original.replace(b'f36c3111407873cc',b'f889b37c1fd93143')==actual
+    oldreg=tomllib.loads(blob(BASE,'docs/developers.toml').decode())
+    newreg=tomllib.loads((ROOT/'docs/developers.toml').read_text())
+    def notes(d):return {n['id']:(s['id'],n) for s in d['section'] for n in s.get('note',[])}
+    prior,current=notes(oldreg),notes(newreg)
+    assert all(prior[n]==current[n] for n in prior)
+    assert len(current)==len({n['source'] for s,n in current.values()})==len({n['title'] for s,n in current.values()})
+    scopes=[]
+    for name,(section,n) in current.items():
+        assert re.findall(r'^= (.+)$',(ROOT/n['source']).read_text(),re.MULTILINE)==[n['title']]
+        for s in n.get('scope',[]):
+            t=(ROOT/s['path']).read_text();assert t.count(s['anchor'])==1
+            if 'end_anchor' in s:assert t.count(s['end_anchor'])==1;t=t[t.index(s['anchor']):t.index(s['end_anchor'])]
+            raw=t.encode();digest=subprocess.check_output(['git','hash-object','--stdin'],input=raw,cwd=ROOT.parent/'main',env=nix_env()).decode().strip()
+            assert digest==s['digest']
+            scopes.append({'note':name,**s,'actual_digest':digest})
+    frozen=tomllib.loads((ROOT/'docs/generated-rendered-evidence.toml').read_text())
+    files={r[k] for r in frozen['artifact'] for k in ('path','source','artifact_owner','source_owner','tool_owner')}
+    assert len(files)==22 and len(frozen['artifact'])==8
+    for f in files:assert (ROOT/f).read_bytes()==blob(BASE,f),f
+    cert=json.loads((ROOT/'docs/architecture/evidence/generation-xs-qed-l2/receipt.json').read_text())
+    pins={}
+    for p,h in {**cert['required_design_pins'],**cert['reused_design_sources']}.items():
+        assert sha(p)==h,p;pins[p]=h
+    # Imported helpers are not optional, and their original relative module closure is preserved.
+    for item in imports:
+        if item['path'].endswith('.py'):
+            assert (ROOT.parent/'generation-oracle-numerator-families'/item['path']).read_bytes()==(ROOT/item['path']).read_bytes()
+    for r in cert['exact_ELFs'].values():assert sha(r['path'])==r['sha256']
+    # Bound immutable seal documents, not a blind replay of every historical command.
+    prep=ROOT.parent/'generation-oracle-numerator-families'
+    expected={'target/xs-qed-l2-migration/handoff.json':'941ad3e54fc0abeeecfceffbe2cffdaa138dc786aec13ef20a303717cfa6d86f',
+              'target/xs-qed-l2-migration/freeze.json':'ef486d7ecc89133e77b0a3e74b62291ead7fd87a109245e4b02e6be096f2be62'}
+    seals=[]
+    for p,h in expected.items():assert sha(prep/p)==h;seals.append(bind(prep/p))
+    review=prep/'.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/review.json'
+    assert sha(review)=='64f44489f4331b2ec2dfcdb2d48e4a8b2b06003c569823a351ff2e98b2e898a6'
+    reviewed=json.loads(review.read_text())
+    records={}
+    for key in ('out/reuse/audit.json','out/reuse/checked-file-hashes.json','out/helper-dependencies.json','out/helper-chronology.json'):
+        row=reviewed['evidence_bindings'][key]
+        assert sha(row['path'])==row['sha256'];records[key]=row
+    manifest=reviewed['retention']['artifact_manifest']
+    assert sha(manifest['path'])==manifest['sha256']
+    result={'base':BASE,'donor':DONOR,'imports':imports,'imports_count':len(imports),'main_before_sha256':hashlib.sha256(original).hexdigest(),'main_after_sha256':hashlib.sha256(actual).hexdigest(),'exact_token_guard':original.replace(b'f36c3111407873cc',b'f889b37c1fd93143')==actual,'prior_registry_contracts_preserved':len(prior),'notes':len(current),'scopes':scopes,'scope_count':len(scopes),'frozen_html':8,'distinct_binding_files':[{'path':f,'sha256':sha(ROOT/f)} for f in sorted(files)],'required_source_pins':pins,'exact_ELFs':cert['exact_ELFs'],'sealed_preparation':seals,'approved_migration_review':bind(review),'reviewed_reuse_records':records,'reviewer_artifact_manifest':manifest,'limits':'Imported reports/receipts/helpers byte-exact; old control/helper chronology is preserved (not all original source dictionaries equal). Complete original outer source/registry inventory remains an expected rejection after authorized edits, no full outer pass claimed. Approved controls82+18/parser4 and B104 heldouts reused through exact review/raw bindings; not rerun here.'}
+    (OUT/'source-audit.json').write_text(json.dumps(result,indent=2)+'\n')
+    print(json.dumps({'imports':len(imports),'notes':len(current),'scopes':len(scopes),'preserved':len(prior)}))
+if __name__=='__main__':main()

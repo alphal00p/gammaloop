@@ -1,0 +1,63 @@
+"""Read only exact selected source/artifacts and fingerprint layers."""
+from pathlib import Path
+import hashlib
+import json
+import os
+import re
+import subprocess
+import sys
+sys.path.insert(0,str(Path(__file__).resolve().parent))
+from record import ROOT,OUT,run,bind,sha,nix_env
+CODE='eae78e11e4d27df2539700fa4d4d71cdcb3a4804'
+def store_hash(path,label):
+    path=Path(path)
+    assert re.fullmatch(r'/nix/store/[0-9a-z]{32}-[A-Za-z0-9_.+-]+',str(path)) and path.exists()
+    argv=['nix','hash','path',str(path)]
+    p=subprocess.run(argv,cwd='/',env=nix_env(),capture_output=True)
+    (OUT/(label+'.out')).write_bytes(p.stdout);(OUT/(label+'.log')).write_bytes(p.stderr)
+    record={'argv':argv,'cwd':'/','exit':p.returncode,'source':str(path),'script':bind(__file__),'license_variables':'both absent; hash only, no eval/path flake or source copy'}
+    (OUT/(label+'.command.json')).write_text(json.dumps(record,indent=2)+'\n')
+    assert p.returncode==0
+    return p.stdout.decode().strip()
+def main():
+    p=json.loads((OUT/'producer-realized.json').read_text())
+    source=Path(p['full_source'])
+    entries=subprocess.check_output(['git','-C',str(ROOT.parent/'main'),'ls-tree','-rz',CODE],env=nix_env()).split(b'\0')
+    checked=[]
+    for entry in entries:
+        if not entry:continue
+        mode_type,name=entry.split(b'\t',1);mode,kind,want=mode_type.split();path=source/os.fsdecode(name)
+        assert mode!=b'160000','Explicit gitlink policy required'
+        data=os.fsencode(os.readlink(path)) if mode==b'120000' else path.read_bytes()
+        actual=hashlib.sha1(b'blob '+str(len(data)).encode()+b'\0'+data).hexdigest()
+        assert actual==want.decode(),path
+        checked.append(str(path.relative_to(source)))
+    assert not any((source/n).exists() for n in ('.local','target','.jj','.git'))
+    top=Path(p['generator_cargo_artifacts'])/'target.tar.zst'
+    middle=Path(p['dependency_cargo_artifacts'])/'target.tar.zst'
+    previous=middle.with_name('target.tar.zst.prev')
+    assert previous.is_file()
+    lower=Path(previous.read_text().strip()) if not previous.is_symlink() else previous.resolve()
+    assert lower.is_file() and str(lower).startswith('/nix/store/') and lower.name=='target.tar.zst'
+    archive=Path(p['archive']['path'])
+    zstd=str(Path('/run/current-system/sw/bin/zstd').resolve())
+    args=[sys.executable,'-B',str(OUT/'fingerprint-closure.py'),zstd,str(OUT/'actual-closure.json'),'feynkit-generator-6b0e7dc68fc70180','test-integration-test-generation_oracle.json','generation_oracle-6b0e7dc68fc70180',str(archive),str(top),str(middle),str(lower)]
+    assert run('actual-closure',args)==0
+    closure=json.loads((OUT/'actual-closure.json').read_text())
+    assert not closure['closure_missing_or_ambiguous'] and not closure['units_with_wasm_feature']
+    keys={}
+    for name,values in closure['packages'].items():
+        if name in ('feynkit-generator','feynkit-graph','spenso','idenso','symbolica','linnet','serde_json'):
+            keys[name]=sorted({f for r in values if r['file'].startswith(('lib-','test-')) for f in json.loads(r['features'])})
+    manifests=[Path(x) for x in re.findall(r'/nix/store/[0-9a-z]{32}-[A-Za-z0-9_.+-]+(?:\.toml)',p['generator_postPatch']) if Path(x).is_file()]
+    assert len(set(manifests))>=2
+    filtered=Path(p['generator_src'])
+    prior=Path('/nix/store/y9pg92ri4dqscpcsgj2n9iz5nlgyrycj-source')
+    def inventory(root):return {str(f.relative_to(root)):sha(f) for f in root.rglob('*') if f.is_file()}
+    a,b=inventory(prior),inventory(filtered)
+    changed=[n for n in sorted(set(a)|set(b)) if a.get(n)!=b.get(n)]
+    assert changed==['crates/feynkit-generator/tests/generation_oracle/main.rs']
+    result={'code':CODE,'fetched_source':{'path':str(source),'nar':p['full_nar'],'tracked_blobs_verified':len(checked),'no_private_root_dirs':not any((source/n).exists() for n in ('.local','target','.jj','.git'))},'filtered_source':{'path':str(filtered),'nar':store_hash(filtered,'filtered-nar'),'files':b,'difference_from_approved69fd_producer':changed},'dependency_source':{'path':p['dependency_src'],'nar':store_hash(p['dependency_src'],'dependency-source-nar')},'archive':p['archive'],'output':{'path':p['output'],'nar':store_hash(p['output'],'output-nar')},'generator_derivation':p['generator_derivation'],'aggregate_evaluated_only':p['aggregate_evaluated_only'],'actual_generator_phase':p['generator_build_phase'],'actual_dependency_phase':p['dependency_build_phase'],'profile':p['profile'],'synthetic_manifests':[bind(m) for m in sorted(set(manifests))],'postPatch':p['generator_postPatch'],'closure':{'record':bind(OUT/'actual-closure.json'),'units':closure['closure_units'],'packages':len(closure['packages']),'rustc':closure['rustc_values'],'layers':closure['layers'],'unit':closure['start'],'missing':closure['closure_missing_or_ambiguous'],'wasm_units':closure['units_with_wasm_feature'],'key_features':keys,'elf_hashes':closure['elf_hashes']},'compiler_inputs':p['compiler_inputs'],'limits':'Layered dependency fingerprints tied by unit hash to executed archive ELF suffix. Dependency ELF hash is not executed archive ELF. Working-copy tree is not execution closure. No final evidence tip rebuilt claim.'}
+    (OUT/'producer-qualified.json').write_text(json.dumps(result,indent=2)+'\n')
+    print(json.dumps({'units':closure['closure_units'],'packages':len(closure['packages']),'tracked_files':len(checked),'selected_files':len(b)}))
+if __name__=='__main__':main()

@@ -1,0 +1,66 @@
+"""Actual CI byte/census/mode links; Auto counters from actual same-mode reports."""
+from pathlib import Path
+import importlib.util
+import json
+import re
+import sys
+sys.path.insert(0,str(Path(__file__).resolve().parent))
+from record import ROOT,OUT,bind,sha
+PREP=ROOT.parent/'generation-oracle-numerator-families'
+CASE='xs_qed_eemm_L2'
+ROWS=[CASE,'xs_qed_eedd_L1','xs_qed_eemm_L1','xs_qed_eeee_1pi_L1','qed_eemm_L1','ctorder_qcd_uugg_L1','sm_eemm_L0','ym_g6_L0']
+def main():
+    path=ROOT/'docs/architecture/evidence/generation-xs-qed-l2'
+    sys.path.insert(0,str(path))
+    import bind_runtime as BIND
+    D=BIND.D;D.weight=BIND.weight
+    modpath=ROOT/'docs/architecture/evidence/generation-oracle-family-migration/validate.py'
+    sys.path.insert(0,str(modpath.parent))
+    spec=importlib.util.spec_from_file_location('approved_mode_join',modpath)
+    V=importlib.util.module_from_spec(spec);spec.loader.exec_module(V)
+    source=(ROOT/'crates/feynkit-generator/tests/generation_oracle/main.rs').read_text()
+    records=[];prior=[]
+    for pool in (1,8,32):
+        command=json.loads((OUT/f'pool-{pool}.command.json').read_text())
+        assert command['exit']==0
+        for case in ROWS:
+            p=OUT/'runtime'/f'dump-p{pool}'
+            census=p/(case+'.census');report=census.read_text().splitlines()[0]
+            payloads={};typed={}
+            summaries={}
+            for mode in ('None','Auto'):
+                file=p/f'{case}.classes-{mode}-t{pool}.json'
+                companion=p/f'{case}.classes-{mode}-t{pool}.sources.json'
+                assert file.read_bytes()==companion.read_bytes()
+                payloads[mode]=json.loads(file.read_text())
+                if case==CASE:
+                    actual=OUT/f'observer-p{pool}/captures'/CASE/f'classes-{mode}-t{pool}'
+                    frozen=PREP/'target/xs-qed-l2/runtime/current/captures'/CASE/f'classes-{mode}-t1'
+                    for name in ('payload.json','typed-owners.json','model.json','request.json','options.json','grouping.json','prepared-report.txt','built-report.txt'):
+                        assert (actual/name).read_bytes()==(frozen/name).read_bytes(),(pool,mode,name)
+                    assert file.read_bytes()==(actual/'payload.json').read_bytes()
+                    mode_report=(actual/'built-report.txt').read_text()
+                    for field in ('topology_count','interaction_assignment_count','retained_count','zero_numerator_count'):
+                        assert re.search(field+r': (\d+)',mode_report)
+                    summaries[mode]=D.summary(payloads[mode],mode_report)
+                    typed[mode]=json.loads((actual/'typed-owners.json').read_text())
+                    records.append({'pool':pool,'mode':mode,'payload':bind(file),'sources':bind(companion),'observer':str(actual),'observer_meta':bind(actual/'capture.json'),'built_report':bind(actual/'built-report.txt'),'prepared_report':bind(actual/'prepared-report.txt'),'summary':summaries[mode],'counter_origin':'Actual SAME-mode observer report; not assertion in-memory counters.'})
+                else:
+                    old=ROOT/'target/wp3-family-integration/runtime'/f'dump-p{pool}'/file.name
+                    assert file.read_bytes()==old.read_bytes()
+            actual_none=D.summary(payloads['None'],report)
+            expected=D.row(source,case)
+            assert actual_none==expected,(case,pool,actual_none,expected)
+            if case==CASE:
+                assert actual_none==summaries['None']
+                mapping=V.modes(payloads['None'],payloads['Auto'],typed['None'],typed['Auto'],case)
+                moved=[{'none':r['none'],'auto':r['auto']} for r in mapping if r['none']!=r['auto']]
+                expected_map=[{'none':i,'auto':i+1} for i in range(12,19)]+[{'none':19,'auto':21},{'none':21,'auto':12}]
+                assert moved==expected_map and mapping[20]['auto']==20
+                records.append({'pool':pool,'mode_correspondence':moved,'20_fixed':mapping[20]['auto']==20,'full_None_asserted_Row':actual_none,'census':bind(census)})
+            else:
+                assert census.read_bytes()==(ROOT/'target/wp3-family-integration/runtime'/f'dump-p{pool}'/(case+'.census')).read_bytes()
+                prior.append({'pool':pool,'case':case,'full_None_Row':actual_none,'census':bind(census)})
+    (OUT/'current-comparison.json').write_text(json.dumps({'records':records,'prior_seven':prior,'code':'eae78e11e4d27df2539700fa4d4d71cdcb3a4804','script':bind(__file__),'borrowed_digest_owner':bind(Path(D.__file__)),'strict_factor_evaluator':bind(Path(BIND.__file__)),'borrowed_mode_owner':bind(modpath),'scope':'CI full asserted None Row and per-mode byte/census joins. Auto8 payload fields are actual CI data; counters from actual same-mode observer reports. Observer-only metadata remains capture-bound; dev-optim observer341 units NOT CI452-unit equivalence.'},indent=2)+'\n')
+    print(json.dumps({'new_case_pool_records':len(records),'prior_seven_full_Row_records':len(prior)}))
+if __name__=='__main__':main()

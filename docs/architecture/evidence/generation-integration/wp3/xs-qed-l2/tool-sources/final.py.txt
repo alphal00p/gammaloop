@@ -1,0 +1,77 @@
+"""Final evidence source is evaluated only; canonical docs use its exact Git copy."""
+from pathlib import Path
+import hashlib
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tarfile
+sys.path.insert(0,str(Path(__file__).resolve().parent))
+from record import ROOT,OUT,run,bind,sha,nix_env
+from producer import drv
+CODE='eae78e11e4d27df2539700fa4d4d71cdcb3a4804'
+CODE_URI='git+file:///shared/lcnbr/dev/gammaloop/main?rev='+CODE+'&shallow=1&allRefs=1'
+BASH='/nix/store/svx59425zxp552p2b8gm11qj5r09b56i-bash-5.3p15/bin/bash'
+def main():
+    revision=sys.argv[1];assert re.fullmatch('[0-9a-f]{40}',revision)
+    uri='git+file:///shared/lcnbr/dev/gammaloop/main?rev='+revision+'&shallow=1&allRefs=1'
+    assert run('final-metadata',['nix','flake','metadata','--json',uri])==0
+    meta=json.loads((OUT/'final-metadata.out').read_text());assert meta['revision']==revision
+    fetched=Path(meta['path'])
+    assert not any((fetched/p).exists() for p in ('.local','target','.jj','.git'))
+    assert run('final-generator-eval',['nix','eval','--raw',uri+'#checks.x86_64-linux.gammaloop-nextest-binaries-feynkit.drvPath'])==0
+    aggregate=(OUT/'final-generator-eval.out').read_text().strip();d=drv(aggregate)
+    selected=['/nix/store/'+k for k in d['inputs']['drvs'] if 'nextest-binaries-feynkit-feynkit-generator-' in k]
+    actual=json.loads((OUT/'producer-realized.json').read_text());assert selected==[actual['generator_derivation']]
+    assert run('final-pages-eval',['nix','eval','--raw',uri+'#packages.x86_64-linux.alphal00p-docs-pages.src'])==0
+    pages=Path((OUT/'final-pages-eval.out').read_text().strip());assert pages.is_dir() and str(pages).startswith('/nix/store/')
+    source=OUT/'final-source';source.mkdir(exist_ok=False)
+    archive=OUT/'final-source.tar'
+    assert run('final-archive',['git','-C',str(ROOT.parent/'main'),'archive','--output',str(archive),revision])==0
+    with tarfile.open(archive) as tar:tar.extractall(source,filter='data')
+    before={}
+    for file in source.rglob('*'):
+        if file.is_file() and not file.is_symlink():
+            rel=file.relative_to(source);assert file.read_bytes()==(fetched/rel).read_bytes(),rel
+            before[str(rel)]=sha(file)
+    # Final fetched tree must contain no extra private/untracked files.
+    fetched_files={str(p.relative_to(fetched)) for p in fetched.rglob('*') if p.is_file() and not p.is_symlink()}
+    assert fetched_files==set(before)
+    import tomllib
+    reg=tomllib.loads((source/'docs/developers.toml').read_text());notes=[n for s in reg['section'] for n in s.get('note',[])];scope_count=0
+    for note in notes:
+        for scope in note.get('scope',[]):
+            text=(source/scope['path']).read_text();assert text.count(scope['anchor'])==1
+            if 'end_anchor' in scope:assert text.count(scope['end_anchor'])==1;text=text[text.index(scope['anchor']):text.index(scope['end_anchor'])]
+            digest=subprocess.check_output(['git','hash-object','--stdin'],input=text.encode(),cwd=ROOT.parent/'main',env=nix_env()).decode().strip()
+            assert digest==scope['digest'];scope_count+=1
+    roles=tomllib.loads((source/'docs/generated-rendered-evidence.toml').read_text())
+    bindings={item[k] for item in roles['artifact'] for k in ('path','source','artifact_owner','source_owner','tool_owner')}
+    assert len(bindings)==22 and len(roles['artifact'])==8
+    paths=bindings|{'docs/developers.toml','docs/generated-rendered-evidence.toml','docs/architecture/generation-integration-xs-qed-l2.typ','crates/alphal00p-docs-builder/src/generated_evidence.rs'}
+    for file in (source/'docs/architecture/evidence/generation-integration/wp3/xs-qed-l2').rglob('*'):
+        if file.is_file():paths.add(str(file.relative_to(source)))
+    for p in paths:assert (pages/p).read_bytes()==(source/p).read_bytes(),p
+    # Nix executes only the already-qualified CODE shell in neutral cwd; Cargo's
+    # actual source cwd is the exact final Git archive, not the shell's pin.
+    command=['nix','develop',CODE_URI,'-c',BASH,'-c','cd "$1"; shift; exec "$@"','task',str(source),'cargo','run','--locked','--offline','-p','alphal00p-docs-builder','--','check']
+    assert run('final-docs-check',command)==0
+    for p,h in before.items():assert sha(source/p)==h,p
+    renders=json.loads((OUT/'render-results.json').read_text())
+    for p,h in renders['inputs'].items():assert sha(p)==h and sha(source/Path(p).relative_to(ROOT))==h,p
+    builder=source/'target/debug/alphal00p-docs-builder'
+    # The same freshly compiled canonical owner discovers this exact source.
+    # Mutate only its private fixture copy, then retain the fixture by relocation.
+    negative=source/'docs/unauthorized-xs-qed-l2.html'
+    negative.write_text('Unauthorized authored HTML negative\n')
+    rc=run('final-canonical-negative',[str(builder),'check'],cwd=source)
+    assert rc==1 and 'shrinking legacy inventory' in (OUT/'final-canonical-negative.log').read_text()
+    archived=OUT/'unauthorized-canonical-negative.html.txt'
+    negative.rename(archived)
+    for p,h in before.items():assert sha(source/p)==h,p
+    result={'candidate':revision,'built_code':CODE,'full_source':{'path':str(fetched),'nar':meta['locked']['narHash'],'classification':'Final evidence source evaluated only, not runtime-built.'},'pages_source':{'path':str(pages),'classification':'Source evaluated only; no page/site realization.'},'fetched_tracked_file_count':len(before),'source_copy_binding':'Exact Git archive blobs equal fetched tracked tree; no private path flake or Nix query on source copy.','generator_graph':{'aggregate':aggregate,'status':'evaluated only','selected_generator':selected[0],'equals_realized_code':selected==[actual['generator_derivation']]},'canonical_docs':{'exit':0,'command':bind(OUT/'final-docs-check.command.json'),'actual_source_cwd':str(source),'shell_code_pin':CODE,'builder_elf':bind(builder),'source_unchanged_after':all(sha(source/p)==h for p,h in before.items())},'registry':{'notes':len(notes),'scope_count':scope_count,'frozen_html':len(roles['artifact']),'bindings':len(bindings),'pages_files_checked':len(paths)},'render_inputs_match_final_source':all(sha(source/Path(p).relative_to(ROOT))==h for p,h in renders['inputs'].items()),'canonical_negative':{'exit':rc,'command':bind(OUT/'final-canonical-negative.command.json'),'retained_fixture':bind(archived),'original_fixture_path':str(negative),'same_owner':bind(builder)},'license_policy':'Both variables absent in all Nix/develop/Cargo docs commands; no runtime-result derivation built.'}
+    (OUT/'final-stage.json').write_text(json.dumps(result,indent=2)+'\n')
+    print(json.dumps({'candidate':revision,'docs_exit':0,'notes':len(notes),'scopes':scope_count,'generator_same':result['generator_graph']['equals_realized_code']}))
+if __name__=='__main__':main()

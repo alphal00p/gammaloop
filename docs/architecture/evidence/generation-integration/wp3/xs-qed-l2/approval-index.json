@@ -1,0 +1,39 @@
+{
+  "schema": 1,
+  "base": {
+    "revision": "69fda047e378d4114f47ec9a10517e44adb57eaa",
+    "runtime": "8dcebc2591ab04d10026fbd47a45e8d31f911ef3",
+    "review": {
+      "path": ".local/review-main-families-round2-opus-astra-20261030T094052Z-3607735/review.json",
+      "sha256": "10b3929c0b6bfcd62e80d5c693e5db689204ea7a719a23246de64e29ae4d8fec",
+      "bytes": 34475
+    },
+    "status": "Cumulative bounded MAIN gate approved by root; frozen historical status prose unchanged."
+  },
+  "certificate": {
+    "revision": "c95e7f6e77994779929115a156654cfce3bd1e53",
+    "reviews": [
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-a-opus-20261030T063905Z/review.json",
+        "sha256": "f5173b1d86a44c18d11179b13a0542eb0282097cb303079d709ab75d2184c554",
+        "bytes": 46561
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-b-opus-20261030T063831Z/review.json",
+        "sha256": "5c97912c4b6fa9660c55b3bf03b785b37b36f2d3a042d677acd388f12ec8346b",
+        "bytes": 103490
+      }
+    ],
+    "scope": "xs_qed_eemm_L2 fixed30-graph domain; None/Auto separately, Grouping None,pool1."
+  },
+  "migration": {
+    "revision": "19b516a43dda31a4403dd2a170f2e837934617ce",
+    "review": {
+      "path": "docs/architecture/evidence/generation-integration/wp3/xs-qed-l2/approved-migration-review.json",
+      "sha256": "64f44489f4331b2ec2dfcdb2d48e4a8b2b06003c569823a351ff2e98b2e898a6",
+      "bytes": 111598
+    },
+    "scope": "PREPARATION ONLY; exactone token and runtime1/8/32. Failed Opus attempts remain unapproved history, not discarded."
+  },
+  "current": "MAIN combined candidate requires NEW independent review assigned by root; no approval invented."
+}

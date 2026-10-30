@@ -1,0 +1,57 @@
+"""Exact approved finite mechanisms; fresh bounded replay and current-only controls."""
+from pathlib import Path
+import json
+import os
+import shutil
+import subprocess
+import sys
+sys.path.insert(0,str(Path(__file__).resolve().parent))
+from record import ROOT,OUT,run,bind,sha
+PREP=ROOT.parent/'generation-oracle-numerator-families'
+D='19b516a43dda31a4403dd2a170f2e837934617ce'
+P='docs/architecture/evidence/generation-xs-qed-l2/'
+CASE='xs_qed_eemm_L2'
+def main():
+    env=dict(os.environ,GIT_OPTIONAL_LOCKS='0')
+    for p in (ROOT/P).glob('*'):
+        if p.is_file():
+            expected=subprocess.check_output(['git','-C',str(ROOT.parent/'main'),'show',D+':'+str(p.relative_to(ROOT))],env=env)
+            assert p.read_bytes()==expected==(PREP/p.relative_to(ROOT)).read_bytes(),p
+    validator=PREP/P/'validate.py'
+    hist=PREP/'target/xs-qed-l2/runtime/historical/captures'
+    current=PREP/'target/xs-qed-l2/runtime/current/captures'
+    records=[]
+    for mode in ('None','Auto'):
+        dest=OUT/'proof'/mode
+        argv=[sys.executable,'-B',str(validator),'--mode',mode,'--historical',str(hist),'--current',str(current),'--anchors-historical',str(hist),'--anchors-current',str(current),'--out',str(dest)]
+        assert run('proof-'+mode,argv)==0
+        verdict=json.loads((dest/'verdict.json').read_text())
+        assert verdict['disposition']=='accept'
+        records.append({'mode':mode,'verdict':verdict,'execution':bind(dest/'execution.json'),'pair_files':[bind(f) for f in sorted(dest.glob('*pairs.json'))]})
+    # Make bounded disposable copies; no frozen tree is modified.
+    fixture=OUT/'proof-fixtures'
+    for label in ('valid','corrupt','missing'):
+        dest=fixture/label/CASE/'classes-None-t1';shutil.copytree(current/CASE/'classes-None-t1',dest)
+    broken=fixture/'missing'/CASE/'classes-None-t1/typed-owners.json'
+    # Do not delete the only retained source: relocate its fixture copy explicitly.
+    broken.rename(broken.with_suffix('.json.absent.txt'))
+    folder=fixture/'corrupt'/CASE/'classes-None-t1'
+    payload=json.loads((folder/'payload.json').read_text());typed=json.loads((folder/'typed-owners.json').read_text())
+    graph=payload['diagrams'][0];gid=graph['id']
+    old=graph['payload']['edges'][0][1]['numerator']
+    graph['payload']['edges'][0][1]['numerator']='-('+old+')'
+    owners=next(g for g in typed if g['id']==gid)['owners'];owner=next(o for o in owners if o['owner']=='edge:0')
+    owner['expression']='-('+owner['expression']+')'
+    owner['producer_decoded_expression']='-('+owner['producer_decoded_expression']+')'
+    (folder/'payload.json').write_text(json.dumps(payload,separators=(',',':')))
+    (folder/'typed-owners.json').write_text(json.dumps(typed,separators=(',',':')))
+    controls=[]
+    for label,expected in [('valid',0),('corrupt',2),('missing',3)]:
+        dest=OUT/'proof-controls'/label
+        argv=[sys.executable,'-B',str(validator),'--mode','None','--historical',str(hist),'--current',str(fixture/label),'--anchors-historical',str(hist),'--anchors-current',str(current),'--out',str(dest)]
+        code=run('proof-control-'+label,argv)
+        verdict=json.loads((dest/'verdict.json').read_text())
+        controls.append({'name':label,'actual_exit':code,'expected_exit':expected,'verdict':verdict,'execution':bind(dest/'execution.json')})
+        assert code==expected,(label,code,verdict)
+    (OUT/'proof-results.json').write_text(json.dumps({'validator':bind(validator),'historical_root':str(hist),'current_root':str(current),'baselines':records,'controls':controls,'limits':'Only pool1 finite certificate,30graphs540owners1296axes56transports. Missing input is infrastructure/no credit; source directory growth and pre-final helper history remain qualified in donor review. No frozen guard disabled; full outer manifest registry mismatch is not a pass.'},indent=2)+'\n')
+if __name__=='__main__':main()

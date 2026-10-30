@@ -1,0 +1,67 @@
+"""Pinned, no-network, allowlisted archive runs on the frozen CODE Git tree."""
+from pathlib import Path
+import datetime
+import hashlib
+import json
+import os
+import shutil
+import subprocess
+import sys
+import tarfile
+import time
+sys.path.insert(0,str(Path(__file__).resolve().parent))
+from record import ROOT,OUT,bind,sha
+CODE='eae78e11e4d27df2539700fa4d4d71cdcb3a4804'
+BWRAP='/nix/store/v24sx9l1jmvvia3z8iznrd7jwhvc8kcf-bubblewrap-0.11.2/bin/bwrap'
+NEXT='/nix/store/kwm3g9vh36d9zd171v0nz64fyan1hvfz-cargo-nextest-0.9.143/bin/cargo-nextest'
+ROWS=['xs_qed_eemm_L2','xs_qed_eedd_L1','xs_qed_eemm_L1','xs_qed_eeee_1pi_L1','qed_eemm_L1','ctorder_qcd_uugg_L1','sm_eemm_L0','ym_g6_L0']
+def main():
+    producer=json.loads((OUT/'producer-realized.json').read_text());archive=Path(producer['archive']['path'])
+    assert sha(archive)==producer['archive']['sha256']
+    rt=OUT/'runtime';rt.mkdir(exist_ok=False)
+    source=rt/'source';source.mkdir()
+    public=rt/'code.tar'
+    env=dict(os.environ,GIT_OPTIONAL_LOCKS='0');env.pop('SYMBOLICA_LICENSE',None);env.pop('SYMBOLICA_LICENSE_SIGNED',None)
+    subprocess.run(['git','-C',str(ROOT.parent/'main'),'archive','--output',str(public),CODE],check=True,env=env)
+    with tarfile.open(public) as tar:tar.extractall(source,filter='data')
+    before={str(p.relative_to(source)):sha(p) for p in source.rglob('*') if p.is_file()}
+    (source/'target').mkdir()
+    for name in ('tmp','state','cache','home'):(rt/name).mkdir()
+    # Preserve an already supplied license, otherwise read config privately.
+    license_value=os.environ.get('SYMBOLICA_LICENSE')
+    if not license_value:
+        config=Path(os.environ.get('XDG_CONFIG_HOME',str(Path.home()/'.config')))
+        license_value=(config/'symbolica/license').read_text().strip()
+    assert license_value
+    path='/nix/store/3qgy8q2j64v2m9jy3a5jmssacbblhd4r-coreutils-9.11/bin:/nix/store/7a60q5dgnv6z96c279rc1nalyiw4mgqn-bash-interactive-5.3p15/bin:/nix/store/c2x9lj2l3x99xrdx1ba1a63lxyxq6ji0-form-5.0.0/bin:/nix/store/z4c6k0mrlkwl3s4w9ysxc8vq1wylm3ms-gcc-wrapper-15.3.0/bin'
+    safe={'PATH':path,'HOME':'/build/home','TMPDIR':'/tmp','XDG_CACHE_HOME':'/build/cache','LANG':'C.UTF-8',
+          'INSTA_UPDATE':'no','NEXTEST_TEST_THREADS':'16','NEXTEST_RETRIES':'0','TESTS_GAMMALOOP_STATE_PATH':'AUTO','GL_TEST_LOG_DIR':'/build/state'}
+    child={**safe,'SYMBOLICA_LICENSE':license_value}
+    base=[BWRAP,'--unshare-net','--unshare-pid','--unshare-ipc','--unshare-uts','--die-with-parent','--new-session',
+          '--ro-bind','/','/','--dev','/dev','--proc','/proc','--bind',str(rt),'/build',
+          '--ro-bind',str(source),'/build/source','--bind',str(source/'target'),'/build/source/target',
+          '--bind',str(rt/'tmp'),'/tmp','--chdir','/build/source',NEXT,'nextest']
+    tail=['--archive-file',str(archive),'--extract-to','/build/source','--extract-overwrite','--workspace-remap','/build/source','--profile','ci_gammaloop']
+    records=[]
+    def execute(label,args,settings=None):
+        env={**child,**(settings or {})};argv=base+args
+        tick=time.monotonic();start=datetime.datetime.now(datetime.UTC).isoformat()
+        with (OUT/(label+'.out')).open('wb') as out,(OUT/(label+'.log')).open('wb') as err:
+            p=subprocess.run(argv,cwd=ROOT,env=env,stdout=out,stderr=err)
+        r={'label':label,'argv':argv,'cwd':str(ROOT),'runtime_cwd':'/build/source','code':CODE,'source_archive':bind(public),'archive':bind(archive),'start':start,'end':datetime.datetime.now(datetime.UTC).isoformat(),'seconds':time.monotonic()-tick,'exit':p.returncode,'safe_environment':{**safe,**(settings or {})},'env_keys':sorted(env),'license':'private direct runtime only; no value/hash retained','launcher':bind(__file__),'bwrap':bind(BWRAP),'nextest':bind(NEXT),'stdout':bind(OUT/(label+'.out')),'stderr':bind(OUT/(label+'.log'))}
+        junit=source/'target/nextest/ci_gammaloop/junit.xml'
+        if args[0]=='run' and junit.is_file():
+            dst=OUT/(label+'-junit.xml');shutil.copy2(junit,dst);r['junit']=bind(dst)
+        (OUT/(label+'.command.json')).write_text(json.dumps(r,indent=2)+'\n')
+        records.append(r);print(json.dumps({'label':label,'exit':p.returncode}),flush=True)
+        return p.returncode
+    expr=' | '.join('test(='+n+')' for n in ROWS)
+    for pool in (1,8,32):
+        (rt/f'dump-p{pool}').mkdir()
+        rc=execute(f'pool-{pool}',['run',*tail,'--test-threads=16','-E',expr,'--no-tests=fail','--no-fail-fast','--status-level','all','--final-status-level','all'],{'FEYNKIT_ORACLE_THREADS':str(pool),'FEYNKIT_ORACLE_DUMP':f'/build/dump-p{pool}'})
+        assert rc==0
+    assert execute('fast-list',['list',*tail,'--message-format','json'])==0
+    execute('fast-run',['run',*tail,'--test-threads=16','--no-tests=fail','--no-fail-fast','--final-status-level','fail'])
+    for p,h in before.items():assert sha(source/p)==h,p
+    (OUT/'runtime-results.json').write_text(json.dumps({'code':CODE,'runs':records,'source_files_before_after_equal':before,'classification':'Fresh actual archive executions; root tracked files mounted read-only and only target/state/tmp writable. No record/update/diagnostic/force flags or signed license present.'},indent=2)+'\n')
+if __name__=='__main__':main()

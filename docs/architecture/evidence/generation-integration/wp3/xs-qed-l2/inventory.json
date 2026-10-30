@@ -1,0 +1,341 @@
+{
+  "schema": 1,
+  "base": "69fda047e378d4114f47ec9a10517e44adb57eaa",
+  "code": "eae78e11e4d27df2539700fa4d4d71cdcb3a4804",
+  "code_paths": [
+    "crates/feynkit-generator/tests/generation_oracle/main.rs",
+    "docs/architecture/evidence/generation-xs-qed-l2-migration/common.py",
+    "docs/architecture/evidence/generation-xs-qed-l2-migration/handoff.py",
+    "docs/architecture/evidence/generation-xs-qed-l2-migration/migrate.py",
+    "docs/architecture/evidence/generation-xs-qed-l2-migration/receipt.json",
+    "docs/architecture/evidence/generation-xs-qed-l2/bind_runtime.py",
+    "docs/architecture/evidence/generation-xs-qed-l2/boundary.py",
+    "docs/architecture/evidence/generation-xs-qed-l2/build.py",
+    "docs/architecture/evidence/generation-xs-qed-l2/common.py",
+    "docs/architecture/evidence/generation-xs-qed-l2/controls.py",
+    "docs/architecture/evidence/generation-xs-qed-l2/docs.py",
+    "docs/architecture/evidence/generation-xs-qed-l2/fingerprints.py",
+    "docs/architecture/evidence/generation-xs-qed-l2/finish.py",
+    "docs/architecture/evidence/generation-xs-qed-l2/native_controls.py",
+    "docs/architecture/evidence/generation-xs-qed-l2/observer-historical.rs.txt",
+    "docs/architecture/evidence/generation-xs-qed-l2/observer.rs.txt",
+    "docs/architecture/evidence/generation-xs-qed-l2/prepare.py",
+    "docs/architecture/evidence/generation-xs-qed-l2/preserve.py",
+    "docs/architecture/evidence/generation-xs-qed-l2/proof.py",
+    "docs/architecture/evidence/generation-xs-qed-l2/qualify.py",
+    "docs/architecture/evidence/generation-xs-qed-l2/receipt.json",
+    "docs/architecture/evidence/generation-xs-qed-l2/retry_observer.py",
+    "docs/architecture/evidence/generation-xs-qed-l2/runtime.py",
+    "docs/architecture/evidence/generation-xs-qed-l2/schema.json",
+    "docs/architecture/evidence/generation-xs-qed-l2/supplements.py",
+    "docs/architecture/evidence/generation-xs-qed-l2/validate.py",
+    "docs/architecture/generation-xs-qed-l2-migration.typ",
+    "docs/architecture/generation-xs-qed-l2.typ",
+    "docs/developers.toml"
+  ],
+  "evidence_paths_before_indexes": [
+    "docs/architecture/evidence/generation-integration/execution.json",
+    "docs/architecture/evidence/generation-integration/wp3/replay.json",
+    "docs/architecture/evidence/generation-integration/wp3/xs-qed-l2/actual-compiled-closure.json",
+    "docs/architecture/evidence/generation-integration/wp3/xs-qed-l2/approval-index.json",
+    "docs/architecture/evidence/generation-integration/wp3/xs-qed-l2/approved-migration-review.json",
+    "docs/architecture/evidence/generation-integration/wp3/xs-qed-l2/receipt.json",
+    "docs/architecture/evidence/generation-integration/wp3/xs-qed-l2/tool-sources/account.py.txt",
+    "docs/architecture/evidence/generation-integration/wp3/xs-qed-l2/tool-sources/audit.py.txt",
+    "docs/architecture/evidence/generation-integration/wp3/xs-qed-l2/tool-sources/compare.py.txt",
+    "docs/architecture/evidence/generation-integration/wp3/xs-qed-l2/tool-sources/final.py.txt",
+    "docs/architecture/evidence/generation-integration/wp3/xs-qed-l2/tool-sources/fingerprint-closure.py.txt",
+    "docs/architecture/evidence/generation-integration/wp3/xs-qed-l2/tool-sources/observer.py.txt",
+    "docs/architecture/evidence/generation-integration/wp3/xs-qed-l2/tool-sources/producer.py.txt",
+    "docs/architecture/evidence/generation-integration/wp3/xs-qed-l2/tool-sources/proof-sandbox-launch.py.txt",
+    "docs/architecture/evidence/generation-integration/wp3/xs-qed-l2/tool-sources/proof-sandbox-launch2.py.txt",
+    "docs/architecture/evidence/generation-integration/wp3/xs-qed-l2/tool-sources/proof-sandbox.py.txt",
+    "docs/architecture/evidence/generation-integration/wp3/xs-qed-l2/tool-sources/proof.py.txt",
+    "docs/architecture/evidence/generation-integration/wp3/xs-qed-l2/tool-sources/qualify-producer.py.txt",
+    "docs/architecture/evidence/generation-integration/wp3/xs-qed-l2/tool-sources/record.py.txt",
+    "docs/architecture/evidence/generation-integration/wp3/xs-qed-l2/tool-sources/render.py.txt",
+    "docs/architecture/evidence/generation-integration/wp3/xs-qed-l2/tool-sources/retained-observer.rs.txt",
+    "docs/architecture/evidence/generation-integration/wp3/xs-qed-l2/tool-sources/runtime.py.txt",
+    "docs/architecture/generation-integration-plan.typ",
+    "docs/architecture/generation-integration-xs-qed-l2.typ",
+    "docs/developers.toml"
+  ],
+  "code_distinct_paths": 29,
+  "evidence_distinct_paths_before_indexes": 25,
+  "overlap": [
+    "docs/developers.toml"
+  ],
+  "cumulative_distinct_paths_including_indexes": 55,
+  "cumulative_paths_nonself": [
+    {
+      "path": "crates/feynkit-generator/tests/generation_oracle/main.rs",
+      "sha256": "aedd07670ad16ae72ae1c96970668c80ea0ecd5d6d5992c736af71de7d00999b",
+      "bytes": 77616
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/execution.json",
+      "sha256": "8648d58d5ec131dbd1372f30eb558ed4c68a1d8f179e3d8da8caa5d9651bab3c",
+      "bytes": 47105
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/replay.json",
+      "sha256": "c098ae8b4cd885f40239d7332544f2c753624692fb26d35dfb3d61d670357389",
+      "bytes": 104590
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/xs-qed-l2/actual-compiled-closure.json",
+      "sha256": "ebdde7f25eeb374b957d999cfb44cccc95947c2cf723ba5849b1e6782087ebf2",
+      "bytes": 361738
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/xs-qed-l2/approval-index.json",
+      "sha256": "0063143c8e5d3fcb073caf25508e311c961bd2a4edae344e4c1c02954f2cb23d",
+      "bytes": 1795
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/xs-qed-l2/approved-migration-review.json",
+      "sha256": "64f44489f4331b2ec2dfcdb2d48e4a8b2b06003c569823a351ff2e98b2e898a6",
+      "bytes": 111598
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/xs-qed-l2/receipt.json",
+      "sha256": "f7646abc83d7ba6ca82f9658bbe910fb38732f8f1b3e047fe272afc30c1b64a8",
+      "bytes": 57239
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/xs-qed-l2/tool-sources/account.py.txt",
+      "sha256": "34d6b7d0ee7d4c52667f9451b9c11c5ae433623872755acb56f4b9fed56f9d99",
+      "bytes": 3850
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/xs-qed-l2/tool-sources/audit.py.txt",
+      "sha256": "da15bced878dcb48ff80f2d91de8e10ff5c7bef181c4d87cb01f373a09c01727",
+      "bytes": 5632
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/xs-qed-l2/tool-sources/compare.py.txt",
+      "sha256": "8167cdedc7d10afad72160c2de291baa161adc3b5de82dad496ace80ce5bb84c",
+      "bytes": 5048
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/xs-qed-l2/tool-sources/final.py.txt",
+      "sha256": "9471964957359662a0e019e756a9a0b2b2cf2fe4473677d3f3724c0a390d7aab",
+      "bytes": 6828
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/xs-qed-l2/tool-sources/fingerprint-closure.py.txt",
+      "sha256": "8621718f97d5942cdc45d694bb5bb239b494a0cf9749736aaa99e02516ca7120",
+      "bytes": 5329
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/xs-qed-l2/tool-sources/observer.py.txt",
+      "sha256": "5c2573d6c3c978cbffa9a8df482fefa770adfa5694e426a481ab9645ae6d23a1",
+      "bytes": 5113
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/xs-qed-l2/tool-sources/producer.py.txt",
+      "sha256": "f7cb5cf5dae14c76192c4c7c400c9a6d0611ef9e2dbc50922d0115776e4808cc",
+      "bytes": 2704
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/xs-qed-l2/tool-sources/proof-sandbox-launch.py.txt",
+      "sha256": "065f62c8331db52388d461bc5ca1583a6425a947109126082f82dd0904e936e4",
+      "bytes": 2069
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/xs-qed-l2/tool-sources/proof-sandbox-launch2.py.txt",
+      "sha256": "4b19e8bae9ad7c500904947e13b8b7f9e8181dca4f0843c6a13890c65b269e1d",
+      "bytes": 2134
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/xs-qed-l2/tool-sources/proof-sandbox.py.txt",
+      "sha256": "e57e9e42bcc292b973d5ad7f7c96c50243e26d49107242e009eab3edc8529c16",
+      "bytes": 3973
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/xs-qed-l2/tool-sources/proof.py.txt",
+      "sha256": "9e64051b8d44f5ec39dbe82c2c91c06738826ee48d7c054758c8417740130777",
+      "bytes": 3893
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/xs-qed-l2/tool-sources/qualify-producer.py.txt",
+      "sha256": "481894978eb8a2e86544cfebca649becfa2d91022c9b9836619e2b05d8ef0cc3",
+      "bytes": 5463
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/xs-qed-l2/tool-sources/record.py.txt",
+      "sha256": "fb539fff8914ca619586b26d6899be610ae081e6879b47a7297234a7a4a8a730",
+      "bytes": 2803
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/xs-qed-l2/tool-sources/render.py.txt",
+      "sha256": "83d12d9c93c5f6d5a23ff46d83c02ad04f86cee81d2033a5ec40300cf493fa88",
+      "bytes": 4925
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/xs-qed-l2/tool-sources/retained-observer.rs.txt",
+      "sha256": "67c50b2ff00ee2f92553fa9a6429640ac084551c08f2c2da015d066d354c07d8",
+      "bytes": 6821
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/xs-qed-l2/tool-sources/runtime.py.txt",
+      "sha256": "9040928c3f3295f130e2f26c3d66e6e4ce924fa8665583927a11e2ab4b6d8b39",
+      "bytes": 5224
+    },
+    {
+      "path": "docs/architecture/evidence/generation-xs-qed-l2-migration/common.py",
+      "sha256": "dad374820e75cd99d7f5150381eaf09f104766d393d152aad2e4ff108434da16",
+      "bytes": 1763
+    },
+    {
+      "path": "docs/architecture/evidence/generation-xs-qed-l2-migration/handoff.py",
+      "sha256": "1b4a595066d288d3e68fb06642c9ff4bcaa720779ba3dd9034d0f527c1cf8b48",
+      "bytes": 20028
+    },
+    {
+      "path": "docs/architecture/evidence/generation-xs-qed-l2-migration/migrate.py",
+      "sha256": "292a9911c265113bf87c665e5537caef58f5d396dd21bf1293128e88f969944a",
+      "bytes": 39713
+    },
+    {
+      "path": "docs/architecture/evidence/generation-xs-qed-l2-migration/receipt.json",
+      "sha256": "c6965a9aa7acb407dc76c924ab07d5def384d2c61a82356b322f2a6379cdc44d",
+      "bytes": 173786
+    },
+    {
+      "path": "docs/architecture/evidence/generation-xs-qed-l2/bind_runtime.py",
+      "sha256": "04eb5140242e5c730980b588a665d94f7cdb11fe87af6bce9991fd8c4f112f87",
+      "bytes": 9166
+    },
+    {
+      "path": "docs/architecture/evidence/generation-xs-qed-l2/boundary.py",
+      "sha256": "e0234927fe80e40ec4d2e9c9ac807a367ec75461113379538a022c119af70fc8",
+      "bytes": 2942
+    },
+    {
+      "path": "docs/architecture/evidence/generation-xs-qed-l2/build.py",
+      "sha256": "99457a3d73c7da4bf8840e305d60fcf719bfa79c421fa7bb87c1aed5fa4b3879",
+      "bytes": 3441
+    },
+    {
+      "path": "docs/architecture/evidence/generation-xs-qed-l2/common.py",
+      "sha256": "7bb2cffbe49254b68d5b87a5e56beb8009bd59d9a315e9261f303e09af48fee8",
+      "bytes": 4886
+    },
+    {
+      "path": "docs/architecture/evidence/generation-xs-qed-l2/controls.py",
+      "sha256": "c5ed68ce29336878d04e7980bd2d42aa8448328c3225cf1903748d184ad50ced",
+      "bytes": 9999
+    },
+    {
+      "path": "docs/architecture/evidence/generation-xs-qed-l2/docs.py",
+      "sha256": "f3ed028e8547c6d9cc12d88061f6239431cb98241a8ec2b42c4a4f6d9cd45077",
+      "bytes": 4915
+    },
+    {
+      "path": "docs/architecture/evidence/generation-xs-qed-l2/fingerprints.py",
+      "sha256": "f91f2305a1d3f74a4362473a74409b1bcf08a998a3a8d15c65ca65d625dc6f82",
+      "bytes": 2584
+    },
+    {
+      "path": "docs/architecture/evidence/generation-xs-qed-l2/finish.py",
+      "sha256": "1eca6b19fe4366e3868844d14778f3b42e35a08966611988a376c96e2dbc30a2",
+      "bytes": 12467
+    },
+    {
+      "path": "docs/architecture/evidence/generation-xs-qed-l2/native_controls.py",
+      "sha256": "048ff4df1fcd3b8aec7281b53af9523547e68bc6b72ef4ac3c5bf1a1495e4b12",
+      "bytes": 2720
+    },
+    {
+      "path": "docs/architecture/evidence/generation-xs-qed-l2/observer-historical.rs.txt",
+      "sha256": "93664dc4501ea678881c630c842ac62a2da4e202502d9847b7c6be7452cbd1cf",
+      "bytes": 6755
+    },
+    {
+      "path": "docs/architecture/evidence/generation-xs-qed-l2/observer.rs.txt",
+      "sha256": "2eb5dabdf0b8dab9f47e1898895f830ba820e46c141d3b981d0df01aabb56b5e",
+      "bytes": 6667
+    },
+    {
+      "path": "docs/architecture/evidence/generation-xs-qed-l2/prepare.py",
+      "sha256": "f4ab8ae1d603a537f1b3126b641625b46233d164a9cfae3fc16ae5f403abe7dd",
+      "bytes": 3852
+    },
+    {
+      "path": "docs/architecture/evidence/generation-xs-qed-l2/preserve.py",
+      "sha256": "c6a5efcf273d47342906df26640d0cce33179044d450b66049c1c7abe3fb293d",
+      "bytes": 1943
+    },
+    {
+      "path": "docs/architecture/evidence/generation-xs-qed-l2/proof.py",
+      "sha256": "5fa968a3994bbf9999b84a5f85ff2201eca689008c02baad5fd16fbc4d3fbd52",
+      "bytes": 2083
+    },
+    {
+      "path": "docs/architecture/evidence/generation-xs-qed-l2/qualify.py",
+      "sha256": "08e020b214f182c74c2c7e228979c79eb266568725d5806a290cc2ac1478d870",
+      "bytes": 6692
+    },
+    {
+      "path": "docs/architecture/evidence/generation-xs-qed-l2/receipt.json",
+      "sha256": "bc81b9833e3b2bbb265922b4eb02563ce2ad96b3c11aa20b38d4fa06f5d8a9b1",
+      "bytes": 269504
+    },
+    {
+      "path": "docs/architecture/evidence/generation-xs-qed-l2/retry_observer.py",
+      "sha256": "6096290e82f31b2c052f9240eb8ff83c0b110eac60505256022f24547875652d",
+      "bytes": 387
+    },
+    {
+      "path": "docs/architecture/evidence/generation-xs-qed-l2/runtime.py",
+      "sha256": "39c31748bc813ffbd56ade3d5ece5353ba1247abc98a1ef49c0ec1e7f2239ecb",
+      "bytes": 3384
+    },
+    {
+      "path": "docs/architecture/evidence/generation-xs-qed-l2/schema.json",
+      "sha256": "c69b663858dfa6e529da4a8b1eff3110a97238ec7a338a9bcceeca27f1affa6e",
+      "bytes": 38555
+    },
+    {
+      "path": "docs/architecture/evidence/generation-xs-qed-l2/supplements.py",
+      "sha256": "5d068df4a00090c98fa835458c15ae7d119df7efaac4ca34bee74f698bdee718",
+      "bytes": 4878
+    },
+    {
+      "path": "docs/architecture/evidence/generation-xs-qed-l2/validate.py",
+      "sha256": "70eade724104195b116c8af7ce1dd142622c7499d196a4ab1707eb699cd2e81c",
+      "bytes": 5386
+    },
+    {
+      "path": "docs/architecture/generation-integration-plan.typ",
+      "sha256": "4489dc7383468cf2daf7f8c177d3ea87fe9cad45c99af1afc0f160b202ff06f6",
+      "bytes": 42856
+    },
+    {
+      "path": "docs/architecture/generation-integration-xs-qed-l2.typ",
+      "sha256": "8e91da1dd37fd2765cda03d28e885fc1f09d9a4d1317f6aaa47dbcdb169b5c32",
+      "bytes": 3543
+    },
+    {
+      "path": "docs/architecture/generation-xs-qed-l2-migration.typ",
+      "sha256": "56e5869947b552bdc2ff8453e1b35bad82d5eb9a75ec74d7e478ef5e05ab8143",
+      "bytes": 10702
+    },
+    {
+      "path": "docs/architecture/generation-xs-qed-l2.typ",
+      "sha256": "1fcb7266a3d12aa75cd1b96cb74d718809bdda832cba65ba08a693c51a9834dc",
+      "bytes": 13946
+    },
+    {
+      "path": "docs/developers.toml",
+      "sha256": "37773f677663cafae0a8b873e60f5e5b7d4d93e30f9bf6040ea6e4ca138dcf9b",
+      "bytes": 202696
+    }
+  ],
+  "self_exclusions": [
+    "docs/architecture/evidence/generation-integration/wp3/xs-qed-l2/inventory.json",
+    "docs/architecture/evidence/generation-integration/wp3/xs-qed-l2/runtime-manifest.json"
+  ],
+  "policy": "Two indexes excluded from internal rows; final Git tree and detached supplement bind both. No circular candidate/receipt self hash."
+}

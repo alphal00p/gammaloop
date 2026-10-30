@@ -1,0 +1,65 @@
+"""Pinned renderer/font environment and real altered-source semantic negative."""
+from pathlib import Path
+import datetime
+from html.parser import HTMLParser
+import json
+import subprocess
+import sys
+sys.path.insert(0,str(Path(__file__).resolve().parent))
+from record import ROOT,OUT,bind,sha
+TOOL='/nix/store/wzpxqpc3v2xxah69rqifq5kac67hx36g-typst-0.15.1/bin/typst'
+FONT='/nix/store/4vmi16yyb241hpsx3mrssvlylc8gl4yh-fonts.conf'
+NAMES=['generation-integration-xs-qed-l2','generation-integration-plan','generation-xs-qed-l2','generation-xs-qed-l2-migration']
+EXPECTED='This migration changes exactly one numerator digest.'
+class Parse(HTMLParser):
+    def __init__(self):super().__init__(convert_charrefs=True);self.text=[];self.active=[]
+    def handle_data(self,text):self.text.append(text)
+    def handle_starttag(self,t,a):
+        if t=='script' or any(k.startswith('on') for k,v in a):self.active.append(t)
+def semantic(path):
+    p=Parse();p.feed(Path(path).read_text());text=' '.join(' '.join(p.text).split())
+    return EXPECTED in text and not p.active,text
+def main():
+    render=OUT/'renders';render.mkdir(exist_ok=False)
+    for n in ('home','config','cache'):(render/n).mkdir()
+    env={'PATH':'/nix/store/3qgy8q2j64v2m9jy3a5jmssacbblhd4r-coreutils-9.11/bin',
+         'HOME':str(render/'home'),'XDG_CONFIG_HOME':str(render/'config'),'XDG_CACHE_HOME':str(render/'cache'),
+         'FONTCONFIG_FILE':FONT,'LANG':'C.UTF-8','LC_ALL':'C.UTF-8','TZ':'UTC','SOURCE_DATE_EPOCH':'0'}
+    assert Path(FONT).is_file()
+    inputs={str(p):sha(p) for p in [ROOT/'docs/developers.toml',*[ROOT/'docs/architecture'/(n+'.typ') for n in NAMES],
+        ROOT/'docs/architecture/evidence/generation-xs-qed-l2/receipt.json',
+        ROOT/'docs/architecture/evidence/generation-xs-qed-l2-migration/receipt.json']}
+    def execute(label,argv):
+        start=datetime.datetime.now(datetime.UTC).isoformat()
+        p=subprocess.run(argv,cwd=ROOT,env=env,capture_output=True)
+        (render/(label+'.out')).write_bytes(p.stdout);(render/(label+'.log')).write_bytes(p.stderr)
+        r={'argv':argv,'cwd':str(ROOT),'start':start,'end':datetime.datetime.now(datetime.UTC).isoformat(),'exit':p.returncode,
+           'tool':bind(TOOL),'FONTCONFIG_FILE':bind(FONT),'renderer_environment':env,'script':bind(__file__),
+           'stdout':bind(render/(label+'.out')),'stderr':bind(render/(label+'.log'))}
+        (render/(label+'.command.json')).write_text(json.dumps(r,indent=2)+'\n');assert p.returncode==0,p.stderr.decode()
+        return r
+    results=[]
+    for n in NAMES:
+        src=ROOT/'docs/architecture'/(n+'.typ');wrapper=render/(n+'-wrapper.typ')
+        wrapper.write_text('#document("index.html")[#include "/docs/architecture/'+n+'.typ"]\n')
+        runs=[]
+        for fmt in ('pdf','html'):
+            dst=render/(n+'.pdf' if fmt=='pdf' else n+'-bundle')
+            args=[TOOL,'compile','--root',str(ROOT),'--creation-timestamp','0']+(['--features','html,bundle','--format','bundle',str(wrapper)] if fmt=='html' else [str(src)])+[str(dst)]
+            r=execute(n+'-'+fmt,args);artifact=dst if fmt=='pdf' else dst/'index.html'
+            runs.append({'command':bind(render/(n+'-'+fmt+'.command.json')),'artifact':bind(artifact)})
+        results.append({'source':bind(src),'wrapper':bind(wrapper),'runs':runs})
+    current=render/'generation-integration-xs-qed-l2-bundle/index.html'
+    accepted,text=semantic(current);assert accepted
+    src=ROOT/'docs/architecture/generation-integration-xs-qed-l2.typ';contents=src.read_text();assert contents.count(EXPECTED)==1
+    bad=render/'altered-source.typ';bad.write_text(contents.replace(EXPECTED,'This migration changes exactly nine numerator digests.'))
+    wrapper=render/'altered-wrapper.typ';wrapper.write_text('#document("index.html")[#include "/'+str(bad.relative_to(ROOT))+'"]\n')
+    execute('altered-source-html',[TOOL,'compile','--root',str(ROOT),'--creation-timestamp','0','--features','html,bundle','--format','bundle',str(wrapper),str(render/'altered-bundle')])
+    badaccepted,badtext=semantic(render/'altered-bundle/index.html');assert not badaccepted
+    for p,h in inputs.items():assert sha(p)==h,p
+    result={'inputs':inputs,'results':results,'fontconfig':bind(FONT),'renderer_environment':env,'creation_timestamp':0,
+            'semantic':{'checker':bind(__file__),'expected':EXPECTED,'current_accepted':accepted,'current_decoded_text':text,
+                        'altered_source':bind(bad),'altered_wrapper':bind(wrapper),'altered_output':bind(render/'altered-bundle/index.html'),'altered_accepted':badaccepted,'altered_decoded_text':badtext},
+            'qualification':'Final prose frozen before actual renders; font config and full renderer env explicit per QM-N2. New outputs do not overwrite frozen donor artifacts. No full-site claim.'}
+    (OUT/'render-results.json').write_text(json.dumps(result,indent=2)+'\n')
+if __name__=='__main__':main()

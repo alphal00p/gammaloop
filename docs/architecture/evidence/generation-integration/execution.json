@@ -610,9 +610,9 @@
     "validation_metadata_commit": "783e3281d01134f8fe2e44eab366d0414c63b852",
     "source_binding": "docs/architecture/evidence/generation-integration/wp3/main32-35/metadata-source.json"
   },
-  "current_implementation_code_commit": "8dcebc2591ab04d10026fbd47a45e8d31f911ef3",
+  "current_implementation_code_commit": "eae78e11e4d27df2539700fa4d4d71cdcb3a4804",
   "current_documentation_code_commit": "a3729fe5d880f0db5f09d9ce7d0ef592bfc4d161",
-  "current_implementation_change": "yyvzwznyztsrqtprzzlpnlyvlkwnuvyy",
+  "current_implementation_change": "xtupxvlkpotywlkloktqqqnzktwnlrpt",
   "main32_35_review": {
     "candidate": "510d79d94bbaf57aaaa992c641e7496905763324",
     "verdict": "APPROVE",
@@ -763,9 +763,20 @@
     "code_change": "yyvzwznyztsrqtprzzlpnlyvlkwnuvyy",
     "receipt": "docs/architecture/evidence/generation-integration/wp3/families/receipt.json",
     "candidate_bookmark": "generation-integration-families",
-    "status": "Round 1 runtime/source/producer/count scopes passed within independent reviews; round 2 evidence correction awaits NEW focused review. Runtime code 8dce is unchanged; 74 oracle failures and WP3 requirements remain open.",
+    "status": "APPROVED cumulative bounded MAIN gate at 69fda047 by root-verified review 10b3929c; original runtime 8dce and counts remain historical. This does not approve any other row or WP3 completion.",
     "round1_candidate": "1f3bb33b44e506af041fa124ea419d5b1ba41e5e",
     "correction": "docs/architecture/evidence/generation-integration/wp3/families/round2/correction.json",
     "evidence_change": "lxzpuulrkmktsumozkultsnnzqxrumno"
+  },
+  "active_xs_qed_l2": {
+    "base": "69fda047e378d4114f47ec9a10517e44adb57eaa",
+    "certificate": "c95e7f6e77994779929115a156654cfce3bd1e53",
+    "migration": "19b516a43dda31a4403dd2a170f2e837934617ce",
+    "code_commit": "eae78e11e4d27df2539700fa4d4d71cdcb3a4804",
+    "code_change": "xtupxvlkpotywlkloktqqqnzktwnlrpt",
+    "evidence_change": "mssryyzyrolmwvuknmrlkzoozuuvlxuo",
+    "receipt": "docs/architecture/evidence/generation-integration/wp3/xs-qed-l2/receipt.json",
+    "bookmark": "generation-integration-xs-qed-l2",
+    "status": "One-token combined candidate awaits NEW independent review. Actual scoped lane 298/73/49; all 73 remaining failures and broader WP3 gates stay open."
   }
 }

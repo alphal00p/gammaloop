@@ -1,0 +1,66 @@
+"""Fresh executions of the qualified retained observer; not CI feature equivalence."""
+from pathlib import Path
+import datetime
+import json
+import os
+import subprocess
+import sys
+import time
+import tomllib
+sys.path.insert(0,str(Path(__file__).resolve().parent))
+from record import ROOT,OUT,bind,sha,nix_env
+PREP=ROOT.parent/'generation-oracle-numerator-families'
+CASE='xs_qed_eemm_L2'
+ELF=PREP/'target/xs-qed-l2-migration/bin/oracle_xs_qed_l2_migration_capture'
+EXPECTED='9a479c8ebcdd38324019f6fcc0de0719e03c223507df9a3005463c260fb1a9d2'
+BWRAP='/nix/store/v24sx9l1jmvvia3z8iznrd7jwhvc8kcf-bubblewrap-0.11.2/bin/bwrap'
+def main():
+    qpath=PREP/'target/xs-qed-l2-migration/build/oracle_xs_qed_l2_migration_capture/qualification-v2.json'
+    q=json.loads(qpath.read_text())
+    assert sha(ELF)==EXPECTED==q['elf_sha256']
+    src=Path(q['emitted']['target']['src_path'])
+    assert sha(src)==q['command']['inputs_before'][str(src)]
+    # Compare all relevant owning Rust/manifest bytes to immutable producer basis.
+    gen=json.loads((OUT/'producer-realized.json').read_text());filtered=Path(gen['generator_src'])
+    guards=[]
+    metadata_differences=[]
+    for p in filtered.rglob('*'):
+        if not p.is_file() or not (p.suffix=='.rs' or p.name=='Cargo.toml'):continue
+        rel=p.relative_to(filtered)
+        if str(rel)=='crates/feynkit-generator/tests/generation_oracle/main.rs':continue
+        old=subprocess.check_output(['git','-C',str(ROOT.parent/'main'),'show','19b516a43dda31a4403dd2a170f2e837934617ce:'+str(rel)],env=nix_env())
+        if old!=p.read_bytes():
+            assert str(rel)=='crates/alphal00p-docs-builder/Cargo.toml',rel
+            before=tomllib.loads(old.decode());after=tomllib.loads(p.read_text())
+            assert after['dependencies'].pop('sha2')=='0.10'
+            assert before==after
+            assert not any(r['unit'].startswith('alphal00p-docs-builder-') for r in q['closure'])
+            metadata_differences.append({'path':str(rel),'qualification':'Approved docs-only sha2 edge, outside retained observer compiled closure; not an owning-source difference.'})
+            continue
+        guards.append({'path':str(rel),'sha256':sha(p)})
+    license_value=os.environ.get('SYMBOLICA_LICENSE')
+    if not license_value:
+        config=Path(os.environ.get('XDG_CONFIG_HOME',str(Path.home()/'.config')))
+        license_value=(config/'symbolica/license').read_text().strip()
+    assert license_value
+    records=[]
+    for pool in (1,8,32):
+        d=OUT/f'observer-p{pool}';d.mkdir(exist_ok=False)
+        for n in ('captures','tmp','cache','home','cwd'):(d/n).mkdir()
+        safe={'PATH':'/nix/store/3qgy8q2j64v2m9jy3a5jmssacbblhd4r-coreutils-9.11/bin','HOME':str(d/'home'),'TMPDIR':'/tmp','XDG_CACHE_HOME':str(d/'cache'),'LANG':'C.UTF-8','FEYNKIT_ORACLE_THREADS':str(pool)}
+        argv=[BWRAP,'--unshare-net','--unshare-pid','--unshare-ipc','--unshare-uts','--ro-bind','/','/','--dev','/dev','--proc','/proc','--bind',str(d),str(d),'--bind',str(d/'tmp'),'/tmp','--chdir',str(d/'cwd'),str(ELF),str(d/'captures'),CASE]
+        start=datetime.datetime.now(datetime.UTC).isoformat();tick=time.monotonic()
+        with (d/'stdout.txt').open('wb') as o,(d/'stderr.txt').open('wb') as e:p=subprocess.run(argv,env={**safe,'SYMBOLICA_LICENSE':license_value},stdout=o,stderr=e)
+        record={'argv':argv,'cwd':str(ROOT),'start':start,'end':datetime.datetime.now(datetime.UTC).isoformat(),'seconds':time.monotonic()-tick,'exit':p.returncode,'safe_environment':safe,'private_license':'direct child only; no value/hash recorded','elf':bind(ELF),'observer_source':bind(src),'qualification':bind(qpath),'script':bind(__file__)}
+        (d/'command.json').write_text(json.dumps(record,indent=2)+'\n');assert p.returncode==0
+        for mode in ('None','Auto'):
+            new=d/'captures'/CASE/f'classes-{mode}-t{pool}'
+            old=PREP/'target/xs-qed-l2/runtime/current/captures'/CASE/f'classes-{mode}-t1'
+            for name in ('model.json','request.json','options.json','grouping.json','payload.json','typed-owners.json','prepared-report.txt','built-report.txt'):
+                assert (new/name).read_bytes()==(old/name).read_bytes(),(pool,mode,name)
+            meta=json.loads((new/'capture.json').read_text())
+            assert meta['run']==f'Run {{ threads: Some({pool}), parallel: true, check_heredity: false, cancelled: false }}'
+            assert meta['prepared_len']==meta['built_len']==30
+        records.append(record);print(pool,'observer complete',flush=True)
+    (OUT/'observer-results.json').write_text(json.dumps({'runs':records,'owning_sources':guards,'nonowning_metadata_differences':metadata_differences,'profile':'retained dev-optim observer, NOT feature/profile equivalent to CI archive','transfer':'Only through identical owners and complete public payload/source joins. Observer-only Run/model/request/options/ports/interfaces remain capture-bound.','dependency_units':q['closure_units'],'root_profile':q['root']['profile'],'source_base':q['source_base'],'source_archive_required':str(src)},indent=2)+'\n')
+if __name__=='__main__':main()

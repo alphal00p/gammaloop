@@ -1,0 +1,43 @@
+"""Actual outer Nextest accounting; expected changes derive from approved prior census."""
+from pathlib import Path
+import json
+import xml.etree.ElementTree as ET
+import sys
+sys.path.insert(0,str(Path(__file__).resolve().parent))
+from record import ROOT,OUT,bind
+
+ROWS={'xs_qed_eemm_L2','xs_qed_eedd_L1','xs_qed_eemm_L1','xs_qed_eeee_1pi_L1','qed_eemm_L1','ctorder_qcd_uugg_L1','sm_eemm_L0','ym_g6_L0'}
+def cases(path):
+    tree=ET.parse(path).getroot();rows=[]
+    for suite in tree.findall('testsuite'):
+        for case in suite.findall('testcase'):
+            f,e,s=case.find('failure'),case.find('error'),case.find('skipped')
+            rows.append({'binary':suite.attrib['name'],'name':case.attrib['name'],'status':'failed' if f is not None or e is not None else 'ignored' if s is not None else 'passed','seconds':case.attrib.get('time'),'failure':''.join(f.itertext()) if f is not None else ''.join(e.itertext()) if e is not None else None})
+    assert len(rows)==int(tree.attrib['tests'])
+    return rows
+def main():
+    listing=json.loads((OUT/'fast-list.out').read_text());selected=[];excluded=[]
+    for binary,suite in listing['rust-suites'].items():
+        for name,row in suite.get('testcases',{}).items():
+            item={'binary':binary,'name':name,'ignored':row['ignored'],'filter':row['filter-match']}
+            (selected if row['filter-match']['status']=='matches' else excluded).append(item)
+    actual=cases(OUT/'fast-run-junit.xml')
+    assert len(actual)==len(selected)
+    failed=[r for r in actual if r['status']=='failed'];passed=[r for r in actual if r['status']=='passed']
+    priorpath=ROOT/'target/wp3-family-integration/accounting.json';prior=json.loads(priorpath.read_text())
+    expected={r['name'] for r in prior['failed_cases']}-{'xs_qed_eemm_L2'}
+    failednames={r['name'] for r in failed}
+    pools=[]
+    for pool in (1,8,32):
+        rows=cases(OUT/f'pool-{pool}-junit.xml');command=json.loads((OUT/f'pool-{pool}.command.json').read_text())
+        assert len(rows)==len(ROWS) and {r['name'] for r in rows}==ROWS and all(r['status']=='passed' for r in rows)
+        assert command['exit']==0
+        pools.append({'pool':pool,'selected':len(rows),'passed':sum(r['status']=='passed' for r in rows),'failed':sum(r['status']=='failed' for r in rows),'ignored':sum(r['status']=='ignored' for r in rows),'command':bind(OUT/f'pool-{pool}.command.json'),'junit':bind(OUT/f'pool-{pool}-junit.xml')})
+    binary={}
+    for row in actual:
+        counts=binary.setdefault(row['binary'],{'passed':0,'failed':0,'ignored':0});counts[row['status']]+=1
+    result={'inventory':listing['test-count'],'selected':len(selected),'passed':len(passed),'failed':len(failed),'excluded':excluded,'binary_results':binary,'failed_cases':failed,'unexpected_failures':sorted(failednames-expected),'missing_expected_failures':sorted(expected-failednames),'expected_remaining_from_prior':sorted(expected),'prior_accounting':bind(priorpath),'prior_counts':{k:prior[k] for k in ('inventory','selected','passed','failed','exit')},'exit':json.loads((OUT/'fast-run.command.json').read_text())['exit'],'pool_results':pools,'sampled_quotient':next(r for r in actual if r['name']=='grouping::tests::sampled_quotient_groups_physical_local_factors'),'source':'eae78e11e4d27df2539700fa4d4d71cdcb3a4804','script':bind(__file__),'attribution':'One literal only. Failed set derived from actual approved prior74 census minus xs_qed_eemm_L2. Sampled-quotient harness already passed before this row update; no digest-change credit. No child-summary inflation.'}
+    (OUT/'accounting.json').write_text(json.dumps(result,indent=2)+'\n')
+    assert not result['unexpected_failures'] and not result['missing_expected_failures']
+    print(json.dumps({k:result[k] for k in ('inventory','selected','passed','failed','exit')}))
+if __name__=='__main__':main()

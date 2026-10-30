@@ -1,0 +1,30 @@
+"""Safe replay correction: pinned no-network sandbox, no original record overwrite."""
+from pathlib import Path
+import datetime
+import json
+import os
+import subprocess
+import sys
+sys.path.insert(0,str(Path(__file__).resolve().parent))
+from record import ROOT,OUT,bind,sha
+
+def main():
+    d=OUT/'proof-sandbox-state2';d.mkdir(exist_ok=False)
+    for n in ('tmp','cache','home'):(d/n).mkdir()
+    bwrap='/nix/store/v24sx9l1jmvvia3z8iznrd7jwhvc8kcf-bubblewrap-0.11.2/bin/bwrap'
+    script=OUT/'proof-sandbox.py'
+    safe={'PATH':'/nix/store/3qgy8q2j64v2m9jy3a5jmssacbblhd4r-coreutils-9.11/bin:/nix/store/31gnwsgag5qa14hfblqi5hyn71pyx7py-binutils-2.46/bin:/nix/store/8yjpgadavqdwphcd2kw4dfvxmgdp5sb3-git-2.55.0/bin',
+          'HOME':str(d/'home'),'TMPDIR':'/tmp','XDG_CACHE_HOME':str(d/'cache'),
+          'XDG_CONFIG_HOME':os.environ.get('XDG_CONFIG_HOME',str(Path.home()/'.config')),
+          'LANG':'C.UTF-8','PYTHONDONTWRITEBYTECODE':'1','GIT_OPTIONAL_LOCKS':'0'}
+    argv=[bwrap,'--unshare-net','--unshare-pid','--unshare-ipc','--unshare-uts','--ro-bind','/','/','--dev','/dev','--proc','/proc',
+          '--bind',str(OUT),str(OUT),'--bind',str(d/'tmp'),'/tmp','--chdir',str(ROOT),
+          sys.executable,'-B',str(script)]
+    before=sha(script);start=datetime.datetime.now(datetime.UTC).isoformat()
+    with (OUT/'proof-sandbox-launch2.out').open('wb') as o,(OUT/'proof-sandbox-launch2.log').open('wb') as e:
+        p=subprocess.run(argv,env=safe,stdout=o,stderr=e)
+    assert before==sha(script)
+    record={'argv':argv,'cwd':str(ROOT),'start':start,'end':datetime.datetime.now(datetime.UTC).isoformat(),'exit':p.returncode,'safe_environment':safe,'script':bind(script),'launcher':bind(__file__),'stdout':bind(OUT/'proof-sandbox-launch2.out'),'stderr':bind(OUT/'proof-sandbox-launch2.log'),'license':'Not present in launcher/validator env; approved native helper reads private config and injects only direct native children after sandbox entry. No values/hashes recorded.'}
+    (OUT/'proof-sandbox-launch2.command.json').write_text(json.dumps(record,indent=2)+'\n')
+    assert p.returncode==0
+if __name__=='__main__':main()

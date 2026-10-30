@@ -1,0 +1,30 @@
+"""Evaluate and realize only the selected pure generator archive."""
+from pathlib import Path
+import json
+import subprocess
+import sys
+sys.path.insert(0,str(Path(__file__).resolve().parent))
+from record import run,validate_nix,nix_env,bind,sha,ROOT,OUT
+CODE='eae78e11e4d27df2539700fa4d4d71cdcb3a4804'
+URI='git+file:///shared/lcnbr/dev/gammaloop/main?rev='+CODE+'&shallow=1&allRefs=1'
+def drv(path):
+    argv=['nix','derivation','show',path]
+    validate_nix(argv)
+    # Never save/display raw env; only explicitly safe producer fields survive.
+    data=json.loads(subprocess.check_output(argv,cwd='/',env=nix_env()))
+    return next(iter(data['derivations'].values()))
+def main():
+    assert run('code-metadata',['nix','flake','metadata','--json',URI])==0
+    metadata=json.loads((OUT/'code-metadata.out').read_text());assert metadata['revision']==CODE
+    assert run('aggregate-eval',['nix','eval','--raw',URI+'#checks.x86_64-linux.gammaloop-nextest-binaries-feynkit.drvPath'])==0
+    aggregate=(OUT/'aggregate-eval.out').read_text().strip()
+    a=drv(aggregate);names=['/nix/store/'+p for p in a['inputs']['drvs'] if 'nextest-binaries-feynkit-feynkit-generator-' in p];assert len(names)==1
+    generator=names[0];g=drv(generator);dep=[str(v).replace('/nix/store/','') for v in g['inputs']['drvs'] if 'crate-test-binaries-feynkit-generator-' in v];assert len(dep)==1
+    dependency='/nix/store/'+dep[0];d=drv(dependency)
+    safe={'code':CODE,'uri':URI,'full_source':metadata['path'],'full_nar':metadata['locked']['narHash'],'aggregate_evaluated_only':aggregate,'generator_derivation':generator,'generator_src':g['env']['src'],'generator_cargo_artifacts':g['env']['cargoArtifacts'],'dependency_derivation':dependency,'dependency_src':d['env']['src'],'dependency_cargo_artifacts':d['env']['cargoArtifacts'],'generator_build_phase':g['env']['buildPhase'],'dependency_build_phase':d['env']['buildPhase'],'generator_postPatch':g['env'].get('postPatch'),'dependency_postPatch':d['env'].get('postPatch'),'profile':g['env']['CARGO_PROFILE'],'compiler_inputs':[p for p in g['inputs']['drvs'] if 'rust-stable' in p],'query_policy':'Validated exact drv only; both license vars absent; raw derivations discarded from memory, no dump.'}
+    (OUT/'producer-safe.json').write_text(json.dumps(safe,indent=2)+'\n')
+    assert run('generator-realize',['nix','build','--no-link','--print-out-paths',generator+'^*'])==0
+    output=Path((OUT/'generator-realize.out').read_text().strip());archives=list(output.glob('*.tar.zst'));assert len(archives)==1
+    safe.update(output=str(output),archive=bind(archives[0]))
+    (OUT/'producer-realized.json').write_text(json.dumps(safe,indent=2)+'\n')
+if __name__=='__main__':main()

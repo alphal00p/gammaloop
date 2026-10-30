@@ -1,0 +1,54 @@
+"""Fail-closed command records: pure Git-pinned Nix only, no private path flakes."""
+from pathlib import Path
+import datetime
+import hashlib
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+
+OUT=Path(__file__).resolve().parent
+ROOT=OUT.parents[1]
+URI=re.compile(r'^git\+file:///shared/lcnbr/dev/gammaloop/main\?rev=[0-9a-f]{40}&shallow=1&allRefs=1(?:#[A-Za-z0-9_.-]+)?$')
+DRV=re.compile(r'^/nix/store/[0-9a-z]{32}-[A-Za-z0-9_.+-]+\.drv(?:\^\*)?$')
+def sha(p):
+    h=hashlib.sha256()
+    with Path(p).open('rb') as f:
+        for b in iter(lambda:f.read(4194304),b''):h.update(b)
+    return h.hexdigest()
+def bind(p):
+    p=Path(p).resolve()
+    return {'path':str(p),'sha256':sha(p),'bytes':p.stat().st_size}
+def nix_env():
+    e=dict(os.environ,GIT_OPTIONAL_LOCKS='0',PYTHONDONTWRITEBYTECODE='1')
+    e.pop('SYMBOLICA_LICENSE',None)
+    e.pop('SYMBOLICA_LICENSE_SIGNED',None)
+    return e
+def validate_nix(argv):
+    assert argv and all(isinstance(v,str) and v for v in argv)
+    if Path(argv[0]).name!='nix':return
+    refs=[v for v in argv[2:] if URI.fullmatch(v) or DRV.fullmatch(v)]
+    assert len(refs)==1,('Exactly one validated immutable installable required',argv)
+    assert argv[1] in ('eval','build','develop','flake','derivation')
+    if argv[1]=='flake':assert argv[2]=='metadata' and URI.fullmatch(refs[0])
+    if argv[1]=='derivation':assert argv[2]=='show' and DRV.fullmatch(refs[0]) and not refs[0].endswith('^*')
+def run(label,argv,cwd=None,extra_env=None):
+    validate_nix(argv)
+    if cwd is None:cwd=Path('/') if Path(argv[0]).name=='nix' else ROOT
+    env=nix_env()
+    env.update(extra_env or {})
+    assert 'SYMBOLICA_LICENSE' not in env and 'SYMBOLICA_LICENSE_SIGNED' not in env
+    scripts={str(Path(a).resolve()):sha(a) for a in argv if a.endswith('.py') and Path(a).is_file()}
+    scripts[str(Path(__file__).resolve())]=sha(__file__)
+    start=datetime.datetime.now(datetime.UTC).isoformat();tick=time.monotonic()
+    with (OUT/(label+'.out')).open('wb') as out,(OUT/(label+'.log')).open('wb') as err:
+        p=subprocess.run(argv,cwd=cwd,env=env,stdout=out,stderr=err)
+    after={p:sha(p) for p in scripts}
+    assert scripts==after
+    record={'argv':argv,'cwd':str(cwd),'start':start,'end':datetime.datetime.now(datetime.UTC).isoformat(),'seconds':time.monotonic()-tick,'exit':p.returncode,'scripts_before':scripts,'scripts_after':after,'stdout':bind(OUT/(label+'.out')),'stderr':bind(OUT/(label+'.log')),'license_variables':'both absent; no runtime license in Nix','safe_extra_env':extra_env or {}}
+    (OUT/(label+'.command.json')).write_text(json.dumps(record,indent=2)+'\n')
+    print(json.dumps({'label':label,'exit':p.returncode}),flush=True)
+    return p.returncode
+if __name__=='__main__':raise SystemExit(run(sys.argv[1],sys.argv[2:]))
