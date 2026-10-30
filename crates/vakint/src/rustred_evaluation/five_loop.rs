@@ -415,8 +415,9 @@ impl Vakint {
             self.load_external_data_with_prepared_caches(
                 root,
                 5,
-                configured.rustred_application_options.reduction_strategy
-                    == crate::RustRedReductionStrategy::DepthFirst,
+                super::uses_prepared_caches(
+                    configured.rustred_application_options.reduction_strategy,
+                ),
             )?;
         }
         self.saved_application(&configured)?;

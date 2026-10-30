@@ -42,6 +42,7 @@ def engine(**overrides):
         "form_exe_path": "/native-cache-python-test-must-not-use-form",
         "integral_normalization_factor": "FMFTandMATAD",
         "use_dot_product_notation": True,
+        "rustred_reduction_strategy": "depth_first",
     }
     options.update(overrides)
     return Vakint(**options)

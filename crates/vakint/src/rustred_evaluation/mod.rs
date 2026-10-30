@@ -204,6 +204,26 @@ pub(crate) fn supports(
         || five_loop::supports(topology)
 }
 
+/// Whether the data needed to reduce a supported topology is loaded. One to
+/// three loops use the vendored artifacts; four and five loops need external
+/// data or, at five loops, a configured application package.
+pub(crate) fn has_data(vakint: &Vakint, settings: &VakintSettings, topology: &Topology) -> bool {
+    match topology.get_integral().n_loops {
+        4 => vakint
+            .rustred_data
+            .as_ref()
+            .is_some_and(|data| data.four_loop.is_some()),
+        5 => settings.rustred_artifact_path.is_some() || vakint.has_rustred_loop(5),
+        _ => true,
+    }
+}
+
+/// Whether a strategy reads the prepared completed-result caches shipped with
+/// the external data. Only depth-first reduction does.
+pub(crate) fn uses_prepared_caches(strategy: crate::RustRedReductionStrategy) -> bool {
+    strategy == crate::RustRedReductionStrategy::DepthFirst
+}
+
 impl Vakint {
     /// Reduce one already-matched and simultaneously routed scalar integral.
     ///
@@ -329,3 +349,70 @@ impl Vakint {
 
 #[cfg(test)]
 mod bundled_cache_tests;
+
+#[cfg(test)]
+mod selection_tests {
+    use crate::{
+        EvaluationMethod, EvaluationOrder, FMFTOptions, MATADOptions, RustRedEvaluationOptions,
+        Vakint, VakintSettings, topologies::Topology, utils::vakint_macros::vk_parse,
+    };
+
+    const FOUR_LOOP_H: &str = "topo(prop(1,edge(5,1),k(1),muvsq,1)*prop(2,edge(2,6),k(2),muvsq,1)\
+        *prop(3,edge(6,5),k(3),muvsq,1)*prop(4,edge(3,4),k(4),muvsq,1)\
+        *prop(5,edge(4,5),k(1)-k(3),muvsq,1)*prop(6,edge(6,3),k(2)-k(3),muvsq,1)\
+        *prop(7,edge(4,1),k(3)-k(1)+k(4),muvsq,1)*prop(8,edge(2,3),k(3)-k(2)+k(4),muvsq,1)\
+        *prop(9,edge(1,2),k(3)+k(4),muvsq,1))";
+
+    fn topology(engine: &Vakint, integral: &str) -> Topology {
+        let mut matched = engine
+            .topologies
+            .match_topologies_to_user_input(vk_parse!(integral).unwrap().as_view(), false)
+            .unwrap()
+            .unwrap();
+        matched.apply_replacement_rules().unwrap();
+        matched.canonical_topology
+    }
+
+    fn order(methods: Vec<EvaluationMethod>) -> VakintSettings {
+        VakintSettings {
+            evaluation_order: EvaluationOrder(methods),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn rustred_yields_to_a_later_backend_only_without_its_data() {
+        let rustred = EvaluationMethod::RustRed(RustRedEvaluationOptions::default());
+        let with_fmft = order(vec![
+            rustred.clone(),
+            EvaluationMethod::FMFT(FMFTOptions::default()),
+        ]);
+        let rustred_only = order(vec![rustred.clone()]);
+        let bare = Vakint::new().unwrap();
+        let four_loop = topology(&bare, FOUR_LOOP_H);
+        assert!(matches!(
+            bare.evaluation_method(&with_fmft, &four_loop),
+            Some(EvaluationMethod::FMFT(_))
+        ));
+        // Without a supporting alternative RustRed reports its missing data.
+        assert!(matches!(
+            bare.evaluation_method(&rustred_only, &four_loop),
+            Some(EvaluationMethod::RustRed(_))
+        ));
+        let loaded = super::cache_tests::external_engine();
+        assert!(matches!(
+            loaded.evaluation_method(&with_fmft, &four_loop),
+            Some(EvaluationMethod::RustRed(_))
+        ));
+        // One to three loops use the vendored programs.
+        let with_matad = order(vec![
+            rustred,
+            EvaluationMethod::MATAD(MATADOptions::default()),
+        ]);
+        let three_loop = topology(&bare, "topo(I3L(muvsq,1,1,1,1,1,1))");
+        assert!(matches!(
+            bare.evaluation_method(&with_matad, &three_loop),
+            Some(EvaluationMethod::RustRed(_))
+        ));
+    }
+}

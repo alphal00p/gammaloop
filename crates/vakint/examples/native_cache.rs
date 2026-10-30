@@ -43,6 +43,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             },
         )]),
         use_dot_product_notation: true,
+        // Prepared caches are read only by depth-first reduction.
+        rustred_application_options: rustred_app::SavedApplicationOptions {
+            reduction_strategy: vakint::RustRedReductionStrategy::DepthFirst,
+            ..Default::default()
+        },
         ..Default::default()
     };
     let prepared = vakint_parse!("topo(I1L(4,3))")?;

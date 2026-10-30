@@ -20,8 +20,8 @@ use symbolica::{
 };
 use vakint::{
     EvaluationMethod, EvaluationOrder, FMFTOptions, LoopNormalizationFactor,
-    OfficialExternalDataOptions, RustRedEvaluationOptions, RustRedMasterMode, Vakint,
-    VakintSettings, vakint_parse, vakint_symbol,
+    OfficialExternalDataOptions, RustRedEvaluationOptions, RustRedMasterMode,
+    RustRedReductionStrategy, Vakint, VakintSettings, vakint_parse, vakint_symbol,
 };
 
 const CASES: &str = include_str!("../tests/fixtures/benchmark_reduction.json");
@@ -154,7 +154,9 @@ impl Options {
                 &OfficialExternalDataOptions {
                     version: self.version.clone(),
                     local_artifacts_path: self.artifacts.clone(),
-                    ..Default::default()
+                    ..OfficialExternalDataOptions::for_strategy(
+                        RustRedReductionStrategy::DepthFirst,
+                    )
                 },
             )?;
             ensure!(report.version == self.version, "data version changed");
@@ -182,6 +184,11 @@ impl Options {
             },
             temporary_directory: Some(self.work_dir.to_string_lossy().into_owned()),
             use_dot_product_notation: true,
+            // The cached backend measures depth-first prepared-cache reuse.
+            rustred_application_options: rustred_app::SavedApplicationOptions {
+                reduction_strategy: RustRedReductionStrategy::DepthFirst,
+                ..Default::default()
+            },
             ..Default::default()
         };
         let start = Instant::now();
@@ -240,7 +247,7 @@ impl Options {
             &OfficialExternalDataOptions {
                 version: self.version.clone(),
                 local_artifacts_path: self.artifacts.clone(),
-                ..Default::default()
+                ..OfficialExternalDataOptions::for_strategy(RustRedReductionStrategy::DepthFirst)
             },
         )?;
         ensure!(engine.cache_statistics(4)?.attached, "4L cache is absent");

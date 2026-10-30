@@ -10,7 +10,7 @@ fn graph_adapter_and_rich_output_are_present_in_valid_python_stubs() {
     assert!(
         module
             .to_string()
-            .contains("rustred_reduction_strategy: builtins.str = 'depth_first'")
+            .contains("rustred_reduction_strategy: builtins.str = 'ordered'")
     );
     let graph_adapter = &module.function["integral_from_diagram"];
     assert_eq!(graph_adapter.len(), 1);

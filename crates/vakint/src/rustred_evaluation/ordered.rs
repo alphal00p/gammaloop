@@ -355,11 +355,16 @@ mod tests {
     }
 
     #[test]
-    fn strategy_switches_keep_depth_first_default() {
+    fn ordered_is_the_vakint_default_strategy() {
         assert_eq!(
             VakintSettings::default()
                 .rustred_application_options
                 .reduction_strategy,
+            RustRedReductionStrategy::Ordered
+        );
+        // The rustred library keeps its own depth-first default.
+        assert_eq!(
+            RustRedReductionStrategy::default(),
             RustRedReductionStrategy::DepthFirst
         );
     }

@@ -29,6 +29,8 @@ pub struct OfficialExternalDataOptions {
     pub refresh: bool,
     /// Attach advertised native prepared caches. Disabling this still validates
     /// every package checksum, but never decodes or imports its cache backing.
+    /// Only depth-first reduction reads these caches, so this defaults to
+    /// false for the default ordered strategy; see [`Self::for_strategy`].
     pub load_prepared_caches: bool,
     /// Timeout for each HTTP request. Native authentication, copying and reuse
     /// have no default compute deadline; caller resource budgets still apply.
@@ -44,11 +46,24 @@ impl Default for OfficialExternalDataOptions {
             version: "latest".into(),
             local_artifacts_path: None,
             refresh: false,
-            load_prepared_caches: true,
+            load_prepared_caches: super::uses_prepared_caches(
+                crate::DEFAULT_RUSTRED_REDUCTION_STRATEGY,
+            ),
             timeout: Duration::from_secs(3600),
             max_archive_bytes: 2 * 1024 * 1024 * 1024,
             max_extracted_bytes: 8 * 1024 * 1024 * 1024,
             max_entries: 250_000,
+        }
+    }
+}
+
+impl OfficialExternalDataOptions {
+    /// Default options that attach prepared caches exactly when `strategy`
+    /// reads them, i.e. for [`crate::RustRedReductionStrategy::DepthFirst`].
+    pub fn for_strategy(strategy: crate::RustRedReductionStrategy) -> Self {
+        Self {
+            load_prepared_caches: super::uses_prepared_caches(strategy),
+            ..Default::default()
         }
     }
 }

@@ -17,6 +17,11 @@ fn bundled_prepared_caches_match_uncached_reductions() {
         integral_normalization_factor: LoopNormalizationFactor::FMFTandMATAD,
         form_exe_path: "/bundled-cache-must-not-use-form".into(),
         use_dot_product_notation: true,
+        // Only depth-first reduction consumes the bundled caches.
+        rustred_application_options: rustred_app::SavedApplicationOptions {
+            reduction_strategy: crate::RustRedReductionStrategy::DepthFirst,
+            ..Default::default()
+        },
         ..Default::default()
     };
     for loops in 1..=4 {

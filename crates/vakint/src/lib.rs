@@ -230,6 +230,21 @@ fn create_unique_tmp_run_dir(base_dir: Option<&str>, prefix: &str) -> std::io::R
 static MINIMAL_FORM_VERSION: &str = "4.2.1";
 static MINIMAL_PYSECDEC_VERSION: &str = "1.6.4";
 
+/// RustRed scheduler selected by [`VakintSettings::default`] and the Python
+/// bindings. The rustred library's own default remains depth-first; select
+/// [`RustRedReductionStrategy::DepthFirst`] explicitly for completed-result
+/// caches.
+pub const DEFAULT_RUSTRED_REDUCTION_STRATEGY: RustRedReductionStrategy =
+    RustRedReductionStrategy::Ordered;
+
+fn default_form_exe_path() -> String {
+    env::var("FORM_PATH").unwrap_or("form".into())
+}
+
+fn default_python_exe_path() -> String {
+    env::var("PYTHON_BIN_PATH").unwrap_or("python3".into())
+}
+
 /// Standard output of a successful `program args` run, or `None` when it
 /// cannot be started or fails. Settings validation and the default evaluation
 /// order both probe external executables, so each command runs at most once
@@ -2103,13 +2118,11 @@ pub struct EvaluationOrder(
 );
 
 impl Default for EvaluationOrder {
+    /// [`EvaluationOrder::available`] for the executables named by the
+    /// `FORM_PATH` and `PYTHON_BIN_PATH` environment variables, which default
+    /// to `form` and `python3` as in [`VakintSettings::default`].
     fn default() -> Self {
-        EvaluationOrder(vec![
-            EvaluationMethod::AlphaLoop(AlphaLoopOptions::default()),
-            EvaluationMethod::MATAD(MATADOptions::default()),
-            EvaluationMethod::FMFT(FMFTOptions::default()),
-            EvaluationMethod::PySecDec(PySecDecOptions::default()),
-        ])
+        Self::available(&default_form_exe_path(), &default_python_exe_path())
     }
 }
 
@@ -2176,8 +2189,11 @@ impl EvaluationOrder {
     pub fn empty() -> Self {
         EvaluationOrder(vec![])
     }
+    /// Every backend, RustRed first. The FORM-based backends are fallbacks for
+    /// integrals RustRed does not support or whose RustRed data is not loaded.
     pub fn all() -> Self {
         EvaluationOrder(vec![
+            EvaluationMethod::RustRed(RustRedEvaluationOptions::default()),
             EvaluationMethod::AlphaLoop(AlphaLoopOptions::default()),
             EvaluationMethod::MATAD(MATADOptions::default()),
             EvaluationMethod::FMFT(FMFTOptions::default()),
@@ -2190,6 +2206,20 @@ impl EvaluationOrder {
             EvaluationMethod::MATAD(MATADOptions::default()),
             EvaluationMethod::PySecDec(PySecDecOptions::default()),
         ])
+    }
+    /// [`EvaluationOrder::all`] restricted to the backends whose external
+    /// dependencies are usable with these executables: RustRed alone when FORM
+    /// is unavailable, and pySecDec only when it can also be imported.
+    /// Executables are probed at most once per process.
+    pub fn available(form_exe_path: &str, python_exe_path: &str) -> Self {
+        let mut order = Self::all();
+        order.0.retain(|method| {
+            method
+                .dependencies()
+                .iter()
+                .all(|dependency| dependency.version(form_exe_path, python_exe_path).is_ok())
+        });
+        order
     }
 
     pub fn adjust(
@@ -2258,7 +2288,11 @@ pub struct VakintSettings {
     pub epsilon_symbol: String,
     /// Symbol used for the squared renormalization scale.
     pub mu_r_sq_symbol: String,
-    /// Executable name or path used to invoke FORM.
+    /// Executable name or path used to invoke FORM, by default `FORM_PATH` or
+    /// `form`. FORM is optional: only the alphaLoop, MATAD, FMFT and pySecDec
+    /// backends and alphaLoop tensor reduction run it. The default evaluation
+    /// order is resolved for the default path; after changing this path, use
+    /// [`EvaluationOrder::available`] to resolve it for the new executable.
     pub form_exe_path: String,
     /// Executable name or path used to invoke Python-based backends.
     pub python_exe_path: String,
@@ -2276,6 +2310,10 @@ pub struct VakintSettings {
     /// Whether successful external-backend runs remove their temporary directories.
     pub clean_tmp_dir: bool,
     /// Ordered analytic and numerical backends considered for each integral.
+    /// The first backend supporting a matched topology evaluates it; a RustRed
+    /// entry whose four- or five-loop data is not loaded yields to a later
+    /// supporting backend. Defaults to [`EvaluationOrder::available`]: RustRed
+    /// first, then the FORM-based backends usable on this system.
     pub evaluation_order: EvaluationOrder,
     /// Optional externally supplied application package for symbolic five-loop RustRed.
     /// No package is downloaded or embedded; lower-loop artifacts are unchanged.
@@ -2285,11 +2323,13 @@ pub struct VakintSettings {
     /// be checked at their boundaries; hard deadlines require a supervisor.
     pub rustred_resources: ResourceLimits,
     /// Native reduction strategy and operational application/cache allowances.
-    /// `reduction_strategy` selects the scalar scheduler at every loop count.
+    /// `reduction_strategy` selects the scalar scheduler at every loop count
+    /// and defaults to [`DEFAULT_RUSTRED_REDUCTION_STRATEGY`] (ordered).
     /// Ordered requests use their own frontier; depth-first without memoization
     /// also recomputes every completed descendant occurrence. Both bypass DFS
-    /// result caches. No strategy enlarges the saved entry domains. Complete
-    /// factorization remains a checked action.
+    /// result caches, so cache operations require selecting
+    /// [`RustRedReductionStrategy::DepthFirst`]. No strategy enlarges the saved
+    /// entry domains. Complete factorization remains a checked action.
     pub rustred_application_options: rustred_app::SavedApplicationOptions,
     /// Per-call numerator lowering allowances for the saved five-loop lane.
     /// These do not change entry admission, legacy lower-loop programs, or
@@ -2532,20 +2572,25 @@ impl TryFrom<&LoopNormalizationFactor> for Atom {
 #[allow(clippy::derivable_impls)]
 impl Default for VakintSettings {
     fn default() -> Self {
+        let form_exe_path = default_form_exe_path();
+        let python_exe_path = default_python_exe_path();
         VakintSettings {
             epsilon_symbol: format!("{}::ε", NAMESPACE),
             mu_r_sq_symbol: format!("{}::mursq", NAMESPACE),
-            form_exe_path: env::var("FORM_PATH").unwrap_or("form".into()),
-            python_exe_path: env::var("PYTHON_BIN_PATH").unwrap_or("python3".into()),
+            evaluation_order: EvaluationOrder::available(&form_exe_path, &python_exe_path),
+            form_exe_path,
+            python_exe_path,
             verify_numerator_identification: false,
             run_time_decimal_precision: 32,
             integral_normalization_factor: LoopNormalizationFactor::pySecDec,
             allow_unknown_integrals: true,
             clean_tmp_dir: env::var("VAKINT_NO_CLEAN_TMP_DIR").is_err(),
-            evaluation_order: EvaluationOrder::default(),
             rustred_artifact_path: None,
             rustred_resources: ResourceLimits::default(),
-            rustred_application_options: rustred_app::SavedApplicationOptions::default(),
+            rustred_application_options: rustred_app::SavedApplicationOptions {
+                reduction_strategy: DEFAULT_RUSTRED_REDUCTION_STRATEGY,
+                ..Default::default()
+            },
             rustred_scalar_numerator_limits: Default::default(),
             rustred_product_limits: Default::default(),
             rustred_momentum_match_limits: Default::default(),
@@ -2636,11 +2681,8 @@ impl VakintTerm {
         // Admission checks inspect concrete powers and masses, just as they do
         // at reduction. The unmatched template still contains pow(n) slots.
         matched.apply_replacement_rules()?;
-        Ok(settings
-            .evaluation_order
-            .0
-            .iter()
-            .find(|method| method.supports(settings, &matched.canonical_topology))
+        Ok(vakint
+            .evaluation_method(settings, &matched.canonical_topology)
             .is_some_and(EvaluationMethod::stages_input_coefficients))
     }
 
@@ -2719,13 +2761,10 @@ impl VakintTerm {
         // Choose the witness before transporting the scalar numerator. A
         // finite saved union may admit only some exact family presentations;
         // ordinary/default backends keep their original matching path.
-        let scalar_rustred =
-            matches!(
-                settings.evaluation_order.0.iter().find(|method| {
-                    method.supports(settings, &integral_specs.canonical_topology)
-                }),
-                Some(EvaluationMethod::RustRed(_))
-            );
+        let scalar_rustred = matches!(
+            vakint.evaluation_method(settings, &integral_specs.canonical_topology),
+            Some(EvaluationMethod::RustRed(_))
+        );
         let scalar_five_loop =
             matches!(integral_specs.canonical_topology, Topology::FiveLoop(_)) && scalar_rustred;
         if scalar_five_loop {
@@ -2755,54 +2794,54 @@ impl VakintTerm {
         let integral_specs =
             self.prepare_integral_specs(vakint, settings, observation.as_deref_mut())?;
 
-        for evaluation_approach in &settings.evaluation_order.0 {
-            if evaluation_approach.supports(settings, &integral_specs.canonical_topology) {
-                let (evaluated_integral, stage) = match evaluation_approach {
-                    EvaluationMethod::RustRed(options) => (
-                        vakint.rustred_reduce_observed(
-                            settings,
-                            self.numerator.as_view(),
-                            &integral_specs,
-                            observation.as_deref_mut(),
-                        )?,
-                        IntegralEvaluation::RustRed {
-                            loop_count: integral_specs.canonical_topology.get_integral().n_loops,
-                            mode: options.master_mode,
-                        },
-                    ),
-                    _ => (
-                        evaluation_approach.reduce_integral(
-                            vakint,
-                            settings,
-                            self.numerator.as_view(),
-                            &integral_specs,
-                            source_id,
-                        )?,
-                        IntegralEvaluation::Complete {
-                            numerical: evaluation_approach.numerical_output(),
-                        },
-                    ),
-                };
-                // Ordered contributions share one normalization boundary after
-                // batching and before master substitution in finalize_rustred.
-                self.numerator = if matches!(evaluation_approach, EvaluationMethod::RustRed(_))
-                    && settings.rustred_application_options.reduction_strategy
-                        == RustRedReductionStrategy::Ordered
-                {
-                    evaluated_integral
-                } else {
-                    simplify_real(evaluated_integral.as_view())
-                };
-                self.integral = Atom::num(1);
-                return Ok(stage);
-            }
-        }
-        Err(VakintError::NoEvaluationMethodFound(
-            self.integral.to_string(),
-            settings.number_of_terms_in_epsilon_expansion
-                - integral_specs.canonical_topology.get_integral().n_loops as i64
-                - 1,
-        ))
+        let Some(evaluation_approach) =
+            vakint.evaluation_method(settings, &integral_specs.canonical_topology)
+        else {
+            return Err(VakintError::NoEvaluationMethodFound(
+                self.integral.to_string(),
+                settings.number_of_terms_in_epsilon_expansion
+                    - integral_specs.canonical_topology.get_integral().n_loops as i64
+                    - 1,
+            ));
+        };
+        let (evaluated_integral, stage) = match evaluation_approach {
+            EvaluationMethod::RustRed(options) => (
+                vakint.rustred_reduce_observed(
+                    settings,
+                    self.numerator.as_view(),
+                    &integral_specs,
+                    observation.as_deref_mut(),
+                )?,
+                IntegralEvaluation::RustRed {
+                    loop_count: integral_specs.canonical_topology.get_integral().n_loops,
+                    mode: options.master_mode,
+                },
+            ),
+            _ => (
+                evaluation_approach.reduce_integral(
+                    vakint,
+                    settings,
+                    self.numerator.as_view(),
+                    &integral_specs,
+                    source_id,
+                )?,
+                IntegralEvaluation::Complete {
+                    numerical: evaluation_approach.numerical_output(),
+                },
+            ),
+        };
+        // Ordered contributions share one normalization boundary after
+        // batching and before master substitution in finalize_rustred.
+        self.numerator = if matches!(evaluation_approach, EvaluationMethod::RustRed(_))
+            && settings.rustred_application_options.reduction_strategy
+                == RustRedReductionStrategy::Ordered
+        {
+            evaluated_integral
+        } else {
+            simplify_real(evaluated_integral.as_view())
+        };
+        self.integral = Atom::num(1);
+        Ok(stage)
     }
 
     pub fn apply_numerator_replacement_rules(
@@ -3215,9 +3254,7 @@ impl VakintTerm {
                 .is_some_and(|matched| {
                     matches!(matched.canonical_topology, Topology::FiveLoop(_))
                         && matches!(
-                            settings.evaluation_order.0.iter().find(|method| {
-                                method.supports(settings, &matched.canonical_topology)
-                            }),
+                            vakint.evaluation_method(settings, &matched.canonical_topology),
                             Some(EvaluationMethod::RustRed(_))
                         )
                 });
@@ -4600,11 +4637,8 @@ impl VakintExpression {
                 {
                     let matched =
                         term.prepare_integral_specs(vakint, settings, observation.as_deref_mut())?;
-                    let method = settings
-                        .evaluation_order
-                        .0
-                        .iter()
-                        .find(|method| method.supports(settings, &matched.canonical_topology))
+                    let method = vakint
+                        .evaluation_method(settings, &matched.canonical_topology)
                         .ok_or_else(|| {
                             VakintError::NoEvaluationMethodFound(
                                 term.integral.to_string(),
@@ -4949,9 +4983,18 @@ impl Vakint {
                 return Ok(Some(matched));
             }
         }
+        // Without five-loop data, RustRed yields to a configured pySecDec
+        // fallback for the unknown-integral topology, as at four loops.
+        let unknown_fallback = settings.allow_unknown_integrals
+            && settings
+                .evaluation_order
+                .0
+                .iter()
+                .any(|method| matches!(method, EvaluationMethod::PySecDec(_)));
         if needs_five_loop
             && settings.rustred_artifact_path.is_none()
             && !self.has_rustred_loop(5)
+            && !unknown_fallback
             && settings
                 .evaluation_order
                 .0
@@ -4967,6 +5010,31 @@ impl Vakint {
         } else {
             Ok(None)
         }
+    }
+
+    /// Backend evaluating a matched topology: the first entry of the evaluation
+    /// order that supports it and has its data loaded. When no supporting entry
+    /// has its data, the first supporting one is selected to report what is missing.
+    pub(crate) fn evaluation_method<'s>(
+        &self,
+        settings: &'s VakintSettings,
+        topology: &Topology,
+    ) -> Option<&'s EvaluationMethod> {
+        let mut supporting = settings
+            .evaluation_order
+            .0
+            .iter()
+            .filter(|method| method.supports(settings, topology))
+            .peekable();
+        let first = supporting.peek().copied();
+        supporting
+            .find(|method| match method {
+                EvaluationMethod::RustRed(_) => {
+                    rustred_evaluation::has_data(self, settings, topology)
+                }
+                _ => true,
+            })
+            .or(first)
     }
 
     pub fn validate_settings(&self, settings: &VakintSettings) -> Result<(), VakintError> {
@@ -8140,18 +8208,40 @@ mod tests {
     }
 
     #[test]
-    fn rustred_scalar_evaluation_is_opt_in_and_form_independent() {
-        let default_order = EvaluationOrder::default();
-        assert_eq!(default_order.0.len(), 4);
+    fn rustred_scalar_evaluation_is_default_and_form_independent() {
         assert!(matches!(
-            default_order.0.as_slice(),
+            EvaluationOrder::all().0.as_slice(),
             [
+                EvaluationMethod::RustRed(_),
                 EvaluationMethod::AlphaLoop(_),
                 EvaluationMethod::MATAD(_),
                 EvaluationMethod::FMFT(_),
                 EvaluationMethod::PySecDec(_),
             ]
         ));
+        // FORM-based backends are dropped when FORM cannot be run, and
+        // pySecDec additionally needs an importable pySecDec.
+        let without_form = EvaluationOrder::available(
+            "/default-order-test/missing-form",
+            "/default-order-test/missing-python",
+        );
+        assert_eq!(
+            without_form.to_string(),
+            EvaluationOrder::rustred_only().to_string()
+        );
+        let default_order = EvaluationOrder::default();
+        assert!(matches!(
+            default_order.0.first(),
+            Some(EvaluationMethod::RustRed(_))
+        ));
+        let form_available = VakintDependency::FORM
+            .version(&default_form_exe_path(), &default_python_exe_path())
+            .is_ok();
+        assert_eq!(default_order.0.len() > 1, form_available);
+        assert_eq!(
+            VakintSettings::default().evaluation_order.to_string(),
+            default_order.to_string()
+        );
 
         let rustred_order = EvaluationOrder::rustred_only();
         let [EvaluationMethod::RustRed(options)] = rustred_order.0.as_slice() else {

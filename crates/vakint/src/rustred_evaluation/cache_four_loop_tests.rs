@@ -37,6 +37,11 @@ fn settings(substitute_masters: bool) -> VakintSettings {
         number_of_terms_in_epsilon_expansion: 5,
         run_time_decimal_precision: 32,
         use_dot_product_notation: true,
+        // Cache tests observe depth-first completed-result caches.
+        rustred_application_options: rustred_app::SavedApplicationOptions {
+            reduction_strategy: crate::RustRedReductionStrategy::DepthFirst,
+            ..Default::default()
+        },
         ..Default::default()
     }
 }

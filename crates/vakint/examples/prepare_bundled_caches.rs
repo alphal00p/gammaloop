@@ -24,7 +24,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     let mut engine = Vakint::new()?;
     if let Some(data) = data {
-        engine.load_external_data(data, loops)?;
+        engine.load_external_data_with_prepared_caches(data, loops, true)?;
     } else if loops == 4 {
         return Err(
             "four-loop preparation requires the local external-data checkout argument".into(),

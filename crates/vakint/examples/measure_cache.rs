@@ -915,6 +915,11 @@ fn measure(options: &Options, root: &Root, identity: &Value, workload: &Workload
                 master_mode: RustRedMasterMode::Retain,
             },
         )]),
+        // Persistent and running caches belong to depth-first reduction.
+        rustred_application_options: rustred_app::SavedApplicationOptions {
+            reduction_strategy: vakint::RustRedReductionStrategy::DepthFirst,
+            ..Default::default()
+        },
         ..Default::default()
     };
     let started = Instant::now();

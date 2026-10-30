@@ -46,6 +46,7 @@ def main():
         integral_normalization_factor="1",
         rustred_cache_bytes=args.cache_gib * 1024**3,
         rustred_cache_policy=args.cache_policy,
+        rustred_reduction_strategy="depth_first",
     )
     start = perf_counter()
     engine.load_rustred_application(str(args.application))

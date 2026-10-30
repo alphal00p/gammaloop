@@ -112,7 +112,7 @@ class CommunityInteroperability(unittest.TestCase):
         artifacts = Path(os.environ["VAKINT_TEST_ARTIFACTS"])
         manifest = json.loads((artifacts / "5L/manifest.json").read_text())
         expected_cache = manifest["cache"]
-        engine = Vakint(evaluation_order=[])
+        engine = Vakint(evaluation_order=[], rustred_reduction_strategy="depth_first")
         report = engine.load_official_external_data(
             5, local_artifacts_path=os.environ["VAKINT_TEST_ARTIFACTS"]
         )
