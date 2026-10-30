@@ -574,18 +574,40 @@ pub(crate) fn evaluate_coefficient(
     parameters: &HashMap<Atom, Complex<Float>>,
     settings: &VakintSettings,
 ) -> Result<(NumericalCoefficient, Vec<PrecisionWarning>), VakintError> {
+    evaluate_coefficient_with_working_precision(
+        expression,
+        sources,
+        parameters,
+        settings,
+        settings.run_time_decimal_precision,
+    )
+}
+
+/// [`evaluate_coefficient`] with the arithmetic carried at `working` decimal
+/// digits (plus the usual guard) instead of the requested precision.
+///
+/// Warnings and the export limit still refer to the request. Callers lower
+/// `working` only when finite sources cap the result below the request anyway.
+pub(crate) fn evaluate_coefficient_with_working_precision(
+    expression: AtomView,
+    sources: &BTreeMap<Atom, FiniteSource>,
+    parameters: &HashMap<Atom, Complex<Float>>,
+    settings: &VakintSettings,
+    working: u32,
+) -> Result<(NumericalCoefficient, Vec<PrecisionWarning>), VakintError> {
     Vakint::initialize_vakint_symbols();
     for identity in parameters.keys() {
         crate::inspection::validate_parameter(identity.as_view(), None)?;
     }
     let requested = settings.run_time_decimal_precision;
-    if requested == 0 {
+    if requested == 0 || working == 0 {
         return Err(VakintError::NumericalPrecision(
             "requested decimal precision must be positive".into(),
         ));
     }
     let bits = decimal_bits(
-        requested
+        working
+            .min(requested)
             .checked_add(32)
             .ok_or_else(|| VakintError::NumericalPrecision("working precision overflow".into()))?,
     );

@@ -113,6 +113,114 @@ products and normalization, after exact cancellation. Missing entries are not ze
 Errors name the integral, coefficient power, requested capability, available data,
 and package version. This source-data check is not a final-result error estimate.
 
+Records of `constants.json` may carry `symbolic_definition`, the defining
+integral printed by Symbolica with full namespaces in the inert heads of
+#link("masters.typ")[the masters documentation]. The prose `definition` field is
+unchanged. The loader parses it, requires every variable to be bound and every
+head to be admitted, and compares it with the definition reconstructed from the
+record's `definition_metadata` when that exists; a different loop-momentum
+routing of the same propagators, related by a linear change of loop momenta
+with unit Jacobian, agrees. Unparseable, unbound or contradicting definitions
+reject the pack. A recorded definition must be explicit: it may not reference
+another named constant (no `vakint` constant, HPL, GPL or master symbol, and
+`zeta`/`polylog` only as the complete definition of that standard function), and
+every normalization factor is written out. The data definition is authoritative
+for its symbol. Names of built-in constants, such as `cl2`, `cl4`, `D5bar1`,
+`D5bar2`, `D6bar1`, `D6bar2`, `T111bar4`, `BNbar4`, `D6`, `T1ep`, `T1ep2` or `S2`,
+cannot be redefined by a record. Packs without the field remain valid:
+the four `K5Moment`/`K5LogMoment` records and the `PR7D2`, `PR10D2`, `PR15D2`,
+`PR7D2Eps1` and `PR10D2Eps1` periods use that reconstruction, and any other
+record is returned without a definition, with the reason, on inspection.
+
+Built-in identities are reserved. This version adds the built-in constants
+`log(q)` for every positive rational `q ≠ 1`, `cl4`, `D5bar1`, `D5bar2`, `D6bar1`,
+`D6bar2`, `T111bar4` and `BNbar4` (the last one is a convenience consistent with
+`matad.rs`, not a basis generator). Formulas should use these names directly:
+`validate_parameter` rejects them as runtime parameter names, and a
+`constants.json` record with one of these identities, with another built-in
+identity, or with a definition head (`Integral`, `Interval`, `LoopIntegral`,
+`SeriesCoefficient`, `EuclideanDot`) rejects the pack as an invalid finite
+constant identity. The loader also rejects the pack when a `symbolic_definition`
+is unparseable, has a free symbol or an unadmitted head, is an inexact number,
+references another named constant or contradicts the reconstruction from
+`definition_metadata`, and when that metadata is inconsistent with the symbol
+(a `K5Moment`/`K5LogMoment` record whose metadata states another power, or a
+`PR7D2`/`PR10D2`/`PR15D2`/`PR7D2Eps1`/`PR10D2Eps1` record whose Taylor order,
+dimension, family or powers disagree with its name and the manifest). Packs that satisfy
+these rules, including `ca49f328` and later, load unchanged.
+
+The constant card states the normalization of each definition class:
+
+#table(
+  columns: (1fr, 1.3fr, 2.4fr),
+  [*Class*], [*Examples*], [*Normalisation*],
+  [Elementary and polylogarithmic numbers],
+  [`𝜋`, `γ`, `zeta(n)`, `log(q)`, `polylog(n,q)`, `s6weak`],
+  [Plain real number given by the convergent integral shown, first interval
+   outermost; no loop measure and no further factor.],
+  [Clausen values],
+  [`cl2`, `cl4`, `S2`],
+  [`Cl_n(π/3) = Im Li_n(exp(i π/3))`, with `Cl_2(π/3) = -∫_0^(π/3) log(2 sin(t/2)) dt`
+   and `S2 = 4/(9√3) Cl_2(π/3)`; plain real numbers.],
+  [HPL projections],
+  [`HR(w, z)`, `HI(w, z)`],
+  [Real or imaginary part of `H(w; z)` at `z = (1±i√3)/2` on the straight path
+   `t = z s`, `1 > s_1 > … > 0`; letters `1/t`, `1/(1-t)`, `1/(1+t)`; trailing zeros
+   become `log(z s)^m/m!` on the principal branch.],
+  [GPL and polylogarithm projections],
+  [`GPLReal`, `GPLImag`, `PolylogReal`, `PolylogImag`],
+  [Real or imaginary part of `G(a_1,…,a_n; 1) = ∫_(1>t_1>…>t_n>0) ∏ dt_i/(t_i-a_i)`,
+   resp. `Li_n(z) = z/(n-1)! ∫_0^1 (-log t)^(n-1)/(1-z t) dt`.],
+  [Bessel moments],
+  [`K5Moment(k)`, `K5LogMoment(k)`, `K5MomentTaylor(k, j)`],
+  [`∫_0^∞ t^k K_0(t)^5 dt`; `3 ∫_0^∞ t^k K_0(t)^5 (log t + γ - log 2) dt`; the
+   coefficient of `ε^j` of the Taylor expansion (not the derivative) of
+   `(e^γ/2)^(3ε) ∫_0^∞ t^(k+3ε) K_ε(t)^5 dt`.],
+  [MATAD masters],
+  [`D6`, `T1ep`, `T1ep2`, MATAD `NumericalSource` leaves],
+  [Euclidean measure `d^d k/π^(d/2)` per loop, `d = 4-2ε`, unit masses, no sign,
+   factor `e^(γε)` per loop; the coefficient of `ε^n` of the Laurent expansion,
+   not the derivative.],
+  [MATAD bars],
+  [`D5bar1`, `D5bar2`, `D5bar3`, `D6bar1`, `D6bar2`, `T111bar4`, `T111bar5`,
+   `BNbar4`, `BNbar5`],
+  [The coefficient of `ε^n` (not the derivative) of the `matad.rs` prefactor
+   times `LoopIntegral(4-2ε, …)` (measure `d^d k/π^(d/2)` per loop, no sign):
+   `(1-2ε)(1-ε) e^(3γε)` for D5 and D6; `(1-ε)(1-2ε)(1-3ε)(2-3ε) Γ(1+ε)^(-3)`
+   for BN and `√3 (1-2ε)(ε-1) Γ(1+ε)^(-2)` for T111, with no `e^(γε)` factor
+   because the explicit `e^(-Lγε)` of `matad.rs` cancels the per-loop `e^(γε)`
+   of the MATAD master.],
+  [Public four-loop masters],
+  [`PR4fin`, `PR4dfin`, `PR11dep0`, `PR4ep1`, `PR4dep1`, `PR14ep2`, `PR14ep3`,
+   FMFT `NumericalSource` leaves],
+  [Minkowski measure `(i π^(d/2) e^(-γε))^(-1)` per loop written as
+   `(-1)^(Σa) e^(4γε) LoopIntegral(4-2ε, ∏ D_E^(-a))`, unit masses; the
+   coefficient of `ε^n` of the Laurent expansion, not the derivative.],
+  [`D = 2` periods],
+  [`PR7D2`, `PR10D2`, `PR15D2`],
+  [`LoopIntegral(2, ∏ 1/(q_E²+1))`: measure `d^2 k/π` per loop, unit masses,
+   positive (hat) sign convention without `(-1)^(Σa)`, no exponential factor.],
+  [`D = 2-2δ` jets],
+  [`PR7D2Eps1`, …, `PR11dD2Eps4`, `PR0D2Eps2`],
+  [The coefficient of `δ^n` of the Taylor expansion (not the derivative) of
+   `e^(Lγδ) LoopIntegral(2-2δ, ∏ 1/(q_E²+1))`: measure `d^D k/π^(D/2)` per
+   loop, unit masses, positive (hat) sign convention, `e^(4γδ)` for four loops.],
+  [No definition],
+  [runtime inputs, pySecDec estimates, AlphaLoop literals, `PR3ep2`, `PR13ep1`],
+  [`definition` is `None`; the value is the recorded source value and
+   `definition_unavailable_reason` states why.],
+)
+
+For a definition built from `LoopIntegral` the statement is not looked up by
+name: it is derived from the definition itself. It names the coefficient taken,
+the measure and dimension, the number of loops, the propagators with their
+masses and `Σa`, and every factor in front of the integral (sign, `e^(Lγε)`,
+`Γ` factors, polynomials, added terms), and ends with "No other factor". Its
+label states the convention those factors realise (public Vakint/FMFT master,
+MATAD master, MATAD bar with the matching `matad.rs` prefactor, `D = 2` period
+or `D = 2-2δ` jet), or "Loop integral with explicit factors" when none applies;
+a statement therefore never contradicts its definition.
+
 HPLs at `exp(±i*pi/3)` use Symbolica's arbitrary-precision numerical algorithms.
 The same evaluator supplies FORM-backed HPL substitution. Finite constants without
 an evaluatable exact definition retain explicit numerical precision; resizing a

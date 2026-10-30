@@ -78,6 +78,15 @@ class PrecisionInspectionSmoke(unittest.TestCase):
         self.assertGreaterEqual(constant.precision.real.significant_digits, 32)
         self.assertTrue(constant.precision.imaginary.exact_zero)
         self.assertTrue(constant.provenance.version)
+        self.assertIsInstance(constant.definition, core.Expression)
+        self.assertIn("Integral(", str(constant.definition))
+        self.assertIsNone(constant.definition_unavailable_reason)
+        self.assertTrue(constant.normalisation.startswith("Plain real number"))
+        with self.assertRaises(AttributeError):
+            constant.definition = constant.definition
+        with self.assertRaises(AttributeError):
+            constant.normalisation = ""
+        self.assertIn("Normalisation", str(constant))
         self.assertIn("Vakint constant", repr(constant))
         self.assertIn("Available precision", str(constant))
         with self.assertRaises(AttributeError):

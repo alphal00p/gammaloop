@@ -312,6 +312,26 @@ pub(crate) fn original_source(part: AtomView) -> Result<Option<Atom>, VakintErro
     Ok(decode(part)?.map(|source| source.original))
 }
 
+/// The authenticated table position of a leaf: which literal of which table
+/// entry, at which epsilon order and complex component, it denotes.
+pub(crate) struct SourceIdentity {
+    pub backend: String,
+    pub original: Atom,
+    pub ordinal: usize,
+    pub order: i64,
+    pub component: i64,
+}
+
+pub(crate) fn source_identity(part: AtomView) -> Result<Option<SourceIdentity>, VakintError> {
+    Ok(decode(part)?.map(|source| SourceIdentity {
+        backend: source.backend,
+        original: source.original,
+        ordinal: source.ordinal,
+        order: source.order,
+        component: source.component,
+    }))
+}
+
 /// Runtime literals retain their binary accuracy, including less than one
 /// complete decimal digit after cancellation in the caller's Float algebra.
 pub(super) fn input_value(part: AtomView) -> Result<Option<Float>, VakintError> {

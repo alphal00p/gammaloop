@@ -1069,6 +1069,139 @@ mod tests {
     }
 
     #[test]
+    fn finite_constant_symbolic_definitions_are_validated_and_checked_against_metadata() {
+        use symbolica::atom::AtomCore;
+        let original = RustRedData::vendored().unwrap();
+        let load = |rows: Vec<serde_json::Value>| {
+            let bytes = serde_json::to_vec(&rows).unwrap();
+            let digest = format!("{:x}", Sha256::digest(&bytes));
+            let mut pack = (*original.loops[&1]).clone();
+            pack.manifest.constant_bindings = Some(FileReference {
+                path: "constants.json".into(),
+                sha256: digest.clone(),
+            });
+            pack.manifest.files.insert(
+                "constants.json".into(),
+                FileDigest {
+                    sha256: digest,
+                    bytes: bytes.len() as u64,
+                },
+            );
+            pack.source = Source::Override {
+                original: Arc::new(pack.source),
+                path: "1L/constants.json".into(),
+                bytes: bytes.into(),
+            };
+            super::super::masters::MasterCatalog::load(
+                &BTreeMap::from([(1, Arc::new(pack))]),
+                "test-definitions",
+            )
+        };
+        let record = |symbol: &str, definition: Option<&str>| {
+            let mut value = serde_json::json!({
+                "symbol": symbol, "value": "1.25",
+                "significant_digits": 30, "absolute_error": "1e-31", "error_quality": "bounded",
+                "definition": "certified test constant", "provenance": {"certificate": "test-proof"}
+            });
+            if let Some(definition) = definition {
+                value["symbolic_definition"] = definition.into();
+            }
+            value
+        };
+        let moment = vakint_parse!("K5Moment(1)").unwrap();
+        let expected = crate::inspection::definitions::external_fallback(
+            &moment,
+            &serde_json::Value::Null,
+            &[],
+        )
+        .unwrap()
+        .unwrap();
+
+        // Absent: the legacy reconstruction applies. Present: it must agree.
+        let absent = load(vec![record("vakint::K5Moment(1)", None)]).unwrap();
+        assert_eq!(absent.constant_definitions[&moment], expected);
+        let text = expected.to_canonical_string();
+        let present = load(vec![record("vakint::K5Moment(1)", Some(&text))]).unwrap();
+        assert_eq!(present.constant_definitions[&moment], expected);
+        assert_ne!(
+            absent.coefficient_snapshot_tag(),
+            present.coefficient_snapshot_tag()
+        );
+
+        // A new name without metadata is defined only by its record.
+        let custom = "vakint::Integral(vakint::t^2,vakint::Interval(vakint::t,0,1))";
+        let catalog = load(vec![record("vakint::new_period", Some(custom))]).unwrap();
+        assert_eq!(
+            catalog.constant_definitions[&vakint_parse!("new_period").unwrap()],
+            vakint_parse!(custom).unwrap()
+        );
+        let undefined = load(vec![record("vakint::new_period", None)]).unwrap();
+        assert!(undefined.constant_definitions.is_empty());
+
+        for (symbol, definition, reason) in [
+            ("vakint::new_period", "vakint::Integral(", "unparseable"),
+            (
+                "vakint::new_period",
+                "vakint::Integral(vakint::t*vakint::mass,vakint::Interval(vakint::t,0,1))",
+                "free symbol",
+            ),
+            (
+                "vakint::new_period",
+                "vakint::Integral(vakint::K5Moment(1),vakint::Interval(vakint::t,0,1))",
+                "not admitted",
+            ),
+            ("vakint::new_period", "2.5`30", "exact"),
+            // An explicit definition never refers to another named constant.
+            (
+                "vakint::new_period",
+                "4/27*3^(1/2)*vakint::cl2",
+                "must not reference another named constant",
+            ),
+            (
+                "vakint::new_period",
+                "vakint::Integral(symbolica::zeta(3)*vakint::t,vakint::Interval(vakint::t,0,1))",
+                "must not reference another named constant",
+            ),
+            (
+                "vakint::new_period",
+                "vakint::SeriesCoefficient(vakint::HR(1,0,vakint::om1)*vakint::ep,vakint::ep,0,1)",
+                "must not reference another named constant",
+            ),
+            // Built-in constants cannot be redefined by data.
+            (
+                "vakint::D6bar1",
+                "vakint::Integral(vakint::t^2,vakint::Interval(vakint::t,0,1))",
+                "invalid finite constant identity",
+            ),
+            (
+                "vakint::cl4",
+                "vakint::Integral(vakint::t^2,vakint::Interval(vakint::t,0,1))",
+                "invalid finite constant identity",
+            ),
+            (
+                "vakint::K5Moment(1)",
+                "vakint::Integral(vakint::t^3*symbolica::bessel_k(0,vakint::t)^5,vakint::Interval(vakint::t,0,∞))",
+                "contradicts",
+            ),
+        ] {
+            let error = load(vec![record(symbol, Some(definition))])
+                .unwrap_err()
+                .to_string();
+            assert!(error.contains(reason), "{definition}: {error}");
+        }
+        let mut contradicting = record("vakint::K5Moment(1)", None);
+        contradicting["provenance"]["definition_metadata"] = serde_json::json!({"power": 3});
+        assert!(
+            load(vec![contradicting])
+                .unwrap_err()
+                .to_string()
+                .contains("inconsistent definition metadata")
+        );
+        let reserved = record("vakint::Integral(1)", None);
+        assert!(load(vec![reserved]).is_err());
+    }
+
+    #[test]
     fn vendored_master_inspection_returns_native_graph_and_all_orders() {
         let engine = Vakint::new().unwrap();
         let data = engine.rustred_data().unwrap();

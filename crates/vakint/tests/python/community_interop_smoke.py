@@ -70,6 +70,8 @@ class CommunityInteroperability(unittest.TestCase):
             self.assertIsInstance(constant.numerical_value, Float)
             self.assertEqual(constant.available_precision.kind, "ArbitraryPrecision")
             self.assertIn("Vakint constant", constant.to_html())
+            self.assertIn("Definition", constant.to_html())
+            self.assertIn("Normalisation", constant.to_html())
             master = next(
                 candidate
                 for symbol in engine.master_symbols()

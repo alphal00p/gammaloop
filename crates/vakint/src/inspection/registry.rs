@@ -10,10 +10,12 @@ use symbolica::{
 
 use super::{
     ConstantSymbol, DataProvenance, FiniteSource, InspectionError, MasterCoefficient, MasterSymbol,
-    MasterSymbolicExpression, PreparedExpression, VakintConstant, VakintMaster, constants, graph,
+    MasterSymbolicExpression, PreparedExpression, VakintConstant, VakintMaster, constants,
+    definitions, graph,
 };
 use crate::{
-    VakintError, VakintSettings, precision,
+    VakintError, VakintSettings,
+    precision::{self, NumericalCoefficient, PrecisionWarning},
     rustred_evaluation::{
         RustRedEvaluationError,
         masters::{Master, MasterCatalog, combine_exact},
@@ -27,6 +29,9 @@ fn invalid(detail: impl std::fmt::Display) -> VakintError {
     }
     .into()
 }
+
+/// Decimal digits carried beyond a finite cap when a request exceeds it.
+const CAPPED_EVALUATION_GUARD_DIGITS: u32 = 64;
 
 // These names identify recorded coefficients, not independent decimal tables.
 const PERIOD_BINDINGS: [(&str, &str, i64); 5] = [
@@ -150,6 +155,82 @@ impl MasterCatalog {
                 })
         });
         Ok(candidate.map(|(master, _)| self.coefficient_symbol(master, power)))
+    }
+
+    /// The defining integral of a constant admitted by [`Self::get_constant`].
+    ///
+    /// Historical table leaves come first, then authenticated external records,
+    /// recorded period aliases and finally the built-in constants. A constant
+    /// without a definition is an error, never a placeholder.
+    pub(crate) fn constant_definition(&self, symbol: AtomView<'_>) -> Result<Atom, VakintError> {
+        let undefined = |reason: &str| -> VakintError {
+            InspectionError::UndefinedConstant {
+                symbol: symbol.to_canonical_string(),
+                reason: reason.into(),
+            }
+            .into()
+        };
+        if let Some(definition) = definitions::legacy_source(symbol)? {
+            return Ok(definition);
+        }
+        if let Some((identity, _)) = self.constant_source(symbol)? {
+            return self.constant_definitions.get(identity).cloned().ok_or_else(|| {
+                undefined("its external data record has no symbolic_definition and no recorded fallback")
+            });
+        }
+        if let Some(definition) = self.period_definition(symbol)? {
+            return Ok(definition);
+        }
+        definitions::builtin(symbol)?.ok_or_else(|| undefined("it is not a registered constant"))
+    }
+
+    /// A recorded period alias is the stated Laurent coefficient of its bound master.
+    /// Authenticated family data define the integral; otherwise the FMFT basis name does.
+    fn period_definition(&self, symbol: AtomView<'_>) -> Result<Option<Atom>, VakintError> {
+        let Some((_, basis, power)) = PERIOD_BINDINGS
+            .into_iter()
+            .find(|(name, _, _)| symbol == Atom::var(vk_symbol!(name)).as_view())
+        else {
+            return Ok(None);
+        };
+        let Some(binding) = self.period_binding(symbol)? else {
+            return Ok(None);
+        };
+        let (master, _, bound_power) = self.coefficient(&binding)?;
+        let family = master.data.as_ref().and_then(|data| {
+            data.manifest
+                .families
+                .iter()
+                .find(|family| family["sha256"] == master.metadata["family_sha256"])
+        });
+        let powers = master.metadata["powers"].as_array().map(|powers| {
+            powers
+                .iter()
+                .map(|power| power.as_i64())
+                .collect::<Option<Vec<_>>>()
+        });
+        let definition = match (family, powers) {
+            (Some(family), Some(Some(powers))) => {
+                if let Some(normalization) =
+                    master.metadata["graph_definition"]["normalization"].as_str()
+                    && normalization
+                        != format!(
+                            "(i*pi^(d/2)*exp(-EulerGamma*epsilon))^(-{})",
+                            master.loop_count
+                        )
+                {
+                    return Err(invalid(format!(
+                        "period {symbol} is bound to a master with normalization {normalization}"
+                    )));
+                }
+                definitions::EuclideanFamily::from_json(family)
+                    .and_then(|family| family.public_master(&powers, bound_power))
+                    .map_err(|detail| invalid(format!("period {symbol}: {detail}")))?
+            }
+            _ => definitions::fmft_master(basis, power)
+                .ok_or_else(|| invalid(format!("period {symbol} has no FMFT master definition")))?,
+        };
+        Ok(Some(definition))
     }
 
     /// Bind finite leaves without expanding definitions or selecting numerical payloads.
@@ -643,28 +724,24 @@ impl MasterCatalog {
             }
             .into());
         }
+        // A missing definition never hides the value: legacy runtime inputs,
+        // estimates and truncated table literals keep their numbers.
+        let (definition, definition_unavailable_reason) =
+            match self.constant_definition(symbol.as_atom().as_view()) {
+                Ok(definition) => (Some(definition), None),
+                Err(error) => {
+                    log::debug!("constant {symbol} has no definition: {error}");
+                    (None, Some(error.to_string()))
+                }
+            };
+        let normalisation = definitions::normalisation(
+            symbol.as_atom().as_view(),
+            definition.as_ref(),
+            definition_unavailable_reason.as_deref(),
+        );
         let prepared = self.prepare_evaluation(symbol.as_atom().clone())?;
         let available_precision = prepared.available_precision();
-        let settings = VakintSettings {
-            run_time_decimal_precision: prec,
-            ..Default::default()
-        };
-        let (number, mut warnings) = precision::evaluate_coefficient(
-            prepared.expression.as_view(),
-            &prepared.sources,
-            &HashMap::new(),
-            &settings,
-        )?;
-        let cap = match available_precision {
-            precision::AvailablePrecision::FixedPrecision(cap) => cap.min(prec),
-            precision::AvailablePrecision::ArbitraryPrecision => prec,
-        };
-        let number = number.capped_decimal_precision(cap);
-        for warning in &mut warnings {
-            if warning.achieved_decimal_precision.is_some() {
-                warning.achieved_decimal_precision = number.precision().real().significant_digits();
-            }
-        }
+        let (number, mut warnings) = Self::evaluate_prepared(&prepared, prec)?;
         number.real_midpoint()?;
         let mut provenance = prepared.sources.values().next().map_or_else(
             || DataProvenance {
@@ -696,6 +773,9 @@ impl MasterCatalog {
 
         Ok(VakintConstant {
             symbol,
+            definition,
+            definition_unavailable_reason,
+            normalisation,
             requested_decimal_precision: prec,
             available_precision,
             numerical: number,
@@ -703,6 +783,40 @@ impl MasterCatalog {
             provenance,
             _snapshot: Arc::clone(self),
         })
+    }
+
+    /// Evaluate a prepared coefficient and cap it at its available precision.
+    ///
+    /// Finite sources cap the result below an unreachable request, so the
+    /// arithmetic stops [`CAPPED_EVALUATION_GUARD_DIGITS`] beyond that cap: a
+    /// 20,000-digit request for a 520-digit formula then costs about as much as
+    /// a 584-digit evaluation. Warnings still report the request.
+    fn evaluate_prepared(
+        prepared: &PreparedExpression,
+        prec: u32,
+    ) -> Result<(NumericalCoefficient, Vec<PrecisionWarning>), VakintError> {
+        let cap = match prepared.available_precision() {
+            precision::AvailablePrecision::FixedPrecision(cap) => cap.min(prec),
+            precision::AvailablePrecision::ArbitraryPrecision => prec,
+        };
+        let settings = VakintSettings {
+            run_time_decimal_precision: prec,
+            ..Default::default()
+        };
+        let (number, mut warnings) = precision::evaluate_coefficient_with_working_precision(
+            prepared.expression.as_view(),
+            &prepared.sources,
+            &HashMap::new(),
+            &settings,
+            cap.saturating_add(CAPPED_EVALUATION_GUARD_DIGITS).min(prec),
+        )?;
+        let number = number.capped_decimal_precision(cap);
+        for warning in &mut warnings {
+            if warning.achieved_decimal_precision.is_some() {
+                warning.achieved_decimal_precision = number.precision().real().significant_digits();
+            }
+        }
+        Ok((number, warnings))
     }
 
     pub(crate) fn get_master(
@@ -720,30 +834,10 @@ impl MasterCatalog {
             })?;
         let graph = graph::master_graph(data, &master.metadata)?;
         let mut coefficients = BTreeMap::new();
-        let settings = VakintSettings {
-            run_time_decimal_precision: prec,
-            ..Default::default()
-        };
         for (&power, coefficient) in &master.coefficients {
             let identity = self.coefficient_symbol(&symbol, power);
             let prepared = self.prepare_evaluation(identity.clone())?;
-            let (number, mut warnings) = precision::evaluate_coefficient(
-                prepared.expression.as_view(),
-                &prepared.sources,
-                &HashMap::new(),
-                &settings,
-            )?;
-            let cap = match prepared.available_precision() {
-                precision::AvailablePrecision::FixedPrecision(cap) => cap.min(prec),
-                precision::AvailablePrecision::ArbitraryPrecision => prec,
-            };
-            let number = number.capped_decimal_precision(cap);
-            for warning in &mut warnings {
-                if warning.achieved_decimal_precision.is_some() {
-                    warning.achieved_decimal_precision =
-                        number.precision().real().significant_digits();
-                }
-            }
+            let (number, mut warnings) = Self::evaluate_prepared(&prepared, prec)?;
             precision::attach_origins(
                 &mut warnings,
                 &prepared.origins,

@@ -28,6 +28,8 @@ pub struct VakintSymbols {
     pub dot: Symbol,
     pub dot_pow: Symbol,
     pub vkdot: Symbol,
+    /// Euclidean scalar product inside constant definitions; distinct from `dot`.
+    pub euclidean_dot: Symbol,
     pub g: Symbol,
     pub g_form: Symbol,
     pub x: Symbol,
@@ -86,6 +88,9 @@ pub static S: LazyLock<VakintSymbols> = LazyLock::new(|| VakintSymbols {
     dot_pow: vk_symbol!("dot_pow"),
     vkdot: symbol!(
         format!("{}::vkdot",crate::NAMESPACE);  Symmetric, Linear
+    ),
+    euclidean_dot: symbol!(
+        format!("{}::EuclideanDot",crate::NAMESPACE); Symmetric, Linear
     ),
     g: symbol!(format!("{}::{}",crate::NAMESPACE,METRIC_SYMBOL); Symmetric),
     g_form: symbol!(format!("{}::g",crate::NAMESPACE); Symmetric),
@@ -153,6 +158,7 @@ pub static SYMBOL_REGISTRY: LazyLock<HashSet<Symbol>> = LazyLock::new(|| {
         s.dot,
         s.dot_pow,
         s.vkdot,
+        s.euclidean_dot,
         s.g,
         s.g_form,
         s.x,

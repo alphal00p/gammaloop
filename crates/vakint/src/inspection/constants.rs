@@ -28,6 +28,43 @@ const NAMED_CONSTANTS: &[&str] = &[
     "EulerGamma",
 ];
 
+/// Higher MATAD expansion coefficients exposed as named constants: the public
+/// name, the `matad.rs` coefficient family and its order. Their exact values
+/// are the tabulated HPL combinations of `matad::MASTERS_SUBSTITUTION`.
+/// `BNbar4` is a convenience consistent with `matad.rs`; it is not
+/// independent of `Li_6(1/2)`, `s6weak` and the classical constants.
+pub(crate) const MATAD_BARS: [(&str, &str, i64); 6] = [
+    ("D5bar1", "D5bar", 1),
+    ("D5bar2", "D5bar", 2),
+    ("D6bar1", "D6bar", 1),
+    ("D6bar2", "D6bar", 2),
+    ("T111bar4", "T111bar", 4),
+    ("BNbar4", "BNbar", 4),
+];
+
+/// `Cl_4(π/3) = Im Li_4(e^(iπ/3))`.
+fn clausen4() -> Atom {
+    vk_symbol!("PolylogImag").call((Atom::num(4), positive_sixth_root()))
+}
+
+fn positive_sixth_root() -> Atom {
+    (Atom::num(1) + Atom::num(3).pow((1, 2)) * Atom::i()) / Atom::num(2)
+}
+
+/// A positive rational other than one: its logarithm is a real constant.
+fn positive_rational(argument: AtomView) -> bool {
+    let AtomView::Num(number) = argument else {
+        return false;
+    };
+    let value = number.get_coeff_view();
+    matches!(
+        value,
+        CoefficientView::Natural(..) | CoefficientView::Large(..)
+    ) && value.is_real()
+        && value > CoefficientView::Natural(0, 1, 0, 1)
+        && value != CoefficientView::Natural(1, 1, 0, 1)
+}
+
 fn invalid(source: AtomView, detail: &str) -> VakintError {
     VakintError::EvaluationError(format!("constant {source}: {detail}"))
 }
@@ -87,6 +124,16 @@ pub(crate) fn builtin_definition(source: AtomView<'_>) -> Result<Option<Atom>, V
             if symbol == vk_symbol!("T1ep") || symbol == vk_symbol!("T1ep2") {
                 return sunset_coefficient(symbol == vk_symbol!("T1ep2")).map(Some);
             }
+            if symbol == vk_symbol!("cl4") {
+                return Ok(Some(clausen4()));
+            }
+            if let Some((_, family, order)) = MATAD_BARS
+                .iter()
+                .find(|(name, _, _)| symbol == vk_symbol!(name))
+            {
+                let value = matad_coefficient(family, *order)?;
+                return hpl::normalize_constants(value.as_view()).map(Some);
+            }
             if NAMED_CONSTANTS
                 .iter()
                 .any(|name| symbol == vk_symbol!(name))
@@ -133,6 +180,15 @@ pub(crate) fn builtin_definition(source: AtomView<'_>) -> Result<Option<Atom>, V
                     "expected the square root of a nonnegative integer",
                 ));
             }
+            if symbol == Symbol::LOG {
+                // log(q) of a positive rational is a real constant (log 2, log 3).
+                // Other logarithms are ordinary expression parts.
+                let arguments = function.iter().collect::<Vec<_>>();
+                return Ok(match arguments.as_slice() {
+                    [argument] if positive_rational(*argument) => Some(source.to_owned()),
+                    _ => None,
+                });
+            }
             if symbol == polylog() {
                 let arguments = function.iter().collect::<Vec<_>>();
                 // A public constant must be real. Ordinary polylog calls can
@@ -173,7 +229,13 @@ pub(crate) fn builtin_symbols() -> Vec<Atom> {
         Atom::var(Symbol::PI),
         Atom::var(Symbol::E),
         Atom::var(euler_gamma()),
+        Atom::var(vk_symbol!("cl4")),
     ]);
+    symbols.extend(
+        MATAD_BARS
+            .iter()
+            .map(|(name, _, _)| Atom::var(vk_symbol!(name))),
+    );
     for expression in matad::MASTERS_SUBSTITUTION.values() {
         expression.visitor(&mut |part| {
             if let AtomView::Fun(function) = part
