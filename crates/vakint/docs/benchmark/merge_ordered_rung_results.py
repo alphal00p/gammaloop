@@ -920,6 +920,157 @@ def append(base, run_id, receipts, protocol=None, historical_receipts=()):
     return result
 
 
+def append_diagnostic(base, diagnostic_id, observations, note, functional_ci=None):
+    """Append completed observations separately from qualified comparisons.
+
+    Inputs are hashed existing functional receipt references. This does not run
+    an equality check, qualify performance, or infer missing observations.
+    """
+    require(
+        diagnostic_id not in base.get("ordered_rung_diagnostics", {}),
+        "diagnostic ID exists",
+    )
+    reports = {}
+    proof = None
+    if functional_ci is not None:
+        proof_path = Path(functional_ci).resolve()
+        proof = read(proof_path)
+        require(
+            proof["schema"] == "vakint.four-loop-functional-ci-case-completion.v1"
+            and proof["status"] == "PASS"
+            and proof["performance_eligible"] is False
+            and proof["test"] == "four_loop_zero_momentum_rung_engine_parity",
+            "missing accepted functional CI proof",
+        )
+    for arm, reference in observations.items():
+        require(
+            arm in ("dfs", "ordered"),
+            "diagnostics only describe actually completed arms",
+        )
+        receipt_path = Path(reference).resolve()
+        receipt = read(receipt_path)
+        if proof is not None:
+            require(receipt_path == proof_path, "functional pair receipt differs")
+            report_ref = receipt["reports"][arm]["report"]
+            completion_ref = receipt["completion"]
+            source = receipt["source_revision"]
+        else:
+            require(
+                receipt["schema"]
+                in (
+                    "vakint.ordered-rung-manual-reference-receipt.v1",
+                    "vakint.ordered-rung-functional-probe-receipt.v1",
+                )
+                and receipt["success"] is True
+                and receipt["status"] == "PASS-functional-catalogue-closure-only",
+                "missing completed functional observation",
+            )
+            report_ref, completion_ref, source = (
+                receipt["report"],
+                receipt["guard_completion"],
+                receipt["main_revision"],
+            )
+        require(
+            re.fullmatch(r"[0-9a-f]{40}", source),
+            "diagnostic source identity is malformed",
+        )
+        report_path = referenced(report_ref, receipt_path.parent)
+        raw = read(report_path)
+        completion_path = referenced(completion_ref, receipt_path.parent)
+        completion = read(completion_path)
+        require(
+            completion["success"] is True
+            and type(completion["exit_code"]) is int
+            and completion["exit_code"] == 0
+            and completion["failure"] is None
+            and completion["signals_sent_to_original_pidfd"] == [],
+            "diagnostic worker did not complete successfully",
+        )
+        require(
+            raw["schema"] == "vakint.ordered-rung-comparison.v1"
+            and raw["strategy"] == PAIR_ARMS[arm]
+            and raw["loop_count"] == 4
+            and raw["normalization"] == "MSbar"
+            and raw["reduction_completed"] is True
+            and raw["persistent_cache"] is False
+            and raw["catalogue_closure"]["closed"] is True
+            and raw["catalogue_closure"]["unknown"] == []
+            and raw["catalogue_closure"]["unknown_count"] == 0,
+            "diagnostic result is incomplete or has incompatible conventions",
+        )
+        if proof is not None:
+            require(
+                raw["numerical_reference"] is not None
+                and raw["numerical_reference"]["coefficients"],
+                "functional numeric proof lacks saved coefficients",
+            )
+        payload = raw["retained"]
+        retained_path = referenced(
+            {"path": payload["file"], "sha256": payload["sha256"]}, report_path.parent
+        )
+        require(
+            retained_path.stat().st_size == payload["bytes"],
+            "diagnostic payload size differs",
+        )
+        reports[arm] = {
+            "receipt": {"evidence": evidence(receipt_path), "raw": receipt},
+            "report": {"evidence": evidence(report_path), "raw": raw},
+            "completion": {"evidence": evidence(completion_path), "raw": completion},
+            "source_revision": source,
+            "reduction_math_seconds": reduction_math(raw),
+            "public_retained_seconds": seconds(raw["retained_reduction_seconds"]),
+            "guard_elapsed_seconds": seconds(completion["elapsed_seconds"]),
+        }
+    require(
+        set(reports) == {"dfs", "ordered"},
+        "diagnostic status requires both completed observations",
+    )
+    dfs, ordered = (reports[arm]["report"]["raw"] for arm in ("dfs", "ordered"))
+    for field in (
+        "projection",
+        "input_sha256",
+        "evaluated_input_sha256",
+        "dimension_binding",
+        "data",
+        "normalization",
+    ):
+        require(dfs[field] == ordered[field], f"diagnostic {field} differs")
+    if proof is not None:
+        for field in ("point", "epsilon_range"):
+            require(
+                dfs["numerical_reference"][field]
+                == ordered["numerical_reference"][field],
+                f"functional numerical {field} differs",
+            )
+        require(
+            dfs["numerical_reference"]["selection"]["requested_decimal_precision"]
+            == ordered["numerical_reference"]["selection"][
+                "requested_decimal_precision"
+            ]
+            and source_cap(dfs["numerical_reference"])
+            == source_cap(ordered["numerical_reference"]),
+            "functional numerical precision capabilities differ",
+        )
+    result = copy.deepcopy(base)
+    result.setdefault("ordered_rung_diagnostics", {})[diagnostic_id] = {
+        "schema": "vakint.ordered-rung-diagnostic.v1",
+        "loop_count": 4,
+        "projection": dfs["projection"],
+        "status": "functional_exact_and_numerical_pass"
+        if proof is not None
+        else "catalogue_closed_exact_pair_pending",
+        "performance_eligible": False,
+        "ordered_over_dfs": None,
+        "ordered_over_dfs_no_memo": None,
+        "exact_retained_equality": True if proof is not None else None,
+        "numerical_validation": True if proof is not None else None,
+        "sample_counts": {"dfs": 1, "dfs_no_memo": 0, "ordered": 1},
+        "observations": reports,
+        "note": note,
+    }
+    return result
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base", type=Path, required=True)

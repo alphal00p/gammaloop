@@ -7,6 +7,19 @@
 
 == Ordered-engine physical rung comparisons
 
+Completed functional observations that cannot establish a qualified cohort are
+kept under #raw("ordered_rung_diagnostics"), selected separately through
+#raw("selected_ordered_rung_diagnostics"). The narrow
+#raw("append_diagnostic") helper verifies report/result/completion hashes,
+successful exits, MSbar conventions, catalogue closure and actual timing scope.
+It does not run an equality check. Only the explicitly named passing functional
+CI receipt can mark its saved pair and numerical checks passed; unpaired
+catalogue-closed observations remain exact-comparison pending. These entries
+always set performance eligibility false and both efficiency ratios null.
+Their amber table keeps math, public-call and guard durations distinct, with
+source cohorts and precision warnings preserved. No incomplete no-memo run is
+converted into a timing or a completed three-arm benchmark.
+
 The generic collector #raw("examples/ordered_reduction_rungs.rs") compares
 ordinary DFS, DFS without completed-result memoization/bookkeeping, and Ordered
 on the same authenticated physical scalar input. Prepared/saved caches and

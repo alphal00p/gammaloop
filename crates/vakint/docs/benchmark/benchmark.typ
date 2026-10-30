@@ -23,6 +23,7 @@
   let fraction = if parts.len() > 1 { parts.at(1) } else { "" }
   parts.first() + "." + fraction + "0" * (d - fraction.len())
 }
+
 #let timing(x) = fixed(x, if x >= 10 { 1 } else if x >= 1 { 2 } else if x >= 0.1 { 3 } else { 4 })
 #let multiplier(x) = fixed(x, if x < 0.1 { 3 } else { 2 })
 
@@ -1465,4 +1466,59 @@ Refresh and validation contract: #raw("maintenance.typ").]
     All historical records and their original cache/provenance identities remain
     unchanged. The new observation is not promoted to a repeated benchmark.]
   }
+}
+
+#let diagnostic-ids = report.at("selected_ordered_rung_diagnostics", default: ())
+#if diagnostic-ids.len() > 0 {
+  let observations = diagnostic-ids.map(id => report.ordered_rung_diagnostics.at(id))
+  assert(observations.all(row => row.schema == "vakint.ordered-rung-diagnostic.v1" and row.performance_eligible == false and row.ordered_over_dfs == none and row.ordered_over_dfs_no_memo == none))
+  pagebreak()
+  set text(fill: black, size: 10pt)
+  align(center)[
+    #text(22pt, weight: "bold", fill: navy)[Four-loop functional observations]
+    #v(0.2em)
+    #text(11.5pt, fill: luma(80))[Separate cohorts · single observations · no efficiency ratios]
+  ]
+  v(0.5em)
+  block(fill: rgb("#fff3df"), inset: 10pt, radius: 4pt, width: 100%)[
+    These are completed functional/diagnostic observations, not the qualified
+    three-arm benchmark above. Sources, monitoring and process scope differ.
+    Catalogue closure alone does not establish exact pair equality. Incomplete
+    no-memo or exact-comparison work remains pending, with no imputed duration,
+    median or speed ratio. Both engine columns show one observed call each.
+  ]
+  v(0.45em)
+  table(
+    columns: (1.1fr, 1fr, 1fr, 1.1fr),
+    inset: (x: 9pt, y: 12pt), stroke: 0.4pt + luma(220),
+    table.header(..([Case / source], [DFS · memo], [Ordered], [Proof status]).map(body => table.cell(fill: navy, text(fill: white, weight: "bold", body)))),
+    ..for row in observations {
+      let dfs = row.observations.dfs
+      let ordered = row.observations.ordered
+      (
+        [*4L · #if row.projection == "zero-momentum-metric" [zero momentum] else [quadratic]*
+          #linebreak() #text(8pt)[Source #raw(dfs.source_revision.slice(0, 12))]],
+        table.cell(fill: rgb("#fff3df"), [#text(14pt, weight: "bold")[#timing(dfs.reduction_math_seconds) s]
+          #linebreak() #text(8pt)[math · n = 1]
+          #linebreak() #text(8pt)[public #timing(dfs.public_retained_seconds) s]]),
+        table.cell(fill: rgb("#fff3df"), [#text(14pt, weight: "bold")[#timing(ordered.reduction_math_seconds) s]
+          #linebreak() #text(8pt)[math · n = 1]
+          #linebreak() #text(8pt)[public #timing(ordered.public_retained_seconds) s]]),
+        [*Catalogue closed*
+          #linebreak() #if row.exact_retained_equality == true [Exact pair ✓] else [Exact pair pending]
+          #linebreak() #if row.numerical_validation == true [Numerical ✓] else [Numerical unmeasured]
+          #linebreak() #text(8pt)[No-memo cohort pending]],
+      )
+    },
+  )
+  v(0.3em)
+  for row in observations {
+    block(inset: (y: 5pt), [*#if row.projection == "zero-momentum-metric" [Zero momentum] else [Quadratic].* #row.note])
+  }
+  v(0.3em)
+  text(8pt, fill: luma(100))[All math/public/guard scopes, requested/achieved precision,
+  warnings, source identities and hashed functional receipts remain in
+  #raw("data/results.json") → #raw("ordered_rung_diagnostics"). Diagnostic IDs:
+  #raw(diagnostic-ids.join(", ")). The qualified 1L–3L measurements and all
+  historical FORM/cache records remain unchanged.]
 }

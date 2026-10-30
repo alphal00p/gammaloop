@@ -833,6 +833,101 @@ class OrderedReportContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "omits or adds an arm"):
             merge.append(self.base, "wrong", receipts, path)
 
+    def diagnostic_receipts(self):
+        parity = merge.read(self.parity)
+        output = {}
+        for arm in ("dfs", "ordered"):
+            report_path = Path(parity["reports"][arm]["path"])
+            raw = merge.read(report_path)
+            raw.update(loop_count=4, gluon_rungs=3)
+            raw["catalogue_closure"]["unknown_count"] = 0
+            report_path.write_text(json.dumps(raw))
+            completion = self.write(
+                f"diagnostic-{arm}-completion.json",
+                {
+                    "success": True,
+                    "exit_code": 0,
+                    "failure": None,
+                    "signals_sent_to_original_pidfd": [],
+                    "elapsed_seconds": 20,
+                },
+            )
+            output[arm] = self.write(
+                f"diagnostic-{arm}.json",
+                {
+                    "schema": "vakint.ordered-rung-functional-probe-receipt.v1",
+                    "status": "PASS-functional-catalogue-closure-only",
+                    "success": True,
+                    "main_revision": "1" * 40,
+                    "report": merge.evidence(report_path),
+                    "guard_completion": merge.evidence(completion),
+                },
+            )
+        return output
+
+    def test_completed_diagnostics_do_not_infer_parity_or_ratios(self):
+        result = merge.append_diagnostic(
+            self.base,
+            "pending",
+            self.diagnostic_receipts(),
+            "SYNTHETIC pending exact comparison",
+        )
+        row = result["ordered_rung_diagnostics"]["pending"]
+        self.assertIsNone(row["exact_retained_equality"])
+        self.assertIsNone(row["numerical_validation"])
+        self.assertIsNone(row["ordered_over_dfs"])
+        self.assertFalse(row["performance_eligible"])
+        self.assertEqual(row["sample_counts"]["dfs_no_memo"], 0)
+        self.assertEqual(result["historical"], self.base["historical"])
+
+    def test_diagnostic_changed_payload_or_failed_worker_is_rejected(self):
+        observations = self.diagnostic_receipts()
+        receipt = merge.read(observations["ordered"])
+        report_path = Path(receipt["report"]["path"])
+        (report_path.parent / "retained.symbolica").write_text("SYNTHETIC CORRUPTION")
+        with self.assertRaisesRegex(ValueError, "changed evidence"):
+            merge.append_diagnostic(self.base, "bad", observations, "SYNTHETIC")
+
+    def test_functional_ci_diagnostic_requires_named_pass_proof(self):
+        self.add_numerical()
+        observations = self.diagnostic_receipts()
+        records = {arm: merge.read(path) for arm, path in observations.items()}
+        summary = self.write(
+            "functional-ci.json",
+            {
+                "schema": "vakint.four-loop-functional-ci-case-completion.v1",
+                "status": "PASS",
+                "performance_eligible": False,
+                "test": "four_loop_zero_momentum_rung_engine_parity",
+                "source_revision": "1" * 40,
+                "completion": records["dfs"]["guard_completion"],
+                "reports": {arm: {"report": records[arm]["report"]} for arm in records},
+            },
+        )
+        row = merge.append_diagnostic(
+            self.base,
+            "functional",
+            {arm: summary for arm in observations},
+            "SYNTHETIC",
+            functional_ci=summary,
+        )["ordered_rung_diagnostics"]["functional"]
+        self.assertTrue(row["exact_retained_equality"])
+        self.assertTrue(row["numerical_validation"])
+        self.assertFalse(row["performance_eligible"])
+        self.assertIsNone(row["ordered_over_dfs"])
+
+    def test_diagnostic_failed_worker_cannot_supply_observed_timings(self):
+        observations = self.diagnostic_receipts()
+        receipt = merge.read(observations["ordered"])
+        path = Path(receipt["guard_completion"]["path"])
+        completion = merge.read(path)
+        completion.update(success=False, exit_code=1)
+        path.write_text(json.dumps(completion))
+        receipt["guard_completion"] = merge.evidence(path)
+        observations["ordered"].write_text(json.dumps(receipt))
+        with self.assertRaisesRegex(ValueError, "did not complete successfully"):
+            merge.append_diagnostic(self.base, "failed", observations, "SYNTHETIC")
+
     def test_historical_changed_acceptance_or_timing_is_rejected(self):
         path = self.historical_pair()
         raw = merge.read(path)
