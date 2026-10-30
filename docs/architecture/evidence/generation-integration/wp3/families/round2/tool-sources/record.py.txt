@@ -1,0 +1,57 @@
+"""Record correction commands and exact scripts; reject implicit Nix sources."""
+from pathlib import Path
+import datetime
+import hashlib
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+
+OUT = Path(__file__).resolve().parent
+ROOT = OUT.parents[1]
+
+def sha(path):
+    h = hashlib.sha256()
+    with Path(path).open("rb") as stream:
+        for block in iter(lambda: stream.read(4194304), b""):
+            h.update(block)
+    return h.hexdigest()
+
+def binding(path):
+    path = Path(path).resolve()
+    return {"path": str(path), "sha256": sha(path), "bytes": path.stat().st_size}
+
+def run(label, argv, cwd=ROOT, scripts=()):
+    assert argv and all(isinstance(x, str) and x for x in argv)
+    # This correction needs no Nix query. Should one be added, fail closed:
+    # no empty/default/dot/path flake and no unvalidated inferred installable.
+    if Path(argv[0]).name in ("nix", "nix-store"):
+        raise ValueError("Nix commands are not enabled in this correction recorder")
+    env = dict(os.environ, GIT_OPTIONAL_LOCKS="0", PYTHONDONTWRITEBYTECODE="1")
+    env.pop("SYMBOLICA_LICENSE", None)
+    env.pop("SYMBOLICA_LICENSE_SIGNED", None)
+    scripts = [Path(__file__), *map(Path, scripts)]
+    scripts += [Path(a) for a in argv if a.endswith(".py") and Path(a).is_file()]
+    before = {str(p.resolve()): sha(p) for p in scripts}
+    start = datetime.datetime.now(datetime.UTC).isoformat()
+    tick = time.monotonic()
+    with (OUT / (label + ".out")).open("wb") as out:
+        with (OUT / (label + ".log")).open("wb") as err:
+            proc = subprocess.run(argv, cwd=cwd, env=env, stdout=out, stderr=err)
+    after = {p: sha(p) for p in before}
+    assert before == after, "Executing script changed"
+    record = {"argv": argv, "cwd": str(cwd), "start": start,
+              "end": datetime.datetime.now(datetime.UTC).isoformat(),
+              "seconds": time.monotonic() - tick, "exit": proc.returncode,
+              "scripts_before": before, "scripts_after": after,
+              "stdout": binding(OUT / (label + ".out")),
+              "stderr": binding(OUT / (label + ".log")),
+              "environment": "Both license variables absent; Git optional locks disabled."}
+    (OUT / (label + ".command.json")).write_text(json.dumps(record, indent=2) + "\n")
+    print(json.dumps({"label": label, "exit": proc.returncode}), flush=True)
+    return proc.returncode
+
+if __name__ == "__main__":
+    raise SystemExit(run(sys.argv[1], sys.argv[2:]))

@@ -1,0 +1,70 @@
+"""Update only current evidence claims; immutable old artifacts are not rewritten."""
+from pathlib import Path
+import difflib
+import json
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from record import binding
+ROOT=Path(__file__).resolve().parents[2]
+OUT=Path(__file__).resolve().parent
+DOC=ROOT/'docs/architecture/evidence/generation-integration/wp3/families'
+q=json.loads((OUT/'qualification.json').read_text())
+p=DOC/'receipt.json'
+old=p.read_text()
+r=json.loads(old)
+r['evidence_change']='lxzpuulrkmktsumozkultsnnzqxrumno'
+r['preserved_round1']='1f3bb33b44e506af041fa124ea419d5b1ba41e5e / generation-integration-families-round1'
+r['correction']={'scope':'Evidence/documentation only. Runtime code8dce and all recorded outcomes unchanged; NEW focused review pending.','findings':'F1 plus associated A-F2/F3/F4/F5 and authorized B metadata improvements.','record':'round2/correction.json','full_execution_closure':'round2/actual-fingerprint-closure.json'}
+r['producer']['generator']['actual_phase_command_lines']=[q['commands']['generator_build_phase']]
+r['producer']['generator']['actual_archive_argv']=q['commands']['generator_argv']
+r['producer']['dependency_build']={
+ 'actual_phase':q['commands']['dependency_phase'],
+ 'cargo_profile':q['commands']['dependency_profile'],
+ 'resolved_argv':q['commands']['dependency_resolved_argv'],
+ 'synthetic_manifests':q['commands']['synthetic_manifests'],
+ 'postpatch_owner':q['commands']['postpatch_owner'],
+ 'source_qualification':'Existing gmqajram dependency source versus y9pg generator source correction preserved in producer-metadata-qualification.json.'}
+r['producer']['features']={
+ 'actual_execution_closure':'round2/actual-fingerprint-closure.json',
+ 'fingerprint_units':q['executed_closure']['units'],
+ 'packages':q['executed_closure']['packages'],
+ 'layers':q['executed_closure']['layers'],
+ 'unit':q['executed_closure']['unit'],
+ 'rustc_fingerprints':q['executed_closure']['rustc_fingerprints'],
+ 'broken_links':q['executed_closure']['broken_links'],
+ 'units_with_wasm_feature':q['executed_closure']['units_with_wasm_feature'],
+ 'direct_synthetic_link':q['executed_closure']['direct_synthetic_link'],
+ 'actual_compiled_key_features':q['executed_closure']['key_features'],
+ 'working_copy_context_only':q['working_copy_context'],
+ 'context_package_count_difference':297-q['working_copy_context']['packages'],
+ 'context_set_comparison':'68 closure-only and two tree-only names (rustc_version, semver); net package-count difference66. The reviewed artifact, not subtraction alone, determines these sets.',
+ 'archive_metadata_resolved_context':r['producer']['features']['archive_metadata_resolved_context'],
+ 'qualification':'Actual layered dependency fingerprints linked from unit6b0e7dc68fc70180, matching executed ELF suffix. Final archive ELF SHA remains independently authoritative; dependency-layer ELF differs and final own fingerprints are not retained in the archive. Working-copy cargo tree and workspace metadata are CONTEXT ONLY, never executed-closure qualification.'}
+r['validation']['current_capture_binding']['qualification']='Actual ci-optim None/Auto/source/census payload equality and None full Row evidence retain credit. Auto has8 payload-derived fields (diagrams, inverse_symmetry, weights, symmetry_factors, content, numerators, named, ids). Auto topology/assignment comparison formerly reused the same frozen report on both sides: NO ci-optim counter recomputation credit. Those two counters are observer-report facts, corroborated by A and fresh read-only comparison of48 retained observer reports in round2 qualification.'
+r['validation']['current_capture_binding']['observer_qualification']='Retained observer521c7879 is dev-optim,341 units/229 packages, NOT feature/profile-equivalent to ci-optim452 units/297 packages.68 packages absent and12 feature reductions are bound in round2 qualification. Transfer only via identical owning sources plus complete public payload byte identity; model/options/Run/ports/interfaces remain observer/capture-bound, not in-memory ci-optim observations.'
+r['validation']['proof']['producing_version_qualification']='Original proof-closure.json was produced before the final retained audit.py. Exact producing bytes are not recovered; retained final tool source is not retroactively that producer. Scope B independently rehashed all27945 entries; record bound in round2 correction. No new full rehash or541 reruns in this correction.'
+r['validation']['renders']={'historical_record':r['validation']['renders']['record'],'historical_qualification':'Positive renders remain valid for their immutable inputs. The original text.replace negative is tautological and receives NO gate-negative credit.','current_record':'target/wp3-family-integration-round2/render-results.json','qualification':'Final corrected integration prose is rendered in PDF and semantic HTML bundle. A genuinely altered-source bundle is rendered and rejected by the same decoded-text checker; exact input/script/tool/argv/output bindings retained. No donor report bytes edited.'}
+r['validation']['final_documentation_qualification']={
+ 'required_record':'target/wp3-family-integration-round2/final-stage.json',
+ 'detached_manifest':'target/wp3-family-integration-round2/final-supplement.json',
+ 'classification':'ONLY this new final-source stage qualifies the corrected candidate. All round1 final/qualified-final records remain successful historical1f3/a86 source-specific records, not current-tree validation. No runtime or producer rebuild/evaluation is required or claimed.'}
+r['runtime_environment_qualification']={
+ 'original':'Network enabled; bwrap resolved from PATH;75 inherited environment keys. Preserve all original bytes; do not label these isolated.',
+ 'review_a':'Separately attributed pinned bubblewrap0.11.2, no network, nine non-secret allowlisted keys plus private license; fresh A reruns reproduce results. Reused source/command/JUnit hashes bound in round2 correction.',
+ 'future_policy':'Pinned bwrap, --unshare-net and explicit safe allowlist; private license only in direct runtime environment. No rerun in this correction.'}
+r['review_note_dispositions']['M-N2/M-N3']='Runtime/results roots remain qualified, but original proof-closure producing script predates retained final audit.py. B independent rehash corroborates content; no exact old script identity invented. New correction commands hash executing scripts.'
+r['review_note_dispositions']['M-N8/M-N9']='Round1 positives remain historical. Tautological negative has no credit. New corrected prose has a real altered-source render negative. Current canonical docs use unchanged source-qualified builder ELF on exact frozen Git archive.'
+r['review_note_dispositions']['M-N10']='All five new notes moved to investigations; four unique short row-name end anchors preserve byte-identical ranges and all117 digests.'
+r['inventories']={
+ 'historical_round1_inventory':'inventory.json at1f3 (28ea71a4...); preserved byte-exact and checked against immutable1f3 blobs, not used as a live corrected-metadata inventory.',
+ 'historical_runtime':'runtime-manifest.json unchanged (5d26514b...); all original runtime records retained.',
+ 'historical_final_supplement':'target/wp3-family-integration/final-supplement.json unchanged (b94f2e71...).',
+ 'current_correction_inventory':'round2/inventory.json (nonself)',
+ 'current_detached_supplement':'target/wp3-family-integration-round2/final-supplement.json',
+ 'tool_source_versions':'Round1 tool-sources are preserved historical final versions, not retroactively the producer of every old output. New round2 script sources are hash-bound before/after each correction command.'}
+new=json.dumps(r,indent=2,ensure_ascii=False)+'\n'
+diff=list(difflib.unified_diff(old.splitlines(),new.splitlines(),n=3))
+print('*** Begin Patch\n*** Update File: '+str(p))
+for line in diff[2:]:
+ print('@@' if line.startswith('@@') else line)
+print('*** End Patch')

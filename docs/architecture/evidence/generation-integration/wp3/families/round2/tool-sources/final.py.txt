@@ -1,0 +1,93 @@
+"""Final Git-tree canonical docs check with unchanged binaries; no Nix or compiler."""
+from pathlib import Path
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tarfile
+sys.path.insert(0,str(Path(__file__).resolve().parent))
+from record import run,sha,binding
+
+OUT=Path(__file__).resolve().parent
+ROOT=OUT.parents[1]
+COMPILED_ROOT=ROOT/'target/wp3-family-integration/qualified-final-docs-source'
+BWRAP='/nix/store/v24sx9l1jmvvia3z8iznrd7jwhvc8kcf-bubblewrap-0.11.2/bin/bwrap'
+
+def main():
+    revision=sys.argv[1]
+    assert re.fullmatch('[0-9a-f]{40}',revision), 'No implicit/default ref permitted'
+    source=OUT/'final-source'
+    source.mkdir(exist_ok=False)
+    archive=OUT/'final-git-tree.tar'
+    assert run('git-archive',['git','-C',str(ROOT.parent/'main'),'archive','--format=tar','--output',str(archive),revision],scripts=[__file__])==0
+    with tarfile.open(archive) as tar:
+        tar.extractall(source,filter='data')
+    stage=json.loads((ROOT/'target/wp3-family-integration/qualified-final-stage.json').read_text())
+    assert sha(stage['canonical_docs']['builder_elf'])==stage['canonical_docs']['builder_elf_sha256']
+    tools={}
+    (OUT/'bin').mkdir(exist_ok=False)
+    for name,filename in [('builder','alphal00p-docs-builder'),('catalogs','alphal00p-docs-catalogs')]:
+        original=COMPILED_ROOT/'target/debug'/filename
+        shutil.copy2(original,OUT/'bin'/name)
+        assert sha(original)==sha(OUT/'bin'/name)
+        tools[name]={'original':binding(original),'copy':binding(OUT/'bin'/name),'sha256':sha(original)}
+    (OUT/'docs-tools.json').write_text(json.dumps(tools,indent=2)+'\n')
+    # The builder discovers its compile-time manifest root. Sandbox remapping is
+    # essential: cwd alone would validate the old tree. Reuse both exact owners;
+    # intercept only the unchanged Cargo run catalog launcher, never its results.
+    guards=[]
+    for package in ('alphal00p-docs-builder','alphal00p-docs-catalogs','alphal00p-docs-schema'):
+        for old in (COMPILED_ROOT/'crates'/package).rglob('*'):
+            if old.is_file() and (old.suffix=='.rs' or old.name=='Cargo.toml'):
+                relative=old.relative_to(COMPILED_ROOT)
+                assert old.read_bytes()==(source/relative).read_bytes(),relative
+                guards.append({'path':str(relative),'sha256':sha(old)})
+    (source/'target').mkdir()
+    (OUT/'tmp').mkdir()
+    (OUT/'catalog-invocations.jsonl').touch()
+    wrapper=OUT/'catalog-cargo.py'
+    wrapper.chmod(0o755)
+    common=[BWRAP,'--unshare-net','--unshare-pid','--unshare-ipc','--unshare-uts',
+            '--ro-bind','/','/','--dev','/dev','--proc','/proc',
+            '--ro-bind',str(source),str(COMPILED_ROOT),
+            '--bind',str(source/'target'),str(COMPILED_ROOT/'target'),
+            '--bind',str(OUT/'tmp'),'/tmp',
+            '--bind',str(OUT/'catalog-invocations.jsonl'),str(OUT/'catalog-invocations.jsonl'),
+            '--chdir',str(COMPILED_ROOT),'env','CARGO='+str(wrapper),str(OUT/'bin/builder'),'check']
+    before={str(p.relative_to(source)):sha(p) for p in source.rglob('*') if p.is_file() and 'target' not in p.relative_to(source).parts}
+    positive=run('canonical-docs',common,scripts=[__file__,wrapper])
+    assert positive==0
+    # A separate disposable source root gets an unauthorized HTML input. The
+    # exact same canonical owner must reject before catalog generation.
+    negative=OUT/'negative-source'
+    shutil.copytree(source,negative,ignore=shutil.ignore_patterns('target'))
+    (negative/'target').mkdir()
+    unauthorized=negative/'docs/unauthorized-family-round2.html'
+    unauthorized.write_text('Unauthorized authored HTML negative\n')
+    bad=[str(negative) if x==str(source) else str(negative/'target') if x==str(source/'target') else x for x in common]
+    negative_exit=run('canonical-docs-negative',bad,scripts=[__file__,wrapper])
+    assert negative_exit!=0
+    assert 'shrinking legacy inventory' in (OUT/'canonical-docs-negative.log').read_text()
+    for p,h in before.items():assert sha(source/p)==h,p
+    commands=[json.loads(line) for line in (OUT/'catalog-invocations.jsonl').read_text().splitlines()]
+    assert commands and all(c['exit']==0 for c in commands)
+    result={'revision':revision,'built_runtime':'8dcebc2591ab04d10026fbd47a45e8d31f911ef3',
+      'source':str(source),'git_archive':binding(archive),'source_kind':'Exact final Git archive, not evaluated/copied to Nix store; no new NAR/build claim.',
+      'canonical_docs':{'exit':positive,'command':binding(OUT/'canonical-docs.command.json'),
+                        'builder':tools['builder'],'catalogs':tools['catalogs'],
+                        'compiled_manifest_root':str(COMPILED_ROOT),
+                        'mapped_actual_source':str(source),'source_owner_guards':guards,
+                        'catalog_launcher_wrapper':binding(wrapper),
+                        'catalog_calls':binding(OUT/'catalog-invocations.jsonl'),
+                        'successful_catalog_calls':sum(c['exit']==0 for c in commands)},
+      'negative':{'exit':negative_exit,'command':binding(OUT/'canonical-docs-negative.command.json'),
+                  'file':binding(unauthorized),'same_canonical_owner':bad[-2:]==common[-2:]},
+      'no_compilation':'Reused exact unchanged builder and catalog ELF owners. Cargo launcher wrapper accepts ONLY the precise catalog run prefix and forwards every exporter argument unchanged; no compiler/Nix command is executed. Other invocations fail closed.',
+      'script':binding(__file__),'both_license_variables':'absent','site':'No full-site realization or runtime rerun.'}
+    (OUT/'final-stage.json').write_text(json.dumps(result,indent=2)+'\n')
+    print(json.dumps({'revision':revision,'canonical_docs_exit':positive,'negative_exit':negative_exit,'catalog_calls':len(commands)}))
+
+if __name__=='__main__':
+    main()

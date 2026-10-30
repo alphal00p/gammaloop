@@ -1,0 +1,190 @@
+{
+  "schema": 1,
+  "round1": "1f3bb33b44e506af041fa124ea419d5b1ba41e5e",
+  "base": "30f02f79c2bcabfadcd8081e1add3d5afe6e91d2",
+  "built_runtime": "8dcebc2591ab04d10026fbd47a45e8d31f911ef3",
+  "correction_distinct_paths_including_self": 15,
+  "correction_paths_nonself": [
+    {
+      "path": "docs/architecture/evidence/generation-integration/execution.json",
+      "sha256": "59290f9c2b61e60b47579b50b75fafa8f27dc6f89866336747604e531b8d5906",
+      "bytes": 46436
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/families/receipt.json",
+      "sha256": "b17b4771cfeb83348af19881dfad8ef6a3502be188e7b4796e0cf186c1cd1d68",
+      "bytes": 38730
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/families/round2/actual-fingerprint-closure.json",
+      "sha256": "08a9bf2dfc4e979711d397206f5b4601c1a4543d9c14de7ba7c6b1594c798da0",
+      "bytes": 361741
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/families/round2/correction.json",
+      "sha256": "0bb2988e1de4c722feaeb33bc6648029b17190b1b686f875cd148526d5776562",
+      "bytes": 53392
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/families/round2/tool-sources/catalog-cargo.py.txt",
+      "sha256": "1e2bb9c9d0d963888a1fb482847d9c74f1e07428e01aaab23b86d8c4ee5f0a6f",
+      "bytes": 1081
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/families/round2/tool-sources/correct.py.txt",
+      "sha256": "954ce6cb51d69afda3285cd29bd0de69a668c3f75d6a939d504a5874bd58f78e",
+      "bytes": 6220
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/families/round2/tool-sources/final.py.txt",
+      "sha256": "6924e8a2cd4b7428cf1681eb67ce3df8e5c4ea24068b5e74bd1806c6300b9d31",
+      "bytes": 5878
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/families/round2/tool-sources/qualify.py.txt",
+      "sha256": "c7f46dd1046fcd382d96728844c59588fb2f8701874f61b2ceddc4caefdd988d",
+      "bytes": 9476
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/families/round2/tool-sources/receipt-patch.py.txt",
+      "sha256": "2b455e6a103755340c362a90d0954f63ffc8a930ea77c19c7c321aa1bcabe350",
+      "bytes": 7966
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/families/round2/tool-sources/record.py.txt",
+      "sha256": "facd4a516b6b0519ac8b9ba26df781f3a8da6403c0dfca512c90df92d6d2f25f",
+      "bytes": 2481
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/families/round2/tool-sources/render.py.txt",
+      "sha256": "b62d9c936c8b2dd2c99764ea0e5184207f2b96bc9bee4fe88418e0c852f903f9",
+      "bytes": 4513
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/replay.json",
+      "sha256": "a353ef997b1cdbb1bbe4765f3e19a2802d9d2b4149cfb33bed77fc8f8db8668d",
+      "bytes": 103908
+    },
+    {
+      "path": "docs/architecture/generation-integration-oracle-families.typ",
+      "sha256": "5ad193ffc6933efba8d947c488ae295a49dde727fd58a6469ed28db112d55f9f",
+      "bytes": 4586
+    },
+    {
+      "path": "docs/developers.toml",
+      "sha256": "3fbaf2e0b1b08ef4069356ab68ac62c5f88abf5c7fdef91976d9fb857c32364d",
+      "bytes": 199743
+    }
+  ],
+  "cumulative_distinct_paths_including_self": 89,
+  "cumulative_path_names_including_self": [
+    "crates/feynkit-generator/tests/generation_oracle/main.rs",
+    "docs/architecture/evidence/generation-integration/execution.json",
+    "docs/architecture/evidence/generation-integration/wp3/families/approval-index.json",
+    "docs/architecture/evidence/generation-integration/wp3/families/approved-migration-review.json",
+    "docs/architecture/evidence/generation-integration/wp3/families/inventory.json",
+    "docs/architecture/evidence/generation-integration/wp3/families/producer-metadata-qualification.json",
+    "docs/architecture/evidence/generation-integration/wp3/families/receipt.json",
+    "docs/architecture/evidence/generation-integration/wp3/families/round2/actual-fingerprint-closure.json",
+    "docs/architecture/evidence/generation-integration/wp3/families/round2/correction.json",
+    "docs/architecture/evidence/generation-integration/wp3/families/round2/inventory.json",
+    "docs/architecture/evidence/generation-integration/wp3/families/round2/tool-sources/catalog-cargo.py.txt",
+    "docs/architecture/evidence/generation-integration/wp3/families/round2/tool-sources/correct.py.txt",
+    "docs/architecture/evidence/generation-integration/wp3/families/round2/tool-sources/final.py.txt",
+    "docs/architecture/evidence/generation-integration/wp3/families/round2/tool-sources/qualify.py.txt",
+    "docs/architecture/evidence/generation-integration/wp3/families/round2/tool-sources/receipt-patch.py.txt",
+    "docs/architecture/evidence/generation-integration/wp3/families/round2/tool-sources/record.py.txt",
+    "docs/architecture/evidence/generation-integration/wp3/families/round2/tool-sources/render.py.txt",
+    "docs/architecture/evidence/generation-integration/wp3/families/runtime-manifest.json",
+    "docs/architecture/evidence/generation-integration/wp3/families/tool-sources/account.py.txt",
+    "docs/architecture/evidence/generation-integration/wp3/families/tool-sources/audit.py.txt",
+    "docs/architecture/evidence/generation-integration/wp3/families/tool-sources/dependency-features.py.txt",
+    "docs/architecture/evidence/generation-integration/wp3/families/tool-sources/final-qualified.py.txt",
+    "docs/architecture/evidence/generation-integration/wp3/families/tool-sources/final.py.txt",
+    "docs/architecture/evidence/generation-integration/wp3/families/tool-sources/observer.py.txt",
+    "docs/architecture/evidence/generation-integration/wp3/families/tool-sources/qualify-producer.py.txt",
+    "docs/architecture/evidence/generation-integration/wp3/families/tool-sources/render.py.txt",
+    "docs/architecture/evidence/generation-integration/wp3/families/tool-sources/replay-current.py.txt",
+    "docs/architecture/evidence/generation-integration/wp3/families/tool-sources/run.py.txt",
+    "docs/architecture/evidence/generation-integration/wp3/families/tool-sources/runtime.py.txt",
+    "docs/architecture/evidence/generation-integration/wp3/replay.json",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/adversarial-control-results.json",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/adversarial-controls.py",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/capture-validation.json",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/commands.json",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/manifest.sha256",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/receipt.json",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/round2/archived-sources/oracle_family_capture.rs",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/round2/archived-sources/oracle_family_exact.rs",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/round2/checks.py",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/round2/closure.json",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/round2/controls.py",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/round2/finalize.py",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/round2/inventory.py",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/round2/overlay.json",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/round2/qualify.py",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/round2/receipt.json",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/round2/replay.py",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/round2/validate.py",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/round3/build_schema.py",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/round3/check_docs.py",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/round3/common.py",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/round3/dispositions.json",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/round3/finalize.py",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/round3/inventory.py",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/round3/qualify.py",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/round3/receipt.json",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/round3/report_checks.py",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/round3/schema.json",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/round3/seal.py",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/round3/suite.py",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/round3/validate.py",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/source-inventory.json",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/validate-captures.py",
+    "docs/architecture/evidence/generation-oracle-family-migration/approval-a.json",
+    "docs/architecture/evidence/generation-oracle-family-migration/approval-b.json",
+    "docs/architecture/evidence/generation-oracle-family-migration/audit.py",
+    "docs/architecture/evidence/generation-oracle-family-migration/build.py",
+    "docs/architecture/evidence/generation-oracle-family-migration/common.py",
+    "docs/architecture/evidence/generation-oracle-family-migration/derive.py",
+    "docs/architecture/evidence/generation-oracle-family-migration/docs.py",
+    "docs/architecture/evidence/generation-oracle-family-migration/fingerprints.py",
+    "docs/architecture/evidence/generation-oracle-family-migration/finish.py",
+    "docs/architecture/evidence/generation-oracle-family-migration/four-literal.patch",
+    "docs/architecture/evidence/generation-oracle-family-migration/negatives.py",
+    "docs/architecture/evidence/generation-oracle-family-migration/observer-source.rs.txt",
+    "docs/architecture/evidence/generation-oracle-family-migration/preserve.py",
+    "docs/architecture/evidence/generation-oracle-family-migration/receipt.json",
+    "docs/architecture/evidence/generation-oracle-family-migration/replay.py",
+    "docs/architecture/evidence/generation-oracle-family-migration/retain_observer.py",
+    "docs/architecture/evidence/generation-oracle-family-migration/runtime.py",
+    "docs/architecture/evidence/generation-oracle-family-migration/runtime_exec.py",
+    "docs/architecture/evidence/generation-oracle-family-migration/validate.py",
+    "docs/architecture/generation-integration-oracle-families.typ",
+    "docs/architecture/generation-integration-plan.typ",
+    "docs/architecture/generation-oracle-family-diagnosis-round2.typ",
+    "docs/architecture/generation-oracle-family-diagnosis-round3.typ",
+    "docs/architecture/generation-oracle-family-diagnosis.typ",
+    "docs/architecture/generation-oracle-family-migration.typ",
+    "docs/developers.toml"
+  ],
+  "nonself_exclusion": "docs/architecture/evidence/generation-integration/wp3/families/round2/inventory.json",
+  "original_manifests": [
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/families/inventory.json",
+      "sha256": "28ea71a423b3aff9b6e47a88bc1b922a20b9d608b24470747e57ad0c836ca9f7",
+      "bytes": 24501
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/families/runtime-manifest.json",
+      "sha256": "5d26514b79aa4ebd733c11090968aabfac3f314d1d26f48b8cae4631fd6bf5e4",
+      "bytes": 314317
+    },
+    {
+      "path": "target/wp3-family-integration/final-supplement.json",
+      "sha256": "b94f2e718d2c0840e500e58237f129cf69c226d94f04348a7e75774c18658a08",
+      "bytes": 16683
+    }
+  ],
+  "policy": "Original manifests byte-exact; round1 tracked inventory rows interpreted against immutable1f3 blobs, not overwritten live metadata. This correction inventory is authoritative for changed paths. Final candidate docs/validation records are separately bound by detached round2 final-supplement.json to avoid self-hash cycles."
+}

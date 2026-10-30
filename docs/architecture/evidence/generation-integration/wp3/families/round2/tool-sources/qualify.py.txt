@@ -1,0 +1,107 @@
+"""Derive correction facts from retained reviews and immutable sources."""
+from pathlib import Path
+import hashlib
+import json
+import os
+import re
+import subprocess
+import sys
+import tomllib
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from record import binding, sha
+
+OUT = Path(__file__).resolve().parent
+ROOT = OUT.parents[1]
+A = ROOT / '.local/review-main-families-a-opus-20261030T064303Z-3915466'
+B = ROOT / '.local/review-main-families-b-opus-20261030T064230Z'
+OLD = '1f3bb33b44e506af041fa124ea419d5b1ba41e5e'
+
+def immutable(rev, path):
+    return subprocess.check_output(['git', '-C', str(ROOT.parent/'main'), 'show', rev+':'+path], env=dict(os.environ, GIT_OPTIONAL_LOCKS='0'))
+
+def notes(reg):
+    return [(s['id'], n) for s in reg['section'] for n in s.get('note', [])]
+
+def scope_bytes(s, text):
+    assert text.count(s['anchor']) == 1
+    if 'end_anchor' in s:
+        assert text.count(s['end_anchor']) == 1
+        start, end = text.index(s['anchor']), text.index(s['end_anchor'])
+        assert end >= start + len(s['anchor'])
+        return text[start:end].encode()
+    return text.encode()
+
+def main():
+    actual = json.loads((OUT/'actual-fingerprint-closure.json').read_text())
+    reviewed = json.loads((A/'work/fingerprint-closure.json').read_text())
+    assert actual == reviewed
+    units, packages = actual['closure'], actual['packages']
+    assert len(units) == actual['closure_units'] and not actual['closure_missing_or_ambiguous']
+    start = actual['start']
+    synthetic = [name for name, value in units[start]['deps'] if name.startswith('gammaloop_ci_test_binary_dependencies_')]
+    assert len(synthetic) == 1
+    root_unit = start.split('/.fingerprint/')[1].split('/')[0]
+    assert root_unit.endswith('6b0e7dc68fc70180')
+    key_features = {}
+    for name in ('feynkit-generator','feynkit-graph','idenso','spenso','symbolica','linnet','serde_json'):
+        selected = [r for r in packages[name] if r['file'].startswith(('lib-', 'test-'))]
+        key_features[name] = sorted({f for r in selected for f in json.loads(r['features'])})
+    tree = json.loads((A/'work/tree-vs-closure.json').read_text())
+    missing = [p for p,d in tree['differences'].items() if d['in_closure'] and not d['in_tree']]
+    observer = json.loads((A/'work/observer-vs-ci-features.json').read_text())
+    drvs = json.loads((A/'work/drv-projection.json').read_text())['derivations']
+    generator = next(p for p in drvs if 'nextest-binaries-feynkit-feynkit-generator' in p)
+    dependencies = next(p for p in drvs if 'crate-test-binaries-feynkit-generator' in p)
+    argv = ['cargo','nextest','archive','--cargo-profile','ci-optim','--offline','-p','feynkit-generator','-E','package(feynkit-generator)','--profile','ci_gammaloop','--archive-file',actual['archive']]
+    phase = drvs[generator]['selected_env']['buildPhase']
+    for flag in ('--cargo-profile ci-optim','--offline -p feynkit-generator',"-E 'package(feynkit-generator)'",'--profile ci_gammaloop','gammaloop-nextest-feynkit-feynkit-generator.tar.zst'):
+        assert flag in phase
+    dep_phase = drvs[dependencies]['selected_env']['buildPhase']
+    assert 'cargoWithProfile test --no-run --offline -p feynkit-generator' in dep_phase
+    assert drvs[dependencies]['selected_env']['CARGO_PROFILE'] == 'ci-optim'
+    manifests = [Path('/nix/store/n3phwkh1l89qi6bw18s0d0c6lg8vyb47-gammaloop-ci-test-binary-dependencies-b6f177b7bc15beb1-feynkit-generator-dev-dependency.toml'), Path('/nix/store/4ndgyxykkkbgn2j41kbrnw1p4jd9yyz9-gammaloop-ci-test-binary-dependencies-b6f177b7bc15beb1-Cargo.toml')]
+    for p in manifests:
+        assert p.is_file() and 'gammaloop-ci-test-binary-dependencies-b6f177b7bc15beb1' in p.read_text()
+    reports = []
+    prep = ROOT.parent/'generation-oracle-numerator-families/target/oracle-numerator-family-diagnosis/adapted-current/captures'
+    for pool in (1,8,32):
+        for case in ('qed_eemm_L1','ctorder_qcd_uugg_L1','sm_eemm_L0','ym_g6_L0'):
+            for mode in ('None','Auto'):
+                for kind in ('built-report.txt','prepared-report.txt'):
+                    now = ROOT/'target/wp3-family-integration'/f'observer-p{pool}/captures'/case/f'classes-{mode}-t{pool}'/kind
+                    frozen = prep/case/f'classes-{mode}-t1'/kind
+                    assert now.read_bytes() == frozen.read_bytes()
+                    reports.append({'current':binding(now),'frozen':binding(frozen)})
+    before = {n['id']:(s,n) for s,n in notes(tomllib.loads(immutable(OLD,'docs/developers.toml').decode()))}
+    current = {n['id']:(s,n) for s,n in notes(tomllib.loads((ROOT/'docs/developers.toml').read_text()))}
+    new_ids = {'generation-oracle-family-migration','generation-oracle-family-diagnosis','generation-oracle-family-diagnosis-round1','generation-oracle-family-diagnosis-round2','generation-integration-oracle-families'}
+    baseline = [n for n in before if n not in new_ids]
+    assert all(before[n] == current[n] for n in baseline)
+    assert all(current[n][0] == 'investigations' for n in new_ids)
+    assert len(current) == len({n['source'] for s,n in current.values()}) == len({n['title'] for s,n in current.values()})
+    scopes = []
+    for name,(section,note) in current.items():
+        assert re.findall(r'^= (.+)$',(ROOT/note['source']).read_text(),re.MULTILINE) == [note['title']]
+        for scope in note.get('scope',[]):
+            raw = scope_bytes(scope,(ROOT/scope['path']).read_text())
+            old_scope = next(s for s in before[name][1]['scope'] if s['symbol'] == scope['symbol'])
+            old_raw = scope_bytes(old_scope,immutable(OLD,scope['path']).decode())
+            assert raw == old_raw
+            digest = subprocess.check_output(['git','hash-object','--stdin'],input=raw,env=dict(os.environ,GIT_OPTIONAL_LOCKS='0'),cwd=ROOT.parent/'main').decode().strip()
+            assert digest == scope['digest'] == old_scope['digest']
+            scopes.append({'note':name,'symbol':scope['symbol'],'path':scope['path'],'digest':digest,'selected_bytes_unchanged':raw == old_raw})
+    result = {
+      'schema':1,'review_a':binding(A/'review.json'),'review_b':binding(B/'review.json'),
+      'executed_closure':{'record':binding(OUT/'actual-fingerprint-closure.json'),'fresh_extraction_equals_review_a':actual==reviewed,'review_a_source':binding(A/'work/fingerprint-closure.json'),'units':len(units),'packages':len(packages),'broken_links':actual['closure_missing_or_ambiguous'],'layers':actual['layers'],'unit':root_unit,'rustc_fingerprints':actual['rustc_values'],'units_with_wasm_feature':actual['units_with_wasm_feature'],'direct_synthetic_link':synthetic,'key_features':key_features,'elf_hashes':actual['elf_hashes']},
+      'commands':{'generator_argv':argv,'generator_build_phase':phase,'dependency_phase':dep_phase,'dependency_profile':drvs[dependencies]['selected_env']['CARGO_PROFILE'],'dependency_resolved_argv':['cargo','test','--profile','ci-optim','--no-run','--offline','-p','feynkit-generator'],'synthetic_manifests':[binding(p) for p in manifests],'projection_source':binding(A/'work/drv-projection.json'),'postpatch_owner':{'path':'nix/rust-workspace.nix','sha256':sha(ROOT/'nix/rust-workspace.nix'),'qualification':'Unchanged synthetic feature-anchor/postPatch owner; A queried exact drvs. This correction reads its retained safe projection, not a new Nix query.'}},
+      'working_copy_context':{'record':binding(ROOT/'target/wp3-family-integration/selected-features.out'),'packages':tree['tree_packages'],'missed_executed_packages':missing,'review_comparison':binding(A/'work/tree-vs-closure.json'),'classification':'WORKING-COPY CONTEXT ONLY; no Nix injection, not execution qualification.'},
+      'observer_qualification':{'record':binding(A/'work/observer-vs-ci-features.json'),'units':341,'packages':observer['observer_packages'],'packages_absent_from_observer':observer['packages_only_in_ci'],'feature_reductions':observer['feature_differences'],'transfer':'Not feature/profile equivalent. Identical owning sources and complete public payload byte joins only; observer-only fields remain capture-bound.'},
+      'observer_report_comparisons':{'reports':reports,'count':len(reports),'attribution':'Fresh read-only retained-report comparisons independently corroborate A F3. No new observer execution.','Auto_fields':'Eight payload-derived fields only; topology/assignment counters are observer-report facts, not ci-optim recomputation.'},
+      'proof_producing_version':{'old_record':binding(ROOT/'target/wp3-family-integration/proof-closure.json'),'qualification':'Earlier audit.py version; exact producing bytes not recovered. Final retained source is not retroactively its version.','independent_b_rehash':binding(B/'out/closure-final-rehash.json'),'attribution':'B rehashed27945 records:27944 match and one expected donor-registry mismatch. No new25.7GB rehash here.'},
+      'registry':{'baseline_preserved_notes':len(baseline),'notes':len(current),'scopes':scopes,'scope_count':len(scopes),'all_digests_unchanged':all(s['selected_bytes_unchanged'] for s in scopes),'moved_ids':sorted(new_ids)},
+      'scripts':{str(p):sha(p) for p in [Path(__file__),A/'scripts/fingerprint_closure.py']}}
+    (OUT/'qualification.json').write_text(json.dumps(result,indent=2)+'\n')
+    print(json.dumps({'units':len(units),'packages':len(packages),'missed':len(missing),'reports':len(reports),'notes':len(current),'scopes':len(scopes),'baseline':len(baseline)}))
+
+if __name__ == '__main__':
+    main()

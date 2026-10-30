@@ -34,6 +34,35 @@ CT None/Auto output order is compared through its certified occurrence/group
 correspondence, not a false whole-file identity. Historical mathematical proof
 and actual current observations retain their separate attributions.
 
+== Executed closure and evidence qualifications
+
+The working-copy cargo tree is context only and does not qualify execution.
+Nix post-patch injects a synthetic test dev-dependency that is absent from that
+tree. The executed oracle unit has 452 fingerprint units across 297 packages,
+including the synthetic crate; the context tree has 231 packages, a net deficit
+of 66. The actual name-set comparison has 68 closure-only and two tree-only
+packages. The full layered fingerprint closure, exact commands,
+injected manifest paths, compiler fingerprint and archive/ELF links are bound in
+the round-two correction evidence. No executed unit has a wasm feature.
+
+The retained observer is not feature- or profile-equivalent to the ci-optim
+assertion executable: its dev-optim closure has 341 units and 229 packages,
+with 68 packages absent and twelve feature reductions. Transfer is only through
+identical owning sources and complete byte-equal public payloads. Observer-only
+model/options/Run/ports/interfaces remain capture-bound. The eight payload-derived
+Auto fields are recomputed from actual ci-optim dumps; topology and assignment
+counters remain observer-report facts, not a ci-optim counter recomputation.
+
+Original implementation runs were network-enabled, used bwrap from PATH and
+inherited 75 environment keys. They are not retroactively called isolated.
+Scope A independently reproduced the results using pinned bwrap, no network and
+nine non-secret environment keys plus the private license; that is separately
+attributed reviewer evidence. Future
+licensed runs require those stricter boundaries. The original proof-closure
+record predates the retained auditor's final version; its exact producing source
+is not reconstructed. Scope B's independent complete rehash corroborates it.
+The new correction commands bind actual executing script hashes.
+
 The original exit matrix and its failures remain immutable history. The earlier
 sampled-quotient harness correction is separate from the seven digest migrations.
 Remaining oracle mismatches and other WP3 requirements stay open. This candidate

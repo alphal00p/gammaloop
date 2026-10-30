@@ -1,0 +1,1398 @@
+{
+  "schema": 1,
+  "round1": "1f3bb33b44e506af041fa124ea419d5b1ba41e5e",
+  "built_runtime": "8dcebc2591ab04d10026fbd47a45e8d31f911ef3",
+  "status": "Evidence correction candidate; NEW focused independent review pending. No runtime or producer rebuild/rerun.",
+  "scope_a": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/.local/review-main-families-a-opus-20261030T064303Z-3915466/review.json",
+    "sha256": "fdc84846cd98dfc558d8994e233ba4c93b582c2a60fbe3fd957d1fe969b19e6c",
+    "bytes": 20346
+  },
+  "scope_b": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/.local/review-main-families-b-opus-20261030T064230Z/review.json",
+    "sha256": "838621c2f16f510785dcd88092c2ddb74ec6ec315a72580ab30ad167f281aaa7",
+    "bytes": 30152
+  },
+  "actual_closure": {
+    "record": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-family-integration-round2/actual-fingerprint-closure.json",
+      "sha256": "08a9bf2dfc4e979711d397206f5b4601c1a4543d9c14de7ba7c6b1594c798da0",
+      "bytes": 361741
+    },
+    "fresh_extraction_equals_review_a": true,
+    "review_a_source": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/.local/review-main-families-a-opus-20261030T064303Z-3915466/work/fingerprint-closure.json",
+      "sha256": "08a9bf2dfc4e979711d397206f5b4601c1a4543d9c14de7ba7c6b1594c798da0",
+      "bytes": 361741
+    },
+    "units": 452,
+    "packages": 297,
+    "broken_links": [],
+    "layers": [
+      "/nix/store/wa6jjzm7grkp6iy459gyqh2vqzlx4k31-gammaloop-crate-test-binaries-feynkit-generator-b6f177b7bc15beb1-deps-0.1.0/target.tar.zst",
+      "/nix/store/56f4pygl36n7im2mvrp850084d9kziaq-gammaloop-crate-test-dependencies-b6f177b7bc15beb1-deps-0.1.0/target.tar.zst",
+      "/nix/store/y46x18djvqy16zrx26zmja4rnq3jp475-gammaloop-crate-test-dependencies-b6f177b7bc15beb1-inputs/target.tar.zst"
+    ],
+    "unit": "feynkit-generator-6b0e7dc68fc70180",
+    "rustc_fingerprints": {
+      "1625334936438085654": 452
+    },
+    "units_with_wasm_feature": [],
+    "direct_synthetic_link": [
+      "gammaloop_ci_test_binary_dependencies_b6f177b7bc15beb1"
+    ],
+    "key_features": {
+      "feynkit-generator": [
+        "default",
+        "native"
+      ],
+      "feynkit-graph": [
+        "default",
+        "native",
+        "svg"
+      ],
+      "idenso": [
+        "bincode",
+        "default",
+        "native",
+        "reference-cases"
+      ],
+      "spenso": [
+        "default",
+        "native",
+        "native-code-generation",
+        "portable-payload",
+        "python",
+        "python_stubgen",
+        "shadowing"
+      ],
+      "symbolica": [
+        "bincode",
+        "float-mpfr",
+        "integer-gmp",
+        "native_code_generation",
+        "serde",
+        "tracing_max_level_info"
+      ],
+      "linnet": [
+        "bincode",
+        "default",
+        "drawing",
+        "native",
+        "rayon",
+        "rkyv",
+        "serde",
+        "symbolica"
+      ],
+      "serde_json": [
+        "alloc",
+        "default",
+        "float_roundtrip",
+        "std"
+      ]
+    },
+    "elf_hashes": {
+      "layer0:./ci-optim/deps/generation_oracle-6b0e7dc68fc70180": {
+        "sha256": "8dee76ac552bdb298147d5576076344d499aa4ba8fd1d321add870047e34bbd8",
+        "bytes": 60757576
+      },
+      "archive:target/ci-optim/deps/generation_oracle-6b0e7dc68fc70180": {
+        "sha256": "0e83563f557f8f87d352ccdf8f71ed8dba95a15fc58cb6ad4b31af78500e8bc7",
+        "bytes": 60757576
+      }
+    }
+  },
+  "actual_commands": {
+    "generator_argv": [
+      "cargo",
+      "nextest",
+      "archive",
+      "--cargo-profile",
+      "ci-optim",
+      "--offline",
+      "-p",
+      "feynkit-generator",
+      "-E",
+      "package(feynkit-generator)",
+      "--profile",
+      "ci_gammaloop",
+      "--archive-file",
+      "/nix/store/di9k3p4hakyy4xnzwfqijvahyhqrjwwl-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0/gammaloop-nextest-feynkit-feynkit-generator.tar.zst"
+    ],
+    "generator_build_phase": "runHook preBuild\ncargo --version\nmkdir -p \"$out\"\nif [ -d target ]; then\n  chmod -R u+w target\n  find target -name '.cargo*lock' -delete\nfi\ncargo nextest --version\ncargo nextest archive \\\n  --cargo-profile ci-optim \\\n  --offline -p feynkit-generator \\\n  -E 'package(feynkit-generator)' \\\n  --profile ci_gammaloop \\\n  --archive-file \"$out/gammaloop-nextest-feynkit-feynkit-generator.tar.zst\"\n\nrunHook postBuild\n",
+    "dependency_phase": "runHook preBuild\ncargo --version\ncargoWithProfile test --no-run --offline -p feynkit-generator\nrunHook postBuild\n",
+    "dependency_profile": "ci-optim",
+    "dependency_resolved_argv": [
+      "cargo",
+      "test",
+      "--profile",
+      "ci-optim",
+      "--no-run",
+      "--offline",
+      "-p",
+      "feynkit-generator"
+    ],
+    "synthetic_manifests": [
+      {
+        "path": "/nix/store/n3phwkh1l89qi6bw18s0d0c6lg8vyb47-gammaloop-ci-test-binary-dependencies-b6f177b7bc15beb1-feynkit-generator-dev-dependency.toml",
+        "sha256": "a6ee84dbdc8b8fcdb6c93ce3f47a9e0d1c7aaed762902c0f51acabfdcf2fdbf4",
+        "bytes": 142
+      },
+      {
+        "path": "/nix/store/4ndgyxykkkbgn2j41kbrnw1p4jd9yyz9-gammaloop-ci-test-binary-dependencies-b6f177b7bc15beb1-Cargo.toml",
+        "sha256": "cb5333af003ff8a2577d81c3c2153c20fb1f749370085070e407f19224feeaf0",
+        "bytes": 1995
+      }
+    ],
+    "projection_source": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/.local/review-main-families-a-opus-20261030T064303Z-3915466/work/drv-projection.json",
+      "sha256": "5c64d4d80cb5fbd305a01c92af0803c59ac387150864fa19ef5438e0c429e71a",
+      "bytes": 19239
+    },
+    "postpatch_owner": {
+      "path": "nix/rust-workspace.nix",
+      "sha256": "df551a9d7afa9bb2477833a71b9b145fe6e4b5fcaeadf99966e05f1b4bed7fd1",
+      "qualification": "Unchanged synthetic feature-anchor/postPatch owner; A queried exact drvs. This correction reads its retained safe projection, not a new Nix query."
+    }
+  },
+  "full_tracked_closure": "actual-fingerprint-closure.json",
+  "derivation_query_policy": "No Nix query/evaluation/build/develop runs in this correction. Existing safe Scope A projection is source-bound; no raw secret-bearing drv or private source is copied to store.",
+  "context_tree": {
+    "record": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-family-integration/selected-features.out",
+      "sha256": "df0fb8c672ccc0bc7dbbd50ffedb76b156af0e73f5a7bf979f328ba7aebe9b1d",
+      "bytes": 168405
+    },
+    "packages": 231,
+    "executed_packages": 297,
+    "net_difference": 66,
+    "closure_only_names": [
+      "amd",
+      "bytecheck",
+      "bytecheck_derive",
+      "cgmath",
+      "ciborium",
+      "ciborium-io",
+      "ciborium-ll",
+      "clarabel",
+      "darling",
+      "darling_core",
+      "darling_macro",
+      "derive_builder",
+      "derive_builder_core",
+      "derive_builder_macro",
+      "enum_dispatch",
+      "gammaloop-ci-test-binary-dependencies-b6f177b7bc15beb1",
+      "getopts",
+      "half",
+      "hexf",
+      "hexf-parse",
+      "ident_case",
+      "is-macro",
+      "kurbo",
+      "kurvst",
+      "lalrpop-util",
+      "linnest",
+      "maplit",
+      "ndarray",
+      "numpy",
+      "phf",
+      "phf_codegen",
+      "phf_generator",
+      "phf_shared",
+      "polycool",
+      "ptr_meta",
+      "ptr_meta_derive",
+      "pyo3",
+      "pyo3-build-config",
+      "pyo3-ffi",
+      "pyo3-macros",
+      "pyo3-macros-backend",
+      "pyo3-stub-gen",
+      "pyo3-stub-gen-derive",
+      "rend",
+      "rkyv",
+      "rkyv_derive",
+      "rustc-hash",
+      "rustpython-ast",
+      "rustpython-parser",
+      "rustpython-parser-core",
+      "rustpython-parser-vendored",
+      "seahash",
+      "serde-big-array",
+      "simdutf8",
+      "siphasher",
+      "symbolica-typst-plugin",
+      "target-lexicon",
+      "twofloat",
+      "unic-char-property",
+      "unic-char-range",
+      "unic-common",
+      "unic-emoji-char",
+      "unic-ucd-ident",
+      "unic-ucd-version",
+      "unicode_names2",
+      "unicode_names2_generator",
+      "venial",
+      "wasm-minimal-protocol"
+    ],
+    "tree_only_names": [
+      "rustc_version",
+      "semver"
+    ],
+    "classification": "CONTEXT ONLY; no synthetic dev-dependency and no executed-closure credit."
+  },
+  "observer": {
+    "record": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/.local/review-main-families-a-opus-20261030T064303Z-3915466/work/observer-vs-ci-features.json",
+      "sha256": "4d1f84c0d4cff5c82f192870fd21b474b98c721db05c435be7349f5ba0d44d8d",
+      "bytes": 2646
+    },
+    "units": 341,
+    "packages": 229,
+    "packages_absent_from_observer": [
+      "amd",
+      "bytecheck",
+      "bytecheck_derive",
+      "cgmath",
+      "ciborium",
+      "ciborium-io",
+      "ciborium-ll",
+      "clarabel",
+      "darling",
+      "darling_core",
+      "darling_macro",
+      "derive_builder",
+      "derive_builder_core",
+      "derive_builder_macro",
+      "enum_dispatch",
+      "gammaloop-ci-test-binary-dependencies-b6f177b7bc15beb1",
+      "getopts",
+      "half",
+      "hexf",
+      "hexf-parse",
+      "ident_case",
+      "is-macro",
+      "kurbo",
+      "kurvst",
+      "lalrpop-util",
+      "linnest",
+      "maplit",
+      "ndarray",
+      "numpy",
+      "phf",
+      "phf_codegen",
+      "phf_generator",
+      "phf_shared",
+      "polycool",
+      "ptr_meta",
+      "ptr_meta_derive",
+      "pyo3",
+      "pyo3-build-config",
+      "pyo3-ffi",
+      "pyo3-macros",
+      "pyo3-macros-backend",
+      "pyo3-stub-gen",
+      "pyo3-stub-gen-derive",
+      "rend",
+      "rkyv",
+      "rkyv_derive",
+      "rustc-hash",
+      "rustpython-ast",
+      "rustpython-parser",
+      "rustpython-parser-core",
+      "rustpython-parser-vendored",
+      "seahash",
+      "serde-big-array",
+      "simdutf8",
+      "siphasher",
+      "symbolica-typst-plugin",
+      "target-lexicon",
+      "twofloat",
+      "unic-char-property",
+      "unic-char-range",
+      "unic-common",
+      "unic-emoji-char",
+      "unic-ucd-ident",
+      "unic-ucd-version",
+      "unicode_names2",
+      "unicode_names2_generator",
+      "venial",
+      "wasm-minimal-protocol"
+    ],
+    "feature_reductions": {
+      "feynkit-amplitude": {
+        "ci_only": [
+          "default"
+        ],
+        "observer_only": []
+      },
+      "feynkit-graph": {
+        "ci_only": [
+          "default",
+          "svg"
+        ],
+        "observer_only": []
+      },
+      "feynkit-kinematics": {
+        "ci_only": [
+          "default"
+        ],
+        "observer_only": []
+      },
+      "hashbrown": {
+        "ci_only": [
+          "ahash"
+        ],
+        "observer_only": []
+      },
+      "idenso": {
+        "ci_only": [
+          "bincode",
+          "default",
+          "reference-cases"
+        ],
+        "observer_only": []
+      },
+      "linnet": {
+        "ci_only": [
+          "default",
+          "drawing",
+          "rkyv"
+        ],
+        "observer_only": []
+      },
+      "spenso": {
+        "ci_only": [
+          "default",
+          "native-code-generation",
+          "portable-payload",
+          "python",
+          "python_stubgen"
+        ],
+        "observer_only": []
+      },
+      "spenso-hep-lib": {
+        "ci_only": [
+          "default"
+        ],
+        "observer_only": []
+      },
+      "symbolica": {
+        "ci_only": [
+          "tracing_max_level_info"
+        ],
+        "observer_only": []
+      },
+      "symbolica-utils": {
+        "ci_only": [
+          "default"
+        ],
+        "observer_only": []
+      },
+      "syn": {
+        "ci_only": [
+          "quote"
+        ],
+        "observer_only": []
+      },
+      "tiny-keccak": {
+        "ci_only": [
+          "sha3"
+        ],
+        "observer_only": []
+      }
+    },
+    "transfer": "Not feature/profile equivalent. Identical owning sources and complete public payload byte joins only; observer-only fields remain capture-bound."
+  },
+  "Auto": {
+    "payload_derived_fields": [
+      "diagrams",
+      "inverse_symmetry",
+      "weights",
+      "symmetry_factors",
+      "content",
+      "numerators",
+      "named",
+      "ids"
+    ],
+    "counter_fields": [
+      "topologies",
+      "assignments"
+    ],
+    "counter_qualification": "Only observer-report facts. Original same-frozen-report comparison is not ci-optim recomputation.",
+    "retained_report_comparisons": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-family-integration-round2/qualification.json",
+      "sha256": "0b8a51259d6290c6e5b34ff802fd97acbb0b3205f84865054381f7d9729dd538",
+      "bytes": 79655
+    },
+    "reports_compared": 48,
+    "review_a_independent_corrobation": "F3 in the bound Scope A review; these new comparisons read retained bytes, not new runtime."
+  },
+  "original_runtime_environment": {
+    "record": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-family-integration/pool-1.command.json",
+      "sha256": "4b2181e2bd0b4f52f49ab09878f5a40feab47d024b42559af10d38bd4765884a",
+      "bytes": 4179
+    },
+    "inherited_env_key_count": 75,
+    "network_disabled": false,
+    "bwrap": "bwrap",
+    "no_retroactive_isolation_credit": true
+  },
+  "review_a_runtime_separate": {
+    "script": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/.local/review-main-families-a-opus-20261030T064303Z-3915466/scripts/sandbox.py",
+      "sha256": "610916c8d7684713113329bb763285c2add4f73c98488b3fe906c8074ddd1be4",
+      "bytes": 5261
+    },
+    "command": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/.local/review-main-families-a-opus-20261030T064303Z-3915466/logs/pool-1.command.json",
+      "sha256": "c3643329d0fcbd83d6d6947928c5219ecf93d345a998cf08c2c5e28fe438d0cc",
+      "bytes": 3152
+    },
+    "safe_env_key_count": 9,
+    "safe_env_keys": [
+      "FEYNKIT_ORACLE_DUMP",
+      "FEYNKIT_ORACLE_THREADS",
+      "HOME",
+      "INSTA_UPDATE",
+      "LANG",
+      "NEXTEST_RETRIES",
+      "NEXTEST_TEST_THREADS",
+      "PATH",
+      "TMPDIR"
+    ],
+    "private_license_key_separate": true,
+    "network_disabled": true,
+    "pinned_bwrap": "/nix/store/v24sx9l1jmvvia3z8iznrd7jwhvc8kcf-bubblewrap-0.11.2/bin/bwrap",
+    "qualification": "Separately attributed reviewer execution, not implementation rerun.",
+    "pool_commands": [
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/.local/review-main-families-a-opus-20261030T064303Z-3915466/logs/pool-1.command.json",
+        "sha256": "c3643329d0fcbd83d6d6947928c5219ecf93d345a998cf08c2c5e28fe438d0cc",
+        "bytes": 3152
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/.local/review-main-families-a-opus-20261030T064303Z-3915466/logs/pool-8.command.json",
+        "sha256": "5123a001d417bb9ecf5289adf084a019d157678dad408f80a6ad9d2e4c9c8e21",
+        "bytes": 3152
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/.local/review-main-families-a-opus-20261030T064303Z-3915466/logs/pool-32.command.json",
+        "sha256": "7e6d96b1ba4dfbd33a4373b0f5ce43f8ae05953cf4f697c2ac1073de085fee4a",
+        "bytes": 3155
+      }
+    ],
+    "junit": [
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/.local/review-main-families-a-opus-20261030T064303Z-3915466/logs/pool-1-junit.xml",
+        "sha256": "f30d79c429a173b045f184687c67f1af16b57ed6c0927d749ccd92274e340bb0",
+        "bytes": 1371
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/.local/review-main-families-a-opus-20261030T064303Z-3915466/logs/pool-8-junit.xml",
+        "sha256": "f394858b0c0825f80b5ba70254f30538e5f9a3e7270e9a24197ae7bb1d02529b",
+        "bytes": 1371
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/.local/review-main-families-a-opus-20261030T064303Z-3915466/logs/pool-32-junit.xml",
+        "sha256": "8c3f99d5a8b46ea3a6686981e595d3c41901f346cb46b6c7e9210ae719b36298",
+        "bytes": 1371
+      }
+    ]
+  },
+  "proof_version": {
+    "historical_record": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-family-integration/proof-closure.json",
+      "sha256": "d4b6661c9c084f6162606576d7ad7ac65071e65a54ab89dae70da8f89896f77b",
+      "bytes": 8863
+    },
+    "qualification": "Earlier audit.py version; exact producing bytes not recovered. Final retained source is not retroactively its version.",
+    "b_independent_rehash": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/.local/review-main-families-b-opus-20261030T064230Z/out/closure-final-rehash.json",
+      "sha256": "f7bfbf3f11dbe6b33689a014af42ddf1d75d7da35f68c42e20a8372c34885ede",
+      "bytes": 1005138
+    },
+    "verified_by_b": 27944,
+    "expected_registry_mismatches": [
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/developers.toml",
+        "expected": {
+          "sha256": "005cd42163a78abcdd49e2d0c3a38a387f5a5c1b867605aeb3b91461d0523e81",
+          "bytes": 186262
+        },
+        "actual": {
+          "sha256": "0cdc86f49589c968a5a3989859d16b8df447d35cafcd44dad1ef742e695f38e3",
+          "bytes": 187928
+        }
+      }
+    ],
+    "new_rehash_claimed": false
+  },
+  "registry": {
+    "baseline_preserved_notes": 86,
+    "notes": 91,
+    "scopes": [
+      {
+        "note": "generation-integration-units39-43",
+        "symbol": "native compact canonical labelling and physical node frames",
+        "path": "crates/linnet/src/half_edge/canon.rs",
+        "digest": "f5196064803f370751b1afc6a5869eed70de2fbc",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "generation-integration-units39-43",
+        "symbol": "caller-thread coalescing, one execution-wide cancellation and worker lifecycle",
+        "path": "crates/feynkit-py/src/generation/execution.rs",
+        "digest": "90aa937d1161c8fb8db294e10af8d468fb260e73",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "generation-integration-units39-43",
+        "symbol": "named certified QCD2 row and current physical CLI controls",
+        "path": "tests/tests/test_feyngen.rs",
+        "digest": "35431963b1bc751b00a7a1bb1e834faa815c0f50",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "generation-mark-geometry",
+        "symbol": "MarkSpec local geometry and existing transport/carrier owners",
+        "path": "crates/kurvst/src/marks.rs",
+        "digest": "fd8561f45d257ecadfcb8e0fa1ed0e48696ef733",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "generation-mark-geometry",
+        "symbol": "Kurbo authoritative stroke join evaluation",
+        "path": "vendor/kurbo/src/stroke.rs",
+        "digest": "8c50e774ab4464366a23681a0b3129c3249f76e6",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "generation-mark-geometry",
+        "symbol": "Drawing sdist complete patched-source regression",
+        "path": "tests/packaging/test_drawing_notices.py",
+        "digest": "96b8f399d4a259e5a832cbb3d837a63276059f22",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "generation-mark-geometry",
+        "symbol": "Maturin drawing source distribution closure",
+        "path": "pyproject.toml",
+        "digest": "406bd3acc6261b911adc5547a81ca3befc05ac75",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "generation-test-source-closure",
+        "symbol": "generation compile-time test source owners",
+        "path": "nix/rust-workspace.nix",
+        "digest": "9f26523be340699df1b29b8144f5aa1f7a1e1c7f",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "generation-test-source-closure",
+        "symbol": "declared local Cargo patch source ownership",
+        "path": "nix/rust-workspace.nix",
+        "digest": "b8ef6794d3fb70d911b1e39e8ee3b4a98d03f227",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "generation-sampling-staged",
+        "symbol": "bundle incidence",
+        "path": "crates/gammalooprs/src/integrands/process/mod.rs",
+        "digest": "fa84abc99317adbeae2c80083e8a6eeffce546ab",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "generation-sampling-staged",
+        "symbol": "signed affine input blocks",
+        "path": "crates/gammalooprs/src/integrands/process/sampling/maps.rs",
+        "digest": "c914fffdc29bc975430dc87ee68bda2e11c2fc5c",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "generation-sampling-staged",
+        "symbol": "exact zero affine coefficients",
+        "path": "crates/gammalooprs/src/integrands/process/sampling/maps.rs",
+        "digest": "08c5ff1dc2daf0f7e601b640de95ccd36a3a8b15",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "generation-sampling-staged",
+        "symbol": "shared signed LMB frame",
+        "path": "crates/gammalooprs/src/integrands/process/sampling/selection.rs",
+        "digest": "cb0a19bd463a7c4f03905dff4e66f8c37e38b69b",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "generation-sampling-staged",
+        "symbol": "graph-derived reflection controls",
+        "path": "crates/gammalooprs/src/integrands/process/mod.rs",
+        "digest": "a5d00202b935534a9afd09dd37a5d7484ccbfea9",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "generation-sampling-staged",
+        "symbol": "fixed seed CoolQM gate",
+        "path": "tests/tests/test_nlo_acceptance/cool_qm_eos.rs",
+        "digest": "fd8f5ff00a6b7b7cf3b3b5299f61624dcd7cbc79",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "generation-projector-flow-staged",
+        "symbol": "from_compact_dot",
+        "path": "crates/feynkit-graph/src/compact_dot.rs",
+        "digest": "26ba8e5f2daf3a874648e3b3fcf1004768aad4c9",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "generation-projector-flow-staged",
+        "symbol": "Aind model and compact chart boundaries",
+        "path": "crates/gammalooprs/src/numerator/aind.rs",
+        "digest": "ccec241e109087f9cc811c8383e408b29b0d1654",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "generation-projector-flow-staged",
+        "symbol": "parse_spec_with_model",
+        "path": "crates/gammaloop-api/src/commands/generate.rs",
+        "digest": "fc0db7043824aa9891ebe63120eaafc6780f7ab4",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "generation-projector-flow-staged",
+        "symbol": "BubbleFlow",
+        "path": "tests/tests/test_runs/test_integrated_uv_cts.rs",
+        "digest": "258dabf85c220b309bc208975dd0c9fa04062111",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "generation-projector-flow-staged",
+        "symbol": "rqft_ghost_explicit_bases_preserve_signed_native_routing",
+        "path": "crates/gammalooprs/src/graph/parse/tests.rs",
+        "digest": "c76aede2cef891292162665f8a9bebb1b31d18a0",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "generation-projector-flow-staged",
+        "symbol": "nineteen variance-corrected graphs",
+        "path": "tests/resources/graphs/qqx_aaa_subtracted.dot",
+        "digest": "f26103ab3a89d5992e4fe866b0538ab618136b97",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "generation-projector-flow-staged",
+        "symbol": "seven explicit directed ghost bases",
+        "path": "tests/resources/graphs/uv_tests/rqft_ghG_3l.dot",
+        "digest": "61aacc598cee73c26bfecff47c17908ad9ff6484",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "generation-integration-wp3-grouping",
+        "symbol": "finite quotient comparison",
+        "path": "crates/feynkit-generator/src/grouping.rs",
+        "digest": "1fde7e75dd6e13b44fafe38ee5dd3b9debb2babf",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "generation-integration-wp3-grouping",
+        "symbol": "strict diagnostic weights",
+        "path": "crates/feynkit-generator/tests/generation_oracle/census.rs",
+        "digest": "fb41124fcb8c821236295e02eee59a1ec4fdcb3d",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "generation-integration-wp3-grouping",
+        "symbol": "actual registration and pool controls",
+        "path": "crates/feynkit-generator/tests/generation_oracle/main.rs",
+        "digest": "0d638c2b0b4d89183621d6d202a8e551fb5e3f34",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "generation-integration-wp3-grouping",
+        "symbol": "source19 normal-run resource reservation",
+        "path": ".config/nextest.toml",
+        "digest": "6f601f9f2e0ecb0d421aa50724834cb7fee18117",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "generation-staged-transport-fix",
+        "symbol": "generated admitted tensor transport",
+        "path": "crates/feynkit-graph/src/finalization.rs",
+        "digest": "ccbf0871fd75826f2cfaf68ba676bbbb7f85db78",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "generation-drawing-notices",
+        "symbol": "embed_typst_packages",
+        "path": "crates/linnest/build_assets.rs",
+        "digest": "6cec3a4971faa783e0497c89ed9f614443f1117b",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "generation-integration-wp3-staged",
+        "symbol": "staged Request / DiagramSet / BuiltDiagramSet",
+        "path": "crates/feynkit-generator/src/generation/staged.rs",
+        "digest": "f13870d5c7d318468a8a1b83ae9b039bb7419826",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "generation-integration-wp3-staged",
+        "symbol": "admitted interaction templates and checked conservation rewrite",
+        "path": "crates/feynkit-generator/src/generation.rs",
+        "digest": "584e7d14e34cf83605500b892943ea2ca3043569",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "generation-integration-wp3-staged",
+        "symbol": "original-pair B2 certificate and current colour completion",
+        "path": "crates/feynkit-generator/src/grouping.rs",
+        "digest": "66cc3fe8280694c72b213d71dee37fb40a1ad997",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "gammaloop-architecture",
+        "symbol": "gammaloop_api::state::State::load",
+        "path": "crates/gammaloop-api/src/state.rs",
+        "digest": "3598dbe299f9a32da1ed8d034706a82959d84abb",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "gammaloop-architecture",
+        "symbol": "gammaloop_api::commands::integrate::Integrate::default_workspace_path",
+        "path": "crates/gammaloop-api/src/commands/integrate.rs",
+        "digest": "bcce3d43713b42fe428e3b5d89784e18c8d47fa7",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "gammaloop-architecture",
+        "symbol": "gammalooprs::integrands::evaluation::EvaluationResult",
+        "path": "crates/gammalooprs/src/integrands/evaluation.rs",
+        "digest": "707cd302e3ed6b9c792c4263fb24e0b1b04e86f1",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "gammaloop-architecture",
+        "symbol": "gammalooprs::integrands::process::ProcessIntegrand::warm_up",
+        "path": "crates/gammalooprs/src/integrands/process/mod.rs",
+        "digest": "2f6aea58d34fcb798c742d41feac8240dfc5ae55",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "gammaloop-architecture",
+        "symbol": "gammalooprs::observables::events::GenericEvent",
+        "path": "crates/gammalooprs/src/observables/events.rs",
+        "digest": "6450148360cff16688c3e37986180c678682606e",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "gammaloop-architecture",
+        "symbol": "gammalooprs::observables::EventProcessingRuntime",
+        "path": "crates/gammalooprs/src/observables/mod.rs",
+        "digest": "b672f52f6674d08d11b6cc68ef0621c399386926",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "gammaloop-architecture",
+        "symbol": "gammaloop_api::python::GammaLoopAPI",
+        "path": "crates/gammaloop-api/src/python.rs",
+        "digest": "872d2b855d14a4aded443e18df435f899c2bf42a",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "gammaloop-architecture",
+        "symbol": "gammalooprs module topology",
+        "path": "crates/gammalooprs/src/lib.rs",
+        "digest": "41d3e5da3e5b11fbfb34c30432192c7d3ed53e16",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "gammaloop-architecture",
+        "symbol": "feynkit_generator::generation::coordination",
+        "path": "crates/feynkit-generator/src/generation.rs",
+        "digest": "5ba73ee8f0b70a9dc5b500e0e84caad9819eb377",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "gammaloop-architecture",
+        "symbol": "feynkit_model::Model",
+        "path": "crates/feynkit-model/src/model.rs",
+        "digest": "b04029827b0ecb3c8f23289bf0937e1ea422e176",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "gammaloop-architecture",
+        "symbol": "feynkit_graph::FeynmanDiagram",
+        "path": "crates/feynkit-graph/src/lib.rs",
+        "digest": "03fa811b133f5816415a2b445445ea5a2d87365d",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "gammaloop-architecture",
+        "symbol": "feynkit_tensor public reduction API",
+        "path": "crates/feynkit-tensor/src/lib.rs",
+        "digest": "f424864aa88eaacddbfe2c220aacef0a3af2f98d",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "gammaloop-architecture",
+        "symbol": "gammalooprs::graph::Graph DOT import boundary",
+        "path": "crates/gammalooprs/src/graph/parse/from_dot.rs",
+        "digest": "2f016e5378c09ffe996a4f74870845364df7d09c",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "gammaloop-architecture",
+        "symbol": "Request / DiagramSet / BuiltDiagramSet staged ownership",
+        "path": "crates/feynkit-generator/src/generation/staged.rs",
+        "digest": "4c1ca2bb58010add5d33dd84657f74d99b00e6fc",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "integration-dashboard",
+        "symbol": "gammaloop_api::commands::integrate::dashboard_event_loop",
+        "path": "crates/gammaloop-api/src/commands/integrate.rs",
+        "digest": "bcce3d43713b42fe428e3b5d89784e18c8d47fa7",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "integration-dashboard",
+        "symbol": "gammalooprs::integrate::RatatuiDashboardState",
+        "path": "crates/gammalooprs/src/integrate/render_ratatui.rs",
+        "digest": "566f096dcc09bbb2f96582a90fe5dd9aadf41f8d",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "integration-dashboard",
+        "symbol": "gammalooprs::integrate",
+        "path": "crates/gammalooprs/src/integrate/mod.rs",
+        "digest": "2cbbafcb254b4b7ac042b6ca8dab6682f9a0ce21",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "uv-renormalization",
+        "symbol": "gammalooprs::uv::UVOrchestrator",
+        "path": "crates/gammalooprs/src/uv/orchestrator.rs",
+        "digest": "4acc87a62891dbff0b3ca2cef2e8ab505c1de6d5",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "uv-renormalization",
+        "symbol": "gammalooprs::uv::approx::Integrated analytic phase ordering",
+        "path": "crates/gammalooprs/src/uv/approx/integrated.rs",
+        "digest": "46b735343d9c8be6b69c1bf738fda6a0733a2f4c",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "uv-renormalization",
+        "symbol": "gammalooprs::uv::approx::Integrated projected numerator interface",
+        "path": "crates/gammalooprs/src/uv/approx/integrated.rs",
+        "digest": "52239c3b024703396d4e60480fd22ecf04761d32",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "uv-renormalization",
+        "symbol": "vakint::VakintSettings tensor and scalar policy fields",
+        "path": "crates/vakint/src/lib.rs",
+        "digest": "70d8d2815a16186713fb2b25f84643e27554481e",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "uv-renormalization",
+        "symbol": "vakint::VakintTerm tensor backend dispatch",
+        "path": "crates/vakint/src/lib.rs",
+        "digest": "22a7663f68fb673976a0dcf4d701abed6134db8a",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "uv-renormalization",
+        "symbol": "gammalooprs::numerator::NumeratorAtomExt scalar factor collection",
+        "path": "crates/gammalooprs/src/numerator/symbolica_ext.rs",
+        "digest": "786808befbd6d68f493db1aeb4ee7e1e8f92b710",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "uv-renormalization",
+        "symbol": "gammalooprs::uv::overlap_numerators::NumeratorJetCache exact finite coefficients",
+        "path": "crates/gammalooprs/src/uv/overlap_numerators.rs",
+        "digest": "5422656f0c564e911f364e3c37da799493d519fc",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "uv-renormalization",
+        "symbol": "gammalooprs::uv::approx::Localizer integrated tensor coefficient ownership",
+        "path": "crates/gammalooprs/src/uv/approx/local_3d/integrated_localizer.rs",
+        "digest": "c4660d75be3e086dfc9d4e65b0c060fabb9def95",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "spenso-parsing-flow",
+        "symbol": "spenso::network::parsing::ShorthandParsing",
+        "path": "crates/spenso/src/network/parsing/mod.rs",
+        "digest": "583f0514c0418a75d13870024bb02a8b42f3ba02",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "schoonschip-network",
+        "symbol": "idenso::shorthands::schoonschip::Schoonschip",
+        "path": "crates/idenso/src/shorthands/schoonschip/api.rs",
+        "digest": "3d4e374d18d8e9d69be971e943712b6246a6f362",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "gammaloop-draw-style-migration",
+        "symbol": "gammaloop_api::templates::Assets::extract_templates",
+        "path": "crates/gammaloop-api/src/templates.rs",
+        "digest": "7fe2b4f32ea4277a6aa32f08395f48a2ce097b7e",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "gammaloop-drawing-architecture",
+        "symbol": "linnest::typst::layout-sequence",
+        "path": "crates/linnest/typst/src/lib.typ",
+        "digest": "df4d9c7e162b3d67227e4d3fcd660b19a1bca0e0",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "spenso-symbolica-syntax-and-rewrites",
+        "symbol": "idenso::IndexTooling",
+        "path": "crates/idenso/src/lib.rs",
+        "digest": "820fbf610c4bb06867a7013d0b8631e57704ff7d",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "spenso-architecture",
+        "symbol": "symbolica_notation::Notation",
+        "path": "crates/symbolica-notation/src/registry.rs",
+        "digest": "309685ed7ca70f43704fb12d8922f69751cadd47",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "spenso-architecture",
+        "symbol": "spenso::structure::TensorStructure",
+        "path": "crates/spenso/src/structure.rs",
+        "digest": "811c525ab9896dcd834ad30f27e14b84e65ec08a",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "spenso-architecture",
+        "symbol": "spenso::tensors::data::DataTensor",
+        "path": "crates/spenso/src/tensors/data.rs",
+        "digest": "f0e8de6af46e1464919245b04739bb6c8fb20eb2",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "spenso-architecture",
+        "symbol": "spenso::contraction::Contract blanket implementation",
+        "path": "crates/spenso/src/contraction.rs",
+        "digest": "1a6c276ef07e2ee5b1270f4b0302ba6540295894",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "spenso-architecture",
+        "symbol": "spenso::network::Network",
+        "path": "crates/spenso/src/network/mod.rs",
+        "digest": "14f66a4d6e62a4fd878c2f52f0bc6ab336cf7f24",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "spenso-architecture",
+        "symbol": "spenso::network::parsing::ParseSettings",
+        "path": "crates/spenso/src/network/parsing/mod.rs",
+        "digest": "583f0514c0418a75d13870024bb02a8b42f3ba02",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "spenso-architecture",
+        "symbol": "spenso::symbolic_parallelism::SymbolicParallelism",
+        "path": "crates/spenso/src/symbolic_parallelism.rs",
+        "digest": "f52c9ac14265f983c86c9affc9713970e6b28561",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "idenso-architecture",
+        "symbol": "idenso::representations::initialize",
+        "path": "crates/idenso/src/representations.rs",
+        "digest": "08709ccab3fc16aefd7a2dde044d4ee4e1455b23",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "idenso-architecture",
+        "symbol": "idenso::IndexTooling",
+        "path": "crates/idenso/src/lib.rs",
+        "digest": "820fbf610c4bb06867a7013d0b8631e57704ff7d",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "idenso-architecture",
+        "symbol": "idenso::CookSettings",
+        "path": "crates/idenso/src/cook.rs",
+        "digest": "b7327c174d55a96e27a015c5f74ddc0b4061b1b5",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "idenso-architecture",
+        "symbol": "idenso::tensor::SymbolicTensor",
+        "path": "crates/idenso/src/tensor/mod.rs",
+        "digest": "b95ee5f1852b22a03b1fe79bfe4342d3c42e831e",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "idenso-architecture",
+        "symbol": "idenso::tensor::SymbolicTensor<IndexedStructure>::multiply",
+        "path": "crates/idenso/src/tensor/indexed.rs",
+        "digest": "a4c365bd57958f94f9070df4562bc957bc1d425c",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "idenso-architecture",
+        "symbol": "idenso::tensor::SymbolicTensor::map_representation_dimensions",
+        "path": "crates/idenso/src/tensor/inference.rs",
+        "digest": "602ecc787c95ff01a067ed58736127940627a9cb",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "idenso-architecture",
+        "symbol": "idenso::tensor::ContractSettings",
+        "path": "crates/idenso/src/tensor/contract.rs",
+        "digest": "442fe89c0ec2fc603e7eeb88b73e69ad9e1b7e60",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "idenso-architecture",
+        "symbol": "idenso::tensor::AlgebraSettings",
+        "path": "crates/idenso/src/tensor/simplification.rs",
+        "digest": "49ae6d4398bf4decc931f01d09ef49e69f64996f",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "idenso-architecture",
+        "symbol": "idenso::tensor::simplification::observation::DomainObservations",
+        "path": "crates/idenso/src/tensor/simplification/observation.rs",
+        "digest": "93939c57f0d943d4f7cedb9e0dcabf1f6cce848c",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "idenso-architecture",
+        "symbol": "idenso::dirac::DiracSimplifier::simplify_trace_node",
+        "path": "crates/idenso/src/dirac/simplify.rs",
+        "digest": "95ebfc105ffb0f9e506105642a6e1629b0e28ae8",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "idenso-architecture",
+        "symbol": "idenso::color::simplify::ColorAlgebraSimplifier::simplify_product",
+        "path": "crates/idenso/src/color/simplify.rs",
+        "digest": "59f13bd0337c64cf8260f9876988919c0571849e",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "idenso-architecture",
+        "symbol": "idenso::tensor::CollectedOutput",
+        "path": "crates/idenso/src/tensor/collection/collected.rs",
+        "digest": "ca8c5cb4f9dd9ee5152cbb94df6c8d919e098c35",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "idenso-architecture",
+        "symbol": "idenso::tensor::SymbolicTensor::collect_with_map",
+        "path": "crates/idenso/src/tensor/collection.rs",
+        "digest": "8f078f8c9d4f7fd1fea495180aa1185894b5cfa3",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "linnet-architecture",
+        "symbol": "linnet::half_edge::HedgeGraph",
+        "path": "crates/linnet/src/half_edge.rs",
+        "digest": "cf395f5b3af0a5aa69450792745aa7f568ccd2e3",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "linnet-architecture",
+        "symbol": "linnet::half_edge::involution::Involution",
+        "path": "crates/linnet/src/half_edge/involution.rs",
+        "digest": "2a5162885ac2e05dc8a1ec79d5fec555a9f6ed36",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "linnet-architecture",
+        "symbol": "linnet::half_edge::subgraph::SubGraphLike",
+        "path": "crates/linnet/src/half_edge/subgraph.rs",
+        "digest": "929ee2f716f95ba3a0bf7a9afdb8f8bf2a458765",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "linnet-architecture",
+        "symbol": "linnet::parser::DotGraph",
+        "path": "crates/linnet/src/parser/mod.rs",
+        "digest": "6667c3527c7ae3fa85946116341b8ee78c0e87a8",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "vakint-architecture",
+        "symbol": "vakint::Vakint",
+        "path": "crates/vakint/src/lib.rs",
+        "digest": "c2e489a41ac7a123e652811ebe421f3e0852fd1c",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "vakint-architecture",
+        "symbol": "vakint::topologies::Topologies::match_topologies_to_user_input",
+        "path": "crates/vakint/src/topologies.rs",
+        "digest": "f4efb1593e4f4ca2c4290f913a3629e5f8512a94",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "vakint-architecture",
+        "symbol": "vakint::graph::Graph::new_from_atom",
+        "path": "crates/vakint/src/graph.rs",
+        "digest": "39e48cf8f2a5f368b6eac525e5b2e19ebe41854e",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "vakint-architecture",
+        "symbol": "vakint::symbolica_community_module::VakintWrapper",
+        "path": "crates/vakint/src/symbolica_community_module/mod.rs",
+        "digest": "42363386100fcecf85037b215b2f6e187eefdb2d",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "vakint-architecture",
+        "symbol": "vakint::lorentz::LorentzTensor native incidence",
+        "path": "crates/vakint/src/lorentz.rs",
+        "digest": "8375e68bc00affeb538695d1c5f460271cf2d4f6",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "vakint-architecture",
+        "symbol": "vakint::projection::ScalarTerms analytic coefficient boundary",
+        "path": "crates/vakint/src/projection.rs",
+        "digest": "faee7fa232d9dd355e96826a5a49f66db9de802c",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "cff-surface-cache-ownership",
+        "symbol": "feynkit_cff::CffGenerator::generate_into",
+        "path": "crates/feynkit-cff/src/generation.rs",
+        "digest": "47ea515ff9c91e24d6f6b501da289996a06dfe9a",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "cff-surface-cache-ownership",
+        "symbol": "feynkit_cff::CffExpression",
+        "path": "crates/feynkit-cff/src/expression.rs",
+        "digest": "22fbe168db1fc1e94241cd87507cd182e76f39a4",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "cff-surface-cache-ownership",
+        "symbol": "feynkit_cff::SurfaceCache",
+        "path": "crates/feynkit-cff/src/surface.rs",
+        "digest": "cf07dd60f15885153560f050d552600cfb19034a",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "generation-asset-diagnostics-staged",
+        "symbol": "Asset and Data resource owner",
+        "path": "crates/symbolica-data/src/lib.rs",
+        "digest": "be8392d004f1369bfc2cab83a01bb79c0d606acf",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "generation-oracle-family-migration",
+        "symbol": "qed_eemm_L1 certified numerator row",
+        "path": "crates/feynkit-generator/tests/generation_oracle/main.rs",
+        "digest": "b486d48307d14f2df3438907461d0ab93db8c6ee",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "generation-oracle-family-migration",
+        "symbol": "ctorder_qcd_uugg_L1 certified numerator row",
+        "path": "crates/feynkit-generator/tests/generation_oracle/main.rs",
+        "digest": "f64cddee976a2fa0d22c7e7805982875fb09022d",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "generation-oracle-family-migration",
+        "symbol": "sm_eemm_L0 certified numerator row",
+        "path": "crates/feynkit-generator/tests/generation_oracle/main.rs",
+        "digest": "3ee0c943abdad923436d37cce999d994d70957fd",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "generation-oracle-family-migration",
+        "symbol": "ym_g6_L0 certified numerator row",
+        "path": "crates/feynkit-generator/tests/generation_oracle/main.rs",
+        "digest": "27f3e85eb4b1c5d9cdb4e4e2a562d53d173d3e2c",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "generation-oracle-numerator-migration",
+        "symbol": "xs_qed_eemm_L1 recorded row",
+        "path": "crates/feynkit-generator/tests/generation_oracle/main.rs",
+        "digest": "4b488f655db1d4b1263d43071718f14d52f9a001",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "generation-oracle-numerator-migration",
+        "symbol": "xs_qed_eedd_L1 recorded row",
+        "path": "crates/feynkit-generator/tests/generation_oracle/main.rs",
+        "digest": "ee1fea52075f15b3b23fa44a98f957909a6c681e",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "generation-oracle-numerator-migration",
+        "symbol": "xs_qed_eeee_1pi_L1 recorded row",
+        "path": "crates/feynkit-generator/tests/generation_oracle/main.rs",
+        "digest": "fb0a84a24354a8881a5515eb2f33fc7db1ea1b99",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "ci",
+        "symbol": "CI checks, uploads and reporting commands",
+        "path": "just/ci.just",
+        "digest": "0f8a76ea61d80a7847d9e8d16756e9914e245ae2",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "feynkit-merge-readiness",
+        "symbol": "EvaluatorStack::preprocess_numerator_families",
+        "path": "crates/gammalooprs/src/integrands/process/evaluators.rs",
+        "digest": "3b507cbf49922826dc7426ae7fcfa75e95c43aed",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "feynkit-merge-readiness",
+        "symbol": "DomainObservations::finish_observation",
+        "path": "crates/idenso/src/tensor/simplification/observation.rs",
+        "digest": "93939c57f0d943d4f7cedb9e0dcabf1f6cce848c",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "feynkit-merge-readiness",
+        "symbol": "group_diagrams",
+        "path": "crates/feynkit-generator/src/grouping.rs",
+        "digest": "66cc3fe8280694c72b213d71dee37fb40a1ad997",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "nix-crane-cache-reuse",
+        "symbol": "documentationRegistry and alphal00pDocsCargoArtifacts",
+        "path": "nix/documentation.nix",
+        "digest": "a6e8d348f30ef64d9c936604c62dcb59ca635d1a",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "nix-crane-cache-reuse",
+        "symbol": "documentation source ownership",
+        "path": "nix/documentation.nix",
+        "digest": "bfafb920e4cc1fc0511aa12ad4c1f86272bb8e75",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "nix-crane-cache-reuse",
+        "symbol": "workspace manifest inputs; documentation source inputs are scoped separately",
+        "path": "nix/rust-workspace.nix",
+        "digest": "6ae7769a5fab0c19db4004118a07e14882b6f4af",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "nix-crane-cache-reuse",
+        "symbol": "workspace package source ownership",
+        "path": "nix/rust-workspace.nix",
+        "digest": "be1f856bd75cbdac5fcd3c511d3bb691462b44b7",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "nix-crane-cache-reuse",
+        "symbol": "alphal00pDocsDerivationArgs and terminal documentation consumers",
+        "path": "nix/documentation.nix",
+        "digest": "a36c6354ece22a926dc6efb1ac634895402cf522",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "nix-crane-cache-reuse",
+        "symbol": "nextestPackageGroups documentation runtime tools",
+        "path": "nix/rust-workspace.nix",
+        "digest": "311d8dbf20da058cf60c74c651491629d7eb6ce6",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "nix-crane-cache-reuse",
+        "symbol": "nextestRuntimeSrcFor",
+        "path": "nix/rust-workspace.nix",
+        "digest": "e70efccc2a78b7ab7b002facfefa375418e590f0",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "nix-crane-cache-reuse",
+        "symbol": "alphal00p_docs_builder::typst_render::PersistentTypstRenderer",
+        "path": "crates/alphal00p-docs-builder/src/typst_render.rs",
+        "digest": "61fa327720910af549fc9613c757c2a534b975f2",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "nix-crane-cache-reuse",
+        "symbol": "alphal00p_docs_builder::SiteBuilder::build_generation",
+        "path": "crates/alphal00p-docs-builder/src/watch.rs",
+        "digest": "424eac149bd4dbf3be82b19f746d6f003829cf61",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "nix-crane-cache-reuse",
+        "symbol": "documentation test group coverage",
+        "path": "nix/ci.nix",
+        "digest": "6f841f176b4d76719aaaaf4f1a0e32c0ff7eb405",
+        "selected_bytes_unchanged": true
+      },
+      {
+        "note": "architecture-notes",
+        "symbol": "alphal00p_docs_builder::SiteBuilder::check_with_catalogs (developer registry validation)",
+        "path": "crates/alphal00p-docs-builder/src/lib.rs",
+        "digest": "63e44b7c2e03ae63fbf549882c9ba0cdcb7439e9",
+        "selected_bytes_unchanged": true
+      }
+    ],
+    "scope_count": 117,
+    "all_digests_unchanged": true,
+    "moved_ids": [
+      "generation-integration-oracle-families",
+      "generation-oracle-family-diagnosis",
+      "generation-oracle-family-diagnosis-round1",
+      "generation-oracle-family-diagnosis-round2",
+      "generation-oracle-family-migration"
+    ]
+  },
+  "historical_manifests": [
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/docs/architecture/evidence/generation-integration/wp3/families/inventory.json",
+      "sha256": "28ea71a423b3aff9b6e47a88bc1b922a20b9d608b24470747e57ad0c836ca9f7",
+      "bytes": 24501
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/docs/architecture/evidence/generation-integration/wp3/families/runtime-manifest.json",
+      "sha256": "5d26514b79aa4ebd733c11090968aabfac3f314d1d26f48b8cae4631fd6bf5e4",
+      "bytes": 314317
+    }
+  ],
+  "historical_final_supplement": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-family-integration/final-supplement.json",
+    "sha256": "b94f2e718d2c0840e500e58237f129cf69c226d94f04348a7e75774c18658a08",
+    "bytes": 16683
+  },
+  "old_manifest_validation_policy": "Preserve all hashes. Tracked round1 inventory rows are interpreted against immutable1f3 blobs, not new live receipt/registry/prose; original runtime paths remain retained. New active round2 manifest binds correction/final source separately.",
+  "retention": "Retain both sibling raw capture/ELF/proof roots and all cited MAIN/sibling reviewer directories through WP3/M-rebuild closure; mutable sibling registry mismatch is expected, no global outer-manifest pass.",
+  "semantic_negative": "Round1 text.replace negative has no gate credit. Round2 renders actual altered source and applies the same named-section semantic checker.",
+  "review_status": "Runtime scopes retained. Scope A F1 correction is not self-approved; root assigns new independent focused review.",
+  "qualification": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-family-integration-round2/qualification.json",
+    "sha256": "0b8a51259d6290c6e5b34ff802fd97acbb0b3205f84865054381f7d9729dd538",
+    "bytes": 79655
+  },
+  "script": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-family-integration-round2/correct.py",
+    "sha256": "954ce6cb51d69afda3285cd29bd0de69a668c3f75d6a939d504a5874bd58f78e",
+    "bytes": 6220
+  }
+}

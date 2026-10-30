@@ -5,7 +5,7 @@
   "base": "30f02f79c2bcabfadcd8081e1add3d5afe6e91d2",
   "built_code_source": "8dcebc2591ab04d10026fbd47a45e8d31f911ef3",
   "built_code_change": "yyvzwznyztsrqtprzzlpnlyvlkwnuvyy",
-  "evidence_change": "snzorympnwtvkwslmwsyosxqvywruols",
+  "evidence_change": "lxzpuulrkmktsumozkultsnnzqxrumno",
   "preserved_prior_evidence": "a86d252c3f0003392cd660b7808c63f625b8cf4a / generation-integration-families-pre-final",
   "supporting_dependency_source_qualification": "docs/architecture/evidence/generation-integration/wp3/families/producer-metadata-qualification.json corrects the original dependency-features.json source field: dependency derivation src is gmqajram..., while y9pg92ri... is the separately qualified generator filtered source. Original fingerprint record bytes retained; no dependency-source credit for its old source field. Exact corrected path/hash is in the final nonself inventory.",
   "candidate_bookmark": "generation-integration-families",
@@ -90,11 +90,25 @@
       "extracted_cargo_metadata_sha256": "c39ec40f7d4bf2a617d2e0154c54c88f2e8d7ee4b3e507a2cfec8a3db84957f0",
       "selected_profile": "ci-optim / ci_gammaloop",
       "actual_phase_command_lines": [
-        "cargo nextest --version",
-        "cargo nextest archive \\",
-        "--archive-file \"$out/gammaloop-nextest-feynkit-feynkit-generator.tar.zst\""
+        "runHook preBuild\ncargo --version\nmkdir -p \"$out\"\nif [ -d target ]; then\n  chmod -R u+w target\n  find target -name '.cargo*lock' -delete\nfi\ncargo nextest --version\ncargo nextest archive \\\n  --cargo-profile ci-optim \\\n  --offline -p feynkit-generator \\\n  -E 'package(feynkit-generator)' \\\n  --profile ci_gammaloop \\\n  --archive-file \"$out/gammaloop-nextest-feynkit-feynkit-generator.tar.zst\"\n\nrunHook postBuild\n"
       ],
-      "workspace_cargoExtraArgs_context_only": "--locked --workspace --features feynkit-graph/svg,feynkit-py/python_stubgen,gammaloop-api/cli,gammaloop-api/python_stubgen,gammaloop-api/ufo_support,gammaloop-integration-tests/python-api-tests,gammaloop-tracing-filter/clap,gammaloop-tracing-filter/python,gammaloop-tracing-filter/symbolica,gammalooprs/python_stubgen,idenso/bincode,idenso/native,idenso/reference-cases,linnest/svg,linnet-py/python_stubgen,linnet/bincode,linnet/drawing,linnet/rayon,linnet/rkyv,linnet/serde,linnet/symbolica,pyo3-stub-gen/infer_signature,pyo3-stub-gen/numpy,pyo3/anyhow,pyo3/auto-initialize,pyo3/eyre,pyo3/macros,pyo3/multiple-pymethods,spenso-hep-lib/native,spenso/native,spenso/native-code-generation,spenso/portable-payload,spenso/python,spenso/python_stubgen,spenso/shadowing,spynso3/python_stubgen,symbolica-utils/native,symbolica/tracing_max_level_info,three-dimensional-reps/display,three-dimensional-reps/eval,three-dimensional-reps/json_schema,vakint/python_stubgen,vakint/symbolica_community_module"
+      "workspace_cargoExtraArgs_context_only": "--locked --workspace --features feynkit-graph/svg,feynkit-py/python_stubgen,gammaloop-api/cli,gammaloop-api/python_stubgen,gammaloop-api/ufo_support,gammaloop-integration-tests/python-api-tests,gammaloop-tracing-filter/clap,gammaloop-tracing-filter/python,gammaloop-tracing-filter/symbolica,gammalooprs/python_stubgen,idenso/bincode,idenso/native,idenso/reference-cases,linnest/svg,linnet-py/python_stubgen,linnet/bincode,linnet/drawing,linnet/rayon,linnet/rkyv,linnet/serde,linnet/symbolica,pyo3-stub-gen/infer_signature,pyo3-stub-gen/numpy,pyo3/anyhow,pyo3/auto-initialize,pyo3/eyre,pyo3/macros,pyo3/multiple-pymethods,spenso-hep-lib/native,spenso/native,spenso/native-code-generation,spenso/portable-payload,spenso/python,spenso/python_stubgen,spenso/shadowing,spynso3/python_stubgen,symbolica-utils/native,symbolica/tracing_max_level_info,three-dimensional-reps/display,three-dimensional-reps/eval,three-dimensional-reps/json_schema,vakint/python_stubgen,vakint/symbolica_community_module",
+      "actual_archive_argv": [
+        "cargo",
+        "nextest",
+        "archive",
+        "--cargo-profile",
+        "ci-optim",
+        "--offline",
+        "-p",
+        "feynkit-generator",
+        "-E",
+        "package(feynkit-generator)",
+        "--profile",
+        "ci_gammaloop",
+        "--archive-file",
+        "/nix/store/di9k3p4hakyy4xnzwfqijvahyhqrjwwl-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0/gammaloop-nextest-feynkit-feynkit-generator.tar.zst"
+      ]
     },
     "sources": {
       "full-source": {
@@ -118,9 +132,159 @@
       "all_other_paths_and_bytes_equal": true
     },
     "features": {
-      "selected_package_tree": "selected-features.out",
-      "tree_sha256": "df0fb8c672ccc0bc7dbbd50ffedb76b156af0e73f5a7bf979f328ba7aebe9b1d",
-      "tree_command": "selected-features.command.json",
+      "actual_execution_closure": "round2/actual-fingerprint-closure.json",
+      "fingerprint_units": 452,
+      "packages": 297,
+      "layers": [
+        "/nix/store/wa6jjzm7grkp6iy459gyqh2vqzlx4k31-gammaloop-crate-test-binaries-feynkit-generator-b6f177b7bc15beb1-deps-0.1.0/target.tar.zst",
+        "/nix/store/56f4pygl36n7im2mvrp850084d9kziaq-gammaloop-crate-test-dependencies-b6f177b7bc15beb1-deps-0.1.0/target.tar.zst",
+        "/nix/store/y46x18djvqy16zrx26zmja4rnq3jp475-gammaloop-crate-test-dependencies-b6f177b7bc15beb1-inputs/target.tar.zst"
+      ],
+      "unit": "feynkit-generator-6b0e7dc68fc70180",
+      "rustc_fingerprints": {
+        "1625334936438085654": 452
+      },
+      "broken_links": [],
+      "units_with_wasm_feature": [],
+      "direct_synthetic_link": [
+        "gammaloop_ci_test_binary_dependencies_b6f177b7bc15beb1"
+      ],
+      "actual_compiled_key_features": {
+        "feynkit-generator": [
+          "default",
+          "native"
+        ],
+        "feynkit-graph": [
+          "default",
+          "native",
+          "svg"
+        ],
+        "idenso": [
+          "bincode",
+          "default",
+          "native",
+          "reference-cases"
+        ],
+        "spenso": [
+          "default",
+          "native",
+          "native-code-generation",
+          "portable-payload",
+          "python",
+          "python_stubgen",
+          "shadowing"
+        ],
+        "symbolica": [
+          "bincode",
+          "float-mpfr",
+          "integer-gmp",
+          "native_code_generation",
+          "serde",
+          "tracing_max_level_info"
+        ],
+        "linnet": [
+          "bincode",
+          "default",
+          "drawing",
+          "native",
+          "rayon",
+          "rkyv",
+          "serde",
+          "symbolica"
+        ],
+        "serde_json": [
+          "alloc",
+          "default",
+          "float_roundtrip",
+          "std"
+        ]
+      },
+      "working_copy_context_only": {
+        "record": {
+          "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-family-integration/selected-features.out",
+          "sha256": "df0fb8c672ccc0bc7dbbd50ffedb76b156af0e73f5a7bf979f328ba7aebe9b1d",
+          "bytes": 168405
+        },
+        "packages": 231,
+        "missed_executed_packages": [
+          "amd",
+          "bytecheck",
+          "bytecheck_derive",
+          "cgmath",
+          "ciborium",
+          "ciborium-io",
+          "ciborium-ll",
+          "clarabel",
+          "darling",
+          "darling_core",
+          "darling_macro",
+          "derive_builder",
+          "derive_builder_core",
+          "derive_builder_macro",
+          "enum_dispatch",
+          "gammaloop-ci-test-binary-dependencies-b6f177b7bc15beb1",
+          "getopts",
+          "half",
+          "hexf",
+          "hexf-parse",
+          "ident_case",
+          "is-macro",
+          "kurbo",
+          "kurvst",
+          "lalrpop-util",
+          "linnest",
+          "maplit",
+          "ndarray",
+          "numpy",
+          "phf",
+          "phf_codegen",
+          "phf_generator",
+          "phf_shared",
+          "polycool",
+          "ptr_meta",
+          "ptr_meta_derive",
+          "pyo3",
+          "pyo3-build-config",
+          "pyo3-ffi",
+          "pyo3-macros",
+          "pyo3-macros-backend",
+          "pyo3-stub-gen",
+          "pyo3-stub-gen-derive",
+          "rend",
+          "rkyv",
+          "rkyv_derive",
+          "rustc-hash",
+          "rustpython-ast",
+          "rustpython-parser",
+          "rustpython-parser-core",
+          "rustpython-parser-vendored",
+          "seahash",
+          "serde-big-array",
+          "simdutf8",
+          "siphasher",
+          "symbolica-typst-plugin",
+          "target-lexicon",
+          "twofloat",
+          "unic-char-property",
+          "unic-char-range",
+          "unic-common",
+          "unic-emoji-char",
+          "unic-ucd-ident",
+          "unic-ucd-version",
+          "unicode_names2",
+          "unicode_names2_generator",
+          "venial",
+          "wasm-minimal-protocol"
+        ],
+        "review_comparison": {
+          "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/.local/review-main-families-a-opus-20261030T064303Z-3915466/work/tree-vs-closure.json",
+          "sha256": "92d87ea96e8a6d3d028f384fda8a67a5f8ca37a00ae933b1c356000ba9bf9bcb",
+          "bytes": 41119
+        },
+        "classification": "WORKING-COPY CONTEXT ONLY; no Nix injection, not execution qualification."
+      },
+      "context_package_count_difference": 66,
+      "context_set_comparison": "68 closure-only and two tree-only names (rustc_version, semver); net package-count difference66. The reviewed artifact, not subtraction alone, determines these sets.",
       "archive_metadata_resolved_context": [
         {
           "package": "feynkit-generator",
@@ -189,14 +353,46 @@
           ]
         }
       ],
-      "qualification": "Root default/native is not full dependency closure. Archive Cargo metadata is retained context; selected cargo tree and exact per-package phase/producer source qualify execution. Workspace-wide cargoExtraArgs is NOT relabelled the executed package command."
+      "qualification": "Actual layered dependency fingerprints linked from unit 6b0e7dc68fc70180, matching executed ELF suffix. Final archive ELF SHA remains independently authoritative; dependency-layer ELF differs and final own fingerprints are not retained in the archive. Working-copy cargo tree and workspace metadata are CONTEXT ONLY, never executed-closure qualification."
     },
     "compiler": [
       "ypzbz0yifsk90xl610bd7kc6sxjz138l-rust-stable-with-components-2026-09-03.drv"
     ],
     "kernel": "1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
     "pure_build_license_policy": "both variables absent, no runtime-result derivation; raw derivations not retained",
-    "first_build_attempt": "producer-build returned .drv path only, exit0 with no archive realization credit; producer-realize uses ^* and actual output/hash above"
+    "first_build_attempt": "producer-build returned .drv path only, exit0 with no archive realization credit; producer-realize uses ^* and actual output/hash above",
+    "dependency_build": {
+      "actual_phase": "runHook preBuild\ncargo --version\ncargoWithProfile test --no-run --offline -p feynkit-generator\nrunHook postBuild\n",
+      "cargo_profile": "ci-optim",
+      "resolved_argv": [
+        "cargo",
+        "test",
+        "--profile",
+        "ci-optim",
+        "--no-run",
+        "--offline",
+        "-p",
+        "feynkit-generator"
+      ],
+      "synthetic_manifests": [
+        {
+          "path": "/nix/store/n3phwkh1l89qi6bw18s0d0c6lg8vyb47-gammaloop-ci-test-binary-dependencies-b6f177b7bc15beb1-feynkit-generator-dev-dependency.toml",
+          "sha256": "a6ee84dbdc8b8fcdb6c93ce3f47a9e0d1c7aaed762902c0f51acabfdcf2fdbf4",
+          "bytes": 142
+        },
+        {
+          "path": "/nix/store/4ndgyxykkkbgn2j41kbrnw1p4jd9yyz9-gammaloop-ci-test-binary-dependencies-b6f177b7bc15beb1-Cargo.toml",
+          "sha256": "cb5333af003ff8a2577d81c3c2153c20fb1f749370085070e407f19224feeaf0",
+          "bytes": 1995
+        }
+      ],
+      "postpatch_owner": {
+        "path": "nix/rust-workspace.nix",
+        "sha256": "df551a9d7afa9bb2477833a71b9b145fe6e4b5fcaeadf99966e05f1b4bed7fd1",
+        "qualification": "Unchanged synthetic feature-anchor/postPatch owner; A queried exact drvs. This correction reads its retained safe projection, not a new Nix query."
+      },
+      "source_qualification": "Existing gmqajram dependency source versus y9pg generator source correction preserved in producer-metadata-qualification.json."
+    }
   },
   "evidence": {
     "producer-qualified.json": {
@@ -290,6 +486,13 @@
       "bytes": 616
     }
   },
+  "historical_evidence_record_roles": {
+    "producer-qualified.json": "Source, derivation, archive and ELF identities retain credit. Its working-copy feature-tree qualification and incomplete phase excerpts are superseded by round2 execution closure and full commands.",
+    "current-comparison.json": "Payload-derived fields and byte joins retain credit. Auto topology/assignment fields sourced from frozen reports have no ci-optim recomputation credit; round2 explicitly binds observer report comparisons.",
+    "proof-closure.json": "Historical output from an earlier auditor version; exact producing source not recovered. Scope B independently corroborated complete rehash. No retrospective final-script identity.",
+    "render-results.json": "Round1 source-specific positive renders only; original tautological negative has no gate credit. Corrected prose uses round2 real altered-source rendering.",
+    "selected-features.out": "Unchanged WORKING-COPY CONTEXT ONLY, without Nix synthetic injection. Never executed closure qualification."
+  },
   "validation": {
     "pools": [
       {
@@ -344,13 +547,13 @@
       },
       "new_four_case_pool_comparisons": 12,
       "prior_three_case_pool_comparisons": 9,
-      "qualification": "Actual new ci-optim None/Auto/source/census files equal approved pool1 and migration output. Independent None full historical Row and Auto full same-mode summary recomputation; CT8-position source/group correspondence explicit. Auto topology/assignment counters are not falsely equated to None.",
+      "qualification": "Actual ci-optim None/Auto/source/census payload equality and None full Row evidence retain credit. Auto has 8 payload-derived fields (diagrams, inverse_symmetry, weights, symmetry_factors, content, numerators, named, ids). Auto topology/assignment comparison formerly reused the same frozen report on both sides: NO ci-optim counter recomputation credit. Those two counters are observer-report facts, corroborated by A and fresh read-only comparison of 48 retained observer reports in round2 qualification.",
       "observer": {
         "path": "target/wp3-family-integration/observer-binding.json",
         "sha256": "478b5f3793d2cacd99306cf07614526e76e67e39d2d98760d1ac9194530cb77f",
         "bytes": 72621
       },
-      "observer_qualification": "Fresh executions of retained521c7879 dev-optim observer, source-qualified unchanged production owners. Exact source/provenance/feature records retained; not a new MAIN-compiled observer or in-memory assertion instrumentation. Actual model/request/options/typed ports/interfaces/Run/payload captures joined byte-exactly to new ci-optim public outputs at1/8/32. These fields remain capture-bound, not enlarged theorem."
+      "observer_qualification": "Retained observer 521c7879 is dev-optim, 341 units / 229 packages, NOT feature/profile-equivalent to ci-optim 452 units / 297 packages. 68 packages absent and 12 feature reductions are bound in round2 qualification. Transfer only via identical owning sources plus complete public payload byte identity; model/options/Run/ports/interfaces remain observer/capture-bound, not in-memory ci-optim observations."
     },
     "fast_lane": {
       "inventory": 420,
@@ -453,7 +656,8 @@
         "exit": 2
       },
       "reused": "541 approved replays/held-out worlds reused with exact scripts/inputs/ELFs/manifest qualification, not rerun for count inflation.",
-      "outer_manifest": "Frozen donor registry mismatch retained as EXPECTED_FAILURE/no outer pass credit; all other listed files required and rehashed."
+      "outer_manifest": "Frozen donor registry mismatch retained as EXPECTED_FAILURE/no outer pass credit; all other listed files required and rehashed.",
+      "producing_version_qualification": "Original proof-closure.json was produced before the final retained audit.py. Exact producing bytes are not recovered; retained final tool source is not retroactively that producer. Scope B independently rehashed all 27,945 entries; record bound in round2 correction. No new full rehash or 541 reruns in this correction."
     },
     "fmt": {
       "path": "target/wp3-family-integration/fmt.command.json",
@@ -475,32 +679,34 @@
       "scopes": 117,
       "mismatches": 0,
       "all86_baseline_note_contracts_preserved": true,
-      "existing113_scopes_unchanged": true,
+      "existing 113_scopes_unchanged": true,
       "classification": "Two superseded reports, one current approved certificate, separate approved migration and combined investigation; four narrow row scopes added."
     },
     "renders": {
-      "record": {
+      "historical_record": {
         "path": "target/wp3-family-integration/render-results.json",
         "sha256": "81841e1a6d7838d2eb81c951409731867cf3b34f59c564c586563827450ba5bb",
         "bytes": 127338
       },
-      "qualification": "Six final-prose PDFs and six proper semantic HTML bundles. Explicit source/imports/wrapper/tool/argv/exit/timestamp0 and semantic mutation negative; no prose edits after rendering. Not a full site build."
+      "historical_qualification": "Positive renders remain valid for their immutable inputs. The original text.replace negative is tautological and receives NO gate-negative credit.",
+      "current_record": "target/wp3-family-integration-round2/render-results.json",
+      "qualification": "Final corrected integration prose is rendered in PDF and semantic HTML bundle. A genuinely altered-source bundle is rendered and rejected by the same decoded-text checker; exact input/script/tool/argv/output bindings retained. No donor report bytes edited."
     },
     "final_documentation_qualification": {
-      "required_record": "target/wp3-family-integration/qualified-final-stage.json",
-      "detached_manifest": "target/wp3-family-integration/final-supplement.json",
-      "classification": "Source-specific final canonical builder/pages/guard results captured AFTER final candidate freeze. This receipt does not infer a full-builder pass from static counts. Detached final records avoid candidate/self-hash cycles."
+      "required_record": "target/wp3-family-integration-round2/final-stage.json",
+      "detached_manifest": "target/wp3-family-integration-round2/final-supplement.json",
+      "classification": "ONLY this new final-source stage qualifies the corrected candidate. All round1 final/qualified-final records remain successful historical1f3/a86 source-specific records, not current-tree validation. No runtime or producer rebuild/evaluation is required or claimed."
     }
   },
   "review_note_dispositions": {
     "M-N1": "Earlier reviewer fingerprint loader a2fd0037 explicitly retained and verified in proof-closure.json; new dependency auditor self-contained.",
-    "M-N2/M-N3": "New output records identify exact runtime root/results.json, code/source versions and per-command results. Old preformat chronology remains historical.",
+    "M-N2/M-N3": "Runtime/results roots remain qualified, but original proof-closure producing script predates retained final audit.py. B independent rehash corroborates content; no exact old script identity invented. New correction commands hash executing scripts.",
     "M-N4": "Exact four-line/lowercase literal guard; rustfmt does not format custom oracle! row text.",
     "M-N5": "Complete actual runtime environment KEY set plus only safe settings recorded, never secret values/hashes.",
     "M-N6": "Old credit uses retained pristine-current13389956 copy/hash, not the overwritten mutable normal-cache path.",
     "M-N7": "Actual prior293/78/49 failed-name census bound; current297/74/49 derived from Nextest/JUnit.",
-    "M-N8/M-N9": "Fresh final source/wrapper/tool/render bindings; final canonical docs owner executable/source qualified on exact frozen source. No stale/intermediate relabelling.",
-    "M-N10": "Four narrow row scopes added; existing113 unchanged.",
+    "M-N8/M-N9": "Round1 positives remain historical. Tautological negative has no credit. New corrected prose has a real altered-source render negative. Current canonical docs use unchanged source-qualified builder ELF on exact frozen Git archive.",
+    "M-N10": "All five new notes moved to investigations; four unique short row-name end anchors preserve byte-identical ranges and all 117 digests.",
     "M-N11": "Current scoped Clippy source/feature/code binding retained, no inherited pass merely from timestamps."
   },
   "failed_attempts": [
@@ -561,9 +767,23 @@
     "license": "Both variables unset in every Nix subprocess; licensed tests only direct private runtime. No real-license runtime-result derivation; no raw potentially secret-bearing derivation retained."
   },
   "inventories": {
-    "tracked": "inventory.json (nonself)",
-    "runtime": "runtime-manifest.json",
-    "final_detached": "target/wp3-family-integration/final-supplement.json",
-    "source_reproduction": "tool-sources/*.py.txt are byte-exact active recorder/auditor sources: copy to target/wp3-family-integration/<same basename without .txt> and execute from task root with recorded pinned Python. No permanent diagnostic Rust target."
+    "historical_round1_inventory": "inventory.json at1f3 (28ea71a4...); preserved byte-exact and checked against immutable1f3 blobs, not used as a live corrected-metadata inventory.",
+    "historical_runtime": "runtime-manifest.json unchanged (5d26514b...); all original runtime records retained.",
+    "historical_final_supplement": "target/wp3-family-integration/final-supplement.json unchanged (b94f2e71...).",
+    "current_correction_inventory": "round2/inventory.json (nonself)",
+    "current_detached_supplement": "target/wp3-family-integration-round2/final-supplement.json",
+    "tool_source_versions": "Round1 tool-sources are preserved historical final versions, not retroactively the producer of every old output. New round2 script sources are hash-bound before/after each correction command."
+  },
+  "preserved_round1": "1f3bb33b44e506af041fa124ea419d5b1ba41e5e / generation-integration-families-round1",
+  "correction": {
+    "scope": "Evidence/documentation only. Runtime code 8dce and all recorded outcomes unchanged; NEW focused review pending.",
+    "findings": "F1 plus associated A-F2/F3/F4/F5 and authorized B metadata improvements.",
+    "record": "round2/correction.json",
+    "full_execution_closure": "round2/actual-fingerprint-closure.json"
+  },
+  "runtime_environment_qualification": {
+    "original": "Network enabled; bwrap resolved from PATH;75 inherited environment keys. Preserve all original bytes; do not label these isolated.",
+    "review_a": "Separately attributed pinned bubblewrap0.11.2, no network, nine non-secret allowlisted keys plus private license; fresh A reruns reproduce results. Reused source/command/JUnit hashes bound in round2 correction.",
+    "future_policy": "Pinned bwrap, --unshare-net and explicit safe allowlist; private license only in direct runtime environment. No rerun in this correction."
   }
 }

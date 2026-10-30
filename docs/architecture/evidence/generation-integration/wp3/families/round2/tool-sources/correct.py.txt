@@ -1,0 +1,52 @@
+"""Bind retained review results and derived correction facts without altering history."""
+from pathlib import Path
+import json
+import sys
+sys.path.insert(0,str(Path(__file__).resolve().parent))
+from record import binding,sha
+ROOT=Path(__file__).resolve().parents[2]
+OUT=Path(__file__).resolve().parent
+A=ROOT/'.local/review-main-families-a-opus-20261030T064303Z-3915466'
+B=ROOT/'.local/review-main-families-b-opus-20261030T064230Z'
+q=json.loads((OUT/'qualification.json').read_text())
+original=json.loads((ROOT/'target/wp3-family-integration/pool-1.command.json').read_text())
+reviewer=json.loads((A/'logs/pool-1.command.json').read_text())
+comparison=json.loads((A/'work/tree-vs-closure.json').read_text())
+missing=[name for name,row in comparison['differences'].items() if row['in_closure'] and not row['in_tree']]
+extra=[name for name,row in comparison['differences'].items() if row['in_tree'] and not row['in_closure']]
+assert len(missing)-len(extra)==comparison['closure_packages']-comparison['tree_packages']
+assert '--unshare-net' not in original['argv'] and original['argv'][0]=='bwrap'
+assert '--unshare-net' in reviewer['argv'] and reviewer['argv'][0].startswith('/nix/store/')
+safe_keys=[k for k in reviewer['env_keys'] if k not in ('SYMBOLICA_LICENSE','SYMBOLICA_LICENSE_SIGNED')]
+reports=q['observer_report_comparisons']['reports']
+assert all(x['current']['sha256']==x['frozen']['sha256'] for x in reports)
+closure=json.loads((OUT/'actual-fingerprint-closure.json').read_text())
+assert closure==json.loads((A/'work/fingerprint-closure.json').read_text())
+b=json.loads((B/'out/closure-final-rehash.json').read_text())
+assert b['entries']==b['ok']+len(b['mismatch']) and not b['missing'] and not b['unreadable']
+assert [r['path'] for r in b['mismatch']]==[str(ROOT.parent/'generation-oracle-numerator-families/docs/developers.toml')]
+r={
+ 'schema':1,'round1':'1f3bb33b44e506af041fa124ea419d5b1ba41e5e',
+ 'built_runtime':'8dcebc2591ab04d10026fbd47a45e8d31f911ef3',
+ 'status':'Evidence correction candidate; NEW focused independent review pending. No runtime or producer rebuild/rerun.',
+ 'scope_a':binding(A/'review.json'),'scope_b':binding(B/'review.json'),
+ 'actual_closure':q['executed_closure'],'actual_commands':q['commands'],
+ 'full_tracked_closure':'actual-fingerprint-closure.json',
+ 'derivation_query_policy':'No Nix query/evaluation/build/develop runs in this correction. Existing safe Scope A projection is source-bound; no raw secret-bearing drv or private source is copied to store.',
+ 'context_tree':{'record':q['working_copy_context']['record'],'packages':comparison['tree_packages'],'executed_packages':comparison['closure_packages'],'net_difference':comparison['closure_packages']-comparison['tree_packages'],'closure_only_names':missing,'tree_only_names':extra,'classification':'CONTEXT ONLY; no synthetic dev-dependency and no executed-closure credit.'},
+ 'observer':q['observer_qualification'],
+ 'Auto':{'payload_derived_fields':['diagrams','inverse_symmetry','weights','symmetry_factors','content','numerators','named','ids'],'counter_fields':['topologies','assignments'],'counter_qualification':'Only observer-report facts. Original same-frozen-report comparison is not ci-optim recomputation.','retained_report_comparisons':binding(OUT/'qualification.json'),'reports_compared':len(reports),'review_a_independent_corrobation':'F3 in the bound Scope A review; these new comparisons read retained bytes, not new runtime.'},
+ 'original_runtime_environment':{'record':binding(ROOT/'target/wp3-family-integration/pool-1.command.json'),'inherited_env_key_count':len(original['env_keys']),'network_disabled':'--unshare-net' in original['argv'],'bwrap':original['argv'][0],'no_retroactive_isolation_credit':True},
+ 'review_a_runtime_separate':{'script':binding(A/'scripts/sandbox.py'),'command':binding(A/'logs/pool-1.command.json'),'safe_env_key_count':len(safe_keys),'safe_env_keys':safe_keys,'private_license_key_separate':'SYMBOLICA_LICENSE' in reviewer['env_keys'],'network_disabled':'--unshare-net' in reviewer['argv'],'pinned_bwrap':reviewer['argv'][0],'qualification':'Separately attributed reviewer execution, not implementation rerun.','pool_commands':[binding(A/f'logs/pool-{pool}.command.json') for pool in (1,8,32)],'junit':[binding(A/f'logs/pool-{pool}-junit.xml') for pool in (1,8,32)]},
+ 'proof_version':{'historical_record':q['proof_producing_version']['old_record'],'qualification':q['proof_producing_version']['qualification'],'b_independent_rehash':binding(B/'out/closure-final-rehash.json'),'verified_by_b':b['ok'],'expected_registry_mismatches':b['mismatch'],'new_rehash_claimed':False},
+ 'registry':q['registry'],
+ 'historical_manifests':[binding(ROOT/'docs/architecture/evidence/generation-integration/wp3/families'/f) for f in ['inventory.json','runtime-manifest.json']], 
+ 'historical_final_supplement':binding(ROOT/'target/wp3-family-integration/final-supplement.json'),
+ 'old_manifest_validation_policy':'Preserve all hashes. Tracked round1 inventory rows are interpreted against immutable1f3 blobs, not new live receipt/registry/prose; original runtime paths remain retained. New active round2 manifest binds correction/final source separately.',
+ 'retention':'Retain both sibling raw capture/ELF/proof roots and all cited MAIN/sibling reviewer directories through WP3/M-rebuild closure; mutable sibling registry mismatch is expected, no global outer-manifest pass.',
+ 'semantic_negative':'Round1 text.replace negative has no gate credit. Round2 renders actual altered source and applies the same named-section semantic checker.',
+ 'review_status':'Runtime scopes retained. Scope A F1 correction is not self-approved; root assigns new independent focused review.',
+ 'qualification':binding(OUT/'qualification.json'),'script':binding(__file__)
+}
+(OUT/'correction.json').write_text(json.dumps(r,indent=2)+'\n')
+print(json.dumps({'units':closure['closure_units'],'packages':len(closure['packages']),'context':comparison['tree_packages'],'net_deficit':len(missing)-len(extra),'closure_only':len(missing),'tree_only':len(extra),'original_env_keys':len(original['env_keys']),'review_safe_keys':len(safe_keys),'reports':len(reports),'scopes':q['registry']['scope_count']}))

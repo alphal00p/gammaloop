@@ -1,0 +1,88 @@
+"""Real final-source render positive/negative; semantic check reads the named section."""
+from pathlib import Path
+import json
+import sys
+from html.parser import HTMLParser
+sys.path.insert(0,str(Path(__file__).resolve().parent))
+from record import run,binding,sha
+
+OUT=Path(__file__).resolve().parent
+ROOT=OUT.parents[1]
+TOOL='/nix/store/wzpxqpc3v2xxah69rqifq5kac67hx36g-typst-0.15.1/bin/typst'
+SOURCE=ROOT/'docs/architecture/generation-integration-oracle-families.typ'
+EXPECTED='The working-copy cargo tree is context only and does not qualify execution.'
+SECTION='Executed closure and evidence qualifications'
+
+class Parser(HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.heading=None
+        self.heading_text=[]
+        self.section=None
+        self.sections={}
+        self.active=[]
+    def handle_starttag(self,tag,attrs):
+        if tag in ('h1','h2','h3'):
+            self.heading=tag
+            self.heading_text=[]
+        if tag=='script' or any(k.startswith('on') for k,v in attrs):
+            self.active.append(tag)
+    def handle_data(self,text):
+        if self.heading:
+            self.heading_text.append(text)
+        elif self.section:
+            self.sections.setdefault(self.section,[]).append(text)
+    def handle_endtag(self,tag):
+        if self.heading==tag:
+            self.section=' '.join(''.join(self.heading_text).split())
+            self.sections.setdefault(self.section,[])
+            self.heading=None
+
+def check(path):
+    parser=Parser()
+    parser.feed(Path(path).read_text())
+    text=' '.join(' '.join(parser.sections.get(SECTION,[])).split())
+    return not parser.active and EXPECTED in text, text
+
+def main():
+    out=OUT/'renders'
+    out.mkdir(exist_ok=False)
+    before=sha(SOURCE)
+    wrapper=out/'current-wrapper.typ'
+    wrapper.write_text('#document("index.html")[#include "/docs/architecture/generation-integration-oracle-families.typ"]\n')
+    commands=[]
+    for label,argv in [
+      ('render-pdf',[TOOL,'compile','--root',str(ROOT),'--creation-timestamp','0',str(SOURCE),str(out/'report.pdf')]),
+      ('render-html',[TOOL,'compile','--root',str(ROOT),'--creation-timestamp','0','--features','html,bundle','--format','bundle',str(wrapper),str(out/'current-bundle')])]:
+        assert run(label,argv,scripts=[__file__])==0
+        commands.append(binding(OUT/(label+'.command.json')))
+    good,text=check(out/'current-bundle/index.html')
+    assert good
+    altered=out/'altered-source.typ'
+    source=SOURCE.read_text()
+    assert source.count(EXPECTED)==1
+    altered.write_text(source.replace(EXPECTED,'The working-copy cargo tree fully qualifies the executed closure.'))
+    badwrapper=out/'altered-wrapper.typ'
+    badwrapper.write_text('#document("index.html")[#include "/'+str(altered.relative_to(ROOT))+'"]\n')
+    label='render-altered-html'
+    argv=[TOOL,'compile','--root',str(ROOT),'--creation-timestamp','0','--features','html,bundle','--format','bundle',str(badwrapper),str(out/'altered-bundle')]
+    assert run(label,argv,scripts=[__file__])==0
+    accepted,badtext=check(out/'altered-bundle/index.html')
+    assert not accepted
+    assert sha(out/'current-bundle/index.html')!=sha(out/'altered-bundle/index.html')
+    assert before==sha(SOURCE)
+    result={'source':binding(SOURCE),'tool':binding(TOOL),'wrapper':binding(wrapper),'creation_timestamp':0,
+      'commands':commands+[binding(OUT/(label+'.command.json'))],
+      'pdf':binding(out/'report.pdf'),'html':binding(out/'current-bundle/index.html'),
+      'semantic_checker':{'script':binding(__file__),'section':SECTION,'expected':EXPECTED,
+                          'current_accepted':good,'current_decoded_section':text,
+                          'altered_source':binding(altered),'altered_wrapper':binding(badwrapper),
+                          'altered_output':binding(out/'altered-bundle/index.html'),
+                          'altered_accepted':accepted,'altered_decoded_section':badtext},
+      'historical_negative':'Original round1 text.replace check is not a gate negative and has no negative-control credit.',
+      'qualification':'Only corrected integration prose rendered; unchanged donor PDFs/bundles retain their exact old source/tool/output bindings. No full-site claim.'}
+    (OUT/'render-results.json').write_text(json.dumps(result,indent=2)+'\n')
+    print(json.dumps({'positive':good,'real_altered_source_accepted':accepted,'source_unchanged':before==sha(SOURCE)}))
+
+if __name__=='__main__':
+    main()

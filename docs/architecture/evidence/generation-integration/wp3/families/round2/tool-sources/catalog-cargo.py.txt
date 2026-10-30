@@ -1,0 +1,24 @@
+#!/nix/store/wj1f56qky4pmjc7l0r6b6l7whnnw7hp6-python3-3.13.15/bin/python3
+"""Exact Cargo-launch delegation to the unchanged qualified catalog executable."""
+from pathlib import Path
+import hashlib
+import json
+import os
+import subprocess
+import sys
+OUT=Path(__file__).resolve().parent
+args=sys.argv[1:]
+prefix=['run','--locked','--quiet','-p','alphal00p-docs-catalogs','--bin','alphal00p-docs-catalogs','--']
+assert args[:len(prefix)]==prefix,args
+elf=OUT/'bin/catalogs'
+def sha(p):return hashlib.sha256(Path(p).read_bytes()).hexdigest()
+expected=json.loads((OUT/'docs-tools.json').read_text())['catalogs']['sha256']
+assert sha(elf)==expected
+record={'argv':[str(elf),*args[len(prefix):]],'delegated_cargo_argv':sys.argv,
+        'cwd':str(Path.cwd()),'script_sha256':sha(__file__),'elf_sha256':expected}
+proc=subprocess.run(record['argv'])
+record['exit']=proc.returncode
+# Only task-owned catalog invocation records are writable in the sandbox.
+with (OUT/'catalog-invocations.jsonl').open('a') as stream:
+    stream.write(json.dumps(record)+'\n')
+raise SystemExit(proc.returncode)

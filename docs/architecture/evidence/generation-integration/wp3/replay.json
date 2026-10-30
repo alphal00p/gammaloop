@@ -1687,6 +1687,9 @@
     "code_change": "yyvzwznyztsrqtprzzlpnlyvlkwnuvyy",
     "receipt": "docs/architecture/evidence/generation-integration/wp3/families/receipt.json",
     "candidate_bookmark": "generation-integration-families",
-    "status": "Exactly four additional numerator literals; current combined validation separately recorded; awaiting NEW independent combined review. WP3 incomplete."
+    "status": "Round 1 runtime/source/producer/count scopes passed within independent reviews; round 2 evidence correction awaits NEW focused review. Runtime code 8dce is unchanged; 74 oracle failures and WP3 requirements remain open.",
+    "round1_candidate": "1f3bb33b44e506af041fa124ea419d5b1ba41e5e",
+    "correction": "docs/architecture/evidence/generation-integration/wp3/families/round2/correction.json",
+    "evidence_change": "lxzpuulrkmktsumozkultsnnzqxrumno"
   }
 }
