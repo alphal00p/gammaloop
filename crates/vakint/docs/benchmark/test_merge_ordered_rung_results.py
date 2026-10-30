@@ -928,6 +928,142 @@ class OrderedReportContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "did not complete successfully"):
             merge.append_diagnostic(self.base, "failed", observations, "SYNTHETIC")
 
+    def exact_diagnostic_fixture(self):
+        pending = merge.append_diagnostic(
+            self.base, "pending", self.diagnostic_receipts(), "SYNTHETIC pending"
+        )
+        reports = pending["ordered_rung_diagnostics"]["pending"]["observations"]
+        proof = self.write(
+            "saved-proof/proof/functional-pair.json",
+            {
+                "schema": "vakint.ordered-rung-functional-pair.v1",
+                "exact_retained_equality": True,
+                "functional_only": True,
+                "performance_eligible": False,
+                "new_evaluations": 0,
+                "retain_only_explicitly_requested": True,
+                "numerical_enclosures_agree": None,
+                "numerical_check": "not checked",
+                "input_sha256": "3" * 64,
+                "reports": {arm: reports[arm]["report"]["evidence"] for arm in reports},
+                "retained": {
+                    arm: reports[arm]["report"]["raw"]["retained"]["sha256"]
+                    for arm in reports
+                },
+            },
+        )
+        self.write(
+            "saved-proof/guard/launch.json",
+            {
+                "schema": "vakint.ordered-rung-process.v1",
+                "guard_armed_before_native_exec": True,
+                "command": [
+                    "SYNTHETIC_COMPARATOR",
+                    "--compare-two-reports",
+                    *[
+                        str(Path(reports[arm]["report"]["evidence"]["path"]).parent)
+                        for arm in ("dfs", "ordered")
+                    ],
+                    "--no-numerical-reference",
+                ],
+            },
+        )
+        self.write(
+            "saved-proof/guard/completion.json",
+            {
+                "success": True,
+                "exit_code": 0,
+                "failure": None,
+                "signals_sent_to_original_pidfd": [],
+            },
+        )
+        return pending, proof
+
+    def test_exact_diagnostic_preserves_pending_entry_and_no_numeric_claim(self):
+        pending, proof = self.exact_diagnostic_fixture()
+        result = merge.append_exact_diagnostic(
+            pending, "exact", "pending", proof, "SYNTHETIC exact only"
+        )
+        self.assertEqual(
+            result["ordered_rung_diagnostics"]["pending"],
+            pending["ordered_rung_diagnostics"]["pending"],
+        )
+        row = result["ordered_rung_diagnostics"]["exact"]
+        self.assertTrue(row["exact_retained_equality"])
+        self.assertIsNone(row["numerical_validation"])
+        self.assertIsNone(row["ordered_over_dfs"])
+        self.assertEqual(
+            row["observations"],
+            pending["ordered_rung_diagnostics"]["pending"]["observations"],
+        )
+
+    def test_exact_diagnostic_rejects_unbound_output_or_unchecked_numeric_claim(self):
+        pending, proof = self.exact_diagnostic_fixture()
+        raw = merge.read(proof)
+        raw["retained"]["ordered"] = "9" * 64
+        proof.write_text(json.dumps(raw))
+        with self.assertRaisesRegex(ValueError, "does not bind"):
+            merge.append_exact_diagnostic(pending, "bad", "pending", proof, "SYNTHETIC")
+        raw["retained"]["ordered"] = pending["ordered_rung_diagnostics"]["pending"][
+            "observations"
+        ]["ordered"]["report"]["raw"]["retained"]["sha256"]
+        raw["numerical_enclosures_agree"] = True
+        proof.write_text(json.dumps(raw))
+        with self.assertRaisesRegex(ValueError, "exact-only"):
+            merge.append_exact_diagnostic(pending, "bad", "pending", proof, "SYNTHETIC")
+
+    def test_current_numeric_checkpoint_is_distinct_from_numeric_pair_comparison(self):
+        pending, proof = self.exact_diagnostic_fixture()
+        current = pending["ordered_rung_diagnostics"]["pending"]["observations"][
+            "ordered"
+        ]
+        numerical = {
+            "coefficients": [
+                {
+                    "epsilon_power": 0,
+                    "real_significant_digits": None,
+                    "imaginary_significant_digits": 213,
+                    "real_error_quality": "Estimated",
+                    "imaginary_error_quality": "Estimated",
+                }
+            ],
+            "warnings": ["SYNTHETIC limiting sources"],
+            "selection": {"requested_decimal_precision": 215},
+        }
+        current["report"]["raw"]["numerical_reference"] = numerical
+        current["receipt"]["raw"].update(
+            schema="vakint.ordered-rung-functional-diagnostic-completion.v1",
+            numerical_precision_by_epsilon=numerical["coefficients"],
+        )
+        report_path = Path(current["report"]["evidence"]["path"])
+        report_path.write_text(json.dumps(current["report"]["raw"]))
+        current["report"]["evidence"] = merge.evidence(report_path)
+        proof_raw = merge.read(proof)
+        proof_raw["reports"]["ordered"] = merge.evidence(report_path)
+        proof.write_text(json.dumps(proof_raw))
+        receipt_path = Path(current["receipt"]["evidence"]["path"])
+        receipt_path.write_text(json.dumps(current["receipt"]["raw"]))
+        current["receipt"]["evidence"] = merge.evidence(receipt_path)
+        result = merge.append_exact_diagnostic(
+            pending, "current", "pending", proof, "SYNTHETIC", current_numerical=True
+        )
+        checkpoint = result["ordered_rung_diagnostics"]["current"]
+        self.assertTrue(checkpoint["numerical_validation"])
+        self.assertIsNone(checkpoint["numerical_pair_comparison"])
+        self.assertEqual(
+            checkpoint["observations"]["ordered"]["report"]["raw"][
+                "numerical_reference"
+            ]["warnings"],
+            numerical["warnings"],
+        )
+        current["receipt"]["raw"]["numerical_precision_by_epsilon"] = []
+        receipt_path.write_text(json.dumps(current["receipt"]["raw"]))
+        current["receipt"]["evidence"] = merge.evidence(receipt_path)
+        with self.assertRaisesRegex(ValueError, "precision evidence differs"):
+            merge.append_exact_diagnostic(
+                pending, "bad", "pending", proof, "SYNTHETIC", current_numerical=True
+            )
+
     def test_historical_changed_acceptance_or_timing_is_rejected(self):
         path = self.historical_pair()
         raw = merge.read(path)

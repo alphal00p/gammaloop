@@ -43588,10 +43588,2291 @@
         }
       },
       "note": "Source 047: both retained runs completed on 10 declared masters with no unknown integrals. Exact pair comparison is pending; no numerical reference was requested. DFS was monitored and Ordered was not, on a shared host, so neither quotient nor fair efficiency claim is made. Guard walls are 962.928 s (DFS) and 33.100 s (Ordered); these differ from the separately shown reduction-math/public-call timers. This source predates later normalization/materialization fixes."
+    },
+    "4L-quadratic-047-saved-exact-proof-222-20261030": {
+      "schema": "vakint.ordered-rung-diagnostic.v1",
+      "loop_count": 4,
+      "projection": "quadratic-transverse",
+      "status": "functional_exact_pass_numerical_unchecked",
+      "performance_eligible": false,
+      "ordered_over_dfs": null,
+      "ordered_over_dfs_no_memo": null,
+      "exact_retained_equality": true,
+      "numerical_validation": null,
+      "sample_counts": {
+        "dfs": 1,
+        "dfs_no_memo": 0,
+        "ordered": 1
+      },
+      "observations": {
+        "dfs": {
+          "receipt": {
+            "evidence": {
+              "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-dfs-manual-reference-047-01/functional-receipt.json",
+              "sha256": "db28b8f426828552357f365f1b9a8ea974998e0e11e002e07aaf4594c6d01bd4"
+            },
+            "raw": {
+              "schema": "vakint.ordered-rung-manual-reference-receipt.v1",
+              "status": "PASS-functional-catalogue-closure-only",
+              "main_revision": "047e5ccd730988edd91ee461c3b665d059b491cf",
+              "native_revision": "b5e51865309d2818f2439f3ddfde7db4a312f2d8",
+              "external_revision": "f1626f676b1b5ace8ea2c261aa4dd114812f79df",
+              "performance_qualified": false,
+              "exact_pair_parity": "PENDINGseparateexactpairtool; noresultcomparisonperformedhere",
+              "fair_efficiency_ratio": null,
+              "normalization_caveat": "047predatesfinalb457Orderedcentralnormalizationsimplifier; same047Nativeb5sourceusedbothdiagnosticreports",
+              "scope": "monitoredsharedhostmanualmemoizedDFSRetainreferenceafter900sCIpilotyieldednoresult; no preparedcache/no previousrunstate/no numericalreference; no arbitrarywallcap",
+              "report": {
+                "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-dfs-manual-reference-047-01/work/L4-quadratic-dfs/report.json",
+                "bytes": 4333,
+                "sha256": "5152f228b54518f615815be6e925e8d0cc726de0afb45c41b00cb569ace4e2c8"
+              },
+              "retained": {
+                "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-dfs-manual-reference-047-01/work/L4-quadratic-dfs/retained.symbolica",
+                "bytes": 22078,
+                "sha256": "6986f629362956bf28bfbb3bf5a941e5d1f4df667a626d93395dbde8059a8f77"
+              },
+              "started": {
+                "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-dfs-manual-reference-047-01/started.json",
+                "bytes": 3688,
+                "sha256": "61c60e7acbc3ef381bf1f82ce8a2dd14d9188e61f10852b3dc05acc77bd8eee3"
+              },
+              "command": {
+                "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-dfs-manual-reference-047-01/command.json",
+                "bytes": 985,
+                "sha256": "e9195d0796ef70b842921df17aa63774f8f9f756b1950642738933952f9dda5a"
+              },
+              "guard_launch": {
+                "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-dfs-manual-reference-047-01/guard/launch.json",
+                "bytes": 1770,
+                "sha256": "c0deed42cde382f461dacd8c893c4d97ee5e3dec2f9bc1a5ccef766a5db3164f"
+              },
+              "guard_completion": {
+                "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-dfs-manual-reference-047-01/guard/completion.json",
+                "bytes": 184,
+                "sha256": "c4053693a61f74fdd689911e51d7b82abdb14abca2d1c5c6860f7c567920e087"
+              },
+              "stdout": {
+                "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-dfs-manual-reference-047-01/guard/stdout.log",
+                "bytes": 75,
+                "sha256": "9861781bf18f0d9195cf44d751dbe9c8107a23363df4f95d8866086891fc5d57"
+              },
+              "stderr": {
+                "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-dfs-manual-reference-047-01/guard/stderr.log",
+                "bytes": 0,
+                "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              },
+              "final_monitor": {
+                "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-dfs-manual-reference-047-01/monitor.json",
+                "bytes": 6870,
+                "sha256": "e07bd1cb57834e0ae501597a215b03430acdabe41a59d606d79de74766d33273"
+              },
+              "phase_observations": {
+                "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-dfs-manual-reference-047-01/phase-observations.jsonl",
+                "bytes": 8270,
+                "sha256": "e0ec95cb739c867b24a2d47ca82316dca283230c1466df6513a59433c74e12d4"
+              },
+              "immutable_executable_unchanged": true,
+              "prepared_input_authenticated": true,
+              "cache_policy_authenticated": true,
+              "catalogue_closure": {
+                "closed": true,
+                "master_count": 10,
+                "unknown": [],
+                "unknown_count": 0
+              },
+              "measured_values": {
+                "guard_elapsed_seconds": 962.9281010050327,
+                "retained_public_seconds": 951.454071791,
+                "reduction_math_seconds": 948.279493383,
+                "reduction_math_scope_id": "vakint.rustred.reduction-math.v1",
+                "reduction_math_interval_count": 175976,
+                "reduction_math_complete": true,
+                "loading_seconds": 9.572763486
+              },
+              "os_resources": {
+                "guard_samples": 962,
+                "peak_rss_bytes": 3056115712,
+                "min_host_available_bytes": 442525646848,
+                "min_host_free_bytes": 154710503424
+              },
+              "ordered047_provenance_only": {
+                "report": {
+                  "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-ordered-diagnostic-047-01/work/L4-quadratic-ordered/report.json",
+                  "bytes": 4336,
+                  "sha256": "d774129bbbc48e7b3c0fbeb18fdce2ecd5f4b397e7dac54823d1deaefdc249ee"
+                },
+                "matching_fields": [
+                  "loop_count",
+                  "projection",
+                  "contributions",
+                  "input_sha256",
+                  "evaluated_input_sha256",
+                  "dimension_binding",
+                  "data",
+                  "normalization",
+                  "epsilon_symbol",
+                  "mu_r_sq_symbol"
+                ],
+                "same_source_native_executable": true,
+                "input_and_data_match": true,
+                "both_catalogue_closed_with10_masters": true,
+                "result_bytes_differ_expected_beforeexactcomparison": true,
+                "expression_equality_not_claimed": true
+              },
+              "utc": "2026-10-30T02:45:15.816627+00:00",
+              "exit_code": 0,
+              "elapsed_seconds": 962.9281010050327,
+              "failure": null,
+              "signals_sent_to_original_pidfd": [],
+              "success": true
+            }
+          },
+          "report": {
+            "evidence": {
+              "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-dfs-manual-reference-047-01/work/L4-quadratic-dfs/report.json",
+              "sha256": "5152f228b54518f615815be6e925e8d0cc726de0afb45c41b00cb569ace4e2c8"
+            },
+            "raw": {
+              "cache_policy": {
+                "depth_first_intrinsic_memoization": true,
+                "ordered_result_cache": "not supported",
+                "prepared_cache_loaded": false,
+                "previous_run_cache_restored": false
+              },
+              "catalogue_closure": {
+                "closed": true,
+                "master_count": 10,
+                "unknown": [],
+                "unknown_count": 0
+              },
+              "completed_seconds": 961.12297411,
+              "completed_seconds_scope": "loading, retained evaluation, artifact serialization and optional numerical reference; scalar input preparation is recorded separately",
+              "contributions": 15,
+              "data": {
+                "manifest_sha256": "028b4e66affca59138c7913c0ee718de6a4d07913e9a88bd905bd5d850e902f2",
+                "path": "/shared/codex-1/vakint_rustred/workspace/5l-push/external-light-profile-v2-20261027",
+                "version": "v0.1.2"
+              },
+              "dimension_binding": {
+                "scope": "exact fixture trace dimension; all public evaluations share this binding",
+                "source": "rustred::{}::d",
+                "target": "-2*vakint::{}::\u03b5+4"
+              },
+              "epsilon_symbol": "vakint::\u03b5",
+              "evaluated_input_sha256": "6aef1c6de7703e2e3476c0dde43dfd5ffc40565c2d5d4459dc44001332ee6b6e",
+              "gluon_rungs": 3,
+              "guards": {
+                "preparation": [
+                  "1",
+                  "rustred::{}::d",
+                  "-1+rustred::{}::d",
+                  "2+rustred::{}::d",
+                  "-2*rustred::{}::d+rustred::{}::d^2+rustred::{}::d^3"
+                ],
+                "scope": "existing lower-loop public Atom API does not expose its internal guard set"
+              },
+              "input_sha256": "050c3d0fbd9b87046986de5f458b6626bdd5652aea464cd932fbe6c43f2abaa8",
+              "intrinsic_memoization": true,
+              "intrinsic_memoization_scope": "primary depth-first completed-result reuse; DFS-no-memo also bypasses dependency/product result memos, while Ordered checked opaque factorization may use a fresh isolated internal memo",
+              "loading_seconds": 9.572763486,
+              "loop_count": 4,
+              "memory_after_retained_reduction": {
+                "process_peak_rss_bytes": 3053498368,
+                "rss_bytes": 2222669824,
+                "scope": "Linux whole-process RSS; peak includes preparation/loading and earlier stages"
+              },
+              "monitoring_enabled": true,
+              "mu_r_sq_symbol": "vakint::mursq",
+              "normalization": "MSbar",
+              "numerical_reference": null,
+              "persistent_cache": false,
+              "preparation": {
+                "current_run_seconds": 0.0,
+                "historical_seconds": 122.011886393,
+                "reused_authenticated_bundle": true,
+                "timing_scope": "scalar preparation precedes retained evaluation; loaded-bundle historical work is not added to current timing",
+                "timings": {
+                  "angular_seconds": 118.806562718,
+                  "graph_generation_seconds": 0.02497967,
+                  "ingress_seconds": 0.520854117,
+                  "scalar_contraction_seconds": 2.577914702,
+                  "taylor_seconds": 0.074417568,
+                  "total_seconds": 122.011822333
+                }
+              },
+              "producer": {
+                "allowed_cpus": "164",
+                "build_profile": "release",
+                "cargo_lock_sha256": "9338911038cac4c53515170535f87f9fabb6bf1004fd75317068c5fd06a9ab13",
+                "commit": "047e5ccd730988edd91ee461c3b665d059b491cf",
+                "comparison_process": "one engine in this process",
+                "debug_assertions": false,
+                "executable_identity_scope": "release: streamed once; DEV: use the supervising original-process launch receipt",
+                "executable_sha256": "7306c9db8b7615673a277ec71c47cd4a36a57e4948db89b63c4a6ff84d12f0fc",
+                "native_runtime_arities": "1,3,6,10,15",
+                "profile_contract": "caller must build --release with no profile overrides; debug_assertions is not compiler-profile introspection"
+              },
+              "projection": "quadratic-transverse",
+              "reduction_completed": true,
+              "reduction_math_seconds": 948.279493383,
+              "reduction_math_timing": {
+                "complete": true,
+                "gross_seconds": 948.279493383,
+                "incompleteness_reason": null,
+                "interval_count": 175976,
+                "measured_owner_preparation_seconds": 0.0,
+                "scope_id": "vakint.rustred.reduction-math.v1"
+              },
+              "retained": {
+                "bytes": 22078,
+                "file": "retained.symbolica",
+                "sha256": "6986f629362956bf28bfbb3bf5a941e5d1f4df667a626d93395dbde8059a8f77"
+              },
+              "retained_reduction_seconds": 951.454071791,
+              "retained_reduction_seconds_scope": "complete retained public call, including frontend and finalization; separate from reduction math",
+              "schema": "vakint.ordered-rung-comparison.v1",
+              "strategy": "DepthFirst",
+              "worker_policy": {
+                "owner_preparation_workers": 1,
+                "scope": "single owner preparation worker required for native timing subtraction"
+              }
+            }
+          },
+          "completion": {
+            "evidence": {
+              "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-dfs-manual-reference-047-01/guard/completion.json",
+              "sha256": "c4053693a61f74fdd689911e51d7b82abdb14abca2d1c5c6860f7c567920e087"
+            },
+            "raw": {
+              "utc": "2026-10-30T02:45:15.816627+00:00",
+              "exit_code": 0,
+              "elapsed_seconds": 962.9281010050327,
+              "failure": null,
+              "signals_sent_to_original_pidfd": [],
+              "success": true
+            }
+          },
+          "source_revision": "047e5ccd730988edd91ee461c3b665d059b491cf",
+          "reduction_math_seconds": 948.279493383,
+          "public_retained_seconds": 951.454071791,
+          "guard_elapsed_seconds": 962.9281010050327
+        },
+        "ordered": {
+          "receipt": {
+            "evidence": {
+              "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-ordered-diagnostic-047-01/functional-receipt.json",
+              "sha256": "f9d971c006cd10ab843e25be84472ceea9f00030c9efcc879a52e86acaa6ac42"
+            },
+            "raw": {
+              "schema": "vakint.ordered-rung-functional-probe-receipt.v1",
+              "status": "PASS-functional-catalogue-closure-only",
+              "main_revision": "047e5ccd730988edd91ee461c3b665d059b491cf",
+              "native_revision": "b5e51865309d2818f2439f3ddfde7db4a312f2d8",
+              "final_b457_equivalence_claimed": false,
+              "speedup_or_performance_qualification": false,
+              "old_result_parity": "not-compared; reference unavailable",
+              "input_contributions": 15,
+              "catalogue_closure": {
+                "closed": true,
+                "master_count": 10,
+                "unknown": [],
+                "unknown_count": 0
+              },
+              "retained": {
+                "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-ordered-diagnostic-047-01/work/L4-quadratic-ordered/retained.symbolica",
+                "bytes": 36395,
+                "sha256": "3b12d381dc11c91fe38c8d7cb8ff84dcd361ad6f2ca679692e149211cb81d687"
+              },
+              "report": {
+                "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-ordered-diagnostic-047-01/work/L4-quadratic-ordered/report.json",
+                "bytes": 4336,
+                "sha256": "d774129bbbc48e7b3c0fbeb18fdce2ecd5f4b397e7dac54823d1deaefdc249ee"
+              },
+              "started": {
+                "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-ordered-diagnostic-047-01/started.json",
+                "bytes": 2324,
+                "sha256": "65f0a47a9d30e012deffe4bbaa6400209a02d883fe33df4332d1342daaa9fffb"
+              },
+              "command": {
+                "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-ordered-diagnostic-047-01/command.json",
+                "bytes": 821,
+                "sha256": "e869cf953f6bb7e5c0d0c13a9b5cf2bfcd7cbd00fce8b09740283f56353393df"
+              },
+              "guard_launch": {
+                "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-ordered-diagnostic-047-01/guard/launch.json",
+                "bytes": 1605,
+                "sha256": "fa2ef54a6560b02e2b577d85b0310556c6fc0bed5ce1d6fd8b2804bcca53e51e"
+              },
+              "guard_completion": {
+                "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-ordered-diagnostic-047-01/guard/completion.json",
+                "bytes": 183,
+                "sha256": "1d1adc29641aa986bc4aef769a912f992341f1eb4bbac687e442b692d45a20c4"
+              },
+              "stdout": {
+                "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-ordered-diagnostic-047-01/guard/stdout.log",
+                "bytes": 76,
+                "sha256": "276ce270aae10113434b5759c528f7b90e9ae4d0e0abb6ed23354f5ab68310f6"
+              },
+              "stderr": {
+                "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-ordered-diagnostic-047-01/guard/stderr.log",
+                "bytes": 0,
+                "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              },
+              "immutable_executable_unchanged": true,
+              "proof_scope": "One4LquadraticOrderedRetainfunctionalprobe, authenticated15-contributionpreparedbundle; no numerical reference/cache/monitor; known047-vs-finalnormalizationdifference recorded; sharedhostnonperformanceoverlap",
+              "utc": "2026-10-30T02:09:16.825782+00:00",
+              "exit_code": 0,
+              "elapsed_seconds": 33.1000607740134,
+              "failure": null,
+              "signals_sent_to_original_pidfd": [],
+              "success": true
+            }
+          },
+          "report": {
+            "evidence": {
+              "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-ordered-diagnostic-047-01/work/L4-quadratic-ordered/report.json",
+              "sha256": "d774129bbbc48e7b3c0fbeb18fdce2ecd5f4b397e7dac54823d1deaefdc249ee"
+            },
+            "raw": {
+              "cache_policy": {
+                "depth_first_intrinsic_memoization": false,
+                "ordered_result_cache": "not supported",
+                "prepared_cache_loaded": false,
+                "previous_run_cache_restored": false
+              },
+              "catalogue_closure": {
+                "closed": true,
+                "master_count": 10,
+                "unknown": [],
+                "unknown_count": 0
+              },
+              "completed_seconds": 31.94085352,
+              "completed_seconds_scope": "loading, retained evaluation, artifact serialization and optional numerical reference; scalar input preparation is recorded separately",
+              "contributions": 15,
+              "data": {
+                "manifest_sha256": "028b4e66affca59138c7913c0ee718de6a4d07913e9a88bd905bd5d850e902f2",
+                "path": "/shared/codex-1/vakint_rustred/workspace/5l-push/external-light-profile-v2-20261027",
+                "version": "v0.1.2"
+              },
+              "dimension_binding": {
+                "scope": "exact fixture trace dimension; all public evaluations share this binding",
+                "source": "rustred::{}::d",
+                "target": "-2*vakint::{}::\u03b5+4"
+              },
+              "epsilon_symbol": "vakint::\u03b5",
+              "evaluated_input_sha256": "6aef1c6de7703e2e3476c0dde43dfd5ffc40565c2d5d4459dc44001332ee6b6e",
+              "gluon_rungs": 3,
+              "guards": {
+                "preparation": [
+                  "1",
+                  "rustred::{}::d",
+                  "-1+rustred::{}::d",
+                  "2+rustred::{}::d",
+                  "-2*rustred::{}::d+rustred::{}::d^2+rustred::{}::d^3"
+                ],
+                "scope": "existing lower-loop public Atom API does not expose its internal guard set"
+              },
+              "input_sha256": "050c3d0fbd9b87046986de5f458b6626bdd5652aea464cd932fbe6c43f2abaa8",
+              "intrinsic_memoization": false,
+              "intrinsic_memoization_scope": "primary depth-first completed-result reuse; DFS-no-memo also bypasses dependency/product result memos, while Ordered checked opaque factorization may use a fresh isolated internal memo",
+              "loading_seconds": 9.882616424,
+              "loop_count": 4,
+              "memory_after_retained_reduction": {
+                "process_peak_rss_bytes": 2349977600,
+                "rss_bytes": 2076430336,
+                "scope": "Linux whole-process RSS; peak includes preparation/loading and earlier stages"
+              },
+              "monitoring_enabled": false,
+              "mu_r_sq_symbol": "vakint::mursq",
+              "normalization": "MSbar",
+              "numerical_reference": null,
+              "persistent_cache": false,
+              "preparation": {
+                "current_run_seconds": 0.0,
+                "historical_seconds": 122.011886393,
+                "reused_authenticated_bundle": true,
+                "timing_scope": "scalar preparation precedes retained evaluation; loaded-bundle historical work is not added to current timing",
+                "timings": {
+                  "angular_seconds": 118.806562718,
+                  "graph_generation_seconds": 0.02497967,
+                  "ingress_seconds": 0.520854117,
+                  "scalar_contraction_seconds": 2.577914702,
+                  "taylor_seconds": 0.074417568,
+                  "total_seconds": 122.011822333
+                }
+              },
+              "producer": {
+                "allowed_cpus": "164",
+                "build_profile": "release",
+                "cargo_lock_sha256": "9338911038cac4c53515170535f87f9fabb6bf1004fd75317068c5fd06a9ab13",
+                "commit": "047e5ccd730988edd91ee461c3b665d059b491cf",
+                "comparison_process": "one engine in this process",
+                "debug_assertions": false,
+                "executable_identity_scope": "release: streamed once; DEV: use the supervising original-process launch receipt",
+                "executable_sha256": "7306c9db8b7615673a277ec71c47cd4a36a57e4948db89b63c4a6ff84d12f0fc",
+                "native_runtime_arities": "1,3,6,10,15",
+                "profile_contract": "caller must build --release with no profile overrides; debug_assertions is not compiler-profile introspection"
+              },
+              "projection": "quadratic-transverse",
+              "reduction_completed": true,
+              "reduction_math_seconds": 2.8831383649999998,
+              "reduction_math_timing": {
+                "complete": true,
+                "gross_seconds": 2.8831383649999998,
+                "incompleteness_reason": null,
+                "interval_count": 5,
+                "measured_owner_preparation_seconds": 0.0,
+                "scope_id": "vakint.rustred.reduction-math.v1"
+              },
+              "retained": {
+                "bytes": 36395,
+                "file": "retained.symbolica",
+                "sha256": "3b12d381dc11c91fe38c8d7cb8ff84dcd361ad6f2ca679692e149211cb81d687"
+              },
+              "retained_reduction_seconds": 21.964086789,
+              "retained_reduction_seconds_scope": "complete retained public call, including frontend and finalization; separate from reduction math",
+              "schema": "vakint.ordered-rung-comparison.v1",
+              "strategy": "Ordered",
+              "worker_policy": {
+                "owner_preparation_workers": 1,
+                "scope": "single owner preparation worker required for native timing subtraction"
+              }
+            }
+          },
+          "completion": {
+            "evidence": {
+              "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-ordered-diagnostic-047-01/guard/completion.json",
+              "sha256": "1d1adc29641aa986bc4aef769a912f992341f1eb4bbac687e442b692d45a20c4"
+            },
+            "raw": {
+              "utc": "2026-10-30T02:09:16.825782+00:00",
+              "exit_code": 0,
+              "elapsed_seconds": 33.1000607740134,
+              "failure": null,
+              "signals_sent_to_original_pidfd": [],
+              "success": true
+            }
+          },
+          "source_revision": "047e5ccd730988edd91ee461c3b665d059b491cf",
+          "reduction_math_seconds": 2.8831383649999998,
+          "public_retained_seconds": 21.964086789,
+          "guard_elapsed_seconds": 33.1000607740134
+        }
+      },
+      "note": "Source 047: saved DFS and Ordered retained expressions now agree exactly, proved by the authenticated source-222 comparator in 0.144 s without any new reduction or numerical evaluation. Both outputs contain 10 declared masters and no unknown integrals. Numerical validation is not checked. DFS was monitored and Ordered was not on a shared host; no fair efficiency ratio is reported. These source-047 math/public observations predate later normalization/materialization fixes; the original pending checkpoint remains preserved.",
+      "supersedes": "4L-quadratic-047-closed-pair-pending-20261030",
+      "exact_pair_proof": {
+        "evidence": {
+          "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-saved-pair-047-proof-222-01/proof/functional-pair.json",
+          "sha256": "1c908fe71e8f3e704029d5c6619a6d100b4aa1586cba8e9cae90fb0701d5b1c9"
+        },
+        "raw": {
+          "equality_scope": "existing exact retained comparator and, when checked, tracked numerical enclosure overlap; no exceptional-domain equality or timing qualification",
+          "exact_retained_equality": true,
+          "functional_only": true,
+          "input_sha256": "050c3d0fbd9b87046986de5f458b6626bdd5652aea464cd932fbe6c43f2abaa8",
+          "new_evaluations": 0,
+          "numerical_check": "not checked",
+          "numerical_enclosures_agree": null,
+          "performance_eligible": false,
+          "reports": {
+            "dfs": {
+              "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-dfs-manual-reference-047-01/work/L4-quadratic-dfs/report.json",
+              "sha256": "5152f228b54518f615815be6e925e8d0cc726de0afb45c41b00cb569ace4e2c8"
+            },
+            "ordered": {
+              "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-ordered-diagnostic-047-01/work/L4-quadratic-ordered/report.json",
+              "sha256": "d774129bbbc48e7b3c0fbeb18fdce2ecd5f4b397e7dac54823d1deaefdc249ee"
+            }
+          },
+          "retain_only_explicitly_requested": true,
+          "retained": {
+            "dfs": "6986f629362956bf28bfbb3bf5a941e5d1f4df667a626d93395dbde8059a8f77",
+            "ordered": "3b12d381dc11c91fe38c8d7cb8ff84dcd361ad6f2ca679692e149211cb81d687"
+          },
+          "schema": "vakint.ordered-rung-functional-pair.v1"
+        }
+      },
+      "exact_pair_execution": {
+        "launch": {
+          "evidence": {
+            "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-saved-pair-047-proof-222-01/guard/launch.json",
+            "sha256": "2335174c5e5ee086c85236332db2be0fdb0e23ef1a7b437ae17e113749ba527b"
+          },
+          "raw": {
+            "schema": "vakint.ordered-rung-process.v1",
+            "utc": "2026-10-30T08:16:30.093106+00:00",
+            "pid": 1633285,
+            "start_ticks": 138189121,
+            "guard_armed_before_native_exec": true,
+            "command": [
+              "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/build/release-222df4cb1/example/immutable/ordered_reduction_rungs",
+              "--work-dir",
+              "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-saved-pair-047-proof-222-01/proof",
+              "--compare-two-reports",
+              "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-dfs-manual-reference-047-01/work/L4-quadratic-dfs",
+              "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-ordered-diagnostic-047-01/work/L4-quadratic-ordered",
+              "--no-numerical-reference"
+            ],
+            "cwd": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/vakint-final-validation",
+            "cpu_affinity": [
+              169
+            ],
+            "minimum_memory_bytes": 200000000000,
+            "maximum_elapsed_seconds": null,
+            "executable": {
+              "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/build/release-222df4cb1/example/immutable/ordered_reduction_rungs",
+              "bytes": 86386016,
+              "sha256": "99b29a8144f00820c80db33d37357e0656ff6f6364135f2b814199c93ded5108"
+            },
+            "thread_environment": {
+              "RAYON_NUM_THREADS": "1",
+              "OMP_NUM_THREADS": "1",
+              "MKL_NUM_THREADS": "1"
+            }
+          }
+        },
+        "completion": {
+          "evidence": {
+            "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-saved-pair-047-proof-222-01/guard/completion.json",
+            "sha256": "98527c6e54c0b55ef539feaf8d8d8d8f60a11e12e5e2d4065a04ce3371e87b6c"
+          },
+          "raw": {
+            "utc": "2026-10-30T08:16:30.236189+00:00",
+            "exit_code": 0,
+            "elapsed_seconds": 0.14437655010260642,
+            "failure": null,
+            "signals_sent_to_original_pidfd": [],
+            "success": true
+          }
+        }
+      }
+    },
+    "4L-quadratic-047DFS-222Ordered-current-closed-20261030": {
+      "schema": "vakint.ordered-rung-diagnostic.v1",
+      "loop_count": 4,
+      "projection": "quadratic-transverse",
+      "status": "catalogue_closed_exact_pair_pending",
+      "performance_eligible": false,
+      "ordered_over_dfs": null,
+      "ordered_over_dfs_no_memo": null,
+      "exact_retained_equality": null,
+      "numerical_validation": null,
+      "sample_counts": {
+        "dfs": 1,
+        "dfs_no_memo": 0,
+        "ordered": 1
+      },
+      "observations": {
+        "dfs": {
+          "receipt": {
+            "evidence": {
+              "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-dfs-manual-reference-047-01/functional-receipt.json",
+              "sha256": "db28b8f426828552357f365f1b9a8ea974998e0e11e002e07aaf4594c6d01bd4"
+            },
+            "raw": {
+              "schema": "vakint.ordered-rung-manual-reference-receipt.v1",
+              "status": "PASS-functional-catalogue-closure-only",
+              "main_revision": "047e5ccd730988edd91ee461c3b665d059b491cf",
+              "native_revision": "b5e51865309d2818f2439f3ddfde7db4a312f2d8",
+              "external_revision": "f1626f676b1b5ace8ea2c261aa4dd114812f79df",
+              "performance_qualified": false,
+              "exact_pair_parity": "PENDINGseparateexactpairtool; noresultcomparisonperformedhere",
+              "fair_efficiency_ratio": null,
+              "normalization_caveat": "047predatesfinalb457Orderedcentralnormalizationsimplifier; same047Nativeb5sourceusedbothdiagnosticreports",
+              "scope": "monitoredsharedhostmanualmemoizedDFSRetainreferenceafter900sCIpilotyieldednoresult; no preparedcache/no previousrunstate/no numericalreference; no arbitrarywallcap",
+              "report": {
+                "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-dfs-manual-reference-047-01/work/L4-quadratic-dfs/report.json",
+                "bytes": 4333,
+                "sha256": "5152f228b54518f615815be6e925e8d0cc726de0afb45c41b00cb569ace4e2c8"
+              },
+              "retained": {
+                "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-dfs-manual-reference-047-01/work/L4-quadratic-dfs/retained.symbolica",
+                "bytes": 22078,
+                "sha256": "6986f629362956bf28bfbb3bf5a941e5d1f4df667a626d93395dbde8059a8f77"
+              },
+              "started": {
+                "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-dfs-manual-reference-047-01/started.json",
+                "bytes": 3688,
+                "sha256": "61c60e7acbc3ef381bf1f82ce8a2dd14d9188e61f10852b3dc05acc77bd8eee3"
+              },
+              "command": {
+                "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-dfs-manual-reference-047-01/command.json",
+                "bytes": 985,
+                "sha256": "e9195d0796ef70b842921df17aa63774f8f9f756b1950642738933952f9dda5a"
+              },
+              "guard_launch": {
+                "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-dfs-manual-reference-047-01/guard/launch.json",
+                "bytes": 1770,
+                "sha256": "c0deed42cde382f461dacd8c893c4d97ee5e3dec2f9bc1a5ccef766a5db3164f"
+              },
+              "guard_completion": {
+                "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-dfs-manual-reference-047-01/guard/completion.json",
+                "bytes": 184,
+                "sha256": "c4053693a61f74fdd689911e51d7b82abdb14abca2d1c5c6860f7c567920e087"
+              },
+              "stdout": {
+                "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-dfs-manual-reference-047-01/guard/stdout.log",
+                "bytes": 75,
+                "sha256": "9861781bf18f0d9195cf44d751dbe9c8107a23363df4f95d8866086891fc5d57"
+              },
+              "stderr": {
+                "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-dfs-manual-reference-047-01/guard/stderr.log",
+                "bytes": 0,
+                "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              },
+              "final_monitor": {
+                "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-dfs-manual-reference-047-01/monitor.json",
+                "bytes": 6870,
+                "sha256": "e07bd1cb57834e0ae501597a215b03430acdabe41a59d606d79de74766d33273"
+              },
+              "phase_observations": {
+                "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-dfs-manual-reference-047-01/phase-observations.jsonl",
+                "bytes": 8270,
+                "sha256": "e0ec95cb739c867b24a2d47ca82316dca283230c1466df6513a59433c74e12d4"
+              },
+              "immutable_executable_unchanged": true,
+              "prepared_input_authenticated": true,
+              "cache_policy_authenticated": true,
+              "catalogue_closure": {
+                "closed": true,
+                "master_count": 10,
+                "unknown": [],
+                "unknown_count": 0
+              },
+              "measured_values": {
+                "guard_elapsed_seconds": 962.9281010050327,
+                "retained_public_seconds": 951.454071791,
+                "reduction_math_seconds": 948.279493383,
+                "reduction_math_scope_id": "vakint.rustred.reduction-math.v1",
+                "reduction_math_interval_count": 175976,
+                "reduction_math_complete": true,
+                "loading_seconds": 9.572763486
+              },
+              "os_resources": {
+                "guard_samples": 962,
+                "peak_rss_bytes": 3056115712,
+                "min_host_available_bytes": 442525646848,
+                "min_host_free_bytes": 154710503424
+              },
+              "ordered047_provenance_only": {
+                "report": {
+                  "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-ordered-diagnostic-047-01/work/L4-quadratic-ordered/report.json",
+                  "bytes": 4336,
+                  "sha256": "d774129bbbc48e7b3c0fbeb18fdce2ecd5f4b397e7dac54823d1deaefdc249ee"
+                },
+                "matching_fields": [
+                  "loop_count",
+                  "projection",
+                  "contributions",
+                  "input_sha256",
+                  "evaluated_input_sha256",
+                  "dimension_binding",
+                  "data",
+                  "normalization",
+                  "epsilon_symbol",
+                  "mu_r_sq_symbol"
+                ],
+                "same_source_native_executable": true,
+                "input_and_data_match": true,
+                "both_catalogue_closed_with10_masters": true,
+                "result_bytes_differ_expected_beforeexactcomparison": true,
+                "expression_equality_not_claimed": true
+              },
+              "utc": "2026-10-30T02:45:15.816627+00:00",
+              "exit_code": 0,
+              "elapsed_seconds": 962.9281010050327,
+              "failure": null,
+              "signals_sent_to_original_pidfd": [],
+              "success": true
+            }
+          },
+          "report": {
+            "evidence": {
+              "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-dfs-manual-reference-047-01/work/L4-quadratic-dfs/report.json",
+              "sha256": "5152f228b54518f615815be6e925e8d0cc726de0afb45c41b00cb569ace4e2c8"
+            },
+            "raw": {
+              "cache_policy": {
+                "depth_first_intrinsic_memoization": true,
+                "ordered_result_cache": "not supported",
+                "prepared_cache_loaded": false,
+                "previous_run_cache_restored": false
+              },
+              "catalogue_closure": {
+                "closed": true,
+                "master_count": 10,
+                "unknown": [],
+                "unknown_count": 0
+              },
+              "completed_seconds": 961.12297411,
+              "completed_seconds_scope": "loading, retained evaluation, artifact serialization and optional numerical reference; scalar input preparation is recorded separately",
+              "contributions": 15,
+              "data": {
+                "manifest_sha256": "028b4e66affca59138c7913c0ee718de6a4d07913e9a88bd905bd5d850e902f2",
+                "path": "/shared/codex-1/vakint_rustred/workspace/5l-push/external-light-profile-v2-20261027",
+                "version": "v0.1.2"
+              },
+              "dimension_binding": {
+                "scope": "exact fixture trace dimension; all public evaluations share this binding",
+                "source": "rustred::{}::d",
+                "target": "-2*vakint::{}::\u03b5+4"
+              },
+              "epsilon_symbol": "vakint::\u03b5",
+              "evaluated_input_sha256": "6aef1c6de7703e2e3476c0dde43dfd5ffc40565c2d5d4459dc44001332ee6b6e",
+              "gluon_rungs": 3,
+              "guards": {
+                "preparation": [
+                  "1",
+                  "rustred::{}::d",
+                  "-1+rustred::{}::d",
+                  "2+rustred::{}::d",
+                  "-2*rustred::{}::d+rustred::{}::d^2+rustred::{}::d^3"
+                ],
+                "scope": "existing lower-loop public Atom API does not expose its internal guard set"
+              },
+              "input_sha256": "050c3d0fbd9b87046986de5f458b6626bdd5652aea464cd932fbe6c43f2abaa8",
+              "intrinsic_memoization": true,
+              "intrinsic_memoization_scope": "primary depth-first completed-result reuse; DFS-no-memo also bypasses dependency/product result memos, while Ordered checked opaque factorization may use a fresh isolated internal memo",
+              "loading_seconds": 9.572763486,
+              "loop_count": 4,
+              "memory_after_retained_reduction": {
+                "process_peak_rss_bytes": 3053498368,
+                "rss_bytes": 2222669824,
+                "scope": "Linux whole-process RSS; peak includes preparation/loading and earlier stages"
+              },
+              "monitoring_enabled": true,
+              "mu_r_sq_symbol": "vakint::mursq",
+              "normalization": "MSbar",
+              "numerical_reference": null,
+              "persistent_cache": false,
+              "preparation": {
+                "current_run_seconds": 0.0,
+                "historical_seconds": 122.011886393,
+                "reused_authenticated_bundle": true,
+                "timing_scope": "scalar preparation precedes retained evaluation; loaded-bundle historical work is not added to current timing",
+                "timings": {
+                  "angular_seconds": 118.806562718,
+                  "graph_generation_seconds": 0.02497967,
+                  "ingress_seconds": 0.520854117,
+                  "scalar_contraction_seconds": 2.577914702,
+                  "taylor_seconds": 0.074417568,
+                  "total_seconds": 122.011822333
+                }
+              },
+              "producer": {
+                "allowed_cpus": "164",
+                "build_profile": "release",
+                "cargo_lock_sha256": "9338911038cac4c53515170535f87f9fabb6bf1004fd75317068c5fd06a9ab13",
+                "commit": "047e5ccd730988edd91ee461c3b665d059b491cf",
+                "comparison_process": "one engine in this process",
+                "debug_assertions": false,
+                "executable_identity_scope": "release: streamed once; DEV: use the supervising original-process launch receipt",
+                "executable_sha256": "7306c9db8b7615673a277ec71c47cd4a36a57e4948db89b63c4a6ff84d12f0fc",
+                "native_runtime_arities": "1,3,6,10,15",
+                "profile_contract": "caller must build --release with no profile overrides; debug_assertions is not compiler-profile introspection"
+              },
+              "projection": "quadratic-transverse",
+              "reduction_completed": true,
+              "reduction_math_seconds": 948.279493383,
+              "reduction_math_timing": {
+                "complete": true,
+                "gross_seconds": 948.279493383,
+                "incompleteness_reason": null,
+                "interval_count": 175976,
+                "measured_owner_preparation_seconds": 0.0,
+                "scope_id": "vakint.rustred.reduction-math.v1"
+              },
+              "retained": {
+                "bytes": 22078,
+                "file": "retained.symbolica",
+                "sha256": "6986f629362956bf28bfbb3bf5a941e5d1f4df667a626d93395dbde8059a8f77"
+              },
+              "retained_reduction_seconds": 951.454071791,
+              "retained_reduction_seconds_scope": "complete retained public call, including frontend and finalization; separate from reduction math",
+              "schema": "vakint.ordered-rung-comparison.v1",
+              "strategy": "DepthFirst",
+              "worker_policy": {
+                "owner_preparation_workers": 1,
+                "scope": "single owner preparation worker required for native timing subtraction"
+              }
+            }
+          },
+          "completion": {
+            "evidence": {
+              "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-dfs-manual-reference-047-01/guard/completion.json",
+              "sha256": "c4053693a61f74fdd689911e51d7b82abdb14abca2d1c5c6860f7c567920e087"
+            },
+            "raw": {
+              "utc": "2026-10-30T02:45:15.816627+00:00",
+              "exit_code": 0,
+              "elapsed_seconds": 962.9281010050327,
+              "failure": null,
+              "signals_sent_to_original_pidfd": [],
+              "success": true
+            }
+          },
+          "source_revision": "047e5ccd730988edd91ee461c3b665d059b491cf",
+          "reduction_math_seconds": 948.279493383,
+          "public_retained_seconds": 951.454071791,
+          "guard_elapsed_seconds": 962.9281010050327
+        },
+        "ordered": {
+          "receipt": {
+            "evidence": {
+              "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-ordered-numeric-222-01/completion-validation.json",
+              "sha256": "c19f05d5f85db6e0a5562f0176362f4f94cf0f3df3ab0c665b22ad93e8aa9719"
+            },
+            "raw": {
+              "schema": "vakint.ordered-rung-functional-diagnostic-completion.v1",
+              "utc": "2026-10-30T08:19:52.113100+00:00",
+              "success": true,
+              "functional_only": true,
+              "performance_eligible": false,
+              "ci_qualified": false,
+              "source_revision": "222df4cb1f35a8c79927df1dd72a56110fa333bd",
+              "guard_completion": {
+                "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-ordered-numeric-222-01/guard/completion.json",
+                "sha256": "27c29ec6ab177524b1f21e7014f0f398dc9a59f15aff5e09ccee86fa704d0506",
+                "bytes": 184
+              },
+              "guard_launch": {
+                "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-ordered-numeric-222-01/guard/launch.json",
+                "sha256": "d912717daad4d9ebabf9cee8a22d5a4711afad9c31007a672599d232afae3529",
+                "bytes": 1619
+              },
+              "report": {
+                "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-ordered-numeric-222-01/work/L4-quadratic-ordered/report.json",
+                "sha256": "8c90946e04b6a2b50684cc5ae62779b6bfc7e1e34da3b2f1e454239bad2b8fb5",
+                "bytes": 27703
+              },
+              "build_receipt": {
+                "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/build/release-222df4cb1/example/build-receipt.json",
+                "sha256": "fe6a42fe1f793ee38f2ab77509da3c63ebf46020237bc71bf869a2c733b76b42",
+                "bytes": 5761
+              },
+              "catalogue_closure": {
+                "closed": true,
+                "master_count": 10,
+                "unknown": [],
+                "unknown_count": 0
+              },
+              "numerical_precision_by_epsilon": [
+                {
+                  "epsilon_power": -4,
+                  "real_significant_digits": null,
+                  "imaginary_significant_digits": 245,
+                  "real_error_quality": "Bounded",
+                  "imaginary_error_quality": "Bounded"
+                },
+                {
+                  "epsilon_power": -3,
+                  "real_significant_digits": null,
+                  "imaginary_significant_digits": 245,
+                  "real_error_quality": "Bounded",
+                  "imaginary_error_quality": "Bounded"
+                },
+                {
+                  "epsilon_power": -2,
+                  "real_significant_digits": null,
+                  "imaginary_significant_digits": 242,
+                  "real_error_quality": "Bounded",
+                  "imaginary_error_quality": "Bounded"
+                },
+                {
+                  "epsilon_power": -1,
+                  "real_significant_digits": null,
+                  "imaginary_significant_digits": 241,
+                  "real_error_quality": "Bounded",
+                  "imaginary_error_quality": "Bounded"
+                },
+                {
+                  "epsilon_power": 0,
+                  "real_significant_digits": null,
+                  "imaginary_significant_digits": 213,
+                  "real_error_quality": "Estimated",
+                  "imaginary_error_quality": "Estimated"
+                }
+              ],
+              "precision_caveat": "epsilon^0 has 213 achieved imaginary digits for a source-selected 215-digit request; no minimum214 acceptance claim and no source/gate change. Exact retained comparison is separately pending."
+            }
+          },
+          "report": {
+            "evidence": {
+              "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-ordered-numeric-222-01/work/L4-quadratic-ordered/report.json",
+              "sha256": "8c90946e04b6a2b50684cc5ae62779b6bfc7e1e34da3b2f1e454239bad2b8fb5"
+            },
+            "raw": {
+              "cache_policy": {
+                "depth_first_intrinsic_memoization": false,
+                "ordered_result_cache": "not supported",
+                "prepared_cache_loaded": false,
+                "previous_run_cache_restored": false
+              },
+              "catalogue_closure": {
+                "closed": true,
+                "master_count": 10,
+                "unknown": [],
+                "unknown_count": 0
+              },
+              "completed_seconds": 56.082169781,
+              "completed_seconds_scope": "loading, retained evaluation, artifact serialization and optional numerical reference; scalar input preparation is recorded separately",
+              "contributions": 15,
+              "data": {
+                "manifest_sha256": "028b4e66affca59138c7913c0ee718de6a4d07913e9a88bd905bd5d850e902f2",
+                "path": "/shared/codex-1/vakint_rustred/workspace/5l-push/external-light-profile-v2-20261027",
+                "version": "v0.1.2"
+              },
+              "dimension_binding": {
+                "scope": "exact fixture trace dimension; all public evaluations share this binding",
+                "source": "rustred::{}::d",
+                "target": "-2*vakint::{}::\u03b5+4"
+              },
+              "epsilon_symbol": "vakint::\u03b5",
+              "evaluated_input_sha256": "6aef1c6de7703e2e3476c0dde43dfd5ffc40565c2d5d4459dc44001332ee6b6e",
+              "gluon_rungs": 3,
+              "guards": {
+                "preparation": [
+                  "1",
+                  "rustred::{}::d",
+                  "-1+rustred::{}::d",
+                  "2+rustred::{}::d",
+                  "-2*rustred::{}::d+rustred::{}::d^2+rustred::{}::d^3"
+                ],
+                "scope": "existing lower-loop public Atom API does not expose its internal guard set"
+              },
+              "input_sha256": "050c3d0fbd9b87046986de5f458b6626bdd5652aea464cd932fbe6c43f2abaa8",
+              "intrinsic_memoization": false,
+              "intrinsic_memoization_scope": "primary depth-first completed-result reuse; DFS-no-memo also bypasses dependency/product result memos, while Ordered checked opaque factorization may use a fresh isolated internal memo",
+              "loading_seconds": 9.575073296,
+              "loop_count": 4,
+              "memory_after_retained_reduction": {
+                "process_peak_rss_bytes": 2343591936,
+                "rss_bytes": 2071588864,
+                "scope": "Linux whole-process RSS; peak includes preparation/loading and earlier stages"
+              },
+              "monitoring_enabled": false,
+              "mu_r_sq_symbol": "vakint::mursq",
+              "normalization": "MSbar",
+              "numerical_reference": {
+                "coefficients": [
+                  {
+                    "epsilon_power": -4,
+                    "imaginary": "1.654454480920700047053093416206298438747997938795532826563712020951665570800982677619374496524374527763935590073885761761288022557485724998683655990379192532260782562439599657356351901065372610982425353853640250439954158013675757742231315536629353e-12",
+                    "imaginary_absolute_error": "1.560935561947423022723426444842499703984055703625171173461184720034471337514668142052201705163945631957094267340541698588976164861726884480573651423117883162288040365633679960473148334475174630025811766821125412179856332361842244637091690864633152e-258",
+                    "imaginary_error_exact_rational": "3/1921924308174003258872616370050369756495810455948672905389542244035233680030523317234537010836564833497229828911284598430510768810573374275010933992099815720970170092183271059798176857571621225553914820586983072295508566795439261982531741155133337002515103744",
+                    "imaginary_error_quality": "Bounded",
+                    "imaginary_exact_rational": "12718945134595584448578754858336910671144599898956821044746478843436980176727953527658571425138460706113484829423298915229195059728874924126010413584534558581145607176731195377344530013387056530679677849628233176335174942054802091447819788209899427/7687697232696013035490465480201479025983241823794691621558168976140934720122093268938148043346259333988919315645138393722043075242293497100043735968399262883880680368733084239192707430286484902215659282347932289182034267181757047930126964620533348010060414976",
+                    "imaginary_exact_zero": false,
+                    "imaginary_significant_digits": 245,
+                    "real": "0",
+                    "real_absolute_error": "0",
+                    "real_error_exact_rational": "0",
+                    "real_error_quality": "Bounded",
+                    "real_exact_rational": "0",
+                    "real_exact_zero": true,
+                    "real_significant_digits": null
+                  },
+                  {
+                    "epsilon_power": -3,
+                    "imaginary": "1.364924946759577538818802068370196211967098299506314581915062417285124095910810709035983959632608985405246861810955753453062618609925723123914016192062833839115145614012669717318990318378932404060500916929253206612962180361282500137340835317719216e-11",
+                    "imaginary_absolute_error": "1.248748449557938418178741155873999763187244562900136938768947776027577070011734513641761364131156505565675413872433358871180931889381507584458921138494306529830432292506943968378518667580139704020649413456900329743885065889473795709673352691706522e-257",
+                    "imaginary_error_exact_rational": "3/240240538521750407359077046256296219561976306993584113173692780504404210003815414654317126354570604187153728613910574803813846101321671784376366749012476965121271261522908882474772107196452653194239352573372884036938570849429907747816467644391667125314387968",
+                    "imaginary_error_quality": "Bounded",
+                    "imaginary_exact_rational": "26232824340103392925193681895319878259235737291598443404789612614588771614501404150795803564348075206359062460685554012660214810690804531009896478018102527073612814802008090465773093152610804094526835564858230926191298317988029313611128313182917565/1921924308174003258872616370050369756495810455948672905389542244035233680030523317234537010836564833497229828911284598430510768810573374275010933992099815720970170092183271059798176857571621225553914820586983072295508566795439261982531741155133337002515103744",
+                    "imaginary_exact_zero": false,
+                    "imaginary_significant_digits": 245,
+                    "real": "0",
+                    "real_absolute_error": "0",
+                    "real_error_exact_rational": "0",
+                    "real_error_quality": "Bounded",
+                    "real_exact_rational": "0",
+                    "real_exact_zero": true,
+                    "real_significant_digits": null
+                  },
+                  {
+                    "epsilon_power": -2,
+                    "imaginary": "-6.487831554381341777185437449959038008226047471476690660220188596619873016837505149157780414467025042710866938537231392713571360660157063010783791668371088249931455461798922327598429453146936346992203035551434385916168174141300861759375220251873931e-11",
+                    "imaginary_absolute_error": "6.687880446349132188292611383809184731709819464038833398400227972478360261292846143560726612498430524974568958229462258994421344222230894119833828644062674338261851881236356246645886477336701541499924708670672532665000451215391825222440585899216228e-254",
+                    "imaginary_error_exact_rational": "16067/240240538521750407359077046256296219561976306993584113173692780504404210003815414654317126354570604187153728613910574803813846101321671784376366749012476965121271261522908882474772107196452653194239352573372884036938570849429907747816467644391667125314387968",
+                    "imaginary_error_quality": "Bounded",
+                    "imaginary_exact_rational": "-974150091539361601305277947094849960286762348123507895526641858298146318117233880315396689594571345274975937927815800174945301387994774419318140688713018465637433865676263974658731469158630721715483581682300692624704321461001912258906875969088799/15015033657609400459942315391018513722623519187099007073355798781525263125238463415894820397160662761697108038369410925238365381332604486523522921813279810320079453845181805154673256699778290824639959535835805252308660678089369234238529227774479195332149248",
+                    "imaginary_exact_zero": false,
+                    "imaginary_significant_digits": 242,
+                    "real": "0",
+                    "real_absolute_error": "0",
+                    "real_error_exact_rational": "0",
+                    "real_error_quality": "Bounded",
+                    "real_exact_rational": "0",
+                    "real_exact_zero": true,
+                    "real_significant_digits": null
+                  },
+                  {
+                    "epsilon_power": -1,
+                    "imaginary": "1.209659443240164816704506013446209486496767590721150707208056321196033832440245252155765239902083729760751689448157947947358571990626716526016968512998657352742904345824074997808201886968867719084473894574163433121406485372200359184653237561063971e-10",
+                    "imaginary_absolute_error": "1.625537481737887036890539987306381291732942489012538257760164951647631324603275207557935493068330795178358542084875584354578591738137554472942992943349321953431268062899372528437263700211320524047146696477295722571939986437191022335138792310550769e-252",
+                    "imaginary_error_exact_rational": "48815/30030067315218800919884630782037027445247038374198014146711597563050526250476926831789640794321325523394216076738821850476730762665208973047045843626559620640158907690363610309346513399556581649279919071671610504617321356178738468477058455548958390664298496",
+                    "imaginary_error_quality": "Bounded",
+                    "imaginary_exact_rational": "454076931362403071953237880331130008658561290203874315650162625560239317863726569265586097273701006152071763884389251811412103403625152205971025906434646078608779984667143516492432368806908527777508271335657123634516067155170729033315363340513537/3753758414402350114985578847754628430655879796774751768338949695381315781309615853973705099290165690424277009592352731309591345333151121630880730453319952580019863461295451288668314174944572706159989883958951313077165169522342308559632306943619798833037312",
+                    "imaginary_exact_zero": false,
+                    "imaginary_significant_digits": 241,
+                    "real": "0",
+                    "real_absolute_error": "0",
+                    "real_error_exact_rational": "0",
+                    "real_error_quality": "Bounded",
+                    "real_exact_rational": "0",
+                    "real_exact_zero": true,
+                    "real_significant_digits": null
+                  },
+                  {
+                    "epsilon_power": 0,
+                    "imaginary": "1.935326213929194881036390088370980229264090538482254338501509363790686915248550290823079041451535691387829200377759838765607179707916487040290059053842280833514920911464700889180803639610411505256452631464404160672879630082406024352152498119737802e-11",
+                    "imaginary_absolute_error": "1.233564324779068252675466190350609656224399629344757849795716834869767771307557399207661014831612790839216412994799500810720256241376204640390881280993259448844710939367905623629403596963529069927944124745819751903581695491405410954079731617489697e-224",
+                    "imaginary_error_exact_rational": "2963521576861427771185776169936545/240240538521750407359077046256296219561976306993584113173692780504404210003815414654317126354570604187153728613910574803813846101321671784376366749012476965121271261522908882474772107196452653194239352573372884036938570849429907747816467644391667125314387968",
+                    "imaginary_error_quality": "Estimated",
+                    "imaginary_exact_rational": "9298876236992202252345721424224821751484139766893904266941841173510597179200102273790041019460086653849082237958461412260553116671207315926890285426582138843422022409327917419031003920730751760673749954387037714930840307751007007817049695007307931/480481077043500814718154092512592439123952613987168226347385561008808420007630829308634252709141208374307457227821149607627692202643343568752733498024953930242542523045817764949544214392905306388478705146745768073877141698859815495632935288783334250628775936",
+                    "imaginary_exact_zero": false,
+                    "imaginary_significant_digits": 213,
+                    "real": "0",
+                    "real_absolute_error": "0",
+                    "real_error_exact_rational": "0",
+                    "real_error_quality": "Estimated",
+                    "real_exact_rational": "0",
+                    "real_exact_zero": true,
+                    "real_significant_digits": null
+                  }
+                ],
+                "coupling_definitions": "exact expansion through the authenticated native QCD model (GC_11=i*G)",
+                "epsilon_range": "all available poles through epsilon^0; remainder O(epsilon)",
+                "point": {
+                  "UFO_G": 1,
+                  "mUV": 1,
+                  "mu_r_squared": 1
+                },
+                "scope": "separate Symbolic-mode public evaluation plus tracked substitution; excluded from retained comparison time",
+                "seconds": 24.41918488,
+                "selection": {
+                  "requested_decimal_precision": 215,
+                  "selection": "minimum validated fixed precision among surviving dependencies",
+                  "surviving_dependencies": [
+                    {
+                      "available_precision": "ArbitraryPrecision",
+                      "data_version": "exact-definition",
+                      "identity": "\ud835\udf0b",
+                      "source_sha256": "4c1b1e82246d0173024bf1ca8474de481e9aba48c1e2cc7643c38ae25b69b151"
+                    },
+                    {
+                      "available_precision": "ArbitraryPrecision",
+                      "data_version": "exact-definition",
+                      "identity": "vakint::{}::T1ep",
+                      "source_sha256": "7748ecaabf6444350eb8eb6c67da2f90e7ea0df499c578cbc828fbec15f95d75"
+                    },
+                    {
+                      "available_precision": "ArbitraryPrecision",
+                      "data_version": "exact-definition",
+                      "identity": "vakint::{}::T1ep2",
+                      "source_sha256": "1febeecf8a2bc6d62b910ff562dca140be923a71084bab3413c4770f9e1ab718"
+                    },
+                    {
+                      "available_precision": "ArbitraryPrecision",
+                      "data_version": "exact-definition",
+                      "identity": "symbolica::{}::zeta(3)",
+                      "source_sha256": "c34fc864824ae227b9f5c96b87243986de2aea8ea70f0109e0c9efdb6d69a5a9"
+                    },
+                    {
+                      "available_precision": "ArbitraryPrecision",
+                      "data_version": "exact-definition",
+                      "identity": "vakint::{}::HR(1,1,0,vakint::{}::om1)",
+                      "source_sha256": "fa4bb974b4e7d8ac4643193dca2fc4b7e288c768eebe7b3a07d65fe09dab5e00"
+                    },
+                    {
+                      "available_precision": "ArbitraryPrecision",
+                      "data_version": "exact-definition",
+                      "identity": "vakint::{}::HR(1,0,1,0,vakint::{}::om1)",
+                      "source_sha256": "2889a7b866e962eefba3cad2d0570f8d414b68528122099c6bacea2f74458f33"
+                    },
+                    {
+                      "available_precision": "ArbitraryPrecision",
+                      "data_version": "exact-definition",
+                      "identity": "vakint::{}::HR(1,1,0,-1,vakint::{}::om1)",
+                      "source_sha256": "bf0da8df352c10fbd54ca2a181c0f2571c02867259e897757ecb3687e8843a70"
+                    },
+                    {
+                      "available_precision": "ArbitraryPrecision",
+                      "data_version": "exact-definition",
+                      "identity": "vakint::{}::HR(1,1,1,1,vakint::{}::om1)",
+                      "source_sha256": "16cf3486d9561d943f9de628c7fc9cc2ee364e967446feb8d12fa7d9c864473b"
+                    },
+                    {
+                      "available_precision": "ArbitraryPrecision",
+                      "data_version": "exact-definition",
+                      "identity": "vakint::{}::HR(1,1,1,-1,vakint::{}::om1)",
+                      "source_sha256": "3e7371fc48f53de0373d9d77661283ffa841290addc62d94e3f18003f96ba532"
+                    },
+                    {
+                      "available_precision": "ArbitraryPrecision",
+                      "data_version": "exact-definition",
+                      "identity": "vakint::{}::HR(1,1,-1,0,vakint::{}::om1)",
+                      "source_sha256": "de3929acb2c70e275e440a5d8f71f27cfaa36b46bb959eaa31c67ce2a30bea50"
+                    },
+                    {
+                      "available_precision": "ArbitraryPrecision",
+                      "data_version": "exact-definition",
+                      "identity": "vakint::{}::HR(1,1,-1,1,vakint::{}::om1)",
+                      "source_sha256": "f4a785868b711399504a9a166f94069833afbdd9c7b7b3f5b8522ff83b8e11ad"
+                    },
+                    {
+                      "available_precision": "ArbitraryPrecision",
+                      "data_version": "exact-definition",
+                      "identity": "vakint::{}::HR(1,-1,1,0,vakint::{}::om1)",
+                      "source_sha256": "9b9bde7fe5ea82d6ff789a57a0db65a34939c463a5a55506b5a2f7fed91df004"
+                    },
+                    {
+                      "available_precision": "ArbitraryPrecision",
+                      "data_version": "exact-definition",
+                      "identity": "vakint::{}::HR(1,-1,1,1,vakint::{}::om1)",
+                      "source_sha256": "78abf47bd5780c3f7fcecf35f47c09f4f97502683910591bc50c2746769157f4"
+                    },
+                    {
+                      "available_precision": "ArbitraryPrecision",
+                      "data_version": "exact-definition",
+                      "identity": "vakint::{}::HR(-1,1,1,0,vakint::{}::om1)",
+                      "source_sha256": "314ae1860df579fa1af227c69cc1333c411b3b1f558daf904f435619233ff0cf"
+                    },
+                    {
+                      "available_precision": "ArbitraryPrecision",
+                      "data_version": "exact-definition",
+                      "identity": "vakint::{}::HI(1,0,vakint::{}::om1)",
+                      "source_sha256": "51b2480e00c2597df0ad0714d66ca1234facdb78e87b6d7e35e9303e97d7e3e8"
+                    },
+                    {
+                      "available_precision": "ArbitraryPrecision",
+                      "data_version": "exact-definition",
+                      "identity": "vakint::{}::HI(1,1,1,vakint::{}::om1)",
+                      "source_sha256": "213b32fce3e261470e88247fa7168aa32c9073cc9b7cea974e1d9e2c65609832"
+                    },
+                    {
+                      "available_precision": "ArbitraryPrecision",
+                      "data_version": "exact-definition",
+                      "identity": "vakint::{}::HI(1,-1,0,vakint::{}::om1)",
+                      "source_sha256": "8094fe2a6eaa03c4cddda95ceac111ce6491de8abac63bffd66aea7b67a2af42"
+                    },
+                    {
+                      "available_precision": "ArbitraryPrecision",
+                      "data_version": "exact-definition",
+                      "identity": "vakint::{}::HI(-1,1,0,vakint::{}::om1)",
+                      "source_sha256": "2b72fd028156740e44aa53bc0badfa01a22daf9223331e11599b0da68cbe1656"
+                    },
+                    {
+                      "available_precision": "ArbitraryPrecision",
+                      "data_version": "exact-definition",
+                      "identity": "vakint::{}::HI(1,0,1,1,vakint::{}::om1)",
+                      "source_sha256": "fcd7095eab05ba538e4119ce5ce45dd27d92091b8600c244cc10bf7d1b540f9b"
+                    },
+                    {
+                      "available_precision": "ArbitraryPrecision",
+                      "data_version": "exact-definition",
+                      "identity": "vakint::{}::HI(1,1,0,1,vakint::{}::om1)",
+                      "source_sha256": "489744cfe2fbf207e8a48fff292a827ae2e0e09908074d60492e42265866f68a"
+                    },
+                    {
+                      "available_precision": "ArbitraryPrecision",
+                      "data_version": "exact-definition",
+                      "identity": "vakint::{}::HI(1,1,1,0,vakint::{}::om1)",
+                      "source_sha256": "afe4794d5249007c6e562afdd3654c28d615df4546ad4c52967940f2b18d4a20"
+                    },
+                    {
+                      "available_precision": "ArbitraryPrecision",
+                      "data_version": "exact-definition",
+                      "identity": "vakint::{}::HI(1,1,1,-1,vakint::{}::om1)",
+                      "source_sha256": "2026dade3ca8901de77141d274c61d1ea798afff22b055059e039ec3b9f82747"
+                    },
+                    {
+                      "available_precision": "ArbitraryPrecision",
+                      "data_version": "exact-definition",
+                      "identity": "vakint::{}::HI(1,1,-1,0,vakint::{}::om1)",
+                      "source_sha256": "93b5c0bebf16ecfca9e7a76b514e53010150d518ed9ef6532bcb18eeb6df8a2b"
+                    },
+                    {
+                      "available_precision": "ArbitraryPrecision",
+                      "data_version": "exact-definition",
+                      "identity": "vakint::{}::HI(1,1,-1,1,vakint::{}::om1)",
+                      "source_sha256": "6a46b5a6d3c3f88e7e8e50821714ee0b8d746ee468b685bb5a855ce8edb10944"
+                    },
+                    {
+                      "available_precision": "ArbitraryPrecision",
+                      "data_version": "exact-definition",
+                      "identity": "vakint::{}::HI(1,1,-1,-1,vakint::{}::om1)",
+                      "source_sha256": "7842ec9830b1774ee3909185649e21a891e57b0f0e7beff48f1e8ba529128f7f"
+                    },
+                    {
+                      "available_precision": "ArbitraryPrecision",
+                      "data_version": "exact-definition",
+                      "identity": "vakint::{}::HI(1,-1,1,0,vakint::{}::om1)",
+                      "source_sha256": "dc8dd1e64c0cc0a7304552f01e5fc03f2cae3defdbb63aca12ef3e31d2d6bd88"
+                    },
+                    {
+                      "available_precision": "ArbitraryPrecision",
+                      "data_version": "exact-definition",
+                      "identity": "vakint::{}::HI(1,-1,1,1,vakint::{}::om1)",
+                      "source_sha256": "372ef49e5dc01631239ddc1966766dfba9fe5e8832c1779fb97f8dd5885e54ab"
+                    },
+                    {
+                      "available_precision": "ArbitraryPrecision",
+                      "data_version": "exact-definition",
+                      "identity": "vakint::{}::HI(1,-1,1,-1,vakint::{}::om1)",
+                      "source_sha256": "4697ac541b1abe79192b00d7afb9ee8c690c1acc048f67fe3735afbc5affbdf8"
+                    },
+                    {
+                      "available_precision": "ArbitraryPrecision",
+                      "data_version": "exact-definition",
+                      "identity": "vakint::{}::HI(1,-1,-1,1,vakint::{}::om1)",
+                      "source_sha256": "c677ed81340edaf2b3dd0b6244f1c2fa8c40480309aadf564f8ae21ce5aed39a"
+                    },
+                    {
+                      "available_precision": "ArbitraryPrecision",
+                      "data_version": "exact-definition",
+                      "identity": "vakint::{}::HI(-1,1,1,1,vakint::{}::om1)",
+                      "source_sha256": "cff010256b8ec64edd17f222058294951cf583c38a78e4b1deb7258eca70396d"
+                    },
+                    {
+                      "available_precision": "ArbitraryPrecision",
+                      "data_version": "exact-definition",
+                      "identity": "vakint::{}::HI(-1,1,-1,0,vakint::{}::om1)",
+                      "source_sha256": "f54bd1ace73948682edd6957ceea4827bad1cc59a3a5df7ff2f2ad7f7c784eca"
+                    },
+                    {
+                      "available_precision": "ArbitraryPrecision",
+                      "data_version": "exact-definition",
+                      "identity": "vakint::{}::HI(-1,-1,1,0,vakint::{}::om1)",
+                      "source_sha256": "b918c0554c665985847ad4129b4c25222a08e01dd53552611cae879babcddf07"
+                    },
+                    {
+                      "available_precision": "FixedPrecision(20000)",
+                      "data_version": "v0.1.2",
+                      "identity": "vakint::{}::RustRedCoefficient(vakint::{}::rustred_data_25fc8afb194db4209319b0753ea8ba4b5b5bd5a9726de5a111c6384f86e73de0,vakint::{}::RustRedMaster(vakint::{}::rustred_family_eb225daea1ddc8a4d61675a26b9b487f90278190fe874e314b7253aee632a5e7,0,1,0,0,1,1,1,0,1,0),0)",
+                      "source_sha256": "f0ad5c640955434f32f331234ad8d3ea2c4917eb5d91f6c5d9e2f914600615d7"
+                    },
+                    {
+                      "available_precision": "FixedPrecision(20000)",
+                      "data_version": "v0.1.2",
+                      "identity": "vakint::{}::RustRedCoefficient(vakint::{}::rustred_data_25fc8afb194db4209319b0753ea8ba4b5b5bd5a9726de5a111c6384f86e73de0,vakint::{}::RustRedMaster(vakint::{}::rustred_family_eb225daea1ddc8a4d61675a26b9b487f90278190fe874e314b7253aee632a5e7,0,3,0,0,1,1,1,0,1,0),0)",
+                      "source_sha256": "1d37969f6d70fff8024da11b0b7fe26eee4607cb7a8b7beb782b00a5c2e1d922"
+                    },
+                    {
+                      "available_precision": "FixedPrecision(215)",
+                      "data_version": "v0.1.2",
+                      "identity": "vakint::{}::RustRedConstant(vakint::{}::rustred_data_25fc8afb194db4209319b0753ea8ba4b5b5bd5a9726de5a111c6384f86e73de0,vakint::{}::PR7D2)",
+                      "source_sha256": "462d80225362bf57f0210aa5550e9c154eef7f95ec03915710db2ffa6e59494a"
+                    },
+                    {
+                      "available_precision": "FixedPrecision(215)",
+                      "data_version": "v0.1.2",
+                      "identity": "vakint::{}::RustRedConstant(vakint::{}::rustred_data_25fc8afb194db4209319b0753ea8ba4b5b5bd5a9726de5a111c6384f86e73de0,vakint::{}::PR10D2)",
+                      "source_sha256": "84e020d42c37e6fda4150caf7c8d636126aa9e5c2b8ac8d7edb18b3453690c43"
+                    },
+                    {
+                      "available_precision": "FixedPrecision(20000)",
+                      "data_version": "v0.1.2",
+                      "identity": "vakint::{}::RustRedConstant(vakint::{}::rustred_data_25fc8afb194db4209319b0753ea8ba4b5b5bd5a9726de5a111c6384f86e73de0,vakint::{}::K5Moment(1))",
+                      "source_sha256": "161af012748e8dc44cc241750a3d55f6f3219b5f7bd6cfc9c6192f346af5094d"
+                    },
+                    {
+                      "available_precision": "FixedPrecision(20000)",
+                      "data_version": "v0.1.2",
+                      "identity": "vakint::{}::RustRedConstant(vakint::{}::rustred_data_25fc8afb194db4209319b0753ea8ba4b5b5bd5a9726de5a111c6384f86e73de0,vakint::{}::K5Moment(3))",
+                      "source_sha256": "e8988c691db8e11a773106fa0304e9dca80d616e4e33e12468124f3486ad1dcc"
+                    }
+                  ]
+                },
+                "warnings": [
+                  "source uncertainty, cancellation and rounding limit this Laurent coefficient [requested 215 digits; achieved 213 digits; data v0.1.2]; \u03b5^0; vakint::{}::PR7D2 (215 source digits); vakint::{}::PR10D2 (215 source digits); vakint::{}::K5Moment(1) (20000 source digits); vakint::{}::K5Moment(3) (20000 source digits); \ud835\udf0b; vakint::{}::T1ep; vakint::{}::T1ep2; symbolica::{}::zeta(3); vakint::{}::HR(1,1,0,vakint::{}::om1); vakint::{}::HR(1,0,1,0,vakint::{}::om1); vakint::{}::HR(1,1,0,-1,vakint::{}::om1); vakint::{}::HR(1,1,1,1,vakint::{}::om1); vakint::{}::HR(1,1,1,-1,vakint::{}::om1); vakint::{}::HR(1,1,-1,0,vakint::{}::om1); vakint::{}::HR(1,1,-1,1,vakint::{}::om1); vakint::{}::HR(1,-1,1,0,vakint::{}::om1); vakint::{}::HR(1,-1,1,1,vakint::{}::om1); vakint::{}::HR(-1,1,1,0,vakint::{}::om1); vakint::{}::HI(1,0,vakint::{}::om1); vakint::{}::HI(1,1,1,vakint::{}::om1); vakint::{}::HI(1,-1,0,vakint::{}::om1); vakint::{}::HI(-1,1,0,vakint::{}::om1); vakint::{}::HI(1,0,1,1,vakint::{}::om1); vakint::{}::HI(1,1,0,1,vakint::{}::om1); vakint::{}::HI(1,1,1,0,vakint::{}::om1); vakint::{}::HI(1,1,1,-1,vakint::{}::om1); vakint::{}::HI(1,1,-1,0,vakint::{}::om1); vakint::{}::HI(1,1,-1,1,vakint::{}::om1); vakint::{}::HI(1,1,-1,-1,vakint::{}::om1); vakint::{}::HI(1,-1,1,0,vakint::{}::om1); vakint::{}::HI(1,-1,1,1,vakint::{}::om1); vakint::{}::HI(1,-1,1,-1,vakint::{}::om1); vakint::{}::HI(1,-1,-1,1,vakint::{}::om1); vakint::{}::HI(-1,1,1,1,vakint::{}::om1); vakint::{}::HI(-1,1,-1,0,vakint::{}::om1); vakint::{}::HI(-1,-1,1,0,vakint::{}::om1); L4_eb225daea1ddc8a4d61675a26b9b487f90278190fe874e314b7253aee632a5e7_p0_p1_p0_p0_p1_p1_p1_p0_p1_p0 epsilon^0 [master L4_eb225daea1ddc8a4d61675a26b9b487f90278190fe874e314b7253aee632a5e7_p0_p1_p0_p0_p1_p1_p1_p0_p1_p0] \u03b5^0 (20000 source digits); L4_eb225daea1ddc8a4d61675a26b9b487f90278190fe874e314b7253aee632a5e7_p0_p3_p0_p0_p1_p1_p1_p0_p1_p0 epsilon^0 [master L4_eb225daea1ddc8a4d61675a26b9b487f90278190fe874e314b7253aee632a5e7_p0_p3_p0_p0_p1_p1_p1_p0_p1_p0] \u03b5^0 (20000 source digits)"
+                ]
+              },
+              "persistent_cache": false,
+              "preparation": {
+                "current_run_seconds": 0.0,
+                "historical_seconds": 122.011886393,
+                "reused_authenticated_bundle": true,
+                "timing_scope": "scalar preparation precedes retained evaluation; loaded-bundle historical work is not added to current timing",
+                "timings": {
+                  "angular_seconds": 118.806562718,
+                  "graph_generation_seconds": 0.02497967,
+                  "ingress_seconds": 0.520854117,
+                  "scalar_contraction_seconds": 2.577914702,
+                  "taylor_seconds": 0.074417568,
+                  "total_seconds": 122.011822333
+                }
+              },
+              "producer": {
+                "allowed_cpus": "169",
+                "build_profile": "release",
+                "cargo_lock_sha256": "9338911038cac4c53515170535f87f9fabb6bf1004fd75317068c5fd06a9ab13",
+                "commit": "222df4cb1f35a8c79927df1dd72a56110fa333bd",
+                "comparison_process": "one engine in this process",
+                "debug_assertions": false,
+                "executable_identity_scope": "release: streamed once; DEV: use the supervising original-process launch receipt",
+                "executable_sha256": "99b29a8144f00820c80db33d37357e0656ff6f6364135f2b814199c93ded5108",
+                "native_runtime_arities": "1,3,6,10,15",
+                "profile_contract": "caller must build --release with no profile overrides; debug_assertions is not compiler-profile introspection"
+              },
+              "projection": "quadratic-transverse",
+              "reduction_completed": true,
+              "reduction_math_seconds": 2.811344448,
+              "reduction_math_timing": {
+                "complete": true,
+                "gross_seconds": 2.811344448,
+                "incompleteness_reason": null,
+                "interval_count": 5,
+                "measured_owner_preparation_seconds": 0.0,
+                "scope_id": "vakint.rustred.reduction-math.v1"
+              },
+              "retained": {
+                "bytes": 22078,
+                "file": "retained.symbolica",
+                "sha256": "6986f629362956bf28bfbb3bf5a941e5d1f4df667a626d93395dbde8059a8f77"
+              },
+              "retained_reduction_seconds": 21.989664564999998,
+              "retained_reduction_seconds_scope": "complete retained public call, including frontend and finalization; separate from reduction math",
+              "schema": "vakint.ordered-rung-comparison.v1",
+              "strategy": "Ordered",
+              "worker_policy": {
+                "owner_preparation_workers": 1,
+                "scope": "single owner preparation worker required for native timing subtraction"
+              }
+            }
+          },
+          "completion": {
+            "evidence": {
+              "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-ordered-numeric-222-01/guard/completion.json",
+              "sha256": "27c29ec6ab177524b1f21e7014f0f398dc9a59f15aff5e09ccee86fa704d0506"
+            },
+            "raw": {
+              "utc": "2026-10-30T08:18:45.859546+00:00",
+              "exit_code": 0,
+              "elapsed_seconds": 57.18771216599271,
+              "failure": null,
+              "signals_sent_to_original_pidfd": [],
+              "success": true
+            }
+          },
+          "source_revision": "222df4cb1f35a8c79927df1dd72a56110fa333bd",
+          "reduction_math_seconds": 2.811344448,
+          "public_retained_seconds": 21.989664564999998,
+          "guard_elapsed_seconds": 57.18771216599271
+        }
+      },
+      "note": "Immutable source-047 DFS and completed source-222 Ordered observations, held separately until their saved exact proof is attached; no fair timing ratio."
+    },
+    "4L-quadratic-047DFS-222Ordered-exact-current-numerical-20261030": {
+      "schema": "vakint.ordered-rung-diagnostic.v1",
+      "loop_count": 4,
+      "projection": "quadratic-transverse",
+      "status": "functional_exact_pass_current_numerical_substitution_pass",
+      "performance_eligible": false,
+      "ordered_over_dfs": null,
+      "ordered_over_dfs_no_memo": null,
+      "exact_retained_equality": true,
+      "numerical_validation": true,
+      "sample_counts": {
+        "dfs": 1,
+        "dfs_no_memo": 0,
+        "ordered": 1
+      },
+      "observations": {
+        "dfs": {
+          "receipt": {
+            "evidence": {
+              "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-dfs-manual-reference-047-01/functional-receipt.json",
+              "sha256": "db28b8f426828552357f365f1b9a8ea974998e0e11e002e07aaf4594c6d01bd4"
+            },
+            "raw": {
+              "schema": "vakint.ordered-rung-manual-reference-receipt.v1",
+              "status": "PASS-functional-catalogue-closure-only",
+              "main_revision": "047e5ccd730988edd91ee461c3b665d059b491cf",
+              "native_revision": "b5e51865309d2818f2439f3ddfde7db4a312f2d8",
+              "external_revision": "f1626f676b1b5ace8ea2c261aa4dd114812f79df",
+              "performance_qualified": false,
+              "exact_pair_parity": "PENDINGseparateexactpairtool; noresultcomparisonperformedhere",
+              "fair_efficiency_ratio": null,
+              "normalization_caveat": "047predatesfinalb457Orderedcentralnormalizationsimplifier; same047Nativeb5sourceusedbothdiagnosticreports",
+              "scope": "monitoredsharedhostmanualmemoizedDFSRetainreferenceafter900sCIpilotyieldednoresult; no preparedcache/no previousrunstate/no numericalreference; no arbitrarywallcap",
+              "report": {
+                "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-dfs-manual-reference-047-01/work/L4-quadratic-dfs/report.json",
+                "bytes": 4333,
+                "sha256": "5152f228b54518f615815be6e925e8d0cc726de0afb45c41b00cb569ace4e2c8"
+              },
+              "retained": {
+                "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-dfs-manual-reference-047-01/work/L4-quadratic-dfs/retained.symbolica",
+                "bytes": 22078,
+                "sha256": "6986f629362956bf28bfbb3bf5a941e5d1f4df667a626d93395dbde8059a8f77"
+              },
+              "started": {
+                "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-dfs-manual-reference-047-01/started.json",
+                "bytes": 3688,
+                "sha256": "61c60e7acbc3ef381bf1f82ce8a2dd14d9188e61f10852b3dc05acc77bd8eee3"
+              },
+              "command": {
+                "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-dfs-manual-reference-047-01/command.json",
+                "bytes": 985,
+                "sha256": "e9195d0796ef70b842921df17aa63774f8f9f756b1950642738933952f9dda5a"
+              },
+              "guard_launch": {
+                "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-dfs-manual-reference-047-01/guard/launch.json",
+                "bytes": 1770,
+                "sha256": "c0deed42cde382f461dacd8c893c4d97ee5e3dec2f9bc1a5ccef766a5db3164f"
+              },
+              "guard_completion": {
+                "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-dfs-manual-reference-047-01/guard/completion.json",
+                "bytes": 184,
+                "sha256": "c4053693a61f74fdd689911e51d7b82abdb14abca2d1c5c6860f7c567920e087"
+              },
+              "stdout": {
+                "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-dfs-manual-reference-047-01/guard/stdout.log",
+                "bytes": 75,
+                "sha256": "9861781bf18f0d9195cf44d751dbe9c8107a23363df4f95d8866086891fc5d57"
+              },
+              "stderr": {
+                "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-dfs-manual-reference-047-01/guard/stderr.log",
+                "bytes": 0,
+                "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              },
+              "final_monitor": {
+                "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-dfs-manual-reference-047-01/monitor.json",
+                "bytes": 6870,
+                "sha256": "e07bd1cb57834e0ae501597a215b03430acdabe41a59d606d79de74766d33273"
+              },
+              "phase_observations": {
+                "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-dfs-manual-reference-047-01/phase-observations.jsonl",
+                "bytes": 8270,
+                "sha256": "e0ec95cb739c867b24a2d47ca82316dca283230c1466df6513a59433c74e12d4"
+              },
+              "immutable_executable_unchanged": true,
+              "prepared_input_authenticated": true,
+              "cache_policy_authenticated": true,
+              "catalogue_closure": {
+                "closed": true,
+                "master_count": 10,
+                "unknown": [],
+                "unknown_count": 0
+              },
+              "measured_values": {
+                "guard_elapsed_seconds": 962.9281010050327,
+                "retained_public_seconds": 951.454071791,
+                "reduction_math_seconds": 948.279493383,
+                "reduction_math_scope_id": "vakint.rustred.reduction-math.v1",
+                "reduction_math_interval_count": 175976,
+                "reduction_math_complete": true,
+                "loading_seconds": 9.572763486
+              },
+              "os_resources": {
+                "guard_samples": 962,
+                "peak_rss_bytes": 3056115712,
+                "min_host_available_bytes": 442525646848,
+                "min_host_free_bytes": 154710503424
+              },
+              "ordered047_provenance_only": {
+                "report": {
+                  "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-ordered-diagnostic-047-01/work/L4-quadratic-ordered/report.json",
+                  "bytes": 4336,
+                  "sha256": "d774129bbbc48e7b3c0fbeb18fdce2ecd5f4b397e7dac54823d1deaefdc249ee"
+                },
+                "matching_fields": [
+                  "loop_count",
+                  "projection",
+                  "contributions",
+                  "input_sha256",
+                  "evaluated_input_sha256",
+                  "dimension_binding",
+                  "data",
+                  "normalization",
+                  "epsilon_symbol",
+                  "mu_r_sq_symbol"
+                ],
+                "same_source_native_executable": true,
+                "input_and_data_match": true,
+                "both_catalogue_closed_with10_masters": true,
+                "result_bytes_differ_expected_beforeexactcomparison": true,
+                "expression_equality_not_claimed": true
+              },
+              "utc": "2026-10-30T02:45:15.816627+00:00",
+              "exit_code": 0,
+              "elapsed_seconds": 962.9281010050327,
+              "failure": null,
+              "signals_sent_to_original_pidfd": [],
+              "success": true
+            }
+          },
+          "report": {
+            "evidence": {
+              "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-dfs-manual-reference-047-01/work/L4-quadratic-dfs/report.json",
+              "sha256": "5152f228b54518f615815be6e925e8d0cc726de0afb45c41b00cb569ace4e2c8"
+            },
+            "raw": {
+              "cache_policy": {
+                "depth_first_intrinsic_memoization": true,
+                "ordered_result_cache": "not supported",
+                "prepared_cache_loaded": false,
+                "previous_run_cache_restored": false
+              },
+              "catalogue_closure": {
+                "closed": true,
+                "master_count": 10,
+                "unknown": [],
+                "unknown_count": 0
+              },
+              "completed_seconds": 961.12297411,
+              "completed_seconds_scope": "loading, retained evaluation, artifact serialization and optional numerical reference; scalar input preparation is recorded separately",
+              "contributions": 15,
+              "data": {
+                "manifest_sha256": "028b4e66affca59138c7913c0ee718de6a4d07913e9a88bd905bd5d850e902f2",
+                "path": "/shared/codex-1/vakint_rustred/workspace/5l-push/external-light-profile-v2-20261027",
+                "version": "v0.1.2"
+              },
+              "dimension_binding": {
+                "scope": "exact fixture trace dimension; all public evaluations share this binding",
+                "source": "rustred::{}::d",
+                "target": "-2*vakint::{}::\u03b5+4"
+              },
+              "epsilon_symbol": "vakint::\u03b5",
+              "evaluated_input_sha256": "6aef1c6de7703e2e3476c0dde43dfd5ffc40565c2d5d4459dc44001332ee6b6e",
+              "gluon_rungs": 3,
+              "guards": {
+                "preparation": [
+                  "1",
+                  "rustred::{}::d",
+                  "-1+rustred::{}::d",
+                  "2+rustred::{}::d",
+                  "-2*rustred::{}::d+rustred::{}::d^2+rustred::{}::d^3"
+                ],
+                "scope": "existing lower-loop public Atom API does not expose its internal guard set"
+              },
+              "input_sha256": "050c3d0fbd9b87046986de5f458b6626bdd5652aea464cd932fbe6c43f2abaa8",
+              "intrinsic_memoization": true,
+              "intrinsic_memoization_scope": "primary depth-first completed-result reuse; DFS-no-memo also bypasses dependency/product result memos, while Ordered checked opaque factorization may use a fresh isolated internal memo",
+              "loading_seconds": 9.572763486,
+              "loop_count": 4,
+              "memory_after_retained_reduction": {
+                "process_peak_rss_bytes": 3053498368,
+                "rss_bytes": 2222669824,
+                "scope": "Linux whole-process RSS; peak includes preparation/loading and earlier stages"
+              },
+              "monitoring_enabled": true,
+              "mu_r_sq_symbol": "vakint::mursq",
+              "normalization": "MSbar",
+              "numerical_reference": null,
+              "persistent_cache": false,
+              "preparation": {
+                "current_run_seconds": 0.0,
+                "historical_seconds": 122.011886393,
+                "reused_authenticated_bundle": true,
+                "timing_scope": "scalar preparation precedes retained evaluation; loaded-bundle historical work is not added to current timing",
+                "timings": {
+                  "angular_seconds": 118.806562718,
+                  "graph_generation_seconds": 0.02497967,
+                  "ingress_seconds": 0.520854117,
+                  "scalar_contraction_seconds": 2.577914702,
+                  "taylor_seconds": 0.074417568,
+                  "total_seconds": 122.011822333
+                }
+              },
+              "producer": {
+                "allowed_cpus": "164",
+                "build_profile": "release",
+                "cargo_lock_sha256": "9338911038cac4c53515170535f87f9fabb6bf1004fd75317068c5fd06a9ab13",
+                "commit": "047e5ccd730988edd91ee461c3b665d059b491cf",
+                "comparison_process": "one engine in this process",
+                "debug_assertions": false,
+                "executable_identity_scope": "release: streamed once; DEV: use the supervising original-process launch receipt",
+                "executable_sha256": "7306c9db8b7615673a277ec71c47cd4a36a57e4948db89b63c4a6ff84d12f0fc",
+                "native_runtime_arities": "1,3,6,10,15",
+                "profile_contract": "caller must build --release with no profile overrides; debug_assertions is not compiler-profile introspection"
+              },
+              "projection": "quadratic-transverse",
+              "reduction_completed": true,
+              "reduction_math_seconds": 948.279493383,
+              "reduction_math_timing": {
+                "complete": true,
+                "gross_seconds": 948.279493383,
+                "incompleteness_reason": null,
+                "interval_count": 175976,
+                "measured_owner_preparation_seconds": 0.0,
+                "scope_id": "vakint.rustred.reduction-math.v1"
+              },
+              "retained": {
+                "bytes": 22078,
+                "file": "retained.symbolica",
+                "sha256": "6986f629362956bf28bfbb3bf5a941e5d1f4df667a626d93395dbde8059a8f77"
+              },
+              "retained_reduction_seconds": 951.454071791,
+              "retained_reduction_seconds_scope": "complete retained public call, including frontend and finalization; separate from reduction math",
+              "schema": "vakint.ordered-rung-comparison.v1",
+              "strategy": "DepthFirst",
+              "worker_policy": {
+                "owner_preparation_workers": 1,
+                "scope": "single owner preparation worker required for native timing subtraction"
+              }
+            }
+          },
+          "completion": {
+            "evidence": {
+              "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-dfs-manual-reference-047-01/guard/completion.json",
+              "sha256": "c4053693a61f74fdd689911e51d7b82abdb14abca2d1c5c6860f7c567920e087"
+            },
+            "raw": {
+              "utc": "2026-10-30T02:45:15.816627+00:00",
+              "exit_code": 0,
+              "elapsed_seconds": 962.9281010050327,
+              "failure": null,
+              "signals_sent_to_original_pidfd": [],
+              "success": true
+            }
+          },
+          "source_revision": "047e5ccd730988edd91ee461c3b665d059b491cf",
+          "reduction_math_seconds": 948.279493383,
+          "public_retained_seconds": 951.454071791,
+          "guard_elapsed_seconds": 962.9281010050327
+        },
+        "ordered": {
+          "receipt": {
+            "evidence": {
+              "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-ordered-numeric-222-01/completion-validation.json",
+              "sha256": "c19f05d5f85db6e0a5562f0176362f4f94cf0f3df3ab0c665b22ad93e8aa9719"
+            },
+            "raw": {
+              "schema": "vakint.ordered-rung-functional-diagnostic-completion.v1",
+              "utc": "2026-10-30T08:19:52.113100+00:00",
+              "success": true,
+              "functional_only": true,
+              "performance_eligible": false,
+              "ci_qualified": false,
+              "source_revision": "222df4cb1f35a8c79927df1dd72a56110fa333bd",
+              "guard_completion": {
+                "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-ordered-numeric-222-01/guard/completion.json",
+                "sha256": "27c29ec6ab177524b1f21e7014f0f398dc9a59f15aff5e09ccee86fa704d0506",
+                "bytes": 184
+              },
+              "guard_launch": {
+                "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-ordered-numeric-222-01/guard/launch.json",
+                "sha256": "d912717daad4d9ebabf9cee8a22d5a4711afad9c31007a672599d232afae3529",
+                "bytes": 1619
+              },
+              "report": {
+                "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-ordered-numeric-222-01/work/L4-quadratic-ordered/report.json",
+                "sha256": "8c90946e04b6a2b50684cc5ae62779b6bfc7e1e34da3b2f1e454239bad2b8fb5",
+                "bytes": 27703
+              },
+              "build_receipt": {
+                "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/build/release-222df4cb1/example/build-receipt.json",
+                "sha256": "fe6a42fe1f793ee38f2ab77509da3c63ebf46020237bc71bf869a2c733b76b42",
+                "bytes": 5761
+              },
+              "catalogue_closure": {
+                "closed": true,
+                "master_count": 10,
+                "unknown": [],
+                "unknown_count": 0
+              },
+              "numerical_precision_by_epsilon": [
+                {
+                  "epsilon_power": -4,
+                  "real_significant_digits": null,
+                  "imaginary_significant_digits": 245,
+                  "real_error_quality": "Bounded",
+                  "imaginary_error_quality": "Bounded"
+                },
+                {
+                  "epsilon_power": -3,
+                  "real_significant_digits": null,
+                  "imaginary_significant_digits": 245,
+                  "real_error_quality": "Bounded",
+                  "imaginary_error_quality": "Bounded"
+                },
+                {
+                  "epsilon_power": -2,
+                  "real_significant_digits": null,
+                  "imaginary_significant_digits": 242,
+                  "real_error_quality": "Bounded",
+                  "imaginary_error_quality": "Bounded"
+                },
+                {
+                  "epsilon_power": -1,
+                  "real_significant_digits": null,
+                  "imaginary_significant_digits": 241,
+                  "real_error_quality": "Bounded",
+                  "imaginary_error_quality": "Bounded"
+                },
+                {
+                  "epsilon_power": 0,
+                  "real_significant_digits": null,
+                  "imaginary_significant_digits": 213,
+                  "real_error_quality": "Estimated",
+                  "imaginary_error_quality": "Estimated"
+                }
+              ],
+              "precision_caveat": "epsilon^0 has 213 achieved imaginary digits for a source-selected 215-digit request; no minimum214 acceptance claim and no source/gate change. Exact retained comparison is separately pending."
+            }
+          },
+          "report": {
+            "evidence": {
+              "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-ordered-numeric-222-01/work/L4-quadratic-ordered/report.json",
+              "sha256": "8c90946e04b6a2b50684cc5ae62779b6bfc7e1e34da3b2f1e454239bad2b8fb5"
+            },
+            "raw": {
+              "cache_policy": {
+                "depth_first_intrinsic_memoization": false,
+                "ordered_result_cache": "not supported",
+                "prepared_cache_loaded": false,
+                "previous_run_cache_restored": false
+              },
+              "catalogue_closure": {
+                "closed": true,
+                "master_count": 10,
+                "unknown": [],
+                "unknown_count": 0
+              },
+              "completed_seconds": 56.082169781,
+              "completed_seconds_scope": "loading, retained evaluation, artifact serialization and optional numerical reference; scalar input preparation is recorded separately",
+              "contributions": 15,
+              "data": {
+                "manifest_sha256": "028b4e66affca59138c7913c0ee718de6a4d07913e9a88bd905bd5d850e902f2",
+                "path": "/shared/codex-1/vakint_rustred/workspace/5l-push/external-light-profile-v2-20261027",
+                "version": "v0.1.2"
+              },
+              "dimension_binding": {
+                "scope": "exact fixture trace dimension; all public evaluations share this binding",
+                "source": "rustred::{}::d",
+                "target": "-2*vakint::{}::\u03b5+4"
+              },
+              "epsilon_symbol": "vakint::\u03b5",
+              "evaluated_input_sha256": "6aef1c6de7703e2e3476c0dde43dfd5ffc40565c2d5d4459dc44001332ee6b6e",
+              "gluon_rungs": 3,
+              "guards": {
+                "preparation": [
+                  "1",
+                  "rustred::{}::d",
+                  "-1+rustred::{}::d",
+                  "2+rustred::{}::d",
+                  "-2*rustred::{}::d+rustred::{}::d^2+rustred::{}::d^3"
+                ],
+                "scope": "existing lower-loop public Atom API does not expose its internal guard set"
+              },
+              "input_sha256": "050c3d0fbd9b87046986de5f458b6626bdd5652aea464cd932fbe6c43f2abaa8",
+              "intrinsic_memoization": false,
+              "intrinsic_memoization_scope": "primary depth-first completed-result reuse; DFS-no-memo also bypasses dependency/product result memos, while Ordered checked opaque factorization may use a fresh isolated internal memo",
+              "loading_seconds": 9.575073296,
+              "loop_count": 4,
+              "memory_after_retained_reduction": {
+                "process_peak_rss_bytes": 2343591936,
+                "rss_bytes": 2071588864,
+                "scope": "Linux whole-process RSS; peak includes preparation/loading and earlier stages"
+              },
+              "monitoring_enabled": false,
+              "mu_r_sq_symbol": "vakint::mursq",
+              "normalization": "MSbar",
+              "numerical_reference": {
+                "coefficients": [
+                  {
+                    "epsilon_power": -4,
+                    "imaginary": "1.654454480920700047053093416206298438747997938795532826563712020951665570800982677619374496524374527763935590073885761761288022557485724998683655990379192532260782562439599657356351901065372610982425353853640250439954158013675757742231315536629353e-12",
+                    "imaginary_absolute_error": "1.560935561947423022723426444842499703984055703625171173461184720034471337514668142052201705163945631957094267340541698588976164861726884480573651423117883162288040365633679960473148334475174630025811766821125412179856332361842244637091690864633152e-258",
+                    "imaginary_error_exact_rational": "3/1921924308174003258872616370050369756495810455948672905389542244035233680030523317234537010836564833497229828911284598430510768810573374275010933992099815720970170092183271059798176857571621225553914820586983072295508566795439261982531741155133337002515103744",
+                    "imaginary_error_quality": "Bounded",
+                    "imaginary_exact_rational": "12718945134595584448578754858336910671144599898956821044746478843436980176727953527658571425138460706113484829423298915229195059728874924126010413584534558581145607176731195377344530013387056530679677849628233176335174942054802091447819788209899427/7687697232696013035490465480201479025983241823794691621558168976140934720122093268938148043346259333988919315645138393722043075242293497100043735968399262883880680368733084239192707430286484902215659282347932289182034267181757047930126964620533348010060414976",
+                    "imaginary_exact_zero": false,
+                    "imaginary_significant_digits": 245,
+                    "real": "0",
+                    "real_absolute_error": "0",
+                    "real_error_exact_rational": "0",
+                    "real_error_quality": "Bounded",
+                    "real_exact_rational": "0",
+                    "real_exact_zero": true,
+                    "real_significant_digits": null
+                  },
+                  {
+                    "epsilon_power": -3,
+                    "imaginary": "1.364924946759577538818802068370196211967098299506314581915062417285124095910810709035983959632608985405246861810955753453062618609925723123914016192062833839115145614012669717318990318378932404060500916929253206612962180361282500137340835317719216e-11",
+                    "imaginary_absolute_error": "1.248748449557938418178741155873999763187244562900136938768947776027577070011734513641761364131156505565675413872433358871180931889381507584458921138494306529830432292506943968378518667580139704020649413456900329743885065889473795709673352691706522e-257",
+                    "imaginary_error_exact_rational": "3/240240538521750407359077046256296219561976306993584113173692780504404210003815414654317126354570604187153728613910574803813846101321671784376366749012476965121271261522908882474772107196452653194239352573372884036938570849429907747816467644391667125314387968",
+                    "imaginary_error_quality": "Bounded",
+                    "imaginary_exact_rational": "26232824340103392925193681895319878259235737291598443404789612614588771614501404150795803564348075206359062460685554012660214810690804531009896478018102527073612814802008090465773093152610804094526835564858230926191298317988029313611128313182917565/1921924308174003258872616370050369756495810455948672905389542244035233680030523317234537010836564833497229828911284598430510768810573374275010933992099815720970170092183271059798176857571621225553914820586983072295508566795439261982531741155133337002515103744",
+                    "imaginary_exact_zero": false,
+                    "imaginary_significant_digits": 245,
+                    "real": "0",
+                    "real_absolute_error": "0",
+                    "real_error_exact_rational": "0",
+                    "real_error_quality": "Bounded",
+                    "real_exact_rational": "0",
+                    "real_exact_zero": true,
+                    "real_significant_digits": null
+                  },
+                  {
+                    "epsilon_power": -2,
+                    "imaginary": "-6.487831554381341777185437449959038008226047471476690660220188596619873016837505149157780414467025042710866938537231392713571360660157063010783791668371088249931455461798922327598429453146936346992203035551434385916168174141300861759375220251873931e-11",
+                    "imaginary_absolute_error": "6.687880446349132188292611383809184731709819464038833398400227972478360261292846143560726612498430524974568958229462258994421344222230894119833828644062674338261851881236356246645886477336701541499924708670672532665000451215391825222440585899216228e-254",
+                    "imaginary_error_exact_rational": "16067/240240538521750407359077046256296219561976306993584113173692780504404210003815414654317126354570604187153728613910574803813846101321671784376366749012476965121271261522908882474772107196452653194239352573372884036938570849429907747816467644391667125314387968",
+                    "imaginary_error_quality": "Bounded",
+                    "imaginary_exact_rational": "-974150091539361601305277947094849960286762348123507895526641858298146318117233880315396689594571345274975937927815800174945301387994774419318140688713018465637433865676263974658731469158630721715483581682300692624704321461001912258906875969088799/15015033657609400459942315391018513722623519187099007073355798781525263125238463415894820397160662761697108038369410925238365381332604486523522921813279810320079453845181805154673256699778290824639959535835805252308660678089369234238529227774479195332149248",
+                    "imaginary_exact_zero": false,
+                    "imaginary_significant_digits": 242,
+                    "real": "0",
+                    "real_absolute_error": "0",
+                    "real_error_exact_rational": "0",
+                    "real_error_quality": "Bounded",
+                    "real_exact_rational": "0",
+                    "real_exact_zero": true,
+                    "real_significant_digits": null
+                  },
+                  {
+                    "epsilon_power": -1,
+                    "imaginary": "1.209659443240164816704506013446209486496767590721150707208056321196033832440245252155765239902083729760751689448157947947358571990626716526016968512998657352742904345824074997808201886968867719084473894574163433121406485372200359184653237561063971e-10",
+                    "imaginary_absolute_error": "1.625537481737887036890539987306381291732942489012538257760164951647631324603275207557935493068330795178358542084875584354578591738137554472942992943349321953431268062899372528437263700211320524047146696477295722571939986437191022335138792310550769e-252",
+                    "imaginary_error_exact_rational": "48815/30030067315218800919884630782037027445247038374198014146711597563050526250476926831789640794321325523394216076738821850476730762665208973047045843626559620640158907690363610309346513399556581649279919071671610504617321356178738468477058455548958390664298496",
+                    "imaginary_error_quality": "Bounded",
+                    "imaginary_exact_rational": "454076931362403071953237880331130008658561290203874315650162625560239317863726569265586097273701006152071763884389251811412103403625152205971025906434646078608779984667143516492432368806908527777508271335657123634516067155170729033315363340513537/3753758414402350114985578847754628430655879796774751768338949695381315781309615853973705099290165690424277009592352731309591345333151121630880730453319952580019863461295451288668314174944572706159989883958951313077165169522342308559632306943619798833037312",
+                    "imaginary_exact_zero": false,
+                    "imaginary_significant_digits": 241,
+                    "real": "0",
+                    "real_absolute_error": "0",
+                    "real_error_exact_rational": "0",
+                    "real_error_quality": "Bounded",
+                    "real_exact_rational": "0",
+                    "real_exact_zero": true,
+                    "real_significant_digits": null
+                  },
+                  {
+                    "epsilon_power": 0,
+                    "imaginary": "1.935326213929194881036390088370980229264090538482254338501509363790686915248550290823079041451535691387829200377759838765607179707916487040290059053842280833514920911464700889180803639610411505256452631464404160672879630082406024352152498119737802e-11",
+                    "imaginary_absolute_error": "1.233564324779068252675466190350609656224399629344757849795716834869767771307557399207661014831612790839216412994799500810720256241376204640390881280993259448844710939367905623629403596963529069927944124745819751903581695491405410954079731617489697e-224",
+                    "imaginary_error_exact_rational": "2963521576861427771185776169936545/240240538521750407359077046256296219561976306993584113173692780504404210003815414654317126354570604187153728613910574803813846101321671784376366749012476965121271261522908882474772107196452653194239352573372884036938570849429907747816467644391667125314387968",
+                    "imaginary_error_quality": "Estimated",
+                    "imaginary_exact_rational": "9298876236992202252345721424224821751484139766893904266941841173510597179200102273790041019460086653849082237958461412260553116671207315926890285426582138843422022409327917419031003920730751760673749954387037714930840307751007007817049695007307931/480481077043500814718154092512592439123952613987168226347385561008808420007630829308634252709141208374307457227821149607627692202643343568752733498024953930242542523045817764949544214392905306388478705146745768073877141698859815495632935288783334250628775936",
+                    "imaginary_exact_zero": false,
+                    "imaginary_significant_digits": 213,
+                    "real": "0",
+                    "real_absolute_error": "0",
+                    "real_error_exact_rational": "0",
+                    "real_error_quality": "Estimated",
+                    "real_exact_rational": "0",
+                    "real_exact_zero": true,
+                    "real_significant_digits": null
+                  }
+                ],
+                "coupling_definitions": "exact expansion through the authenticated native QCD model (GC_11=i*G)",
+                "epsilon_range": "all available poles through epsilon^0; remainder O(epsilon)",
+                "point": {
+                  "UFO_G": 1,
+                  "mUV": 1,
+                  "mu_r_squared": 1
+                },
+                "scope": "separate Symbolic-mode public evaluation plus tracked substitution; excluded from retained comparison time",
+                "seconds": 24.41918488,
+                "selection": {
+                  "requested_decimal_precision": 215,
+                  "selection": "minimum validated fixed precision among surviving dependencies",
+                  "surviving_dependencies": [
+                    {
+                      "available_precision": "ArbitraryPrecision",
+                      "data_version": "exact-definition",
+                      "identity": "\ud835\udf0b",
+                      "source_sha256": "4c1b1e82246d0173024bf1ca8474de481e9aba48c1e2cc7643c38ae25b69b151"
+                    },
+                    {
+                      "available_precision": "ArbitraryPrecision",
+                      "data_version": "exact-definition",
+                      "identity": "vakint::{}::T1ep",
+                      "source_sha256": "7748ecaabf6444350eb8eb6c67da2f90e7ea0df499c578cbc828fbec15f95d75"
+                    },
+                    {
+                      "available_precision": "ArbitraryPrecision",
+                      "data_version": "exact-definition",
+                      "identity": "vakint::{}::T1ep2",
+                      "source_sha256": "1febeecf8a2bc6d62b910ff562dca140be923a71084bab3413c4770f9e1ab718"
+                    },
+                    {
+                      "available_precision": "ArbitraryPrecision",
+                      "data_version": "exact-definition",
+                      "identity": "symbolica::{}::zeta(3)",
+                      "source_sha256": "c34fc864824ae227b9f5c96b87243986de2aea8ea70f0109e0c9efdb6d69a5a9"
+                    },
+                    {
+                      "available_precision": "ArbitraryPrecision",
+                      "data_version": "exact-definition",
+                      "identity": "vakint::{}::HR(1,1,0,vakint::{}::om1)",
+                      "source_sha256": "fa4bb974b4e7d8ac4643193dca2fc4b7e288c768eebe7b3a07d65fe09dab5e00"
+                    },
+                    {
+                      "available_precision": "ArbitraryPrecision",
+                      "data_version": "exact-definition",
+                      "identity": "vakint::{}::HR(1,0,1,0,vakint::{}::om1)",
+                      "source_sha256": "2889a7b866e962eefba3cad2d0570f8d414b68528122099c6bacea2f74458f33"
+                    },
+                    {
+                      "available_precision": "ArbitraryPrecision",
+                      "data_version": "exact-definition",
+                      "identity": "vakint::{}::HR(1,1,0,-1,vakint::{}::om1)",
+                      "source_sha256": "bf0da8df352c10fbd54ca2a181c0f2571c02867259e897757ecb3687e8843a70"
+                    },
+                    {
+                      "available_precision": "ArbitraryPrecision",
+                      "data_version": "exact-definition",
+                      "identity": "vakint::{}::HR(1,1,1,1,vakint::{}::om1)",
+                      "source_sha256": "16cf3486d9561d943f9de628c7fc9cc2ee364e967446feb8d12fa7d9c864473b"
+                    },
+                    {
+                      "available_precision": "ArbitraryPrecision",
+                      "data_version": "exact-definition",
+                      "identity": "vakint::{}::HR(1,1,1,-1,vakint::{}::om1)",
+                      "source_sha256": "3e7371fc48f53de0373d9d77661283ffa841290addc62d94e3f18003f96ba532"
+                    },
+                    {
+                      "available_precision": "ArbitraryPrecision",
+                      "data_version": "exact-definition",
+                      "identity": "vakint::{}::HR(1,1,-1,0,vakint::{}::om1)",
+                      "source_sha256": "de3929acb2c70e275e440a5d8f71f27cfaa36b46bb959eaa31c67ce2a30bea50"
+                    },
+                    {
+                      "available_precision": "ArbitraryPrecision",
+                      "data_version": "exact-definition",
+                      "identity": "vakint::{}::HR(1,1,-1,1,vakint::{}::om1)",
+                      "source_sha256": "f4a785868b711399504a9a166f94069833afbdd9c7b7b3f5b8522ff83b8e11ad"
+                    },
+                    {
+                      "available_precision": "ArbitraryPrecision",
+                      "data_version": "exact-definition",
+                      "identity": "vakint::{}::HR(1,-1,1,0,vakint::{}::om1)",
+                      "source_sha256": "9b9bde7fe5ea82d6ff789a57a0db65a34939c463a5a55506b5a2f7fed91df004"
+                    },
+                    {
+                      "available_precision": "ArbitraryPrecision",
+                      "data_version": "exact-definition",
+                      "identity": "vakint::{}::HR(1,-1,1,1,vakint::{}::om1)",
+                      "source_sha256": "78abf47bd5780c3f7fcecf35f47c09f4f97502683910591bc50c2746769157f4"
+                    },
+                    {
+                      "available_precision": "ArbitraryPrecision",
+                      "data_version": "exact-definition",
+                      "identity": "vakint::{}::HR(-1,1,1,0,vakint::{}::om1)",
+                      "source_sha256": "314ae1860df579fa1af227c69cc1333c411b3b1f558daf904f435619233ff0cf"
+                    },
+                    {
+                      "available_precision": "ArbitraryPrecision",
+                      "data_version": "exact-definition",
+                      "identity": "vakint::{}::HI(1,0,vakint::{}::om1)",
+                      "source_sha256": "51b2480e00c2597df0ad0714d66ca1234facdb78e87b6d7e35e9303e97d7e3e8"
+                    },
+                    {
+                      "available_precision": "ArbitraryPrecision",
+                      "data_version": "exact-definition",
+                      "identity": "vakint::{}::HI(1,1,1,vakint::{}::om1)",
+                      "source_sha256": "213b32fce3e261470e88247fa7168aa32c9073cc9b7cea974e1d9e2c65609832"
+                    },
+                    {
+                      "available_precision": "ArbitraryPrecision",
+                      "data_version": "exact-definition",
+                      "identity": "vakint::{}::HI(1,-1,0,vakint::{}::om1)",
+                      "source_sha256": "8094fe2a6eaa03c4cddda95ceac111ce6491de8abac63bffd66aea7b67a2af42"
+                    },
+                    {
+                      "available_precision": "ArbitraryPrecision",
+                      "data_version": "exact-definition",
+                      "identity": "vakint::{}::HI(-1,1,0,vakint::{}::om1)",
+                      "source_sha256": "2b72fd028156740e44aa53bc0badfa01a22daf9223331e11599b0da68cbe1656"
+                    },
+                    {
+                      "available_precision": "ArbitraryPrecision",
+                      "data_version": "exact-definition",
+                      "identity": "vakint::{}::HI(1,0,1,1,vakint::{}::om1)",
+                      "source_sha256": "fcd7095eab05ba538e4119ce5ce45dd27d92091b8600c244cc10bf7d1b540f9b"
+                    },
+                    {
+                      "available_precision": "ArbitraryPrecision",
+                      "data_version": "exact-definition",
+                      "identity": "vakint::{}::HI(1,1,0,1,vakint::{}::om1)",
+                      "source_sha256": "489744cfe2fbf207e8a48fff292a827ae2e0e09908074d60492e42265866f68a"
+                    },
+                    {
+                      "available_precision": "ArbitraryPrecision",
+                      "data_version": "exact-definition",
+                      "identity": "vakint::{}::HI(1,1,1,0,vakint::{}::om1)",
+                      "source_sha256": "afe4794d5249007c6e562afdd3654c28d615df4546ad4c52967940f2b18d4a20"
+                    },
+                    {
+                      "available_precision": "ArbitraryPrecision",
+                      "data_version": "exact-definition",
+                      "identity": "vakint::{}::HI(1,1,1,-1,vakint::{}::om1)",
+                      "source_sha256": "2026dade3ca8901de77141d274c61d1ea798afff22b055059e039ec3b9f82747"
+                    },
+                    {
+                      "available_precision": "ArbitraryPrecision",
+                      "data_version": "exact-definition",
+                      "identity": "vakint::{}::HI(1,1,-1,0,vakint::{}::om1)",
+                      "source_sha256": "93b5c0bebf16ecfca9e7a76b514e53010150d518ed9ef6532bcb18eeb6df8a2b"
+                    },
+                    {
+                      "available_precision": "ArbitraryPrecision",
+                      "data_version": "exact-definition",
+                      "identity": "vakint::{}::HI(1,1,-1,1,vakint::{}::om1)",
+                      "source_sha256": "6a46b5a6d3c3f88e7e8e50821714ee0b8d746ee468b685bb5a855ce8edb10944"
+                    },
+                    {
+                      "available_precision": "ArbitraryPrecision",
+                      "data_version": "exact-definition",
+                      "identity": "vakint::{}::HI(1,1,-1,-1,vakint::{}::om1)",
+                      "source_sha256": "7842ec9830b1774ee3909185649e21a891e57b0f0e7beff48f1e8ba529128f7f"
+                    },
+                    {
+                      "available_precision": "ArbitraryPrecision",
+                      "data_version": "exact-definition",
+                      "identity": "vakint::{}::HI(1,-1,1,0,vakint::{}::om1)",
+                      "source_sha256": "dc8dd1e64c0cc0a7304552f01e5fc03f2cae3defdbb63aca12ef3e31d2d6bd88"
+                    },
+                    {
+                      "available_precision": "ArbitraryPrecision",
+                      "data_version": "exact-definition",
+                      "identity": "vakint::{}::HI(1,-1,1,1,vakint::{}::om1)",
+                      "source_sha256": "372ef49e5dc01631239ddc1966766dfba9fe5e8832c1779fb97f8dd5885e54ab"
+                    },
+                    {
+                      "available_precision": "ArbitraryPrecision",
+                      "data_version": "exact-definition",
+                      "identity": "vakint::{}::HI(1,-1,1,-1,vakint::{}::om1)",
+                      "source_sha256": "4697ac541b1abe79192b00d7afb9ee8c690c1acc048f67fe3735afbc5affbdf8"
+                    },
+                    {
+                      "available_precision": "ArbitraryPrecision",
+                      "data_version": "exact-definition",
+                      "identity": "vakint::{}::HI(1,-1,-1,1,vakint::{}::om1)",
+                      "source_sha256": "c677ed81340edaf2b3dd0b6244f1c2fa8c40480309aadf564f8ae21ce5aed39a"
+                    },
+                    {
+                      "available_precision": "ArbitraryPrecision",
+                      "data_version": "exact-definition",
+                      "identity": "vakint::{}::HI(-1,1,1,1,vakint::{}::om1)",
+                      "source_sha256": "cff010256b8ec64edd17f222058294951cf583c38a78e4b1deb7258eca70396d"
+                    },
+                    {
+                      "available_precision": "ArbitraryPrecision",
+                      "data_version": "exact-definition",
+                      "identity": "vakint::{}::HI(-1,1,-1,0,vakint::{}::om1)",
+                      "source_sha256": "f54bd1ace73948682edd6957ceea4827bad1cc59a3a5df7ff2f2ad7f7c784eca"
+                    },
+                    {
+                      "available_precision": "ArbitraryPrecision",
+                      "data_version": "exact-definition",
+                      "identity": "vakint::{}::HI(-1,-1,1,0,vakint::{}::om1)",
+                      "source_sha256": "b918c0554c665985847ad4129b4c25222a08e01dd53552611cae879babcddf07"
+                    },
+                    {
+                      "available_precision": "FixedPrecision(20000)",
+                      "data_version": "v0.1.2",
+                      "identity": "vakint::{}::RustRedCoefficient(vakint::{}::rustred_data_25fc8afb194db4209319b0753ea8ba4b5b5bd5a9726de5a111c6384f86e73de0,vakint::{}::RustRedMaster(vakint::{}::rustred_family_eb225daea1ddc8a4d61675a26b9b487f90278190fe874e314b7253aee632a5e7,0,1,0,0,1,1,1,0,1,0),0)",
+                      "source_sha256": "f0ad5c640955434f32f331234ad8d3ea2c4917eb5d91f6c5d9e2f914600615d7"
+                    },
+                    {
+                      "available_precision": "FixedPrecision(20000)",
+                      "data_version": "v0.1.2",
+                      "identity": "vakint::{}::RustRedCoefficient(vakint::{}::rustred_data_25fc8afb194db4209319b0753ea8ba4b5b5bd5a9726de5a111c6384f86e73de0,vakint::{}::RustRedMaster(vakint::{}::rustred_family_eb225daea1ddc8a4d61675a26b9b487f90278190fe874e314b7253aee632a5e7,0,3,0,0,1,1,1,0,1,0),0)",
+                      "source_sha256": "1d37969f6d70fff8024da11b0b7fe26eee4607cb7a8b7beb782b00a5c2e1d922"
+                    },
+                    {
+                      "available_precision": "FixedPrecision(215)",
+                      "data_version": "v0.1.2",
+                      "identity": "vakint::{}::RustRedConstant(vakint::{}::rustred_data_25fc8afb194db4209319b0753ea8ba4b5b5bd5a9726de5a111c6384f86e73de0,vakint::{}::PR7D2)",
+                      "source_sha256": "462d80225362bf57f0210aa5550e9c154eef7f95ec03915710db2ffa6e59494a"
+                    },
+                    {
+                      "available_precision": "FixedPrecision(215)",
+                      "data_version": "v0.1.2",
+                      "identity": "vakint::{}::RustRedConstant(vakint::{}::rustred_data_25fc8afb194db4209319b0753ea8ba4b5b5bd5a9726de5a111c6384f86e73de0,vakint::{}::PR10D2)",
+                      "source_sha256": "84e020d42c37e6fda4150caf7c8d636126aa9e5c2b8ac8d7edb18b3453690c43"
+                    },
+                    {
+                      "available_precision": "FixedPrecision(20000)",
+                      "data_version": "v0.1.2",
+                      "identity": "vakint::{}::RustRedConstant(vakint::{}::rustred_data_25fc8afb194db4209319b0753ea8ba4b5b5bd5a9726de5a111c6384f86e73de0,vakint::{}::K5Moment(1))",
+                      "source_sha256": "161af012748e8dc44cc241750a3d55f6f3219b5f7bd6cfc9c6192f346af5094d"
+                    },
+                    {
+                      "available_precision": "FixedPrecision(20000)",
+                      "data_version": "v0.1.2",
+                      "identity": "vakint::{}::RustRedConstant(vakint::{}::rustred_data_25fc8afb194db4209319b0753ea8ba4b5b5bd5a9726de5a111c6384f86e73de0,vakint::{}::K5Moment(3))",
+                      "source_sha256": "e8988c691db8e11a773106fa0304e9dca80d616e4e33e12468124f3486ad1dcc"
+                    }
+                  ]
+                },
+                "warnings": [
+                  "source uncertainty, cancellation and rounding limit this Laurent coefficient [requested 215 digits; achieved 213 digits; data v0.1.2]; \u03b5^0; vakint::{}::PR7D2 (215 source digits); vakint::{}::PR10D2 (215 source digits); vakint::{}::K5Moment(1) (20000 source digits); vakint::{}::K5Moment(3) (20000 source digits); \ud835\udf0b; vakint::{}::T1ep; vakint::{}::T1ep2; symbolica::{}::zeta(3); vakint::{}::HR(1,1,0,vakint::{}::om1); vakint::{}::HR(1,0,1,0,vakint::{}::om1); vakint::{}::HR(1,1,0,-1,vakint::{}::om1); vakint::{}::HR(1,1,1,1,vakint::{}::om1); vakint::{}::HR(1,1,1,-1,vakint::{}::om1); vakint::{}::HR(1,1,-1,0,vakint::{}::om1); vakint::{}::HR(1,1,-1,1,vakint::{}::om1); vakint::{}::HR(1,-1,1,0,vakint::{}::om1); vakint::{}::HR(1,-1,1,1,vakint::{}::om1); vakint::{}::HR(-1,1,1,0,vakint::{}::om1); vakint::{}::HI(1,0,vakint::{}::om1); vakint::{}::HI(1,1,1,vakint::{}::om1); vakint::{}::HI(1,-1,0,vakint::{}::om1); vakint::{}::HI(-1,1,0,vakint::{}::om1); vakint::{}::HI(1,0,1,1,vakint::{}::om1); vakint::{}::HI(1,1,0,1,vakint::{}::om1); vakint::{}::HI(1,1,1,0,vakint::{}::om1); vakint::{}::HI(1,1,1,-1,vakint::{}::om1); vakint::{}::HI(1,1,-1,0,vakint::{}::om1); vakint::{}::HI(1,1,-1,1,vakint::{}::om1); vakint::{}::HI(1,1,-1,-1,vakint::{}::om1); vakint::{}::HI(1,-1,1,0,vakint::{}::om1); vakint::{}::HI(1,-1,1,1,vakint::{}::om1); vakint::{}::HI(1,-1,1,-1,vakint::{}::om1); vakint::{}::HI(1,-1,-1,1,vakint::{}::om1); vakint::{}::HI(-1,1,1,1,vakint::{}::om1); vakint::{}::HI(-1,1,-1,0,vakint::{}::om1); vakint::{}::HI(-1,-1,1,0,vakint::{}::om1); L4_eb225daea1ddc8a4d61675a26b9b487f90278190fe874e314b7253aee632a5e7_p0_p1_p0_p0_p1_p1_p1_p0_p1_p0 epsilon^0 [master L4_eb225daea1ddc8a4d61675a26b9b487f90278190fe874e314b7253aee632a5e7_p0_p1_p0_p0_p1_p1_p1_p0_p1_p0] \u03b5^0 (20000 source digits); L4_eb225daea1ddc8a4d61675a26b9b487f90278190fe874e314b7253aee632a5e7_p0_p3_p0_p0_p1_p1_p1_p0_p1_p0 epsilon^0 [master L4_eb225daea1ddc8a4d61675a26b9b487f90278190fe874e314b7253aee632a5e7_p0_p3_p0_p0_p1_p1_p1_p0_p1_p0] \u03b5^0 (20000 source digits)"
+                ]
+              },
+              "persistent_cache": false,
+              "preparation": {
+                "current_run_seconds": 0.0,
+                "historical_seconds": 122.011886393,
+                "reused_authenticated_bundle": true,
+                "timing_scope": "scalar preparation precedes retained evaluation; loaded-bundle historical work is not added to current timing",
+                "timings": {
+                  "angular_seconds": 118.806562718,
+                  "graph_generation_seconds": 0.02497967,
+                  "ingress_seconds": 0.520854117,
+                  "scalar_contraction_seconds": 2.577914702,
+                  "taylor_seconds": 0.074417568,
+                  "total_seconds": 122.011822333
+                }
+              },
+              "producer": {
+                "allowed_cpus": "169",
+                "build_profile": "release",
+                "cargo_lock_sha256": "9338911038cac4c53515170535f87f9fabb6bf1004fd75317068c5fd06a9ab13",
+                "commit": "222df4cb1f35a8c79927df1dd72a56110fa333bd",
+                "comparison_process": "one engine in this process",
+                "debug_assertions": false,
+                "executable_identity_scope": "release: streamed once; DEV: use the supervising original-process launch receipt",
+                "executable_sha256": "99b29a8144f00820c80db33d37357e0656ff6f6364135f2b814199c93ded5108",
+                "native_runtime_arities": "1,3,6,10,15",
+                "profile_contract": "caller must build --release with no profile overrides; debug_assertions is not compiler-profile introspection"
+              },
+              "projection": "quadratic-transverse",
+              "reduction_completed": true,
+              "reduction_math_seconds": 2.811344448,
+              "reduction_math_timing": {
+                "complete": true,
+                "gross_seconds": 2.811344448,
+                "incompleteness_reason": null,
+                "interval_count": 5,
+                "measured_owner_preparation_seconds": 0.0,
+                "scope_id": "vakint.rustred.reduction-math.v1"
+              },
+              "retained": {
+                "bytes": 22078,
+                "file": "retained.symbolica",
+                "sha256": "6986f629362956bf28bfbb3bf5a941e5d1f4df667a626d93395dbde8059a8f77"
+              },
+              "retained_reduction_seconds": 21.989664564999998,
+              "retained_reduction_seconds_scope": "complete retained public call, including frontend and finalization; separate from reduction math",
+              "schema": "vakint.ordered-rung-comparison.v1",
+              "strategy": "Ordered",
+              "worker_policy": {
+                "owner_preparation_workers": 1,
+                "scope": "single owner preparation worker required for native timing subtraction"
+              }
+            }
+          },
+          "completion": {
+            "evidence": {
+              "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-ordered-numeric-222-01/guard/completion.json",
+              "sha256": "27c29ec6ab177524b1f21e7014f0f398dc9a59f15aff5e09ccee86fa704d0506"
+            },
+            "raw": {
+              "utc": "2026-10-30T08:18:45.859546+00:00",
+              "exit_code": 0,
+              "elapsed_seconds": 57.18771216599271,
+              "failure": null,
+              "signals_sent_to_original_pidfd": [],
+              "success": true
+            }
+          },
+          "source_revision": "222df4cb1f35a8c79927df1dd72a56110fa333bd",
+          "reduction_math_seconds": 2.811344448,
+          "public_retained_seconds": 21.989664564999998,
+          "guard_elapsed_seconds": 57.18771216599271
+        }
+      },
+      "note": "Mixed producer checkpoints: old DFS source 047 and current Ordered source 222. The retained payloads are byte-identical and the authenticated saved comparator also proves exact equality without new reductions. Current Ordered tracked substitution completed: source-selected request 215 digits; finite imaginary coefficient achieves 213 digits with Estimated error quality, while pole coefficients achieve 241\u2013245 digits with Bounded errors. Precision warnings, including PR7D2/PR10D2 and data v0.1.2, remain verbatim in the raw report. This is exact retained equivalence plus current deterministic substitution using the same active dataset, not a separate old-DFS numerical run or numerical pair comparison. Shared-host/monitor/source differences preclude a fair timing ratio; no no-memo observation is added.",
+      "supersedes": "4L-quadratic-047DFS-222Ordered-current-closed-20261030",
+      "exact_pair_proof": {
+        "evidence": {
+          "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-saved-pair-current222-proof-01/proof/functional-pair.json",
+          "sha256": "56f6cf733474741f913cf4d1508b08b7c42857ca54cf7ab53adfad5ec5136f45"
+        },
+        "raw": {
+          "equality_scope": "existing exact retained comparator and, when checked, tracked numerical enclosure overlap; no exceptional-domain equality or timing qualification",
+          "exact_retained_equality": true,
+          "functional_only": true,
+          "input_sha256": "050c3d0fbd9b87046986de5f458b6626bdd5652aea464cd932fbe6c43f2abaa8",
+          "new_evaluations": 0,
+          "numerical_check": "not checked",
+          "numerical_enclosures_agree": null,
+          "performance_eligible": false,
+          "reports": {
+            "dfs": {
+              "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-dfs-manual-reference-047-01/work/L4-quadratic-dfs/report.json",
+              "sha256": "5152f228b54518f615815be6e925e8d0cc726de0afb45c41b00cb569ace4e2c8"
+            },
+            "ordered": {
+              "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-ordered-numeric-222-01/work/L4-quadratic-ordered/report.json",
+              "sha256": "8c90946e04b6a2b50684cc5ae62779b6bfc7e1e34da3b2f1e454239bad2b8fb5"
+            }
+          },
+          "retain_only_explicitly_requested": true,
+          "retained": {
+            "dfs": "6986f629362956bf28bfbb3bf5a941e5d1f4df667a626d93395dbde8059a8f77",
+            "ordered": "6986f629362956bf28bfbb3bf5a941e5d1f4df667a626d93395dbde8059a8f77"
+          },
+          "schema": "vakint.ordered-rung-functional-pair.v1"
+        }
+      },
+      "exact_pair_execution": {
+        "launch": {
+          "evidence": {
+            "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-saved-pair-current222-proof-01/guard/launch.json",
+            "sha256": "a5be89301af7e8cf8886e5bf21e30d1525bfbfa4467ab75c4058e1e1ec243f07"
+          },
+          "raw": {
+            "schema": "vakint.ordered-rung-process.v1",
+            "utc": "2026-10-30T08:20:07.836830+00:00",
+            "pid": 1865806,
+            "start_ticks": 138210895,
+            "guard_armed_before_native_exec": true,
+            "command": [
+              "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/build/release-222df4cb1/example/immutable/ordered_reduction_rungs",
+              "--work-dir",
+              "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-saved-pair-current222-proof-01/proof",
+              "--compare-two-reports",
+              "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-dfs-manual-reference-047-01/work/L4-quadratic-dfs",
+              "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-ordered-numeric-222-01/work/L4-quadratic-ordered",
+              "--no-numerical-reference"
+            ],
+            "cwd": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/vakint-final-validation",
+            "cpu_affinity": [
+              169
+            ],
+            "minimum_memory_bytes": 200000000000,
+            "maximum_elapsed_seconds": null,
+            "executable": {
+              "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/build/release-222df4cb1/example/immutable/ordered_reduction_rungs",
+              "bytes": 86386016,
+              "sha256": "99b29a8144f00820c80db33d37357e0656ff6f6364135f2b814199c93ded5108"
+            },
+            "thread_environment": {
+              "RAYON_NUM_THREADS": "1",
+              "OMP_NUM_THREADS": "1",
+              "MKL_NUM_THREADS": "1"
+            }
+          }
+        },
+        "completion": {
+          "evidence": {
+            "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L4-quadratic-saved-pair-current222-proof-01/guard/completion.json",
+            "sha256": "bf7a541d1d4f89bf4c4041db57d3d26f566212184dd102c6b64e0ed03f86ccd0"
+          },
+          "raw": {
+            "utc": "2026-10-30T08:20:07.964665+00:00",
+            "exit_code": 0,
+            "elapsed_seconds": 0.12926367716863751,
+            "failure": null,
+            "signals_sent_to_original_pidfd": [],
+            "success": true
+          }
+        }
+      },
+      "numerical_pair_comparison": null,
+      "numerical_validation_basis": "current Ordered tracked substitution of the exactly equivalent retained expression, with the same authenticated active data; no separate numerical evaluation of the old DFS result"
     }
   },
   "selected_ordered_rung_diagnostics": [
     "4L-zero-b457-functional-ci-20261030",
-    "4L-quadratic-047-closed-pair-pending-20261030"
+    "4L-quadratic-047DFS-222Ordered-exact-current-numerical-20261030"
   ]
 }

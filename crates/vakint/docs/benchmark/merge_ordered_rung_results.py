@@ -954,6 +954,21 @@ def append_diagnostic(base, diagnostic_id, observations, note, functional_ci=Non
             report_ref = receipt["reports"][arm]["report"]
             completion_ref = receipt["completion"]
             source = receipt["source_revision"]
+        elif (
+            receipt["schema"]
+            == "vakint.ordered-rung-functional-diagnostic-completion.v1"
+        ):
+            require(
+                receipt["success"] is True
+                and receipt["functional_only"] is True
+                and receipt["performance_eligible"] is False,
+                "missing current functional completion",
+            )
+            report_ref, completion_ref, source = (
+                receipt["report"],
+                receipt["guard_completion"],
+                receipt["source_revision"],
+            )
         else:
             require(
                 receipt["schema"]
@@ -1068,6 +1083,132 @@ def append_diagnostic(base, diagnostic_id, observations, note, functional_ci=Non
         "observations": reports,
         "note": note,
     }
+    return result
+
+
+def append_exact_diagnostic(
+    base, diagnostic_id, previous_id, proof_path, note, current_numerical=False
+):
+    """Add a saved-result exact checkpoint without rewriting earlier status."""
+    require(
+        diagnostic_id not in base.get("ordered_rung_diagnostics", {}),
+        "diagnostic ID exists",
+    )
+    previous = base["ordered_rung_diagnostics"][previous_id]
+    proof_path = Path(proof_path).resolve()
+    proof = read(proof_path)
+    require(
+        proof["schema"] == "vakint.ordered-rung-functional-pair.v1"
+        and proof["exact_retained_equality"] is True
+        and proof["functional_only"] is True
+        and proof["performance_eligible"] is False
+        and proof["new_evaluations"] == 0
+        and proof["retain_only_explicitly_requested"] is True
+        and proof["numerical_enclosures_agree"] is None
+        and proof["numerical_check"] == "not checked",
+        "missing saved exact-only functional pair proof",
+    )
+    for arm in ("dfs", "ordered"):
+        report = previous["observations"][arm]["report"]
+        require(
+            referenced(proof["reports"][arm], proof_path.parent)
+            == Path(report["evidence"]["path"])
+            and proof["reports"][arm]["sha256"] == report["evidence"]["sha256"]
+            and proof["retained"][arm] == report["raw"]["retained"]["sha256"]
+            and proof["input_sha256"] == report["raw"]["input_sha256"],
+            "saved pair proof does not bind the recorded reports/results/input",
+        )
+        require(
+            read(Path(report["evidence"]["path"])) == report["raw"],
+            "recorded diagnostic report differs from authenticated bytes",
+        )
+    execution = proof_path.parent.parent / "guard"
+    launch_path, completion_path = (
+        execution / "launch.json",
+        execution / "completion.json",
+    )
+    launch, completion = read(launch_path), read(completion_path)
+    require(
+        launch["schema"] == "vakint.ordered-rung-process.v1"
+        and launch["guard_armed_before_native_exec"] is True
+        and completion["success"] is True
+        and type(completion["exit_code"]) is int
+        and completion["exit_code"] == 0
+        and completion["failure"] is None
+        and completion["signals_sent_to_original_pidfd"] == [],
+        "saved comparator did not complete successfully",
+    )
+    command = launch["command"]
+    require(
+        command.count("--compare-two-reports") == 1
+        and "--no-numerical-reference" in command,
+        "saved comparator scope differs",
+    )
+    index = command.index("--compare-two-reports")
+    require(
+        command[index + 1 : index + 3]
+        == [
+            str(
+                Path(previous["observations"][arm]["report"]["evidence"]["path"]).parent
+            )
+            for arm in ("dfs", "ordered")
+        ],
+        "saved comparator used different report directories",
+    )
+    result = copy.deepcopy(base)
+    checkpoint = copy.deepcopy(previous)
+    checkpoint.update(
+        status="functional_exact_pass_numerical_unchecked",
+        exact_retained_equality=True,
+        numerical_validation=None,
+        supersedes=previous_id,
+        note=note,
+        exact_pair_proof={"evidence": evidence(proof_path), "raw": proof},
+        exact_pair_execution={
+            "launch": {"evidence": evidence(launch_path), "raw": launch},
+            "completion": {"evidence": evidence(completion_path), "raw": completion},
+        },
+    )
+    if current_numerical:
+        observation = checkpoint["observations"]["ordered"]
+        receipt = observation["receipt"]["raw"]
+        receipt_path = referenced(observation["receipt"]["evidence"], proof_path.parent)
+        require(
+            read(receipt_path) == receipt,
+            "current functional receipt differs from authenticated bytes",
+        )
+        numerical = observation["report"]["raw"]["numerical_reference"]
+        require(
+            receipt["schema"]
+            == "vakint.ordered-rung-functional-diagnostic-completion.v1"
+            and numerical is not None
+            and numerical["coefficients"],
+            "current numerical checkpoint lacks a completed tracked substitution",
+        )
+        recorded = [
+            {
+                field: row[field]
+                for field in (
+                    "epsilon_power",
+                    "real_significant_digits",
+                    "imaginary_significant_digits",
+                    "real_error_quality",
+                    "imaginary_error_quality",
+                )
+            }
+            for row in numerical["coefficients"]
+        ]
+        require(
+            receipt["numerical_precision_by_epsilon"] == recorded,
+            "current numerical precision evidence differs from its report",
+        )
+        checkpoint.update(
+            numerical_validation=True,
+            numerical_pair_comparison=None,
+            numerical_validation_basis="current Ordered tracked substitution of the exactly equivalent retained expression, with the same authenticated active data; no separate numerical evaluation of the old DFS result",
+            status="functional_exact_pass_current_numerical_substitution_pass",
+        )
+    result["ordered_rung_diagnostics"][diagnostic_id] = checkpoint
     return result
 
 

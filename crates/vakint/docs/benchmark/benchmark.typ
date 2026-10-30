@@ -1497,7 +1497,8 @@ Refresh and validation contract: #raw("maintenance.typ").]
       let ordered = row.observations.ordered
       (
         [*4L · #if row.projection == "zero-momentum-metric" [zero momentum] else [quadratic]*
-          #linebreak() #text(8pt)[Source #raw(dfs.source_revision.slice(0, 12))]],
+          #linebreak() #text(8pt)[DFS #raw(dfs.source_revision.slice(0, 12))
+            #linebreak() Ordered #raw(ordered.source_revision.slice(0, 12))]],
         table.cell(fill: rgb("#fff3df"), [#text(14pt, weight: "bold")[#timing(dfs.reduction_math_seconds) s]
           #linebreak() #text(8pt)[math · n = 1]
           #linebreak() #text(8pt)[public #timing(dfs.public_retained_seconds) s]]),
@@ -1506,7 +1507,9 @@ Refresh and validation contract: #raw("maintenance.typ").]
           #linebreak() #text(8pt)[public #timing(ordered.public_retained_seconds) s]]),
         [*Catalogue closed*
           #linebreak() #if row.exact_retained_equality == true [Exact pair ✓] else [Exact pair pending]
-          #linebreak() #if row.numerical_validation == true [Numerical ✓] else [Numerical unmeasured]
+          #linebreak() #if row.numerical_validation == true {
+            if row.at("numerical_pair_comparison", default: true) == none { [Current numerical ✓] } else { [Numerical ✓] }
+          } else [Numerical unmeasured]
           #linebreak() #text(8pt)[No-memo cohort pending]],
       )
     },

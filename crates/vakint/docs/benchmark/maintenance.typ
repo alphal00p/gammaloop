@@ -19,6 +19,20 @@ always set performance eligibility false and both efficiency ratios null.
 Their amber table keeps math, public-call and guard durations distinct, with
 source cohorts and precision warnings preserved. No incomplete no-memo run is
 converted into a timing or a completed three-arm benchmark.
+When the saved-result comparator later emits a bound exact-only functional pair
+proof, #raw("append_exact_diagnostic") adds a new checkpoint that supersedes
+the pending display selection without modifying that earlier entry. It verifies
+both report/result/input bindings and the successful exact-only comparator
+execution. Numerical status stays null unless separately checked; the proof
+does not retime either reduction or qualify any efficiency ratio.
+If a current Ordered report additionally has a completed tracked numerical
+substitution, its precision records can be bound to that functional completion
+with #raw("current_numerical=True"). This chain establishes exact retained
+equivalence plus current deterministic substitution using the active dataset;
+it does not claim a separate numerical evaluation of the historical DFS result.
+The table labels it “Current numerical” and retains requested/achieved digits,
+error quality and warnings unchanged, including Estimated rather than Bounded
+errors. Mixed producer revisions remain explicit in both source labels.
 
 The generic collector #raw("examples/ordered_reduction_rungs.rs") compares
 ordinary DFS, DFS without completed-result memoization/bookkeeping, and Ordered
