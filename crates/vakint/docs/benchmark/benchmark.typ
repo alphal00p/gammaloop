@@ -1203,15 +1203,20 @@ Refresh and validation contract: #raw("maintenance.typ").]
 // the historical four-loop FORM/cache measurements above.
 #let ordered-id = report.at("selected_ordered_rung_run", default: none)
 #if ordered-id != none {
-  let run = report.ordered_rung_runs.at(ordered-id)
-  assert(run.schema in ("vakint.ordered-rung-report.v1", "vakint.ordered-rung-report.v2", "vakint.ordered-rung-report.v3"))
-  assert(run.persistent_caches == false)
+  let selected-ids = report.at("selected_ordered_rung_runs", default: (ordered-id,))
+  let selected-runs = selected-ids.map(id => report.ordered_rung_runs.at(id))
+  let run = selected-runs.first()
+  assert(selected-runs.all(item => item.schema in ("vakint.ordered-rung-report.v1", "vakint.ordered-rung-report.v2", "vakint.ordered-rung-report.v3") and item.persistent_caches == false))
   let triple = run.schema != "vakint.ordered-rung-report.v1"
   let arms = if triple { ("dfs", "dfs_no_memo", "ordered") } else { ("dfs", "ordered") }
-  let rows = run.summary
+  assert(selected-runs.all(item => item.arms == arms), message: "Keep unlike arm cohorts in separate selections")
+  let rows = selected-runs.map(item => item.summary).flatten().sorted(key: row => row.loop_count * 2 + if row.projection == "zero-momentum-metric" { 0 } else { 1 })
+  assert(rows.len() == 0 or rows.all(row => row.producer.commit == rows.first().producer.commit and row.producer.cargo_lock_sha256 == rows.first().producer.cargo_lock_sha256), message: "Display distinct source cohorts separately")
+  let asymmetric = rows.any(row => row.at("baseline_single_measurements", default: false))
+  let ratio-text(value) = if value < 0.001 { fixed(value, 6) } else { multiplier(value) }
   let label(row) = [*#(str(row.loop_count) + "L")* · #if row.projection == "zero-momentum-metric" [zero momentum] else [quadratic]]
   let math-duration(value) = if value >= 1 { timing(value) + " s" } else if value >= 0.001 {
-    fixed(value * 1000, 3) + " ms"
+    fixed(value * 1000, if value >= 0.1 { 1 } else { 3 }) + " ms"
   } else { fixed(value * 1000000, 3) + " µs" }
   let measured-cell(row, engine) = {
     let metric = row.metrics.at(engine).reduction_math_seconds
@@ -1236,10 +1241,10 @@ Refresh and validation contract: #raw("maintenance.typ").]
         }
         if engine == "ordered" and memo-ratio != none {
           linebreak()
-          text(9pt, weight: "bold")[#if triple [÷ memo ]×#multiplier(memo-ratio)]
+          text(9pt, weight: "bold")[#if triple [÷ memo ]×#ratio-text(memo-ratio)]
           if triple and no-memo-ratio != none {
             linebreak()
-            text(9pt, weight: "bold")[÷ no memo ×#multiplier(no-memo-ratio)]
+            text(9pt, weight: "bold")[÷ no memo ×#ratio-text(no-memo-ratio)]
           }
         }
       }
@@ -1277,9 +1282,9 @@ Refresh and validation contract: #raw("maintenance.typ").]
     faster DFS arm; green means faster than both. Both ratios are printed.] else [Green means faster.]
     Without a bound fresh-process release protocol, observations are diagnostic
     and have no ratio. Gross times and preparation deductions remain in the raw record.
-    #if run.schema == "vakint.ordered-rung-report.v3" [Each DFS baseline is one
-    actual run; Ordered shows the median/range of three. Ratios use those
-    single baselines, with no estimate of their run-to-run variability.]
+    #if asymmetric [Rows labeled n = 1 use a single actual DFS measurement;
+    Ordered shows three-run median/range. Those single baselines have no measured
+    run-to-run variability. Earlier balanced rows retain their original n = 3.]
   ]
   v(0.4em)
   {
@@ -1338,6 +1343,7 @@ Refresh and validation contract: #raw("maintenance.typ").]
   remains independent. Dashboard/snapshot runs retain their observer overhead
   and remain diagnostic, including the large five-loop examples.]
   v(0.35em)
+  if rows.any(row => last-progress(row) != none) {
   text(12pt, weight: "bold", fill: navy)[Ordered frontier and grouping]
   v(0.2em)
   table(
@@ -1360,6 +1366,10 @@ Refresh and validation contract: #raw("maintenance.typ").]
   not a public-call sum. Keys are pending operational identities; emitted terms
   are pre-global-grouping events. Merge/cancellation counts exclude input and
   intra-rule grouping and do not measure CPU time saved. A dash is unmeasured.]
+  } else {
+    text(8pt)[Frontier, phase and cancellation counters are unmeasured in these
+    monitoring-off timing samples and remain null in the raw records.]
+  }
   v(0.35em)
   text(9pt)[*Correctness.* Exact retained expressions agree. Numerical checks,
   where present, compare tracked component errors at unit UV mass,
@@ -1376,16 +1386,20 @@ Refresh and validation contract: #raw("maintenance.typ").]
     Native / kernel: #if sources == none [— / —] else [#raw(sources.native_revision.slice(0, 12)) / #raw(sources.kernel_revision.slice(0, 12))].
     Data: #rows.map(row => row.data.at("version", default: "vendored registry")).dedup().join(", ").
     Full source-tree and manifest identities are preserved in the raw records.]
+    v(0.15em)
+    text(8pt)[These observations time the recorded source cohort. Later
+    normalization/materialization cost fixes are not measured here; neither
+    reduced math time nor the table's color implies a public-pipeline speedup.]
   }
   v(0.2em)
-  text(8pt, fill: luma(100))[Run: #raw(ordered-id). Source/data/protocol and every
+  text(8pt, fill: luma(100))[Runs: #raw(selected-ids.join(", ")). Source/data/protocol and every
   raw sample: #raw("data/results.json") → #raw("ordered_rung_runs").
   Refresh: #raw("merge_ordered_rung_results.py"); details in
   #link("maintenance.typ")[the maintenance contract] and
   #link("../ordered_reduction.typ")[the ordered-engine guide].
   Historical FORM, DFS and cache cohorts above remain unchanged.]
   }
-  for entry in run.at("historical_comparisons", default: ()) {
+  for entry in selected-runs.map(item => item.at("historical_comparisons", default: ())).flatten() {
     assert(entry.performance_eligible == false)
     assert(entry.ordered_over_dfs == none)
     let old = entry.historical

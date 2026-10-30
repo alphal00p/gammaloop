@@ -52,6 +52,13 @@ four-loop, five-loop, ingress or cache selections. Review the output before
 replacing the canonical measured JSON and rendering the PDF. All 48 original
 four-loop measurements and their original provenance remain untouched.
 Synthetic adapter tests never supply published timing data.
+To display balanced and asymmetric records from the same measured source
+together, set #raw("selected_ordered_rung_runs") to their existing run IDs.
+Their raw protocol and statistical counts remain separate; the renderer checks
+matching source/Cargo identities and preserves each row's actual per-arm counts.
+The singular selector remains the default when that list is absent. Measurements
+from later normalization/materialization changes must not be inferred from an
+earlier source cohort.
 
 New parity receipts bind all three executed arms:
 
