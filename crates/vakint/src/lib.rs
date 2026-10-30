@@ -230,6 +230,97 @@ fn create_unique_tmp_run_dir(base_dir: Option<&str>, prefix: &str) -> std::io::R
 static MINIMAL_FORM_VERSION: &str = "4.2.1";
 static MINIMAL_PYSECDEC_VERSION: &str = "1.6.4";
 
+/// Standard output of a successful `program args` run, or `None` when it
+/// cannot be started or fails. Settings validation and the default evaluation
+/// order both probe external executables, so each command runs at most once
+/// per process.
+fn probe_command_output(program: &str, args: &[&str]) -> Option<String> {
+    static PROBES: LazyLock<Mutex<HashMap<Vec<String>, Option<String>>>> =
+        LazyLock::new(Default::default);
+    let command = std::iter::once(program)
+        .chain(args.iter().copied())
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+    let mut probes = PROBES
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    probes
+        .entry(command)
+        .or_insert_with(|| {
+            Command::new(program)
+                .args(args)
+                .stderr(Stdio::null())
+                .output()
+                .ok()
+                .filter(|output| output.status.success())
+                .map(|output| String::from_utf8_lossy(&output.stdout).into_owned())
+        })
+        .clone()
+}
+
+/// Version captured by `pattern` in a probe output, checked against `minimal`.
+fn parse_dependency_version(
+    dependency: &str,
+    command: &str,
+    output: &str,
+    pattern: &str,
+    minimal: &str,
+) -> Result<String, String> {
+    let Some(version) = Regex::new(pattern)
+        .unwrap()
+        .captures(output)
+        .map(|captures| captures[1].to_owned())
+    else {
+        return Err(format!(
+            "Could not obtain {dependency} version from command:\n{command}\nOutput was:\n{output}"
+        ));
+    };
+    match compare_to(&version, minimal, Cmp::Ge) {
+        Ok(true) => Ok(version),
+        Ok(false) => Err(format!(
+            "{} version installed on your system does not meet minimal requirements: {}<{}",
+            dependency.red(),
+            version.red(),
+            minimal
+        )),
+        Err(_) => Err(format!(
+            "Could not parse {} version '{}'.",
+            dependency.red(),
+            version.red()
+        )),
+    }
+}
+
+/// Version of a FORM executable that meets [`MINIMAL_FORM_VERSION`].
+fn checked_form_version(form_exe_path: &str) -> Result<String, VakintError> {
+    let output =
+        probe_command_output(form_exe_path, &["-version"]).ok_or(VakintError::FormUnavailable)?;
+    parse_dependency_version(
+        "FORM",
+        &format!("{form_exe_path} -version"),
+        &output,
+        r"FORM\s([\.|\d]+)",
+        MINIMAL_FORM_VERSION,
+    )
+    .map_err(VakintError::FormVersion)
+}
+
+/// pySecDec version importable by a Python executable that meets
+/// [`MINIMAL_PYSECDEC_VERSION`].
+fn checked_pysecdec_version(python_exe_path: &str) -> Result<String, VakintError> {
+    const IMPORT: &str = "import pySecDec; print(pySecDec.__version__)";
+    let output = probe_command_output(python_exe_path, &["-c", IMPORT])
+        .ok_or(VakintError::PySecDecUnavailable)?;
+    parse_dependency_version(
+        "PySecDec",
+        &format!("{python_exe_path} -c '{IMPORT}'"),
+        &output,
+        r"([\.|\d]+)",
+        MINIMAL_PYSECDEC_VERSION,
+    )
+    .map_err(VakintError::PySecDecVersion)
+}
+
 static FORM_SRC: phf::Map<&'static str, &'static str> = phf_map! {
     "integrateduv.frm" =>  include_str!(concat!(
         env!("CARGO_MANIFEST_DIR"),
@@ -309,8 +400,21 @@ pub enum VakintError {
     FormError(String, String, String, String),
     #[error("{0}")]
     FormVersion(String),
-    #[error("FORM is not installed in your system and required for vakint to work.")]
+    #[error("FORM is not installed or could not be run.")]
     FormUnavailable,
+    #[error(
+        "FORM is required by {required_by}, but the FORM executable '{form_exe_path}' is unusable: {reason}\n\
+        Install FORM >= {minimal} and expose it through PATH, FORM_PATH or form_exe_path, \
+        or use the FORM-independent defaults instead: RustRed evaluation \
+        (EvaluationOrder::rustred_only(), the default order when FORM is unavailable) and \
+        FeynKit tensor reduction.",
+        minimal = MINIMAL_FORM_VERSION
+    )]
+    FormRequired {
+        required_by: String,
+        form_exe_path: String,
+        reason: String,
+    },
     #[error("PySecDec error: {0}")]
     PySecDecError(String),
     #[error("{0}")]
@@ -1742,10 +1846,25 @@ impl fmt::Display for MATADOptions {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VakintDependency {
     FORM,
     PySecDec,
+}
+
+impl VakintDependency {
+    /// Supported version of this external dependency for the given
+    /// executables. Each executable is probed at most once per process.
+    pub fn version(
+        &self,
+        form_exe_path: &str,
+        python_exe_path: &str,
+    ) -> Result<String, VakintError> {
+        match self {
+            Self::FORM => checked_form_version(form_exe_path),
+            Self::PySecDec => checked_pysecdec_version(python_exe_path),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -1774,6 +1893,17 @@ impl fmt::Display for EvaluationMethod {
 }
 
 impl EvaluationMethod {
+    /// Backend name used in diagnostics.
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::AlphaLoop(_) => "alphaLoop",
+            Self::MATAD(_) => "MATAD",
+            Self::FMFT(_) => "FMFT",
+            Self::PySecDec(_) => "pySecDec",
+            Self::RustRed(_) => "RustRed",
+        }
+    }
+
     fn numerical_output(&self) -> bool {
         match self {
             Self::AlphaLoop(options) => options.susbstitute_masters,
@@ -4853,72 +4983,42 @@ Evaluated (n_loops=1, mu_r=1) :
             settings.integral_normalization_factor, expanded, evaluated
         );
 
-        if settings
-            .evaluation_order
-            .0
-            .iter()
-            .any(|em| em.dependencies().contains(&VakintDependency::FORM))
-        {
-            let form_version = self.get_form_version(settings)?;
-            match compare_to(form_version.clone(), MINIMAL_FORM_VERSION, Cmp::Ge) {
-                Ok(valid) => {
-                    if valid {
-                        debug!(
-                            "{} successfully detected with version '{}'",
-                            "FORM".green(),
-                            form_version.green()
-                        );
-                    } else {
-                        return Err(VakintError::FormVersion(format!(
-                            "{} version installed on your system does not meet minimal requirements: {}<{}",
-                            "FORM".red(),
-                            form_version.red(),
-                            MINIMAL_FORM_VERSION
-                        )));
-                    }
-                }
-                Err(_) => {
-                    return Err(VakintError::FormVersion(format!(
-                        "Could not parse {} version '{}'.",
-                        "FORM".red(),
-                        form_version.red()
-                    )));
-                }
-            };
+        let required_by = |dependency| {
+            settings
+                .evaluation_order
+                .0
+                .iter()
+                .filter(|method| method.dependencies().contains(&dependency))
+                .map(EvaluationMethod::name)
+                .collect::<Vec<_>>()
+        };
+        let form_users = required_by(VakintDependency::FORM);
+        if !form_users.is_empty() {
+            let version = VakintDependency::FORM
+                .version(&settings.form_exe_path, &settings.python_exe_path)
+                .map_err(|error| VakintError::FormRequired {
+                    required_by: format!(
+                        "the evaluation backend{} {}",
+                        if form_users.len() > 1 { "s" } else { "" },
+                        form_users.join(", ")
+                    ),
+                    form_exe_path: settings.form_exe_path.clone(),
+                    reason: error.to_string(),
+                })?;
+            debug!(
+                "{} successfully detected with version '{}'",
+                "FORM".green(),
+                version.green()
+            );
         }
-
-        if settings
-            .evaluation_order
-            .0
-            .iter()
-            .any(|em| em.dependencies().contains(&VakintDependency::PySecDec))
-        {
-            let pysecdec_version = self.get_pysecdec_version(settings)?;
-            match compare_to(pysecdec_version.clone(), MINIMAL_PYSECDEC_VERSION, Cmp::Ge) {
-                Ok(valid) => {
-                    if valid {
-                        debug!(
-                            "{} successfully detected with version '{}'",
-                            "PySecDec".green(),
-                            pysecdec_version.green()
-                        );
-                    } else {
-                        return Err(VakintError::FormVersion(format!(
-                            "{} version installed on your system does not meet minimal requirements: {}<{}.",
-                            "PySecDec".red(),
-                            pysecdec_version.red(),
-                            MINIMAL_PYSECDEC_VERSION
-                        )));
-                    }
-                }
-                Err(_) => {
-                    return Err(VakintError::FormVersion(format!(
-                        "Could not parse {} version '{}'.",
-                        "PySecDec".red(),
-                        pysecdec_version.red()
-                    )));
-                }
-            };
+        if !required_by(VakintDependency::PySecDec).is_empty() {
+            let version = VakintDependency::PySecDec
+                .version(&settings.form_exe_path, &settings.python_exe_path)?;
+            debug!(
+                "{} successfully detected with version '{}'",
+                "PySecDec".green(),
+                version.green()
+            );
         }
 
         Ok(())
@@ -6221,60 +6321,6 @@ Evaluated (n_loops=1, mu_r=1) :
         Ok(evaluated_integral)
     }
 
-    fn get_pysecdec_version(&self, settings: &VakintSettings) -> Result<String, VakintError> {
-        let mut cmd = Command::new(settings.python_exe_path.as_str());
-        cmd.arg("-c");
-        cmd.arg("import pySecDec; print(pySecDec.__version__)");
-        let output = if let Ok(o) = cmd.output() {
-            o
-        } else {
-            return Err(VakintError::PySecDecUnavailable);
-        };
-        if !ExitStatus::success(&output.status) {
-            return Err(VakintError::PySecDecUnavailable);
-        }
-        let output_str = String::from_utf8_lossy(&output.stdout).into_owned();
-        let re = Regex::new(r"([\.|\d]+)").unwrap();
-        let mut versions = vec![];
-        for (_, [version]) in re.captures_iter(output_str.as_str()).map(|ci| ci.extract()) {
-            versions.push(version);
-        }
-        if versions.is_empty() {
-            return Err(VakintError::PySecDecVersion(format!(
-                "Could not obtain PySecDec version from command:\n{:?}\nOutput was:\n{}",
-                cmd, output_str
-            )));
-        }
-        Ok(versions[0].into())
-    }
-
-    fn get_form_version(&self, settings: &VakintSettings) -> Result<String, VakintError> {
-        let mut cmd = Command::new(settings.form_exe_path.as_str());
-        cmd.arg("-version");
-        let output = if let Ok(o) = cmd.output() {
-            o
-        } else {
-            return Err(VakintError::FormUnavailable);
-        };
-
-        if !ExitStatus::success(&output.status) {
-            return Err(VakintError::FormUnavailable);
-        }
-        let output_str = String::from_utf8_lossy(&output.stdout).into_owned();
-        let re = Regex::new(r"FORM\s([\.|\d]+)").unwrap();
-        let mut versions = vec![];
-        for (_, [version]) in re.captures_iter(output_str.as_str()).map(|ci| ci.extract()) {
-            versions.push(version);
-        }
-        if versions.is_empty() {
-            return Err(VakintError::FormVersion(format!(
-                "Could not obtain form version from command:\n{:?}\nOutput was:\n{}",
-                cmd, output_str
-            )));
-        }
-        Ok(versions[0].into())
-    }
-
     pub fn convert_from_dot_notation(atom: AtomView) -> Atom {
         let dummy_pat = function!(S.dot_dummy_ind, S.a_).to_pattern();
 
@@ -7143,7 +7189,15 @@ Evaluated (n_loops=1, mu_r=1) :
             debug!("Temporary run directory: {}", tmp_dir.display());
         }
         //println!("Running {} with command: {:?}", "FORM".green(), cmd);
-        let output = cmd.stderr(Stdio::piped()).stdout(Stdio::piped()).output()?;
+        let output = cmd
+            .stderr(Stdio::piped())
+            .stdout(Stdio::piped())
+            .output()
+            .map_err(|error| VakintError::FormRequired {
+                required_by: "the requested FORM-based computation".into(),
+                form_exe_path: settings.form_exe_path.clone(),
+                reason: error.to_string(),
+            })?;
         // println!("{}", String::from_utf8_lossy(&output.stdout));
         if !ExitStatus::success(&output.status) {
             return Err(VakintError::FormError(
@@ -8109,6 +8163,42 @@ mod tests {
             rustred_order.to_string(),
             "[RustRed (master_mode=numerical)]"
         );
+    }
+
+    #[test]
+    fn explicit_form_backends_report_a_missing_form() {
+        let vakint = Vakint::new().unwrap();
+        let missing = "/explicit-form-backend-test/missing-form";
+        let settings = VakintSettings {
+            form_exe_path: missing.into(),
+            evaluation_order: EvaluationOrder(vec![
+                EvaluationMethod::RustRed(RustRedEvaluationOptions::default()),
+                EvaluationMethod::MATAD(MATADOptions::default()),
+                EvaluationMethod::FMFT(FMFTOptions::default()),
+            ]),
+            ..Default::default()
+        };
+        let error = vakint.validate_settings(&settings).unwrap_err();
+        assert!(
+            matches!(
+                &error,
+                VakintError::FormRequired { required_by, form_exe_path, .. }
+                    if required_by == "the evaluation backends MATAD, FMFT"
+                        && form_exe_path == missing
+            ),
+            "{error}"
+        );
+        assert!(
+            error
+                .to_string()
+                .contains("EvaluationOrder::rustred_only()")
+        );
+        vakint
+            .validate_settings(&VakintSettings {
+                evaluation_order: EvaluationOrder::rustred_only(),
+                ..settings
+            })
+            .unwrap();
     }
 
     #[test]
