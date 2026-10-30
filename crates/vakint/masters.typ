@@ -191,7 +191,10 @@ written out explicitly outside the heads:
 - MATAD bars invert the expansions of `matad.rs`: `D5bar1`, `D5bar2`, `D6bar1`
   and `D6bar2` are `SeriesCoefficient((1-2 ep)(1-ep) exp(3 γ ep) LoopIntegral(4-2 ep, …), ep, 0, n)`,
   `BNbar4` uses `(1-ep)(1-2 ep)(1-3 ep)(2-3 ep)/Γ(1+ep)^3` and `T111bar4` uses
-  `√3 (1-2 ep)(ep-1)/Γ(1+ep)^2`; their values are the tabulated HPL combinations.
+  `√3 (1-2 ep)(ep-1)/Γ(1+ep)^2`, without an `exp(L γ ep)` factor; their values
+  are the tabulated HPL combinations. `BNbar4` is a convenience consistent with
+  `matad.rs`, not a basis generator: it equals a combination of
+  `Li_6(1/2)`, `s6weak` and classical constants.
   The weight-seven bars `D5bar3`, `T111bar5` and `BNbar5` come from external data
   with the same conventions.
 - `D=2` periods are `LoopIntegral(2, ∏ 1/(q_E²+1))` and their `D=2-2δ` jets are
@@ -250,10 +253,12 @@ card:
   [MATAD bars],
   [`D5bar1`, `D5bar2`, `D5bar3`, `D6bar1`, `D6bar2`, `T111bar4`, `T111bar5`,
    `BNbar4`, `BNbar5`],
-  [The coefficient of `ε^n` of a MATAD master times its `matad.rs` prefactor:
-   `(1-2ε)(1-ε)` for D5 and D6; `(1-ε)(1-2ε)(1-3ε)(2-3ε)/Γ(1+ε)^3` for BN and
-   `√3 (1-2ε)(ε-1)/Γ(1+ε)^2` for T111, whose explicit `e^(Lγε)` cancels the
-   per-loop factor.],
+  [The coefficient of `ε^n` (not the derivative) of the `matad.rs` prefactor
+   times `LoopIntegral(4-2ε, …)` (measure `d^d k/π^(d/2)` per loop, no sign):
+   `(1-2ε)(1-ε) e^(3γε)` for D5 and D6; `(1-ε)(1-2ε)(1-3ε)(2-3ε) Γ(1+ε)^(-3)`
+   for BN and `√3 (1-2ε)(ε-1) Γ(1+ε)^(-2)` for T111, with no `e^(γε)` factor
+   because the explicit `e^(-Lγε)` of `matad.rs` cancels the per-loop `e^(γε)`
+   of the MATAD master.],
   [Public four-loop masters],
   [`PR4fin`, `PR4dfin`, `PR11dep0`, `PR4ep1`, `PR4dep1`, `PR14ep2`, `PR14ep3`,
    FMFT `NumericalSource` leaves],
@@ -274,6 +279,16 @@ card:
   [`definition` is `None`; the value is the recorded source value and
    `definition_unavailable_reason` states why.],
 )
+
+For a definition built from `LoopIntegral` the statement is not looked up by
+name: it is derived from the definition itself. It names the coefficient taken,
+the measure and dimension, the number of loops, the propagators with their
+masses and `Σa`, and every factor in front of the integral (sign, `e^(Lγε)`,
+`Γ` factors, polynomials, added terms), and ends with "No other factor". Its
+label states the convention those factors realise (public Vakint/FMFT master,
+MATAD master, MATAD bar with the matching `matad.rs` prefactor, `D = 2` period
+or `D = 2-2δ` jet), or "Loop integral with explicit factors" when none applies;
+a statement therefore never contradicts its definition.
 
 The momentum routing transcribes the master's family rows in family order.
 External records supply the atom in `symbolic_definition`; records of older

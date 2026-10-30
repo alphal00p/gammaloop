@@ -218,10 +218,12 @@ statement of the conventions, also shown as "Normalisation" on the constant card
   [MATAD bars],
   [`D5bar1`, `D5bar2`, `D5bar3`, `D6bar1`, `D6bar2`, `T111bar4`, `T111bar5`,
    `BNbar4`, `BNbar5`],
-  [The coefficient of `ε^n` of a MATAD master times its `matad.rs` prefactor:
-   `(1-2ε)(1-ε)` for D5 and D6; `(1-ε)(1-2ε)(1-3ε)(2-3ε)/Γ(1+ε)^3` for BN and
-   `√3 (1-2ε)(ε-1)/Γ(1+ε)^2` for T111, whose explicit `e^(Lγε)` cancels the
-   per-loop factor.],
+  [The coefficient of `ε^n` (not the derivative) of the `matad.rs` prefactor
+   times `LoopIntegral(4-2ε, …)` (measure `d^d k/π^(d/2)` per loop, no sign):
+   `(1-2ε)(1-ε) e^(3γε)` for D5 and D6; `(1-ε)(1-2ε)(1-3ε)(2-3ε) Γ(1+ε)^(-3)`
+   for BN and `√3 (1-2ε)(ε-1) Γ(1+ε)^(-2)` for T111, with no `e^(γε)` factor
+   because the explicit `e^(-Lγε)` of `matad.rs` cancels the per-loop `e^(γε)`
+   of the MATAD master.],
   [Public four-loop masters],
   [`PR4fin`, `PR4dfin`, `PR11dep0`, `PR4ep1`, `PR4dep1`, `PR14ep2`, `PR14ep3`,
    FMFT `NumericalSource` leaves],
@@ -242,6 +244,16 @@ statement of the conventions, also shown as "Normalisation" on the constant card
   [`definition` is `None`; the value is the recorded source value and
    `definition_unavailable_reason` states why.],
 )
+
+For a definition built from `LoopIntegral` the statement is not looked up by
+name: it is derived from the definition itself. It names the coefficient taken,
+the measure and dimension, the number of loops, the propagators with their
+masses and `Σa`, and every factor in front of the integral (sign, `e^(Lγε)`,
+`Γ` factors, polynomials, added terms), and ends with "No other factor". Its
+label states the convention those factors realise (public Vakint/FMFT master,
+MATAD master, MATAD bar with the matching `matad.rs` prefactor, `D = 2` period
+or `D = 2-2δ` jet), or "Loop integral with explicit factors" when none applies;
+a statement therefore never contradicts its definition.
 
 Master formulas retain their original snapshot internally; notebook and terminal views show the
 mathematical names, while the expression getter preserves the binding needed for evaluation.

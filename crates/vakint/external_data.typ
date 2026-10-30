@@ -132,6 +132,23 @@ the four `K5Moment`/`K5LogMoment` records and the `PR7D2`, `PR10D2`, `PR15D2`,
 `PR7D2Eps1` and `PR10D2Eps1` periods use that reconstruction, and any other
 record is returned without a definition, with the reason, on inspection.
 
+Built-in identities are reserved. This version adds the built-in constants
+`log(q)` for every positive rational `q ≠ 1`, `cl4`, `D5bar1`, `D5bar2`, `D6bar1`,
+`D6bar2`, `T111bar4` and `BNbar4` (the last one is a convenience consistent with
+`matad.rs`, not a basis generator). Formulas should use these names directly:
+`validate_parameter` rejects them as runtime parameter names, and a
+`constants.json` record with one of these identities, with another built-in
+identity, or with a definition head (`Integral`, `Interval`, `LoopIntegral`,
+`SeriesCoefficient`, `EuclideanDot`) rejects the pack as an invalid finite
+constant identity. The loader also rejects the pack when a `symbolic_definition`
+is unparseable, has a free symbol or an unadmitted head, is an inexact number,
+references another named constant or contradicts the reconstruction from
+`definition_metadata`, and when that metadata is inconsistent with the symbol
+(a `K5Moment`/`K5LogMoment` record whose metadata states another power, or a
+`PR7D2`/`PR10D2`/`PR15D2`/`PR7D2Eps1`/`PR10D2Eps1` record whose Taylor order,
+dimension, family or powers disagree with its name and the manifest). Packs that satisfy
+these rules, including `ca49f328` and later, load unchanged.
+
 The constant card states the normalization of each definition class:
 
 #table(
@@ -167,10 +184,12 @@ The constant card states the normalization of each definition class:
   [MATAD bars],
   [`D5bar1`, `D5bar2`, `D5bar3`, `D6bar1`, `D6bar2`, `T111bar4`, `T111bar5`,
    `BNbar4`, `BNbar5`],
-  [The coefficient of `ε^n` of a MATAD master times its `matad.rs` prefactor:
-   `(1-2ε)(1-ε)` for D5 and D6; `(1-ε)(1-2ε)(1-3ε)(2-3ε)/Γ(1+ε)^3` for BN and
-   `√3 (1-2ε)(ε-1)/Γ(1+ε)^2` for T111, whose explicit `e^(Lγε)` cancels the
-   per-loop factor.],
+  [The coefficient of `ε^n` (not the derivative) of the `matad.rs` prefactor
+   times `LoopIntegral(4-2ε, …)` (measure `d^d k/π^(d/2)` per loop, no sign):
+   `(1-2ε)(1-ε) e^(3γε)` for D5 and D6; `(1-ε)(1-2ε)(1-3ε)(2-3ε) Γ(1+ε)^(-3)`
+   for BN and `√3 (1-2ε)(ε-1) Γ(1+ε)^(-2)` for T111, with no `e^(γε)` factor
+   because the explicit `e^(-Lγε)` of `matad.rs` cancels the per-loop `e^(γε)`
+   of the MATAD master.],
   [Public four-loop masters],
   [`PR4fin`, `PR4dfin`, `PR11dep0`, `PR4ep1`, `PR4dep1`, `PR14ep2`, `PR14ep3`,
    FMFT `NumericalSource` leaves],
@@ -191,6 +210,16 @@ The constant card states the normalization of each definition class:
   [`definition` is `None`; the value is the recorded source value and
    `definition_unavailable_reason` states why.],
 )
+
+For a definition built from `LoopIntegral` the statement is not looked up by
+name: it is derived from the definition itself. It names the coefficient taken,
+the measure and dimension, the number of loops, the propagators with their
+masses and `Σa`, and every factor in front of the integral (sign, `e^(Lγε)`,
+`Γ` factors, polynomials, added terms), and ends with "No other factor". Its
+label states the convention those factors realise (public Vakint/FMFT master,
+MATAD master, MATAD bar with the matching `matad.rs` prefactor, `D = 2` period
+or `D = 2-2δ` jet), or "Loop integral with explicit factors" when none applies;
+a statement therefore never contradicts its definition.
 
 HPLs at `exp(±i*pi/3)` use Symbolica's arbitrary-precision numerical algorithms.
 The same evaluator supplies FORM-backed HPL substitution. Finite constants without
