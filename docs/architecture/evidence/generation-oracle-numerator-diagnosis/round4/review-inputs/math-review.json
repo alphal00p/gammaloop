@@ -1,0 +1,41 @@
+{
+  "schema": 1,
+  "review": "scope-B exact-path semantics and supported-schema closure, round 3, new independent Opus",
+  "verdict": "REQUEST_CHANGES",
+  "scope_limit": "Only the three-row bounded QED numerator certificate; no migration, other 78 rows, pools 8/32, grouped cases, integration or WP3 approval.",
+  "candidate": {"commit": "6476a458e3b11c6c78f95b83ec4a66c6ca40ae2d", "change": "uwkqsnmotwtrklywvupkswkxqyxrqquq", "workspace": "generation-oracle-numerator-diagnosis",
+    "receipt_sha256": "c0b5f1a041014420375e7d0789230ecfd79469774ebfe8b4e485640e46d41dc8", "semantic_checker_sha256": "f146dc75ea2e21d046e86c968d803b4b82a8c13f4c6ead4644326b7e54ff98de", "combined_validator_sha256": "d9f9151f03095c265060e4507c638fa078125c4de15d44fd5874eb3df93d337b"},
+  "fresh": [
+    "node round3/validate.mjs (exit 0; 92 axes = 36+28+28; 6 transports = 4+0+2; cooked 14/row; payload 46 + metadata 16 schema paths)",
+    "node round3/proof/controls-all.mjs <review>/replay-r3: 49/49 prior (44 reject, 5 accept) + 27/27 held-outs (18 reject, 9 accept) = 62 negative / 14 positive; accounting confirmed",
+    "round3 held-outs replayed against FROZEN round2 proof/semantic-validate.mjs: X1,X2,X3,X4,X23,X24 all ACCEPT (B2-1/B2-4 reproduced); against round3 all reject at 'schema keys unsupported' with unchanged FNV",
+    "X5-X9 reject only at 'aggregate coefficient', X13 only at 'aggregate numerator factors' (live tables and payloads fully mirrored)",
+    "probe/probes.mjs and probe/probes2.mjs: 43 reviewer probes (31 + 12) through the round3 semantic entrypoint only (no SHA/FNV); capture identity recorded separately"
+  ],
+  "reused_not_rerun": "Producer/ELF/provenance identity (Peer A scope). Capture-identity column uses the frozen manifest SHA-256 and a reviewer FNV-1a-64 reimplementation only; neither is semantic proof. No build, no producer run, no expansion/trace/numerics.",
+  "env": {"node": "v24.19.0 (/home/lcnbr/.nix-profile/bin/node)", "license_needed": false},
+  "blocking_finding": {
+    "id": "R3-B1",
+    "title": "Schema closure ignores array arity/position; a mirrored rogue numerator in an edge tuple is semantically accepted with unchanged numerator FNV",
+    "minimal_counterexample": "In both current/ and historical/xs_qed_eedd_L1.json: d=clone(payload.edges[0][1]); payload.edges[0].push({...d, numerator:'0'}). Also with numerator 'garbage(' at edges[2] (num_interface removed from the clone), and eemm edges[4] numerator '-1'.",
+    "result": "round3 semantic-validate exit 0 (accept); reviewer FNV unchanged; only raw SHA (capture identity) rejects. One-sided variant rejects at exact non-owner comparison.",
+    "also": "Mirrored extra incidence element edges[i].push({source,target}) (eedd edges[2], eeee edges[1]) likewise accepted, FNV unchanged.",
+    "cause": "validateSchema collapses every array index to '*'; $/diagrams/*/payload/edges/*/* admits the union of the incidence signature and both edge-data signatures at any tuple position and any tuple length. removeKnownExpressions strips only edges[i][1].numerator, so edges[i][2].numerator is a numerator-named field outside every semantic owner that is never parsed, owned, or multiplied into the aggregate. This is the same class as X1-X4/X24 that round 3 claims to close ('mirrored unknown payload field all reject').",
+    "narrow_remedy": "Make heterogeneous tuples positional in the contract: require every payload.edges[i] to be an array of length exactly 2 with [0] matching only {source,target} and [1] matching only the edge-data signatures (or record allowed array lengths per pointer). Optionally also reject any key named numerator/numerator_prefactor/projector/*_interface outside the exact owner path set. Add G1m/G1m2/G3 as retained negative controls (expected reject, unchanged FNV) and keep the positive controls passing."
+  },
+  "non_blocking": [
+    "Leaf types and scalar-to-array changes are not part of the closure: mirrored aut 1->[1], symmetry_factor -> ['garbage('], source_slot number->string are semantically accepted, FNV unchanged, SHA rejects. Acceptable as capture-bound values if the report states the closure is on object-key signatures (not array arity, element positions or leaf types).",
+    "metadata model/options are pinned by sha256(JSON.stringify(...)), which is key-order sensitive: a mirrored, semantically neutral key reversal of metadata (V1) rejects at 'semantic-contract model/options'. Conservative; payload/owner key reordering is correctly accepted. Either canonicalize before hashing or do not describe JSON reordering as generally admitted.",
+    "Mirrored redistribution of a local factor between owners (move (-i) from edge:4 to edge:3, T5) is accepted with changed FNV; consistent with the stated limit that local values are cross-route equality plus capture binding, not derived."
+  ],
+  "verified": [
+    "No expression/interface field is recursively stripped: removal is exactly payload numerator/numerator_prefactor/projector, vertices[i].numerator, edges[i][1].numerator and the matching *_interface fields; interface-like keys elsewhere reject by exact path scan (G1/G2/G4).",
+    "Object-key closure: unknown, missing and extra keys reject at payload and metadata paths (X1-X4, X23, X24, G8, G10); metadata is fully consumed (owners, model/options/grouping pins, report, case, id).",
+    "Owner bijection both sides, duplicate/missing/extra owners, live-expression binding, injective cooked decoding (14/row), closed constructor heads, ordered serialized interfaces vs live ports, bijective transports, port-hedge incidence, local-product factor multiset and Gaussian-integer coefficient (sums atomic, no distribution), full scalar contraction, group master/member/source/ratio chain.",
+    "Parser consumes the full string (trailing-token check), precedence is correct (T7 -i^2 accepted as +1, T8 (-i)^2 rejected, X8/X9), rational/zero-power/sum forms reject conservatively.",
+    "Equivalent forms still accepted: interface transposes (V3, prior), owner reorder (V7), payload key reorder, cooked alpha-renaming (X19), symmetric g swap (X20), whitespace (V6, X25), i^3/double-negation/power split (V4, V5, T2b, X10, X11).",
+    "Reporting honestly separates derived port-hedge incidence from capture-bound Q labels, AutG/aut/symmetry, cuts/keys/routing and observationally pinned dimensions/variance/flags/order; X14-X17 semantically accepted, all alter capture SHA, X16/X17 leave FNV unchanged as stated."
+  ],
+  "guards": {"evidence_and_docs_sha256_before_after": "identical (guard-before/after-evidence.sha256, 115 files)", "jj_commit_and_bookmarks": "unchanged", "historical_workspace": "2928717f unchanged", "adapted_elfs": "31e9ea39...b01ef / 1a76aa51...66c50 unchanged", "owned_processes_left": 0, "tracked_edits": "none; all outputs under this ignored .local directory"},
+  "retained": ["probe/probes.mjs", "probe/probes2.mjs", "probe/out-r3/*", "probe/out2-r3/*", "replay-r3/*", "replay-r2-heldouts/*", "fresh-validate.out"]
+}

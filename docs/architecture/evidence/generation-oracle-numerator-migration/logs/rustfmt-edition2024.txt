@@ -1,0 +1,7 @@
+Script started on 2026-10-29 20:14:00+00:00 [COMMAND="nix develop -c rustfmt --edition 2024 --check crates/feynkit-generator/tests/generation_oracle/main.rs" <not executed on terminal>]
+warning: ignoring untrusted flake configuration setting 'extra-substituters'.
+Pass '--accept-flake-config' to trust it
+warning: ignoring untrusted flake configuration setting 'extra-trusted-public-keys'.
+Pass '--accept-flake-config' to trust it
+
+Script done on 2026-10-29 20:14:46+00:00 [COMMAND_EXIT_CODE="0"]

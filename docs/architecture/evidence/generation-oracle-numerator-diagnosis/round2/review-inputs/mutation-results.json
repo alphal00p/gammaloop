@@ -1,0 +1,485 @@
+[
+ {
+  "id": "iface-delete-entry",
+  "expect": "reject",
+  "A_semantic": "accept",
+  "B_with_fixed_digest": "reject",
+  "C_independent": "reject",
+  "desc": "current vertex:0 num_interface loses one axis",
+  "C_reason": [
+   "xs_qed_eedd_L1: vertex:0: serialized interface != live ordered ports"
+  ]
+ },
+ {
+  "id": "iface-extra-entry",
+  "expect": "reject",
+  "A_semantic": "accept",
+  "B_with_fixed_digest": "reject",
+  "C_independent": "reject",
+  "desc": "current vertex:0 num_interface gains a foreign axis",
+  "C_reason": [
+   "xs_qed_eedd_L1: vertex:0: serialized interface != live ordered ports"
+  ]
+ },
+ {
+  "id": "iface-wrong-variance",
+  "expect": "reject",
+  "A_semantic": "accept",
+  "B_with_fixed_digest": "reject",
+  "C_independent": "reject",
+  "desc": "current vertex:0 interface: dind(cof) -> cof",
+  "C_reason": [
+   "xs_qed_eedd_L1: vertex:0: serialized interface != live ordered ports"
+  ]
+ },
+ {
+  "id": "iface-wrong-dimension",
+  "expect": "reject",
+  "A_semantic": "accept",
+  "B_with_fixed_digest": "reject",
+  "C_independent": "reject",
+  "desc": "current edge:2 interface bis(4)->bis(5)",
+  "C_reason": [
+   "xs_qed_eedd_L1: edge:2: serialized interface != live ordered ports"
+  ]
+ },
+ {
+  "id": "iface-swapped-owner",
+  "expect": "reject",
+  "A_semantic": "accept",
+  "B_with_fixed_digest": "reject",
+  "C_independent": "reject",
+  "desc": "current vertex:0/vertex:1 interfaces swapped",
+  "C_reason": [
+   "xs_qed_eedd_L1: vertex:0: serialized interface != live ordered ports",
+   "xs_qed_eedd_L1: vertex:1: serialized interface != live ordered ports"
+  ]
+ },
+ {
+  "id": "iface-deleted-record",
+  "expect": "reject",
+  "A_semantic": "accept",
+  "B_with_fixed_digest": "reject",
+  "C_independent": "reject",
+  "desc": "current edge:2 num_interface removed (null) while live order is explicit",
+  "C_reason": [
+   "xs_qed_eedd_L1: edge:2: no interface but non-inferred live order"
+  ]
+ },
+ {
+  "id": "iface-malformed",
+  "expect": "reject",
+  "A_semantic": "accept",
+  "B_with_fixed_digest": "reject",
+  "C_independent": "reject",
+  "desc": "current vertex:0 num_interface is a garbage string",
+  "C_reason": [
+   "xs_qed_eedd_L1: exception fc.iface.map is not a function"
+  ]
+ },
+ {
+  "id": "iface-extra-field",
+  "expect": "reject",
+  "A_semantic": "accept",
+  "B_with_fixed_digest": "accept",
+  "C_independent": "reject",
+  "desc": "unknown extra_interface field on a group member",
+  "C_reason": [
+   "xs_qed_eemm_L1: unexpected interface field /groups/0/members/0/bogus_interface"
+  ]
+ },
+ {
+  "id": "iface-projector-nonnull",
+  "expect": "reject",
+  "A_semantic": "accept",
+  "B_with_fixed_digest": "reject",
+  "C_independent": "reject",
+  "desc": "current projector_interface becomes non-null wrong axis list",
+  "C_reason": [
+   "xs_qed_eedd_L1: projector: serialized interface != live ordered ports"
+  ]
+ },
+ {
+  "id": "valid-iface-consistent-reorder",
+  "expect": "accept",
+  "A_semantic": "accept",
+  "B_with_fixed_digest": "reject",
+  "C_independent": "accept",
+  "desc": "current vertex:0 interface and its live ports reversed together (consistent transpose)",
+  "C_reason": []
+ },
+ {
+  "id": "meta-variance-mirrored",
+  "expect": "reject",
+  "A_semantic": "accept",
+  "B_with_fixed_digest": "accept",
+  "C_independent": "reject",
+  "desc": "both live port lists: dind(cof) -> cof on vertex:0 (strings still agree)",
+  "C_reason": [
+   "xs_qed_eedd_L1: vertex:0: current live ports [\"spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(3,1))\",\"spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(4,1))\",\"spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(6,1))\",\"spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(3,1))\",\"spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(4,1))\"] != free [\"spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(4,1)))\",\"spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(3,1))\",\"spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(3,1))\",\"spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(4,1))\",\"spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(6,1))\"]",
+   "xs_qed_eedd_L1: vertex:0: historical live ports != free [\"spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(4,1)))\",\"spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(3,1))\",\"spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(3,1))\",\"spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(4,1))\",\"spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(6,1))\"]"
+  ]
+ },
+ {
+  "id": "meta-dimension-mirrored",
+  "expect": "reject",
+  "A_semantic": "accept",
+  "B_with_fixed_digest": "accept",
+  "C_independent": "reject",
+  "desc": "both live port lists: mink(4)->mink(5) vertex:2",
+  "C_reason": [
+   "xs_qed_eedd_L1: vertex:2: current live ports [\"spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(0,1))\",\"spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(1,1))\",\"spenso::{spenso::representation,spenso::self_dual}::mink(5,gammalooprs::{spenso::index}::hedge(9,1))\"] != free [\"spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(0,1))\",\"spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(1,1))\",\"spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(9,1))\"]",
+   "xs_qed_eedd_L1: vertex:2: historical live ports != free [\"spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(0,1))\",\"spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(1,1))\",\"spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(9,1))\"]"
+  ]
+ },
+ {
+  "id": "meta-dimension-onesided",
+  "expect": "reject",
+  "A_semantic": "reject",
+  "B_with_fixed_digest": "reject",
+  "C_independent": "reject",
+  "desc": "current live ports mink(4)->mink(5) vertex:2",
+  "C_reason": [
+   "xs_qed_eedd_L1: vertex:2: current live ports [\"spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(0,1))\",\"spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(1,1))\",\"spenso::{spenso::representation,spenso::self_dual}::mink(5,gammalooprs::{spenso::index}::hedge(9,1))\"] != free [\"spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(0,1))\",\"spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(1,1))\",\"spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(9,1))\"]",
+   "xs_qed_eedd_L1: vertex:2: transport not bijective"
+  ]
+ },
+ {
+  "id": "meta-owner-duplicate",
+  "expect": "reject",
+  "A_semantic": "accept",
+  "B_with_fixed_digest": "accept",
+  "C_independent": "reject",
+  "desc": "current owner table duplicates vertex:0",
+  "C_reason": [
+   "xs_qed_eedd_L1: duplicate owner",
+   "xs_qed_eedd_L1: current owner table [\"vertex:0\",\"vertex:1\",\"vertex:2\",\"vertex:3\",\"edge:0\",\"edge:1\",\"edge:2\",\"edge:3\",\"edge:4\",\"edge:5\",\"numerator\",\"prefactor\",\"projector\",\"vertex:0\"] != payload owners"
+  ]
+ },
+ {
+  "id": "meta-owner-missing-current",
+  "expect": "reject",
+  "A_semantic": "accept",
+  "B_with_fixed_digest": "accept",
+  "C_independent": "reject",
+  "desc": "current owner table drops edge:2",
+  "C_reason": [
+   "xs_qed_eedd_L1: current owner table [\"vertex:0\",\"vertex:1\",\"vertex:2\",\"vertex:3\",\"edge:0\",\"edge:1\",\"edge:3\",\"edge:4\",\"edge:5\",\"numerator\",\"prefactor\",\"projector\"] != payload owners",
+   "xs_qed_eedd_L1: owner edge:2 missing"
+  ]
+ },
+ {
+  "id": "meta-owner-missing-both",
+  "expect": "reject",
+  "A_semantic": "accept",
+  "B_with_fixed_digest": "accept",
+  "C_independent": "reject",
+  "desc": "both owner tables drop edge:2",
+  "C_reason": [
+   "xs_qed_eedd_L1: historical owner table [\"vertex:0\",\"vertex:1\",\"vertex:2\",\"vertex:3\",\"edge:0\",\"edge:1\",\"edge:3\",\"edge:4\",\"edge:5\",\"numerator\",\"prefactor\",\"projector\"] != payload owners",
+   "xs_qed_eedd_L1: current owner table [\"vertex:0\",\"vertex:1\",\"vertex:2\",\"vertex:3\",\"edge:0\",\"edge:1\",\"edge:3\",\"edge:4\",\"edge:5\",\"numerator\",\"prefactor\",\"projector\"] != payload owners"
+  ]
+ },
+ {
+  "id": "meta-owner-extra-historical",
+  "expect": "reject",
+  "A_semantic": "accept",
+  "B_with_fixed_digest": "accept",
+  "C_independent": "reject",
+  "desc": "historical owner table gains vertex:9",
+  "C_reason": [
+   "xs_qed_eedd_L1: historical owner table [\"vertex:0\",\"vertex:1\",\"vertex:2\",\"vertex:3\",\"edge:0\",\"edge:1\",\"edge:2\",\"edge:3\",\"edge:4\",\"edge:5\",\"numerator\",\"prefactor\",\"projector\",\"vertex:9\"] != payload owners"
+  ]
+ },
+ {
+  "id": "meta-owner-swapped-mirrored",
+  "expect": "reject",
+  "A_semantic": "accept",
+  "B_with_fixed_digest": "accept",
+  "C_independent": "reject",
+  "desc": "vertex:0<->vertex:1 owner labels swapped in both live tables",
+  "C_reason": [
+   "xs_qed_eedd_L1: vertex:0: current live expression != payload fragment",
+   "xs_qed_eedd_L1: vertex:0: current live ports [\"spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(2,1))\",\"spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(5,1))\",\"spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(8,1))\",\"spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(5,1))\",\"spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(2,1)))\"] != free [\"spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(4,1)))\",\"spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(3,1))\",\"spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(3,1))\",\"spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(4,1))\",\"spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(6,1))\"]"
+  ]
+ },
+ {
+  "id": "meta-expression-current",
+  "expect": "reject",
+  "A_semantic": "accept",
+  "B_with_fixed_digest": "accept",
+  "C_independent": "reject",
+  "desc": "current live vertex:0 expression -> 0",
+  "C_reason": [
+   "xs_qed_eedd_L1: vertex:0: current live expression != payload fragment"
+  ]
+ },
+ {
+  "id": "meta-expression-historical",
+  "expect": "reject",
+  "A_semantic": "accept",
+  "B_with_fixed_digest": "accept",
+  "C_independent": "reject",
+  "desc": "historical live vertex:0 expression -> 2*expr",
+  "C_reason": [
+   "xs_qed_eedd_L1: exception vertex:0: historical live expression does not decode to payload fragment"
+  ]
+ },
+ {
+  "id": "meta-flags-mirrored",
+  "expect": "reject",
+  "A_semantic": "accept",
+  "B_with_fixed_digest": "accept",
+  "C_independent": "accept",
+  "desc": "both live tables mark vertex:0 metric=true",
+  "C_reason": []
+ },
+ {
+  "id": "meta-report",
+  "expect": "reject",
+  "A_semantic": "accept",
+  "B_with_fixed_digest": "accept",
+  "C_independent": "reject",
+  "desc": "current metadata report retained_count changed",
+  "C_reason": [
+   "xs_qed_eedd_L1: metadata report differs"
+  ]
+ },
+ {
+  "id": "num-trailing-current",
+  "expect": "reject",
+  "A_semantic": "reject",
+  "B_with_fixed_digest": "reject",
+  "C_independent": "reject",
+  "desc": "current aggregate numerator *2",
+  "C_reason": [
+   "xs_qed_eedd_L1: numerator: payload expression differs beyond constructor map",
+   "xs_qed_eedd_L1: numerator: current live expression != payload fragment"
+  ]
+ },
+ {
+  "id": "num-aggregate-mirrored",
+  "expect": "reject",
+  "A_semantic": "accept",
+  "B_with_fixed_digest": "reject",
+  "C_independent": "reject",
+  "desc": "both aggregate numerators *2 (local fragments untouched)",
+  "C_reason": [
+   "xs_qed_eedd_L1: numerator: current live expression != payload fragment",
+   "xs_qed_eedd_L1: exception numerator: historical live expression does not decode to payload fragment"
+  ]
+ },
+ {
+  "id": "num-local-mirrored",
+  "expect": "reject",
+  "A_semantic": "accept",
+  "B_with_fixed_digest": "reject",
+  "C_independent": "reject",
+  "desc": "both edge:4 photon fragments lose (-i) factor (aggregate untouched)",
+  "C_reason": [
+   "xs_qed_eedd_L1: edge:4: current live expression != payload fragment",
+   "xs_qed_eedd_L1: exception edge:4: historical live expression does not decode to payload fragment"
+  ]
+ },
+ {
+  "id": "prefactor-mirrored",
+  "expect": "reject",
+  "A_semantic": "accept",
+  "B_with_fixed_digest": "reject",
+  "C_independent": "reject",
+  "desc": "both numerator_prefactor -> 2",
+  "C_reason": [
+   "xs_qed_eeee_1pi_L1: prefactor: current live expression != payload fragment",
+   "xs_qed_eeee_1pi_L1: exception prefactor: historical live expression does not decode to payload fragment"
+  ]
+ },
+ {
+  "id": "prefactor-current",
+  "expect": "reject",
+  "A_semantic": "reject",
+  "B_with_fixed_digest": "reject",
+  "C_independent": "reject",
+  "desc": "current numerator_prefactor -> 2",
+  "C_reason": [
+   "xs_qed_eeee_1pi_L1: prefactor: payload expression differs beyond constructor map",
+   "xs_qed_eeee_1pi_L1: prefactor: current live expression != payload fragment"
+  ]
+ },
+ {
+  "id": "projector-variance-mirrored",
+  "expect": "reject",
+  "A_semantic": "accept",
+  "B_with_fixed_digest": "reject",
+  "C_independent": "reject",
+  "desc": "both projectors: u bis(hedge0) -> mink (uncontracted)",
+  "C_reason": [
+   "xs_qed_eedd_L1: projector: current live expression != payload fragment",
+   "xs_qed_eedd_L1: exception projector: historical live expression does not decode to payload fragment"
+  ]
+ },
+ {
+  "id": "overall-factor-mirrored",
+  "expect": "reject",
+  "A_semantic": "accept",
+  "B_with_fixed_digest": "accept",
+  "C_independent": "reject",
+  "desc": "both member overall_factor sign flipped (diagram factor untouched)",
+  "C_reason": [
+   "xs_qed_eemm_L1: group/member/overall factor binding"
+  ]
+ },
+ {
+  "id": "ratio-current",
+  "expect": "reject",
+  "A_semantic": "reject",
+  "B_with_fixed_digest": "reject",
+  "C_independent": "reject",
+  "desc": "current member ratio -> 2",
+  "C_reason": [
+   "xs_qed_eemm_L1: non-numerator dump content differs (exact, no text mapping)",
+   "xs_qed_eemm_L1: group shape"
+  ]
+ },
+ {
+  "id": "ratio-mirrored",
+  "expect": "reject",
+  "A_semantic": "reject",
+  "B_with_fixed_digest": "reject",
+  "C_independent": "reject",
+  "desc": "both member ratios -> 2",
+  "C_reason": [
+   "xs_qed_eemm_L1: group shape"
+  ]
+ },
+ {
+  "id": "master-mirrored",
+  "expect": "reject",
+  "A_semantic": "accept",
+  "B_with_fixed_digest": "accept",
+  "C_independent": "reject",
+  "desc": "both group masters -> 1 (nonexistent member)",
+  "C_reason": [
+   "xs_qed_eemm_L1: group shape"
+  ]
+ },
+ {
+  "id": "member-source-mirrored",
+  "expect": "reject",
+  "A_semantic": "accept",
+  "B_with_fixed_digest": "accept",
+  "C_independent": "reject",
+  "desc": "both member source_index -> 1",
+  "C_reason": [
+   "xs_qed_eemm_L1: group shape"
+  ]
+ },
+ {
+  "id": "routing-current",
+  "expect": "reject",
+  "A_semantic": "reject",
+  "B_with_fixed_digest": "reject",
+  "C_independent": "reject",
+  "desc": "current loop routing sign flipped",
+  "C_reason": [
+   "xs_qed_eedd_L1: non-numerator dump content differs (exact, no text mapping)"
+  ]
+ },
+ {
+  "id": "ctor-foreign-in-current",
+  "expect": "reject",
+  "A_semantic": "accept",
+  "B_with_fixed_digest": "reject",
+  "C_independent": "reject",
+  "desc": "one current Q uses the historical (tagged) spelling",
+  "C_reason": [
+   "xs_qed_eedd_L1: current contains foreign spelling Q",
+   "xs_qed_eedd_L1: numerator: current live expression != payload fragment"
+  ]
+ },
+ {
+  "id": "ctor-namespace",
+  "expect": "reject",
+  "A_semantic": "reject",
+  "B_with_fixed_digest": "reject",
+  "C_independent": "reject",
+  "desc": "current Q namespace gammalooprs -> other",
+  "C_reason": [
+   "xs_qed_eedd_L1: numerator: payload expression differs beyond constructor map",
+   "xs_qed_eedd_L1: numerator: current live expression != payload fragment"
+  ]
+ },
+ {
+  "id": "ctor-label",
+  "expect": "reject",
+  "A_semantic": "reject",
+  "B_with_fixed_digest": "reject",
+  "C_independent": "reject",
+  "desc": "current Q -> K constructor (label mismatch)",
+  "C_reason": [
+   "xs_qed_eedd_L1: numerator: payload expression differs beyond constructor map",
+   "xs_qed_eedd_L1: numerator: current live expression != payload fragment"
+  ]
+ },
+ {
+  "id": "ctor-prefix-extension",
+  "expect": "reject",
+  "A_semantic": "accept",
+  "B_with_fixed_digest": "reject",
+  "C_independent": "reject",
+  "desc": "current edge index head renamed edgeX (prefix of mapped spelling)",
+  "C_reason": [
+   "xs_qed_eedd_L1: numerator: payload expression differs beyond constructor map",
+   "xs_qed_eedd_L1: numerator: current live expression != payload fragment"
+  ]
+ },
+ {
+  "id": "ratio-mirrored-3",
+  "expect": "reject",
+  "A_semantic": "accept",
+  "B_with_fixed_digest": "accept",
+  "C_independent": "reject",
+  "desc": "both member ratios -> 3",
+  "C_reason": [
+   "xs_qed_eemm_L1: group shape"
+  ]
+ },
+ {
+  "id": "num-trailing-mirrored-3",
+  "expect": "reject",
+  "A_semantic": "accept",
+  "B_with_fixed_digest": "reject",
+  "C_independent": "reject",
+  "desc": "both aggregate numerators *3",
+  "C_reason": [
+   "xs_qed_eemm_L1: numerator: current live expression != payload fragment",
+   "xs_qed_eemm_L1: exception numerator: historical live expression does not decode to payload fragment"
+  ]
+ },
+ {
+  "id": "valid-identity",
+  "expect": "accept",
+  "A_semantic": "accept",
+  "B_with_fixed_digest": "accept",
+  "C_independent": "accept",
+  "desc": "rewrite with no change",
+  "C_reason": []
+ },
+ {
+  "id": "valid-key-order",
+  "expect": "accept",
+  "A_semantic": "accept",
+  "B_with_fixed_digest": "accept",
+  "C_independent": "accept",
+  "desc": "current JSON object keys reordered",
+  "C_reason": []
+ },
+ {
+  "id": "valid-owner-order",
+  "expect": "accept",
+  "A_semantic": "accept",
+  "B_with_fixed_digest": "accept",
+  "C_independent": "accept",
+  "desc": "live owner tables reordered",
+  "C_reason": []
+ }
+]

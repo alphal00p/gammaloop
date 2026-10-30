@@ -1,0 +1,12 @@
+317,318c317,324
+<     const exprKeys = new Set(["numerator", "numerator_prefactor", "projector"]);
+<     const noExpr = (o) => Array.isArray(o) ? o.map(noExpr) : o && typeof o === "object" ? Object.fromEntries(Object.entries(o).filter(([k]) => !exprKeys.has(k)).map(([k, v]) => [k, noExpr(v)])) : o;
+---
+>     // REVIEWER SKETCH: drop only the exact owner expression paths already compared above.
+>     const noExpr = (data) => {
+>       const copy = structuredClone(data), payload = copy.diagrams[0].payload;
+>       for (const k of ["numerator", "numerator_prefactor", "projector"]) delete payload[k];
+>       for (const vertex of payload.vertices) delete vertex.numerator;
+>       for (const edge of payload.edges) delete edge[1].numerator;
+>       return copy;
+>     };

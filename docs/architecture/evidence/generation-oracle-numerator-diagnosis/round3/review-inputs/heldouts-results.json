@@ -1,0 +1,329 @@
+[
+ {
+  "id": "X1-extra-numerator-key-diagram-current",
+  "expect": "reject",
+  "actual": "accept",
+  "status": 0,
+  "editError": null,
+  "fnv_changed": false,
+  "desc": "one-sided: current diagrams[0].numerator = 'garbage(' (unknown location)",
+  "failures": [],
+  "stderr": ""
+ },
+ {
+  "id": "X2-extra-projector-key-cut-current",
+  "expect": "reject",
+  "actual": "accept",
+  "status": 0,
+  "editError": null,
+  "fnv_changed": false,
+  "desc": "one-sided: current payload.cuts[0].projector added",
+  "failures": [],
+  "stderr": ""
+ },
+ {
+  "id": "X3-extra-numerator-key-member-historical",
+  "expect": "reject",
+  "actual": "accept",
+  "status": 0,
+  "editError": null,
+  "fnv_changed": false,
+  "desc": "one-sided: historical group member gains numerator field",
+  "failures": [],
+  "stderr": ""
+ },
+ {
+  "id": "X4-extra-prefactor-key-incidence-current",
+  "expect": "reject",
+  "actual": "accept",
+  "status": 0,
+  "editError": null,
+  "fnv_changed": false,
+  "desc": "one-sided: current edges[2][0] incidence object gains numerator_prefactor",
+  "failures": [],
+  "stderr": ""
+ },
+ {
+  "id": "X5-aggregate-x2-full-mirror",
+  "expect": "reject",
+  "actual": "reject",
+  "status": 1,
+  "editError": null,
+  "fnv_changed": true,
+  "desc": "both payload aggregates and both live numerator owners *2 (locals untouched)",
+  "failures": [
+   "xs_qed_eedd_L1: aggregate coefficient 2,0 != local product 1,0"
+  ],
+  "stderr": ""
+ },
+ {
+  "id": "X6-local-drop-i-full-mirror",
+  "expect": "reject",
+  "actual": "reject",
+  "status": 1,
+  "editError": null,
+  "fnv_changed": true,
+  "desc": "edge:4 loses (-i) in both payloads and both live owners (aggregate untouched)",
+  "failures": [
+   "xs_qed_eedd_L1: aggregate coefficient 1,0 != local product 0,1"
+  ],
+  "stderr": ""
+ },
+ {
+  "id": "X7-local-sign-full-mirror",
+  "expect": "reject",
+  "actual": "reject",
+  "status": 1,
+  "editError": null,
+  "fnv_changed": true,
+  "desc": "edge:4 (-i)->(i) in payloads and live (aggregate untouched): sign only",
+  "failures": [
+   "xs_qed_eedd_L1: aggregate coefficient 1,0 != local product -1,0"
+  ],
+  "stderr": ""
+ },
+ {
+  "id": "X8-local-precedence-trap-neg-pow",
+  "expect": "reject",
+  "actual": "reject",
+  "status": 1,
+  "editError": null,
+  "fnv_changed": true,
+  "desc": "edge:4 (-i) -> -𝑖^3 (= +i) everywhere local",
+  "failures": [
+   "xs_qed_eedd_L1: aggregate coefficient 1,0 != local product -1,0"
+  ],
+  "stderr": ""
+ },
+ {
+  "id": "X9-local-precedence-trap-pow-neg",
+  "expect": "reject",
+  "actual": "reject",
+  "status": 1,
+  "editError": null,
+  "fnv_changed": true,
+  "desc": "edge:4 (-i) -> (-𝑖)^3 (= +i) everywhere local",
+  "failures": [
+   "xs_qed_eedd_L1: aggregate coefficient 1,0 != local product -1,0"
+  ],
+  "stderr": ""
+ },
+ {
+  "id": "X10-valid-power-equivalent",
+  "expect": "accept",
+  "actual": "accept",
+  "status": 0,
+  "editError": null,
+  "fnv_changed": true,
+  "desc": "edge:4 (-i) -> 𝑖^3 (= -i) everywhere local: valid equivalent coefficient",
+  "failures": [],
+  "stderr": ""
+ },
+ {
+  "id": "X11-valid-unary-equivalent",
+  "expect": "accept",
+  "actual": "accept",
+  "status": 0,
+  "editError": null,
+  "fnv_changed": true,
+  "desc": "edge:4 (-i)*g -> -𝑖*g everywhere local",
+  "failures": [],
+  "stderr": ""
+ },
+ {
+  "id": "X12-implicit-mult-unsupported",
+  "expect": "reject",
+  "actual": "reject",
+  "status": 1,
+  "editError": null,
+  "fnv_changed": true,
+  "desc": "edge:4 (-i) -> (-1𝑖) implicit product everywhere local",
+  "failures": [
+   "xs_qed_eedd_L1: exception parse: want ) got i @3"
+  ],
+  "stderr": ""
+ },
+ {
+  "id": "X13-gc-multiplicity-aggregate",
+  "expect": "reject",
+  "actual": "reject",
+  "status": 1,
+  "editError": null,
+  "fnv_changed": true,
+  "desc": "aggregate GC_1^2 -> GC_1^3 in both payloads and live",
+  "failures": [
+   "xs_qed_eedd_L1: aggregate numerator factors != product of local factors"
+  ],
+  "stderr": ""
+ },
+ {
+  "id": "X14-consistent-coef-mirror",
+  "expect": "accept?",
+  "actual": "accept",
+  "status": 0,
+  "editError": null,
+  "fnv_changed": true,
+  "desc": "vertex:0 and aggregate *2 in both payloads and both live owners (consistent)",
+  "failures": [],
+  "stderr": ""
+ },
+ {
+  "id": "X15-Q-label-mirror",
+  "expect": "reject?",
+  "actual": "accept",
+  "status": 0,
+  "editError": null,
+  "fnv_changed": true,
+  "desc": "eedd edge:2 momentum Q(2,..) -> Q(3,..) everywhere (edge owner uses edge 3 momentum)",
+  "failures": [],
+  "stderr": ""
+ },
+ {
+  "id": "X16-overall-factor-full-mirror",
+  "expect": "reject?",
+  "actual": "accept",
+  "status": 0,
+  "editError": null,
+  "fnv_changed": false,
+  "desc": "AutG(1)->AutG(2) in diagram/payload/member factors on both routes; aut field still 1",
+  "failures": [],
+  "stderr": ""
+ },
+ {
+  "id": "X17-routing-mirror",
+  "expect": "reject?",
+  "actual": "accept",
+  "status": 0,
+  "editError": null,
+  "fnv_changed": false,
+  "desc": "loop sign of edge 2 flipped in payload LMB on both routes",
+  "failures": [],
+  "stderr": ""
+ },
+ {
+  "id": "X18-cooked-swap-one-owner",
+  "expect": "reject",
+  "actual": "reject",
+  "status": 1,
+  "editError": null,
+  "fnv_changed": false,
+  "desc": "historical live vertex:0 swaps two cooked bis symbols only there",
+  "failures": [
+   "xs_qed_eedd_L1: exception edge:2: historical live expression does not decode to payload fragment"
+  ],
+  "stderr": ""
+ },
+ {
+  "id": "X19-valid-cooked-global-rename",
+  "expect": "accept",
+  "actual": "accept",
+  "status": 0,
+  "editError": null,
+  "fnv_changed": false,
+  "desc": "historical live: two cooked symbols swapped consistently in every owner (alpha-equivalent)",
+  "failures": [],
+  "stderr": ""
+ },
+ {
+  "id": "X20-valid-symmetric-g-swap-live",
+  "expect": "accept",
+  "actual": "accept",
+  "status": 0,
+  "editError": null,
+  "fnv_changed": false,
+  "desc": "historical live edge:4 g(mink a, mink b) args swapped (symmetric)",
+  "failures": [],
+  "stderr": ""
+ },
+ {
+  "id": "X21-variance-flip-consistent",
+  "expect": "reject",
+  "actual": "reject",
+  "status": 1,
+  "editError": null,
+  "fnv_changed": true,
+  "desc": "hedge(2) cof variance flipped at vertex:1 and edge:2 in payloads, interfaces, live exprs and ports",
+  "failures": [
+   "xs_qed_eedd_L1: vertex:1: historical live order differs from observed producer order",
+   "xs_qed_eedd_L1: edge:2: historical live order differs from observed producer order"
+  ],
+  "stderr": ""
+ },
+ {
+  "id": "X22-dimension-consistent",
+  "expect": "reject",
+  "actual": "reject",
+  "status": 1,
+  "editError": null,
+  "fnv_changed": true,
+  "desc": "hedge(2) cof(3)->cof(4) everywhere incl. ports/interfaces/live",
+  "failures": [
+   "xs_qed_eedd_L1: vertex:1: historical live order differs from observed producer order",
+   "xs_qed_eedd_L1: edge:2: historical live order differs from observed producer order"
+  ],
+  "stderr": ""
+ },
+ {
+  "id": "X23-metadata-unknown-owner-field",
+  "expect": "reject?",
+  "actual": "accept",
+  "status": 0,
+  "editError": null,
+  "fnv_changed": false,
+  "desc": "one-sided: current live vertex:0 gains interface:[] record",
+  "failures": [],
+  "stderr": ""
+ },
+ {
+  "id": "X24-mirrored-unknown-payload-field",
+  "expect": "accept?",
+  "actual": "accept",
+  "status": 0,
+  "editError": null,
+  "fnv_changed": false,
+  "desc": "mirrored unknown non-interface payload field",
+  "failures": [],
+  "stderr": ""
+ },
+ {
+  "id": "X25-valid-interface-whitespace",
+  "expect": "accept",
+  "actual": "accept",
+  "status": 0,
+  "editError": null,
+  "fnv_changed": true,
+  "desc": "current vertex:0 interface entry with inserted spaces (same slot)",
+  "failures": [],
+  "stderr": ""
+ },
+ {
+  "id": "X26-iface-port-hedge-relabel-consistent",
+  "expect": "reject",
+  "actual": "reject",
+  "status": 1,
+  "editError": null,
+  "fnv_changed": true,
+  "desc": "current vertex:0 interface+live ports+payload use hedge(99) for hedge(6) consistently on current only",
+  "failures": [
+   "xs_qed_eedd_L1: vertex:0: payload expression differs beyond constructor map",
+   "xs_qed_eedd_L1: vertex:0: free interfaces differ",
+   "xs_qed_eedd_L1: vertex:0: transport not bijective"
+  ],
+  "stderr": ""
+ },
+ {
+  "id": "X27-mirrored-hedge-relabel-all",
+  "expect": "reject",
+  "actual": "reject",
+  "status": 1,
+  "editError": null,
+  "fnv_changed": true,
+  "desc": "hedge(6)<->hedge(7) labels swapped in all four files (vertex/edge incidence violated)",
+  "failures": [
+   "xs_qed_eedd_L1: vertex:0: historical live order differs from observed producer order",
+   "xs_qed_eedd_L1: vertex:0: port hedge 7 not at vertex",
+   "xs_qed_eedd_L1: vertex:3: missing interface does not use observed inferred order"
+  ],
+  "stderr": ""
+ }
+]

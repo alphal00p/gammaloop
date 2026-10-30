@@ -1,0 +1,112 @@
+{
+  "schema": 2,
+  "title": "Three one-diagram QED oracle numerator diagnosis correction",
+  "round1": {
+    "commit": "e1d44235bfe064fd76027a8938195df4f227bdb7",
+    "bookmark": "generation-oracle-numerator-diagnosis-round1",
+    "inventory": "round1-inventory.sha256",
+    "inventory_sha256": "e7a6c29b8ba32255e0656d9f496bfccee77fd4057c553573683267645dae5d14",
+    "preservation": "The original evidence bundle, raw JSON, receipt, manifest, validator and Typst source remain byte-identical. Round two is additive except for the active registry entry."
+  },
+  "scope": {
+    "cases": ["xs_qed_eedd_L1", "xs_qed_eemm_L1", "xs_qed_eeee_1pi_L1"],
+    "pool": 1,
+    "asserted_class": "Classes::None particle reference returned by classes::check",
+    "comparison_class": "Classes::Auto, byte-identical to Classes::None per route and case",
+    "naming": "Naming::prefix(\"D\")",
+    "model": "builtin Model::qed",
+    "excluded": ["other 78 rows", "pools 8 and 32", "snapshot migration", "production changes", "integration", "broad grouping or physical theorem"]
+  },
+  "producer_controls": {
+    "historical": {
+      "source": "2b1ef4f07a44bc061bcc97c378bbdd9c41cb0e94",
+      "workspace_ref": "generation-oracle-numerator-historical",
+      "workspace_commit": "2928717fd53ae386ae979145b6cb8c18043a7c45",
+      "kernel": "c78cffc20f318df1fce50539a587cbe8ffc717c0",
+      "pristine_elf_sha256": "32d17aaa366493c030d4ce674eeadb08d4e1a07486ede9494dc2302d5b240695",
+      "fresh_result": "exit 0; 3 passed, 0 failed, 161 filtered",
+      "fresh_log_sha256": "6f1c0549a867db2b240fe8523ff8688721e7fd2763cfa50f8afda983d6d95285"
+    },
+    "current": {
+      "source": "b9f788922341e7bde2e801a054423ae70ed7e9ae",
+      "kernel": "1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
+      "pristine_elf_sha256": "c2ef6aea7f9978606ca0891a5061eafaaf75f952574fb5b3894da04a39cbbe84",
+      "fresh_result": "exit 101; 0 passed, 3 failed only at Summary.numerators, 180 filtered",
+      "fresh_log_sha256": "0f189123a044635009d6358c0f03f572cd3d949dd348de35b94597d1395b2dbc"
+    },
+    "compiler": "rustc 1.98.1 (48a229cea 2026-09-01), cargo 1.98.1, LLVM 22.1.8",
+    "features": ["feynkit-generator/default", "feynkit-generator/native"],
+    "profile": "dev-optim",
+    "locked": true,
+    "fresh_command": "FEYNKIT_ORACLE_THREADS=1 FEYNKIT_ORACLE_DUMP=<retained review dump> RECORD unset; nix develop -c cargo test --locked --profile dev-optim -p feynkit-generator --test generation_oracle -- --test-threads 1 --nocapture xs_qed_eedd_L1 xs_qed_eemm_L1 xs_qed_eeee_1pi_L1",
+    "no_dump_control": "The same command without FEYNKIT_ORACLE_DUMP reproduces 3 pass/3 fail and identical current numerator values."
+  },
+  "payload_provenance": {
+    "origin": "Fresh Opus-A pristine FEYNKIT_ORACLE_DUMP output from the exact source/kernel/ELF command above.",
+    "bridge": "For all six route/case pairs, round-one raw payload == fresh classes-None-t1.json == fresh classes-Auto-t1.json byte for byte.",
+    "retained": "provenance/{historical,current}/ includes None, Auto, census, assertion/no-run logs and producer metadata.",
+    "qualification": "The original round-one dump directories were absent. This receipt attributes the raw bytes to the retained fresh qualified recapture and does not claim the original directories survive."
+  },
+  "request_and_run": {
+    "request": "Not serialized by the diagnostic. Equality is source-qualified from the bound Case::request, cross_section, plain, loop_one_pi and EE/DD/MUMU definitions, with equal full model/options/grouping captures and equal 17/34, 17/34, 3/4 completed reports.",
+    "run": "The retained environment and t1 filenames bind one worker. No claim is made that an unrecorded default Run was observed.",
+    "numerator_options": "Historical NumeratorOptions::default().with_naming(D); current case.numerators().with_naming(D). For these cases filter_zero_color=false, prefactor=1 and projector=null on both routes.",
+    "grouping": "Grouping::None on both routes."
+  },
+  "adapted_capture": {
+    "history": [
+      "initial observational source failed to compile on both routes",
+      "r2 source compiled and ran",
+      "decoded source recompiled and produced the final metadata captures"
+    ],
+    "recoverable_round1_logs": {
+      "historical": ["3e6697e57db11aacf82f340d4b6fd9277c8d883b3880fab961959150ba9289c3", "f49eb59e403a9668185cbc9f51c78dedfa38ade69b8302a64c7257f3d362e24c", "93f12ee28dfad821852cc965794ba7e8f488883db885442bfdda76d0fd8b6b50"],
+      "current": ["3155232e409e09996816af0dbdda69534ed9f8e2b9fb5c9289cbb37a12d97c5a", "6db963b0e74b168655c486d542aa43e82a247f483699aa8eb2bc7f7fe6f85214", "cfc3828a0095c39930619cdb8b9a99c5419c302788b7bd6da16e3874d29b9e0c"]
+    },
+    "missing": "Intermediate source bytes beyond the final archived patch and original adapted ELFs were not retained and are not reconstructed.",
+    "review_rederivation": {
+      "method": "Clean source exports plus the archived patches; locked native dev-optim producers; exact diagnostic command; all six metadata files reproduced byte-for-byte.",
+      "historical_elf_sha256": "31e9ea393246f513f6c7fdbf55fe8a425213ae3276751c95cf8ddbeda47b01ef",
+      "current_elf_sha256": "1a76aa5134431c7436340c6f231b48e5fba66a67e47e19eaaf376e386b466c50",
+      "historical_patched_source_sha256": "c9bca95aefadf64fbec44bd5fa58d681603f4adb94f1d6c154859bd4ca62b5b8",
+      "current_patched_source_sha256": "b2c6b6e7ed7ed6c09072f5a5d6158c9d772fc3385847026b07206d6da1e9befa"
+    },
+    "observation_limit": "Ports are decoded afterwards from live logical_slots with each producer's CookSettings::indices/ReversibleEncoding/representation-payload owner. Metric/composite flags and logical order are observed producer outputs, not independent theorems."
+  },
+  "semantic_certificate": {
+    "entrypoint": "proof/semantic-validate.mjs",
+    "capture_entrypoint": "proof/capture-validate.mjs",
+    "separation": "The semantic entrypoint reads no manifest and checks no fixed expected digest. Capture identity/FNV is separate.",
+    "owner_boundary": "Exact both-side owner bijection for vertices, edges, numerator, prefactor and projector; diagram ID, payload fragment, current live expression and historically decoded live expression are bound.",
+    "interfaces": "Only exact known interface locations are admitted; present arrays equal ordered live ports before omission; absent interfaces require the frozen producer-observed inferred order.",
+    "constructors": "Closed whole-AST-head inventory and Q/K/P/edge/vertex map bound to historical symbols.rs SHA 0a13fee3...174b and current SHA b580b7c7...aa9d. Only Q and edge occur.",
+    "mathematics": "92 expression-derived typed free axes, six explicit permutations, 14 injectively decoded cooked symbols per row, aggregate exact factor multiset/coefficient equals all local factors, and prefactor*numerator*projector contracts to a scalar without expansion.",
+    "groups": "Both sides bind master 0, one member, source index 0, ratio 1, ID/name and member/diagram/payload source factors; scalar grammar is parsed or rejected.",
+    "not_used": ["whole-graph expansion", "distribution", "Dirac trace", "numerical sampling", "parameter-at-one substitution"]
+  },
+  "controls": {
+    "retained_review_inputs": {
+      "provenance_review_sha256": "747af1ff5de3c62c4a1034cd7600d83345933f53f8cb207c37b300b59794c9b8",
+      "independent_sha256": "885eb2bd5334bf87d7717fd90c230379a131bdd7cc4aaf61749a826299c7b7e1",
+      "mutate_sha256": "aa27ced2cf99332eddc08b9a57accfb1003e266d249e447e04aad19f4d05f9a7",
+      "mutation_results_sha256": "e8618262322fba8c77fa2fcd4f886e8f593329c1246e8fd8f295135b27ee3159",
+      "fnv_sha256": "099bae697c8fddd92be2d5db0698e285822811d792f22499f9f8b722c0703395"
+    },
+    "corrected": "All 43 records actually present in the retained review matrix plus six correction held-outs: 49/49 intended outcomes through the full semantic entrypoint, without SHA or fixed-digest shortcuts.",
+    "valid_controls": ["identity", "JSON key reorder", "owner-table reorder", "consistent eedd interface transpose", "consistent eeee interface transpose"],
+    "transpose_capture_control": "Both consistent transposes pass the semantic entrypoint while the independent FNV recomputation changes, proving the capture/semantic separation."
+  },
+  "attempts_and_limits": {
+    "earlier_nextest": "Round-one nextest invocations were prebuild attempts without --locked; current exited 100. They receive no assertion, pool or dump credit.",
+    "docs": "Full docs builder remains red on the inherited eight mark-geometry HTML inventory entries. No reviewer HTML evidence was deleted to force a pass.",
+    "claim": "Frozen factorized mathematics is valid for these three cases; no production physical defect or algorithm fix was found.",
+    "next": "Stop for new independent Opus A/B review; Astra fallback only if Opus is unavailable."
+  },
+  "integrity": {
+    "manifest": "manifest.sha256",
+    "manifest_sha256": "e24c60731a26698c5904f5e736cc2fedfcf03889c51401a2d56348d13060b2e8",
+    "combined_validator": "validate.mjs",
+    "combined_validator_sha256": "2928646b226336565f663979520f00c8074b9a3f2c3869cec2906617ee91696d",
+    "changed_inventory": "changed-inventory.json"
+  }
+}

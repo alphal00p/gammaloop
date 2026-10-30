@@ -1,0 +1,136 @@
+[
+ {
+  "id": "G1m-mirrored-edge2-third-element-garbage-numerator",
+  "expect": "reject",
+  "semantic": "accept",
+  "capture_sha_unchanged": false,
+  "fnv_changed": false,
+  "editError": null,
+  "desc": "both payloads: edges[2].push(edge data w/o num_interface, numerator 'garbage(')",
+  "failures": []
+ },
+ {
+  "id": "G1m2-mirrored-edge0-third-element-zero-numerator",
+  "expect": "reject",
+  "semantic": "accept",
+  "capture_sha_unchanged": false,
+  "fnv_changed": false,
+  "editError": null,
+  "desc": "both payloads: edges[0].push(edge data, numerator '0')",
+  "failures": []
+ },
+ {
+  "id": "G1m3-mirrored-eemm-edge4-third-element",
+  "expect": "reject",
+  "semantic": "accept",
+  "capture_sha_unchanged": false,
+  "fnv_changed": false,
+  "editError": null,
+  "desc": "eemm both payloads: edges[4].push(edge data, numerator '-1')",
+  "failures": []
+ },
+ {
+  "id": "G1h-historical-only-third-element",
+  "expect": "reject",
+  "semantic": "reject",
+  "capture_sha_unchanged": false,
+  "fnv_changed": false,
+  "editError": null,
+  "desc": "historical only: edges[2].push(rogue)",
+  "failures": [
+   "xs_qed_eedd_L1: non-owner dump content differs (exact, no text mapping)"
+  ]
+ },
+ {
+  "id": "G3b-mirrored-edge-extra-incidence-eeee",
+  "expect": "reject",
+  "semantic": "accept",
+  "capture_sha_unchanged": false,
+  "fnv_changed": false,
+  "editError": null,
+  "desc": "eeee both: edges[1].push({source,target})",
+  "failures": []
+ },
+ {
+  "id": "G19-mirrored-edge-short-tuple",
+  "expect": "reject",
+  "semantic": "reject",
+  "capture_sha_unchanged": false,
+  "fnv_changed": "fnv-error Cannot read properties of undefined (rea",
+  "editError": null,
+  "desc": "both: edges[0] = [edges[0][1]] (drop incidence)",
+  "failures": [
+   "xs_qed_eedd_L1: vertex:2: port hedge 0 not at vertex",
+   "xs_qed_eedd_L1: vertex:3: port hedge 10 not at vertex",
+   "xs_qed_eedd_L1: exception Cannot read properties of undefined (reading 'numerator')"
+  ]
+ },
+ {
+  "id": "T2b-gc-split-power",
+  "expect": "accept",
+  "semantic": "accept",
+  "capture_sha_unchanged": false,
+  "fnv_changed": true,
+  "editError": null,
+  "desc": "aggregate GC_1^2 -> GC_1*GC_1 everywhere (equivalent)",
+  "failures": []
+ },
+ {
+  "id": "T2c-gc-into-sum",
+  "expect": "reject",
+  "semantic": "reject",
+  "capture_sha_unchanged": false,
+  "fnv_changed": true,
+  "editError": null,
+  "desc": "aggregate GC_1^2 -> (GC_1+GC_1)*GC_1/2? use (GC_1+0)*GC_1 everywhere (sum atomic, conservative)",
+  "failures": [
+   "xs_qed_eedd_L1: aggregate numerator factors != product of local factors"
+  ]
+ },
+ {
+  "id": "T4b-gc-power-zero",
+  "expect": "reject",
+  "semantic": "reject",
+  "capture_sha_unchanged": false,
+  "fnv_changed": true,
+  "editError": null,
+  "desc": "aggregate * GC_1^0 everywhere (conservative)",
+  "failures": [
+   "xs_qed_eedd_L1: aggregate numerator factors != product of local factors"
+  ]
+ },
+ {
+  "id": "T6-gc-power-swap-local",
+  "expect": "reject",
+  "semantic": "reject",
+  "capture_sha_unchanged": false,
+  "fnv_changed": true,
+  "editError": null,
+  "desc": "aggregate GC_1^2 -> GC_1^(1+1) (exponent sum, conservative)",
+  "failures": [
+   "xs_qed_eedd_L1: aggregate numerator factors != product of local factors"
+  ]
+ },
+ {
+  "id": "T7-neg-pow-precedence-aggregate",
+  "expect": "accept",
+  "semantic": "accept",
+  "capture_sha_unchanged": false,
+  "fnv_changed": true,
+  "editError": null,
+  "desc": "aggregate prefixed with -𝑖^2* (= +1 via -(𝑖^2)? no: -(−1)=+1) -> accept-equivalent check",
+  "failures": []
+ },
+ {
+  "id": "T8-neg-pow-wrong-aggregate",
+  "expect": "reject",
+  "semantic": "reject",
+  "capture_sha_unchanged": false,
+  "fnv_changed": true,
+  "editError": null,
+  "desc": "aggregate prefixed with (-𝑖)^2* (= -1)",
+  "failures": [
+   "xs_qed_eedd_L1: aggregate coefficient -1,0 != local product 1,0"
+  ]
+ }
+]

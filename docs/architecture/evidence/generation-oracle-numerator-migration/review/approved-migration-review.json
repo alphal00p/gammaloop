@@ -1,0 +1,62 @@
+{
+  "schema": 1,
+  "reviewer": "independent Opus migration/test review",
+  "date": "2026-10-29",
+  "candidate": {"commit": "ab7eefa30e2c4a8914cd79e5632d2f0d64bc0239", "change": "ovpqtvtuytnqoklqlorxttuwttzoskpx", "bookmark": "generation-oracle-numerator-migration", "workspace": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-diagnosis"},
+  "parent": {"commit": "16bfd2c84ea1fdeba0c8087cc6cdc8f1082f11a8", "bookmarks": ["generation-oracle-numerator-diagnosis", "generation-oracle-numerator-diagnosis-approved-certificate"]},
+  "historical": {"commit": "2928717fd53ae386ae979145b6cb8c18043a7c45", "workspace_pristine": "fresh: main/cases/census/classes.rs on disk == commit"},
+  "verdict": "APPROVE",
+  "verdict_scope": "Only this three-row numerator-literal migration preparation. Requires later actual combined-main checks and review; the other 78 rows and WP3 remain open; no thread-pool symbolic theorem beyond pool-1 certificate.",
+  "inventory": {
+    "status": "fresh",
+    "diff_vs_parent": "24 A, 2 C (old/new main.rs source copies), 2 M: crates/feynkit-generator/tests/generation_oracle/main.rs and docs/developers.toml (one inserted [[section.note]] only); all A under docs/architecture/evidence/generation-oracle-numerator-migration/ plus docs/architecture/generation-oracle-numerator-migration.typ",
+    "main_rs": {"old_sha256": "499b49e4d5b58f9796e79e8393399ddc5e3fee24062fe36ae590dffd7bd18aa8", "new_sha256": "987e9c274c0faa2710689cd10d6b4903414b19e62b9f1833c6c5e3c463b4049b", "lines": 950, "changed_lines": [331, 337, 347], "only_numerators_literal_changed": true},
+    "literals": {"xs_qed_eemm_L1": ["0x8b7b40bba961420d", "0x414e2a7a954beae8"], "xs_qed_eedd_L1": ["0xf5a21f1a84870bc7", "0xd3ad2f3a0802b6ab"], "xs_qed_eeee_1pi_L1": ["0x0db0b7cc52558270", "0x1fa84d9ad4fdf0b0"]},
+    "unchanged_vs_parent": {"classes.rs": "f605e4436ff0a2225155840fdad2065d50e74fd88b34979faaa97f7153a3e4fe", "cases.rs": "e3ef8ec52578364ef24cf278965eaba2ec967f1f626c707bb7667c2834e319a2", "census.rs": "b46641d3c13dd70304a457ad4f884cedd486f188ce86dd92c73328a6b1da05d3", "Cargo.lock": "0d896231393016a4df0ac9a8a2b8eddee545b4a8d62bc87cdfbd1f2e3230a2cd", "Cargo.toml": "bf968d49de81d06aa62e12793cfb6d66b46064d55090c2bb3413f883765e63dd", "feynkit-generator/Cargo.toml": "07f9c77b96b4ef7e92d461e8076696adc008edae2797b0a11dbe11aadaf50c59", "nix-ci.nix": "e031749e51a33ee48bc5c653d13c2dc7e7d3a51bddea77fc3c67d01ac217c540 (top-level enable=false)"},
+    "no_changes_under": "docs/architecture/evidence/generation-oracle-numerator-diagnosis (0 entries in diff)",
+    "on_disk_vs_commit": "206 tracked files in scope byte-identical to ab7eefa3; no unsnapshotted edits; modes preserved (run-*.sh executable)"
+  },
+  "approval_rehash": {"path": ".local/review-oracle-qed-combined-opus-round4-20261029194522-3130656/review.json", "sha256": "1202230f36622faf1f9dbcf23c29eba8c8ba8c512ae3da14b901194a349e4b30", "evidence_copy_sha256_equal": true, "status": "fresh"},
+  "producers": {
+    "old_elf": {"path": "target/oracle-numerator-migration/old/generation_oracle", "sha256": "c2ef6aea7f9978606ca0891a5061eafaaf75f952574fb5b3894da04a39cbbe84", "provenance": "round3 meta.txt / round4 receipt bind this hash to cache path generation_oracle-c4b54249fc0354d6 at source b9f788922341; b9f78892..16bfd2c differs only under docs/ (fresh check), so compiled inputs equal parent", "contains_old_literals_only": true},
+    "new_elf": {"path": "target/oracle-numerator-migration/new/generation_oracle", "sha256": "8cde4358a163d8a024bc74bebdcc25c0a4f17f1fe68a79ae557299846316496a", "build": "nix develop -c cargo test --locked --profile dev-optim -p feynkit-generator --test generation_oracle --no-run; same cache metadata path generation_oracle-c4b54249fc0354d6 (same features/profile/deps), cache copy still sha 8cde4358", "contains_new_literals_only": true},
+    "same_size_bytes": 912790136,
+    "compiler": "rustc 1.98.1 (48a229cea 2026-09-01), LLVM 22.1.8, cargo 1.98.1 (logged)",
+    "elf_byte_diff": "1803598 differing bytes (expected rebuild/debuginfo churn); literal byte search confirms each ELF embeds only its own three literals"
+  },
+  "fresh_runs": {
+    "status": "fresh",
+    "runner": ".local/.../run.sh: env -i PATH HOME SYMBOLICA_LICENSE(private) FEYNKIT_ORACLE_THREADS=<pool> FEYNKIT_ORACLE_DUMP=<isolated .local dir>; ELF --test-threads 1 --nocapture --exact xs_qed_eedd_L1 xs_qed_eemm_L1 xs_qed_eeee_1pi_L1",
+    "results": {"old": {"1": "exit 101, 0 passed 3 failed", "8": "exit 101, 0 passed 3 failed", "32": "exit 101, 0 passed 3 failed"}, "new": {"1": "exit 0, 3 passed", "8": "exit 0, 3 passed", "32": "exit 0, 3 passed"}},
+    "old_failures": "all 9 at main.rs:147 historical-row assert (so classes::check None/Auto/cross-pool passed first); left/right Summary differ only in numerators field; left values equal new literals",
+    "pool_selection": "FEYNKIT_ORACLE_THREADS -> main.rs threads() -> classes::check_request loop -> Run::default().threads(count); dump filenames t{count} come from the same loop variable",
+    "test_inventory": "183 tests in ELF; exact three names present; 180 filtered out per run"
+  },
+  "independent_recompute": {
+    "status": "fresh",
+    "payloads": "all 36 None/Auto/sources JSON files per case byte-identical across old/new x pools 1/8/32 and modes; 6 census files per case identical; fresh dumps diff -rq equal to retained dumps (except pid-named failure dirs)",
+    "digests_from_census_text_via_census.rs_FNV": {"xs_qed_eedd_L1": {"numerators": "0xd3ad2f3a0802b6ab", "content": "0xb467d6be7a12aefa", "ids": "0x58ebcb07ba6255d3"}, "xs_qed_eemm_L1": {"numerators": "0x414e2a7a954beae8", "content": "0x831ae534b022fd0f", "ids": "0xedd739fe2aef9d55"}, "xs_qed_eeee_1pi_L1": {"numerators": "0x1fa84d9ad4fdf0b0", "content": "0x8686eb17d2b0f293", "ids": "0xf777e735b39d93bf"}},
+    "certificate_link": "round4 capture current payload_sha256 (72035c.., 7353727c.., 0b41b239..) equal fresh migration payload hashes",
+    "full_row": "new passes assert full Summary equality incl. counts, inverse symmetry, weights, histogram, named"
+  },
+  "validators": {
+    "migration_validate.mjs": {"sha256": "901c2cf148f4f3cb5dacea528071e59ee8c8159f83fc72689d02b403c7294e56", "status": "fresh exit 0", "output_equals_pool-evidence.json": "byte-identical (9d12527f...)"},
+    "manifest.sha256": "fresh sha256sum -c ok (21 entries)",
+    "receipt_sha256": "70b87cb354e9c022ab26696532d5da3f65d71e106da6e783246bc2a5c3482e95",
+    "round4_outer_validate.mjs": "fresh exit 1, only changed-inventory mismatch docs/developers.toml (185009 vs 184343 bytes); 29/30 inventory entries and full round4 manifest still match; correctly NOT credited",
+    "round4_entrypoints": {"capture-validate.mjs": "fresh exit 0, output sha 9bb5070f.. == retained certificate-capture-final.json", "semantic-validate.mjs": "fresh exit 0, sha 746e5869.. == retained certificate-semantic-final.json, 92 axes / 6 perms", "controls-all.mjs": "fresh exit 0, primary 115/115, probes 41/43 with the two approved qualifications", "canonical-doc-check.mjs": "fresh exit 0", "pre_registry_certificate-replay.json": "fields equal fresh capture/semantic/controls outputs"}
+  },
+  "negative_controls": {"status": "fresh", "zero_selection": "new ELF with no_such_test or non-exact prefix -> running 0 tests, exit 0; rejected by validator (requires 'running 3 tests' and exact pass/fail counts)", "record_mode": "old ELF with FEYNKIT_ORACLE_RECORD=1 -> passes printing Row; no retained or fresh log contains record output", "wrong_literal": "old ELF serves as wrong-literal control: fails 9/9"},
+  "docs": {"pdf": "fresh typst rebuild 4d8fbf159fafe6ae1f309a8003a76f5de217e24c8c2a32ffee56991fbc311ef1 byte-identical", "html": "fresh bundle rebuild 189ac863098623a2b4bd61fecc16c76e423d447ec34cece8d17b1c13f9b2cb99 byte-identical", "registry": "one new note, title/source match single = heading; certificate note preserved", "full_docs": "reused log: exit 1 for 8 inherited tracked mark-geometry HTML + 2 retained .local review HTML; none from this migration; nothing deleted"},
+  "reused_not_rerun": ["rustfmt --edition 2024 (log)", "scoped clippy -D warnings (log)", "full docs builder (log)", "new ELF build (log + cache hash)"],
+  "not_run": ["graph numerator expansion (forbidden)", "historical kernel rebuild (unnecessary)", "full oracle suite / other 78 rows (out of scope)"],
+  "nonblocking_notes": [
+    "validate.mjs treats manifest.sha256 and changed-inventory.json as optional (existsSync); deleting them silently skips those checks. Consider making them mandatory.",
+    "target/oracle-numerator-migration/certificate-replay-final.json is a retained 0-byte file (the empty stdout of the expectedly failing outer round4 validator) and is not explained in receipt/doc; label or note it.",
+    "validate.mjs does not assert absence of record-mode Row output in logs; currently covered by hashed run scripts that unset RECORD and old failures at main.rs:147.",
+    "The report prose mentions only the pre-registry certificate replay; the post-registry outer-guard rejection and separate entrypoint replay are qualified in receipt.json but could also be stated in the .typ."
+  ],
+  "concurrency": "jj ops at 20:31 (restore census.rs into ce8304dd) belong to generation-oracle-numerator-families workspace; ignored. This review used --ignore-working-copy only; no snapshot, ref move, tracked edit, push, fetch, PR, upload or CI.",
+  "retained_review_artifacts": "this directory (.local, ignored): runs/ dumps+logs, digest.mjs, run.sh, r4-*.out, bundle/ rebuild, validate.out",
+  "processes_left": "none"
+}

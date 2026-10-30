@@ -1,0 +1,26 @@
+{
+  "schema": 1,
+  "source": "docs/architecture/generation-oracle-numerator-diagnosis-round4.typ",
+  "source_sha256": "abf171ccc349722d8b70b6eb2ed62116040a2384ca57ba5ec1bd53b32569a0ab",
+  "wrapper": "target/oracle-numerator-diagnosis/round4-wrapper.typ",
+  "wrapper_sha256": "1cc867e5b21fc67b137b30a3695af61013c0ebe5b46c841bddc516f5a2952aff",
+  "pdf": {
+    "command": "nix develop -c typst compile --root . --creation-timestamp 0 docs/architecture/generation-oracle-numerator-diagnosis-round4.typ target/oracle-numerator-diagnosis/round4-bundle/report.pdf",
+    "path": "target/oracle-numerator-diagnosis/round4-bundle/report.pdf",
+    "sha256": "41d694e546b08c965dd809abfb4bb824f45fcff6ffa4cb24a6256213c6f63336",
+    "log_sha256": "700d928b9dad60c7d5fe875c38d7c1d2613a9a33e60cea7e2858f711b793dcef"
+  },
+  "html": {
+    "command": "nix develop -c typst compile --root . --features html,bundle --format bundle target/oracle-numerator-diagnosis/round4-wrapper.typ target/oracle-numerator-diagnosis/round4-bundle/html",
+    "path": "target/oracle-numerator-diagnosis/round4-bundle/html/index.html",
+    "sha256": "d3e007b3feec8c916738c5871081241d02c30f854515b97d51d31c57a77af414",
+    "log_sha256": "01fc358e66259ceb0b99024cfa906b3225de647506bd870dfbf400d348e5088a"
+  },
+  "full_docs_check": {
+    "command": "nix develop -c cargo run --locked -p alphal00p-docs-builder -- check",
+    "result": "exit 1: eight inherited tracked mark-geometry HTML entries plus two retained untracked review HTML files",
+    "log": "target/oracle-numerator-diagnosis/round4-docs-builder.log",
+    "log_sha256": "babd8ff75e2195fd39aa826df45f27a87ac7fb90bb1314634704502d92b781a3"
+  },
+  "typst": "0.15.1"
+}

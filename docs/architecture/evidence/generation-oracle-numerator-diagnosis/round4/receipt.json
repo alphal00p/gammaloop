@@ -1,0 +1,130 @@
+{
+  "schema": 4,
+  "title": "Three one-diagram QED oracle numerator diagnosis round-four correction",
+  "scope": {
+    "cases": ["xs_qed_eedd_L1", "xs_qed_eemm_L1", "xs_qed_eeee_1pi_L1"],
+    "pool": 1,
+    "asserted_class": "Classes::None",
+    "comparison_class": "Classes::Auto, byte-identical per route/case",
+    "excluded": ["other 78 rows", "pools 8/32", "grouped cases", "production changes", "migration", "integration"]
+  },
+  "prior_rounds": {
+    "round1": "e1d44235bfe064fd76027a8938195df4f227bdb7",
+    "round2": "b9992b04999f0cc9f5d8626691cd7b7ce2e219aa",
+    "round3": "6476a458e3b11c6c78f95b83ec4a66c6ca40ae2d",
+    "historical": "2928717fd53ae386ae979145b6cb8c18043a7c45",
+    "anchor": "prior-rounds.json",
+    "preservation": "All prior reports, receipts, manifests, validators, reviews, raw captures and retained ELFs are unchanged."
+  },
+  "reviews": {
+    "mathematics": {
+      "path": "review-inputs/math-review.json",
+      "sha256": "92b5eb1ab217ac9bc5ccbf55e9b088669b47c609144679d390300f88700cd439"
+    },
+    "provenance": {
+      "path": "review-inputs/provenance-review.json",
+      "sha256": "fc62d653d85163bc31379571451b2c745d8d80d69a42ebd41cfb2a0c15ad2354"
+    }
+  },
+  "producer_reuse": {
+    "new_run": false,
+    "attribution": "Reuses round-two Opus-A pristine executions and round-three qualified provenance/checks. Runtime bytes are unchanged by this docs/checker-only correction.",
+    "historical": {
+      "source": "2b1ef4f07a44bc061bcc97c378bbdd9c41cb0e94",
+      "kernel": "c78cffc20f318df1fce50539a587cbe8ffc717c0",
+      "elf_sha256": "32d17aaa366493c030d4ce674eeadb08d4e1a07486ede9494dc2302d5b240695",
+      "result": "3 pass"
+    },
+    "current": {
+      "source": "b9f788922341e7bde2e801a054423ae70ed7e9ae",
+      "kernel": "1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
+      "elf_sha256": "c2ef6aea7f9978606ca0891a5061eafaaf75f952574fb5b3894da04a39cbbe84",
+      "result": "3 numerator-only failures"
+    },
+    "compiler": "rustc 1.98.1 (48a229cea 2026-09-01), native default features, locked dev-optim",
+    "adapted_elf_paths": [
+      "target/oracle-numerator-diagnosis/adapted-historical/review-rederived-generation_oracle",
+      "target/oracle-numerator-diagnosis/adapted-current/review-rederived-generation_oracle"
+    ],
+    "adapted_elf_hashes": [
+      "31e9ea393246f513f6c7fdbf55fe8a425213ae3276751c95cf8ddbeda47b01ef",
+      "1a76aa5134431c7436340c6f231b48e5fba66a67e47e19eaaf376e386b466c50"
+    ],
+    "binding": "Frozen round-two receipt binds observational patch and patched sources; ELF strings bind c78cffc/1a1829b checkouts and rustc 48a229ceaefd4985.",
+    "environment": "Retained fresh script explicitly unsets record/dump/threads/diagnostic/target variables before the bounded command; logs record actual nonsecret FEYNKIT settings. No license value is stored.",
+    "companions": "None, Auto, census and sources.json companions remain byte-identical as previously certified."
+  },
+  "repair": {
+    "old_checker": {
+      "path": "../round3/proof/semantic-validate.mjs",
+      "sha256": "f146dc75ea2e21d046e86c968d803b4b82a8c13f4c6ead4644326b7e54ff98de"
+    },
+    "new_checker": {
+      "path": "proof/semantic-validate.mjs",
+      "sha256": "55950e6a6a6a7b256cc5891c5c5abfae4f5ded31ea90c946c73fff4729d8d21d"
+    },
+    "object_keys": "Retains the 46 payload and 16 metadata supported object-key paths from round three.",
+    "edge_tuple": {
+      "length": 2,
+      "position_0": "object with exactly source,target",
+      "position_1": "edge-data object with the supported required fields and optional num_interface only"
+    },
+    "exact_owner_paths": "Every payload numerator/numerator_prefactor/projector/*_interface key must occur at the exact aggregate, vertex or edge-data owner path.",
+    "ordering": "Tuple cardinality, component object type and positional signature are checked before graph owner construction.",
+    "schema_limit": "This closes supported object-key signatures plus the positional two-element edge tuple. It does not type every leaf or constrain every other array cardinality."
+  },
+  "mathematical_boundary": {
+    "derived": ["whole parsed heads", "92 typed port axes", "six transports", "port-hedge incidence", "factorized aggregate/local equality", "complete global port contraction"],
+    "observed_or_capture_bound": ["dimension/variance/flags/order producer pins", "non-port Q/edge labels", "AutG/aut/symmetry values", "cuts/keys/routing", "local scalar-factor distribution"],
+    "metadata_order": "Payload/owner object key reorder controls pass. Model/options pins use key-order-sensitive JSON.stringify hashes, so no general metadata key-order invariance is claimed.",
+    "forbidden": ["whole-graph expansion", "distribution", "trace", "numerical sampling", "parameter-at-one proof"]
+  },
+  "controls": {
+    "prior": {
+      "total": 76,
+      "reviewer_fixed_expectations": 70,
+      "author_finalized_tentative": 6,
+      "passed": 76
+    },
+    "tuple": {
+      "total": 39,
+      "negative": 36,
+      "positive": 3,
+      "passed": 39,
+      "old_accept_new_reject_blockers": 6,
+      "coverage": "Every row; one-sided/mirrored edge-data append, incidence append, truncate, swap, wrong-position, wrong-type, and valid component-key reorder."
+    },
+    "primary_total": 115,
+    "primary_passed": 115,
+    "reviewer_probes": {
+      "total": 43,
+      "matched": 41,
+      "qualified": [
+        "G18 changes a different array cardinality and remains capture-bound",
+        "V1 reorders key-sensitive metadata and remains conservatively rejected"
+      ]
+    },
+    "positive_equivalents": ["interface transpose", "payload/owner key reorder", "cooked alpha rename", "symmetric metric argument swap", "interface whitespace", "i powers", "double negation", "split power"],
+    "aggregate": "Fully mirrored aggregate controls continue to reject at aggregate coefficient/factor predicates."
+  },
+  "documentation": {
+    "source": "docs/architecture/generation-oracle-numerator-diagnosis-round4.typ",
+    "bundle": "bundle.json",
+    "full_docs": "Expected failure: eight inherited tracked mark-geometry HTML files plus two retained review HTML files."
+  },
+  "tools": {
+    "node": "v24.19.0",
+    "typst": "0.15.1"
+  },
+  "limits": {
+    "claim": "Frozen mathematical values remain valid only for these three one-diagram pool-1 rows; no production defect or value change found.",
+    "next": "Stop for new independent Opus correction review covering provenance/report invariance and tuple semantics; Astra fallback authorized."
+  },
+  "integrity": {
+    "manifest": "manifest.sha256",
+    "manifest_sha256": "1e22c2d872c9d072e62dfd56a3759e364992621f2de1a1c72c9571cdbd08d6f7",
+    "changed_inventory": "changed-inventory.json",
+    "validator": "validate.mjs",
+    "validator_sha256": "147a6e4972c6a7895aee808ecd660f7f1baa4a9cca01a64880444d47a82ffd06"
+  }
+}

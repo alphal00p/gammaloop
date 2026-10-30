@@ -1,0 +1,261 @@
+warning: ignoring untrusted flake configuration setting 'extra-substituters'.
+Pass '--accept-flake-config' to trust it
+warning: ignoring untrusted flake configuration setting 'extra-trusted-public-keys'.
+Pass '--accept-flake-config' to trust it
+building '/nix/store/dpxz3z6m8xsr98ih3hz25fyp2z1ij6kh-linnest-wasm-0.1.0.drv'...
+building '/nix/store/bywd4lh50dw4wxzgnpgl6468s4hrl0a6-clinnet-deps-0.1.8.drv'...
+building '/nix/store/da91bbv781h6rnw34b57mnwxh71vqq62-clinnet-0.1.8.drv'...
+building '/nix/store/i83p5k13wyb7ia8ih0f5yd8pl1cigchv-nix-shell-env.drv'...
+    Blocking waiting for file lock on package cache
+   Compiling proc-macro2 v1.0.106
+   Compiling unicode-ident v1.0.24
+   Compiling quote v1.0.45
+   Compiling libc v0.2.186
+   Compiling serde_core v1.0.228
+   Compiling version_check v0.9.5
+   Compiling cfg-if v1.0.4
+   Compiling autocfg v1.5.0
+   Compiling serde v1.0.228
+   Compiling libm v0.2.16
+   Compiling zerocopy v0.8.48
+   Compiling once_cell v1.21.4
+   Compiling bytemuck v1.25.0
+   Compiling getrandom v0.3.4
+   Compiling memchr v2.8.0
+   Compiling crossbeam-utils v0.8.21
+   Compiling paste v1.0.15
+   Compiling rayon-core v1.13.0
+   Compiling log v0.4.29
+   Compiling either v1.15.0
+   Compiling gmp-mpfr-sys v1.7.1
+   Compiling regex-syntax v0.8.10
+   Compiling virtue v0.0.18
+   Compiling unty v0.0.4
+   Compiling crunchy v0.2.4
+   Compiling anyhow v1.0.102
+   Compiling zmij v1.0.21
+   Compiling lazy_static v1.5.0
+   Compiling rug v1.30.0
+   Compiling foldhash v0.2.0
+   Compiling serde_json v1.0.149
+   Compiling itoa v1.0.18
+   Compiling equivalent v1.0.2
+   Compiling tiny-keccak v2.0.2
+   Compiling az v1.3.0
+   Compiling allocator-api2 v0.2.21
+   Compiling bitflags v1.3.2
+   Compiling winnow v1.0.2
+   Compiling rustix v1.1.4
+   Compiling dyn-clone v1.0.20
+   Compiling colored v3.1.1
+   Compiling linux-raw-sys v0.12.1
+   Compiling typenum v1.20.0
+   Compiling alloc-no-stdlib v2.0.4
+   Compiling unicode-width v0.2.2
+   Compiling toml_writer v1.1.1+spec-1.1.0
+   Compiling powerfmt v0.2.0
+   Compiling spec_math v0.1.6
+   Compiling pin-project-lite v0.2.17
+   Compiling utf8parse v0.2.2
+   Compiling time-core v0.1.8
+   Compiling option-ext v0.2.0
+   Compiling heck v0.5.0
+   Compiling num-conv v0.2.1
+   Compiling colorchoice v1.0.5
+   Compiling anstyle v1.0.14
+   Compiling is_terminal_polyfill v1.70.2
+   Compiling static_assertions v1.1.0
+   Compiling unicode-segmentation v1.13.2
+   Compiling nu-ansi-term v0.50.3
+   Compiling signal-hook v0.3.18
+   Compiling parking_lot_core v0.9.12
+   Compiling anstyle-query v1.1.5
+   Compiling symbolica v3.0.1 (https://github.com/symbolica-dev/symbolica?rev=c78cffc20f318df1fce50539a587cbe8ffc717c0#c78cffc2)
+   Compiling self_cell v1.2.2
+   Compiling tinyjson v2.5.1
+   Compiling append-only-vec v0.1.8
+   Compiling bytes v1.11.1
+   Compiling byteorder v1.5.0
+   Compiling data-encoding v2.11.1
+   Compiling scopeguard v1.2.0
+   Compiling ed25519-compact v2.4.2
+   Compiling inventory v0.3.24
+   Compiling strsim v0.11.1
+   Compiling same-file v1.0.6
+   Compiling unicase v2.9.0
+   Compiling cpufeatures v0.2.17
+   Compiling clap_lex v1.1.0
+   Compiling litrs v1.0.0
+   Compiling arrayvec v0.7.6
+   Compiling indenter v0.3.4
+   Compiling iana-time-zone v0.1.65
+   Compiling rawpointer v0.2.1
+   Compiling winnow v0.7.15
+   Compiling thiserror v2.0.18
+   Compiling syn v1.0.109
+   Compiling find-msvc-tools v0.1.9
+   Compiling shlex v1.3.0
+   Compiling eyre v0.6.12
+   Compiling bytecount v0.6.9
+   Compiling fnv v1.0.7
+   Compiling heck v0.4.1
+   Compiling jiff v0.2.24
+   Compiling convert_case v0.4.0
+   Compiling arrayref v0.3.9
+   Compiling ref-ops v0.2.5
+   Compiling constant_time_eq v0.4.2
+   Compiling cpufeatures v0.3.0
+   Compiling constcat v0.5.1
+   Compiling gat-lending-iterator v0.1.8
+   Compiling adler2 v2.0.1
+   Compiling base64 v0.22.1
+   Compiling getrandom v0.4.2
+   Compiling fastrand v2.4.1
+   Compiling safe_arch v0.7.4
+   Compiling aho-corasick v1.1.4
+   Compiling safe_arch v1.2.0
+   Compiling itertools v0.14.0
+   Compiling generic-array v0.14.7
+   Compiling tracing-core v0.1.36
+   Compiling ahash v0.8.12
+   Compiling hashbrown v0.16.1
+   Compiling alloc-stdlib v0.2.2
+   Compiling deranged v0.5.8
+   Compiling anstyle-parse v1.0.0
+   Compiling thread_local v1.1.9
+   Compiling sharded-slab v0.1.7
+   Compiling libloading v0.9.0
+   Compiling lock_api v0.4.14
+   Compiling bstr v1.12.1
+   Compiling hashbrown v0.17.1
+   Compiling walkdir v2.5.0
+   Compiling uncased v0.9.10
+   Compiling proc-macro2-diagnostics v0.10.1
+   Compiling proc-macro-error-attr v1.0.4
+   Compiling figment v0.10.19
+   Compiling proc-macro-error v1.0.4
+   Compiling papergrid v0.18.0
+   Compiling testing_table v0.3.0
+   Compiling features v0.10.0
+   Compiling colored v2.2.0
+   Compiling num-traits v0.2.19
+   Compiling smartstring v1.0.1
+   Compiling matrixmultiply v0.3.10
+   Compiling cc v1.2.61
+   Compiling miniz_oxide v0.8.9
+   Compiling convert_case v0.10.0
+   Compiling brotli-decompressor v5.0.0
+   Compiling anstream v1.0.0
+   Compiling wide v0.7.33
+   Compiling bincode_derive v2.0.1
+   Compiling wide v1.7.0
+   Compiling document-features v0.2.12
+   Compiling tracing-log v0.2.0
+   Compiling toml_parser v1.1.2+spec-1.1.0
+   Compiling brotli v8.0.2
+   Compiling crossbeam-epoch v0.9.18
+   Compiling time v0.3.47
+   Compiling regex-automata v0.4.14
+   Compiling crossbeam-deque v0.8.6
+   Compiling syn v2.0.117
+   Compiling crypto-common v0.1.7
+   Compiling block-buffer v0.10.4
+   Compiling digest v0.10.7
+   Compiling sha2 v0.10.9
+   Compiling rayon v1.12.0
+   Compiling getrandom v0.2.17
+   Compiling region v3.0.2
+   Compiling hugepage-rs v0.1.1
+   Compiling wasmtime-jit-icache-coherence v34.0.2
+   Compiling dirs-sys v0.5.0
+   Compiling errno v0.3.14
+   Compiling mio v1.2.0
+   Compiling console v0.16.3
+   Compiling rand_core v0.6.4
+   Compiling rand_core v0.9.5
+   Compiling signal-hook-registry v1.4.8
+   Compiling num-integer v0.1.46
+   Compiling approx v0.5.1
+   Compiling num-complex v0.4.6
+   Compiling directories v6.0.0
+   Compiling const-random-macro v0.1.16
+   Compiling rand_xoshiro v0.6.0
+   Compiling num-bigint v0.4.6
+   Compiling num-iter v0.1.45
+   Compiling signal-hook-mio v0.2.5
+   Compiling simba v0.9.1
+   Compiling bitflags v2.13.2
+   Compiling toml_datetime v1.1.1+spec-1.1.0
+   Compiling serde_spanned v1.1.1
+   Compiling indexmap v2.14.0
+   Compiling xpct v0.5.1
+   Compiling toml v1.1.2+spec-1.1.0
+   Compiling blake3 v1.8.5
+   Compiling const-random v0.1.18
+   Compiling duplicate v1.0.0
+   Compiling num-rational v0.4.2
+   Compiling matchers v0.2.0
+   Compiling regex v1.12.3
+   Compiling globset v0.4.18
+   Compiling terminal_size v0.4.4
+   Compiling tempfile v3.27.0
+   Compiling env_filter v1.0.1
+   Compiling rust-embed-utils v8.11.0
+   Compiling clap_builder v4.6.0
+   Compiling env_logger v0.11.10
+   Compiling xprec v0.2.2
+   Compiling serde_derive v1.0.228
+   Compiling zerocopy-derive v0.8.48
+   Compiling tracing-attributes v0.1.31
+   Compiling derive_more-impl v2.1.1
+   Compiling clap_derive v4.6.1
+   Compiling thiserror-impl v2.0.18
+   Compiling duplicate v2.0.1
+   Compiling serde_repr v0.1.20
+   Compiling tabled_derive v0.12.0
+   Compiling delegate v0.12.0
+   Compiling enum-try-as-inner v0.1.1
+   Compiling spenso-macros v0.3.2 (/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-diagnosis/.local/review-oracle-qed-provenance-opus-20261029a/scratch/historical/crates/spenso-macros)
+   Compiling derive_more v0.99.20
+   Compiling delegate v0.13.5
+   Compiling derive_more v2.1.1
+   Compiling tabled v0.22.0
+   Compiling clap v4.6.1
+   Compiling tracing v0.1.44
+   Compiling smallvec v1.15.1
+   Compiling bincode v2.0.1
+   Compiling tracing-serde v0.2.0
+   Compiling chrono v0.4.44
+   Compiling vectorize v0.2.0
+   Compiling tracing-subscriber v0.3.23
+   Compiling parking_lot v0.12.5
+   Compiling crossterm v0.29.0
+   Compiling bincode-trait-derive v0.1.1
+   Compiling num v0.4.3
+   Compiling ppv-lite86 v0.2.21
+   Compiling rand_chacha v0.9.0
+   Compiling rand_chacha v0.3.1
+   Compiling rand v0.9.4
+   Compiling rand v0.8.6
+   Compiling symjit v2.27.0
+   Compiling numerica v3.0.1 (https://github.com/symbolica-dev/symbolica?rev=c78cffc20f318df1fce50539a587cbe8ffc717c0#c78cffc2)
+   Compiling graphica v3.0.1
+   Compiling symbolica-utils v0.1.0 (/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-diagnosis/.local/review-oracle-qed-provenance-opus-20261029a/scratch/historical/crates/symbolica-utils)
+   Compiling gammaloop-workspace-hack v0.1.0 (/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-diagnosis/.local/review-oracle-qed-provenance-opus-20261029a/scratch/historical/crates/gammaloop-workspace-hack)
+   Compiling linnet v0.17.0 (/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-diagnosis/.local/review-oracle-qed-provenance-opus-20261029a/scratch/historical/crates/linnet)
+   Compiling spenso v0.6.0 (/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-diagnosis/.local/review-oracle-qed-provenance-opus-20261029a/scratch/historical/crates/spenso)
+   Compiling feynkit-model v0.1.0 (/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-diagnosis/.local/review-oracle-qed-provenance-opus-20261029a/scratch/historical/crates/feynkit-model)
+   Compiling idenso v0.3.0 (/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-diagnosis/.local/review-oracle-qed-provenance-opus-20261029a/scratch/historical/crates/idenso)
+   Compiling feynkit-kinematics v0.1.0 (/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-diagnosis/.local/review-oracle-qed-provenance-opus-20261029a/scratch/historical/crates/feynkit-kinematics)
+   Compiling feynkit-graph v0.1.0 (/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-diagnosis/.local/review-oracle-qed-provenance-opus-20261029a/scratch/historical/crates/feynkit-graph)
+   Compiling spenso-hep-lib v0.1.7 (/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-diagnosis/.local/review-oracle-qed-provenance-opus-20261029a/scratch/historical/crates/spenso-hep-lib)
+   Compiling feynkit-amplitude v0.1.0 (/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-diagnosis/.local/review-oracle-qed-provenance-opus-20261029a/scratch/historical/crates/feynkit-amplitude)
+   Compiling feynkit-generator v0.1.0 (/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-diagnosis/.local/review-oracle-qed-provenance-opus-20261029a/scratch/historical/crates/feynkit-generator)
+    Finished `dev-optim` profile [optimized + debuginfo] target(s) in 5m 25s
+     Running tests/generation_oracle/main.rs (/common/build-cache/lcnbr/88/7d54503e1ce811/dev-optim/deps/generation_oracle-ded84c41ff366641)
+
+running 1 test
+test qed_one_diagram_numerator_diagnostic ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 164 filtered out; finished in 0.05s
+

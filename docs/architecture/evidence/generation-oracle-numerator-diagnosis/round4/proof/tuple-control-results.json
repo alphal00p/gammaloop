@@ -1,0 +1,556 @@
+{
+  "schema": 1,
+  "controls": 39,
+  "negative": 36,
+  "positive": 3,
+  "passed": 39,
+  "old_blocker_acceptances": 6,
+  "results": [
+    {
+      "id": "xs_qed_eedd_L1-onesided-append-data",
+      "expected": "reject",
+      "old": "reject",
+      "corrected": "reject",
+      "pass": true,
+      "original_blocker": false,
+      "fnv_status": 0,
+      "corrected_failures": [
+        "xs_qed_eedd_L1: diagrams[0].payload.edges[0]: edge tuple must contain exactly 2 elements",
+        "xs_qed_eedd_L1: expression field outside exact owner path $/diagrams/0/payload/edges/0/2/numerator",
+        "xs_qed_eedd_L1: non-owner dump content differs (exact, no text mapping)"
+      ]
+    },
+    {
+      "id": "xs_qed_eedd_L1-mirrored-append-data",
+      "expected": "reject",
+      "old": "accept",
+      "corrected": "reject",
+      "pass": true,
+      "original_blocker": true,
+      "fnv_status": 0,
+      "corrected_failures": [
+        "xs_qed_eedd_L1: diagrams[0].payload.edges[0]: edge tuple must contain exactly 2 elements",
+        "xs_qed_eedd_L1: diagrams[0].payload.edges[0]: edge tuple must contain exactly 2 elements",
+        "xs_qed_eedd_L1: expression field outside exact owner path $/diagrams/0/payload/edges/0/2/numerator",
+        "xs_qed_eedd_L1: expression field outside exact owner path $/diagrams/0/payload/edges/0/2/numerator"
+      ]
+    },
+    {
+      "id": "xs_qed_eedd_L1-onesided-append-incidence",
+      "expected": "reject",
+      "old": "reject",
+      "corrected": "reject",
+      "pass": true,
+      "original_blocker": false,
+      "fnv_status": 0,
+      "corrected_failures": [
+        "xs_qed_eedd_L1: diagrams[0].payload.edges[0]: edge tuple must contain exactly 2 elements",
+        "xs_qed_eedd_L1: non-owner dump content differs (exact, no text mapping)"
+      ]
+    },
+    {
+      "id": "xs_qed_eedd_L1-mirrored-append-incidence",
+      "expected": "reject",
+      "old": "accept",
+      "corrected": "reject",
+      "pass": true,
+      "original_blocker": true,
+      "fnv_status": 0,
+      "corrected_failures": [
+        "xs_qed_eedd_L1: diagrams[0].payload.edges[0]: edge tuple must contain exactly 2 elements",
+        "xs_qed_eedd_L1: diagrams[0].payload.edges[0]: edge tuple must contain exactly 2 elements"
+      ]
+    },
+    {
+      "id": "xs_qed_eedd_L1-onesided-truncate",
+      "expected": "reject",
+      "old": "reject",
+      "corrected": "reject",
+      "pass": true,
+      "original_blocker": false,
+      "fnv_status": 1,
+      "corrected_failures": [
+        "xs_qed_eedd_L1: diagrams[0].payload.edges[0]: edge tuple must contain exactly 2 elements",
+        "xs_qed_eedd_L1: exception Cannot read properties of undefined (reading 'numerator')"
+      ]
+    },
+    {
+      "id": "xs_qed_eedd_L1-mirrored-truncate",
+      "expected": "reject",
+      "old": "reject",
+      "corrected": "reject",
+      "pass": true,
+      "original_blocker": false,
+      "fnv_status": 1,
+      "corrected_failures": [
+        "xs_qed_eedd_L1: diagrams[0].payload.edges[0]: edge tuple must contain exactly 2 elements",
+        "xs_qed_eedd_L1: diagrams[0].payload.edges[0]: edge tuple must contain exactly 2 elements",
+        "xs_qed_eedd_L1: exception Cannot read properties of undefined (reading 'numerator')"
+      ]
+    },
+    {
+      "id": "xs_qed_eedd_L1-onesided-swap",
+      "expected": "reject",
+      "old": "reject",
+      "corrected": "reject",
+      "pass": true,
+      "original_blocker": false,
+      "fnv_status": 1,
+      "corrected_failures": [
+        "xs_qed_eedd_L1: diagrams[0].payload.edges[0][0]: unsupported incidence object",
+        "xs_qed_eedd_L1: diagrams[0].payload.edges[0][1]: unsupported edge-data object",
+        "xs_qed_eedd_L1: expression field outside exact owner path $/diagrams/0/payload/edges/0/0/numerator",
+        "xs_qed_eedd_L1: vertex:2: port hedge 0 not at vertex"
+      ]
+    },
+    {
+      "id": "xs_qed_eedd_L1-mirrored-swap",
+      "expected": "reject",
+      "old": "reject",
+      "corrected": "reject",
+      "pass": true,
+      "original_blocker": false,
+      "fnv_status": 1,
+      "corrected_failures": [
+        "xs_qed_eedd_L1: diagrams[0].payload.edges[0][0]: unsupported incidence object",
+        "xs_qed_eedd_L1: diagrams[0].payload.edges[0][1]: unsupported edge-data object",
+        "xs_qed_eedd_L1: diagrams[0].payload.edges[0][0]: unsupported incidence object",
+        "xs_qed_eedd_L1: diagrams[0].payload.edges[0][1]: unsupported edge-data object"
+      ]
+    },
+    {
+      "id": "xs_qed_eedd_L1-onesided-wrong-position",
+      "expected": "reject",
+      "old": "reject",
+      "corrected": "reject",
+      "pass": true,
+      "original_blocker": false,
+      "fnv_status": 0,
+      "corrected_failures": [
+        "xs_qed_eedd_L1: diagrams[0].payload.edges[0][0]: unsupported incidence object",
+        "xs_qed_eedd_L1: expression field outside exact owner path $/diagrams/0/payload/edges/0/0/numerator",
+        "xs_qed_eedd_L1: vertex:2: port hedge 0 not at vertex",
+        "xs_qed_eedd_L1: vertex:3: port hedge 10 not at vertex"
+      ]
+    },
+    {
+      "id": "xs_qed_eedd_L1-mirrored-wrong-position",
+      "expected": "reject",
+      "old": "reject",
+      "corrected": "reject",
+      "pass": true,
+      "original_blocker": false,
+      "fnv_status": 0,
+      "corrected_failures": [
+        "xs_qed_eedd_L1: diagrams[0].payload.edges[0][0]: unsupported incidence object",
+        "xs_qed_eedd_L1: diagrams[0].payload.edges[0][0]: unsupported incidence object",
+        "xs_qed_eedd_L1: expression field outside exact owner path $/diagrams/0/payload/edges/0/0/numerator",
+        "xs_qed_eedd_L1: expression field outside exact owner path $/diagrams/0/payload/edges/0/0/numerator"
+      ]
+    },
+    {
+      "id": "xs_qed_eedd_L1-onesided-wrong-type",
+      "expected": "reject",
+      "old": "reject",
+      "corrected": "reject",
+      "pass": true,
+      "original_blocker": false,
+      "fnv_status": 1,
+      "corrected_failures": [
+        "xs_qed_eedd_L1: diagrams[0].payload.edges[0]: edge tuple must contain exactly 2 elements",
+        "xs_qed_eedd_L1: expression field outside exact owner path $/diagrams/0/payload/edges/0/data/numerator",
+        "xs_qed_eedd_L1: payload schema keys unsupported at $/diagrams/*/payload/edges/*: [\"data\",\"incidence\"]",
+        "xs_qed_eedd_L1: payload schema keys unsupported at $/diagrams/*/payload/edges/*/incidence: [\"source\",\"target\"]"
+      ]
+    },
+    {
+      "id": "xs_qed_eedd_L1-mirrored-wrong-type",
+      "expected": "reject",
+      "old": "reject",
+      "corrected": "reject",
+      "pass": true,
+      "original_blocker": false,
+      "fnv_status": 1,
+      "corrected_failures": [
+        "xs_qed_eedd_L1: diagrams[0].payload.edges[0]: edge tuple must contain exactly 2 elements",
+        "xs_qed_eedd_L1: diagrams[0].payload.edges[0]: edge tuple must contain exactly 2 elements",
+        "xs_qed_eedd_L1: expression field outside exact owner path $/diagrams/0/payload/edges/0/data/numerator",
+        "xs_qed_eedd_L1: expression field outside exact owner path $/diagrams/0/payload/edges/0/data/numerator"
+      ]
+    },
+    {
+      "id": "xs_qed_eedd_L1-valid-component-key-reorder",
+      "expected": "accept",
+      "old": "accept",
+      "corrected": "accept",
+      "pass": true,
+      "original_blocker": false,
+      "fnv_status": 0,
+      "corrected_failures": []
+    },
+    {
+      "id": "xs_qed_eemm_L1-onesided-append-data",
+      "expected": "reject",
+      "old": "reject",
+      "corrected": "reject",
+      "pass": true,
+      "original_blocker": false,
+      "fnv_status": 0,
+      "corrected_failures": [
+        "xs_qed_eemm_L1: diagrams[0].payload.edges[4]: edge tuple must contain exactly 2 elements",
+        "xs_qed_eemm_L1: expression field outside exact owner path $/diagrams/0/payload/edges/4/2/numerator",
+        "xs_qed_eemm_L1: non-owner dump content differs (exact, no text mapping)"
+      ]
+    },
+    {
+      "id": "xs_qed_eemm_L1-mirrored-append-data",
+      "expected": "reject",
+      "old": "accept",
+      "corrected": "reject",
+      "pass": true,
+      "original_blocker": true,
+      "fnv_status": 0,
+      "corrected_failures": [
+        "xs_qed_eemm_L1: diagrams[0].payload.edges[4]: edge tuple must contain exactly 2 elements",
+        "xs_qed_eemm_L1: diagrams[0].payload.edges[4]: edge tuple must contain exactly 2 elements",
+        "xs_qed_eemm_L1: expression field outside exact owner path $/diagrams/0/payload/edges/4/2/numerator",
+        "xs_qed_eemm_L1: expression field outside exact owner path $/diagrams/0/payload/edges/4/2/numerator"
+      ]
+    },
+    {
+      "id": "xs_qed_eemm_L1-onesided-append-incidence",
+      "expected": "reject",
+      "old": "reject",
+      "corrected": "reject",
+      "pass": true,
+      "original_blocker": false,
+      "fnv_status": 0,
+      "corrected_failures": [
+        "xs_qed_eemm_L1: diagrams[0].payload.edges[4]: edge tuple must contain exactly 2 elements",
+        "xs_qed_eemm_L1: non-owner dump content differs (exact, no text mapping)"
+      ]
+    },
+    {
+      "id": "xs_qed_eemm_L1-mirrored-append-incidence",
+      "expected": "reject",
+      "old": "accept",
+      "corrected": "reject",
+      "pass": true,
+      "original_blocker": true,
+      "fnv_status": 0,
+      "corrected_failures": [
+        "xs_qed_eemm_L1: diagrams[0].payload.edges[4]: edge tuple must contain exactly 2 elements",
+        "xs_qed_eemm_L1: diagrams[0].payload.edges[4]: edge tuple must contain exactly 2 elements"
+      ]
+    },
+    {
+      "id": "xs_qed_eemm_L1-onesided-truncate",
+      "expected": "reject",
+      "old": "reject",
+      "corrected": "reject",
+      "pass": true,
+      "original_blocker": false,
+      "fnv_status": 1,
+      "corrected_failures": [
+        "xs_qed_eemm_L1: diagrams[0].payload.edges[4]: edge tuple must contain exactly 2 elements",
+        "xs_qed_eemm_L1: exception Cannot read properties of undefined (reading 'numerator')"
+      ]
+    },
+    {
+      "id": "xs_qed_eemm_L1-mirrored-truncate",
+      "expected": "reject",
+      "old": "reject",
+      "corrected": "reject",
+      "pass": true,
+      "original_blocker": false,
+      "fnv_status": 1,
+      "corrected_failures": [
+        "xs_qed_eemm_L1: diagrams[0].payload.edges[4]: edge tuple must contain exactly 2 elements",
+        "xs_qed_eemm_L1: diagrams[0].payload.edges[4]: edge tuple must contain exactly 2 elements",
+        "xs_qed_eemm_L1: exception Cannot read properties of undefined (reading 'numerator')"
+      ]
+    },
+    {
+      "id": "xs_qed_eemm_L1-onesided-swap",
+      "expected": "reject",
+      "old": "reject",
+      "corrected": "reject",
+      "pass": true,
+      "original_blocker": false,
+      "fnv_status": 1,
+      "corrected_failures": [
+        "xs_qed_eemm_L1: diagrams[0].payload.edges[4][0]: unsupported incidence object",
+        "xs_qed_eemm_L1: diagrams[0].payload.edges[4][1]: unsupported edge-data object",
+        "xs_qed_eemm_L1: expression field outside exact owner path $/diagrams/0/payload/edges/4/0/numerator",
+        "xs_qed_eemm_L1: vertex:0: port hedge 6 not at vertex"
+      ]
+    },
+    {
+      "id": "xs_qed_eemm_L1-mirrored-swap",
+      "expected": "reject",
+      "old": "reject",
+      "corrected": "reject",
+      "pass": true,
+      "original_blocker": false,
+      "fnv_status": 1,
+      "corrected_failures": [
+        "xs_qed_eemm_L1: diagrams[0].payload.edges[4][0]: unsupported incidence object",
+        "xs_qed_eemm_L1: diagrams[0].payload.edges[4][1]: unsupported edge-data object",
+        "xs_qed_eemm_L1: diagrams[0].payload.edges[4][0]: unsupported incidence object",
+        "xs_qed_eemm_L1: diagrams[0].payload.edges[4][1]: unsupported edge-data object"
+      ]
+    },
+    {
+      "id": "xs_qed_eemm_L1-onesided-wrong-position",
+      "expected": "reject",
+      "old": "reject",
+      "corrected": "reject",
+      "pass": true,
+      "original_blocker": false,
+      "fnv_status": 0,
+      "corrected_failures": [
+        "xs_qed_eemm_L1: diagrams[0].payload.edges[4][0]: unsupported incidence object",
+        "xs_qed_eemm_L1: expression field outside exact owner path $/diagrams/0/payload/edges/4/0/numerator",
+        "xs_qed_eemm_L1: vertex:0: port hedge 6 not at vertex",
+        "xs_qed_eemm_L1: vertex:3: port hedge 7 not at vertex"
+      ]
+    },
+    {
+      "id": "xs_qed_eemm_L1-mirrored-wrong-position",
+      "expected": "reject",
+      "old": "reject",
+      "corrected": "reject",
+      "pass": true,
+      "original_blocker": false,
+      "fnv_status": 0,
+      "corrected_failures": [
+        "xs_qed_eemm_L1: diagrams[0].payload.edges[4][0]: unsupported incidence object",
+        "xs_qed_eemm_L1: diagrams[0].payload.edges[4][0]: unsupported incidence object",
+        "xs_qed_eemm_L1: expression field outside exact owner path $/diagrams/0/payload/edges/4/0/numerator",
+        "xs_qed_eemm_L1: expression field outside exact owner path $/diagrams/0/payload/edges/4/0/numerator"
+      ]
+    },
+    {
+      "id": "xs_qed_eemm_L1-onesided-wrong-type",
+      "expected": "reject",
+      "old": "reject",
+      "corrected": "reject",
+      "pass": true,
+      "original_blocker": false,
+      "fnv_status": 1,
+      "corrected_failures": [
+        "xs_qed_eemm_L1: diagrams[0].payload.edges[4]: edge tuple must contain exactly 2 elements",
+        "xs_qed_eemm_L1: expression field outside exact owner path $/diagrams/0/payload/edges/4/data/numerator",
+        "xs_qed_eemm_L1: payload schema keys unsupported at $/diagrams/*/payload/edges/*: [\"data\",\"incidence\"]",
+        "xs_qed_eemm_L1: payload schema keys unsupported at $/diagrams/*/payload/edges/*/incidence: [\"source\",\"target\"]"
+      ]
+    },
+    {
+      "id": "xs_qed_eemm_L1-mirrored-wrong-type",
+      "expected": "reject",
+      "old": "reject",
+      "corrected": "reject",
+      "pass": true,
+      "original_blocker": false,
+      "fnv_status": 1,
+      "corrected_failures": [
+        "xs_qed_eemm_L1: diagrams[0].payload.edges[4]: edge tuple must contain exactly 2 elements",
+        "xs_qed_eemm_L1: diagrams[0].payload.edges[4]: edge tuple must contain exactly 2 elements",
+        "xs_qed_eemm_L1: expression field outside exact owner path $/diagrams/0/payload/edges/4/data/numerator",
+        "xs_qed_eemm_L1: expression field outside exact owner path $/diagrams/0/payload/edges/4/data/numerator"
+      ]
+    },
+    {
+      "id": "xs_qed_eemm_L1-valid-component-key-reorder",
+      "expected": "accept",
+      "old": "accept",
+      "corrected": "accept",
+      "pass": true,
+      "original_blocker": false,
+      "fnv_status": 0,
+      "corrected_failures": []
+    },
+    {
+      "id": "xs_qed_eeee_1pi_L1-onesided-append-data",
+      "expected": "reject",
+      "old": "reject",
+      "corrected": "reject",
+      "pass": true,
+      "original_blocker": false,
+      "fnv_status": 0,
+      "corrected_failures": [
+        "xs_qed_eeee_1pi_L1: diagrams[0].payload.edges[1]: edge tuple must contain exactly 2 elements",
+        "xs_qed_eeee_1pi_L1: expression field outside exact owner path $/diagrams/0/payload/edges/1/2/numerator",
+        "xs_qed_eeee_1pi_L1: non-owner dump content differs (exact, no text mapping)"
+      ]
+    },
+    {
+      "id": "xs_qed_eeee_1pi_L1-mirrored-append-data",
+      "expected": "reject",
+      "old": "accept",
+      "corrected": "reject",
+      "pass": true,
+      "original_blocker": true,
+      "fnv_status": 0,
+      "corrected_failures": [
+        "xs_qed_eeee_1pi_L1: diagrams[0].payload.edges[1]: edge tuple must contain exactly 2 elements",
+        "xs_qed_eeee_1pi_L1: diagrams[0].payload.edges[1]: edge tuple must contain exactly 2 elements",
+        "xs_qed_eeee_1pi_L1: expression field outside exact owner path $/diagrams/0/payload/edges/1/2/numerator",
+        "xs_qed_eeee_1pi_L1: expression field outside exact owner path $/diagrams/0/payload/edges/1/2/numerator"
+      ]
+    },
+    {
+      "id": "xs_qed_eeee_1pi_L1-onesided-append-incidence",
+      "expected": "reject",
+      "old": "reject",
+      "corrected": "reject",
+      "pass": true,
+      "original_blocker": false,
+      "fnv_status": 0,
+      "corrected_failures": [
+        "xs_qed_eeee_1pi_L1: diagrams[0].payload.edges[1]: edge tuple must contain exactly 2 elements",
+        "xs_qed_eeee_1pi_L1: non-owner dump content differs (exact, no text mapping)"
+      ]
+    },
+    {
+      "id": "xs_qed_eeee_1pi_L1-mirrored-append-incidence",
+      "expected": "reject",
+      "old": "accept",
+      "corrected": "reject",
+      "pass": true,
+      "original_blocker": true,
+      "fnv_status": 0,
+      "corrected_failures": [
+        "xs_qed_eeee_1pi_L1: diagrams[0].payload.edges[1]: edge tuple must contain exactly 2 elements",
+        "xs_qed_eeee_1pi_L1: diagrams[0].payload.edges[1]: edge tuple must contain exactly 2 elements"
+      ]
+    },
+    {
+      "id": "xs_qed_eeee_1pi_L1-onesided-truncate",
+      "expected": "reject",
+      "old": "reject",
+      "corrected": "reject",
+      "pass": true,
+      "original_blocker": false,
+      "fnv_status": 1,
+      "corrected_failures": [
+        "xs_qed_eeee_1pi_L1: diagrams[0].payload.edges[1]: edge tuple must contain exactly 2 elements",
+        "xs_qed_eeee_1pi_L1: exception Cannot read properties of undefined (reading 'numerator')"
+      ]
+    },
+    {
+      "id": "xs_qed_eeee_1pi_L1-mirrored-truncate",
+      "expected": "reject",
+      "old": "reject",
+      "corrected": "reject",
+      "pass": true,
+      "original_blocker": false,
+      "fnv_status": 1,
+      "corrected_failures": [
+        "xs_qed_eeee_1pi_L1: diagrams[0].payload.edges[1]: edge tuple must contain exactly 2 elements",
+        "xs_qed_eeee_1pi_L1: diagrams[0].payload.edges[1]: edge tuple must contain exactly 2 elements",
+        "xs_qed_eeee_1pi_L1: exception Cannot read properties of undefined (reading 'numerator')"
+      ]
+    },
+    {
+      "id": "xs_qed_eeee_1pi_L1-onesided-swap",
+      "expected": "reject",
+      "old": "reject",
+      "corrected": "reject",
+      "pass": true,
+      "original_blocker": false,
+      "fnv_status": 1,
+      "corrected_failures": [
+        "xs_qed_eeee_1pi_L1: diagrams[0].payload.edges[1][0]: unsupported incidence object",
+        "xs_qed_eeee_1pi_L1: diagrams[0].payload.edges[1][1]: unsupported edge-data object",
+        "xs_qed_eeee_1pi_L1: expression field outside exact owner path $/diagrams/0/payload/edges/1/0/numerator",
+        "xs_qed_eeee_1pi_L1: vertex:2: port hedge 11 not at vertex"
+      ]
+    },
+    {
+      "id": "xs_qed_eeee_1pi_L1-mirrored-swap",
+      "expected": "reject",
+      "old": "reject",
+      "corrected": "reject",
+      "pass": true,
+      "original_blocker": false,
+      "fnv_status": 1,
+      "corrected_failures": [
+        "xs_qed_eeee_1pi_L1: diagrams[0].payload.edges[1][0]: unsupported incidence object",
+        "xs_qed_eeee_1pi_L1: diagrams[0].payload.edges[1][1]: unsupported edge-data object",
+        "xs_qed_eeee_1pi_L1: diagrams[0].payload.edges[1][0]: unsupported incidence object",
+        "xs_qed_eeee_1pi_L1: diagrams[0].payload.edges[1][1]: unsupported edge-data object"
+      ]
+    },
+    {
+      "id": "xs_qed_eeee_1pi_L1-onesided-wrong-position",
+      "expected": "reject",
+      "old": "reject",
+      "corrected": "reject",
+      "pass": true,
+      "original_blocker": false,
+      "fnv_status": 0,
+      "corrected_failures": [
+        "xs_qed_eeee_1pi_L1: diagrams[0].payload.edges[1][0]: unsupported incidence object",
+        "xs_qed_eeee_1pi_L1: expression field outside exact owner path $/diagrams/0/payload/edges/1/0/numerator",
+        "xs_qed_eeee_1pi_L1: vertex:2: port hedge 11 not at vertex",
+        "xs_qed_eeee_1pi_L1: vertex:3: port hedge 1 not at vertex"
+      ]
+    },
+    {
+      "id": "xs_qed_eeee_1pi_L1-mirrored-wrong-position",
+      "expected": "reject",
+      "old": "reject",
+      "corrected": "reject",
+      "pass": true,
+      "original_blocker": false,
+      "fnv_status": 0,
+      "corrected_failures": [
+        "xs_qed_eeee_1pi_L1: diagrams[0].payload.edges[1][0]: unsupported incidence object",
+        "xs_qed_eeee_1pi_L1: diagrams[0].payload.edges[1][0]: unsupported incidence object",
+        "xs_qed_eeee_1pi_L1: expression field outside exact owner path $/diagrams/0/payload/edges/1/0/numerator",
+        "xs_qed_eeee_1pi_L1: expression field outside exact owner path $/diagrams/0/payload/edges/1/0/numerator"
+      ]
+    },
+    {
+      "id": "xs_qed_eeee_1pi_L1-onesided-wrong-type",
+      "expected": "reject",
+      "old": "reject",
+      "corrected": "reject",
+      "pass": true,
+      "original_blocker": false,
+      "fnv_status": 1,
+      "corrected_failures": [
+        "xs_qed_eeee_1pi_L1: diagrams[0].payload.edges[1]: edge tuple must contain exactly 2 elements",
+        "xs_qed_eeee_1pi_L1: expression field outside exact owner path $/diagrams/0/payload/edges/1/data/numerator",
+        "xs_qed_eeee_1pi_L1: payload schema keys unsupported at $/diagrams/*/payload/edges/*: [\"data\",\"incidence\"]",
+        "xs_qed_eeee_1pi_L1: payload schema keys unsupported at $/diagrams/*/payload/edges/*/incidence: [\"source\",\"target\"]"
+      ]
+    },
+    {
+      "id": "xs_qed_eeee_1pi_L1-mirrored-wrong-type",
+      "expected": "reject",
+      "old": "reject",
+      "corrected": "reject",
+      "pass": true,
+      "original_blocker": false,
+      "fnv_status": 1,
+      "corrected_failures": [
+        "xs_qed_eeee_1pi_L1: diagrams[0].payload.edges[1]: edge tuple must contain exactly 2 elements",
+        "xs_qed_eeee_1pi_L1: diagrams[0].payload.edges[1]: edge tuple must contain exactly 2 elements",
+        "xs_qed_eeee_1pi_L1: expression field outside exact owner path $/diagrams/0/payload/edges/1/data/numerator",
+        "xs_qed_eeee_1pi_L1: expression field outside exact owner path $/diagrams/0/payload/edges/1/data/numerator"
+      ]
+    },
+    {
+      "id": "xs_qed_eeee_1pi_L1-valid-component-key-reorder",
+      "expected": "accept",
+      "old": "accept",
+      "corrected": "accept",
+      "pass": true,
+      "original_blocker": false,
+      "fnv_status": 0,
+      "corrected_failures": []
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "round1": {
+    "commit": "e1d44235bfe064fd76027a8938195df4f227bdb7",
+    "bookmark": "generation-oracle-numerator-diagnosis-round1",
+    "inventory_sha256": "e7a6c29b8ba32255e0656d9f496bfccee77fd4057c553573683267645dae5d14"
+  },
+  "round2": {
+    "commit": "b9992b04999f0cc9f5d8626691cd7b7ce2e219aa",
+    "bookmark": "generation-oracle-numerator-diagnosis-round2",
+    "receipt_sha256": "9c11b9f748e79509d91f122107a109cb8bc7a826150ee70a8480f1140b07af08",
+    "manifest_sha256": "e24c60731a26698c5904f5e736cc2fedfcf03889c51401a2d56348d13060b2e8",
+    "changed_inventory_sha256": "6b8ef84ba32f1758ee0a54ca49c6f163df77a70a111608a6f95c40b66fee1477",
+    "validator_sha256": "2928646b226336565f663979520f00c8074b9a3f2c3869cec2906617ee91696d",
+    "report_sha256": "eaa06fcda696ce094466bbaec41e88e2aa855df32d8c0068c1e43c3088a76852"
+  },
+  "historical": {
+    "commit": "2928717fd53ae386ae979145b6cb8c18043a7c45",
+    "bookmark": "generation-oracle-numerator-historical"
+  }
+}

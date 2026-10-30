@@ -1,0 +1,107 @@
+{
+  "schema": 1,
+  "review": "Scope A: producer, inputs, capture provenance and reporting",
+  "candidate": {
+    "commit": "e1d44235bfe064fd76027a8938195df4f227bdb7",
+    "change": "mqnrpynmmowopkxvnylyvptznkurnnqk",
+    "bookmark": "generation-oracle-numerator-diagnosis",
+    "base": "b9f788922341e7bde2e801a054423ae70ed7e9ae",
+    "historical_workspace": "2928717fd53ae386ae979145b6cb8c18043a7c45 (xlwvvpsp, empty) over 2b1ef4f07a44bc061bcc97c378bbdd9c41cb0e94"
+  },
+  "verdict": "REQUEST_CHANGES",
+  "verdict_basis": "The underlying evidence reproduces and is bound to the original producers (fresh runs below). The candidate's own receipt, document and validator misreport which execution produced the asserted digest, omit the payload provenance, overstate captured inputs, and do not bind the omitted interfaces. These are reporting and certificate-binding defects. The fixes are documentation, receipt and validator changes only.",
+  "fresh": {
+    "pristine_assertions": {
+      "env": "FEYNKIT_ORACLE_THREADS=1, FEYNKIT_ORACLE_DUMP=<review>/runs/pristine-*/dump, RECORD unset; SYMBOLICA_LICENSE preserved/loaded silently",
+      "command": "nix develop -c cargo test --locked --profile dev-optim -p feynkit-generator --test generation_oracle -- --test-threads 1 --nocapture xs_qed_eedd_L1 xs_qed_eemm_L1 xs_qed_eeee_1pi_L1",
+      "historical": "exit 0; 3 passed, 0 failed, 161 filtered; no recompilation (Finished 0.39s); executed /common/build-cache/lcnbr/31/cee24e4a757ac1/dev-optim/deps/generation_oracle-ded84c41ff366641 sha256 32d17aaa366493c030d4ce674eeadb08d4e1a07486ede9494dc2302d5b240695 == retained ELF",
+      "current": "exit 101; 0 passed, 3 failed, 180 filtered; only Summary.numerators differs; executed .../14/f78654d42ee4d7/dev-optim/deps/generation_oracle-c4b54249fc0354d6 sha256 c2ef6aea7f9978606ca0891a5061eafaaf75f952574fb5b3894da04a39cbbe84 == retained ELF",
+      "logs": "runs/pristine-{historical,current}/{assertions.log,meta.txt,no-run.log}"
+    },
+    "no_dump_control": "Same command without FEYNKIT_ORACLE_DUMP: historical 3 pass/161 filtered, current 3 fail with identical numerator values. DUMP only redirects storage and writes files; it does not force a pass or record. The current failure inventories went to the nix-shell TMPDIR; I moved them to runs/nodump-current/tmp-inventories and removed the empty /tmp/nix-shell.WU1ZjF. Their left.json files are byte-identical to evidence current/*.json.",
+    "toolchain": "both shells: rustc 1.98.1 (48a229cea 2026-09-01) commit 48a229ceaefd4985c50990b14116b6d856af0985, LLVM 22.1.8, cargo 1.98.1; ELF .comment says rustc 1.98.1 (48a229cea) in both",
+    "kernel_binding": "ELF debuginfo: historical references only checkouts/symbolica-db3dbb7e8d40efb5/c78cffc/ (653 occurrences) and workspace generation-oracle-numerator-historical; current references only .../1a1829b/ (757 occurrences) and generation-oracle-numerator-diagnosis. Locks: c78cffc2 (rev=) and 1a1829b1 (branch=main#). Source hashes for main.rs/cases.rs/census.rs/Cargo.lock equal the receipt.",
+    "payload_provenance": "Evidence historical/*.json and current/*.json are byte-identical to the fresh pristine FEYNKIT_ORACLE_DUMP outputs <case>.classes-None-t1.json and <case>.classes-Auto-t1.json (write_exact_dump in classes::check_request) from each original producer. None and Auto dumps are byte-identical to each other for all 6 route/case pairs.",
+    "summary_digests": "scripts/summary.mjs re-implements census.rs Summary::summary/digest_json/Entry::of independently from source, without reusing validate.mjs. Over the six evidence dumps it reproduces all four digests (content, numerators, named, ids), equal to the oracle rows (rows identical in both sources) for historical, and equal to the logged left Summary decimals for current. Six numerator digests: eedd f5a21f1a84870bc7->d3ad2f3a0802b6ab, eemm 8b7b40bba961420d->414e2a7a954beae8, eeee_1pi 0db0b7cc52558270->1fa84d9ad4fdf0b0. digest_json, summary and Digest impl are textually identical across both census.rs.",
+    "adapted_rederivation": "I exported both revisions with git archive into a review scratch dir (exports byte-equal to the workspaces for Cargo.lock and main.rs), applied the archived patches (sha256 e8a34a90... historical, 6163aa80... current) with git apply, and ran FEYNKIT_ORACLE_DIAGNOSTIC=<capture> nix develop -c cargo test --locked --profile dev-optim -p feynkit-generator --test generation_oracle qed_one_diagram_numerator_diagnostic -- --ignored --exact --nocapture. Both exit 0 (1 passed). All six captured metadata files are byte-identical to evidence metadata-{historical,current}/*.json. Adapted ELF sha256: historical 31e9ea393246f513f6c7fdbf55fe8a425213ae3276751c95cf8ddbeda47b01ef, current 1a76aa5134431c7436340c6f231b48e5fba66a67e47e19eaaf376e386b466c50 (retained in the new build-cache dirs 88/7d54503e1ce811 and 6e/86f18de9f43a18). Patched main.rs copies are in runs/adapted-*/patched-main.rs. I removed the scratch source trees afterwards because they are reproducible and polluted the docs builder walk.",
+    "uncook_owner": "The diagnostic decodes with CookSettings::indices().with_mode(ReversibleEncoding).with_representation_payloads(true,true). These are exactly the settings of each producer's NumeratorInterface::admit, from the in-tree idenso compiled into that producer. The ports are text decoded afterwards from live logical_slots, not native admission metadata. No open ports occur.",
+    "capture_options": "Historical capture uses NumeratorOptions::default().with_naming(prefix D) and current uses case.numerators().with_naming(prefix D). Each matches its own classes::check / check() exactly. Serialized options are equal (filter_zero_color false, prefactor 1, projector null). Grouping is none in both. Report counts are 17/34, 17/34 and 3/4, completed.",
+    "interface_binding": "Every current serialized num_interface (eedd vertex:0,1, edge:2,3; eeee_1pi vertex:1,2; eemm none) equals verbatim, in order, the live port list captured for the same owner. The six interface owners are exactly the six permuted owners. This holds in the data, but validate.mjs does not check it.",
+    "docs": "typst 0.15.1. Direct PDF compile (--root . --creation-timestamp 0) exits 0. A semantic HTML bundle via a #document wrapper (--features html,bundle --format bundle) exits 0 with h2 title plus four sections and two evidence links. The single '= Title' matches the developers.toml title. alphal00p-docs-builder check exits 1. Excluding this review's own untracked .local files, the tracked new-legacy list is exactly the 8 inherited mark-geometry HTML entries, identical to the candidate's docs-builder-check.log. Full docs is NOT green."
+  },
+  "reused_not_rerun": [
+    "pristine run.log nextest invocations (not --locked, no THREADS)",
+    "original adapted run/run-r2/run-decoded logs",
+    "candidate validator-output.json; I ran manifest sha256 -c (all OK, manifest sha d217da5b...) and summary recompute instead",
+    "pools 8/32, remaining 78 rows, grouped cases: not run, no credit",
+    "tensor algebra/transport semantics and adversarial mutations: peer B scope, not repeated"
+  ],
+  "findings": [
+    {
+      "severity": "high",
+      "id": "A1-asserted-reference-is-classes-none",
+      "summary": "In both sources the asserted Summary comes from classes::check's particle-only reference, which is the first mode, Classes::None, at the first thread count. Classes::Auto is only checked for class equivalence against it. The document and receipt present the asserting row as Classes::Auto.",
+      "evidence": "classes.rs check_request: for mode in [Classes::None, Classes::Auto], with particle_reference set on the first iteration and returned; main.rs check() asserts reference.summary(). The adapted capture uses Classes::Auto.",
+      "mitigation": "Fresh pristine None and Auto dumps are byte-identical per case and route and equal the evidence payloads, so the conclusion is unaffected for these three rows.",
+      "required": "State that the failing digest is from the Classes::None particle reference. Record the None==Auto byte-equality that justifies the Auto metadata capture, or capture both."
+    },
+    {
+      "severity": "high",
+      "id": "A2-payload-provenance-unrecorded",
+      "summary": "The receipt and document do not say which execution or file produced historical/*.json and current/*.json. The pristine dumps were not retained in either target/oracle-numerator-diagnosis. The pristine-current assertions.log points to a dumps/ directory that no longer exists. The archived diagnostic patch does not write these payloads.",
+      "required": "Record that they are FEYNKIT_ORACLE_DUMP <case>.classes-{None,Auto}-t1.json from the pristine assertion runs, with their sha256 and the exact env. Retain the dumps or a hash list, and the .census files."
+    },
+    {
+      "severity": "medium",
+      "id": "A3-command-and-env-not-evidenced",
+      "summary": "The receipt command includes FEYNKIT_ORACLE_THREADS=1 FEYNKIT_ORACLE_DUMP, but the retained script COMMAND lines show neither, and the default thread set is [1,8,32]. Pool 1 is therefore not evidenced by the retained logs. Fresh reruns with THREADS=1 reproduce the results. The receipt also does not mention the earlier nextest builds (no --locked; current exit 100).",
+      "required": "Log the env in the captured command, or retain the t1-suffixed dump names. Report the nextest pre-builds."
+    },
+    {
+      "severity": "medium",
+      "id": "A4-elf-is-post-capture-rebuild",
+      "summary": "The retained pristine ELFs were copied after a post-restore rebuild (17:57-17:59, recompiling feynkit-generator), not from the binary that ran assertions.log (17:46). Fresh runs show the cache binary is byte-identical to the retained ELFs and ran without recompiling, so they are qualified now. The receipt should say the hash is of the restored rebuild and record the re-execution.",
+      "required": "Wording, plus a post-rebuild assertion execution record."
+    },
+    {
+      "severity": "medium",
+      "id": "A5-adapted-producer-history-and-elf",
+      "summary": "The adapted producer went through three source versions: two compile failures, r2, then run-decoded, which recompiled. Only the final patch is archived and no adapted ELF is retained. The receipt does not mention this history. My byte-for-byte re-derivation of all six metadata files from the archived patches now qualifies the final patch.",
+      "required": "Record the iteration history and the adapted ELF or its hash, and state which run produced the metadata (run-decoded)."
+    },
+    {
+      "severity": "medium",
+      "id": "A6-request-not-captured",
+      "summary": "last_shared_boundary claims request/options equality, but the captures serialize only model JSON, numerator options, grouping, report and owners. The Request (process, loops, cuts, topology rules, configure closure) and Run are not captured. Equality rests on source identity: the request fn and the cross_section/plain/loop_one_pi/EE/DD/MUMU definitions are textually identical, with report counts equal.",
+      "required": "Qualify the claim as source-level request identity plus equal report counts, or serialize the request."
+    },
+    {
+      "severity": "medium",
+      "id": "A7-validator-binding-overlap-with-B",
+      "summary": "validate.mjs drops all *_interface fields unchecked and never binds the metadata captures to the payload, for example by diagram id, owner set or interface==ports. I verified independently that ids match and that every interface equals the captured ports verbatim, but the certificate does not enforce this. This overlaps with peer B's finding; B owns the mutation evidence.",
+      "required": "Assert interface==current owner ports before omission, owner bijection with payload fragments, and equal diagram id."
+    },
+    {
+      "severity": "low",
+      "id": "A8-metric-composite-and-sorted-order",
+      "summary": "metric/composite come from live is_metric()/is_composite() in each adapted producer, which is native rather than independently derived. The historical port order is the order observed from logical_slots, which happens to be lexicographic. The claim that the historical inferred order is sorted is unsourced (as B also flags).",
+      "required": "Qualify both as observed producer outputs."
+    }
+  ],
+  "guards": {
+    "method": "scripts/guard.sh before/after: temp-index git read-tree of each workspace commit, then diff-files plus untracked-not-ignored; sha256 and modes of every file under target/oracle-numerator-diagnosis; bookmarks, workspaces, op head, processes",
+    "result": "Both workspaces byte- and mode-clean against e1d44235 / 2928717f before and after (only .jj internals listed). Evidence trees unchanged. Task bookmarks unchanged. Both @ unchanged.",
+    "unrelated_shared_movements": [
+      "workspace generation-core-api-fixture added at 18:23:27 (other session)",
+      "generation-rendered-evidence @ 3d1bc1a8 -> 1049e0c3 (other session)",
+      "jj status snapshots 18:15:03 and 18:24:24 by other sessions; this review used only --ignore-working-copy"
+    ],
+    "processes": "No owned processes left running. The duplicate monitor was stopped."
+  },
+  "retained": {
+    "review_dir": ".local/review-oracle-qed-provenance-opus-20261029a",
+    "contents": "guards/{before,after}, scripts/{guard.sh,fresh-pristine.sh,fresh-nodump.sh,adapted.sh,summary.mjs}, runs/pristine-*/dump (full pristine census/classes dumps and failure inventories), runs/nodump-*, runs/adapted-*/{capture,patched-main.rs,run.log,meta.txt}, docs/{report.pdf,html,typst.log,builder-check.log}, summary-recompute.jsonl",
+    "build_cache": "New build-cache dirs /common/build-cache/lcnbr/88/7d54503e1ce811 and 6e/86f18de9f43a18 (adapted ELFs) left in place as shared cache",
+    "note": "This review dir's docs/html/index.html is an untracked .local file that the docs builder walks. Remove it if a later builder check in this workspace needs a clean inventory."
+  }
+}

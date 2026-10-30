@@ -1,0 +1,90 @@
+{
+  "schema": 1,
+  "title": "Three one-diagram QED oracle numerator diagnosis",
+  "scope": "Exactly xs_qed_eedd_L1, xs_qed_eemm_L1, and xs_qed_eeee_1pi_L1 at Classes::Auto, Naming::prefix(\"D\"), Run threads=1, builtin Model::qed, original requests and filters. No expectation migration, all-81 certification, integration, upload, or physical-correctness claim.",
+  "sources": {
+    "historical": {
+      "revision": "2b1ef4f07a44bc061bcc97c378bbdd9c41cb0e94",
+      "workspace_change": "xlwvvpsp",
+      "kernel": "c78cffc20f318df1fce50539a587cbe8ffc717c0",
+      "cargo_lock_sha256": "29abed8df55accfd70d23546274008d42a694c26018b58c7a76bba2e907604b5",
+      "test_main_sha256": "a7d59e30a76bcb73f16f91221835ff1e076d00c78a6d40f266182f395ff7e16d",
+      "cases_sha256": "f9b7e9f80c7d0102c2d2c3b8c319edab7a1c4883109da4e231c6f1189bca00a8",
+      "census_sha256": "9820eeaae584966add033d5e934c30cf660e6821ef4c318a52cd22b5be7782c9"
+    },
+    "current": {
+      "revision": "b9f788922341e7bde2e801a054423ae70ed7e9ae",
+      "workspace_change": "mqnrpynm",
+      "kernel": "1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
+      "cargo_lock_sha256": "0d896231393016a4df0ac9a8a2b8eddee545b4a8d62bc87cdfbd1f2e3230a2cd",
+      "test_main_sha256": "499b49e4d5b58f9796e79e8393399ddc5e3fee24062fe36ae590dffd7bd18aa8",
+      "cases_sha256": "e3ef8ec52578364ef24cf278965eaba2ec967f1f626c707bb7667c2834e319a2",
+      "census_sha256": "b46641d3c13dd70304a457ad4f884cedd486f188ce86dd92c73328a6b1da05d3"
+    },
+    "compiler": "rustc 1.98.1 (48a229cea 2026-09-01), x86_64-unknown-linux-gnu, LLVM 22.1.8",
+    "features": ["feynkit-generator/default", "feynkit-generator/native"],
+    "profile": "dev-optim",
+    "locked": true
+  },
+  "pristine_assertions": {
+    "command": "FEYNKIT_ORACLE_THREADS=1 FEYNKIT_ORACLE_DUMP=<task-owned> nix develop -c cargo test --locked --profile dev-optim -p feynkit-generator --test generation_oracle -- --test-threads 1 --nocapture xs_qed_eedd_L1 xs_qed_eemm_L1 xs_qed_eeee_1pi_L1",
+    "historical": {
+      "result": "3 passed, 0 failed",
+      "producer_sha256": "32d17aaa366493c030d4ce674eeadb08d4e1a07486ede9494dc2302d5b240695",
+      "log_sha256": "3a58c20765efcb812c9f0a7b983ba6b52850e815614bb127fca35e8a509105a3"
+    },
+    "current": {
+      "result": "0 passed, 3 failed at the unchanged numerator assertions",
+      "producer_sha256": "c2ef6aea7f9978606ca0891a5061eafaaf75f952574fb5b3894da04a39cbbe84",
+      "log_sha256": "32ac98b6982bb7818832a2a203e2db4f6f4350a14afbd47c2a5ecd8f05bbf9d6"
+    },
+    "qualification": "Both producers were rebuilt from their own unchanged source, lock, kernel and Nix shell. No historical data was replayed through the current kernel and no record/force-pass mode was used."
+  },
+  "pipeline": {
+    "ordered_stages": [
+      "builtin QED model and exact case request",
+      "topology enumeration and interaction assignment",
+      "Classes::Auto generation",
+      "local numerator construction and typed tensor admission",
+      "Named D build and complete physical payload",
+      "grouping with the original case options",
+      "Census::Summary numerator serialization sequence",
+      "FNV-1a multiset digest"
+    ],
+    "last_shared_boundary": "The complete model, request/options, one graph identity, canonical key, incidence, cuts, signed routing, overall/source factor, group master/member/ratio, local owner set, and every labelled representation/dimension/variance port multiset.",
+    "first_unequal_boundary": "Local numerator representation/export: historical constructor presentation tags versus current notation-owned Q/e labels, plus current explicit interfaces for selected non-inferable local tensors. The first FNV input is already unequal at the aggregate numerator JSON string; this precedes hashing and is not an FNV defect.",
+    "excluded": [
+      "topology or assignment selection",
+      "physical incidence, cuts, routing, weights, group membership or ratios",
+      "named or DiagramId ownership",
+      "a mathematical numerator change within the audited factorized representation",
+      "FNV implementation or multiset ordering"
+    ]
+  },
+  "certificate": {
+    "method": "Bind only five audited constructor spellings and carry each historical typed logical axis to the equal current labelled axis by its explicit permutation. After removing only interface fields whose complete typed ports are proven by that transport, each current complete dump equals its historical dump. No factor is distributed or expanded.",
+    "typed_axes": 92,
+    "permuted_owners": 6,
+    "complete_dumps_equal": 3,
+    "controls_without_sha_guards": [
+      "trailing aggregate numerator factor rejected",
+      "typed dimension corruption rejected",
+      "group ratio corruption rejected"
+    ],
+    "validator": "validate.mjs",
+    "manifest_sha256": "d217da5bd84a425e494e26cd6a18d137b581afdd39ac81569750b41f6156e4b4"
+  },
+  "diagnostic_adaptations": {
+    "current_patch_sha256": "6163aa801a1cbf3ffd951db596c153066f988bf299675a48746b73cef4542d17",
+    "historical_patch_sha256": "e8a34a90d791158c8103442fb07e34e7c2d191eedbe45f8ba8116b2c2b8cf2f3",
+    "purpose": "Observational model/options and live typed-port capture only; no production algorithm, assertion, request, filter, naming, class, grouping or thread option changed.",
+    "restored": "Both workspaces were restored to pristine tracked test source after capture before the pristine producer rebuild."
+  },
+  "limits": [
+    "The result applies only to these three one-diagram QED rows at pool 1.",
+    "Pools 8 and 32 were not certified here.",
+    "It is not retained proof for the other 78 failures or for other model families, grouped membership/master/ratio cases, or broad physical correctness.",
+    "No pin-swapped source/kernel counterfactual was introduced; source and kernel effects are jointly controlled by the two original locked pipelines."
+  ],
+  "next_comparison": "For another model family or a grouped case, repeat the full-key/local-owner typed-axis transport and then compare every group master, member source factor and exact ratio before considering any digest migration."
+}

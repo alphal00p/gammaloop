@@ -1,0 +1,18 @@
+Script started on 2026-10-29 20:20:03+00:00 [COMMAND="nix develop -c rustc -vV" <not executed on terminal>]
+warning: ignoring untrusted flake configuration setting 'extra-substituters'.
+Pass '--accept-flake-config' to trust it
+warning: ignoring untrusted flake configuration setting 'extra-trusted-public-keys'.
+Pass '--accept-flake-config' to trust it
+building '/nix/store/8zzv72n182lpxa3glrwaj0xmrm60l9bc-linnest-wasm-0.1.0.drv'...
+building '/nix/store/p4rk4lcpw9hxf4322xk2jkf0r76fm436-clinnet-deps-0.1.8.drv'...
+building '/nix/store/a032sxg43wb8ihnkfamxa3lxnbfz3pjb-clinnet-0.1.8.drv'...
+building '/nix/store/jxfk43xca4icw8kskqqazsa3mh3jj0xy-nix-shell-env.drv'...
+rustc 1.98.1 (48a229cea 2026-09-01)
+binary: rustc
+commit-hash: 48a229ceaefd4985c50990b14116b6d856af0985
+commit-date: 2026-09-01
+host: x86_64-unknown-linux-gnu
+release: 1.98.1
+LLVM version: 22.1.8
+
+Script done on 2026-10-29 20:22:14+00:00 [COMMAND_EXIT_CODE="0"]

@@ -1,0 +1,73 @@
+{
+  "schema": 1,
+  "reviewer": "independent Opus scope A round 3 (producer, inputs, capture provenance, reporting)",
+  "date": "2026-10-29",
+  "candidate": {
+    "commit": "6476a458e3b11c6c78f95b83ec4a66c6ca40ae2d",
+    "change": "uwkqsnmotwtrklywvupkswkxqyxrqquq",
+    "receipt_sha256": "c0b5f1a041014420375e7d0789230ecfd79469774ebfe8b4e485640e46d41dc8",
+    "semantic_checker_sha256": "f146dc75ea2e21d046e86c968d803b4b82a8c13f4c6ead4644326b7e54ff98de",
+    "validator_sha256": "d9f9151f03095c265060e4507c638fa078125c4de15d44fd5874eb3df93d337b",
+    "report_sha256": "fae085c975b19dbc39bad1a51013c4977b20a623ee4a638ed3575469645597c1"
+  },
+  "verdict": "REQUEST_CHANGES",
+  "verdict_scope": "Scope A only. Every provenance item verified and R2-A1/A2/A4 closed. The one A-owned blocker is report and registry wording that depends on peer B's round-three blocker (review SHA 92b5eb1a...cd439): the report claims a closed schema, which B's mirrored extra-edge-tuple counterexample falsifies. After B's repair (positional length-2 edge tuples, or an explicit array-arity rule) and matching wording, A expects to approve without a new producer run. This is not approval of migration, the other 78 rows, pools 8/32, grouped cases, main or WP3.",
+  "evidence_policy": {
+    "fresh": [
+      "nix develop -c node round3/validate.mjs: exit 0. Manifest, changed-inventory, round-2 anchors, both adapted-ELF hashes, capture-validate, semantic-validate, all 76 controls re-executed, canonical doc check (validate.log)",
+      "typst 0.15.1 PDF and bundle-HTML recompiles, written to a scratch /tmp directory that was then deleted: report.pdf a7ed3265...77298 and index.html eac857f9...a637, byte-equal to bundle.json (fresh-docs.sha256)",
+      "nix develop -c cargo run --locked -p alphal00p-docs-builder -- check: exit 1. Exactly 10 new entries: 8 tracked mark-geometry HTML files plus the 2 retained review HTML files from rounds 1 and 2 (docs-builder.log). Matches bundle.json and the report. This review added no HTML.",
+      "ELF string probes (fixed-string grep): both adapted ELFs contain the patch-only literal 'diagnostic capture: set FEYNKIT_ORACLE_DIAGNOSTIC'; both pristine ELFs lack it. The historical adapted ELF embeds cargo checkout symbolica-db3dbb7e8d40efb5/c78cffc and the current one embeds .../1a1829b, matching each workspace's Cargo.lock. All four ELFs embed rustc commit 48a229ceaefd4985."
+    ],
+    "reused_with_attribution": "Round-2 Opus A fresh producer executions (.local/review-oracle-qed-provenance-opus-round2-20261029184414-1303495, review.json 00fec390...). All 7 hashes in review-inputs/provenance-run-hashes.sha256 still verify (sha256sum -c OK). The round-3 provenance/{historical,current}/{dump,nodump,meta,rustc}.txt files are byte-identical to that review's runs/*. No new producer run was needed: the diff from runtime source b9f78892 to 6476a458 touches only docs/, the historical workspace @ remains 2928717f with an empty diff over 2b1ef4f0, and the pristine ELFs are retained (historical 32d17aaa...0695, current c2ef6aea...be84).",
+    "not_run": "No producer cargo test, rebuild, adapted diagnostic or graph-numerator expansion. Peer B's array-arity probe was not duplicated."
+  },
+  "prior_findings": {
+    "R2-A1": "CLOSED. target/oracle-numerator-diagnosis/adapted-{historical,current}/review-rederived-generation_oracle are regular files with 1 link each, mode 755, and inodes distinct from the cache files. Hashes are 31e9ea39...b01ef and 1a76aa51...66c50, equal to the still-present cache files at /common/build-cache/lcnbr/88/... and /6e/... CARGO_TARGET_DIR is /common/build-cache, so target/oracle-numerator-diagnosis is not a cargo-managed cache. Qualification chain: validate.mjs pins the round-2 receipt, which binds the patched main.rs hashes (c9bca95a... historical, b2c6b6e7... current, committed under round2/provenance), the method and the ELF hashes. Archived patches remain at target/.../archive in each workspace. ELF probes independently confirm patch presence, kernel and compiler. The report correctly says the scratch exports did not survive.",
+    "R2-A2": "CLOSED. The report and receipt now cite the round-2 review's script and logs as reused evidence. fresh.sh explicitly unsets FEYNKIT_ORACLE_RECORD/DUMP/THREADS/DIAGNOSTIC and CARGO_TARGET_DIR. meta.txt prints no FEYNKIT_/CARGO_/RUST variable after the unset. The in-shell environment shows only THREADS=1 plus DUMP (dump runs) or only THREADS=1 (no-dump runs). The report keeps the older-log record-mode absence as an inference only. No license value appears in any log.",
+    "R2-A3": "PARTIALLY CLOSED. The 'complete owner chain' wording was replaced by derived vs observed/pinned lists that are accurate: incidence is limited to port hedges; Q/edge labels, AutG/source factor, aut/symmetry, cuts, keys and routing are cross-route/copy equality plus capture identity; no capture hash is called a mathematical proof. The new 'closed schema' wording reopens an overclaim; see R3-A1.",
+    "R2-A4": "CLOSED. The 12 sources.json companions are retained and byte-equal to their payload JSON and to the round-2 review dumps. Each current oracle-failure-*/left.json is byte-equal to the retained payloads, so the report's 'add no payload' claim holds.",
+    "round1_and_round2_closures": "PRESERVED. Classes::None is asserted and Auto compared. For all 6 route/case pairs, the 18 None/Auto/census files equal round2/provenance (route-correct) and the round-1 raw JSON. capture-validate pins the round-1 manifest and recomputes all six asserted FNV values. Request remains source-qualified; the source is unchanged since round 2 (docs-only diff)."
+  },
+  "inventory_and_preservation": {
+    "diff_vs_round2": "48 added files plus 1 modified file (docs/developers.toml), all under round3/ except the report Typst file. No round-1 or round-2 file is modified. All 49 changed paths on disk equal jj file show -r @.",
+    "changed_inventory": "48 entries cover every changed path except changed-inventory.json itself (self-reference). manifest.sha256 covers every round-3 file except changed-inventory.json, manifest.sha256 and receipt.json. The receipt pins the manifest hash; the commit is the outer anchor. Acceptable.",
+    "refs": "Bookmarks round1 e1d44235, round2 b9992b04, current 6476a458 and historical 2928717f are identical before and after this review."
+  },
+  "findings": [
+    {
+      "id": "R3-A1",
+      "severity": "medium (A-owned wording; overlaps peer B's blocker)",
+      "title": "Report and registry claim a closed schema although array arity is unconstrained",
+      "where": "round3.typ 'In addition, the bounded captured schema is closed.' and 'Every other field remains in the exact cross-route comparison'; developers.toml summary 'Exact-path, closed-schema factor-preserving certificate'",
+      "evidence": "Peer B round 3 (92b5eb1a...): a mirrored extra edges[i][2] element carrying a cloned edge payload with numerator 0, garbage or -1 passes. It is exact on both sides, never owned, never aggregated, and leaves the FNV unchanged. The receipt's domain text ('object-key signatures') is accurate; the prose 'closed' is not.",
+      "remedy": "Land B's positional [incidence,data] length-2 rule, or a general array-arity/leaf-type rule, as a new held-out. Then state exactly what the schema closes: object keys plus whatever array arity is added. Add B's nonblocking qualifications (key-order-sensitive model/options hash; mirrored factor redistribution is capture-bound)."
+    },
+    {
+      "id": "R3-A2",
+      "severity": "informational",
+      "title": "Held-out expectations X14-X17/X23-X24 were author-classified",
+      "evidence": "B's heldouts.mjs marked these '?'. controls-all.mjs overrides X15-X17 from reject? to accept and X24 from accept? to reject; X14 and X23 keep their tentative values. The report's '76 of 76 expected outcomes' is therefore partly author-classified. The paragraph 'classified explicitly according to the semantic/capture boundary' discloses this adequately. Optional: say '70 reviewer-fixed plus 6 author-classified'."
+    },
+    {
+      "id": "R3-A3",
+      "severity": "informational",
+      "title": "capture-validate does not assert the absence of FEYNKIT_ORACLE_RECORD",
+      "evidence": "The logs do show absence, verified by reading them. The validator checks THREADS, DUMP and license but not RECORD or DIAGNOSTIC. Optional: add assert.doesNotMatch for /FEYNKIT_ORACLE_(RECORD|DIAGNOSTIC)=/."
+    },
+    {
+      "id": "R3-A4",
+      "severity": "informational",
+      "title": "Round-3 adapted_elf_retention does not restate the patch/kernel/compiler binding",
+      "evidence": "The binding is reachable only through the pinned round-2 receipt. Optional: cross-reference the round-2 patched-source hashes and the Symbolica checkouts c78cffc/1a1829b from the round-3 receipt."
+    }
+  ],
+  "guards": {
+    "jj": "Only --ignore-working-copy; no snapshot, edit or ref move. GIT_OPTIONAL_LOCKS=0; no main status or index restore.",
+    "tracked_bytes_modes": "Both workspaces' digests are identical before and after (guards/*-tracked.sha).",
+    "elfs": "Adapted and pristine ELF hashes are unchanged (guards/post-elfs.txt); no cache deletion or transplant.",
+    "processes": "I killed my own slow ELF regex grep. No generation_oracle, typst or docs-builder process of this review remains. Running processes from another contributor's review (review-main-core-scope-round2) were not touched.",
+    "temp": "The scratch /tmp PDF/HTML directory was removed. The review directory holds logs and guards only, with no HTML."
+  },
+  "retained": ["review.json", "validate.log", "docs-builder.log", "pdf.log", "html.log", "fresh-docs.sha256", "guards/"]
+}

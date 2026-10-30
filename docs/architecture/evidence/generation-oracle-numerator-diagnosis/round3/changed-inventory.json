@@ -1,0 +1,247 @@
+{
+  "schema": 1,
+  "base": "b9992b04999f0cc9f5d8626691cd7b7ce2e219aa",
+  "scope": "Additive round-three evidence/report plus active registry update; prior rounds and all raw capture bytes remain immutable.",
+  "files": [
+    {
+      "path": "docs/architecture/generation-oracle-numerator-diagnosis-round3.typ",
+      "bytes": 8377,
+      "sha256": "fae085c975b19dbc39bad1a51013c4977b20a623ee4a638ed3575469645597c1"
+    },
+    {
+      "path": "docs/developers.toml",
+      "bytes": 184344,
+      "sha256": "85f3afbd2395cf42d52054c46f6c7e954c717e1bda181b3a2b9875cb2af3eeaf"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-diagnosis/round3/bundle.json",
+      "bytes": 1837,
+      "sha256": "88b339a41a1dabcfb213d8583dc33439c13a451d5ae1d918ec709c288ae236f3"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-diagnosis/round3/manifest.sha256",
+      "bytes": 4621,
+      "sha256": "0d6b6a34b96f508f2e7ae9f83a3e89990031e38dc23949ceceb4a4603b533674"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-diagnosis/round3/prior-rounds.json",
+      "bytes": 990,
+      "sha256": "3981f3c687d6fcb2a3d824a5cf198cab3bb7145b42f87537c5aa78454434ee93"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-diagnosis/round3/proof/build-semantic-contract.mjs",
+      "bytes": 6218,
+      "sha256": "c19bfdd25e92f633c7739cb30961bebd0d745ae82f982b90c11db4f7dfe8aa5d"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-diagnosis/round3/proof/canonical-doc-check.mjs",
+      "bytes": 1196,
+      "sha256": "73432d783f4f2995c9cf6349e9fd2ad6a5e1621f735d740943245bb3f4e53699"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-diagnosis/round3/proof/capture-validate.mjs",
+      "bytes": 4907,
+      "sha256": "d790a136b6e68dce9c401cb3e4bf1821a2568cefdbb14d8e5549aca9551a5aae"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-diagnosis/round3/proof/controls-all.mjs",
+      "bytes": 3324,
+      "sha256": "83e17022d3cfd516d946fa4cbcaf721462e538f6302f31311d891b3147656372"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-diagnosis/round3/proof/controls.mjs",
+      "bytes": 15505,
+      "sha256": "f66a2919977a91a37e532d3d4636fbab2f892350e1ef78bab4d9b24540a71f61"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-diagnosis/round3/proof/heldout-results.json",
+      "bytes": 10275,
+      "sha256": "d0761311844c319847ad495e9ff57bd3d68026b0f2952ddee989bddc800970a5"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-diagnosis/round3/proof/prior-control-results.json",
+      "bytes": 26491,
+      "sha256": "ce3628483cc0b838d7008e52bc2e28324dd7d0834c3949720475b6439041c611"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-diagnosis/round3/proof/semantic-contract.json",
+      "bytes": 52419,
+      "sha256": "c428c7dc28b9ed6a2a14eb612f045abe458263f82f4ed9949a0c0e9d6f585368"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-diagnosis/round3/proof/semantic-validate.mjs",
+      "bytes": 24797,
+      "sha256": "f146dc75ea2e21d046e86c968d803b4b82a8c13f4c6ead4644326b7e54ff98de"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-diagnosis/round3/provenance/current/dump.txt",
+      "bytes": 4702,
+      "sha256": "cc0f4b5ce38bf9bd14bce96c7a775df942518a5cd9f974fb0f2ed32508f5af4e"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-diagnosis/round3/provenance/current/meta.txt",
+      "bytes": 1101,
+      "sha256": "54cc91b5e9591a242a075dddcf0d60069cb4566ede125f2723fb9a47b025ef80"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-diagnosis/round3/provenance/current/nodump.txt",
+      "bytes": 4128,
+      "sha256": "cb41e599538333b99bbf341229ba2bd6cf591ceb924da57932b1cc5705d60b19"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-diagnosis/round3/provenance/current/rustc.txt",
+      "bytes": 441,
+      "sha256": "3c6542f1d3921e647d8fe58aadc39e583a5c189107baf03bd59a8fd9e2efa50c"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-diagnosis/round3/provenance/current/xs_qed_eedd_L1.classes-Auto-t1.sources.json",
+      "bytes": 17336,
+      "sha256": "72035c7055f26bc8ff1119b5960537fd6ca8bbed9f7d18e4b269e079fb379b5e"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-diagnosis/round3/provenance/current/xs_qed_eedd_L1.classes-None-t1.sources.json",
+      "bytes": 17336,
+      "sha256": "72035c7055f26bc8ff1119b5960537fd6ca8bbed9f7d18e4b269e079fb379b5e"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-diagnosis/round3/provenance/current/xs_qed_eeee_1pi_L1.classes-Auto-t1.sources.json",
+      "bytes": 13685,
+      "sha256": "0b41b239ff6db92cdbcdddb90aa1118ea4fbc71ceae9c4a72caad8c875a872e6"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-diagnosis/round3/provenance/current/xs_qed_eeee_1pi_L1.classes-None-t1.sources.json",
+      "bytes": 13685,
+      "sha256": "0b41b239ff6db92cdbcdddb90aa1118ea4fbc71ceae9c4a72caad8c875a872e6"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-diagnosis/round3/provenance/current/xs_qed_eemm_L1.classes-Auto-t1.sources.json",
+      "bytes": 13009,
+      "sha256": "7353727c6fa396655cc3cb1406a0abbd9b938df9c95e9d9f2264448ed1dc59a0"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-diagnosis/round3/provenance/current/xs_qed_eemm_L1.classes-None-t1.sources.json",
+      "bytes": 13009,
+      "sha256": "7353727c6fa396655cc3cb1406a0abbd9b938df9c95e9d9f2264448ed1dc59a0"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-diagnosis/round3/provenance/historical/dump.txt",
+      "bytes": 1072,
+      "sha256": "bcf6175bdd423feaf874994145e27dc1ccf00f22bdad39e734a299ea9e6dbad1"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-diagnosis/round3/provenance/historical/meta.txt",
+      "bytes": 1104,
+      "sha256": "eeb8ebf99a3e8aa20278ae1abe37fa8eb5193f5644795722e446d70232f9dc5d"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-diagnosis/round3/provenance/historical/nodump.txt",
+      "bytes": 894,
+      "sha256": "8a161afb5771493b7461bc7b689a901b0acfafc27267efc95a420ded09c7b1e0"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-diagnosis/round3/provenance/historical/rustc.txt",
+      "bytes": 441,
+      "sha256": "3c6542f1d3921e647d8fe58aadc39e583a5c189107baf03bd59a8fd9e2efa50c"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-diagnosis/round3/provenance/historical/xs_qed_eedd_L1.classes-Auto-t1.sources.json",
+      "bytes": 15562,
+      "sha256": "3dec7bc10c8b6c2136cf2375cbed312c769aafcbdd09e2286418bd31d87dcd89"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-diagnosis/round3/provenance/historical/xs_qed_eedd_L1.classes-None-t1.sources.json",
+      "bytes": 15562,
+      "sha256": "3dec7bc10c8b6c2136cf2375cbed312c769aafcbdd09e2286418bd31d87dcd89"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-diagnosis/round3/provenance/historical/xs_qed_eeee_1pi_L1.classes-Auto-t1.sources.json",
+      "bytes": 13301,
+      "sha256": "5af1ba70956eb150cc4a5dae5c7af014eb3f0d07e6830a8e824b3e094d55a128"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-diagnosis/round3/provenance/historical/xs_qed_eeee_1pi_L1.classes-None-t1.sources.json",
+      "bytes": 13301,
+      "sha256": "5af1ba70956eb150cc4a5dae5c7af014eb3f0d07e6830a8e824b3e094d55a128"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-diagnosis/round3/provenance/historical/xs_qed_eemm_L1.classes-Auto-t1.sources.json",
+      "bytes": 13277,
+      "sha256": "fef76039010f14d76289bced1da8de26120472bd4bbab27d0934ec29761810f7"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-diagnosis/round3/provenance/historical/xs_qed_eemm_L1.classes-None-t1.sources.json",
+      "bytes": 13277,
+      "sha256": "fef76039010f14d76289bced1da8de26120472bd4bbab27d0934ec29761810f7"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-diagnosis/round3/receipt.json",
+      "bytes": 7363,
+      "sha256": "c0b5f1a041014420375e7d0789230ecfd79469774ebfe8b4e485640e46d41dc8"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-diagnosis/round3/review-inputs/controls-sketch.mjs",
+      "bytes": 15725,
+      "sha256": "a2a4cd8b182af6d4d4b512ff2a6dda32cbf29cec53afa0ab7b8352f9416d0b79"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-diagnosis/round3/review-inputs/fnv.mjs",
+      "bytes": 1409,
+      "sha256": "099bae697c8fddd92be2d5db0698e285822811d792f22499f9f8b722c0703395"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-diagnosis/round3/review-inputs/heldouts-remedy-results.json",
+      "bytes": 8943,
+      "sha256": "432d416e5a983e56ea7137eab24a165264c496517233f3d819588413524e4339"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-diagnosis/round3/review-inputs/heldouts-results.json",
+      "bytes": 8607,
+      "sha256": "bcc00ea6d2bd4aea27486f3444a3e983d8249b3259e3d6211893f818787162d7"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-diagnosis/round3/review-inputs/heldouts.mjs",
+      "bytes": 11224,
+      "sha256": "e5d67f3844e677118d97f4f85607e80bbf9f03b260141cc0bd5ca204169f2095"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-diagnosis/round3/review-inputs/math-review.json",
+      "bytes": 8174,
+      "sha256": "f60d02b44d70808e1854c9808cfc1db952ea318ae29186628c1d62fdd1b26a9a"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-diagnosis/round3/review-inputs/myfnv.mjs",
+      "bytes": 1489,
+      "sha256": "da2056ef11feaa54ef90139268db133e7ec6b65511c1dad89ee255399652d4e2"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-diagnosis/round3/review-inputs/patch.diff",
+      "bytes": 774,
+      "sha256": "7db1a6cddfcbefa331b6eb7bc48922cfae750a3369f033bde0776d7b4d15a354"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-diagnosis/round3/review-inputs/provenance-fresh.sh",
+      "bytes": 1680,
+      "sha256": "3b3ad97ea982a2123530d3177596053b7c9030c59a57c449805d33fd9b621dc7"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-diagnosis/round3/review-inputs/provenance-review.json",
+      "bytes": 14478,
+      "sha256": "00fec390fd277857e6af99e28ede1bb2d5e0475dfa676ea17c422bd3452ae421"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-diagnosis/round3/review-inputs/provenance-run-hashes.sha256",
+      "bytes": 1583,
+      "sha256": "64eb87e304fd1f8798d275c07a55a28302146972bb5cf3ac3c018e6772766832"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-diagnosis/round3/review-inputs/semantic-validate.mjs",
+      "bytes": 23876,
+      "sha256": "244deb00a0165c642d2c8d6b4040be384613e0eb20937e0bf0dc0e248767627c"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-diagnosis/round3/validate.mjs",
+      "bytes": 3247,
+      "sha256": "d9f9151f03095c265060e4507c638fa078125c4de15d44fd5874eb3df93d337b"
+    }
+  ]
+}

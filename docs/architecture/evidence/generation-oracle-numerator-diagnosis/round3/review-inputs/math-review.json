@@ -1,0 +1,91 @@
+{
+  "schema": 1,
+  "scope": "B (factorized mathematics, typed interfaces, constructor equivalence)",
+  "reviewer": "independent Opus round2 (fresh)",
+  "verdict": "REQUEST_CHANGES",
+  "candidate": {
+    "commit": "b9992b04999f0cc9f5d8626691cd7b7ce2e219aa",
+    "change": "oowxyvpousmtlosquqmvvnkoysuklxyq",
+    "historical_checkpoint": "2928717fd53ae386ae979145b6cb8c18043a7c45 (unchanged)",
+    "receipt_sha256": "9c11b9f748e79509d91f122107a109cb8bc7a826150ee70a8480f1140b07af08",
+    "validate_sha256": "2928646b226336565f663979520f00c8074b9a3f2c3869cec2906617ee91696d",
+    "semantic_validate_sha256": "a9435be895e75fe707f11a7b161c4957e49b2f0d7b0cbc072db7540e6fba9c6f",
+    "semantic_contract_sha256": "ebbf586bc9c1eea0a2ebf168cedc08c722b478c0042d774288308d92d6ed2c80"
+  },
+  "fresh": [
+    "validate.mjs exit 0",
+    "semantic-validate exit 0: axes 36/28/28=92, nonidentity perms 4/0/2=6 (eedd v0,v1 [4,3,0,1,2]; e2,e3 [3,2,0,1]; eeee v1,v2 [1,0,2]), cooked 14 each, aggregate coef 1+0i",
+    "capture-validate exit 0",
+    "reviewer FNV re-derived from crates/feynkit-generator/tests/generation_oracle/census.rs digest_json/key: f5a21f1a84870bc7->d3ad2f3a0802b6ab, 8b7b40bba961420d->414e2a7a954beae8, 0db0b7cc52558270->1fa84d9ad4fdf0b0 (capture identity only)",
+    "committed 49 controls rerun: 49/49, outcomes identical; accounting 43 round1 records + 6 held-outs is correct",
+    "27 reviewer held-outs (heldouts/results.json)"
+  ],
+  "not_run": [
+    "no producer/ELF execution, no cargo build, no kernel helper (peer A owns provenance)",
+    "no whole-graph expansion"
+  ],
+  "blocker": {
+    "id": "B2-1",
+    "severity": "high (certificate insufficiency; frozen mathematics not shown wrong)",
+    "location": "docs/architecture/evidence/generation-oracle-numerator-diagnosis/round2/proof/semantic-validate.mjs:317-320",
+    "summary": "noExpr removes every key named numerator/numerator_prefactor/projector at ANY depth before the exact historical-vs-current non-numerator comparison, but only the 13-17 known owner paths are semantically compared. A one-sided extra or differing expression-named field at an unknown location is silently accepted. This is the round1 recursive *_interface strip defect re-introduced for expression keys and contradicts the comment at :306-307 and report claim 'never arbitrary recursively named fields'.",
+    "counterexamples": [
+      "X1: current only diagrams[0].numerator='garbage(' -> ACCEPT (FNV unchanged; only manifest SHA catches)",
+      "X2: current only payload.cuts[0].projector='2' -> ACCEPT",
+      "X3: historical only groups[0].members[0].numerator='0' -> ACCEPT",
+      "X4: current only payload.edges[2][0].numerator_prefactor='-1' -> ACCEPT"
+    ],
+    "command": "node .local/review-oracle-qed-math-opus-round2-20261029184614-1367858/heldouts.mjs docs/architecture/evidence/generation-oracle-numerator-diagnosis docs/architecture/evidence/generation-oracle-numerator-diagnosis/round2/proof/semantic-validate.mjs .local/review-oracle-qed-math-opus-round2-20261029184614-1367858/myfnv.mjs .local/review-oracle-qed-math-opus-round2-20261029184614-1367858/heldouts",
+    "expected": "reject: old/current dumps differ outside every checked owner path",
+    "current": "exit 0, failures []",
+    "remedy": "replace recursive noExpr with deletion of exactly payload.{numerator,numerator_prefactor,projector}, vertices[i].numerator, edges[i][1].numerator (mirroring stripKnownInterfaces); add X1-X4 as held-outs. Reviewer sketch (remedy-sketch/patch.diff) rejects X1-X4 and keeps all 49 committed controls and all reviewer valid controls passing."
+  },
+  "required_qualifications": [
+    {
+      "id": "B2-2",
+      "severity": "medium",
+      "summary": "Graph incidence is bound only for port hedge indices. Non-port owner labels (Q/K/P first argument, edge(e,1) dummy labels) are not bound to the owning edge: X15 (eedd edge:2 Q(2,..)->Q(3,..) mirrored in payload locals, aggregate and both live tables) is ACCEPTED. Either bind momentum/edge-index labels in edge fragments to the owner edge id, or narrow the report's 'validates graph incidence' to port hedges."
+    },
+    {
+      "id": "B2-3",
+      "severity": "low",
+      "summary": "Overall/source factor is bound only across its three copies and across routes; X16 (AutG(1)->AutG(2) everywhere on both routes while aut='1', symmetry_factor=1) is ACCEPTED and leaves FNV unchanged. Bind AutG argument to aut/symmetry_factor or state that factor values are cross-route equality + capture SHA only. Same qualification for routing/cuts/key (X17 mirrored LMB sign accepted, FNV unchanged)."
+    },
+    {
+      "id": "B2-4",
+      "severity": "low",
+      "summary": "Metadata owner records and payload objects are schema-open: X23 one-sided unknown live owner field 'interface' and X24 mirrored unknown payload field are ACCEPTED. Close key sets or qualify."
+    },
+    {
+      "id": "B2-5",
+      "severity": "advisory",
+      "summary": "Fully self-consistent mirrored variance (X21) and dimension (X22) changes are rejected only by the frozen producer-observed port lists in semantic-contract.json (probe with port pins disabled accepts them); there is no derived representation/dimension rule. Report should attribute typed-axis rejection to the observed contract, as it already does for flags/historical order. Incidence step 9 is live (probe rejects X27 'port hedge 7 not at vertex'). Comment '13.' has no code; property follows from 9+11+12."
+    },
+    {
+      "id": "B2-6",
+      "severity": "advisory",
+      "summary": "Committed mirrored aggregate/local controls (num-aggregate-mirrored, num-local-mirrored, prefactor-mirrored, projector-variance-mirrored, num-trailing-mirrored-3) reject at the live-binding boundary because live tables were not mirrored; they never reach the aggregate-chain predicate. Reviewer X5-X9, X13 (fully mirrored incl. live) confirm the chain predicate fires on coefficient, sign, unary/power precedence and multiplicity; add them."
+    }
+  ],
+  "confirmed": [
+    "closed whole-head constructor map Q/K/P/edge/vertex consistent with contract authority; only Q and edge occur; foreign/prefix/label/namespace heads reject",
+    "parser: integer Gaussian coefficients, unary minus binds looser than ^, ^ right-assoc, implicit products/decimals/'+' unary reject; equivalent 𝑖^3 and -𝑖*g accepted (X10,X11); -𝑖^3 and (-𝑖)^3 traps rejected (X8,X9)",
+    "owner bijection both sides, current live == payload, historical live decodes via injective consistent cooked map (single-owner swap X18 rejects; global alpha-rename X19 and symmetric g swap X20 accepted)",
+    "interfaces: exact owner paths, ordered equality to live ports, presence pinned; consistent transposes accepted with FNV change; whitespace-equivalent slot accepted (X25)",
+    "aggregate factor multiset + exact coefficient equals local product; prefactor*numerator*projector fully contracted; no expansion",
+    "group shape master 0/one member/source 0/ratio 1 is the forced value for single-diagram Grouping none, not an accidental equality"
+  ],
+  "limits": [
+    "three one-diagram rows at pool 1 only; no other78, pools 8/32, grouped cases, main, WP3 or physics-general claim",
+    "consistent mirrored physics changes (X14) are only rejected by capture identity, by design",
+    "cooked hashes not recomputed from hedges; decoding is alignment-based"
+  ],
+  "overlap_for_parent": "Scope A: none of the B findings depend on producer provenance; B did not credit or rerun any producer. B2-3 (overall factor/routing only capture-bound) touches A's capture-identity statement.",
+  "hygiene": {
+    "tracked_edits": "none; evidence 65 files byte-identical before/after; @ b9992b04 unchanged; historical @ 2928717f unchanged",
+    "refs": "task bookmarks unchanged; unrelated shared bookmarks generation-integration-core-test-inference-{base,code} appeared during review (not mine)",
+    "note": "one plain 'jj status' run (no --ignore-working-copy) created no operation and left @ unchanged",
+    "processes": "none left"
+  },
+  "retained": "this directory (copied-data controls, held-out harness/results, remedy sketch, probe) for re-review"
+}

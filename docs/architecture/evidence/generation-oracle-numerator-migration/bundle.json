@@ -1,0 +1,23 @@
+{
+  "schema": 1,
+  "source": "docs/architecture/generation-oracle-numerator-migration.typ",
+  "source_sha256": "973db0f95b77043459c7aa2e0b4198230da8909b56ffc66c9ab35a6b3a6a1f99",
+  "wrapper": "target/oracle-numerator-migration/wrapper.typ",
+  "wrapper_sha256": "5078357cb00ae3b6d4e9355e749d93f3140344faaa0cdfd5caf29a3fffc3df57",
+  "pdf": {
+    "path": "target/oracle-numerator-migration/bundle/report.pdf",
+    "sha256": "4d8fbf159fafe6ae1f309a8003a76f5de217e24c8c2a32ffee56991fbc311ef1",
+    "log_sha256": "dcee0b79eba167bdafd7fd579c2147bc74b8bc3c3f5b086c7aa33562e62f7799"
+  },
+  "html": {
+    "path": "target/oracle-numerator-migration/bundle/html/index.html",
+    "sha256": "189ac863098623a2b4bd61fecc16c76e423d447ec34cece8d17b1c13f9b2cb99",
+    "log_sha256": "71eea3aa32307bd6d5289f735924e8ef582bdc180a333f59d1d036df8b4da735"
+  },
+  "full_docs": {
+    "result": "exit 1: eight inherited tracked mark-geometry HTML files plus two retained review HTML files",
+    "log": "target/oracle-numerator-migration/docs-builder.log",
+    "log_sha256": "482d96029a4e0f141b8c67b4e2700cb3a6174ab3bea04229cadbee91e2eed9f4"
+  },
+  "typst": "0.15.1"
+}

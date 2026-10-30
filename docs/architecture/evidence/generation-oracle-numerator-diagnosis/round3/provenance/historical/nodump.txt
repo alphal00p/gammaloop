@@ -1,0 +1,17 @@
+warning: ignoring untrusted flake configuration setting 'extra-substituters'.
+Pass '--accept-flake-config' to trust it
+warning: ignoring untrusted flake configuration setting 'extra-trusted-public-keys'.
+Pass '--accept-flake-config' to trust it
+CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER=/nix/store/z4c6k0mrlkwl3s4w9ysxc8vq1wylm3ms-gcc-wrapper-15.3.0/bin/gcc
+FEYNKIT_ORACLE_THREADS=1
+RUSTFLAGS=-C linker=/nix/store/z4c6k0mrlkwl3s4w9ysxc8vq1wylm3ms-gcc-wrapper-15.3.0/bin/gcc
+    Finished `dev-optim` profile [optimized + debuginfo] target(s) in 0.32s
+     Running tests/generation_oracle/main.rs (/common/build-cache/lcnbr/31/cee24e4a757ac1/dev-optim/deps/generation_oracle-ded84c41ff366641)
+
+running 3 tests
+test xs_qed_eedd_L1 ... ok
+test xs_qed_eeee_1pi_L1 ... ok
+test xs_qed_eemm_L1 ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 161 filtered out; finished in 0.08s
+

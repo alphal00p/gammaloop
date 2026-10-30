@@ -1,0 +1,631 @@
+{
+  "schema": 1,
+  "controls": 49,
+  "passed": 49,
+  "results": [
+    {
+      "id": "iface-delete-entry",
+      "expected": "reject",
+      "actual": "reject",
+      "pass": true,
+      "capture_fnv_changed": true,
+      "desc": "current vertex:0 num_interface loses one axis",
+      "failures": [
+        "xs_qed_eedd_L1: vertex:0: serialized interface != live ordered ports"
+      ],
+      "stderr": ""
+    },
+    {
+      "id": "iface-extra-entry",
+      "expected": "reject",
+      "actual": "reject",
+      "pass": true,
+      "capture_fnv_changed": true,
+      "desc": "current vertex:0 num_interface gains a foreign axis",
+      "failures": [
+        "xs_qed_eedd_L1: vertex:0: serialized interface != live ordered ports"
+      ],
+      "stderr": ""
+    },
+    {
+      "id": "iface-wrong-variance",
+      "expected": "reject",
+      "actual": "reject",
+      "pass": true,
+      "capture_fnv_changed": true,
+      "desc": "current vertex:0 interface: dind(cof) -> cof",
+      "failures": [
+        "xs_qed_eedd_L1: vertex:0: serialized interface != live ordered ports"
+      ],
+      "stderr": ""
+    },
+    {
+      "id": "iface-wrong-dimension",
+      "expected": "reject",
+      "actual": "reject",
+      "pass": true,
+      "capture_fnv_changed": true,
+      "desc": "current edge:2 interface bis(4)->bis(5)",
+      "failures": [
+        "xs_qed_eedd_L1: edge:2: serialized interface != live ordered ports"
+      ],
+      "stderr": ""
+    },
+    {
+      "id": "iface-swapped-owner",
+      "expected": "reject",
+      "actual": "reject",
+      "pass": true,
+      "capture_fnv_changed": true,
+      "desc": "current vertex:0/vertex:1 interfaces swapped",
+      "failures": [
+        "xs_qed_eedd_L1: vertex:0: serialized interface != live ordered ports",
+        "xs_qed_eedd_L1: vertex:1: serialized interface != live ordered ports"
+      ],
+      "stderr": ""
+    },
+    {
+      "id": "iface-deleted-record",
+      "expected": "reject",
+      "actual": "reject",
+      "pass": true,
+      "capture_fnv_changed": true,
+      "desc": "current edge:2 num_interface removed (null) while live order is explicit",
+      "failures": [
+        "xs_qed_eedd_L1: edge:2: malformed serialized interface"
+      ],
+      "stderr": ""
+    },
+    {
+      "id": "iface-malformed",
+      "expected": "reject",
+      "actual": "reject",
+      "pass": true,
+      "capture_fnv_changed": true,
+      "desc": "current vertex:0 num_interface is a garbage string",
+      "failures": [
+        "xs_qed_eedd_L1: vertex:0: malformed serialized interface"
+      ],
+      "stderr": ""
+    },
+    {
+      "id": "iface-extra-field",
+      "expected": "reject",
+      "actual": "reject",
+      "pass": true,
+      "capture_fnv_changed": false,
+      "desc": "unknown extra_interface field on a group member",
+      "failures": [
+        "xs_qed_eemm_L1: interface field outside exact owner path $/groups/0/members/0/bogus_interface",
+        "xs_qed_eemm_L1: payload schema keys unsupported at $/groups/*/members/*: [\"bogus_interface\",\"id\",\"name\",\"overall_factor\",\"ratio\",\"source_index\"]",
+        "xs_qed_eemm_L1: unexpected interface field /groups/0/members/0/bogus_interface"
+      ],
+      "stderr": ""
+    },
+    {
+      "id": "iface-projector-nonnull",
+      "expected": "reject",
+      "actual": "reject",
+      "pass": true,
+      "capture_fnv_changed": true,
+      "desc": "current projector_interface becomes non-null wrong axis list",
+      "failures": [
+        "xs_qed_eedd_L1: payload schema keys unsupported at $/diagrams/*/payload: [\"cuts\",\"edges\",\"half_edge_order\",\"loop_momentum_basis\",\"model\",\"numerator\",\"numerator_prefactor\",\"overall_factor\",\"projector\",\"projector_interface\",\"symmetry_factor\",\"topology_threshold_candidates\",\"vertices\"]",
+        "xs_qed_eedd_L1: projector: interface presence differs from producer contract",
+        "xs_qed_eedd_L1: projector: serialized interface != live ordered ports"
+      ],
+      "stderr": ""
+    },
+    {
+      "id": "valid-iface-consistent-reorder",
+      "expected": "accept",
+      "actual": "accept",
+      "pass": true,
+      "capture_fnv_changed": true,
+      "desc": "current vertex:0 interface and its live ports reversed together (consistent transpose)",
+      "failures": [],
+      "stderr": ""
+    },
+    {
+      "id": "meta-variance-mirrored",
+      "expected": "reject",
+      "actual": "reject",
+      "pass": true,
+      "capture_fnv_changed": false,
+      "desc": "both live port lists: dind(cof) -> cof on vertex:0 (strings still agree)",
+      "failures": [
+        "xs_qed_eedd_L1: vertex:0: current live ports [\"spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(3,1))\",\"spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(4,1))\",\"spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(6,1))\",\"spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(3,1))\",\"spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(4,1))\"] != free [\"spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(4,1)))\",\"spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(3,1))\",\"spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(3,1))\",\"spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(4,1))\",\"spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(6,1))\"]",
+        "xs_qed_eedd_L1: vertex:0: historical live ports != free [\"spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(4,1)))\",\"spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(3,1))\",\"spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(3,1))\",\"spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(4,1))\",\"spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(6,1))\"]",
+        "xs_qed_eedd_L1: vertex:0: serialized interface != live ordered ports"
+      ],
+      "stderr": ""
+    },
+    {
+      "id": "meta-dimension-mirrored",
+      "expected": "reject",
+      "actual": "reject",
+      "pass": true,
+      "capture_fnv_changed": false,
+      "desc": "both live port lists: mink(4)->mink(5) vertex:2",
+      "failures": [
+        "xs_qed_eedd_L1: vertex:2: current live ports [\"spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(0,1))\",\"spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(1,1))\",\"spenso::{spenso::representation,spenso::self_dual}::mink(5,gammalooprs::{spenso::index}::hedge(9,1))\"] != free [\"spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(0,1))\",\"spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(1,1))\",\"spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(9,1))\"]",
+        "xs_qed_eedd_L1: vertex:2: historical live ports != free [\"spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(0,1))\",\"spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(1,1))\",\"spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(9,1))\"]",
+        "xs_qed_eedd_L1: vertex:2: missing interface does not use observed inferred order"
+      ],
+      "stderr": ""
+    },
+    {
+      "id": "meta-dimension-onesided",
+      "expected": "reject",
+      "actual": "reject",
+      "pass": true,
+      "capture_fnv_changed": false,
+      "desc": "current live ports mink(4)->mink(5) vertex:2",
+      "failures": [
+        "xs_qed_eedd_L1: vertex:2: current live ports [\"spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(0,1))\",\"spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(1,1))\",\"spenso::{spenso::representation,spenso::self_dual}::mink(5,gammalooprs::{spenso::index}::hedge(9,1))\"] != free [\"spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(0,1))\",\"spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(1,1))\",\"spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(9,1))\"]",
+        "xs_qed_eedd_L1: vertex:2: missing interface does not use observed inferred order",
+        "xs_qed_eedd_L1: vertex:2: transport not bijective"
+      ],
+      "stderr": ""
+    },
+    {
+      "id": "meta-owner-duplicate",
+      "expected": "reject",
+      "actual": "reject",
+      "pass": true,
+      "capture_fnv_changed": false,
+      "desc": "current owner table duplicates vertex:0",
+      "failures": [
+        "xs_qed_eedd_L1: duplicate owner",
+        "xs_qed_eedd_L1: current owner table [\"vertex:0\",\"vertex:1\",\"vertex:2\",\"vertex:3\",\"edge:0\",\"edge:1\",\"edge:2\",\"edge:3\",\"edge:4\",\"edge:5\",\"numerator\",\"prefactor\",\"projector\",\"vertex:0\"] != payload owners"
+      ],
+      "stderr": ""
+    },
+    {
+      "id": "meta-owner-missing-current",
+      "expected": "reject",
+      "actual": "reject",
+      "pass": true,
+      "capture_fnv_changed": false,
+      "desc": "current owner table drops edge:2",
+      "failures": [
+        "xs_qed_eedd_L1: current owner table [\"vertex:0\",\"vertex:1\",\"vertex:2\",\"vertex:3\",\"edge:0\",\"edge:1\",\"edge:3\",\"edge:4\",\"edge:5\",\"numerator\",\"prefactor\",\"projector\"] != payload owners",
+        "xs_qed_eedd_L1: owner edge:2 missing",
+        "xs_qed_eedd_L1: aggregate numerator factors != product of local factors"
+      ],
+      "stderr": ""
+    },
+    {
+      "id": "meta-owner-missing-both",
+      "expected": "reject",
+      "actual": "reject",
+      "pass": true,
+      "capture_fnv_changed": false,
+      "desc": "both owner tables drop edge:2",
+      "failures": [
+        "xs_qed_eedd_L1: historical owner table [\"vertex:0\",\"vertex:1\",\"vertex:2\",\"vertex:3\",\"edge:0\",\"edge:1\",\"edge:3\",\"edge:4\",\"edge:5\",\"numerator\",\"prefactor\",\"projector\"] != payload owners",
+        "xs_qed_eedd_L1: current owner table [\"vertex:0\",\"vertex:1\",\"vertex:2\",\"vertex:3\",\"edge:0\",\"edge:1\",\"edge:3\",\"edge:4\",\"edge:5\",\"numerator\",\"prefactor\",\"projector\"] != payload owners",
+        "xs_qed_eedd_L1: owner edge:2 missing"
+      ],
+      "stderr": ""
+    },
+    {
+      "id": "meta-owner-extra-historical",
+      "expected": "reject",
+      "actual": "reject",
+      "pass": true,
+      "capture_fnv_changed": false,
+      "desc": "historical owner table gains vertex:9",
+      "failures": [
+        "xs_qed_eedd_L1: historical owner table [\"vertex:0\",\"vertex:1\",\"vertex:2\",\"vertex:3\",\"edge:0\",\"edge:1\",\"edge:2\",\"edge:3\",\"edge:4\",\"edge:5\",\"numerator\",\"prefactor\",\"projector\",\"vertex:9\"] != payload owners"
+      ],
+      "stderr": ""
+    },
+    {
+      "id": "meta-owner-swapped-mirrored",
+      "expected": "reject",
+      "actual": "reject",
+      "pass": true,
+      "capture_fnv_changed": false,
+      "desc": "vertex:0<->vertex:1 owner labels swapped in both live tables",
+      "failures": [
+        "xs_qed_eedd_L1: vertex:0: current live expression != payload fragment",
+        "xs_qed_eedd_L1: vertex:0: current live ports [\"spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(2,1))\",\"spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(5,1))\",\"spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(8,1))\",\"spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(5,1))\",\"spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(2,1)))\"] != free [\"spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(4,1)))\",\"spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(3,1))\",\"spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(3,1))\",\"spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(4,1))\",\"spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(6,1))\"]",
+        "xs_qed_eedd_L1: vertex:0: historical live ports != free [\"spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(4,1)))\",\"spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(3,1))\",\"spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(3,1))\",\"spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(4,1))\",\"spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(6,1))\"]"
+      ],
+      "stderr": ""
+    },
+    {
+      "id": "meta-expression-current",
+      "expected": "reject",
+      "actual": "reject",
+      "pass": true,
+      "capture_fnv_changed": false,
+      "desc": "current live vertex:0 expression -> 0",
+      "failures": [
+        "xs_qed_eedd_L1: vertex:0: current live expression != payload fragment"
+      ],
+      "stderr": ""
+    },
+    {
+      "id": "meta-expression-historical",
+      "expected": "reject",
+      "actual": "reject",
+      "pass": true,
+      "capture_fnv_changed": false,
+      "desc": "historical live vertex:0 expression -> 2*expr",
+      "failures": [
+        "xs_qed_eedd_L1: exception vertex:0: historical live expression does not decode to payload fragment"
+      ],
+      "stderr": ""
+    },
+    {
+      "id": "meta-flags-mirrored",
+      "expected": "reject",
+      "actual": "reject",
+      "pass": true,
+      "capture_fnv_changed": false,
+      "desc": "both live tables mark vertex:0 metric=true",
+      "failures": [
+        "xs_qed_eedd_L1: vertex:0: producer-observed metric/composite flags changed"
+      ],
+      "stderr": ""
+    },
+    {
+      "id": "meta-report",
+      "expected": "reject",
+      "actual": "reject",
+      "pass": true,
+      "capture_fnv_changed": false,
+      "desc": "current metadata report retained_count changed",
+      "failures": [
+        "xs_qed_eedd_L1: metadata report differs",
+        "xs_qed_eedd_L1: semantic-contract report"
+      ],
+      "stderr": ""
+    },
+    {
+      "id": "num-trailing-current",
+      "expected": "reject",
+      "actual": "reject",
+      "pass": true,
+      "capture_fnv_changed": true,
+      "desc": "current aggregate numerator *2",
+      "failures": [
+        "xs_qed_eedd_L1: numerator: payload expression differs beyond constructor map",
+        "xs_qed_eedd_L1: numerator: current live expression != payload fragment",
+        "xs_qed_eedd_L1: aggregate coefficient 2,0 != local product 1,0"
+      ],
+      "stderr": ""
+    },
+    {
+      "id": "num-aggregate-mirrored",
+      "expected": "reject",
+      "actual": "reject",
+      "pass": true,
+      "capture_fnv_changed": true,
+      "desc": "both aggregate numerators *2 (local fragments untouched)",
+      "failures": [
+        "xs_qed_eedd_L1: numerator: current live expression != payload fragment",
+        "xs_qed_eedd_L1: exception numerator: historical live expression does not decode to payload fragment"
+      ],
+      "stderr": ""
+    },
+    {
+      "id": "num-local-mirrored",
+      "expected": "reject",
+      "actual": "reject",
+      "pass": true,
+      "capture_fnv_changed": true,
+      "desc": "both edge:4 photon fragments lose (-i) factor (aggregate untouched)",
+      "failures": [
+        "xs_qed_eedd_L1: edge:4: current live expression != payload fragment",
+        "xs_qed_eedd_L1: exception edge:4: historical live expression does not decode to payload fragment"
+      ],
+      "stderr": ""
+    },
+    {
+      "id": "prefactor-mirrored",
+      "expected": "reject",
+      "actual": "reject",
+      "pass": true,
+      "capture_fnv_changed": true,
+      "desc": "both numerator_prefactor -> 2",
+      "failures": [
+        "xs_qed_eeee_1pi_L1: prefactor: current live expression != payload fragment",
+        "xs_qed_eeee_1pi_L1: exception prefactor: historical live expression does not decode to payload fragment"
+      ],
+      "stderr": ""
+    },
+    {
+      "id": "prefactor-current",
+      "expected": "reject",
+      "actual": "reject",
+      "pass": true,
+      "capture_fnv_changed": true,
+      "desc": "current numerator_prefactor -> 2",
+      "failures": [
+        "xs_qed_eeee_1pi_L1: prefactor: payload expression differs beyond constructor map",
+        "xs_qed_eeee_1pi_L1: prefactor: current live expression != payload fragment",
+        "xs_qed_eeee_1pi_L1: prefactor binding"
+      ],
+      "stderr": ""
+    },
+    {
+      "id": "projector-variance-mirrored",
+      "expected": "reject",
+      "actual": "reject",
+      "pass": true,
+      "capture_fnv_changed": true,
+      "desc": "both projectors: u bis(hedge0) -> mink (uncontracted)",
+      "failures": [
+        "xs_qed_eedd_L1: projector: current live expression != payload fragment",
+        "xs_qed_eedd_L1: exception projector: historical live expression does not decode to payload fragment"
+      ],
+      "stderr": ""
+    },
+    {
+      "id": "overall-factor-mirrored",
+      "expected": "reject",
+      "actual": "reject",
+      "pass": true,
+      "capture_fnv_changed": false,
+      "desc": "both member overall_factor sign flipped (diagram factor untouched)",
+      "failures": [
+        "xs_qed_eemm_L1: historical group/member/source-factor binding",
+        "xs_qed_eemm_L1: current group/member/source-factor binding"
+      ],
+      "stderr": ""
+    },
+    {
+      "id": "ratio-current",
+      "expected": "reject",
+      "actual": "reject",
+      "pass": true,
+      "capture_fnv_changed": false,
+      "desc": "current member ratio -> 2",
+      "failures": [
+        "xs_qed_eemm_L1: non-owner dump content differs (exact, no text mapping)",
+        "xs_qed_eemm_L1: current group shape"
+      ],
+      "stderr": ""
+    },
+    {
+      "id": "ratio-mirrored",
+      "expected": "reject",
+      "actual": "reject",
+      "pass": true,
+      "capture_fnv_changed": false,
+      "desc": "both member ratios -> 2",
+      "failures": [
+        "xs_qed_eemm_L1: historical group shape",
+        "xs_qed_eemm_L1: current group shape"
+      ],
+      "stderr": ""
+    },
+    {
+      "id": "master-mirrored",
+      "expected": "reject",
+      "actual": "reject",
+      "pass": true,
+      "capture_fnv_changed": false,
+      "desc": "both group masters -> 1 (nonexistent member)",
+      "failures": [
+        "xs_qed_eemm_L1: historical group shape",
+        "xs_qed_eemm_L1: current group shape"
+      ],
+      "stderr": ""
+    },
+    {
+      "id": "member-source-mirrored",
+      "expected": "reject",
+      "actual": "reject",
+      "pass": true,
+      "capture_fnv_changed": false,
+      "desc": "both member source_index -> 1",
+      "failures": [
+        "xs_qed_eemm_L1: historical group shape",
+        "xs_qed_eemm_L1: current group shape"
+      ],
+      "stderr": ""
+    },
+    {
+      "id": "routing-current",
+      "expected": "reject",
+      "actual": "reject",
+      "pass": true,
+      "capture_fnv_changed": false,
+      "desc": "current loop routing sign flipped",
+      "failures": [
+        "xs_qed_eedd_L1: non-owner dump content differs (exact, no text mapping)"
+      ],
+      "stderr": ""
+    },
+    {
+      "id": "ctor-foreign-in-current",
+      "expected": "reject",
+      "actual": "reject",
+      "pass": true,
+      "capture_fnv_changed": true,
+      "desc": "one current Q uses the historical (tagged) spelling",
+      "failures": [
+        "xs_qed_eedd_L1: numerator: unsupported current symbol head gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:q}::Q",
+        "xs_qed_eedd_L1: numerator: current live expression != payload fragment",
+        "xs_qed_eedd_L1: aggregate numerator factors != product of local factors"
+      ],
+      "stderr": ""
+    },
+    {
+      "id": "ctor-namespace",
+      "expected": "reject",
+      "actual": "reject",
+      "pass": true,
+      "capture_fnv_changed": true,
+      "desc": "current Q namespace gammalooprs -> other",
+      "failures": [
+        "xs_qed_eedd_L1: numerator: unsupported current symbol head other::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q",
+        "xs_qed_eedd_L1: numerator: payload expression differs beyond constructor map",
+        "xs_qed_eedd_L1: numerator: current live expression != payload fragment"
+      ],
+      "stderr": ""
+    },
+    {
+      "id": "ctor-label",
+      "expected": "reject",
+      "actual": "reject",
+      "pass": true,
+      "capture_fnv_changed": true,
+      "desc": "current Q -> K constructor (label mismatch)",
+      "failures": [
+        "xs_qed_eedd_L1: numerator: unsupported current symbol head gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::K",
+        "xs_qed_eedd_L1: numerator: payload expression differs beyond constructor map",
+        "xs_qed_eedd_L1: numerator: current live expression != payload fragment"
+      ],
+      "stderr": ""
+    },
+    {
+      "id": "ctor-prefix-extension",
+      "expected": "reject",
+      "actual": "reject",
+      "pass": true,
+      "capture_fnv_changed": true,
+      "desc": "current edge index head renamed edgeX (prefix of mapped spelling)",
+      "failures": [
+        "xs_qed_eedd_L1: numerator: unsupported current symbol head gammalooprs::{spenso::index}::edgeX",
+        "xs_qed_eedd_L1: numerator: unsupported historical symbol head gammalooprs::{spenso::index,spenso::index-label:e}::edgeX",
+        "xs_qed_eedd_L1: numerator: payload expression differs beyond constructor map"
+      ],
+      "stderr": ""
+    },
+    {
+      "id": "ratio-mirrored-3",
+      "expected": "reject",
+      "actual": "reject",
+      "pass": true,
+      "capture_fnv_changed": false,
+      "desc": "both member ratios -> 3",
+      "failures": [
+        "xs_qed_eemm_L1: historical group shape",
+        "xs_qed_eemm_L1: current group shape"
+      ],
+      "stderr": ""
+    },
+    {
+      "id": "num-trailing-mirrored-3",
+      "expected": "reject",
+      "actual": "reject",
+      "pass": true,
+      "capture_fnv_changed": true,
+      "desc": "both aggregate numerators *3",
+      "failures": [
+        "xs_qed_eemm_L1: numerator: current live expression != payload fragment",
+        "xs_qed_eemm_L1: exception numerator: historical live expression does not decode to payload fragment"
+      ],
+      "stderr": ""
+    },
+    {
+      "id": "heldout-foreign-symbol-mirrored",
+      "expected": "reject",
+      "actual": "reject",
+      "pass": true,
+      "capture_fnv_changed": true,
+      "desc": "foreign coupling head mirrored through both payloads and live expressions",
+      "failures": [
+        "xs_qed_eemm_L1: vertex:0: unsupported current symbol head Foreign::{}::GC_3",
+        "xs_qed_eemm_L1: vertex:0: unsupported historical symbol head Foreign::{}::GC_3",
+        "xs_qed_eemm_L1: vertex:1: unsupported current symbol head Foreign::{}::GC_3"
+      ],
+      "stderr": ""
+    },
+    {
+      "id": "heldout-inferred-order-reorder",
+      "expected": "reject",
+      "actual": "reject",
+      "pass": true,
+      "capture_fnv_changed": false,
+      "desc": "missing-interface owner live order changed",
+      "failures": [
+        "xs_qed_eemm_L1: vertex:0: missing interface does not use observed inferred order"
+      ],
+      "stderr": ""
+    },
+    {
+      "id": "heldout-model-mirrored",
+      "expected": "reject",
+      "actual": "reject",
+      "pass": true,
+      "capture_fnv_changed": false,
+      "desc": "captured model parameter changed on both routes",
+      "failures": [
+        "xs_qed_eemm_L1: semantic-contract model"
+      ],
+      "stderr": ""
+    },
+    {
+      "id": "heldout-unknown-historical-interface",
+      "expected": "reject",
+      "actual": "reject",
+      "pass": true,
+      "capture_fnv_changed": false,
+      "desc": "unknown historical group interface field",
+      "failures": [
+        "xs_qed_eemm_L1: interface field outside exact owner path $/groups/0/members/0/foreign_interface",
+        "xs_qed_eemm_L1: payload schema keys unsupported at $/groups/*/members/*: [\"foreign_interface\",\"id\",\"name\",\"overall_factor\",\"ratio\",\"source_index\"]",
+        "xs_qed_eemm_L1: historical carries interface fields /groups/0/members/0/foreign_interface"
+      ],
+      "stderr": ""
+    },
+    {
+      "id": "heldout-diagram-id-mirrored",
+      "expected": "reject",
+      "actual": "reject",
+      "pass": true,
+      "capture_fnv_changed": false,
+      "desc": "diagram id changed consistently across payload and live tables",
+      "failures": [
+        "xs_qed_eemm_L1: semantic-contract diagram id"
+      ],
+      "stderr": ""
+    },
+    {
+      "id": "valid-identity",
+      "expected": "accept",
+      "actual": "accept",
+      "pass": true,
+      "capture_fnv_changed": false,
+      "desc": "rewrite with no change",
+      "failures": [],
+      "stderr": ""
+    },
+    {
+      "id": "valid-key-order",
+      "expected": "accept",
+      "actual": "accept",
+      "pass": true,
+      "capture_fnv_changed": false,
+      "desc": "current JSON object keys reordered",
+      "failures": [],
+      "stderr": ""
+    },
+    {
+      "id": "valid-owner-order",
+      "expected": "accept",
+      "actual": "accept",
+      "pass": true,
+      "capture_fnv_changed": false,
+      "desc": "live owner tables reordered",
+      "failures": [],
+      "stderr": ""
+    },
+    {
+      "id": "valid-heldout-eeee-interface-transpose",
+      "expected": "accept",
+      "actual": "accept",
+      "pass": true,
+      "capture_fnv_changed": true,
+      "desc": "second case explicit interface and live ports transposed consistently",
+      "failures": [],
+      "stderr": ""
+    }
+  ]
+}

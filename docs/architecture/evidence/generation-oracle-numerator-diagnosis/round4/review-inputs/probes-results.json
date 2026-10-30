@@ -1,0 +1,372 @@
+[
+ {
+  "id": "G1-mirrored-edge-tuple-extra-numerator",
+  "expect": "reject",
+  "semantic": "reject",
+  "capture_sha_unchanged": false,
+  "fnv_changed": false,
+  "editError": null,
+  "desc": "both payloads: edges[2] gains 3rd tuple element = clone of edge data with numerator 'garbage('",
+  "failures": [
+   "xs_qed_eedd_L1: unexpected interface field /diagrams/0/payload/edges/2/2/num_interface",
+   "xs_qed_eedd_L1: non-owner dump content differs (exact, no text mapping)"
+  ]
+ },
+ {
+  "id": "G1b-onesided-edge-tuple-extra-numerator",
+  "expect": "reject",
+  "semantic": "reject",
+  "capture_sha_unchanged": false,
+  "fnv_changed": false,
+  "editError": null,
+  "desc": "current only: same extra tuple element",
+  "failures": [
+   "xs_qed_eedd_L1: unexpected interface field /diagrams/0/payload/edges/2/2/num_interface",
+   "xs_qed_eedd_L1: non-owner dump content differs (exact, no text mapping)"
+  ]
+ },
+ {
+  "id": "G2-mirrored-edge-tuple-extra-iface",
+  "expect": "reject",
+  "semantic": "reject",
+  "capture_sha_unchanged": false,
+  "fnv_changed": false,
+  "editError": null,
+  "desc": "both payloads: edges[2] 3rd element with num_interface",
+  "failures": [
+   "xs_qed_eedd_L1: unexpected interface field /diagrams/0/payload/edges/2/2/num_interface",
+   "xs_qed_eedd_L1: non-owner dump content differs (exact, no text mapping)"
+  ]
+ },
+ {
+  "id": "G3-mirrored-edge-tuple-extra-incidence",
+  "expect": "reject",
+  "semantic": "accept",
+  "capture_sha_unchanged": false,
+  "fnv_changed": false,
+  "editError": null,
+  "desc": "both payloads: edges[2] gains extra {source,target} element",
+  "failures": []
+ },
+ {
+  "id": "G4-mirrored-edge-tuple-position-swap",
+  "expect": "reject",
+  "semantic": "reject",
+  "capture_sha_unchanged": false,
+  "fnv_changed": "fnv-error The first argument must be of type string or an instance of Buffer, ArrayBuffer, or Array or an Array-like Object. Received undefined",
+  "editError": null,
+  "desc": "both payloads: edges[2] = [data, incidence]",
+  "failures": [
+   "xs_qed_eedd_L1: unexpected interface field /diagrams/0/payload/edges/2/0/num_interface",
+   "xs_qed_eedd_L1: vertex:0: port hedge 3 not at vertex",
+   "xs_qed_eedd_L1: vertex:0: port hedge 3 not at vertex",
+   "xs_qed_eedd_L1: vertex:1: port hedge 2 not at vertex"
+  ]
+ },
+ {
+  "id": "G5-mirrored-scalar-to-array-aut",
+  "expect": "capture",
+  "semantic": "accept",
+  "capture_sha_unchanged": false,
+  "fnv_changed": false,
+  "editError": null,
+  "desc": "both: diagram aut 1 -> [1] (type change, value)",
+  "failures": []
+ },
+ {
+  "id": "G6-mirrored-scalar-to-array-expression-string",
+  "expect": "capture",
+  "semantic": "accept",
+  "capture_sha_unchanged": false,
+  "fnv_changed": false,
+  "editError": null,
+  "desc": "both: symmetry_factor -> ['garbage('] (expression-like string in scalar array)",
+  "failures": []
+ },
+ {
+  "id": "G7-mirrored-number-to-string-source_slot",
+  "expect": "capture",
+  "semantic": "accept",
+  "capture_sha_unchanged": false,
+  "fnv_changed": false,
+  "editError": null,
+  "desc": "both: edges[2][1].source_slot number -> string",
+  "failures": []
+ },
+ {
+  "id": "G8-mirrored-nesting-cut-element-array",
+  "expect": "reject",
+  "semantic": "reject",
+  "capture_sha_unchanged": false,
+  "fnv_changed": false,
+  "editError": null,
+  "desc": "both: cuts[0].cut[0] wrapped in extra array",
+  "failures": [
+   "xs_qed_eedd_L1: payload schema keys unsupported at $/diagrams/*/payload/cuts/*/cut/*/*: [\"edge\",\"endpoint\"]",
+   "xs_qed_eedd_L1: payload schema keys unsupported at $/diagrams/*/payload/cuts/*/cut/*/*: [\"edge\",\"endpoint\"]"
+  ]
+ },
+ {
+  "id": "G9-mirrored-extra-group",
+  "expect": "reject",
+  "semantic": "reject",
+  "capture_sha_unchanged": false,
+  "fnv_changed": false,
+  "editError": null,
+  "desc": "both: second group",
+  "failures": [
+   "xs_qed_eedd_L1: historical group shape",
+   "xs_qed_eedd_L1: current group shape"
+  ]
+ },
+ {
+  "id": "G10-mirrored-missing-key-half_edge_order",
+  "expect": "reject",
+  "semantic": "reject",
+  "capture_sha_unchanged": false,
+  "fnv_changed": false,
+  "editError": null,
+  "desc": "both: delete payload.half_edge_order",
+  "failures": [
+   "xs_qed_eedd_L1: payload schema keys unsupported at $/diagrams/*/payload: [\"cuts\",\"edges\",\"loop_momentum_basis\",\"model\",\"numerator\",\"numerator_prefactor\",\"overall_factor\",\"projector\",\"symmetry_factor\",\"topology_threshold_candidates\",\"vertices\"]",
+   "xs_qed_eedd_L1: payload schema keys unsupported at $/diagrams/*/payload: [\"cuts\",\"edges\",\"loop_momentum_basis\",\"model\",\"numerator\",\"numerator_prefactor\",\"overall_factor\",\"projector\",\"symmetry_factor\",\"topology_threshold_candidates\",\"vertices\"]",
+   "xs_qed_eedd_L1: exception Cannot read properties of undefined (reading '3')"
+  ]
+ },
+ {
+  "id": "G11-mirrored-missing-edge-optional-iface-both",
+  "expect": "reject",
+  "semantic": "reject",
+  "capture_sha_unchanged": false,
+  "fnv_changed": true,
+  "editError": null,
+  "desc": "both payload+contract: delete edges[2][1].num_interface on current (optional signature admitted)",
+  "failures": [
+   "xs_qed_eedd_L1: edge:2: interface presence differs from producer contract"
+  ]
+ },
+ {
+  "id": "G12-historical-gains-edge-iface",
+  "expect": "reject",
+  "semantic": "reject",
+  "capture_sha_unchanged": false,
+  "fnv_changed": true,
+  "editError": null,
+  "desc": "historical edges[2][1] gains num_interface (signature admitted by union)",
+  "failures": [
+   "xs_qed_eedd_L1: historical carries interface fields /diagrams/0/payload/edges/2/1/num_interface",
+   "xs_qed_eedd_L1: edge:2: historical interface present"
+  ]
+ },
+ {
+  "id": "G13-mirrored-numerator-in-vertex-extra",
+  "expect": "reject",
+  "semantic": "reject",
+  "capture_sha_unchanged": false,
+  "fnv_changed": true,
+  "editError": null,
+  "desc": "both payloads: extra vertex (no owner rows)",
+  "failures": [
+   "xs_qed_eedd_L1: historical owner table [\"vertex:0\",\"vertex:1\",\"vertex:2\",\"vertex:3\",\"edge:0\",\"edge:1\",\"edge:2\",\"edge:3\",\"edge:4\",\"edge:5\",\"numerator\",\"prefactor\",\"projector\"] != payload owners",
+   "xs_qed_eedd_L1: current owner table [\"vertex:0\",\"vertex:1\",\"vertex:2\",\"vertex:3\",\"edge:0\",\"edge:1\",\"edge:2\",\"edge:3\",\"edge:4\",\"edge:5\",\"numerator\",\"prefactor\",\"projector\"] != payload owners",
+   "xs_qed_eedd_L1: owner vertex:4 missing"
+  ]
+ },
+ {
+  "id": "G14-metadata-owner-in-extra-diagram-field",
+  "expect": "reject",
+  "semantic": "reject",
+  "capture_sha_unchanged": false,
+  "fnv_changed": false,
+  "editError": null,
+  "desc": "metadata-current: owner gets ports as string",
+  "failures": [
+   "xs_qed_eedd_L1: exception oC.ports.map is not a function"
+  ]
+ },
+ {
+  "id": "G15-numerator-type-array",
+  "expect": "reject",
+  "semantic": "reject",
+  "capture_sha_unchanged": false,
+  "fnv_changed": true,
+  "editError": null,
+  "desc": "both payloads+live: vertex:0 numerator wrapped in array",
+  "failures": [
+   "xs_qed_eedd_L1: exception s.startsWith is not a function"
+  ]
+ },
+ {
+  "id": "G16-iface-type-string",
+  "expect": "reject",
+  "semantic": "reject",
+  "capture_sha_unchanged": false,
+  "fnv_changed": true,
+  "editError": null,
+  "desc": "current: vertex:0 num_interface as joined string",
+  "failures": [
+   "xs_qed_eedd_L1: vertex:0: malformed serialized interface"
+  ]
+ },
+ {
+  "id": "G17-iface-null",
+  "expect": "reject",
+  "semantic": "reject",
+  "capture_sha_unchanged": false,
+  "fnv_changed": true,
+  "editError": null,
+  "desc": "current: vertex:0 num_interface null",
+  "failures": [
+   "xs_qed_eedd_L1: vertex:0: malformed serialized interface"
+  ]
+ },
+ {
+  "id": "G18-key-edges-extra-numerator-array",
+  "expect": "reject",
+  "semantic": "accept",
+  "capture_sha_unchanged": false,
+  "fnv_changed": true,
+  "editError": null,
+  "desc": "both: diagram key.edges[0] gains extra element with numerator",
+  "failures": []
+ },
+ {
+  "id": "V1-all-files-key-reversal",
+  "expect": "accept",
+  "semantic": "reject",
+  "capture_sha_unchanged": false,
+  "fnv_changed": true,
+  "editError": null,
+  "desc": "every object in all 4 files of all cases with reversed key order",
+  "failures": [
+   "xs_qed_eedd_L1: semantic-contract model",
+   "xs_qed_eedd_L1: semantic-contract options",
+   "xs_qed_eemm_L1: semantic-contract model",
+   "xs_qed_eemm_L1: semantic-contract options"
+  ]
+ },
+ {
+  "id": "V2-aggregate-factor-reorder-mirrored",
+  "expect": "accept",
+  "semantic": "accept",
+  "capture_sha_unchanged": false,
+  "fnv_changed": true,
+  "editError": null,
+  "desc": "eedd aggregate numerator top-level factors reversed in both payloads and live",
+  "failures": []
+ },
+ {
+  "id": "V3-current-iface-transpose-eedd-edge2",
+  "expect": "accept",
+  "semantic": "accept",
+  "capture_sha_unchanged": false,
+  "fnv_changed": true,
+  "editError": null,
+  "desc": "current edge:2 serialized interface and live ports reversed consistently",
+  "failures": []
+ },
+ {
+  "id": "V4-coef-equivalent-i-squared",
+  "expect": "accept",
+  "semantic": "accept",
+  "capture_sha_unchanged": false,
+  "fnv_changed": true,
+  "editError": null,
+  "desc": "eedd edge:4 (-𝑖)* -> 𝑖*𝑖*𝑖* everywhere local",
+  "failures": []
+ },
+ {
+  "id": "V5-coef-double-neg",
+  "expect": "accept",
+  "semantic": "accept",
+  "capture_sha_unchanged": false,
+  "fnv_changed": true,
+  "editError": null,
+  "desc": "eedd edge:4 (-𝑖)* -> -(-(-𝑖))* everywhere local",
+  "failures": []
+ },
+ {
+  "id": "V6-iface-whitespace-all",
+  "expect": "accept",
+  "semantic": "accept",
+  "capture_sha_unchanged": false,
+  "fnv_changed": false,
+  "editError": null,
+  "desc": "current: spaces after every comma in all serialized interfaces of eemm",
+  "failures": []
+ },
+ {
+  "id": "V7-owner-table-reverse-both",
+  "expect": "accept",
+  "semantic": "accept",
+  "capture_sha_unchanged": false,
+  "fnv_changed": false,
+  "editError": null,
+  "desc": "metadata owners arrays reversed (both)",
+  "failures": []
+ },
+ {
+  "id": "T1-coef-i-squared-wrong",
+  "expect": "reject",
+  "semantic": "reject",
+  "capture_sha_unchanged": false,
+  "fnv_changed": true,
+  "editError": null,
+  "desc": "edge:4 (-𝑖)* -> 𝑖*𝑖* (=-1) everywhere local",
+  "failures": [
+   "xs_qed_eedd_L1: aggregate coefficient 1,0 != local product 0,-1"
+  ]
+ },
+ {
+  "id": "T2-factor-moved-into-sum",
+  "expect": "reject",
+  "semantic": "reject",
+  "capture_sha_unchanged": false,
+  "fnv_changed": true,
+  "editError": null,
+  "desc": "aggregate: GC_1^2 -> GC_1*(GC_1) unchanged? no: -> (GC_1+0)*GC_1",
+  "failures": [
+   "xs_qed_eedd_L1: numerator: unsupported current symbol head UFO::{}::",
+   "xs_qed_eedd_L1: numerator: unsupported current symbol head GC_1",
+   "xs_qed_eedd_L1: numerator: unsupported historical symbol head UFO::{}::",
+   "xs_qed_eedd_L1: numerator: unsupported historical symbol head GC_1"
+  ]
+ },
+ {
+  "id": "T3-div-coefficient",
+  "expect": "reject",
+  "semantic": "reject",
+  "capture_sha_unchanged": false,
+  "fnv_changed": true,
+  "editError": null,
+  "desc": "aggregate gains *2/2 (rational not reduced, conservative)",
+  "failures": [
+   "xs_qed_eedd_L1: aggregate numerator factors != product of local factors",
+   "xs_qed_eedd_L1: aggregate coefficient 2,0 != local product 1,0"
+  ]
+ },
+ {
+  "id": "T4-power-zero",
+  "expect": "reject",
+  "semantic": "reject",
+  "capture_sha_unchanged": false,
+  "fnv_changed": true,
+  "editError": null,
+  "desc": "aggregate gains *GC_1^0 (conservative)",
+  "failures": [
+   "xs_qed_eedd_L1: numerator: unsupported current symbol head GC_1",
+   "xs_qed_eedd_L1: numerator: unsupported historical symbol head GC_1",
+   "xs_qed_eedd_L1: aggregate numerator factors != product of local factors"
+  ]
+ },
+ {
+  "id": "T5-local-factor-moved-between-owners",
+  "expect": "accept?",
+  "semantic": "accept",
+  "capture_sha_unchanged": false,
+  "fnv_changed": true,
+  "editError": null,
+  "desc": "eedd: move (-𝑖) from edge:4 to edge:3 (local redistribution; aggregate product preserved)",
+  "failures": []
+ }
+]

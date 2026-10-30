@@ -1,0 +1,44 @@
+Script started on 2026-10-29 20:07:19+00:00 [COMMAND="bash target/oracle-numerator-migration/run-old.sh 32 target/oracle-numerator-migration/old/dump-p32" <not executed on terminal>]
+source=16bfd2c84ea1fdeba0c8087cc6cdc8f1082f11a8
+pool=32
+dump=target/oracle-numerator-migration/old/dump-p32
+record=unset diagnostic=unset update=unset
+elf=target/oracle-numerator-migration/old/generation_oracle
+argv=--test-threads 1 --nocapture xs_qed_eedd_L1 xs_qed_eemm_L1 xs_qed_eeee_1pi_L1
+
+running 3 tests
+test xs_qed_eedd_L1 ... xs_qed_eedd_L1: historical row: complete failure inventories: target/oracle-numerator-migration/old/dump-p32/oracle-failure-xs_qed_eedd_L1__historical_row-3458574
+
+thread 'xs_qed_eedd_L1' (3458575) panicked at crates/feynkit-generator/tests/generation_oracle/main.rs:147:9:
+assertion `left == right` failed: xs_qed_eedd_L1: summary differs from its oracle row
+  left: Summary { diagrams: 1, topologies: 17, assignments: 34, inverse_symmetry: Fraction { numerator: 1, denominator: 1 }, weights: Fraction { numerator: -1, denominator: 1 }, symmetry_factors: [(1, 1)], content: 12999594963008401146, numerators: 15252899439262742187, named: 15938435765113127527, ids: 6407438128916878803 }
+ right: Summary { diagrams: 1, topologies: 17, assignments: 34, inverse_symmetry: Fraction { numerator: 1, denominator: 1 }, weights: Fraction { numerator: -1, denominator: 1 }, symmetry_factors: [(1, 1)], content: 12999594963008401146, numerators: 17699743684272524231, named: 15938435765113127527, ids: 6407438128916878803 }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+test xs_qed_eeee_1pi_L1 ... xs_qed_eeee_1pi_L1: historical row: complete failure inventories: target/oracle-numerator-migration/old/dump-p32/oracle-failure-xs_qed_eeee_1pi_L1__historical_row-3458574
+
+thread 'xs_qed_eeee_1pi_L1' (3459268) panicked at crates/feynkit-generator/tests/generation_oracle/main.rs:147:9:
+assertion `left == right` failed: xs_qed_eeee_1pi_L1: summary differs from its oracle row
+  left: Summary { diagrams: 1, topologies: 3, assignments: 4, inverse_symmetry: Fraction { numerator: 1, denominator: 1 }, weights: Fraction { numerator: -1, denominator: 1 }, symmetry_factors: [(1, 1)], content: 9693693735513158291, numerators: 2281158538656870576, named: 17702699951451974615, ids: 17831975467429499839 }
+ right: Summary { diagrams: 1, topologies: 3, assignments: 4, inverse_symmetry: Fraction { numerator: 1, denominator: 1 }, weights: Fraction { numerator: -1, denominator: 1 }, symmetry_factors: [(1, 1)], content: 9693693735513158291, numerators: 986490406576685680, named: 17702699951451974615, ids: 17831975467429499839 }
+FAILED
+test xs_qed_eemm_L1 ... xs_qed_eemm_L1: historical row: complete failure inventories: target/oracle-numerator-migration/old/dump-p32/oracle-failure-xs_qed_eemm_L1__historical_row-3458574
+
+thread 'xs_qed_eemm_L1' (3459725) panicked at crates/feynkit-generator/tests/generation_oracle/main.rs:147:9:
+assertion `left == right` failed: xs_qed_eemm_L1: summary differs from its oracle row
+  left: Summary { diagrams: 1, topologies: 17, assignments: 34, inverse_symmetry: Fraction { numerator: 1, denominator: 1 }, weights: Fraction { numerator: -1, denominator: 1 }, symmetry_factors: [(1, 1)], content: 9447115182819179791, numerators: 4705745366627904232, named: 17585428203571335429, ids: 17138230670786534741 }
+ right: Summary { diagrams: 1, topologies: 17, assignments: 34, inverse_symmetry: Fraction { numerator: 1, denominator: 1 }, weights: Fraction { numerator: -1, denominator: 1 }, symmetry_factors: [(1, 1)], content: 9447115182819179791, numerators: 10050698168152179213, named: 17585428203571335429, ids: 17138230670786534741 }
+FAILED
+
+failures:
+
+failures:
+    xs_qed_eedd_L1
+    xs_qed_eeee_1pi_L1
+    xs_qed_eemm_L1
+
+test result: FAILED. 0 passed; 3 failed; 0 ignored; 0 measured; 180 filtered out; finished in 0.35s
+
+exit=101
+
+Script done on 2026-10-29 20:07:20+00:00 [COMMAND_EXIT_CODE="101"]

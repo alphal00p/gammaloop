@@ -1,0 +1,18 @@
+Script started on 2026-10-29 20:09:51+00:00 [COMMAND="bash target/oracle-numerator-migration/run-new.sh 8 target/oracle-numerator-migration/new/dump-p8" <not executed on terminal>]
+source=migration-working-copy
+pool=8
+dump=target/oracle-numerator-migration/new/dump-p8
+record=unset diagnostic=unset update=unset
+elf=target/oracle-numerator-migration/new/generation_oracle
+argv=--test-threads 1 --nocapture xs_qed_eedd_L1 xs_qed_eemm_L1 xs_qed_eeee_1pi_L1
+
+running 3 tests
+test xs_qed_eedd_L1 ... ok
+test xs_qed_eeee_1pi_L1 ... ok
+test xs_qed_eemm_L1 ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 180 filtered out; finished in 0.27s
+
+exit=0
+
+Script done on 2026-10-29 20:09:52+00:00 [COMMAND_EXIT_CODE="0"]

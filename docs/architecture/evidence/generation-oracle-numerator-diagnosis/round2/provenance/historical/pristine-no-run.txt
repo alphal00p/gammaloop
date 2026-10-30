@@ -1,0 +1,8 @@
+warning: ignoring untrusted flake configuration setting 'extra-substituters'.
+Pass '--accept-flake-config' to trust it
+warning: ignoring untrusted flake configuration setting 'extra-trusted-public-keys'.
+Pass '--accept-flake-config' to trust it
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Finished `dev-optim` profile [optimized + debuginfo] target(s) in 0.48s
+  Executable tests/generation_oracle/main.rs (/common/build-cache/lcnbr/31/cee24e4a757ac1/dev-optim/deps/generation_oracle-ded84c41ff366641)

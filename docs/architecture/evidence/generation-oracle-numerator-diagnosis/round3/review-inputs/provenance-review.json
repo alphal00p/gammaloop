@@ -1,0 +1,124 @@
+{
+  "schema": 1,
+  "reviewer": "independent Opus scope A round 2 (producer, inputs, capture provenance, reporting)",
+  "date": "2026-10-29",
+  "candidate": {
+    "commit": "b9992b04999f0cc9f5d8626691cd7b7ce2e219aa",
+    "change": "oowxyvpousmtlosquqmvvnkoysuklxyq",
+    "bookmark": "generation-oracle-numerator-diagnosis",
+    "parent_round1": "e1d44235bfe064fd76027a8938195df4f227bdb7 (generation-oracle-numerator-diagnosis-round1)",
+    "historical_checkpoint": "2928717fd53ae386ae979145b6cb8c18043a7c45 (source 2b1ef4f07a44bc061bcc97c378bbdd9c41cb0e94, empty diff to source)",
+    "receipt_sha256": "9c11b9f748e79509d91f122107a109cb8bc7a826150ee70a8480f1140b07af08",
+    "validator_sha256": "2928646b226336565f663979520f00c8074b9a3f2c3869cec2906617ee91696d",
+    "semantic_checker_sha256": "a9435be895e75fe707f11a7b161c4957e49b2f0d7b0cbc072db7540e6fba9c6f",
+    "correction_typ_sha256": "eaa06fcda696ce094466bbaec41e88e2aa855df32d8c0068c1e43c3088a76852"
+  },
+  "verdict": "REQUEST_CHANGES",
+  "verdict_scope": "Scope A only. Not an approval of migration, the other 78 rows, pools 8/32, main integration or WP3.",
+  "summary": "Fresh execution independently reproduces every producer, payload, census and bridge claim; A1, A3, A4, A5, A6 and A8 are closed and A2 is closed by fresh bytes. Changes are requested because (1) the report calls the review-rederived adapted ELFs 'retained' although they exist only in the mutable shared build cache with no task-owned copy, (2) the report calls the provenance logs 'environment-bearing' although they contain no environment, and (3) the report's 'complete' owner/expression/interface wording exceeds what the semantic checker enforces, per peer B finding B2-1 (overlap; B owns the repair, A owns the wording).",
+  "fresh_evidence": {
+    "script": "scripts/fresh.sh (sha256 in run-hashes.sha256)",
+    "env_policy": "FEYNKIT_ORACLE_RECORD/DUMP/THREADS/DIAGNOSTIC and CARGO_TARGET_DIR explicitly unset; SYMBOLICA_LICENSE preserved or loaded from config, value never printed; in-shell FEYNKIT_*/CARGO_TARGET*/RUSTFLAGS environment printed at the head of each log",
+    "command": "FEYNKIT_ORACLE_THREADS=1 [FEYNKIT_ORACLE_DUMP=<review>/runs/<route>/dump] nix develop -c cargo test --locked --profile dev-optim -p feynkit-generator --test generation_oracle -- --test-threads 1 --nocapture xs_qed_eedd_L1 xs_qed_eemm_L1 xs_qed_eeee_1pi_L1",
+    "historical": {
+      "workspace": "generation-oracle-numerator-historical @ 2928717f",
+      "elf": "/common/build-cache/lcnbr/31/cee24e4a757ac1/dev-optim/deps/generation_oracle-ded84c41ff366641 sha256 32d17aaa366493c030d4ce674eeadb08d4e1a07486ede9494dc2302d5b240695 before and after (no rebuild); equals retained copy target/oracle-numerator-diagnosis/pristine-historical/generation_oracle",
+      "dump_run": "exit 0; 3 passed, 0 failed, 161 filtered; no RECORD row printed",
+      "nodump_run": "exit 0; 3 passed, 0 failed, 161 filtered",
+      "rustc": "1.98.1 (48a229cea 2026-09-01) commit 48a229ceaefd4985c50990b14116b6d856af0985",
+      "kernel_lock": "symbolica rev c78cffc20f318df1fce50539a587cbe8ffc717c0"
+    },
+    "current": {
+      "workspace": "generation-oracle-numerator-diagnosis @ b9992b04 (non-docs content identical to runtime b9f78892)",
+      "elf": "/common/build-cache/lcnbr/14/f78654d42ee4d7/dev-optim/deps/generation_oracle-c4b54249fc0354d6 sha256 c2ef6aea7f9978606ca0891a5061eafaaf75f952574fb5b3894da04a39cbbe84 before and after; equals retained copy target/oracle-numerator-diagnosis/pristine-current/generation_oracle",
+      "dump_run": "exit 101; 0 passed, 3 failed, 180 filtered; panic main.rs:147 Summary assertion",
+      "nodump_run": "exit 101; identical 3 failures and identical numerator values",
+      "non_numerator_summary_fields": "left == right for all 3 cases in both runs after removing only the numerators field",
+      "asserted_values": "left numerators d3ad2f3a0802b6ab / 414e2a7a954beae8 / 1fa84d9ad4fdf0b0; right (oracle row) f5a21f1a84870bc7 / 8b7b40bba961420d / 0db0b7cc52558270; historical source rows are identical",
+      "rustc": "1.98.1 (48a229cea 2026-09-01)",
+      "kernel_lock": "symbolica branch main #1a1829b1f3d0a88b53b44085b3b9f34ef77945b3"
+    },
+    "byte_parity": "All 18 fresh files (None, Auto, census x 3 cases x 2 routes) are byte-identical to round2/provenance and to round-one raw historical/current JSON. Fresh None == Auto for every route/case; *.sources.json == *.json (Grouping::None ptr_eq copy).",
+    "features": "feynkit-generator default = [native] on both routes; no feature flags passed",
+    "fresh_timestamps": "historical 18:48:26Z-18:49:13Z, current 18:49:18Z-18:50:33Z"
+  },
+  "reused_evidence_validated": {
+    "prior_review_A": ".local/review-oracle-qed-provenance-opus-20261029a (review.json 747af1ff5de3c62c4a1034cd7600d83345933f53f8cb207c37b300b59794c9b8). Its pristine dumps, census, assertion/no-run logs, adapted captures and patched-main.rs are byte-identical to round2/provenance and round-one metadata; its scripts set THREADS/DUMP inline but did not unset FEYNKIT_ORACLE_RECORD for pristine runs (absence of record mode is inferable from log behaviour and now captured freshly).",
+    "round1_attempt_logs": "All six adapted run/run-r2/run-decoded hashes in receipt.adapted_capture.recoverable_round1_logs resolve under target/oracle-numerator-diagnosis. Round-one nextest run.log: historical exit 0, current exit 100, no --locked. Original assertion logs 3a58c207... (17:46-17:48Z) and 32ac98b6...; ELF copies come from 17:57-17:59Z --locked --no-run rebuilds that recompiled feynkit-generator. Timeline in report matches.",
+    "patches": "Applying archive/{historical,current}-observational.patch to main.rs from 2928717f and b9f78892 reproduces round2/provenance/*/patched-main.rs and the prior review copies byte for byte. Patch touches only tests/generation_oracle/main.rs.",
+    "adapted_elfs": "31e9ea393246f513f6c7fdbf55fe8a425213ae3276751c95cf8ddbeda47b01ef and 1a76aa5134431c7436340c6f231b48e5fba66a67e47e19eaaf376e386b466c50 currently resolve only at /common/build-cache/lcnbr/88/... and /common/build-cache/lcnbr/6e/...; the scratch source exports that produced them were removed; no task- or review-owned copy exists.",
+    "fnv": "capture-validate.mjs and review-inputs/fnv.mjs implement the same byte sequence as census.rs Entry::digest_json + Summary numerators multiset on both routes (code read); recomputed six digests equal the u64 values actually asserted by the fresh producers."
+  },
+  "ownership_checks": {
+    "asserted_route": "main.rs::check uses classes::check(case), which returns particle_reference = Classes::None census at the first thread count; the dump classes-None-t1.json is write_exact_dump of that same named census. Confirmed in both routes' sources.",
+    "uncook_owner": "Diagnostic uses CookSettings::indices().with_mode(ReversibleEncoding).with_representation_payloads(true,true), which matches NumeratorInterface::admit/export in each route's feynkit-graph/src/numerator_interface.rs. Ports are post-generation observations from logical_slots, as qualified.",
+    "request_sources": "Case::request/model/grouping, cross_section, plain, loop_one_pi, EE/DD/MUMU are textually identical across routes; only difference is current Case::numerators() = default().with_zero_color_filter(false) for these cases vs historical NumeratorOptions::default(); captured serialized options are identical (filter_zero_color false, prefactor 1, projector null, naming D). The receipt binds these by prose plus immutable commits, not by file hashes; acceptable, verified here.",
+    "metadata_binding": "Metadata diagram IDs equal payload IDs for all 6; model JSON equal across routes; payload model hash 392f722f... equal across routes; current owner expressions equal payload fragments for all 13 owners x 3; census differs only in per-diagram numerator digest; reports 17/34, 17/34, 3/4 completed.",
+    "symbols": "feynkit-graph/src/symbols.rs sha256 0a13fee3...174b (historical) and b580b7c7...aa9d (current) match semantic-contract."
+  },
+  "prior_findings": {
+    "A1": "CLOSED. Report and receipt state Classes::None is asserted and Auto is compared; fresh None==Auto bytes for all six.",
+    "A2": "CLOSED. Missing original dump directories explicitly qualified; raw bytes now bound to fresh recapture (and again by this review).",
+    "A3": "CLOSED with wording issue R2-A2. Earlier nextest prebuilds recorded with exits; env/pool1 now bound by command and fresh env capture here.",
+    "A4": "CLOSED. ELFs described as later rebuilds; fresh executions of identical bytes without recompilation.",
+    "A5": "PARTIAL. Iterations/failed builds/missing ELFs recorded and patched sources verified; 'retained adapted ELFs' wording is false (R2-A1).",
+    "A6": "CLOSED. Request/Run non-serialization qualified; source definitions verified identical.",
+    "A7": "PARTIAL via overlap with peer B2-1; ID/owner/expression binding exists but the checker accepts rogue expression fields and unknown metadata keys, so 'complete' wording overclaims (R2-A3).",
+    "A8": "CLOSED. Metric/composite/order and ports are labelled observed producer outputs decoded after logical_slots."
+  },
+  "findings": [
+    {
+      "id": "R2-A1",
+      "severity": "medium",
+      "title": "Adapted ELFs reported as retained exist only in the mutable shared build cache",
+      "where": "correction.typ 'Its retained adapted ELFs are historical 31e9ea39...b01ef and current 1a76aa51...66c50'; receipt.adapted_capture.review_rederivation",
+      "evidence": "Only copies: /common/build-cache/lcnbr/88/7d54503e1ce811/.../generation_oracle-ded84c41ff366641 and /common/build-cache/lcnbr/6e/86f18de9f43a18/.../generation_oracle-c4b54249fc0354d6. Not under target/oracle-numerator-diagnosis or any review directory; producing scratch exports deleted. Hashes currently resolve.",
+      "remedy": "Copy both ELFs into task-owned target/oracle-numerator-diagnosis/adapted-*/ (as for pristine ELFs) and record path+hash in the receipt, or reword to 'present in the shared build cache at review time, not retained'."
+    },
+    {
+      "id": "R2-A2",
+      "severity": "low",
+      "title": "Provenance logs described as environment-bearing",
+      "where": "correction.typ 'exact environment-bearing logs'; receipt.producer_controls.fresh_command 'RECORD unset'",
+      "evidence": "round2/provenance/*/pristine-assertions.txt contain no environment; the reused prior script did not unset FEYNKIT_ORACLE_RECORD. Record mode absence is inferable (no row printed, assertions executed) and is now captured in this review's runs/*/dump.log and nodump.log.",
+      "remedy": "Reword to 'command-line environment from the retained script; record mode excluded by log behaviour', or cite this review's env-bearing logs as REUSED review evidence."
+    },
+    {
+      "id": "R2-A3",
+      "severity": "high (overlap, owned by peer B)",
+      "title": "Report claims a complete owner/expression/interface chain beyond what the checker enforces",
+      "where": "correction.typ 'Complete semantic boundary', 'Every interface-like field is rejected outside its exact known owner'; receipt.semantic_certificate.owner_boundary; registry summary 'complete factor-preserving semantic owner certificate'",
+      "evidence": "Peer B2-1 (report sha f60d02b4...): recursive stripping of numerator/numerator_prefactor/projector at arbitrary paths lets four one-sided rogue expression fields pass with FNV unchanged; unknown metadata keys accepted. A did not re-derive B's mutations.",
+      "remedy": "After B's repair, keep 'complete' wording only if the exact-path checker and new held-outs land; otherwise qualify. Also state B's qualifications (incidence-only derivation, capture-bound source factor/routing values) in the report."
+    },
+    {
+      "id": "R2-A4",
+      "severity": "informational",
+      "title": "Dump companions not retained",
+      "evidence": "*.classes-*-t1.sources.json and current oracle-failure-* inventories were omitted from round2/provenance; sources.json is byte-identical to the retained json (Grouping::None copy), so nothing is lost. Mention it for completeness."
+    }
+  ],
+  "docs": {
+    "registry": "single active entry points to correction.typ with corrected title/status; round-one Typst remains byte-identical and unregistered, its errors identified in the correction text (Auto vs None, ELF origin).",
+    "pdf": "fresh nix develop -c typst compile --root . --creation-timestamp 0 ... -> 894fc4daa0367f82ed3f83e7528250cbe2650830fb628bc2a9fc2c485f58490e (matches bundle.json); typst 0.15.1",
+    "html": "fresh bundle compile of target/oracle-numerator-diagnosis/round2-wrapper.typ -> index.html 020fce56fed2c8f06b069909322136ea2ced4d8140d93a3fb12dc3db50db4e9b (matches)",
+    "full_builder": "nix develop -c cargo run --locked -p alphal00p-docs-builder -- check: exit 1, 8 inherited mark-geometry HTML plus prior review HTML. Run before this review wrote its own HTML, which is now an additional retained untracked HTML under .local. Full docs are not green.",
+    "theorem_wording": "No general theorem claimed; scope limited to three rows, pool 1."
+  },
+  "validator": "nix develop -c node round2/validate.mjs exit 0 (manifest, changed inventory, capture, semantic, doc check; reads control-results.json without re-running controls; controls are peer B scope).",
+  "guards": {
+    "refs": "both workspaces @ and oracle bookmarks identical before/after (guards/pre-*-refs.txt == post-*-refs.txt)",
+    "tracked_bytes_modes": "diag 88a152f7d80d169867f575beb5cc205e15b3db988ea430dc6e15ba78b9cab4c6, hist 6b9fb52714c25e40bbe31cf7cc2723efbcc87775e8cfc297b442b967d80a8cbe, identical before/after",
+    "disk_vs_commit": "all 52 changed paths on disk equal jj file show -r @",
+    "jj": "all jj commands used --ignore-working-copy; no snapshots, edits or ref moves",
+    "elfs_after": "guards/post-elfs.txt",
+    "processes": "no owned generation_oracle, typst or docs-builder process remains",
+    "temp": "nix-shell temp failure inventories from the no-dump current run moved to runs/current/nodump-tmp-inventories and the empty /tmp dir removed"
+  },
+  "retained": [
+    "runs/{historical,current}/ dumps, logs, meta, rustc: fresh evidence",
+    "docs/report.pdf, docs/html/: reproduced bundle (untracked HTML intentionally kept as evidence)",
+    "patchcheck/: patch re-application outputs",
+    "guards/, scripts/fresh.sh, run-hashes.sha256, validate.log"
+  ]
+}

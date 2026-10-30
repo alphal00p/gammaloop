@@ -1,0 +1,216 @@
+Script started on 2026-10-29 20:14:46+00:00 [COMMAND="nix develop -c cargo clippy --locked --profile dev-optim -p feynkit-generator --test generation_oracle -- -D warnings" <not executed on terminal>]
+warning: ignoring untrusted flake configuration setting 'extra-substituters'.
+Pass '--accept-flake-config' to trust it
+warning: ignoring untrusted flake configuration setting 'extra-trusted-public-keys'.
+Pass '--accept-flake-config' to trust it
+   Compiling cfg-if v1.0.4
+   Compiling once_cell v1.21.4
+    Checking memchr v2.8.0
+   Compiling unty v0.0.4
+    Checking log v0.4.29
+    Checking bytemuck v1.25.0
+    Checking regex-syntax v0.8.10
+   Compiling scopeguard v1.2.0
+   Compiling either v1.15.0
+    Checking lazy_static v1.5.0
+   Compiling typenum v1.20.0
+    Checking equivalent v1.0.2
+    Checking foldhash v0.2.0
+   Compiling linux-raw-sys v0.12.1
+   Compiling allocator-api2 v0.2.21
+    Checking itoa v1.0.18
+    Checking alloc-no-stdlib v2.0.4
+   Compiling winnow v1.0.2
+    Checking powerfmt v0.2.0
+   Compiling utf8parse v0.2.2
+    Checking az v1.3.0
+    Checking unicode-width v0.2.2
+    Checking bitflags v1.3.2
+    Checking toml_writer v1.1.1+spec-1.1.0
+    Checking colored v3.1.1
+    Checking num-conv v0.2.1
+   Compiling dyn-clone v1.0.20
+   Compiling colorchoice v1.0.5
+   Compiling anstyle-query v1.1.5
+    Checking time-core v0.1.8
+   Compiling pin-project-lite v0.2.17
+   Compiling anstyle v1.0.14
+   Compiling is_terminal_polyfill v1.70.2
+    Checking option-ext v0.2.0
+    Checking nu-ansi-term v0.50.3
+    Checking static_assertions v1.1.0
+   Compiling unicase v2.9.0
+   Compiling strsim v0.11.1
+    Checking spec_math v0.1.6
+   Compiling same-file v1.0.6
+   Compiling clap_lex v1.1.0
+   Compiling cpufeatures v0.2.17
+    Checking tinyjson v2.5.1
+   Compiling data-encoding v2.11.1
+   Compiling inventory v0.3.24
+   Compiling iana-time-zone v0.1.65
+   Compiling self_cell v1.2.2
+   Compiling rawpointer v0.2.1
+   Compiling byteorder v1.5.0
+   Compiling append-only-vec v0.1.8
+    Checking bytes v1.11.1
+    Checking ed25519-compact v2.4.2
+   Compiling arrayvec v0.7.6
+   Compiling indenter v0.3.4
+   Compiling winnow v0.7.15
+    Checking fnv v1.0.7
+    Checking bytecount v0.6.9
+    Checking jiff v0.2.24
+    Checking gat-lending-iterator v0.1.8
+    Checking cpufeatures v0.3.0
+    Checking ref-ops v0.2.5
+    Checking arrayref v0.3.9
+    Checking constant_time_eq v0.4.2
+    Checking constcat v0.5.1
+    Checking adler2 v2.0.1
+    Checking base64 v0.22.1
+    Checking fastrand v2.4.1
+    Checking aho-corasick v1.1.4
+   Compiling safe_arch v0.7.4
+   Compiling safe_arch v1.2.0
+   Compiling tracing-core v0.1.36
+    Checking itertools v0.14.0
+    Checking alloc-stdlib v0.2.2
+    Checking deranged v0.5.8
+   Compiling anstyle-parse v1.0.0
+   Compiling thread_local v1.1.9
+   Compiling sharded-slab v0.1.7
+    Checking hashbrown v0.16.1
+   Compiling lock_api v0.4.14
+   Compiling bstr v1.12.1
+   Compiling hashbrown v0.17.1
+   Compiling libloading v0.9.0
+   Compiling walkdir v2.5.0
+    Checking roxmltree v0.21.1
+    Checking testing_table v0.3.0
+    Checking features v0.10.0
+    Checking colored v2.2.0
+   Compiling libc v0.2.186
+    Checking serde_core v1.0.228
+    Checking libm v0.2.16
+   Compiling crossbeam-utils v0.8.21
+    Checking zmij v1.0.21
+    Checking anyhow v1.0.102
+   Compiling brotli-decompressor v5.0.0
+    Checking papergrid v0.18.0
+    Checking eyre v0.6.12
+    Checking miniz_oxide v0.8.9
+   Compiling generic-array v0.14.7
+    Checking wide v0.7.33
+   Compiling anstream v1.0.0
+   Compiling matrixmultiply v0.3.10
+    Checking uncased v0.9.10
+   Compiling spenso-macros v0.3.2 (/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-diagnosis/crates/spenso-macros)
+    Checking blake3 v1.8.5
+   Compiling zerocopy v0.8.48
+    Checking wide v1.7.0
+   Compiling derive_more v2.1.1
+    Checking thiserror v2.0.18
+   Compiling tracing v0.1.44
+   Compiling tracing-log v0.2.0
+    Checking toml_parser v1.1.2+spec-1.1.0
+    Checking crossbeam-epoch v0.9.18
+   Compiling block-buffer v0.10.4
+   Compiling crypto-common v0.1.7
+   Compiling digest v0.10.7
+    Checking crossbeam-deque v0.8.6
+   Compiling sha2 v0.10.9
+    Checking rayon-core v1.13.0
+    Checking tabled v0.22.0
+    Checking time v0.3.47
+    Checking regex-automata v0.4.14
+   Compiling brotli v8.0.2
+   Compiling num-traits v0.2.19
+    Checking rayon v1.12.0
+    Checking getrandom v0.3.4
+    Checking gmp-mpfr-sys v1.7.1
+    Checking getrandom v0.2.17
+    Checking region v3.0.2
+    Checking corosensei v0.3.4
+    Checking hugepage-rs v0.1.1
+    Checking dirs-sys v0.5.0
+    Checking wasmtime-jit-icache-coherence v34.0.2
+    Checking errno v0.3.14
+    Checking mio v1.2.0
+    Checking console v0.16.3
+    Checking getrandom v0.4.2
+    Checking rand_core v0.9.5
+    Checking signal-hook-registry v1.4.8
+    Checking rand_core v0.6.4
+    Checking directories v6.0.0
+   Compiling num-complex v0.4.6
+   Compiling approx v0.5.1
+   Compiling num-integer v0.1.46
+    Checking rand_xoshiro v0.6.0
+   Compiling const-random-macro v0.1.16
+    Checking signal-hook v0.3.18
+   Compiling num-bigint v0.4.6
+    Checking num-iter v0.1.45
+    Checking signal-hook-mio v0.2.5
+    Checking serde v1.0.228
+    Checking bitflags v2.13.2
+    Checking serde_json v1.0.149
+    Checking serde_spanned v1.1.1
+    Checking toml_datetime v1.1.1+spec-1.1.0
+    Checking indexmap v2.14.0
+   Compiling simba v0.9.1
+    Checking rustix v1.1.4
+    Checking xpct v0.5.1
+    Checking toml v1.1.2+spec-1.1.0
+    Checking smallvec v1.15.1
+    Checking bincode v2.0.1
+    Checking rug v1.30.0
+    Checking tracing-serde v0.2.0
+    Checking smartstring v1.0.1
+    Checking chrono v0.4.44
+    Checking figment v0.10.19
+    Checking vectorize v0.2.0
+    Checking parking_lot_core v0.9.12
+    Checking parking_lot v0.12.5
+    Checking const-random v0.1.18
+   Compiling num-rational v0.4.2
+    Checking matchers v0.2.0
+    Checking regex v1.12.3
+    Checking globset v0.4.18
+    Checking tracing-subscriber v0.3.23
+    Checking ppv-lite86 v0.2.21
+    Checking ahash v0.8.12
+    Checking terminal_size v0.4.4
+    Checking crossterm v0.29.0
+    Checking tempfile v3.27.0
+    Checking env_filter v1.0.1
+    Checking rust-embed-utils v8.11.0
+    Checking clap_builder v4.6.0
+    Checking num v0.4.3
+    Checking env_logger v0.11.10
+    Checking rand_chacha v0.9.0
+    Checking rand_chacha v0.3.1
+   Compiling bincode-trait-derive v0.1.1
+    Checking rand v0.9.4
+    Checking rand v0.8.6
+    Checking clap v4.6.1
+    Checking symjit v2.27.3
+   Compiling xprec v0.2.2
+    Checking numerica v3.0.1 (https://github.com/symbolica-dev/symbolica?branch=main#1a1829b1)
+    Checking graphica v3.0.1 (https://github.com/symbolica-dev/symbolica?branch=main#1a1829b1)
+    Checking symbolica v3.0.1 (https://github.com/symbolica-dev/symbolica?branch=main#1a1829b1)
+    Checking symbolica-utils v0.1.0 (/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-diagnosis/crates/symbolica-utils)
+    Checking symbolica-notation v0.1.0 (/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-diagnosis/crates/symbolica-notation)
+   Compiling gammaloop-workspace-hack v0.1.0 (/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-diagnosis/crates/gammaloop-workspace-hack)
+    Checking linnet v0.17.0 (/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-diagnosis/crates/linnet)
+    Checking spenso v0.6.0 (/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-diagnosis/crates/spenso)
+    Checking feynkit-model v0.1.0 (/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-diagnosis/crates/feynkit-model)
+    Checking idenso v0.3.0 (/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-diagnosis/crates/idenso)
+    Checking feynkit-kinematics v0.1.0 (/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-diagnosis/crates/feynkit-kinematics)
+    Checking feynkit-graph v0.1.0 (/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-diagnosis/crates/feynkit-graph)
+    Checking spenso-hep-lib v0.1.7 (/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-diagnosis/crates/spenso-hep-lib)
+    Checking feynkit-amplitude v0.1.0 (/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-diagnosis/crates/feynkit-amplitude)
+    Checking feynkit-generator v0.1.0 (/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-diagnosis/crates/feynkit-generator)
+    Finished `dev-optim` profile [optimized + debuginfo] target(s) in 3m 59s
+
+Script done on 2026-10-29 20:19:31+00:00 [COMMAND_EXIT_CODE="0"]

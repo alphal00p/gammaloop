@@ -1,0 +1,14 @@
+Script started on 2026-10-29 20:07:44+00:00 [COMMAND="env -u FEYNKIT_ORACLE_RECORD -u FEYNKIT_ORACLE_DIAGNOSTIC -u FEYNKIT_ORACLE_DUMP -u FEYNKIT_ORACLE_THREADS -u UPDATE_EXPECT -u EXPECT -u FORCE_UPDATE -u INSTA_UPDATE nix develop -c cargo test --locked --profile dev-optim -p feynkit-generator --test generation_oracle --no-run" <not executed on terminal>]
+warning: ignoring untrusted flake configuration setting 'extra-substituters'.
+Pass '--accept-flake-config' to trust it
+warning: ignoring untrusted flake configuration setting 'extra-trusted-public-keys'.
+Pass '--accept-flake-config' to trust it
+building '/nix/store/8v7nsp62129ym2byhgsjhamhk6rndvf3-linnest-wasm-0.1.0.drv'...
+building '/nix/store/9aw0jc4qx4gdszbliihc98nagyjb31mp-clinnet-deps-0.1.8.drv'...
+building '/nix/store/9cx6g4v65rhd18m53d963fz28f7fhaqj-clinnet-0.1.8.drv'...
+building '/nix/store/qk41xdc7jfbha64cans2p51zjsyrifbj-nix-shell-env.drv'...
+   Compiling feynkit-generator v0.1.0 (/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-diagnosis/crates/feynkit-generator)
+    Finished `dev-optim` profile [optimized + debuginfo] target(s) in 21.59s
+  Executable tests/generation_oracle/main.rs (/common/build-cache/lcnbr/14/f78654d42ee4d7/dev-optim/deps/generation_oracle-c4b54249fc0354d6)
+
+Script done on 2026-10-29 20:09:39+00:00 [COMMAND_EXIT_CODE="0"]

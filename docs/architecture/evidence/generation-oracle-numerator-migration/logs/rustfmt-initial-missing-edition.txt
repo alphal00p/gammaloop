@@ -1,0 +1,24 @@
+Script started on 2026-10-29 20:12:11+00:00 [COMMAND="nix develop -c rustfmt --check crates/feynkit-generator/tests/generation_oracle/main.rs" <not executed on terminal>]
+warning: ignoring untrusted flake configuration setting 'extra-substituters'.
+Pass '--accept-flake-config' to trust it
+warning: ignoring untrusted flake configuration setting 'extra-trusted-public-keys'.
+Pass '--accept-flake-config' to trust it
+building '/nix/store/3y8nb7lh11g449f9aigqa0f1h79hf5vn-linnest-wasm-0.1.0.drv'...
+building '/nix/store/qixpirici8ajbc55w73r8zgy3736mkg5-clinnet-deps-0.1.8.drv'...
+building '/nix/store/7lqyimynnkk32jf05bgkdsiqww9gplhw-clinnet-0.1.8.drv'...
+building '/nix/store/0wnf7z0nsqxy56h1k5q0z7i5wlg0as32-nix-shell-env.drv'...
+error: let chains are only allowed in Rust 2024 or later
+   --> /shared/lcnbr/dev/gammaloop/generation-oracle-numerator-diagnosis/crates/feynkit-generator/tests/generation_oracle/census.rs:864:16
+    |
+864 |             if let AtomView::Fun(group) = view
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: let chains are only allowed in Rust 2024 or later
+   --> /shared/lcnbr/dev/gammaloop/generation-oracle-numerator-diagnosis/crates/feynkit-generator/tests/generation_oracle/census.rs:874:24
+    |
+874 |                     if let AtomView::Var(parameter) = view
+    |                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error writing files: failed to resolve mod `census`: cannot parse /shared/lcnbr/dev/gammaloop/generation-oracle-numerator-diagnosis/crates/feynkit-generator/tests/generation_oracle/census.rs
+
+Script done on 2026-10-29 20:13:57+00:00 [COMMAND_EXIT_CODE="1"]

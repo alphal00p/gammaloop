@@ -1,0 +1,125 @@
+{
+  "schema": 3,
+  "title": "Three one-diagram QED oracle numerator diagnosis round-three correction",
+  "scope": {
+    "cases": ["xs_qed_eedd_L1", "xs_qed_eemm_L1", "xs_qed_eeee_1pi_L1"],
+    "pool": 1,
+    "asserted_class": "Classes::None particle reference",
+    "comparison_class": "Classes::Auto, byte-identical per route/case",
+    "model": "builtin Model::qed",
+    "excluded": ["other 78 rows", "pools 8 and 32", "grouped cases", "snapshot migration", "production physics changes", "integration"]
+  },
+  "prior_rounds": {
+    "round1": "e1d44235bfe064fd76027a8938195df4f227bdb7",
+    "round2": "b9992b04999f0cc9f5d8626691cd7b7ce2e219aa",
+    "historical": "2928717fd53ae386ae979145b6cb8c18043a7c45",
+    "anchor": "prior-rounds.json",
+    "preservation": "Prior reports, receipts, manifests, validators, reviewer evidence and all raw capture bytes are unchanged."
+  },
+  "reviews": {
+    "provenance": {
+      "path": "review-inputs/provenance-review.json",
+      "sha256": "00fec390fd277857e6af99e28ede1bb2d5e0475dfa676ea17c422bd3452ae421"
+    },
+    "mathematics": {
+      "path": "review-inputs/math-review.json",
+      "sha256": "f60d02b44d70808e1854c9808cfc1db952ea318ae29186628c1d62fdd1b26a9a"
+    },
+    "heldouts_mjs_sha256": "e5d67f3844e677118d97f4f85607e80bbf9f03b260141cc0bd5ca204169f2095",
+    "heldouts_results_sha256": "bcc00ea6d2bd4aea27486f3444a3e983d8249b3259e3d6211893f818787162d7",
+    "heldouts_remedy_results_sha256": "432d416e5a983e56ea7137eab24a165264c496517233f3d819588413524e4339",
+    "myfnv_sha256": "da2056ef11feaa54ef90139268db133e7ec6b65511c1dad89ee255399652d4e2",
+    "remedy_patch_sha256": "7db1a6cddfcbefa331b6eb7bc48922cfae750a3369f033bde0776d7b4d15a354"
+  },
+  "producer_reuse": {
+    "qualification": "No producer rebuild was needed. Round-two Opus A fresh runs and immutable raw captures are reused with explicit attribution.",
+    "historical": {
+      "source": "2b1ef4f07a44bc061bcc97c378bbdd9c41cb0e94",
+      "kernel": "c78cffc20f318df1fce50539a587cbe8ffc717c0",
+      "pristine_elf_sha256": "32d17aaa366493c030d4ce674eeadb08d4e1a07486ede9494dc2302d5b240695",
+      "result": "3 passed, 0 failed"
+    },
+    "current": {
+      "source": "b9f788922341e7bde2e801a054423ae70ed7e9ae",
+      "kernel": "1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
+      "pristine_elf_sha256": "c2ef6aea7f9978606ca0891a5061eafaaf75f952574fb5b3894da04a39cbbe84",
+      "result": "3 failed only at Summary.numerators"
+    },
+    "compiler": "rustc 1.98.1 (48a229cea 2026-09-01), native default features, locked dev-optim",
+    "environment_evidence": "review-inputs/provenance-fresh.sh explicitly unsets record/dump/thread/diagnostic variables before setting the bounded command. provenance/*/{dump,nodump,meta}.txt records actual nonsecret FEYNKIT settings, producer path and result; older logs only inferred record-mode absence from assertion behavior.",
+    "request": "Source-qualified, not serialized: bound request/case definitions, equal model/options/grouping captures and equal completed reports 17/34, 17/34, 3/4.",
+    "sources_companions": "All retained classes-{None,Auto}-t1.sources.json files equal their corresponding payload JSON byte-for-byte for Grouping::None."
+  },
+  "adapted_elf_retention": {
+    "historical": {
+      "path": "target/oracle-numerator-diagnosis/adapted-historical/review-rederived-generation_oracle",
+      "sha256": "31e9ea393246f513f6c7fdbf55fe8a425213ae3276751c95cf8ddbeda47b01ef"
+    },
+    "current": {
+      "path": "target/oracle-numerator-diagnosis/adapted-current/review-rederived-generation_oracle",
+      "sha256": "1a76aa5134431c7436340c6f231b48e5fba66a67e47e19eaaf376e386b466c50"
+    },
+    "method": "Verified copies made from the review-qualified shared-cache files; no cache transplant, rebuild or claim that deleted scratch exports survive."
+  },
+  "schema_and_exact_paths": {
+    "payload_paths": 46,
+    "metadata_paths": 16,
+    "domain": "Exact legitimate object-key signatures observed across both producers and the three bounded cases. Unknown, missing and extra fields reject; legitimate optional interface variants remain admitted.",
+    "checked_expression_paths": [
+      "payload.numerator",
+      "payload.numerator_prefactor",
+      "payload.projector",
+      "payload.vertices[i].numerator",
+      "payload.edges[i][1].numerator"
+    ],
+    "comparison": "Only those exact expression paths and already checked exact interface paths are removed from the cross-route comparison. Every other field remains exact or fails schema validation.",
+    "counterexamples": "X1-X4 reject with unchanged FNV at schema/exact comparison; X23-X24 reject as unsupported keys."
+  },
+  "semantic_certificate": {
+    "entrypoint": "proof/semantic-validate.mjs",
+    "capture_entrypoint": "proof/capture-validate.mjs",
+    "controls_entrypoint": "proof/controls-all.mjs",
+    "derived": [
+      "whole parsed constructor heads within the closed bounded inventory",
+      "92 free typed port axes and six transports",
+      "port-hedge incidence with vertex/edge owners",
+      "factorized aggregate multiset and exact Gaussian-integer coefficient equals local product",
+      "prefactor*numerator*projector has no free ports",
+      "known owner/interface/live-expression bindings"
+    ],
+    "observed_or_pinned": [
+      "dimension, variance, metric/composite and producer logical order from live producer observations",
+      "non-port Q/edge labels",
+      "AutG/source-factor value and aut/symmetry fields",
+      "cuts, canonical keys and signed routing"
+    ],
+    "qualification": "Observed/pinned values are exact cross-route/copy equality plus immutable capture identity, not derived graph-automorphism, momentum-ownership or routing theorems.",
+    "factorization": "No graph-numerator expansion, distribution, trace, numerical sample or parameter-at-one substitution."
+  },
+  "controls": {
+    "prior": "49/49 round-two outcomes retained",
+    "new_heldouts": "27/27 classified outcomes",
+    "total": 76,
+    "negative": 62,
+    "positive": 14,
+    "aggregate_boundary": "Fully mirrored X5-X9 and X13 reject at aggregate coefficient/factor multiplicity, not earlier live binding.",
+    "positive_forms": "X10 𝑖^3 and X11 unary-minus equivalents remain valid.",
+    "capture_boundary": "X14-X17 are semantically accepted by the deliberately bounded theorem. X14/X15 change FNV; X16/X17 leave numerator FNV unchanged but violate frozen raw-capture identity."
+  },
+  "documentation": {
+    "source": "docs/architecture/generation-oracle-numerator-diagnosis-round3.typ",
+    "bundle": "bundle.json",
+    "full_docs": "Still fails on eight inherited tracked mark-geometry HTML entries plus two retained untracked Opus review HTML files; no evidence deleted."
+  },
+  "limits": {
+    "physical": "Frozen mathematics remains independently valid only for the three factorized rows at pool 1; no production defect or value change found.",
+    "next": "Stop for new independent Opus A/B correction reviews; Astra fallback authorized if Opus unavailable."
+  },
+  "integrity": {
+    "manifest": "manifest.sha256",
+    "manifest_sha256": "0d6b6a34b96f508f2e7ae9f83a3e89990031e38dc23949ceceb4a4603b533674",
+    "changed_inventory": "changed-inventory.json",
+    "validator": "validate.mjs",
+    "validator_sha256": "d9f9151f03095c265060e4507c638fa078125c4de15d44fd5874eb3df93d337b"
+  }
+}

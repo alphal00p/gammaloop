@@ -1,0 +1,108 @@
+{
+  "schema": 1,
+  "title": "Three one-diagram QED numerator oracle migration",
+  "scope": {
+    "cases": ["xs_qed_eedd_L1", "xs_qed_eemm_L1", "xs_qed_eeee_1pi_L1"],
+    "pools": [1, 8, 32],
+    "asserted_class": "Classes::None",
+    "comparison_class": "Classes::Auto",
+    "excluded": ["other 78 rows", "production algorithms", "generation options", "locks/kernels/manifests", "main integration"]
+  },
+  "approval": {
+    "certificate_commit": "16bfd2c84ea1fdeba0c8087cc6cdc8f1082f11a8",
+    "bookmark": "generation-oracle-numerator-diagnosis-approved-certificate",
+    "review": "review/approved-certificate-review.json",
+    "review_sha256": "1202230f36622faf1f9dbcf23c29eba8c8ba8c512ae3da14b901194a349e4b30",
+    "verdict": "APPROVE_CERTIFICATE",
+    "scope_limit": "Fixed-case symbolic certificate for the three rows at pool 1; not migration or broader physical approval."
+  },
+  "literal_inventory": [
+    {"case": "xs_qed_eemm_L1", "line": 331, "old": "0x8b7b40bba961420d", "new": "0x414e2a7a954beae8"},
+    {"case": "xs_qed_eedd_L1", "line": 337, "old": "0xf5a21f1a84870bc7", "new": "0xd3ad2f3a0802b6ab"},
+    {"case": "xs_qed_eeee_1pi_L1", "line": 347, "old": "0x0db0b7cc52558270", "new": "0x1fa84d9ad4fdf0b0"}
+  ],
+  "source": {
+    "old_sha256": "499b49e4d5b58f9796e79e8393399ddc5e3fee24062fe36ae590dffd7bd18aa8",
+    "new_sha256": "987e9c274c0faa2710689cd10d6b4903414b19e62b9f1833c6c5e3c463b4049b",
+    "changed_lines": [331, 337, 347],
+    "line_count_equal": true,
+    "all_other_lines_identical": true,
+    "classes_owner_sha256": "f605e4436ff0a2225155840fdad2065d50e74fd88b34979faaa97f7153a3e4fe",
+    "cases_sha256": "e3ef8ec52578364ef24cf278965eaba2ec967f1f626c707bb7667c2834e319a2",
+    "census_sha256": "b46641d3c13dd70304a457ad4f884cedd486f188ce86dd92c73328a6b1da05d3"
+  },
+  "protected_inputs": {
+    "cargo_lock_sha256": "0d896231393016a4df0ac9a8a2b8eddee545b4a8d62bc87cdfbd1f2e3230a2cd",
+    "workspace_manifest_sha256": "bf968d49de81d06aa62e12793cfb6d66b46064d55090c2bb3413f883765e63dd",
+    "generator_manifest_sha256": "07f9c77b96b4ef7e92d461e8076696adc008edae2797b0a11dbe11aadaf50c59",
+    "nixci_sha256": "e031749e51a33ee48bc5c653d13c2dc7e7d3a51bddea77fc3c67d01ac217c540",
+    "nixci_enable": false,
+    "kernel": "1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
+    "compiler": "rustc 1.98.1 (48a229cea 2026-09-01), LLVM 22.1.8",
+    "cargo": "cargo 1.98.1 (797e8a9bc 2026-08-05)",
+    "features": ["feynkit-generator/default", "feynkit-generator/native"],
+    "profile": "dev-optim",
+    "locked": true
+  },
+  "producers": {
+    "old": {
+      "path": "target/oracle-numerator-migration/old/generation_oracle",
+      "sha256": "c2ef6aea7f9978606ca0891a5061eafaaf75f952574fb5b3894da04a39cbbe84",
+      "source": "target/oracle-numerator-migration/old/main.rs",
+      "qualification": "Approved-current old-literal producer retained before rebuilding; same binary as the qualified certificate producer."
+    },
+    "new": {
+      "path": "target/oracle-numerator-migration/new/generation_oracle",
+      "sha256": "8cde4358a163d8a024bc74bebdcc25c0a4f17f1fe68a79ae557299846316496a",
+      "source": "target/oracle-numerator-migration/new/main.rs",
+      "build_log": "logs/new-build.txt",
+      "qualification": "Fresh locked native-default dev-optim generation_oracle test producer."
+    }
+  },
+  "commands": {
+    "old": "FEYNKIT_ORACLE_THREADS=<1|8|32> FEYNKIT_ORACLE_DUMP=<old/dump-pN> target/oracle-numerator-migration/old/generation_oracle --test-threads 1 --nocapture <three names>",
+    "build_new": "nix develop -c cargo test --locked --profile dev-optim -p feynkit-generator --test generation_oracle --no-run",
+    "new": "FEYNKIT_ORACLE_THREADS=<1|8|32> FEYNKIT_ORACLE_DUMP=<new/dump-pN> target/oracle-numerator-migration/new/generation_oracle --test-threads 1 --nocapture <three names>",
+    "environment": "Run scripts unset FEYNKIT_ORACLE_RECORD, FEYNKIT_ORACLE_DIAGNOSTIC, UPDATE_EXPECT, EXPECT, FORCE_UPDATE and INSTA_UPDATE; license is loaded privately and never printed."
+  },
+  "outcomes": {
+    "old": {"executed": 9, "passed": 0, "failed": 9, "per_pool_exit": {"1": 101, "8": 101, "32": 101}},
+    "new": {"executed": 9, "passed": 9, "failed": 0, "per_pool_exit": {"1": 0, "8": 0, "32": 0}},
+    "pool_evidence": "pool-evidence.json",
+    "pool_evidence_sha256": "9d12527fb658bfacd44dddaf76c3d8cd01484ca7996c07e5403b7beb2ec5de3e",
+    "payloads": "For every route/pool/case, Classes::None == Classes::Auto == sources companions; old == new and pools 1 == 8 == 32 byte-for-byte.",
+    "summaries": "Independent replay reproduces diagrams/content/numerators/named/ids for all 18 route/pool/case records. Passing new assertions cover the full unchanged Summary including topology/assignment counts, rational weights and symmetry histogram."
+  },
+  "certificate_replay": {
+    "path": "target/oracle-numerator-migration/certificate-replay.json",
+    "sha256": "2cac1b1341d8206c84f1857512a107e3ab8453d3a1f9ee2d7078f9292b8ecf54",
+    "inputs": "Frozen round-four raw capture and semantic inputs; migrated expectations are not consumed.",
+    "result": "6 capture rows, 92 axes, 6 transports, approved controls pass.",
+    "post_registry_capture_sha256": "9bb5070f177ed968935afc030556fd94e0081f481bb1527f73a592321e6c91be",
+    "post_registry_semantic_sha256": "746e5869cb4a1a0bb9c9031ecebf5fa81b691f81d7f7fc1fc655dbcdce484c5e",
+    "post_registry_qualification": "The frozen combined round-four validator correctly rejects the later registry byte change through its outer changed-inventory guard. Its capture and semantic entrypoints were therefore replayed separately against the exact frozen inputs after registration; both pass and do not consume migrated expectations."
+  },
+  "checks": {
+    "rustfmt": "Explicit --edition 2024 check passed.",
+    "clippy": "Scoped feynkit-generator generation_oracle test target passed with -D warnings.",
+    "failed_attempt": "Initial direct rustfmt without --edition failed parsing unchanged Rust-2024 let chains; retained, no credit.",
+    "validator": "validate.mjs"
+  },
+  "limits": [
+    "Pool-1 symbolic approval remains fixed-case only.",
+    "Fresh pool-8/32 results are regression checks for the same requests, not a generalized symbolic theorem.",
+    "Certificate semantics operate on parsed JSON; immutable raw bytes bind duplicate-key text and other capture-bound leaves.",
+    "No graph numerator expansion, distribution, trace or numerical correctness proof."
+  ],
+  "documentation": {
+    "source": "docs/architecture/generation-oracle-numerator-migration.typ",
+    "bundle": "bundle.json",
+    "full_docs": "Expected inherited failure: eight tracked mark-geometry HTML files plus two retained review HTML files."
+  },
+  "integrity": {
+    "manifest": "manifest.sha256",
+    "manifest_sha256": "f37d0985bab164c3a6c8b0cc465f2e1ddfa090d17fe6493e600a450db0f81a5e",
+    "changed_inventory": "changed-inventory.json",
+    "validator_sha256": "901c2cf148f4f3cb5dacea528071e59ee8c8159f83fc72689d02b403c7294e56"
+  }
+}

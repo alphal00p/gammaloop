@@ -1,0 +1,135 @@
+{
+  "schema": 1,
+  "review": "Independent Opus COMBINED correction review, round 4: scope A reporting/provenance invariance + scope B tuple semantics",
+  "date": "2026-10-29",
+  "verdict": "APPROVE_CERTIFICATE",
+  "verdict_scope": "Certificate only for xs_qed_eedd_L1, xs_qed_eemm_L1, xs_qed_eeee_1pi_L1, builtin QED, original requests, disabled zero-color filter, NamingD, pool 1, Classes::None asserted (Classes::Auto byte-equal bridge). Supports a later, separately tested and reviewed three-row migration only. NOT a migration, other-78-row, grouped-case, pool 8/32, main or WP3 approval. No producer rerun is claimed or was performed.",
+  "candidate": {
+    "commit": "16bfd2c84ea1fdeba0c8087cc6cdc8f1082f11a8",
+    "change": "slpmqqzunspplyotozonnymltukmluyo",
+    "workspace": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-diagnosis",
+    "receipt_sha256": "5c9866e1289539cfdecd70b7d075b2444db9c377c352bd7db47f7febc7d52838",
+    "semantic_checker_sha256": "55950e6a6a6a7b256cc5891c5c5abfae4f5ded31ea90c946c73fff4729d8d21d",
+    "combined_validator_sha256": "147a6e4972c6a7895aee808ecd660f7f1baa4a9cca01a64880444d47a82ffd06",
+    "manifest_sha256": "1e22c2d872c9d072e62dfd56a3759e364992621f2de1a1c72c9571cdbd08d6f7",
+    "report_sha256": "abf171ccc349722d8b70b6eb2ed62116040a2384ca57ba5ec1bd53b32569a0ab",
+    "all_hashes_verified": true
+  },
+  "inputs_read": {
+    "round3_B": {"path": ".local/review-oracle-qed-math-opus-round3-20261029191910-2334762/review.json", "sha256": "92b5eb1ab217ac9bc5ccbf55e9b088669b47c609144679d390300f88700cd439", "copied_into_round4_review_inputs_byte_equal": true},
+    "round3_A": {"path": ".local/review-oracle-qed-provenance-opus-round3-20261029191812-2287513/review.json", "sha256": "fc62d653d85163bc31379571451b2c745d8d80d69a42ebd41cfb2a0c15ad2354", "copied_into_round4_review_inputs_byte_equal": true},
+    "earlier_reviews_unchanged": {"round1_A": "747af1ff...", "round2_A": "00fec390...", "round2_B": "f60d02b4..."},
+    "guidance": ["AGENTS.md (workspace root and task workspace)", "CONTRIBUTING.typ (task workspace)"],
+    "reviewer_probe_files": "round4/review-inputs/probes.mjs and probes2.mjs are byte-identical to the round-3 B reviewer's .local/.../probe/ copies"
+  },
+  "task_1_tuple_semantics": {
+    "checker_diff_round3_to_round4": "Only additions: signatureAllowed, validateEdgeTuples (Array + length===2, [0] in incidence_signatures, [1] in data_signatures), auditOwnerPaths (every payload key numerator|numerator_prefactor|projector|*_interface must match exact aggregate path, vertices/<n>, or edges/<n>/1), both called on H and C before validateSchema and before owner construction. semantic-contract.json identical to round 3 except new edge_tuple {length 2, incidence [[source,target]], data = the two observed signatures differing only by num_interface}.",
+    "producer_type_check": "crates/feynkit-generator/tests/generation_oracle/census.rs: struct EdgePayload(EdgeEndpoints, EdgeDataPayload) is a positional 2-tuple; EdgeDataPayload has optional num_interface; census digest replica covers payload.edges.map(e=>e[1]) only. So the positional 2-tuple is the producer type, and anything at edges[i][2+] is FNV-invisible -- which is why R3-B1 mattered.",
+    "fresh_heldout_harness": {
+      "script": "harness.mjs (sha256 86cdf1f323ac1cdc6dcb40819e740d16dd0e6adfa034156f513d4ef7c6a19e45)",
+      "method": "Copies frozen evidence; mutates; runs the FULL semantic entrypoints round3/proof/semantic-validate.mjs and round4/proof/semantic-validate.mjs as processes; no manifest/SHA/FNV shortcut in verdicts. Independent FNV-1a-64 replica written from census.rs Digest used only to classify capture identity (baseline reproduces all six frozen digests).",
+      "results_sha256": "483ac41c1d26da056d7ea21aaafe1f34f5ec2cfa952e19e95b30007b05ec37ac",
+      "total": 324,
+      "matrix": "3 rows x edges {0,2,4,5} (external, interfaced and photon edges) x 19 tuple variants, plus 22 rogue unowned-path expressions per row, mirrored extra edge+owner, positives and qualification probes.",
+      "R3-B1_reproduced": "35 mirrored escapes accepted by frozen round-3 checker with FNV unchanged (append edge-data with numerator '0' or 'garbage(((' and append incidence {source:9,target:9}, every row, every tested edge) -- all 35 REJECTED by round 4 with 'edge tuple must contain exactly 2 elements'. (eedd edge 2 garbage variant was already rejected by round 3 because it kept num_interface.)",
+      "tuple_variants_all_rejected_round4": ["append-data", "append-incidence", "prepend-incidence", "truncate", "empty", "swap", "nest-incidence", "nest-data", "nest-whole", "data,data", "incidence,incidence", "null data", "object-instead-of-array", "numerator on incidence", "num_interface on incidence", "numerator inside data.external", "one-sided append"],
+      "optional_interface_only_at_data_owner": "num_interface on edges[i][0] rejected (signature + owner-path audit); on edges[i][1] admitted only where the contract's per-owner interface presence says so (G11/G12 prior probes).",
+      "rogue_unowned_expressions_all_rejected": ["diagram.numerator", "groups/0/members/0.projector", "groups/0.numerator_prefactor", "key.edges[0].diagram.numerator", "key.vertices[0].diagram.numerator", "cuts[0].projector", "cuts[0].cut[0].numerator", "half_edge_order[0].numerator_prefactor", "loop_momentum_basis.num_interface", "edge_signatures/0.numerator", "basis.numerator", "topology_threshold_candidates[0].numerator", "vertices[0].numerator_prefactor_interface", "vertices[0].projector", "edges[0][1].projector", "edges[0][1].numerator_prefactor", "payload.numerator2", "payload.Numerator", "top-level numerator", "vertices[0] wrapped in array", "extra half_edge_order object with numerator", "{numerator} nested in leaf array"],
+      "general_audit_not_special_cased": "auditOwnerPaths is a generic recursive traversal with exact-path regexes; it caught every rogue location above (including new locations never in round-3 controls). Expression-bearing keys under other names are additionally closed by the unchanged 46+16 object-key signature paths.",
+      "positives_all_accepted": ["edge component key reversal (12, every row/edge)", "deep payload key reversal both sides and current-only", "owner table reversal", "owner object key reversal", "token-level whitespace in all payload expressions, live expressions and live ports (brace-aware; ws-probes.mjs)", "token-level whitespace in serialized interfaces (eedd, eeee; eemm has none)"],
+      "conservative_rejects_noted": "Whitespace inside symbol attribute braces (e.g. 'spenso::{spenso::representation, spenso::self_dual}::bis') is rejected: head identity, not a legitimate equivalence. My first naive whitespace probe made this mistake; corrected probe in ws-probes.mjs.",
+      "extra_whole_edge_with_owner_mirrored": "Rejected on all rows (semantic-contract owner pins); FNV changes."
+    }
+  },
+  "task_2_controls_and_qualifications": {
+    "recomputed": "node round4/proof/controls-all.mjs <review>/scratch/controls: prior 76/76 (49 + 27 heldouts), tuples 39/39 (36 negative, 3 positive), primary 115/115, probes 43 with 41 matched + 2 qualified. Fresh per-id outcomes equal committed prior-control-results, heldout-results, tuple-control-results, reviewer-probes(-2)-results exactly.",
+    "six_old_new_counterexamples": "The 6 mirrored append-data/append-incidence tuple controls: round3 accept -> round4 reject, reproduced; my independent FNV confirms unchanged numerator digest for all six (see N1 on how the committed evidence records this).",
+    "70_plus_6": "controls.mjs and heldouts.mjs byte-identical to round 3; qualified map X14-X17 accept, X23/X24 reject unchanged; disclosure '70 reviewer-fixed + 6 author-finalized' accurate.",
+    "G18": "Edit appends a cloned {diagram:{external,is_dummy,particle}} to diagrams[0].key.edges on both sides. Despite its id, it contains NO numerator/interface key and creates no owner (owners derive from payload.vertices/edges). key is inside the numerator FNV, so the FNV changes (fresh: fnvUnchanged=false, all 3 rows). Semantic accept + FNV-visible + capture-bound is an honest qualification; it cannot hide an unassigned expression: the same location with a numerator key is rejected by the owner-path audit (rogue/key-edge-numerator, all rows).",
+    "V1": "Reversing every key in metadata fails ONLY 'semantic-contract model' and 'semantic-contract options' (JSON.stringify SHA pins). Fresh V1b (metadata reversed except the pinned model/numerators/grouping objects) ACCEPTS on all 3 rows. Conservative false reject, no soundness effect; wording in report l.88-91 is exact.",
+    "mathematics_unchanged": "Baseline round4 semantic: 0 failures; axes 36+28+28=92; transports 4+0+2=6; cooked map 14 per row; aggregate factors 16/12/12, coef 1+0i. Round3 checker also passes baseline. Factorized aggregate, full contraction and typed owner proof unchanged (code identical outside additions).",
+    "capture_bound_classes": "overall/source factor, symmetry_factor/aut values and leaf types (G5-G7), routing (X17), non-port labels (X15), cuts/keys, local scalar redistribution: semantic accept, only raw-capture byte identity rejects; all disclosed in report l.64-69 and l.79-86 and receipt mathematical_boundary. No general routing/automorphism theorem claimed or required."
+  },
+  "task_3_provenance": {
+    "R3-A1_closed": "Report l.43-69 and registry summary now state the exact extent: closed supported object-key signatures + positional two-element edge tuple; other array cardinalities and leaf types are immutable-capture facts with concrete examples. No 'closed schema'/'complete' overclaim remains in report, receipt or registry.",
+    "R3-A2": "closed (70+6 disclosed).",
+    "R3-A3": "still informational: capture-validate does not assert absence of FEYNKIT_ORACLE_RECORD/DIAGNOSTIC; I verified 0 occurrences in round3/provenance/{historical,current}/{dump,nodump,meta}.txt, and provenance-fresh.sh line 8 unsets RECORD/DUMP/THREADS/DIAGNOSTIC/CARGO_TARGET_DIR.",
+    "R3-A4": "closed: round-4 receipt producer_reuse.binding restates patch/source/kernel/compiler binding.",
+    "rehashed": {
+      "pristine_historical_elf": "generation-oracle-numerator-historical/target/oracle-numerator-diagnosis/pristine-historical/generation_oracle 32d17aaa366493c030d4ce674eeadb08d4e1a07486ede9494dc2302d5b240695 (also build-cache path in meta.txt)",
+      "pristine_current_elf": "target/oracle-numerator-diagnosis/pristine-current/generation_oracle c2ef6aea7f9978606ca0891a5061eafaaf75f952574fb5b3894da04a39cbbe84 (also build-cache path)",
+      "adapted_historical_elf": "31e9ea393246f513f6c7fdbf55fe8a425213ae3276751c95cf8ddbeda47b01ef",
+      "adapted_current_elf": "1a76aa5134431c7436340c6f231b48e5fba66a67e47e19eaaf376e386b466c50",
+      "elf_strings": "historical pristine/adapted: symbolica-db3dbb7e8d40efb5/c78cffc, rustc 48a229ceaefd4985; current pristine/adapted: .../1a1829b, rustc 48a229ceaefd4985",
+      "patches": "historical-observational.patch e8a34a90...cf2f3, current-observational.patch 6163aa80...d42d17, equal to round-1 receipt",
+      "kernels_in_lock": "Cargo.lock at 2b1ef4f0 pins symbolica rev c78cffc2...; at b9f78892 pins 1a1829b1...",
+      "runtime_source_unchanged": "jj diff b9f78892..16bfd2c8 touches only docs/ (0 non-docs paths)",
+      "companions": "For both routes and all 3 rows: round1 payload == round2 None == round2 Auto == round3 None.sources.json == round3 Auto.sources.json (byte cmp); census 'completed: true'.",
+      "env_logs": "dump/nodump: FEYNKIT_ORACLE_THREADS=1, DUMP only in dump run; historical 3 passed/0 failed both runs; current 0 passed/3 failed both runs; meta 'license-set yes', no license value."
+    },
+    "reused_vs_fresh": "Reused (not rerun): round-2 Opus-A pristine executions, round-3 provenance logs, raw captures, ELFs. Fresh in this review: semantic checker runs (round3 and round4), capture-validate, full combined validate.mjs (exit 0), controls-all replay, 324-case + 12-case reviewer harnesses, typst PDF/HTML, docs-builder check. No producer build/run.",
+    "immutability": "Original sources/captures/ELFs immutable -> provenance closure from rounds 2/3 carries over unchanged."
+  },
+  "task_4_inventory_docs_registry": {
+    "changed_inventory": "jj diff 6476a458..16bfd2c8 = exactly the 30 inventory paths + changed-inventory.json itself (self-excluded); sizes/hashes verified by validate.mjs; diff from e1d44235/b9992b04 adds only their own later-round files.",
+    "prior_rounds": "round3 receipt c0b5f1a0..., manifest 0d6b6a34..., inventory a6f97a04..., validator d9f9151f..., report fae085c9... all equal prior-rounds.json; all four manifests (round1 root, round2, round3, round4) sha256 -c OK; bookmarks round1/2/3 at e1d44235/b9992b04/6476a458, historical at 2928717f with empty diff over 2b1ef4f0.",
+    "registry": "docs/developers.toml note generation-oracle-numerator-diagnosis: title 'Three one-diagram QED oracle numerator diagnosis round-four correction', source round4.typ, summary 'Positional edge-tuple and exact-owner-path certificate over bounded object-key signatures, with capture-bound leaf and physics qualifications.', status round-four; canonical-doc-check passes (1 entry).",
+    "pdf": "fresh nix develop -c typst 0.15.1 compile --creation-timestamp 0 -> 41d694e546b08c965dd809abfb4bb824f45fcff6ffa4cb24a6256213c6f63336 (byte-equal)",
+    "html": "fresh bundle compile of round4-wrapper.typ (1cc867e5...) -> index.html d3e007b3feec8c916738c5871081241d02c30f854515b97d51d31c57a77af414 (byte-equal), heading 'Three one-diagram QED oracle numerator diagnosis round-four correction'",
+    "full_docs": "nix develop -c cargo run --locked -p alphal00p-docs-builder -- check: exit 1, exactly 10 'new' entries = 8 tracked mark-geometry HTML + 2 retained .local review HTML (round1/round2 provenance). Red, as reported; no review HTML deleted. This review created no HTML inside the workspace (outputs went to a mktemp dir, removed after hashing)."
+  },
+  "findings": [
+    {
+      "id": "R4-N1",
+      "severity": "low, nonblocking (evidence quality)",
+      "where": "round4/proof/tuple-controls.mjs:84,92; report round4.typ:103-105",
+      "issue": "tuple-controls records fnv_status = exit code of myfnv.mjs, which always exits 0; it never compares the digest with the baseline. The report claim 'their numerator FNV remains unchanged' is TRUE (independently confirmed for all six and 29 further variants) but is not demonstrated by the committed tuple evidence.",
+      "reproducer": "node round4/review-inputs/myfnv.mjs <any mutated copy> -> exit 0 regardless of digest.",
+      "remedy": "Optional: compare myfnv stdout to the baseline and record fnv_unchanged:boolean; assert it is true for the six blocker controls."
+    },
+    {
+      "id": "R4-N2",
+      "severity": "informational",
+      "where": "round4/review-inputs/probes.mjs:90 (V6); report round4.typ:110",
+      "issue": "V6 'iface-whitespace-all' targets eemm, which has no serialized interfaces; fnv_changed=false shows it is a semantic no-op (V-ids are exempt from the no-op guard). The 'interface whitespace' positive claim still holds: brace-aware token whitespace in eedd/eeee interfaces, all payload/live expressions and live ports accepts on round 4 (ws-probes-results.json).",
+      "remedy": "Optional: cite an eedd/eeee interface-whitespace control instead of V6."
+    },
+    {
+      "id": "R4-N3",
+      "severity": "informational (wording)",
+      "where": "report round4.typ:60",
+      "issue": "'No expression or interface can ride through another structurally valid branch' is exact for expression/interface KEYS. Expression-like strings in other leaves (G6: symmetry_factor -> ['garbage(']) are semantically accepted and only capture-bound, which l.64-69 discloses explicitly.",
+      "remedy": "Optional: 'No expression or interface field ...'."
+    },
+    {
+      "id": "R4-N4",
+      "severity": "informational (model boundary)",
+      "where": "semantic-validate.mjs:15 (JSON.parse)",
+      "issue": "The theorem acts on the parsed JSON model. A raw-text duplicate key (mirrored, eemm edges[0][1]: '\"numerator\": \"0\", ' inserted before the real numerator) is semantic-accept with unchanged FNV because parse keeps the last value; only byte identity with the fresh Classes::None capture rejects it. serde-produced captures cannot contain duplicate fields, and captures are byte-pinned, so this is not a blocker.",
+      "remedy": "Optional: one sentence that semantics are over the parsed model, with raw-byte identity binding the text."
+    }
+  ],
+  "blocking_findings": [],
+  "guards": {
+    "tracked_bytes": "4383 tracked files sha256 before == after",
+    "target_dir": "6265 files under target/oracle-numerator-diagnosis sha256 and modes before == after",
+    "refs": "task bookmarks unchanged; historical @ 2928717f unchanged; repo op-log head moved only because of other lanes' bookmark ops (generation-integration*) at 19:53, not this review",
+    "jj": "all jj commands used --ignore-working-copy; no git index/status on main; no edits to main or other lanes",
+    "license": "loaded privately from ~/.config/symbolica/license only into the environment for nix develop; review directory grep shows no license value",
+    "processes": "none left",
+    "cleanup": "mktemp /tmp/oracle-r4-combined-review-* removed; per-mutation evidence copies removed; retained scripts, results, logs and guard files only",
+    "no": ["snapshots", "cache deletion", "graph numerator expansion", "producer build/run", "publication/push/fetch/upload/CI"]
+  },
+  "commands": [
+    "node round4/proof/semantic-validate.mjs <evidence> (round3 and round4)",
+    "node round4/proof/capture-validate.mjs",
+    "node round4/validate.mjs",
+    "node round4/proof/controls-all.mjs <review>/scratch/controls",
+    "node <review>/harness.mjs <workspace> <review>/scratch/runs",
+    "node <review>/ws-probes.mjs <workspace> <review>/scratch/ws",
+    "nix develop -c typst compile --root . --creation-timestamp 0 docs/architecture/generation-oracle-numerator-diagnosis-round4.typ <tmp>/report.pdf",
+    "nix develop -c typst compile --root . --features html,bundle --format bundle target/oracle-numerator-diagnosis/round4-wrapper.typ <tmp>/html",
+    "nix develop -c cargo run --locked -p alphal00p-docs-builder -- check"
+  ],
+  "tools": {"node": "v24.19.0", "typst": "0.15.1 (9dfd3a08)"}
+}

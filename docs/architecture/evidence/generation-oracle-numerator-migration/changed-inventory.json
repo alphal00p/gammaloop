@@ -1,0 +1,142 @@
+{
+  "schema": 1,
+  "base": "16bfd2c84ea1fdeba0c8087cc6cdc8f1082f11a8",
+  "scope": "Exactly three named numerator literals plus migration evidence/report and one registry entry; no other runtime or configuration file.",
+  "files": [
+    {
+      "path": "crates/feynkit-generator/tests/generation_oracle/main.rs",
+      "bytes": 77616,
+      "sha256": "987e9c274c0faa2710689cd10d6b4903414b19e62b9f1833c6c5e3c463b4049b"
+    },
+    {
+      "path": "docs/architecture/generation-oracle-numerator-migration.typ",
+      "bytes": 4965,
+      "sha256": "973db0f95b77043459c7aa2e0b4198230da8909b56ffc66c9ab35a6b3a6a1f99"
+    },
+    {
+      "path": "docs/developers.toml",
+      "bytes": 185009,
+      "sha256": "49b6cd2b47504a40171296b96ceb8ab42def458330a50402ae9f816ecab5f433"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-migration/bundle.json",
+      "bytes": 1139,
+      "sha256": "6e0d0cb639851307b6f7153c3ecfe3f8dca11bf296cd6761576c11dff5a6be26"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-migration/canonical-doc-check.mjs",
+      "bytes": 1166,
+      "sha256": "f11c05f47cade308f6e44f32fd628671aee3567e449badfb4c366f40efb498c3"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-migration/logs/cargo.txt",
+      "bytes": 459,
+      "sha256": "572fe7fb8f4e505ae653eabdb850037691890cd3524d1f48fcd97dc086a0e5f0"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-migration/logs/clippy.txt",
+      "bytes": 8675,
+      "sha256": "c37ddbc99d7308c19d10fcdabeecaa81560dfc8bf6bc396bac10a21f7ebdd150"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-migration/logs/new-build.txt",
+      "bytes": 1344,
+      "sha256": "f88d702384053dc55c364e7b66389cc6232a34398f6f5e3e6e8dec1f0a628252"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-migration/logs/new-pool-1.txt",
+      "bytes": 743,
+      "sha256": "c81a3d67fcdd6ecc955094778aa4e76ca21bc5486c54fe754e1f7a0b4e1c90f3"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-migration/logs/new-pool-32.txt",
+      "bytes": 747,
+      "sha256": "ec877eff5c0e5c7bb87cf109a84b219f0c36f03f4e6a203cd8a3ffd831616ea6"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-migration/logs/new-pool-8.txt",
+      "bytes": 743,
+      "sha256": "9e032cbfdb7ad729f30a06a79dfdde04a5a4b7b6775677f8cfefa8f9f4c07467"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-migration/logs/old-pool-1.txt",
+      "bytes": 4015,
+      "sha256": "cde030a97069e945a9393aae2c841a207fca619b4921765ecc15a4194ba3a4ce"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-migration/logs/old-pool-32.txt",
+      "bytes": 4022,
+      "sha256": "6f1ee18e99764829fde5eba11a2f3498a0345f80c1555aefa060e75d4373bce4"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-migration/logs/old-pool-8.txt",
+      "bytes": 4015,
+      "sha256": "2142d3e08e003705983cde5adad8b9fdcc74d49e5e2aa219eee22f6ba4ad270b"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-migration/logs/rustc.txt",
+      "bytes": 944,
+      "sha256": "3af530e18b6de3b4a9c37e6db43ca4d470371ea13726136d50feec7e644d22e8"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-migration/logs/rustfmt-edition2024.txt",
+      "bytes": 501,
+      "sha256": "c59cea5344842986312a0e618e0f118ba3369f95eab5a18cfcd7490ba3627778"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-migration/logs/rustfmt-initial-missing-edition.txt",
+      "bytes": 1650,
+      "sha256": "cdfc78e913c7df44d80a0aec5ecfce9e9287852a61d3135178a7a472283a15c0"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-migration/manifest.sha256",
+      "bytes": 1806,
+      "sha256": "f37d0985bab164c3a6c8b0cc465f2e1ddfa090d17fe6493e600a450db0f81a5e"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-migration/pool-evidence.json",
+      "bytes": 9688,
+      "sha256": "9d12527fb658bfacd44dddaf76c3d8cd01484ca7996c07e5403b7beb2ec5de3e"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-migration/receipt.json",
+      "bytes": 7005,
+      "sha256": "70b87cb354e9c022ab26696532d5da3f65d71e106da6e783246bc2a5c3482e95"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-migration/review/approved-certificate-review.json",
+      "bytes": 18441,
+      "sha256": "1202230f36622faf1f9dbcf23c29eba8c8ba8c512ae3da14b901194a349e4b30"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-migration/run-new.sh",
+      "bytes": 959,
+      "sha256": "361f4c14acc8993ab885376df413e218e35476ef33db228309b19f3c73045f97"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-migration/run-old.sh",
+      "bytes": 977,
+      "sha256": "75a42261086748bb64aa9ead1bf8643601e0aac9de3cf8ceadcd3e4b365c4be1"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-migration/sources/new-main.rs",
+      "bytes": 77616,
+      "sha256": "987e9c274c0faa2710689cd10d6b4903414b19e62b9f1833c6c5e3c463b4049b"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-migration/sources/old-main.rs",
+      "bytes": 77616,
+      "sha256": "499b49e4d5b58f9796e79e8393399ddc5e3fee24062fe36ae590dffd7bd18aa8"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-migration/summary.mjs",
+      "bytes": 2624,
+      "sha256": "531c7b7ef4d66a4d32426b56740a4dda7ae540ed9da8384e3ff72586924f0b27"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-numerator-migration/validate.mjs",
+      "bytes": 10020,
+      "sha256": "901c2cf148f4f3cb5dacea528071e59ee8c8159f83fc72689d02b403c7294e56"
+    }
+  ]
+}

@@ -1,0 +1,1433 @@
+{
+  "schema": 1,
+  "authority": {
+    "historical_symbols_revision": "2b1ef4f07a44bc061bcc97c378bbdd9c41cb0e94",
+    "historical_symbols_sha256": "0a13fee39574d1f8a819cdac3ecc0c9607a266b765907fcae0eaaaf146da174b",
+    "current_symbols_revision": "b9f788922341e7bde2e801a054423ae70ed7e9ae",
+    "current_symbols_sha256": "b580b7c70db4f11bf79fd02f8109a715c01b74d63a560a54d49868b8e5c4aa9d",
+    "constructor_map": {
+      "Q": [
+        "gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:q}::Q",
+        "gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q"
+      ],
+      "K": [
+        "gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:k}::K",
+        "gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::K"
+      ],
+      "P": [
+        "gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:p}::P",
+        "gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::P"
+      ],
+      "edge": [
+        "gammalooprs::{spenso::index,spenso::index-label:e}::edge",
+        "gammalooprs::{spenso::index}::edge"
+      ],
+      "vertex": [
+        "gammalooprs::{spenso::index,spenso::index-label:v}::vertex",
+        "gammalooprs::{spenso::index}::vertex"
+      ]
+    }
+  },
+  "cases": {
+    "xs_qed_eedd_L1": {
+      "diagram_id": "d7099c291db331ebfa2cdef08a66824d",
+      "model_sha256": "240bc07998f4b0c43d5afb6d18bd5235a9c72b4c25d25d31037d041653da1b68",
+      "options_sha256": "cfd637210db230c1cf617063105c0b6b09e46f9fce8c8b1cf3528854b93ecd2c",
+      "grouping_sha256": "30a0924a3360be687d1df9fcbbfdff62c01bc0fd14036ab9076cf7f451568666",
+      "report": "GenerationReport { topology_count: 17, interaction_assignment_count: 34, retained_count: 1, zero_numerator_count: 0, completed: true }",
+      "payload_names": {
+        "historical": [
+          "UFO::{}::GC_1",
+          "UFO::{}::GC_3",
+          "UFO::{}::MD",
+          "gammalooprs::{spenso::index,spenso::index-label:e}::edge",
+          "gammalooprs::{spenso::index}::hedge",
+          "gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:q}::Q",
+          "gammalooprs::{spenso::rank1,spenso::tensor}::u",
+          "gammalooprs::{spenso::rank1,spenso::tensor}::ubar",
+          "gammalooprs::{spenso::rank1,spenso::tensor}::v",
+          "gammalooprs::{spenso::rank1,spenso::tensor}::vbar",
+          "spenso::{linear,spenso::tensor}::gamma",
+          "spenso::{spenso::lower}::dind",
+          "spenso::{spenso::representation,spenso::dualizable}::cof",
+          "spenso::{spenso::representation,spenso::self_dual}::bis",
+          "spenso::{spenso::representation,spenso::self_dual}::mink",
+          "spenso::{symmetric,linear,real,spenso::tensor}::g"
+        ],
+        "current": [
+          "UFO::{}::GC_1",
+          "UFO::{}::GC_3",
+          "UFO::{}::MD",
+          "gammalooprs::{spenso::index}::edge",
+          "gammalooprs::{spenso::index}::hedge",
+          "gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q",
+          "gammalooprs::{spenso::rank1,spenso::tensor}::u",
+          "gammalooprs::{spenso::rank1,spenso::tensor}::ubar",
+          "gammalooprs::{spenso::rank1,spenso::tensor}::v",
+          "gammalooprs::{spenso::rank1,spenso::tensor}::vbar",
+          "spenso::{linear,spenso::tensor}::gamma",
+          "spenso::{spenso::lower}::dind",
+          "spenso::{spenso::representation,spenso::dualizable}::cof",
+          "spenso::{spenso::representation,spenso::self_dual}::bis",
+          "spenso::{spenso::representation,spenso::self_dual}::mink",
+          "spenso::{symmetric,linear,real,spenso::tensor}::g"
+        ]
+      },
+      "owners": {
+        "vertex:0": {
+          "historical_ports": [
+            "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(4,1)))",
+            "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(3,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(3,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(4,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(6,1))"
+          ],
+          "current_ports": [
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(3,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(4,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(6,1))",
+            "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(3,1))",
+            "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(4,1)))"
+          ],
+          "historical_flags": [
+            false,
+            true
+          ],
+          "current_flags": [
+            false,
+            true
+          ],
+          "current_interface_present": true
+        },
+        "vertex:1": {
+          "historical_ports": [
+            "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(2,1)))",
+            "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(5,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(2,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(5,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(8,1))"
+          ],
+          "current_ports": [
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(2,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(5,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(8,1))",
+            "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(5,1))",
+            "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(2,1)))"
+          ],
+          "historical_flags": [
+            false,
+            true
+          ],
+          "current_flags": [
+            false,
+            true
+          ],
+          "current_interface_present": true
+        },
+        "vertex:2": {
+          "historical_ports": [
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(0,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(1,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(9,1))"
+          ],
+          "current_ports": [
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(0,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(1,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(9,1))"
+          ],
+          "historical_flags": [
+            false,
+            true
+          ],
+          "current_flags": [
+            false,
+            true
+          ],
+          "current_interface_present": false
+        },
+        "vertex:3": {
+          "historical_ports": [
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(10,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(11,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(7,1))"
+          ],
+          "current_ports": [
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(10,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(11,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(7,1))"
+          ],
+          "historical_flags": [
+            false,
+            true
+          ],
+          "current_flags": [
+            false,
+            true
+          ],
+          "current_interface_present": false
+        },
+        "edge:0": {
+          "historical_ports": [],
+          "current_ports": [],
+          "historical_flags": [
+            false,
+            true
+          ],
+          "current_flags": [
+            false,
+            true
+          ],
+          "current_interface_present": false
+        },
+        "edge:1": {
+          "historical_ports": [],
+          "current_ports": [],
+          "historical_flags": [
+            false,
+            true
+          ],
+          "current_flags": [
+            false,
+            true
+          ],
+          "current_interface_present": false
+        },
+        "edge:2": {
+          "historical_ports": [
+            "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(3,1)))",
+            "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(2,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(2,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(3,1))"
+          ],
+          "current_ports": [
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(2,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(3,1))",
+            "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(2,1))",
+            "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(3,1)))"
+          ],
+          "historical_flags": [
+            false,
+            true
+          ],
+          "current_flags": [
+            false,
+            true
+          ],
+          "current_interface_present": true
+        },
+        "edge:3": {
+          "historical_ports": [
+            "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(5,1)))",
+            "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(4,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(4,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(5,1))"
+          ],
+          "current_ports": [
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(4,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(5,1))",
+            "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(4,1))",
+            "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(5,1)))"
+          ],
+          "historical_flags": [
+            false,
+            true
+          ],
+          "current_flags": [
+            false,
+            true
+          ],
+          "current_interface_present": true
+        },
+        "edge:4": {
+          "historical_ports": [
+            "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(6,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(7,1))"
+          ],
+          "current_ports": [
+            "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(6,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(7,1))"
+          ],
+          "historical_flags": [
+            false,
+            true
+          ],
+          "current_flags": [
+            false,
+            true
+          ],
+          "current_interface_present": false
+        },
+        "edge:5": {
+          "historical_ports": [
+            "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(8,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(9,1))"
+          ],
+          "current_ports": [
+            "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(8,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(9,1))"
+          ],
+          "historical_flags": [
+            false,
+            true
+          ],
+          "current_flags": [
+            false,
+            true
+          ],
+          "current_interface_present": false
+        },
+        "numerator": {
+          "historical_ports": [
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(0,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(1,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(10,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(11,1))"
+          ],
+          "current_ports": [
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(0,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(1,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(10,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(11,1))"
+          ],
+          "historical_flags": [
+            false,
+            true
+          ],
+          "current_flags": [
+            false,
+            true
+          ],
+          "current_interface_present": false
+        },
+        "prefactor": {
+          "historical_ports": [],
+          "current_ports": [],
+          "historical_flags": [
+            false,
+            true
+          ],
+          "current_flags": [
+            false,
+            true
+          ],
+          "current_interface_present": false
+        },
+        "projector": {
+          "historical_ports": [
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(0,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(1,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(10,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(11,1))"
+          ],
+          "current_ports": [
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(0,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(1,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(10,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(11,1))"
+          ],
+          "historical_flags": [
+            false,
+            true
+          ],
+          "current_flags": [
+            false,
+            true
+          ],
+          "current_interface_present": false
+        }
+      }
+    },
+    "xs_qed_eemm_L1": {
+      "diagram_id": "685a3c747e47b7b0847f76d281998a43",
+      "model_sha256": "240bc07998f4b0c43d5afb6d18bd5235a9c72b4c25d25d31037d041653da1b68",
+      "options_sha256": "cfd637210db230c1cf617063105c0b6b09e46f9fce8c8b1cf3528854b93ecd2c",
+      "grouping_sha256": "30a0924a3360be687d1df9fcbbfdff62c01bc0fd14036ab9076cf7f451568666",
+      "report": "GenerationReport { topology_count: 17, interaction_assignment_count: 34, retained_count: 1, zero_numerator_count: 0, completed: true }",
+      "payload_names": {
+        "historical": [
+          "UFO::{}::GC_3",
+          "UFO::{}::MM",
+          "gammalooprs::{spenso::index,spenso::index-label:e}::edge",
+          "gammalooprs::{spenso::index}::hedge",
+          "gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:q}::Q",
+          "gammalooprs::{spenso::rank1,spenso::tensor}::u",
+          "gammalooprs::{spenso::rank1,spenso::tensor}::ubar",
+          "gammalooprs::{spenso::rank1,spenso::tensor}::v",
+          "gammalooprs::{spenso::rank1,spenso::tensor}::vbar",
+          "spenso::{linear,spenso::tensor}::gamma",
+          "spenso::{spenso::representation,spenso::self_dual}::bis",
+          "spenso::{spenso::representation,spenso::self_dual}::mink",
+          "spenso::{symmetric,linear,real,spenso::tensor}::g"
+        ],
+        "current": [
+          "UFO::{}::GC_3",
+          "UFO::{}::MM",
+          "gammalooprs::{spenso::index}::edge",
+          "gammalooprs::{spenso::index}::hedge",
+          "gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q",
+          "gammalooprs::{spenso::rank1,spenso::tensor}::u",
+          "gammalooprs::{spenso::rank1,spenso::tensor}::ubar",
+          "gammalooprs::{spenso::rank1,spenso::tensor}::v",
+          "gammalooprs::{spenso::rank1,spenso::tensor}::vbar",
+          "spenso::{linear,spenso::tensor}::gamma",
+          "spenso::{spenso::representation,spenso::self_dual}::bis",
+          "spenso::{spenso::representation,spenso::self_dual}::mink",
+          "spenso::{symmetric,linear,real,spenso::tensor}::g"
+        ]
+      },
+      "owners": {
+        "vertex:0": {
+          "historical_ports": [
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(3,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(4,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(6,1))"
+          ],
+          "current_ports": [
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(3,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(4,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(6,1))"
+          ],
+          "historical_flags": [
+            false,
+            true
+          ],
+          "current_flags": [
+            false,
+            true
+          ],
+          "current_interface_present": false
+        },
+        "vertex:1": {
+          "historical_ports": [
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(2,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(5,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(8,1))"
+          ],
+          "current_ports": [
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(2,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(5,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(8,1))"
+          ],
+          "historical_flags": [
+            false,
+            true
+          ],
+          "current_flags": [
+            false,
+            true
+          ],
+          "current_interface_present": false
+        },
+        "vertex:2": {
+          "historical_ports": [
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(0,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(1,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(9,1))"
+          ],
+          "current_ports": [
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(0,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(1,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(9,1))"
+          ],
+          "historical_flags": [
+            false,
+            true
+          ],
+          "current_flags": [
+            false,
+            true
+          ],
+          "current_interface_present": false
+        },
+        "vertex:3": {
+          "historical_ports": [
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(10,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(11,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(7,1))"
+          ],
+          "current_ports": [
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(10,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(11,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(7,1))"
+          ],
+          "historical_flags": [
+            false,
+            true
+          ],
+          "current_flags": [
+            false,
+            true
+          ],
+          "current_interface_present": false
+        },
+        "edge:0": {
+          "historical_ports": [],
+          "current_ports": [],
+          "historical_flags": [
+            false,
+            true
+          ],
+          "current_flags": [
+            false,
+            true
+          ],
+          "current_interface_present": false
+        },
+        "edge:1": {
+          "historical_ports": [],
+          "current_ports": [],
+          "historical_flags": [
+            false,
+            true
+          ],
+          "current_flags": [
+            false,
+            true
+          ],
+          "current_interface_present": false
+        },
+        "edge:2": {
+          "historical_ports": [
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(2,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(3,1))"
+          ],
+          "current_ports": [
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(2,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(3,1))"
+          ],
+          "historical_flags": [
+            false,
+            true
+          ],
+          "current_flags": [
+            false,
+            true
+          ],
+          "current_interface_present": false
+        },
+        "edge:3": {
+          "historical_ports": [
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(4,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(5,1))"
+          ],
+          "current_ports": [
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(4,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(5,1))"
+          ],
+          "historical_flags": [
+            false,
+            true
+          ],
+          "current_flags": [
+            false,
+            true
+          ],
+          "current_interface_present": false
+        },
+        "edge:4": {
+          "historical_ports": [
+            "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(6,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(7,1))"
+          ],
+          "current_ports": [
+            "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(6,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(7,1))"
+          ],
+          "historical_flags": [
+            false,
+            true
+          ],
+          "current_flags": [
+            false,
+            true
+          ],
+          "current_interface_present": false
+        },
+        "edge:5": {
+          "historical_ports": [
+            "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(8,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(9,1))"
+          ],
+          "current_ports": [
+            "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(8,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(9,1))"
+          ],
+          "historical_flags": [
+            false,
+            true
+          ],
+          "current_flags": [
+            false,
+            true
+          ],
+          "current_interface_present": false
+        },
+        "numerator": {
+          "historical_ports": [
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(0,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(1,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(10,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(11,1))"
+          ],
+          "current_ports": [
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(0,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(1,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(10,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(11,1))"
+          ],
+          "historical_flags": [
+            false,
+            true
+          ],
+          "current_flags": [
+            false,
+            true
+          ],
+          "current_interface_present": false
+        },
+        "prefactor": {
+          "historical_ports": [],
+          "current_ports": [],
+          "historical_flags": [
+            false,
+            true
+          ],
+          "current_flags": [
+            false,
+            true
+          ],
+          "current_interface_present": false
+        },
+        "projector": {
+          "historical_ports": [
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(0,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(1,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(10,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(11,1))"
+          ],
+          "current_ports": [
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(0,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(1,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(10,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(11,1))"
+          ],
+          "historical_flags": [
+            false,
+            true
+          ],
+          "current_flags": [
+            false,
+            true
+          ],
+          "current_interface_present": false
+        }
+      }
+    },
+    "xs_qed_eeee_1pi_L1": {
+      "diagram_id": "19313a3947e130179589bbd41aa5957c",
+      "model_sha256": "240bc07998f4b0c43d5afb6d18bd5235a9c72b4c25d25d31037d041653da1b68",
+      "options_sha256": "cfd637210db230c1cf617063105c0b6b09e46f9fce8c8b1cf3528854b93ecd2c",
+      "grouping_sha256": "30a0924a3360be687d1df9fcbbfdff62c01bc0fd14036ab9076cf7f451568666",
+      "report": "GenerationReport { topology_count: 3, interaction_assignment_count: 4, retained_count: 1, zero_numerator_count: 0, completed: true }",
+      "payload_names": {
+        "historical": [
+          "UFO::{}::GC_3",
+          "UFO::{}::Me",
+          "gammalooprs::{spenso::index,spenso::index-label:e}::edge",
+          "gammalooprs::{spenso::index}::hedge",
+          "gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:q}::Q",
+          "gammalooprs::{spenso::rank1,spenso::tensor}::u",
+          "gammalooprs::{spenso::rank1,spenso::tensor}::ubar",
+          "gammalooprs::{spenso::rank1,spenso::tensor}::v",
+          "gammalooprs::{spenso::rank1,spenso::tensor}::vbar",
+          "spenso::{linear,spenso::tensor}::gamma",
+          "spenso::{spenso::representation,spenso::self_dual}::bis",
+          "spenso::{spenso::representation,spenso::self_dual}::mink",
+          "spenso::{symmetric,linear,real,spenso::tensor}::g"
+        ],
+        "current": [
+          "UFO::{}::GC_3",
+          "UFO::{}::Me",
+          "gammalooprs::{spenso::index}::edge",
+          "gammalooprs::{spenso::index}::hedge",
+          "gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q",
+          "gammalooprs::{spenso::rank1,spenso::tensor}::u",
+          "gammalooprs::{spenso::rank1,spenso::tensor}::ubar",
+          "gammalooprs::{spenso::rank1,spenso::tensor}::v",
+          "gammalooprs::{spenso::rank1,spenso::tensor}::vbar",
+          "spenso::{linear,spenso::tensor}::gamma",
+          "spenso::{spenso::representation,spenso::self_dual}::bis",
+          "spenso::{spenso::representation,spenso::self_dual}::mink",
+          "spenso::{symmetric,linear,real,spenso::tensor}::g"
+        ]
+      },
+      "owners": {
+        "vertex:0": {
+          "historical_ports": [
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(0,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(2,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(4,1))"
+          ],
+          "current_ports": [
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(0,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(2,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(4,1))"
+          ],
+          "historical_flags": [
+            false,
+            true
+          ],
+          "current_flags": [
+            false,
+            true
+          ],
+          "current_interface_present": false
+        },
+        "vertex:1": {
+          "historical_ports": [
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(10,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(3,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(6,1))"
+          ],
+          "current_ports": [
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(3,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(10,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(6,1))"
+          ],
+          "historical_flags": [
+            false,
+            true
+          ],
+          "current_flags": [
+            false,
+            true
+          ],
+          "current_interface_present": true
+        },
+        "vertex:2": {
+          "historical_ports": [
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(11,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(9,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(7,1))"
+          ],
+          "current_ports": [
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(9,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(11,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(7,1))"
+          ],
+          "historical_flags": [
+            false,
+            true
+          ],
+          "current_flags": [
+            false,
+            true
+          ],
+          "current_interface_present": true
+        },
+        "vertex:3": {
+          "historical_ports": [
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(1,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(8,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(5,1))"
+          ],
+          "current_ports": [
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(1,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(8,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(5,1))"
+          ],
+          "historical_flags": [
+            false,
+            true
+          ],
+          "current_flags": [
+            false,
+            true
+          ],
+          "current_interface_present": false
+        },
+        "edge:0": {
+          "historical_ports": [],
+          "current_ports": [],
+          "historical_flags": [
+            false,
+            true
+          ],
+          "current_flags": [
+            false,
+            true
+          ],
+          "current_interface_present": false
+        },
+        "edge:1": {
+          "historical_ports": [],
+          "current_ports": [],
+          "historical_flags": [
+            false,
+            true
+          ],
+          "current_flags": [
+            false,
+            true
+          ],
+          "current_interface_present": false
+        },
+        "edge:2": {
+          "historical_ports": [
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(2,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(3,1))"
+          ],
+          "current_ports": [
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(2,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(3,1))"
+          ],
+          "historical_flags": [
+            false,
+            true
+          ],
+          "current_flags": [
+            false,
+            true
+          ],
+          "current_interface_present": false
+        },
+        "edge:3": {
+          "historical_ports": [
+            "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(4,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(5,1))"
+          ],
+          "current_ports": [
+            "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(4,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(5,1))"
+          ],
+          "historical_flags": [
+            false,
+            true
+          ],
+          "current_flags": [
+            false,
+            true
+          ],
+          "current_interface_present": false
+        },
+        "edge:4": {
+          "historical_ports": [
+            "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(6,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(7,1))"
+          ],
+          "current_ports": [
+            "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(6,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(7,1))"
+          ],
+          "historical_flags": [
+            false,
+            true
+          ],
+          "current_flags": [
+            false,
+            true
+          ],
+          "current_interface_present": false
+        },
+        "edge:5": {
+          "historical_ports": [
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(8,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(9,1))"
+          ],
+          "current_ports": [
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(8,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(9,1))"
+          ],
+          "historical_flags": [
+            false,
+            true
+          ],
+          "current_flags": [
+            false,
+            true
+          ],
+          "current_interface_present": false
+        },
+        "numerator": {
+          "historical_ports": [
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(0,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(1,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(10,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(11,1))"
+          ],
+          "current_ports": [
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(0,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(1,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(10,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(11,1))"
+          ],
+          "historical_flags": [
+            false,
+            true
+          ],
+          "current_flags": [
+            false,
+            true
+          ],
+          "current_interface_present": false
+        },
+        "prefactor": {
+          "historical_ports": [],
+          "current_ports": [],
+          "historical_flags": [
+            false,
+            true
+          ],
+          "current_flags": [
+            false,
+            true
+          ],
+          "current_interface_present": false
+        },
+        "projector": {
+          "historical_ports": [
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(0,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(1,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(10,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(11,1))"
+          ],
+          "current_ports": [
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(0,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(1,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(10,1))",
+            "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(11,1))"
+          ],
+          "historical_flags": [
+            false,
+            true
+          ],
+          "current_flags": [
+            false,
+            true
+          ],
+          "current_interface_present": false
+        }
+      }
+    }
+  },
+  "schema_signatures": {
+    "payload": {
+      "$": [
+        [
+          "diagrams",
+          "groups"
+        ]
+      ],
+      "$/diagrams/*": [
+        [
+          "aut",
+          "basis",
+          "id",
+          "key",
+          "name",
+          "overall_factor",
+          "payload"
+        ]
+      ],
+      "$/diagrams/*/basis": [
+        [
+          "dependent_externals",
+          "edge_signatures",
+          "external_edges",
+          "loop_edges",
+          "tree_edges"
+        ]
+      ],
+      "$/diagrams/*/basis/edge_signatures": [
+        [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4",
+          "5"
+        ]
+      ],
+      "$/diagrams/*/basis/edge_signatures/0": [
+        [
+          "external",
+          "loops"
+        ]
+      ],
+      "$/diagrams/*/basis/edge_signatures/1": [
+        [
+          "external",
+          "loops"
+        ]
+      ],
+      "$/diagrams/*/basis/edge_signatures/2": [
+        [
+          "external",
+          "loops"
+        ]
+      ],
+      "$/diagrams/*/basis/edge_signatures/3": [
+        [
+          "external",
+          "loops"
+        ]
+      ],
+      "$/diagrams/*/basis/edge_signatures/4": [
+        [
+          "external",
+          "loops"
+        ]
+      ],
+      "$/diagrams/*/basis/edge_signatures/5": [
+        [
+          "external",
+          "loops"
+        ]
+      ],
+      "$/diagrams/*/key": [
+        [
+          "edges",
+          "half_edges",
+          "vertices",
+          "words"
+        ]
+      ],
+      "$/diagrams/*/key/edges/*": [
+        [
+          "diagram"
+        ]
+      ],
+      "$/diagrams/*/key/edges/*/diagram": [
+        [
+          "external",
+          "is_dummy",
+          "particle"
+        ]
+      ],
+      "$/diagrams/*/key/edges/*/diagram/external": [
+        [
+          "connection",
+          "index",
+          "name",
+          "state"
+        ]
+      ],
+      "$/diagrams/*/key/vertices/*": [
+        [
+          "cut_side"
+        ],
+        [
+          "diagram"
+        ],
+        [
+          "topology_threshold_side"
+        ]
+      ],
+      "$/diagrams/*/key/vertices/*/diagram": [
+        [
+          "interaction"
+        ]
+      ],
+      "$/diagrams/*/key/vertices/*/cut_side": [
+        [
+          "coupling_orders",
+          "loop_count",
+          "side"
+        ]
+      ],
+      "$/diagrams/*/key/vertices/*/cut_side/coupling_orders": [
+        [
+          "QED"
+        ]
+      ],
+      "$/diagrams/*/key/vertices/*/topology_threshold_side": [
+        [
+          "side"
+        ]
+      ],
+      "$/diagrams/*/payload": [
+        [
+          "cuts",
+          "edges",
+          "half_edge_order",
+          "loop_momentum_basis",
+          "model",
+          "numerator",
+          "numerator_prefactor",
+          "overall_factor",
+          "projector",
+          "symmetry_factor",
+          "topology_threshold_candidates",
+          "vertices"
+        ]
+      ],
+      "$/diagrams/*/payload/cuts/*": [
+        [
+          "cut",
+          "left",
+          "right"
+        ]
+      ],
+      "$/diagrams/*/payload/cuts/*/cut/*": [
+        [
+          "edge",
+          "endpoint"
+        ]
+      ],
+      "$/diagrams/*/payload/cuts/*/left": [
+        [
+          "coupling_orders",
+          "half_edges",
+          "loop_count"
+        ]
+      ],
+      "$/diagrams/*/payload/cuts/*/left/coupling_orders": [
+        [
+          "QED"
+        ]
+      ],
+      "$/diagrams/*/payload/cuts/*/left/half_edges/*": [
+        [
+          "edge",
+          "endpoint"
+        ]
+      ],
+      "$/diagrams/*/payload/cuts/*/right": [
+        [
+          "coupling_orders",
+          "half_edges",
+          "loop_count"
+        ]
+      ],
+      "$/diagrams/*/payload/cuts/*/right/coupling_orders": [
+        [
+          "QED"
+        ]
+      ],
+      "$/diagrams/*/payload/cuts/*/right/half_edges/*": [
+        [
+          "edge",
+          "endpoint"
+        ]
+      ],
+      "$/diagrams/*/payload/edges/*/*": [
+        [
+          "directed",
+          "external",
+          "is_dummy",
+          "num_interface",
+          "numerator",
+          "orientation",
+          "particle",
+          "source_slot",
+          "target_slot"
+        ],
+        [
+          "directed",
+          "external",
+          "is_dummy",
+          "numerator",
+          "orientation",
+          "particle",
+          "source_slot",
+          "target_slot"
+        ],
+        [
+          "source",
+          "target"
+        ]
+      ],
+      "$/diagrams/*/payload/edges/*/*/external": [
+        [
+          "connection",
+          "index",
+          "name",
+          "state"
+        ]
+      ],
+      "$/diagrams/*/payload/half_edge_order/*": [
+        [
+          "edge",
+          "endpoint"
+        ]
+      ],
+      "$/diagrams/*/payload/loop_momentum_basis": [
+        [
+          "dependent_externals",
+          "edge_signatures",
+          "external_edges",
+          "loop_edges",
+          "tree_edges"
+        ]
+      ],
+      "$/diagrams/*/payload/loop_momentum_basis/edge_signatures": [
+        [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4",
+          "5"
+        ]
+      ],
+      "$/diagrams/*/payload/loop_momentum_basis/edge_signatures/0": [
+        [
+          "external",
+          "loops"
+        ]
+      ],
+      "$/diagrams/*/payload/loop_momentum_basis/edge_signatures/1": [
+        [
+          "external",
+          "loops"
+        ]
+      ],
+      "$/diagrams/*/payload/loop_momentum_basis/edge_signatures/2": [
+        [
+          "external",
+          "loops"
+        ]
+      ],
+      "$/diagrams/*/payload/loop_momentum_basis/edge_signatures/3": [
+        [
+          "external",
+          "loops"
+        ]
+      ],
+      "$/diagrams/*/payload/loop_momentum_basis/edge_signatures/4": [
+        [
+          "external",
+          "loops"
+        ]
+      ],
+      "$/diagrams/*/payload/loop_momentum_basis/edge_signatures/5": [
+        [
+          "external",
+          "loops"
+        ]
+      ],
+      "$/diagrams/*/payload/topology_threshold_candidates/*": [
+        [
+          "cut",
+          "left",
+          "right"
+        ]
+      ],
+      "$/diagrams/*/payload/topology_threshold_candidates/*/cut/*": [
+        [
+          "edge",
+          "endpoint"
+        ]
+      ],
+      "$/diagrams/*/payload/topology_threshold_candidates/*/left/*": [
+        [
+          "edge",
+          "endpoint"
+        ]
+      ],
+      "$/diagrams/*/payload/topology_threshold_candidates/*/right/*": [
+        [
+          "edge",
+          "endpoint"
+        ]
+      ],
+      "$/diagrams/*/payload/vertices/*": [
+        [
+          "interaction",
+          "name",
+          "num_interface",
+          "numerator"
+        ],
+        [
+          "interaction",
+          "name",
+          "numerator"
+        ]
+      ],
+      "$/groups/*": [
+        [
+          "master",
+          "members"
+        ]
+      ],
+      "$/groups/*/members/*": [
+        [
+          "id",
+          "name",
+          "overall_factor",
+          "ratio",
+          "source_index"
+        ]
+      ]
+    },
+    "metadata": {
+      "$": [
+        [
+          "case",
+          "diagrams",
+          "grouping",
+          "model",
+          "numerators",
+          "report"
+        ]
+      ],
+      "$/diagrams/*": [
+        [
+          "id",
+          "owners"
+        ]
+      ],
+      "$/diagrams/*/owners/*": [
+        [
+          "composite",
+          "expression",
+          "metric",
+          "owner",
+          "ports"
+        ]
+      ],
+      "$/model": [
+        [
+          "couplings",
+          "form_factors",
+          "functions",
+          "lorentz_structures",
+          "name",
+          "orders",
+          "parameters",
+          "particles",
+          "propagators",
+          "restriction",
+          "vertex_rules"
+        ]
+      ],
+      "$/model/couplings/*": [
+        [
+          "expression",
+          "name",
+          "orders",
+          "value"
+        ]
+      ],
+      "$/model/lorentz_structures/*": [
+        [
+          "name",
+          "spins",
+          "structure"
+        ]
+      ],
+      "$/model/orders/*": [
+        [
+          "expansion_order",
+          "hierarchy",
+          "name"
+        ]
+      ],
+      "$/model/parameters/*": [
+        [
+          "expression",
+          "lhablock",
+          "lhacode",
+          "name",
+          "nature",
+          "parameter_type",
+          "texname",
+          "value"
+        ],
+        [
+          "expression",
+          "lhablock",
+          "lhacode",
+          "name",
+          "nature",
+          "parameter_type",
+          "value"
+        ]
+      ],
+      "$/model/particles/*": [
+        [
+          "antiname",
+          "antitexname",
+          "charge",
+          "chemical_potential",
+          "color",
+          "ghost_number",
+          "goldstoneboson",
+          "lepton_number",
+          "mass",
+          "name",
+          "pdg_code",
+          "propagating",
+          "propagator",
+          "spin",
+          "texname",
+          "width",
+          "y_charge",
+          "y_charge_right"
+        ],
+        [
+          "antiname",
+          "antitexname",
+          "charge",
+          "color",
+          "ghost_number",
+          "goldstoneboson",
+          "lepton_number",
+          "mass",
+          "name",
+          "pdg_code",
+          "propagating",
+          "propagator",
+          "spin",
+          "texname",
+          "width",
+          "y_charge",
+          "y_charge_right"
+        ]
+      ],
+      "$/model/propagators/*": [
+        [
+          "denominator",
+          "name",
+          "numerator",
+          "particle"
+        ]
+      ],
+      "$/model/vertex_rules/*": [
+        [
+          "color_structures",
+          "couplings",
+          "lorentz_structures",
+          "name",
+          "particles"
+        ]
+      ],
+      "$/numerators": [
+        [
+          "filter_zero_color",
+          "loop_momentum_bases",
+          "named_loop_momentum_bases",
+          "naming",
+          "prefactor",
+          "projector"
+        ]
+      ],
+      "$/numerators/loop_momentum_bases": [
+        []
+      ],
+      "$/numerators/named_loop_momentum_bases": [
+        []
+      ],
+      "$/numerators/naming": [
+        [
+          "named"
+        ]
+      ],
+      "$/numerators/naming/named": [
+        [
+          "prefix"
+        ]
+      ]
+    }
+  }
+}

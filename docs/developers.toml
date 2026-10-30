@@ -2191,6 +2191,108 @@ id = "investigations"
 title = "Engineering investigations"
 summary = "Dated measurements and diagnostic records. Treat their results as experiment context, not timeless API guarantees."
 
+# QED preparation reports are immutable; only round4 owns the current certificate.
+# The three literal rows precede register_indices; its existing scope is unchanged.
+[[section.note]]
+id = "generation-oracle-numerator-diagnosis"
+title = "Three one-diagram QED oracle numerator diagnosis round-four correction"
+summary = "Approved pool-1 fixed-case certificate with exact owner transport and capture-bound qualifications."
+source = "docs/architecture/generation-oracle-numerator-diagnosis-round4.typ"
+kind = "Correctness investigation"
+status = "Approved certificate at 16bfd2c8; combined MAIN review pending"
+lifecycle = "investigation"
+owner = "unassigned"
+captured_at = "2026-10-29"
+evidence_revision = "16bfd2c84ea1fdeba0c8087cc6cdc8f1082f11a8"
+reviewed_at = "2026-10-29"
+review_ref = "16bfd2c84ea1fdeba0c8087cc6cdc8f1082f11a8"
+products = ["feynkit"]
+topics = ["generation", "validation"]
+review_triggers = ["crates/feynkit-generator/tests/generation_oracle/**", "crates/feynkit-graph/src/numerator_interface.rs", "crates/idenso/src/cook.rs"]
+
+[[section.note]]
+id = "generation-oracle-numerator-migration"
+title = "Three one-diagram QED numerator oracle migration"
+summary = "Approved three-literal preparation with pool 1/8/32 runtime evidence; combined MAIN review pending."
+source = "docs/architecture/generation-oracle-numerator-migration.typ"
+kind = "Implementation receipt"
+status = "Approved preparation ab7eefa3; integrated candidate awaiting independent review"
+lifecycle = "investigation"
+owner = "unassigned"
+captured_at = "2026-10-29"
+evidence_revision = "ab7eefa30e2c4a8914cd79e5632d2f0d64bc0239"
+reviewed_at = "2026-10-29"
+review_ref = "ab7eefa30e2c4a8914cd79e5632d2f0d64bc0239"
+products = ["feynkit"]
+topics = ["generation", "validation"]
+review_triggers = ["crates/feynkit-generator/tests/generation_oracle/main.rs"]
+
+[[section.note.scope]]
+path = "crates/feynkit-generator/tests/generation_oracle/main.rs"
+symbol = "xs_qed_eemm_L1 recorded row"
+anchor = "    fast xs_qed_eemm_L1:"
+end_anchor = "    fast xs_qed_eemm_L2:"
+digest = "4b488f655db1d4b1263d43071718f14d52f9a001"
+
+[[section.note.scope]]
+path = "crates/feynkit-generator/tests/generation_oracle/main.rs"
+symbol = "xs_qed_eedd_L1 recorded row"
+anchor = "    fast xs_qed_eedd_L1:"
+end_anchor = "    fast xs_qed_eedd_L2:"
+digest = "ee1fea52075f15b3b23fa44a98f957909a6c681e"
+
+[[section.note.scope]]
+path = "crates/feynkit-generator/tests/generation_oracle/main.rs"
+symbol = "xs_qed_eeee_1pi_L1 recorded row"
+anchor = "    fast xs_qed_eeee_1pi_L1:"
+end_anchor = "    fast xs_qed_eeee_1pi_L2:"
+digest = "fb0a84a24354a8881a5515eb2f33fc7db1ea1b99"
+
+[[section.note]]
+id = "generation-oracle-numerator-diagnosis-round1-history"
+title = "Three one-diagram QED oracle numerator diagnosis"
+summary = "Frozen first-round investigation, superseded by the approved round-four certificate."
+source = "docs/architecture/generation-oracle-numerator-diagnosis.typ"
+kind = "Historical investigation"
+status = "Archived; superseded by round4"
+lifecycle = "archived"
+owner = "unassigned"
+captured_at = "2026-10-29"
+evidence_revision = "16bfd2c84ea1fdeba0c8087cc6cdc8f1082f11a8"
+products = ["feynkit"]
+topics = ["generation", "validation"]
+review_triggers = ["docs/architecture/evidence/generation-oracle-numerator-diagnosis/**"]
+
+[[section.note]]
+id = "generation-oracle-numerator-diagnosis-round2-history"
+title = "Three one-diagram QED oracle numerator diagnosis correction"
+summary = "Frozen second-round investigation, superseded by the approved round-four certificate."
+source = "docs/architecture/generation-oracle-numerator-diagnosis-correction.typ"
+kind = "Historical investigation"
+status = "Archived; superseded by round4"
+lifecycle = "archived"
+owner = "unassigned"
+captured_at = "2026-10-29"
+evidence_revision = "16bfd2c84ea1fdeba0c8087cc6cdc8f1082f11a8"
+products = ["feynkit"]
+topics = ["generation", "validation"]
+review_triggers = ["docs/architecture/evidence/generation-oracle-numerator-diagnosis/round2/**"]
+
+[[section.note]]
+id = "generation-oracle-numerator-diagnosis-round3-history"
+title = "Three one-diagram QED oracle numerator diagnosis round-three correction"
+summary = "Frozen third-round investigation, superseded by the approved round-four certificate."
+source = "docs/architecture/generation-oracle-numerator-diagnosis-round3.typ"
+kind = "Historical investigation"
+status = "Archived; superseded by round4"
+lifecycle = "archived"
+owner = "unassigned"
+captured_at = "2026-10-29"
+evidence_revision = "16bfd2c84ea1fdeba0c8087cc6cdc8f1082f11a8"
+products = ["feynkit"]
+topics = ["generation", "validation"]
+review_triggers = ["docs/architecture/evidence/generation-oracle-numerator-diagnosis/round3/**"]
+
 [[section.note]]
 id = "symbolica-evaluation-domain-fix"
 title = "Symbolica evaluation-domain bug and fix"
