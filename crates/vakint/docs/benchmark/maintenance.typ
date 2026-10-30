@@ -169,10 +169,40 @@ used by a diagnostic build; qualified final builds use coherent published pins.
 The adapter rejects invalid supplied protocols instead of silently downgrading
 them to diagnostic records. DEV reports with explicit profile and nullable
 self-hash remain admissible without a performance protocol.
-Use three samples per arm for final comparisons and retain median/range.
-Each sample binds three fresh workers and one cheap three-report comparison;
-all nine performance workers run serially. Each arm's boolean policy stays
-fixed across repetitions. No new physical five-loop DFS run is included.
+Current qualification uses *one* actual ordinary-DFS run, *one* actual
+no-memo DFS run, and three Ordered runs. Earlier balanced version-two cohorts
+retain their three original samples per arm unchanged. The asymmetric contract
+changes only the protocol/report version; exact comparison still uses the
+existing three-directory comparator and version-two parity receipts:
+
+```json
+{
+  "schema": "vakint.ordered-rung-protocol.v3",
+  "sample_counts": {"dfs": 1, "dfs_no_memo": 1, "ordered": 3},
+  "samples": [
+    {"dfs": "<first actual worker>", "dfs_no_memo": "<first actual worker>", "ordered": "<first actual worker>"},
+    {"ordered": "<second actual worker>"},
+    {"ordered": "<third actual worker>"}
+  ]
+}
+```
+
+The worker objects use the same guarded file contract above; all other build,
+source, cache and timing requirements remain unchanged. This is one case per
+asymmetric protocol. Run the cheap comparator three times, pointing to the
+*same immutable* DFS/no-memo report directories and each distinct Ordered
+directory. Repeated baseline references are equality evidence, not additional
+measurements. The adapter deduplicates measured samples by report hash, requires
+exactly one/one/three unique workers, and writes
+#raw("vakint.ordered-rung-report.v3") with per-arm #raw("sample_counts").
+It never repeats baseline numbers to create fake medians or ranges.
+
+The table labels both baselines #raw("n = 1 · single measurement"); Ordered
+retains its measured median/range. Ratios use each single baseline observation
+and carry no estimate of baseline run-to-run variability. All five workers run
+serially. Each arm's boolean policy stays fixed. No new physical five-loop DFS
+run is included. Existing version-one/two cohorts remain as recorded, including
+their original sample counts and qualification.
 Release status is not inferred from #raw("debug_assertions=false").
 
 The headline is #raw("reduction_math_seconds"), using fixed scope

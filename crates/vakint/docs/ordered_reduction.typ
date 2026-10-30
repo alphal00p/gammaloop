@@ -254,6 +254,11 @@ authenticates their saved payloads and compares exact retained expressions and
 serialized numerical centers/error estimates without reducing again. These are
 mathematical bounds only for components marked #raw("Bounded"). It writes a bound
 #raw("parity.json") suitable for the benchmark adapter.
+For current performance qualification, run each DFS variant once and Ordered
+three times. Reuse those same saved baseline reports for the three cheap exact
+comparisons. Their repeated references are not repeated timing samples: the
+report labels each DFS baseline as one observation and gives only Ordered a
+three-run median/range. Prior balanced measurements retain their original counts.
 
 The comparison headline is #raw("reduction_math_seconds"): measured
 non-overlapping math spans covering IBP/routing and exact weighted terminal

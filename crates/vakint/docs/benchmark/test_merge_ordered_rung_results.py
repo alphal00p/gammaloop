@@ -277,6 +277,61 @@ class OrderedReportContractTests(unittest.TestCase):
             },
         )
 
+    def asymmetric(self):
+        anchor = self.triplet("asymmetric-anchor")
+        receipts = [anchor]
+        protocol_path = self.protocol(anchor)
+        protocol = merge.read(protocol_path)
+        protocol["schema"] = "vakint.ordered-rung-protocol.v3"
+        protocol["sample_counts"] = {"dfs": 1, "dfs_no_memo": 1, "ordered": 3}
+        initial = protocol["samples"][0]["ordered"]
+        for index in (1, 2):
+            receipt = merge.read(anchor)
+            source = Path(receipt["reports"]["ordered"]["path"])
+            directory = self.root / f"asymmetric-ordered-{index}" / "ordered"
+            directory.mkdir(parents=True)
+            (directory / "retained.symbolica").write_bytes(
+                (source.parent / "retained.symbolica").read_bytes()
+            )
+            report = merge.read(source)
+            report["reduction_math_seconds"] = index + 1
+            report["reduction_math_timing"]["gross_seconds"] = index + 2
+            new_report = self.write(
+                str(directory.relative_to(self.root) / "report.json"), report
+            )
+            receipt["reports"]["ordered"] = merge.evidence(new_report)
+            receipt_path = self.write(f"asymmetric-parity-{index}.json", receipt)
+            receipts.append(receipt_path)
+            launch = merge.read(Path(initial["launch"]["path"]))
+            launch.update(
+                pid=200 + index,
+                start_ticks=2000 + index,
+                utc=f"2026-10-29T12:0{index + 2}:00+00:00",
+            )
+            launch["command"][launch["command"].index("--work-dir") + 1] = str(
+                directory.parent
+            )
+            launch_path = self.write(f"extra-guard-{index}/launch.json", launch)
+            completion = merge.read(Path(initial["completion"]["path"]))
+            completion["utc"] = f"2026-10-29T12:0{index + 2}:30+00:00"
+            completion_path = self.write(
+                f"extra-guard-{index}/completion.json", completion
+            )
+            protocol["samples"].append(
+                {
+                    "ordered": {
+                        **initial,
+                        "report_sha256": merge.digest(new_report),
+                        "pid": 200 + index,
+                        "start_ticks": 2000 + index,
+                        "launch": merge.evidence(launch_path),
+                        "completion": merge.evidence(completion_path),
+                    }
+                }
+            )
+        protocol_path.write_text(json.dumps(protocol))
+        return receipts, protocol_path
+
     def historical_pair(self):
         pair = merge.read(self.parity)
         ordered_path = Path(pair["reports"]["ordered"]["path"])
@@ -737,6 +792,46 @@ class OrderedReportContractTests(unittest.TestCase):
             result["ordered_rung_runs"]["old-qualified"],
             original["ordered_rung_runs"]["old-qualified"],
         )
+
+    def test_asymmetric_counts_use_one_real_baseline_and_three_ordered_values(self):
+        receipts, protocol = self.asymmetric()
+        result = merge.append(self.base, "asymmetric", receipts, protocol)
+        run = result["ordered_rung_runs"]["asymmetric"]
+        self.assertEqual(run["schema"], "vakint.ordered-rung-report.v3")
+        row = run["summary"][0]
+        self.assertEqual(
+            row["sample_counts"], {"dfs": 1, "dfs_no_memo": 1, "ordered": 3}
+        )
+        self.assertIsNone(row["sample_count"])
+        self.assertEqual(
+            row["metrics"]["dfs"]["reduction_math_seconds"]["samples"], [4]
+        )
+        self.assertEqual(
+            row["metrics"]["dfs_no_memo"]["reduction_math_seconds"]["samples"], [2]
+        )
+        self.assertEqual(
+            row["metrics"]["ordered"]["reduction_math_seconds"]["samples"], [1, 2, 3]
+        )
+        self.assertEqual(row["ordered_over_dfs"], 0.5)
+        self.assertEqual(row["ordered_over_dfs_no_memo"], 1)
+
+    def test_repeated_baseline_references_need_explicit_asymmetric_protocol(self):
+        receipts, _ = self.asymmetric()
+        with self.assertRaisesRegex(ValueError, "explicit asymmetric protocol"):
+            merge.append(self.base, "wrong", receipts)
+
+    def test_asymmetric_protocol_rejects_fake_counts_or_extra_baseline_worker(self):
+        receipts, path = self.asymmetric()
+        protocol = merge.read(path)
+        protocol["sample_counts"]["dfs"] = 3
+        path.write_text(json.dumps(protocol))
+        with self.assertRaisesRegex(ValueError, "one real baseline"):
+            merge.append(self.base, "wrong", receipts, path)
+        protocol["sample_counts"]["dfs"] = 1
+        protocol["samples"][1]["dfs"] = protocol["samples"][0]["dfs"]
+        path.write_text(json.dumps(protocol))
+        with self.assertRaisesRegex(ValueError, "omits or adds an arm"):
+            merge.append(self.base, "wrong", receipts, path)
 
     def test_historical_changed_acceptance_or_timing_is_rejected(self):
         path = self.historical_pair()

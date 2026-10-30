@@ -87,6 +87,9 @@ earlier pySecDec records as historical cohorts. Headline and ratio use checked
 `reduction_math_seconds` (IBP plus exact weighted assembly/grouping), requiring
 `experimental-rustred`; retain the broader public-call timer separately.
 Qualified fresh-process measurements use `--no-monitor` for every arm;
+current qualification runs ordinary DFS once, no-memo DFS once, and Ordered
+three times. Repeated references to the saved DFS outputs are proof inputs,
+never additional samples; preserve per-arm counts and prior balanced cohorts.
 dashboard/snapshot observations remain diagnostic, with RAM guarding independent.
 Never use the old 40-hour public timer as reduction-only time. Preserve unavailable phase times as null
 and all earlier cohorts unchanged. See `docs/ordered_reduction.typ` for phase and

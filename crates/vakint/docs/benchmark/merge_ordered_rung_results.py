@@ -255,12 +255,17 @@ def validate_protocol(path, pairs):
     raw = read(path)
     require(
         raw["schema"]
-        in ("vakint.ordered-rung-protocol.v1", "vakint.ordered-rung-protocol.v2"),
+        in (
+            "vakint.ordered-rung-protocol.v1",
+            "vakint.ordered-rung-protocol.v2",
+            "vakint.ordered-rung-protocol.v3",
+        ),
         "unknown protocol",
     )
-    arms = tuple(TRIPLET_ARMS if raw["schema"].endswith(".v2") else PAIR_ARMS)
+    asymmetric = raw["schema"].endswith(".v3")
+    arms = tuple(PAIR_ARMS if raw["schema"].endswith(".v1") else TRIPLET_ARMS)
     require(
-        all(tuple(pair["reports"]) == arms for pair in pairs),
+        asymmetric or all(tuple(pair["reports"]) == arms for pair in pairs),
         "protocol/comparison arm sets differ",
     )
     require(
@@ -312,12 +317,25 @@ def validate_protocol(path, pairs):
     }
     identities = set()
     accepted = set()
+    accepted_reports = set()
+    arm_counts = {name: 0 for name in arms}
     windows = []
     for item in raw["samples"]:
-        require(set(item) == set(arms), "protocol sample omits or adds an arm")
-        accepted.add(tuple(item[name]["report_sha256"] for name in arms))
-        for name in arms:
+        require(
+            set(item) == set(arms) or (asymmetric and set(item) == {"ordered"}),
+            "protocol sample omits or adds an arm",
+        )
+        accepted.add(
+            tuple(item[name]["report_sha256"] for name in arms if name in item)
+        )
+        for name in item:
             process = item[name]
+            require(
+                (name, process["report_sha256"]) not in accepted_reports,
+                "protocol repeats a worker report",
+            )
+            accepted_reports.add((name, process["report_sha256"]))
+            arm_counts[name] += 1
             require(
                 type(process["pid"]) is int
                 and process["pid"] > 0
@@ -386,10 +404,42 @@ def validate_protocol(path, pairs):
         "qualified performance worker windows overlap",
     )
     require(len(accepted) == len(raw["samples"]), "duplicate qualified sample")
+    if asymmetric:
+        require(
+            set(raw["samples"][0]) == set(arms)
+            and all(set(item) == {"ordered"} for item in raw["samples"][1:]),
+            "asymmetric protocol requires one anchor triplet followed by Ordered workers",
+        )
+        require(
+            all(type(count) is int for count in raw["sample_counts"].values()),
+            "asymmetric sample counts must be integers",
+        )
+        require(
+            raw["sample_counts"]
+            == arm_counts
+            == {"dfs": 1, "dfs_no_memo": 1, "ordered": 3},
+            "asymmetric protocol requires one real baseline per DFS arm and three Ordered workers",
+        )
+        require(
+            accepted_reports
+            == {
+                (name, record["evidence"]["sha256"])
+                for pair in pairs
+                for name, record in pair["reports"].items()
+            },
+            "asymmetric protocol and unique compared workers differ",
+        )
     for pair in pairs:
         require(
-            tuple(pair["reports"][name]["evidence"]["sha256"] for name in arms)
-            in accepted,
+            (
+                all(
+                    (name, record["evidence"]["sha256"]) in accepted_reports
+                    for name, record in pair["reports"].items()
+                )
+                if asymmetric
+                else tuple(pair["reports"][name]["evidence"]["sha256"] for name in arms)
+                in accepted
+            ),
             "protocol does not bind a supplied sample",
         )
         for name, item in pair["reports"].items():
@@ -710,6 +760,7 @@ def append(base, run_id, receipts, protocol=None, historical_receipts=()):
     hashes = [item["parity"]["evidence"]["sha256"] for item in pairs + historical]
     require(len(hashes) == len(set(hashes)), "duplicate parity receipt")
     qualified = validate_protocol(Path(protocol).resolve(), pairs) if protocol else None
+    asymmetric = qualified is not None and qualified["raw"]["schema"].endswith(".v3")
     grouped = {}
     for pair in pairs:
         raw = pair["reports"]["dfs"]["raw"]
@@ -741,8 +792,21 @@ def append(base, run_id, receipts, protocol=None, historical_receipts=()):
                 "mixed numerical-validation scope in one cohort",
             )
         metrics = {}
+        sample_counts = {}
         for name in arms:
-            values = [sample["reports"][name]["raw"] for sample in samples]
+            unique = {
+                (
+                    sample["reports"][name]["evidence"]["path"],
+                    sample["reports"][name]["evidence"]["sha256"],
+                ): sample["reports"][name]["raw"]
+                for sample in samples
+            }
+            require(
+                asymmetric or len(unique) == len(samples),
+                "reused report reference requires an explicit asymmetric protocol",
+            )
+            values = list(unique.values())
+            sample_counts[name] = len(values)
             math_values = [reduction_math(row) for row in values]
             math_complete = all(value is not None for value in math_values)
             metrics[name] = {
@@ -782,7 +846,13 @@ def append(base, run_id, receipts, protocol=None, historical_receipts=()):
                     for row in values
                 ],
                 "ordered_progress": [row.get("ordered_progress") for row in values],
+                "sample_count": len(values),
             }
+        if asymmetric:
+            require(
+                sample_counts == {"dfs": 1, "dfs_no_memo": 1, "ordered": 3},
+                "case does not contain the declared one/one/three actual samples",
+            )
         ordered = metrics["ordered"]["reduction_math_seconds"]
         ratios = {
             name: (
@@ -802,7 +872,9 @@ def append(base, run_id, receipts, protocol=None, historical_receipts=()):
                 "loop_count": loops,
                 "projection": projection,
                 "input_sha256": identity,
-                "sample_count": len(samples),
+                "sample_count": None if asymmetric else len(samples),
+                "sample_counts": sample_counts,
+                "baseline_single_measurements": asymmetric,
                 "data": first["data"],
                 "producer": first["producer"],
                 "dfs_request_memoization": first.get("dfs_request_memoization"),
@@ -830,7 +902,9 @@ def append(base, run_id, receipts, protocol=None, historical_receipts=()):
         )
     result = copy.deepcopy(base)
     result.setdefault("ordered_rung_runs", {})[run_id] = {
-        "schema": "vakint.ordered-rung-report.v2"
+        "schema": "vakint.ordered-rung-report.v3"
+        if asymmetric
+        else "vakint.ordered-rung-report.v2"
         if len(arms) == 3
         else "vakint.ordered-rung-report.v1",
         "arms": list(arms),

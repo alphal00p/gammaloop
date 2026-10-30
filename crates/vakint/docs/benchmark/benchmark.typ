@@ -1204,9 +1204,9 @@ Refresh and validation contract: #raw("maintenance.typ").]
 #let ordered-id = report.at("selected_ordered_rung_run", default: none)
 #if ordered-id != none {
   let run = report.ordered_rung_runs.at(ordered-id)
-  assert(run.schema in ("vakint.ordered-rung-report.v1", "vakint.ordered-rung-report.v2"))
+  assert(run.schema in ("vakint.ordered-rung-report.v1", "vakint.ordered-rung-report.v2", "vakint.ordered-rung-report.v3"))
   assert(run.persistent_caches == false)
-  let triple = run.schema == "vakint.ordered-rung-report.v2"
+  let triple = run.schema != "vakint.ordered-rung-report.v1"
   let arms = if triple { ("dfs", "dfs_no_memo", "ordered") } else { ("dfs", "ordered") }
   let rows = run.summary
   let label(row) = [*#(str(row.loop_count) + "L")* · #if row.projection == "zero-momentum-metric" [zero momentum] else [quadratic]]
@@ -1215,6 +1215,7 @@ Refresh and validation contract: #raw("maintenance.typ").]
   } else { fixed(value * 1000000, 3) + " µs" }
   let measured-cell(row, engine) = {
     let metric = row.metrics.at(engine).reduction_math_seconds
+    let n = row.at("sample_counts", default: (:)).at(engine, default: row.sample_count)
     let memo-ratio = row.ordered_over_dfs
     let no-memo-ratio = row.at("ordered_over_dfs_no_memo", default: none)
     let ratio = if triple {
@@ -1228,7 +1229,11 @@ Refresh and validation contract: #raw("maintenance.typ").]
       } else {
         text(15pt, weight: "bold")[#math-duration(metric.median_seconds)]
         linebreak()
-        text(8pt)[#math-duration(metric.min_seconds)–#math-duration(metric.max_seconds) · n = #row.sample_count]
+        if n == 1 {
+          text(8pt)[n = 1 · single measurement]
+        } else {
+          text(8pt)[#math-duration(metric.min_seconds)–#math-duration(metric.max_seconds) · n = #n]
+        }
         if engine == "ordered" and memo-ratio != none {
           linebreak()
           text(9pt, weight: "bold")[#if triple [÷ memo ]×#multiplier(memo-ratio)]
@@ -1272,6 +1277,9 @@ Refresh and validation contract: #raw("maintenance.typ").]
     faster DFS arm; green means faster than both. Both ratios are printed.] else [Green means faster.]
     Without a bound fresh-process release protocol, observations are diagnostic
     and have no ratio. Gross times and preparation deductions remain in the raw record.
+    #if run.schema == "vakint.ordered-rung-report.v3" [Each DFS baseline is one
+    actual run; Ordered shows the median/range of three. Ratios use those
+    single baselines, with no estimate of their run-to-run variability.]
   ]
   v(0.4em)
   {
