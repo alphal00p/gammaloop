@@ -1,13 +1,14 @@
 {
-  "schema": 1,
+  "schema": 2,
   "base": "30f02f79c2bcabfadcd8081e1add3d5afe6e91d2",
   "built_code": "8dcebc2591ab04d10026fbd47a45e8d31f911ef3",
+  "preserved_pre_final": "a86d252c3f0003392cd660b7808c63f625b8cf4a",
   "code_distinct_paths": 58,
-  "evidence_distinct_paths_before_indexes": 18,
+  "evidence_distinct_paths_including_indexes": 22,
   "code_evidence_overlap": [
     "docs/developers.toml"
   ],
-  "cumulative_distinct_count_with_two_final_indexes": 77,
+  "cumulative_distinct_count": 79,
   "cumulative_paths_nonself": [
     {
       "path": "crates/feynkit-generator/tests/generation_oracle/main.rs",
@@ -30,9 +31,19 @@
       "sha256": "78d9b395b72a7c070daabc217bddcabb613c001c14f362d059bda1306bdc902a"
     },
     {
+      "path": "docs/architecture/evidence/generation-integration/wp3/families/producer-metadata-qualification.json",
+      "bytes": 1930,
+      "sha256": "3a8f6e5392c1d6ad94b14a27cc012aeb64d5cdfb58ba5b60c6e4fb67e1dd915b"
+    },
+    {
       "path": "docs/architecture/evidence/generation-integration/wp3/families/receipt.json",
-      "bytes": 27521,
-      "sha256": "19de1d14a14f9ea08be7e6dfff3bdacf7a001cda687d02b3b795491c1a38ff1d"
+      "bytes": 28135,
+      "sha256": "49cdc2e8acb7b03a321cab3a2b9c872c118060ccad1586ee228c0d46282d199f"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/families/runtime-manifest.json",
+      "bytes": 314317,
+      "sha256": "5d26514b79aa4ebd733c11090968aabfac3f314d1d26f48b8cae4631fd6bf5e4"
     },
     {
       "path": "docs/architecture/evidence/generation-integration/wp3/families/tool-sources/account.py.txt",
@@ -48,6 +59,11 @@
       "path": "docs/architecture/evidence/generation-integration/wp3/families/tool-sources/dependency-features.py.txt",
       "bytes": 1985,
       "sha256": "ec9fba2bdd70656437d06e6720085a60031addc8749b9c2566770764c410d137"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/families/tool-sources/final-qualified.py.txt",
+      "bytes": 6978,
+      "sha256": "c2a0e2d99bd23d3d6bd064a142378013a1248e1756dd0ebcd5358f34a1a731ea"
     },
     {
       "path": "docs/architecture/evidence/generation-integration/wp3/families/tool-sources/final.py.txt",
@@ -386,10 +402,9 @@
     }
   ],
   "nonself_exclusions": [
-    "docs/architecture/evidence/generation-integration/wp3/families/inventory.json",
-    "docs/architecture/evidence/generation-integration/wp3/families/runtime-manifest.json"
+    "docs/architecture/evidence/generation-integration/wp3/families/inventory.json"
   ],
-  "self_hash_policy": "Indexfiles excludedfrom ownhashrows; finalGit tree and detachedsupplement bind them. No candidate/self hashcycle.",
+  "self_hash_policy": "Onlythis inventory excludesitsownbytes; finalGit tree and detachedsupplement bind it. runtime-manifest.json is immutableandhashedhere. No candidate/selfhashcycle.",
   "code_paths": [
     "crates/feynkit-generator/tests/generation_oracle/main.rs",
     "docs/architecture/evidence/generation-oracle-family-diagnosis/adversarial-control-results.json",
@@ -450,14 +465,18 @@
     "docs/architecture/generation-oracle-family-migration.typ",
     "docs/developers.toml"
   ],
-  "evidence_paths_before_indexes": [
+  "evidence_paths_including_indexes": [
     "docs/architecture/evidence/generation-integration/execution.json",
     "docs/architecture/evidence/generation-integration/wp3/families/approval-index.json",
     "docs/architecture/evidence/generation-integration/wp3/families/approved-migration-review.json",
+    "docs/architecture/evidence/generation-integration/wp3/families/inventory.json",
+    "docs/architecture/evidence/generation-integration/wp3/families/producer-metadata-qualification.json",
     "docs/architecture/evidence/generation-integration/wp3/families/receipt.json",
+    "docs/architecture/evidence/generation-integration/wp3/families/runtime-manifest.json",
     "docs/architecture/evidence/generation-integration/wp3/families/tool-sources/account.py.txt",
     "docs/architecture/evidence/generation-integration/wp3/families/tool-sources/audit.py.txt",
     "docs/architecture/evidence/generation-integration/wp3/families/tool-sources/dependency-features.py.txt",
+    "docs/architecture/evidence/generation-integration/wp3/families/tool-sources/final-qualified.py.txt",
     "docs/architecture/evidence/generation-integration/wp3/families/tool-sources/final.py.txt",
     "docs/architecture/evidence/generation-integration/wp3/families/tool-sources/observer.py.txt",
     "docs/architecture/evidence/generation-integration/wp3/families/tool-sources/qualify-producer.py.txt",
@@ -469,5 +488,6 @@
     "docs/architecture/generation-integration-oracle-families.typ",
     "docs/architecture/generation-integration-plan.typ",
     "docs/developers.toml"
-  ]
+  ],
+  "supporting_dependency_correction": "producer-metadata-qualification.json; priorrawfingerprintrecord retained, wrongsourcefieldexplicitlysuperseded."
 }

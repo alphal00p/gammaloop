@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "classification": "Supporting dependency provenance corrected before independent combined review; no runtime or producer change.",
+  "original_record": {
+    "path": "target/wp3-family-integration/dependency-features.json",
+    "sha256": "90cdfb5dba7a9a861159a74defc389ca5a08ece4c58351137ae1d53979b81145",
+    "bytes": 85296,
+    "retention": "bytes preserved; actual fingerprint features/deriver/artifact fields retain credit; old source field denotes generator filtered source, NOT the dependency derivation src and has no such credit"
+  },
+  "actual_dependency_artifact": {
+    "root": "/nix/store/wa6jjzm7grkp6iy459gyqh2vqzlx4k31-gammaloop-crate-test-binaries-feynkit-generator-b6f177b7bc15beb1-deps-0.1.0",
+    "deriver": "/nix/store/9fb1whmflhldis39lg6b4z3fqfyig6k5-gammaloop-crate-test-binaries-feynkit-generator-b6f177b7bc15beb1-deps-0.1.0.drv",
+    "source": "/nix/store/gmqajram6mmwjpwcfz6a97g02ffsywbq-source",
+    "profile": "ci-optim",
+    "query_argv": [
+      "nix",
+      "derivation",
+      "show",
+      "/nix/store/9fb1whmflhldis39lg6b4z3fqfyig6k5-gammaloop-crate-test-binaries-feynkit-generator-b6f177b7bc15beb1-deps-0.1.0.drv"
+    ],
+    "query_policy": "both license variables absent; raw derivation read only in memory, not retained/displayed"
+  },
+  "generator_filtered_source_separate": "/nix/store/y9pg92ri4dqscpcsgj2n9iz5nlgyrycj-source",
+  "executed_archive_deriver": "/nix/store/rbp28mw3nnkf1l3dl9f2yrbpjvcgvir9-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0.drv",
+  "executed_oracle_elf_sha256": "0e83563f557f8f87d352ccdf8f71ed8dba95a15fc58cb6ad4b31af78500e8bc7",
+  "qualification": "Dependency fingerprints are supporting provenance, not final archive ELF depfiles/binary binding. Final selected runtime remains8dce; no runtime rebuild/rerun. Prior a86 final-stage docs/evaluation records remain successful prior-candidate results, not new final tip qualification."
+}

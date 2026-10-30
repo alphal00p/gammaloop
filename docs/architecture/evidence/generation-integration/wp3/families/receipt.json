@@ -5,7 +5,9 @@
   "base": "30f02f79c2bcabfadcd8081e1add3d5afe6e91d2",
   "built_code_source": "8dcebc2591ab04d10026fbd47a45e8d31f911ef3",
   "built_code_change": "yyvzwznyztsrqtprzzlpnlyvlkwnuvyy",
-  "evidence_change": "nqnowunlnumplkytytoyvoomttupknok",
+  "evidence_change": "snzorympnwtvkwslmwsyosxqvywruols",
+  "preserved_prior_evidence": "a86d252c3f0003392cd660b7808c63f625b8cf4a / generation-integration-families-pre-final",
+  "supporting_dependency_source_qualification": "docs/architecture/evidence/generation-integration/wp3/families/producer-metadata-qualification.json corrects the original dependency-features.json source field: dependency derivation src is gmqajram..., while y9pg92ri... is the separately qualified generator filtered source. Original fingerprint record bytes retained; no dependency-source credit for its old source field. Exact corrected path/hash is in the final nonself inventory.",
   "candidate_bookmark": "generation-integration-families",
   "approval_index": "docs/architecture/evidence/generation-integration/wp3/families/approval-index.json",
   "migration": {
@@ -485,7 +487,7 @@
       "qualification": "Six final-prose PDFs and six proper semantic HTML bundles. Explicit source/imports/wrapper/tool/argv/exit/timestamp0 and semantic mutation negative; no prose edits after rendering. Not a full site build."
     },
     "final_documentation_qualification": {
-      "required_record": "target/wp3-family-integration/final-stage.json",
+      "required_record": "target/wp3-family-integration/qualified-final-stage.json",
       "detached_manifest": "target/wp3-family-integration/final-supplement.json",
       "classification": "Source-specific final canonical builder/pages/guard results captured AFTER final candidate freeze. This receipt does not infer a full-builder pass from static counts. Detached final records avoid candidate/self-hash cycles."
     }
