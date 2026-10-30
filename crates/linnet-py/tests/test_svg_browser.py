@@ -1,6 +1,7 @@
 """Exercise the shared graph camera and inspector in Chromium and WebKit."""
 
 import importlib.util
+import math
 import os
 import unittest
 import xml.etree.ElementTree as ET
@@ -40,6 +41,17 @@ class SvgBrowserTests(unittest.TestCase):
         self.assertLess(sizes[1][0], 390)
         self.assertGreater(sizes[2][1], 600)
         self.assertGreater(sizes[3][0], 390)
+        # Standalone SVGs use pt (4/3 CSS px); the readable preview is bounded
+        # by 450px width, 300px height, and a total enlargement of 3.
+        natural_scales = [
+            max(4 / 3, min(3, 450 / width, 300 / height))
+            for width, height in sizes
+        ]
+        # The label comparisons use unfitted previews, and reset must still
+        # reach 100% after the first preview's column narrows to 300px.
+        for (width, _), natural in zip(sizes[:3], natural_scales[:3]):
+            self.assertLessEqual(width * natural, 520)
+        self.assertLessEqual(sizes[0][0] * natural_scales[0], 300)
         drawings = [render.to_html() for render in renders]
         document = "<style>figure { margin: 0; }</style>" + "".join(
             f'<div id="graph-{index}" style="width:520px">{drawing}</div>'
@@ -71,11 +83,12 @@ class SvgBrowserTests(unittest.TestCase):
                             owner = page.locator(f"#graph-{index}")
                             camera = owner.locator(".linnet-viewport")
                             scale = camera.evaluate("s => s.getScreenCTM().a")
-                            expected = (3, 4 / 3, 4 / 3, 520 / 900)[index]
+                            natural = natural_scales[index]
+                            expected = min(natural, 520 / width)
                             self.assertAlmostEqual(scale, expected, delta=1e-4)
                             self.assertEqual(
                                 owner.locator("output").inner_text(),
-                                ("100%", "100%", "100%", "43%")[index],
+                                f"{math.floor(100 * expected / natural + 0.5)}%",
                             )
                             x, y, w, h = map(
                                 float, camera.get_attribute("viewBox").split()
@@ -89,14 +102,15 @@ class SvgBrowserTests(unittest.TestCase):
                                     '[data-linnet-kind="node"][data-linnet-id="0"]'
                                 ).bounding_box()
                             )
-                        # The small preview enlarges labels for readability;
-                        # larger drawings preserve their physical dimensions.
-                        for label in labels[1:3]:
+                        # The same node-0 label target has fixed authored dimensions;
+                        # its screen dimensions grow with the natural scale.
+                        for index, label in enumerate(labels[1:3], start=1):
+                            ratio = natural_scales[0] / natural_scales[index]
                             self.assertAlmostEqual(
-                                label["height"] * 2.25, labels[0]["height"], places=2
+                                label["height"] * ratio, labels[0]["height"], places=2
                             )
                             self.assertAlmostEqual(
-                                label["width"] * 2.25, labels[0]["width"], places=2
+                                label["width"] * ratio, labels[0]["width"], places=2
                             )
                         self.assertGreaterEqual(
                             page.locator("#graph-2 > figure > svg").bounding_box()[
@@ -114,7 +128,9 @@ class SvgBrowserTests(unittest.TestCase):
                             "document.querySelector('#graph-0 svg').viewBox.baseVal.width === 300"
                         )
                         self.assertAlmostEqual(
-                            camera.evaluate("s => s.getScreenCTM().a"), 3.15, delta=1e-4
+                            camera.evaluate("s => s.getScreenCTM().a"),
+                            1.05 * natural_scales[0],
+                            delta=1e-4,
                         )
                         self.assertEqual(first.locator("output").inner_text(), "105%")
                         page.keyboard.press("0")

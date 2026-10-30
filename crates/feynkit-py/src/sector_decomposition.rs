@@ -52,9 +52,9 @@ impl PyFeynmanDiagram {
     /// With a complete diagram, an admitted numerical point and regulator ``eps``:
     ///
     /// >>> from symbolica import E, S
-    /// >>> from symbolica.community import hepkit as hep
+    /// >>> from symbolica.community import graph, hepkit as hep
     /// >>> model = hep.Model.phi3()
-    /// >>> diagram = model.process(["phi"], ["phi"]).generate_diagrams(loops=1, max_vertices=2, maximum_bridges=0, progress=None).diagrams[0]
+    /// >>> diagram = model.process(["phi"], ["phi"]).amplitude(loops=hep.Loops.total(1), topology=hep.TopologyRules(max_vertices=2, bridges=graph.Bridges.at_most(0), self_energies=hep.Veto.all(), tadpoles=hep.Veto.all(), snails=hep.Veto.massless())).generate().build(hep.NumeratorOptions(naming=hep.Naming.named("D"))).diagrams[0]
     /// >>> from symbolica.community.hepkit.sector_decomposition import with_diagram_expressions
     /// >>> diagram = with_diagram_expressions(diagram, overall_factor=diagram.overall_factor_expression(evaluate=True))
     /// >>> eps, D = S("eps", "D")
@@ -144,9 +144,9 @@ pyo3_stub_gen::inventory::submit! {
                 With a complete diagram and admitted numerical kinematics:
 
                 >>> from symbolica import E, S
-                >>> from symbolica.community import hepkit as hep
+                >>> from symbolica.community import graph, hepkit as hep
                 >>> model = hep.Model.phi3()
-                >>> diagram = model.process(["phi"], ["phi"]).generate_diagrams(loops=1, max_vertices=2, maximum_bridges=0, progress=None).diagrams[0]
+                >>> diagram = model.process(["phi"], ["phi"]).amplitude(loops=hep.Loops.total(1), topology=hep.TopologyRules(max_vertices=2, bridges=graph.Bridges.at_most(0), self_energies=hep.Veto.all(), tadpoles=hep.Veto.all(), snails=hep.Veto.massless())).generate().build(hep.NumeratorOptions(naming=hep.Naming.named("D"))).diagrams[0]
                 >>> from symbolica.community.hepkit.sector_decomposition import with_diagram_expressions
                 >>> diagram = with_diagram_expressions(diagram, overall_factor=diagram.overall_factor_expression(evaluate=True))
                 >>> eps, D = S("eps", "D")

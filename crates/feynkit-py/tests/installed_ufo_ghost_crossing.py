@@ -1,10 +1,9 @@
-"""Check canonical SM ghost vertices in all three crossings.
+"""Check SM ghost vertices against the original UFO in all three crossings.
 
-Particle order and couplings follow the bundled UFO in assets/models/ufo/sm.
-Its antighost-derivative convention defines UUV1 = P(3,2): the all-incoming
-antighost momentum for fields ordered [ghost, antighost, vector]. The expected
-crossings below follow that derivative independently of the stored Lorentz
-expression. No external MadGraph installation is required.
+Upstream records: https://github.com/mg5amcnlo/mg5amcnlo/tree/3.x/models/sm
+The particle order and couplings below come from vertices.py/couplings.py.
+lorentz.py defines UUV1 = P(3,2) + P(3,3), which equals -p1 with all
+three momenta incoming. No external MadGraph installation is required.
 """
 
 import copy
@@ -51,7 +50,7 @@ p3 = "UFO::P(UFO::idx(1,3),UFO::idx(1,3))"
 uuv = next(
     item for item in specification["lorentz_structures"] if item["name"] == "UUV1"
 )
-assert E(uuv["structure"], default_namespace="UFO") == E(p2)
+assert E(uuv["structure"], default_namespace="UFO") == E(p2 + "+" + p3)
 P, mink, hedge, wave, index, mu = S(
     "gammalooprs::P",
     "spenso::mink",
@@ -72,28 +71,27 @@ for name, (particles, coupling_name) in vertices.items():
         model.expand_couplings(S("UFO::" + coupling_name)) - coupling
     ).together() == zero
     ghost, antighost, vector = [model.particle(particle) for particle in particles]
-    # P0 = P1 + P2 for the physical process. The derivative supplies p2,
-    # the all-incoming antighost momentum: -P2 = -P0 + P1 when crossed
-    # to external slot 2, and P0 when the antighost is incoming.
+    # P0 = P1 + P2 for the physical process. The expected tensor is -p1
+    # of the ordered UFO ghost leg, independent of the stored Lorentz expression.
     # slots records the external indices of (ghost, antighost, vector).
     for incoming, outgoing, slots, momentum in (
         (
             [ghost],
             [model.particle(vector.antiname), model.particle(antighost.antiname)],
             (0, 2, 1),
-            -P(0, mink(4, mu)) + P(1, mink(4, mu)),
+            -P(0, mink(4, mu)),
         ),
         (
             [vector],
             [model.particle(ghost.antiname), model.particle(antighost.antiname)],
             (1, 2, 0),
-            -P(0, mink(4, mu)) + P(1, mink(4, mu)),
+            P(1, mink(4, mu)),
         ),
         (
             [antighost],
             [model.particle(vector.antiname), model.particle(ghost.antiname)],
             (2, 0, 1),
-            P(0, mink(4, mu)),
+            P(0, mink(4, mu)) - P(1, mink(4, mu)),
         ),
     ):
         diagrams = (

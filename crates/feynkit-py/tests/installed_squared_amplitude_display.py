@@ -8,10 +8,15 @@ from symbolica.community import hepkit as hep
 from symbolica.community.tensor import DisplaySettings
 
 model = hep.Model.standard_model()
-generated = model.process(
-    ["e-", "e+"], ["a", "a"], vertex_allow=["V_98"]
-).generate_diagrams(
-    max_vertices=2, maximum_bridges=None, numerator_grouping=None, progress=None
+generated = (
+    model.process(["e-", "e+"], ["a", "a"])
+    .amplitude(
+        loops=hep.Loops.total(0),
+        restrict=hep.Restrict().only_vertices([model.vertex_rule("V_98")]),
+        topology=hep.TopologyRules(max_vertices=2),
+    )
+    .generate()
+    .build()
 )
 squared = hep.Amplitude(generated.diagrams).squared()
 fermions = squared.sum_spins([0, 1], average_initial=True)

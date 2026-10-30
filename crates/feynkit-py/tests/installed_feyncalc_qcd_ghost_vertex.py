@@ -3,9 +3,8 @@
 All graph weights, momentum routing, UV expansion, color/tensor reduction and
 IBP are shared APIs.  The only analytic integral input is I(1)|pole = M/eps;
 physical loop integration restores i/(16*pi**2), and a4 = gs**2/(16*pi**2).
-The SM model supplies its antighost-derivative rule UUV1 = P(3,2) in the
-ordered [ghost, antighost, vector] vertex; only the gluon gauge parameter
-is specialized here.
+The SM model supplies the canonical UFO ghost rule; only the gluon gauge
+parameter is specialized here.
 References: FeynCalcExamples/QCD/OneLoop/{Renormalization,GhGl-Gh}.
 """
 
@@ -164,11 +163,8 @@ for pdg in (9000005, -9000005):
             assert not scalar.matches(K(arguments))
             assert not scalar.matches(hedge(arguments))
             if not loops:
-                # -G f(A,c,barc) p_barc with all vertex momenta incoming.
-                # For an incoming ghost, p_barc=-P2 and f(b,a,c)=-f(a,b,c);
-                # for an incoming antighost, p_barc=P0 and f(b,c,a)=f(a,b,c).
                 expected_momentum = P(0, mink(D, b))
-                if pdg > 0:
+                if pdg < 0:
                     expected_momentum -= P(1, mink(D, b))
                 assert (scalar + gs * expected_momentum * color).expand() == zero
                 trees[pdg] = scalar
