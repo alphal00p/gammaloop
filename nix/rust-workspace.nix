@@ -2842,7 +2842,9 @@
       status=0
       ${lib.concatMapStringsSep "\n" (package: ''
           rm -f ${lib.escapeShellArg nextestJunitPath}
+          # Honor the Nix builder's requested parallelism when running tests too.
           cargo nextest run \
+            --test-threads "$NIX_BUILD_CORES" \
             --archive-file ${nextestBinarySetForTarget target}/${nextestArchiveNameFor target package} \
             --extract-to . \
             --extract-overwrite \
