@@ -84,10 +84,28 @@ impl<const N: usize> NativeCandidate<N> {
     }
 
     /// Request-local global reduction; never reads or fills the DFS point cache.
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn reduce_linear_combination_ordered(
         &self,
         terms: Vec<(IntegralKey, rustred::algebra::Coefficient)>,
         limits: ReductionLimits,
+        observation: Option<&mut rustred::solver::CandidateRoutedApplicationObserver<'_>>,
+    ) -> Result<rustred::solver::CandidateOrderedReduction, crate::RustRedEvaluationError> {
+        self.reduce_linear_combination_ordered_with_arithmetic(
+            terms,
+            limits,
+            rustred::reduction::OrderedWeightArithmetic::Exact,
+            observation,
+        )
+    }
+
+    /// As [`Self::reduce_linear_combination_ordered`] with an explicit
+    /// frontier weight arithmetic (identical exact results).
+    pub(crate) fn reduce_linear_combination_ordered_with_arithmetic(
+        &self,
+        terms: Vec<(IntegralKey, rustred::algebra::Coefficient)>,
+        limits: ReductionLimits,
+        arithmetic: rustred::reduction::OrderedWeightArithmetic,
         observation: Option<&mut rustred::solver::CandidateRoutedApplicationObserver<'_>>,
     ) -> Result<rustred::solver::CandidateOrderedReduction, crate::RustRedEvaluationError> {
         let reducer = self
@@ -106,19 +124,20 @@ impl<const N: usize> NativeCandidate<N> {
                 );
                 envelope.caller_phase = Some("entry_admission");
                 observer.emit(envelope);
-                reducer.reduce_linear_combination_ordered_with_observation(
+                reducer.reduce_linear_combination_ordered_with_arithmetic(
                     terms,
-                    &mut |progress, current| {
+                    arithmetic,
+                    Some(&mut |progress, current| {
                         observer.emit_ordered_progress(
                             self.family.fingerprint(),
                             *progress,
                             current,
                         );
                         Ok(())
-                    },
+                    }),
                 )
             }
-            None => reducer.reduce_linear_combination_ordered(terms),
+            None => reducer.reduce_linear_combination_ordered_with_arithmetic(terms, arithmetic, None),
         }
         .map_err(crate::RustRedEvaluationError::from_native)
     }

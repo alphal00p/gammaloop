@@ -1017,6 +1017,9 @@ impl SavedApplication {
         MonitorContext::native_phase(observation.as_deref_mut(), "scalar_lowering", None);
         let mut application = self.prepared.lock().map_err(failure)?;
         application.set_reduction_strategy(settings.rustred_application_options.reduction_strategy);
+        application.set_ordered_weight_arithmetic(
+            settings.rustred_application_options.ordered_weight_arithmetic,
+        );
         let family = application.family();
         let loop_count = family.loop_count();
         let dimension = family.dimension().to_expression();

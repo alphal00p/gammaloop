@@ -36,6 +36,53 @@ pub use precision::{
     NumericalCoefficient, NumericalEvaluationResult, PrecisionSource, PrecisionWarning,
 };
 pub use rustred::reduction::ReductionStrategy as RustRedReductionStrategy;
+pub use rustred::reduction::{
+    ModularWeightOptions as RustRedModularWeightOptions,
+    OrderedWeightArithmetic as RustRedOrderedWeightArithmetic,
+};
+
+/// Parse an Ordered weight arithmetic: `exact`, or
+/// `modular[:key=value,...]` with keys `threads`, `batch`, `seed`, `checks`,
+/// `verification_primes`, `max_primes`, `max_points` and `cross_check`
+/// (`0`/`1`). Both arithmetics return identical exact results.
+pub fn parse_rustred_ordered_weight_arithmetic(
+    text: &str,
+) -> Result<RustRedOrderedWeightArithmetic, String> {
+    let text = text.trim();
+    if text.eq_ignore_ascii_case("exact") {
+        return Ok(RustRedOrderedWeightArithmetic::Exact);
+    }
+    let Some(rest) = text.strip_prefix("modular") else {
+        return Err(format!(
+            "unknown ordered weight arithmetic {text:?}; expected 'exact' or 'modular[:key=value,...]'"
+        ));
+    };
+    let mut options = RustRedModularWeightOptions::default();
+    let rest = rest.strip_prefix(':').unwrap_or(rest);
+    for item in rest.split(',').map(str::trim).filter(|item| !item.is_empty()) {
+        let (key, value) = item
+            .split_once('=')
+            .ok_or_else(|| format!("expected key=value in modular options, found {item:?}"))?;
+        let number = || {
+            value
+                .trim()
+                .parse::<u64>()
+                .map_err(|e| format!("invalid modular option {key}={value}: {e}"))
+        };
+        match key.trim() {
+            "threads" => options.threads = number()? as usize,
+            "batch" => options.batch_points = number()? as usize,
+            "seed" => options.seed = number()?,
+            "checks" => options.verification_points = number()? as usize,
+            "verification_primes" => options.verification_primes = number()? as usize,
+            "max_primes" => options.max_primes = number()? as usize,
+            "max_points" => options.max_points_per_prime = number()? as usize,
+            "cross_check" => options.cross_check_exact = number()? != 0,
+            other => return Err(format!("unknown modular option {other:?}")),
+        }
+    }
+    Ok(RustRedOrderedWeightArithmetic::Modular(options))
+}
 pub use rustred::scalar_numerator::ScalarNumeratorLimits as RustRedScalarNumeratorLimits;
 use rustred::solver::CandidateRoutedApplicationObserver;
 pub use rustred::solver::{
