@@ -74,9 +74,9 @@ validated packs are reused offline. Activation is transactional and replaces inc
 and numerical context. Explicit IBP, saved-application and cache paths remain available. See
 the crate's `external_data.typ` for loading and release conventions.
 
-Prepared caches attach by default when the selected data supplies them. Official loading can
-set `load_prepared_caches` to false to activate the validated registry without importing those
-caches. A saved-application path inside a recognized release uses that release's cumulative
+Prepared caches attach only when requested for depth-first reduction, the one strategy that
+reads them (`OfficialExternalDataOptions::for_strategy`). The default ordered strategy never reads
+them, so default loading activates the validated registry without importing those caches. A saved-application path inside a recognized release uses that release's cumulative
 snapshot; a bare application supplies terminal declarations without inventing coefficient or
 graph records.
 

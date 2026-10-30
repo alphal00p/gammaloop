@@ -34,17 +34,21 @@ expressions rather than input spelling when testing equivalence.
 
 Tensor numerators are reduced to scalar integrals before analytic evaluation where required.
 Reduction depends on the topology, Lorentz rank, dimension convention, and scalar-product
-normalization. Tensor reduction requires FORM. When diagnosing a mismatch, keep the FORM input
-and Vakint temporary directory so that the failing reduction can be inspected.
+normalization. The default FeynKit tensor reduction is native; the optional AlphaLoop projector
+requires FORM. When diagnosing a mismatch with that projector, keep the FORM input and Vakint
+temporary directory so that the failing reduction can be inspected.
 
 == Evaluation order and backends
 
 The evaluation order is an ordered selection policy, not a request to combine backend results.
 Vakint skips methods whose capability declaration does not match the canonical topology, then
-uses the first matching method. An error from that selected backend is returned immediately; it
-does not trigger fallback to the next method. AlphaLoop, MATAD, and FMFT are analytic FORM-backed
-paths. pySecDec is numerical and additionally needs numeric parameters and external momenta where
-the topology requires them.
+uses the first matching method. RustRed also yields to a later matching method when the external
+data for a four- or five-loop topology is not loaded; if no later method matches, RustRed reports
+the missing data. An error from the selected backend is returned immediately; it does not trigger
+fallback to the next method. The default order starts with RustRed, using ordered reduction,
+followed by the backends whose tools are usable on the system. AlphaLoop, MATAD, and FMFT are
+analytic FORM-backed paths. pySecDec is numerical and additionally needs numeric parameters and
+external momenta where the topology requires them.
 
 For reproducible comparisons record:
 

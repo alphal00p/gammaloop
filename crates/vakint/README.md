@@ -1,8 +1,14 @@
 # Vakint
 
 Vakint matches, canonicalizes, tensor-reduces, and evaluates single-scale vacuum integrals for
-high-energy physics. It combines Symbolica expression handling with analytic FORM-backed methods
-and numerical pySecDec evaluation.
+high-energy physics. It combines Symbolica expression handling with the FORM-independent RustRed
+reduction, analytic FORM-backed methods and numerical pySecDec evaluation.
+
+By default Vakint evaluates with RustRed using the ordered reduction strategy, and needs neither
+FORM nor pySecDec. When FORM (4.2.1 or newer) is available, the default evaluation order keeps
+AlphaLoop, MATAD and FMFT after RustRed as fallbacks, followed by pySecDec when it can be imported.
+Explicitly requested FORM-based backends report a missing FORM installation. Cache operations
+require selecting the depth-first strategy explicitly.
 
 Use the canonical Typst documentation for maintained workflows:
 

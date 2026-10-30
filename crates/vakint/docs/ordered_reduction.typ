@@ -11,8 +11,10 @@
 = Ordered RustRed reduction
 
 The ordered strategy combines equal, not-yet-reduced integrals across the
-request before expanding them. It is an alternative scheduler over the existing
-checked reduction operations. Depth-first reduction remains the default.
+request before expanding them. It is a scheduler over the existing checked
+reduction operations and Vakint's default strategy. The RustRed library's own
+default remains depth-first, which Vakint users select explicitly when they
+need completed-result caches.
 
 #panel[
   *Scope.* Existing reduction tables and topology matching; exact rational
@@ -24,41 +26,48 @@ checked reduction operations. Depth-first reduction remains the default.
 == Selecting the strategy
 
 Use the same evaluation methods and master modes as for depth-first reduction.
-The strategy belongs to the existing RustRed application settings:
+The strategy belongs to the existing RustRed application settings and defaults
+to #raw("vakint::DEFAULT_RUSTRED_REDUCTION_STRATEGY"), i.e. ordered. Select
+depth-first reduction explicitly, for example to use completed-result caches:
 
 ```rust
 use vakint::{RustRedReductionStrategy, VakintSettings};
 
 let mut settings = VakintSettings::default();
 settings.rustred_application_options.reduction_strategy =
-    RustRedReductionStrategy::Ordered;
+    RustRedReductionStrategy::DepthFirst;
 ```
 
 #raw("RustRedReductionStrategy") reexports RustRed's strategy enum. Selecting
 it changes scheduling, not the definitions, normalization or requested numerical
-precision of the masters. RustRed must still be selected in the evaluation
-order. The Python constructor exposes the same choice:
+precision of the masters. RustRed leads the default evaluation order; FORM-based
+backends follow it only when FORM is usable. The Python constructor exposes the
+same choice:
 
 ```python
 from symbolica.community.hepkit.vakint import Vakint, VakintEvaluationMethod
 
 engine = Vakint(
-    rustred_reduction_strategy="ordered",
+    rustred_reduction_strategy="depth_first",
     evaluation_order=[VakintEvaluationMethod.new_rustred_method()],
 )
 ```
 
-The accepted strings are #raw("depth_first") (the default),
-#raw("depth_first_without_memoization"), and #raw("ordered"). Unknown values
+The accepted strings are #raw("ordered") (the default), #raw("depth_first"),
+and #raw("depth_first_without_memoization"). Unknown values
 produce an error. The no-memoization choice, exposed in Rust as
 #raw("RustRedReductionStrategy::DepthFirstWithoutMemoization"), recomputes repeated
 descendants without completed-result memoization, lookup/insertion bookkeeping,
 or persistent caches, including dependent factor reductions. A zero cache budget
 or subtraction of bookkeeping time is not this execution path. Immutable
-program preparation remains shared. Python instances configured with either
-alternative reject explicit cache operations and skip prepared caches during
-official loading. Rust evaluations in these modes never consume attached DFS
-completed-result backings. Ordinary
+program preparation remains shared. Python instances configured with ordered
+or no-memoization reduction reject explicit cache operations, with an error
+explaining the #raw("depth_first") opt-in, and skip prepared caches during data
+loading. In Rust, #raw("OfficialExternalDataOptions::default()") and
+#raw("load_external_data") likewise skip prepared caches;
+#raw("OfficialExternalDataOptions::for_strategy(RustRedReductionStrategy::DepthFirst)")
+and #raw("load_external_data_with_prepared_caches") load them. Rust evaluations
+in these modes never consume attached DFS completed-result backings. Ordinary
 numerical, symbolic and retained-master evaluation retain their existing public
 interfaces.
 

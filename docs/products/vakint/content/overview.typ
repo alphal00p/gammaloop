@@ -49,12 +49,14 @@ preserve them, but evaluation still needs a backend that supports the resulting 
 
 == External tools and reproducibility
 
-#boundary("Construction validates the selected backends", [
-  The default evaluation order includes AlphaLoop, MATAD, FMFT, and pySecDec. Settings validation
-  therefore probes FORM and pySecDec even if a later example only canonicalizes an expression.
-  Vakint requires FORM 4.2.1 or newer and pySecDec 1.6.4 or newer. For matching without
-  evaluation, use an empty evaluation order in Rust; in Python, provide an empty
-  `evaluation_order` when constructing `Vakint`.
+#boundary("FORM and pySecDec are optional", [
+  The default evaluation order starts with RustRed, using ordered reduction, which needs neither
+  FORM nor pySecDec. AlphaLoop, MATAD, FMFT, and pySecDec follow it as fallbacks only when their
+  tools are usable: FORM 4.2.1 or newer, and additionally pySecDec 1.6.4 or newer for pySecDec.
+  Without FORM the default order is RustRed alone. Settings validation checks the tools needed by
+  an explicitly configured order and names the backends that require a missing FORM; each tool
+  is probed at most once per process. For matching without evaluation, use an empty evaluation
+  order in Rust; in Python, provide an empty `evaluation_order` when constructing `Vakint`.
 ])
 
 Analytic AlphaLoop, MATAD, and FMFT methods depend on FORM. The pySecDec method depends on both
