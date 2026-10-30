@@ -79,6 +79,8 @@ fn coefficients(
     let dimension = context.parameter("d").unwrap().to_expression();
     let physical_epsilon = (Atom::num(4) - &dimension) / Atom::num(2);
     let parameters = symbols.iter().cloned().collect::<Vec<_>>();
+    let archived_euler = Atom::var(symbolica::transcendental::euler_gamma());
+    let current_euler = Atom::var(vakint_symbol!("EulerGamma"));
     let mut result = BTreeMap::new();
     for (product, scalar) in value.coefficient_list::<i32>(&parameters) {
         if !product_is_polynomial(product.as_view(), symbols) || !masters(&scalar).is_empty() {
@@ -90,7 +92,14 @@ fn coefficients(
         // The small universal loop factor is never included in the native
         // polynomial variable map. Expand only this one scalar coefficient,
         // allowing its common Euler/phase/pi factors to cancel exactly.
-        let scalar = canonical_retained(&(scalar / common))?.expand();
+        // The archive uses Symbolica's exact builtin gamma; current MSbar
+        // normalization uses Vakint's spelling of the same Euler constant.
+        // Bind only this known identity, leaving all foreign symbols visible
+        // to strict Q(d) admission below.
+        let scalar = (scalar / common)
+            .replace(archived_euler.clone())
+            .with(current_euler.clone());
+        let scalar = canonical_retained(&scalar)?.expand();
         let scalar = scalar
             .replace(epsilon.clone())
             .with(physical_epsilon.clone());
@@ -98,7 +107,30 @@ fn coefficients(
             .as_view()
             .try_to_rational_polynomial(&Q, &Z, Some(variables.clone()))
             .map_err(|error| format!("coefficient of {product} is not exact Q(d): {error}"))?;
-        context.validate_with_limits(&coefficient, ExactAlgebraLimits::default())?;
+        context
+            .validate_with_limits(&coefficient, ExactAlgebraLimits::default())
+            .map_err(|error| {
+                let describe = |variables: &[symbolica::poly::PolyVariable]| {
+                    variables
+                        .iter()
+                        .map(|variable| match variable {
+                            symbolica::poly::PolyVariable::Temporary(_) => format!("{variable:?}"),
+                            _ => Atom::from(variable.clone())
+                                .to_canonical_string()
+                                .chars()
+                                .take(240)
+                                .collect::<String>(),
+                        })
+                        .collect::<Vec<_>>()
+                };
+                let preview = scalar.to_canonical_string().chars().take(240).collect::<String>();
+                format!(
+                    "coefficient of {product} failed exact Q(d) admission: {error}; expected variables {:?}; numerator variables {:?}; denominator variables {:?}; scalar preview {preview}",
+                    describe(&variables),
+                    describe(coefficient.numerator.variables()),
+                    describe(coefficient.denominator.variables()),
+                )
+            })?;
         if !coefficient.is_zero() {
             if let Some(previous) = result.get_mut(&product) {
                 *previous =

@@ -107,6 +107,54 @@ fn scalar_nonrational_functions_cannot_pass_as_full_rational_proofs() -> Result<
 }
 
 #[test]
+fn archived_builtin_euler_alias_cancels_current_normalization_exactly() -> Result<()> {
+    let _ = report(5)?;
+    let context = CoefficientContext::try_new(["d"])?;
+    let epsilon = vakint_parse!("ε")?;
+    let archived_euler = Atom::var(symbolica::transcendental::euler_gamma());
+    let current_euler = vakint_parse!("EulerGamma")?;
+    let exact = vakint_parse!("RustRedMaster(family,1)*(2+ε)/(ε^6*(1-ε)^3)")?;
+    let archived = &exact
+        * Atom::var(symbolica::atom::Symbol::E)
+            .pow(Atom::num(5) * (current_euler - archived_euler) * &epsilon);
+    let symbols = masters(&exact);
+    let actual = coefficients(&archived, &symbols, &Atom::one(), &epsilon, &context)?;
+    let expected = coefficients(&exact, &symbols, &Atom::one(), &epsilon, &context)?;
+    assert_eq!(actual.len(), 1);
+    assert_eq!(actual, expected);
+    assert!(
+        actual
+            .values()
+            .all(|coefficient| context.contains(coefficient))
+    );
+    Ok(())
+}
+
+#[test]
+fn foreign_euler_homonyms_remain_outside_exact_coefficient_context() -> Result<()> {
+    let _ = report(5)?;
+    let context = CoefficientContext::try_new(["d"])?;
+    let epsilon = vakint_parse!("ε")?;
+    let current_euler = vakint_parse!("EulerGamma")?;
+    let foreign_euler = Atom::var(symbolica::symbol!("historical_comparison_control::γ"));
+    let master = vakint_parse!("RustRedMaster(family,1)")?;
+    let value = &master
+        * Atom::var(symbolica::atom::Symbol::E)
+            .pow(Atom::num(5) * (current_euler - foreign_euler) * &epsilon);
+    let error = coefficients(&value, &masters(&master), &Atom::one(), &epsilon, &context)
+        .err()
+        .ok_or("an unrelated Euler-named symbol was silently identified")?;
+    let diagnostic = error.to_string();
+    assert!(diagnostic.contains("foreign variable map"), "{diagnostic}");
+    assert!(
+        diagnostic.contains("historical_comparison_control"),
+        "{diagnostic}"
+    );
+    assert!(diagnostic.contains("RustRedMaster"), "{diagnostic}");
+    Ok(())
+}
+
+#[test]
 fn historical_hash_is_checked_before_parsing_or_creating_output() -> Result<()> {
     let directory = tempfile::tempdir()?;
     let completed = CompletedRun {
