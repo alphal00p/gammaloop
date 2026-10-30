@@ -413,6 +413,17 @@ own workspace. Bounded: one regression, one bisect, one written verdict.
   awaits NEW independent combined review; 81 oracle rows and broader WP3 gates
   remain open.
 
+- #strong[Three-row QED integration 2026-10-30:]
+  the cumulative core/docs gate is approved at `e20acd85`. Approved migration
+  `ab7eefa3` and certificate `16bfd2c8` are reconciled onto that base. Only the
+  three one-diagram QED numerator digests change; all other rows remain untouched.
+  The certificate is pool-1 mathematics, with separately qualified pool 1/8/32
+  runtime checks. The frozen outer inventory validators reject the changed MAIN
+  registry, while immutable capture/semantic/control entrypoints retain their
+  own recorded outcomes. Combined results and remaining gates are recorded in
+  `evidence/generation-integration/wp3/qed/receipt.json`; NEW independent review
+  is required and WP3 remains incomplete.
+
 - `jj duplicate` the v4 chain (`kursouxx::kpslpwqz`) onto the WP2 base; do not
   rebase in place, so the 19 live workspaces on older lines stay valid.
 - Drop the empty \#175/\#176 copies and the first \#177 (`nxmztorq`); adapt

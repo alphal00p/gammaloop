@@ -610,9 +610,9 @@
     "validation_metadata_commit": "783e3281d01134f8fe2e44eab366d0414c63b852",
     "source_binding": "docs/architecture/evidence/generation-integration/wp3/main32-35/metadata-source.json"
   },
-  "current_implementation_code_commit": "b9f788922341e7bde2e801a054423ae70ed7e9ae",
+  "current_implementation_code_commit": "b1c836680256d033620d32d844c1d3c41ed478f9",
   "current_documentation_code_commit": "a3729fe5d880f0db5f09d9ce7d0ef592bfc4d161",
-  "current_implementation_change": "olwyvkywonuuoszxllzsnovoxktuolzk",
+  "current_implementation_change": "mxykynnsmxqvnzqovrosqxrorqrwuznw",
   "main32_35_review": {
     "candidate": "510d79d94bbaf57aaaa992c641e7496905763324",
     "verdict": "APPROVE",
@@ -742,6 +742,17 @@
     "evidence_change": "zturtlpykppzpkzlwqsmnrklllptosll",
     "receipt": "docs/architecture/evidence/generation-integration/wp3/core-docs/receipt.json",
     "candidate_bookmark": "generation-integration-core-docs",
-    "status": "Round2 evidence-only correction candidate: runtime/docs gates retained, stage chronology and22-file/24-role binding inventory corrected; awaiting NEW focused independent review. The81 oracle rows and broader WP3 gates remain open."
+    "status": "APPROVED at e20acd85 by cumulative independent reviews and final ledger fallback review; original runtime and evidence identities remain historical."
+  },
+  "active_qed_migration": {
+    "base": "e20acd85a8e5f07375352e3b2ea571f1364a092e",
+    "preparation": "ab7eefa30e2c4a8914cd79e5632d2f0d64bc0239",
+    "certificate": "16bfd2c84ea1fdeba0c8087cc6cdc8f1082f11a8",
+    "code_commit": "b1c836680256d033620d32d844c1d3c41ed478f9",
+    "code_change": "mxykynnsmxqvnzqovrosqxrorqrwuznw",
+    "evidence_change": "wkoykyulytwwnosnvznysrnyxspvuwkr",
+    "receipt": "docs/architecture/evidence/generation-integration/wp3/qed/receipt.json",
+    "candidate_bookmark": "generation-integration-qed",
+    "status": "Only three certified QED digest rows integrated; fresh combined validation recorded separately; awaiting NEW independent review. Other78 oracle rows and broader WP3 gates remain open."
   }
 }

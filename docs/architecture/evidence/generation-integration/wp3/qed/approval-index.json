@@ -1,0 +1,7 @@
+{
+  "schema":1,
+  "base":{"revision":"e20acd85a8e5f07375352e3b2ea571f1364a092e","review":".local/review-main-core-docs-ledger-astra-20261029T235510Z-3864025/review.json","sha256":"af7b7cf1ce3f982515689e5969999674074bed72c2425358df5fe95809640691","scope":"cumulative bounded core/docs approval including target-only ledger correction"},
+  "certificate":{"revision":"16bfd2c84ea1fdeba0c8087cc6cdc8f1082f11a8","review":"docs/architecture/evidence/generation-oracle-numerator-migration/review/approved-certificate-review.json","sha256":"1202230f36622faf1f9dbcf23c29eba8c8ba8c512ae3da14b901194a349e4b30","scope":"three one-diagram QED rows, pool1 fixed-case mathematics and qualified capture-bound observations"},
+  "migration":{"revision":"ab7eefa30e2c4a8914cd79e5632d2f0d64bc0239","review":"docs/architecture/evidence/generation-oracle-numerator-migration/review/approved-migration-review.json","sha256":"351bf648a182dc1fab748cab2a93df2b684e6517f89049c32eac8db04256f871","scope":"exact three digest literals; actual old-fail/new-pass at pools1/8/32; historical mathematical scope remains pool1"},
+  "status":"Approvals retain their original preparation scopes. Combined MAIN candidate requires new independent review."
+}

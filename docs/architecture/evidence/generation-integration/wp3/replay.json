@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "status": "Source46 approved; TensorReduction layout repair integrated and awaiting NEW independent Opus review before WP3 rebuilt-tip exit matrix. WP3 incomplete.",
+  "status": "Source46, tensor and core/docs bounded gates approved; three-row QED migration candidate awaiting NEW independent review. WP3 incomplete.",
   "fixed_target": {
     "commit": "3f0df2a870806076820786994d4883decec8e9e3",
     "tree": "3c91ba47525c627fbc02d79f5afa1d58aa7c5b66",
@@ -1504,9 +1504,9 @@
     "evidence_change": "rsnwxksqkumlppzknlkkqvkrvpyrrzrt",
     "metadata_snapshot_commit": "2990045ccc658413f2eb2c07fe21e9d811ac4da8"
   },
-  "current_implementation_code_commit": "b9f788922341e7bde2e801a054423ae70ed7e9ae",
+  "current_implementation_code_commit": "b1c836680256d033620d32d844c1d3c41ed478f9",
   "current_documentation_code_commit": "a3729fe5d880f0db5f09d9ce7d0ef592bfc4d161",
-  "current_implementation_change": "olwyvkywonuuoszxllzsnovoxktuolzk",
+  "current_implementation_change": "mxykynnsmxqvnzqovrosqxrorqrwuznw",
   "main32_35_review": {
     "candidate": "510d79d94bbaf57aaaa992c641e7496905763324",
     "verdict": "APPROVE",
@@ -1666,6 +1666,17 @@
     "evidence_change": "zturtlpykppzpkzlwqsmnrklllptosll",
     "receipt": "docs/architecture/evidence/generation-integration/wp3/core-docs/receipt.json",
     "candidate_bookmark": "generation-integration-core-docs",
-    "status": "Round2 evidence-only correction candidate with unchanged code9b18: final stage pointers and22-file/24-role inventory corrected; awaiting NEW focused review. No QED replay, WP3 completion, or M-rebuild claim."
+    "status": "APPROVED at e20acd85 including final target-only ledger correction; original source and execution identities remain historical."
+  },
+  "active_qed_migration": {
+    "base": "e20acd85a8e5f07375352e3b2ea571f1364a092e",
+    "preparation": "ab7eefa30e2c4a8914cd79e5632d2f0d64bc0239",
+    "certificate": "16bfd2c84ea1fdeba0c8087cc6cdc8f1082f11a8",
+    "code_commit": "b1c836680256d033620d32d844c1d3c41ed478f9",
+    "code_change": "mxykynnsmxqvnzqovrosqxrorqrwuznw",
+    "evidence_change": "wkoykyulytwwnosnvznysrnyxspvuwkr",
+    "receipt": "docs/architecture/evidence/generation-integration/wp3/qed/receipt.json",
+    "candidate_bookmark": "generation-integration-qed",
+    "status": "Three one-diagram QED digest literals and immutable certificate closure integrated; awaiting NEW independent combined review. No other migration or WP3 completion claim."
   }
 }

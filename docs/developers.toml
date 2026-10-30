@@ -2211,6 +2211,21 @@ topics = ["generation", "validation"]
 review_triggers = ["crates/feynkit-generator/tests/generation_oracle/**", "crates/feynkit-graph/src/numerator_interface.rs", "crates/idenso/src/cook.rs"]
 
 [[section.note]]
+id = "generation-integration-qed"
+title = "Three-row QED oracle integration"
+summary = "Bounded combined MAIN validation of three certified QED numerator digest literals and their immutable proof closure."
+source = "docs/architecture/generation-integration-qed.typ"
+kind = "Integration investigation"
+status = "Combined candidate awaiting independent review; WP3 incomplete"
+lifecycle = "investigation"
+owner = "unassigned"
+captured_at = "2026-10-30"
+evidence_revision = "b1c836680256d033620d32d844c1d3c41ed478f9"
+products = ["feynkit"]
+topics = ["generation", "validation", "integration"]
+review_triggers = ["crates/feynkit-generator/tests/generation_oracle/**", "docs/architecture/evidence/generation-integration/wp3/qed/**"]
+
+[[section.note]]
 id = "generation-oracle-numerator-migration"
 title = "Three one-diagram QED numerator oracle migration"
 summary = "Approved three-literal preparation with pool 1/8/32 runtime evidence; combined MAIN review pending."
