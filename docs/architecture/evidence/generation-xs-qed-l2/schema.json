@@ -1,0 +1,1551 @@
+{
+  "scope": "xs_qed_eemm_L2",
+  "types": {
+    "grouping.json": [
+      "str"
+    ],
+    "model.json": [
+      "dict"
+    ],
+    "model.json/couplings": [
+      "list"
+    ],
+    "model.json/couplings/*": [
+      "dict"
+    ],
+    "model.json/couplings/*/expression": [
+      "str"
+    ],
+    "model.json/couplings/*/name": [
+      "str"
+    ],
+    "model.json/couplings/*/orders": [
+      "list"
+    ],
+    "model.json/couplings/*/orders/*": [
+      "list"
+    ],
+    "model.json/couplings/*/orders/*/*": [
+      "int",
+      "str"
+    ],
+    "model.json/couplings/*/value": [
+      "list"
+    ],
+    "model.json/couplings/*/value/*": [
+      "float"
+    ],
+    "model.json/form_factors": [
+      "list"
+    ],
+    "model.json/functions": [
+      "list"
+    ],
+    "model.json/lorentz_structures": [
+      "list"
+    ],
+    "model.json/lorentz_structures/*": [
+      "dict"
+    ],
+    "model.json/lorentz_structures/*/name": [
+      "str"
+    ],
+    "model.json/lorentz_structures/*/spins": [
+      "list"
+    ],
+    "model.json/lorentz_structures/*/spins/*": [
+      "int"
+    ],
+    "model.json/lorentz_structures/*/structure": [
+      "str"
+    ],
+    "model.json/name": [
+      "str"
+    ],
+    "model.json/orders": [
+      "list"
+    ],
+    "model.json/orders/*": [
+      "dict"
+    ],
+    "model.json/orders/*/expansion_order": [
+      "int"
+    ],
+    "model.json/orders/*/hierarchy": [
+      "int"
+    ],
+    "model.json/orders/*/name": [
+      "str"
+    ],
+    "model.json/parameters": [
+      "list"
+    ],
+    "model.json/parameters/*": [
+      "dict"
+    ],
+    "model.json/parameters/*/expression": [
+      "NoneType",
+      "str"
+    ],
+    "model.json/parameters/*/lhablock": [
+      "NoneType",
+      "str"
+    ],
+    "model.json/parameters/*/lhacode": [
+      "NoneType",
+      "list"
+    ],
+    "model.json/parameters/*/lhacode/*": [
+      "int"
+    ],
+    "model.json/parameters/*/name": [
+      "str"
+    ],
+    "model.json/parameters/*/nature": [
+      "str"
+    ],
+    "model.json/parameters/*/parameter_type": [
+      "str"
+    ],
+    "model.json/parameters/*/texname": [
+      "str"
+    ],
+    "model.json/parameters/*/value": [
+      "list"
+    ],
+    "model.json/parameters/*/value/*": [
+      "float"
+    ],
+    "model.json/particles": [
+      "list"
+    ],
+    "model.json/particles/*": [
+      "dict"
+    ],
+    "model.json/particles/*/antiname": [
+      "str"
+    ],
+    "model.json/particles/*/antitexname": [
+      "str"
+    ],
+    "model.json/particles/*/charge": [
+      "str"
+    ],
+    "model.json/particles/*/chemical_potential": [
+      "str"
+    ],
+    "model.json/particles/*/color": [
+      "int"
+    ],
+    "model.json/particles/*/ghost_number": [
+      "int"
+    ],
+    "model.json/particles/*/goldstoneboson": [
+      "bool"
+    ],
+    "model.json/particles/*/lepton_number": [
+      "int"
+    ],
+    "model.json/particles/*/mass": [
+      "str"
+    ],
+    "model.json/particles/*/name": [
+      "str"
+    ],
+    "model.json/particles/*/pdg_code": [
+      "int"
+    ],
+    "model.json/particles/*/propagating": [
+      "bool"
+    ],
+    "model.json/particles/*/propagator": [
+      "NoneType"
+    ],
+    "model.json/particles/*/spin": [
+      "int"
+    ],
+    "model.json/particles/*/texname": [
+      "str"
+    ],
+    "model.json/particles/*/width": [
+      "str"
+    ],
+    "model.json/particles/*/y_charge": [
+      "str"
+    ],
+    "model.json/particles/*/y_charge_right": [
+      "NoneType",
+      "str"
+    ],
+    "model.json/propagators": [
+      "list"
+    ],
+    "model.json/propagators/*": [
+      "dict"
+    ],
+    "model.json/propagators/*/denominator": [
+      "str"
+    ],
+    "model.json/propagators/*/name": [
+      "str"
+    ],
+    "model.json/propagators/*/numerator": [
+      "str"
+    ],
+    "model.json/propagators/*/particle": [
+      "str"
+    ],
+    "model.json/restriction": [
+      "NoneType"
+    ],
+    "model.json/vertex_rules": [
+      "list"
+    ],
+    "model.json/vertex_rules/*": [
+      "dict"
+    ],
+    "model.json/vertex_rules/*/color_structures": [
+      "list"
+    ],
+    "model.json/vertex_rules/*/color_structures/*": [
+      "str"
+    ],
+    "model.json/vertex_rules/*/couplings": [
+      "list"
+    ],
+    "model.json/vertex_rules/*/couplings/*": [
+      "list"
+    ],
+    "model.json/vertex_rules/*/couplings/*/*": [
+      "str"
+    ],
+    "model.json/vertex_rules/*/lorentz_structures": [
+      "list"
+    ],
+    "model.json/vertex_rules/*/lorentz_structures/*": [
+      "str"
+    ],
+    "model.json/vertex_rules/*/name": [
+      "str"
+    ],
+    "model.json/vertex_rules/*/particles": [
+      "list"
+    ],
+    "model.json/vertex_rules/*/particles/*": [
+      "str"
+    ],
+    "options.json": [
+      "dict"
+    ],
+    "options.json/filter_zero_color": [
+      "bool"
+    ],
+    "options.json/loop_momentum_bases": [
+      "dict"
+    ],
+    "options.json/named_loop_momentum_bases": [
+      "dict"
+    ],
+    "options.json/naming": [
+      "dict"
+    ],
+    "options.json/naming/named": [
+      "dict"
+    ],
+    "options.json/naming/named/prefix": [
+      "str"
+    ],
+    "options.json/prefactor": [
+      "str"
+    ],
+    "options.json/projector": [
+      "NoneType"
+    ],
+    "payload.json": [
+      "dict"
+    ],
+    "payload.json/diagrams": [
+      "list"
+    ],
+    "payload.json/diagrams/*": [
+      "dict"
+    ],
+    "payload.json/diagrams/*/aut": [
+      "str"
+    ],
+    "payload.json/diagrams/*/basis": [
+      "dict"
+    ],
+    "payload.json/diagrams/*/basis/dependent_externals": [
+      "list"
+    ],
+    "payload.json/diagrams/*/basis/edge_signatures": [
+      "dict"
+    ],
+    "payload.json/diagrams/*/basis/edge_signatures/#": [
+      "dict"
+    ],
+    "payload.json/diagrams/*/basis/edge_signatures/#/external": [
+      "list"
+    ],
+    "payload.json/diagrams/*/basis/edge_signatures/#/external/*": [
+      "int"
+    ],
+    "payload.json/diagrams/*/basis/edge_signatures/#/loops": [
+      "list"
+    ],
+    "payload.json/diagrams/*/basis/edge_signatures/#/loops/*": [
+      "int"
+    ],
+    "payload.json/diagrams/*/basis/external_edges": [
+      "list"
+    ],
+    "payload.json/diagrams/*/basis/external_edges/*": [
+      "int"
+    ],
+    "payload.json/diagrams/*/basis/loop_edges": [
+      "list"
+    ],
+    "payload.json/diagrams/*/basis/loop_edges/*": [
+      "int"
+    ],
+    "payload.json/diagrams/*/basis/tree_edges": [
+      "list"
+    ],
+    "payload.json/diagrams/*/basis/tree_edges/*": [
+      "int"
+    ],
+    "payload.json/diagrams/*/id": [
+      "str"
+    ],
+    "payload.json/diagrams/*/key": [
+      "dict"
+    ],
+    "payload.json/diagrams/*/key/edges": [
+      "list"
+    ],
+    "payload.json/diagrams/*/key/edges/*": [
+      "dict",
+      "str"
+    ],
+    "payload.json/diagrams/*/key/edges/*/diagram": [
+      "dict"
+    ],
+    "payload.json/diagrams/*/key/edges/*/diagram/external": [
+      "NoneType",
+      "dict"
+    ],
+    "payload.json/diagrams/*/key/edges/*/diagram/external/connection": [
+      "int"
+    ],
+    "payload.json/diagrams/*/key/edges/*/diagram/external/index": [
+      "int"
+    ],
+    "payload.json/diagrams/*/key/edges/*/diagram/external/name": [
+      "str"
+    ],
+    "payload.json/diagrams/*/key/edges/*/diagram/external/state": [
+      "str"
+    ],
+    "payload.json/diagrams/*/key/edges/*/diagram/is_dummy": [
+      "bool"
+    ],
+    "payload.json/diagrams/*/key/edges/*/diagram/particle": [
+      "int"
+    ],
+    "payload.json/diagrams/*/key/half_edges": [
+      "list"
+    ],
+    "payload.json/diagrams/*/key/half_edges/*": [
+      "NoneType",
+      "int"
+    ],
+    "payload.json/diagrams/*/key/vertices": [
+      "list"
+    ],
+    "payload.json/diagrams/*/key/vertices/*": [
+      "dict"
+    ],
+    "payload.json/diagrams/*/key/vertices/*/cut_side": [
+      "dict"
+    ],
+    "payload.json/diagrams/*/key/vertices/*/cut_side/coupling_orders": [
+      "dict"
+    ],
+    "payload.json/diagrams/*/key/vertices/*/cut_side/coupling_orders/QED": [
+      "int"
+    ],
+    "payload.json/diagrams/*/key/vertices/*/cut_side/loop_count": [
+      "int"
+    ],
+    "payload.json/diagrams/*/key/vertices/*/cut_side/side": [
+      "str"
+    ],
+    "payload.json/diagrams/*/key/vertices/*/diagram": [
+      "dict"
+    ],
+    "payload.json/diagrams/*/key/vertices/*/diagram/interaction": [
+      "int"
+    ],
+    "payload.json/diagrams/*/key/vertices/*/topology_threshold_side": [
+      "dict"
+    ],
+    "payload.json/diagrams/*/key/vertices/*/topology_threshold_side/side": [
+      "str"
+    ],
+    "payload.json/diagrams/*/key/words": [
+      "list"
+    ],
+    "payload.json/diagrams/*/key/words/*": [
+      "int"
+    ],
+    "payload.json/diagrams/*/name": [
+      "str"
+    ],
+    "payload.json/diagrams/*/overall_factor": [
+      "str"
+    ],
+    "payload.json/diagrams/*/payload": [
+      "dict"
+    ],
+    "payload.json/diagrams/*/payload/cuts": [
+      "list"
+    ],
+    "payload.json/diagrams/*/payload/cuts/*": [
+      "dict"
+    ],
+    "payload.json/diagrams/*/payload/cuts/*/cut": [
+      "list"
+    ],
+    "payload.json/diagrams/*/payload/cuts/*/cut/*": [
+      "dict"
+    ],
+    "payload.json/diagrams/*/payload/cuts/*/cut/*/edge": [
+      "int"
+    ],
+    "payload.json/diagrams/*/payload/cuts/*/cut/*/endpoint": [
+      "str"
+    ],
+    "payload.json/diagrams/*/payload/cuts/*/left": [
+      "dict"
+    ],
+    "payload.json/diagrams/*/payload/cuts/*/left/coupling_orders": [
+      "dict"
+    ],
+    "payload.json/diagrams/*/payload/cuts/*/left/coupling_orders/QED": [
+      "int"
+    ],
+    "payload.json/diagrams/*/payload/cuts/*/left/half_edges": [
+      "list"
+    ],
+    "payload.json/diagrams/*/payload/cuts/*/left/half_edges/*": [
+      "dict"
+    ],
+    "payload.json/diagrams/*/payload/cuts/*/left/half_edges/*/edge": [
+      "int"
+    ],
+    "payload.json/diagrams/*/payload/cuts/*/left/half_edges/*/endpoint": [
+      "str"
+    ],
+    "payload.json/diagrams/*/payload/cuts/*/left/loop_count": [
+      "int"
+    ],
+    "payload.json/diagrams/*/payload/cuts/*/right": [
+      "dict"
+    ],
+    "payload.json/diagrams/*/payload/cuts/*/right/coupling_orders": [
+      "dict"
+    ],
+    "payload.json/diagrams/*/payload/cuts/*/right/coupling_orders/QED": [
+      "int"
+    ],
+    "payload.json/diagrams/*/payload/cuts/*/right/half_edges": [
+      "list"
+    ],
+    "payload.json/diagrams/*/payload/cuts/*/right/half_edges/*": [
+      "dict"
+    ],
+    "payload.json/diagrams/*/payload/cuts/*/right/half_edges/*/edge": [
+      "int"
+    ],
+    "payload.json/diagrams/*/payload/cuts/*/right/half_edges/*/endpoint": [
+      "str"
+    ],
+    "payload.json/diagrams/*/payload/cuts/*/right/loop_count": [
+      "int"
+    ],
+    "payload.json/diagrams/*/payload/edges": [
+      "list"
+    ],
+    "payload.json/diagrams/*/payload/edges/*": [
+      "list"
+    ],
+    "payload.json/diagrams/*/payload/edges/*/0": [
+      "dict"
+    ],
+    "payload.json/diagrams/*/payload/edges/*/0/source": [
+      "int"
+    ],
+    "payload.json/diagrams/*/payload/edges/*/0/target": [
+      "int"
+    ],
+    "payload.json/diagrams/*/payload/edges/*/1": [
+      "dict"
+    ],
+    "payload.json/diagrams/*/payload/edges/*/1/directed": [
+      "bool"
+    ],
+    "payload.json/diagrams/*/payload/edges/*/1/external": [
+      "NoneType",
+      "dict"
+    ],
+    "payload.json/diagrams/*/payload/edges/*/1/external/connection": [
+      "int"
+    ],
+    "payload.json/diagrams/*/payload/edges/*/1/external/index": [
+      "int"
+    ],
+    "payload.json/diagrams/*/payload/edges/*/1/external/name": [
+      "str"
+    ],
+    "payload.json/diagrams/*/payload/edges/*/1/external/state": [
+      "str"
+    ],
+    "payload.json/diagrams/*/payload/edges/*/1/is_dummy": [
+      "bool"
+    ],
+    "payload.json/diagrams/*/payload/edges/*/1/num_interface": [
+      "list"
+    ],
+    "payload.json/diagrams/*/payload/edges/*/1/num_interface/*": [
+      "str"
+    ],
+    "payload.json/diagrams/*/payload/edges/*/1/numerator": [
+      "str"
+    ],
+    "payload.json/diagrams/*/payload/edges/*/1/orientation": [
+      "str"
+    ],
+    "payload.json/diagrams/*/payload/edges/*/1/particle": [
+      "int"
+    ],
+    "payload.json/diagrams/*/payload/edges/*/1/source_slot": [
+      "int"
+    ],
+    "payload.json/diagrams/*/payload/edges/*/1/target_slot": [
+      "int"
+    ],
+    "payload.json/diagrams/*/payload/half_edge_order": [
+      "list"
+    ],
+    "payload.json/diagrams/*/payload/half_edge_order/*": [
+      "dict"
+    ],
+    "payload.json/diagrams/*/payload/half_edge_order/*/edge": [
+      "int"
+    ],
+    "payload.json/diagrams/*/payload/half_edge_order/*/endpoint": [
+      "str"
+    ],
+    "payload.json/diagrams/*/payload/loop_momentum_basis": [
+      "dict"
+    ],
+    "payload.json/diagrams/*/payload/loop_momentum_basis/dependent_externals": [
+      "list"
+    ],
+    "payload.json/diagrams/*/payload/loop_momentum_basis/edge_signatures": [
+      "dict"
+    ],
+    "payload.json/diagrams/*/payload/loop_momentum_basis/edge_signatures/#": [
+      "dict"
+    ],
+    "payload.json/diagrams/*/payload/loop_momentum_basis/edge_signatures/#/external": [
+      "list"
+    ],
+    "payload.json/diagrams/*/payload/loop_momentum_basis/edge_signatures/#/external/*": [
+      "int"
+    ],
+    "payload.json/diagrams/*/payload/loop_momentum_basis/edge_signatures/#/loops": [
+      "list"
+    ],
+    "payload.json/diagrams/*/payload/loop_momentum_basis/edge_signatures/#/loops/*": [
+      "int"
+    ],
+    "payload.json/diagrams/*/payload/loop_momentum_basis/external_edges": [
+      "list"
+    ],
+    "payload.json/diagrams/*/payload/loop_momentum_basis/external_edges/*": [
+      "int"
+    ],
+    "payload.json/diagrams/*/payload/loop_momentum_basis/loop_edges": [
+      "list"
+    ],
+    "payload.json/diagrams/*/payload/loop_momentum_basis/loop_edges/*": [
+      "int"
+    ],
+    "payload.json/diagrams/*/payload/loop_momentum_basis/tree_edges": [
+      "list"
+    ],
+    "payload.json/diagrams/*/payload/loop_momentum_basis/tree_edges/*": [
+      "int"
+    ],
+    "payload.json/diagrams/*/payload/model": [
+      "list"
+    ],
+    "payload.json/diagrams/*/payload/model/*": [
+      "int"
+    ],
+    "payload.json/diagrams/*/payload/numerator": [
+      "str"
+    ],
+    "payload.json/diagrams/*/payload/numerator_prefactor": [
+      "str"
+    ],
+    "payload.json/diagrams/*/payload/overall_factor": [
+      "str"
+    ],
+    "payload.json/diagrams/*/payload/projector": [
+      "str"
+    ],
+    "payload.json/diagrams/*/payload/symmetry_factor": [
+      "int"
+    ],
+    "payload.json/diagrams/*/payload/topology_threshold_candidates": [
+      "list"
+    ],
+    "payload.json/diagrams/*/payload/topology_threshold_candidates/*": [
+      "dict"
+    ],
+    "payload.json/diagrams/*/payload/topology_threshold_candidates/*/cut": [
+      "list"
+    ],
+    "payload.json/diagrams/*/payload/topology_threshold_candidates/*/cut/*": [
+      "dict"
+    ],
+    "payload.json/diagrams/*/payload/topology_threshold_candidates/*/cut/*/edge": [
+      "int"
+    ],
+    "payload.json/diagrams/*/payload/topology_threshold_candidates/*/cut/*/endpoint": [
+      "str"
+    ],
+    "payload.json/diagrams/*/payload/topology_threshold_candidates/*/left": [
+      "list"
+    ],
+    "payload.json/diagrams/*/payload/topology_threshold_candidates/*/left/*": [
+      "dict"
+    ],
+    "payload.json/diagrams/*/payload/topology_threshold_candidates/*/left/*/edge": [
+      "int"
+    ],
+    "payload.json/diagrams/*/payload/topology_threshold_candidates/*/left/*/endpoint": [
+      "str"
+    ],
+    "payload.json/diagrams/*/payload/topology_threshold_candidates/*/right": [
+      "list"
+    ],
+    "payload.json/diagrams/*/payload/topology_threshold_candidates/*/right/*": [
+      "dict"
+    ],
+    "payload.json/diagrams/*/payload/topology_threshold_candidates/*/right/*/edge": [
+      "int"
+    ],
+    "payload.json/diagrams/*/payload/topology_threshold_candidates/*/right/*/endpoint": [
+      "str"
+    ],
+    "payload.json/diagrams/*/payload/vertices": [
+      "list"
+    ],
+    "payload.json/diagrams/*/payload/vertices/*": [
+      "dict"
+    ],
+    "payload.json/diagrams/*/payload/vertices/*/interaction": [
+      "int"
+    ],
+    "payload.json/diagrams/*/payload/vertices/*/name": [
+      "str"
+    ],
+    "payload.json/diagrams/*/payload/vertices/*/num_interface": [
+      "list"
+    ],
+    "payload.json/diagrams/*/payload/vertices/*/num_interface/*": [
+      "str"
+    ],
+    "payload.json/diagrams/*/payload/vertices/*/numerator": [
+      "str"
+    ],
+    "payload.json/groups": [
+      "list"
+    ],
+    "payload.json/groups/*": [
+      "dict"
+    ],
+    "payload.json/groups/*/master": [
+      "int"
+    ],
+    "payload.json/groups/*/members": [
+      "list"
+    ],
+    "payload.json/groups/*/members/*": [
+      "dict"
+    ],
+    "payload.json/groups/*/members/*/id": [
+      "str"
+    ],
+    "payload.json/groups/*/members/*/name": [
+      "str"
+    ],
+    "payload.json/groups/*/members/*/overall_factor": [
+      "str"
+    ],
+    "payload.json/groups/*/members/*/ratio": [
+      "str"
+    ],
+    "payload.json/groups/*/members/*/source_index": [
+      "int"
+    ],
+    "request.json": [
+      "dict"
+    ],
+    "request.json/classes": [
+      "str"
+    ],
+    "request.json/cuts": [
+      "dict"
+    ],
+    "request.json/cuts/amplitude": [
+      "dict"
+    ],
+    "request.json/cuts/amplitude/loops": [
+      "str"
+    ],
+    "request.json/cuts/amplitude/orders": [
+      "dict"
+    ],
+    "request.json/cuts/amplitude/orders/perturbative": [
+      "dict"
+    ],
+    "request.json/cuts/amplitude/orders/plain": [
+      "dict"
+    ],
+    "request.json/cuts/amplitude/orders/squared": [
+      "dict"
+    ],
+    "request.json/cuts/blobs": [
+      "dict"
+    ],
+    "request.json/cuts/blobs/inclusive": [
+      "dict"
+    ],
+    "request.json/cuts/blobs/inclusive/max": [
+      "int"
+    ],
+    "request.json/cuts/blobs/inclusive/min": [
+      "int"
+    ],
+    "request.json/cuts/sewn_tadpoles": [
+      "bool"
+    ],
+    "request.json/cuts/spectators": [
+      "dict"
+    ],
+    "request.json/cuts/spectators/inclusive": [
+      "dict"
+    ],
+    "request.json/cuts/spectators/inclusive/max": [
+      "int"
+    ],
+    "request.json/cuts/spectators/inclusive/min": [
+      "int"
+    ],
+    "request.json/cuts/symmetrize_left_right": [
+      "bool"
+    ],
+    "request.json/kind": [
+      "str"
+    ],
+    "request.json/loops": [
+      "dict"
+    ],
+    "request.json/loops/forward": [
+      "dict"
+    ],
+    "request.json/loops/forward/end": [
+      "int"
+    ],
+    "request.json/loops/forward/start": [
+      "int"
+    ],
+    "request.json/orders": [
+      "dict"
+    ],
+    "request.json/orders/perturbative": [
+      "dict"
+    ],
+    "request.json/orders/plain": [
+      "dict"
+    ],
+    "request.json/orders/squared": [
+      "dict"
+    ],
+    "request.json/process": [
+      "dict"
+    ],
+    "request.json/process/incoming": [
+      "list"
+    ],
+    "request.json/process/incoming/*": [
+      "dict"
+    ],
+    "request.json/process/incoming/*/kind": [
+      "str"
+    ],
+    "request.json/process/incoming/*/value": [
+      "str"
+    ],
+    "request.json/process/outgoing_alternatives": [
+      "list"
+    ],
+    "request.json/process/outgoing_alternatives/*": [
+      "list"
+    ],
+    "request.json/process/outgoing_alternatives/*/*": [
+      "dict"
+    ],
+    "request.json/process/outgoing_alternatives/*/*/kind": [
+      "str"
+    ],
+    "request.json/process/outgoing_alternatives/*/*/value": [
+      "str"
+    ],
+    "request.json/restrictions": [
+      "dict"
+    ],
+    "request.json/restrictions/particle_allow": [
+      "list"
+    ],
+    "request.json/restrictions/particle_exclude": [
+      "list"
+    ],
+    "request.json/restrictions/vertex_allow": [
+      "list"
+    ],
+    "request.json/restrictions/vertex_exclude": [
+      "list"
+    ],
+    "request.json/symmetrization": [
+      "dict"
+    ],
+    "request.json/symmetrization/external_fermions": [
+      "bool"
+    ],
+    "request.json/symmetrization/final_state": [
+      "bool"
+    ],
+    "request.json/symmetrization/initial": [
+      "bool"
+    ],
+    "request.json/topology": [
+      "dict"
+    ],
+    "request.json/topology/bridges": [
+      "str"
+    ],
+    "request.json/topology/factorized_loops": [
+      "str"
+    ],
+    "request.json/topology/fermion_loops": [
+      "str"
+    ],
+    "request.json/topology/max_vertices": [
+      "NoneType"
+    ],
+    "request.json/topology/self_energies": [
+      "dict"
+    ],
+    "request.json/topology/self_energies/massive": [
+      "bool"
+    ],
+    "request.json/topology/self_energies/massless": [
+      "bool"
+    ],
+    "request.json/topology/self_loops": [
+      "bool"
+    ],
+    "request.json/topology/snails": [
+      "dict"
+    ],
+    "request.json/topology/snails/massive": [
+      "bool"
+    ],
+    "request.json/topology/snails/massless": [
+      "bool"
+    ],
+    "request.json/topology/tadpoles": [
+      "dict"
+    ],
+    "request.json/topology/tadpoles/massive": [
+      "bool"
+    ],
+    "request.json/topology/tadpoles/massless": [
+      "bool"
+    ],
+    "request.json/topology/zero_flow_edges": [
+      "bool"
+    ],
+    "typed-owners.json": [
+      "list"
+    ],
+    "typed-owners.json/*": [
+      "dict"
+    ],
+    "typed-owners.json/*/id": [
+      "str"
+    ],
+    "typed-owners.json/*/owners": [
+      "list"
+    ],
+    "typed-owners.json/*/owners/*": [
+      "dict"
+    ],
+    "typed-owners.json/*/owners/*/expression": [
+      "str"
+    ],
+    "typed-owners.json/*/owners/*/is_composite": [
+      "bool"
+    ],
+    "typed-owners.json/*/owners/*/is_metric": [
+      "bool"
+    ],
+    "typed-owners.json/*/owners/*/ordered_ports": [
+      "list"
+    ],
+    "typed-owners.json/*/owners/*/ordered_ports/*": [
+      "str"
+    ],
+    "typed-owners.json/*/owners/*/owner": [
+      "str"
+    ],
+    "typed-owners.json/*/owners/*/producer_decoded_expression": [
+      "str"
+    ]
+  },
+  "object_keys": {
+    "model.json": [
+      [
+        "couplings",
+        "form_factors",
+        "functions",
+        "lorentz_structures",
+        "name",
+        "orders",
+        "parameters",
+        "particles",
+        "propagators",
+        "restriction",
+        "vertex_rules"
+      ]
+    ],
+    "model.json/couplings/*": [
+      [
+        "expression",
+        "name",
+        "orders",
+        "value"
+      ]
+    ],
+    "model.json/lorentz_structures/*": [
+      [
+        "name",
+        "spins",
+        "structure"
+      ]
+    ],
+    "model.json/orders/*": [
+      [
+        "expansion_order",
+        "hierarchy",
+        "name"
+      ]
+    ],
+    "model.json/parameters/*": [
+      [
+        "expression",
+        "lhablock",
+        "lhacode",
+        "name",
+        "nature",
+        "parameter_type",
+        "texname",
+        "value"
+      ],
+      [
+        "expression",
+        "lhablock",
+        "lhacode",
+        "name",
+        "nature",
+        "parameter_type",
+        "value"
+      ]
+    ],
+    "model.json/particles/*": [
+      [
+        "antiname",
+        "antitexname",
+        "charge",
+        "chemical_potential",
+        "color",
+        "ghost_number",
+        "goldstoneboson",
+        "lepton_number",
+        "mass",
+        "name",
+        "pdg_code",
+        "propagating",
+        "propagator",
+        "spin",
+        "texname",
+        "width",
+        "y_charge",
+        "y_charge_right"
+      ],
+      [
+        "antiname",
+        "antitexname",
+        "charge",
+        "color",
+        "ghost_number",
+        "goldstoneboson",
+        "lepton_number",
+        "mass",
+        "name",
+        "pdg_code",
+        "propagating",
+        "propagator",
+        "spin",
+        "texname",
+        "width",
+        "y_charge",
+        "y_charge_right"
+      ]
+    ],
+    "model.json/propagators/*": [
+      [
+        "denominator",
+        "name",
+        "numerator",
+        "particle"
+      ]
+    ],
+    "model.json/vertex_rules/*": [
+      [
+        "color_structures",
+        "couplings",
+        "lorentz_structures",
+        "name",
+        "particles"
+      ]
+    ],
+    "options.json": [
+      [
+        "filter_zero_color",
+        "loop_momentum_bases",
+        "named_loop_momentum_bases",
+        "naming",
+        "prefactor",
+        "projector"
+      ]
+    ],
+    "options.json/loop_momentum_bases": [
+      []
+    ],
+    "options.json/named_loop_momentum_bases": [
+      []
+    ],
+    "options.json/naming": [
+      [
+        "named"
+      ]
+    ],
+    "options.json/naming/named": [
+      [
+        "prefix"
+      ]
+    ],
+    "payload.json": [
+      [
+        "diagrams",
+        "groups"
+      ]
+    ],
+    "payload.json/diagrams/*": [
+      [
+        "aut",
+        "basis",
+        "id",
+        "key",
+        "name",
+        "overall_factor",
+        "payload"
+      ]
+    ],
+    "payload.json/diagrams/*/basis": [
+      [
+        "dependent_externals",
+        "edge_signatures",
+        "external_edges",
+        "loop_edges",
+        "tree_edges"
+      ]
+    ],
+    "payload.json/diagrams/*/basis/edge_signatures": [
+      "numeric-map"
+    ],
+    "payload.json/diagrams/*/basis/edge_signatures/#": [
+      [
+        "external",
+        "loops"
+      ]
+    ],
+    "payload.json/diagrams/*/key": [
+      [
+        "edges",
+        "half_edges",
+        "vertices",
+        "words"
+      ]
+    ],
+    "payload.json/diagrams/*/key/edges/*": [
+      [
+        "diagram"
+      ]
+    ],
+    "payload.json/diagrams/*/key/edges/*/diagram": [
+      [
+        "external",
+        "is_dummy",
+        "particle"
+      ]
+    ],
+    "payload.json/diagrams/*/key/edges/*/diagram/external": [
+      [
+        "connection",
+        "index",
+        "name",
+        "state"
+      ]
+    ],
+    "payload.json/diagrams/*/key/vertices/*": [
+      [
+        "cut_side"
+      ],
+      [
+        "diagram"
+      ],
+      [
+        "topology_threshold_side"
+      ]
+    ],
+    "payload.json/diagrams/*/key/vertices/*/cut_side": [
+      [
+        "coupling_orders",
+        "loop_count",
+        "side"
+      ]
+    ],
+    "payload.json/diagrams/*/key/vertices/*/cut_side/coupling_orders": [
+      [
+        "QED"
+      ]
+    ],
+    "payload.json/diagrams/*/key/vertices/*/diagram": [
+      [
+        "interaction"
+      ]
+    ],
+    "payload.json/diagrams/*/key/vertices/*/topology_threshold_side": [
+      [
+        "side"
+      ]
+    ],
+    "payload.json/diagrams/*/payload": [
+      [
+        "cuts",
+        "edges",
+        "half_edge_order",
+        "loop_momentum_basis",
+        "model",
+        "numerator",
+        "numerator_prefactor",
+        "overall_factor",
+        "projector",
+        "symmetry_factor",
+        "topology_threshold_candidates",
+        "vertices"
+      ]
+    ],
+    "payload.json/diagrams/*/payload/cuts/*": [
+      [
+        "cut",
+        "left",
+        "right"
+      ]
+    ],
+    "payload.json/diagrams/*/payload/cuts/*/cut/*": [
+      [
+        "edge",
+        "endpoint"
+      ]
+    ],
+    "payload.json/diagrams/*/payload/cuts/*/left": [
+      [
+        "coupling_orders",
+        "half_edges",
+        "loop_count"
+      ]
+    ],
+    "payload.json/diagrams/*/payload/cuts/*/left/coupling_orders": [
+      [
+        "QED"
+      ]
+    ],
+    "payload.json/diagrams/*/payload/cuts/*/left/half_edges/*": [
+      [
+        "edge",
+        "endpoint"
+      ]
+    ],
+    "payload.json/diagrams/*/payload/cuts/*/right": [
+      [
+        "coupling_orders",
+        "half_edges",
+        "loop_count"
+      ]
+    ],
+    "payload.json/diagrams/*/payload/cuts/*/right/coupling_orders": [
+      [
+        "QED"
+      ]
+    ],
+    "payload.json/diagrams/*/payload/cuts/*/right/half_edges/*": [
+      [
+        "edge",
+        "endpoint"
+      ]
+    ],
+    "payload.json/diagrams/*/payload/edges/*/0": [
+      [
+        "source",
+        "target"
+      ]
+    ],
+    "payload.json/diagrams/*/payload/edges/*/1": [
+      [
+        "directed",
+        "external",
+        "is_dummy",
+        "num_interface",
+        "numerator",
+        "orientation",
+        "particle",
+        "source_slot",
+        "target_slot"
+      ],
+      [
+        "directed",
+        "external",
+        "is_dummy",
+        "numerator",
+        "orientation",
+        "particle",
+        "source_slot",
+        "target_slot"
+      ]
+    ],
+    "payload.json/diagrams/*/payload/edges/*/1/external": [
+      [
+        "connection",
+        "index",
+        "name",
+        "state"
+      ]
+    ],
+    "payload.json/diagrams/*/payload/half_edge_order/*": [
+      [
+        "edge",
+        "endpoint"
+      ]
+    ],
+    "payload.json/diagrams/*/payload/loop_momentum_basis": [
+      [
+        "dependent_externals",
+        "edge_signatures",
+        "external_edges",
+        "loop_edges",
+        "tree_edges"
+      ]
+    ],
+    "payload.json/diagrams/*/payload/loop_momentum_basis/edge_signatures": [
+      "numeric-map"
+    ],
+    "payload.json/diagrams/*/payload/loop_momentum_basis/edge_signatures/#": [
+      [
+        "external",
+        "loops"
+      ]
+    ],
+    "payload.json/diagrams/*/payload/topology_threshold_candidates/*": [
+      [
+        "cut",
+        "left",
+        "right"
+      ]
+    ],
+    "payload.json/diagrams/*/payload/topology_threshold_candidates/*/cut/*": [
+      [
+        "edge",
+        "endpoint"
+      ]
+    ],
+    "payload.json/diagrams/*/payload/topology_threshold_candidates/*/left/*": [
+      [
+        "edge",
+        "endpoint"
+      ]
+    ],
+    "payload.json/diagrams/*/payload/topology_threshold_candidates/*/right/*": [
+      [
+        "edge",
+        "endpoint"
+      ]
+    ],
+    "payload.json/diagrams/*/payload/vertices/*": [
+      [
+        "interaction",
+        "name",
+        "num_interface",
+        "numerator"
+      ],
+      [
+        "interaction",
+        "name",
+        "numerator"
+      ]
+    ],
+    "payload.json/groups/*": [
+      [
+        "master",
+        "members"
+      ]
+    ],
+    "payload.json/groups/*/members/*": [
+      [
+        "id",
+        "name",
+        "overall_factor",
+        "ratio",
+        "source_index"
+      ]
+    ],
+    "request.json": [
+      [
+        "classes",
+        "cuts",
+        "kind",
+        "loops",
+        "orders",
+        "process",
+        "restrictions",
+        "symmetrization",
+        "topology"
+      ]
+    ],
+    "request.json/cuts": [
+      [
+        "amplitude",
+        "blobs",
+        "sewn_tadpoles",
+        "spectators",
+        "symmetrize_left_right"
+      ]
+    ],
+    "request.json/cuts/amplitude": [
+      [
+        "loops",
+        "orders"
+      ]
+    ],
+    "request.json/cuts/amplitude/orders": [
+      [
+        "perturbative",
+        "plain",
+        "squared"
+      ]
+    ],
+    "request.json/cuts/amplitude/orders/perturbative": [
+      []
+    ],
+    "request.json/cuts/amplitude/orders/plain": [
+      []
+    ],
+    "request.json/cuts/amplitude/orders/squared": [
+      []
+    ],
+    "request.json/cuts/blobs": [
+      [
+        "inclusive"
+      ]
+    ],
+    "request.json/cuts/blobs/inclusive": [
+      [
+        "max",
+        "min"
+      ]
+    ],
+    "request.json/cuts/spectators": [
+      [
+        "inclusive"
+      ]
+    ],
+    "request.json/cuts/spectators/inclusive": [
+      [
+        "max",
+        "min"
+      ]
+    ],
+    "request.json/loops": [
+      [
+        "forward"
+      ]
+    ],
+    "request.json/loops/forward": [
+      [
+        "end",
+        "start"
+      ]
+    ],
+    "request.json/orders": [
+      [
+        "perturbative",
+        "plain",
+        "squared"
+      ]
+    ],
+    "request.json/orders/perturbative": [
+      []
+    ],
+    "request.json/orders/plain": [
+      []
+    ],
+    "request.json/orders/squared": [
+      []
+    ],
+    "request.json/process": [
+      [
+        "incoming",
+        "outgoing_alternatives"
+      ]
+    ],
+    "request.json/process/incoming/*": [
+      [
+        "kind",
+        "value"
+      ]
+    ],
+    "request.json/process/outgoing_alternatives/*/*": [
+      [
+        "kind",
+        "value"
+      ]
+    ],
+    "request.json/restrictions": [
+      [
+        "particle_allow",
+        "particle_exclude",
+        "vertex_allow",
+        "vertex_exclude"
+      ]
+    ],
+    "request.json/symmetrization": [
+      [
+        "external_fermions",
+        "final_state",
+        "initial"
+      ]
+    ],
+    "request.json/topology": [
+      [
+        "bridges",
+        "factorized_loops",
+        "fermion_loops",
+        "max_vertices",
+        "self_energies",
+        "self_loops",
+        "snails",
+        "tadpoles",
+        "zero_flow_edges"
+      ]
+    ],
+    "request.json/topology/self_energies": [
+      [
+        "massive",
+        "massless"
+      ]
+    ],
+    "request.json/topology/snails": [
+      [
+        "massive",
+        "massless"
+      ]
+    ],
+    "request.json/topology/tadpoles": [
+      [
+        "massive",
+        "massless"
+      ]
+    ],
+    "typed-owners.json/*": [
+      [
+        "id",
+        "owners"
+      ]
+    ],
+    "typed-owners.json/*/owners/*": [
+      [
+        "expression",
+        "is_composite",
+        "is_metric",
+        "ordered_ports",
+        "owner",
+        "producer_decoded_expression"
+      ]
+    ]
+  },
+  "derivation_inputs": {
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-l2/runtime/historical/captures/xs_qed_eemm_L2/classes-None-t1/model.json": "a1e0237b57dfc6093c868ec88b664327a50d4877239692c8e5d68df5cfc33138",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-l2/runtime/historical/captures/xs_qed_eemm_L2/classes-None-t1/request.json": "84161103f1fba3397d440ddd56417744852970a2ce36596927d419ad593ca4ca",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-l2/runtime/historical/captures/xs_qed_eemm_L2/classes-None-t1/options.json": "902f9700155918f019896a8345c5d3ebabee98f119140346ef913a8771e08925",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-l2/runtime/historical/captures/xs_qed_eemm_L2/classes-None-t1/grouping.json": "30a0924a3360be687d1df9fcbbfdff62c01bc0fd14036ab9076cf7f451568666",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-l2/runtime/historical/captures/xs_qed_eemm_L2/classes-None-t1/payload.json": "ff430b9bd1326d106bab281cee1e0c65458ab9a46d2c5bc50c29a07ca2ba8c4f",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-l2/runtime/historical/captures/xs_qed_eemm_L2/classes-None-t1/typed-owners.json": "aa54cfedfe65569a7d9211cd2c2e7ce0e1c16f8e775142e728a2f2dd913791d0",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-l2/runtime/historical/captures/xs_qed_eemm_L2/classes-Auto-t1/model.json": "a1e0237b57dfc6093c868ec88b664327a50d4877239692c8e5d68df5cfc33138",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-l2/runtime/historical/captures/xs_qed_eemm_L2/classes-Auto-t1/request.json": "4fdc7e0b66ba61131e58a63126ea1a2cd0a1409a151276646883190dac3d874c",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-l2/runtime/historical/captures/xs_qed_eemm_L2/classes-Auto-t1/options.json": "902f9700155918f019896a8345c5d3ebabee98f119140346ef913a8771e08925",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-l2/runtime/historical/captures/xs_qed_eemm_L2/classes-Auto-t1/grouping.json": "30a0924a3360be687d1df9fcbbfdff62c01bc0fd14036ab9076cf7f451568666",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-l2/runtime/historical/captures/xs_qed_eemm_L2/classes-Auto-t1/payload.json": "cf7d04fd1263371801fff65858248c0460af09ee79a79c8ddce87f02130dfaf6",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-l2/runtime/historical/captures/xs_qed_eemm_L2/classes-Auto-t1/typed-owners.json": "6a18680cc36ae80657471b7a1bc2b9040188e0463c31a1c787549255d45eadb9",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-l2/runtime/current/captures/xs_qed_eemm_L2/classes-None-t1/model.json": "a1e0237b57dfc6093c868ec88b664327a50d4877239692c8e5d68df5cfc33138",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-l2/runtime/current/captures/xs_qed_eemm_L2/classes-None-t1/request.json": "84161103f1fba3397d440ddd56417744852970a2ce36596927d419ad593ca4ca",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-l2/runtime/current/captures/xs_qed_eemm_L2/classes-None-t1/options.json": "902f9700155918f019896a8345c5d3ebabee98f119140346ef913a8771e08925",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-l2/runtime/current/captures/xs_qed_eemm_L2/classes-None-t1/grouping.json": "30a0924a3360be687d1df9fcbbfdff62c01bc0fd14036ab9076cf7f451568666",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-l2/runtime/current/captures/xs_qed_eemm_L2/classes-None-t1/payload.json": "08ebf574d98a7d953fa7ed582d2c61b5b7091515866cadd5b378b0c79916af93",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-l2/runtime/current/captures/xs_qed_eemm_L2/classes-None-t1/typed-owners.json": "99a3b669af95cb4646f144ab04e2061dc85a2246f7aa202532162e991cd8a33e",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-l2/runtime/current/captures/xs_qed_eemm_L2/classes-Auto-t1/model.json": "a1e0237b57dfc6093c868ec88b664327a50d4877239692c8e5d68df5cfc33138",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-l2/runtime/current/captures/xs_qed_eemm_L2/classes-Auto-t1/request.json": "4fdc7e0b66ba61131e58a63126ea1a2cd0a1409a151276646883190dac3d874c",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-l2/runtime/current/captures/xs_qed_eemm_L2/classes-Auto-t1/options.json": "902f9700155918f019896a8345c5d3ebabee98f119140346ef913a8771e08925",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-l2/runtime/current/captures/xs_qed_eemm_L2/classes-Auto-t1/grouping.json": "30a0924a3360be687d1df9fcbbfdff62c01bc0fd14036ab9076cf7f451568666",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-l2/runtime/current/captures/xs_qed_eemm_L2/classes-Auto-t1/payload.json": "33a8a36d030a7362c9c3984c86354722a54266596d35d486fb66511f47ecfcbf",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-l2/runtime/current/captures/xs_qed_eemm_L2/classes-Auto-t1/typed-owners.json": "770b61ab11a66033f4de2d90f628d072dc09032cc5ebc4b5ddfe9af71bf7ef71"
+  },
+  "qualification": "independently observed fixed producer paths/kinds, not copied four-family schema; exact edge tuples and symmetric domains checked separately"
+}

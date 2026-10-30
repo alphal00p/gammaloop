@@ -2192,6 +2192,47 @@ title = "Engineering investigations"
 summary = "Dated measurements and diagnostic records. Treat their results as experiment context, not timeless API guarantees."
 
 [[section.note]]
+id = "generation-xs-qed-l2-migration"
+title = "Two-loop QED cross-section oracle migration preparation"
+summary = "Separate one-literal xs_qed_eemm_L2 preparation with old/new pool 1/8/32 runtime and immutable finite-proof bindings; no MAIN integration."
+source = "docs/architecture/generation-xs-qed-l2-migration.typ"
+kind = "Migration preparation record"
+status = "Approved preparation; separate MAIN combined review pending"
+lifecycle = "investigation"
+owner = "unassigned"
+reviewed_at = "2026-10-30"
+review_ref = "64f44489f4331b2ec2dfcdb2d48e4a8b2b06003c569823a351ff2e98b2e898a6"
+evidence_revision = "19b516a43dda31a4403dd2a170f2e837934617ce"
+products = ["feynkit", "gammaloop"]
+topics = ["generation", "oracles", "validation"]
+review_triggers = ["crates/feynkit-generator/tests/generation_oracle/**", "docs/architecture/evidence/generation-xs-qed-l2-migration/**"]
+
+
+[[section.note.scope]]
+path = "crates/feynkit-generator/tests/generation_oracle/main.rs"
+symbol = "xs_qed_eemm_L2 certified numerator row"
+anchor = "    fast xs_qed_eemm_L2:"
+end_anchor = "    fast xs_qed_eemm_L3:"
+# Approved numerator token only; all other row fields and generation options unchanged.
+digest = "17d09cf70892eedf0eee7c33051559cd2a4f10ef"
+
+[[section.note]]
+id = "generation-xs-qed-l2"
+title = "Ungrouped two-loop QED cross-section numerator certificate"
+summary = "Fixed xs_qed_eemm_L2 None/Auto pool-one candidate with pristine assertions, live cut/owner bindings and independent finite contract."
+source = "docs/architecture/generation-xs-qed-l2.typ"
+kind = "Bounded correctness investigation"
+status = "Approved preparation; separate MAIN combined review pending"
+lifecycle = "investigation"
+owner = "unassigned"
+reviewed_at = "2026-10-30"
+review_ref = "f5173b1d86a44c18d11179b13a0542eb0282097cb303079d709ab75d2184c554;5c97912c4b6fa9660c55b3bf03b785b37b36f2d3a042d677acd388f12ec8346b"
+evidence_revision = "c95e7f6e77994779929115a156654cfce3bd1e53"
+products = ["feynkit", "gammaloop"]
+topics = ["generation", "oracles", "cuts", "validation"]
+review_triggers = ["crates/feynkit-generator/tests/generation_oracle/**", "docs/architecture/evidence/generation-xs-qed-l2/**"]
+
+[[section.note]]
 id = "generation-oracle-family-migration"
 title = "Four certified numerator oracle migrations"
 summary = "Separate four-literal preparation with source-qualified old/new runtime and capture bindings; no MAIN integration."
