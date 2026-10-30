@@ -1,0 +1,80 @@
+{
+  "schema": 1,
+  "base_code": "f8422fcce0b3e9580fcb05ef6aa908b93b70521e",
+  "base_evidence": "594c83ac9e17c7f5eea04c8c05129d86796c0dd9",
+  "corrected_code": "5ba04864ca506e259d9eef4a54f65acdd8323fc2",
+  "review": {
+    "path": ".local/review-feynkit-refresh-source-opus-round2-20261030T183758Z-bf9af2c7/review.json",
+    "sha256": "a29edac9e9d9f9138115053dfd7c69f160a55f570e784db2c174499e42d73700",
+    "verdict": "REQUEST_CHANGES"
+  },
+  "scope": "Only one browser test file; no replay or preserved-history rewrite. F1-F5 and prior preservation gates carry; no new source approval.",
+  "corrections": {
+    "R2-1": "Root explicitly authorizes equality within1/64CSSpx only for tall outer height, replacing structural toolbar slack lost upstream. No measured browser output used.",
+    "R2-2": "Both authored axes independently converted to binary32 via struct !2f before far containment bounds; original1e-6 origin/far margins unchanged.",
+    "preserved": "Pinned drawings, measured dimensions, natural/fitted formulas, JS positive-half rounding, scale delta1e-4, label places2, node-id0 locator, fit/reset guards and all other tests."
+  },
+  "source": {
+    "path": "crates/linnet-py/tests/test_svg_browser.py",
+    "git_blob": "bb7a217a5d047a0d3473e4d4b1200c3228365bfa",
+    "sha256": "286caaae70befa262d8300bfb7ac6e53df23fe36df9ec978d51af4d701529d75"
+  },
+  "worker_bindings": [
+    {
+      "path": "target/refresh-browser-precision-source-fix-20261030-sol61-r3/precision.patch",
+      "sha256": "f645d09d0891737b126a40446873d95efd191388546cf14840a83c9ca13df0ef"
+    },
+    {
+      "path": "target/refresh-browser-precision-source-fix-20261030-sol61-r3/handoff.json",
+      "sha256": "9b66ba2cf5773c9b7e410f5d9b12eec1b675dcccad0ff30cbfe4563a580b8259"
+    },
+    {
+      "path": "target/refresh-browser-precision-source-fix-20261030-sol61-r3/rationale.typ",
+      "sha256": "ca080ac3fbb7f1d59a203318885a918afea72c3ab379c6d46a4a0e1cb156d98e"
+    },
+    {
+      "path": "target/refresh-browser-precision-source-fix-20261030-sol61-r3/validation.json",
+      "sha256": "b1c963dd6d7954e304e6aaae0dc6177bb78a248639d332980ece435f9b0713b6"
+    }
+  ],
+  "validation": {
+    "syntax": "PASS",
+    "exact_one_path_delta": "PASS",
+    "worker_after_hash": "PASS",
+    "verified_scopes": 118,
+    "scope_digest_changes_vs_594c": 0,
+    "retained_ordered_scope_keys": "unchanged vs594c andfdff; registry still has only2prior Nix digest differences vsfdff",
+    "protected_trees": [
+      "crates/feynkit-generator",
+      "crates/feynkit-model",
+      "crates/feynkit-amplitude",
+      "crates/feynkit-py/src/generation",
+      "tests/tests/test_feyngen.rs"
+    ],
+    "historical_evidence_unchanged": 1204,
+    "oracle_paths_unchanged": 243,
+    "conflicted_replay_commits": 0,
+    "main_index_sha256": "36fca2996228d0adb018933745a106061d3febe8921980864b5cc50dbad4af5d"
+  },
+  "doc_wip": {
+    "bookmark": "generation-feynkit-refresh-qualification-doc-wip",
+    "commit": "43bdb85918367e8472dad0b1d85295a5318fff0a",
+    "classification": "separate preserved unreviewed Typst/registry WIP; excluded from this code and evidence follow-up"
+  },
+  "shared_build": {
+    "built_code": "5ea149ffd88ae3afc4072a38c0871c1329be8424",
+    "archive_sha256": "9688999459ceb9e3747f35e5ed599437fbdf64ef03a4564ca537b3254c0dac1e",
+    "archive_build": "PASS pure package-specific build",
+    "compiled_dependency_units": 452,
+    "helper_compilation": "4entry artifacts PASS on qualified8eb units; no licensed execution yet",
+    "new_browser_head_drv_invariance": "PENDING explicit immutable query; no duplicate build permitted"
+  },
+  "runtime_credit": "NONE; representative precision simulations are not browser execution or a universal engine proof",
+  "pending": [
+    "new root-assigned independent focused source review",
+    "explicit final selected-generator drv invariance",
+    "limited12pool1 current8eb runtime and lane proof rebinding",
+    "installed host, generated-stub parity and actual Chromium/WebKit including fixture guards",
+    "separate review of Typst/registry WIP; upstreamci.typ debt and wider8eb/API gates remain pending"
+  ]
+}
