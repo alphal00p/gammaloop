@@ -1,6 +1,13 @@
 //! Public-engine acceptance of the independently certified four-loop periods.
 //! This test deliberately loads the complete local pack, including its graph
 //! and IBP metadata, and never contacts a producer workspace or the network.
+//!
+//! The data-dependent expectations below (`D2_DIGITS`, `D2_DEPENDENT_CELLS`, the
+//! 520-digit cap of the `P19`/`P73` ε¹ rows and the 739 published formulas) are
+//! those of `vakint-external-data` `main` at `f51bc5a2` (the closed 4L formulas
+//! with 520-digit D = 2 periods). Earlier packs such as `ca49f328` cap the D = 2
+//! periods at 215 digits and fail these assertions; update them together with
+//! the data.
 
 use std::{fs, path::PathBuf};
 
@@ -687,11 +694,13 @@ fn assert_explicit(leaf: &symbolica::atom::Atom, definition: &symbolica::atom::A
 ///
 /// `VAKINT_TEST_EXTRA_FORMULAS` may name a JSON array of further formula strings,
 /// for example a basis rewrite prepared for a later data release, whose leaves
-/// are checked against the same loaded data.
+/// are checked against the same loaded data. `VAKINT_TEST_LEAF_DUMP` may name a
+/// JSON file that receives the definition and normalization of every leaf.
 #[test]
 #[ignore = "checks every leaf of every published 1L-4L formula; set VAKINT_TEST_EXTERNAL_DATA"]
 fn public_engine_every_published_leaf_has_an_explicit_definition() {
     use std::collections::BTreeMap;
+    use symbolica::atom::AtomCore;
     let root = std::env::var_os("VAKINT_TEST_EXTERNAL_DATA")
         .map(PathBuf::from)
         .expect("set VAKINT_TEST_EXTERNAL_DATA to the external-data checkout");
@@ -729,6 +738,7 @@ fn public_engine_every_published_leaf_has_an_explicit_definition() {
         formulas += extra.len();
     }
     let mut by_class = BTreeMap::<String, usize>::new();
+    let mut dump = Vec::new();
     for leaf in leaves.keys() {
         let symbol = ConstantSymbol::try_from(leaf.clone())
             .unwrap_or_else(|error| panic!("{leaf} is not a constant symbol: {error}"));
@@ -750,8 +760,23 @@ fn public_engine_every_published_leaf_has_an_explicit_definition() {
             "{leaf}"
         );
         *by_class
-            .entry(normalisation.split([':', '.']).next().unwrap().to_owned())
+            .entry(
+                normalisation
+                    .split(": ")
+                    .next()
+                    .and_then(|label| label.split(". ").next())
+                    .unwrap()
+                    .to_owned(),
+            )
             .or_default() += 1;
+        dump.push(serde_json::json!({
+            "leaf": leaf.to_canonical_string(),
+            "definition": definition.to_canonical_string(),
+            "normalisation": normalisation,
+        }));
+    }
+    if let Some(path) = std::env::var_os("VAKINT_TEST_LEAF_DUMP") {
+        fs::write(path, serde_json::to_vec_pretty(&dump).unwrap()).unwrap();
     }
     eprintln!(
         "{formulas} published 1L-4L formulas, {} distinct leaves, every one explicitly defined",

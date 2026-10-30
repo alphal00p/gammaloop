@@ -21,6 +21,7 @@ use std::sync::LazyLock;
 use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
 use symbolica::coefficient::{Coefficient, CoefficientView};
 use symbolica::domains::rational::Rational;
+use symbolica::printer::PrintOptions;
 use symbolica::transcendental::{
     bessel_i, bessel_k, euler_gamma, gamma, imaginary_part, polylog, real_part, zeta,
 };
@@ -706,11 +707,27 @@ pub(crate) fn matad_master(name: &str, order: i64) -> Option<Atom> {
 /// With `mi = e^(L γ ep) LoopIntegral(4-2ep, …)` the explicit `e^(L γ ep)` of BN and
 /// T111 cancels, and the pole terms do not contribute at the admitted orders.
 pub(crate) fn matad_bar(family: &str, order: i64) -> Option<Atom> {
+    let (master, prefactor, minimum_order) = matad_bar_prefactor(family)?;
+    if order < minimum_order {
+        return None;
+    }
+    let (integrand, loops) = matad_topology(master)?;
+    let ep = epsilon();
+    let dimension = Atom::num(4) - Atom::num(2) * &ep;
+    Some(series_coefficient(
+        prefactor * loop_integral(dimension, integrand, loops),
+        ep,
+        order,
+    ))
+}
+
+/// The MATAD master, the `matad.rs` prefactor and the lowest bar order of a bar family.
+fn matad_bar_prefactor(family: &str) -> Option<(&'static str, Atom, i64)> {
     let ep = epsilon();
     // a - b ep
     let linear = |a: i64, b: i64| Atom::num(a) - Atom::num(b) * &ep;
     let inverse_gamma = |power: i64| call(gamma(), vec![Atom::num(1) + &ep]).pow(Atom::num(-power));
-    let (master, prefactor, minimum_order) = match family {
+    Some(match family {
         "D5bar" | "D6bar" => (
             if family == "D5bar" { "miD5" } else { "miD6" },
             linear(1, 2) * linear(1, 1) * exp(Atom::num(3) * Atom::var(euler_gamma()) * &ep),
@@ -727,17 +744,7 @@ pub(crate) fn matad_bar(family: &str, order: i64) -> Option<Atom> {
             0,
         ),
         _ => return None,
-    };
-    if order < minimum_order {
-        return None;
-    }
-    let (integrand, loops) = matad_topology(master)?;
-    let dimension = Atom::num(4) - Atom::num(2) * &ep;
-    Some(series_coefficient(
-        prefactor * loop_integral(dimension, integrand, loops),
-        ep,
-        order,
-    ))
+    })
 }
 
 fn integer_arguments(arguments: &[AtomView]) -> Option<Vec<i64>> {
@@ -1646,24 +1653,364 @@ const GPL: &str = "Real or imaginary part of the Goncharov polylogarithm G(a1,�
 const POLYLOG_PROJECTION: &str = "Real or imaginary part of Li_n(z) = z/(n-1)! ∫_0^1 (-log t)^(n-1)/(1 - z t) dt at the complex point shown; a plain number.";
 const BESSEL_MOMENT: &str = "One-dimensional Bessel moment ∫_0^∞ t^k K_0(t)^5 dt (position-space form of the equal-mass four-loop banana in D = 2); K5LogMoment carries the factor 3 and log t + γ - log 2 as shown. A plain number.";
 const BESSEL_TAYLOR: &str = "Coefficient of ε^j of the Taylor expansion (not the j-th derivative) of the ε-deformed Bessel moment (e^γ/2)^(3ε) ∫_0^∞ t^(k+3ε) K_ε(t)^5 dt; a plain number.";
-const MATAD_MASTER: &str = "MATAD normalization: Euclidean measure d^dk/π^(d/2) per loop with d = 4-2ε, unit masses, no sign, factor e^(γε) per loop; coefficient of ε^n of the Laurent expansion (not the n-th derivative). T1ep and T1ep2 are coefficients of miT111 itself (the external sunset master is -miT111).";
-const MATAD_BAR: &str = "MATAD bar Xbar(n) of Vakint's matad.rs: coefficient of ε^n of the Laurent expansion (not the n-th derivative) of the MATAD master (Euclidean measure d^dk/π^(d/2) per loop, d = 4-2ε, unit masses, no sign, e^(γε) per loop) times its matad.rs prefactor: (1-2ε)(1-ε) for D5 and D6; (1-ε)(1-2ε)(1-3ε)(2-3ε)/Γ(1+ε)^3 for BN and √3(1-2ε)(ε-1)/Γ(1+ε)^2 for T111, whose explicit e^(Lγε) cancels the per-loop factor.";
-const PUBLIC_MASTER: &str = "Public Vakint/FMFT master normalization: Minkowski measure (iπ^(d/2) e^(-γε))^(-1) per loop, written as the Euclidean integral with the sign (-1)^(Σa) of the propagator powers a, factor e^(γε) per loop and d^dk/π^(d/2) per loop, d = 4-2ε, unit masses; coefficient of ε^n of the Laurent expansion (not the n-th derivative).";
-const D2_PERIOD: &str = "Euclidean measure d^2k/π per loop in D = 2, unit masses, positive (hat) sign convention: no (-1)^(Σa) and no exponential factor; the integral converges as written.";
+/// Labels of the loop-integral normalization statements, read off the definition.
+const PUBLIC_MASTER: &str = "Public Vakint/FMFT master normalization";
+const MATAD_MASTER: &str = "MATAD normalization";
+const EVEN_MASTER: &str = "Public Vakint/FMFT and MATAD normalization (identical for even Σa)";
+const MATAD_BAR: &str = "MATAD bar";
+const D2_PERIOD: &str = "D = 2 period";
+const D2_JET: &str = "D = 2-2δ jet";
+const LOOP_INTEGRAL: &str = "Loop integral with explicit factors";
 
-fn loop_integral_shape(definition: &Atom) -> Option<(Atom, usize)> {
-    let mut shape = None;
-    definition.visitor(&mut |part| {
-        if let AtomView::Fun(function) = part
-            && function.get_symbol() == HEADS.loop_integral
+/// A loop-integral definition read off its structure:
+/// `[SeriesCoefficient(] sign e^exponent other LoopIntegral(D, f, k(1), …, k(L)) [+ added, x, x0, n)]`.
+struct LoopDefinition {
+    /// Variable, point and order of the outer `SeriesCoefficient`.
+    expansion: Option<[Atom; 3]>,
+    dimension: Atom,
+    loops: usize,
+    /// Squared mass (constant term) and power `a` of every denominator.
+    denominators: Vec<(Atom, i64)>,
+    /// Whether the integrand has factors other than denominators.
+    numerator: bool,
+    negative: bool,
+    exponent: Option<Atom>,
+    other: Atom,
+    /// Terms added to the loop-integral term inside the expansion.
+    added: Option<Atom>,
+}
+
+/// Factors of a product with their integer exponents, distributing `(a b)^n`.
+fn factor_powers(view: AtomView, power: i64, factors: &mut Vec<(Atom, i64)>) {
+    match view {
+        AtomView::Mul(product) => product
+            .iter()
+            .for_each(|factor| factor_powers(factor, power, factors)),
+        AtomView::Pow(pow) => {
+            let (base, exponent) = pow.get_base_exp();
+            match get_integer_from_atom(exponent) {
+                Some(exponent) if !matches!(base, AtomView::Num(_)) => {
+                    factor_powers(base, power * exponent, factors)
+                }
+                _ => factors.push((view.to_owned(), power)),
+            }
+        }
+        _ => factors.push((view.to_owned(), power)),
+    }
+}
+
+/// The constant term of a propagator denominator: its squared mass.
+fn squared_mass(denominator: AtomView) -> Atom {
+    match denominator {
+        AtomView::Add(sum) => sum
+            .iter()
+            .filter(|term| !term.contains_symbol(S.euclidean_dot))
+            .fold(Atom::Zero, |total, term| total + term.to_owned()),
+        view if view.contains_symbol(S.euclidean_dot) => Atom::Zero,
+        view => view.to_owned(),
+    }
+}
+
+fn parse_loop_definition(definition: AtomView) -> Option<LoopDefinition> {
+    let (body, expansion) = match definition {
+        AtomView::Fun(function)
+            if function.get_symbol() == HEADS.series_coefficient && function.get_nargs() == 4 =>
         {
             let arguments = function.iter().collect::<Vec<_>>();
-            shape = Some((arguments[0].to_owned(), arguments.len().saturating_sub(2)));
-            return false;
+            (
+                arguments[0],
+                Some([
+                    arguments[1].to_owned(),
+                    arguments[2].to_owned(),
+                    arguments[3].to_owned(),
+                ]),
+            )
         }
-        shape.is_none()
+        view => (view, None),
+    };
+    let terms = match body {
+        AtomView::Add(sum) => sum.iter().collect::<Vec<_>>(),
+        view => vec![view],
+    };
+    let (integral_terms, added_terms): (Vec<_>, Vec<_>) = terms
+        .into_iter()
+        .partition(|term| term.contains_symbol(HEADS.loop_integral));
+    let [term] = integral_terms[..] else {
+        return None;
+    };
+    let added = (!added_terms.is_empty()).then(|| {
+        added_terms
+            .iter()
+            .fold(Atom::Zero, |total, term| total + term.to_owned())
     });
-    shape
+    let mut factors = Vec::new();
+    factor_powers(term, 1, &mut factors);
+    let (mut integral, mut negative, mut exponent, mut other) =
+        (None, false, None::<Atom>, Atom::num(1));
+    for (factor, power) in factors {
+        let mut add_exponent = |summand: Atom| {
+            exponent = Some(exponent.take().unwrap_or(Atom::Zero) + summand * Atom::num(power));
+        };
+        match factor.as_view() {
+            AtomView::Fun(function) if function.get_symbol() == HEADS.loop_integral => {
+                if power != 1 || integral.is_some() {
+                    return None;
+                }
+                integral = Some(function.iter().map(|a| a.to_owned()).collect::<Vec<_>>());
+            }
+            view if view.contains_symbol(HEADS.loop_integral) => return None,
+            AtomView::Num(_) if factor == Atom::num(-1) => negative ^= power % 2 != 0,
+            AtomView::Var(variable) if variable.get_symbol() == Symbol::E => {
+                add_exponent(Atom::num(1))
+            }
+            AtomView::Pow(pow) if matches!(pow.get_base_exp().0, AtomView::Var(base) if base.get_symbol() == Symbol::E) => {
+                add_exponent(pow.get_base_exp().1.to_owned())
+            }
+            AtomView::Fun(function)
+                if function.get_symbol() == Symbol::EXP && function.get_nargs() == 1 =>
+            {
+                add_exponent(function.iter().next().unwrap().to_owned())
+            }
+            _ => other *= factor.pow(Atom::num(power)),
+        }
+    }
+    let arguments = integral?;
+    if arguments.len() < 3 {
+        return None;
+    }
+    let mut integrand = Vec::new();
+    factor_powers(arguments[1].as_view(), 1, &mut integrand);
+    let mut denominators = Vec::new();
+    let mut numerator = false;
+    for (factor, power) in integrand {
+        if power < 0 && factor.contains_symbol(S.euclidean_dot) {
+            denominators.push((squared_mass(factor.as_view()), -power));
+        } else if factor != Atom::num(1) {
+            numerator = true;
+        }
+    }
+    Some(LoopDefinition {
+        expansion,
+        dimension: arguments[0].clone(),
+        loops: arguments.len() - 2,
+        denominators,
+        numerator,
+        negative,
+        exponent,
+        other,
+        added,
+    })
+}
+
+/// The power `m` if `term = c x^m` with `c` free of `x`.
+fn monomial_power(term: AtomView, variable: &Atom) -> Option<i64> {
+    let mut factors = Vec::new();
+    factor_powers(term, 1, &mut factors);
+    factors.into_iter().try_fold(0, |total, (factor, power)| {
+        if factor == *variable {
+            Some(total + power)
+        } else if factor.contains(variable.as_view()) {
+            None
+        } else {
+            Some(total)
+        }
+    })
+}
+
+fn equal(left: &Atom, right: &Atom) -> bool {
+    (left.clone() - right.clone()).expand().is_zero()
+}
+
+/// The normalization statement of a loop-integral definition, derived from its
+/// structure: the coefficient taken, the measure and dimension, the masses and
+/// `Σa`, and every factor in front of the `LoopIntegral`. The label names the
+/// convention that these factors realise; it never depends on the symbol name.
+fn loop_statement(definition: &Atom) -> Option<String> {
+    let parsed = parse_loop_definition(definition.as_view())?;
+    let show = |atom: &Atom| atom.printer(PrintOptions::file_no_namespace()).to_string();
+    let loops = parsed.loops;
+    let propagators = parsed.denominators.len();
+    let power_sum: i64 = parsed.denominators.iter().map(|(_, power)| power).sum();
+    let odd = power_sum.rem_euclid(2) == 1;
+    let variable = parsed.expansion.as_ref().map(|[variable, _, _]| variable);
+    let per_loop = |variable: &Atom| {
+        parsed.exponent.as_ref().is_some_and(|exponent| {
+            equal(
+                exponent,
+                &(Atom::num(loops as i64) * Atom::var(euler_gamma()) * variable),
+            )
+        })
+    };
+    let plain = parsed.other == Atom::num(1) && parsed.added.is_none();
+    let prefactor = parsed
+        .exponent
+        .as_ref()
+        .map_or(Atom::num(1), |exponent| exp(exponent.clone()))
+        * &parsed.other
+        * Atom::num(if parsed.negative { -1 } else { 1 });
+    let matad = ["D5bar", "BNbar", "T111bar"]
+        .into_iter()
+        .find_map(|family| {
+            let (master, candidate, _) = matad_bar_prefactor(family)?;
+            (matad_topology(master)?.1 == loops && equal(&prefactor, &candidate)).then_some(family)
+        });
+    let dimension_is = |expected: Atom| equal(&parsed.dimension, &expected);
+    let label = match (matad, variable) {
+        (Some(family), _) => format!(
+            "{MATAD_BAR} (matad.rs {} prefactor)",
+            match family {
+                "D5bar" => "D5/D6",
+                "BNbar" => "BN",
+                _ => "T111",
+            }
+        ),
+        (None, None)
+            if dimension_is(Atom::num(2))
+                && plain
+                && parsed.exponent.is_none()
+                && !parsed.negative =>
+        {
+            D2_PERIOD.into()
+        }
+        (None, Some(variable))
+            if plain
+                && per_loop(variable)
+                && variable == &Atom::var(HEADS.delta)
+                && dimension_is(Atom::num(2) - Atom::num(2) * variable)
+                && !parsed.negative =>
+        {
+            D2_JET.into()
+        }
+        (None, Some(variable))
+            if plain
+                && per_loop(variable)
+                && dimension_is(Atom::num(4) - Atom::num(2) * variable) =>
+        {
+            match (odd, parsed.negative) {
+                (true, true) => PUBLIC_MASTER.into(),
+                (true, false) => MATAD_MASTER.into(),
+                (false, false) => EVEN_MASTER.into(),
+                (false, true) => LOOP_INTEGRAL.into(),
+            }
+        }
+        _ => LOOP_INTEGRAL.into(),
+    };
+
+    let mut text = format!("{label}: ");
+    match &parsed.expansion {
+        Some([variable, point, order]) => text.push_str(&format!(
+            "coefficient of {}^{} of the series expansion in {} around {} (a series coefficient, not a derivative) of ",
+            show(variable),
+            show(order),
+            show(variable),
+            show(point)
+        )),
+        None => text.push_str("exactly "),
+    }
+    let mut factors = Vec::new();
+    if parsed.negative {
+        factors.push(if odd {
+            "the sign -1 = (-1)^Σa".to_string()
+        } else {
+            "the sign -1".to_string()
+        });
+    }
+    if let Some(exponent) = &parsed.exponent {
+        factors.push(match variable {
+            Some(variable) if per_loop(variable) => format!(
+                "e^({}), i.e. e^(γ {}) per loop",
+                show(exponent),
+                show(variable)
+            ),
+            _ => format!("e^({})", show(exponent)),
+        });
+    }
+    if parsed.other != Atom::num(1) {
+        factors.push(format!("the factor {}", show(&parsed.other)));
+    }
+    for factor in factors {
+        text.push_str(&factor);
+        text.push_str(" times ");
+    }
+    let unit = parsed
+        .denominators
+        .iter()
+        .filter(|(mass, _)| *mass == Atom::num(1))
+        .count();
+    let massless = parsed
+        .denominators
+        .iter()
+        .filter(|(mass, _)| mass.is_zero())
+        .count();
+    let masses = if unit == propagators {
+        "all with unit mass".to_string()
+    } else if unit + massless == propagators {
+        format!("{unit} with unit mass and {massless} massless")
+    } else {
+        "with the squared masses written in them".to_string()
+    };
+    text.push_str(&format!(
+        "the {loops}-loop Euclidean integral with measure d^Dk/π^(D/2) per loop, D = {}, over {propagators} propagators, {masses}, whose powers sum to Σa = {power_sum}{}",
+        show(&parsed.dimension),
+        if parsed.numerator {
+            ", with the numerator shown"
+        } else {
+            ""
+        }
+    ));
+    if let Some(added) = &parsed.added {
+        text.push_str(&format!(
+            "; the term {} is added inside the expansion",
+            show(added)
+        ));
+        let contributes = match &parsed.expansion {
+            Some([variable, point, order]) if point.is_zero() => {
+                let terms = match added.as_view() {
+                    AtomView::Add(sum) => sum.iter().collect::<Vec<_>>(),
+                    view => vec![view],
+                };
+                terms.into_iter().any(|term| {
+                    monomial_power(term, variable)
+                        .is_none_or(|power| Some(power) == get_integer_from_atom(order.as_view()))
+                })
+            }
+            _ => true,
+        };
+        if !contributes {
+            text.push_str(" (it does not contribute to this coefficient)");
+        }
+    }
+    text.push_str(". ");
+    if !parsed.negative && odd {
+        text.push_str("No sign (-1)^Σa. ");
+    }
+    if let Some(variable) = variable
+        && parsed.exponent.is_none()
+    {
+        text.push_str(&format!("No e^(γ {}) factor", show(variable)));
+        text.push_str(if matches!(matad, Some("BNbar" | "T111bar")) {
+            ": the explicit e^(-Lγε) of matad.rs has cancelled the e^(γε) per loop of the MATAD master. "
+        } else {
+            ". "
+        });
+    }
+    if label == PUBLIC_MASTER {
+        text.push_str(
+            "This is the Euclidean form of the Minkowski measure (iπ^(d/2) e^(-γε))^(-1) d^dk per loop. ",
+        );
+    } else if label == MATAD_MASTER {
+        text.push_str(
+            "The public Vakint/FMFT master with the same propagators carries in addition the sign (-1)^Σa. ",
+        );
+    } else if label == D2_PERIOD {
+        text.push_str(
+            "No regulator: the integral is finite as written (positive, hat convention). ",
+        );
+    } else if label == D2_JET {
+        text.push_str("Positive (hat) sign convention. ");
+    }
+    text.push_str("No other factor.");
+    Some(text)
 }
 
 fn named(symbol: AtomView, names: &[&str]) -> bool {
@@ -1677,9 +2024,10 @@ fn named(symbol: AtomView, names: &[&str]) -> bool {
 
 /// A plain-language statement of the normalization conventions of a definition.
 ///
-/// The statement depends on the class of the constant: elementary integrals,
-/// HPL/GPL projections, Bessel moments, MATAD and public four-dimensional
-/// masters, and D = 2 periods and jets. Without a definition it records why.
+/// For a loop-integral definition the statement is derived from the definition
+/// itself (see [`loop_statement`]), so it cannot contradict it. The other
+/// classes (elementary integrals, HPL/GPL projections, Bessel moments) carry a
+/// fixed statement. Without a definition it records why.
 pub(crate) fn normalisation(
     symbol: AtomView,
     definition: Option<&Atom>,
@@ -1691,27 +2039,12 @@ pub(crate) fn normalisation(
             unavailable.unwrap_or("no definition")
         );
     };
-    if let Some((dimension, loops)) = loop_integral_shape(definition) {
-        if dimension == Atom::num(2) {
-            return format!("{D2_PERIOD} Loops: {loops}.");
-        }
-        if dimension.contains_symbol(HEADS.delta) {
-            return format!(
-                "Euclidean measure d^Dk/π^(D/2) per loop with D = 2-2δ, unit masses, positive (hat) sign convention: no (-1)^(Σa); factor e^(γδ) per loop (e^({loops}γδ) for {loops} loops); coefficient of δ^n of the Taylor expansion (not the n-th derivative)."
-            );
-        }
-        let bar = named(
-            symbol,
-            &super::constants::MATAD_BARS.map(|(name, _, _)| name),
-        ) || matches!(symbol, AtomView::Var(variable)
-                if variable.get_symbol().get_stripped_name().trim_end_matches(|c: char| c.is_ascii_digit()).ends_with("bar"));
-        return if bar {
-            MATAD_BAR.into()
-        } else if loops == 4 {
-            PUBLIC_MASTER.into()
-        } else {
-            MATAD_MASTER.into()
-        };
+    if definition.contains_symbol(HEADS.loop_integral) {
+        return loop_statement(definition).unwrap_or_else(|| {
+            format!(
+                "{LOOP_INTEGRAL}: the expression shown, with the Euclidean measure d^Dk/π^(D/2) per loop inside each LoopIntegral and every other factor written out."
+            )
+        });
     }
     if definition.contains_symbol(bessel_k()) {
         return if definition.contains_symbol(HEADS.series_coefficient) {

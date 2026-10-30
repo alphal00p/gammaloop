@@ -31,6 +31,8 @@ const NAMED_CONSTANTS: &[&str] = &[
 /// Higher MATAD expansion coefficients exposed as named constants: the public
 /// name, the `matad.rs` coefficient family and its order. Their exact values
 /// are the tabulated HPL combinations of `matad::MASTERS_SUBSTITUTION`.
+/// `BNbar4` is a convenience consistent with `matad.rs`; it is not
+/// independent of `Li_6(1/2)`, `s6weak` and the classical constants.
 pub(crate) const MATAD_BARS: [(&str, &str, i64); 6] = [
     ("D5bar1", "D5bar", 1),
     ("D5bar2", "D5bar", 2),

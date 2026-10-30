@@ -422,7 +422,11 @@ fn legacy_leaf_constant_lookup_retains_its_cap_and_source_provenance() {
         constant.definition(),
         Some(&definitions::matad_master("miD6", -1).unwrap())
     );
-    assert!(constant.normalisation().starts_with("MATAD normalization"));
+    assert!(
+        constant
+            .normalisation()
+            .starts_with("Public Vakint/FMFT and MATAD normalization (identical for even Σa)")
+    );
     assert!(constant.warnings().iter().any(|warning| {
         warning.requested_decimal_precision == requested
             && warning.sources.iter().any(|contributor| {

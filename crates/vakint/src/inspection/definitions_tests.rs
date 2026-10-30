@@ -353,11 +353,15 @@ fn normalisation_statements_follow_the_definition_class() {
             "PolylogImag(4,(1+3^(1/2)*𝑖)/2)",
             "Real or imaginary part of Li_n",
         ),
-        ("D6", "MATAD normalization"),
+        (
+            "D6",
+            "Public Vakint/FMFT and MATAD normalization (identical for even Σa)",
+        ),
         ("T1ep2", "MATAD normalization"),
-        ("D6bar2", "MATAD bar"),
-        ("T111bar4", "MATAD bar"),
-        ("BNbar4", "MATAD bar"),
+        ("D6bar2", "MATAD bar (matad.rs D5/D6 prefactor)"),
+        ("D5bar1", "MATAD bar (matad.rs D5/D6 prefactor)"),
+        ("T111bar4", "MATAD bar (matad.rs T111 prefactor)"),
+        ("BNbar4", "MATAD bar (matad.rs BN prefactor)"),
     ] {
         assert!(
             statement(symbol).starts_with(start),
@@ -375,14 +379,8 @@ fn normalisation_statements_follow_the_definition_class() {
     let powers = [0, 1, 0, 0, 1, 1, 1, 1, 1, 0];
     let anonymous = vk_parse!("anonymous_period").unwrap();
     for (definition, start) in [
-        (
-            family.d2_period(&powers).unwrap(),
-            "Euclidean measure d^2k/π per loop in D = 2",
-        ),
-        (
-            family.d2_jet(&powers, 2).unwrap(),
-            "Euclidean measure d^Dk/π^(D/2) per loop with D = 2-2δ",
-        ),
+        (family.d2_period(&powers).unwrap(), "D = 2 period"),
+        (family.d2_jet(&powers, 2).unwrap(), "D = 2-2δ jet"),
         (
             fmft_master("PR4", 1).unwrap(),
             "Public Vakint/FMFT master normalization",
@@ -406,9 +404,98 @@ fn normalisation_statements_follow_the_definition_class() {
         Some(&family.d2_jet(&powers, 1).unwrap()),
         None,
     );
-    assert!(jet.contains("e^(4γδ) for 4 loops") && jet.contains("not the n-th derivative"));
+    for fragment in [
+        "coefficient of delta^1 of the series expansion in delta around 0",
+        "not a derivative",
+        "e^(4*γ*delta), i.e. e^(γ delta) per loop",
+        "4-loop Euclidean integral with measure d^Dk/π^(D/2) per loop, D = 2-2*delta",
+        "6 propagators, all with unit mass, whose powers sum to Σa = 6",
+        "No other factor.",
+    ] {
+        assert!(jet.contains(fragment), "{fragment}: {jet}");
+    }
     let missing = normalisation(anonymous.as_view(), None, Some("a runtime input"));
     assert!(missing.starts_with("No defining integral") && missing.contains("a runtime input"));
+}
+
+/// The loop-integral statement is read off the definition, never off the name,
+/// and lists every factor in front of the `LoopIntegral`.
+#[test]
+fn loop_normalisation_statements_are_derived_from_the_definition() {
+    Vakint::initialize_vakint_symbols();
+    let ep = Atom::var(S.form_epsilon);
+    let (sunset, loops) = matad_topology("miT111").unwrap();
+    assert_eq!(loops, 2);
+    let master = euclidean_master(sunset.clone(), loops);
+    let statement = |name: &str, definition: Atom| {
+        normalisation(vk_parse!(name).unwrap().as_view(), Some(&definition), None)
+    };
+    // A two-loop public coefficient with (-1)^Σa, under a MATAD-bar-like name.
+    let public = statement("Xbar7", series_coefficient(-master.clone(), ep.clone(), 0));
+    assert!(public.starts_with(PUBLIC_MASTER), "{public}");
+    assert!(public.contains("the sign -1 = (-1)^Σa"), "{public}");
+    assert!(public.contains("Σa = 3"), "{public}");
+    // The same integral without the sign is the MATAD convention.
+    let matad = statement("PR4fin", series_coefficient(master.clone(), ep.clone(), 0));
+    assert!(matad.starts_with(MATAD_MASTER), "{matad}");
+    assert!(matad.contains("No sign (-1)^Σa."), "{matad}");
+    // A four-loop public master read under an unrelated name.
+    let fmft = statement("T111bar4", fmft_master("PR4", 1).unwrap());
+    assert!(fmft.starts_with(PUBLIC_MASTER), "{fmft}");
+    // Any other prefactor is printed as such.
+    let other = statement(
+        "D5bar1",
+        series_coefficient(Atom::num(2) * master, ep.clone(), 1),
+    );
+    assert!(other.starts_with(LOOP_INTEGRAL), "{other}");
+    assert!(other.contains("the factor 2 times"), "{other}");
+    // T111 and BN bars carry Γ(1+ep)^(-L) and no exponential factor.
+    for (name, family) in [("T111bar4", "T111"), ("BNbar4", "BN")] {
+        let text = statement(
+            name,
+            builtin(vk_parse!(name).unwrap().as_view())
+                .unwrap()
+                .unwrap(),
+        );
+        assert!(
+            text.starts_with(&format!("{MATAD_BAR} (matad.rs {family} prefactor)")),
+            "{text}"
+        );
+        assert!(
+            text.contains("gamma(ep+1)") || text.contains("gamma(1+ep)"),
+            "{text}"
+        );
+        assert!(
+            text.contains("No e^(γ ep) factor: the explicit e^(-Lγε) of matad.rs"),
+            "{text}"
+        );
+    }
+    // D5 has one massless line; its bar keeps e^(3γ ep).
+    let d5 = statement(
+        "D5bar1",
+        builtin(vk_parse!("D5bar1").unwrap().as_view())
+            .unwrap()
+            .unwrap(),
+    );
+    assert!(d5.contains("5 with unit mass and 1 massless"), "{d5}");
+    assert!(d5.contains("e^(3*γ*ep), i.e. e^(γ ep) per loop"), "{d5}");
+    // A pole term added inside the expansion (the external T111bar5 form).
+    let (_, prefactor, _) = matad_bar_prefactor("T111bar").unwrap();
+    let subtracted = series_coefficient(
+        prefactor * loop_integral(Atom::num(4) - Atom::num(2) * &ep, sunset, loops)
+            - Atom::num((3, 2)) * sqrt3() / ep.pow(Atom::num(2)),
+        ep.clone(),
+        5,
+    );
+    let text = statement("T111bar5", subtracted);
+    assert!(
+        text.starts_with(&format!("{MATAD_BAR} (matad.rs T111 prefactor)")),
+        "{text}"
+    );
+    assert!(
+        text.contains("is added inside the expansion (it does not contribute to this coefficient)"),
+        "{text}"
+    );
 }
 
 /// Count the nested intervals and find the innermost logarithm power.
