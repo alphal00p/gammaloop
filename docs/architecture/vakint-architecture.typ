@@ -95,6 +95,12 @@ rebind the same name to different data.
 Symbolic reduction binds these finite leaves after exact combination, using the same period
 registry without choosing a numerical fallback. Loading rejects declarations that shadow native
 evaluators, reserved Vakint symbols, existing period aliases or master basis identities.
+This includes the inert definition heads and the built-in constants `cl4`, `log(q)` for positive
+rational `q` other than one, `D5bar1/2`, `D6bar1/2`, `T111bar4` and `BNbar4`.
+A record may carry an optional `symbolic_definition`. Loading parses and validates it, and it
+must agree with any definition reconstructed from the record's `definition_metadata`. An invalid
+definition, a contradiction or inconsistent metadata rejects the pack. Records without
+`symbolic_definition` keep the reconstruction from their metadata, if any.
 
 Campaign certification is advisory outside its recorded predicates. Safe partial reductions retain
 family-qualified unknown integrals. After exact combination, Retain mode warns with sorted,
@@ -286,7 +292,9 @@ source-data uncertainty.
 Raw coefficient records retain the evaluated midpoint and its enclosure. Checked symbolic
 export enforces requested and achieved precision without lowering the raw midpoint first.
 Inspection lookups explicitly cap their returned numerical values to the request and source
-availability. Represented external dot products use the same component source identities and
+availability. When finite sources cap a coefficient below the request, its single evaluation
+pass carries 64 decimal digits beyond that cap instead of the full request. Warnings still refer
+to the request. Represented external dot products use the same component source identities and
 reject incompatible dimensions or missing momenta.
 
 Public MATAD/FMFT numerical master-substitution helpers prepare the same finite-source identities
@@ -329,6 +337,14 @@ Master records expose every available epsilon coefficient, per-coefficient symbo
 validated source precision and a native FeynKit diagram with authenticated powers, numerator and
 loop-momentum routing. Declared uncomputed terminals remain inspectable with empty coefficient
 maps. Inspection does not download data or use FORM's private tables.
+Constant records also carry their defining integral as an exact atom. It uses the inert heads
+`Integral`, `Interval`, `LoopIntegral`, `SeriesCoefficient` and `EuclideanDot`, and it never
+refers to another named constant: its only free symbols are 𝜋, 𝑒 and γ. Lookup tries
+historical table leaves first, then authenticated external records, recorded period aliases and
+built-in constants. For loop-integral definitions, the plain-language normalisation statement is
+derived from the definition itself; the other classes carry a fixed statement. A constant
+without a definition still returns its value, together with the reason the definition is
+missing.
 Bare saved applications may announce master identities without authenticated graph payloads;
 `get_master` then reports that the matching external-data pack is required.
 

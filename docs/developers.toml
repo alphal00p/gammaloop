@@ -743,7 +743,10 @@ anchor = "pub(crate) struct RustRedData {"
 # Reviewed 2026-10-30 against dbd1cc72: external-data activation takes an
 # explicit prepared-cache flag; the default loaders still import them.
 # Validation and data ownership are unchanged.
-digest = "c97d9ff088ff602ad091f1e0a8bf54e7d2e14cd4"
+# Reviewed 2026-10-30 against d505df40 (PR #243): test-only regression for
+# optional symbolic_definition records (absent, agreeing, contradicting, invalid,
+# reserved identities). Production snapshot ownership and activation are unchanged.
+digest = "5069473c575f75c05e1533938ef5dd5de3804343"
 
 [[section.note.scope]]
 path = "crates/vakint/src/rustred_evaluation/masters.rs"
@@ -777,7 +780,11 @@ anchor = "pub(crate) struct MasterCatalog {"
 # development-only step; runtime tests import raw bytes without codec dependencies.
 # Reviewed 2026-10-30 against dbd1cc72: master coefficient combination is
 # wrapped in a timing span only; catalogue ownership is unchanged.
-digest = "59c9d081838c48e135c3b348fb4d8b52cd21da85"
+# Reviewed 2026-10-30 against d505df40 (PR #243): finite constant records may
+# carry a symbolic_definition. It is parsed, validated and checked against the
+# metadata reconstruction inside the same transactional load, and definition heads
+# are rejected as identities. Record bytes still enter the snapshot tag.
+digest = "d1fc1c9b474d20ea85ca63f92208fbdee0b94331"
 
 [[section.note.scope]]
 path = "crates/vakint/src/precision.rs"
@@ -803,7 +810,10 @@ anchor = "pub struct NumericalEvaluationResult {"
 # aware evaluation, component accuracy, and lookup capping are preserved.
 # Reviewed 2026-10-30 against dbd1cc72: epsilon-power extraction matches the
 # power atom directly instead of a pattern; accepted orders and errors are unchanged.
-digest = "f87697e6fc7f5010741390ceb26282597768fe90"
+# Reviewed 2026-10-30 against d505df40 (PR #243): coefficient evaluation
+# accepts a working precision at most the request. It is still one tracked pass
+# with the fixed guard, and warnings and export limits still refer to the request.
+digest = "622962a7022a889e73d8f94cf1390bc9be7ff493"
 
 [[section.note.scope]]
 path = "crates/vakint/src/inspection.rs"
@@ -815,7 +825,10 @@ anchor = "pub struct VakintMaster {"
 # Reviewed 2026-10-21: parameter validation reuses the complete snapshot
 # reference classifier and propagates finite-constant lookup errors. Loaded
 # moments remain finite sources with their authenticated source cap.
-digest = "70c727d6ad416c08d7f3f2b78b474454ad669b55"
+# Reviewed 2026-10-30 against d505df40 (PR #243): constant records add the
+# defining-integral atom, the reason it is unavailable and a normalisation statement.
+# Two error variants are added. Snapshot ownership and typed identities are unchanged.
+digest = "d855ee2d4daa5d37bce043afc82945d3bf15e825"
 
 [[section.note.scope]]
 path = "crates/vakint/src/precision/materialize.rs"
@@ -848,7 +861,10 @@ anchor = "pub(crate) fn stage_table("
 # Reviewed 2026-10-21 binary-input correction: decoding validates nonzero
 # exactly representable centers at their original bit precision. ASCII-hex
 # validation precedes byte slicing, so malformed Unicode metadata fails gracefully.
-digest = "350a68bab888916a2e7e9a0adaee8656b4177257"
+# Reviewed 2026-10-30 against d505df40 (PR #243): a read-only source_identity
+# accessor exposes the decoded table position for definitions. Staging and decoding
+# ownership are unchanged.
+digest = "f756083c3cfedf7a0d490d2fedb2a35234d34f07"
 
 [[section.note.scope]]
 path = "crates/vakint/src/inspection/registry.rs"
@@ -863,7 +879,11 @@ anchor = "    fn constant_source("
 # Reviewed 2026-10-27: Both constant and master lookup cap values to
 # requested/source availability and report capped achieved precision;
 # canonical identities and snapshot ownership are unchanged.
-digest = "3be6fac050e0a1954a77d3089a08e4572e1ae34e"
+# Reviewed 2026-10-30 against d505df40 (PR #243): lookup resolves definitions
+# in a fixed order: legacy leaf, external record, period alias, then built-in.
+# A missing definition never hides the value. Constant and master lookups share one
+# capped evaluation that works at cap + 64 digits when sources cap below the request.
+digest = "d60e072d149147b68aada2676a98782418bc85cc"
 
 [[section.note.scope]]
 path = "crates/vakint/src/presentation.rs"
@@ -872,7 +892,10 @@ anchor = "pub(crate) enum Content {"
 # Reviewed 2026-10-21: terminal and HTML records share a stored-value view.
 # Display-only projection hides one snapshot transport tag but preserves the
 # original Atom and keeps mixed-snapshot formulas explicit.
-digest = "48e4e5b61c2f44f522025660523bdff303b2472e"
+# Reviewed 2026-10-30 against d505df40 (PR #243): the constant card adds
+# Definition and Normalisation fields from the stored record. The shared
+# stored-value view is unchanged.
+digest = "895ed6417bade3e8f1a4336e4ede8669b59b8307"
 
 [[section.note.scope]]
 path = "crates/vakint/src/symbolica_community_module/presentation.rs"
@@ -910,7 +933,11 @@ anchor = "pub(crate) fn builtin_symbols()"
 # Reviewed 2026-10-21 full inspection sweep: native real constant definitions
 # and advertised projections share lookup validation. The public regression
 # checks every advertised endpoint GPL; the complete380-constant API sweep passes.
-digest = "de8c958c91fdfffd075de0c26473b9d4ff9c3b88"
+# Reviewed 2026-10-30 against d505df40 (PR #243): cl4, log of a positive
+# rational other than one and the MATAD bars D5bar1/2, D6bar1/2, T111bar4 and BNbar4
+# become built-in real constants. Their values come from the existing matad.rs
+# and HPL owners, and they are therefore reserved identities.
+digest = "39b1649db1233f627ebe908581ae9a5950716839"
 
 [[section.note.scope]]
 path = "crates/vakint/src/matad.rs"
