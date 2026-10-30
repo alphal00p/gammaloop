@@ -92,8 +92,8 @@ fn coefficients(
         // allowing its common Euler/phase/pi factors to cancel exactly.
         let scalar = canonical_retained(&(scalar / common))?.expand();
         let scalar = scalar
-            .replace(epsilon.as_view())
-            .with(physical_epsilon.as_view());
+            .replace(epsilon.clone())
+            .with(physical_epsilon.clone());
         let coefficient = scalar
             .as_view()
             .try_to_rational_polynomial(&Q, &Z, Some(variables.clone()))
