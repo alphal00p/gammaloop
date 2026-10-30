@@ -238,7 +238,6 @@ fn three_loop_quadratic_rung_engine_parity() -> fixture::Result<()> {
 }
 
 #[test]
-#[ignore = "sequential physical-fixture qualification: requires explicit 4L data and a complete comparison below fifteen minutes"]
 fn four_loop_zero_momentum_rung_engine_parity() -> fixture::Result<()> {
     compare(4, fixture::Projection::ZeroMomentumMetric)
 }
