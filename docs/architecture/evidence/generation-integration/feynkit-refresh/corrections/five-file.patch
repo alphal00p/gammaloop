@@ -1,0 +1,221 @@
+diff --git a/crates/feynkit-py/src/sector_decomposition.rs b/crates/feynkit-py/src/sector_decomposition.rs
+index e31adcf9695b9b9184be7de717c67d4c4f8dc47a..a3d59bb6f0516a6882fd3ce07bc2d28d55d28c12 100644
+--- a/crates/feynkit-py/src/sector_decomposition.rs
++++ b/crates/feynkit-py/src/sector_decomposition.rs
+@@ -52,9 +52,9 @@ impl PyFeynmanDiagram {
+     /// With a complete diagram, an admitted numerical point and regulator ``eps``:
+     ///
+     /// >>> from symbolica import E, S
+-    /// >>> from symbolica.community import hepkit as hep
++    /// >>> from symbolica.community import graph, hepkit as hep
+     /// >>> model = hep.Model.phi3()
+-    /// >>> diagram = model.process(["phi"], ["phi"]).generate_diagrams(loops=1, max_vertices=2, maximum_bridges=0, progress=None).diagrams[0]
++    /// >>> diagram = model.process(["phi"], ["phi"]).amplitude(loops=hep.Loops.total(1), topology=hep.TopologyRules(max_vertices=2, bridges=graph.Bridges.at_most(0), self_energies=hep.Veto.all(), tadpoles=hep.Veto.all(), snails=hep.Veto.massless())).generate().build(hep.NumeratorOptions(naming=hep.Naming.named("D"))).diagrams[0]
+     /// >>> from symbolica.community.hepkit.sector_decomposition import with_diagram_expressions
+     /// >>> diagram = with_diagram_expressions(diagram, overall_factor=diagram.overall_factor_expression(evaluate=True))
+     /// >>> eps, D = S("eps", "D")
+@@ -144,9 +144,9 @@ pyo3_stub_gen::inventory::submit! {
+                 With a complete diagram and admitted numerical kinematics:
+ 
+                 >>> from symbolica import E, S
+-                >>> from symbolica.community import hepkit as hep
++                >>> from symbolica.community import graph, hepkit as hep
+                 >>> model = hep.Model.phi3()
+-                >>> diagram = model.process(["phi"], ["phi"]).generate_diagrams(loops=1, max_vertices=2, maximum_bridges=0, progress=None).diagrams[0]
++                >>> diagram = model.process(["phi"], ["phi"]).amplitude(loops=hep.Loops.total(1), topology=hep.TopologyRules(max_vertices=2, bridges=graph.Bridges.at_most(0), self_energies=hep.Veto.all(), tadpoles=hep.Veto.all(), snails=hep.Veto.massless())).generate().build(hep.NumeratorOptions(naming=hep.Naming.named("D"))).diagrams[0]
+                 >>> from symbolica.community.hepkit.sector_decomposition import with_diagram_expressions
+                 >>> diagram = with_diagram_expressions(diagram, overall_factor=diagram.overall_factor_expression(evaluate=True))
+                 >>> eps, D = S("eps", "D")
+diff --git a/crates/feynkit-py/tests/installed_feyncalc_qcd_ghost_vertex.py b/crates/feynkit-py/tests/installed_feyncalc_qcd_ghost_vertex.py
+index fa61ef9f93995cfc7fb20344cdbcd06d1f9f08ea..73fe5f5cf3d17ac6a3c8f1896539a5235d51d098 100644
+--- a/crates/feynkit-py/tests/installed_feyncalc_qcd_ghost_vertex.py
++++ b/crates/feynkit-py/tests/installed_feyncalc_qcd_ghost_vertex.py
+@@ -3,9 +3,8 @@
+ All graph weights, momentum routing, UV expansion, color/tensor reduction and
+ IBP are shared APIs.  The only analytic integral input is I(1)|pole = M/eps;
+ physical loop integration restores i/(16*pi**2), and a4 = gs**2/(16*pi**2).
+-The SM model supplies its antighost-derivative rule UUV1 = P(3,2) in the
+-ordered [ghost, antighost, vector] vertex; only the gluon gauge parameter
+-is specialized here.
++The SM model supplies the canonical UFO ghost rule; only the gluon gauge
++parameter is specialized here.
+ References: FeynCalcExamples/QCD/OneLoop/{Renormalization,GhGl-Gh}.
+ """
+ 
+@@ -164,11 +163,8 @@ for pdg in (9000005, -9000005):
+             assert not scalar.matches(K(arguments))
+             assert not scalar.matches(hedge(arguments))
+             if not loops:
+-                # -G f(A,c,barc) p_barc with all vertex momenta incoming.
+-                # For an incoming ghost, p_barc=-P2 and f(b,a,c)=-f(a,b,c);
+-                # for an incoming antighost, p_barc=P0 and f(b,c,a)=f(a,b,c).
+                 expected_momentum = P(0, mink(D, b))
+-                if pdg > 0:
++                if pdg < 0:
+                     expected_momentum -= P(1, mink(D, b))
+                 assert (scalar + gs * expected_momentum * color).expand() == zero
+                 trees[pdg] = scalar
+diff --git a/crates/feynkit-py/tests/installed_squared_amplitude_display.py b/crates/feynkit-py/tests/installed_squared_amplitude_display.py
+index 4a289d77b7392cf9ed0582f197b4d4394b2603ab..0d0eeb7eee9933534941c617b1eb9e52eec53b8a 100644
+--- a/crates/feynkit-py/tests/installed_squared_amplitude_display.py
++++ b/crates/feynkit-py/tests/installed_squared_amplitude_display.py
+@@ -8,10 +8,15 @@ from symbolica.community import hepkit as hep
+ from symbolica.community.tensor import DisplaySettings
+ 
+ model = hep.Model.standard_model()
+-generated = model.process(
+-    ["e-", "e+"], ["a", "a"], vertex_allow=["V_98"]
+-).generate_diagrams(
+-    max_vertices=2, maximum_bridges=None, numerator_grouping=None, progress=None
++generated = (
++    model.process(["e-", "e+"], ["a", "a"])
++    .amplitude(
++        loops=hep.Loops.total(0),
++        restrict=hep.Restrict().only_vertices([model.vertex_rule("V_98")]),
++        topology=hep.TopologyRules(max_vertices=2),
++    )
++    .generate()
++    .build()
+ )
+ squared = hep.Amplitude(generated.diagrams).squared()
+ fermions = squared.sum_spins([0, 1], average_initial=True)
+diff --git a/crates/feynkit-py/tests/installed_ufo_ghost_crossing.py b/crates/feynkit-py/tests/installed_ufo_ghost_crossing.py
+index f12f4733145e7597983acc63ed880dea3f8a26b6..e7e5f7d284f8d211605077228f4c54a1d69dd785 100644
+--- a/crates/feynkit-py/tests/installed_ufo_ghost_crossing.py
++++ b/crates/feynkit-py/tests/installed_ufo_ghost_crossing.py
+@@ -1,10 +1,9 @@
+-"""Check canonical SM ghost vertices in all three crossings.
++"""Check SM ghost vertices against the original UFO in all three crossings.
+ 
+-Particle order and couplings follow the bundled UFO in assets/models/ufo/sm.
+-Its antighost-derivative convention defines UUV1 = P(3,2): the all-incoming
+-antighost momentum for fields ordered [ghost, antighost, vector]. The expected
+-crossings below follow that derivative independently of the stored Lorentz
+-expression. No external MadGraph installation is required.
++Upstream records: https://github.com/mg5amcnlo/mg5amcnlo/tree/3.x/models/sm
++The particle order and couplings below come from vertices.py/couplings.py.
++lorentz.py defines UUV1 = P(3,2) + P(3,3), which equals -p1 with all
++three momenta incoming. No external MadGraph installation is required.
+ """
+ 
+ import copy
+@@ -51,7 +50,7 @@ p3 = "UFO::P(UFO::idx(1,3),UFO::idx(1,3))"
+ uuv = next(
+     item for item in specification["lorentz_structures"] if item["name"] == "UUV1"
+ )
+-assert E(uuv["structure"], default_namespace="UFO") == E(p2)
++assert E(uuv["structure"], default_namespace="UFO") == E(p2 + "+" + p3)
+ P, mink, hedge, wave, index, mu = S(
+     "gammalooprs::P",
+     "spenso::mink",
+@@ -72,28 +71,27 @@ for name, (particles, coupling_name) in vertices.items():
+         model.expand_couplings(S("UFO::" + coupling_name)) - coupling
+     ).together() == zero
+     ghost, antighost, vector = [model.particle(particle) for particle in particles]
+-    # P0 = P1 + P2 for the physical process. The derivative supplies p2,
+-    # the all-incoming antighost momentum: -P2 = -P0 + P1 when crossed
+-    # to external slot 2, and P0 when the antighost is incoming.
++    # P0 = P1 + P2 for the physical process. The expected tensor is -p1
++    # of the ordered UFO ghost leg, independent of the stored Lorentz expression.
+     # slots records the external indices of (ghost, antighost, vector).
+     for incoming, outgoing, slots, momentum in (
+         (
+             [ghost],
+             [model.particle(vector.antiname), model.particle(antighost.antiname)],
+             (0, 2, 1),
+-            -P(0, mink(4, mu)) + P(1, mink(4, mu)),
++            -P(0, mink(4, mu)),
+         ),
+         (
+             [vector],
+             [model.particle(ghost.antiname), model.particle(antighost.antiname)],
+             (1, 2, 0),
+-            -P(0, mink(4, mu)) + P(1, mink(4, mu)),
++            P(1, mink(4, mu)),
+         ),
+         (
+             [antighost],
+             [model.particle(vector.antiname), model.particle(ghost.antiname)],
+             (2, 0, 1),
+-            P(0, mink(4, mu)),
++            P(0, mink(4, mu)) - P(1, mink(4, mu)),
+         ),
+     ):
+         diagrams = (
+diff --git a/crates/linnet-py/tests/test_svg_browser.py b/crates/linnet-py/tests/test_svg_browser.py
+index 7e55fdda21eab70772d5fdd2fef734722aacdd0b..d78aaada3cce5983c08a33f7b574638eec772701 100644
+--- a/crates/linnet-py/tests/test_svg_browser.py
++++ b/crates/linnet-py/tests/test_svg_browser.py
+@@ -1,6 +1,7 @@
+ """Exercise the shared graph camera and inspector in Chromium and WebKit."""
+ 
+ import importlib.util
++import math
+ import os
+ import unittest
+ import xml.etree.ElementTree as ET
+@@ -40,6 +41,17 @@ class SvgBrowserTests(unittest.TestCase):
+         self.assertLess(sizes[1][0], 390)
+         self.assertGreater(sizes[2][1], 600)
+         self.assertGreater(sizes[3][0], 390)
++        # Standalone SVGs use pt (4/3 CSS px); the readable preview is bounded
++        # by 450px width, 300px height, and a total enlargement of 3.
++        natural_scales = [
++            max(4 / 3, min(3, 450 / width, 300 / height))
++            for width, height in sizes
++        ]
++        # The label comparisons use unfitted previews, and reset must still
++        # reach 100% after the first preview's column narrows to 300px.
++        for (width, _), natural in zip(sizes[:3], natural_scales[:3]):
++            self.assertLessEqual(width * natural, 520)
++        self.assertLessEqual(sizes[0][0] * natural_scales[0], 300)
+         drawings = [render.to_html() for render in renders]
+         document = "<style>figure { margin: 0; }</style>" + "".join(
+             f'<div id="graph-{index}" style="width:520px">{drawing}</div>'
+@@ -71,11 +83,12 @@ class SvgBrowserTests(unittest.TestCase):
+                             owner = page.locator(f"#graph-{index}")
+                             camera = owner.locator(".linnet-viewport")
+                             scale = camera.evaluate("s => s.getScreenCTM().a")
+-                            expected = (3, 4 / 3, 4 / 3, 520 / 900)[index]
++                            natural = natural_scales[index]
++                            expected = min(natural, 520 / width)
+                             self.assertAlmostEqual(scale, expected, delta=1e-4)
+                             self.assertEqual(
+                                 owner.locator("output").inner_text(),
+-                                ("100%", "100%", "100%", "43%")[index],
++                                f"{math.floor(100 * expected / natural + 0.5)}%",
+                             )
+                             x, y, w, h = map(
+                                 float, camera.get_attribute("viewBox").split()
+@@ -89,14 +102,15 @@ class SvgBrowserTests(unittest.TestCase):
+                                     '[data-linnet-kind="node"][data-linnet-id="0"]'
+                                 ).bounding_box()
+                             )
+-                        # The small preview enlarges labels for readability;
+-                        # larger drawings preserve their physical dimensions.
+-                        for label in labels[1:3]:
++                        # The same node-0 label target has fixed authored dimensions;
++                        # its screen dimensions grow with the natural scale.
++                        for index, label in enumerate(labels[1:3], start=1):
++                            ratio = natural_scales[0] / natural_scales[index]
+                             self.assertAlmostEqual(
+-                                label["height"] * 2.25, labels[0]["height"], places=2
++                                label["height"] * ratio, labels[0]["height"], places=2
+                             )
+                             self.assertAlmostEqual(
+-                                label["width"] * 2.25, labels[0]["width"], places=2
++                                label["width"] * ratio, labels[0]["width"], places=2
+                             )
+                         self.assertGreaterEqual(
+                             page.locator("#graph-2 > figure > svg").bounding_box()[
+@@ -114,7 +128,9 @@ class SvgBrowserTests(unittest.TestCase):
+                             "document.querySelector('#graph-0 svg').viewBox.baseVal.width === 300"
+                         )
+                         self.assertAlmostEqual(
+-                            camera.evaluate("s => s.getScreenCTM().a"), 3.15, delta=1e-4
++                            camera.evaluate("s => s.getScreenCTM().a"),
++                            1.05 * natural_scales[0],
++                            delta=1e-4,
+                         )
+                         self.assertEqual(first.locator("output").inner_text(), "105%")
+                         page.keyboard.press("0")

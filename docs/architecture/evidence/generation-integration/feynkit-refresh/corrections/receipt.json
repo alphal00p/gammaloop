@@ -1,0 +1,167 @@
+{
+  "schema": 1,
+  "round_one_code": "5ea149ffd88ae3afc4072a38c0871c1329be8424",
+  "round_one_evidence": "0afe4d3d940e8b181d97243cf78508e854bdef6f",
+  "corrected_code": "f8422fcce0b3e9580fcb05ef6aa908b93b70521e",
+  "review": {
+    "path": ".local/review-feynkit-refresh-source-opus-20261030T180840Z-1a5f11c9/review.json",
+    "sha256": "f5b33bc4ca307d62e7270737295141457ecf1d5f2754d65699eeabc3d3c8f06f",
+    "verdict": "REQUEST_CHANGES",
+    "new_source_approval": false
+  },
+  "source_delta": [
+    {
+      "path": "crates/feynkit-py/src/sector_decomposition.rs",
+      "git_blob": "a3d59bb6f0516a6882fd3ce07bc2d28d55d28c12",
+      "sha256": "7095cd586b5ba0d9ab457604ee7f55079aca82f0ac2a5e7cdd2522b33470c4be"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_feyncalc_qcd_ghost_vertex.py",
+      "git_blob": "73fe5f5cf3d17ac6a3c8f1896539a5235d51d098",
+      "sha256": "2622f4f8f53624e177e6ae059eb12953f1b16f6cf08ebe85b70ff6155423dfc6"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_squared_amplitude_display.py",
+      "git_blob": "0d0eeb7eee9933534941c617b1eb9e52eec53b8a",
+      "sha256": "ee598de2e554ef35f5ca2166e6789df5d8d3dbb7743bcaa77ce5dd994a7587d8"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_ufo_ghost_crossing.py",
+      "git_blob": "e7e5f7d284f8d211605077228f4c54a1d69dd785",
+      "sha256": "22231e8bd4f950b386fd72a917c6468afa802ed24c2218b5c48e6d29ee44f314"
+    },
+    {
+      "path": "crates/linnet-py/tests/test_svg_browser.py",
+      "git_blob": "d78aaada3cce5983c08a33f7b574638eec772701",
+      "sha256": "e20498219df081aac7f19edb761ceadfefd11db10c879bdf4a03705f87f35e8b"
+    }
+  ],
+  "worker_bindings": [
+    {
+      "path": "target/refresh-ghost-source-fix-20261030-sol61-r2/ghost-source-fix.patch",
+      "sha256": "f98ccb958457c8f53cbfe4d3414e2cda84ee5dbb81744f60b3f4118dda6f32cf"
+    },
+    {
+      "path": "target/refresh-ghost-source-fix-20261030-sol61-r2/result.json",
+      "sha256": "79b9b2cc4ec7a255da36acc4e83876c9b619eeee60a1b36e74a7d792b51d1722"
+    },
+    {
+      "path": "target/refresh-ghost-source-fix-20261030-sol61-r2/rationale.typ",
+      "sha256": "6ca2da6fe45db92c0bc89e55dda6561c7cab4ac0d48a67789bf3b203b66fb483"
+    },
+    {
+      "path": "target/refresh-staged-api-source-fix-20261030-sol61-r2/fix.patch",
+      "sha256": "1fe76671b4c9db3253263622afe921017dd95d6b2b6f9d4773cc9cfe38b95ef5"
+    },
+    {
+      "path": "target/refresh-staged-api-source-fix-20261030-sol61-r2/handoff.json",
+      "sha256": "6116a24de1d11242a323cd3cc0a20f87a19db418b02a7f5d161931da3acda5dc"
+    },
+    {
+      "path": "target/refresh-staged-api-source-fix-20261030-sol61-r2/validation.json",
+      "sha256": "fac011177aa8aec4715f7f20d5bb9c054146415a8c09775fc81c5b12e5db458a"
+    },
+    {
+      "path": "target/refresh-staged-api-source-fix-20261030-sol61-r2/rationale.typ",
+      "sha256": "02cdf2c2bc67783a25d54de546d192b61a66e581affff1f83cc25b9c4445d8f1"
+    },
+    {
+      "path": "target/refresh-browser-source-fix-20261030-sol61-r2/f5.patch",
+      "sha256": "6d509db9ebc79f0268e366a86751deb6a79f96eafcafad6606dc1ea4db8445f3"
+    },
+    {
+      "path": "target/refresh-browser-source-fix-20261030-sol61-r2/handoff.json",
+      "sha256": "a6bb0f23bfefc71898072bdf0c1b9e3190baffbfcdbdc2949892535b1faa08f4"
+    },
+    {
+      "path": "target/refresh-browser-source-fix-20261030-sol61-r2/validation.json",
+      "sha256": "afcf756a4c62bbdd608db3415165d82810c7e6a234b46b1ac3a7b42955f7de3f"
+    },
+    {
+      "path": "target/refresh-browser-source-fix-20261030-sol61-r2/rationale.typ",
+      "sha256": "cebb2dcb70184010344641be137d41be25d443428b926158c48200bcfa993738"
+    }
+  ],
+  "decisions": {
+    "F1_F2": "Restore approved canonical UUV1 sum/crossing expectations and pdg<0 branch; retain upstream API adaptations and local scalar-prefactor reuse; no output re-recording.",
+    "F3": "Use same single typed V_98 rule, tree-level/max2vertices staged request; preserve21assertion ASTs and display suffix.",
+    "F4": "Restore both approved staged examples/imports; ExtensionPoint implementation/tests unchanged; existing stubs already contain examples.",
+    "F5": "Derive scale/percent/label ratio/zoom from measured dimensions and final renderer formulas with JS half-up positive rounding; retain fixtures, locator/tolerances and coverage; added regime guards require browser execution."
+  },
+  "additive_evidence_corrections": {
+    "N1": "Round-one parity record omitted that original#52 crossing-test scalar-prefactor conversion was already subsumed upstream. F1/F2 now expose and repair opposite-convention expectations which merged textually. Historical reconciliation.txt is preserved as superseded round-one judgment, not current source approval.",
+    "N2": "Historical handoff-source-hashes.json labels CODE5ea while some bytes belong to EVIDENCE0afe. Correct attribution is both round_one_code and round_one_evidence above; corrected_code names only the five-path follow-up.",
+    "N5": {
+      "scratch_commit": "883184320f00db3cc5f1fd54d15923feec8febec",
+      "bookmark": "generation-feynkit-refresh-inventory-scratch",
+      "retained": "two .reconciliation inventory inputs; no deletion"
+    }
+  },
+  "protected": {
+    "production_trees_unchanged_vs_fdff": [
+      "crates/feynkit-generator",
+      "crates/feynkit-model",
+      "crates/feynkit-amplitude",
+      "crates/feynkit-py/src/generation",
+      "tests/tests/test_feyngen.rs"
+    ],
+    "kernel_build_inputs_unchanged_vs_5ea": [
+      "Cargo.lock",
+      "tydenso/Cargo.lock",
+      "examples/notebooks/symbolica-host/Cargo.lock",
+      "uv.lock",
+      ".config/hakari.toml",
+      "crates/gammaloop-workspace-hack/Cargo.toml",
+      "nix/rust-workspace.nix",
+      "nix-ci.nix"
+    ],
+    "historical_evidence_files_unchanged": 1204,
+    "oracle_paths_unchanged": 243,
+    "main_index_sha256": "36fca2996228d0adb018933745a106061d3febe8921980864b5cc50dbad4af5d",
+    "conflicted_replay_commits": 0,
+    "round_one_refs_preserved": true
+  },
+  "static": {
+    "exact_paths": [
+      "crates/feynkit-py/tests/installed_ufo_ghost_crossing.py",
+      "crates/feynkit-py/tests/installed_feyncalc_qcd_ghost_vertex.py",
+      "crates/feynkit-py/tests/installed_squared_amplitude_display.py",
+      "crates/feynkit-py/src/sector_decomposition.rs",
+      "crates/linnet-py/tests/test_svg_browser.py"
+    ],
+    "python_ast": "PASS",
+    "worker_after_hashes": "PASS",
+    "scopes": {
+      "valid": 118,
+      "changed_digests": 0
+    },
+    "registry_sha256": "d75c2c84804505df3356a234155f851fef2c8b15b4ed721b58f3d6e3603f717e",
+    "checks": "bounded static source checks only; installed host/browser/stub regeneration pending"
+  },
+  "formatting": {
+    "tool": "/nix/store/c3bpv60f5wgp4pmgsifaykxk214h6463-rust-stable-with-components-2026-09-03/bin/rustfmt",
+    "command": "rustfmt --check --edition2024 crates/feynkit-py/src/sector_decomposition.rs",
+    "result": "PASS",
+    "clippy": "not run; only doc-example text changes to Rust; full current8eb gate remains pending"
+  },
+  "shared_qualification": {
+    "active_build_source": "5ea149ffd88ae3afc4072a38c0871c1329be8424",
+    "build_still_running": true,
+    "selected_drv": "/nix/store/5pxm7dg3gnz25a30iqzmyvh7kwcrwbsq-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0.drv",
+    "rust_source_manifest": ".local/feynkit-refresh/qualification/helper-source-manifest.json",
+    "rust_source_manifest_sha256": "46980d764e8161030d85f0e528c3de59362ec9c589f81e01da1fbd9cd6d905a2",
+    "lane_source_manifest": ".local/feynkit-refresh/qualification/additive-lane-source-manifest.json",
+    "lane_source_manifest_sha256": "ec8362d699be0eaae5b68ac4e25afe233039cf884f6cb88b8e175bce19984c9b",
+    "compiled_on_corrected_source": false,
+    "transfer_credit": "NONE until exact corrected package/dependency sources and drv invariance"
+  },
+  "pending": [
+    "new independent focused source review by root",
+    "generator archive completion/ELF/unit qualification",
+    "helper compilation/actual8eb captures and proof rebinding",
+    "installed host tests and generated-stub parity",
+    "actual Chromium/WebKit browser execution incl.regime guards",
+    "full-site qualification not run or authorized"
+  ],
+  "runtime_credit": "NONE"
+}
