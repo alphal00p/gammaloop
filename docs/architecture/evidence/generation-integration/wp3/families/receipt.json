@@ -1,0 +1,567 @@
+{
+  "schema": 1,
+  "status": "COMBINED_CANDIDATE_AWAITING_NEW_INDEPENDENT_REVIEW_WP3_INCOMPLETE",
+  "scope": "Only four additional certified numerator literals and immutable evidence/report closure; no production algorithm, physics expectation outside these four digests, dependency/kernel/resource policy change.",
+  "base": "30f02f79c2bcabfadcd8081e1add3d5afe6e91d2",
+  "built_code_source": "8dcebc2591ab04d10026fbd47a45e8d31f911ef3",
+  "built_code_change": "yyvzwznyztsrqtprzzlpnlyvlkwnuvyy",
+  "evidence_change": "nqnowunlnumplkytytoyvoomttupknok",
+  "candidate_bookmark": "generation-integration-families",
+  "approval_index": "docs/architecture/evidence/generation-integration/wp3/families/approval-index.json",
+  "migration": {
+    "preparation": "3432ac3f36890ae2664d8571085f05e1dd41f27f",
+    "certificate": "87fa13a93b1c0b3e5792fd56937486ad962b2b55",
+    "donor_patch_sha256": "c136076c87dd3f6ae5b7ceced353e6bb82a0e333625cec65810a5b2aafed3097",
+    "source": "crates/feynkit-generator/tests/generation_oracle/main.rs",
+    "old_main_sha256": "987e9c274c0faa2710689cd10d6b4903414b19e62b9f1833c6c5e3c463b4049b",
+    "new_main_sha256": "c29a92c9d5614afaa756f36856e5804064403919fb28c16be9cb04c1c2f5c54b",
+    "changed_lines": [
+      242,
+      293,
+      300,
+      368
+    ],
+    "rows": [
+      {
+        "name": "qed_eemm_L1",
+        "old": "f39e8abed0a17168",
+        "new": "3866ebfda57f6fb8"
+      },
+      {
+        "name": "ctorder_qcd_uugg_L1",
+        "old": "22c36efac374dc81",
+        "new": "3a743bf033456b6f"
+      },
+      {
+        "name": "sm_eemm_L0",
+        "old": "7c4bccf1c63f9180",
+        "new": "c030c29958e57000"
+      },
+      {
+        "name": "ym_g6_L0",
+        "old": "edab6fe01ae6725e",
+        "new": "c742a6c3a2526c64"
+      }
+    ],
+    "prior_three_qed_literals": "Preserved exactly. All other main.rs bytes equal approved MAIN30f. No whole-file transplant.",
+    "row_text_guard": "Exact four-line substitution, not rustfmt coverage of oracle! macro."
+  },
+  "imports": {
+    "certificate_evidence_files": 33,
+    "certificate_reports": 3,
+    "migration_evidence_files": 19,
+    "migration_reports": 1,
+    "byte_exact_imported_files": 56,
+    "code_checkpoint_distinct_paths": 58,
+    "rule": "Immutable3432 bytes imported; registry merged rather than transplanted; original pending-review reports/receipts untouched.",
+    "old_preflight": {
+      "path": "target/wp3-family-migration-preflight-30f-87fa-20261030/preflight.json",
+      "sha256": "3dc3a7f7b3bff69249feec35e5c7f54439b0b03ae7db711777dbb8f6820a22e9"
+    },
+    "refreshed_source_inventory": {
+      "path": "target/wp3-family-integration/source-audit.json",
+      "sha256": "c053390e94cba5aa8aafd5fcc294559d61ca7b26efc85e17f611f13cfd7bfa9a",
+      "bytes": 47382
+    },
+    "raw_closure": {
+      "path": "target/wp3-family-integration/proof-closure.json",
+      "sha256": "d4b6661c9c084f6162606576d7ad7ac65071e65a54ab89dae70da8f89896f77b",
+      "bytes": 8863
+    },
+    "raw_qualification": "Original large sibling task roots/ELFs/reviews retained, not duplicated or pruned. Mandatory27,945-file certificate inventory rehashed; only expected donor-registry mismatch, no whole outer-manifest pass credit. Freeze indexes/relative modules/checker ELFs required externally."
+  },
+  "producer": {
+    "code": "8dcebc2591ab04d10026fbd47a45e8d31f911ef3",
+    "uri": "git+file:///shared/lcnbr/dev/gammaloop/main?rev=8dcebc2591ab04d10026fbd47a45e8d31f911ef3&shallow=1&allRefs=1",
+    "aggregate": {
+      "derivation": "/nix/store/3xsx66v02384cgv2dkbywdwgq79v62si-gammaloop-nextest-binaries-feynkit.drv",
+      "status": "evaluated only, not realized"
+    },
+    "generator": {
+      "derivation": "/nix/store/rbp28mw3nnkf1l3dl9f2yrbpjvcgvir9-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0.drv",
+      "output": "/nix/store/di9k3p4hakyy4xnzwfqijvahyhqrjwwl-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0",
+      "status": "actually realized and executed",
+      "archive": "/nix/store/di9k3p4hakyy4xnzwfqijvahyhqrjwwl-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0/gammaloop-nextest-feynkit-feynkit-generator.tar.zst",
+      "archive_sha256": "723717497dee592443c5633a55ce90751c5c277f10c83b2d5be20d0f89e7764e",
+      "oracle_elf": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-family-integration/runtime/source/target/ci-optim/deps/generation_oracle-6b0e7dc68fc70180",
+      "oracle_elf_sha256": "0e83563f557f8f87d352ccdf8f71ed8dba95a15fc58cb6ad4b31af78500e8bc7",
+      "extracted_cargo_metadata_sha256": "c39ec40f7d4bf2a617d2e0154c54c88f2e8d7ee4b3e507a2cfec8a3db84957f0",
+      "selected_profile": "ci-optim / ci_gammaloop",
+      "actual_phase_command_lines": [
+        "cargo nextest --version",
+        "cargo nextest archive \\",
+        "--archive-file \"$out/gammaloop-nextest-feynkit-feynkit-generator.tar.zst\""
+      ],
+      "workspace_cargoExtraArgs_context_only": "--locked --workspace --features feynkit-graph/svg,feynkit-py/python_stubgen,gammaloop-api/cli,gammaloop-api/python_stubgen,gammaloop-api/ufo_support,gammaloop-integration-tests/python-api-tests,gammaloop-tracing-filter/clap,gammaloop-tracing-filter/python,gammaloop-tracing-filter/symbolica,gammalooprs/python_stubgen,idenso/bincode,idenso/native,idenso/reference-cases,linnest/svg,linnet-py/python_stubgen,linnet/bincode,linnet/drawing,linnet/rayon,linnet/rkyv,linnet/serde,linnet/symbolica,pyo3-stub-gen/infer_signature,pyo3-stub-gen/numpy,pyo3/anyhow,pyo3/auto-initialize,pyo3/eyre,pyo3/macros,pyo3/multiple-pymethods,spenso-hep-lib/native,spenso/native,spenso/native-code-generation,spenso/portable-payload,spenso/python,spenso/python_stubgen,spenso/shadowing,spynso3/python_stubgen,symbolica-utils/native,symbolica/tracing_max_level_info,three-dimensional-reps/display,three-dimensional-reps/eval,three-dimensional-reps/json_schema,vakint/python_stubgen,vakint/symbolica_community_module"
+    },
+    "sources": {
+      "full-source": {
+        "path": "/nix/store/mkm0bp3qf7pqy3yj6420hbym8x7pfig7-source",
+        "nar": "sha256-eLIBl+zBaZeDUe8Laytzyt8O21Ed4HqjPHf2ulLKkes="
+      },
+      "filtered-source": {
+        "path": "/nix/store/y9pg92ri4dqscpcsgj2n9iz5nlgyrycj-source",
+        "nar": "sha256-B+iZjVgOFMOOhV+xbeJ5DxP58CYXLkCxhlUOYJWQWBM="
+      },
+      "producer-output": {
+        "path": "/nix/store/di9k3p4hakyy4xnzwfqijvahyhqrjwwl-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0",
+        "nar": "sha256-GrcU7ZuZDoQ7a6Eg0Q/LLeTMsFrr2B8vGgwcHZ/XbtQ="
+      }
+    },
+    "selected_source_vs_prior_qed": {
+      "old": "/nix/store/rzh71dadzgxblz94gc4yx2b3ylcq2dk4-source",
+      "difference": [
+        "crates/feynkit-generator/tests/generation_oracle/main.rs"
+      ],
+      "all_other_paths_and_bytes_equal": true
+    },
+    "features": {
+      "selected_package_tree": "selected-features.out",
+      "tree_sha256": "df0fb8c672ccc0bc7dbbd50ffedb76b156af0e73f5a7bf979f328ba7aebe9b1d",
+      "tree_command": "selected-features.command.json",
+      "archive_metadata_resolved_context": [
+        {
+          "package": "feynkit-generator",
+          "id": "path+file:///build/source/crates/feynkit-generator#0.1.0",
+          "features": [
+            "default",
+            "native",
+            "wasm"
+          ]
+        },
+        {
+          "package": "feynkit-graph",
+          "id": "path+file:///build/source/crates/feynkit-graph#0.1.0",
+          "features": [
+            "default",
+            "native",
+            "svg",
+            "wasm"
+          ]
+        },
+        {
+          "package": "idenso",
+          "id": "path+file:///build/source/crates/idenso#0.3.0",
+          "features": [
+            "bincode",
+            "default",
+            "native",
+            "reference-cases",
+            "wasm"
+          ]
+        },
+        {
+          "package": "spenso",
+          "id": "path+file:///build/source/crates/spenso#0.6.0",
+          "features": [
+            "default",
+            "native",
+            "native-code-generation",
+            "portable-payload",
+            "python",
+            "python_stubgen",
+            "shadowing",
+            "wasm"
+          ]
+        },
+        {
+          "package": "symbolica",
+          "id": "git+https://github.com/symbolica-dev/symbolica?branch=main#3.0.1",
+          "features": [
+            "binary_size",
+            "bincode",
+            "float-astro",
+            "float-mpfr",
+            "integer-gmp",
+            "integer-malachite",
+            "native_code_generation",
+            "numpy",
+            "pyo3",
+            "pyo3-stub-gen",
+            "pyo3-stub-gen-derive",
+            "python_export",
+            "python_stubgen",
+            "serde",
+            "tracing_max_level_info",
+            "wasm"
+          ]
+        }
+      ],
+      "qualification": "Root default/native is not full dependency closure. Archive Cargo metadata is retained context; selected cargo tree and exact per-package phase/producer source qualify execution. Workspace-wide cargoExtraArgs is NOT relabelled the executed package command."
+    },
+    "compiler": [
+      "ypzbz0yifsk90xl610bd7kc6sxjz138l-rust-stable-with-components-2026-09-03.drv"
+    ],
+    "kernel": "1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
+    "pure_build_license_policy": "both variables absent, no runtime-result derivation; raw derivations not retained",
+    "first_build_attempt": "producer-build returned .drv path only, exit0 with no archive realization credit; producer-realize uses ^* and actual output/hash above"
+  },
+  "evidence": {
+    "producer-qualified.json": {
+      "path": "target/wp3-family-integration/producer-qualified.json",
+      "sha256": "33c8cc78f60e870afb461d37fc49ee27140cf57cbca0c1c37f1066afeeb39867",
+      "bytes": 85312
+    },
+    "dependency-features.json": {
+      "path": "target/wp3-family-integration/dependency-features.json",
+      "sha256": "90cdfb5dba7a9a861159a74defc389ca5a08ece4c58351137ae1d53979b81145",
+      "bytes": 85296
+    },
+    "selected-features.out": {
+      "path": "target/wp3-family-integration/selected-features.out",
+      "sha256": "df0fb8c672ccc0bc7dbbd50ffedb76b156af0e73f5a7bf979f328ba7aebe9b1d",
+      "bytes": 168405
+    },
+    "accounting.json": {
+      "path": "target/wp3-family-integration/accounting.json",
+      "sha256": "960daf372a8fa6eb246252a77f05b06a374fe144593d86e3de73ab125018c753",
+      "bytes": 99519
+    },
+    "runtime-results.json": {
+      "path": "target/wp3-family-integration/runtime-results.json",
+      "sha256": "9efeae7d9280dfae7a0b80698d3ff5ebf2d244f0552308b403cf47553b1237e9",
+      "bytes": 21488
+    },
+    "source-audit.json": {
+      "path": "target/wp3-family-integration/source-audit.json",
+      "sha256": "c053390e94cba5aa8aafd5fcc294559d61ca7b26efc85e17f611f13cfd7bfa9a",
+      "bytes": 47382
+    },
+    "proof-closure.json": {
+      "path": "target/wp3-family-integration/proof-closure.json",
+      "sha256": "d4b6661c9c084f6162606576d7ad7ac65071e65a54ab89dae70da8f89896f77b",
+      "bytes": 8863
+    },
+    "current-comparison.json": {
+      "path": "target/wp3-family-integration/current-comparison.json",
+      "sha256": "a3f41690160455882521d214d2070a9c36cb75af548e4514e50dc851cdc9bbd0",
+      "bytes": 58468
+    },
+    "observer-binding.json": {
+      "path": "target/wp3-family-integration/observer-binding.json",
+      "sha256": "478b5f3793d2cacd99306cf07614526e76e67e39d2d98760d1ac9194530cb77f",
+      "bytes": 72621
+    },
+    "current-semantic-results.json": {
+      "path": "target/wp3-family-integration/current-semantic-results.json",
+      "sha256": "29611868aa7388a63ca88003386f41190b55f5d2602894390bda7493e4b10ac6",
+      "bytes": 14562
+    },
+    "render-results.json": {
+      "path": "target/wp3-family-integration/render-results.json",
+      "sha256": "81841e1a6d7838d2eb81c951409731867cf3b34f59c564c586563827450ba5bb",
+      "bytes": 127338
+    },
+    "fmt.command.json": {
+      "path": "target/wp3-family-integration/fmt.command.json",
+      "sha256": "2e3964616744ecfb32534e4591684d8a908a73efe5b90695723fe26479bdf7af",
+      "bytes": 730
+    },
+    "clippy.command.json": {
+      "path": "target/wp3-family-integration/clippy.command.json",
+      "sha256": "99a0a15b0a42767a7cce807777972930dc7a6c7c5233fcef026f4b509b155996",
+      "bytes": 781
+    },
+    "producer-build.command.json": {
+      "path": "target/wp3-family-integration/producer-build.command.json",
+      "sha256": "84f12a25d25cef8c6efeb1c84acedf2caf1cfb00173d262d3c0c305183d19cb4",
+      "bytes": 637
+    },
+    "baseline.command.json": {
+      "path": "target/wp3-family-integration/baseline.command.json",
+      "sha256": "d3c76fc6b2c1b93ee34e2731a55f27921f013c5c1eea37f93785f88929ea01ab",
+      "bytes": 849
+    },
+    "source-audit.command.json": {
+      "path": "target/wp3-family-integration/source-audit.command.json",
+      "sha256": "937f0d5fd7aa0aa75418d42aab05bcc88bff3b661ab9760352e81c50c8e4486d",
+      "bytes": 616
+    },
+    "current-comparison.command.json": {
+      "path": "target/wp3-family-integration/current-comparison.command.json",
+      "sha256": "65a49c70b26b08e7eae47e71d7c3ef6588a6b72bce9fb33c6070ac9f49d94e32",
+      "bytes": 616
+    },
+    "current-comparison-mode-corrected.command.json": {
+      "path": "target/wp3-family-integration/current-comparison-mode-corrected.command.json",
+      "sha256": "4ed5a4e716f9224ecc317c6d907f02a351ee716f2d7479ecfb9a967767eff89e",
+      "bytes": 616
+    }
+  },
+  "validation": {
+    "pools": [
+      {
+        "pool": 1,
+        "selected": 7,
+        "new_four_passed": 4,
+        "prior_three_passed": 3,
+        "ignored": 0,
+        "failed": 0,
+        "exit": 0,
+        "junit": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-family-integration/pool-1-junit.xml",
+        "junit_sha256": "66b3f9b45073dea38768e3905e80e840dc675bb3d0d282887b929bddda49e419",
+        "command_sha256": "4b2181e2bd0b4f52f49ab09878f5a40feab47d024b42559af10d38bd4765884a"
+      },
+      {
+        "pool": 8,
+        "selected": 7,
+        "new_four_passed": 4,
+        "prior_three_passed": 3,
+        "ignored": 0,
+        "failed": 0,
+        "exit": 0,
+        "junit": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-family-integration/pool-8-junit.xml",
+        "junit_sha256": "efeb0291077221eef17869d34eb8f98a65edbdf6096ec84c1104f2d827420104",
+        "command_sha256": "2fc1607db9622df05c9b6964b54f1d6a515779708e9df09b72c71de7aad42af4"
+      },
+      {
+        "pool": 32,
+        "selected": 7,
+        "new_four_passed": 4,
+        "prior_three_passed": 3,
+        "ignored": 0,
+        "failed": 0,
+        "exit": 0,
+        "junit": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-family-integration/pool-32-junit.xml",
+        "junit_sha256": "07121ccf6237536a437a3956234ad622fb74b447b1e7f749227231d263622fd0",
+        "command_sha256": "a740babe29cf1b4773f51af0121fbc50b4b537b782493ab09aa24db3c06b4683"
+      }
+    ],
+    "fresh_seven_total": {
+      "new_four_passes": 12,
+      "prior_three_passes": 9,
+      "failed": 0,
+      "ignored": 0,
+      "classification": "Real outer Nextest selectedcases/JUnit; no nested child count inflation."
+    },
+    "current_capture_binding": {
+      "record": {
+        "path": "target/wp3-family-integration/current-comparison.json",
+        "sha256": "a3f41690160455882521d214d2070a9c36cb75af548e4514e50dc851cdc9bbd0",
+        "bytes": 58468
+      },
+      "new_four_case_pool_comparisons": 12,
+      "prior_three_case_pool_comparisons": 9,
+      "qualification": "Actual new ci-optim None/Auto/source/census files equal approved pool1 and migration output. Independent None full historical Row and Auto full same-mode summary recomputation; CT8-position source/group correspondence explicit. Auto topology/assignment counters are not falsely equated to None.",
+      "observer": {
+        "path": "target/wp3-family-integration/observer-binding.json",
+        "sha256": "478b5f3793d2cacd99306cf07614526e76e67e39d2d98760d1ac9194530cb77f",
+        "bytes": 72621
+      },
+      "observer_qualification": "Fresh executions of retained521c7879 dev-optim observer, source-qualified unchanged production owners. Exact source/provenance/feature records retained; not a new MAIN-compiled observer or in-memory assertion instrumentation. Actual model/request/options/typed ports/interfaces/Run/payload captures joined byte-exactly to new ci-optim public outputs at1/8/32. These fields remain capture-bound, not enlarged theorem."
+    },
+    "fast_lane": {
+      "inventory": 420,
+      "selected": 371,
+      "passed": 297,
+      "failed": 74,
+      "binary_results": {
+        "feynkit-generator": {
+          "passed": 222,
+          "failed": 0,
+          "ignored": 0
+        },
+        "feynkit-generator::amplitude": {
+          "passed": 9,
+          "failed": 0,
+          "ignored": 0
+        },
+        "feynkit-generator::generation_oracle": {
+          "passed": 65,
+          "failed": 74,
+          "ignored": 0
+        },
+        "feynkit-generator::momentum_tensor": {
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0
+        }
+      },
+      "unexpected_failures": [],
+      "missing_expected_failures": [],
+      "prior_accounting": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-qed-integration/accounting.json",
+        "sha256": "502d1458e79f7a64823e92c89c245566cf9a150fd36369652fc1054caea3eaa0",
+        "counts": {
+          "inventory": 420,
+          "selected": 371,
+          "passed": 293,
+          "failed": 78
+        }
+      },
+      "exit": 100,
+      "junit_sha256": "d0c554bb4876b482506b7b116510868c6546a7ae4382eecbc5c3dbaf91130fdb",
+      "pool_results": [
+        {
+          "pool": 1,
+          "selected": 7,
+          "new_four_passed": 4,
+          "prior_three_passed": 3,
+          "ignored": 0,
+          "failed": 0,
+          "exit": 0,
+          "junit": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-family-integration/pool-1-junit.xml",
+          "junit_sha256": "66b3f9b45073dea38768e3905e80e840dc675bb3d0d282887b929bddda49e419",
+          "command_sha256": "4b2181e2bd0b4f52f49ab09878f5a40feab47d024b42559af10d38bd4765884a"
+        },
+        {
+          "pool": 8,
+          "selected": 7,
+          "new_four_passed": 4,
+          "prior_three_passed": 3,
+          "ignored": 0,
+          "failed": 0,
+          "exit": 0,
+          "junit": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-family-integration/pool-8-junit.xml",
+          "junit_sha256": "efeb0291077221eef17869d34eb8f98a65edbdf6096ec84c1104f2d827420104",
+          "command_sha256": "2fc1607db9622df05c9b6964b54f1d6a515779708e9df09b72c71de7aad42af4"
+        },
+        {
+          "pool": 32,
+          "selected": 7,
+          "new_four_passed": 4,
+          "prior_three_passed": 3,
+          "ignored": 0,
+          "failed": 0,
+          "exit": 0,
+          "junit": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-family-integration/pool-32-junit.xml",
+          "junit_sha256": "07121ccf6237536a437a3956234ad622fb74b447b1e7f749227231d263622fd0",
+          "command_sha256": "a740babe29cf1b4773f51af0121fbc50b4b537b782493ab09aa24db3c06b4683"
+        }
+      ],
+      "sampled_quotient": {
+        "binary": "feynkit-generator",
+        "name": "grouping::tests::sampled_quotient_groups_physical_local_factors",
+        "seconds": "0.645",
+        "status": "passed",
+        "failure": null
+      },
+      "attribution": "Only four additional row expectations change; original b9 matrix remains history. Sampled-quotient source binding was already separately corrected on prior MAIN and is not attributed to digest migrations.",
+      "qualification": "Remaining74 are the actual prior78 failed-name set minus exactly4. All74 remain open, exit100. Full failing current/expected fields are retained in accounting.json. Sampled-quotient source-binding pass is separate, not digest-migration credit."
+    },
+    "proof": {
+      "fresh_frozen_baseline_domains": 8,
+      "fresh_current_semantic_domains": 8,
+      "current_only_mutation": {
+        "disposition": "reject",
+        "stage": "raw-producer-binding",
+        "detail": "current/vertex:0",
+        "case": "qed_eemm_L1",
+        "mode": "None",
+        "exit": 2
+      },
+      "reused": "541 approved replays/held-out worlds reused with exact scripts/inputs/ELFs/manifest qualification, not rerun for count inflation.",
+      "outer_manifest": "Frozen donor registry mismatch retained as EXPECTED_FAILURE/no outer pass credit; all other listed files required and rehashed."
+    },
+    "fmt": {
+      "path": "target/wp3-family-integration/fmt.command.json",
+      "sha256": "2e3964616744ecfb32534e4591684d8a908a73efe5b90695723fe26479bdf7af",
+      "bytes": 730
+    },
+    "clippy": {
+      "path": "target/wp3-family-integration/clippy.command.json",
+      "sha256": "99a0a15b0a42767a7cce807777972930dc7a6c7c5233fcef026f4b509b155996",
+      "bytes": 781
+    },
+    "lint_source_binding": {
+      "code": "8dcebc2591ab04d10026fbd47a45e8d31f911ef3",
+      "source_sha256": "c29a92c9d5614afaa756f36856e5804064403919fb28c16be9cb04c1c2f5c54b",
+      "qualification": "Pinned code development shell; direct Cargo check cwd task workspace. Rust/model/manifest/lock bytes equal code before/after. Subsequent changes evidence/prose only."
+    },
+    "registry": {
+      "notes": 91,
+      "scopes": 117,
+      "mismatches": 0,
+      "all86_baseline_note_contracts_preserved": true,
+      "existing113_scopes_unchanged": true,
+      "classification": "Two superseded reports, one current approved certificate, separate approved migration and combined investigation; four narrow row scopes added."
+    },
+    "renders": {
+      "record": {
+        "path": "target/wp3-family-integration/render-results.json",
+        "sha256": "81841e1a6d7838d2eb81c951409731867cf3b34f59c564c586563827450ba5bb",
+        "bytes": 127338
+      },
+      "qualification": "Six final-prose PDFs and six proper semantic HTML bundles. Explicit source/imports/wrapper/tool/argv/exit/timestamp0 and semantic mutation negative; no prose edits after rendering. Not a full site build."
+    },
+    "final_documentation_qualification": {
+      "required_record": "target/wp3-family-integration/final-stage.json",
+      "detached_manifest": "target/wp3-family-integration/final-supplement.json",
+      "classification": "Source-specific final canonical builder/pages/guard results captured AFTER final candidate freeze. This receipt does not infer a full-builder pass from static counts. Detached final records avoid candidate/self-hash cycles."
+    }
+  },
+  "review_note_dispositions": {
+    "M-N1": "Earlier reviewer fingerprint loader a2fd0037 explicitly retained and verified in proof-closure.json; new dependency auditor self-contained.",
+    "M-N2/M-N3": "New output records identify exact runtime root/results.json, code/source versions and per-command results. Old preformat chronology remains historical.",
+    "M-N4": "Exact four-line/lowercase literal guard; rustfmt does not format custom oracle! row text.",
+    "M-N5": "Complete actual runtime environment KEY set plus only safe settings recorded, never secret values/hashes.",
+    "M-N6": "Old credit uses retained pristine-current13389956 copy/hash, not the overwritten mutable normal-cache path.",
+    "M-N7": "Actual prior293/78/49 failed-name census bound; current297/74/49 derived from Nextest/JUnit.",
+    "M-N8/M-N9": "Fresh final source/wrapper/tool/render bindings; final canonical docs owner executable/source qualified on exact frozen source. No stale/intermediate relabelling.",
+    "M-N10": "Four narrow row scopes added; existing113 unchanged.",
+    "M-N11": "Current scoped Clippy source/feature/code binding retained, no inherited pass merely from timestamps."
+  },
+  "failed_attempts": [
+    {
+      "record": {
+        "path": "target/wp3-family-integration/producer-build.command.json",
+        "sha256": "84f12a25d25cef8c6efeb1c84acedf2caf1cfb00173d262d3c0c305183d19cb4",
+        "bytes": 637
+      },
+      "qualification": "Exit0 returned .drv path only, no output-realization credit; corrected ^* realization retained."
+    },
+    {
+      "record": {
+        "path": "target/wp3-family-integration/baseline.command.json",
+        "sha256": "d3c76fc6b2c1b93ee34e2731a55f27921f013c5c1eea37f93785f88929ea01ab",
+        "bytes": 849
+      },
+      "qualification": "Exit1 Python-I removed sibling-module import; no replay credit; corrected -B entrypoint passed."
+    },
+    {
+      "record": {
+        "path": "target/wp3-family-integration/source-audit.command.json",
+        "sha256": "937f0d5fd7aa0aa75418d42aab05bcc88bff3b661ab9760352e81c50c8e4486d",
+        "bytes": 616
+      },
+      "qualification": "Exit1 first-line-only title assumption; no complete static credit; canonical heading search corrected."
+    },
+    {
+      "record": {
+        "path": "target/wp3-family-integration/current-comparison.command.json",
+        "sha256": "65a49c70b26b08e7eae47e71d7c3ef6588a6b72bce9fb33c6070ac9f49d94e32",
+        "bytes": 616
+      },
+      "qualification": "Exit1 invalid assumption that Auto counters equal None historical Row; no pass credit; compare complete same-mode summary instead."
+    },
+    {
+      "record": {
+        "path": "target/wp3-family-integration/current-comparison-mode-corrected.command.json",
+        "sha256": "4ed5a4e716f9224ecc317c6d907f02a351ee716f2d7479ecfb9a967767eff89e",
+        "bytes": 616
+      },
+      "qualification": "Exit1 completion race: runtime-results.json absent while full lane still active. Corrected final comparison after completion passed."
+    }
+  ],
+  "limits": [
+    "Historical mathematics only four independent cases, None/Auto, Grouping None,pool1;8/32runtime does not extend theorem.",
+    "Named multiset transport only; interface presence/order, ports-vs-expression typing, locality/Run/pool/cook association capture-bound.",
+    "OnlyQ/edge/vertex of5 audited mappings exercised; original final diagnostic build logs remain absent and independently corroborated, not reconstructed.",
+    "Original b9 exit matrix and all historical failures/failed commands unchanged. Current74 oracle failures, source44 later EXIT101, other WP3 requirements remain open.",
+    "No whole-graph numerator expansion, trace/numerical substitution, unrelated row repair, license-runtime import, performance/memory/distribution/publication or WP3/M-rebuild completion.",
+    "Aggregate evaluated only. Full final evidence source distinct; archive credit belongs to built8dce code and independently verified filtered graph, not a claim final evidence was rebuilt."
+  ],
+  "policy": {
+    "global_workers": 16,
+    "memory_intensive_slots": 2,
+    "timeout_seconds": 240,
+    "nixci": false,
+    "license": "Both variables unset in every Nix subprocess; licensed tests only direct private runtime. No real-license runtime-result derivation; no raw potentially secret-bearing derivation retained."
+  },
+  "inventories": {
+    "tracked": "inventory.json (nonself)",
+    "runtime": "runtime-manifest.json",
+    "final_detached": "target/wp3-family-integration/final-supplement.json",
+    "source_reproduction": "tool-sources/*.py.txt are byte-exact active recorder/auditor sources: copy to target/wp3-family-integration/<same basename without .txt> and execute from task root with recorded pinned Python. No permanent diagnostic Rust target."
+  }
+}

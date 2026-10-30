@@ -1,0 +1,128 @@
+"""Source, manifest, immutable proof and raw-current bindings; no algebra normalization."""
+from pathlib import Path
+import hashlib
+import importlib.util
+import json
+import os
+import re
+import subprocess
+import sys
+import tomllib
+
+ROOT=Path(__file__).resolve().parents[2]
+OUT=Path(__file__).resolve().parent
+PREP=ROOT.parent/"generation-oracle-numerator-families"
+REV="3432ac3f36890ae2664d8571085f05e1dd41f27f"
+BASE="30f02f79c2bcabfadcd8081e1add3d5afe6e91d2"
+CODE="8dcebc2591ab04d10026fbd47a45e8d31f911ef3"
+FAMILIES=["qed_eemm_L1","ctorder_qcd_uugg_L1","sm_eemm_L0","ym_g6_L0"]
+def sha(p):
+    h=hashlib.sha256()
+    with Path(p).open("rb") as f:
+        for block in iter(lambda:f.read(4*1024*1024),b""): h.update(block)
+    return h.hexdigest()
+def blob(rev,p):
+    return subprocess.check_output(["git","-C",str(ROOT.parent/"main"),"show",rev+":"+p],env=dict(os.environ,GIT_OPTIONAL_LOCKS="0"))
+def save(name,obj):
+    (OUT/name).write_text(json.dumps(obj,indent=2)+"\n")
+def source():
+    paths=subprocess.check_output(["git","-C",str(ROOT.parent/"main"),"diff","--name-only","--diff-filter=A","b9f788922341e7bde2e801a054423ae70ed7e9ae",REV],env=dict(os.environ,GIT_OPTIONAL_LOCKS="0"),text=True).splitlines()
+    imports=[]
+    for p in paths:
+        data=blob(REV,p);assert data==(ROOT/p).read_bytes(),p
+        imports.append({"path":p,"bytes":len(data),"sha256":sha(ROOT/p),"revision":REV})
+    reg=tomllib.loads((ROOT/"docs/developers.toml").read_text());notes=[n for s in reg['section'] for n in s.get('note',[])];old=tomllib.loads(blob(BASE,"docs/developers.toml").decode());oldnotes=[n for s in old['section'] for n in s.get('note',[])]
+    assert all(n in notes for n in oldnotes),"preserve existing86 complete note contracts"
+    assert len(notes)==len({n['id'] for n in notes})==len({n['title'] for n in notes})==len({n['source'] for n in notes})==91
+    scopes=[]
+    for n in notes:
+        headings=re.findall(r'^= (.+)$',(ROOT/n['source']).read_text(),re.MULTILINE)
+        assert headings==[n['title']],n['id']
+        for s in n.get('scope',[]):
+            t=(ROOT/s['path']).read_text();assert t.count(s['anchor'])==1
+            if 'end_anchor' in s:
+                assert t.count(s['end_anchor'])==1;assert t.index(s['end_anchor'])>t.index(s['anchor']);t=t[t.index(s['anchor']):t.index(s['end_anchor'])]
+            b=t.encode();h=hashlib.sha1(b'blob '+str(len(b)).encode()+b'\0'+b).hexdigest();assert h==s['digest'],n['id']
+            scopes.append({'note':n['id'],'path':s['path'],'symbol':s['symbol'],'digest':h})
+    p='crates/feynkit-generator/tests/generation_oracle/main.rs';before=blob(BASE,p).decode();after=(ROOT/p).read_text();expected=before
+    for old,new in [('f39e8abed0a17168','3866ebfda57f6fb8'),('22c36efac374dc81','3a743bf033456b6f'),('7c4bccf1c63f9180','c030c29958e57000'),('edab6fe01ae6725e','c742a6c3a2526c64')]:
+        assert expected.count(old)==1;expected=expected.replace(old,new)
+    assert expected==after
+    bindings=tomllib.loads((ROOT/'docs/generated-rendered-evidence.toml').read_text());roles=['path','source','artifact_owner','source_owner','tool_owner'];files=sorted({a[k] for a in bindings['artifact'] for k in roles});assert len(files)==22 and len(bindings['artifact'])==8
+    for f in files:assert (ROOT/f).read_bytes()==blob(BASE,f),f
+    save('source-audit.json',{'base':BASE,'code':CODE,'imports':imports,'imports_count':len(imports),'exact_four_line_guard':'PASS','source_sha256':sha(ROOT/p),'preserved_main_entries':len(oldnotes),'notes':len(notes),'scopes':scopes,'scope_count':len(scopes),'frozen_generated_artifacts':8,'binding_files':[{'path':f,'sha256':sha(ROOT/f)} for f in files]})
+def manifests():
+    freeze=PREP/'target/oracle-numerator-family-round3/freeze.json';assert sha(freeze)=='5655d842c80f24467e7596dfedd30f8d9588178a346818cb119020b9189729de'
+    mf=PREP/'target/oracle-family-migration/freeze.json';assert sha(mf)=='92ec6d507e1ad558e4e95d08685a5bbfbabb08ebec56389a5497ff4d591e767c'
+    records=[]
+    for f in [freeze,mf]:
+        obj=json.loads(f.read_text())
+        for name,value in obj['artifacts'].items():
+            expected=value['sha256'] if isinstance(value,dict) else value
+            path=Path(name)
+            if not path.is_absolute():path=PREP/path
+            assert path.is_file(),path
+            assert sha(path)==expected,path
+            records.append({'path':str(path),'sha256':expected,'bytes':path.stat().st_size})
+    # All approved final certificate payloads, including semantic-control worlds,
+    # remain required. The donor registry is deliberately different after migration.
+    index=PREP/'target/oracle-numerator-family-round3/inventory/closure-final.json';entries=json.loads(index.read_text())['files'];bad=[]
+    for name,row in entries.items():
+        p=Path(name);assert p.is_file(),name
+        actual=sha(p)
+        if actual!=row['sha256']:bad.append({'path':name,'expected':row['sha256'],'actual':actual})
+    assert all(x['path']==str(PREP/'docs/developers.toml') for x in bad),bad
+    # Exact approved scripts and retained checker ELFs are source-bound before replay.
+    receipt=json.loads(blob('87fa13a93b1c0b3e5792fd56937486ad962b2b55','docs/architecture/evidence/generation-oracle-family-diagnosis/round3/receipt.json'))
+    for p,h in receipt['source_hashes'].items():assert sha(p)==h,p
+    for row in receipt['elf_bindings'].values():assert sha(row['path'])==row['sha256']
+    helper=PREP/'.local/review-family-r2-a-20261030T010834Z/probes/fingerprints.py';assert sha(helper)=='a2fd0037853a21fc765b770b015485865581b1542c20e5eb24a20947439e8c86'
+    save('proof-closure.json',{'freeze_records':records,'mandatory_certificate_manifest':str(index),'manifest_sha256':sha(index),'verified_payload_count':len(entries),'outer_registry_mismatches_expected_no_pass_credit':bad,'exact_scripts_and_elf_bindings':receipt['source_hashes'],'retained_elves':receipt['elf_bindings'],'fingerprint_helper':{'path':str(helper),'sha256':sha(helper)},'reused_541_replays':'approved retained outputs, unchanged scripts/ELFs/inputs; not rerun for count inflation','qualification':'Current fresh baseline is separate; the frozen whole-manifest registry claim does not pass on changed registry.'})
+def current():
+    sys.path.insert(0,str(ROOT/'docs/architecture/evidence/generation-oracle-family-migration'))
+    import derive as D
+    import validate as V
+    approved=PREP/'target/oracle-numerator-family-diagnosis/adapted-current/captures'
+    source=(ROOT/'crates/feynkit-generator/tests/generation_oracle/main.rs').read_text();observations=[]
+    for pool in (1,8,32):
+        cmd=json.loads((OUT/f'pool-{pool}.command.json').read_text());assert cmd['exit']==0 and cmd['source_revision']==CODE
+        for case in FAMILIES:
+            payloads={};typed={};files=[]
+            for mode in ('None','Auto'):
+                frozen=approved/case/f'classes-{mode}-t1';p=OUT/'runtime'/f'dump-p{pool}'/f'{case}.classes-{mode}-t{pool}.json';comp=p.with_name(p.name.replace('.json','.sources.json'))
+                assert p.read_bytes()==comp.read_bytes()==(frozen/'payload.json').read_bytes(),str(p)
+                payloads[mode]=json.loads(p.read_text());typed[mode]=json.loads((frozen/'typed-owners.json').read_text())
+                result=D.summary(payloads[mode],(frozen/'built-report.txt').read_text())
+                # The historical Row is explicitly the None reference. Auto has
+                # mode-specific generation counters and CT naming/order; compare
+                # its complete summary to its own approved mode, never normalize it.
+                row=D.row(source,case)
+                if mode=='None':
+                    assert result==row,(case,mode,'full historical Row')
+                approved_summary=D.summary(json.loads((frozen/'payload.json').read_text()),(frozen/'built-report.txt').read_text())
+                assert result==approved_summary,(case,mode,'complete same-mode summary')
+                files.append({'mode':mode,'payload':str(p),'sources':str(comp),'sha256':sha(p),'approved_payload':str(frozen/'payload.json'),'full_summary':result,'typed_owners_sha256':sha(frozen/'typed-owners.json')})
+            mapping=V.modes(payloads['None'],payloads['Auto'],typed['None'],typed['Auto'],case)
+            moved=[{'none':r['none'],'auto':r['auto']} for r in mapping if r['none']!=r['auto']]
+            assert (len(moved)==8 if case=='ctorder_qcd_uugg_L1' else not moved)
+            prep=PREP/'target/oracle-family-migration/runtime-final/new'/case/f'pool-{pool}/dumps'
+            for file in (OUT/'runtime'/f'dump-p{pool}').glob(case+'.*'):
+                assert file.read_bytes()==(prep/file.name).read_bytes(),str(file)
+            observations.append({'pool':pool,'case':case,'files':files,'ct_or_identity_mode_mapping':moved,'census_sha256':sha(OUT/'runtime'/f'dump-p{pool}'/(case+'.census')),'comparison_to_migration_runtime_root':str(prep)})
+    prior=[]
+    for pool in (1,8,32):
+        for case in ('xs_qed_eedd_L1','xs_qed_eemm_L1','xs_qed_eeee_1pi_L1'):
+            baseline=ROOT/'target/wp3-qed-integration/runtime/dump-p1'
+            files=[]
+            for mode in ('None','Auto'):
+                for suffix in ('json','sources.json'):
+                    file=OUT/'runtime'/f'dump-p{pool}'/f'{case}.classes-{mode}-t{pool}.{suffix}'
+                    old=baseline/f'{case}.classes-{mode}-t1.{suffix}'
+                    assert file.read_bytes()==old.read_bytes(),str(file)
+                    files.append({'path':str(file),'sha256':sha(file),'approved_prior_path':str(old)})
+            census=OUT/'runtime'/f'dump-p{pool}'/(case+'.census')
+            assert census.read_bytes()==(baseline/(case+'.census')).read_bytes()
+            prior.append({'case':case,'pool':pool,'files':files,'census_sha256':sha(census)})
+    save('current-comparison.json',{'actual_runtime_root':str(OUT/'runtime'),'runtime_results_sha256':sha(OUT/'runtime-results.json'),'code':CODE,'validation_source_sha256':sha(__file__),'approved_derive_sha256':sha(Path(D.__file__)),'approved_mode_owner_checker_sha256':sha(Path(V.__file__)),'observations':observations,'prior_three_qed_complete_payload_census_preservation':prior,'fresh_observer_binding':{'path':str(OUT/'observer-binding.json'),'sha256':sha(OUT/'observer-binding.json')},'qualification':'New assertion bytes equal every approved complete payload and source companion, with full None historical Row recomputation and complete same-mode Auto summary/CT occurrence-group mapping. Fresh separately compiled retained observer runs bind typed ports/model/request/Run metadata under unchanged owning production sources; not in-memory observations of the assertion ELF, not a new MAIN-compiled observer. Mathematical scope remains pool1.'})
+if __name__=='__main__':
+    {'source':source,'manifests':manifests,'current':current}[sys.argv[1]]()

@@ -1,0 +1,473 @@
+{
+  "schema": 1,
+  "base": "30f02f79c2bcabfadcd8081e1add3d5afe6e91d2",
+  "built_code": "8dcebc2591ab04d10026fbd47a45e8d31f911ef3",
+  "code_distinct_paths": 58,
+  "evidence_distinct_paths_before_indexes": 18,
+  "code_evidence_overlap": [
+    "docs/developers.toml"
+  ],
+  "cumulative_distinct_count_with_two_final_indexes": 77,
+  "cumulative_paths_nonself": [
+    {
+      "path": "crates/feynkit-generator/tests/generation_oracle/main.rs",
+      "bytes": 77616,
+      "sha256": "c29a92c9d5614afaa756f36856e5804064403919fb28c16be9cb04c1c2f5c54b"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/execution.json",
+      "bytes": 46133,
+      "sha256": "e660ade26f5e0ab9618a1032e4b04cfb30e0a53a41bda60bb001281750e35805"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/families/approval-index.json",
+      "bytes": 1711,
+      "sha256": "b4a5e208d9045f87c1f2ec16f542d16b69c748ee7346e98cde3d800e9752dd0d"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/families/approved-migration-review.json",
+      "bytes": 29992,
+      "sha256": "78d9b395b72a7c070daabc217bddcabb613c001c14f362d059bda1306bdc902a"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/families/receipt.json",
+      "bytes": 27521,
+      "sha256": "19de1d14a14f9ea08be7e6dfff3bdacf7a001cda687d02b3b795491c1a38ff1d"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/families/tool-sources/account.py.txt",
+      "bytes": 3879,
+      "sha256": "951d63ec10d92848579d402d3f195e2f6470c5c6bf2f5dacf393b5467d19e3d3"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/families/tool-sources/audit.py.txt",
+      "bytes": 10863,
+      "sha256": "87cecd0bd0d96b6d9056fb5f0b30d404f6fbcd5356a2bef8dca144425c0ccb5e"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/families/tool-sources/dependency-features.py.txt",
+      "bytes": 1985,
+      "sha256": "ec9fba2bdd70656437d06e6720085a60031addc8749b9c2566770764c410d137"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/families/tool-sources/final.py.txt",
+      "bytes": 6583,
+      "sha256": "c61edb9f1a4423f8961399b63a8354eb303a11d3bf8cca8284516952608a1e56"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/families/tool-sources/observer.py.txt",
+      "bytes": 5113,
+      "sha256": "410c66c1d4f47567d4b1ef955068a2d434298eb52afe9ef9a639c37215324af3"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/families/tool-sources/qualify-producer.py.txt",
+      "bytes": 4233,
+      "sha256": "51a9d46721054f26c43cb46b6f1d986d9bb2a06f6a041740adc3b6e2d762a7af"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/families/tool-sources/render.py.txt",
+      "bytes": 3746,
+      "sha256": "0879b789a38951bf1bf1afa93fba2a6697afcafade7eb925cd3d88ed549eaf7f"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/families/tool-sources/replay-current.py.txt",
+      "bytes": 3052,
+      "sha256": "9b41f5b4ce7b09d2d4765cffc3382d7a56a89c222cc1c92c73af641f2b41550c"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/families/tool-sources/run.py.txt",
+      "bytes": 1549,
+      "sha256": "bc74e922ee5dc689aabeda42e2dd17dd3af3e251570c3aed2e5e7648cb605374"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/families/tool-sources/runtime.py.txt",
+      "bytes": 4682,
+      "sha256": "0e2d151b256b84b976aead5318445cb7bd9443ee7233ecf3efb1d3aac2066ff5"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/replay.json",
+      "bytes": 103605,
+      "sha256": "666c7292c9e59d362326c5fa0897914ba5a26467cacab2b995101551654381a2"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-family-diagnosis/adversarial-control-results.json",
+      "bytes": 1278,
+      "sha256": "bce10f00e3387cab62c481fb338b6094dd50dad93963684c8380775d0de5116a"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-family-diagnosis/adversarial-controls.py",
+      "bytes": 6537,
+      "sha256": "b171e4e68131afb72854cd67b6cad8479097719873ad44893ae902cc019e9448"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-family-diagnosis/capture-validation.json",
+      "bytes": 6587,
+      "sha256": "72d68ac60e527769fa92c3d7a8b80082d9e12e89f00b9613df1c5672dc86b807"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-family-diagnosis/commands.json",
+      "bytes": 1870,
+      "sha256": "c96d94726305ac965cb9de1dcfde1a987d8b789fb9d0a0e10eba3151448223ab"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-family-diagnosis/manifest.sha256",
+      "bytes": 1047,
+      "sha256": "4dac3703c6e529a0f9b7ed6fee3b195b72fbd1cbdf14146e0854be9b236d17ef"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-family-diagnosis/receipt.json",
+      "bytes": 10902,
+      "sha256": "215b7008872e1f84cb551a34993d25da87a36562d99aa8185c292039d9733c6e"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-family-diagnosis/round2/archived-sources/oracle_family_capture.rs",
+      "bytes": 6645,
+      "sha256": "a6ae13b6df94a8e044ff2f01f3f6e53eb2a871cee48daed241d5a5fb23349497"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-family-diagnosis/round2/archived-sources/oracle_family_exact.rs",
+      "bytes": 1878,
+      "sha256": "ebf20ee5fd6520c319f4f7f904ca2de13f083cb09f978a190833d800c143d969"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-family-diagnosis/round2/checks.py",
+      "bytes": 4138,
+      "sha256": "20d9c65185600991d60aa1dc561ae4ce28e62a4c1640bceb3ba6646d06d269f4"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-family-diagnosis/round2/closure.json",
+      "bytes": 550,
+      "sha256": "28e8b15091411b85f84d0287bcf801095dbaf86cc45e11062fef0b177421b819"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-family-diagnosis/round2/controls.py",
+      "bytes": 15322,
+      "sha256": "78cda27d1ae77e7a7e4033f0b97def4430c8c35002d5f8e599f3fe89d8c47176"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-family-diagnosis/round2/finalize.py",
+      "bytes": 13476,
+      "sha256": "afaf6d06da151044b270e8e62705a103c4859e9379d755803dd2b4a59956dc97"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-family-diagnosis/round2/inventory.py",
+      "bytes": 3122,
+      "sha256": "433f2de3c8013117db02b35c1b438aa2be6855556112ea207c17b74842973562"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-family-diagnosis/round2/overlay.json",
+      "bytes": 1935,
+      "sha256": "e4bae701414d87d81660afa43d0e645f698fcff1f3f1b0659241bdff4229a946"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-family-diagnosis/round2/qualify.py",
+      "bytes": 5293,
+      "sha256": "22733ddc64174975b39bc2d42aff76c05d5b45e5f0f1e753b6b5e7506710aa25"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-family-diagnosis/round2/receipt.json",
+      "bytes": 16220,
+      "sha256": "7eb0add11a640f728768878a22cb43ae9833a1964aa5f490a0af5efdbe18b6dc"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-family-diagnosis/round2/replay.py",
+      "bytes": 6737,
+      "sha256": "1d03a6f6ecac23cb0697e2d5ebe19f1d1a9c0aa57690f011dfc9011f75d3255a"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-family-diagnosis/round2/validate.py",
+      "bytes": 26687,
+      "sha256": "b468b3a4e394424c8b8add875d3e682ac80f9be9895c82bcc232fee7ac5e9fcb"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-family-diagnosis/round3/build_schema.py",
+      "bytes": 2328,
+      "sha256": "8cc5965b96b90e5a73675faf99834041381c68d5af75f7d95bdb7b8a034f6902"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-family-diagnosis/round3/check_docs.py",
+      "bytes": 3535,
+      "sha256": "68b948c86e9ee60abcc6995d0d4ec0d44afd09e6cca05fe5fc342d17399511ad"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-family-diagnosis/round3/common.py",
+      "bytes": 5374,
+      "sha256": "c4d3c0b1094b21dae30519b3b19881ea053149332c9002d2a296e0116a8694c9"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-family-diagnosis/round3/dispositions.json",
+      "bytes": 7832,
+      "sha256": "9aa7e28bc397099f18ea728e871784a0c6450f9247891d93fdbe292a875c7648"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-family-diagnosis/round3/finalize.py",
+      "bytes": 6079,
+      "sha256": "774692b61ed50a6a0298ea8a11bb243494ab5c3d1cb7217d3afd188b436d994a"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-family-diagnosis/round3/inventory.py",
+      "bytes": 3172,
+      "sha256": "443f81d7d9eb2065c4d2f274754ca4b96f7eefc189cfc272917b80c23add60e8"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-family-diagnosis/round3/qualify.py",
+      "bytes": 3569,
+      "sha256": "c6011385d8ebc406f6c0bbf7faec730a576164eae7f9a4d511c17a37fddcfda5"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-family-diagnosis/round3/receipt.json",
+      "bytes": 460022,
+      "sha256": "1ed0d3b904129234677b3dca68e1d9d057532be9fa507d73c501b9344d90057e"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-family-diagnosis/round3/report_checks.py",
+      "bytes": 5333,
+      "sha256": "efff5927bfcb7dd3eb6f056bd5e9885404239a9f1f5ca58d92ce5355c2ea0006"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-family-diagnosis/round3/schema.json",
+      "bytes": 52363,
+      "sha256": "b1c062aee5342ead1fc7633fca96216abc5beee28822ab2bc6b11b859d04043b"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-family-diagnosis/round3/seal.py",
+      "bytes": 4756,
+      "sha256": "a024aca35bb4c02d802952dff623728ef08a07be6da76e7345e78ed9fe626038"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-family-diagnosis/round3/suite.py",
+      "bytes": 18870,
+      "sha256": "e23484539d040f9667df0e16fd2a0bbe356870ce8966224f214b2cd77617ab79"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-family-diagnosis/round3/validate.py",
+      "bytes": 24827,
+      "sha256": "25805ad1b7b24ae7b68e551dbe97c6cb962f2a9cf733c5ba9d723231a05e9a67"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-family-diagnosis/source-inventory.json",
+      "bytes": 2375,
+      "sha256": "d1b007db6a629a99337229727ecb6159245024fbcae744c02b492ecfebfa2675"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-family-diagnosis/validate-captures.py",
+      "bytes": 12175,
+      "sha256": "9475dffcc1a94b3c6285b15dbb89c1b7f523943812803888133396889976da38"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-family-migration/approval-a.json",
+      "bytes": 30166,
+      "sha256": "45482a7440a8dd5bb808d41176b40b9950865c344fb03f07510411e025783bc8"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-family-migration/approval-b.json",
+      "bytes": 59574,
+      "sha256": "6ceec9c3de1180b4901f9bca6548589adb16b4688e97e162177a61d864f0792d"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-family-migration/audit.py",
+      "bytes": 3549,
+      "sha256": "476a49617039d273601b37587cc0f1e202013cf57879480de62b70e31b043dee"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-family-migration/build.py",
+      "bytes": 3923,
+      "sha256": "0fab806167050f8f3392d4a6850b69dc956636974c089b72e2b2457583871370"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-family-migration/common.py",
+      "bytes": 4856,
+      "sha256": "e69a6a573e137614a43372636d240331e14540e7c2aadfb91fae1d708e0f25ad"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-family-migration/derive.py",
+      "bytes": 6647,
+      "sha256": "8212db3171eb2f81134b8e86dbe3c789a2e25819086ace3935ecc17ee1380168"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-family-migration/docs.py",
+      "bytes": 5622,
+      "sha256": "9dadd4a5e8c00aa0c0d0ccae15cea3a0a67ef45127c681adcc34f3b3a4bdaaf9"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-family-migration/fingerprints.py",
+      "bytes": 2535,
+      "sha256": "695845c8c739c17aa95ff20abce221ac257f8a540ae3737f80fcdc25ce3fe1c4"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-family-migration/finish.py",
+      "bytes": 11709,
+      "sha256": "b46bdcd6bf055c30543d0e57eedd1f44b0c4f3d11c52b54f4dfa48cf919d70b3"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-family-migration/four-literal.patch",
+      "bytes": 9389,
+      "sha256": "c136076c87dd3f6ae5b7ceced353e6bb82a0e333625cec65810a5b2aafed3097"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-family-migration/negatives.py",
+      "bytes": 1942,
+      "sha256": "e9ce3af6dca1361affe2a420eb2bda80bd539700abaac2057cb37e790c6bfc16"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-family-migration/observer-source.rs.txt",
+      "bytes": 6832,
+      "sha256": "cfee35ed6510afdda3cb36d7b0904a43e722a89da76e081d616b1913d1a7ff43"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-family-migration/preserve.py",
+      "bytes": 2039,
+      "sha256": "af42ff3a9d8070cba04de5b688ed400e36090e7f1f47af6e1a9ff8e66c1f66c0"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-family-migration/receipt.json",
+      "bytes": 41836,
+      "sha256": "5aae4a73d4d7053101688a2332918c6d2588b343a8807bb13c3eefdc746c47cb"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-family-migration/replay.py",
+      "bytes": 1847,
+      "sha256": "78ed87bcf2b16ff5612b646c330d3e648bc04475cf6b9a53a647342ffb3a1427"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-family-migration/retain_observer.py",
+      "bytes": 2251,
+      "sha256": "aadcc0aa85dc072749b0433f9f21e99b311d853e67029d7fa53026c110bc609c"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-family-migration/runtime.py",
+      "bytes": 5314,
+      "sha256": "15fc1beff4cceb37f625188eeebf253bcbad30dfa50e319dd65026a97784d1bd"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-family-migration/runtime_exec.py",
+      "bytes": 481,
+      "sha256": "ca9cad91bf1d9ba065b255354dca3f51eb69c114331bd1df4d5c6bf36ad4921e"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-oracle-family-migration/validate.py",
+      "bytes": 10755,
+      "sha256": "e7c79126e9457d7b75482271229bdbd8d219e0ec6c90b08294081f3b2b07a8d9"
+    },
+    {
+      "path": "docs/architecture/generation-integration-oracle-families.typ",
+      "bytes": 2731,
+      "sha256": "a218d2ad5b612095d09ca353a2422f2901099923469cb7ae617e477e49b2c373"
+    },
+    {
+      "path": "docs/architecture/generation-integration-plan.typ",
+      "bytes": 41940,
+      "sha256": "e692dfeceb6d06848e7448ee5c9fd0482763ad120693fd79d980b04091d4b787"
+    },
+    {
+      "path": "docs/architecture/generation-oracle-family-diagnosis-round2.typ",
+      "bytes": 10084,
+      "sha256": "09cf0497d641dc9d2551b9314d38ac1383ce2813f371ee6248fef2a5d358bf64"
+    },
+    {
+      "path": "docs/architecture/generation-oracle-family-diagnosis-round3.typ",
+      "bytes": 12970,
+      "sha256": "323d96377065d549d130bc0b95d33bd5781d29e2cefed67dc2b6888f1a89f74b"
+    },
+    {
+      "path": "docs/architecture/generation-oracle-family-diagnosis.typ",
+      "bytes": 5943,
+      "sha256": "6039ba3616e9e6f162abbadef4248266853482780ba1beed437e82e18bc52d98"
+    },
+    {
+      "path": "docs/architecture/generation-oracle-family-migration.typ",
+      "bytes": 12113,
+      "sha256": "14187c6f51a09b7c6fc5c29cc90ac72f2da394fff0c392355de81224179c62ac"
+    },
+    {
+      "path": "docs/developers.toml",
+      "bytes": 200782,
+      "sha256": "5c6d4e7c3b357e9df7d2b5e154e94449c3746190017d2e9590839827a889551b"
+    }
+  ],
+  "nonself_exclusions": [
+    "docs/architecture/evidence/generation-integration/wp3/families/inventory.json",
+    "docs/architecture/evidence/generation-integration/wp3/families/runtime-manifest.json"
+  ],
+  "self_hash_policy": "Indexfiles excludedfrom ownhashrows; finalGit tree and detachedsupplement bind them. No candidate/self hashcycle.",
+  "code_paths": [
+    "crates/feynkit-generator/tests/generation_oracle/main.rs",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/adversarial-control-results.json",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/adversarial-controls.py",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/capture-validation.json",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/commands.json",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/manifest.sha256",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/receipt.json",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/round2/archived-sources/oracle_family_capture.rs",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/round2/archived-sources/oracle_family_exact.rs",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/round2/checks.py",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/round2/closure.json",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/round2/controls.py",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/round2/finalize.py",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/round2/inventory.py",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/round2/overlay.json",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/round2/qualify.py",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/round2/receipt.json",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/round2/replay.py",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/round2/validate.py",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/round3/build_schema.py",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/round3/check_docs.py",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/round3/common.py",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/round3/dispositions.json",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/round3/finalize.py",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/round3/inventory.py",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/round3/qualify.py",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/round3/receipt.json",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/round3/report_checks.py",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/round3/schema.json",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/round3/seal.py",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/round3/suite.py",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/round3/validate.py",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/source-inventory.json",
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/validate-captures.py",
+    "docs/architecture/evidence/generation-oracle-family-migration/approval-a.json",
+    "docs/architecture/evidence/generation-oracle-family-migration/approval-b.json",
+    "docs/architecture/evidence/generation-oracle-family-migration/audit.py",
+    "docs/architecture/evidence/generation-oracle-family-migration/build.py",
+    "docs/architecture/evidence/generation-oracle-family-migration/common.py",
+    "docs/architecture/evidence/generation-oracle-family-migration/derive.py",
+    "docs/architecture/evidence/generation-oracle-family-migration/docs.py",
+    "docs/architecture/evidence/generation-oracle-family-migration/fingerprints.py",
+    "docs/architecture/evidence/generation-oracle-family-migration/finish.py",
+    "docs/architecture/evidence/generation-oracle-family-migration/four-literal.patch",
+    "docs/architecture/evidence/generation-oracle-family-migration/negatives.py",
+    "docs/architecture/evidence/generation-oracle-family-migration/observer-source.rs.txt",
+    "docs/architecture/evidence/generation-oracle-family-migration/preserve.py",
+    "docs/architecture/evidence/generation-oracle-family-migration/receipt.json",
+    "docs/architecture/evidence/generation-oracle-family-migration/replay.py",
+    "docs/architecture/evidence/generation-oracle-family-migration/retain_observer.py",
+    "docs/architecture/evidence/generation-oracle-family-migration/runtime.py",
+    "docs/architecture/evidence/generation-oracle-family-migration/runtime_exec.py",
+    "docs/architecture/evidence/generation-oracle-family-migration/validate.py",
+    "docs/architecture/generation-oracle-family-diagnosis-round2.typ",
+    "docs/architecture/generation-oracle-family-diagnosis-round3.typ",
+    "docs/architecture/generation-oracle-family-diagnosis.typ",
+    "docs/architecture/generation-oracle-family-migration.typ",
+    "docs/developers.toml"
+  ],
+  "evidence_paths_before_indexes": [
+    "docs/architecture/evidence/generation-integration/execution.json",
+    "docs/architecture/evidence/generation-integration/wp3/families/approval-index.json",
+    "docs/architecture/evidence/generation-integration/wp3/families/approved-migration-review.json",
+    "docs/architecture/evidence/generation-integration/wp3/families/receipt.json",
+    "docs/architecture/evidence/generation-integration/wp3/families/tool-sources/account.py.txt",
+    "docs/architecture/evidence/generation-integration/wp3/families/tool-sources/audit.py.txt",
+    "docs/architecture/evidence/generation-integration/wp3/families/tool-sources/dependency-features.py.txt",
+    "docs/architecture/evidence/generation-integration/wp3/families/tool-sources/final.py.txt",
+    "docs/architecture/evidence/generation-integration/wp3/families/tool-sources/observer.py.txt",
+    "docs/architecture/evidence/generation-integration/wp3/families/tool-sources/qualify-producer.py.txt",
+    "docs/architecture/evidence/generation-integration/wp3/families/tool-sources/render.py.txt",
+    "docs/architecture/evidence/generation-integration/wp3/families/tool-sources/replay-current.py.txt",
+    "docs/architecture/evidence/generation-integration/wp3/families/tool-sources/run.py.txt",
+    "docs/architecture/evidence/generation-integration/wp3/families/tool-sources/runtime.py.txt",
+    "docs/architecture/evidence/generation-integration/wp3/replay.json",
+    "docs/architecture/generation-integration-oracle-families.typ",
+    "docs/architecture/generation-integration-plan.typ",
+    "docs/developers.toml"
+  ]
+}

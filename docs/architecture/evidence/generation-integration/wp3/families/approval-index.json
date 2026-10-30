@@ -1,0 +1,45 @@
+{
+  "schema": 1,
+  "base": {
+    "revision": "30f02f79c2bcabfadcd8081e1add3d5afe6e91d2",
+    "reviews": [
+      {
+        "path": ".local/review-main-qed-a-astra-20261030T003951Z-507209/review.json",
+        "sha256": "20d7723dfba8ec74acb8c387f21b1366d100fe599c65e467878075a592bc2145",
+        "bytes": 70749
+      },
+      {
+        "path": ".local/review-main-qed-b-astra-20261030TK1C01X/review.json",
+        "sha256": "99c56c5167f591f4cba9ae043c77828a12d4f7ddcf5cf8d685689602bc3cbb2d",
+        "bytes": 364955
+      }
+    ],
+    "status": "Root-aggregated A/B APPROVED; frozen tracked historical status preserved."
+  },
+  "certificate": {
+    "revision": "87fa13a93b1c0b3e5792fd56937486ad962b2b55",
+    "reviews": [
+      {
+        "path": "docs/architecture/evidence/generation-oracle-family-migration/approval-a.json",
+        "sha256": "45482a7440a8dd5bb808d41176b40b9950865c344fb03f07510411e025783bc8",
+        "bytes": 30166
+      },
+      {
+        "path": "docs/architecture/evidence/generation-oracle-family-migration/approval-b.json",
+        "sha256": "6ceec9c3de1180b4901f9bca6548589adb16b4688e97e162177a61d864f0792d",
+        "bytes": 59574
+      }
+    ],
+    "scope": "four separate cases, None/Auto, Grouping None, pool1"
+  },
+  "migration": {
+    "revision": "3432ac3f36890ae2664d8571085f05e1dd41f27f",
+    "review": {
+      "path": "docs/architecture/evidence/generation-integration/wp3/families/approved-migration-review.json",
+      "sha256": "78d9b395b72a7c070daabc217bddcabb613c001c14f362d059bda1306bdc902a",
+      "bytes": 29992
+    },
+    "scope": "exact4 literals; old-fail/new-pass pools1/8/32; not a MAIN approval"
+  },
+  "status": "NEW independent MAIN combined review required"
+}

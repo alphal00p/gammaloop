@@ -1,0 +1,39 @@
+"""Task-owned command recorder: private license stays out of Nix and records."""
+import datetime
+import hashlib
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+import time
+
+ROOT = Path(__file__).resolve().parents[2]
+OUT = Path(__file__).resolve().parent
+
+def sha(path):
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+def run(label, argv, cwd=ROOT):
+    env = dict(os.environ)
+    env.pop("SYMBOLICA_LICENSE", None)
+    env.pop("SYMBOLICA_LICENSE_SIGNED", None)
+    env["GIT_OPTIONAL_LOCKS"] = "0"
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
+    start = datetime.datetime.now(datetime.UTC).isoformat()
+    tick = time.monotonic()
+    with (OUT / (label + ".out")).open("wb") as stdout:
+        with (OUT / (label + ".log")).open("wb") as stderr:
+            proc = subprocess.run(argv, cwd=cwd, env=env, stdout=stdout, stderr=stderr)
+    record = {"argv": argv, "cwd": str(cwd), "start": start,
+              "end": datetime.datetime.now(datetime.UTC).isoformat(),
+              "seconds": time.monotonic()-tick, "exit": proc.returncode,
+              "stdout_sha256": sha(OUT/(label+".out")),
+              "stderr_sha256": sha(OUT/(label+".log")),
+              "license_variables": "both absent in this subprocess"}
+    (OUT/(label+".command.json")).write_text(json.dumps(record, indent=2)+"\n")
+    print(json.dumps({"label":label,"exit":proc.returncode,"seconds":record["seconds"]}),flush=True)
+    return proc.returncode
+
+if __name__ == "__main__":
+    raise SystemExit(run(sys.argv[1], sys.argv[2:]))

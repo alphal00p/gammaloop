@@ -610,9 +610,9 @@
     "validation_metadata_commit": "783e3281d01134f8fe2e44eab366d0414c63b852",
     "source_binding": "docs/architecture/evidence/generation-integration/wp3/main32-35/metadata-source.json"
   },
-  "current_implementation_code_commit": "b1c836680256d033620d32d844c1d3c41ed478f9",
+  "current_implementation_code_commit": "8dcebc2591ab04d10026fbd47a45e8d31f911ef3",
   "current_documentation_code_commit": "a3729fe5d880f0db5f09d9ce7d0ef592bfc4d161",
-  "current_implementation_change": "mxykynnsmxqvnzqovrosqxrorqrwuznw",
+  "current_implementation_change": "yyvzwznyztsrqtprzzlpnlyvlkwnuvyy",
   "main32_35_review": {
     "candidate": "510d79d94bbaf57aaaa992c641e7496905763324",
     "verdict": "APPROVE",
@@ -753,6 +753,16 @@
     "evidence_change": "wkoykyulytwwnosnvznysrnyxspvuwkr",
     "receipt": "docs/architecture/evidence/generation-integration/wp3/qed/receipt.json",
     "candidate_bookmark": "generation-integration-qed",
-    "status": "Only three certified QED digest rows integrated; fresh combined validation recorded separately; awaiting NEW independent review. Other78 oracle rows and broader WP3 gates remain open."
+    "status": "Approved historical three-row MAIN gate at30f02f79; original receipt/outcomes remain unchanged; approvals recorded in current family integration approval index."
+  },
+  "active_family_migration": {
+    "base": "30f02f79c2bcabfadcd8081e1add3d5afe6e91d2",
+    "certificate": "87fa13a93b1c0b3e5792fd56937486ad962b2b55",
+    "migration": "3432ac3f36890ae2664d8571085f05e1dd41f27f",
+    "code_commit": "8dcebc2591ab04d10026fbd47a45e8d31f911ef3",
+    "code_change": "yyvzwznyztsrqtprzzlpnlyvlkwnuvyy",
+    "receipt": "docs/architecture/evidence/generation-integration/wp3/families/receipt.json",
+    "candidate_bookmark": "generation-integration-families",
+    "status": "Exactly four additional numerator literals; current combined validation separately recorded; awaiting NEW independent combined review. WP3 incomplete."
   }
 }

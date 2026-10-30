@@ -1,0 +1,40 @@
+"""Immutable validator on NEW observer captures, with fixed preparation anchors."""
+from pathlib import Path
+import hashlib
+import json
+import os
+import shutil
+import subprocess
+import sys
+
+ROOT=Path(__file__).resolve().parents[2]
+OUT=Path(__file__).resolve().parent
+PREP=ROOT.parent/'generation-oracle-numerator-families'
+P=PREP/'docs/architecture/evidence/generation-oracle-family-diagnosis/round3/validate.py'
+HIST=ROOT.parent/'generation-oracle-family-historical/target/oracle-numerator-family-diagnosis/adapted-historical/captures'
+ANCHOR=PREP/'target/oracle-numerator-family-diagnosis/adapted-current/captures'
+CUR=OUT/'observer-p1/captures'
+sys.path.insert(0,str(OUT))
+import run
+def sha(p):return hashlib.sha256(Path(p).read_bytes()).hexdigest()
+def main():
+    assert sha(P)=='25805ad1b7b24ae7b68e551dbe97c6cb962f2a9cf733c5ba9d723231a05e9a67'
+    rows=[]
+    for case in ('qed_eemm_L1','ctorder_qcd_uugg_L1','sm_eemm_L0','ym_g6_L0'):
+        for mode in ('None','Auto'):
+            target=OUT/'current-semantic'/case/mode
+            argv=[sys.executable,'-B',str(P),'--case',case,'--mode',mode,'--historical',str(HIST),'--current',str(CUR),'--anchors-historical',str(HIST),'--anchors-current',str(ANCHOR),'--out',str(target)]
+            code=run.run('current-semantic-'+case+'-'+mode,argv);assert code==0
+            verdict=json.loads((target/'verdict.json').read_text());assert verdict['disposition']=='accept'
+            rows.append({'case':case,'mode':mode,'argv':argv,'exit':code,'verdict':verdict,'execution_sha256':sha(target/'execution.json')})
+    # Disposable CURRENT-side mutation; frozen preparation remains read-only.
+    mutant=OUT/'current-mutant';shutil.copytree(CUR/'qed_eemm_L1',mutant/'qed_eemm_L1')
+    file=mutant/'qed_eemm_L1/classes-None-t1/typed-owners.json'
+    before=sha(ANCHOR/'qed_eemm_L1/classes-None-t1/typed-owners.json')
+    data=json.loads(file.read_text());data[0]['owners'][0]['expression']='2*('+data[0]['owners'][0]['expression']+')'
+    file.write_text(json.dumps(data,separators=(',',':')))
+    target=OUT/'current-semantic-mutant';argv=[sys.executable,'-B',str(P),'--case','qed_eemm_L1','--mode','None','--historical',str(HIST),'--current',str(mutant),'--anchors-historical',str(HIST),'--anchors-current',str(ANCHOR),'--out',str(target)]
+    code=run.run('current-semantic-mutant',argv);assert code==2
+    assert before==sha(ANCHOR/'qed_eemm_L1/classes-None-t1/typed-owners.json')
+    (OUT/'current-semantic-results.json').write_text(json.dumps({'validator':str(P),'validator_sha256':sha(P),'new_current_root':str(CUR),'anchors_current':str(ANCHOR),'historical_root':str(HIST),'rows':rows,'current_only_mutation':{'argv':argv,'exit':code,'verdict':json.loads((target/'verdict.json').read_text()),'mutant_path':str(file),'mutant_sha256':sha(file),'frozen_anchor_sha256_unchanged':before},'mathematical_scope':'pool1 only; new observer uses unchanged source-qualified retained dev-optim ELF; actual ci-optim assertion payload join is separately bound'},indent=2)+'\n')
+if __name__=='__main__':main()

@@ -1,0 +1,23 @@
+"""Read dependency fingerprint metadata from the exact Nix artifact, not cache seeding."""
+import hashlib
+import json
+from pathlib import Path
+import subprocess
+import tarfile
+
+OUT=Path(__file__).resolve().parent
+ARTIFACT=Path('/nix/store/wa6jjzm7grkp6iy459gyqh2vqzlx4k31-gammaloop-crate-test-binaries-feynkit-generator-b6f177b7bc15beb1-deps-0.1.0')
+archive=ARTIFACT/'target.tar.zst'
+process=subprocess.Popen(['zstd','-dc',str(archive)],stdout=subprocess.PIPE)
+rows=[]
+with tarfile.open(fileobj=process.stdout,mode='r|') as tar:
+    for member in tar:
+        if '/.fingerprint/' not in member.name or not member.name.endswith('.json') or not member.isfile():continue
+        data=tar.extractfile(member).read()
+        value=json.loads(data)
+        rows.append({'member':member.name,'sha256':hashlib.sha256(data).hexdigest(),'bytes':len(data),'features':value.get('features'),'declared_features':value.get('declared_features'),'rustc':value.get('rustc'),'profile':value.get('profile'),'deps':value.get('deps'),'rustflags':value.get('rustflags'),'compile_kind':value.get('compile_kind')})
+assert process.wait()==0
+selected=[r for r in rows if any('/'+name+'-' in r['member'] for name in ['feynkit-generator','spenso','idenso','feynkit-graph','symbolica'])]
+assert selected
+(OUT/'dependency-features.json').write_text(json.dumps({'artifact_root':str(ARTIFACT),'archive':str(archive),'deriver':'/nix/store/9fb1whmflhldis39lg6b4z3fqfyig6k5-gammaloop-crate-test-binaries-feynkit-generator-b6f177b7bc15beb1-deps-0.1.0.drv','source':'/nix/store/y9pg92ri4dqscpcsgj2n9iz5nlgyrycj-source','records':rows,'selected_features':selected,'qualification':'Actual supporting dependency artifact fingerprints with explicit full root/member/hash. They are NOT asserted to be final archive ELF depfiles or hashes. The executed archive ELF SHA and derivation/output remain independently authoritative. No artifact was installed in any shared Cargo cache.'},indent=2)+'\n')
+print(len(rows),len(selected))

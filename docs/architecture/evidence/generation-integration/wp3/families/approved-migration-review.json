@@ -1,0 +1,222 @@
+{
+  "schema": 1,
+  "title": "Independent combined migration/test/evidence review: separate four-literal oracle numerator migration preparation",
+  "reviewer": "NEW independent Opus reviewer (claude-opus-5-5); not a continuation of the certificate reviewers; no fixes, no subreviews, no follow-up launched",
+  "date": "2026-10-30",
+  "review_window_utc": ["2026-10-30T05:06:12Z", "2026-10-30T05:50:23Z"],
+  "verdict": "APPROVED_MIGRATION_PREPARATION_SCOPE_WITH_NONBLOCKING_NOTES",
+  "verdict_summary": "The frozen candidate 3432ac3f changes exactly four numerator literals (main.rs lines 242/293/300/368) and adds only migration evidence, one report and one inserted registry entry. Independent evidence confirms every material claim: the old (133899..) and new (49ed27..) assertion ELFs are byte-identical in all loadable and debug sections except 32 .text bytes that are exactly the four movabs immediates (old literals in the old ELF, new literals in the new ELF), so both come from the same compiler/flags/341-unit dependency closure/sources apart from the patch; the new ELF's qualified build compiled the candidate main.rs. A fresh, sandboxed, minimal-environment rerun of the retained ELFs gives old 12/12 failures (exit 101, panic at the Summary assertion, only numerators differ) and new 12/12 passes, one real selected test per run, at pools 1/8/32, with observed peak OS threads 394/402/426 showing Run::threads(1|8|32) reaching the runtime pools. My own Summary implementation, written from census.rs, reproduces all four digests and unchanged counts, rational weights, inverse symmetry and histograms from the approved historical/current pool-1 captures and from all 48 fresh and author runtime dumps, matching each run's per-diagram census digests. All emitted None/Auto payloads are byte-identical across routes, pools, observer companions and the approved pool-1 captures; the CT None/Auto permutation 109->113,110->109,111->114,112->110,113->115,114->111,115->116,116->112 holds at every route/pool and equals the certified mapping. All 48 observer-mode bindings, the 541-run certificate replay (identical to approved except output paths), 31 fresh approved suite runs, the outer manifest expected failure, the freeze/inventory/receipt hashes, the reproducible PDF/HTML render with detected altered-report controls, and the inherited-only docs gates check out. No blocking finding. Eleven nonblocking notes concern helper portability, binding precision and wording. This is not MAIN or WP3 clearance and does not extend the mathematical certificate beyond pool 1.",
+  "verdict_scope": {
+    "approved": [
+      "the exact four-literal change at this preparation base (3432ac3f vs 87fa13a9) and its patch artifact c136076c.. as the only code delta, for later application to a freshly qualified MAIN",
+      "the old/new runtime matrix as current-route runtime evidence for qed_eemm_L1, ctorder_qcd_uugg_L1, sm_eemm_L0, ym_g6_L0 at pools 1/8/32",
+      "capture/payload/observer bindings of those runs to the approved pool-1 captures and the producer/observer provenance chain",
+      "reuse of the approved round-3 certificate by invariance: the certificate's inputs, checkers, ELFs and captures are unchanged and its replay reproduces its exact dispositions/stages",
+      "receipt/report/registry/evidence correctness within the stated limits"
+    ],
+    "not_approved": [
+      "MAIN integration, MAIN30f, WP3, any refreshed reconciliation or Git-pinned producer",
+      "any extension of the mathematical certificate beyond four separate cases x Classes None/Auto x Grouping None x pool 1; pools 8/32 are runtime observations only",
+      "other rows, grouped cases, general physics, performance, memory, distribution, license validity",
+      "a green full documentation check"
+    ]
+  },
+  "candidate": {
+    "revision": "3432ac3f36890ae2664d8571085f05e1dd41f27f",
+    "bookmark": "generation-oracle-family-migration",
+    "parent_approved": "87fa13a93b1c0b3e5792fd56937486ad962b2b55 (generation-oracle-family-approved, generation-oracle-family-round3)",
+    "preserved_refs_verified": {
+      "round2": "78c0754c8fb732878123c02999ced3fc506c5a1d",
+      "round1": "e814b6b4c3463d9aa1c018939365b624619af24b (also generation-oracle-family-diagnosis)",
+      "historical_diagnostic": "5e61ef89f4df4e818884e40b8d0c46108eab75a8",
+      "historical_pristine_source": "2b1ef4f07a44bc061bcc97c378bbdd9c41cb0e94 (historical workspace @ is empty 6d476227 over it; 3551/3551 tracked files equal)"
+    },
+    "receipt_sha256": "5aae4a73d4d7053101688a2332918c6d2588b343a8807bb13c3eefdc746c47cb",
+    "freeze_sha256": "92ec6d507e1ad558e4e95d08685a5bbfbabb08ebec56389a5497ff4d591e767c",
+    "approval_a_sha256": "45482a7440a8dd5bb808d41176b40b9950865c344fb03f07510411e025783bc8",
+    "approval_b_sha256": "6ceec9c3de1180b4901f9bca6548589adb16b4688e97e162177a61d864f0792d",
+    "approvals_byte_identical_to_originals": true,
+    "workspace_working_copy": "equals the candidate tree exactly before and after the review (4295 tracked blobs, 0 mismatch, 0 untracked outside target/.local/.jj)"
+  },
+  "verified": {
+    "code_delta": {
+      "changed_paths": "22 = main.rs (M), docs/developers.toml (M), report .typ (A), 19 migration evidence files (A); no mode changes; no Cargo.toml/Cargo.lock/flake/nix-ci.nix/Nextest/kernel/production/options changes",
+      "main_rs": "old 499b49e4.. (= 87fa = round2 = round1 = base b9f78892), new 3459e671..; 951 lines both; exactly lines 242 qed_eemm_L1, 293 ym_g6_L0, 300 sm_eemm_L0, 368 ctorder_qcd_uugg_L1 differ; each line equals the old line with only the numerators value replaced; 149 Rows, names/tiers/other fields unchanged",
+      "literals": {
+        "qed_eemm_L1": "0xf39e8abed0a17168 -> 0x3866ebfda57f6fb8",
+        "ctorder_qcd_uugg_L1": "0x22c36efac374dc81 -> 0x3a743bf033456b6f",
+        "sm_eemm_L0": "0x7c4bccf1c63f9180 -> 0xc030c29958e57000",
+        "ym_g6_L0": "0xedab6fe01ae6725e -> 0xc742a6c3a2526c64"
+      },
+      "patch": "four-literal.patch sha256 c136076c.. (tracked copy identical to target copy); applies cleanly with git apply to a private copy of MAIN30f main.rs (987e9c27..), result c29a92c9.. differs from MAIN30f in exactly the four lines and from the approved base in exactly 3 xs_qed + 4 new numerators; xs_qed_eemm_L1/xs_qed_eedd_L1/xs_qed_eeee_1pi_L1 remain OLD at this base as intended",
+      "registry_scopes": "candidate registry: 110 verified scopes, 1 on main.rs (anchored at fn register_indices), none covers the four rows; MAIN30f: 113 scopes, 4 on main.rs (register_indices + three xs_qed row scopes), none covers the four rows",
+      "nixci": "top-level enable = false (unchanged)"
+    },
+    "producer_chain": {
+      "old_assertion_elf": "target/oracle-numerator-family-diagnosis/pristine-current/bin/generation_oracle sha256 133899560973c3b824a1fde41061c0cf32995438434436567f1bfaa035d9d7ba",
+      "new_assertion_elf": "target/oracle-family-migration/bin/generation_oracle sha256 49ed27bd4a26c706d1785a7444e2de4001669a22e77d5d545b8987fe594a9df2 (= current normal-cache artifact generation_oracle-c4b54249fc0354d6)",
+      "observer_elf": "target/oracle-family-migration/bin/oracle_family_migration_capture sha256 521c787912fe7bfe0ba6b28c046d3c9b571904defa215f808cea04d971cafa57 (= emitted observer-source artifact; build transcript 50cf8dc7.., fresh=false, 6m11s full private compile)",
+      "binary_identity_old_vs_new": "same size 912789816; program headers and all loadable sections identical; all .debug_* sections identical; .text differs in exactly 32 bytes at offsets 2235517/2241549/2257149/2292749 = movabs imm64 of sm_eemm_L0/qed_eemm_L1/ctorder_qcd_uugg_L1/ym_g6_L0 (old literal only in old ELF, new literal only in new ELF, each once; neighbouring unchanged row literals at identical offsets in both); .symtab/.strtab differ only by two ThinLTO '.llvm.<module-hash>' suffixes",
+      "embedded_identity": ".comment 'rustc version 1.98.1 (48a229cea 2026-09-01)'; .debug_str references only the Symbolica checkout revision 1a1829b (Cargo.lock symbolica 1a1829b1f3d0a88b53b44085b3b9f34ef77945b3)",
+      "qualified_build": "cargo test --locked --profile dev-optim -p feynkit-generator --test generation_oracle --no-run (04:12:19-04:12:35Z), compiled only feynkit-generator, generation_oracle fresh=false; 4274 approved-listed sources equal before/after; versus the candidate only docs/developers.toml differs (edited 04:26, not a compile input); main.rs at build = 3459e671..; rustc 1.98.1 (48a229cea), cargo 1.98.1; CARGO_TARGET_DIR unset; rustc dep-info for the unit lists exactly the six tests/generation_oracle/*.rs files",
+      "closure_independent": "own fingerprint walk over the live build root: 341 dependency units, none missing; old.json and new.json projections (unit, kind, features, profile, rustc, rustflags) equal the live closure and all 341 recorded dependency fingerprint files are still byte-identical; root rustc/profile/features/config/rustflags/compile_kind equal; observer projection equal with a different (example vs test) root profile, as claimed",
+      "observer_source": "private tree equals 87fa13a9 exactly (4275 blobs) plus the overlay example; overlay vs archived approved capture source adds only the pool argument/folder name; options NumeratorOptions::default().with_naming(prefix D) and Grouping::None are equivalent to case.numerators()/case.grouping() for these four cases (filter_zero_color false = default; no grouping)"
+    },
+    "fresh_runtime": {
+      "method": "24 runs of the retained ELFs (no rebuild) in bwrap with read-only root, --unshare-net, private writable output/tmp/~/.cache/state, minimal explicit env (PATH coreutils, HOME, TMPDIR, XDG_CACHE_HOME, GL_TEST_LOG_DIR, FEYNKIT_ORACLE_THREADS, FEYNKIT_ORACLE_DUMP; license injected in-child, redacted in the recorded child env); argv '<case> --exact --test-threads 1 --nocapture'",
+      "old": "12/12 exit 101; each 'running 1 test', 'test <case> ... FAILED', single summary '0 passed; 1 failed; 0 ignored; 0 measured; 182 filtered out'; panic at main.rs:147:9 '<case>: summary differs from its oracle row'; left/right Summaries have 10 fields each and differ only in numerators",
+      "new": "12/12 exit 0; each 1 passed, 0 failed, 0 ignored, 182 filtered; no record/update/force/RAYON/RUST_TEST_THREADS variables in the child env",
+      "pools": "max observed OS threads of the ELF process: 394 at pool 1, 402 at pool 8, 426 at pool 32 for every case and route (= main + test thread + census pool 8 + global Rayon 384 + Run pool of exactly N for N>1; Run::threads(1) runs serially), runtime evidence that FEYNKIT_ORACLE_THREADS reaches Run::default().threads(count), beyond the dump filename t<count> which comes from the same variable",
+      "selection": "183 tests in both ELFs, each case matches exactly once with --exact; one top-level selected test per run, exactly one libtest summary line (no nested summary inflation); a passing new run executes the complete check() including classes::check Named/Minimal/thread/class assertions and the full-Summary assert_eq",
+      "author_matrix_consistency": "author runtime-final old 12 FAILED/new 12 ok with recorded flags exactly FEYNKIT_ORACLE_THREADS=<pool> and FEYNKIT_ORACLE_DUMP, update/force flags absent; my outcomes and dumps are identical"
+    },
+    "negatives_fresh": {
+      "zero_selection_new_elf": "exit 0, 'running 0 tests', '0 passed; 0 failed; 0 ignored; 0 measured; 183 filtered out' -> 0 selected, zero credit by the selected-count predicate",
+      "record_mode_old_elf_x4": "exit 0, 1 passed with the Row assertion skipped -> zero credit by FEYNKIT_ORACLE_RECORD presence; the printed rows are byte-equal to the candidate's new Row text for all four cases (diagnostic corroboration only)",
+      "record_mode_new_elf_qed": "exit 0, row equals the candidate literal (diagnostic only)",
+      "wrong_literal_guard": "ordinary old-ELF runs are the meaningful guard: they fail only on numerators at every pool",
+      "author_negatives": "zero-selection and record-mode-old-elf outputs match their recorded stdout/stderr hashes and behave identically"
+    },
+    "row_recomputation_independent": {
+      "implementation": "scripts/recompute.py written from census.rs Digest/Entry/Summary (FNV-1a, LE u64, 0xff text terminator, 0xfe absent name, serde_json compact Value order, interface fields appended when present, vertex then edge fragments, strict AutG/fermion-sign weight parser); serialization self-check reproduces every dump byte-for-byte",
+      "approved_pool1_captures": "historical None payloads give the OLD Rows exactly (all 10 fields); current None payloads give the NEW Rows exactly",
+      "fresh_and_author_runs": "48/48 (24 fresh + 24 author runtime-final) equal the new Row in all fields and the old Row in all fields except numerators; every per-diagram key/id/S/frame/numerator/factor equals the ELF's own .census line",
+      "unchanged_fields": {
+        "qed_eemm_L1": "17 diagrams, 10 topologies, 17 assignments, inverse symmetry 17/1, weights 1/1, |Aut| histogram (1,17)",
+        "ctorder_qcd_uugg_L1": "268, 32, 268, 251/1, 13/1, (1,234),(2,34)",
+        "sm_eemm_L0": "4, 1, 4, 4/1, -4/1, (1,4)",
+        "ym_g6_L0": "220, 220, 220, 220/1, 220/1, (1,220)"
+      }
+    },
+    "capture_binding": {
+      "payload_bytes": "for each case and mode a single byte group of 31 members: fresh and author old/new dumps at pools 1/8/32 (.json and .sources.json), six observer companion payloads, and the approved pool-1 current capture payload.json; .census identical across all runs, routes and pools per case",
+      "mode_correspondence": "derived from fresh dumps by exact full-key text with no normalization: QED/SM/YM identity (None and Auto bytes identical); CT moved pairs 109->113,110->109,111->114,112->110,113->115,114->111,115->116,116->112 at all 3 pools on both routes, all non-name fields and IDs equal per key, singleton groups bound to each graph's own id/name/factor/source index, names positional (D###) in each mode so they follow the mapping; equals target/oracle-numerator-family-round3/qualification/mode-order.json (c81316cc..) current mapping",
+      "observer_bindings": "48/48: model/request/options/grouping/payload/typed-owners byte-identical to the approved pool-1 captures; capture.json run exactly 'Run { threads: Some(<pool>), parallel: true, check_heredity: false, cancelled: false }', classes and Grouping None, prepared_len = built_len = diagram count; observer payload byte-identical to both author and fresh assertion dumps; owner domains equal, raw and decoded expressions equal payload owners, ordered_ports equal num_interface wherever present (24/1550/0/198 interface-bearing owners per mode, matching approval B's facts)",
+      "author_validation": "validation.json (a1ee9a1b..) 12 pairs and 48 bindings with test/source/approved byte-equality all true; CT permutation recorded at all pools"
+    },
+    "certificate_reuse": {
+      "invariance": "certificate inputs unchanged: 27945-file approved closure manifest rehashed, only docs/developers.toml differs; preservation before/after snapshots equal; my before/after guard of 14 evidence roots (124647 entries incl. both workspaces' diagnosis captures/ELFs and all prior review dirs) shows 0 added/removed/changed",
+      "author_replay_541": "8 baseline + 531 controls + 2 infrastructure, one checker-source set equal to the committed approved files (common c4d3c0b1, validate 25805ad1, suite e2348453, schema b1c062ae, round2 validate b468b3a4, controls 78cda27d); every row matched; versus the approved credited round-3 results all expected/stage/disposition/case/mode/exit identical, 68 detail strings differ only by output-root paths",
+      "fresh_replay_31": "unmodified approved suite.py into private outputs: baseline 8 accept, staged 11 reject + 2 accept, anchor 8 reject, infrastructure 2 harness-error, all matched; identical to the author's replay and the approved results after output-path normalization only; checker sources unchanged before/after",
+      "separation": "certificate replay reads only frozen captures/ELFs and never main.rs; migrated literals are exercised only by the assertion test matrix"
+    },
+    "evidence_and_report": {
+      "receipt": "every referenced path hash matches; rows equal derivation.json; audit equals audit.json; negative_controls equal negatives/results.json; provenance ELF hashes equal retained artifacts (old by retained copy)",
+      "freeze": "9 frozen artifacts match; 6 ref records hash the exact commit ids; completed-commands.json binds 47 command records (141 files), excluding only the active seal command; artifact-manifest (22603 files) still matches (2866 symlinked entries rehashed via targets); 30 post-inventory freeze/seal files bound by freeze.json; source-inventory (22 paths) equals the candidate",
+      "helper_chronology": "credited runtime-final used runtime.py 0f879772/derive.py d95b5f4a, receipt used finish.py 47c6038a, first audit used 067af581; the committed versions differ only by ruff formatting, unused-import removal and a B023 lambda default binding; final audit re-ran with the committed audit.py",
+      "registry": "docs/developers.toml = approved file + one inserted 839-byte migration entry; three certificate classifications/scopes unchanged; titles exact",
+      "render": "pinned Typst 0.15.1 (0853d812..) reproduces report.pdf 3bde1627.. twice and all four HTML pages byte-identically from the exact frozen sources; migration page has the exact title, 3 semantic table headers, no scripts/handlers, the four literal rows and matrix old 12/0/12/0, new 12/12/0/0; altered receipt literal, altered receipt matrix and altered report text each change the PDF; render inputs at 04:40:41Z equal the current files",
+      "docs_gates": "real builder (8e8ea464..) read-only: first gate = R2B commands.md + 8 inherited mark-geometry HTML, nothing new; with that masked in-sandbox: unknown owner lucien-huber (sunset notes); with owners masked: only source46 unclassified, missing none; with source46 also registered in-sandbox: all registry/title/owner/scope checks pass and the run stops at catalog-exporter launch (environmental); no new migration/certificate note regression",
+      "fmt_clippy": "author: scoped clippy (-p feynkit-generator --test generation_oracle -- --deny warnings) exit 0 at 04:22 on the final main.rs; rustfmt --edition 2024 --check exit 0; ruff check/format clean for 14 helpers. Fresh: rustfmt 1.9.0-stable (48a229ceae) --edition 2024 --check exit 0 (see M-N4)",
+      "license": "34 recorded author Nix invocations all prefixed env -u SYMBOLICA_LICENSE -u SYMBOLICA_LICENSE_SIGNED; 18803 evidence/ELF/review files contain no raw license value; no .drv files"
+    }
+  },
+  "blocking": [],
+  "nonblocking": [
+    {
+      "id": "M-N1",
+      "title": "Committed helper depends on a prior reviewer's untracked probe",
+      "where": ["docs/architecture/evidence/generation-oracle-family-migration/fingerprints.py:11-17", "build.py:9", "retain_observer.py:8"],
+      "detail": "collect() executes .local/review-family-r2-a-20261030T010834Z/probes/fingerprints.py (sha256 a2fd0037853a21fc765b770b015485865581b1542c20e5eb24a20947439e8c86), which is outside the candidate and bound only indirectly by the preservation snapshots. The helpers are not self-contained for a future fresh checkout. My own closure implementation reproduces the 341-unit closure and projections, so the provenance result stands.",
+      "repair": "optional: vendor the loader or cite the probe path/hash in the receipt"
+    },
+    {
+      "id": "M-N2",
+      "title": "Credited outputs were produced by pre-format helper versions",
+      "where": ["receipt.json qualifications.original_history", "target/oracle-family-migration/helper-versions/"],
+      "detail": "runtime-final, the receipt and the first audit ran with runtime.py 0f879772, derive.py d95b5f4a, finish.py 47c6038a and audit.py 067af581; all later deltas to the committed versions are formatting/lint-only (verified by diff). The receipt notes helper evolution generally but does not map credited outputs to helper versions.",
+      "repair": "optional precision"
+    },
+    {
+      "id": "M-N3",
+      "title": "validation.json does not identify its input root",
+      "where": ["validate.py:89", "target/oracle-family-migration/validation-preliminary.json"],
+      "detail": "The preliminary run (validate.py 8f803c5a) read the superseded runtime/ tree and the final run reads runtime-final/, yet both wrote byte-identical validation.json because it records dump hashes and companion files but not the runtime root or execution records. All 120 dump files in runtime/ and runtime-final/ are byte-identical and execution outcomes are checked separately by finish.py from runtime-final/results.json, so there is no semantic consequence.",
+      "repair": "optional: record the validated root and results.json hashes"
+    },
+    {
+      "id": "M-N4",
+      "title": "Edition-2024 rustfmt evidence does not cover the four changed rows",
+      "where": ["report line 190", "commands/20261030T042222013276-rustfmt-edition2024"],
+      "detail": "The Rows sit inside the custom-syntax oracle! macro body, which rustfmt leaves untouched: a misformatted row overlay still passes --check, while misformatting fn threads outside the macro fails. The effective textual guard for the rows is the exact per-line literal substitution (audit.py; independently scripts/row_diff.py). Lowercase hexadecimal is preserved.",
+      "repair": "wording"
+    },
+    {
+      "id": "M-N5",
+      "title": "Author runtime environment record is a projection",
+      "where": ["common.py:78-101", "runtime.py:48-64"],
+      "detail": "Records list oracle flags, update/force flags, TMPDIR, XDG_CACHE_HOME and CARGO_TARGET_DIR of a nix-develop-derived environment, not the complete child environment. My fresh runs with a complete recorded minimal child environment reproduce identical outcomes and byte-identical dumps.",
+      "repair": "optional: record the full child env key set"
+    },
+    {
+      "id": "M-N6",
+      "title": "provenance/old.json artifact path now resolves to the new ELF",
+      "where": ["target/oracle-family-migration/provenance/old.json artifact"],
+      "detail": "The recorded path is the mutable normal-cache slot generation_oracle-c4b54249fc0354d6, which now holds 49ed27..; the old ELF is bound by its hash and the retained pristine-current copy pinned in runtime.py. Acknowledged in qualifications.build_gaps.",
+      "repair": "optional: add the retained path to old.json or the receipt"
+    },
+    {
+      "id": "M-N7",
+      "title": "Unsourced '74 of the remaining 78 MAIN rows' count",
+      "where": ["report line 195", "receipt.json migration_scope.other_rows"],
+      "detail": "No migration artifact derives 78; approval B describes 'other 78 MAIN rows' as the excluded set. The unchanged-row claim itself holds (only four lines changed; 149 Rows).",
+      "repair": "cite the source of the count or reword"
+    },
+    {
+      "id": "M-N8",
+      "title": "Render timestamps are deterministic; HTML uses an untracked wrapper",
+      "where": ["docs.py:83-115", "target/oracle-family-migration/docs/main.typ"],
+      "detail": "--creation-timestamp 0 makes PDF metadata epoch 0 (reproducible); actual render times are in the command records (04:40:41.98-04:40:42.25Z), after the receipt (04:37:21) and report source (04:38:40) and before the commit snapshot (04:46:05). The HTML bundle is compiled from a target-side wrapper that only includes the four tracked notes and is hash-bound in the docs validation inputs and artifact manifest.",
+      "repair": "none required"
+    },
+    {
+      "id": "M-N9",
+      "title": "Docs builder binary provenance not re-established",
+      "where": ["target/debug/alphal00p-docs-builder (8e8ea464.., built 2026-10-29T20:56)"],
+      "detail": "Inherited limitation also noted by approval A; the builder source is unchanged since 2026-10-13 and identical at base and candidate.",
+      "repair": "none required for this preparation"
+    },
+    {
+      "id": "M-N10",
+      "title": "No per-row verified scopes for the four rows",
+      "where": ["docs/developers.toml generation-oracle-family-migration entry"],
+      "detail": "MAIN's prior three-row QED migration note registers one verified scope per migrated row; this preparation uses review_triggers only. Not required by this base's builder; relevant only for MAIN reconciliation.",
+      "repair": "consider at MAIN reconciliation"
+    },
+    {
+      "id": "M-N11",
+      "title": "Clippy record does not hash main.rs",
+      "where": ["commands/20261030T042220798653-scoped-clippy"],
+      "detail": "Final main.rs content at clippy time (04:22) is inferred from its mtime (04:12:19) and the qualified build's sources-before, not recorded by the clippy command itself.",
+      "repair": "optional"
+    }
+  ],
+  "limits": [
+    "Mathematical approval remains the round-3 certificate only: four separate cases x Classes None/Auto x Grouping None x pool 1, both locked kernels. Pools 8/32 are current-route runtime observations; byte identity of their payloads with the pool-1 captures is not a new theorem.",
+    "Hash and FNV equality are inventory/digest evidence, not mathematical proof; my recomputation verifies the digest encoding and inputs, not physics.",
+    "Preserved certificate limits: R3B-N1 interface presence/typed-port order and R3B-N3 port typing against free indices and factor locality are capture-bound and the theorem is named multiset transport (the migration's within-route byte binding of interfaces/ports to the approved captures is runtime binding, not a theorem extension); R3B-N2 Run state is observer/capture metadata, unconsumed by the validator (assertion-ELF pools are now additionally evidenced by observed thread counts); R3B-N4 no license-validity theorem, an invalid license may yield correct restricted-mode output; R3B-N5 uneven committed predicate coverage, B's held-outs cited not rerun; R3B-N6 only Q/edge/vertex of five audited mappings occur, tagged spellings audited not natively proved; A3-N1..N10 provenance/wording notes; baseline anchors are self-comparisons.",
+    "Observer typed metadata comes from a separately compiled same-source observer joined by complete payload bytes; it is not in-memory instrumentation of the assertion ELF.",
+    "No graph numerator expansion/distribution, trace, numerical or parameter-at-one probe was used; weights admit only AutG and fermion-sign heads (no group ratios occur).",
+    "Full documentation check is not green: first gate (8 inherited HTML + R2B commands.md), then unknown sunset owners, then source46 classification; beyond those, catalog generation was not exercised.",
+    "MAIN30f is unaffected and unapproved: it needs refreshed reconciliation, an actual Git-pinned producer and a NEW combined review; the family dev-optim route is not declared identical to MAIN's ci-optim/Nextest route; broad Nix/docs source sets change (docs runtime includes the whole docs tree); no NAR/derivation identity is inferred.",
+    "Old-ELF original final build logs remain absent; its identity rests on the retained copy, the pre-replacement fingerprint snapshot and the binary identity with the source-qualified new ELF."
+  ],
+  "guards": {
+    "before": "05:06-05:26Z: working copy = candidate; 124647 evidence entries hashed (private cache/tmp/state recorded by size only); jj op head 39ba8127 (04:58 bookmark creation)",
+    "after": "05:43-05:47Z: working copy = candidate; evidence entries 124647, 0 added/removed/changed; all oracle-family refs unchanged; historical workspace pristine",
+    "unrelated_activity": "jj operations 22a5d8b5..a99fbad0 (05:17-05:42Z) and bookmark/workspace changes belong to the generation-nix-license-boundary workspace (snapshots, new commits, -a367/-960d checkpoints, -round2/-round2-code moves, -base); none touches oracle-family refs or this workspace. Four foreign bwrap --unshare-all processes were observed and left alone.",
+    "own_mutations": "only files under this review root; no tracked file, ref, index, snapshot, fetch, push, export, upload, PR, CI, store or shared-cache change; no Nix invocation"
+  },
+  "own_failed_or_uncredited_attempts": [
+    "first guard attempt failed: python3 not on PATH (switched to the pinned store interpreter)",
+    "docs-builder masking by /dev/null file binds did not mask (walker uses dirent types); replaced by tmpfs directory overlays",
+    "first owner-masked builder run had no git on PATH and stopped at spawning git hash-object; rerun with git; these two stderr files were overwritten by the reruns",
+    "runs/negatives/results.json record_rows is empty because its regex expected the row at line start; the record-row comparison was redone with a position-independent regex (all four rows equal the candidate literals)"
+  ],
+  "retained_artifacts": {
+    "root": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-family-migration-opus-20261030T050603Z",
+    "contents": "review.json, review.sha256, review-manifest.sha256, commands.json, scripts/ (17 helpers), guards/ (before/after trees, wc, refs, op logs, command summary), runs/matrix (24 fresh runs with dumps, child env, records), runs/negatives (6), runs/replay (31 suite runs), runs/render (PDFs, html/bundle.tar, controls), runs/builder*, runs/rustfmt, runs/list, recompute.json, dumps_compare.json, observer_check.json, replay_compare.json, render.json, elf_diff_old_new.json, elf_sections_old_new.json, extracted main.rs/registry copies as .txt, apply30f/",
+    "cleanup": "removed 116 empty private cache/tmp/state/target-overlay directories and two empty bind mount-point files created by this review; no .md/.html/.typ/.rs files left in the review root; no owned processes remain",
+    "reason": "audit trail for root and any later combined review"
+  }
+}

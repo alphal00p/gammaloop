@@ -1,0 +1,79 @@
+"""Fresh immutable-source Nextest archive matrix, with direct-only private license."""
+from pathlib import Path
+import hashlib
+import json
+import os
+import shutil
+import subprocess
+import time
+import datetime
+
+ROOT = Path(__file__).resolve().parents[2]
+OUT = Path(__file__).resolve().parent
+RUN = OUT / "runtime"
+CODE = "8dcebc2591ab04d10026fbd47a45e8d31f911ef3"
+NEW = ["qed_eemm_L1", "ctorder_qcd_uugg_L1", "sm_eemm_L0", "ym_g6_L0"]
+OLD = ["xs_qed_eedd_L1", "xs_qed_eemm_L1", "xs_qed_eeee_1pi_L1"]
+NEXTEST = "/nix/store/kwm3g9vh36d9zd171v0nz64fyan1hvfz-cargo-nextest-0.9.143/bin/cargo-nextest"
+
+def sha(p):
+    return hashlib.sha256(Path(p).read_bytes()).hexdigest()
+
+def main():
+    archive_root = Path((OUT/"producer-realize.out").read_text().strip())
+    archives = list(archive_root.glob("*.tar.zst"))
+    assert len(archives)==1
+    archive = archives[0]
+    metadata = json.loads((OUT/"code-metadata.out").read_text())
+    assert metadata["revision"] == CODE
+    source = Path(metadata["path"])
+    RUN.mkdir(exist_ok=False)
+    shutil.copytree(source, RUN/"source", symlinks=True)
+    (RUN/"source").chmod(0o755)
+    for p in (RUN/"source").rglob("*"):
+        if not p.is_symlink():
+            p.chmod(p.stat().st_mode | 0o200)
+    (RUN/"tmp").mkdir()
+    env = {k:v for k,v in os.environ.items() if not k.startswith("FEYNKIT_ORACLE_") and k not in (
+        "SYMBOLICA_LICENSE_SIGNED", "CARGO_TARGET_DIR", "UPDATE_EXPECT", "EXPECT", "FORCE_UPDATE",
+        "INSTA_UPDATE_FAST", "INSTA_FORCE_PASS", "UPDATE_SNAPSHOTS", "EXPECTTEST_ACCEPT", "BLESS", "RECORD", "FORCE_PASS")}
+    if not env.get("SYMBOLICA_LICENSE"):
+        config = Path(env.get("XDG_CONFIG_HOME",str(Path.home()/".config")))
+        env["SYMBOLICA_LICENSE"]=(config/"symbolica/license").read_text().strip()
+    assert env["SYMBOLICA_LICENSE"]
+    env.update(INSTA_UPDATE="no",NEXTEST_TEST_THREADS="16",NEXTEST_RETRIES="0")
+    base=["bwrap","--ro-bind","/","/","--dev-bind","/dev","/dev","--proc","/proc",
+          "--bind",str(RUN),"/build","--bind",str(RUN/"tmp"),"/tmp","--chdir","/build/source",
+          "env","TMPDIR=/tmp","TESTS_GAMMALOOP_STATE_PATH=AUTO","INSTA_UPDATE=no","NEXTEST_TEST_THREADS=16","NEXTEST_RETRIES=0"]
+    tail=["--archive-file",str(archive),"--extract-to","/build/source","--extract-overwrite",
+          "--workspace-remap","/build/source","--profile","ci_gammaloop"]
+    records=[]
+    def execute(label, args, extras=None):
+        child=env.copy(); child.update(extras or {})
+        argv=base+[NEXTEST,"nextest"]+args
+        start=datetime.datetime.now(datetime.UTC).isoformat(); tick=time.monotonic()
+        with (OUT/(label+".out")).open("wb") as out, (OUT/(label+".log")).open("wb") as err:
+            p=subprocess.run(argv,cwd=ROOT,env=child,stdout=out,stderr=err)
+        record={"label":label,"argv":argv,"cwd":str(ROOT),"runtime_cwd":"/build/source",
+                "source":str(source),"source_revision":CODE,"archive":str(archive),"archive_sha256":sha(archive),
+                "started":start,"ended":datetime.datetime.now(datetime.UTC).isoformat(),"seconds":time.monotonic()-tick,
+                "exit":p.returncode,"env_keys":sorted(child),
+                "safe_settings":{k:v for k,v in child.items() if k.startswith("FEYNKIT_ORACLE_") or k in ("INSTA_UPDATE","NEXTEST_TEST_THREADS","NEXTEST_RETRIES")},
+                "license":"private direct runtime only; value/hash never recorded", "stdout_sha256":sha(OUT/(label+".out")),"stderr_sha256":sha(OUT/(label+".log"))}
+        junit=RUN/"source/target/nextest/ci_gammaloop/junit.xml"
+        if args[0]=="run" and junit.is_file():
+            shutil.copy2(junit,OUT/(label+"-junit.xml"));record["junit_sha256"]=sha(OUT/(label+"-junit.xml"))
+        (OUT/(label+".command.json")).write_text(json.dumps(record,indent=2)+"\n")
+        records.append(record); print(json.dumps({"label":label,"exit":p.returncode,"seconds":record["seconds"]}),flush=True)
+        return p.returncode
+    expr=" | ".join("test(="+n+")" for n in NEW+OLD)
+    for pool in (1,8,32):
+        (RUN/("dump-p"+str(pool))).mkdir()
+        assert execute("pool-"+str(pool),["run",*tail,"--test-threads=16","-E",expr,"--no-tests=fail","--no-fail-fast","--status-level","all","--final-status-level","all"],
+                       {"FEYNKIT_ORACLE_THREADS":str(pool),"FEYNKIT_ORACLE_DUMP":"/build/dump-p"+str(pool)})==0
+    assert execute("fast-list",["list",*tail,"--message-format","json"])==0
+    execute("fast-run",["run",*tail,"--test-threads=16","--no-fail-fast","--final-status-level","fail","--no-tests=fail"])
+    (OUT/"runtime-results.json").write_text(json.dumps(records,indent=2)+"\n")
+
+if __name__ == "__main__":
+    main()

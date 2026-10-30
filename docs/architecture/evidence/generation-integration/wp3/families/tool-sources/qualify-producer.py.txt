@@ -1,0 +1,33 @@
+"""Safe producer/source identity projection; never retain raw derivations."""
+from pathlib import Path
+import hashlib
+import json
+import os
+import subprocess
+import sys
+sys.path.insert(0,str(Path(__file__).resolve().parent))
+import run
+OUT=Path(__file__).resolve().parent
+ROOT=OUT.parents[1]
+def sha(p):
+    h=hashlib.sha256()
+    with Path(p).open('rb') as f:
+        for b in iter(lambda:f.read(4*1024*1024),b''):h.update(b)
+    return h.hexdigest()
+def main():
+    env=dict(os.environ);env.pop('SYMBOLICA_LICENSE',None);env.pop('SYMBOLICA_LICENSE_SIGNED',None)
+    safe=json.loads((OUT/'producer-safe.json').read_text());meta=json.loads((OUT/'code-metadata.out').read_text());output=Path((OUT/'producer-realize.out').read_text().strip());assert output.is_dir()
+    archive=next(output.glob('*.tar.zst'));source=Path(safe['filtered_source']);full=Path(meta['path']);old=Path('/nix/store/rzh71dadzgxblz94gc4yx2b3ylcq2dk4-source')
+    def inventory(root):return {str(p.relative_to(root)):sha(p) for p in root.rglob('*') if p.is_file()}
+    before,after=inventory(old),inventory(source);difference=[p for p in sorted(set(before)|set(after)) if before.get(p)!=after.get(p)];assert difference==['crates/feynkit-generator/tests/generation_oracle/main.rs'],difference
+    elf=OUT/'runtime/source/target/ci-optim/deps/generation_oracle-6b0e7dc68fc70180';assert elf.is_file()
+    records={}
+    for name,path in [('full-source',full),('filtered-source',source),('producer-output',output)]:
+        code=run.run(name+'-nar',['nix','hash','path',str(path)]);assert code==0;records[name]={'path':str(path),'nar':(OUT/(name+'-nar.out')).read_text().strip()}
+    drv=json.loads(subprocess.check_output(['nix','derivation','show',safe['generator_derivation']],env=env));d=next(iter(drv['derivations'].values()))
+    trace=[l.strip() for k,v in d['env'].items() if k in ('buildPhase','installPhase','configurePhase','checkPhase') for l in v.splitlines() if 'nextest' in l or 'cargo test' in l or 'cargo build' in l]
+    archive_meta=OUT/'runtime/source/target/nextest/cargo-metadata.json';cargo=json.loads(archive_meta.read_text());nodes=cargo['resolve']['nodes'];packages={p['id']:p for p in cargo['packages']}
+    features=[{'package':packages[n['id']]['name'],'id':n['id'],'features':n['features']} for n in nodes if packages[n['id']]['name'] in ['feynkit-generator','spenso','idenso','feynkit-graph','symbolica','workspace-hack']]
+    record={'code':'8dcebc2591ab04d10026fbd47a45e8d31f911ef3','uri':'git+file:///shared/lcnbr/dev/gammaloop/main?rev=8dcebc2591ab04d10026fbd47a45e8d31f911ef3&shallow=1&allRefs=1','aggregate':{'derivation':safe['aggregate_evaluated_only'],'status':'evaluated only, not realized'},'generator':{'derivation':safe['generator_derivation'],'output':str(output),'status':'actually realized and executed','archive':str(archive),'archive_sha256':sha(archive),'oracle_elf':str(elf),'oracle_elf_sha256':sha(elf),'extracted_cargo_metadata_sha256':sha(archive_meta),'selected_profile':'ci-optim / ci_gammaloop','actual_phase_command_lines':trace,'workspace_cargoExtraArgs_context_only':safe['cargo_command']},'sources':records,'selected_source_inventory':after,'selected_source_vs_prior_qed':{'old':str(old),'difference':difference,'all_other_paths_and_bytes_equal':True},'features':{'selected_package_tree':'selected-features.out','tree_sha256':sha(OUT/'selected-features.out'),'tree_command':'selected-features.command.json','archive_metadata_resolved_context':features,'qualification':'Root default/native is not full dependency closure. Archive Cargo metadata is retained context; selected cargo tree and exact per-package phase/producer source qualify execution. Workspace-wide cargoExtraArgs is NOT relabelled the executed package command.'},'compiler':safe['compiler_input_paths'],'kernel':'1a1829b1f3d0a88b53b44085b3b9f34ef77945b3','pure_build_license_policy':'both variables absent, no runtime-result derivation; raw derivations not retained','first_build_attempt':'producer-build returned .drv path only, exit0 with no archive realization credit; producer-realize uses ^* and actual output/hash above'}
+    (OUT/'producer-qualified.json').write_text(json.dumps(record,indent=2)+'\n')
+if __name__=='__main__':main()

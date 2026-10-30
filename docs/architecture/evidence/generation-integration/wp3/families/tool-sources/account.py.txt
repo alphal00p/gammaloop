@@ -1,0 +1,43 @@
+"""Count actual outer Nextest cases, preserve every failure and exclusion."""
+from pathlib import Path
+import hashlib
+import json
+import xml.etree.ElementTree as ET
+
+OUT=Path(__file__).resolve().parent
+ROOT=OUT.parents[1]
+NEW={'qed_eemm_L1','ctorder_qcd_uugg_L1','sm_eemm_L0','ym_g6_L0'}
+PRIOR={'xs_qed_eedd_L1','xs_qed_eemm_L1','xs_qed_eeee_1pi_L1'}
+def sha(p):return hashlib.sha256(Path(p).read_bytes()).hexdigest()
+def cases(path):
+    root=ET.parse(path).getroot();rows=[]
+    for suite in root.findall('testsuite'):
+        for c in suite.findall('testcase'):
+            f=c.find('failure');e=c.find('error');s=c.find('skipped')
+            rows.append({'binary':suite.attrib['name'],'name':c.attrib['name'],'seconds':c.attrib.get('time'),'status':'failed' if f is not None or e is not None else 'ignored' if s is not None else 'passed','failure':''.join(f.itertext()) if f is not None else ''.join(e.itertext()) if e is not None else None})
+    assert len(rows)==int(root.attrib['tests']);return rows
+def main():
+    listing=json.loads((OUT/'fast-list.out').read_text());selected=[];excluded=[]
+    for binary,suite in listing['rust-suites'].items():
+        for name,c in suite.get('testcases',{}).items():
+            row={'binary':binary,'name':name,'ignored':c['ignored'],'filter':c['filter-match']}
+            (selected if c['filter-match']['status']=='matches' else excluded).append(row)
+    runs=cases(OUT/'fast-run-junit.xml');assert len(runs)==len(selected)
+    failed=[r for r in runs if r['status']=='failed'];passed=[r for r in runs if r['status']=='passed'];names={r['name'] for r in failed}
+    oldpath=ROOT/'target/wp3-qed-integration/accounting.json';old=json.loads(oldpath.read_text());prior_names={r['name'] for r in old['failed_cases']};expected=prior_names-NEW
+    assert len(prior_names)==78 and NEW<=prior_names
+    unexpected=sorted(names-expected);missing=sorted(expected-names)
+    # Preserve a mismatch as a real finding rather than adjusting expectations.
+    pools=[]
+    for pool in (1,8,32):
+        p=OUT/f'pool-{pool}-junit.xml';r=cases(p);command=OUT/f'pool-{pool}.command.json';c=json.loads(command.read_text());assert c['exit']==0
+        assert len(r)==7 and {x['name'] for x in r}==NEW|PRIOR and all(x['status']=='passed' for x in r)
+        pools.append({'pool':pool,'selected':len(r),'new_four_passed':sum(x['name'] in NEW for x in r),'prior_three_passed':sum(x['name'] in PRIOR for x in r),'ignored':0,'failed':0,'exit':c['exit'],'junit':str(p),'junit_sha256':sha(p),'command_sha256':sha(command)})
+    binaries={}
+    for r in runs:
+        b=binaries.setdefault(r['binary'],{'passed':0,'failed':0,'ignored':0});b[r['status']]+=1
+    output={'inventory':listing['test-count'],'selected':len(selected),'passed':len(passed),'failed':len(failed),'excluded':excluded,'binary_results':binaries,'failed_cases':failed,'expected_failed_names_from_actual_prior78_minus_exact4':sorted(expected),'unexpected_failures':unexpected,'missing_expected_failures':missing,'prior_accounting':{'path':str(oldpath),'sha256':sha(oldpath),'counts':{k:old[k] for k in ('inventory','selected','passed','failed')}},'exit':json.loads((OUT/'fast-run.command.json').read_text())['exit'],'junit_sha256':sha(OUT/'fast-run-junit.xml'),'pool_results':pools,'sampled_quotient':next(r for r in runs if r['name']=='grouping::tests::sampled_quotient_groups_physical_local_factors'),'attribution':'Only four additional row expectations change; original b9 matrix remains history. Sampled-quotient source binding was already separately corrected on prior MAIN and is not attributed to digest migrations.'}
+    (OUT/'accounting.json').write_text(json.dumps(output,indent=2)+'\n')
+    assert not unexpected and not missing,(unexpected,missing)
+    print(json.dumps({k:output[k] for k in ('inventory','selected','passed','failed','exit')}))
+if __name__=='__main__':main()

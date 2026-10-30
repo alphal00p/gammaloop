@@ -3084,7 +3084,7 @@ lifecycle = "investigation"
 owner = "unassigned"
 reviewed_at = "2026-10-30"
 review_ref = "78d9b395b72a7c070daabc217bddcabb613c001c14f362d059bda1306bdc902a"
-evidence_revision = "87fa13a93b1c0b3e5792fd56937486ad962b2b55"
+evidence_revision = "3432ac3f36890ae2664d8571085f05e1dd41f27f"
 products = ["feynkit", "gammaloop"]
 topics = ["generation", "oracles", "migration", "testing"]
 review_triggers = ["crates/feynkit-generator/tests/generation_oracle/main.rs", "docs/architecture/evidence/generation-oracle-family-migration/**"]
@@ -3132,6 +3132,7 @@ lifecycle = "investigation"
 owner = "unassigned"
 reviewed_at = "2026-10-30"
 review_ref = "45482a7440a8dd5bb808d41176b40b9950865c344fb03f07510411e025783bc8;6ceec9c3de1180b4901f9bca6548589adb16b4688e97e162177a61d864f0792d"
+evidence_revision = "87fa13a93b1c0b3e5792fd56937486ad962b2b55"
 products = ["feynkit", "gammaloop"]
 topics = ["generation", "oracles", "tensor-interfaces", "validation"]
 review_triggers = ["crates/feynkit-generator/src/**", "crates/feynkit-generator/tests/generation_oracle/**", "crates/feynkit-graph/src/**", "crates/idenso/src/cook.rs", "Cargo.lock"]
@@ -3169,6 +3170,21 @@ review_ref = "fa8f82f97b08bb80c71cfcc4178a67c7bf381d10c55cbfd952bcb59dc5031f07"
 products = ["feynkit", "gammaloop"]
 topics = ["generation", "oracles", "validation"]
 review_triggers = ["docs/architecture/evidence/generation-oracle-family-diagnosis/round2/**"]
+
+[[section.note]]
+id = "generation-integration-oracle-families"
+title = "Four-family oracle migration integration"
+summary = "Bounded combined integration of four certified digest literals, preserving three prior QED migrations and certificate scope limits."
+source = "docs/architecture/generation-integration-oracle-families.typ"
+kind = "Integration investigation"
+status = "Combined candidate · NEW independent review required"
+lifecycle = "investigation"
+owner = "unassigned"
+reviewed_at = "2026-10-30"
+review_ref = "pending"
+products = ["feynkit", "gammaloop"]
+topics = ["generation", "validation", "oracles"]
+review_triggers = ["crates/feynkit-generator/tests/generation_oracle/main.rs", "docs/architecture/evidence/generation-integration/wp3/families/**"]
 
 [[section.note]]
 id = "phase-conventions"

@@ -1,0 +1,44 @@
+"""Final prose -> PDF and semantic HTML, exact inputs/tool/wrapper/argv bindings."""
+from pathlib import Path
+import hashlib
+from html.parser import HTMLParser
+import json
+import subprocess
+import datetime
+
+ROOT=Path(__file__).resolve().parents[2]
+OUT=Path(__file__).resolve().parent/'renders'
+TOOL='/nix/store/wzpxqpc3v2xxah69rqifq5kac67hx36g-typst-0.15.1/bin/typst'
+NAMES=['generation-integration-oracle-families','generation-integration-plan','generation-oracle-family-diagnosis','generation-oracle-family-diagnosis-round2','generation-oracle-family-diagnosis-round3','generation-oracle-family-migration']
+def sha(p):return hashlib.sha256(Path(p).read_bytes()).hexdigest()
+class Semantic(HTMLParser):
+    def __init__(self):super().__init__(convert_charrefs=True);self.text=[];self.active=[]
+    def handle_data(self,s):self.text.append(s)
+    def handle_starttag(self,t,a):
+        if t=='script' or any(k.startswith('on') for k,v in a):self.active.append(t)
+def main():
+    OUT.mkdir(exist_ok=False);results=[]
+    # Record imports as well as top-level source. No integration prose changes
+    # are made after this snapshot; later metadata does not alter these reports.
+    inputs={str(p.relative_to(ROOT)):sha(p) for p in (ROOT/'docs/architecture').rglob('*') if p.is_file() and (p.suffix=='.typ' or ('generation-oracle-family' in str(p) and p.suffix=='.json'))}
+    for name in NAMES:
+        source=ROOT/'docs/architecture'/(name+'.typ');wrapper=OUT/(name+'-wrapper.typ');wrapper.write_text('#document("index.html")[#include "/docs/architecture/'+name+'.typ"]\n')
+        row={'source':str(source.relative_to(ROOT)),'source_sha256':sha(source),'wrapper':str(wrapper),'wrapper_sha256':sha(wrapper),'tool':TOOL,'tool_sha256':sha(TOOL),'creation_timestamp':0,'runs':[]}
+        for fmt in ('pdf','html'):
+            target=OUT/(name+'.pdf' if fmt=='pdf' else name+'-bundle')
+            argv=[TOOL,'compile','--root',str(ROOT),'--creation-timestamp','0']+(['--features','html,bundle','--format','bundle',str(wrapper)] if fmt=='html' else [str(source)])+[str(target)]
+            start=datetime.datetime.now(datetime.UTC).isoformat();p=subprocess.run(argv,cwd=ROOT,capture_output=True)
+            (OUT/(name+'-'+fmt+'.out')).write_bytes(p.stdout);(OUT/(name+'-'+fmt+'.log')).write_bytes(p.stderr)
+            artifact=target if fmt=='pdf' else target/'index.html';record={'argv':argv,'cwd':str(ROOT),'start':start,'end':datetime.datetime.now(datetime.UTC).isoformat(),'exit':p.returncode,'artifact':str(artifact),'sha256':sha(artifact) if artifact.is_file() else None};row['runs'].append(record)
+            assert p.returncode==0,(name,fmt,p.stderr.decode())
+            if fmt=='html':
+                parser=Semantic();parser.feed(artifact.read_text());assert not parser.active
+                row['decoded_text']=' '.join(' '.join(parser.text).split())
+        assert row['source_sha256']==sha(source);results.append(row)
+    expected='Pool 8 and pool 32 executions are runtime evidence only.'
+    text=results[0]['decoded_text'];assert expected in text
+    negative=text.replace(expected,'Pool 8 and pool 32 extend the historical theorem.')
+    assert expected not in negative
+    for name,h in inputs.items():assert sha(ROOT/name)==h,name
+    (OUT.parent/'render-results.json').write_text(json.dumps({'results':results,'input_hashes':inputs,'semantic_expected_current_paragraph':expected,'positive':'PASS','altered_scope_negative':'REJECT','source_unchanged_after_render':True,'script_sha256':sha(__file__),'qualification':'Current final prose frozen before rendering; metadata-only final tip separately source-bound; deterministic creation timestamp0 is not command wall-clock time.'},indent=2)+'\n')
+if __name__=='__main__':main()

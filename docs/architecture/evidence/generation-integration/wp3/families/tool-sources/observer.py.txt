@@ -1,0 +1,60 @@
+"""Execute the retained, source-qualified observer and bind new actual captures."""
+from pathlib import Path
+import hashlib
+import json
+import os
+import subprocess
+import sys
+import time
+import datetime
+
+ROOT=Path(__file__).resolve().parents[2]
+OUT=Path(__file__).resolve().parent
+PREP=ROOT.parent/'generation-oracle-numerator-families'
+ELF=PREP/'target/oracle-family-migration/bin/oracle_family_migration_capture'
+SHA='521c787912fe7bfe0ba6b28c046d3c9b571904defa215f808cea04d971cafa57'
+PYTHON=sys.executable
+CASES=['qed_eemm_L1','ctorder_qcd_uugg_L1','sm_eemm_L0','ym_g6_L0']
+def sha(p):
+    return hashlib.sha256(Path(p).read_bytes()).hexdigest()
+def main():
+    assert sha(ELF)==SHA
+    env=dict(os.environ,GIT_OPTIONAL_LOCKS='0')
+    names=['feynkit-generator','feynkit-graph','feynkit-model','idenso','spenso','spenso-hep-lib','linnet','symbolica-utils','symbolica-notation']
+    guards=[]
+    # Compare immutable owner bytes, never the sibling's changing runtime sources.
+    git=['git','-C',str(ROOT.parent/'main')]
+    for name in names:
+        paths=subprocess.check_output(git+['ls-tree','-r','--name-only','b9f788922341e7bde2e801a054423ae70ed7e9ae','--','crates/'+name],env=env,text=True).splitlines()
+        for p in paths:
+            if not (p.endswith('.rs') or p.endswith('Cargo.toml')):continue
+            if p=='crates/feynkit-generator/tests/generation_oracle/main.rs':continue
+            original=subprocess.check_output(git+['show','b9f788922341e7bde2e801a054423ae70ed7e9ae:'+p],env=env)
+            assert original==(ROOT/p).read_bytes(),p
+            guards.append({'path':p,'sha256':sha(ROOT/p)})
+    for k in list(env):
+        if k.startswith('FEYNKIT_ORACLE_') or k in ('SYMBOLICA_LICENSE','SYMBOLICA_LICENSE_SIGNED','CARGO_TARGET_DIR','RECORD','FORCE_PASS','UPDATE_EXPECT','UPDATE_SNAPSHOTS','BLESS','INSTA_FORCE_PASS'):env.pop(k)
+    env['INSTA_UPDATE']='no'
+    rows=[]
+    injector=ROOT/'docs/architecture/evidence/generation-oracle-family-migration/runtime_exec.py'
+    for pool in (1,8,32):
+        d=OUT/('observer-p'+str(pool));d.mkdir(exist_ok=False)
+        for name in ('tmp','cache','captures'):(d/name).mkdir()
+        argv=['bwrap','--ro-bind','/','/','--dev-bind','/dev','/dev','--proc','/proc','--bind',str(d),str(d),'--bind',str(d/'tmp'),'/tmp','--bind',str(d/'cache'),str(Path.home()/'.cache'),'--unshare-net','--die-with-parent','--',PYTHON,'-B',str(injector),str(ELF),str(d/'captures'),str(pool),*CASES]
+        tick=time.monotonic();start=datetime.datetime.now(datetime.UTC).isoformat()
+        child=dict(env,TMPDIR='/tmp',XDG_CACHE_HOME=str(d/'cache'))
+        with (d/'stdout.txt').open('wb') as o,(d/'stderr.txt').open('wb') as e:p=subprocess.run(argv,cwd=ROOT,env=child,stdout=o,stderr=e)
+        record={'argv':argv,'cwd':str(ROOT),'start':start,'end':datetime.datetime.now(datetime.UTC).isoformat(),'seconds':time.monotonic()-tick,'exit':p.returncode,'elf':str(ELF),'elf_sha256':sha(ELF),'injector_sha256':sha(injector),'env_keys':sorted(child),'license':'absent until private direct ELF injection; no values/hashes recorded','stdout_sha256':sha(d/'stdout.txt'),'stderr_sha256':sha(d/'stderr.txt')}
+        (d/'command.json').write_text(json.dumps(record,indent=2)+'\n');assert p.returncode==0
+        for case in CASES:
+            for mode in ('None','Auto'):
+                now=d/'captures'/case/f'classes-{mode}-t{pool}';old=PREP/'target/oracle-numerator-family-diagnosis/adapted-current/captures'/case/f'classes-{mode}-t1'
+                for name in ('model.json','request.json','options.json','grouping.json','payload.json','typed-owners.json'):
+                    assert (now/name).read_bytes()==(old/name).read_bytes(),(case,mode,name)
+                meta=json.loads((now/'capture.json').read_text());assert meta['run']==f'Run {{ threads: Some({pool}), parallel: true, check_heredity: false, cancelled: false }}'
+                assert meta['prepared_len']==meta['built_len']==len(json.loads((now/'payload.json').read_text())['diagrams'])
+                assertion=OUT/'runtime'/f'dump-p{pool}'/f'{case}.classes-{mode}-t{pool}.json'
+                assert (now/'payload.json').read_bytes()==assertion.read_bytes()
+        rows.append(record);print(pool,'capture bound',flush=True)
+    (OUT/'observer-binding.json').write_text(json.dumps({'rows':rows,'owner_sources_unchanged_from_b9':guards,'qualification':'Fresh executions of retained dev-optim observer, source-qualified unchanged production owners; not a new compiled MAIN/Nix observer. Separate profile/dependency provenance retained in approved preparation. New ci-optim assertion payloads equal complete actual observer payloads. Typed interface and order/model/Run remain observed capture bindings, not expanded theorem.','observer_source_sha256':sha(ROOT/'docs/architecture/evidence/generation-oracle-family-migration/observer-source.rs.txt'),'preparation_provenance':str(PREP/'target/oracle-family-migration/provenance/observer.json'),'preparation_provenance_sha256':sha(PREP/'target/oracle-family-migration/provenance/observer.json')},indent=2)+'\n')
+if __name__=='__main__':main()

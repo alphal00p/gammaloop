@@ -424,6 +424,21 @@ own workspace. Bounded: one regression, one bisect, one written verdict.
   `evidence/generation-integration/wp3/qed/receipt.json`; NEW independent review
   is required and WP3 remains incomplete.
 
+- #strong[Four-family integration 2026-10-30:]
+  the preceding three-row QED gate is approved at `30f02f79`, with both root-
+  aggregated independent reviews retained. Approved certificate `87fa13a9` and
+  separate four-literal migration `3432ac3f` are reconciled onto that frozen
+  base, preserving the three prior QED literals and every other row field.
+  The historical mathematics remains four independent cases, None/Auto,
+  Grouping None, pool 1; actual pool 8/32 runs are runtime evidence only.
+  New combined producer, payload/source/census and observer bindings, complete
+  generator results and all remaining failures are recorded separately in
+  `evidence/generation-integration/wp3/families/receipt.json`. Named multiset
+  transport does not certify positional interfaces, and captured Run, interface
+  order, typing/locality and historical cook qualifications remain explicit.
+  NEW independent combined review is required; no other oracle migration,
+  license-runtime repair, M-rebuild or WP3 completion is claimed.
+
 - `jj duplicate` the v4 chain (`kursouxx::kpslpwqz`) onto the WP2 base; do not
   rebase in place, so the 19 live workspaces on older lines stay valid.
 - Drop the empty \#175/\#176 copies and the first \#177 (`nxmztorq`); adapt

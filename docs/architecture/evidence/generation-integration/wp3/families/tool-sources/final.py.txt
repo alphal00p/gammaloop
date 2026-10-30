@@ -1,0 +1,71 @@
+"""Final frozen evidence qualification, license-free Nix and exact docs CWD."""
+from pathlib import Path
+import hashlib
+import json
+import os
+import shutil
+import subprocess
+import sys
+import tomllib
+sys.path.insert(0,str(Path(__file__).resolve().parent))
+import run
+
+ROOT=Path(__file__).resolve().parents[2]
+OUT=Path(__file__).resolve().parent
+def sha(p):
+    h=hashlib.sha256()
+    with Path(p).open('rb') as f:
+        for b in iter(lambda:f.read(4*1024*1024),b''):h.update(b)
+    return h.hexdigest()
+def main():
+    revision=sys.argv[1];uri=f'git+file:///shared/lcnbr/dev/gammaloop/main?rev={revision}&shallow=1&allRefs=1'
+    def command(label,argv,cwd=ROOT):
+        assert run.run(label,argv,cwd)==0,label
+        return (OUT/(label+'.out')).read_text().strip()
+    meta=json.loads(command('final-metadata',['nix','flake','metadata','--json',uri]));assert meta['revision']==revision
+    full=Path(meta['path']);fullnar=command('final-full-nar',['nix','hash','path',str(full)])
+    pages=Path(command('final-pages-eval',['nix','eval','--option','eval-cache','false','--raw',uri+'#packages.x86_64-linux.alphal00p-docs-pages.src']))
+    pagesnar=command('final-pages-nar',['nix','hash','path',str(pages)])
+    aggregate=command('final-generator-eval',['nix','eval','--raw',uri+'#checks.x86_64-linux.gammaloop-nextest-binaries-feynkit.drvPath'])
+    env=dict(os.environ);env.pop('SYMBOLICA_LICENSE',None);env.pop('SYMBOLICA_LICENSE_SIGNED',None);env['GIT_OPTIONAL_LOCKS']='0'
+    d=next(iter(json.loads(subprocess.check_output(['nix','derivation','show',aggregate],env=env))['derivations'].values()))
+    selected=['/nix/store/'+p for p in d['inputs']['drvs'] if 'nextest-binaries-feynkit-feynkit-generator' in p]
+    assert selected==['/nix/store/rbp28mw3nnkf1l3dl9f2yrbpjvcgvir9-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0.drv']
+    records=json.loads((ROOT/'docs/architecture/evidence/generation-integration/wp3/families/inventory.json').read_text())
+    paths={x['path'] for x in records['cumulative_paths_nonself']}
+    bindings=tomllib.loads((full/'docs/generated-rendered-evidence.toml').read_text());bindingpaths={a[k] for a in bindings['artifact'] for k in ('path','source','artifact_owner','source_owner','tool_owner')};assert len(bindingpaths)==22 and len(bindings['artifact'])==8
+    paths.update(bindingpaths);paths.update(['docs/developers.toml','docs/generated-rendered-evidence.toml','crates/alphal00p-docs-builder/src/lib.rs','crates/alphal00p-docs-builder/src/generated_evidence.rs'])
+    for p in paths:
+        assert (ROOT/p).read_bytes()==(full/p).read_bytes(),p
+        # Documentation source intentionally selects .txt/.json/.py/.rs under docs,
+        # as well as the four-row assertion source via verified row scopes.
+        assert (pages/p).read_bytes()==(full/p).read_bytes(),p
+    assert not any((pages/name).exists() for name in ('.local','.git','.jj','target'))
+    registry=tomllib.loads((full/'docs/developers.toml').read_text());notes=[n for s in registry['section'] for n in s.get('note',[])];scopes=[]
+    for n in notes:
+        for s in n.get('scope',[]):
+            t=(full/s['path']).read_text();assert t.count(s['anchor'])==1
+            if 'end_anchor' in s:assert t.count(s['end_anchor'])==1;t=t[t.index(s['anchor']):t.index(s['end_anchor'])]
+            b=t.encode();h=hashlib.sha1(b'blob '+str(len(b)).encode()+b'\0'+b).hexdigest();assert h==s['digest'],n['id'];scopes.append({'id':n['id'],'symbol':s['symbol'],'digest':h})
+    assert len(notes)==91 and len(scopes)==117
+    renders=json.loads((OUT/'render-results.json').read_text())
+    for p,h in renders['input_hashes'].items():assert sha(full/p)==sha(ROOT/p)==h,p
+    for r in renders['results']:
+        assert sha(full/r['source'])==r['source_sha256']
+        assert sha(r['wrapper'])==r['wrapper_sha256'] and sha(r['tool'])==r['tool_sha256']
+        for a in r['runs']:assert a['exit']==0 and sha(a['artifact'])==a['sha256']
+    copy=OUT/'final-docs-source';shutil.copytree(full,copy,copy_function=shutil.copy2,symlinks=True)
+    copynar=command('final-docs-copy-nar',['nix','hash','path',str(copy)]);assert copynar==fullnar
+    copy.chmod(0o755)
+    command('final-docs-check',['nix','develop',uri,'-c','cargo','run','--locked','-p','alphal00p-docs-builder','--','check'],cwd=copy)
+    for p in full.rglob('*'):
+        if p.is_file() and not p.is_symlink():assert sha(p)==sha(copy/p.relative_to(full)),str(p)
+    probe='/shared/lcnbr/dev/gammaloop/generation-rendered-evidence/.local/review-rendered-evidence-round4-opus-20261029T183451Z/probe/current-probe'
+    command('final-prose-gate',['env','-i','PATH=',probe,'actual-gate',str(pages)])
+    negative=OUT/'final-negative-source';shutil.copytree(pages,negative,symlinks=True);negative.chmod(0o755)
+    (negative/'unauthorized-families.html').write_text('Unauthorized authored HTML negative\n')
+    assert run.run('final-prose-negative',['env','-i','PATH=',probe,'actual-gate',str(negative)])==2
+    builder=copy/'target/debug/alphal00p-docs-builder'
+    record={'revision':revision,'built_code':'8dcebc2591ab04d10026fbd47a45e8d31f911ef3','full_source':{'path':str(full),'nar':fullnar,'status':'Final evidence source evaluated only; not claimed built/executed as runtime.'},'pages_source':{'path':str(pages),'nar':pagesnar,'status':'evaluated source only, no page/site realization'},'generator_invariance':{'aggregate_evaluated_only':aggregate,'generator':selected[0],'equals_built_code':True},'registry':{'notes':len(notes),'scopes':scopes,'bad':0},'verified_final_pages_bindings':len(paths),'generated_html_artifacts':8,'generated_distinct_binding_files':22,'canonical_docs':{'exit':0,'command':'final-docs-check.command.json','cwd':str(copy),'origin':str(full),'before_copy_nar':copynar,'source_files_unchanged_after':True,'builder_elf':str(builder),'builder_elf_sha256':sha(builder)},'prose_boundary':{'tool':probe,'sha256':sha(probe),'empty_PATH_positive_exit':0,'unauthorized_HTML_negative_exit':2},'render_bindings':'All frozen inputs match final source; outputs/wrappers/tools rehashed and commands exits checked. Scope mutation rejected.','license':'Both variables absent in all Nix/Cargo docs commands; no license-bearing runtime-result derivation.','tracked_files_and_refs':'Final artifacts bind existing candidate; no further tracked changes permitted after this record.'}
+    (OUT/'final-stage.json').write_text(json.dumps(record,indent=2)+'\n');print(json.dumps({'revision':revision,'docs':0,'notes':91,'scopes':117,'pages':str(pages),'source_equal':True}))
+if __name__=='__main__':main()
