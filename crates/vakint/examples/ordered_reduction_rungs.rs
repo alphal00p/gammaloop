@@ -27,6 +27,7 @@ fn main() -> fixture::Result<()> {
     let mut snapshot = None;
     let mut build_profile = None;
     let mut compare_reports = None;
+    let mut compare_two_reports = None;
     while let Some(argument) = arguments.next() {
         match argument.as_str() {
             "--work-dir" => {
@@ -86,6 +87,20 @@ fn main() -> fixture::Result<()> {
                     ),
                 ))
             }
+            "--compare-two-reports" => {
+                compare_two_reports = Some((
+                    PathBuf::from(
+                        arguments
+                            .next()
+                            .ok_or("--compare-two-reports needs a DFS report directory")?,
+                    ),
+                    PathBuf::from(
+                        arguments
+                            .next()
+                            .ok_or("--compare-two-reports needs an ordered report directory")?,
+                    ),
+                ))
+            }
             "--prepared-input" => {
                 prepared_input = Some(PathBuf::from(
                     arguments.next().ok_or("--prepared-input needs a path")?,
@@ -101,7 +116,7 @@ fn main() -> fixture::Result<()> {
             }
             "--help" => {
                 println!(
-                    "ordered_reduction_rungs --work-dir PATH --build-profile release [--loops N] [--projection zero-momentum|quadratic] [--engine dfs|dfs-no-memo|ordered|all] [--artifacts PATH] [--prepared-input PATH] [--prepare-only] [--no-numerical-reference] [--no-monitor | --monitor] [--progress-snapshot PATH]\nFor completed fresh processes: --work-dir OUT --compare-reports DFS_DIRECTORY DFS_NO_MEMO_DIRECTORY ORDERED_DIRECTORY.\nDefault: one loop, zero momentum; all three strategies through four loops, ordered only at five loops; tracked numerical reference through four loops. DFS retains its ordinary per-run memo; dfs-no-memo disables that memo and its bookkeeping. Neither restores prepared or previous-run caches. Saved inputs under work-dir/input-LN-projection are authenticated and reused; --prepared-input selects a shared or legacy bundle. Reduction math is captured with the experimental-rustred feature; the complete retained public call is timed separately. Both timings exclude the subsequent numerical reference. Use --no-monitor for qualified performance comparisons: it disables both dashboard and snapshot callbacks and conflicts with --monitor and --progress-snapshot. Use a release build without profile overrides."
+                    "ordered_reduction_rungs --work-dir PATH --build-profile release [--loops N] [--projection zero-momentum|quadratic] [--engine dfs|dfs-no-memo|ordered|all] [--artifacts PATH] [--prepared-input PATH] [--prepare-only] [--no-numerical-reference] [--no-monitor | --monitor] [--progress-snapshot PATH]\nFor completed fresh processes: --work-dir OUT --compare-reports DFS_DIRECTORY DFS_NO_MEMO_DIRECTORY ORDERED_DIRECTORY.\nFor a functional two-engine proof only: --work-dir OUT --compare-two-reports DFS_DIRECTORY ORDERED_DIRECTORY; --no-numerical-reference explicitly compares retained expressions only without changing the saved reports.\nDefault: one loop, zero momentum; all three strategies through four loops, ordered only at five loops; tracked numerical reference through four loops. DFS retains its ordinary per-run memo; dfs-no-memo disables that memo and its bookkeeping. Neither restores prepared or previous-run caches. Saved inputs under work-dir/input-LN-projection are authenticated and reused; --prepared-input selects a shared or legacy bundle. Reduction math is captured with the experimental-rustred feature; the complete retained public call is timed separately. Both timings exclude the subsequent numerical reference. Use --no-monitor for qualified performance comparisons: it disables both dashboard and snapshot callbacks and conflicts with --monitor and --progress-snapshot. Use a release build without profile overrides."
                 );
                 return Ok(());
             }
@@ -110,6 +125,9 @@ fn main() -> fixture::Result<()> {
     }
     if no_monitor && (tui || snapshot.is_some()) {
         return Err("--no-monitor conflicts with --monitor and --progress-snapshot".into());
+    }
+    if compare_reports.is_some() && compare_two_reports.is_some() {
+        return Err("select only one saved-report comparison mode".into());
     }
     if loop_count == 0 {
         return Err("--loops must be positive".into());
@@ -129,6 +147,18 @@ fn main() -> fixture::Result<()> {
     }
     let work = work.ok_or("--work-dir is required; keep development data under workspace")?;
     std::fs::create_dir_all(&work)?;
+    if let Some((dfs, ordered)) = compare_two_reports {
+        fixture::comparison::compare_two_reports(
+            &dfs,
+            &ordered,
+            &work.join("functional-pair.json"),
+            numerical,
+        )?;
+        println!(
+            "Authenticated functional two-engine comparison passed; no performance qualification."
+        );
+        return Ok(());
+    }
     if let Some((dfs, dfs_no_memo, ordered)) = compare_reports {
         fixture::comparison::compare_reports(
             &dfs,

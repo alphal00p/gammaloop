@@ -30,6 +30,38 @@ pub struct CompletedRun {
     pub report: serde_json::Value,
 }
 
+impl CompletedRun {
+    fn read(directory: &Path, strategy: &str, memoization: bool) -> Result<Self> {
+        let report: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(directory.join("report.json"))?)?;
+        if report["schema"] != "vakint.ordered-rung-comparison.v1"
+            || report["persistent_cache"] != false
+            || report["reduction_completed"] != true
+            || report["catalogue_closure"]["closed"] != true
+            || report["catalogue_closure"]["unknown_count"] != 0
+            || report["strategy"] != strategy
+            || report["intrinsic_memoization"] != memoization
+            || report["cache_policy"]["depth_first_intrinsic_memoization"] != memoization
+            || report["cache_policy"]["prepared_cache_loaded"] != false
+            || report["cache_policy"]["previous_run_cache_restored"] != false
+        {
+            return Err(format!("comparison requires a completed {strategy} report with the declared memoization policy and no loaded prepared or previous-run caches").into());
+        }
+        if report["retained"]["file"] != "retained.symbolica" {
+            return Err("unexpected retained result filename".into());
+        }
+        let payload = std::fs::read(directory.join("retained.symbolica"))?;
+        if report["retained"]["bytes"].as_u64() != Some(payload.len() as u64)
+            || report["retained"]["sha256"].as_str() != Some(sha256(&payload).as_str())
+        {
+            return Err("retained physical result failed byte-length or SHA256 validation".into());
+        }
+        Vakint::initialize_vakint_symbols();
+        let value = Atom::parse(&String::from_utf8(payload)?, "vakint", Default::default())?;
+        Ok(Self { value, report })
+    }
+}
+
 /// Capture the retained call only. Symbolic expansion and numerical references
 /// happen after this closure has returned and its instrumentation has closed.
 fn capture_retained_call<T, E>(
@@ -712,40 +744,9 @@ pub fn compare_reports(
     ordered: &Path,
     destination: &Path,
 ) -> Result<()> {
-    let load = |directory: &Path, strategy: &str, memoization: bool| -> Result<CompletedRun> {
-        let report: serde_json::Value =
-            serde_json::from_slice(&std::fs::read(directory.join("report.json"))?)?;
-        if report["schema"] != "vakint.ordered-rung-comparison.v1"
-            || report["persistent_cache"] != false
-            || report["reduction_completed"] != true
-            || report["catalogue_closure"]["closed"] != true
-            || report["catalogue_closure"]["unknown_count"] != 0
-            || report["strategy"] != strategy
-            || report["intrinsic_memoization"] != memoization
-            || report["cache_policy"]["depth_first_intrinsic_memoization"] != memoization
-            || report["cache_policy"]["prepared_cache_loaded"] != false
-            || report["cache_policy"]["previous_run_cache_restored"] != false
-        {
-            return Err(
-                format!("comparison requires a completed {strategy} report with the declared memoization policy and no loaded prepared or previous-run caches").into(),
-            );
-        }
-        if report["retained"]["file"] != "retained.symbolica" {
-            return Err("unexpected retained result filename".into());
-        }
-        let payload = std::fs::read(directory.join("retained.symbolica"))?;
-        if report["retained"]["bytes"].as_u64() != Some(payload.len() as u64)
-            || report["retained"]["sha256"].as_str() != Some(sha256(&payload).as_str())
-        {
-            return Err("retained physical result failed byte-length or SHA256 validation".into());
-        }
-        Vakint::initialize_vakint_symbols();
-        let value = Atom::parse(&String::from_utf8(payload)?, "vakint", Default::default())?;
-        Ok(CompletedRun { value, report })
-    };
-    let memoized = load(dfs, "DepthFirst", true)?;
-    let nonmemoized = load(dfs_no_memo, "DepthFirstWithoutMemoization", false)?;
-    let ordered_result = load(ordered, "Ordered", false)?;
+    let memoized = CompletedRun::read(dfs, "DepthFirst", true)?;
+    let nonmemoized = CompletedRun::read(dfs_no_memo, "DepthFirstWithoutMemoization", false)?;
+    let ordered_result = CompletedRun::read(ordered, "Ordered", false)?;
     compare(&memoized, &nonmemoized)?;
     compare(&memoized, &ordered_result)?;
     let dfs_report = std::fs::canonicalize(dfs.join("report.json"))?;
@@ -770,6 +771,50 @@ pub fn compare_reports(
     )?;
     Ok(())
 }
+
+/// A functional two-engine proof, never a performance-qualified three-arm sample.
+/// Retain-only comparison discards numerical metadata in these loaded copies;
+/// neither the source reports nor their recorded timing/evidence are modified.
+pub fn compare_two_reports(
+    dfs: &Path,
+    ordered: &Path,
+    destination: &Path,
+    numerical_reference: bool,
+) -> Result<()> {
+    let mut dfs_result = CompletedRun::read(dfs, "DepthFirst", true)?;
+    let mut ordered_result = CompletedRun::read(ordered, "Ordered", false)?;
+    if numerical_reference
+        && (dfs_result.report["numerical_reference"].is_null()
+            || ordered_result.report["numerical_reference"].is_null())
+    {
+        return Err("two-report comparison requires both numerical references; explicitly select --no-numerical-reference for retained-only proof".into());
+    }
+    if !numerical_reference {
+        dfs_result.report["numerical_reference"] = serde_json::Value::Null;
+        ordered_result.report["numerical_reference"] = serde_json::Value::Null;
+    }
+    compare(&dfs_result, &ordered_result)?;
+    let numerical_checked =
+        numerical_reference && !dfs_result.report["numerical_reference"].is_null();
+    let dfs_report = std::fs::canonicalize(dfs.join("report.json"))?;
+    let ordered_report = std::fs::canonicalize(ordered.join("report.json"))?;
+    let certificate = serde_json::json!({
+        "schema":"vakint.ordered-rung-functional-pair.v1","functional_only":true,"performance_eligible":false,
+        "exact_retained_equality":true,"numerical_enclosures_agree":if numerical_checked {Some(true)} else {None},
+        "numerical_check":if numerical_checked {"checked existing references"} else {"not checked"},
+        "retain_only_explicitly_requested":!numerical_reference,"new_evaluations":0,
+        "input_sha256":dfs_result.report["input_sha256"],
+        "reports":{"dfs":{"path":dfs_report,"sha256":sha256(&std::fs::read(&dfs_report)?)},
+            "ordered":{"path":ordered_report,"sha256":sha256(&std::fs::read(&ordered_report)?)}},
+        "retained":{"dfs":dfs_result.report["retained"]["sha256"],"ordered":ordered_result.report["retained"]["sha256"]},
+        "equality_scope":"existing exact retained comparator and, when checked, tracked numerical enclosure overlap; no exceptional-domain equality or timing qualification",
+    });
+    std::fs::write(destination, serde_json::to_vec_pretty(&certificate)?)?;
+    Ok(())
+}
+
+#[cfg(test)]
+mod saved_reports_tests;
 
 pub fn prepared(
     directory: &Path,
