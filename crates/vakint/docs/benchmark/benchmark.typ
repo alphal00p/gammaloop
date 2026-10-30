@@ -1525,3 +1525,90 @@ Refresh and validation contract: #raw("maintenance.typ").]
   #raw(diagnostic-ids.join(", ")). The qualified 1L–3L measurements and all
   historical FORM/cache records remain unchanged.]
 }
+
+#let five-loop-diagnostic-ids = report.at("selected_ordered_five_loop_diagnostics", default: ())
+#for id in five-loop-diagnostic-ids {
+  let row = report.ordered_rung_diagnostics.at(id)
+  assert(row.schema == "vakint.ordered-five-loop-diagnostic.v1"
+    and row.projection == "zero-momentum-metric"
+    and row.status == "complete_exact_55_master_58_product_comparison"
+    and row.performance_eligible == false
+    and row.ordered_over_dfs == none and row.ordered_over_dfs_no_memo == none
+    and row.numerical_validation == none)
+  let old = row.historical_dfs
+  let current = row.ordered
+  assert(old.reduction_math_seconds == none and old.sample_count == 1 and current.sample_count == 1)
+  pagebreak()
+  set text(fill: black, size: 10pt)
+  align(center)[
+    #text(22pt, weight: "bold", fill: navy)[Five-loop ordered reduction]
+    #v(0.2em)
+    #text(11.5pt, fill: luma(80))[Zero momentum · complete historical coefficient check]
+  ]
+  v(0.5em)
+  block(fill: rgb("#fff3df"), inset: 10pt, radius: 4pt, width: 100%)[
+    One completed monitored Ordered run is checked against the accepted saved
+    DFS expression. The two observations have different source, normalization,
+    monitoring and cache-capture cohorts. *No fair speed ratio is available.*
+    No five-loop master value has been evaluated.
+  ]
+  v(0.45em)
+  table(
+    columns: (1fr, 1fr, 1.1fr),
+    inset: (x: 10pt, y: 16pt), stroke: 0.4pt + luma(225),
+    align: center + horizon,
+    table.header(..([Historical DFS math], [Ordered math · MSbar], [Exact validation]).map(body =>
+      table.cell(fill: navy, text(fill: white, weight: "bold", body)))),
+    table.cell(fill: pale, [#text(20pt, weight: "bold")[—]
+      #linebreak() Unmeasured · n = 1]),
+    table.cell(fill: pale, [#text(20pt, weight: "bold")[#timing(current.reduction_math_seconds) s]
+      #linebreak() Monitored · n = 1]),
+    [*58 products / 55 masters ✓*
+      #linebreak() Complete rational coefficients
+      #linebreak() Ratio — · Numerical —],
+  )
+  v(0.45em)
+  text(9pt)[*Public retained calls, separately:* historical pySecDec
+  #timing(old.public_retained_seconds) s; current MSbar
+  #timing(current.public_retained_seconds) s. The earlier roughly 40-hour
+  public-call observation supplies no reduction-only time and is separate
+  from the older 63-master Native-only cohort.]
+  v(0.3em)
+  text(9pt)[*What agrees.* All 58 distinct complete #raw("Q(d)") master-product
+  coefficients, covering 55 individual masters, agree after the recorded exact
+  normalization and dimension conversions, at unit UV mass, renormalization
+  scale and coupling. No Laurent truncation or numerical master substitution is
+  used. Equality holds on the intersection of the sufficient generic guard
+  domains; identical exceptional-domain guard sets are not asserted.]
+  v(0.3em)
+  text(9pt)[*Other scopes.* Collector #timing(current.collector_seconds) s;
+  guarded whole test #timing(current.guard_elapsed_seconds) s. The collector
+  begins after scalar preparation; the guard also spans the saved-result
+  verification and final test work. These scopes are not added together.]
+  v(0.3em)
+  if row.monitor_summary != none {
+    text(9pt)[*Monitoring.* The finalized history and resource samples are bound
+    to this successful run. Its last Native census describes one local request,
+    not the entire expression or a count of masters. Phase fraction is structural
+    progress, not elapsed-time fraction. Grouping/cancellation counts do not
+    establish CPU time saved; coefficient-monomial proxies are not memory bytes.]
+    v(0.3em)
+  }
+  if row.excluded_launch != none {
+    text(9pt)[*Excluded launch.* The earlier documented launch/monitor failure
+    remains in the raw provenance. It contributes no scientific or performance
+    observation to this table.]
+    v(0.3em)
+  }
+  text(8pt)[Current source / Native / external data:
+  #raw(current.source_revision.slice(0, 12)) /
+  #raw(current.native_revision.slice(0, 12)) /
+  #raw(current.external_revision.slice(0, 12)). Exact coefficient and conversion
+  receipts bind the immutable input, saved result and current result payloads.
+  The 640 five-loop catalogue entries remain uncomputed.]
+  v(0.3em)
+  text(8pt, fill: luma(100))[Diagnostic: #raw(id).
+  All raw reports, guard/build/monitor evidence and the excluded launch remain in
+  #raw("data/results.json") → #raw("ordered_rung_diagnostics"). Historical
+  measurements and the qualified lower-loop cohorts above remain unchanged.]
+}

@@ -1078,6 +1078,396 @@ class OrderedReportContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "accepted timing differs"):
             merge.append(self.base, "test", [], historical_receipts=[path])
 
+    def closed_five_loop_fixture(self):
+        """Tiny synthetic files model closure evidence, never physical results."""
+        root = self.root / "SYNTHETIC-five-loop-zero"
+        root.mkdir()
+
+        def write(name, value):
+            return self.write(root / name, value)
+
+        def payload(name):
+            path = root / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(f"SYNTHETIC FILE CONTRACT ONLY: {name}")
+            return path
+
+        def identity(path):
+            return {**merge.evidence(path), "bytes": path.stat().st_size}
+
+        def relative_identity(path):
+            return {
+                "file": path.name,
+                "sha256": merge.digest(path),
+                "bytes": path.stat().st_size,
+            }
+
+        executable = payload("SYNTHETIC-NOT-AN-EXECUTABLE")
+        source = {
+            "main_revision": "1" * 40,
+            "native_revision": "2" * 40,
+            "kernel_revision": "3" * 40,
+            "cargo_lock_sha256": "4" * 64,
+        }
+        build_path = write(
+            "build.json",
+            {
+                "schema": "vakint.ordered-rung-build.v1",
+                "success": True,
+                "build_profile": "release",
+                "profile_overrides": False,
+                "sources": source,
+                "executable": identity(executable),
+            },
+        )
+        input_path = payload("input.symbolica")
+        data_path = write("manifest.json", {"scope": "SYNTHETIC DATA"})
+        old_result = payload("old-result.symbolica")
+        failed_launch = write(
+            "excluded-launch.json", {"scope": "SYNTHETIC launch failure"}
+        )
+        command = [
+            "SYNTHETIC-nice",
+            "-n",
+            "19",
+            str(executable),
+            "five_loop_zero_momentum_ordered_matches_saved_depth_first_result",
+        ]
+        started_path = write(
+            "started.json",
+            {
+                "schema": "vakint.ordered-five-loop-physical-acceptance.v1",
+                "root_explicit_go": True,
+                "test_name": "five_loop_zero_momentum_ordered_matches_saved_depth_first_result",
+                "command": command,
+                "executable": identity(executable),
+                "build_receipt": identity(build_path),
+                "source_revision": source["main_revision"],
+                "native_revision": source["native_revision"],
+                "kernel_revision": source["kernel_revision"],
+                "cargo_lock_sha256": source["cargo_lock_sha256"],
+                "external_revision": "5" * 40,
+                "prepared_manifest": identity(
+                    write("prepared.json", {"scope": "SYNTHETIC"})
+                ),
+                "input_binding": identity(input_path),
+                "external_manifest": identity(data_path),
+                "historical_binding": identity(old_result),
+                "previous_documented_monitoring_abort": identity(failed_launch),
+            },
+        )
+        launch_path = write(
+            "guard/launch.json",
+            {
+                "schema": "vakint.ordered-rung-process.v1",
+                "guard_armed_before_native_exec": True,
+                "command": command,
+            },
+        )
+        completion_path = write(
+            "guard/completion.json",
+            {
+                "success": True,
+                "exit_code": 0,
+                "failure": None,
+                "signals_sent_to_original_pidfd": [],
+                "elapsed_seconds": 14,
+            },
+        )
+        retained = relative_identity(payload("work/result.symbolica"))
+        guards = {
+            "payload": relative_identity(payload("work/guards.symbolica")),
+            "count": 1,
+        }
+        report = {
+            "schema": "vakint.ordered-rung-comparison.v1",
+            "loop_count": 5,
+            "projection": "zero-momentum-metric",
+            "strategy": "Ordered",
+            "normalization": "MSbar",
+            "reduction_completed": True,
+            "catalogue_closure": {
+                "closed": True,
+                "master_count": 55,
+                "unknown_count": 0,
+                "unknown": [],
+            },
+            "persistent_cache": False,
+            "intrinsic_memoization": False,
+            "cache_policy": {
+                "prepared_cache_loaded": False,
+                "previous_run_cache_restored": False,
+            },
+            "worker_policy": {"owner_preparation_workers": 1},
+            "numerical_reference": None,
+            "input_sha256": merge.digest(input_path),
+            "dimension_binding": {"source": "d", "target": "4-2epsilon"},
+            "data": {
+                "manifest_sha256": merge.digest(data_path),
+                "version": "SYNTHETIC",
+            },
+            "retained": retained,
+            "guards": guards,
+            "monitoring_enabled": True,
+            "reduction_math_seconds": 8,
+            "retained_reduction_seconds": 10,
+            "reduction_math_timing": {
+                "scope_id": merge.MATH_SCOPE,
+                "complete": True,
+                "gross_seconds": 9,
+                "measured_owner_preparation_seconds": 1,
+                "interval_count": 2,
+                "incompleteness_reason": None,
+            },
+            "completed_seconds": 12,
+        }
+        report_path = write("work/report.json", report)
+        old_report_path = write(
+            "historical-report.json",
+            {
+                "schema": "vakint.qcd-ladder.benchmark.v1",
+                "reduction_completed": True,
+                "projection": report["projection"],
+                "input_sha256": report["input_sha256"],
+                "reduction_seconds": 100,
+            },
+        )
+        acceptance_path = write(
+            "historical-acceptance.json",
+            {
+                "schema": "vakint.physical-q0.cold-completion-parent-acceptance.v1",
+                "status": "ACCEPTED_FUNCTIONAL_COLD_COMPLETE_CACHE_CLOSED",
+                "collector_reduction_seconds": 100,
+                "output_artifacts_verified": {
+                    "benchmark.json": identity(old_report_path),
+                    "result.symbolica": identity(old_result),
+                    "nonzero-conditions.symbolica": {"sha256": "a" * 64},
+                },
+            },
+        )
+        factor = "SYNTHETIC EXACT NORMALIZATION FACTOR"
+        certificate_path = write(
+            "work/historical-coefficient-comparison.json",
+            {
+                "schema": "vakint.historical-q0-coefficient-comparison.v1",
+                "status": "PASS",
+                "historical": {**identity(old_result), "normalization": "pySecDec"},
+                "ordered_retained": retained,
+                "input_sha256": report["input_sha256"],
+                "dimension_binding": report["dimension_binding"],
+                "master_count": 55,
+                "master_product_count": 58,
+                "products": [
+                    {"master_product": f"SYNTHETIC-{i}", "exactly_equal": True}
+                    for i in range(58)
+                ],
+                "exact_full_rational_coefficients": True,
+                "laurent_truncation_used": False,
+                "master_values_evaluated": False,
+                "new_reductions": 0,
+                "point": {"mUV": 1, "mu_r_squared": 1, "UFO_G": 1},
+                "guards": {
+                    "identical_guard_sets_claimed": False,
+                    "ordered": guards,
+                    "historical_sha256": "a" * 64,
+                },
+                "normalization_conversion": {
+                    "api": "VakintSettings::get_integral_normalization_factor_atom",
+                    "source": "pySecDec",
+                    "target": "MSbar",
+                    "loop_count": 5,
+                    "before_laurent_truncation": True,
+                    "factor": factor,
+                    "sha256": hashlib.sha256(factor.encode()).hexdigest(),
+                },
+                "converted_historical": relative_identity(
+                    payload("work/converted.symbolica")
+                ),
+            },
+        )
+        summary_path = write(
+            "monitor-summary.json",
+            {
+                "schema": "vakint.ordered-five-loop-monitor-summary.v1",
+                "finalized": True,
+                "run_success": True,
+                "bindings": {
+                    "final_snapshot": identity(
+                        write("snapshot.json", {"SYNTHETIC": True})
+                    ),
+                    "sampled_history": identity(payload("history.jsonl")),
+                    "guard_resources": identity(payload("resources.jsonl")),
+                    "command": identity(write("command.json", command)),
+                    **{
+                        name: identity(path)
+                        for name, path in {
+                            "report": report_path,
+                            "historical_certificate": certificate_path,
+                            "completion": completion_path,
+                            "launch": launch_path,
+                            "started": started_path,
+                            "build_receipt": build_path,
+                        }.items()
+                    },
+                },
+                "native_census": {
+                    "scope": "SYNTHETIC one native request",
+                    "phases_completed": 2,
+                },
+            },
+        )
+        return {
+            "run_directory": root,
+            "historical_acceptance": acceptance_path,
+            "historical_report": old_report_path,
+            "monitor_summary": summary_path,
+        }
+
+    def test_closed_five_loop_zero_has_separate_public_math_and_certificate_scopes(
+        self,
+    ):
+        args = self.closed_five_loop_fixture()
+        original = copy.deepcopy(self.base)
+        result = merge.append_five_loop_diagnostic(self.base, "synthetic-zero", **args)
+        self.assertEqual(self.base, original)
+        row = result["ordered_rung_diagnostics"]["synthetic-zero"]
+        self.assertFalse(row["performance_eligible"])
+        self.assertIsNone(row["ordered_over_dfs"])
+        self.assertIsNone(row["numerical_validation"])
+        self.assertIsNone(row["historical_dfs"]["reduction_math_seconds"])
+        self.assertEqual(row["historical_dfs"]["public_retained_seconds"], 100)
+        self.assertEqual(row["ordered"]["reduction_math_seconds"], 8)
+        self.assertEqual(row["ordered"]["public_retained_seconds"], 10)
+        self.assertEqual((row["master_count"], row["master_product_count"]), (55, 58))
+        self.assertTrue(row["excluded_launch"]["excluded_from_measurements"])
+        self.assertIn("local native request", row["monitor_summary"]["scope"])
+
+    def test_five_loop_zero_rejects_live_or_failed_guard(self):
+        args = self.closed_five_loop_fixture()
+        root = args["run_directory"]
+        completion_path = root / "guard/completion.json"
+        complete = merge.read(completion_path)
+        completion_path.unlink()
+        with self.assertRaisesRegex(ValueError, "closed run"):
+            merge.append_five_loop_diagnostic(self.base, "live", **args)
+        for changes in (
+            {"success": False},
+            {"exit_code": 1},
+            {"signals_sent_to_original_pidfd": [15]},
+        ):
+            self.write(completion_path, {**complete, **changes})
+            with (
+                self.subTest(changes=changes),
+                self.assertRaisesRegex(ValueError, "accepted complete"),
+            ):
+                merge.append_five_loop_diagnostic(self.base, "failed", **args)
+
+    def test_five_loop_zero_certificate_requires_every_distinct_product_and_exact_scope(
+        self,
+    ):
+        args = self.closed_five_loop_fixture()
+        path = args["run_directory"] / "work/historical-coefficient-comparison.json"
+        original = merge.read(path)
+        cases = [
+            {"master_count": 54},
+            {"master_product_count": 57},
+            {"products": original["products"][:-1]},
+            {"products": [original["products"][0]] * 58},
+            {
+                "products": [
+                    {**row, "exactly_equal": False} for row in original["products"]
+                ]
+            },
+            {"master_values_evaluated": True},
+            {"laurent_truncation_used": True},
+            {"input_sha256": "b" * 64},
+            {"point": {"mUV": 2, "mu_r_squared": 1, "UFO_G": 1}},
+        ]
+        for changes in cases:
+            self.write(path, {**original, **changes})
+            with (
+                self.subTest(changes=changes.keys()),
+                self.assertRaisesRegex(ValueError, "55-master/58-product"),
+            ):
+                merge.append_five_loop_diagnostic(self.base, "bad", **args)
+
+    def test_five_loop_zero_rejects_quadratic_instead_of_inventing_a_reference(self):
+        args = self.closed_five_loop_fixture()
+        path = args["run_directory"] / "work/report.json"
+        raw = merge.read(path)
+        raw["projection"] = "quadratic-transverse"
+        self.write(path, raw)
+        with self.assertRaisesRegex(ValueError, "conventions/input/data"):
+            merge.append_five_loop_diagnostic(self.base, "not-zero", **args)
+
+    def test_five_loop_zero_rejects_wrong_conversion_or_incomplete_math(self):
+        args = self.closed_five_loop_fixture()
+        root = args["run_directory"]
+        path = root / "work/historical-coefficient-comparison.json"
+        certificate = merge.read(path)
+        self.write(
+            path,
+            {
+                **certificate,
+                "normalization_conversion": {
+                    **certificate["normalization_conversion"],
+                    "factor": "CHANGED",
+                },
+            },
+        )
+        with self.assertRaisesRegex(ValueError, "normalization conversion"):
+            merge.append_five_loop_diagnostic(self.base, "bad-factor", **args)
+        self.write(path, certificate)
+        report_path = root / "work/report.json"
+        report = merge.read(report_path)
+        report["reduction_math_seconds"] = None
+        report["reduction_math_timing"].update(
+            complete=False, incompleteness_reason="SYNTHETIC unmeasured"
+        )
+        self.write(report_path, report)
+        args["monitor_summary"] = None
+        with self.assertRaisesRegex(ValueError, "complete reduction-math"):
+            merge.append_five_loop_diagnostic(self.base, "missing-math", **args)
+
+    def test_five_loop_zero_rejects_changed_result_and_source_binding(self):
+        args = self.closed_five_loop_fixture()
+        path = args["run_directory"] / "work/result.symbolica"
+        path.write_text("CHANGED SYNTHETIC PAYLOAD")
+        with self.assertRaisesRegex(ValueError, "changed evidence"):
+            merge.append_five_loop_diagnostic(self.base, "corrupt", **args)
+        path.write_text("SYNTHETIC FILE CONTRACT ONLY: work/result.symbolica")
+        started_path = args["run_directory"] / "started.json"
+        started = merge.read(started_path)
+        started["source_revision"] = "f" * 40
+        self.write(started_path, started)
+        with self.assertRaisesRegex(ValueError, "source/build identity"):
+            merge.append_five_loop_diagnostic(self.base, "wrong-source", **args)
+
+    def test_five_loop_zero_monitor_requires_closed_successful_bound_inputs(self):
+        args = self.closed_five_loop_fixture()
+        path = args["monitor_summary"]
+        original = merge.read(path)
+        for changes in ({"finalized": False}, {"run_success": False}):
+            self.write(path, {**original, **changes})
+            with (
+                self.subTest(changes=changes),
+                self.assertRaisesRegex(ValueError, "not finalized"),
+            ):
+                merge.append_five_loop_diagnostic(self.base, "live-monitor", **args)
+        raw = copy.deepcopy(original)
+        raw["bindings"].pop("completion")
+        self.write(path, raw)
+        with self.assertRaisesRegex(ValueError, "closed-run bindings"):
+            merge.append_five_loop_diagnostic(self.base, "missing-binding", **args)
+        raw = copy.deepcopy(original)
+        different = self.write(
+            "other-report.json", {"scope": "SYNTHETIC DIFFERENT RUN"}
+        )
+        raw["bindings"]["report"] = merge.evidence(different)
+        self.write(path, raw)
+        with self.assertRaisesRegex(ValueError, "different completed run"):
+            merge.append_five_loop_diagnostic(self.base, "wrong-monitor", **args)
+
 
 if __name__ == "__main__":
     unittest.main()

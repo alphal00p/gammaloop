@@ -34,6 +34,33 @@ The table labels it “Current numerical” and retains requested/achieved digit
 error quality and warnings unchanged, including Estimated rather than Bounded
 errors. Mixed producer revisions remain explicit in both source labels.
 
+The five-loop zero-momentum acceptance uses the separate
+#raw("append_five_loop_diagnostic") helper. It requires a closed successful
+guard, the original launch/build/source/input/data bindings, the actual retained
+payload, and a passing #raw("vakint.historical-q0-coefficient-comparison.v1")
+certificate for all 58 distinct master products over 55 individual masters.
+That certificate compares complete rational coefficients at unit UV mass,
+renormalization scale and coupling after exact dimension and pySecDec-to-MSbar
+normalization conversion, before any Laurent truncation. It does not assert
+identical exceptional-dimensional guard sets or evaluate five-loop masters.
+The earlier 144005.78694374-second observation remains a historical public-call
+timer with unmeasured reduction math; the new monitored math, public-call,
+collector and guarded whole-test durations remain separate. Both efficiency
+ratios and numerical validation are always null. A documented launch/monitor
+failure is retained as excluded provenance and never enters a measured duration.
+Select these zero-specific records through
+#raw("selected_ordered_five_loop_diagnostics"). A supplied monitor summary must
+be finalized and successful with stable hashed bindings; its Native census
+describes one local request rather than the whole expression or master inventory.
+
+The 55/58 historical reference belongs only to zero momentum. The quadratic
+five-loop example has no corresponding independent saved DFS reference, and
+neither physical DFS mode is rerun. Its eventual completed observation can
+establish catalogue closure and checked native-rule execution, with independent
+reference equality and numerical evaluation left null. A feasibility-censored
+quadratic attempt keeps its censor receipt and null completed timings; it must
+not be described as a successful benchmark or given the zero-momentum proof.
+
 The generic collector #raw("examples/ordered_reduction_rungs.rs") compares
 ordinary DFS, DFS without completed-result memoization/bookkeeping, and Ordered
 on the same authenticated physical scalar input. Prepared/saved caches and

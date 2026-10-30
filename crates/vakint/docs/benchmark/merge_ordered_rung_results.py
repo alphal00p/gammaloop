@@ -57,6 +57,12 @@ def referenced(reference, base):
     path = path if path.is_absolute() else base / path
     require(path.is_file(), f"missing evidence: {path}")
     require(digest(path) == reference["sha256"], f"changed evidence: {path}")
+    if "bytes" in reference:
+        require(
+            type(reference["bytes"]) is int
+            and reference["bytes"] == path.stat().st_size,
+            f"changed evidence size: {path}",
+        )
     return path.resolve()
 
 
@@ -1209,6 +1215,288 @@ def append_exact_diagnostic(
             status="functional_exact_pass_current_numerical_substitution_pass",
         )
     result["ordered_rung_diagnostics"][diagnostic_id] = checkpoint
+    return result
+
+
+def append_five_loop_diagnostic(
+    base,
+    diagnostic_id,
+    run_directory,
+    historical_acceptance,
+    historical_report,
+    monitor_summary=None,
+):
+    """Accept only a closed ordered q0 run with its complete 55/58 certificate."""
+    require(
+        diagnostic_id not in base.get("ordered_rung_diagnostics", {}),
+        "diagnostic ID exists",
+    )
+    root = Path(run_directory).resolve()
+    paths = {
+        "started": root / "started.json",
+        "launch": root / "guard/launch.json",
+        "completion": root / "guard/completion.json",
+        "report": root / "work/report.json",
+        "certificate": root / "work/historical-coefficient-comparison.json",
+    }
+    require(
+        all(path.is_file() for path in paths.values()),
+        "closed run, guard and historical certificate are required",
+    )
+    documents = {name: read(path) for name, path in paths.items()}
+    started, launch, completion, report, certificate = (
+        documents[name]
+        for name in ("started", "launch", "completion", "report", "certificate")
+    )
+    require(
+        started["schema"] == "vakint.ordered-five-loop-physical-acceptance.v1"
+        and started["root_explicit_go"] is True
+        and started["test_name"]
+        == "five_loop_zero_momentum_ordered_matches_saved_depth_first_result"
+        and launch["schema"] == "vakint.ordered-rung-process.v1"
+        and launch["guard_armed_before_native_exec"] is True
+        and launch["command"] == started["command"]
+        and started["executable"]["path"] in launch["command"]
+        and completion["success"] is True
+        and type(completion["exit_code"]) is int
+        and completion["exit_code"] == 0
+        and completion["failure"] is None
+        and completion["signals_sent_to_original_pidfd"] == [],
+        "five-loop worker is not an accepted complete run",
+    )
+    build_path = referenced(started["build_receipt"], root)
+    build = read(build_path)
+    referenced(started["executable"], root)
+    require(
+        build["schema"] == "vakint.ordered-rung-build.v1"
+        and build["success"] is True
+        and build["build_profile"] == "release"
+        and build["profile_overrides"] is False
+        and build["executable"] == started["executable"]
+        and all(
+            build["sources"][key] == started[target]
+            for key, target in (
+                ("main_revision", "source_revision"),
+                ("native_revision", "native_revision"),
+                ("kernel_revision", "kernel_revision"),
+                ("cargo_lock_sha256", "cargo_lock_sha256"),
+            )
+        ),
+        "five-loop source/build identity differs",
+    )
+    for key in ("prepared_manifest", "input_binding", "external_manifest"):
+        referenced(started[key], root)
+    require(
+        report["schema"] == "vakint.ordered-rung-comparison.v1"
+        and report["loop_count"] == 5
+        and report["projection"] == "zero-momentum-metric"
+        and report["strategy"] == "Ordered"
+        and report["normalization"] == "MSbar"
+        and report["reduction_completed"] is True
+        and report["catalogue_closure"]["closed"] is True
+        and report["catalogue_closure"]["unknown_count"] == 0
+        and report["catalogue_closure"]["unknown"] == []
+        and report["persistent_cache"] is False
+        and report["numerical_reference"] is None
+        and report["cache_policy"]["prepared_cache_loaded"] is False
+        and report["cache_policy"]["previous_run_cache_restored"] is False
+        and report["intrinsic_memoization"] is False
+        and report["input_sha256"] == started["input_binding"]["sha256"]
+        and report["data"]["manifest_sha256"] == started["external_manifest"]["sha256"],
+        "five-loop report conventions/input/data differ",
+    )
+    retained = report["retained"]
+    retained_path = referenced(
+        {"path": retained["file"], "sha256": retained["sha256"]}, paths["report"].parent
+    )
+    require(
+        retained_path.stat().st_size == retained["bytes"],
+        "five-loop retained payload size differs",
+    )
+    guard = report["guards"]["payload"]
+    referenced(
+        {"path": guard["file"], "sha256": guard["sha256"], "bytes": guard["bytes"]},
+        paths["report"].parent,
+    )
+    acceptance_path, old_report_path = (
+        Path(historical_acceptance).resolve(),
+        Path(historical_report).resolve(),
+    )
+    acceptance, old_report = read(acceptance_path), read(old_report_path)
+    accepted_report = acceptance["output_artifacts_verified"]["benchmark.json"]
+    require(
+        acceptance["schema"]
+        == "vakint.physical-q0.cold-completion-parent-acceptance.v1"
+        and acceptance["status"] == "ACCEPTED_FUNCTIONAL_COLD_COMPLETE_CACHE_CLOSED"
+        and digest(old_report_path) == accepted_report["sha256"]
+        and old_report_path.stat().st_size == accepted_report["bytes"]
+        and old_report["schema"] == "vakint.qcd-ladder.benchmark.v1"
+        and old_report["reduction_completed"] is True
+        and old_report["projection"] == report["projection"]
+        and old_report["input_sha256"] == report["input_sha256"]
+        and old_report["reduction_seconds"]
+        == acceptance["collector_reduction_seconds"],
+        "historical public timing/result acceptance differs",
+    )
+    historical = acceptance["output_artifacts_verified"]["result.symbolica"]
+    require(
+        certificate["schema"] == "vakint.historical-q0-coefficient-comparison.v1"
+        and certificate["status"] == "PASS"
+        and certificate["historical"]["sha256"]
+        == historical["sha256"]
+        == started["historical_binding"]["sha256"]
+        and certificate["historical"]["bytes"]
+        == historical["bytes"]
+        == started["historical_binding"]["bytes"]
+        and certificate["historical"]["normalization"] == "pySecDec"
+        and certificate["ordered_retained"] == retained
+        and certificate["input_sha256"] == report["input_sha256"]
+        and certificate["dimension_binding"] == report["dimension_binding"]
+        and certificate["master_count"] == 55
+        and certificate["master_product_count"] == 58
+        and len(certificate["products"]) == 58
+        and len({row["master_product"] for row in certificate["products"]}) == 58
+        and all(row["exactly_equal"] is True for row in certificate["products"])
+        and certificate["exact_full_rational_coefficients"] is True
+        and certificate["laurent_truncation_used"] is False
+        and certificate["master_values_evaluated"] is False
+        and certificate["new_reductions"] == 0
+        and all(
+            certificate["point"][name] == 1 for name in ("mUV", "mu_r_squared", "UFO_G")
+        )
+        and certificate["guards"]["identical_guard_sets_claimed"] is False
+        and certificate["guards"]["ordered"] == report["guards"]
+        and certificate["guards"]["historical_sha256"]
+        == acceptance["output_artifacts_verified"]["nonzero-conditions.symbolica"][
+            "sha256"
+        ],
+        "complete 55-master/58-product equality certificate is missing or incompatible",
+    )
+    conversion = certificate["normalization_conversion"]
+    require(
+        conversion["api"] == "VakintSettings::get_integral_normalization_factor_atom"
+        and conversion["source"] == "pySecDec"
+        and conversion["target"] == "MSbar"
+        and conversion["loop_count"] == 5
+        and conversion["before_laurent_truncation"] is True
+        and hashlib.sha256(conversion["factor"].encode()).hexdigest()
+        == conversion["sha256"],
+        "five-loop exact normalization conversion differs",
+    )
+    converted = certificate["converted_historical"]
+    converted_path = referenced(
+        {"path": converted["file"], "sha256": converted["sha256"]},
+        paths["certificate"].parent,
+    )
+    require(
+        converted_path.stat().st_size == converted["bytes"],
+        "converted historical payload size differs",
+    )
+    monitor = None
+    if monitor_summary is not None:
+        summary_path = Path(monitor_summary).resolve()
+        summary = read(summary_path)
+        require(
+            summary["schema"] == "vakint.ordered-five-loop-monitor-summary.v1"
+            and summary["finalized"] is True
+            and summary["run_success"] is True,
+            "monitor summary is not finalized and successful",
+        )
+        require(
+            set(summary["bindings"])
+            >= {
+                "final_snapshot",
+                "sampled_history",
+                "guard_resources",
+                "launch",
+                "completion",
+                "started",
+                "command",
+                "build_receipt",
+                "report",
+                "historical_certificate",
+            },
+            "monitor summary lacks closed-run bindings",
+        )
+        for item in summary["bindings"].values():
+            referenced(item, summary_path.parent)
+        require(
+            summary["bindings"]["report"]["sha256"] == digest(paths["report"])
+            and summary["bindings"]["historical_certificate"]["sha256"]
+            == digest(paths["certificate"])
+            and all(
+                summary["bindings"][key]["sha256"] == digest(path)
+                for key, path in (
+                    ("completion", paths["completion"]),
+                    ("launch", paths["launch"]),
+                    ("started", paths["started"]),
+                    ("build_receipt", build_path),
+                )
+            ),
+            "monitor summary belongs to a different completed run",
+        )
+        monitor = {
+            "evidence": evidence(summary_path),
+            "raw": summary,
+            "scope": "final sampled local native request; not a whole-expression or master inventory",
+        }
+    failed = None
+    if "previous_documented_monitoring_abort" in started:
+        failed_path = referenced(started["previous_documented_monitoring_abort"], root)
+        failed = {
+            "evidence": evidence(failed_path),
+            "raw": read(failed_path),
+            "excluded_from_measurements": True,
+            "scope": "launch/monitor failure; no scientific or performance baseline",
+        }
+    math_seconds = reduction_math(report)
+    require(
+        math_seconds is not None,
+        "accepted five-loop observation lacks complete reduction-math telemetry",
+    )
+    result = copy.deepcopy(base)
+    result.setdefault("ordered_rung_diagnostics", {})[diagnostic_id] = {
+        "schema": "vakint.ordered-five-loop-diagnostic.v1",
+        "loop_count": 5,
+        "projection": "zero-momentum-metric",
+        "status": "complete_exact_55_master_58_product_comparison",
+        "performance_eligible": False,
+        "ordered_over_dfs": None,
+        "ordered_over_dfs_no_memo": None,
+        "numerical_validation": None,
+        "exact_full_rational_coefficients": True,
+        "master_count": 55,
+        "master_product_count": 58,
+        "comparison_scope": "all complete Q(d) master-product coefficients at unit UV mass, renormalization scale and coupling, after exact normalization/dimension conversion; no Laurent truncation; intersection of sufficient generic guard domains",
+        "historical_dfs": {
+            "normalization": "pySecDec",
+            "public_retained_seconds": seconds(old_report["reduction_seconds"]),
+            "reduction_math_seconds": None,
+            "sample_count": 1,
+            "acceptance": {"evidence": evidence(acceptance_path), "raw": acceptance},
+            "report": {"evidence": evidence(old_report_path), "raw": old_report},
+        },
+        "ordered": {
+            "normalization": "MSbar",
+            "source_revision": started["source_revision"],
+            "native_revision": started["native_revision"],
+            "external_revision": started["external_revision"],
+            "reduction_math_seconds": math_seconds,
+            "public_retained_seconds": seconds(report["retained_reduction_seconds"]),
+            "collector_seconds": seconds(report["completed_seconds"]),
+            "guard_elapsed_seconds": seconds(completion["elapsed_seconds"]),
+            "sample_count": 1,
+            "monitoring_enabled": report["monitoring_enabled"],
+        },
+        "evidence": {
+            name: {"evidence": evidence(paths[name]), "raw": document}
+            for name, document in documents.items()
+        },
+        "build_receipt": {"evidence": evidence(build_path), "raw": build},
+        "monitor_summary": monitor,
+        "excluded_launch": failed,
+        "limitations": "monitored single observation and historical source/normalization/capture cohort; no fair speed ratio, no numerical evaluation of the 640 uncomputed five-loop catalogue entries",
+    }
     return result
 
 
