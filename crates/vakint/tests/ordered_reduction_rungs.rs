@@ -20,8 +20,27 @@ fn golden_precision_target_respects_the_selected_source_cap() {
 }
 
 fn compare(loop_count: usize, projection: fixture::Projection) -> fixture::Result<()> {
-    let directory = tempfile::tempdir()?;
-    let input_directory = directory.path().join("input");
+    let temporary = tempfile::tempdir()?;
+    let directory = if let Some(root) = std::env::var_os("VAKINT_ORDERED_RUN_EVIDENCE") {
+        let root = std::path::PathBuf::from(root);
+        let directory = root.join(format!("L{loop_count}-{projection:?}"));
+        if ["dfs", "ordered"]
+            .iter()
+            .any(|arm| directory.join(arm).join("report.json").exists())
+        {
+            return Err(
+                "preserve completed physical evidence and select a fresh evidence root".into(),
+            );
+        }
+        std::fs::create_dir_all(root)?;
+        // Fresh case directories keep graph preparation inside the measured CI
+        // invocation and preserve interrupted evidence instead of reusing it.
+        std::fs::create_dir(&directory)?;
+        directory
+    } else {
+        temporary.path().to_owned()
+    };
+    let input_directory = directory.join("input");
     let prepared = fixture::comparison::prepared(&input_directory, projection, loop_count)?;
     assert!(!prepared.input.is_zero());
     assert_eq!(prepared.loop_count, loop_count);
@@ -36,7 +55,7 @@ fn compare(loop_count: usize, projection: fixture::Projection) -> fixture::Resul
     let run = |name, strategy| {
         fixture::comparison::run(
             &loaded,
-            &directory.path().join(name),
+            &directory.join(name),
             &fixture::comparison::RunOptions {
                 strategy,
                 artifacts: std::env::var_os("VAKINT_TEST_EXTERNAL_DATA").map(Into::into),
