@@ -135,7 +135,7 @@ record is returned without a definition, with the reason, on inspection.
 The constant card states the normalization of each definition class:
 
 #table(
-  columns: 3,
+  columns: (1fr, 1.3fr, 2.4fr),
   [*Class*], [*Examples*], [*Normalisation*],
   [Elementary and polylogarithmic numbers],
   [`𝜋`, `γ`, `zeta(n)`, `log(q)`, `polylog(n,q)`, `s6weak`],

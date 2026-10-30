@@ -218,7 +218,7 @@ conventions of its definition class, shown as "Normalisation" on the constant
 card:
 
 #table(
-  columns: 3,
+  columns: (1fr, 1.3fr, 2.4fr),
   [*Class*], [*Examples*], [*Normalisation*],
   [Elementary and polylogarithmic numbers],
   [`𝜋`, `γ`, `zeta(n)`, `log(q)`, `polylog(n,q)`, `s6weak`],
