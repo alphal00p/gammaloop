@@ -278,7 +278,6 @@ fn four_loop_zero_momentum_ordered_matches_recorded_numerical_reference() -> fix
 }
 
 #[test]
-#[ignore = "enable after the complete fresh-preparation Ordered quadratic case qualifies below fifteen minutes"]
 fn four_loop_quadratic_ordered_matches_recorded_numerical_reference() -> fixture::Result<()> {
     compare_strategies(
         4,
