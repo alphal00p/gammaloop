@@ -1,0 +1,7 @@
+{
+  "frozen_manifest": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-round2-candidate/relied-on-frozen-evidence.json",
+  "frozen_manifest_sha256": "2d097349708a1a946b257e0426c33e91faa2efbe5cb8773fa37bd279885f345b",
+  "round2_manifest": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-round2-candidate/round2-manifest.json",
+  "round2_manifest_sha256": "bfe285f19bd037f80fa93b2593a54ba7ed1147d437b3d0c46b188d5a75de5756",
+  "manifest_entries": 34136
+}

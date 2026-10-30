@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "environment": {
+    "license": "Preserved when exported; otherwise loaded privately from ${XDG_CONFIG_HOME:-$HOME/.config}/symbolica/license. No value retained.",
+    "unset": ["FEYNKIT_ORACLE_RECORD", "FEYNKIT_ORACLE_DIAGNOSTIC", "FEYNKIT_ORACLE_UPDATE", "FEYNKIT_ORACLE_FORCE_PASS", "FEYNKIT_ORACLE_ID_CHILD", "FEYNKIT_ORACLE_PRINT_CHILD", "FEYNKIT_ORACLE_REGISTRATION_CHILD", "CARGO_TARGET_DIR"],
+    "pristine_only": {"FEYNKIT_ORACLE_THREADS": "1", "FEYNKIT_ORACLE_DUMP": "route-specific task-owned pristine dump directory"}
+  },
+  "commands": [
+    "nix develop -c cargo test --locked --profile dev-optim -p feynkit-generator --test generation_oracle <case> -- --exact --test-threads 1 --nocapture",
+    "nix develop -c cargo build --locked --profile dev-optim -p feynkit-generator --example oracle_family_capture",
+    "<preserved oracle_family_capture ELF> <route capture root> qed_eemm_L1 ctorder_qcd_uugg_L1",
+    "<preserved oracle_family_capture ELF> <route capture root> sm_eemm_L0 ym_g6_L0",
+    "nix develop -c python docs/architecture/evidence/generation-oracle-family-diagnosis/validate-captures.py qed_eemm_L1 ctorder_qcd_uugg_L1 sm_eemm_L0 ym_g6_L0",
+    "nix develop -c python docs/architecture/evidence/generation-oracle-family-diagnosis/adversarial-controls.py",
+    "nix develop -c cargo build --locked --profile dev-optim -p feynkit-generator --example oracle_family_exact",
+    "<preserved oracle_family_exact ELF> <local-or-graph-pairs.json> <kernel-specific-results.json>",
+    "nix develop -c typst compile --root . --creation-timestamp 0 docs/architecture/generation-oracle-family-diagnosis.typ target/oracle-numerator-family-diagnosis/docs/generation-oracle-family-diagnosis.pdf"
+  ],
+  "prohibited_not_run": ["pool 8", "pool 32", "broad 78-row matrix", "grouped proof", "CI", "upload", "publication", "fetch", "push"]
+}

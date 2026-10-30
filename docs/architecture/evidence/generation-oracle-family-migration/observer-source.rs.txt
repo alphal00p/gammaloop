@@ -1,0 +1,225 @@
+//! Bounded observational capture for four oracle numerator proof families.
+
+#![allow(dead_code)]
+
+#[path = "../tests/generation_oracle/cases.rs"]
+mod cases;
+#[path = "../tests/generation_oracle/census.rs"]
+mod census;
+
+use std::env;
+use std::fs;
+use std::fs::File;
+use std::io::BufWriter;
+use std::path::Path;
+use std::time::Instant;
+
+use cases::Case;
+use census::Census;
+use feynkit_generator::{BuiltDiagramSet, Classes, Grouping, Naming, NumeratorOptions, Run};
+use idenso::tensor::SymbolicTensor;
+use idenso::{CookMode, CookSettings};
+use serde::Serialize;
+use spenso::structure::abstract_index::AbstractIndex;
+use spenso::structure::partial::{PartialIndex, PartialStructureExt};
+use spenso::structure::slot::IsAbstractSlot;
+use symbolica::atom::AtomCore;
+
+#[derive(Serialize)]
+struct OwnerRecord {
+    owner: String,
+    expression: String,
+    producer_decoded_expression: String,
+    ordered_ports: Vec<String>,
+    is_metric: bool,
+    is_composite: bool,
+}
+
+#[derive(Serialize)]
+struct DiagramRecord {
+    id: String,
+    owners: Vec<OwnerRecord>,
+}
+
+#[derive(Serialize)]
+struct CaptureMeta {
+    case: String,
+    classes: String,
+    run: String,
+    grouping: String,
+    prepared_len: usize,
+    built_len: usize,
+    prepared_millis: u128,
+    built_millis: u128,
+}
+
+fn owner_record(
+    owner: String,
+    value: &SymbolicTensor<spenso::structure::partial::PartialStructure>,
+    cooking: &CookSettings,
+) -> OwnerRecord {
+    let ordered_ports = value
+        .structure()
+        .logical_slots()
+        .into_iter()
+        .map(|slot| match slot.aind {
+            PartialIndex::Explicit(index) => cooking
+                .uncook(
+                    slot.rep()
+                        .slot::<AbstractIndex, _>(index)
+                        .to_atom()
+                        .as_view(),
+                )
+                .to_canonical_string(),
+            PartialIndex::Open(id) => {
+                format!(
+                    "open:{id:?}:{}",
+                    slot.rep().to_symbolic([]).to_canonical_string()
+                )
+            }
+        })
+        .collect();
+    OwnerRecord {
+        owner,
+        expression: value.expression().to_canonical_string(),
+        producer_decoded_expression: cooking
+            .uncook(value.expression().as_view())
+            .to_canonical_string(),
+        ordered_ports,
+        is_metric: value.is_metric(),
+        is_composite: value.is_composite(),
+    }
+}
+
+fn metadata(result: &BuiltDiagramSet, path: &Path) {
+    let cooking = CookSettings::indices()
+        .with_mode(CookMode::ReversibleEncoding)
+        .with_representation_payloads(true, true);
+    let records = result
+        .diagrams()
+        .iter()
+        .map(|diagram| {
+            let mut owners = diagram
+                .vertices()
+                .map(|(id, vertex)| {
+                    owner_record(format!("vertex:{}", id.0), &vertex.numerator, &cooking)
+                })
+                .collect::<Vec<_>>();
+            owners.extend(diagram.edges().map(|(id, _, edge)| {
+                owner_record(format!("edge:{}", id.0), &edge.numerator, &cooking)
+            }));
+            owners.push(owner_record(
+                "numerator_prefactor".to_owned(),
+                diagram.numerator_prefactor(),
+                &cooking,
+            ));
+            owners.push(owner_record(
+                "projector".to_owned(),
+                diagram.projector(),
+                &cooking,
+            ));
+            owners.push(owner_record(
+                "numerator".to_owned(),
+                diagram.numerator().expect("built numerator"),
+                &cooking,
+            ));
+            DiagramRecord {
+                id: diagram.id().expect("named output").to_string(),
+                owners,
+            }
+        })
+        .collect::<Vec<_>>();
+    fs::write(path, serde_json::to_vec(&records).unwrap()).unwrap();
+}
+
+fn capture(case: &Case, classes: Classes, root: &Path, threads: usize) {
+    let folder = root.join(case.name).join(format!("classes-{classes:?}-t{threads}"));
+    fs::create_dir_all(&folder).unwrap();
+    let model = case.model();
+    let request = case.request(&model).with_classes(classes);
+    let options = NumeratorOptions::default().with_naming(Naming::prefix("D"));
+    let grouping = Grouping::None;
+    let run = Run::default().threads(threads);
+
+    fs::write(folder.join("model.json"), model.to_json().unwrap()).unwrap();
+    fs::write(
+        folder.join("request.json"),
+        serde_json::to_vec(&request).unwrap(),
+    )
+    .unwrap();
+    fs::write(
+        folder.join("options.json"),
+        serde_json::to_vec(&options).unwrap(),
+    )
+    .unwrap();
+    fs::write(
+        folder.join("grouping.json"),
+        serde_json::to_vec(&grouping).unwrap(),
+    )
+    .unwrap();
+
+    let prepared_start = Instant::now();
+    let prepared = request.generate(model.into(), &run).unwrap();
+    let prepared_millis = prepared_start.elapsed().as_millis();
+    assert!(prepared.report().completed);
+    fs::write(
+        folder.join("prepared-report.txt"),
+        format!("{:?}", prepared.report()),
+    )
+    .unwrap();
+
+    let built_start = Instant::now();
+    let built = prepared.build(&options, &run).unwrap();
+    let built_millis = built_start.elapsed().as_millis();
+    assert!(built.report().completed);
+    fs::write(
+        folder.join("built-report.txt"),
+        format!("{:?}", built.report()),
+    )
+    .unwrap();
+    metadata(&built, &folder.join("typed-owners.json"));
+    Census::of(&built)
+        .write_exact_dump(BufWriter::new(
+            File::create(folder.join("payload.json")).unwrap(),
+        ))
+        .unwrap();
+    let meta = CaptureMeta {
+        case: case.name.to_owned(),
+        classes: format!("{classes:?}"),
+        run: format!("{run:?}"),
+        grouping: format!("{grouping:?}"),
+        prepared_len: prepared.len(),
+        built_len: built.len(),
+        prepared_millis,
+        built_millis,
+    };
+    fs::write(
+        folder.join("capture.json"),
+        serde_json::to_vec(&meta).unwrap(),
+    )
+    .unwrap();
+}
+
+fn main() {
+    let mut args = env::args().skip(1);
+    let root = args.next().expect("capture output directory");
+    let root = Path::new(&root);
+    let threads: usize = args.next().expect("pool").parse().expect("integer pool");
+    assert!([1, 8, 32].contains(&threads), "unsupported pool");
+    for name in args {
+        assert!(
+            [
+                "qed_eemm_L1",
+                "ctorder_qcd_uugg_L1",
+                "sm_eemm_L0",
+                "ym_g6_L0"
+            ]
+            .contains(&name.as_str()),
+            "unsupported case {name}"
+        );
+        let case = Case::named(&name);
+        for classes in [Classes::None, Classes::Auto] {
+            capture(case, classes, root, threads);
+        }
+    }
+}

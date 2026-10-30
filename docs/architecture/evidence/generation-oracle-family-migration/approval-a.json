@@ -1,0 +1,250 @@
+{
+ "schema": 1,
+ "title": "Independent review, round three, Scope A: provenance, documentation and evidence accuracy of the four-family oracle numerator certificate corrections",
+ "date": "2026-10-30",
+ "reviewer": "new independent Scope A reviewer (Opus), read-only on the frozen candidate; complementary to Scope B (mathematics/controls), not waiting on B",
+ "review_window_utc": [
+  "2026-10-30T03:09:37Z",
+  "2026-10-30T03:39:33Z (after-guard); review.json written afterwards"
+ ],
+ "verdict": "APPROVED_SCOPE_A_WITH_NONBLOCKING_NOTES",
+ "verdict_summary": "Scope A (provenance, documentation and evidence accuracy) is approved for the eight bounded domains (qed_eemm_L1, ctorder_qcd_uugg_L1, sm_eemm_L0, ym_g6_L0 x Classes None/Auto, Grouping None, pool 1, two locked kernels). The candidate delta is docs-only (15 paths); all prior captures, ELFs, reviews and round-one/round-two evidence are byte-preserved; the kernel/compiler/feature/ELF chain is intact; every one of the 541 credited validator executions (8 baseline + 531 controls + 2 infrastructure) binds final source hashes, unchanged inputs and ELFs before/after, and pair/result files whose hashes match disk; the baseline pair files are bound token-for-token to the frozen capture strings; the receipt's 531-control/2-infrastructure accounting equals an independent recount; A-D1 is repaired (three notes classified, no new docs-builder failure introduced); the PDF and semantic HTML reproduce byte-for-byte with pinned Typst and altered-report negatives are detected. Ten nonblocking precision notes (A3-N1..A3-N10) concern undisclosed intermediate inventory files, one chronology wording, an uncited auxiliary qualification artifact, an omitted masked gate in the receipt limits, an unrecorded formatting step, and wording nits. None changes the bounded result or requires a rerun.",
+ "verdict_scope": {
+  "documentation_acceptance": "ACCEPT: registry classification complete and correct for all three notes; titles exact; rendered report reproduces from final bytes; report/receipt/dispositions accurately state fresh vs cited evidence and the 531/2 accounting, with the A3 notes as wording/disclosure precision. Full docs builder is NOT green (inherited first gate plus masked inherited gates), as the candidate itself states.",
+  "provenance_and_evidence_binding": "ACCEPT for the eight frozen domains and the credited candidate/ root.",
+  "captured_producer_facts": "INHERITED, not re-established: no producer was re-executed in round three or in this review. Capture/ELF bytes are proven unchanged since the round-one manifests and R2 A's fresh producer reruns (cited, not repeated). Historical raw cook/decoded association remains capture-bound.",
+  "semantic_soundness": "NOT JUDGED (Scope B). If Scope B finds a reported semantic closure false (definition gate, native faithfulness, additive witness, predicate isolation), the corresponding report/receipt statements need correction and this documentation acceptance is withdrawn for those statements only.",
+  "not_approved": "No MAIN/WP3 approval, no migration, no expectation change, no grouped/other-row/pool 8/32 credit."
+ },
+ "frozen_inputs_verified": {
+  "candidate": {
+   "bookmark": "generation-oracle-family-round3",
+   "commit": "87fa13a93b1c0b3e5792fd56937486ad962b2b55",
+   "parent": "78c0754c8fb732878123c02999ced3fc506c5a1d",
+   "workspace_at": "@ is the candidate; disk == commit (4275 tracked entries, 0 mismatches, 0 untracked outside .jj/target/.local) before and after"
+  },
+  "round2": "78c0754c8fb732878123c02999ced3fc506c5a1d (bookmark generation-oracle-family-round2)",
+  "round1": "e814b6b4c3463d9aa1c018939365b624619af24b (bookmarks generation-oracle-family-round1 and generation-oracle-family-diagnosis)",
+  "historical_diagnostic": "5e61ef89f4df4e818884e40b8d0c46108eab75a8 = 2b1ef4f0 + the two adapters only",
+  "historical_holder": "workspace generation-oracle-family-historical @ 6d476227597e72d9ef3504f0c99fc5c6806d235f, empty change over 2b1ef4f07a44bc061bcc97c378bbdd9c41cb0e94 (tree 058e6a31 identical); disk == commit (3551 entries, 0 mismatches, 0 untracked); jj working-copy state unchanged since R2 A's guard",
+  "current_runtime": "b9f788922341e7bde2e801a054423ae70ed7e9ae",
+  "prior_reviews": {
+   "R1": "target/oracle-family-independent-review-r1/review.json 0ec5a10aeae24bea52792f9d48700d81fb05a42f233bfe8e5e101eec300bf008 (1163-entry manifest verifies)",
+   "R2_A": ".local/review-family-r2-a-20261030T010834Z/review.json 2b690ee1aa2dcef7894b1dd2afa45eb5f9361cc98776c7599d26b36a660d657e (246-entry manifest verifies)",
+   "R2_B": ".local/review-family-r2-b-20261030T010814/review.json fa8f82f97b08bb80c71cfcc4178a67c7bf381d10c55cbfd952bcb59dc5031f07 (no own manifest; whole dir unchanged per R3 frozen inventory and this review's guards)"
+  },
+  "round3_evidence": {
+   "receipt.json": "1ed0d3b904129234677b3dca68e1d9d057532be9fa507d73c501b9344d90057e (disk == commit == target copy)",
+   "validate.py": "25805ad1b7b24ae7b68e551dbe97c6cb962f2a9cf733c5ba9d723231a05e9a67",
+   "common.py": "c4d3c0b1094b21dae30519b3b19881ea053149332c9002d2a296e0116a8694c9",
+   "suite.py": "e23484539d040f9667df0e16fd2a0bbe356870ce8966224f214b2cd77617ab79",
+   "schema.json": "b1c062aee5342ead1fc7633fca96216abc5beee28822ab2bc6b11b859d04043b",
+   "dispositions.json": "9aa7e28bc397099f18ea728e871784a0c6450f9247891d93fdbe292a875c7648 (== receipt.finding_dispositions)",
+   "report": "docs/architecture/generation-oracle-family-diagnosis-round3.typ 323d96377065d549d130bc0b95d33bd5781d29e2cefed67dc2b6888f1a89f74b",
+   "developers.toml": "005cd42163a78abcdd49e2d0c3a38a387f5a5c1b867605aeb3b91461d0523e81",
+   "freeze.json": "5655d842c80f24467e7596dfedd30f8d9588178a346818cb119020b9189729de (9 bound artifacts and 13 source files rehash correctly)",
+   "closure-final.json": "7bfe004aec2114dbe2d9bf811b3a8422119b51437ee3a90ebda2ece51759b400"
+  }
+ },
+ "blocking": [],
+ "nonblocking": [
+  {
+   "id": "A3-N1",
+   "title": "Two intermediate inventory files are retained but undisclosed",
+   "where": [
+    "target/oracle-numerator-family-round3/inventory/development-before-v1.json (mtime 02:29:42.706, renamed at ctime 02:30:38.816)",
+    "target/oracle-numerator-family-round3/inventory/closure-development-v1.json (mtime 03:01:55.156, renamed at ctime 03:02:14.560)",
+    "receipt.json execution_history; report lines 199-204"
+   ],
+   "detail": "Outputs of superseded inventory runs (02:28:18 'frozen-before' and the 03:00:56 'inventory.py final' run with pre-final inventory.py cbe81e7a) were renamed by unrecorded file operations seconds before the reruns; both are hash-bound in closure-final but neither is mentioned or labelled superseded in receipt/report/dispositions. closure-development-v1 now fails its own entry for inventory.py (3146 vs 3172 bytes), as expected for a superseded stage. development-before-v1's file map equals frozen-before/after, so it is in fact the only strictly pre-run closure snapshot (see A3-N2).",
+   "repair": "Label both as superseded development inventories in the receipt (or a note); no rerun needed."
+  },
+  {
+   "id": "A3-N2",
+   "title": "'before' closure inventory overlapped the start of the credited runs",
+   "where": [
+    "report lines 155-157",
+    "commands/20261030T023038975511-candidate-frozen-before (02:30:38.975-02:32:03.3)",
+    "first credited validator start 02:30:40.244 (baseline); reviewer 02:30:41, domain 02:30:42, staged/infrastructure/anchor/legacy 02:31:26-02:31:30"
+   ],
+   "detail": "frozen-before.json hashing ran concurrently with the first ~85 s of credited runs. Per-run execution.json inputs_before/after, ELF before/after and native pair/ELF bindings close the gap for consumed inputs (verified for all 541 runs), development-before-v1 (02:29:42) has an identical file map, and frozen-after (02:57:12-02:58:40) is strictly after the last credited run (02:55:43.649).",
+   "repair": "Wording precision: state that strict pre-run state is given by per-run records and the identical 02:29:42 development inventory."
+  },
+  {
+   "id": "A3-N3",
+   "title": "None/Auto parity relies on an uncited auxiliary artifact outside the credited root, produced with a pre-final common.py",
+   "where": [
+    "report lines 107-112 and 199-201",
+    "target/oracle-numerator-family-round3/qualification/mode-order.json",
+    "commands/20261030T022846018000-final-qualify (common.py sha256 a8610c37..., not the final c4d3c0b1)"
+   ],
+   "detail": "qualify.py (final bytes) ran at 02:28:46, before common.py's final write at 02:30:08; the jj-snapshot diff from the preceding common.py to the final one touches only source_hashes() scope and an XDG_CONFIG_HOME record field, not loading/equality logic. The artifact is hash-bound by closure-final but the receipt does not cite it, while stating only candidate/ is credited. This review independently confirmed its mapping (CT 109->113,110->109,111->114,112->110,113->115,114->111,115->116,116->112 on both routes; identity elsewhere), matching R1 p11, R2 A a05 and R2 B.",
+   "repair": "Cite qualification/mode-order.json and its producing command in the receipt (or rerun qualify under final sources)."
+  },
+  {
+   "id": "A3-N4",
+   "title": "Receipt limits and A-D1 disposition omit the masked inherited unknown-owner gate",
+   "where": [
+    "receipt.json limits[5]; dispositions A-D1",
+    "docs/developers.toml generation-sunset-certificate and generation-sunset-migration (owner lucien-huber; owner list contains only 'unassigned')",
+    "crates/alphal00p-docs-builder/src/lib.rs:848-853 (owner check) precedes 1077-1086 (classification)"
+   ],
+   "detail": "Both failures exist at b9f78892 (inherited). Once the eight-HTML first gate is fixed, the builder would stop at the unknown-owner check before reaching the source46 classification. The report (lines 194-197), docs/registry.json and the render-validation qualification record it; the receipt limit names only source46.",
+   "repair": "Add the masked unknown-owner gate to the receipt limits/A-D1 disposition."
+  },
+  {
+   "id": "A3-N5",
+   "title": "Unrecorded edit/format step before credited runs",
+   "where": [
+    "round3/build_schema.py mtime 02:20:53.564 and round3/validate.py 02:20:53.565",
+    "commands ledger: next entry 20261030T022053750641-legacy-smoke at 02:20:53.750"
+   ],
+   "detail": "Two sources changed within 1 ms (ruff-style; build_schema.py also lost an unused import and loop variable after it generated schema.json at 01:58:13). No ledger record. Covered by the report's stated limit that interactive source edits are not an exhaustive transcript; no credited run depends on it (all record final hashes) and the retained build_schema.py regenerates schema.json equivalently (results/schema regeneration, 272/62/96).",
+   "repair": "None required; optionally mention it alongside the typoed-ruff observation."
+  },
+  {
+   "id": "A3-N6",
+   "title": "round1-p30 'retained unchanged' is content-identity, not byte-identity",
+   "where": [
+    "dispositions round1-p30"
+   ],
+   "detail": "R2 B's B1m-f/g/gamma world current payload.json/typed-owners.json are JSON-content-identical to R1 work/mutations but re-serialized (different SHA-256); historical sides equal the frozen captures.",
+   "repair": "Say 'content-identical (re-serialized)'."
+  },
+  {
+   "id": "A3-N7",
+   "title": "Run state is recorded in captures, though not validated",
+   "where": [
+    "report lines 25-26",
+    "adapted-*/captures/<case>/classes-<mode>-t1/capture.json 'run'"
+   ],
+   "detail": "Each capture.json records 'Run { threads: Some(1), parallel: true, check_heredity: false, cancelled: false }', identical across routes in all 8 domains (only prepared/built millis differ). The validator does not consume capture.json, so 'separately qualified' is accurate; 'serialize Request' undersells that Run debug text is also captured.",
+   "repair": "Optional precision."
+  },
+  {
+   "id": "A3-N8",
+   "title": "Seal outputs not hash-bound in the root record",
+   "where": [
+    "target/oracle-numerator-family-round3/freeze/{diff,historical-status,<4 refs>}/*",
+    "seal.py:38-69"
+   ],
+   "detail": "Exactly 25 round-three files are outside every manifest: the seal command's own record, freeze.json, closure-final.json, the two freeze manifests and 18 seal-time command records. freeze.json binds the manifests and closure by hash and embeds the ref records; diff/historical-status stdout were enforced at seal time but are not hashed. Acceptable self-referential root; no stale stage found.",
+   "repair": "None required."
+  },
+  {
+   "id": "A3-N9",
+   "title": "Round-two registry entry cites only one of its two reviews",
+   "where": [
+    "docs/developers.toml generation-oracle-family-diagnosis-round2 review_ref"
+   ],
+   "detail": "review_ref is R2 B's SHA; R2 A (2b690ee1...) is cited in the receipt but not the registry. review_ref is a single string; status text says 'A/B findings retained'.",
+   "repair": "Optional."
+  },
+  {
+   "id": "A3-N10",
+   "title": "Cosmetic wording in rendered disposition table",
+   "where": [
+    "dispositions.json / receipt strings rendered into report table"
+   ],
+   "detail": "Missing spaces ('inherited8', 'with5e61ef89', 'exited0', 'pool1', 'infrastructure3'); round1-p21 omits that round two's replay-final/parser.json reran the 24 p21 probes.",
+   "repair": "Optional."
+  }
+ ],
+ "prior_findings_assessment": {
+  "A-D1": "RESOLVED. Three notes classified with exact titles (source first line and rendered single leading <h2> both equal registry titles), unique IDs/sources, lifecycle superseded -> generation-oracle-family-diagnosis for round1 (evidence_revision e814b6b4, review_ref R1 SHA, reviewed_at 2026-10-29) and round2 (evidence_revision 78c0754c, review_ref R2 B SHA), one current owner (lifecycle investigation, round3 source). Gate re-implementation over b9f78892/e814b6b4/78c0754c/87fa13a9: candidate introduces no new registry, scope-digest, classification, prose or title failure and resolves round two's unclassified round-one note. Inherited and unchanged: 8 mark-geometry HTML (first gate), 2 unknown-owner (lucien-huber), source46 unclassified. Live tree first gate today: those 8 + R2 B's commands.md; this review added none. See A3-N4.",
+  "A-D2": "RESOLVED. Reverse raw-mutant coverage is attributed, not rerun: R2 B results/b1_old_pairs_reversed.json has 24 runs (3 mutants x 2 modes x local/graph x 2 kernels), all exit 101 at oracle_family_exact.rs:36:87 with 'redefined with new attributes' in all 24 logs; R1 p24 has the 6 mutant rows exit 101 and 8 retained rows exit 0.",
+  "A-D3": "RESOLVED with nits A3-N6/A3-N10: explicit round1-p21/p24/p30/p31 rows plus B-F1..F9 and A-D1..A-N6 rows rendered in the report table.",
+  "A-D4": "RESOLVED for round three: per-run inputs/ELF/pair/source hashes before and after for all 541 executions; frozen-after strictly after the credited runs; precision A3-N2. Old missing pre-run hashes/logs remain explicitly unknown; R2 A post-run checks cited separately.",
+  "A-D5": "RESOLVED: 49 top-level command records (argv, UTC start/end, env policy, exit, stdout/stderr); no Nix command recorded or needed; the typoed-ruff interactive failure disclosed; old unrecorded Nix/license commands not upgraded. Residual unrecorded edit/rename steps (A3-N1, A3-N5) fall within the stated interactive-edit limit.",
+  "A-N1": "RESOLVED in round-three prose (new private copy/workspace at exact base; never restore into frozen @/holder/other lanes). The frozen round-two overlay.json still lists 'jj restore' argv; it cannot be edited and is now qualified.",
+  "A-N2": "RESOLVED and verified: nix/rust-workspace.nix:62-63 cargoSources includes craneLib.fileset.commonCargoSources (all *.rs); Cargo members crates/* and tests only; report lines 174-177 accurate.",
+  "A-N3": "RESOLVED: citation to R2 A a01_fingerprints.json (sha256 3fd27ad0..., recorded in every execution.json) accurate: 336/341 units, root [default,native], test vs build root profiles differ. Fresh corroboration: all six build-cache artifacts still byte-identical to the retained ELFs and their fingerprint JSONs present.",
+  "A-N4": "RESOLVED: superseded roots labelled; round2 and round2-final dev roots unchanged since R2 A's after-guard (fresh).",
+  "A-N5": "RESOLVED: .ruff_cache removed by recorded rm/rmdir commands; ruff --no-cache and python -B used; no untracked files outside .jj/target/.local.",
+  "A-N6": "RESOLVED: baseline anchor pairs are pure self-comparisons (0 nonliteral, no native-anchor run in any baseline domain); receipt limit states no extra algebra credit.",
+  "R1_scope_A_items": "N1/N2 build-log gaps accurately retained; N4 historical closure inventoried; N7 no new pyc; N10 PDF reproduction (68ceeead...) still holds."
+ },
+ "verified": {
+  "candidate_delta": "87fa13a9 vs 78c0754c: exactly 15 paths (13 new round3 evidence/script files, new report, docs/developers.toml M); 87fa13a9 vs b9f78892: 36 A + 1 M, all under docs/. Cargo.lock/Cargo.toml/flake/nix/crates/tests/nix-ci.nix/AGENTS.md/CONTRIBUTING.typ/.github/justfile unchanged; nix-ci.nix top-level enable = false unchanged. Every delta blob equals disk.",
+  "prior_evidence_preservation": "Round-one target manifest (182) and docs manifest (7), R1 review manifest (1163), R2 A review manifest (246), round-two relied-on manifest (2828) all verify; round-two manifest 34136 entries verify except docs/developers.toml, whose recorded hash equals the round-two committed blob (intended round-three edit). All 37086 files in R2 A's after-guard (incl. superseded round2/round2-final roots and historical target) unchanged in SHA-256/mode/mtime with no new files.",
+  "round3_closure": "closure-final 27945 entries, frozen-before/after 21627 entries (equal maps, equal source hashes), development-before-v1 equal map, completed command manifest 144 (48 commands x 3), attempt manifest 6896: 0 mismatches. Every on-disk round-three file is covered except the 25 seal-time files (A3-N8). No .drv files. Each frozen root is fully inventoried (no extra/missing files). R2 B world old validators (42 copies) are byte-identical to round2/validate.py b468b3a4.",
+  "elf_kernel_compiler_chain": "Retained ELFs: historical exact 1ae86dce..., current exact 41c68004..., historical capture 588c9d1d..., current capture 473a80ed..., historical pristine c11977c0..., current pristine 13389956... (plus attempt1 capture ELFs 43c1216f/aaab1787). Exact ELFs embed rustc 1.98.1 (48a229cea 2026-09-01) and only their own Symbolica checkout (c78cffc / 1a1829b). Cargo.lock pins c78cffc20f318df1fce50539a587cbe8ffc717c0 (2b1ef4f0) and 1a1829b1f3d0a88b53b44085b3b9f34ef77945b3 (b9f78892 = 87fa13a9). Archived sources oracle_family_exact.rs ebf20ee5... and oracle_family_capture.rs a6ae13b6... equal the e814b6b4 and 5e61ef89 example blobs. Panic-classification lines 35/36 (parse unwraps), 44 (equality), 45 (post-parse safeguards -> unclassified/exit 3) match the archived source.",
+  "credited_runs": "541 credited validator executions under candidate/ (baseline 8, legacy 324, reviewer 42, domain 144, staged 13, anchor 8, infrastructure 2): all matched; 0 problems in invocation/execution/native records. All record final source hashes; all started after the last core-source write (common.py 02:30:08.847) and within 02:30:40-02:55:44; inputs_before == inputs_after == current disk; ELF before == after == expected; 890 native ELF processes whose pair-file and result hashes equal current disk and whose reasons match stdout/stderr (equal / inequality at line 44 / parse error at 35-36). Validator processes have both licence variables removed; only direct ELF children receive SYMBOLICA_LICENSE (common.run); old round-two validator reruns inject only into their own ELF children.",
+  "accounting": "Independent recount from per-run control/verdict files equals the receipt layers (runs, dispositions, stages, results.json SHA-256): controls 531 = legacy 324 (296 reject/28 accept) + reviewer 42 (38/4) + domain 144 (128/16) + staged 13 (11/2) + anchor 8 (8/0) = 481 reject + 50 accept, all intended; baseline 8 accept; infrastructure 2 harness-error (missing-input, missing-license) separate. Inside reviewer rows, 11 old-pipeline X-* reruns: 9 accept, 1 ct-incidence reject (exit 2), 1 KeyError harness error (exit 1), matching report lines 139-141 and not counted in the 531.",
+  "pair_binding": "For all 8 baseline domains, independent of the candidate parser: faithfulness texts equal mapped capture strings exactly with complete owner/port references (104/431/22/588 distinct texts); cross pairs one per owner (255/4004/40/3270), token-bound to capture strings; nonliteral 0/16/0/240 exactly the native-cross forward/reverse wraps; aggregate pairs one per graph and route (34/536/8/440) token-bound to prefactor x vertex x edge products and aggregates; cross-ports 24/1550/0/198 nontrivial; anchor pairs 510/8008/80/6540 all self-comparisons; summaries consistent. The five-spelling map used independently reproduces every historical faithfulness text exactly.",
+  "receipt_domain_records": "All 8 receipt domain/mode records equal summary.json, execution.json SHA-256 and elapsed time; None/Auto records identical except CT 'ct' occurrence lists (output order); CT rule counts V_36_CT 59 / V_135_CT 209 per route and mode.",
+  "documentation_render": "Pinned Typst 0.15.1 (0853d812...) reproduces round1.pdf 68ceeead..., round2.pdf 40b8075c..., round3.pdf dd9bc6a5... and HTML 009fa666/ff26d08e/7aff1512 byte-for-byte, with both the candidate wrapper (byte-identical to the retained main.typ) and a builder-style note-{i}.html wrapper. Builder rules re-implemented: exactly one leading <h2> equal to the registry title, no active elements/handlers/unsafe URLs; round3 has 2 <thead>. Rendered round3 table cells (77) equal receipt values. Negatives in private roots: altered title, second level-one heading, injected script element, and an altered receipt owner count are all detected; the unaltered private-root render equals the in-tree render.",
+  "schema_regeneration": "Retained build_schema.py, run in a private copy against symlinked frozen captures, regenerates schema.json with identical schema/scope/types/object_keys/rules and identical derivation-input hashes (96) modulo root path.",
+  "timeline": "Core source last writes: schema.json 01:58:15, validate.py 02:20:53, suite.py 02:28:06, common.py 02:30:08. Credited runs 02:30:40-02:55:43; frozen-before 02:30:38-02:32:03 (A3-N2); finalize 02:57:11; frozen-after 02:57:12-02:58:40; report_checks 02:58:35; final inventory 03:02:14 (supplement after inventory.py fix at 03:02:14.421); bookmark 03:03:13 (jj snapshot created 87fa13a9); seal 03:03:40. jj snapshots show the candidate @ already carried final common.py/suite.py/validate.py/schema.json at 02:36:35 and unchanged thereafter.",
+  "licence_records": "Only source-code mentions of the variable names occur in round-three records (freeze/diff); no value scan was performed (would require loading the licence)."
+ },
+ "source_elf_bindings": {
+  "historical_exact": {
+   "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-family-historical/target/oracle-numerator-family-diagnosis/adapted-historical/bin/oracle_family_exact",
+   "sha256": "1ae86dcea5b15ff04274a91557a28dcf75d57154ee0882ed51d5c86c53be81b6",
+   "kernel": "c78cffc20f318df1fce50539a587cbe8ffc717c0",
+   "build_cache": "/common/build-cache/lcnbr/06/12b3a0b47b0581/dev-optim/examples/oracle_family_exact-7ddc98c7f356751c (identical now)"
+  },
+  "current_exact": {
+   "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-diagnosis/adapted-current/bin/oracle_family_exact",
+   "sha256": "41c68004f03d25e4a47c58cc5d2bb75e04af39cebe525313fab67873127108ae",
+   "kernel": "1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
+   "build_cache": "/common/build-cache/lcnbr/11/9bdc63100f0b07/dev-optim/examples/oracle_family_exact-2f31a20f35ddffc3 (identical now)"
+  },
+  "archived_source": "docs/architecture/evidence/generation-oracle-family-diagnosis/round2/archived-sources/oracle_family_exact.rs ebf20ee5fd6520c319f4f7f904ca2de13f083cb09f978a190833d800c143d969",
+  "compiler": "rustc 1.98.1 (48a229cea 2026-09-01)",
+  "features": "R2 A a01: per route one closure (336 historical / 341 current units) shared by pristine/capture/exact; root [default, native]; pristine (test) vs capture/exact (build) root profile hashes differ. Cache corroboration, not original build logs.",
+  "docs_builder_binary": "target/debug/alphal00p-docs-builder 8e8ea464630ac710f5143dfabf468b189c4370ad0cb7e9023e92f996657d639f, built 2026-10-29T20:56:25Z in this workspace (embedded root path), rustc 1.98.1; crate unchanged since f2640286 (2026-10-27) through 87fa13a9; reported failure location lib.rs:1806 matches source. Corroborated, not rebuilt or rerun here."
+ },
+ "coverage": {
+  "fresh_in_this_review": [
+   "before/after guards (tracked bytes/modes of both workspaces via git blob ids, untracked scan, jj op head/bookmarks/workspaces, git refs, main .git HEAD/index/packed-refs/FETCH_HEAD, three working-copy states, lstat+ctime of all evidence roots, full SHA-256 of the round-three root)",
+   "candidate delta and blob hashes; policy/CI/lock invariance",
+   "complete round-three closure/manifest rehash and coverage audit",
+   "round-one, R1, R2 A and round-two manifest verification; comparison with R2 A's 37086-entry after-guard",
+   "per-run audit of all 541 credited executions and 890 native ELF records; independent accounting recount",
+   "independent pair-to-capture binding for the 8 baseline domains",
+   "ELF hashes, embedded compiler/kernel strings, archived-source and lock-pin checks; build-cache artifact rehash",
+   "docs-builder gate re-implementation over 4 committed trees plus live prose gate",
+   "pinned Typst PDF + semantic HTML re-render, builder-rule validation, receipt-table binding and 4 altered-report negatives",
+   "schema.json regeneration from retained build_schema.py (private copy)",
+   "jj op-log/snapshot and mtime chronology of sources; capture run-state comparison; mode-order mapping check; R1/R2 B mutant content comparison; cited-evidence existence checks"
+  ],
+  "reused_cited_not_rerun": [
+   "R2 A fresh pristine/capture producer reruns (a03) and capture-to-dump bindings",
+   "R2 A fingerprint closure qualification (a01) and panic-location source binding (a07)",
+   "R2 B reversed raw-mutant runs (b1_old_pairs_reversed.json) and R1 p24",
+   "R1 p11 / R2 A a05 / R2 B None/Auto and CT derivations (cross-check only)"
+  ],
+  "not_done_by_design": [
+   "no re-execution of the validator, controls or any ELF (Scope B owns semantic/control reruns); the licence was never loaded",
+   "no Nix eval/build/develop or store command",
+   "no run of the docs-builder binary (writes temp dirs under target/)",
+   "no full licence-value leak scan"
+  ]
+ },
+ "execution": {
+  "python": "/nix/store/4168xqs4l5jbfc7xyi9zrhdhszx0pnlb-python3-3.13.16/bin/python3 -I -B",
+  "typst": "/nix/store/2szzba1xi60y8i3qcyxwvgq2i6w9iy5s-typst-0.15.1/bin/typst",
+  "licence_and_nix": "SYMBOLICA_LICENSE and SYMBOLICA_LICENSE_SIGNED unset in the shell and removed from every review subprocess; no ELF run, so no licence use; no Nix invocation.",
+  "commands": "commands.json (exact argv per step, UTC times); scripts/ (all review scripts); logs/; results/a01..a09; renders/"
+ },
+ "guards": {
+  "before": "guards/before (03:12:27; summary SHA-256 80570c46...)",
+  "after": "guards/after (03:39:33; summary SHA-256 a88b0524...)",
+  "result": "results/a09_guard_compare.txt: no differences. jj op head 80a63d62...; all bookmarks/workspaces; git refs; main .git HEAD/index/packed-refs/FETCH_HEAD; working-copy metadata of candidate, historical and main; tracked bytes/modes (4275 and 3551 entries, 0 mismatches, 0 untracked outside .jj/target/.local); every evidence root (incl. R1, R2 A, R2 B dirs, round1/round2/round2-final/round2-candidate/round3, historical target, target/debug, dev-optim, generated) unchanged by lstat incl. ctime; round-three root unchanged by full SHA-256. No unrelated shared activity on these objects in the window."
+ },
+ "limits": [
+  "Documentation/provenance verdict only; semantic correctness of predicates, native faithfulness and the additive witness is Scope B.",
+  "Captured producer facts are inherited from round one and R2 A's fresh reruns; nothing was re-executed here.",
+  "Cargo fingerprints and panic locations are corroboration, not original build logs; the original final ELF build logs remain absent.",
+  "Docs-builder results come from a re-implementation of its gates plus the candidate's retained builder log; the full builder is not green (inherited).",
+  "Bounded to the eight named domains; no grouped, other-row, pool 8/32, migration, expectation, MAIN or WP3 conclusion."
+ ],
+ "cross_scope_notes_for_root": [
+  "If Scope B finds a semantic closure stated in the report false, report lines 37-86 and the matching receipt/disposition rows must be corrected; this acceptance then excludes those statements.",
+  "Running report_checks.py or the docs builder on the live tree walks .local/: its first gate currently lists the 8 inherited HTML paths plus R2 B's commands.md. This review left no .md/.html/.typ/.rs files in its directory (HTML renders archived as tar; wrappers stored as *.typ.txt).",
+  "A3-N3: the None/Auto statement depends on qualification/mode-order.json, which is not cited by the receipt."
+ ],
+ "retained_artifacts": "This directory (54 MB): review.json, commands.json, review-manifest.sha256, scripts/, results/ (a01-a09), guards/ (before/after summaries and per-root details), renders/ (3 PDFs + html-bundles-and-negatives.tar), snapshots/ (report, dispositions, freeze.json, render-validation.json, registry.json, task registry entries, receipt without domain detail, command ledger, jj op log, interactive-error record), scratch/ (wrapper *.typ.txt, AST source versions *.py.txt, schema-world private copy with symlinks to frozen captures and regenerated schema.json). Kept for root aggregation; safe to delete afterwards. Removed: the private /tmp render directory. No review process remains."
+}

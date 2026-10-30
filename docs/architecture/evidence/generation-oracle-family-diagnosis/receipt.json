@@ -1,0 +1,79 @@
+{
+  "schema": 1,
+  "title": "Four ungrouped oracle numerator family certificates",
+  "date": "2026-10-29",
+  "status": "CANDIDATE_CERTIFICATES_STOP_FOR_NEW_INDEPENDENT_REVIEW",
+  "scope": {
+    "cases": ["qed_eemm_L1", "ctorder_qcd_uugg_L1", "sm_eemm_L0", "ym_g6_L0"],
+    "independent_domains": true,
+    "class_reference": "Classes::None returned by classes::check and asserted against the historical Row",
+    "class_comparison": "Classes::Auto captured and proved independently",
+    "pool": 1,
+    "excluded": ["other 65 ungrouped rows", "all 9 grouped rows", "pools 8/32", "migration", "expectation changes", "production fixes", "general physical correctness"]
+  },
+  "sources": {
+    "historical": {"commit": "2b1ef4f07a44bc061bcc97c378bbdd9c41cb0e94", "kernel": "c78cffc20f318df1fce50539a587cbe8ffc717c0", "workspace": "/shared/lcnbr/dev/gammaloop/generation-oracle-family-historical", "lock_sha256": "29abed8df55accfd70d23546274008d42a694c26018b58c7a76bba2e907604b5"},
+    "current": {"commit": "b9f788922341e7bde2e801a054423ae70ed7e9ae", "kernel": "1a1829b1f3d0a88b53b44085b3b9f34ef77945b3", "workspace": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families", "lock_sha256": "0d896231393016a4df0ac9a8a2b8eddee545b4a8d62bc87cdfbd1f2e3230a2cd"},
+    "compiler": "rustc 1.98.1 (48a229ceaefd4985c50990b14116b6d856af0985), cargo 1.98.1 (797e8a9bc), native default features",
+    "adapter_source_sha256": "a6ae13b6df94a8e044ff2f01f3f6e53eb2a871cee48daed241d5a5fb23349497",
+    "exact_checker_source_sha256": "ebf20ee5fd6520c319f4f7f904ca2de13f083cb09f978a190833d800c143d969"
+  },
+  "preflight_correction": {
+    "historical_preflight_json_sha256": "9722fa0a07d3f349d6b8317acd859f4cda9d9cf2f0b34a911d0f8f39b6dd3219",
+    "historical_preflight_typ_sha256": "f065f47aed87418f6520852be6ff45220f930a8dd5782227ae62044d8bb4c9e2",
+    "correction": "Both exact common harnesses return the Classes::None particle reference to main::check after comparing Auto against it. The approved three-row certificate binds source-level request construction, captured model/options/grouping/report, run environment and payloads; it did not serialize Request or Run. The four new adapters do serialize Request and record Run separately as execution state."
+  },
+  "pristine_controls": {
+    "environment": "FEYNKIT_ORACLE_THREADS=1; built-in FEYNKIT_ORACLE_DUMP set to task-owned route; record, diagnostic, update, force-pass and child flags explicitly unset; no CARGO_TARGET_DIR override; private license loaded when not already exported",
+    "command": "nix develop -c cargo test --locked --profile dev-optim -p feynkit-generator --test generation_oracle <case> -- --exact --test-threads 1 --nocapture",
+    "historical": {"elf_sha256": "c11977c051addcb77c5ae9d4639be1af15092cd73eac6797c2a1357da5576988", "results": {"qed_eemm_L1": "pass", "ctorder_qcd_uugg_L1": "pass", "sm_eemm_L0": "pass", "ym_g6_L0": "pass"}},
+    "current": {"elf_sha256": "133899560973c3b824a1fde41061c0cf32995438434436567f1bfaa035d9d7ba", "results": {"qed_eemm_L1": "numerator-only assertion failure", "ctorder_qcd_uugg_L1": "numerator-only assertion failure", "sm_eemm_L0": "numerator-only assertion failure", "ym_g6_L0": "numerator-only assertion failure"}},
+    "assertion_boundary": "For each current row, the displayed diagram/topology/assignment counts, inverse symmetry, weight, symmetry histogram, content/name/ID digests equal the historical Row and only numerator FNV differs."
+  },
+  "capture_contract": {
+    "inputs": "Byte-exact old/current model JSON, serialized Request JSON per class mode, numerator options, Grouping::None and explicit Run debug state.",
+    "graph_binding": "Complete multiplicity-preserving unique full CanonicalDiagramKey join; graph ID/name/aut/basis/overall factor and all non-expression physical payload fields exact.",
+    "owner_binding": "Exact positional two-element edge tuples, incidence, particle/rule/cut/routing/source fields, all vertex/edge/numerator/prefactor/projector paths, producer-decoded expressions, ordered live typed ports and current serialized interfaces where present.",
+    "proof": "Only five immutable symbols.rs constructor spellings are mapped. Every remaining nonliteral local pair and every already-factorized graph numerator is parsed completely and compared as an exact Atom independently under both locked kernels. No expansion, distribution, trace, sample or parameter substitution.",
+    "classes": "None and Auto were captured and proved separately. QED, SM and YM payloads are byte-identical within each route. CT-order has the same complete canonical-key/ID/payload domain with only eight generated names differing; both modes receive independent graph/owner proofs."
+  },
+  "families": [
+    {"case":"qed_eemm_L1","status":"COMPLETED_CANDIDATE","graphs":17,"owners":255,"axes":524,"permuted_owners":24,"unique_nonliteral_local_pairs":0,"first_raw_difference":{"graph":"31892f26a4758104f83d42635404fe95","owner":"vertex:0"},"first_nonliteral_pair":null,"classification":"historical cooked-index encoding versus current native typed-axis order plus source-verified constructor/interface spelling; producer decoding makes every local expression literal and the 24 explicit port permutations are bijective","factorized_graph_pairs_per_mode_per_kernel":17,"capture_bytes_current_both_modes":1283966,"observed_current_millis":{"None":{"prepare":0,"build":9},"Auto":{"prepare":4,"build":8}}},
+    {"case":"ctorder_qcd_uugg_L1","status":"COMPLETED_CANDIDATE","graphs":268,"owners":4004,"axes":13736,"permuted_owners":1550,"unique_nonliteral_local_pairs":11,"first_raw_difference":{"graph":"02577f90e5d28d2219254af4fca93960","owner":"vertex:0"},"first_nonliteral_pair":{"graph":"06defc798ffe231099823311da250f97","owner":"vertex:2"},"classification":"typed-axis transport and exact local canonical tensor symmetry after verified constructor spelling; no physical local-value difference found","ct_provenance":{"rules":["V_135_CT","V_36_CT"],"couplings":["GC_10_CT","GC_11_CT"],"coupling_order":["CT",1],"selected_interaction_ids":[0,1,2,3,4,5,6,7,8,9,10]},"factorized_graph_pairs_per_mode_per_kernel":268,"capture_bytes_current_both_modes":34559266,"observed_current_millis":{"None":{"prepare":5,"build":58},"Auto":{"prepare":4,"build":60}}},
+    {"case":"sm_eemm_L0","status":"COMPLETED_CANDIDATE","graphs":4,"owners":40,"axes":56,"permuted_owners":0,"unique_nonliteral_local_pairs":0,"first_raw_difference":{"graph":"27fc833cec05648c11784f27e7518598","owner":"vertex:0"},"first_nonliteral_pair":null,"classification":"producer encoding and verified constructor/interface spelling only in this four-graph domain; ordered typed ports and all producer-decoded local values are literal","factorized_graph_pairs_per_mode_per_kernel":4,"capture_bytes_current_both_modes":293838,"observed_current_millis":{"None":{"prepare":2,"build":4},"Auto":{"prepare":0,"build":2}}},
+    {"case":"ym_g6_L0","status":"COMPLETED_CANDIDATE","graphs":220,"owners":3270,"axes":10880,"permuted_owners":198,"unique_nonliteral_local_pairs":179,"first_raw_difference":{"graph":"192c43dc5cc4b23ea11189ed587e6e97","owner":"vertex:0"},"first_nonliteral_pair":{"graph":"0fd0f59de6011720526b3a67df19768a","owner":"vertex:1"},"classification":"typed-axis transport plus exact local Yang--Mills tensor symmetry after verified constructor spelling; all 179 unique pairs and 220 factorized graphs are exact in both kernels","factorized_graph_pairs_per_mode_per_kernel":220,"capture_bytes_current_both_modes":40704488,"observed_current_millis":{"None":{"prepare":4,"build":82},"Auto":{"prepare":4,"build":86}}}
+  ],
+  "controls": {
+    "exact_expression": "Every nonliteral local and graph pair rejects sign, coefficient-times-two and power-two corruptions through the full parser/equality path in both kernels.",
+    "structural_negative": ["edge tuple truncation", "expression at incidence path", "rule mismatch", "routing mismatch", "source overall-factor mismatch", "duplicate owner", "missing owner", "owner swap", "port dimension", "port variance", "port occurrence", "aggregate/local chain", "model mismatch", "malformed JSON"],
+    "positive": "Explicit occurrence-preserving typed-axis permutations only; no general owner rename or metadata normalization is admitted."
+  },
+  "validation": {
+    "json": "receipt, source inventory, capture validation and adversarial results parse successfully",
+    "typst": {"result":"pass","pdf_sha256":"68ceeead6fed33384d935b7b607442a6316c548e909e803200ee5b6c3106591a"},
+    "capture_validator": "pass for all four cases in None and Auto",
+    "exact_checker": "pass for every nonliteral local and factorized graph pair under both locked kernels",
+    "docs_builder": "exit 1 only for eight pre-existing retained mark-geometry HTML paths outside this task; no family-diagnosis path was reported"
+  },
+  "failed_attempts": [
+    "Initial adapter compile used the private feynkit_graph::SymbolicTensor path and nonexistent to_dense method; corrected to the existing idenso::tensor::SymbolicTensor owner and expression().",
+    "A rustfmt invocation traversed the historical path module and mechanically reformatted census.rs; the file was restored exactly from @- before the final adapted build.",
+    "First enhanced direct-ELF capture omitted the license export and aborted under restricted concurrent licensing; both failed adapted binaries are retained as oracle_family_capture-attempt1 and receive no evidence credit."
+  ],
+  "evidence": {
+    "raw_current": "target/oracle-numerator-family-diagnosis/adapted-current",
+    "raw_historical": "../generation-oracle-family-historical/target/oracle-numerator-family-diagnosis/adapted-historical",
+    "proof": "target/oracle-numerator-family-diagnosis/proof",
+    "capture_validator": "docs/architecture/evidence/generation-oracle-family-diagnosis/validate-captures.py",
+    "adversarial_validator": "docs/architecture/evidence/generation-oracle-family-diagnosis/adversarial-controls.py",
+    "adapted_current_elf_sha256": {"capture":"473a80ede10d0cd0b6b12d880683ed7ee45948a42dc33a2bb65c32b824db0ad8","exact":"41c68004f03d25e4a47c58cc5d2bb75e04af39cebe525313fab67873127108ae"},
+    "adapted_historical_elf_sha256": {"capture":"588c9d1d00527bcbd6744dd67b27def8470bfce1968f52dee87b192349a40bc4","exact":"1ae86dcea5b15ff04274a91557a28dcf75d57154ee0882ed51d5c86c53be81b6"}
+  },
+  "limits": [
+    "Each result is bounded to its named case, exact model/request/options, Grouping::None, Classes mode and pool 1.",
+    "Capture-bound graph keys, routing, factors and model values are not promoted to independent general physics theorems.",
+    "No conclusion transfers among the four families or to any other oracle row.",
+    "No migration, expectation update, production change or kernel change is authorized.",
+    "Pool 8/32, grouped membership and combined-head integration remain untested here."
+  ]
+}

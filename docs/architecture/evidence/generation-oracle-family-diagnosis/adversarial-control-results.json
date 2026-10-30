@@ -1,0 +1,68 @@
+{
+  "schema": 1,
+  "negative": [
+    {
+      "name": "edge tuple shape",
+      "rejected": true
+    },
+    {
+      "name": "expression field at incidence path",
+      "rejected": true
+    },
+    {
+      "name": "vertex rule mismatch",
+      "rejected": true
+    },
+    {
+      "name": "routing mismatch",
+      "rejected": true
+    },
+    {
+      "name": "source overall-factor mismatch",
+      "rejected": true
+    },
+    {
+      "name": "duplicate owner",
+      "rejected": true
+    },
+    {
+      "name": "missing owner",
+      "rejected": true
+    },
+    {
+      "name": "owner payload swap",
+      "rejected": true
+    },
+    {
+      "name": "typed-port dimension",
+      "rejected": true
+    },
+    {
+      "name": "typed-port variance",
+      "rejected": true
+    },
+    {
+      "name": "typed-port occurrence",
+      "rejected": true
+    },
+    {
+      "name": "aggregate/local chain",
+      "rejected": true
+    },
+    {
+      "name": "model identity",
+      "rejected": true
+    },
+    {
+      "name": "malformed JSON",
+      "rejected": true
+    }
+  ],
+  "positive": [
+    {
+      "name": "typed-axis permutation",
+      "accepted": true,
+      "qualification": "Only the explicit occurrence-preserving bijection is accepted; no owner rename is claimed."
+    }
+  ]
+}

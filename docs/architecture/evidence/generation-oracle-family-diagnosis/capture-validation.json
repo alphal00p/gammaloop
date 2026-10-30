@@ -1,0 +1,184 @@
+{
+  "schema": 1,
+  "results": [
+    {
+      "case": "qed_eemm_L1",
+      "mode": "None",
+      "graphs": 17,
+      "owners": 255,
+      "axes": 524,
+      "permuted_owners": 24,
+      "nonliteral_unique_local_pairs": 0,
+      "input_sha256": {
+        "model.json": "a1e0237b57dfc6093c868ec88b664327a50d4877239692c8e5d68df5cfc33138",
+        "request.json": "9528a407e56b5aaacf07537a66fcdeec939d8829763a5fe582db58e2dd786274",
+        "options.json": "902f9700155918f019896a8345c5d3ebabee98f119140346ef913a8771e08925",
+        "grouping.json": "30a0924a3360be687d1df9fcbbfdff62c01bc0fd14036ab9076cf7f451568666"
+      },
+      "ct_order_detail": null
+    },
+    {
+      "case": "qed_eemm_L1",
+      "mode": "Auto",
+      "graphs": 17,
+      "owners": 255,
+      "axes": 524,
+      "permuted_owners": 24,
+      "nonliteral_unique_local_pairs": 0,
+      "input_sha256": {
+        "model.json": "a1e0237b57dfc6093c868ec88b664327a50d4877239692c8e5d68df5cfc33138",
+        "request.json": "9c1feeb220e916ec59100381b183c1b3998702143182696679cd3f4b6f549a72",
+        "options.json": "902f9700155918f019896a8345c5d3ebabee98f119140346ef913a8771e08925",
+        "grouping.json": "30a0924a3360be687d1df9fcbbfdff62c01bc0fd14036ab9076cf7f451568666"
+      },
+      "ct_order_detail": null
+    },
+    {
+      "case": "ctorder_qcd_uugg_L1",
+      "mode": "None",
+      "graphs": 268,
+      "owners": 4004,
+      "axes": 13736,
+      "permuted_owners": 1550,
+      "nonliteral_unique_local_pairs": 11,
+      "input_sha256": {
+        "model.json": "e8dd0e13fea1045e3ce738ba4fbf7204dfaf9fb612fb355e73594fbaf954dc1e",
+        "request.json": "ebc0d8fa9bfb5d70aafc92626af1dfe0e70490d964d5dfe70a0a9c17559fdf0a",
+        "options.json": "902f9700155918f019896a8345c5d3ebabee98f119140346ef913a8771e08925",
+        "grouping.json": "30a0924a3360be687d1df9fcbbfdff62c01bc0fd14036ab9076cf7f451568666"
+      },
+      "ct_order_detail": {
+        "ct_rules": [
+          "V_135_CT",
+          "V_36_CT"
+        ],
+        "ct_couplings": [
+          "GC_10_CT",
+          "GC_11_CT"
+        ],
+        "selected_vertex_interactions": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10
+        ]
+      }
+    },
+    {
+      "case": "ctorder_qcd_uugg_L1",
+      "mode": "Auto",
+      "graphs": 268,
+      "owners": 4004,
+      "axes": 13736,
+      "permuted_owners": 1550,
+      "nonliteral_unique_local_pairs": 11,
+      "input_sha256": {
+        "model.json": "e8dd0e13fea1045e3ce738ba4fbf7204dfaf9fb612fb355e73594fbaf954dc1e",
+        "request.json": "e88d819cf617c592ff8ce5da58fddcf593b2834f66c210d50684d12e8730a4b1",
+        "options.json": "902f9700155918f019896a8345c5d3ebabee98f119140346ef913a8771e08925",
+        "grouping.json": "30a0924a3360be687d1df9fcbbfdff62c01bc0fd14036ab9076cf7f451568666"
+      },
+      "ct_order_detail": {
+        "ct_rules": [
+          "V_135_CT",
+          "V_36_CT"
+        ],
+        "ct_couplings": [
+          "GC_10_CT",
+          "GC_11_CT"
+        ],
+        "selected_vertex_interactions": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10
+        ]
+      }
+    },
+    {
+      "case": "sm_eemm_L0",
+      "mode": "None",
+      "graphs": 4,
+      "owners": 40,
+      "axes": 56,
+      "permuted_owners": 0,
+      "nonliteral_unique_local_pairs": 0,
+      "input_sha256": {
+        "model.json": "862b05a0e841275ee4c4d2534519fa6a4b4143e973b7bc9459a6e0189d41f1f0",
+        "request.json": "7a1767884a927de232df8d8a9fa06bade86820de10cbafee6da338e5021099f2",
+        "options.json": "902f9700155918f019896a8345c5d3ebabee98f119140346ef913a8771e08925",
+        "grouping.json": "30a0924a3360be687d1df9fcbbfdff62c01bc0fd14036ab9076cf7f451568666"
+      },
+      "ct_order_detail": null
+    },
+    {
+      "case": "sm_eemm_L0",
+      "mode": "Auto",
+      "graphs": 4,
+      "owners": 40,
+      "axes": 56,
+      "permuted_owners": 0,
+      "nonliteral_unique_local_pairs": 0,
+      "input_sha256": {
+        "model.json": "862b05a0e841275ee4c4d2534519fa6a4b4143e973b7bc9459a6e0189d41f1f0",
+        "request.json": "c43cced42430b6e52010496b5e7e9a3da7f5838c600e8e8ccc59b0a8b30585ee",
+        "options.json": "902f9700155918f019896a8345c5d3ebabee98f119140346ef913a8771e08925",
+        "grouping.json": "30a0924a3360be687d1df9fcbbfdff62c01bc0fd14036ab9076cf7f451568666"
+      },
+      "ct_order_detail": null
+    },
+    {
+      "case": "ym_g6_L0",
+      "mode": "None",
+      "graphs": 220,
+      "owners": 3270,
+      "axes": 10880,
+      "permuted_owners": 198,
+      "nonliteral_unique_local_pairs": 179,
+      "input_sha256": {
+        "model.json": "cecb61a579d96bd974fd2c362a3d26cac3f04c13a16dca478e1474e7b609cd72",
+        "request.json": "f7309c659c0373baab4717788534da6503811d45181a2900398bef28930ee839",
+        "options.json": "902f9700155918f019896a8345c5d3ebabee98f119140346ef913a8771e08925",
+        "grouping.json": "30a0924a3360be687d1df9fcbbfdff62c01bc0fd14036ab9076cf7f451568666"
+      },
+      "ct_order_detail": null
+    },
+    {
+      "case": "ym_g6_L0",
+      "mode": "Auto",
+      "graphs": 220,
+      "owners": 3270,
+      "axes": 10880,
+      "permuted_owners": 198,
+      "nonliteral_unique_local_pairs": 179,
+      "input_sha256": {
+        "model.json": "cecb61a579d96bd974fd2c362a3d26cac3f04c13a16dca478e1474e7b609cd72",
+        "request.json": "058fc9278a691bc5f9a9d7472acbace96b2d5f5f1a895aa7d180ce83cb88be74",
+        "options.json": "902f9700155918f019896a8345c5d3ebabee98f119140346ef913a8771e08925",
+        "grouping.json": "30a0924a3360be687d1df9fcbbfdff62c01bc0fd14036ab9076cf7f451568666"
+      },
+      "ct_order_detail": null
+    }
+  ],
+  "spellings": {
+    "gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:q}::Q": "gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q",
+    "gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:k}::K": "gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::K",
+    "gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:p}::P": "gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::P",
+    "gammalooprs::{spenso::index,spenso::index-label:e}::edge": "gammalooprs::{spenso::index}::edge",
+    "gammalooprs::{spenso::index,spenso::index-label:v}::vertex": "gammalooprs::{spenso::index}::vertex"
+  }
+}

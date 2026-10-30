@@ -1,0 +1,931 @@
+{
+  "schema": 1,
+  "title": "Four certified numerator oracle migrations",
+  "status": "SEPARATE_PREPARATION_CANDIDATE_REQUIRES_NEW_INDEPENDENT_MIGRATION_REVIEW",
+  "certificate": {
+    "revision": "87fa13a93b1c0b3e5792fd56937486ad962b2b55",
+    "checkpoint": "generation-oracle-family-approved",
+    "approvals": [
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-migration/approval-a.json",
+        "sha256": "45482a7440a8dd5bb808d41176b40b9950865c344fb03f07510411e025783bc8",
+        "verdict": "APPROVED_SCOPE_A_WITH_NONBLOCKING_NOTES"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-migration/approval-b.json",
+        "sha256": "6ceec9c3de1180b4901f9bca6548589adb16b4688e97e162177a61d864f0792d",
+        "verdict": "APPROVED_SCOPE_B_WITH_NONBLOCKING_FINDINGS"
+      }
+    ],
+    "scope": "four separate cases x None/Auto, Grouping None, pool1, both historical/current locked kernels"
+  },
+  "migration_scope": {
+    "cases": [
+      "qed_eemm_L1",
+      "ctorder_qcd_uugg_L1",
+      "sm_eemm_L0",
+      "ym_g6_L0"
+    ],
+    "runtime_pools": [
+      1,
+      8,
+      32
+    ],
+    "runtime_kernel": "1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
+    "other_rows": "all other74 of remaining78 MAIN rows unchanged and uncertified",
+    "MAIN": "not imported or executed"
+  },
+  "rows": [
+    {
+      "case": "qed_eemm_L1",
+      "expected": {
+        "diagrams": 17,
+        "topologies": 10,
+        "assignments": 17,
+        "content": 7422309700345920757,
+        "numerators": 17554620949685432680,
+        "named": 10592316861553909751,
+        "ids": 2145380692827460863,
+        "inverse_symmetry": [
+          17,
+          1
+        ],
+        "weights": [
+          1,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            17
+          ]
+        ]
+      },
+      "historical": {
+        "diagrams": 17,
+        "topologies": 10,
+        "assignments": 17,
+        "inverse_symmetry": [
+          17,
+          1
+        ],
+        "weights": [
+          1,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            17
+          ]
+        ],
+        "content": 7422309700345920757,
+        "numerators": 17554620949685432680,
+        "named": 10592316861553909751,
+        "ids": 2145380692827460863
+      },
+      "current": {
+        "diagrams": 17,
+        "topologies": 10,
+        "assignments": 17,
+        "inverse_symmetry": [
+          17,
+          1
+        ],
+        "weights": [
+          1,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            17
+          ]
+        ],
+        "content": 7422309700345920757,
+        "numerators": 4064195188384296888,
+        "named": 10592316861553909751,
+        "ids": 2145380692827460863
+      },
+      "old_literal": "0xf39e8abed0a17168",
+      "new_literal": "0x3866ebfda57f6fb8"
+    },
+    {
+      "case": "ctorder_qcd_uugg_L1",
+      "expected": {
+        "diagrams": 268,
+        "topologies": 32,
+        "assignments": 268,
+        "content": 3739432559396318766,
+        "numerators": 2504967841048222849,
+        "named": 14366692940614832948,
+        "ids": 116655280719852808,
+        "inverse_symmetry": [
+          251,
+          1
+        ],
+        "weights": [
+          13,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            234
+          ],
+          [
+            2,
+            34
+          ]
+        ]
+      },
+      "historical": {
+        "diagrams": 268,
+        "topologies": 32,
+        "assignments": 268,
+        "inverse_symmetry": [
+          251,
+          1
+        ],
+        "weights": [
+          13,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            234
+          ],
+          [
+            2,
+            34
+          ]
+        ],
+        "content": 3739432559396318766,
+        "numerators": 2504967841048222849,
+        "named": 14366692940614832948,
+        "ids": 116655280719852808
+      },
+      "current": {
+        "diagrams": 268,
+        "topologies": 32,
+        "assignments": 268,
+        "inverse_symmetry": [
+          251,
+          1
+        ],
+        "weights": [
+          13,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            234
+          ],
+          [
+            2,
+            34
+          ]
+        ],
+        "content": 3739432559396318766,
+        "numerators": 4212057454336633711,
+        "named": 14366692940614832948,
+        "ids": 116655280719852808
+      },
+      "old_literal": "0x22c36efac374dc81",
+      "new_literal": "0x3a743bf033456b6f"
+    },
+    {
+      "case": "sm_eemm_L0",
+      "expected": {
+        "diagrams": 4,
+        "topologies": 1,
+        "assignments": 4,
+        "content": 10929955570424177348,
+        "numerators": 8956477622741602688,
+        "named": 13842947773127443770,
+        "ids": 10495501204288162602,
+        "inverse_symmetry": [
+          4,
+          1
+        ],
+        "weights": [
+          -4,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            4
+          ]
+        ]
+      },
+      "historical": {
+        "diagrams": 4,
+        "topologies": 1,
+        "assignments": 4,
+        "inverse_symmetry": [
+          4,
+          1
+        ],
+        "weights": [
+          -4,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            4
+          ]
+        ],
+        "content": 10929955570424177348,
+        "numerators": 8956477622741602688,
+        "named": 13842947773127443770,
+        "ids": 10495501204288162602
+      },
+      "current": {
+        "diagrams": 4,
+        "topologies": 1,
+        "assignments": 4,
+        "inverse_symmetry": [
+          4,
+          1
+        ],
+        "weights": [
+          -4,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            4
+          ]
+        ],
+        "content": 10929955570424177348,
+        "numerators": 13848782818041491456,
+        "named": 13842947773127443770,
+        "ids": 10495501204288162602
+      },
+      "old_literal": "0x7c4bccf1c63f9180",
+      "new_literal": "0xc030c29958e57000"
+    },
+    {
+      "case": "ym_g6_L0",
+      "expected": {
+        "diagrams": 220,
+        "topologies": 220,
+        "assignments": 220,
+        "content": 16241761859322678488,
+        "numerators": 17125905016321110622,
+        "named": 600665664770254046,
+        "ids": 5335496870149672531,
+        "inverse_symmetry": [
+          220,
+          1
+        ],
+        "weights": [
+          220,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            220
+          ]
+        ]
+      },
+      "historical": {
+        "diagrams": 220,
+        "topologies": 220,
+        "assignments": 220,
+        "inverse_symmetry": [
+          220,
+          1
+        ],
+        "weights": [
+          220,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            220
+          ]
+        ],
+        "content": 16241761859322678488,
+        "numerators": 17125905016321110622,
+        "named": 600665664770254046,
+        "ids": 5335496870149672531
+      },
+      "current": {
+        "diagrams": 220,
+        "topologies": 220,
+        "assignments": 220,
+        "inverse_symmetry": [
+          220,
+          1
+        ],
+        "weights": [
+          220,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            220
+          ]
+        ],
+        "content": 16241761859322678488,
+        "numerators": 14358221921182706788,
+        "named": 600665664770254046,
+        "ids": 5335496870149672531
+      },
+      "old_literal": "0xedab6fe01ae6725e",
+      "new_literal": "0xc742a6c3a2526c64"
+    }
+  ],
+  "audit": {
+    "approved": "87fa13a93b1c0b3e5792fd56937486ad962b2b55",
+    "changed_code_paths": [
+      "crates/feynkit-generator/tests/generation_oracle/main.rs"
+    ],
+    "changed_lines": [
+      242,
+      293,
+      300,
+      368
+    ],
+    "patch_sha256": "c136076c87dd3f6ae5b7ceced353e6bb82a0e333625cec65810a5b2aafed3097",
+    "new_main_sha256": "3459e671163389a5dba83b990efa6d2f6d784e83e644bd1a213df0a746c35a98",
+    "outer_manifest": {
+      "verdict": "EXPECTED_FAILURE",
+      "mismatches": [
+        "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/developers.toml"
+      ],
+      "credit": 0,
+      "qualification": "original guard not disabled; approved donor registry verified by immutable commit; portable semantic/capture/control replay is separate"
+    },
+    "old_main_sha256": "499b49e4d5b58f9796e79e8393399ddc5e3fee24062fe36ae590dffd7bd18aa8",
+    "three_xs_rows": "byte-preserved at THIS approved preparation base; MAIN values deliberately not imported",
+    "reconciliation": "apply only four-literal.patch to freshly qualified MAIN; no main.rs transplant"
+  },
+  "matrix": {
+    "old": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-family-migration/runtime-final/old/results.json",
+      "sha256": "9e6200c27842be40e9a36157f06abeeb017da4fae156b501fb2035d4d58522a0",
+      "runs": 12,
+      "selected": 12,
+      "passed": 0,
+      "failed": 12,
+      "ignored": 0,
+      "per_case_pool": [
+        {
+          "case": "qed_eemm_L1",
+          "pool": 1,
+          "selected": 1,
+          "passed": 0,
+          "failed": 1,
+          "ignored": 0,
+          "filtered": 182
+        },
+        {
+          "case": "qed_eemm_L1",
+          "pool": 8,
+          "selected": 1,
+          "passed": 0,
+          "failed": 1,
+          "ignored": 0,
+          "filtered": 182
+        },
+        {
+          "case": "qed_eemm_L1",
+          "pool": 32,
+          "selected": 1,
+          "passed": 0,
+          "failed": 1,
+          "ignored": 0,
+          "filtered": 182
+        },
+        {
+          "case": "ctorder_qcd_uugg_L1",
+          "pool": 1,
+          "selected": 1,
+          "passed": 0,
+          "failed": 1,
+          "ignored": 0,
+          "filtered": 182
+        },
+        {
+          "case": "ctorder_qcd_uugg_L1",
+          "pool": 8,
+          "selected": 1,
+          "passed": 0,
+          "failed": 1,
+          "ignored": 0,
+          "filtered": 182
+        },
+        {
+          "case": "ctorder_qcd_uugg_L1",
+          "pool": 32,
+          "selected": 1,
+          "passed": 0,
+          "failed": 1,
+          "ignored": 0,
+          "filtered": 182
+        },
+        {
+          "case": "sm_eemm_L0",
+          "pool": 1,
+          "selected": 1,
+          "passed": 0,
+          "failed": 1,
+          "ignored": 0,
+          "filtered": 182
+        },
+        {
+          "case": "sm_eemm_L0",
+          "pool": 8,
+          "selected": 1,
+          "passed": 0,
+          "failed": 1,
+          "ignored": 0,
+          "filtered": 182
+        },
+        {
+          "case": "sm_eemm_L0",
+          "pool": 32,
+          "selected": 1,
+          "passed": 0,
+          "failed": 1,
+          "ignored": 0,
+          "filtered": 182
+        },
+        {
+          "case": "ym_g6_L0",
+          "pool": 1,
+          "selected": 1,
+          "passed": 0,
+          "failed": 1,
+          "ignored": 0,
+          "filtered": 182
+        },
+        {
+          "case": "ym_g6_L0",
+          "pool": 8,
+          "selected": 1,
+          "passed": 0,
+          "failed": 1,
+          "ignored": 0,
+          "filtered": 182
+        },
+        {
+          "case": "ym_g6_L0",
+          "pool": 32,
+          "selected": 1,
+          "passed": 0,
+          "failed": 1,
+          "ignored": 0,
+          "filtered": 182
+        }
+      ]
+    },
+    "new": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-family-migration/runtime-final/new/results.json",
+      "sha256": "01a05d502bdd79c2620a62f5924ffb20f453a526d99e06b30dc9502a201b3d91",
+      "runs": 12,
+      "selected": 12,
+      "passed": 12,
+      "failed": 0,
+      "ignored": 0,
+      "per_case_pool": [
+        {
+          "case": "qed_eemm_L1",
+          "pool": 1,
+          "selected": 1,
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0,
+          "filtered": 182
+        },
+        {
+          "case": "qed_eemm_L1",
+          "pool": 8,
+          "selected": 1,
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0,
+          "filtered": 182
+        },
+        {
+          "case": "qed_eemm_L1",
+          "pool": 32,
+          "selected": 1,
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0,
+          "filtered": 182
+        },
+        {
+          "case": "ctorder_qcd_uugg_L1",
+          "pool": 1,
+          "selected": 1,
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0,
+          "filtered": 182
+        },
+        {
+          "case": "ctorder_qcd_uugg_L1",
+          "pool": 8,
+          "selected": 1,
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0,
+          "filtered": 182
+        },
+        {
+          "case": "ctorder_qcd_uugg_L1",
+          "pool": 32,
+          "selected": 1,
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0,
+          "filtered": 182
+        },
+        {
+          "case": "sm_eemm_L0",
+          "pool": 1,
+          "selected": 1,
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0,
+          "filtered": 182
+        },
+        {
+          "case": "sm_eemm_L0",
+          "pool": 8,
+          "selected": 1,
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0,
+          "filtered": 182
+        },
+        {
+          "case": "sm_eemm_L0",
+          "pool": 32,
+          "selected": 1,
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0,
+          "filtered": 182
+        },
+        {
+          "case": "ym_g6_L0",
+          "pool": 1,
+          "selected": 1,
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0,
+          "filtered": 182
+        },
+        {
+          "case": "ym_g6_L0",
+          "pool": 8,
+          "selected": 1,
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0,
+          "filtered": 182
+        },
+        {
+          "case": "ym_g6_L0",
+          "pool": 32,
+          "selected": 1,
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0,
+          "filtered": 182
+        }
+      ]
+    }
+  },
+  "runtime_validation": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-family-migration/validation.json",
+    "sha256": "a1ee9a1be5090470ae972a5032067bdec78ceb57dc335422341185731f800e1f",
+    "pairs": 12,
+    "observer_mode_bindings": 48
+  },
+  "provenance": {
+    "old": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-family-migration/provenance/old.json",
+      "sha256": "9adf105c25ea7bc44b72bd924d3e1ae015b4f17518cecffbb5cab5806f9c0044",
+      "elf_sha256": "133899560973c3b824a1fde41061c0cf32995438434436567f1bfaa035d9d7ba",
+      "dependency_units": 341
+    },
+    "new": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-family-migration/provenance/new.json",
+      "sha256": "1b639d64803984e007f2a8f67fa9b80fbc591ac4fc89cd0311cfec6ec9dd2ab6",
+      "elf_sha256": "49ed27bd4a26c706d1785a7444e2de4001669a22e77d5d545b8987fe594a9df2",
+      "dependency_units": 341
+    },
+    "observer": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-family-migration/provenance/observer.json",
+      "sha256": "69d8b21a41c28f99fd8d38a5219bcff71b6ebe81a33444b51fb5d6f37118e5c8",
+      "elf_sha256": "521c787912fe7bfe0ba6b28c046d3c9b571904defa215f808cea04d971cafa57",
+      "dependency_units": 341
+    }
+  },
+  "feature_qualification": {
+    "assertion_old_new": "complete dependency units, root/compiler/profile/features/flags/config compare exactly; not merely root default/native",
+    "observer_dependency_projection_equal": true,
+    "observer_root_profile": 15396524706607348604,
+    "assertion_root_profile": 1235621381506040755,
+    "observer_note": "build vs test root profiles differ; raw complete per-unit records retained; byte-identical emitted/cache ELF binding"
+  },
+  "proof_replay": [
+    {
+      "kind": "baseline",
+      "count": 8,
+      "dispositions": {
+        "accept": 8
+      },
+      "sha256": "0af7f799fb381a86cd54d730819e84f86fac526f1870e9dde611e53c2e26313f"
+    },
+    {
+      "kind": "legacy",
+      "count": 324,
+      "dispositions": {
+        "reject": 296,
+        "accept": 28
+      },
+      "sha256": "f60613d338a6ca5a8ca604a9981edb8da7148451e33351d8d16b99349552bafc"
+    },
+    {
+      "kind": "reviewer",
+      "count": 42,
+      "dispositions": {
+        "reject": 38,
+        "accept": 4
+      },
+      "sha256": "740f3c1100772cc46c04cd6ddd3d5273e56ddf6c4ab50dc826713622e130246e"
+    },
+    {
+      "kind": "domain",
+      "count": 144,
+      "dispositions": {
+        "reject": 128,
+        "accept": 16
+      },
+      "sha256": "bd9678e046057405e6e7844df2aa69d20765d22f98b15ea960df09f00c72716e"
+    },
+    {
+      "kind": "staged",
+      "count": 13,
+      "dispositions": {
+        "reject": 11,
+        "accept": 2
+      },
+      "sha256": "0096bd1437f97f0aa7028b776376d3b4277f6f817df99ad7b35b8fa2fc4ceabd"
+    },
+    {
+      "kind": "anchor",
+      "count": 8,
+      "dispositions": {
+        "reject": 8
+      },
+      "sha256": "5740c92e195507da6c6302437d87a6cf728d24da45d5ff1c043794dd03611b72"
+    },
+    {
+      "kind": "infrastructure",
+      "count": 2,
+      "dispositions": {
+        "harness-error": 2
+      },
+      "sha256": "f60522afc3f09683120bad38d581f529e35a6412690a5bc5db2e336ca9b25f42"
+    }
+  ],
+  "mode_order_reference": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-round3/qualification/mode-order.json",
+    "sha256": "c81316ccf47a141d23e31919f4d74e95b735601106cfa8c7074d0a613da9c1c3"
+  },
+  "negative_controls": [
+    {
+      "name": "zero-selection",
+      "command": {
+        "argv": [
+          "/home/lcnbr/.nix-profile/bin/bwrap",
+          "--ro-bind",
+          "/",
+          "/",
+          "--dev",
+          "/dev",
+          "--proc",
+          "/proc",
+          "--bind",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-family-migration/negatives/zero-selection",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-family-migration/negatives/zero-selection",
+          "--bind",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-family-migration/negatives/zero-selection/tmp",
+          "/tmp",
+          "--bind",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-family-migration/negatives/zero-selection/cache",
+          "/home/lcnbr/.cache",
+          "--unshare-net",
+          "--die-with-parent",
+          "--",
+          "/nix/store/4168xqs4l5jbfc7xyi9zrhdhszx0pnlb-python3-3.13.16/bin/python3",
+          "-B",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-migration/runtime_exec.py",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-family-migration/bin/generation_oracle",
+          "migration_nonexistent_exact_selection",
+          "--exact",
+          "--test-threads",
+          "1",
+          "--nocapture"
+        ],
+        "cwd": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families",
+        "started_utc": "2026-10-30T04:22:26.912661+00:00",
+        "sources_before": {
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-migration/build.py": "c29f45ba05add505fba0b9a3f869ed279b4d6a1b765ed63b332e8aa0d4bd1f7f",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-migration/common.py": "892cef5ba621394be3fc12c08f8be91b9eef27bddd5864528cf4bd6db6d9c79c",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-migration/derive.py": "9079fde632a9dd536549a4c6b6cc050bb92e9f50be5f45dceeb3d0f540abdbb0",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-migration/fingerprints.py": "695845c8c739c17aa95ff20abce221ac257f8a540ae3737f80fcdc25ce3fe1c4",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-migration/negatives.py": "f600b2f9425ee6a2985e99cfdfdf81c67772cfdd5aec1d3185e91361ba7b9531",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-migration/preserve.py": "4dae8678da24c1152ee8a2e151f83336c57c967edf8f53ef8d7fc925a13ae769",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-migration/replay.py": "78ed87bcf2b16ff5612b646c330d3e648bc04475cf6b9a53a647342ffb3a1427",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-migration/retain_observer.py": "d12e93b4a47f9406861bebb6295055049e37e090723ec03610e8a6bad0970a01",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-migration/runtime.py": "ef8f268081bfdc7e383eaec552a33aff54a949832706e68ea2d0e6f2e28d0277",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-migration/runtime_exec.py": "e32b63eafd19e1f70a0181d922ab0b22833df23dd8cb2df79cd185b66aa4d42c",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-migration/validate.py": "8f803c5aa7e2ace97b97443b7dfe2f25fb59f7100dfe904879dfc953ea416918"
+        },
+        "inputs_before": {
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-family-migration/bin/generation_oracle": "49ed27bd4a26c706d1785a7444e2de4001669a22e77d5d545b8987fe594a9df2",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-migration/runtime_exec.py": "e32b63eafd19e1f70a0181d922ab0b22833df23dd8cb2df79cd185b66aa4d42c",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-migration/runtime.py": "ef8f268081bfdc7e383eaec552a33aff54a949832706e68ea2d0e6f2e28d0277"
+        },
+        "tool_sha256_before": "3f4227c0fbbcf400a236eb7dde1a63b3a2feaa22187cb6026054444c58f8c535",
+        "environment": {
+          "both_license_variables": "absent; runtime_exec injects privately after sandbox entry",
+          "oracle_flags": {
+            "FEYNKIT_ORACLE_THREADS": "1"
+          },
+          "CARGO_TARGET_DIR": "unset; normal shell/cache only",
+          "TMPDIR": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-family-migration/negatives/zero-selection/tmp",
+          "XDG_CACHE_HOME": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-family-migration/negatives/zero-selection/cache",
+          "PYTHONDONTWRITEBYTECODE": "1"
+        },
+        "exit": 0,
+        "ended_utc": "2026-10-30T04:22:27.039193+00:00",
+        "elapsed_seconds": 0.12471535103395581,
+        "inputs_after": {
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-family-migration/bin/generation_oracle": "49ed27bd4a26c706d1785a7444e2de4001669a22e77d5d545b8987fe594a9df2",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-migration/runtime_exec.py": "e32b63eafd19e1f70a0181d922ab0b22833df23dd8cb2df79cd185b66aa4d42c",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-migration/runtime.py": "ef8f268081bfdc7e383eaec552a33aff54a949832706e68ea2d0e6f2e28d0277"
+        },
+        "tool_sha256_after": "3f4227c0fbbcf400a236eb7dde1a63b3a2feaa22187cb6026054444c58f8c535",
+        "sources_after": {
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-migration/build.py": "c29f45ba05add505fba0b9a3f869ed279b4d6a1b765ed63b332e8aa0d4bd1f7f",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-migration/common.py": "892cef5ba621394be3fc12c08f8be91b9eef27bddd5864528cf4bd6db6d9c79c",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-migration/derive.py": "9079fde632a9dd536549a4c6b6cc050bb92e9f50be5f45dceeb3d0f540abdbb0",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-migration/fingerprints.py": "695845c8c739c17aa95ff20abce221ac257f8a540ae3737f80fcdc25ce3fe1c4",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-migration/negatives.py": "f600b2f9425ee6a2985e99cfdfdf81c67772cfdd5aec1d3185e91361ba7b9531",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-migration/preserve.py": "4dae8678da24c1152ee8a2e151f83336c57c967edf8f53ef8d7fc925a13ae769",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-migration/replay.py": "78ed87bcf2b16ff5612b646c330d3e648bc04475cf6b9a53a647342ffb3a1427",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-migration/retain_observer.py": "d12e93b4a47f9406861bebb6295055049e37e090723ec03610e8a6bad0970a01",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-migration/runtime.py": "ef8f268081bfdc7e383eaec552a33aff54a949832706e68ea2d0e6f2e28d0277",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-migration/runtime_exec.py": "e32b63eafd19e1f70a0181d922ab0b22833df23dd8cb2df79cd185b66aa4d42c",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-migration/validate.py": "8f803c5aa7e2ace97b97443b7dfe2f25fb59f7100dfe904879dfc953ea416918"
+        },
+        "stdout_sha256": "470719c0586f5e9eea54b2b23e82a0836a47a53d9b50154b3e57df969f60ee03",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "selected": 0,
+      "admitted": false,
+      "reason": "actual libtest exit0 with selected0 violates the ordinary matrix's explicit nonzero selection predicate",
+      "credit": "none; diagnostic counterexample to treating exit0 as test acceptance"
+    },
+    {
+      "name": "record-mode-old-elf",
+      "command": {
+        "argv": [
+          "/home/lcnbr/.nix-profile/bin/bwrap",
+          "--ro-bind",
+          "/",
+          "/",
+          "--dev",
+          "/dev",
+          "--proc",
+          "/proc",
+          "--bind",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-family-migration/negatives/record-mode-old-elf",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-family-migration/negatives/record-mode-old-elf",
+          "--bind",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-family-migration/negatives/record-mode-old-elf/tmp",
+          "/tmp",
+          "--bind",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-family-migration/negatives/record-mode-old-elf/cache",
+          "/home/lcnbr/.cache",
+          "--unshare-net",
+          "--die-with-parent",
+          "--",
+          "/nix/store/4168xqs4l5jbfc7xyi9zrhdhszx0pnlb-python3-3.13.16/bin/python3",
+          "-B",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-migration/runtime_exec.py",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-diagnosis/pristine-current/bin/generation_oracle",
+          "qed_eemm_L1",
+          "--exact",
+          "--test-threads",
+          "1",
+          "--nocapture"
+        ],
+        "cwd": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families",
+        "started_utc": "2026-10-30T04:22:30.766609+00:00",
+        "sources_before": {
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-migration/build.py": "c29f45ba05add505fba0b9a3f869ed279b4d6a1b765ed63b332e8aa0d4bd1f7f",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-migration/common.py": "892cef5ba621394be3fc12c08f8be91b9eef27bddd5864528cf4bd6db6d9c79c",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-migration/derive.py": "9079fde632a9dd536549a4c6b6cc050bb92e9f50be5f45dceeb3d0f540abdbb0",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-migration/fingerprints.py": "695845c8c739c17aa95ff20abce221ac257f8a540ae3737f80fcdc25ce3fe1c4",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-migration/negatives.py": "f600b2f9425ee6a2985e99cfdfdf81c67772cfdd5aec1d3185e91361ba7b9531",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-migration/preserve.py": "4dae8678da24c1152ee8a2e151f83336c57c967edf8f53ef8d7fc925a13ae769",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-migration/replay.py": "78ed87bcf2b16ff5612b646c330d3e648bc04475cf6b9a53a647342ffb3a1427",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-migration/retain_observer.py": "d12e93b4a47f9406861bebb6295055049e37e090723ec03610e8a6bad0970a01",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-migration/runtime.py": "ef8f268081bfdc7e383eaec552a33aff54a949832706e68ea2d0e6f2e28d0277",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-migration/runtime_exec.py": "e32b63eafd19e1f70a0181d922ab0b22833df23dd8cb2df79cd185b66aa4d42c",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-migration/validate.py": "8f803c5aa7e2ace97b97443b7dfe2f25fb59f7100dfe904879dfc953ea416918"
+        },
+        "inputs_before": {
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-diagnosis/pristine-current/bin/generation_oracle": "133899560973c3b824a1fde41061c0cf32995438434436567f1bfaa035d9d7ba",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-migration/runtime_exec.py": "e32b63eafd19e1f70a0181d922ab0b22833df23dd8cb2df79cd185b66aa4d42c",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-migration/runtime.py": "ef8f268081bfdc7e383eaec552a33aff54a949832706e68ea2d0e6f2e28d0277"
+        },
+        "tool_sha256_before": "3f4227c0fbbcf400a236eb7dde1a63b3a2feaa22187cb6026054444c58f8c535",
+        "environment": {
+          "both_license_variables": "absent; runtime_exec injects privately after sandbox entry",
+          "oracle_flags": {
+            "FEYNKIT_ORACLE_THREADS": "1",
+            "FEYNKIT_ORACLE_RECORD": "1"
+          },
+          "CARGO_TARGET_DIR": "unset; normal shell/cache only",
+          "TMPDIR": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-family-migration/negatives/record-mode-old-elf/tmp",
+          "XDG_CACHE_HOME": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-family-migration/negatives/record-mode-old-elf/cache",
+          "PYTHONDONTWRITEBYTECODE": "1"
+        },
+        "exit": 0,
+        "ended_utc": "2026-10-30T04:22:30.975973+00:00",
+        "elapsed_seconds": 0.20802671206183732,
+        "inputs_after": {
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-diagnosis/pristine-current/bin/generation_oracle": "133899560973c3b824a1fde41061c0cf32995438434436567f1bfaa035d9d7ba",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-migration/runtime_exec.py": "e32b63eafd19e1f70a0181d922ab0b22833df23dd8cb2df79cd185b66aa4d42c",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-migration/runtime.py": "ef8f268081bfdc7e383eaec552a33aff54a949832706e68ea2d0e6f2e28d0277"
+        },
+        "tool_sha256_after": "3f4227c0fbbcf400a236eb7dde1a63b3a2feaa22187cb6026054444c58f8c535",
+        "sources_after": {
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-migration/build.py": "c29f45ba05add505fba0b9a3f869ed279b4d6a1b765ed63b332e8aa0d4bd1f7f",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-migration/common.py": "892cef5ba621394be3fc12c08f8be91b9eef27bddd5864528cf4bd6db6d9c79c",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-migration/derive.py": "9079fde632a9dd536549a4c6b6cc050bb92e9f50be5f45dceeb3d0f540abdbb0",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-migration/fingerprints.py": "695845c8c739c17aa95ff20abce221ac257f8a540ae3737f80fcdc25ce3fe1c4",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-migration/negatives.py": "f600b2f9425ee6a2985e99cfdfdf81c67772cfdd5aec1d3185e91361ba7b9531",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-migration/preserve.py": "4dae8678da24c1152ee8a2e151f83336c57c967edf8f53ef8d7fc925a13ae769",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-migration/replay.py": "78ed87bcf2b16ff5612b646c330d3e648bc04475cf6b9a53a647342ffb3a1427",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-migration/retain_observer.py": "d12e93b4a47f9406861bebb6295055049e37e090723ec03610e8a6bad0970a01",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-migration/runtime.py": "ef8f268081bfdc7e383eaec552a33aff54a949832706e68ea2d0e6f2e28d0277",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-migration/runtime_exec.py": "e32b63eafd19e1f70a0181d922ab0b22833df23dd8cb2df79cd185b66aa4d42c",
+          "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-migration/validate.py": "8f803c5aa7e2ace97b97443b7dfe2f25fb59f7100dfe904879dfc953ea416918"
+        },
+        "stdout_sha256": "4b590e286ea37b647caeea7b9bf9c16c7cd876a10bf179dd3378c4515fa841a2",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "selected": 1,
+      "admitted": false,
+      "reason": "actual old ELF exits0 in record mode by skipping the Row assertion; RECORD presence disqualifies pass credit independently of selection",
+      "credit": "none; diagnostic counterexample to treating exit0 as test acceptance"
+    }
+  ],
+  "qualifications": {
+    "interfaces_ports_locality": "R3B-N1/N3: interface presence and typed-port ORDER capture-bound; theorem is named multiset transport, not free-index inference, locality or positional-consumer correctness. Migration strictly compares actual complete observer bytes/fields with approved captures and joins complete assertion payloads. Observer metadata is not in-memory instrumentation of the assertion ELF.",
+    "Run_pool": "R3B-N2/A3-N7: capture.json Run debug text is provenance, unconsumed by semantic validator. Migration explicitly checks actual Some(1/8/32), class, Grouping None, prepared/built counts. Only pool1 is historically mathematically certified.",
+    "mapping": "R3B-N6: Q/edge/vertex only of five declared audited maps occur; K/P absent. Historical tagged spellings source-audited, not natively proved equivalent.",
+    "license": "R3B-N4: invalid/missing license can produce correct restricted-mode output; no license-validity theorem or inequality credit. Real private config used only at direct runtime exec, no network, private cache/tmp/state. Missing-license policy controls are infrastructure, not kernel inequalities.",
+    "predicate_coverage": "R3B-N5: baseline anchors are self-comparisons. Fresh committed 531 suite does not permanently cover all predicates; B's independent additional held-outs are preserved/cited, not claimed freshly rerun here.",
+    "mode_order_attribution": "A3-N3: old qualification artifact used final qualify.py with pre-final common.py a8610c37, 20261030T022846018000-final-qualify; A independently verified. Migration independently derives full correspondence from all fresh observations, then checks this certified mapping.",
+    "inventory_chronology": "A3-N1/N2: development-before-v1 is strictly pre-run with same map; frozen-before overlapped first runs, per-run guards close consumed-input boundary; closure-development-v1 superseded. New global preservation snapshot began after initial runtime/replay starts, not retroactively pre-run. Strict actual producer build and per-run inputs/ELFs guards retained.",
+    "original_history": "A3-N5/N6/N10: unrecorded source-edit/format/rename chronology not reconstructed; original B1 mutants content-identical reserializations, not byte-identical. Some migration helper versions evolved during preparation; actual versions/raw commands and pre-format copies retained; not all interactive edits are a transcript.",
+    "build_gaps": "Original final producer build logs absent; independent A compiler/source/fingerprint corroboration retained with limits. New qualified build has its actual source-before/after, Cargo/compiler log and retained ELF. Mutable normal-cache old artifact was replaced by ordinary compilation; retained old ELF and old fingerprint snapshot preserved.",
+    "inherited_docs": "A3-N4/N9: full builder first stops at eight inherited HTML plus preserved R2B commands.md; masked unknown sunset owners precede unregistered source46. No unrelated fixes. Original registry review_ref singleton and historical prose remain unchanged.",
+    "seal_limits": "A3-N8: original seal self-reference exclusions retained. New detached seal/manifests explicitly exclude their own active record, not mathematical evidence.",
+    "source_sets": "Root preflight static findings only: archives outside Cargo auto-targets and scoped generator/Idenso/core compile source, but affect broad commonCargoSources and broad build/fmt/test/WASM/docs sets; docs runtime entire docs tree. Archive paths/bytes unchanged; no filter repair, no general NAR/derivation identity claim. Actual combined sources require later qualification."
+  },
+  "MAIN_context": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-family-migration-preflight-30f-87fa-20261030/preflight.json",
+    "retained_copy": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-family-migration/main-preflight-context.json",
+    "sha256": "3dc3a7f7b3bff69249feec35e5c7f54439b0b03ae7db711777dbb8f6820a22e9",
+    "authority": "read-only30f context, not import approval; fresh future four-line patch and combined review required"
+  },
+  "preparation_history": {
+    "credited_runtime": "runtime-final/",
+    "supporting_previous_runtime": "runtime/; final flags hardened with explicit update/force unsets and repeated24 selections",
+    "failed": "three stalled Nix clients interrupted before Cargo/runtime; qualified inventory first failed on gitlink; first observer fingerprint lookup failed because normal cache forwards ELF path; no pass credit",
+    "retention": "all prior reviews, large pair/control evidence, raw outputs and failed attempts retained; no cache/store deletion"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "purpose": "Reproduce the unchanged retained round-one diagnostics explicitly, outside the active round-two Cargo target set. These commands are instructions only and were not run in round two.",
+  "current": {
+    "base": "b9f788922341e7bde2e801a054423ae70ed7e9ae",
+    "source_revision": "e814b6b4c3463d9aa1c018939365b624619af24b",
+    "overlay_argv": ["jj", "restore", "--from", "e814b6b4c3463d9aa1c018939365b624619af24b", "crates/feynkit-generator/examples/oracle_family_capture.rs", "crates/feynkit-generator/examples/oracle_family_exact.rs"]
+  },
+  "historical": {
+    "base": "2b1ef4f07a44bc061bcc97c378bbdd9c41cb0e94",
+    "source_revision": "5e61ef89f4df4e818884e40b8d0c46108eab75a8",
+    "overlay_argv": ["jj", "restore", "--from", "5e61ef89f4df4e818884e40b8d0c46108eab75a8", "crates/feynkit-generator/examples/oracle_family_capture.rs", "crates/feynkit-generator/examples/oracle_family_exact.rs"]
+  },
+  "source_sha256": {
+    "oracle_family_capture.rs": "a6ae13b6df94a8e044ff2f01f3f6e53eb2a871cee48daed241d5a5fb23349497",
+    "oracle_family_exact.rs": "ebf20ee5fd6520c319f4f7f904ca2de13f083cb09f978a190833d800c143d969"
+  },
+  "build_argv": ["env", "-u", "SYMBOLICA_LICENSE", "-u", "SYMBOLICA_LICENSE_SIGNED", "nix", "develop", "-c", "cargo", "build", "--locked", "--profile", "dev-optim", "-p", "feynkit-generator", "--example", "oracle_family_capture", "--example", "oracle_family_exact"],
+  "runtime": "Inject a private license only into direct retained ELF processes; never into Nix, argv, store derivations, or evidence. No CARGO_TARGET_DIR override. Capture only the four named domains with explicit case arguments and own output paths.",
+  "lint": "The archived observation wrapper includes a test-only census module; its round-one unused-import warnings are disclosed. It is absent from the active canonical all-target Cargo inventory. Production lint settings and census source are unchanged."
+}

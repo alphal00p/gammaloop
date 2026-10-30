@@ -1,0 +1,31 @@
+{
+  "schema": 1,
+  "historical": {
+    "revision": "2b1ef4f07a44bc061bcc97c378bbdd9c41cb0e94",
+    "files": {
+      "Cargo.lock": "29abed8df55accfd70d23546274008d42a694c26018b58c7a76bba2e907604b5",
+      "crates/feynkit-generator/tests/generation_oracle/main.rs": "a7d59e30a76bcb73f16f91221835ff1e076d00c78a6d40f266182f395ff7e16d",
+      "crates/feynkit-generator/tests/generation_oracle/classes.rs": "49f6c1cbac7e775a9dc534ef4aac7edd1fb102a96a765b78f831b1a729840edb",
+      "crates/feynkit-generator/tests/generation_oracle/cases.rs": "f9b7e9f80c7d0102c2d2c3b8c319edab7a1c4883109da4e231c6f1189bca00a8",
+      "crates/feynkit-generator/tests/generation_oracle/census.rs": "9820eeaae584966add033d5e934c30cf660e6821ef4c318a52cd22b5be7782c9",
+      "crates/feynkit-generator/src/generation.rs": "6984bc440cb00fa2d7e0a84ee6a321309dbbc80923583afd8ab26768d2c36d5e",
+      "crates/feynkit-graph/src/symbols.rs": "0a13fee39574d1f8a819cdac3ecc0c9607a266b765907fcae0eaaaf146da174b",
+      "crates/idenso/src/cook.rs": "2ec8560b1cb5fca5c97c93a201d35a70d6db7040fef1dd2a3679833cf70b916a",
+      "crates/feynkit-model/src/model.rs": "7f1d7610e0968dbe15dd5df4c2c69365f75758d5f5fe3353c344e7404d83ac24"
+    }
+  },
+  "current": {
+    "revision": "b9f788922341e7bde2e801a054423ae70ed7e9ae",
+    "files": {
+      "Cargo.lock": "0d896231393016a4df0ac9a8a2b8eddee545b4a8d62bc87cdfbd1f2e3230a2cd",
+      "crates/feynkit-generator/tests/generation_oracle/main.rs": "499b49e4d5b58f9796e79e8393399ddc5e3fee24062fe36ae590dffd7bd18aa8",
+      "crates/feynkit-generator/tests/generation_oracle/classes.rs": "f605e4436ff0a2225155840fdad2065d50e74fd88b34979faaa97f7153a3e4fe",
+      "crates/feynkit-generator/tests/generation_oracle/cases.rs": "e3ef8ec52578364ef24cf278965eaba2ec967f1f626c707bb7667c2834e319a2",
+      "crates/feynkit-generator/tests/generation_oracle/census.rs": "b46641d3c13dd70304a457ad4f884cedd486f188ce86dd92c73328a6b1da05d3",
+      "crates/feynkit-generator/src/generation.rs": "0e6f4a83632be8fc13633a66a7fc3ba68819b49e78fcbf26363dd0f5469c4042",
+      "crates/feynkit-graph/src/symbols.rs": "b580b7c70db4f11bf79fd02f8109a715c01b74d63a560a54d49868b8e5c4aa9d",
+      "crates/idenso/src/cook.rs": "6bf40b5bc5f015c1982967c3a610f0d70d67c8e0242ba1bd0628d18c8de16436",
+      "crates/feynkit-model/src/model.rs": "4434c92cf4698f318a7b6ad360a6b6a48ff91b0e6cc329cc52b594430ade13f1"
+    }
+  }
+}

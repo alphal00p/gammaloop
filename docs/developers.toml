@@ -3074,6 +3074,103 @@ topics = ["cff", "uv", "factorization"]
 review_triggers = ["crates/gammalooprs/src/**", "crates/three-dimensional-reps/src/**"]
 
 [[section.note]]
+id = "generation-oracle-family-migration"
+title = "Four certified numerator oracle migrations"
+summary = "Separate four-literal preparation with source-qualified old/new runtime and capture bindings; no MAIN integration."
+source = "docs/architecture/generation-oracle-family-migration.typ"
+kind = "Migration preparation record"
+status = "Approved four-literal preparation · combined MAIN validation pending review"
+lifecycle = "investigation"
+owner = "unassigned"
+reviewed_at = "2026-10-30"
+review_ref = "78d9b395b72a7c070daabc217bddcabb613c001c14f362d059bda1306bdc902a"
+evidence_revision = "87fa13a93b1c0b3e5792fd56937486ad962b2b55"
+products = ["feynkit", "gammaloop"]
+topics = ["generation", "oracles", "migration", "testing"]
+review_triggers = ["crates/feynkit-generator/tests/generation_oracle/main.rs", "docs/architecture/evidence/generation-oracle-family-migration/**"]
+
+
+[[section.note.scope]]
+path = "crates/feynkit-generator/tests/generation_oracle/main.rs"
+symbol = "qed_eemm_L1 certified numerator row"
+anchor = "    fast qed_eemm_L1:"
+end_anchor = "    fast qed_eemm_L2: Row { diagrams: 357, topologies: 116, assignments: 357, inverse_symmetry: (357, 1), weights: (57, 1), symmetry_factors: &[(1, 357)], content: 0x459953470ad8f543, numerators: 0xe5d00cfbb0473ed7, named: 0x04ccbdf50c929329, ids: 0x566e38b1fd985ea0 };"
+# Exact approved numerator-only migration; all other row fields/options unchanged.
+digest = "b486d48307d14f2df3438907461d0ab93db8c6ee"
+
+[[section.note.scope]]
+path = "crates/feynkit-generator/tests/generation_oracle/main.rs"
+symbol = "ctorder_qcd_uugg_L1 certified numerator row"
+anchor = "    fast ctorder_qcd_uugg_L1:"
+end_anchor = "    fast ctorder_qcd_vac_L3: Row { diagrams: 1298, topologies: 12, assignments: 1298, inverse_symmetry: (18965, 24), weights: (-3859, 24), symmetry_factors: &[(1, 431), (2, 601), (3, 14), (4, 177), (6, 30), (8, 33), (12, 3), (16, 5), (24, 1), (48, 3)], content: 0xcc01ea12aa514317, numerators: 0x5fd0f29cbe24355f, named: 0x1912ce16ab5de4c6, ids: 0x74aeeea5e0eb56f4 };"
+# Exact approved numerator-only migration; all other row fields/options unchanged.
+digest = "f64cddee976a2fa0d22c7e7805982875fb09022d"
+
+[[section.note.scope]]
+path = "crates/feynkit-generator/tests/generation_oracle/main.rs"
+symbol = "sm_eemm_L0 certified numerator row"
+anchor = "    fast sm_eemm_L0:"
+end_anchor = "    fast sm_eemm_L1: Row { diagrams: 464, topologies: 10, assignments: 464, inverse_symmetry: (925, 2), weights: (-205, 2), symmetry_factors: &[(1, 461), (2, 3)], content: 0x7d459f5367fbcba8, numerators: 0xdf611964612f3ec9, named: 0x7b2f048149dccbf3, ids: 0xa1e6a4f3cf7051f9 };"
+# Exact approved numerator-only migration; all other row fields/options unchanged.
+digest = "3ee0c943abdad923436d37cce999d994d70957fd"
+
+[[section.note.scope]]
+path = "crates/feynkit-generator/tests/generation_oracle/main.rs"
+symbol = "ym_g6_L0 certified numerator row"
+anchor = "    fast ym_g6_L0:"
+end_anchor = "    heavy ym_g7_L0: Row { diagrams: 2485, topologies: 2485, assignments: 2485, inverse_symmetry: (2485, 1), weights: (2485, 1), symmetry_factors: &[(1, 2485)], content: 0x057203fcdeaf182e, numerators: 0xdb59060eb8d155e8, named: 0x825ef5b96a66dc8d, ids: 0x54cd7d6e49c55438 };"
+# Exact approved numerator-only migration; all other row fields/options unchanged.
+digest = "27f3e85eb4b1c5d9cdb4e4e2a562d53d173d3e2c"
+[[section.note]]
+id = "generation-oracle-family-diagnosis"
+title = "Four ungrouped oracle numerator certificates: cross-route alignment and native faithfulness"
+summary = "Executable physical alignment, independently declared supported shape, native parse faithfulness and predicate-isolating controls for four separate frozen domains."
+source = "docs/architecture/generation-oracle-family-diagnosis-round3.typ"
+kind = "Correctness investigation"
+status = "Approved pool1 preparation certificate · separate MAIN integration under review"
+lifecycle = "investigation"
+owner = "unassigned"
+reviewed_at = "2026-10-30"
+review_ref = "45482a7440a8dd5bb808d41176b40b9950865c344fb03f07510411e025783bc8;6ceec9c3de1180b4901f9bca6548589adb16b4688e97e162177a61d864f0792d"
+products = ["feynkit", "gammaloop"]
+topics = ["generation", "oracles", "tensor-interfaces", "validation"]
+review_triggers = ["crates/feynkit-generator/src/**", "crates/feynkit-generator/tests/generation_oracle/**", "crates/feynkit-graph/src/**", "crates/idenso/src/cook.rs", "Cargo.lock"]
+
+[[section.note]]
+id = "generation-oracle-family-diagnosis-round1"
+title = "Four ungrouped oracle numerator family certificates"
+summary = "Preserved round-one candidate; independent review found certificate enforcement and adversarial-control gaps."
+source = "docs/architecture/generation-oracle-family-diagnosis.typ"
+kind = "Historical correctness investigation"
+status = "Superseded · BLOCKING_FINDINGS retained unchanged"
+lifecycle = "superseded"
+superseded_by = "generation-oracle-family-diagnosis"
+evidence_revision = "e814b6b4c3463d9aa1c018939365b624619af24b"
+owner = "unassigned"
+reviewed_at = "2026-10-29"
+review_ref = "0ec5a10aeae24bea52792f9d48700d81fb05a42f233bfe8e5e101eec300bf008"
+products = ["feynkit", "gammaloop"]
+topics = ["generation", "oracles", "validation"]
+review_triggers = ["docs/architecture/evidence/generation-oracle-family-diagnosis/**"]
+
+[[section.note]]
+id = "generation-oracle-family-diagnosis-round2"
+title = "Four ungrouped oracle numerator certificates: round-two evidence correction"
+summary = "Preserved round-two candidate; independent reviews support frozen mathematics but require cross-route completeness and reporting repair."
+source = "docs/architecture/generation-oracle-family-diagnosis-round2.typ"
+kind = "Historical correctness investigation"
+status = "Superseded · independent A/B findings retained unchanged"
+lifecycle = "superseded"
+superseded_by = "generation-oracle-family-diagnosis"
+evidence_revision = "78c0754c8fb732878123c02999ced3fc506c5a1d"
+owner = "unassigned"
+reviewed_at = "2026-10-30"
+review_ref = "fa8f82f97b08bb80c71cfcc4178a67c7bf381d10c55cbfd952bcb59dc5031f07"
+products = ["feynkit", "gammaloop"]
+topics = ["generation", "oracles", "validation"]
+review_triggers = ["docs/architecture/evidence/generation-oracle-family-diagnosis/round2/**"]
+
+[[section.note]]
 id = "phase-conventions"
 title = "Phase conventions and forward-cut conjugation"
 summary = "Raised-energy feature-stack record; numerical evidence applies to the revisions recorded in the note."

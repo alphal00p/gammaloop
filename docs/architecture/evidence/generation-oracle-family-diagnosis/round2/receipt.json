@@ -1,0 +1,338 @@
+{
+  "schema": 2,
+  "verdict": "CANDIDATE_ONLY_ROOT_TO_COMMISSION_REVIEW",
+  "date": "2026-10-30",
+  "round1": {
+    "bookmark": "generation-oracle-family-round1",
+    "revision": "e814b6b4c3463d9aa1c018939365b624619af24b",
+    "review_sha256": "0ec5a10aeae24bea52792f9d48700d81fb05a42f233bfe8e5e101eec300bf008"
+  },
+  "historical": {
+    "diagnostic_ref": "generation-oracle-family-historical-diagnostic",
+    "diagnostic_revision": "5e61ef89f4df4e818884e40b8d0c46108eab75a8",
+    "pristine_source": "2b1ef4f07a44bc061bcc97c378bbdd9c41cb0e94",
+    "workspace_left_pristine": true
+  },
+  "candidate_ref": "generation-oracle-family-round2",
+  "runtime_current": "b9f788922341e7bde2e801a054423ae70ed7e9ae",
+  "scope": {
+    "cases": [
+      "qed_eemm_L1",
+      "ctorder_qcd_uugg_L1",
+      "sm_eemm_L0",
+      "ym_g6_L0"
+    ],
+    "modes": [
+      "None",
+      "Auto"
+    ],
+    "pool": 1,
+    "grouping": "None",
+    "kernels": [
+      "c78cffc20f318df1fce50539a587cbe8ffc717c0",
+      "1a1829b1f3d0a88b53b44085b3b9f34ef77945b3"
+    ]
+  },
+  "families": [
+    {
+      "case": "qed_eemm_L1",
+      "status": "CORRECTED_CANDIDATE_PENDING_NEW_REVIEW",
+      "modes": {
+        "None": {
+          "graphs": 17,
+          "bound_pairs": 799,
+          "symbol_definitions": 25,
+          "execution": {
+            "argv": [
+              "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-diagnosis/round2/validate.py",
+              "--case",
+              "qed_eemm_L1",
+              "--mode",
+              "None",
+              "--out",
+              "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-round2-candidate/replay-final/baseline/qed_eemm_L1/None"
+            ],
+            "validator_sha256": "b468b3a4e394424c8b8add875d3e682ac80f9be9895c82bcc232fee7ac5e9fcb",
+            "python": "/nix/store/4168xqs4l5jbfc7xyi9zrhdhszx0pnlb-python3-3.13.16/bin/python3",
+            "elapsed_seconds": 0.36628946219570935,
+            "max_rss_kib": 36924
+          },
+          "controls": 40,
+          "nonliteral_cross_owner_instances": 0,
+          "nonliteral_cross_instances_literal_after_even_f_rotation": 0
+        },
+        "Auto": {
+          "graphs": 17,
+          "bound_pairs": 799,
+          "symbol_definitions": 25,
+          "execution": {
+            "argv": [
+              "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-diagnosis/round2/validate.py",
+              "--case",
+              "qed_eemm_L1",
+              "--mode",
+              "Auto",
+              "--out",
+              "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-round2-candidate/replay-final/baseline/qed_eemm_L1/Auto"
+            ],
+            "validator_sha256": "b468b3a4e394424c8b8add875d3e682ac80f9be9895c82bcc232fee7ac5e9fcb",
+            "python": "/nix/store/4168xqs4l5jbfc7xyi9zrhdhszx0pnlb-python3-3.13.16/bin/python3",
+            "elapsed_seconds": 0.360611239913851,
+            "max_rss_kib": 36904
+          },
+          "controls": 40,
+          "nonliteral_cross_owner_instances": 0,
+          "nonliteral_cross_instances_literal_after_even_f_rotation": 0
+        }
+      }
+    },
+    {
+      "case": "ctorder_qcd_uugg_L1",
+      "status": "CORRECTED_CANDIDATE_PENDING_NEW_REVIEW",
+      "modes": {
+        "None": {
+          "graphs": 268,
+          "bound_pairs": 12548,
+          "symbol_definitions": 27,
+          "execution": {
+            "argv": [
+              "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-diagnosis/round2/validate.py",
+              "--case",
+              "ctorder_qcd_uugg_L1",
+              "--mode",
+              "None",
+              "--out",
+              "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-round2-candidate/replay-final/baseline/ctorder_qcd_uugg_L1/None"
+            ],
+            "validator_sha256": "b468b3a4e394424c8b8add875d3e682ac80f9be9895c82bcc232fee7ac5e9fcb",
+            "python": "/nix/store/4168xqs4l5jbfc7xyi9zrhdhszx0pnlb-python3-3.13.16/bin/python3",
+            "elapsed_seconds": 9.121893814997748,
+            "max_rss_kib": 615964
+          },
+          "controls": 42,
+          "nonliteral_cross_owner_instances": 16,
+          "nonliteral_cross_instances_literal_after_even_f_rotation": 16
+        },
+        "Auto": {
+          "graphs": 268,
+          "bound_pairs": 12548,
+          "symbol_definitions": 27,
+          "execution": {
+            "argv": [
+              "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-diagnosis/round2/validate.py",
+              "--case",
+              "ctorder_qcd_uugg_L1",
+              "--mode",
+              "Auto",
+              "--out",
+              "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-round2-candidate/replay-final/baseline/ctorder_qcd_uugg_L1/Auto"
+            ],
+            "validator_sha256": "b468b3a4e394424c8b8add875d3e682ac80f9be9895c82bcc232fee7ac5e9fcb",
+            "python": "/nix/store/4168xqs4l5jbfc7xyi9zrhdhszx0pnlb-python3-3.13.16/bin/python3",
+            "elapsed_seconds": 9.223460871027783,
+            "max_rss_kib": 613896
+          },
+          "controls": 42,
+          "nonliteral_cross_owner_instances": 16,
+          "nonliteral_cross_instances_literal_after_even_f_rotation": 16
+        }
+      }
+    },
+    {
+      "case": "sm_eemm_L0",
+      "status": "CORRECTED_CANDIDATE_PENDING_NEW_REVIEW",
+      "modes": {
+        "None": {
+          "graphs": 4,
+          "bound_pairs": 128,
+          "symbol_definitions": 18,
+          "execution": {
+            "argv": [
+              "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-diagnosis/round2/validate.py",
+              "--case",
+              "sm_eemm_L0",
+              "--mode",
+              "None",
+              "--out",
+              "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-round2-candidate/replay-final/baseline/sm_eemm_L0/None"
+            ],
+            "validator_sha256": "b468b3a4e394424c8b8add875d3e682ac80f9be9895c82bcc232fee7ac5e9fcb",
+            "python": "/nix/store/4168xqs4l5jbfc7xyi9zrhdhszx0pnlb-python3-3.13.16/bin/python3",
+            "elapsed_seconds": 0.0847623161971569,
+            "max_rss_kib": 15392
+          },
+          "controls": 39,
+          "nonliteral_cross_owner_instances": 0,
+          "nonliteral_cross_instances_literal_after_even_f_rotation": 0
+        },
+        "Auto": {
+          "graphs": 4,
+          "bound_pairs": 128,
+          "symbol_definitions": 18,
+          "execution": {
+            "argv": [
+              "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-diagnosis/round2/validate.py",
+              "--case",
+              "sm_eemm_L0",
+              "--mode",
+              "Auto",
+              "--out",
+              "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-round2-candidate/replay-final/baseline/sm_eemm_L0/Auto"
+            ],
+            "validator_sha256": "b468b3a4e394424c8b8add875d3e682ac80f9be9895c82bcc232fee7ac5e9fcb",
+            "python": "/nix/store/4168xqs4l5jbfc7xyi9zrhdhszx0pnlb-python3-3.13.16/bin/python3",
+            "elapsed_seconds": 0.08315677894279361,
+            "max_rss_kib": 15396
+          },
+          "controls": 39,
+          "nonliteral_cross_owner_instances": 0,
+          "nonliteral_cross_instances_literal_after_even_f_rotation": 0
+        }
+      }
+    },
+    {
+      "case": "ym_g6_L0",
+      "status": "CORRECTED_CANDIDATE_PENDING_NEW_REVIEW",
+      "modes": {
+        "None": {
+          "graphs": 220,
+          "bound_pairs": 10250,
+          "symbol_definitions": 11,
+          "execution": {
+            "argv": [
+              "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-diagnosis/round2/validate.py",
+              "--case",
+              "ym_g6_L0",
+              "--mode",
+              "None",
+              "--out",
+              "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-round2-candidate/replay-final/baseline/ym_g6_L0/None"
+            ],
+            "validator_sha256": "b468b3a4e394424c8b8add875d3e682ac80f9be9895c82bcc232fee7ac5e9fcb",
+            "python": "/nix/store/4168xqs4l5jbfc7xyi9zrhdhszx0pnlb-python3-3.13.16/bin/python3",
+            "elapsed_seconds": 14.833410595078021,
+            "max_rss_kib": 944736
+          },
+          "controls": 41,
+          "nonliteral_cross_owner_instances": 240,
+          "nonliteral_cross_instances_literal_after_even_f_rotation": 240
+        },
+        "Auto": {
+          "graphs": 220,
+          "bound_pairs": 10250,
+          "symbol_definitions": 11,
+          "execution": {
+            "argv": [
+              "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-diagnosis/round2/validate.py",
+              "--case",
+              "ym_g6_L0",
+              "--mode",
+              "Auto",
+              "--out",
+              "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-round2-candidate/replay-final/baseline/ym_g6_L0/Auto"
+            ],
+            "validator_sha256": "b468b3a4e394424c8b8add875d3e682ac80f9be9895c82bcc232fee7ac5e9fcb",
+            "python": "/nix/store/4168xqs4l5jbfc7xyi9zrhdhszx0pnlb-python3-3.13.16/bin/python3",
+            "elapsed_seconds": 15.303911125054583,
+            "max_rss_kib": 936188
+          },
+          "controls": 41,
+          "nonliteral_cross_owner_instances": 240,
+          "nonliteral_cross_instances_literal_after_even_f_rotation": 240
+        }
+      }
+    }
+  ],
+  "validator_sha256": "b468b3a4e394424c8b8add875d3e682ac80f9be9895c82bcc232fee7ac5e9fcb",
+  "semantic_controls": {
+    "total": 324,
+    "matched": 324,
+    "by_stage": {
+      "schema": 64,
+      "payload-live-link": 16,
+      "raw-producer-binding": 8,
+      "exact-checker": 44,
+      "physical-capture": 24,
+      "input-identity": 16,
+      "groups": 16,
+      "complete": 28,
+      "port": 24,
+      "syntax": 48,
+      "symbol-definition": 28,
+      "json": 8
+    },
+    "parser_probes": 24,
+    "aggregate_predicate_controls": 8,
+    "B1_actual_mutants": 3
+  },
+  "definition_boundary": "Complete parsed whole-symbol tokens after only the five audited mappings; per-expression, per-route, cross-route and emitted-file consistency. Symbolica-normalized equality under identical attribute-bearing definitions, fresh processes per order/kernel. CT/YM nonliteral equalities depend on even cyclic f rotations.",
+  "derived": [
+    "complete payload/typed-owner domains",
+    "fixed owner/path and positional tuple schema",
+    "live decoded/payload links",
+    "current raw/live link",
+    "explicit named-index port bijections",
+    "singleton None group chains",
+    "factor-preserving intra-route aggregate product under both kernels",
+    "CT incident rule identities/couplings/degree one",
+    "CT None/Auto occurrence and group-index permutation"
+  ],
+  "capture_bound": [
+    "historical raw cooked expression and producer-decoding association anchored to actual frozen capture; decoded value additionally semantically anchored",
+    "graph incidence/routing/physical/model/request/factor values qualified by complete frozen records, not a general physics derivation",
+    "no positional downstream consumer theorem"
+  ],
+  "N1_N2": "No new diagnostic or pristine producer ELF compiled. Unchanged preserved round-one ELFs are replayed. Pinned development-shell preparation may realize ordinary documentation helpers with both license variables absent. Original final-build-log gaps remain explicitly attributed to reviewer reruns and source/compiler/kernel corroboration. attempt1 was a successful pre-decoding adapter; the later license-aborted enhanced attempt lacks a retained log.",
+  "N3": "Executable owner/payload domains, raw/live/payload linkage, singleton groups and aggregate product checks added; mirrored aggregate corruption rejects through the real checker, with direct aggregate-predicate controls retained.",
+  "N4": "Supplemental closure manifests cover complete relied-on current/historical evidence, review and preflight qualifications. Old manifests remain untouched.",
+  "N5": "Both routes derive the same None->Auto position permutation: 109->113,110->109,111->114,112->110,113->115,114->111,115->116,116->112; full keys/IDs and corresponding singleton group/member records are retained.",
+  "N6": "Both Rust diagnostics archived byte-for-byte outside ordinary Cargo targets. Reproducible overlay uses the frozen round-one/historical source paths; no production lint suppression or census edits.",
+  "N7": "New Python commands use -I -B. Own unnecessary tracked-evidence bytecode removed; frozen target bytecode covered by prior manifests retained as historical evidence.",
+  "N8": "CT occurrence records derived independently for both routes/modes: 59 V_36_CT and 209 V_135_CT, each graph exactly one CT-rule vertex, actual declared/used couplings with CT degree exactly one.",
+  "N9": "Port equivalence is for named-index contraction, not positional downstream consumers.",
+  "N10": "Pinned Typst report compiled, active canonical title/registry checked; direct existing docs-builder replay retains the same eight inherited mark-geometry HTML failures.",
+  "no_new_producer_run": true,
+  "no_new_diagnostic_build": true,
+  "no_new_independent_review_launched": true,
+  "syntax_and_controls": "Full-path controls use fresh staged inputs; setup failures cannot be counted as rejection. String-level parser mutations and actual kernel parses are distinct from the unchanged ELF's post-parse Atom corruptions. Literal parsed-tree identities do not require the ELF's power control (1^2=1).",
+  "development_attempts": [
+    "initial all-owner ELF run rejected a unit owner at its post-parse power control; literal AST identities now remain literal and only nonliteral pairs enter that checker",
+    "initial strict lexer omitted Unicode epsilon names and was extended to consume actual Unicode identifiers",
+    "first controls command had a syntax error before any mutant ran; preserved transcript and later attempt directory are not counted",
+    "pre-final-source baseline and controls are retained as development outputs; credited baseline and controls record the exact final validator SHA"
+  ],
+  "validation": {
+    "canonical_registry": {
+      "id": "generation-oracle-family-diagnosis",
+      "title": "Four ungrouped oracle numerator certificates: round-two evidence correction",
+      "summary": "Explicit symbol-definition identity, full-path controls and complete owner/aggregate provenance over four frozen independent domains.",
+      "source": "docs/architecture/generation-oracle-family-diagnosis-round2.typ",
+      "kind": "Correctness investigation",
+      "status": "Round-two correction candidate · root commissions NEW independent review",
+      "lifecycle": "investigation",
+      "owner": "unassigned",
+      "reviewed_at": "2026-10-30",
+      "review_ref": "pending",
+      "products": [
+        "feynkit",
+        "gammaloop"
+      ],
+      "topics": [
+        "generation",
+        "oracles",
+        "tensor-interfaces",
+        "validation"
+      ],
+      "review_triggers": [
+        "crates/feynkit-generator/src/**",
+        "crates/feynkit-generator/tests/generation_oracle/**",
+        "crates/feynkit-graph/src/**",
+        "crates/idenso/src/cook.rs",
+        "Cargo.lock"
+      ]
+    },
+    "pdf_sha256": "40b8075c334d80a8423ffaa1ccae195049d9b384203c055fdc5ab05c9258303d",
+    "frozen_evidence_files": 2828,
+    "source_invariance_records": 14
+  }
+}

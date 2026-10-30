@@ -1,0 +1,941 @@
+{
+ "schema": 1,
+ "title": "Round-three independent Scope B review: four-family oracle numerator certificate (mathematical and executable soundness, adversarial)",
+ "reviewer": "Claude Opus 5.5, independent Scope B reviewer; no subreviews launched; complementary to Peer A",
+ "date": "2026-10-30",
+ "scope": {
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families",
+  "historical_workspace": "/shared/lcnbr/dev/gammaloop/generation-oracle-family-historical",
+  "candidate": {
+   "revision": "87fa13a93b1c0b3e5792fd56937486ad962b2b55",
+   "bookmark": "generation-oracle-family-round3"
+  },
+  "preserved": {
+   "round2": "78c0754c8fb732878123c02999ced3fc506c5a1d",
+   "round1": "e814b6b4c3463d9aa1c018939365b624619af24b",
+   "historical_diagnostic": "5e61ef89f4df4e818884e40b8d0c46108eab75a8",
+   "historical_pristine_source": "2b1ef4f07a44bc061bcc97c378bbdd9c41cb0e94",
+   "current_runtime": "b9f788922341e7bde2e801a054423ae70ed7e9ae"
+  },
+  "domains": [
+   "qed_eemm_L1 (17 graphs, 255 owners, 524 axes per mode)",
+   "ctorder_qcd_uugg_L1 (268/4004/13736)",
+   "sm_eemm_L0 (4/40/56)",
+   "ym_g6_L0 (220/3270/10880)"
+  ],
+  "modes": [
+   "Classes None",
+   "Classes Auto"
+  ],
+  "grouping": "None",
+  "pool": "1 (capture metadata; see N2)",
+  "excluded": "grouped rows, other 78 MAIN rows, pool 8/32, expectation migration, MAIN/WP3 approval, performance, memory, distribution; provenance/manifests/docs are Scope A",
+  "method_constraints_observed": "no whole-graph expansion/distribution, traces, numerical or parameter-at-one substitutes; no Nix invocation; no tracked edits, snapshots, ref changes, fetch/push/upload/CI/PR"
+ },
+ "verdict": "APPROVED_SCOPE_B_WITH_NONBLOCKING_FINDINGS",
+ "verdict_summary": "For the eight separate frozen domains, the round-three executable certificate is sound for its advertised finite contract, and every round-one/round-two Scope B blocker is resolved by fresh independent execution, not by author assertion. I reran the exact final validator (validate.py 25805ad1, common.py c4d3c0b1, suite.py e2348453, schema.json b1c062ae) into a private root: 8/8 baselines accept, 531/531 controls (481 reject, 50 accept) and 2/2 infrastructure checks match their intended disposition and exact stage, row-for-row identical to the author's credited candidate. Every native-stage rejection is backed by the raw ELF outcome (114 equality-assertion panics at oracle_family_exact.rs:44, 18 parse-unwrap Err panics at :35), and mirrored aggregate corruptions reach the native aggregate-product predicate only after faithfulness and cross-equality pass. Independent mathematics with my own parser and canonical form reproduces all domain counts, definition tables, the 16 CT and 240 YM even-f nonliteral pairs, the aggregate factorization of every graph/route/mode without distribution, every per-owner port permutation, CT provenance and the None/Auto mapping. 68 new semantic held-outs plus 4 infrastructure cases (all predictions matched, except one test-design error of mine) show that every validator predicate is reachable and correct. There is no ELF-side symbol pre-registration, and license failures cannot masquerade as parse errors or inequality. No blocking finding. Six nonblocking findings: interface presence and typed-port order are not bound (cross-route by design; also not by the anchor layer); pool-1/Run metadata is unconsumed; ports-vs-expression typing and locality are capture-bound; a hypothetical result-file classification nuance; uneven suite predicate coverage; and the exercised mapping count. All six need only limits/wording (or optional binding), no theorem, expectation or production change.",
+ "relation_to_report_and_peer_A": {
+  "report_lines_37_86": "Not invalidated. Fresh evidence confirms L39-44 (mode/grouping, fixed supported shape, bool!=int), L46-52 (cross-route physical/owner alignment), L54-59 (live links, singleton chain, definition identity, no inherited registration), L61-67 (native faithfulness of every distinct text incl. projectors/ports, additive-witness soundness, raw whitespace preserved, trailing syntax rejects), L69-75 (theorem form, even cyclic f, both orders/kernels in fresh processes, aggregate per producer, no distribution) and L77-86 (anchors as subsequent provenance layer; capture-qualified physics). N1 qualifies L50-52 and L77-82: interface presence and typed-port order are neither cross-route- nor anchor-bound. N3 qualifies L84-86/L100-103. N2 qualifies L23-26 and receipt scope.pool. None requires excluding those statements; they need added limits.",
+  "receipt_assertions": "Domain records (graphs, owners, permutations 24/1550/0/198, distinct native texts 104/431/22/588, anchor self-comparisons, nonliteral 0/16/0/240, full CT occurrence lists) are identical to my fresh summaries 8/8; layer disposition/stage counts identical; theorem and limits accurate but should add N1/N2/N3 limits.",
+  "peer_A": "A's 481 reject + 50 accept and 541-execution binding agree with my fresh rerun counts and my own binding audit of my runs. I did not duplicate A's provenance/manifest/docs work beyond the read-only guards needed for my reruns."
+ },
+ "frozen_inputs": {
+  "workspace_tree": "4275 tracked files byte- and mode-identical to 87fa13a9 tree 95d56e25 before and after; 0 untracked non-ignored files",
+  "historical_tree": "3551 tracked files identical to 2b1ef4f0 tree 058e6a31 (holder @ 6d476227 empty) before and after",
+  "tracked_delta": "78c0754c..87fa13a9 = exactly 15 docs paths (13 round3 evidence files, round3 report, docs/developers.toml); b9f78892..87fa13a9 = 37 paths, all under docs/ (no production/test/expectation/option/kernel/lock/manifest/policy/nix-ci change)",
+  "round3_hashes": {
+   "receipt.json": "1ed0d3b904129234677b3dca68e1d9d057532be9fa507d73c501b9344d90057e",
+   "validate.py": "25805ad1b7b24ae7b68e551dbe97c6cb962f2a9cf733c5ba9d723231a05e9a67",
+   "common.py": "c4d3c0b1094b21dae30519b3b19881ea053149332c9002d2a296e0116a8694c9",
+   "suite.py": "e23484539d040f9667df0e16fd2a0bbe356870ce8966224f214b2cd77617ab79",
+   "schema.json": "b1c062aee5342ead1fc7633fca96216abc5beee28822ab2bc6b11b859d04043b",
+   "dispositions.json": "9aa7e28bc397099f18ea728e871784a0c6450f9247891d93fdbe292a875c7648",
+   "round2/validate.py": "b468b3a4e394424c8b8add875d3e682ac80f9be9895c82bcc232fee7ac5e9fcb",
+   "round2/controls.py": "78cda27d1ae77e7a7e4033f0b97def4430c8c35002d5f8e599f3fe89d8c47176"
+  },
+  "freeze": {
+   "freeze.json": "5655d842c80f24467e7596dfedd30f8d9588178a346818cb119020b9189729de",
+   "all 9 freeze artifact hashes": "verify",
+   "inventory/closure-final.json": "7bfe004aec2114dbe2d9bf811b3a8422119b51437ee3a90ebda2ece51759b400 (27945/27945 entries match current bytes, 4800 via symlinked fixtures)"
+  },
+  "prior_reviews_read": {
+   "R1": "target/oracle-family-independent-review-r1/review.json 0ec5a10aeae24bea52792f9d48700d81fb05a42f233bfe8e5e101eec300bf008",
+   "R2_A": ".local/review-family-r2-a-20261030T010834Z/review.json 2b690ee1aa2dcef7894b1dd2afa45eb5f9361cc98776c7599d26b36a660d657e",
+   "R2_B": ".local/review-family-r2-b-20261030T010814/review.json fa8f82f97b08bb80c71cfcc4178a67c7bf381d10c55cbfd952bcb59dc5031f07"
+  }
+ },
+ "bindings": {
+  "elfs": {
+   "historical_exact": "1ae86dcea5b15ff04274a91557a28dcf75d57154ee0882ed51d5c86c53be81b6 (kernel c78cffc2)",
+   "current_exact": "41c68004f03d25e4a47c58cc5d2bb75e04af39cebe525313fab67873127108ae (kernel 1a1829b1)",
+   "historical_capture": "588c9d1d00527bcbd6744dd67b27def8470bfce1968f52dee87b192349a40bc4",
+   "current_capture": "473a80ede10d0cd0b6b12d880683ed7ee45948a42dc33a2bb65c32b824db0ad8",
+   "unchanged": "hashed before/after every fresh native run (1019 runs) and in the before/after evidence manifests"
+  },
+  "archived_exact_source": "round2/archived-sources/oracle_family_exact.rs ebf20ee5...; every observed panic coordinate (35:80, 36:87 from R2-B, 44:9, 48:69) lands exactly on the unwrap/assert! token of that file: corroboration only, not build logs (compiler/feature qualification remains A's 336/341-unit fingerprint evidence)",
+  "python": "/nix/store/4168xqs4l5jbfc7xyi9zrhdhszx0pnlb-python3-3.13.16/bin/python3 (same interpreter as the credited commands), -B, PYTHONDONTWRITEBYTECODE=1",
+  "fresh_run_binding_audit": "541 control rows carry the exact final source hashes; 1019 native runs (870 exit 0, 149 exit 101) use a qualified ELF, and their pair/result files re-hash to the recorded values; 609 validator executions show identical inputs/ELF hashes before and after"
+ },
+ "fresh_coverage": {
+  "suite_rerun": {
+   "root": ".local/review-family-r3-b-20261030T030934Z/runs",
+   "baseline": "8/8 accept/complete",
+   "legacy": "324 (296 reject, 28 accept)",
+   "reviewer_worlds": "42 (38 reject, 4 accept), anchors mirrored = actual R2-B worlds",
+   "domain": "144 (128 reject, 16 accept)",
+   "staged": "13 (11 reject, 2 accept)",
+   "anchor": "8 reject anchor-input",
+   "infrastructure": "2 harness-error/infrastructure exit 3",
+   "author_comparison": "541/541 rows identical in (kind,label,case,mode) and observed disposition+stage; 0 audit problems",
+   "audit": ".local/review-family-r3-b-20261030T030934Z/results-audit-runs.json"
+  },
+  "raw_elf_backing": "aggregate-product: 38 failing runs all inequality at :44; cross-equality: 76 at :44; native-parse: 18 at :35 with 'Unknown attribute or tag' Err; no native failure under any non-native stage; every accept has only 'equal' native runs",
+  "baseline_layer_coverage": "faithfulness 104/431/22/588 distinct texts x 2 kernels; cross nonliteral 0/16/0/240 x 2 orders x 2 kernels; aggregate 34/536/8/440 x 2 orders x 2 kernels; anchor nonliteral 0 (self-comparisons 510/8008/80/6540)",
+  "mirrored_aggregate_ordering": "all 19 suite aggregate-product rejections show faithfulness equal and cross equal (or no nonliteral pairs) before native aggregate inequality under both kernels",
+  "F1_reproduction": "old R2 validator in the 11 actual X-* worlds: 9 accept, 1 genuine ct-incidence reject (X-ct-vertex-rule-current), 1 KeyError 'edge:7' exit 1 (X-missing-edge-current); round3 rejects all 11 (cross-physical x6, cross-input, selected-mode, selected-grouping, cross-owner-domain x2)",
+  "independent_mathematics": {
+   "own_parser_counts": "graphs/owners/axes reproduce 17/255/524, 268/4004/13736, 4/40/56, 220/3270/10880 in both modes",
+   "cross_route_deep_diff": "only differing paths: numerator strings, typed expression/decoded/ports, capture.json timings, and num_interface present only in current (vertices in 6 domains, edges in 4)",
+   "definitions": "25/27/18/11 names per route, one spelling each; route deltas exactly the Q (tensor-label q), edge (index-label e) and vertex (index-label v) mappings; K/P mappings never fire; tables equal the validator's definitions.json 8/8",
+   "nonliteral": "QED/SM all literal; CT 16 (8 vertex, 8 numerator) and YM 240 (125 vertex, 115 numerator) differ only by one-step cyclic rotations of spenso::{antisymmetric,real,spenso::tensor}::f arguments (96 and 1500 calls); all other leaves (coefficients, couplings, powers, signs) identical",
+   "aggregate": "numerator == prefactor * all vertex * all edge factors for 17/268/4/220 graphs per route per mode, under a factor-preserving canonical form (flattening, commutative order, power collection, exact Gaussian-rational literal constants; sums kept whole; no distribution); projector never 1 and correctly excluded",
+   "ports": "15138 owner rows: per-owner permutation equals the validator's cross-ports.json exactly; nontrivial 24/1550/0/198, all and only on owners carrying a current num_interface",
+   "faithfulness_set": "validator faithfulness rows equal exactly my union of distinct mapped decoded texts and ports (104/431/22/588), unit owners included",
+   "ct": "per route/mode: 59 V_36_CT + 209 V_135_CT, one CT vertex per graph, rule-particle incidence exact, CT couplings only at CT vertices and within rule couplings, CT order 1, vertex and aggregate CT degree 1, request CT inclusive [1,1]",
+   "none_auto": "QED/SM/YM identical order and content; CT None->Auto 109->113, 110->109, 111->114, 112->110, 113->115, 114->111, 115->116, 116->112 in both routes; IDs follow full keys; only positional names differ; typed owners equal by ID; groups follow; inputs equal except request classes",
+   "group_chain": "16/16 captures singleton master/member/source chain with strict int types; diagram overall_factor == payload overall_factor",
+   "schema": "schema.json re-derived independently from the 96 frozen capture files: 272 type paths and 62 object paths identical; derivation hashes equal current captures"
+  },
+  "elf_probes": {
+   "root": ".local/review-family-r3-b-20261030T030934Z/probes/elf",
+   "processes": 42,
+   "attribute_grammar": "native rejects leading/trailing space, space after comma, unknown, uppercase and unqualified-tag attributes at :35; accepts {real,}, {,real}, {real,real}, {}, namespaced tags with values (spellings differ, so the Python gate is conservative)",
+   "preregistration": "none of the 43 certificate names is pre-registered in either ELF (two disjoint conflicting attribute sets parse in fresh processes); conflict-detection control fails as expected",
+   "subset_inheritance": "R1-B1 mechanism reproduced in both kernels (later attribute subset silently inherits antisymmetry), so the Python definition gate is load-bearing, and it is enforced",
+   "license": "absent or invalid license (bwrap, private ~/.cache, no network) -> restricted mode, exit 0, correct equality; invalid key attempts the license server; never a parse Err or assertion"
+  },
+  "heldouts": {
+   "root": ".local/review-family-r3-b-20261030T030934Z/heldout",
+   "semantic": 68,
+   "pool_metadata": 1,
+   "infrastructure": 4,
+   "predictions_matched": "67/68 (miss = my v1 test design; see failed_attempts)",
+   "classes_covered": [
+    "one-sided options/request/model/half_edge_order/symmetry_factor/aut/basis/key/order/name/overall_factor/vertex-count/diagram-count with mirrored anchors -> cross-input/cross-physical/cross-graph-domain/cross-owner-domain",
+    "fully mirrored aggregate extra coupling / dropped factor -> aggregate-product",
+    "bool/int/float type swaps, 3-tuples, swapped tuples, extra incidence key, null numerator, non-numeric routing key -> schema/edge-tuple",
+    "unknown typed/vertex/payload interface fields -> schema",
+    "grouping/classes current-only, group extra member/master shift -> selected-grouping/selected-mode/group-chain",
+    "duplicate/renamed/missing owners and typed graphs, duplicate payload id/key -> owner-domain/graph-domain/cross-graph-domain",
+    "namespace change, extra tag, trailing-comma spelling, port-only spelling conflict -> cross-definitions/symbol-definition",
+    "f antisymmetry removed in both routes (CT, YM) -> cross-equality under both kernels (no inherited antisymmetry)",
+    "malformed literal-only/port-only/unit-owner attributes -> native-parse; semicolon, juxtaposition, Unicode minus -> syntax",
+    "cross-flags is_metric/is_composite, interface-live-link (current and historical) -> exact stages",
+    "anchor-only changes with frozen anchors -> anchor-physical/anchor-raw-cook/anchor-equality (native :44 both kernels)",
+    "infrastructure: ELF result path unwritable (:48 Err) and unreadable input -> harness-error exit 3; empty input -> checked json rejection; invalid license -> restricted-mode accept"
+   ],
+   "contract_mismatches": [
+    "iface-removed-current-mirrored",
+    "iface-removed-current-unmirrored",
+    "edge-iface-removed-current-unmirrored"
+   ]
+  }
+ },
+ "reused_coverage": {
+  "R2_B_worlds": "the 42 actual mirrored worlds and staged JSON worlds were consumed read-only (unchanged before/after); my world diff confirms each world changes exactly what its name says",
+  "cited_not_rerun": "R2-B results/b1_old_pairs_reversed.json: 24/24 reversed raw-mutant runs exit 101 at :36 (fresh process per order/kernel), as the round3 dispositions cite; R1 p21/p22/p24/p30/p31 files exist and are cited, not claimed fresh by round3",
+  "capture_provenance": "producer captures/ELFs themselves were not regenerated; their provenance is the author's and A's (attributed)"
+ },
+ "correction_assessment": [
+  {
+   "finding": "R1 B1 (historical-first parse accepts attribute subsets)",
+   "status": "resolved (fresh)",
+   "evidence": "definition gate before native; actual f/g/gamma B1 mutants with mirrored anchors reject at cross-definitions; internal conflict -> symbol-definition; held-outs namespace/tag/trailing-comma/port-only; no ELF pre-registration; subset inheritance reproduced, so the gate is required and present; f-antisymmetry removal in both routes rejects natively"
+  },
+  {
+   "finding": "R1 B2 (self-asserting/crashing controls)",
+   "status": "resolved",
+   "evidence": "all 541 rows are real validator subprocesses with exact stages; raw ELF outcomes back every native stage"
+  },
+  {
+   "finding": "R2 B-F1 BLOCKER (no cross-route non-numerator comparison)",
+   "status": "resolved (fresh)",
+   "evidence": "F1 reproduced old/new; 20+ independent one-sided held-outs reject at cross-input/cross-physical/cross-graph-domain/cross-owner-domain/cross-flags; symmetric owner domains"
+  },
+  {
+   "finding": "R2 B-F2/F3 (anchor identity vs derived predicates)",
+   "status": "resolved",
+   "evidence": "0 of 296 legacy negatives stop at an anchor stage; mirrored aggregate reaches aggregate-product after faithfulness/cross"
+  },
+  {
+   "finding": "R2 B-F4 (anchor-relative schema)",
+   "status": "resolved",
+   "evidence": "independently re-derived fixed schema; strict types (bool != int, float != int); hidden fields reject"
+  },
+  {
+   "finding": "R2 B-F5 (literal-only unparseable text)",
+   "status": "resolved",
+   "evidence": "faithfulness covers every distinct mapped text and port under both kernels; malformed literal-only/port-only/unit-owner held-outs -> native-parse"
+  },
+  {
+   "finding": "R2 B-F6 (cross-route permutations discarded)",
+   "status": "resolved",
+   "evidence": "cross-ports.json per owner equals independent derivation (0 mismatches)"
+  },
+  {
+   "finding": "R2 B-F7/F8 (exit codes, crash classification)",
+   "status": "resolved, with nuance N4",
+   "evidence": "harness errors exit 3; :48 Err panic classified infrastructure; license failures never parse errors"
+  },
+  {
+   "finding": "R2 B-F9 (historical raw cook)",
+   "status": "limitation correctly retained",
+   "evidence": "O-historical-raw-garbage accepts in mirrored world; anchor-raw-cook rejects with frozen anchors (my held-out)"
+  },
+  {
+   "finding": "A-N6 (anchor self-comparisons)",
+   "status": "confirmed",
+   "evidence": "0 nonliteral anchor pairs in 8/8 baselines; no algebra credit taken"
+  }
+ ],
+ "blocking": [],
+ "nonblocking": [
+  {
+   "id": "R3B-N1",
+   "title": "Interface presence and typed-port order are not bound cross-route (by design) nor by the frozen anchor layer",
+   "where": [
+    "docs/architecture/evidence/generation-oracle-family-diagnosis/round3/validate.py:112-118 (interface linked only when present)",
+    "validate.py:142-151,166,175 (num_interface excluded from physical comparison)",
+    "validate.py:471-505 (anchor layer reuses physical_alignment, compares decoded expressions/historical raw only; no typed ordered_ports or interface comparison)",
+    "round2/validate.py:466-473 (round two compared per-route ports with the anchor; dropped in round three)",
+    "round3/schema.json object_keys payload.json/diagrams/*/payload/vertices/* and .../edges/*/1 (union-derived: interface optional)",
+    "generation-oracle-family-diagnosis-round3.typ:50-52,77-82"
+   ],
+   "facts": "historical payloads never carry num_interface; current carries it exactly on the 24/1550/0/198 permuted owners",
+   "reproducers": [
+    "heldout/runs/iface-removed-current-mirrored (qed None) accept",
+    "heldout/runs/iface-removed-current-unmirrored (qed None, frozen anchors) accept",
+    "heldout/runs/edge-iface-removed-current-unmirrored (ctorder Auto, frozen anchors) accept",
+    "heldout/runs/port-permuted-current-unmirrored (ym None, frozen anchors) accept",
+    "heldout/runs/anchor-typed-ports-permuted-both-routes (ym None, frozen anchors) accept"
+   ],
+   "impact": "the stated theorem (Symbolica-normalized expression equality plus named multiset transport) remains true in those worlds; but the brief's 'every original field accounted for' is not met for interface presence/order, and the receipt lists no matching limit",
+   "required_repair": "either strictly compare num_interface presence/value and typed ordered_ports with the route's own frozen anchor (no transformation is needed within one route), or add an explicit limit that payload interface presence and positional port order are capture-bound and only named multiset transport is certified; optionally record the interface<->nontrivial-permutation correlation as a derived summary. No theorem/expectation/production change."
+  },
+  {
+   "id": "R3B-N2",
+   "title": "Pool 1 / Run state is capture metadata, not executed by the certificate",
+   "where": [
+    "validate.py:18-25 (FILES omit capture.json, built-report.txt, prepared-report.txt)",
+    "receipt.json scope.pool = 1",
+    "generation-oracle-family-diagnosis-round3.typ:24-26"
+   ],
+   "reproducer": "heldout/runs/pool8-capture-metadata-mirrored: threads Some(8) in both routes -> accept",
+   "fresh_supporting_check": "all 16 capture.json: threads Some(1), classes == folder == request, Grouping None, prepared_len == built_len == graphs; reports retained == graphs, completed, zero_numerator 0",
+   "required_repair": "annotate scope.pool as capture/A-provenance-bound (the report's 'separately qualified' is accurate but terse), or consume capture.json strictly"
+  },
+  {
+   "id": "R3B-N3",
+   "title": "Port typing against expression free indices and factor locality are capture-bound",
+   "where": [
+    "validate.py:390-416 (ports compared only as cross-route multisets)",
+    "generation-oracle-family-diagnosis-round3.typ:84-86,100-103"
+   ],
+   "reproducers": [
+    "heldout/runs/port-unrelated-to-expression-both accept",
+    "heldout/runs/local-factor-relocated-both accept"
+   ],
+   "required_repair": "optional wording: typed ports are not checked against expression free indices; vertex/edge factor placement (locality) is a source-qualified capture fact"
+  },
+  {
+   "id": "R3B-N4",
+   "title": "Exit-0 native result parse failures would be labelled checked rejections; license validity is not checked",
+   "where": [
+    "validate.py:290-297 (malformed/short result -> Rejection json/checker-result, exit 2)",
+    "common.py:110-120 (license value read, never validated)"
+   ],
+   "detail": "hypothetical (never observed): a misbehaving ELF exiting 0 with a corrupt result would yield exit 2 under a distinct stage, never acceptance; a missing result file yields exit 3. An invalid license is not detected: the ELF falls back to restricted single-thread mode, exits 0 with correct results, and attempts an outbound license-server connection when network is available (probes/elf license-invalid-sandboxed; heldout infra-invalid-license-sandboxed). The infrastructure 'missing-license' control exercises the harness's license-file policy, not a Symbolica failure; the report's claim that license problems never count as equality rejection is accurate.",
+   "required_repair": "optional: classify any exit-0 result-load failure as infrastructure; optionally note restricted-mode behaviour"
+  },
+  {
+   "id": "R3B-N5",
+   "title": "Suite predicate coverage is uneven; several predicates are exercised only by this review",
+   "where": [
+    "round3/suite.py (control families)"
+   ],
+   "detail": "suite reaches cross-flags 0x, cross-graph-domain 0x, graph-domain 0x, interface-live-link 1x (current only), symbol-definition 1x, and no anchor predicate except anchor-input; this review's held-outs show all of them reachable with exact stages. cross-groups cannot fire independently (implied by the per-route group chain plus cross-physical): redundant, harmless.",
+   "required_repair": "optional: adopt these held-outs as permanent controls"
+  },
+  {
+   "id": "R3B-N6",
+   "title": "Mapping precision: three of the five declared whole-symbol mappings are exercised; tagged historical spellings are never parsed natively",
+   "where": [
+    "round2/validate.py:38-45 (SPELLINGS)",
+    "validate.py:64-69 (mapped_text before faithfulness)"
+   ],
+   "detail": "only Q (tensor-label q), edge (index-label e) and vertex (index-label v) occur; K/P never fire. Faithfulness runs on mapped text, so equivalence of label-tagged to untagged spellings remains the audited R1/R2 assumption, not a native proof.",
+   "required_repair": "wording: state the exercised mapping set and that it is audited, not natively derived"
+  }
+ ],
+ "theorem_as_supported": "For each of the eight domains separately (four cases x Classes None/Auto, Grouping None, captured at pool 1 per capture metadata): after the exact final validator binds the actual frozen captures of both routes (type-strict identity of model/request/options/grouping; selected classes and Grouping None; full keys with multiplicity, IDs, order, every non-expression diagram/payload/vertex/edge field, positional counts, typed flags; symmetric unique owner domains; singleton group/source-factor chain; decoded-to-payload and current raw links), every owner's historical decoded expression equals the current one under Symbolica normalization in both locked kernels. Nonliteral pairs are checked in fresh processes and both orders. Every namespace::name carries one identical attribute-bearing spelling after the three exercised (five declared) audited label-tag mappings, and every distinct mapped text and port is natively parse-faithful to its token-tree render. QED/SM pairs are token-identical; CT/YM nonliteral pairs differ only by even cyclic rotations of the antisymmetric spenso::f, and the equality depends on that declared attribute. Each route's aggregate equals numerator_prefactor times all local factors. Typed ports are equal as repeat-free multisets (named-index transport). CT provenance and None/Auto correspondence hold as stated.",
+ "cumulative_validity_by_domain": {
+  "qed_eemm_L1/None": {
+   "graphs": 17,
+   "owners": 255,
+   "axes": 524,
+   "native_texts": 104,
+   "nonliteral": 0,
+   "port_transports": 24,
+   "aggregate_graphs_per_route": 17,
+   "fresh_baseline": "accept/complete",
+   "status": "supported within the finite contract; nonblocking N1-N6"
+  },
+  "qed_eemm_L1/Auto": {
+   "graphs": 17,
+   "owners": 255,
+   "axes": 524,
+   "native_texts": 104,
+   "nonliteral": 0,
+   "port_transports": 24,
+   "aggregate_graphs_per_route": 17,
+   "fresh_baseline": "accept/complete",
+   "status": "supported within the finite contract; nonblocking N1-N6"
+  },
+  "ctorder_qcd_uugg_L1/None": {
+   "graphs": 268,
+   "owners": 4004,
+   "axes": 13736,
+   "native_texts": 431,
+   "nonliteral": 16,
+   "f_rotations": 96,
+   "port_transports": 1550,
+   "aggregate_graphs_per_route": 268,
+   "ct": "59 V_36_CT + 209 V_135_CT",
+   "none_auto": "8-position output permutation 109-116",
+   "fresh_baseline": "accept/complete",
+   "status": "supported within the finite contract; nonblocking N1-N6"
+  },
+  "ctorder_qcd_uugg_L1/Auto": {
+   "graphs": 268,
+   "owners": 4004,
+   "axes": 13736,
+   "native_texts": 431,
+   "nonliteral": 16,
+   "f_rotations": 96,
+   "port_transports": 1550,
+   "aggregate_graphs_per_route": 268,
+   "ct": "59 V_36_CT + 209 V_135_CT",
+   "none_auto": "8-position output permutation 109-116",
+   "fresh_baseline": "accept/complete",
+   "status": "supported within the finite contract; nonblocking N1-N6"
+  },
+  "sm_eemm_L0/None": {
+   "graphs": 4,
+   "owners": 40,
+   "axes": 56,
+   "native_texts": 22,
+   "nonliteral": 0,
+   "port_transports": 0,
+   "aggregate_graphs_per_route": 4,
+   "fresh_baseline": "accept/complete",
+   "status": "supported within the finite contract; nonblocking N1-N6"
+  },
+  "sm_eemm_L0/Auto": {
+   "graphs": 4,
+   "owners": 40,
+   "axes": 56,
+   "native_texts": 22,
+   "nonliteral": 0,
+   "port_transports": 0,
+   "aggregate_graphs_per_route": 4,
+   "fresh_baseline": "accept/complete",
+   "status": "supported within the finite contract; nonblocking N1-N6"
+  },
+  "ym_g6_L0/None": {
+   "graphs": 220,
+   "owners": 3270,
+   "axes": 10880,
+   "native_texts": 588,
+   "nonliteral": 240,
+   "f_rotations": 1500,
+   "port_transports": 198,
+   "aggregate_graphs_per_route": 220,
+   "fresh_baseline": "accept/complete",
+   "status": "supported within the finite contract; nonblocking N1-N6"
+  },
+  "ym_g6_L0/Auto": {
+   "graphs": 220,
+   "owners": 3270,
+   "axes": 10880,
+   "native_texts": 588,
+   "nonliteral": 240,
+   "f_rotations": 1500,
+   "port_transports": 198,
+   "aggregate_graphs_per_route": 220,
+   "fresh_baseline": "accept/complete",
+   "status": "supported within the finite contract; nonblocking N1-N6"
+  }
+ },
+ "limits": [
+  "Symbolica-normalized equality is the equality notion (conservative: identities needing distribution would be rejected; none occurred)",
+  "no general physics theorem; graph construction, factor placement/locality and historical raw cook decoding are capture facts with cross-route equality checked (N3, B-F9)",
+  "named-axis transport only; positional consumer correctness, interface presence and port/free-index typing not certified (N1, N3)",
+  "pool 1 / Run state capture-bound (N2); audited spelling mappings not natively derived (N6)",
+  "baseline anchors are self-comparisons; the anchor layer is partial provenance (N1, N5)",
+  "no grouped, other-row, pool 8/32, migration, MAIN/WP3, expectation, performance, memory or distribution conclusion; provenance/manifests/docs are Scope A"
+ ],
+ "commands": {
+  "top_level_recorded": [
+   {
+    "label": "anchor",
+    "cwd": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families",
+    "argv": [
+     "/nix/store/4168xqs4l5jbfc7xyi9zrhdhszx0pnlb-python3-3.13.16/bin/python3",
+     "-B",
+     "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-diagnosis/round3/suite.py",
+     "anchor",
+     "--out",
+     "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-family-r3-b-20261030T030934Z/runs/anchor"
+    ],
+    "started_utc": "2026-10-30T03:17:39.319395+00:00",
+    "ended_utc": "2026-10-30T03:19:23.021570+00:00",
+    "exit": 0,
+    "elapsed_s": 103.7,
+    "env_policy": {
+     "SYMBOLICA_LICENSE": "absent in this process env",
+     "SYMBOLICA_LICENSE_SIGNED": "absent",
+     "FEYNKIT_ORACLE_*": "absent",
+     "CARGO_TARGET_DIR": "absent",
+     "PYTHONDONTWRITEBYTECODE": "1",
+     "XDG_CONFIG_HOME": "unset (default ~/.config)"
+    },
+    "record": ".local/review-family-r3-b-20261030T030934Z/logs/anchor/command.json"
+   },
+   {
+    "label": "baseline",
+    "cwd": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families",
+    "argv": [
+     "/nix/store/4168xqs4l5jbfc7xyi9zrhdhszx0pnlb-python3-3.13.16/bin/python3",
+     "-B",
+     "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-diagnosis/round3/suite.py",
+     "baseline",
+     "--out",
+     "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-family-r3-b-20261030T030934Z/runs/baseline"
+    ],
+    "started_utc": "2026-10-30T03:17:39.330929+00:00",
+    "ended_utc": "2026-10-30T03:19:29.707834+00:00",
+    "exit": 0,
+    "elapsed_s": 110.4,
+    "env_policy": {
+     "SYMBOLICA_LICENSE": "absent in this process env",
+     "SYMBOLICA_LICENSE_SIGNED": "absent",
+     "FEYNKIT_ORACLE_*": "absent",
+     "CARGO_TARGET_DIR": "absent",
+     "PYTHONDONTWRITEBYTECODE": "1",
+     "XDG_CONFIG_HOME": "unset (default ~/.config)"
+    },
+    "record": ".local/review-family-r3-b-20261030T030934Z/logs/baseline/command.json"
+   },
+   {
+    "label": "domain",
+    "cwd": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families",
+    "argv": [
+     "/nix/store/4168xqs4l5jbfc7xyi9zrhdhszx0pnlb-python3-3.13.16/bin/python3",
+     "-B",
+     "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-diagnosis/round3/suite.py",
+     "domain",
+     "--out",
+     "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-family-r3-b-20261030T030934Z/runs/domain"
+    ],
+    "started_utc": "2026-10-30T03:17:39.327948+00:00",
+    "ended_utc": "2026-10-30T03:28:32.212896+00:00",
+    "exit": 0,
+    "elapsed_s": 652.9,
+    "env_policy": {
+     "SYMBOLICA_LICENSE": "absent in this process env",
+     "SYMBOLICA_LICENSE_SIGNED": "absent",
+     "FEYNKIT_ORACLE_*": "absent",
+     "CARGO_TARGET_DIR": "absent",
+     "PYTHONDONTWRITEBYTECODE": "1",
+     "XDG_CONFIG_HOME": "unset (default ~/.config)"
+    },
+    "record": ".local/review-family-r3-b-20261030T030934Z/logs/domain/command.json"
+   },
+   {
+    "label": "infrastructure",
+    "cwd": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families",
+    "argv": [
+     "/nix/store/4168xqs4l5jbfc7xyi9zrhdhszx0pnlb-python3-3.13.16/bin/python3",
+     "-B",
+     "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-diagnosis/round3/suite.py",
+     "infrastructure",
+     "--out",
+     "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-family-r3-b-20261030T030934Z/runs/infrastructure"
+    ],
+    "started_utc": "2026-10-30T03:17:39.326673+00:00",
+    "ended_utc": "2026-10-30T03:17:42.054569+00:00",
+    "exit": 0,
+    "elapsed_s": 2.7,
+    "env_policy": {
+     "SYMBOLICA_LICENSE": "absent in this process env",
+     "SYMBOLICA_LICENSE_SIGNED": "absent",
+     "FEYNKIT_ORACLE_*": "absent",
+     "CARGO_TARGET_DIR": "absent",
+     "PYTHONDONTWRITEBYTECODE": "1",
+     "XDG_CONFIG_HOME": "unset (default ~/.config)"
+    },
+    "record": ".local/review-family-r3-b-20261030T030934Z/logs/infrastructure/command.json"
+   },
+   {
+    "label": "legacy-ctorder_qcd_uugg_L1-Auto",
+    "cwd": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families",
+    "argv": [
+     "/nix/store/4168xqs4l5jbfc7xyi9zrhdhszx0pnlb-python3-3.13.16/bin/python3",
+     "-B",
+     "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-diagnosis/round3/suite.py",
+     "legacy",
+     "--case",
+     "ctorder_qcd_uugg_L1",
+     "--mode",
+     "Auto",
+     "--out",
+     "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-family-r3-b-20261030T030934Z/runs/legacy/ctorder_qcd_uugg_L1-Auto"
+    ],
+    "started_utc": "2026-10-30T03:17:39.333623+00:00",
+    "ended_utc": "2026-10-30T03:21:50.439860+00:00",
+    "exit": 0,
+    "elapsed_s": 251.1,
+    "env_policy": {
+     "SYMBOLICA_LICENSE": "absent in this process env",
+     "SYMBOLICA_LICENSE_SIGNED": "absent",
+     "FEYNKIT_ORACLE_*": "absent",
+     "CARGO_TARGET_DIR": "absent",
+     "PYTHONDONTWRITEBYTECODE": "1",
+     "XDG_CONFIG_HOME": "unset (default ~/.config)"
+    },
+    "record": ".local/review-family-r3-b-20261030T030934Z/logs/legacy-ctorder_qcd_uugg_L1-Auto/command.json"
+   },
+   {
+    "label": "legacy-ctorder_qcd_uugg_L1-None",
+    "cwd": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families",
+    "argv": [
+     "/nix/store/4168xqs4l5jbfc7xyi9zrhdhszx0pnlb-python3-3.13.16/bin/python3",
+     "-B",
+     "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-diagnosis/round3/suite.py",
+     "legacy",
+     "--case",
+     "ctorder_qcd_uugg_L1",
+     "--mode",
+     "None",
+     "--out",
+     "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-family-r3-b-20261030T030934Z/runs/legacy/ctorder_qcd_uugg_L1-None"
+    ],
+    "started_utc": "2026-10-30T03:17:39.319199+00:00",
+    "ended_utc": "2026-10-30T03:21:49.968051+00:00",
+    "exit": 0,
+    "elapsed_s": 250.6,
+    "env_policy": {
+     "SYMBOLICA_LICENSE": "absent in this process env",
+     "SYMBOLICA_LICENSE_SIGNED": "absent",
+     "FEYNKIT_ORACLE_*": "absent",
+     "CARGO_TARGET_DIR": "absent",
+     "PYTHONDONTWRITEBYTECODE": "1",
+     "XDG_CONFIG_HOME": "unset (default ~/.config)"
+    },
+    "record": ".local/review-family-r3-b-20261030T030934Z/logs/legacy-ctorder_qcd_uugg_L1-None/command.json"
+   },
+   {
+    "label": "legacy-qed_eemm_L1-Auto",
+    "cwd": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families",
+    "argv": [
+     "/nix/store/4168xqs4l5jbfc7xyi9zrhdhszx0pnlb-python3-3.13.16/bin/python3",
+     "-B",
+     "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-diagnosis/round3/suite.py",
+     "legacy",
+     "--case",
+     "qed_eemm_L1",
+     "--mode",
+     "Auto",
+     "--out",
+     "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-family-r3-b-20261030T030934Z/runs/legacy/qed_eemm_L1-Auto"
+    ],
+    "started_utc": "2026-10-30T03:17:39.319809+00:00",
+    "ended_utc": "2026-10-30T03:19:07.638061+00:00",
+    "exit": 0,
+    "elapsed_s": 88.3,
+    "env_policy": {
+     "SYMBOLICA_LICENSE": "absent in this process env",
+     "SYMBOLICA_LICENSE_SIGNED": "absent",
+     "FEYNKIT_ORACLE_*": "absent",
+     "CARGO_TARGET_DIR": "absent",
+     "PYTHONDONTWRITEBYTECODE": "1",
+     "XDG_CONFIG_HOME": "unset (default ~/.config)"
+    },
+    "record": ".local/review-family-r3-b-20261030T030934Z/logs/legacy-qed_eemm_L1-Auto/command.json"
+   },
+   {
+    "label": "legacy-qed_eemm_L1-None",
+    "cwd": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families",
+    "argv": [
+     "/nix/store/4168xqs4l5jbfc7xyi9zrhdhszx0pnlb-python3-3.13.16/bin/python3",
+     "-B",
+     "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-diagnosis/round3/suite.py",
+     "legacy",
+     "--case",
+     "qed_eemm_L1",
+     "--mode",
+     "None",
+     "--out",
+     "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-family-r3-b-20261030T030934Z/runs/legacy/qed_eemm_L1-None"
+    ],
+    "started_utc": "2026-10-30T03:17:39.322076+00:00",
+    "ended_utc": "2026-10-30T03:19:07.642285+00:00",
+    "exit": 0,
+    "elapsed_s": 88.3,
+    "env_policy": {
+     "SYMBOLICA_LICENSE": "absent in this process env",
+     "SYMBOLICA_LICENSE_SIGNED": "absent",
+     "FEYNKIT_ORACLE_*": "absent",
+     "CARGO_TARGET_DIR": "absent",
+     "PYTHONDONTWRITEBYTECODE": "1",
+     "XDG_CONFIG_HOME": "unset (default ~/.config)"
+    },
+    "record": ".local/review-family-r3-b-20261030T030934Z/logs/legacy-qed_eemm_L1-None/command.json"
+   },
+   {
+    "label": "legacy-sm_eemm_L0-Auto",
+    "cwd": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families",
+    "argv": [
+     "/nix/store/4168xqs4l5jbfc7xyi9zrhdhszx0pnlb-python3-3.13.16/bin/python3",
+     "-B",
+     "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-diagnosis/round3/suite.py",
+     "legacy",
+     "--case",
+     "sm_eemm_L0",
+     "--mode",
+     "Auto",
+     "--out",
+     "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-family-r3-b-20261030T030934Z/runs/legacy/sm_eemm_L0-Auto"
+    ],
+    "started_utc": "2026-10-30T03:17:39.331514+00:00",
+    "ended_utc": "2026-10-30T03:19:02.268426+00:00",
+    "exit": 0,
+    "elapsed_s": 82.9,
+    "env_policy": {
+     "SYMBOLICA_LICENSE": "absent in this process env",
+     "SYMBOLICA_LICENSE_SIGNED": "absent",
+     "FEYNKIT_ORACLE_*": "absent",
+     "CARGO_TARGET_DIR": "absent",
+     "PYTHONDONTWRITEBYTECODE": "1",
+     "XDG_CONFIG_HOME": "unset (default ~/.config)"
+    },
+    "record": ".local/review-family-r3-b-20261030T030934Z/logs/legacy-sm_eemm_L0-Auto/command.json"
+   },
+   {
+    "label": "legacy-sm_eemm_L0-None",
+    "cwd": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families",
+    "argv": [
+     "/nix/store/4168xqs4l5jbfc7xyi9zrhdhszx0pnlb-python3-3.13.16/bin/python3",
+     "-B",
+     "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-diagnosis/round3/suite.py",
+     "legacy",
+     "--case",
+     "sm_eemm_L0",
+     "--mode",
+     "None",
+     "--out",
+     "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-family-r3-b-20261030T030934Z/runs/legacy/sm_eemm_L0-None"
+    ],
+    "started_utc": "2026-10-30T03:17:39.321804+00:00",
+    "ended_utc": "2026-10-30T03:19:02.132243+00:00",
+    "exit": 0,
+    "elapsed_s": 82.8,
+    "env_policy": {
+     "SYMBOLICA_LICENSE": "absent in this process env",
+     "SYMBOLICA_LICENSE_SIGNED": "absent",
+     "FEYNKIT_ORACLE_*": "absent",
+     "CARGO_TARGET_DIR": "absent",
+     "PYTHONDONTWRITEBYTECODE": "1",
+     "XDG_CONFIG_HOME": "unset (default ~/.config)"
+    },
+    "record": ".local/review-family-r3-b-20261030T030934Z/logs/legacy-sm_eemm_L0-None/command.json"
+   },
+   {
+    "label": "legacy-ym_g6_L0-Auto",
+    "cwd": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families",
+    "argv": [
+     "/nix/store/4168xqs4l5jbfc7xyi9zrhdhszx0pnlb-python3-3.13.16/bin/python3",
+     "-B",
+     "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-diagnosis/round3/suite.py",
+     "legacy",
+     "--case",
+     "ym_g6_L0",
+     "--mode",
+     "Auto",
+     "--out",
+     "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-family-r3-b-20261030T030934Z/runs/legacy/ym_g6_L0-Auto"
+    ],
+    "started_utc": "2026-10-30T03:17:39.327459+00:00",
+    "ended_utc": "2026-10-30T03:23:03.143530+00:00",
+    "exit": 0,
+    "elapsed_s": 323.8,
+    "env_policy": {
+     "SYMBOLICA_LICENSE": "absent in this process env",
+     "SYMBOLICA_LICENSE_SIGNED": "absent",
+     "FEYNKIT_ORACLE_*": "absent",
+     "CARGO_TARGET_DIR": "absent",
+     "PYTHONDONTWRITEBYTECODE": "1",
+     "XDG_CONFIG_HOME": "unset (default ~/.config)"
+    },
+    "record": ".local/review-family-r3-b-20261030T030934Z/logs/legacy-ym_g6_L0-Auto/command.json"
+   },
+   {
+    "label": "legacy-ym_g6_L0-None",
+    "cwd": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families",
+    "argv": [
+     "/nix/store/4168xqs4l5jbfc7xyi9zrhdhszx0pnlb-python3-3.13.16/bin/python3",
+     "-B",
+     "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-diagnosis/round3/suite.py",
+     "legacy",
+     "--case",
+     "ym_g6_L0",
+     "--mode",
+     "None",
+     "--out",
+     "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-family-r3-b-20261030T030934Z/runs/legacy/ym_g6_L0-None"
+    ],
+    "started_utc": "2026-10-30T03:17:39.319667+00:00",
+    "ended_utc": "2026-10-30T03:23:03.529889+00:00",
+    "exit": 0,
+    "elapsed_s": 324.2,
+    "env_policy": {
+     "SYMBOLICA_LICENSE": "absent in this process env",
+     "SYMBOLICA_LICENSE_SIGNED": "absent",
+     "FEYNKIT_ORACLE_*": "absent",
+     "CARGO_TARGET_DIR": "absent",
+     "PYTHONDONTWRITEBYTECODE": "1",
+     "XDG_CONFIG_HOME": "unset (default ~/.config)"
+    },
+    "record": ".local/review-family-r3-b-20261030T030934Z/logs/legacy-ym_g6_L0-None/command.json"
+   },
+   {
+    "label": "manifest-after",
+    "cwd": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families",
+    "argv": [
+     "/nix/store/4168xqs4l5jbfc7xyi9zrhdhszx0pnlb-python3-3.13.16/bin/python3",
+     "-I",
+     "-B",
+     "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-family-r3-b-20261030T030934Z/scripts/manifest.py",
+     "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-family-r3-b-20261030T030934Z/after/evidence-manifest.json",
+     "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-family-r2-a-20261030T010834Z",
+     "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-family-r2-b-20261030T010814",
+     "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-family-independent-review-r1",
+     "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-round3",
+     "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-round2-candidate",
+     "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-round2",
+     "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-round2-final",
+     "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-diagnosis",
+     "/shared/lcnbr/dev/gammaloop/generation-oracle-family-historical/target/oracle-numerator-family-diagnosis",
+     "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-diagnosis"
+    ],
+    "started_utc": "2026-10-30T03:42:56.286271+00:00",
+    "ended_utc": "2026-10-30T03:43:14.700855+00:00",
+    "exit": 0,
+    "elapsed_s": 18.4,
+    "env_policy": {
+     "SYMBOLICA_LICENSE": "absent in this process env",
+     "SYMBOLICA_LICENSE_SIGNED": "absent",
+     "FEYNKIT_ORACLE_*": "absent",
+     "CARGO_TARGET_DIR": "absent",
+     "PYTHONDONTWRITEBYTECODE": "1",
+     "XDG_CONFIG_HOME": "unset (default ~/.config)"
+    },
+    "record": ".local/review-family-r3-b-20261030T030934Z/logs/manifest-after/command.json"
+   },
+   {
+    "label": "manifest-before",
+    "cwd": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families",
+    "argv": [
+     "/nix/store/4168xqs4l5jbfc7xyi9zrhdhszx0pnlb-python3-3.13.16/bin/python3",
+     "-I",
+     "-B",
+     "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-family-r3-b-20261030T030934Z/scripts/manifest.py",
+     "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-family-r3-b-20261030T030934Z/before/evidence-manifest.json",
+     "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-family-r2-a-20261030T010834Z",
+     "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-family-r2-b-20261030T010814",
+     "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-family-independent-review-r1",
+     "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-round3",
+     "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-round2-candidate",
+     "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-round2",
+     "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-round2-final",
+     "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-diagnosis",
+     "/shared/lcnbr/dev/gammaloop/generation-oracle-family-historical/target/oracle-numerator-family-diagnosis",
+     "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-diagnosis"
+    ],
+    "started_utc": "2026-10-30T03:16:26.848293+00:00",
+    "ended_utc": "2026-10-30T03:16:49.735378+00:00",
+    "exit": 0,
+    "elapsed_s": 22.9,
+    "env_policy": {
+     "SYMBOLICA_LICENSE": "absent in this process env",
+     "SYMBOLICA_LICENSE_SIGNED": "absent",
+     "FEYNKIT_ORACLE_*": "absent",
+     "CARGO_TARGET_DIR": "absent",
+     "PYTHONDONTWRITEBYTECODE": "1",
+     "XDG_CONFIG_HOME": "unset (default ~/.config)"
+    },
+    "record": ".local/review-family-r3-b-20261030T030934Z/logs/manifest-before/command.json"
+   },
+   {
+    "label": "reviewer",
+    "cwd": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families",
+    "argv": [
+     "/nix/store/4168xqs4l5jbfc7xyi9zrhdhszx0pnlb-python3-3.13.16/bin/python3",
+     "-B",
+     "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-diagnosis/round3/suite.py",
+     "reviewer",
+     "--out",
+     "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-family-r3-b-20261030T030934Z/runs/reviewer"
+    ],
+    "started_utc": "2026-10-30T03:17:39.336789+00:00",
+    "ended_utc": "2026-10-30T03:21:49.435701+00:00",
+    "exit": 0,
+    "elapsed_s": 250.1,
+    "env_policy": {
+     "SYMBOLICA_LICENSE": "absent in this process env",
+     "SYMBOLICA_LICENSE_SIGNED": "absent",
+     "FEYNKIT_ORACLE_*": "absent",
+     "CARGO_TARGET_DIR": "absent",
+     "PYTHONDONTWRITEBYTECODE": "1",
+     "XDG_CONFIG_HOME": "unset (default ~/.config)"
+    },
+    "record": ".local/review-family-r3-b-20261030T030934Z/logs/reviewer/command.json"
+   },
+   {
+    "label": "staged",
+    "cwd": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families",
+    "argv": [
+     "/nix/store/4168xqs4l5jbfc7xyi9zrhdhszx0pnlb-python3-3.13.16/bin/python3",
+     "-B",
+     "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-diagnosis/round3/suite.py",
+     "staged",
+     "--out",
+     "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-family-r3-b-20261030T030934Z/runs/staged"
+    ],
+    "started_utc": "2026-10-30T03:17:39.323660+00:00",
+    "ended_utc": "2026-10-30T03:18:10.038224+00:00",
+    "exit": 0,
+    "elapsed_s": 30.7,
+    "env_policy": {
+     "SYMBOLICA_LICENSE": "absent in this process env",
+     "SYMBOLICA_LICENSE_SIGNED": "absent",
+     "FEYNKIT_ORACLE_*": "absent",
+     "CARGO_TARGET_DIR": "absent",
+     "PYTHONDONTWRITEBYTECODE": "1",
+     "XDG_CONFIG_HOME": "unset (default ~/.config)"
+    },
+    "record": ".local/review-family-r3-b-20261030T030934Z/logs/staged/command.json"
+   }
+  ],
+  "heldouts": "72 validator invocations, each with command.json (argv, UTC start, exit, validator SHA) under heldout/runs/*; drivers scripts/heldout_run.py, heldout_run2.py and two inline single-spec runs (symbol-definition v2; duplicate-payload-id/diagram-removed) appending to heldout/results2.json; pool8 via inline driver -> heldout/pool8-result.json",
+  "elf_probes": "scripts/elf_probe.py probes/elf_probe_specs.json probes/elf (42 fresh processes, 03:27:47-03:28:33Z)",
+  "independent_analysis": "scripts/indep_diff.py, indep_algebra.py, indep_aggregate.py, indep_none_auto.py, indep_ct.py, schema_rederive.py, cmp_outputs.py, audit_runs.py, audit_layers.py, world_diff.py, cmp_closure2.py, tree_compare.py, manifest.py (all python -I -B unless importing sibling review modules)",
+  "vcs_reads": "jj --ignore-working-copy log/op log/bookmark list/workspace list; GIT_OPTIONAL_LOCKS=0 git --git-dir=main/.git cat-file/ls-tree/diff/rev-parse/check-ignore --no-index; no status/index refresh"
+ },
+ "license_and_nix": {
+  "nix": "no Nix eval/build/develop invoked",
+  "license": "never exported, printed, saved, hashed or placed in argv; read from ~/.config/symbolica/license only into the environment of direct retained-ELF children (validator common.run or my elf_probe); scan of my whole root: 0 files contain it",
+  "failure_probes": "absent/invalid-license probes ran in bwrap with a private ~/.cache and no network; the shared ~/.cache/symbolica lock is untouched (mtime 2026-09-11)"
+ },
+ "guards": {
+  "before_after": {
+   "workspace_tree": "4275/0 diffs both",
+   "historical_tree": "3551/0 diffs both",
+   "untracked": "0 both",
+   "jj_op_head": "80a63d622c9df04f unchanged",
+   "oracle_bookmarks": "unchanged",
+   "oracle_workspaces": "unchanged",
+   "main_git": "index 36fca299..., HEAD ad9a6439..., packed-refs 4312ed61... unchanged",
+   "prior_evidence_manifest": "82297 entries / 57956 files; before == after sha256 3a3adc7f0c18579bceff1e89e47fdc824ad94e73939ef81d9d7743894b599d6c",
+   "pre_existing": "target/oracle-numerator-family-diagnosis/__pycache__/validate-captures.cpython-313.pyc (R1 N7) present before and after, untouched"
+  },
+  "unrelated_shared_activity": "other lanes' bwrap Nix-boundary attestation processes were running and were not touched"
+ },
+ "failed_attempts": [
+  "first held-out run aborted: my spec bool-particle-current assumed an sm graph-0 edge with particle 1; the 53 partial runs/worlds were my own superseded scratch and were removed; fixed spec, dry-ran all mutations, full rerun complete",
+  "symbol-definition-port-only-current (v1) targeted an owner with a live interface, so the validator correctly rejected earlier at interface-live-link; retained as a test-design miss; v2 on the interface-free numerator owner rejects at symbol-definition",
+  "my first independent lexer was ASCII-only (failed on gammalooprs::ϵbar) and my first aggregate canonical form lacked power collection; both corrected before any conclusion; no validator credit depends on them"
+ ],
+ "retained_artifacts": {
+  "root": ".local/review-family-r3-b-20261030T030934Z",
+  "size": "17G apparent (runs 15G fresh suite rerun incl. hash-bound pair files; heldout 1.7G worlds+runs; probes 1.3M; before/after manifests 56M; logs; scripts)",
+  "key_files_sha256": {
+   "results-audit-runs.json": "1e77bf6a180066b71c6de9ad4d56481ad5a7a47aa184cb83112506fc32129b44",
+   "results-baseline-layers.json": "20178698b8bf37d96e0c17a4303714d451b3270446ebea4799e2bb1ea5414e90",
+   "heldout/results.json": "01ae4575fe3ced4dc4b229817d3006c5122e5c3419b83e2136935cb75e91f9e4",
+   "heldout/results2.json": "f89f43334df1036215d62b320deed48ac2d91ec44dfd50aaa8e7e57159b83b75",
+   "heldout/pool8-result.json": "4b50e928f8a5c57532931338b231919173a0cabca97b8d2020347158d02f89d5",
+   "probes/elf/results.json": "86747fe75aa5d62f0e066b1310ee8e05d86ac3232d9ad3b706d84c8dc3796f56",
+   "probes/elf_probe_specs.json": "6adc770c223cfbe46bfe60d187f8631b4a07e6d487e938c32914be3ab0525f7d",
+   "probes/indep_algebra.json": "bec7b731650d8d7fb290a821ec9fa4b051b7ba8c0578889b3f390b149b17b1c9",
+   "probes/indep_aggregate.json": "9005fd02949b5e9625ae2a9b5408ddf0144a57e6901bfa61227f314ad836d84d",
+   "probes/indep_ct.json": "3e8dca1d50513d8e51e0b24a5cc16624de7e98620902c7ab9bc638a4059f26a8",
+   "probes/indep_none_auto.json": "1c89abf71bb0b56bda8b62580872d694ef910d2b752f471d22b92282490b7324",
+   "probes/indep_cross_route_diff.json": "9d0e766936e948f312bb74eb37b7a788fa62769631f24644f22b03f4931ef0d1",
+   "probes/reviewer_world_diffs.json": "f8c09b95db3788b477466705b24c9879eca9a80146a7f75f5b8403bfadf02a85",
+   "probes/all_definitions.json": "d904844aeee5d68b553039841382330451f49ae6b62ca27ad1e0eef62ba5b814",
+   "before/evidence-manifest.json": "3a3adc7f0c18579bceff1e89e47fdc824ad94e73939ef81d9d7743894b599d6c",
+   "after/evidence-manifest.json": "3a3adc7f0c18579bceff1e89e47fdc824ad94e73939ef81d9d7743894b599d6c",
+   "before/worktree-compare.json": "42a1b3cb1d0d8e275ad27e43b3634c7132387f93a1a85a98f974168152188eb4",
+   "after/worktree-compare.json": "42a1b3cb1d0d8e275ad27e43b3634c7132387f93a1a85a98f974168152188eb4",
+   "before/historical-worktree-compare.json": "5f918d78e7de1f89992f15165e596e9afd6fc66440606e86275d8af5305492a1",
+   "after/historical-worktree-compare.json": "5f918d78e7de1f89992f15165e596e9afd6fc66440606e86275d8af5305492a1",
+   "runs/baseline/results.json": "0896ea88d8218b2174c78bab1fd376b0aa487b361998841af3b450528c8d7776",
+   "runs/reviewer/results.json": "6a206ed050b9c0137b7c7400c2ea48fda9d1f4c41b0f1c7378ebe6a555c2fc9b",
+   "runs/domain/results.json": "042c982e57cdf3fa8704293153ab7fcd9a907c51203950af96fe89820ab70d08",
+   "runs/staged/results.json": "b26a14d06b8645dfd8dd8c27a7a3fd8a6535945d880b43eecfed76386d8becec",
+   "runs/anchor/results.json": "d9a0b1115287a2981d962da8f499773e379a0125010e99e0dc7194751a67afbe",
+   "runs/infrastructure/results.json": "eebe2d06cfda1365f08c9b400e3fcb01bef1bd727a1b7b933e3097d619542642",
+   "runs/legacy/qed_eemm_L1-None/results.json": "7f682c91c9baed18213149a94b33b1b97e80813277aa008896ed597ed218a92f",
+   "runs/legacy/qed_eemm_L1-Auto/results.json": "3d91881ee4dee62dec179d5e3ef4cddcec013d2666b13a34bd8d65931ed7e731",
+   "runs/legacy/ctorder_qcd_uugg_L1-None/results.json": "6889fc95a9e631f2d6dc2c7408bfffd65d109b15cf0e1c8339a51a573b7296c7",
+   "runs/legacy/ctorder_qcd_uugg_L1-Auto/results.json": "b399ee3bba00c0c9790731524295d652b508ceb61fb230b27bf3d11e5c7b3279",
+   "runs/legacy/sm_eemm_L0-None/results.json": "ad6d28ea664b9a8b68c8d49edfc93934b61c14e520d8966ca4f2e8884dbde0c4",
+   "runs/legacy/sm_eemm_L0-Auto/results.json": "7296453343fda2bf7c6b7f513ff74df91b4816cdfe12dce93861fff7be72385a",
+   "runs/legacy/ym_g6_L0-None/results.json": "80ce93b0f11dc104f0575befd50df4bdca0ce278e65d821694bcf9064481597f",
+   "runs/legacy/ym_g6_L0-Auto/results.json": "f2101fe4147b5ffb9995fd677ff3e03e1276dbb7e000944edc65c4f242f8946b"
+  },
+  "scripts_sha256": {
+   "scripts/agg_debug.py": "6e9edf82cf15470c7f9db266e3eefe65377a6c2b84c003e2937fb2ac18f4d39a",
+   "scripts/audit_layers.py": "61df94e3a23845dd7478ab930e5acac480fb9eb1bfa983ecba131b0cf8c1738d",
+   "scripts/audit_runs.py": "8f62d127b689b44ab6c01f1614b3226360e129df408a7ff474e9de519e33cf24",
+   "scripts/cmp_closure.py": "045e434a1b7aebc51c35fef3521db6a9e4e52086a7e87074eeac0ef8daf422c4",
+   "scripts/cmp_closure2.py": "d77183038318c6b0b1690c925b96e37f2aefb4af0380745cd038dfb7775a5fd8",
+   "scripts/cmp_outputs.py": "062ebb4a316cab7f056182c77295714b2bdacf9f4dc2697fcf626dc381715306",
+   "scripts/elf_probe.py": "a2a1fb3fa3b5ff7d62cd058de173561cf09acbd0a545b2e37f75d6b3923ddf8c",
+   "scripts/heldout_lib.py": "6bf4c75b2feea9b8129a3c6117d75a4718a2a525ac94a66252694f099c42927a",
+   "scripts/heldout_run.py": "9efc8f266d40a6b319d9ef45e11eeb7c7186c88531375f210c79f55fd9425fa7",
+   "scripts/heldout_run2.py": "7790a31e859963af6da77008dccfc7cdd41fbed4284df9bfbb943f3fb9b7bb20",
+   "scripts/heldout_specs.py": "7be9fa72d3504f50bd468014084305247dca2ebffde02066ef7384b08e417a0a",
+   "scripts/heldout_specs2.py": "f5e3870a8009649a0ccc41830adf7267a7a46948b1ec723fcc053eb8fafef793",
+   "scripts/indep_aggregate.py": "ca1f22e423366ad0e9664be7f5910e986b79f11b3599269eea4e391f8d188f24",
+   "scripts/indep_algebra.py": "ff0c15b84145c719211d6dcff3593d316dd610908c281a96f2ca304918983e62",
+   "scripts/indep_algebra_lib.py": "fbd45075da54c06372bb9e9b8b8ac65d39b8cf9e6030838a3ee6f285b442e0a0",
+   "scripts/indep_ct.py": "be3a7c1561897626157c75e26af58256b93aebcd183f2b54d810308d782d67d6",
+   "scripts/indep_diff.py": "4352d076775d5e65270a9873a33d368622e97598b1c621cf86f95b614b94d7b1",
+   "scripts/indep_none_auto.py": "c79ab86be6b9bcf128d0bc0bdad292a16055b03ebad4dca6800cc9c286dda6ee",
+   "scripts/manifest.py": "1a173c82153da5b31f40bb866d7d0abb44f2af23f2a9020fa643991eff43df0b",
+   "scripts/rerun_all.sh": "85f884135f7b8a3b4645d5ee9df9da3a883f68b2009ccd4d980581cbe41d9868",
+   "scripts/runrec.py": "899af8c5b7ca72f772ac5da279425c3069079d8293045d88c2904ca6540622e5",
+   "scripts/schema_rederive.py": "8db71b1c350ad122d280fe603a951248054c3741c5cdb4152ed8ce194ad4b921",
+   "scripts/tree_compare.py": "de52cfc4fc82b34b00a35b8c019594e886846ede7aca9e35d969f730937a703b",
+   "scripts/world_diff.py": "d7f5ef3f3aa6bf72b2dd8b1027524e98e276abf47dd9f7092635b7a168d3a4c5"
+  },
+  "note": "no .md/.html/.rs/.typ files under .local (docs builder walks it); no __pycache__; after aggregation root may prune runs/**/native-*/*-pairs.json and heldout/worlds (hashes retained in command records)"
+ },
+ "cleanup": {
+  "removed": "only my aborted partial held-out attempt (53 runs, 53 worlds)",
+  "processes": "none of mine running",
+  "outside_root": "nothing created/modified outside my review root except harness-managed tool logs"
+ }
+}

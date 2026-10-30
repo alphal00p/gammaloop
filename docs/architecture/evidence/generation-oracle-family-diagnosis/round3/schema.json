@@ -1,0 +1,1451 @@
+{
+  "schema": 1,
+  "scope": [
+    "qed_eemm_L1",
+    "ctorder_qcd_uugg_L1",
+    "sm_eemm_L0",
+    "ym_g6_L0"
+  ],
+  "types": {
+    "grouping.json": [
+      "str"
+    ],
+    "model.json": [
+      "dict"
+    ],
+    "model.json/couplings": [
+      "list"
+    ],
+    "model.json/couplings/*": [
+      "dict"
+    ],
+    "model.json/couplings/*/expression": [
+      "str"
+    ],
+    "model.json/couplings/*/name": [
+      "str"
+    ],
+    "model.json/couplings/*/orders": [
+      "list"
+    ],
+    "model.json/couplings/*/orders/*": [
+      "list"
+    ],
+    "model.json/couplings/*/orders/*/*": [
+      "int",
+      "str"
+    ],
+    "model.json/couplings/*/value": [
+      "list"
+    ],
+    "model.json/couplings/*/value/*": [
+      "float"
+    ],
+    "model.json/covariant_cut_multiplets": [
+      "dict"
+    ],
+    "model.json/covariant_cut_multiplets/-24": [
+      "list"
+    ],
+    "model.json/covariant_cut_multiplets/-24/*": [
+      "int"
+    ],
+    "model.json/covariant_cut_multiplets/23": [
+      "list"
+    ],
+    "model.json/covariant_cut_multiplets/23/*": [
+      "int"
+    ],
+    "model.json/covariant_cut_multiplets/24": [
+      "list"
+    ],
+    "model.json/covariant_cut_multiplets/24/*": [
+      "int"
+    ],
+    "model.json/form_factors": [
+      "list"
+    ],
+    "model.json/functions": [
+      "list"
+    ],
+    "model.json/lorentz_structures": [
+      "list"
+    ],
+    "model.json/lorentz_structures/*": [
+      "dict"
+    ],
+    "model.json/lorentz_structures/*/name": [
+      "str"
+    ],
+    "model.json/lorentz_structures/*/spins": [
+      "list"
+    ],
+    "model.json/lorentz_structures/*/spins/*": [
+      "int"
+    ],
+    "model.json/lorentz_structures/*/structure": [
+      "str"
+    ],
+    "model.json/name": [
+      "str"
+    ],
+    "model.json/orders": [
+      "list"
+    ],
+    "model.json/orders/*": [
+      "dict"
+    ],
+    "model.json/orders/*/expansion_order": [
+      "int"
+    ],
+    "model.json/orders/*/hierarchy": [
+      "int"
+    ],
+    "model.json/orders/*/name": [
+      "str"
+    ],
+    "model.json/parameters": [
+      "list"
+    ],
+    "model.json/parameters/*": [
+      "dict"
+    ],
+    "model.json/parameters/*/expression": [
+      "NoneType",
+      "str"
+    ],
+    "model.json/parameters/*/lhablock": [
+      "NoneType",
+      "str"
+    ],
+    "model.json/parameters/*/lhacode": [
+      "NoneType",
+      "list"
+    ],
+    "model.json/parameters/*/lhacode/*": [
+      "int"
+    ],
+    "model.json/parameters/*/name": [
+      "str"
+    ],
+    "model.json/parameters/*/nature": [
+      "str"
+    ],
+    "model.json/parameters/*/parameter_type": [
+      "str"
+    ],
+    "model.json/parameters/*/texname": [
+      "str"
+    ],
+    "model.json/parameters/*/value": [
+      "list"
+    ],
+    "model.json/parameters/*/value/*": [
+      "float"
+    ],
+    "model.json/particles": [
+      "list"
+    ],
+    "model.json/particles/*": [
+      "dict"
+    ],
+    "model.json/particles/*/antiname": [
+      "str"
+    ],
+    "model.json/particles/*/antitexname": [
+      "str"
+    ],
+    "model.json/particles/*/charge": [
+      "str"
+    ],
+    "model.json/particles/*/chemical_potential": [
+      "str"
+    ],
+    "model.json/particles/*/color": [
+      "int"
+    ],
+    "model.json/particles/*/ghost_number": [
+      "int"
+    ],
+    "model.json/particles/*/goldstoneboson": [
+      "bool"
+    ],
+    "model.json/particles/*/lepton_number": [
+      "int"
+    ],
+    "model.json/particles/*/mass": [
+      "str"
+    ],
+    "model.json/particles/*/name": [
+      "str"
+    ],
+    "model.json/particles/*/pdg_code": [
+      "int"
+    ],
+    "model.json/particles/*/propagating": [
+      "bool"
+    ],
+    "model.json/particles/*/propagator": [
+      "NoneType"
+    ],
+    "model.json/particles/*/spin": [
+      "int"
+    ],
+    "model.json/particles/*/texname": [
+      "str"
+    ],
+    "model.json/particles/*/width": [
+      "str"
+    ],
+    "model.json/particles/*/y_charge": [
+      "NoneType",
+      "str"
+    ],
+    "model.json/particles/*/y_charge_right": [
+      "NoneType",
+      "str"
+    ],
+    "model.json/propagators": [
+      "list"
+    ],
+    "model.json/propagators/*": [
+      "dict"
+    ],
+    "model.json/propagators/*/denominator": [
+      "str"
+    ],
+    "model.json/propagators/*/name": [
+      "str"
+    ],
+    "model.json/propagators/*/numerator": [
+      "str"
+    ],
+    "model.json/propagators/*/particle": [
+      "str"
+    ],
+    "model.json/restriction": [
+      "NoneType"
+    ],
+    "model.json/vertex_rules": [
+      "list"
+    ],
+    "model.json/vertex_rules/*": [
+      "dict"
+    ],
+    "model.json/vertex_rules/*/color_structures": [
+      "list"
+    ],
+    "model.json/vertex_rules/*/color_structures/*": [
+      "str"
+    ],
+    "model.json/vertex_rules/*/couplings": [
+      "list"
+    ],
+    "model.json/vertex_rules/*/couplings/*": [
+      "list"
+    ],
+    "model.json/vertex_rules/*/couplings/*/*": [
+      "NoneType",
+      "str"
+    ],
+    "model.json/vertex_rules/*/lorentz_structures": [
+      "list"
+    ],
+    "model.json/vertex_rules/*/lorentz_structures/*": [
+      "str"
+    ],
+    "model.json/vertex_rules/*/name": [
+      "str"
+    ],
+    "model.json/vertex_rules/*/particles": [
+      "list"
+    ],
+    "model.json/vertex_rules/*/particles/*": [
+      "str"
+    ],
+    "options.json": [
+      "dict"
+    ],
+    "options.json/filter_zero_color": [
+      "bool"
+    ],
+    "options.json/loop_momentum_bases": [
+      "dict"
+    ],
+    "options.json/named_loop_momentum_bases": [
+      "dict"
+    ],
+    "options.json/naming": [
+      "dict"
+    ],
+    "options.json/naming/named": [
+      "dict"
+    ],
+    "options.json/naming/named/prefix": [
+      "str"
+    ],
+    "options.json/prefactor": [
+      "str"
+    ],
+    "options.json/projector": [
+      "NoneType"
+    ],
+    "payload.json": [
+      "dict"
+    ],
+    "payload.json/diagrams": [
+      "list"
+    ],
+    "payload.json/diagrams/*": [
+      "dict"
+    ],
+    "payload.json/diagrams/*/aut": [
+      "str"
+    ],
+    "payload.json/diagrams/*/basis": [
+      "dict"
+    ],
+    "payload.json/diagrams/*/basis/dependent_externals": [
+      "list"
+    ],
+    "payload.json/diagrams/*/basis/dependent_externals/*": [
+      "int"
+    ],
+    "payload.json/diagrams/*/basis/edge_signatures": [
+      "dict"
+    ],
+    "payload.json/diagrams/*/basis/edge_signatures/#": [
+      "dict"
+    ],
+    "payload.json/diagrams/*/basis/edge_signatures/#/external": [
+      "list"
+    ],
+    "payload.json/diagrams/*/basis/edge_signatures/#/external/*": [
+      "int"
+    ],
+    "payload.json/diagrams/*/basis/edge_signatures/#/loops": [
+      "list"
+    ],
+    "payload.json/diagrams/*/basis/edge_signatures/#/loops/*": [
+      "int"
+    ],
+    "payload.json/diagrams/*/basis/external_edges": [
+      "list"
+    ],
+    "payload.json/diagrams/*/basis/external_edges/*": [
+      "int"
+    ],
+    "payload.json/diagrams/*/basis/loop_edges": [
+      "list"
+    ],
+    "payload.json/diagrams/*/basis/loop_edges/*": [
+      "int"
+    ],
+    "payload.json/diagrams/*/basis/tree_edges": [
+      "list"
+    ],
+    "payload.json/diagrams/*/basis/tree_edges/*": [
+      "int"
+    ],
+    "payload.json/diagrams/*/id": [
+      "str"
+    ],
+    "payload.json/diagrams/*/key": [
+      "dict"
+    ],
+    "payload.json/diagrams/*/key/edges": [
+      "list"
+    ],
+    "payload.json/diagrams/*/key/edges/*": [
+      "dict"
+    ],
+    "payload.json/diagrams/*/key/edges/*/diagram": [
+      "dict"
+    ],
+    "payload.json/diagrams/*/key/edges/*/diagram/external": [
+      "NoneType",
+      "dict"
+    ],
+    "payload.json/diagrams/*/key/edges/*/diagram/external/connection": [
+      "int"
+    ],
+    "payload.json/diagrams/*/key/edges/*/diagram/external/index": [
+      "int"
+    ],
+    "payload.json/diagrams/*/key/edges/*/diagram/external/name": [
+      "str"
+    ],
+    "payload.json/diagrams/*/key/edges/*/diagram/external/state": [
+      "str"
+    ],
+    "payload.json/diagrams/*/key/edges/*/diagram/is_dummy": [
+      "bool"
+    ],
+    "payload.json/diagrams/*/key/edges/*/diagram/particle": [
+      "int"
+    ],
+    "payload.json/diagrams/*/key/half_edges": [
+      "list"
+    ],
+    "payload.json/diagrams/*/key/half_edges/*": [
+      "int"
+    ],
+    "payload.json/diagrams/*/key/vertices": [
+      "list"
+    ],
+    "payload.json/diagrams/*/key/vertices/*": [
+      "dict"
+    ],
+    "payload.json/diagrams/*/key/vertices/*/diagram": [
+      "dict"
+    ],
+    "payload.json/diagrams/*/key/vertices/*/diagram/interaction": [
+      "int"
+    ],
+    "payload.json/diagrams/*/key/words": [
+      "list"
+    ],
+    "payload.json/diagrams/*/key/words/*": [
+      "int"
+    ],
+    "payload.json/diagrams/*/name": [
+      "str"
+    ],
+    "payload.json/diagrams/*/overall_factor": [
+      "str"
+    ],
+    "payload.json/diagrams/*/payload": [
+      "dict"
+    ],
+    "payload.json/diagrams/*/payload/cuts": [
+      "list"
+    ],
+    "payload.json/diagrams/*/payload/edges": [
+      "list"
+    ],
+    "payload.json/diagrams/*/payload/edges/*": [
+      "list"
+    ],
+    "payload.json/diagrams/*/payload/edges/*/0": [
+      "dict"
+    ],
+    "payload.json/diagrams/*/payload/edges/*/0/source": [
+      "NoneType",
+      "int"
+    ],
+    "payload.json/diagrams/*/payload/edges/*/0/target": [
+      "NoneType",
+      "int"
+    ],
+    "payload.json/diagrams/*/payload/edges/*/1": [
+      "dict"
+    ],
+    "payload.json/diagrams/*/payload/edges/*/1/directed": [
+      "bool"
+    ],
+    "payload.json/diagrams/*/payload/edges/*/1/external": [
+      "NoneType",
+      "dict"
+    ],
+    "payload.json/diagrams/*/payload/edges/*/1/external/connection": [
+      "int"
+    ],
+    "payload.json/diagrams/*/payload/edges/*/1/external/index": [
+      "int"
+    ],
+    "payload.json/diagrams/*/payload/edges/*/1/external/name": [
+      "str"
+    ],
+    "payload.json/diagrams/*/payload/edges/*/1/external/state": [
+      "str"
+    ],
+    "payload.json/diagrams/*/payload/edges/*/1/is_dummy": [
+      "bool"
+    ],
+    "payload.json/diagrams/*/payload/edges/*/1/num_interface": [
+      "list"
+    ],
+    "payload.json/diagrams/*/payload/edges/*/1/num_interface/*": [
+      "str"
+    ],
+    "payload.json/diagrams/*/payload/edges/*/1/numerator": [
+      "str"
+    ],
+    "payload.json/diagrams/*/payload/edges/*/1/orientation": [
+      "str"
+    ],
+    "payload.json/diagrams/*/payload/edges/*/1/particle": [
+      "int"
+    ],
+    "payload.json/diagrams/*/payload/edges/*/1/source_slot": [
+      "int"
+    ],
+    "payload.json/diagrams/*/payload/edges/*/1/target_slot": [
+      "int"
+    ],
+    "payload.json/diagrams/*/payload/half_edge_order": [
+      "list"
+    ],
+    "payload.json/diagrams/*/payload/half_edge_order/*": [
+      "dict"
+    ],
+    "payload.json/diagrams/*/payload/half_edge_order/*/edge": [
+      "int"
+    ],
+    "payload.json/diagrams/*/payload/half_edge_order/*/endpoint": [
+      "str"
+    ],
+    "payload.json/diagrams/*/payload/loop_momentum_basis": [
+      "dict"
+    ],
+    "payload.json/diagrams/*/payload/loop_momentum_basis/dependent_externals": [
+      "list"
+    ],
+    "payload.json/diagrams/*/payload/loop_momentum_basis/dependent_externals/*": [
+      "int"
+    ],
+    "payload.json/diagrams/*/payload/loop_momentum_basis/edge_signatures": [
+      "dict"
+    ],
+    "payload.json/diagrams/*/payload/loop_momentum_basis/edge_signatures/#": [
+      "dict"
+    ],
+    "payload.json/diagrams/*/payload/loop_momentum_basis/edge_signatures/#/external": [
+      "list"
+    ],
+    "payload.json/diagrams/*/payload/loop_momentum_basis/edge_signatures/#/external/*": [
+      "int"
+    ],
+    "payload.json/diagrams/*/payload/loop_momentum_basis/edge_signatures/#/loops": [
+      "list"
+    ],
+    "payload.json/diagrams/*/payload/loop_momentum_basis/edge_signatures/#/loops/*": [
+      "int"
+    ],
+    "payload.json/diagrams/*/payload/loop_momentum_basis/external_edges": [
+      "list"
+    ],
+    "payload.json/diagrams/*/payload/loop_momentum_basis/external_edges/*": [
+      "int"
+    ],
+    "payload.json/diagrams/*/payload/loop_momentum_basis/loop_edges": [
+      "list"
+    ],
+    "payload.json/diagrams/*/payload/loop_momentum_basis/loop_edges/*": [
+      "int"
+    ],
+    "payload.json/diagrams/*/payload/loop_momentum_basis/tree_edges": [
+      "list"
+    ],
+    "payload.json/diagrams/*/payload/loop_momentum_basis/tree_edges/*": [
+      "int"
+    ],
+    "payload.json/diagrams/*/payload/model": [
+      "list"
+    ],
+    "payload.json/diagrams/*/payload/model/*": [
+      "int"
+    ],
+    "payload.json/diagrams/*/payload/numerator": [
+      "str"
+    ],
+    "payload.json/diagrams/*/payload/numerator_prefactor": [
+      "str"
+    ],
+    "payload.json/diagrams/*/payload/overall_factor": [
+      "str"
+    ],
+    "payload.json/diagrams/*/payload/projector": [
+      "str"
+    ],
+    "payload.json/diagrams/*/payload/symmetry_factor": [
+      "int"
+    ],
+    "payload.json/diagrams/*/payload/topology_threshold_candidates": [
+      "list"
+    ],
+    "payload.json/diagrams/*/payload/vertices": [
+      "list"
+    ],
+    "payload.json/diagrams/*/payload/vertices/*": [
+      "dict"
+    ],
+    "payload.json/diagrams/*/payload/vertices/*/interaction": [
+      "int"
+    ],
+    "payload.json/diagrams/*/payload/vertices/*/name": [
+      "str"
+    ],
+    "payload.json/diagrams/*/payload/vertices/*/num_interface": [
+      "list"
+    ],
+    "payload.json/diagrams/*/payload/vertices/*/num_interface/*": [
+      "str"
+    ],
+    "payload.json/diagrams/*/payload/vertices/*/numerator": [
+      "str"
+    ],
+    "payload.json/groups": [
+      "list"
+    ],
+    "payload.json/groups/*": [
+      "dict"
+    ],
+    "payload.json/groups/*/master": [
+      "int"
+    ],
+    "payload.json/groups/*/members": [
+      "list"
+    ],
+    "payload.json/groups/*/members/*": [
+      "dict"
+    ],
+    "payload.json/groups/*/members/*/id": [
+      "str"
+    ],
+    "payload.json/groups/*/members/*/name": [
+      "str"
+    ],
+    "payload.json/groups/*/members/*/overall_factor": [
+      "str"
+    ],
+    "payload.json/groups/*/members/*/ratio": [
+      "str"
+    ],
+    "payload.json/groups/*/members/*/source_index": [
+      "int"
+    ],
+    "request.json": [
+      "dict"
+    ],
+    "request.json/classes": [
+      "str"
+    ],
+    "request.json/cuts": [
+      "dict"
+    ],
+    "request.json/cuts/amplitude": [
+      "dict"
+    ],
+    "request.json/cuts/amplitude/loops": [
+      "str"
+    ],
+    "request.json/cuts/amplitude/orders": [
+      "dict"
+    ],
+    "request.json/cuts/amplitude/orders/perturbative": [
+      "dict"
+    ],
+    "request.json/cuts/amplitude/orders/plain": [
+      "dict"
+    ],
+    "request.json/cuts/amplitude/orders/squared": [
+      "dict"
+    ],
+    "request.json/cuts/blobs": [
+      "str"
+    ],
+    "request.json/cuts/sewn_tadpoles": [
+      "bool"
+    ],
+    "request.json/cuts/spectators": [
+      "str"
+    ],
+    "request.json/cuts/symmetrize_left_right": [
+      "bool"
+    ],
+    "request.json/kind": [
+      "str"
+    ],
+    "request.json/loops": [
+      "dict"
+    ],
+    "request.json/loops/total": [
+      "dict"
+    ],
+    "request.json/loops/total/end": [
+      "int"
+    ],
+    "request.json/loops/total/start": [
+      "int"
+    ],
+    "request.json/orders": [
+      "dict"
+    ],
+    "request.json/orders/perturbative": [
+      "dict"
+    ],
+    "request.json/orders/plain": [
+      "dict"
+    ],
+    "request.json/orders/plain/CT": [
+      "dict"
+    ],
+    "request.json/orders/plain/CT/inclusive": [
+      "dict"
+    ],
+    "request.json/orders/plain/CT/inclusive/max": [
+      "int"
+    ],
+    "request.json/orders/plain/CT/inclusive/min": [
+      "int"
+    ],
+    "request.json/orders/squared": [
+      "dict"
+    ],
+    "request.json/process": [
+      "dict"
+    ],
+    "request.json/process/incoming": [
+      "list"
+    ],
+    "request.json/process/incoming/*": [
+      "dict"
+    ],
+    "request.json/process/incoming/*/kind": [
+      "str"
+    ],
+    "request.json/process/incoming/*/value": [
+      "str"
+    ],
+    "request.json/process/outgoing_alternatives": [
+      "list"
+    ],
+    "request.json/process/outgoing_alternatives/*": [
+      "list"
+    ],
+    "request.json/process/outgoing_alternatives/*/*": [
+      "dict"
+    ],
+    "request.json/process/outgoing_alternatives/*/*/kind": [
+      "str"
+    ],
+    "request.json/process/outgoing_alternatives/*/*/value": [
+      "str"
+    ],
+    "request.json/restrictions": [
+      "dict"
+    ],
+    "request.json/restrictions/particle_allow": [
+      "list"
+    ],
+    "request.json/restrictions/particle_exclude": [
+      "list"
+    ],
+    "request.json/restrictions/vertex_allow": [
+      "list"
+    ],
+    "request.json/restrictions/vertex_exclude": [
+      "list"
+    ],
+    "request.json/symmetrization": [
+      "dict"
+    ],
+    "request.json/symmetrization/external_fermions": [
+      "bool"
+    ],
+    "request.json/symmetrization/final_state": [
+      "bool"
+    ],
+    "request.json/symmetrization/initial": [
+      "bool"
+    ],
+    "request.json/topology": [
+      "dict"
+    ],
+    "request.json/topology/bridges": [
+      "str"
+    ],
+    "request.json/topology/factorized_loops": [
+      "str"
+    ],
+    "request.json/topology/fermion_loops": [
+      "str"
+    ],
+    "request.json/topology/max_vertices": [
+      "NoneType"
+    ],
+    "request.json/topology/self_energies": [
+      "dict"
+    ],
+    "request.json/topology/self_energies/massive": [
+      "bool"
+    ],
+    "request.json/topology/self_energies/massless": [
+      "bool"
+    ],
+    "request.json/topology/self_loops": [
+      "bool"
+    ],
+    "request.json/topology/snails": [
+      "dict"
+    ],
+    "request.json/topology/snails/massive": [
+      "bool"
+    ],
+    "request.json/topology/snails/massless": [
+      "bool"
+    ],
+    "request.json/topology/tadpoles": [
+      "dict"
+    ],
+    "request.json/topology/tadpoles/massive": [
+      "bool"
+    ],
+    "request.json/topology/tadpoles/massless": [
+      "bool"
+    ],
+    "request.json/topology/zero_flow_edges": [
+      "bool"
+    ],
+    "typed-owners.json": [
+      "list"
+    ],
+    "typed-owners.json/*": [
+      "dict"
+    ],
+    "typed-owners.json/*/id": [
+      "str"
+    ],
+    "typed-owners.json/*/owners": [
+      "list"
+    ],
+    "typed-owners.json/*/owners/*": [
+      "dict"
+    ],
+    "typed-owners.json/*/owners/*/expression": [
+      "str"
+    ],
+    "typed-owners.json/*/owners/*/is_composite": [
+      "bool"
+    ],
+    "typed-owners.json/*/owners/*/is_metric": [
+      "bool"
+    ],
+    "typed-owners.json/*/owners/*/ordered_ports": [
+      "list"
+    ],
+    "typed-owners.json/*/owners/*/ordered_ports/*": [
+      "str"
+    ],
+    "typed-owners.json/*/owners/*/owner": [
+      "str"
+    ],
+    "typed-owners.json/*/owners/*/producer_decoded_expression": [
+      "str"
+    ]
+  },
+  "object_keys": {
+    "model.json": [
+      [
+        "couplings",
+        "covariant_cut_multiplets",
+        "form_factors",
+        "functions",
+        "lorentz_structures",
+        "name",
+        "orders",
+        "parameters",
+        "particles",
+        "propagators",
+        "restriction",
+        "vertex_rules"
+      ],
+      [
+        "couplings",
+        "form_factors",
+        "functions",
+        "lorentz_structures",
+        "name",
+        "orders",
+        "parameters",
+        "particles",
+        "propagators",
+        "restriction",
+        "vertex_rules"
+      ]
+    ],
+    "model.json/couplings/*": [
+      [
+        "expression",
+        "name",
+        "orders",
+        "value"
+      ]
+    ],
+    "model.json/covariant_cut_multiplets": [
+      [
+        "-24",
+        "23",
+        "24"
+      ]
+    ],
+    "model.json/lorentz_structures/*": [
+      [
+        "name",
+        "spins",
+        "structure"
+      ]
+    ],
+    "model.json/orders/*": [
+      [
+        "expansion_order",
+        "hierarchy",
+        "name"
+      ]
+    ],
+    "model.json/parameters/*": [
+      [
+        "expression",
+        "lhablock",
+        "lhacode",
+        "name",
+        "nature",
+        "parameter_type",
+        "texname",
+        "value"
+      ],
+      [
+        "expression",
+        "lhablock",
+        "lhacode",
+        "name",
+        "nature",
+        "parameter_type",
+        "value"
+      ]
+    ],
+    "model.json/particles/*": [
+      [
+        "antiname",
+        "antitexname",
+        "charge",
+        "chemical_potential",
+        "color",
+        "ghost_number",
+        "goldstoneboson",
+        "lepton_number",
+        "mass",
+        "name",
+        "pdg_code",
+        "propagating",
+        "propagator",
+        "spin",
+        "texname",
+        "width",
+        "y_charge",
+        "y_charge_right"
+      ],
+      [
+        "antiname",
+        "antitexname",
+        "charge",
+        "color",
+        "ghost_number",
+        "goldstoneboson",
+        "lepton_number",
+        "mass",
+        "name",
+        "pdg_code",
+        "propagating",
+        "propagator",
+        "spin",
+        "texname",
+        "width",
+        "y_charge",
+        "y_charge_right"
+      ]
+    ],
+    "model.json/propagators/*": [
+      [
+        "denominator",
+        "name",
+        "numerator",
+        "particle"
+      ]
+    ],
+    "model.json/vertex_rules/*": [
+      [
+        "color_structures",
+        "couplings",
+        "lorentz_structures",
+        "name",
+        "particles"
+      ]
+    ],
+    "options.json": [
+      [
+        "filter_zero_color",
+        "loop_momentum_bases",
+        "named_loop_momentum_bases",
+        "naming",
+        "prefactor",
+        "projector"
+      ]
+    ],
+    "options.json/loop_momentum_bases": [
+      []
+    ],
+    "options.json/named_loop_momentum_bases": [
+      []
+    ],
+    "options.json/naming": [
+      [
+        "named"
+      ]
+    ],
+    "options.json/naming/named": [
+      [
+        "prefix"
+      ]
+    ],
+    "payload.json": [
+      [
+        "diagrams",
+        "groups"
+      ]
+    ],
+    "payload.json/diagrams/*": [
+      [
+        "aut",
+        "basis",
+        "id",
+        "key",
+        "name",
+        "overall_factor",
+        "payload"
+      ]
+    ],
+    "payload.json/diagrams/*/basis": [
+      [
+        "dependent_externals",
+        "edge_signatures",
+        "external_edges",
+        "loop_edges",
+        "tree_edges"
+      ]
+    ],
+    "payload.json/diagrams/*/basis/edge_signatures": [
+      "numeric-map"
+    ],
+    "payload.json/diagrams/*/basis/edge_signatures/#": [
+      [
+        "external",
+        "loops"
+      ]
+    ],
+    "payload.json/diagrams/*/key": [
+      [
+        "edges",
+        "half_edges",
+        "vertices",
+        "words"
+      ]
+    ],
+    "payload.json/diagrams/*/key/edges/*": [
+      [
+        "diagram"
+      ]
+    ],
+    "payload.json/diagrams/*/key/edges/*/diagram": [
+      [
+        "external",
+        "is_dummy",
+        "particle"
+      ]
+    ],
+    "payload.json/diagrams/*/key/edges/*/diagram/external": [
+      [
+        "connection",
+        "index",
+        "name",
+        "state"
+      ]
+    ],
+    "payload.json/diagrams/*/key/vertices/*": [
+      [
+        "diagram"
+      ]
+    ],
+    "payload.json/diagrams/*/key/vertices/*/diagram": [
+      [
+        "interaction"
+      ]
+    ],
+    "payload.json/diagrams/*/payload": [
+      [
+        "cuts",
+        "edges",
+        "half_edge_order",
+        "loop_momentum_basis",
+        "model",
+        "numerator",
+        "numerator_prefactor",
+        "overall_factor",
+        "projector",
+        "symmetry_factor",
+        "topology_threshold_candidates",
+        "vertices"
+      ]
+    ],
+    "payload.json/diagrams/*/payload/edges/*/0": [
+      [
+        "source",
+        "target"
+      ]
+    ],
+    "payload.json/diagrams/*/payload/edges/*/1": [
+      [
+        "directed",
+        "external",
+        "is_dummy",
+        "num_interface",
+        "numerator",
+        "orientation",
+        "particle",
+        "source_slot",
+        "target_slot"
+      ],
+      [
+        "directed",
+        "external",
+        "is_dummy",
+        "numerator",
+        "orientation",
+        "particle",
+        "source_slot",
+        "target_slot"
+      ]
+    ],
+    "payload.json/diagrams/*/payload/edges/*/1/external": [
+      [
+        "connection",
+        "index",
+        "name",
+        "state"
+      ]
+    ],
+    "payload.json/diagrams/*/payload/half_edge_order/*": [
+      [
+        "edge",
+        "endpoint"
+      ]
+    ],
+    "payload.json/diagrams/*/payload/loop_momentum_basis": [
+      [
+        "dependent_externals",
+        "edge_signatures",
+        "external_edges",
+        "loop_edges",
+        "tree_edges"
+      ]
+    ],
+    "payload.json/diagrams/*/payload/loop_momentum_basis/edge_signatures": [
+      "numeric-map"
+    ],
+    "payload.json/diagrams/*/payload/loop_momentum_basis/edge_signatures/#": [
+      [
+        "external",
+        "loops"
+      ]
+    ],
+    "payload.json/diagrams/*/payload/vertices/*": [
+      [
+        "interaction",
+        "name",
+        "num_interface",
+        "numerator"
+      ],
+      [
+        "interaction",
+        "name",
+        "numerator"
+      ]
+    ],
+    "payload.json/groups/*": [
+      [
+        "master",
+        "members"
+      ]
+    ],
+    "payload.json/groups/*/members/*": [
+      [
+        "id",
+        "name",
+        "overall_factor",
+        "ratio",
+        "source_index"
+      ]
+    ],
+    "request.json": [
+      [
+        "classes",
+        "cuts",
+        "kind",
+        "loops",
+        "orders",
+        "process",
+        "restrictions",
+        "symmetrization",
+        "topology"
+      ]
+    ],
+    "request.json/cuts": [
+      [
+        "amplitude",
+        "blobs",
+        "sewn_tadpoles",
+        "spectators",
+        "symmetrize_left_right"
+      ]
+    ],
+    "request.json/cuts/amplitude": [
+      [
+        "loops",
+        "orders"
+      ]
+    ],
+    "request.json/cuts/amplitude/orders": [
+      [
+        "perturbative",
+        "plain",
+        "squared"
+      ]
+    ],
+    "request.json/cuts/amplitude/orders/perturbative": [
+      []
+    ],
+    "request.json/cuts/amplitude/orders/plain": [
+      []
+    ],
+    "request.json/cuts/amplitude/orders/squared": [
+      []
+    ],
+    "request.json/loops": [
+      [
+        "total"
+      ]
+    ],
+    "request.json/loops/total": [
+      [
+        "end",
+        "start"
+      ]
+    ],
+    "request.json/orders": [
+      [
+        "perturbative",
+        "plain",
+        "squared"
+      ]
+    ],
+    "request.json/orders/perturbative": [
+      []
+    ],
+    "request.json/orders/plain": [
+      [
+        "CT"
+      ],
+      []
+    ],
+    "request.json/orders/plain/CT": [
+      [
+        "inclusive"
+      ]
+    ],
+    "request.json/orders/plain/CT/inclusive": [
+      [
+        "max",
+        "min"
+      ]
+    ],
+    "request.json/orders/squared": [
+      []
+    ],
+    "request.json/process": [
+      [
+        "incoming",
+        "outgoing_alternatives"
+      ]
+    ],
+    "request.json/process/incoming/*": [
+      [
+        "kind",
+        "value"
+      ]
+    ],
+    "request.json/process/outgoing_alternatives/*/*": [
+      [
+        "kind",
+        "value"
+      ]
+    ],
+    "request.json/restrictions": [
+      [
+        "particle_allow",
+        "particle_exclude",
+        "vertex_allow",
+        "vertex_exclude"
+      ]
+    ],
+    "request.json/symmetrization": [
+      [
+        "external_fermions",
+        "final_state",
+        "initial"
+      ]
+    ],
+    "request.json/topology": [
+      [
+        "bridges",
+        "factorized_loops",
+        "fermion_loops",
+        "max_vertices",
+        "self_energies",
+        "self_loops",
+        "snails",
+        "tadpoles",
+        "zero_flow_edges"
+      ]
+    ],
+    "request.json/topology/self_energies": [
+      [
+        "massive",
+        "massless"
+      ]
+    ],
+    "request.json/topology/snails": [
+      [
+        "massive",
+        "massless"
+      ]
+    ],
+    "request.json/topology/tadpoles": [
+      [
+        "massive",
+        "massless"
+      ]
+    ],
+    "typed-owners.json/*": [
+      [
+        "id",
+        "owners"
+      ]
+    ],
+    "typed-owners.json/*/owners/*": [
+      [
+        "expression",
+        "is_composite",
+        "is_metric",
+        "ordered_ports",
+        "owner",
+        "producer_decoded_expression"
+      ]
+    ]
+  },
+  "derivation_inputs": {
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-family-historical/target/oracle-numerator-family-diagnosis/adapted-historical/captures/qed_eemm_L1/classes-None-t1/payload.json": "dc8edf1fe742689145c17a0b812767e3d05890d02aecc72e7608ef956c6c667d",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-family-historical/target/oracle-numerator-family-diagnosis/adapted-historical/captures/qed_eemm_L1/classes-None-t1/typed-owners.json": "ef2af9b74c91c0a214f22907fd1e17b50682a8d6818cccfb19f6a246a9c4785e",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-family-historical/target/oracle-numerator-family-diagnosis/adapted-historical/captures/qed_eemm_L1/classes-None-t1/model.json": "a1e0237b57dfc6093c868ec88b664327a50d4877239692c8e5d68df5cfc33138",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-family-historical/target/oracle-numerator-family-diagnosis/adapted-historical/captures/qed_eemm_L1/classes-None-t1/request.json": "9528a407e56b5aaacf07537a66fcdeec939d8829763a5fe582db58e2dd786274",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-family-historical/target/oracle-numerator-family-diagnosis/adapted-historical/captures/qed_eemm_L1/classes-None-t1/options.json": "902f9700155918f019896a8345c5d3ebabee98f119140346ef913a8771e08925",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-family-historical/target/oracle-numerator-family-diagnosis/adapted-historical/captures/qed_eemm_L1/classes-None-t1/grouping.json": "30a0924a3360be687d1df9fcbbfdff62c01bc0fd14036ab9076cf7f451568666",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-family-historical/target/oracle-numerator-family-diagnosis/adapted-historical/captures/qed_eemm_L1/classes-Auto-t1/payload.json": "dc8edf1fe742689145c17a0b812767e3d05890d02aecc72e7608ef956c6c667d",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-family-historical/target/oracle-numerator-family-diagnosis/adapted-historical/captures/qed_eemm_L1/classes-Auto-t1/typed-owners.json": "ef2af9b74c91c0a214f22907fd1e17b50682a8d6818cccfb19f6a246a9c4785e",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-family-historical/target/oracle-numerator-family-diagnosis/adapted-historical/captures/qed_eemm_L1/classes-Auto-t1/model.json": "a1e0237b57dfc6093c868ec88b664327a50d4877239692c8e5d68df5cfc33138",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-family-historical/target/oracle-numerator-family-diagnosis/adapted-historical/captures/qed_eemm_L1/classes-Auto-t1/request.json": "9c1feeb220e916ec59100381b183c1b3998702143182696679cd3f4b6f549a72",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-family-historical/target/oracle-numerator-family-diagnosis/adapted-historical/captures/qed_eemm_L1/classes-Auto-t1/options.json": "902f9700155918f019896a8345c5d3ebabee98f119140346ef913a8771e08925",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-family-historical/target/oracle-numerator-family-diagnosis/adapted-historical/captures/qed_eemm_L1/classes-Auto-t1/grouping.json": "30a0924a3360be687d1df9fcbbfdff62c01bc0fd14036ab9076cf7f451568666",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-family-historical/target/oracle-numerator-family-diagnosis/adapted-historical/captures/ctorder_qcd_uugg_L1/classes-None-t1/payload.json": "8c2aef39589c3cb2043e212074ccbef2f06edec6c11af9fa369f3698cc6214a1",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-family-historical/target/oracle-numerator-family-diagnosis/adapted-historical/captures/ctorder_qcd_uugg_L1/classes-None-t1/typed-owners.json": "617968b9be989531d5e727d0d86bdc27e23f72cd53f5682ca311facd0e2a3fa2",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-family-historical/target/oracle-numerator-family-diagnosis/adapted-historical/captures/ctorder_qcd_uugg_L1/classes-None-t1/model.json": "e8dd0e13fea1045e3ce738ba4fbf7204dfaf9fb612fb355e73594fbaf954dc1e",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-family-historical/target/oracle-numerator-family-diagnosis/adapted-historical/captures/ctorder_qcd_uugg_L1/classes-None-t1/request.json": "ebc0d8fa9bfb5d70aafc92626af1dfe0e70490d964d5dfe70a0a9c17559fdf0a",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-family-historical/target/oracle-numerator-family-diagnosis/adapted-historical/captures/ctorder_qcd_uugg_L1/classes-None-t1/options.json": "902f9700155918f019896a8345c5d3ebabee98f119140346ef913a8771e08925",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-family-historical/target/oracle-numerator-family-diagnosis/adapted-historical/captures/ctorder_qcd_uugg_L1/classes-None-t1/grouping.json": "30a0924a3360be687d1df9fcbbfdff62c01bc0fd14036ab9076cf7f451568666",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-family-historical/target/oracle-numerator-family-diagnosis/adapted-historical/captures/ctorder_qcd_uugg_L1/classes-Auto-t1/payload.json": "575219ad3cf25cea67af555333ad2409614ce64f74d9e7809c7d38c80e598170",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-family-historical/target/oracle-numerator-family-diagnosis/adapted-historical/captures/ctorder_qcd_uugg_L1/classes-Auto-t1/typed-owners.json": "7cff06b23cafb257c817180b295d7be520bb879cd6ad291695d52df489e193b9",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-family-historical/target/oracle-numerator-family-diagnosis/adapted-historical/captures/ctorder_qcd_uugg_L1/classes-Auto-t1/model.json": "e8dd0e13fea1045e3ce738ba4fbf7204dfaf9fb612fb355e73594fbaf954dc1e",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-family-historical/target/oracle-numerator-family-diagnosis/adapted-historical/captures/ctorder_qcd_uugg_L1/classes-Auto-t1/request.json": "e88d819cf617c592ff8ce5da58fddcf593b2834f66c210d50684d12e8730a4b1",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-family-historical/target/oracle-numerator-family-diagnosis/adapted-historical/captures/ctorder_qcd_uugg_L1/classes-Auto-t1/options.json": "902f9700155918f019896a8345c5d3ebabee98f119140346ef913a8771e08925",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-family-historical/target/oracle-numerator-family-diagnosis/adapted-historical/captures/ctorder_qcd_uugg_L1/classes-Auto-t1/grouping.json": "30a0924a3360be687d1df9fcbbfdff62c01bc0fd14036ab9076cf7f451568666",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-family-historical/target/oracle-numerator-family-diagnosis/adapted-historical/captures/sm_eemm_L0/classes-None-t1/payload.json": "44375435c367260d4fb01169e0f8a049af4623f022e4c7fd54c95b7e9702d74c",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-family-historical/target/oracle-numerator-family-diagnosis/adapted-historical/captures/sm_eemm_L0/classes-None-t1/typed-owners.json": "371a023180d556b715a1361c230332b1a7c1dbe38eb558eaf0c0c60cadc0c252",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-family-historical/target/oracle-numerator-family-diagnosis/adapted-historical/captures/sm_eemm_L0/classes-None-t1/model.json": "862b05a0e841275ee4c4d2534519fa6a4b4143e973b7bc9459a6e0189d41f1f0",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-family-historical/target/oracle-numerator-family-diagnosis/adapted-historical/captures/sm_eemm_L0/classes-None-t1/request.json": "7a1767884a927de232df8d8a9fa06bade86820de10cbafee6da338e5021099f2",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-family-historical/target/oracle-numerator-family-diagnosis/adapted-historical/captures/sm_eemm_L0/classes-None-t1/options.json": "902f9700155918f019896a8345c5d3ebabee98f119140346ef913a8771e08925",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-family-historical/target/oracle-numerator-family-diagnosis/adapted-historical/captures/sm_eemm_L0/classes-None-t1/grouping.json": "30a0924a3360be687d1df9fcbbfdff62c01bc0fd14036ab9076cf7f451568666",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-family-historical/target/oracle-numerator-family-diagnosis/adapted-historical/captures/sm_eemm_L0/classes-Auto-t1/payload.json": "44375435c367260d4fb01169e0f8a049af4623f022e4c7fd54c95b7e9702d74c",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-family-historical/target/oracle-numerator-family-diagnosis/adapted-historical/captures/sm_eemm_L0/classes-Auto-t1/typed-owners.json": "371a023180d556b715a1361c230332b1a7c1dbe38eb558eaf0c0c60cadc0c252",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-family-historical/target/oracle-numerator-family-diagnosis/adapted-historical/captures/sm_eemm_L0/classes-Auto-t1/model.json": "862b05a0e841275ee4c4d2534519fa6a4b4143e973b7bc9459a6e0189d41f1f0",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-family-historical/target/oracle-numerator-family-diagnosis/adapted-historical/captures/sm_eemm_L0/classes-Auto-t1/request.json": "c43cced42430b6e52010496b5e7e9a3da7f5838c600e8e8ccc59b0a8b30585ee",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-family-historical/target/oracle-numerator-family-diagnosis/adapted-historical/captures/sm_eemm_L0/classes-Auto-t1/options.json": "902f9700155918f019896a8345c5d3ebabee98f119140346ef913a8771e08925",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-family-historical/target/oracle-numerator-family-diagnosis/adapted-historical/captures/sm_eemm_L0/classes-Auto-t1/grouping.json": "30a0924a3360be687d1df9fcbbfdff62c01bc0fd14036ab9076cf7f451568666",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-family-historical/target/oracle-numerator-family-diagnosis/adapted-historical/captures/ym_g6_L0/classes-None-t1/payload.json": "ea6b4add508bb9cee53b6747c7b250c9fdecb309e617307e780717f511e61ad0",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-family-historical/target/oracle-numerator-family-diagnosis/adapted-historical/captures/ym_g6_L0/classes-None-t1/typed-owners.json": "02f5eb43d6dbc4ba968db385c47209e8082dfb88c757f76b092036f487f49061",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-family-historical/target/oracle-numerator-family-diagnosis/adapted-historical/captures/ym_g6_L0/classes-None-t1/model.json": "cecb61a579d96bd974fd2c362a3d26cac3f04c13a16dca478e1474e7b609cd72",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-family-historical/target/oracle-numerator-family-diagnosis/adapted-historical/captures/ym_g6_L0/classes-None-t1/request.json": "f7309c659c0373baab4717788534da6503811d45181a2900398bef28930ee839",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-family-historical/target/oracle-numerator-family-diagnosis/adapted-historical/captures/ym_g6_L0/classes-None-t1/options.json": "902f9700155918f019896a8345c5d3ebabee98f119140346ef913a8771e08925",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-family-historical/target/oracle-numerator-family-diagnosis/adapted-historical/captures/ym_g6_L0/classes-None-t1/grouping.json": "30a0924a3360be687d1df9fcbbfdff62c01bc0fd14036ab9076cf7f451568666",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-family-historical/target/oracle-numerator-family-diagnosis/adapted-historical/captures/ym_g6_L0/classes-Auto-t1/payload.json": "ea6b4add508bb9cee53b6747c7b250c9fdecb309e617307e780717f511e61ad0",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-family-historical/target/oracle-numerator-family-diagnosis/adapted-historical/captures/ym_g6_L0/classes-Auto-t1/typed-owners.json": "02f5eb43d6dbc4ba968db385c47209e8082dfb88c757f76b092036f487f49061",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-family-historical/target/oracle-numerator-family-diagnosis/adapted-historical/captures/ym_g6_L0/classes-Auto-t1/model.json": "cecb61a579d96bd974fd2c362a3d26cac3f04c13a16dca478e1474e7b609cd72",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-family-historical/target/oracle-numerator-family-diagnosis/adapted-historical/captures/ym_g6_L0/classes-Auto-t1/request.json": "058fc9278a691bc5f9a9d7472acbace96b2d5f5f1a895aa7d180ce83cb88be74",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-family-historical/target/oracle-numerator-family-diagnosis/adapted-historical/captures/ym_g6_L0/classes-Auto-t1/options.json": "902f9700155918f019896a8345c5d3ebabee98f119140346ef913a8771e08925",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-family-historical/target/oracle-numerator-family-diagnosis/adapted-historical/captures/ym_g6_L0/classes-Auto-t1/grouping.json": "30a0924a3360be687d1df9fcbbfdff62c01bc0fd14036ab9076cf7f451568666",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-diagnosis/adapted-current/captures/qed_eemm_L1/classes-None-t1/payload.json": "e4fb87ff9d740293b12a6147f80345a804df45aedcba561282b8b0c8770efd1c",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-diagnosis/adapted-current/captures/qed_eemm_L1/classes-None-t1/typed-owners.json": "49bad039e2ee75503778fa591b1aaade7b6aa4bfe3556aa15a34aeaf6d28b32e",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-diagnosis/adapted-current/captures/qed_eemm_L1/classes-None-t1/model.json": "a1e0237b57dfc6093c868ec88b664327a50d4877239692c8e5d68df5cfc33138",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-diagnosis/adapted-current/captures/qed_eemm_L1/classes-None-t1/request.json": "9528a407e56b5aaacf07537a66fcdeec939d8829763a5fe582db58e2dd786274",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-diagnosis/adapted-current/captures/qed_eemm_L1/classes-None-t1/options.json": "902f9700155918f019896a8345c5d3ebabee98f119140346ef913a8771e08925",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-diagnosis/adapted-current/captures/qed_eemm_L1/classes-None-t1/grouping.json": "30a0924a3360be687d1df9fcbbfdff62c01bc0fd14036ab9076cf7f451568666",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-diagnosis/adapted-current/captures/qed_eemm_L1/classes-Auto-t1/payload.json": "e4fb87ff9d740293b12a6147f80345a804df45aedcba561282b8b0c8770efd1c",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-diagnosis/adapted-current/captures/qed_eemm_L1/classes-Auto-t1/typed-owners.json": "49bad039e2ee75503778fa591b1aaade7b6aa4bfe3556aa15a34aeaf6d28b32e",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-diagnosis/adapted-current/captures/qed_eemm_L1/classes-Auto-t1/model.json": "a1e0237b57dfc6093c868ec88b664327a50d4877239692c8e5d68df5cfc33138",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-diagnosis/adapted-current/captures/qed_eemm_L1/classes-Auto-t1/request.json": "9c1feeb220e916ec59100381b183c1b3998702143182696679cd3f4b6f549a72",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-diagnosis/adapted-current/captures/qed_eemm_L1/classes-Auto-t1/options.json": "902f9700155918f019896a8345c5d3ebabee98f119140346ef913a8771e08925",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-diagnosis/adapted-current/captures/qed_eemm_L1/classes-Auto-t1/grouping.json": "30a0924a3360be687d1df9fcbbfdff62c01bc0fd14036ab9076cf7f451568666",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-diagnosis/adapted-current/captures/ctorder_qcd_uugg_L1/classes-None-t1/payload.json": "85a70e591007edeb41414c130a36e941811a18072f378638c80180aeaf89c406",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-diagnosis/adapted-current/captures/ctorder_qcd_uugg_L1/classes-None-t1/typed-owners.json": "0b0a70e3614fcfed2793b3965a9997ebdf79a6eee7c5de480d19869954cb319e",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-diagnosis/adapted-current/captures/ctorder_qcd_uugg_L1/classes-None-t1/model.json": "e8dd0e13fea1045e3ce738ba4fbf7204dfaf9fb612fb355e73594fbaf954dc1e",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-diagnosis/adapted-current/captures/ctorder_qcd_uugg_L1/classes-None-t1/request.json": "ebc0d8fa9bfb5d70aafc92626af1dfe0e70490d964d5dfe70a0a9c17559fdf0a",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-diagnosis/adapted-current/captures/ctorder_qcd_uugg_L1/classes-None-t1/options.json": "902f9700155918f019896a8345c5d3ebabee98f119140346ef913a8771e08925",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-diagnosis/adapted-current/captures/ctorder_qcd_uugg_L1/classes-None-t1/grouping.json": "30a0924a3360be687d1df9fcbbfdff62c01bc0fd14036ab9076cf7f451568666",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-diagnosis/adapted-current/captures/ctorder_qcd_uugg_L1/classes-Auto-t1/payload.json": "9d3130c655f578f40387c0bfdfd2182980fd8c9cc0e9aa44f02083ec033394d2",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-diagnosis/adapted-current/captures/ctorder_qcd_uugg_L1/classes-Auto-t1/typed-owners.json": "6eae67f9bb5869638aeb54f75f47aa0e4626af9d42af2b8965f2ffd2e1e33946",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-diagnosis/adapted-current/captures/ctorder_qcd_uugg_L1/classes-Auto-t1/model.json": "e8dd0e13fea1045e3ce738ba4fbf7204dfaf9fb612fb355e73594fbaf954dc1e",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-diagnosis/adapted-current/captures/ctorder_qcd_uugg_L1/classes-Auto-t1/request.json": "e88d819cf617c592ff8ce5da58fddcf593b2834f66c210d50684d12e8730a4b1",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-diagnosis/adapted-current/captures/ctorder_qcd_uugg_L1/classes-Auto-t1/options.json": "902f9700155918f019896a8345c5d3ebabee98f119140346ef913a8771e08925",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-diagnosis/adapted-current/captures/ctorder_qcd_uugg_L1/classes-Auto-t1/grouping.json": "30a0924a3360be687d1df9fcbbfdff62c01bc0fd14036ab9076cf7f451568666",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-diagnosis/adapted-current/captures/sm_eemm_L0/classes-None-t1/payload.json": "c2f388d85626096d775548765dc1454ad4d7aff2301c5576bbe7bff54a5aeaf9",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-diagnosis/adapted-current/captures/sm_eemm_L0/classes-None-t1/typed-owners.json": "1f5a203c10cfbb4507d2ea9403be6ab136fc69190039b6e5da34503800367b90",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-diagnosis/adapted-current/captures/sm_eemm_L0/classes-None-t1/model.json": "862b05a0e841275ee4c4d2534519fa6a4b4143e973b7bc9459a6e0189d41f1f0",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-diagnosis/adapted-current/captures/sm_eemm_L0/classes-None-t1/request.json": "7a1767884a927de232df8d8a9fa06bade86820de10cbafee6da338e5021099f2",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-diagnosis/adapted-current/captures/sm_eemm_L0/classes-None-t1/options.json": "902f9700155918f019896a8345c5d3ebabee98f119140346ef913a8771e08925",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-diagnosis/adapted-current/captures/sm_eemm_L0/classes-None-t1/grouping.json": "30a0924a3360be687d1df9fcbbfdff62c01bc0fd14036ab9076cf7f451568666",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-diagnosis/adapted-current/captures/sm_eemm_L0/classes-Auto-t1/payload.json": "c2f388d85626096d775548765dc1454ad4d7aff2301c5576bbe7bff54a5aeaf9",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-diagnosis/adapted-current/captures/sm_eemm_L0/classes-Auto-t1/typed-owners.json": "1f5a203c10cfbb4507d2ea9403be6ab136fc69190039b6e5da34503800367b90",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-diagnosis/adapted-current/captures/sm_eemm_L0/classes-Auto-t1/model.json": "862b05a0e841275ee4c4d2534519fa6a4b4143e973b7bc9459a6e0189d41f1f0",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-diagnosis/adapted-current/captures/sm_eemm_L0/classes-Auto-t1/request.json": "c43cced42430b6e52010496b5e7e9a3da7f5838c600e8e8ccc59b0a8b30585ee",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-diagnosis/adapted-current/captures/sm_eemm_L0/classes-Auto-t1/options.json": "902f9700155918f019896a8345c5d3ebabee98f119140346ef913a8771e08925",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-diagnosis/adapted-current/captures/sm_eemm_L0/classes-Auto-t1/grouping.json": "30a0924a3360be687d1df9fcbbfdff62c01bc0fd14036ab9076cf7f451568666",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-diagnosis/adapted-current/captures/ym_g6_L0/classes-None-t1/payload.json": "2a8c23f6fa77e779b3fe5a7b72075375422ee46d655949000f2a5aee2871bbb0",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-diagnosis/adapted-current/captures/ym_g6_L0/classes-None-t1/typed-owners.json": "f6fd7acf11573af6e933704293a896697324a18efc593157e35ded5061b8e687",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-diagnosis/adapted-current/captures/ym_g6_L0/classes-None-t1/model.json": "cecb61a579d96bd974fd2c362a3d26cac3f04c13a16dca478e1474e7b609cd72",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-diagnosis/adapted-current/captures/ym_g6_L0/classes-None-t1/request.json": "f7309c659c0373baab4717788534da6503811d45181a2900398bef28930ee839",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-diagnosis/adapted-current/captures/ym_g6_L0/classes-None-t1/options.json": "902f9700155918f019896a8345c5d3ebabee98f119140346ef913a8771e08925",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-diagnosis/adapted-current/captures/ym_g6_L0/classes-None-t1/grouping.json": "30a0924a3360be687d1df9fcbbfdff62c01bc0fd14036ab9076cf7f451568666",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-diagnosis/adapted-current/captures/ym_g6_L0/classes-Auto-t1/payload.json": "2a8c23f6fa77e779b3fe5a7b72075375422ee46d655949000f2a5aee2871bbb0",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-diagnosis/adapted-current/captures/ym_g6_L0/classes-Auto-t1/typed-owners.json": "f6fd7acf11573af6e933704293a896697324a18efc593157e35ded5061b8e687",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-diagnosis/adapted-current/captures/ym_g6_L0/classes-Auto-t1/model.json": "cecb61a579d96bd974fd2c362a3d26cac3f04c13a16dca478e1474e7b609cd72",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-diagnosis/adapted-current/captures/ym_g6_L0/classes-Auto-t1/request.json": "058fc9278a691bc5f9a9d7472acbace96b2d5f5f1a895aa7d180ce83cb88be74",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-diagnosis/adapted-current/captures/ym_g6_L0/classes-Auto-t1/options.json": "902f9700155918f019896a8345c5d3ebabee98f119140346ef913a8771e08925",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/oracle-numerator-family-diagnosis/adapted-current/captures/ym_g6_L0/classes-Auto-t1/grouping.json": "30a0924a3360be687d1df9fcbbfdff62c01bc0fd14036ab9076cf7f451568666"
+  },
+  "rules": [
+    "exact field kinds; Python bool is never int",
+    "only declared object signatures",
+    "numeric edge-signature maps only",
+    "positional edge tuples have exactly two elements",
+    "variable graph/owner cardinality is checked symmetrically across routes"
+  ]
+}
