@@ -58,6 +58,53 @@ class SvgBrowserTests(unittest.TestCase):
             f'<div id="graph-{index}" style="width:520px">{drawing}</div>'
             for index, drawing in enumerate(drawings)
         )
+
+        def outer_scale(owner, column_width, expected_height):
+            geometry = owner.locator(":scope > figure > svg").evaluate(
+                """svg => {
+                    const m = svg.getScreenCTM();
+                    const box = svg.getBoundingClientRect();
+                    const view = svg.viewBox.baseVal;
+                    return {a:m.a, b:m.b, c:m.c, d:m.d,
+                        width:box.width, height:box.height,
+                        view_width:view.width, view_height:view.height};
+                }"""
+            )
+            self.assertGreater(geometry["a"], 0)
+            self.assertEqual(geometry["a"], geometry["d"])
+            self.assertEqual(geometry["b"], 0)
+            self.assertEqual(geometry["c"], 0)
+            self.assertGreater(geometry["view_height"], 0)
+            self.assertEqual(geometry["view_width"], column_width)
+            # Five binary32 roundings bound authored dimensions, outer
+            # viewBox and screen matrix; one layout unit is 1/64 of a CSS
+            # pixel.
+            unit_roundoff = 2**-24
+            representation = expected_height * (
+                5 * unit_roundoff / (1 - 5 * unit_roundoff)
+            )
+            self.assertAlmostEqual(geometry["width"], column_width, delta=1 / 64)
+            self.assertAlmostEqual(
+                geometry["height"],
+                expected_height,
+                delta=1 / 64 + representation,
+            )
+            self.assertAlmostEqual(
+                geometry["view_height"], expected_height, delta=representation
+            )
+            # Default meet uses the smaller viewport/viewBox ratio. Check it
+            # independently so normalization cannot conceal CSS scaling.
+            meet = min(
+                geometry["width"] / geometry["view_width"],
+                geometry["height"] / geometry["view_height"],
+            )
+            self.assertAlmostEqual(geometry["a"], meet, delta=2**-23)
+            self.assertLessEqual(
+                abs(geometry["a"] - 1) * geometry["view_height"],
+                1 / 64 + representation,
+            )
+            return geometry["a"]
+
         with sync_playwright() as playwright:
             selected = os.environ.get("LINNET_TEST_BROWSER_ENGINES", "chromium,webkit")
             for name in selected.split(","):
@@ -83,9 +130,10 @@ class SvgBrowserTests(unittest.TestCase):
                         for index, (width, height) in enumerate(sizes):
                             owner = page.locator(f"#graph-{index}")
                             camera = owner.locator(".linnet-viewport")
-                            scale = camera.evaluate("s => s.getScreenCTM().a")
                             natural = natural_scales[index]
                             expected = min(natural, 520 / width)
+                            outer = outer_scale(owner, 520, expected * height)
+                            scale = camera.evaluate("s => s.getScreenCTM().a") / outer
                             self.assertAlmostEqual(scale, expected, delta=1e-4)
                             self.assertEqual(
                                 owner.locator("output").inner_text(),
@@ -102,10 +150,11 @@ class SvgBrowserTests(unittest.TestCase):
                             self.assertLessEqual(y, 1e-6)
                             self.assertGreaterEqual(x + w, width32 - 1e-6)
                             self.assertGreaterEqual(y + h, height32 - 1e-6)
+                            label = owner.locator(
+                                '[data-linnet-kind="node"][data-linnet-id="0"]'
+                            ).bounding_box()
                             labels.append(
-                                owner.locator(
-                                    '[data-linnet-kind="node"][data-linnet-id="0"]'
-                                ).bounding_box()
+                                {side: label[side] / outer for side in ("width", "height")}
                             )
                         # The same node-0 label target has fixed authored dimensions;
                         # its screen dimensions grow with the natural scale.
@@ -135,8 +184,10 @@ class SvgBrowserTests(unittest.TestCase):
                         page.wait_for_function(
                             "document.querySelector('#graph-0 svg').viewBox.baseVal.width === 300"
                         )
+                        # Resize can change the outer meet transform; read it again.
+                        outer = outer_scale(first, 300, natural_scales[0] * sizes[0][1])
                         self.assertAlmostEqual(
-                            camera.evaluate("s => s.getScreenCTM().a"),
+                            camera.evaluate("s => s.getScreenCTM().a") / outer,
                             1.05 * natural_scales[0],
                             delta=1e-4,
                         )
