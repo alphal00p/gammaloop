@@ -1,0 +1,25 @@
+{
+  "tracking_exit": 0,
+  "tracking_stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "tracking_warning_bytes": 0,
+  "errors": [
+    {
+      "attempt": "optional packet-closure.json read",
+      "kind": "read-only setup",
+      "detail": "Filename absent; reviewer-listed git-manifest-missing.json consumed instead. No tracking or data modification."
+    },
+    {
+      "attempt": "pre-snapshot immutable audit",
+      "source": "audit-before-snapshot.py",
+      "stderr": "tracking/pre-snapshot-audit.stderr",
+      "detail": "jj file track --include-ignored returned0 and queued exact files. Initial --ignore-working-copy read saw the unsnapshotted change;425-completeness assertion stopped. Explicit snapshot then produced ed669e2b; same audit source passes425 actual Git blobs. No audit condition weakened."
+    }
+  ],
+  "audit_before_snapshot_sha256": "bd7d94d9ac248e8163a04e98363ffa70a21b7d32332d01da5434e99d63dff694",
+  "audit_corrected_workflow_sha256": "bd7d94d9ac248e8163a04e98363ffa70a21b7d32332d01da5434e99d63dff694",
+  "source_bytes_unchanged_workflow_corrected": true,
+  "temporary_ignore_exceptions": false,
+  "gitignore_before_after_sha256": "42c5d0557c5f4b8932d39519c87a0278bda6c802aace2199caf257a0af030a85",
+  "tracking_limit": "1MiB",
+  "include_ignored_override_bounded_to_exact13_all_under_limit": true
+}

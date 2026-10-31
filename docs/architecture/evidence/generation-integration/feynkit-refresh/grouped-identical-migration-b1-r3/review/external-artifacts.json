@@ -1,0 +1,172 @@
+{
+  "review": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-grouped-identical-integration-astra-20261031-033116Z-c0749b38/review.json",
+    "sha256": "0f0851e068653202a7981e71b4d5ccf54316d1bf544caa0725f99cc1794066f4",
+    "bytes": 56941
+  },
+  "lowercase_seal": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-grouped-identical-integration-astra-20261031-033116Z-c0749b38/seal.json",
+    "sha256": "121a41e327b0c353b5fe24fae1582e239925b86024218719072dcbfd08e7d51a",
+    "bytes": 19498
+  },
+  "artifacts": [
+    {
+      "name": "git-manifest-missing.json",
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-grouped-identical-integration-astra-20261031-033116Z-c0749b38/git-manifest-missing.json",
+      "sha256": "7892d3cdb50b5f94f1ed8b568706f3cd24fc7c717154fbd9498a9e6ef7fd6547",
+      "bytes": 4217,
+      "retained_external": true,
+      "new_execution": false
+    },
+    {
+      "name": "integrity.json",
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-grouped-identical-integration-astra-20261031-033116Z-c0749b38/integrity.json",
+      "sha256": "3de5b89c08f5f4f2220279ce9ed9f7b24f057a14fce424861d8d756b8e62f567",
+      "bytes": 404712,
+      "retained_external": true,
+      "new_execution": false
+    },
+    {
+      "name": "producer.json",
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-grouped-identical-integration-astra-20261031-033116Z-c0749b38/producer.json",
+      "sha256": "17a875a4cf5e30df6eb4d0393aeac1e43e9db4da39d65e30e08783e73ea6a2d9",
+      "bytes": 318632,
+      "retained_external": true,
+      "new_execution": false
+    },
+    {
+      "name": "terminal-to-archive.json",
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-grouped-identical-integration-astra-20261031-033116Z-c0749b38/terminal-to-archive.json",
+      "sha256": "2e385761723ea2dde2e2babb90152e09cd593597d8698196279cd4d5fe33b204",
+      "bytes": 1418,
+      "retained_external": true,
+      "new_execution": false
+    },
+    {
+      "name": "proof-binding.json",
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-grouped-identical-integration-astra-20261031-033116Z-c0749b38/proof-binding.json",
+      "sha256": "d28eaba9ee2eff7c99483948061b157423e4616cd0e78b50a83bb0cbf90d933e",
+      "bytes": 20979,
+      "retained_external": true,
+      "new_execution": false
+    },
+    {
+      "name": "proof-input-hashes.json",
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-grouped-identical-integration-astra-20261031-033116Z-c0749b38/proof-input-hashes.json",
+      "sha256": "5faed7ed01c8eb00cf91a0a9ac6de00df7279c1f51c48ffec9943d5dd818ad1b",
+      "bytes": 1528375,
+      "retained_external": true,
+      "new_execution": false
+    },
+    {
+      "name": "capsule-preparation.json",
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-grouped-identical-integration-astra-20261031-033116Z-c0749b38/capsule-preparation.json",
+      "sha256": "8ed4fb9be3f08454f989111d3de8346c2f5f301a65eae987d3972ff26f47867f",
+      "bytes": 387736,
+      "retained_external": true,
+      "new_execution": false
+    },
+    {
+      "name": "network-preflight.json",
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-grouped-identical-integration-astra-20261031-033116Z-c0749b38/network-preflight.json",
+      "sha256": "c8889c1cb222dec7ee16746b414697bd5641832e7e6d7aa0e9c4afe5a35b8eed",
+      "bytes": 7985,
+      "retained_external": true,
+      "new_execution": false
+    },
+    {
+      "name": "selected-inventory.json",
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-grouped-identical-integration-astra-20261031-033116Z-c0749b38/selected-inventory.json",
+      "sha256": "9583a0a088f92bc6de3d83e05bae628c9cced2b30e639daf7b8d4afdfefaec57",
+      "bytes": 3307,
+      "retained_external": true,
+      "new_execution": false
+    },
+    {
+      "name": "pure-boundary.json",
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-grouped-identical-integration-astra-20261031-033116Z-c0749b38/pure-boundary.json",
+      "sha256": "3d796001eab85e9bc68462456b009431640f25598ec26448878a85fdd6f35c2e",
+      "bytes": 1325,
+      "retained_external": true,
+      "new_execution": false
+    },
+    {
+      "name": "licensed-boundary.json",
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-grouped-identical-integration-astra-20261031-033116Z-c0749b38/licensed-boundary.json",
+      "sha256": "e8e14704d8c3d72b285f1d4acf2fc5192129d6daa6b7ddbcaeefaeb6e11cafc6",
+      "bytes": 179,
+      "retained_external": true,
+      "new_execution": false
+    },
+    {
+      "name": "runtime-results.json",
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-grouped-identical-integration-astra-20261031-033116Z-c0749b38/runtime-results.json",
+      "sha256": "09261b33abd0eadf247600938f5f2a0292e4c2f113f0f2cf288305e6eae7fdd8",
+      "bytes": 6254,
+      "retained_external": true,
+      "new_execution": false
+    },
+    {
+      "name": "runtime-summary-crosscheck.json",
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-grouped-identical-integration-astra-20261031-033116Z-c0749b38/runtime-summary-crosscheck.json",
+      "sha256": "8eb5b834864d9dc6d589d434c51e297aa26d2169651f46fa9bf7efdf3820cdbe",
+      "bytes": 1074,
+      "retained_external": true,
+      "new_execution": false
+    },
+    {
+      "name": "fresh-joins.json",
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-grouped-identical-integration-astra-20261031-033116Z-c0749b38/fresh-joins.json",
+      "sha256": "7e63e398f919736166df662750ea942ac30622d1490e6985eed56c090ea71d0b",
+      "bytes": 1832793,
+      "retained_external": true,
+      "new_execution": false
+    },
+    {
+      "name": "static-controls.json",
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-grouped-identical-integration-astra-20261031-033116Z-c0749b38/static-controls.json",
+      "sha256": "148c34a6286238b23d9528cf22bcf48c75045d2f1af32c1353da9dbeea94a01d",
+      "bytes": 814,
+      "retained_external": true,
+      "new_execution": false
+    },
+    {
+      "name": "license-audit.json",
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-grouped-identical-integration-astra-20261031-033116Z-c0749b38/license-audit.json",
+      "sha256": "aac373b7dc506935e0111d14739ac121fedbb9983f535471b33e1d2228d3eedc",
+      "bytes": 190,
+      "retained_external": true,
+      "new_execution": false
+    },
+    {
+      "name": "guard-before.json",
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-grouped-identical-integration-astra-20261031-033116Z-c0749b38/guard-before.json",
+      "sha256": "857b221f276f24acb9247927e1b7ce1c350f43b8e6b7624faeff90f83ecc3f66",
+      "bytes": 2546661,
+      "retained_external": true,
+      "new_execution": false
+    },
+    {
+      "name": "guard-after.json",
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-grouped-identical-integration-astra-20261031-033116Z-c0749b38/guard-after.json",
+      "sha256": "fb7cf9f71b86d01b15f45c101ad04800a9ce2c3923bab28647e2b07f5fa3ce56",
+      "bytes": 2546661,
+      "retained_external": true,
+      "new_execution": false
+    },
+    {
+      "name": "final-guard.json",
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-grouped-identical-integration-astra-20261031-033116Z-c0749b38/final-guard.json",
+      "sha256": "7f9a2f1da2cb6cec210fc89fdeb310ea9186dd8cd8b44a99c6bf3afd6dd3b5a3",
+      "bytes": 1119,
+      "retained_external": true,
+      "new_execution": false
+    }
+  ],
+  "reviewer_runtime_credit": 39,
+  "reviewer_five_capture_credit": 5,
+  "reviewer_owner_associations": 2124,
+  "fresh_repair_runtime_credit": 0,
+  "external_runtime_archive_libraries_proof_inputs_required": true,
+  "selfcontained_claim": false
+}

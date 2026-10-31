@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/grouped-identical-b1-durability-20261031-r3/audit.py", line 83, in <module>
+    rev=sys.argv[1];historical='--historical' in sys.argv;result=audit(rev,historical);path=O/('historical-7c-audit.json' if historical else 'immutable-'+rev+'-audit.json');path.write_text(json.dumps(result,indent=2)+'\n');print(json.dumps({k:result[k] for k in ['immutable_commit','manifest_entries','matched','missing_paths','mismatched_paths','unexpected_scoped_paths','scoped_manifest_tree_sha256']}))
+                                                                 ~~~~~^^^^^^^^^^^^^^^^
+  File "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/grouped-identical-b1-durability-20261031-r3/audit.py", line 49, in audit
+    else:assert not missing and len(rows)==425
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError

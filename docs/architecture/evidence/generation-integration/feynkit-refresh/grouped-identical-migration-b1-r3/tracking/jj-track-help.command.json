@@ -1,0 +1,14 @@
+{
+  "argv": [
+    "jj",
+    "--config",
+    "snapshot.auto-track=none()",
+    "file",
+    "track",
+    "--help"
+  ],
+  "cwd": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh",
+  "exit": 0,
+  "stdout_sha256": "d495d709d582668230ad42ab85923ee07f96b508bccbe77144b1758036a3772d",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+}

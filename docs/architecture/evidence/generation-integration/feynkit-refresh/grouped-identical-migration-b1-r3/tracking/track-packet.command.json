@@ -1,0 +1,15 @@
+{
+  "argv": [
+    "jj",
+    "--config",
+    "snapshot.auto-track=none()",
+    "file",
+    "track",
+    "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration-b1-r3"
+  ],
+  "cwd": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh",
+  "exit": 0,
+  "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "all_new_files_checked_before_tracking_bytes": 1048576
+}

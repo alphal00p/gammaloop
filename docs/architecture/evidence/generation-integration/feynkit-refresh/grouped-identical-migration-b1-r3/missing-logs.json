@@ -1,0 +1,85 @@
+{
+  "source_review_sha256": "0f0851e068653202a7981e71b4d5ccf54316d1bf544caa0725f99cc1794066f4",
+  "finding": "B1",
+  "exact_paths": [
+    {
+      "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration/preparation/chain-controls-failed-attempts.log",
+      "sha256": "0dc92a87ac33b3aa9eb21998bcc1ed69f573af2ad1094a945facf19260090f6a",
+      "local_bytes": 2413,
+      "manifest_line": 95
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration/preparation/evidence-failed-attempts.log",
+      "sha256": "0a35c7697b18c6fba4577fe8731fcee3e4ae847a53833be6ab2973b1443e26c6",
+      "local_bytes": 1519,
+      "manifest_line": 109
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration/reviews/migration/controls.log",
+      "sha256": "0dd9c0247b9f14d530594c424c911d9018936ad6e5521d3ec5f65ceba3d14f04",
+      "local_bytes": 83,
+      "manifest_line": 349
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration/reviews/migration/final-guard.log",
+      "sha256": "92e57ec624dee43e4b55a9d030cf1bc8dbcc2e005399ca919651685b387539eb",
+      "local_bytes": 1118,
+      "manifest_line": 352
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration/reviews/migration/finite-named.log",
+      "sha256": "e1a9d15b011463ba1976e4ffba69bc1490f33c32c448e03604a1c6dde1411e80",
+      "local_bytes": 136,
+      "manifest_line": 356
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration/reviews/migration/integrity-before.log",
+      "sha256": "841b1a101f275f7093346f6ea505a2ccc42c3a9e0268c1060f5bced35b9a3af4",
+      "local_bytes": 552,
+      "manifest_line": 363
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration/reviews/migration/integrity-final.log",
+      "sha256": "520522359a036658a928ed9186836fd40b9dd690c6e9dc69f148b51c085b8b4d",
+      "local_bytes": 1140,
+      "manifest_line": 365
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration/reviews/migration/integrity-v2-before.log",
+      "sha256": "bd046201efd2d0a2c36f463b48e81353afc9eacb7e4843557daae0d76fe96afe",
+      "local_bytes": 358,
+      "manifest_line": 366
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration/reviews/migration/integrity-v3-before.log",
+      "sha256": "520522359a036658a928ed9186836fd40b9dd690c6e9dc69f148b51c085b8b4d",
+      "local_bytes": 1140,
+      "manifest_line": 368
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration/reviews/migration/reconstruction.log",
+      "sha256": "91880609d3aa7af2034cf7de1483345c4958a11b54e41bf1b5546f5ea03d449b",
+      "local_bytes": 190,
+      "manifest_line": 374
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration/reviews/migration/supplementary-v2.log",
+      "sha256": "67aa932b7d4c823155070b1d795c9c6fa424acc35df7d6947a2613212fdd7c4b",
+      "local_bytes": 1340,
+      "manifest_line": 384
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration/reviews/migration/supplementary-v3.log",
+      "sha256": "ae5a0f344297d4f763a76fe541d3283de0c91a045356f72d32561228bac91e2f",
+      "local_bytes": 645,
+      "manifest_line": 388
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration/reviews/migration/supplementary.log",
+      "sha256": "68fbadf372f0b35eb30ae13e26678c9438397a97d4bb10c3941e8a784eba316b",
+      "local_bytes": 905,
+      "manifest_line": 390
+    }
+  ],
+  "repair": "Same path and exact bytes, explicitly tracked using supported JJ --include-ignored; no rename/reformat/truncation."
+}
