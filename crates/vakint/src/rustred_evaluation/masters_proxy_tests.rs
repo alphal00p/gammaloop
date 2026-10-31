@@ -46,6 +46,11 @@ pub(crate) fn reference_combine_master_coefficients(raw: Atom) -> Atom {
     )
 }
 
+/// Workers of the timed combination (`VAKINT_POSTPROCESSING_THREADS`, default 1).
+fn proxy_threads() -> usize {
+    super::super::postprocessing_threads(&VakintSettings::default())
+}
+
 fn proxy_products() -> usize {
     std::env::var("VAKINT_POSTPROC_PROXY_PRODUCTS")
         .ok()
@@ -126,13 +131,25 @@ fn five_loop_retained_post_processing_proxy() {
     let started = Instant::now();
     let simplified = crate::utils::simplify_real(raw.as_view());
     println!("simplify_real {:.3} s", started.elapsed().as_secs_f64());
+    let threads = proxy_threads();
     let started = Instant::now();
-    let combined = MasterCatalog::combine_master_coefficients(simplified.clone());
+    let combined = MasterCatalog::combine_master_coefficients(simplified.clone(), threads);
     println!(
-        "combine_master_coefficients {:.3} s, {} bytes",
+        "combine_master_coefficients ({threads} threads) {:.3} s, {} bytes, canonical sha256 {:x}",
         started.elapsed().as_secs_f64(),
-        combined.as_view().get_byte_size()
+        combined.as_view().get_byte_size(),
+        Sha256::digest(combined.to_canonical_string().as_bytes())
     );
+    if threads > 1 {
+        let started = Instant::now();
+        let sequential = MasterCatalog::combine_master_coefficients(simplified.clone(), 1);
+        println!(
+            "combine_master_coefficients (1 thread) {:.3} s, identical {}",
+            started.elapsed().as_secs_f64(),
+            sequential == combined
+        );
+        assert_eq!(sequential, combined);
+    }
     if std::env::var("VAKINT_POSTPROC_PROXY_REFERENCE").as_deref() == Ok("1") {
         let started = Instant::now();
         let reference = reference_combine_master_coefficients(simplified);

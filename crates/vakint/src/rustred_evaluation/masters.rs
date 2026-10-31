@@ -718,8 +718,47 @@ impl MasterCatalog {
         result
     }
 
-    fn combine_master_coefficients(raw: Atom) -> Atom {
-        let raw = raw.expand();
+    /// `expression.expand()`, distributing the summands of the top-level sum
+    /// (or of the only sum factor of a top-level product) over up to `threads`
+    /// workers. Expansion distributes over that sum and the final sum of all
+    /// expanded summands is normalized once, which is the same canonical
+    /// expanded expression; every other shape expands on the calling thread.
+    fn expand_on(expression: &Atom, threads: usize) -> Atom {
+        if threads > 1 {
+            match expression.as_view() {
+                AtomView::Add(sum) => {
+                    let terms = sum.iter().collect::<Vec<_>>();
+                    return Atom::add_many(super::parallel::map_ordered(
+                        threads,
+                        &terms,
+                        |_, term| term.expand(),
+                    ));
+                }
+                AtomView::Mul(product) => {
+                    let (sums, rest): (Vec<_>, Vec<_>) = product
+                        .iter()
+                        .partition(|factor| matches!(factor, AtomView::Add(_)));
+                    if let [AtomView::Add(sum)] = sums.as_slice() {
+                        let rest = Atom::mul_many(rest);
+                        let terms = sum.iter().collect::<Vec<_>>();
+                        return Atom::add_many(super::parallel::map_ordered(
+                            threads,
+                            &terms,
+                            |_, term| (term.to_owned() * &rest).expand(),
+                        ));
+                    }
+                }
+                _ => {}
+            }
+        }
+        expression.expand()
+    }
+
+    /// Combine the scalar coefficient of every master product exactly, on up
+    /// to `threads` workers. Coefficients are combined independently and
+    /// summed in collection order, so the result is independent of `threads`.
+    fn combine_master_coefficients(raw: Atom, threads: usize) -> Atom {
+        let raw = Self::expand_on(&raw, threads);
         // Keep the same whole-expression Float policy as combine_exact.
         if Self::has_floating_coefficients(&raw) {
             return raw;
@@ -738,10 +777,14 @@ impl MasterCatalog {
         // Terminal products are independent indeterminates. Combine their
         // scalar coefficients before classifying any surviving unknowns,
         // without rationalizing the whole polynomial in those terminals.
+        let combined = super::parallel::map_ordered(threads, &terms, |_, (_, coefficient)| {
+            combine_exact(coefficient.clone())
+        });
         Atom::add_many(
             terms
                 .into_iter()
-                .map(|(monomial, coefficient)| monomial * combine_exact(coefficient)),
+                .zip(combined)
+                .map(|((monomial, _), coefficient)| monomial * coefficient),
         )
     }
 
@@ -785,11 +828,14 @@ impl MasterCatalog {
         issues
     }
 
+    /// Combine retained master coefficients exactly (see
+    /// [`Self::combine_master_coefficients`]) and report unresolved masters.
     pub(super) fn retain(
         &self,
         raw: Atom,
         announced: &BareMasterDeclarations,
         mut observation: Option<&mut CandidateRoutedApplicationObserver<'_>>,
+        threads: usize,
     ) -> Atom {
         let started = std::time::Instant::now();
         MonitorContext::native_phase(
@@ -799,7 +845,7 @@ impl MasterCatalog {
         );
         let raw = {
             let _math = MathSpan::new();
-            Self::combine_master_coefficients(raw)
+            Self::combine_master_coefficients(raw, threads)
         };
         log::debug!(target: "vakint::saved_application", "phase=retained_catalogue_exact_combination elapsed_seconds={:.6}", started.elapsed().as_secs_f64());
         let started = std::time::Instant::now();
@@ -906,7 +952,12 @@ impl MasterCatalog {
         mode: RustRedMasterMode,
     ) -> Result<Atom, VakintError> {
         if mode == RustRedMasterMode::Retain {
-            return Ok(self.retain(raw, &BTreeMap::new(), None));
+            return Ok(self.retain(
+                raw,
+                &BTreeMap::new(),
+                None,
+                super::postprocessing_threads(settings),
+            ));
         }
         let raw = combine_exact(raw);
         self.require_coefficients(&raw, &BTreeMap::new())?;
@@ -1300,9 +1351,9 @@ mod tests {
         let raw = &product * &spectator * coefficient
             + &product * &spectator * vk_parse!("1+ep").unwrap()
             + rational_zero * unknown.pow(Atom::num(2)) * &master;
-        let retained = catalog.retain(raw, &declarations, None);
+        let retained = catalog.retain(raw, &declarations, None, 1);
         assert_eq!(
-            catalog.retain(retained.clone(), &declarations, None),
+            catalog.retain(retained.clone(), &declarations, None, 1),
             retained
         );
         let symbols = vec![master, announced];
@@ -1326,11 +1377,11 @@ mod tests {
             + (unknown.pow(Atom::num(2)) + Atom::num(2) * &unknown + Atom::num(1))
                 / (&unknown + Atom::num(1))
             - (&unknown + Atom::num(1));
-        assert_eq!(catalog.retain(raw, &BTreeMap::new(), None), master);
+        assert_eq!(catalog.retain(raw, &BTreeMap::new(), None, 1), master);
 
         let opaque = vk_symbol!("opaque_master_function").call(&unknown);
         assert_eq!(
-            catalog.retain(&opaque + &master, &BTreeMap::new(), None),
+            catalog.retain(&opaque + &master, &BTreeMap::new(), None, 1),
             combine_exact(opaque + master)
         );
     }
@@ -1343,7 +1394,7 @@ mod tests {
         let raw = vk_parse!("(0.125+ep)/(1-ep)").unwrap() * master + zero * unknown;
         let expected = raw.expand();
         assert!(MasterCatalog::has_floating_coefficients(&expected));
-        let retained = catalog.retain(raw, &BTreeMap::new(), None);
+        let retained = catalog.retain(raw, &BTreeMap::new(), None, 1);
         assert_eq!(retained.as_view().get_data(), expected.as_view().get_data());
         assert_eq!(
             MasterCatalog::finite_precision(&retained),
@@ -1360,7 +1411,7 @@ mod tests {
         let zero = vk_parse!("(1-ep)^-1-1-ep*(1-ep)^-1").unwrap();
         let raw =
             &master * (&coefficient + &first - &second) + master.pow(Atom::num(2)) * zero * &first;
-        let retained = catalog.retain(raw, &BTreeMap::new(), None);
+        let retained = catalog.retain(raw, &BTreeMap::new(), None, 1);
         let terms = retained.coefficient_list::<i32>(std::slice::from_ref(&master));
         assert_eq!(terms.len(), 1);
         assert_eq!(terms[0].0, master);
@@ -1378,9 +1429,48 @@ mod tests {
             vk_parse!("ep^-2*((1-ep)^-1-1-ep)-(1-ep)^-1").unwrap(),
         ] {
             assert_eq!(
-                catalog.retain(expression.clone(), &BTreeMap::new(), None),
+                catalog.retain(expression.clone(), &BTreeMap::new(), None, 1),
                 combine_exact(expression)
             );
+        }
+    }
+
+    #[test]
+    fn threaded_expansion_and_combination_match_the_sequential_result() {
+        crate::Vakint::initialize_vakint_symbols();
+        let master = |index: i64| {
+            vk_parse!(&format!("RustRedMaster(rustred_family_threads,{index})")).unwrap()
+        };
+        let expressions = [
+            // one sum factor times prefactors, with like terms across summands
+            "(x*(1+x)^2/(1-2*x)+3*x^2/(1-2*x)-x+y*(2+x))*mUV^(5*(4-2*x)/2-14)*(2*x+1)^(-3)*exp(-5*x*EulerGamma)*𝑖",
+            // a plain sum and a product with two sum factors (sequential path)
+            "x^2+(x+1)^3/(x-2)+y*(x+y)^2",
+            "(x+1)*(x-2)/(3*x+5)",
+            "(1+x)^2+(1-x)^2-2*x^2",
+        ];
+        for (index, expression) in expressions.into_iter().enumerate() {
+            let expression = vk_parse!(expression).unwrap();
+            for threads in [2, 3, 8] {
+                assert_eq!(
+                    MasterCatalog::expand_on(&expression, threads),
+                    expression.expand(),
+                    "{expression}"
+                );
+            }
+            // Masters in every summand go through the retained combination.
+            let raw = Atom::add_many((1..=4).map(|power| {
+                master(power)
+                    * expression.clone()
+                    * vk_parse!("x").unwrap().pow(Atom::num(power - index as i64))
+            })) * vk_parse!("(1+x)^(-2)*mUV^2").unwrap();
+            let sequential = MasterCatalog::combine_master_coefficients(raw.clone(), 1);
+            for threads in [2, 3, 8] {
+                assert_eq!(
+                    MasterCatalog::combine_master_coefficients(raw.clone(), threads),
+                    sequential
+                );
+            }
         }
     }
 
@@ -1436,7 +1526,7 @@ mod tests {
         // Two complete master products keep this explicit check below a minute.
         let raw = crate::utils::simplify_real(proxy_tests::five_loop_proxy_raw(2).as_view());
         assert_eq!(
-            MasterCatalog::combine_master_coefficients(raw.clone()),
+            MasterCatalog::combine_master_coefficients(raw.clone(), 1),
             proxy_tests::reference_combine_master_coefficients(raw)
         );
     }
@@ -1495,7 +1585,7 @@ mod tests {
         );
         // This fixture is already globally combined. Do not run the previous
         // whole-expression rationalization or infer pre-merge speed from it.
-        let combined = MasterCatalog::combine_master_coefficients(original);
+        let combined = MasterCatalog::combine_master_coefficients(original, 1);
         assert_eq!(
             MasterCatalog::referenced_masters(&combined),
             symbols.iter().cloned().collect::<BTreeSet<_>>()
@@ -1576,7 +1666,10 @@ mod tests {
             },
         )]);
         assert!(catalog.unresolved(&declared, false, &announced).is_empty());
-        assert_eq!(catalog.retain(declared.clone(), &announced, None), declared);
+        assert_eq!(
+            catalog.retain(declared.clone(), &announced, None, 1),
+            declared
+        );
         let error = catalog
             .require_coefficients(&declared, &announced)
             .unwrap_err()
@@ -1632,7 +1725,7 @@ mod tests {
                     &mut callback,
                 );
                 assert_eq!(
-                    catalog.retain(raw.clone(), &BTreeMap::new(), Some(&mut observer)),
+                    catalog.retain(raw.clone(), &BTreeMap::new(), Some(&mut observer), 1),
                     master,
                 );
                 assert_eq!(

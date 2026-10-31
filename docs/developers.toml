@@ -802,7 +802,12 @@ anchor = "pub(crate) struct MasterCatalog {"
 # first tries one canonicalization over a shared remainder with univariate
 # denominators factored over Z, and otherwise keeps the term-wise path. It returns the
 # identical expression (3L/4L retained outputs, 58-product 5L proxy). Ownership is unchanged.
-digest = "1bae246fec89800c23cb0cc0d54d4ed629b37280"
+# Reviewed 2026-10-31 for the 5L pipeline speedup: retention expands the summands of the
+# top-level sum (or of the only sum factor of a product) and combines the complete coefficients
+# on the post-processing workers, summing in input order; one worker runs inline. Results are
+# identical for every worker count (3L/4L retained outputs, 58-product 5L proxy). Ownership is
+# unchanged.
+digest = "c02d0fe3fc42669419eee73c3a66ed102972e4bf"
 
 [[section.note.scope]]
 path = "crates/vakint/src/precision.rs"

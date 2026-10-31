@@ -16,6 +16,7 @@ use std::{
 
 use super::experimental::timing::MathSpan;
 use super::monitor::{MonitorContext, RustRedMonitorOptions, RustRedMonitorScope};
+use super::parallel;
 use super::request_dump::{self, DumpChannel, DumpProgram, DumpRequest, RequestDump};
 use rustred::algebra::Coefficient;
 use rustred::family::IntegralKey;
@@ -46,6 +47,8 @@ use crate::{
 };
 
 static PARENTS: LazyLock<Vec<ParentDescriptor>> = LazyLock::new(descriptors);
+/// Guards materialized per parallel chunk between progress updates.
+const GUARD_CHUNK: usize = 4096;
 
 #[path = "five_loop/witness_cache.rs"]
 mod witness_cache;
@@ -1458,25 +1461,38 @@ impl SavedApplication {
                     "guards processed",
                 )
             });
-            for (index, condition) in normalized.nonzero_conditions().iter().enumerate() {
-                let condition = condition.to_expression();
-                if condition.is_zero()
-                    || condition
-                        .get_all_symbols(true)
-                        .iter()
-                        .any(|symbol| !dimension.get_all_symbols(true).contains(symbol))
-                {
-                    return Err(failure(
+            // Each guard is materialized independently; chunks are consumed in
+            // input order, so the first invalid guard reports as sequentially.
+            let threads = super::postprocessing_threads(settings);
+            let dimension_symbols = dimension.get_all_symbols(true);
+            let dimension_pattern = dimension.to_pattern();
+            let physical_pattern = physical_dimension.to_pattern();
+            let guard_chunk = GUARD_CHUNK.max(threads);
+            for (chunk_index, chunk) in normalized
+                .nonzero_conditions()
+                .chunks(guard_chunk)
+                .enumerate()
+            {
+                let materialized = parallel::map_ordered(threads, chunk, |_, condition| {
+                    let condition = condition.to_expression();
+                    (!condition.is_zero()
+                        && condition
+                            .get_all_symbols(true)
+                            .iter()
+                            .all(|symbol| dimension_symbols.contains(symbol)))
+                    .then(|| {
+                        condition
+                            .replace(&dimension_pattern)
+                            .with(&physical_pattern)
+                    })
+                });
+                for condition in materialized {
+                    conditions.insert(condition.ok_or_else(|| failure(
                         "saved application has a non-generic-d guard; the symbolic Vakint result cannot discharge it",
-                    ).into());
+                    ))?);
                 }
-                conditions.insert(
-                    condition
-                        .replace(dimension.to_pattern())
-                        .with(physical_dimension.to_pattern()),
-                );
                 if let Some(progress) = &mut guard_progress {
-                    progress.completed(index + 1);
+                    progress.completed(chunk_index * guard_chunk + chunk.len());
                 }
             }
             log::debug!(target: "vakint::saved_application", "phase=retained_guard_materialization elapsed_seconds={:.6}", guards_started.elapsed().as_secs_f64());

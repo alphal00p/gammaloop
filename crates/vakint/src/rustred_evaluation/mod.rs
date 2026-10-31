@@ -30,6 +30,7 @@ mod materialize;
 pub(crate) mod monitor;
 mod numerator;
 mod ordered;
+mod parallel;
 mod request_dump;
 #[cfg(test)]
 mod terminal;
@@ -193,6 +194,23 @@ impl RustRedEvaluationError {
     }
 }
 
+/// Worker threads for the independent caller-side work around a native
+/// reduction: guard and retained-coefficient materialization and the retained
+/// catalogue combination. Each item is computed exactly as on one thread and
+/// the results are consumed in input order, so the output never depends on
+/// this count; `1` runs everything inline on the calling thread.
+///
+/// n_cores plumbing point: replace the interim `VAKINT_POSTPROCESSING_THREADS`
+/// override (default 1) by the engine's `n_cores` setting.
+pub(crate) fn postprocessing_threads(settings: &VakintSettings) -> usize {
+    let _ = settings;
+    std::env::var("VAKINT_POSTPROCESSING_THREADS")
+        .ok()
+        .and_then(|threads| threads.trim().parse::<usize>().ok())
+        .filter(|threads| *threads > 0)
+        .unwrap_or(1)
+}
+
 /// Whether the opt-in scalar backend owns a shipped program for this matcher class.
 pub(crate) fn supports(
     settings: &VakintSettings,
@@ -268,7 +286,12 @@ impl Vakint {
         let data = self.rustred_data()?;
         let announced = self.announced_bare_masters()?;
         let result = if mode == RustRedMasterMode::Retain {
-            data.masters.retain(raw, &announced, observation)
+            data.masters.retain(
+                raw,
+                &announced,
+                observation,
+                postprocessing_threads(settings),
+            )
         } else {
             if !announced.is_empty() {
                 data.masters
