@@ -259,7 +259,11 @@ pub(super) fn candidate(
             .generic
             .checked_sub(before.generic)
             .ok_or_else(|| error("diagnostic generic counter regression"))?;
-        if rational + generic != 1 {
+        let grouped = after
+            .grouped
+            .checked_sub(before.grouped)
+            .ok_or_else(|| error("diagnostic grouped counter regression"))?;
+        if rational + generic + grouped != 1 {
             return Err(error(
                 "candidate lowering did not execute exactly one conversion on the observed thread",
             ));
@@ -444,7 +448,9 @@ fn measured<T>(
         ))
     });
     let (value, records, searches, candidates, rechecks, seconds, bytes) = result?;
-    if generic && counts.rational != 0 || counts.rational + counts.generic < candidates + rechecks {
+    if generic && (counts.rational != 0 || counts.grouped != 0)
+        || counts.rational + counts.generic + counts.grouped < candidates + rechecks
+    {
         return Err(error(
             "weighted conversion counters do not cover the complete witness search",
         ));
@@ -456,11 +462,12 @@ fn measured<T>(
 
 fn check_lane(generic: bool, counts: Counts) {
     assert!(
-        counts.rational + counts.generic > 0,
+        counts.rational + counts.generic + counts.grouped > 0,
         "phase never exercised weighted conversion"
     );
     if generic {
         assert_eq!(counts.rational, 0, "forced generic phase used Q");
+        assert_eq!(counts.grouped, 0, "forced generic phase used the grouped lane");
     } else {
         assert!(
             counts.rational > 0,

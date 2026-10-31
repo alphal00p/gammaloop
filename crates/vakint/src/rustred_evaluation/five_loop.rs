@@ -1230,6 +1230,7 @@ impl SavedApplication {
         // Transport and weighted lowering are independent per contribution
         // and run first (in parallel when configured); everything below then
         // consumes them strictly in contribution order, as before.
+        let batch_started = std::time::Instant::now();
         let lowered = super::parallel::map_ordered_by_cost(
             frontend_threads(settings),
             contributions,
@@ -1269,6 +1270,9 @@ impl SavedApplication {
                 Ok((input, input_conditions, lowering))
             },
         );
+        log::debug!(target: "vakint::saved_application",
+            "phase=scalar_lowering contributions={} threads={} elapsed_seconds={:.6}",
+            contributions.len(), frontend_threads(settings), batch_started.elapsed().as_secs_f64());
         for (input_index, lowered) in lowered.into_iter().enumerate() {
             let (input, input_conditions, lowering) = lowered?;
             conditions.extend(input_conditions);
