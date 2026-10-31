@@ -10737,10 +10737,68 @@ mod tests {
         assert!(builder.check_prose_sources().is_err());
 
         let archive = tempfile::tempdir().unwrap();
-        fs::create_dir(archive.path().join("target")).unwrap();
-        fs::write(archive.path().join("target/unauthorized.html"), "prose").unwrap();
+        fs::create_dir(archive.path().join("dist")).unwrap();
+        fs::write(archive.path().join("dist/unauthorized.html"), "prose").unwrap();
         builder.root = archive.path().to_path_buf();
         assert!(builder.check_prose_sources().is_err());
+    }
+
+    #[test]
+    fn prose_source_gate_excludes_only_metadata_free_root_cargo_output() {
+        let temporary = tempfile::tempdir().unwrap();
+        let root = temporary.path();
+        let rustdoc = "target/alphal00p-docs-rustdoc/cargo-target-v1/doc/example/index.html";
+        let generated = root.join(rustdoc);
+        fs::create_dir_all(generated.parent().unwrap()).unwrap();
+        fs::write(generated, "Generated Rustdoc").unwrap();
+        let mut builder = SiteBuilder::discover().unwrap();
+        builder.root = root.to_path_buf();
+        builder.legacy_prose = LegacyProseConfig {
+            schema: LEGACY_PROSE_SCHEMA_VERSION,
+            source: Vec::new(),
+        };
+        builder.generated_evidence = GeneratedEvidenceRegistry::empty_for_tests();
+        builder.check_prose_sources().unwrap();
+
+        for source in [
+            "unauthorized.html",
+            "docs/target/unauthorized.html",
+            "crates/example/target/unauthorized.md",
+            "targeted/unauthorized.html",
+        ] {
+            let path = root.join(source);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(&path, "Authored prose").unwrap();
+            let error = builder.check_prose_sources().unwrap_err();
+            assert!(
+                error.to_string().contains("shrinking legacy inventory"),
+                "{error}"
+            );
+            fs::remove_file(path).unwrap();
+        }
+
+        assert!(
+            Command::new("git")
+                .arg("init")
+                .current_dir(root)
+                .status()
+                .unwrap()
+                .success()
+        );
+        fs::write(root.join(".gitignore"), "target/\n").unwrap();
+        assert!(
+            Command::new("git")
+                .args(["add", "-f", rustdoc])
+                .current_dir(root)
+                .status()
+                .unwrap()
+                .success()
+        );
+        let error = builder.check_prose_sources().unwrap_err();
+        assert!(
+            error.to_string().contains("shrinking legacy inventory"),
+            "{error}"
+        );
     }
 
     #[test]

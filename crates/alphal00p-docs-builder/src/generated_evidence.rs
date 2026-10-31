@@ -489,14 +489,18 @@ impl RepositorySources {
 
     pub(crate) fn contains(&self, path: &Path) -> bool {
         match self {
-            Self::MetadataFree => true,
+            Self::MetadataFree => {
+                // Source exports lack VCS membership, but the root Cargo target is generated.
+                // Nested target directories and explicit VCS entries remain source candidates.
+                !path.starts_with("target")
+            }
             Self::Listed(paths) => paths.contains(path),
         }
     }
 
     pub(crate) fn may_contain(&self, directory: &Path) -> bool {
         match self {
-            Self::MetadataFree => true,
+            Self::MetadataFree => self.contains(directory),
             Self::Listed(paths) => paths.iter().any(|path| path.starts_with(directory)),
         }
     }
@@ -1359,9 +1363,22 @@ mod tests {
     }
 
     #[test]
-    fn metadata_free_exports_conservatively_check_every_file() {
+    fn metadata_free_exports_exclude_only_root_cargo_output() {
         let temporary = tempfile::tempdir().unwrap();
         let sources = RepositorySources::discover(temporary.path()).unwrap();
-        assert!(sources.contains(Path::new("docs/unexpected.html")));
+        for path in [
+            "docs/unexpected.html",
+            "docs/target/unexpected.html",
+            "targeted/note.md",
+        ] {
+            assert!(sources.contains(Path::new(path)), "{path}");
+            assert!(
+                sources.may_contain(Path::new(path).parent().unwrap()),
+                "{path}"
+            );
+        }
+        assert!(!sources.contains(Path::new("target/doc/index.html")));
+        assert!(!sources.may_contain(Path::new("target")));
+        assert!(sources.may_contain(Path::new("")));
     }
 }
