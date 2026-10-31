@@ -131,11 +131,12 @@ external-backend checks remain explicit exclusions in the configuration;
 their absence from automatic coverage does not establish that they are
 unsupported. Ignored tests are not enabled wholesale.
 
-Each successful Nix runtime result retains per-package JUnit reports with
-individual case durations. GitHub Actions exports test names, statuses and
-durations to a CSV artifact. Captured test output, expressions and raw logs
-are excluded. A failed Nix derivation has no registered report output; the
-build still fails, even when there is no timing CSV to upload.
+Each Nix runtime invocation writes per-package JUnit reports with individual
+case durations to its local report directory. GitHub Actions exports test
+names, statuses and durations to a CSV artifact. Captured test output,
+expressions and raw logs are excluded. A preparation failure prevents runtime
+execution; a runtime failure still fails the job even when reports and timing
+metadata are available.
 Nextest reservations continue to protect shared
 generated-state folders and large evaluator allocations. Four shards permit
 separate workers to run long cases concurrently; they do not remove these
@@ -150,12 +151,13 @@ test mocks Typst and checks the missing-optional-renderer behavior.
 Merged artifacts are self-contained compressed archives. Recursive inheritance,
 writable extraction, Cargo fingerprints and epoch-1 timestamps must survive
 changes to archive handling. Stable publication outputs depend on the artifacts,
-not the commit. Lightweight test runners request the corresponding Nix check
-result before fetching compiler state or test binaries. NixCI launches a cached
-runner too, but a matching cached check result can avoid executing its tests.
+not the commit. Executable test runners retain their compiled input closures.
+Building or substituting a runner only prepares those inputs. Every runtime
+invocation executes its selected tests and writes fresh local reports, including
+when the runner and compiled inputs are cached.
 The local upload command selects static checks, runtime launchers and compiled
-producers, not runtime check results. Uncached runtime checks run in NixCI using
-those prepared inputs. An empty successful test output alone does not retain
+producers, not runtime check results. NixCI and GitHub Actions execute runtime
+checks using those prepared inputs. An empty successful test output alone does not retain
 the necessary producers. Test groups are scheduled and reported independently.
 
 The local upload command keeps all selected outputs rooted through temporary
