@@ -17,24 +17,27 @@
 //! off, read-only or read-write (live population), in memory or backed by a
 //! directory, with a resident-byte ceiling and an autosave policy.
 //!
-//! Validity is decided by versions only, never by digests of sources or
-//! program bytes. RustRed's binding stamp covers its cache schema version, its
-//! hand-bumped step-semantics version and cheap identity fields (adapter,
+//! Validity is decided by versions and cheap identities only, never by digests
+//! of engine sources. RustRed's binding stamp covers its cache schema version,
+//! its hand-bumped step-semantics version and cheap identity fields (adapter,
 //! family fingerprint, coefficient variables, unresolved policy). Vakint adds
-//! the version of the loaded data (the external-data release, or the vendored
-//! or local pack version), so new rule tables never replay old records. A
-//! cache directory holds one subdirectory per program, data version and
-//! stamp, `<loops>L-<program>.<data version>.<stamp>`: a new data release or a
-//! RustRed version bump uses a new subdirectory, and RustRed rejects a file
-//! whose stamp differs. Local edits of rule tables that keep the data version
-//! must use a fresh cache directory.
+//! the identity of the program's rule tables, read from digests the loader has
+//! already verified (see [`OrderedCacheProgram::rule_tables`]); no data file is
+//! hashed for the cache. External-data checkouts change their tables without
+//! changing their release version, so the release version is reported but
+//! never part of the key. A cache directory holds one subdirectory per
+//! program, rule tables and stamp, `<loops>L-<program>.<tables>.<stamp>`: new
+//! rule tables (a data update or a local override) or a RustRed semantics
+//! bump use a new subdirectory, and RustRed rejects a file whose stamp
+//! differs. A data update that leaves a program's tables unchanged keeps its
+//! records.
 //!
 //! The depth-first completed-result caches (prepared bundles, running caches
 //! and their transport) were removed together with depth-first reduction: a
 //! completed terminal image replaces a frontier key and would skip every
 //! grouping and cancellation below it.
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     fmt, fs,
     path::{Path, PathBuf},
     str::FromStr,
@@ -222,8 +225,12 @@ pub struct OrderedCacheProgramStatistics {
     pub loop_count: usize,
     /// Program label, e.g. `3L-unit-mass-vacuum-k6` or `4L-four-loop-h`.
     pub program: String,
-    /// Version of the data the program was loaded from (file-name safe).
+    /// Version of the data the program was loaded from (file-name safe;
+    /// reported only, not part of the cache identity).
     pub data_version: String,
+    /// Hexadecimal identity of the program's rule tables (part of the cache
+    /// identity, see the module documentation).
+    pub rule_tables: String,
     /// Hexadecimal binding stamp of the cache.
     pub stamp: String,
     /// The program's cache directory, if the cache is backed by one.
@@ -289,9 +296,36 @@ pub(crate) struct OrderedCacheProgram {
     pub loop_count: usize,
     /// File-name safe label, unique per program within a loop count.
     pub label: String,
-    /// File-name safe version of the data the program was loaded from.
+    /// File-name safe version of the data the program was loaded from
+    /// (reported only: checkouts do not bump it when their tables change).
     pub data_version: String,
+    /// Identity of the program's rule tables, from digests verified on load:
+    /// the sha256 of a closed program's `rules.rrbin`, a digest of the pack
+    /// manifest's declared sha256 of a four-loop program's inputs, and the
+    /// saved-application identity of a five-loop package (its
+    /// `application.json`, which pins every payload, with the pack's families
+    /// and masters).
+    pub rule_tables: [u8; 32],
     pub binding: OrderedStepCacheBinding,
+}
+
+/// Registry key: program label, rule tables and binding stamp.
+type ProgramKey = (String, [u8; 32], [u8; 32]);
+
+/// The rule-table identity of a program read from several data files: a
+/// digest of their paths and declared (verified) sha256 values, in order.
+pub(super) fn declared_rule_tables(
+    files: impl IntoIterator<Item = (impl AsRef<str>, impl AsRef<str>)>,
+) -> [u8; 32] {
+    let mut digest = Sha256::new();
+    digest.update(b"vakint-ordered-cache-rule-tables-v1\0");
+    for (path, sha256) in files {
+        for field in [path.as_ref(), sha256.as_ref()] {
+            digest.update((field.len() as u64).to_le_bytes());
+            digest.update(field.as_bytes());
+        }
+    }
+    digest.finalize().into()
 }
 
 /// At most 64 ASCII letters, digits, `-`, `.` and `_` (others become `-`).
@@ -317,6 +351,7 @@ impl OrderedCacheProgram {
         loop_count: usize,
         name: &str,
         data_version: &str,
+        rule_tables: [u8; 32],
         binding: OrderedStepCacheBinding,
     ) -> Self {
         Self {
@@ -326,13 +361,14 @@ impl OrderedCacheProgram {
                 file_name_safe(&name.replace(['.', '_'], "-"), true)
             ),
             data_version: file_name_safe(data_version, false),
+            rule_tables,
             binding,
         }
     }
 
-    /// Registry key: one cache per data version and binding stamp.
-    fn key(&self) -> (String, [u8; 32]) {
-        (self.data_version.clone(), self.binding.stamp())
+    /// Registry key: one cache per program, rule tables and binding stamp.
+    fn key(&self) -> ProgramKey {
+        (self.label.clone(), self.rule_tables, self.binding.stamp())
     }
 }
 
@@ -348,6 +384,7 @@ struct Attached {
     loop_count: usize,
     label: String,
     data_version: String,
+    rule_tables: [u8; 32],
     stamp: [u8; 32],
     configuration: Configuration,
     autosave: OrderedCacheAutosave,
@@ -395,6 +432,7 @@ impl Attached {
             loop_count: self.loop_count,
             program: self.label.clone(),
             data_version: self.data_version.clone(),
+            rule_tables: hex(&self.rule_tables),
             stamp: hex(&self.stamp),
             directory: self.configuration.directory.clone(),
             mode: self.mode(),
@@ -405,10 +443,11 @@ impl Attached {
 }
 
 /// The Ordered step caches of one engine, shared by its clones. Caches are
-/// keyed by data version and binding stamp, so one program has one cache.
+/// keyed by program, rule tables and binding stamp, so one program has one
+/// cache.
 #[derive(Default)]
 pub(crate) struct OrderedCacheRegistry {
-    attached: Mutex<BTreeMap<(String, [u8; 32]), Attached>>,
+    attached: Mutex<BTreeMap<ProgramKey, Attached>>,
     last_autosave_error: Mutex<Option<String>>,
 }
 
@@ -439,7 +478,7 @@ fn invalid_setting(detail: String) -> VakintError {
 mod tests;
 
 impl OrderedCacheRegistry {
-    fn lock(&self) -> std::sync::MutexGuard<'_, BTreeMap<(String, [u8; 32]), Attached>> {
+    fn lock(&self) -> std::sync::MutexGuard<'_, BTreeMap<ProgramKey, Attached>> {
         self.attached.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
@@ -457,7 +496,7 @@ impl OrderedCacheRegistry {
             return Ok(None);
         }
         let key = program.key();
-        let stamp = key.1;
+        let stamp = key.2;
         let configuration = Configuration {
             directory: settings
                 .directory
@@ -470,6 +509,7 @@ impl OrderedCacheRegistry {
         if let Some(current) = attached.get_mut(&key) {
             if current.configuration == configuration {
                 current.autosave = settings.autosave;
+                current.data_version.clone_from(&program.data_version);
                 return Ok(Some(Arc::clone(&current.cache)));
             }
             // An automatic save: a failure is reported, not raised.
@@ -500,6 +540,7 @@ impl OrderedCacheRegistry {
                 loop_count: program.loop_count,
                 label: program.label.clone(),
                 data_version: program.data_version.clone(),
+                rule_tables: program.rule_tables,
                 stamp,
                 configuration,
                 autosave: settings.autosave,
@@ -517,13 +558,13 @@ impl OrderedCacheRegistry {
             (
                 left.loop_count,
                 &left.program,
-                &left.data_version,
+                &left.rule_tables,
                 &left.stamp,
             )
                 .cmp(&(
                     right.loop_count,
                     &right.program,
-                    &right.data_version,
+                    &right.rule_tables,
                     &right.stamp,
                 ))
         });
@@ -588,6 +629,33 @@ impl OrderedCacheRegistry {
     fn clear(&self) {
         self.lock().clear();
     }
+
+    /// Detach the caches of every program not in `programs` (superseded by a
+    /// data or five-loop application change), so their resident records are
+    /// released. Records of a directory-backed cache are saved first unless
+    /// its autosave policy is `Never`; a failed save is reported, not raised.
+    pub(crate) fn detach_except(&self, programs: &[OrderedCacheProgram]) {
+        let keep: BTreeSet<ProgramKey> = programs.iter().map(OrderedCacheProgram::key).collect();
+        let detached: Vec<Attached> = {
+            let mut attached = self.lock();
+            let superseded: Vec<ProgramKey> = attached
+                .keys()
+                .filter(|key| !keep.contains(*key))
+                .cloned()
+                .collect();
+            superseded
+                .iter()
+                .filter_map(|key| attached.remove(key))
+                .collect()
+        };
+        for program in detached {
+            if program.autosave != OrderedCacheAutosave::Never
+                && let Err(error) = program.save()
+            {
+                self.autosave_failed(error);
+            }
+        }
+    }
 }
 
 impl Drop for OrderedCacheRegistry {
@@ -607,12 +675,13 @@ impl Drop for OrderedCacheRegistry {
     }
 }
 
-/// `<root>/<label>.<data version>.<first 16 hex digits of the stamp>`.
+/// `<root>/<label>.<first 16 hex digits of the rule tables>.<first 16 hex
+/// digits of the stamp>`.
 fn program_directory(root: &Path, program: &OrderedCacheProgram, stamp: &[u8; 32]) -> PathBuf {
     root.join(format!(
         "{}.{}.{}",
         program.label,
-        program.data_version,
+        hex(&program.rule_tables[..8]),
         hex(&stamp[..8])
     ))
 }
@@ -622,8 +691,9 @@ impl Vakint {
     /// evaluations would on first use, and return their statistics. Opening
     /// a directory reads and checks only its manifests; shard files are read
     /// at their first lookup. A five-loop saved application is covered once
-    /// it is loaded. Fails when a directory holds a cache of another program
-    /// or engine (RustRed's stamp check) or cannot be read.
+    /// it is loaded. Fails when a directory holds a cache with another
+    /// binding (RustRed's stamp check: another cache schema or step-semantics
+    /// version, family, variables or policy) or cannot be read.
     pub fn load_ordered_cache(
         &self,
         settings: &VakintSettings,
@@ -705,6 +775,15 @@ impl Vakint {
         program: &OrderedCacheProgram,
     ) -> Result<Option<Arc<OrderedStepCache>>, RustRedEvaluationError> {
         self.ordered_cache.cache(&settings.ordered_cache, program)
+    }
+
+    /// Detach the caches of programs this engine no longer has, after its
+    /// data were replaced. Nothing is detached if the programs cannot be
+    /// listed.
+    pub(super) fn detach_superseded_ordered_caches(&self) {
+        if let Ok(programs) = self.ordered_cache_programs() {
+            self.ordered_cache.detach_except(&programs);
+        }
     }
 
     /// Every program currently loaded in this engine.

@@ -284,8 +284,9 @@ fn four_loop_quadratic_rung_matches_depth_first_and_reference() -> fixture::Resu
 /// The zero-momentum test compares with the accepted historical result shipped
 /// in `examples/data/five_loop_q0`. The quadratic test compares the retained
 /// expression and its nonzero conditions with saved digests, which hold only
-/// for the data release they were produced with (see
-/// [`FIVE_LOOP_QUADRATIC_FIXTURE`]).
+/// for the five-loop pack they were produced with (see
+/// [`FIVE_LOOP_QUADRATIC_FIXTURE`]); with another pack the test fails and says
+/// how to regenerate them.
 #[test]
 #[ignore = "slow optional fixture: full ordered 5L zero-momentum reduction against the accepted saved result; needs VAKINT_TEST_EXTERNAL_DATA, VAKINT_QCD_LADDER_PREPARED_INPUT and a fresh VAKINT_ORDERED_RUN_EVIDENCE (see the invocation above)"]
 fn five_loop_zero_momentum_ordered_matches_saved_depth_first_result() -> fixture::Result<()> {
@@ -302,13 +303,15 @@ fn five_loop_zero_momentum_ordered_matches_saved_depth_first_result() -> fixture
 }
 
 /// The saved 5L quadratic result: digests of the canonical retained
-/// expression and of its nonzero conditions, for one data release and one
+/// expression and of its nonzero conditions, for one five-loop pack and one
 /// prepared input.
 struct FiveLoopFixture {
-    /// Data release the digests belong to.
+    /// Data release the digests were produced with.
     data: &'static str,
-    /// sha256 of that release's `manifest.json`.
-    data_manifest_sha256: &'static str,
+    /// sha256 of its `5L/manifest.json` (the release manifest's declared
+    /// `manifest_sha256` of the 5L pack), which pins every 5L file. Releases
+    /// that change only other packs keep it.
+    five_loop_pack_manifest_sha256: &'static str,
     /// sha256 of the canonical prepared input.
     input_sha256: &'static str,
     /// sha256 of `retained.symbolica`.
@@ -324,13 +327,13 @@ struct FiveLoopFixture {
 /// new data and a fresh evidence directory under two different weight
 /// arithmetics (e.g. `modular_polynomial` and `modular_sampled`), check that
 /// both `retained.symbolica` and `nonzero-conditions.symbolica` agree byte for
-/// byte, then replace the release name and all four digests here (the manifest
-/// digest is `sha256sum manifest.json` of the data checkout; the others are the
-/// `report.json` fields `input_sha256`, `retained.sha256` and
+/// byte, then replace the release name and all four digests here (the pack
+/// digest is `sha256sum 5L/manifest.json` of the data checkout; the others are
+/// the `report.json` fields `input_sha256`, `retained.sha256` and
 /// `guards.payload.sha256`).
 const FIVE_LOOP_QUADRATIC_FIXTURE: FiveLoopFixture = FiveLoopFixture {
     data: "vakint-external-data v0.1.2 (f1626f67)",
-    data_manifest_sha256: "028b4e66affca59138c7913c0ee718de6a4d07913e9a88bd905bd5d850e902f2",
+    five_loop_pack_manifest_sha256: "036858d6d8ca3e48a2a9c6edd2c944eab48c7fc4d92902a99df2f9cdfa9b2160",
     input_sha256: "276d17a136aa5292b82effe05354d0b7cb639966a5f3797f960bbdf9f301a1fa",
     retained_sha256: "093086472ecdc75fd7180f5ce08a758f822a3048a3661eb8cc60c06e07ce34a4",
     nonzero_conditions_sha256: "5a56684173706ff69d9991147666a47fe04fff88beb888d67f006e45041a7be3",
@@ -349,27 +352,25 @@ fn five_loop_quadratic_ordered_retains_declared_masters() -> fixture::Result<()>
         std::env::var_os("VAKINT_TEST_EXTERNAL_DATA")
             .ok_or("set VAKINT_TEST_EXTERNAL_DATA to the vakint-external-data checkout")?,
     );
-    let manifest = sha256_hex(&std::fs::read(data.join("manifest.json"))?);
-    if manifest != fixture_data.data_manifest_sha256 {
-        println!(
-            "SKIPPED five_loop_quadratic_ordered_retains_declared_masters: the saved digests \
-             belong to {} (manifest.json sha256 {}), but {} has manifest.json sha256 {manifest}. \
-             Run against that release, or regenerate the fixture as documented at \
-             FIVE_LOOP_QUADRATIC_FIXTURE in tests/ordered_reduction_rungs.rs.",
+    // Fail before the long run: an ignored test only runs on request, and a
+    // silent skip would read as a pass.
+    let pack = sha256_hex(&std::fs::read(data.join("5L/manifest.json"))?);
+    if pack != fixture_data.five_loop_pack_manifest_sha256 {
+        return Err(format!(
+            "the saved digests belong to the 5L pack of {} (5L/manifest.json sha256 {}), but {} \
+             has 5L/manifest.json sha256 {pack}. Run against that pack, or regenerate the \
+             fixture as documented at FIVE_LOOP_QUADRATIC_FIXTURE in \
+             tests/ordered_reduction_rungs.rs.",
             fixture_data.data,
-            fixture_data.data_manifest_sha256,
+            fixture_data.five_loop_pack_manifest_sha256,
             data.display()
-        );
-        return Ok(());
+        )
+        .into());
     }
     let completed = ordered_five_loop(fixture::Projection::QuadraticTransverse)?;
     assert_eq!(
         completed.report["input_sha256"], fixture_data.input_sha256,
         "the saved digests belong to a different prepared quadratic input"
-    );
-    assert_eq!(
-        completed.report["data"]["manifest_sha256"],
-        fixture_data.data_manifest_sha256
     );
     let evidence = std::path::PathBuf::from(
         std::env::var_os("VAKINT_ORDERED_RUN_EVIDENCE")

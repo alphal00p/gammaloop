@@ -353,20 +353,28 @@ read-write) and saves. The rung tests and examples read
 counters in #raw("ordered_step_cache").
 
 A cache directory holds one subdirectory per program,
-#raw("<loops>L-<program>.<data version>.<stamp>") (e.g.
-#raw("4L-four-loop-h.v0.1.2.1f2e...")): a manifest and content-addressed shard
+#raw("<loops>L-<program>.<tables>.<stamp>") (e.g.
+#raw("4L-four-loop-h.5c1d....1f2e...")): a manifest and content-addressed shard
 files written atomically, so an interrupted save keeps the previous cache
-valid. Validity is decided by versions only, never by digests of sources or
-program bytes. The stamp is a BLAKE3 digest of RustRed's binding: its cache
-schema version, its hand-bumped step-semantics version and cheap identity
-fields (adapter, family fingerprint, coefficient variables, unresolved
-policy). The data version is the loaded external-data release (or the
-vendored or local pack version), so a new data release or a RustRed version
-bump writes a new subdirectory and never replays foreign records; stale
-subdirectories can be deleted. Rule tables edited locally without a new data
-version need a fresh cache directory. RustRed rejects a manifest or shard
-whose stamp or payload digest differs; Vakint reports this as an error naming
-the directory. A directory
+valid. Validity is decided by versions and cheap identities only, never by
+digests of engine sources. The stamp is a BLAKE3 digest of RustRed's binding:
+its cache schema version, its hand-bumped step-semantics version and cheap
+identity fields (adapter, family fingerprint, coefficient variables,
+unresolved policy). The tables identify the program's rule tables with digests
+the loader has already verified, so no data file is hashed for the cache: the
+sha256 of a 1L–3L #raw("ibps/rules.rrbin"), the declared sha256 values of a 4L
+program's four #raw("ibps") files, and the identity of the 5L saved application
+(its #raw("application.json"), which pins every payload, with the pack's
+families and masters). The external-data release version is reported
+(#raw("data_version") in the statistics) but is not part of the key, because
+checkouts change their tables without changing it. New rule tables (a data
+update or a local override) or a RustRed semantics bump therefore write a new
+subdirectory and never replay foreign records, while a data update that keeps a
+program's tables keeps its records; stale subdirectories can be deleted. When
+loaded data or a five-loop application replace a program, its cache is detached
+(saved first unless its autosave policy is #raw("never")). RustRed rejects a
+manifest or shard whose stamp or payload digest differs; Vakint reports this as
+an error naming the directory. A directory
 has one writer at a time: two engines or processes writing the same
 directory lose records of one of them (never mix them); readers are safe.
 

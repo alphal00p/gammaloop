@@ -51,6 +51,10 @@ struct Input {
     program: Vec<u8>,
     catalog: Vec<u8>,
     normalization: Vec<u8>,
+    /// Ordered step-cache identity of the four files above: a digest of the
+    /// pack manifest's declared sha256 values, which `LoopData::read`
+    /// verified.
+    rule_tables: [u8; 32],
 }
 
 struct Descriptor {
@@ -77,7 +81,7 @@ pub(super) struct FourLoopPrograms {
 
 impl FourLoopPrograms {
     /// Load the four programs of a pack whose data release is `data_version`
-    /// (part of their Ordered step-cache identity).
+    /// (reported with their Ordered step caches).
     pub(super) fn load(
         data: &super::data::LoopData,
         data_version: &str,
@@ -90,13 +94,24 @@ impl FourLoopPrograms {
             ("bmw", "four-loop-bmw"),
             ("x", "four-loop-x"),
         ] {
+            let [csv, program, catalog, normalization] =
+                ["csv", "candidates.rrbin.gz", "rrcat.bin.gz", "rrnorm.bin"]
+                    .map(|extension| format!("ibps/{name}.{extension}"));
+            let rule_tables = super::cache::declared_rule_tables(
+                [&csv, &program, &catalog, &normalization]
+                    .into_iter()
+                    .filter_map(|path| {
+                        let declared = data.manifest.files.get(path.as_str())?;
+                        Some((path.as_str(), declared.sha256.as_str()))
+                    }),
+            );
             inputs.push(Input {
                 label,
-                csv: String::from_utf8(data.read(&format!("ibps/{name}.csv"))?)
-                    .map_err(super::data::failure)?,
-                program: data.read(&format!("ibps/{name}.candidates.rrbin.gz"))?,
-                catalog: data.read(&format!("ibps/{name}.rrcat.bin.gz"))?,
-                normalization: data.read(&format!("ibps/{name}.rrnorm.bin"))?,
+                csv: String::from_utf8(data.read(&csv)?).map_err(super::data::failure)?,
+                program: data.read(&program)?,
+                catalog: data.read(&catalog)?,
+                normalization: data.read(&normalization)?,
+                rule_tables,
             });
         }
         let descriptors = inputs
@@ -264,12 +279,13 @@ fn load(
     catalog.require_exact_keys(native.output_terminals())?;
     native.preserve_unresolved()?;
     // The program, normalization and policy are final here. The cache
-    // binding holds cheap identity fields only; the data version keys it to
-    // this release's rule tables.
+    // binding holds cheap identity fields only; the declared digests of the
+    // input files key it to these rule tables.
     let step_cache = super::cache::OrderedCacheProgram::new(
         4,
         input.label,
         data_version,
+        input.rule_tables,
         native.ordered_step_cache_binding()?,
     );
     Ok(LoadedProgram {

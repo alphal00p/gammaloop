@@ -67,10 +67,29 @@ impl ArtifactSnapshot {
         self.source_digest
     }
 
+    /// The Ordered step-cache identity of this closed program loaded from
+    /// data `data_version`: its rule tables are the sha256 of the rule bytes
+    /// computed on load (the pack manifest's verified digest, or a local
+    /// override's own digest).
+    pub(super) fn ordered_cache_program(
+        &self,
+        loop_count: usize,
+        name: &str,
+        data_version: &str,
+    ) -> super::cache::OrderedCacheProgram {
+        super::cache::OrderedCacheProgram::new(
+            loop_count,
+            name,
+            data_version,
+            self.source_digest,
+            self.ordered_step_cache_binding(),
+        )
+    }
+
     /// Binding of an Ordered step cache to this closed program: adapter,
     /// family and coefficient variables (closed artifacts have no unresolved
-    /// policy or terminal convention). The rule bytes are not digested; Vakint
-    /// keys its caches by the data version as well.
+    /// policy or terminal convention). The rule bytes are not digested again;
+    /// Vakint keys its caches by their load-time sha256 as well.
     pub(super) fn ordered_step_cache_binding(&self) -> rustred::reduction::OrderedStepCacheBinding {
         rustred::reduction::OrderedStepCacheBinding::new(
             rustred::reduction::OrderedStepCacheAdapter::ClosedArtifact,

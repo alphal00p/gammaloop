@@ -366,43 +366,204 @@ fn ordered_cache_modes_and_autosave_policies_round_trip() {
 }
 
 #[test]
-fn caches_are_keyed_by_data_version_and_binding_stamp() {
+fn caches_are_keyed_by_program_rule_tables_and_binding_stamp() {
     let snapshot = super::super::artifact::ArtifactFamily::UnitMassVacuumK1
         .snapshot()
         .unwrap();
-    let program = |version: &str| {
+    let program = |name: &str, version: &str, tables: [u8; 32]| {
         super::OrderedCacheProgram::new(
             1,
-            "unit-mass-vacuum-k1",
+            name,
             version,
+            tables,
             snapshot.ordered_step_cache_binding(),
         )
     };
-    let (release, next, local) = (program("v0.1.2"), program("v0.2.0"), program("local/a b"));
-    // Same binding (versions and identity fields only), different data.
-    assert_eq!(release.binding.stamp(), next.binding.stamp());
-    assert_eq!(local.data_version, "local-a-b");
-    let root = Path::new("/caches");
+    let tables = snapshot.source_digest();
+    let mut edited = tables;
+    edited[0] ^= 1;
+    let release = program("unit-mass-vacuum-k1", "v0.1.2", tables);
+    // A data checkout that keeps the release version but edits the rule
+    // tables, one that bumps the version with the same tables, and another
+    // program with the same tables and binding.
+    let same_version = program("unit-mass-vacuum-k1", "v0.1.2", edited);
+    let next_release = program("unit-mass-vacuum-k1", "v0.2.0", tables);
+    let other_program = program("unit-mass-vacuum-k3", "v0.1.2", tables);
+    assert_eq!(
+        program("unit-mass-vacuum-k1", "local/a b", tables).data_version,
+        "local-a-b"
+    );
+    // Versions and identity fields only: the binding is the same for all.
     let stamp = release.binding.stamp();
-    let directory = super::program_directory(root, &release, &stamp);
-    let name = directory.file_name().unwrap().to_str().unwrap().to_owned();
-    assert!(name.starts_with("1L-unit-mass-vacuum-k1.v0.1.2."), "{name}");
-    assert_ne!(directory, super::program_directory(root, &next, &stamp));
-    // A new data version never shares the records of the previous one.
+    assert_eq!(stamp, same_version.binding.stamp());
+    let root = Path::new("/caches");
+    let directory = |program| super::program_directory(root, program, &stamp);
+    assert_eq!(
+        directory(&release),
+        root.join(format!(
+            "1L-unit-mass-vacuum-k1.{}.{}",
+            super::hex(&tables[..8]),
+            super::hex(&stamp[..8])
+        ))
+    );
+    assert_ne!(directory(&release), directory(&same_version));
+    assert_eq!(directory(&release), directory(&next_release));
+    assert_ne!(directory(&release), directory(&other_program));
+    // Edited rule tables never share records, whatever the data version says;
+    // unchanged tables keep them across a release.
     let registry = super::OrderedCacheRegistry::default();
     let settings = OrderedCacheSettings::default();
-    let first = registry.cache(&settings, &release).unwrap().unwrap();
-    let again = registry.cache(&settings, &release).unwrap().unwrap();
-    let other = registry.cache(&settings, &next).unwrap().unwrap();
-    assert!(std::sync::Arc::ptr_eq(&first, &again));
-    assert!(!std::sync::Arc::ptr_eq(&first, &other));
-    let statistics = registry.statistics();
-    assert_eq!(
-        statistics
+    let cache = |program| registry.cache(&settings, program).unwrap().unwrap();
+    let first = cache(&release);
+    assert!(std::sync::Arc::ptr_eq(&first, &cache(&release)));
+    assert!(std::sync::Arc::ptr_eq(&first, &cache(&next_release)));
+    let edited_cache = cache(&same_version);
+    assert!(!std::sync::Arc::ptr_eq(&first, &edited_cache));
+    assert!(!std::sync::Arc::ptr_eq(&first, &cache(&other_program)));
+    let reported = || {
+        registry
+            .statistics()
             .programs
-            .iter()
-            .map(|program| program.data_version.as_str())
-            .collect::<Vec<_>>(),
-        ["v0.1.2", "v0.2.0"]
+            .into_iter()
+            .map(|program| (program.program, program.data_version, program.rule_tables))
+            .collect::<std::collections::BTreeSet<_>>()
+    };
+    let entry = |program: &str, version: &str, tables: &[u8]| {
+        (program.to_owned(), version.to_owned(), super::hex(tables))
+    };
+    // The last data version that used a cache is reported.
+    let kept = [
+        entry("1L-unit-mass-vacuum-k1", "v0.2.0", &tables),
+        entry("1L-unit-mass-vacuum-k3", "v0.1.2", &tables),
+    ];
+    let mut expected: std::collections::BTreeSet<_> = kept.iter().cloned().collect();
+    expected.insert(entry("1L-unit-mass-vacuum-k1", "v0.1.2", &edited));
+    assert_eq!(reported(), expected);
+    // Superseded programs are detached; the others keep their cache.
+    registry.detach_except(&[next_release.clone(), other_program.clone()]);
+    assert_eq!(
+        reported(),
+        kept.into_iter().collect::<std::collections::BTreeSet<_>>()
     );
+    assert!(std::sync::Arc::ptr_eq(&first, &cache(&release)));
+    assert!(!std::sync::Arc::ptr_eq(
+        &edited_cache,
+        &cache(&same_version)
+    ));
+}
+
+/// The rule-table identities are the digests the loader verified: a closed
+/// program's is its pack's declared `rules.rrbin` sha256, a local override of
+/// the same bytes keeps it (and the cache), and a five-loop package's is its
+/// saved-application identity, which differs for every `application.json`.
+#[test]
+fn rule_tables_are_the_verified_data_digests() {
+    let input = THREE_LOOP[0].to_owned();
+    let mut engine = Vakint::new().unwrap();
+    let in_memory = settings(OrderedCacheSettings::default(), "exact");
+    let data = engine.rustred_data().unwrap();
+    let programs = data.ordered_cache_programs().unwrap();
+    assert_eq!(programs.len(), 3);
+    for program in &programs {
+        let declared = &data.loops[&program.loop_count].manifest.files["ibps/rules.rrbin"];
+        assert_eq!(super::hex(&program.rule_tables), declared.sha256);
+        assert_eq!(program.data_version, data.version);
+    }
+    let cold = evaluate_all(&engine, &in_memory, std::slice::from_ref(&input));
+    let before = engine.ordered_cache_statistics();
+    assert_eq!(before.programs.len(), 1);
+    assert!(before.inserts > 0);
+    // The same rules loaded as a local override: a new data version, the
+    // same rule tables, so the attached cache and its records are kept.
+    let rules = tempfile::tempdir().unwrap();
+    let three_loop = &data.loops[&3];
+    std::fs::write(
+        rules.path().join("rules.rrbin"),
+        three_loop.read("ibps/rules.rrbin").unwrap(),
+    )
+    .unwrap();
+    engine.load_rustred_artifacts(3, rules.path()).unwrap();
+    let overridden = engine.rustred_data().unwrap();
+    assert!(overridden.version.starts_with("local-"));
+    assert_eq!(
+        overridden.ordered_cache_programs().unwrap(),
+        programs
+            .iter()
+            .map(|program| super::OrderedCacheProgram {
+                data_version: overridden.version.clone(),
+                ..program.clone()
+            })
+            .collect::<Vec<_>>()
+    );
+    let warm = evaluate_all(&engine, &in_memory, std::slice::from_ref(&input));
+    assert_eq!(warm, cold);
+    let after = engine.ordered_cache_statistics();
+    assert_eq!(after.programs.len(), 1);
+    assert_eq!(after.inserts, before.inserts);
+    assert!(after.hits > before.hits);
+    assert_eq!(after.programs[0].data_version, overridden.version);
+    // Five-loop packages: application.json pins every payload; bare paths
+    // and package directories are identified by it alone here.
+    let packages = tempfile::tempdir().unwrap();
+    let identity = |name: &str, contents: &str| {
+        let package = packages.path().join(name);
+        std::fs::create_dir(&package).unwrap();
+        std::fs::write(package.join("application.json"), contents).unwrap();
+        let identity = super::saved_application_digest(&data, &package).unwrap();
+        assert_eq!(
+            identity,
+            super::saved_application_digest(&data, &package.join("application.json")).unwrap()
+        );
+        identity
+    };
+    let official = identity("official", r#"{"payloads":[{"blake3":"aa"}]}"#);
+    assert_eq!(
+        official,
+        identity("copy", r#"{"payloads":[{"blake3":"aa"}]}"#)
+    );
+    assert_ne!(
+        official,
+        identity("bare", r#"{"payloads":[{"blake3":"bb"}]}"#)
+    );
+}
+
+/// Each four-loop program is keyed by the declared (load-verified) sha256 of
+/// its own four input files, so editing one program's tables leaves the
+/// caches of the other three valid.
+#[test]
+fn four_loop_rule_tables_are_the_declared_input_digests() {
+    let engine = super::super::test_data::external_engine();
+    let data = engine.rustred_data().unwrap();
+    let pack = &data.loops[&4];
+    let programs: Vec<_> = data
+        .ordered_cache_programs()
+        .unwrap()
+        .into_iter()
+        .filter(|program| program.loop_count == 4)
+        .collect();
+    assert_eq!(programs.len(), 4);
+    for (program, name) in programs.iter().zip(["h", "fg", "bmw", "x"]) {
+        assert_eq!(program.label, format!("4L-four-loop-{name}"));
+        let paths = ["csv", "candidates.rrbin.gz", "rrcat.bin.gz", "rrnorm.bin"]
+            .map(|extension| format!("ibps/{name}.{extension}"));
+        let declared = |path: &String| pack.manifest.files[path.as_str()].sha256.clone();
+        let expected = super::declared_rule_tables(paths.iter().map(|path| (path, declared(path))));
+        assert_eq!(program.rule_tables, expected, "{}", program.label);
+        // Another declared digest for any one file is another identity.
+        for edited in 0..paths.len() {
+            let other =
+                super::declared_rule_tables(paths.iter().enumerate().map(|(index, path)| {
+                    let sha256 = if index == edited {
+                        "0".repeat(64)
+                    } else {
+                        declared(path)
+                    };
+                    (path, sha256)
+                }));
+            assert_ne!(other, expected);
+        }
+    }
+    let distinct: std::collections::BTreeSet<_> =
+        programs.iter().map(|program| program.rule_tables).collect();
+    assert_eq!(distinct.len(), 4);
 }

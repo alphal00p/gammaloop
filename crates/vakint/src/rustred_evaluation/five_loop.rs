@@ -144,8 +144,9 @@ pub(crate) struct SavedApplication {
     product_charts: SavedApplicationProductChartStatistics,
     data: Arc<super::data::RustRedData>,
     witnesses: Mutex<WitnessCache>,
-    /// Ordered step-cache identity computed by RustRed from the loaded
-    /// package (selection, queries, payload digests, family, policy).
+    /// Ordered step-cache identity of the loaded package: its
+    /// saved-application identity as rule tables and RustRed's binding
+    /// (family, variables, policy).
     step_cache: super::cache::OrderedCacheProgram,
 }
 
@@ -763,6 +764,7 @@ impl Vakint {
             let application = Arc::new(SavedApplication::new(
                 prepared,
                 path.clone(),
+                identity,
                 settings.rustred_product_limits,
                 Arc::clone(&data),
             )?);
@@ -776,14 +778,21 @@ impl Vakint {
                 Some(catalogue) => Arc::clone(catalogue),
                 None => crate::topologies::FiveLoopCatalogue::prepare()?,
             };
-            *loaded = Some(LoadedApplication {
+            let replaced = loaded.replace(LoadedApplication {
                 path,
                 options,
                 product_limits: settings.rustred_product_limits,
-                application,
+                application: Arc::clone(&application),
                 bare,
                 catalogue,
             });
+            // The replaced package's cache is unreachable unless both share
+            // their rule tables (a copy, or an options reload).
+            if replaced.is_some() {
+                let mut programs = data.ordered_cache_programs()?;
+                programs.push(application.ordered_cache_program().clone());
+                self.ordered_cache.detach_except(&programs);
+            }
         }
         let loaded = loaded
             .as_ref()
@@ -1063,9 +1072,12 @@ impl Vakint {
 }
 
 impl SavedApplication {
+    /// `identity` is the package's [`super::cache::saved_application_digest`],
+    /// the rule-table identity of its Ordered step cache.
     fn new(
         mut prepared: PreparedSavedApplication<15>,
         path: PathBuf,
+        identity: [u8; 32],
         product_limits: VacuumProductReductionLimits,
         data: Arc<super::data::RustRedData>,
     ) -> Result<Self, RustRedEvaluationError> {
@@ -1102,6 +1114,7 @@ impl SavedApplication {
             5,
             prepared.family().name(),
             &data.version,
+            identity,
             prepared.ordered_step_cache_binding(),
         );
         Ok(Self {
@@ -1183,18 +1196,9 @@ impl SavedApplication {
         application.set_ordered_weight_arithmetic(settings.rustred_ordered_weight_arithmetic());
         let scheduler = super::ordered_scheduler(settings);
         application.set_ordered_scheduler_options(scheduler);
-        // The cache is opened with this package's own binding, so its stamp
-        // matches; RustRed checks family, variables and policy again here
-        // and at every request.
-        if step_cache
-            .as_ref()
-            .is_some_and(|cache| cache.stamp() != self.step_cache.binding.stamp())
-        {
-            return Err(super::cache::ordered_cache_failure(
-                "the step cache is bound to another saved application",
-            )
-            .into());
-        }
+        // The cache is the one of this package's own program (its rule tables
+        // and binding); RustRed checks family, variables and policy again
+        // here and at every request.
         application
             .set_ordered_step_cache(step_cache)
             .map_err(super::cache::operation)?;

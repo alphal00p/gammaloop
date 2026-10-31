@@ -62,9 +62,10 @@ for campaign coverage and release conventions.
 
 RustRed reduces every request with its ordered scheduler: all contributions of one
 loop count share an exact frontier per compatible coefficient channel. There is no
-strategy setting; `rustred_application_options.ordered_weight_arithmetic` selects
-exact or modular frontier weights (`parse_rustred_ordered_weight_arithmetic`), with
-identical results. Depth-first reduction, its prepared and running caches and the
+strategy setting; `VakintSettings::ordered_weight_arithmetic` (Python:
+`ordered_weight_arithmetic`) selects exact, `modular_sampled` or `modular_polynomial`
+(the default) frontier weights, with identical results, and `VakintSettings::n_cores`
+(Python: `n_cores`) is the single source of every worker thread. Depth-first reduction, its prepared and running caches and the
 Python cache operations were removed. Instead, `VakintSettings::ordered_cache` (Python:
 `ordered_cache`, `ordered_cache_directory`, `ordered_cache_ram_bytes`,
 `ordered_cache_autosave`) configures the Ordered step cache, which replays each expanded

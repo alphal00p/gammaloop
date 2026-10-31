@@ -449,9 +449,11 @@ Instead, `rustred_evaluation::cache` owns one RustRed `OrderedStepCache` per red
 engine's clones. It stores the weight-independent checked step of each expanded key, replayed
 exactly by every arithmetic, pass, channel and request, never weights, zero decisions or results.
 `VakintSettings::ordered_cache` selects off, read-only or read-write (default, in memory), an
-optional directory with one `<loops>L-<program>.<data version>.<stamp>` subdirectory per program
-(validity by versions only: RustRed's stamp covers its cache schema and step-semantics versions
-and cheap identity fields, Vakint adds the loaded data version; no source or program digests), a resident
+optional directory with one `<loops>L-<program>.<tables>.<stamp>` subdirectory per program
+(validity by versions and cheap identities only: RustRed's stamp covers its cache schema and
+step-semantics versions and cheap identity fields; Vakint adds the program's rule-table identity
+from digests the data loader already verified, because data checkouts do not bump their release
+version; no engine source digests), a resident
 ceiling and an autosave policy; `load_`, `save_`, `warm_`, `clear_ordered_cache` and
 `ordered_cache_statistics` are the operations (`symbolica_community_module::cache` holds the
 Python report conversion). A foreign or corrupt directory is rejected, not replayed.

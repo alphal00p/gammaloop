@@ -204,12 +204,7 @@ pub(super) fn evaluate_ordered_batch(
     } else {
         vakint.ordered_step_cache(
             settings,
-            &super::cache::OrderedCacheProgram::new(
-                first.loop_count,
-                first.family.name(),
-                &data.version,
-                snapshot.ordered_step_cache_binding(),
-            ),
+            &snapshot.ordered_cache_program(first.loop_count, first.family.name(), &data.version),
         )?
     };
     let cohort_total = channels.len();

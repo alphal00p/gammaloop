@@ -762,7 +762,10 @@ anchor = "pub struct VakintWrapper {"
 # ordered_weight_arithmetic (default the modular_polynomial constant) and the
 # ordered_cache* keywords together, without strategy or cache-policy keywords; both
 # getters and the cache methods remain, loaders pass n_cores. Ownership is unchanged.
-digest = "6270e7563d48833a707ab0c82b9ca6898ae0ae04"
+# Reviewed 2026-10-31 for the cache-identity review fix: the docstrings of
+# ordered_cache_directory and load_ordered_cache describe subdirectories per
+# program, rule tables and RustRed binding; wrapper behaviour is unchanged.
+digest = "fb5c085cbd0542dd5f77ccf1d73f970f25d5688f"
 
 [[section.note.scope]]
 path = "crates/vakint/src/symbolica_community_module/numerical.rs"
@@ -822,7 +825,11 @@ anchor = "pub(crate) struct RustRedData {"
 # n_cores only (load_external_data_on, load_rustred_artifacts_on, activate_external_data);
 # step-cache identities carry the data version (versioning-only binding), four-loop
 # programs load with the manifest version. Validation and activation are unchanged.
-digest = "ae764be22bab8e16d37684bce439e3b204be0ddd"
+# Reviewed 2026-10-31 for the cache-identity review fix: closed programs are
+# keyed by their load-time rules sha256 instead of the release version, and an
+# activation detaches the Ordered caches of programs the new data replaced.
+# Loading, validation and the activation order are unchanged.
+digest = "9f1c506e829e0ce69b45fbbd4ca6c30aef9fd5be"
 
 [[section.note.scope]]
 path = "crates/vakint/src/rustred_evaluation/masters.rs"

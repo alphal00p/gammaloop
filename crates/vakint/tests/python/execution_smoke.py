@@ -1,8 +1,8 @@
 """Worker cores and Ordered weight arithmetic of the Python engine.
 
-Every arithmetic and every core count must return the same exact result. The
-polynomial modular arithmetic may still be RustRed's validated stub, which
-fails with an explicit error before any work.
+Every arithmetic and every core count must return the same exact result as
+the exact arithmetic on one core. The default arithmetic is
+modular_polynomial.
 """
 
 import os
@@ -10,8 +10,6 @@ import unittest
 
 from symbolica import E
 from symbolica.community.hepkit.vakint import Vakint, VakintEvaluationMethod
-
-POLYNOMIAL_STUB = "modular_polynomial weight arithmetic is not implemented yet"
 
 
 def engine(**overrides):
@@ -44,7 +42,7 @@ class ExecutionSettingsTests(unittest.TestCase):
         obj = engine()
         self.assertGreaterEqual(obj.n_cores, 1)
         self.assertLessEqual(obj.n_cores, min(10, available_cores()))
-        self.assertEqual(obj.ordered_weight_arithmetic, "exact")
+        self.assertEqual(obj.ordered_weight_arithmetic, "modular_polynomial")
 
     def test_canonical_arithmetic_text(self):
         for text, canonical in (
@@ -73,19 +71,17 @@ class ExecutionSettingsTests(unittest.TestCase):
 class ExecutionResultTests(unittest.TestCase):
     def test_every_arithmetic_and_core_count_agrees(self):
         expression = lower_loop_input()
-        reference = engine(n_cores=1).evaluate_integral(expression)
+        reference = engine(
+            n_cores=1, ordered_weight_arithmetic="exact"
+        ).evaluate_integral(expression)
         cores = sorted({1, min(4, available_cores())})
         for n_cores in cores:
-            for arithmetic in ("exact", "modular_sampled", "modular_polynomial"):
+            for arithmetic in (None, "exact", "modular_sampled", "modular_polynomial"):
                 with self.subTest(n_cores=n_cores, arithmetic=arithmetic):
-                    obj = engine(n_cores=n_cores, ordered_weight_arithmetic=arithmetic)
-                    try:
-                        result = obj.evaluate_integral(expression)
-                    except Exception as error:
-                        if arithmetic != "modular_polynomial":
-                            raise
-                        self.assertIn(POLYNOMIAL_STUB, str(error))
-                        continue
+                    options = {"n_cores": n_cores}
+                    if arithmetic is not None:
+                        options["ordered_weight_arithmetic"] = arithmetic
+                    result = engine(**options).evaluate_integral(expression)
                     self.assertEqual(result, reference)
 
 

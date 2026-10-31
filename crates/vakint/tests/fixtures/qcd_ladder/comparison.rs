@@ -328,7 +328,7 @@ fn ordered_cache_report(engine: &Vakint, settings: &OrderedCacheSettings) -> ser
         "last_autosave_error": statistics.last_autosave_error,
         "programs": statistics.programs.iter().map(|program| serde_json::json!({
             "program": program.program, "data_version": program.data_version,
-            "stamp": program.stamp, "directory": program.directory,
+            "rule_tables": program.rule_tables, "stamp": program.stamp, "directory": program.directory,
             "records": program.native.records, "hits": program.native.hits,
             "misses": program.native.misses, "inserts": program.native.inserts,
             "loaded_shards": program.native.loaded_shards, "shards": program.native.shards.len(),

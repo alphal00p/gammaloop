@@ -483,11 +483,10 @@ impl RustRedData {
         for (loop_count, snapshot) in &self.lower {
             let family = super::artifact::shipped_family_for_loop_count(*loop_count)
                 .ok_or_else(|| failure("lower-loop program without a registered family"))?;
-            programs.push(super::cache::OrderedCacheProgram::new(
+            programs.push(snapshot.ordered_cache_program(
                 *loop_count,
                 family.name(),
                 &self.version,
-                snapshot.ordered_step_cache_binding(),
             ));
         }
         if let Some(four_loop) = &self.four_loop {
@@ -632,6 +631,8 @@ impl Vakint {
         }
         resources::checkpoint()?;
         *self = staged;
+        // Programs whose rule tables changed are no longer reachable.
+        self.detach_superseded_ordered_caches();
         Ok(())
     }
 }

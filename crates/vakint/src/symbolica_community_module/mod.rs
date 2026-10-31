@@ -962,8 +962,10 @@ impl VakintWrapper {
     ///     identical to computed ones, so results never depend on this setting.
     /// ordered_cache_directory : Optional[str]
     ///     Directory of the Ordered step cache, one subdirectory per reduction
-    ///     program and engine build. None (default) keeps records in memory for
-    ///     the lifetime of this engine. One writer per directory at a time.
+    ///     program, rule tables and RustRed cache binding (schema and
+    ///     step-semantics versions, family, variables, policy). None (default)
+    ///     keeps records in memory for the lifetime of this engine. One writer
+    ///     per directory at a time.
     /// ordered_cache_ram_bytes : Optional[int]
     ///     Ceiling on the estimated resident bytes of each program's cache.
     ///     Default 8 GiB; records beyond it are recomputed instead of kept.
@@ -1147,7 +1149,8 @@ impl VakintWrapper {
     ///
     /// Opening a cache directory checks its manifests; shard files are read at
     /// their first lookup. A five-loop application is covered once loaded.
-    /// Raises if a directory holds a cache of another program or engine build.
+    /// Raises if a directory holds a cache with another RustRed binding (cache
+    /// schema or step-semantics version, family, variables or policy).
     pub fn load_ordered_cache<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let statistics = resources::run(self.settings.rustred_resources, || {
             self.vakint

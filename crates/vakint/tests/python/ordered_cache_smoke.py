@@ -3,6 +3,7 @@
 Uses only the vendored lower-loop programs: no external data, no FORM.
 """
 
+import os
 import tempfile
 import unittest
 
@@ -53,6 +54,14 @@ class OrderedCacheSmoke(unittest.TestCase):
                 sorted(program["program"] for program in cold["programs"]),
                 ["2L-unit-mass-vacuum-k3", "3L-unit-mass-vacuum-k6"],
             )
+            # One subdirectory per program, rule tables and binding stamp.
+            for program in cold["programs"]:
+                self.assertEqual(len(program["rule_tables"]), 64)
+                self.assertEqual(
+                    os.path.basename(program["directory"]),
+                    f'{program["program"]}.{program["rule_tables"][:16]}'
+                    f'.{program["stamp"][:16]}',
+                )
             reader = engine(
                 ordered_cache="read-only", ordered_cache_directory=directory
             )

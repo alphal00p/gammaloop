@@ -56,6 +56,7 @@ pub(super) fn statistics<'py>(
         record.set_item("loop_count", program.loop_count)?;
         record.set_item("program", &program.program)?;
         record.set_item("data_version", &program.data_version)?;
+        record.set_item("rule_tables", &program.rule_tables)?;
         record.set_item("stamp", &program.stamp)?;
         record.set_item("directory", program.directory.clone())?;
         record.set_item("mode", program.mode.as_str())?;
