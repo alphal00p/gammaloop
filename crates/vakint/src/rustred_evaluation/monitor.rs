@@ -240,6 +240,9 @@ pub(super) struct DisplaySnapshot {
     pub elapsed: Duration,
     pub phase: String,
     pub phase_started_at: Duration,
+    /// Cumulative wall time of every finished phase label, in first-seen
+    /// order. The running phase is added on presentation; labels are bounded.
+    pub phase_ledger: Vec<(String, Duration)>,
     pub native_work_active: bool,
     pub caller_work: Option<CallerWork>,
     pub ordered_batches: Option<CallerWork>,
@@ -757,6 +760,7 @@ impl MonitorState {
             "phase": self.latest.phase,
             "native_work_active": self.latest.native_work_active,
             "phase_elapsed_seconds": (!self.latest.phase.is_empty()).then(|| self.observation_age(self.latest.phase_started_at, now).as_secs_f64()),
+            "phase_seconds": self.phase_seconds(now),
             "event_age_seconds": (!self.latest.phase.is_empty()).then(|| now.saturating_sub(self.received_at).as_secs_f64()),
             "native_observation_age_seconds": self.latest.native_observed_at.map(|at| self.observation_age(at, now).as_secs_f64()),
             "native_quantitative_sample_age_seconds": self.latest.quantitative_sample_at.map(|at| self.observation_age(at, now).as_secs_f64()),
@@ -844,6 +848,28 @@ impl MonitorState {
                 .native_collection_sample_at
                 .map(|at| self.observation_age(at, now).as_secs_f64());
             sample
+        })
+    }
+
+    /// Stage breakdown of this scope: cumulative seconds per phase label,
+    /// including the running phase up to `now`.
+    fn phase_seconds(&self, now: Duration) -> serde_json::Value {
+        let mut ledger = self.latest.phase_ledger.clone();
+        if !self.latest.phase.is_empty() {
+            let running = self.observation_age(self.latest.phase_started_at, now);
+            match ledger
+                .iter_mut()
+                .find(|(label, _)| *label == self.latest.phase)
+            {
+                Some((_, total)) => *total += running,
+                None => ledger.push((self.latest.phase.clone(), running)),
+            }
+        }
+        serde_json::json!({
+            "scope": "cumulative wall seconds per observed phase label (caller phases and native activities are disjoint), first-seen order",
+            "phases": ledger.iter().map(|(phase, seconds)| serde_json::json!({
+                "phase": phase, "seconds": seconds.as_secs_f64(),
+            })).collect::<Vec<_>>(),
         })
     }
 

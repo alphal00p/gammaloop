@@ -122,6 +122,10 @@ single remainder and differ only by rational multiples of powers of one symbol (
 coefficient expanded in the regulator), they are summed into one polynomial, the univariate
 denominators are factored once over Z, and that product is canonicalized once. The result is the
 expression the term-wise canonicalization produces; every other shape uses the term-wise path.
+The caller expression is expanded with the summands of its top-level sum (or of the single sum
+factor of a top-level product) distributed over the post-processing workers, and the complete
+coefficients are combined independently on those workers. Both results are summed in input order
+and normalized once, so they are identical for every worker count; one worker runs inline.
 The resulting sum need not have the same serialized
 shape as a single global rational expression. Agreement requires exact equality of every complete
 master-product coefficient and the full guard/family metadata, rather than matching term counts or
@@ -267,6 +271,11 @@ outside that grammar, use the unchanged full weighted lowering. The witness memo
 exact admitted support. Witness screening and per-contribution scalar lowering may run on
 scoped worker threads; results are consumed in input order, and one thread runs inline.
 
+The loaded five-loop application is shared by all Ordered weight arithmetics: each request sets
+its arithmetic before reducing, so a different arithmetic never reloads or re-prepares the package.
+Retained guards are materialized independently in fixed chunks on the post-processing workers and
+inserted into the guard set in input order.
+
 Five-loop retained evaluation also reports coverage/mass batching (with actual lowered
 keys checked), guard and coefficient materialization, normalization and notation conversion,
 catalogue coefficient combination, residual catalogue classification,
@@ -278,7 +287,10 @@ its reduction and materialization children plus callee cleanup;
 `retained_finalization_total` includes the catalogue combination and classification
 children. Add only the explicitly listed disjoint spans when comparing their sum
 with public evaluation time. Never add a parent to its children or label an
-unassigned residual as pure IBP time.
+unassigned residual as pure IBP time. The monitor document's `phase_seconds` lists the
+cumulative wall seconds of every observed caller phase and native activity label in first-seen
+order, including the running phase; these labels are disjoint, so they add up to the observed
+scope time.
 
 Symbolic sizes follow the objects actually stored by each owner. The caller reports the
 encoded byte length and stored summands of its existing Atom at phase boundaries, without

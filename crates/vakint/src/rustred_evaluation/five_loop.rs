@@ -16,6 +16,7 @@ use std::{
 
 use super::experimental::timing::MathSpan;
 use super::monitor::{MonitorContext, RustRedMonitorOptions, RustRedMonitorScope};
+use super::parallel;
 use super::request_dump::{self, DumpChannel, DumpProgram, DumpRequest, RequestDump};
 use rustred::algebra::Coefficient;
 use rustred::family::IntegralKey;
@@ -47,6 +48,8 @@ use crate::{
 };
 
 static PARENTS: LazyLock<Vec<ParentDescriptor>> = LazyLock::new(descriptors);
+/// Guards materialized per parallel chunk between progress updates.
+const GUARD_CHUNK: usize = 4096;
 
 /// PLUMBING POINT (n_cores): worker threads for the independent five-loop
 /// frontend items (witness screening, full witness keys, and per-contribution
@@ -738,6 +741,10 @@ impl Vakint {
         // Strategy changes do not change immutable tables or the DFS cache
         // namespace. Select the request engine under the prepared-owner lock.
         options.reduction_strategy = crate::RustRedReductionStrategy::DepthFirst;
+        // Likewise the Ordered weight arithmetic only selects how a request
+        // computes its frontier weights; every batch sets it before reducing.
+        // A different arithmetic must not reload and re-prepare the package.
+        options.ordered_weight_arithmetic = rustred::reduction::OrderedWeightArithmetic::Exact;
         options.unresolved_policy = rustred::solver::UnresolvedPolicy::Preserve;
         let mut loaded = self.rustred_application.lock().map_err(failure)?;
         if loaded.as_ref().is_none_or(|current| {
@@ -1726,25 +1733,38 @@ impl SavedApplication {
                     "guards processed",
                 )
             });
-            for (index, condition) in normalized.nonzero_conditions().iter().enumerate() {
-                let condition = condition.to_expression();
-                if condition.is_zero()
-                    || condition
-                        .get_all_symbols(true)
-                        .iter()
-                        .any(|symbol| !dimension.get_all_symbols(true).contains(symbol))
-                {
-                    return Err(failure(
+            // Each guard is materialized independently; chunks are consumed in
+            // input order, so the first invalid guard reports as sequentially.
+            let threads = super::postprocessing_threads(settings);
+            let dimension_symbols = dimension.get_all_symbols(true);
+            let dimension_pattern = dimension.to_pattern();
+            let physical_pattern = physical_dimension.to_pattern();
+            let guard_chunk = GUARD_CHUNK.max(threads);
+            for (chunk_index, chunk) in normalized
+                .nonzero_conditions()
+                .chunks(guard_chunk)
+                .enumerate()
+            {
+                let materialized = parallel::map_ordered(threads, chunk, |_, condition| {
+                    let condition = condition.to_expression();
+                    (!condition.is_zero()
+                        && condition
+                            .get_all_symbols(true)
+                            .iter()
+                            .all(|symbol| dimension_symbols.contains(symbol)))
+                    .then(|| {
+                        condition
+                            .replace(&dimension_pattern)
+                            .with(&physical_pattern)
+                    })
+                });
+                for condition in materialized {
+                    conditions.insert(condition.ok_or_else(|| failure(
                         "saved application has a non-generic-d guard; the symbolic Vakint result cannot discharge it",
-                    ).into());
+                    ))?);
                 }
-                conditions.insert(
-                    condition
-                        .replace(dimension.to_pattern())
-                        .with(physical_dimension.to_pattern()),
-                );
                 if let Some(progress) = &mut guard_progress {
-                    progress.completed(index + 1);
+                    progress.completed(chunk_index * guard_chunk + chunk.len());
                 }
             }
             log::debug!(target: "vakint::saved_application", "phase=retained_guard_materialization elapsed_seconds={:.6}", guards_started.elapsed().as_secs_f64());
@@ -1873,6 +1893,39 @@ mod tests {
                     Atom::one()
                 );
             }
+        }
+    }
+
+    #[test]
+    #[ignore = "loads the official five-loop package twice over (minutes); needs VAKINT_TEST_EXTERNAL_DATA"]
+    fn weight_arithmetic_changes_reuse_the_loaded_application() {
+        let artifacts = PathBuf::from(
+            std::env::var_os("VAKINT_TEST_EXTERNAL_DATA")
+                .expect("set VAKINT_TEST_EXTERNAL_DATA to the official external-data checkout"),
+        );
+        let mut vakint = Vakint::new().unwrap();
+        vakint
+            .load_official_external_data(
+                5,
+                &crate::OfficialExternalDataOptions {
+                    local_artifacts_path: Some(artifacts),
+                    load_prepared_caches: false,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        let loaded = vakint.loaded_application().unwrap();
+        let mut settings = VakintSettings::default();
+        for arithmetic in ["modular:threads=1", "modular:threads=2,batch=8", "exact"] {
+            settings
+                .rustred_application_options
+                .ordered_weight_arithmetic =
+                crate::parse_rustred_ordered_weight_arithmetic(arithmetic).unwrap();
+            let reused = vakint.saved_application(&settings).unwrap();
+            assert!(
+                Arc::ptr_eq(&loaded, &reused),
+                "{arithmetic} reloaded the package"
+            );
         }
     }
 
