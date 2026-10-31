@@ -3,7 +3,7 @@
   "status": "NEW_INDEPENDENT_INTEGRATION_REVIEW_REQUIRED",
   "code": "432b6544f3d2d884f6efffb8be104ae5820183b0",
   "evidence_commit": "6cf91fc314a0300b31e2acd4ac413c65a96c002a",
-  "candidate_bookmark": "generation-next-qcd-migration-candidate-20261031",
+  "candidate_bookmark": "generation-next-qcd-migration-candidate-r2-20261031",
   "evidence_manifest_sha256": "245fe268474e67165b0c12aacf855118333340d21263be87c3634ae2b7fc98a9",
   "evidence_seal_sha256": "def3554d2cbd649bf2bcc682bcb54c3ffce0bef886bad2e8732f4af7e24a32bb",
   "immutable_blob_audit": {
@@ -22,5 +22,8 @@
   "global_integration": "83276dc047815d1dcc7f003aeb512c204b26758e",
   "global_advance": false,
   "self_approval": false,
-  "external_dependencies_required": true
+  "external_dependencies_required": true,
+  "preserved_original_candidate": "d24fc097a25fd63dcb025371b5a2fc9a7587ac31",
+  "finalization_record": "finalization/resolution.json",
+  "finalization_scope": "Retain diagnostic and use an exact empty conflict revset. No source/runtime/proof change; old candidate and old subordinate manifest remain immutable at their named revision."
 }

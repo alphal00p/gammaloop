@@ -1,0 +1,34 @@
+[
+  {
+    "argv": [
+      "jj",
+      "--config",
+      "user.name=\"Lucien Huber\"",
+      "--config",
+      "user.email=\"im@lcnbr.ch\"",
+      "log",
+      "--no-graph",
+      "-r",
+      "@",
+      "-T",
+      "commit_id"
+    ],
+    "exit": 0,
+    "stdout": "d24fc097a25fd63dcb025371b5a2fc9a7587ac31",
+    "stderr": ""
+  },
+  {
+    "argv": [
+      "jj",
+      "--config",
+      "user.name=\"Lucien Huber\"",
+      "--config",
+      "user.email=\"im@lcnbr.ch\"",
+      "diff",
+      "--name-only"
+    ],
+    "exit": 0,
+    "stdout": "docs/architecture/evidence/generation-integration/feynkit-refresh/next-qcd-migration-durability/SEAL.json\ndocs/architecture/evidence/generation-integration/feynkit-refresh/next-qcd-migration-durability/SHA256SUMS\ndocs/architecture/evidence/generation-integration/feynkit-refresh/next-qcd-migration-durability/before-candidate-end-state.json\ndocs/architecture/evidence/generation-integration/feynkit-refresh/next-qcd-migration-durability/evidence-immutable-audit.json.gz\ndocs/architecture/evidence/generation-integration/feynkit-refresh/next-qcd-migration-durability/receipt.json\ndocs/architecture/evidence/generation-integration/feynkit-refresh/next-qcd-migration-durability/tracking-and-freeze-commands.json\n",
+    "stderr": ""
+  }
+]

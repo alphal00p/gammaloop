@@ -1,0 +1,11 @@
+Traceback (most recent call last):
+  File "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/freeze_candidate.py", line 47, in <module>
+    assert not jj('resolve','--list','-r',candidate)
+               ~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/freeze_candidate.py", line 12, in jj
+    def jj(*a):return run(['jj','--config','user.name="Lucien Huber"','--config','user.email="im@lcnbr.ch"',*a])
+                      ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/freeze_candidate.py", line 11, in run
+    r=subprocess.run(args,cwd=W,env=ENV,capture_output=True);commands.append({'argv':args,'exit':r.returncode,'stdout':r.stdout.decode(),'stderr':r.stderr.decode()});write(O/'freeze-commands.json',commands);assert r.returncode==0,(args,r.stderr.decode());return r.stdout.decode().strip()
+                                                                                                                                                                                                                      ^^^^^^^^^^^^^^^
+AssertionError: (['jj', '--config', 'user.name="Lucien Huber"', '--config', 'user.email="im@lcnbr.ch"', 'resolve', '--list', '-r', 'd24fc097a25fd63dcb025371b5a2fc9a7587ac31'], 'Error: No conflicts found at this revision\n')

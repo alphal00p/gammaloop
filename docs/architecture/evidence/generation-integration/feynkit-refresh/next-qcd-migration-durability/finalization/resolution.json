@@ -1,0 +1,52 @@
+{
+  "schema": "QCD-finalization-only-diagnostic-resolution/1",
+  "original_candidate": "d24fc097a25fd63dcb025371b5a2fc9a7587ac31",
+  "original_candidate_bookmark": "generation-next-qcd-migration-candidate-20261031",
+  "original_evidence": "6cf91fc314a0300b31e2acd4ac413c65a96c002a",
+  "original_probe": {
+    "argv": [
+      "jj",
+      "--config",
+      "user.name=\"Lucien Huber\"",
+      "--config",
+      "user.email=\"im@lcnbr.ch\"",
+      "resolve",
+      "--list",
+      "-r",
+      "d24fc097a25fd63dcb025371b5a2fc9a7587ac31"
+    ],
+    "exit": 2,
+    "stdout": "",
+    "stderr": "Error: No conflicts found at this revision\n"
+  },
+  "resume_setup_diagnostic": "First resume used jj diff default(parent-to-current) as a clean-tree check; it stopped before mutation. Replaced with explicit OLD-to-@ comparison. Original script/commands/error retained.",
+  "meaning": "JJ resolve --list returns a nonzero code for a conflict-free revision. Original immutable source/manifest audits had already succeeded. This is a finalization helper assumption error, not a source/build/native selected-test failure.",
+  "corrected_check": {
+    "argv": [
+      "jj",
+      "--config",
+      "user.name=\"Lucien Huber\"",
+      "--config",
+      "user.email=\"im@lcnbr.ch\"",
+      "log",
+      "--no-graph",
+      "-r",
+      "conflicts() & (432b6544f3d2d884f6efffb8be104ae5820183b0 | 6cf91fc314a0300b31e2acd4ac413c65a96c002a | d24fc097a25fd63dcb025371b5a2fc9a7587ac31)",
+      "-T",
+      "commit_id"
+    ],
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  "all_code_evidence_candidate_conflicts_revset_empty": true,
+  "original_primary_manifest_vector_sha256": "b39221027b87b471d91d384a2fc10c3fc5fec8a8b335c5b3d60ae1a4ee993d06",
+  "original_durability_manifest_sha256": "8d15a9abb9ef61936d8bdf6f6400fc1652937e3b5e6fcc32b26db1d757b49a26",
+  "original_audit_gzip_sha256": "b31f051f28d8cd1036e45f5a70b0d239231e9bef7e4f4c8c9ba826930608776b",
+  "original_audit_reconstructed_sha256": "a6d767e6033941af96e6b2c8a45fe623ac381c7443ae3ec63e96aeff33899d84",
+  "original_audit_reconstructed_bytes": 1307929,
+  "new_builds": 0,
+  "new_native_selected_or_proof_runs": 0,
+  "ref_overwrites": 0,
+  "published": false
+}

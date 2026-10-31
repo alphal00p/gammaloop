@@ -1,0 +1,26 @@
+{
+  "schema": "next-QCD-immutable-evidence-closure/1",
+  "status": "NEW_INDEPENDENT_INTEGRATION_REVIEW_REQUIRED",
+  "code": "432b6544f3d2d884f6efffb8be104ae5820183b0",
+  "evidence_commit": "6cf91fc314a0300b31e2acd4ac413c65a96c002a",
+  "candidate_bookmark": "generation-next-qcd-migration-candidate-20261031",
+  "evidence_manifest_sha256": "245fe268474e67165b0c12aacf855118333340d21263be87c3634ae2b7fc98a9",
+  "evidence_seal_sha256": "def3554d2cbd649bf2bcc682bcb54c3ffce0bef886bad2e8732f4af7e24a32bb",
+  "immutable_blob_audit": {
+    "compressed": "evidence-immutable-audit.json.gz",
+    "gzip_sha256": "353987d8cbbe307263df861e929d663c5ceff05f31a807bfa326453f77ed4e99",
+    "reconstructed_sha256": "3217a9d7e2f854ef68edff9af631e42f9f63297291c47e7218d61b16c40c71a7",
+    "reconstructed_bytes": 1305141,
+    "matched": 1276,
+    "missing": [],
+    "mismatched": [],
+    "unexpected": [],
+    "lossless_reconstructions": 1267
+  },
+  "closure_protocol": "Primary manifest verified at exact evidence commit. This subordinate packet adds only immutable audit/record bytes. Final candidate is rechecked across BOTH exact manifests; final audit/handoff remains external to avoid circular self-commit claims. The committed verifier is replayable.",
+  "ignored_logs": "Explicit bounded jj file track --include-ignored on every primary manifest path; cap remains1MiB",
+  "global_integration": "83276dc047815d1dcc7f003aeb512c204b26758e",
+  "global_advance": false,
+  "self_approval": false,
+  "external_dependencies_required": true
+}

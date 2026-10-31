@@ -1,0 +1,89 @@
+[
+  {
+    "argv": [
+      "jj",
+      "--config",
+      "user.name=\"Lucien Huber\"",
+      "--config",
+      "user.email=\"im@lcnbr.ch\"",
+      "log",
+      "--no-graph",
+      "-r",
+      "@",
+      "-T",
+      "commit_id"
+    ],
+    "exit": 0,
+    "stdout": "d24fc097a25fd63dcb025371b5a2fc9a7587ac31",
+    "stderr": ""
+  },
+  {
+    "argv": [
+      "jj",
+      "--config",
+      "user.name=\"Lucien Huber\"",
+      "--config",
+      "user.email=\"im@lcnbr.ch\"",
+      "diff",
+      "--from",
+      "d24fc097a25fd63dcb025371b5a2fc9a7587ac31",
+      "--to",
+      "@",
+      "--name-only"
+    ],
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "argv": [
+      "jj",
+      "--config",
+      "user.name=\"Lucien Huber\"",
+      "--config",
+      "user.email=\"im@lcnbr.ch\"",
+      "log",
+      "--no-graph",
+      "-r",
+      "generation-next-qcd-migration-evidence-20261031",
+      "-T",
+      "commit_id"
+    ],
+    "exit": 0,
+    "stdout": "6cf91fc314a0300b31e2acd4ac413c65a96c002a",
+    "stderr": ""
+  },
+  {
+    "argv": [
+      "jj",
+      "--config",
+      "user.name=\"Lucien Huber\"",
+      "--config",
+      "user.email=\"im@lcnbr.ch\"",
+      "log",
+      "--no-graph",
+      "-r",
+      "conflicts() & (432b6544f3d2d884f6efffb8be104ae5820183b0 | 6cf91fc314a0300b31e2acd4ac413c65a96c002a | d24fc097a25fd63dcb025371b5a2fc9a7587ac31)",
+      "-T",
+      "commit_id"
+    ],
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "argv": [
+      "jj",
+      "--config",
+      "user.name=\"Lucien Huber\"",
+      "--config",
+      "user.email=\"im@lcnbr.ch\"",
+      "new",
+      "-m",
+      "retain QCD finalization diagnostic and exact candidate closure"
+    ],
+    "exit": 0,
+    "stdout": "",
+    "stderr": "Working copy  (@) now at: uzwplywl fcd479ac (empty) retain QCD finalization diagnostic and exact candidate closure\nParent commit (@-)      : zvxkpyok d24fc097 generation-next-qcd-migration-candidate-20261031 | record immutable QCD evidence closure for independent review\n"
+  }
+]
