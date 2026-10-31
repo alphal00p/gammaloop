@@ -1011,6 +1011,18 @@ fn update_display(pending: &mut Pending, envelope: &Envelope<'_>, detail: bool, 
         .caller_phase
         .map_or_else(|| format!("native {:?}", envelope.activity), str::to_owned);
     if display.phase != phase {
+        let finished = std::mem::take(&mut display.phase);
+        if !finished.is_empty() {
+            let spent = envelope.elapsed.saturating_sub(display.phase_started_at);
+            match display
+                .phase_ledger
+                .iter_mut()
+                .find(|(label, _)| *label == finished)
+            {
+                Some((_, total)) => *total += spent,
+                None => display.phase_ledger.push((finished, spent)),
+            }
+        }
         display.phase_started_at = envelope.elapsed;
         display.caller_work = None;
     }
@@ -2007,6 +2019,52 @@ mod tests {
         assert!(pending.display.ordered.is_none());
         assert!(pending.display.native_epoch > first_epoch);
         assert!(!pending.display.request_finished);
+    }
+
+    #[test]
+    fn phase_ledger_accumulates_finished_and_running_phases_in_first_seen_order() {
+        let mut pending = Pending::default();
+        for (phase, seconds) in [
+            (Some("data_loading"), 0),
+            (Some("canonicalization"), 4),
+            (None, 5),
+            (Some("canonicalization"), 15),
+            (Some("guard_serialization"), 16),
+        ] {
+            let mut envelope = Envelope::new(Event::ActivityStarted, "ledger");
+            envelope.caller_phase = phase;
+            envelope.elapsed = Duration::from_secs(seconds);
+            update_display(&mut pending, &envelope, false, false);
+        }
+        assert_eq!(
+            pending.display.phase_ledger,
+            [
+                ("data_loading".to_owned(), Duration::from_secs(4)),
+                ("canonicalization".to_owned(), Duration::from_secs(2)),
+                (
+                    format!("native {:?}", Activity::Admission),
+                    Duration::from_secs(10)
+                ),
+            ]
+        );
+        let mut state = super::super::MonitorState::default();
+        state.observe(pending.display.clone(), Duration::from_secs(16));
+        let phases = &state.presentation(Duration::from_secs(19))["phase_seconds"]["phases"];
+        let rows = phases
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|row| {
+                (
+                    row["phase"].as_str().unwrap(),
+                    row["seconds"].as_f64().unwrap(),
+                )
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(rows[0], ("data_loading", 4.0));
+        assert_eq!(rows[1], ("canonicalization", 2.0));
+        assert_eq!(rows[3], ("guard_serialization", 3.0));
+        assert_eq!(rows.len(), 4);
     }
 
     #[test]

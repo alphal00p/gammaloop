@@ -277,7 +277,10 @@ its reduction and materialization children plus callee cleanup;
 `retained_finalization_total` includes the catalogue combination and classification
 children. Add only the explicitly listed disjoint spans when comparing their sum
 with public evaluation time. Never add a parent to its children or label an
-unassigned residual as pure IBP time.
+unassigned residual as pure IBP time. The monitor document's `phase_seconds` lists the
+cumulative wall seconds of every observed caller phase and native activity label in first-seen
+order, including the running phase; these labels are disjoint, so they add up to the observed
+scope time.
 
 Symbolic sizes follow the objects actually stored by each owner. The caller reports the
 encoded byte length and stored summands of its existing Atom at phase boundaries, without
