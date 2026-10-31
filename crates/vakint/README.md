@@ -9,12 +9,13 @@ By default Vakint evaluates with RustRed, which needs neither FORM nor pySecDec.
 RustRed as fallbacks, followed by pySecDec when it can be imported. Explicitly requested
 FORM-based backends report a missing FORM installation.
 
-Two settings control how the ordered strategy computes. `n_cores` is the single source of every
-worker count. It defaults to the cores available to the process, at most ten, and to one without
-a Symbolica license. With `n_cores = 1` every computation runs on the calling thread.
-`ordered_weight_arithmetic` selects `exact` (the default), `modular_sampled` or
-`modular_polynomial` frontier weights. Advanced options use RustRed's syntax, for example
-`modular_sampled:batch_points=64`. All choices return identical exact results:
+Two settings control how the ordered reduction computes. `n_cores` is the single source of every
+worker count (RustRed's ordered scheduler and modular replay, the five-loop frontend, the retained
+post-processing and the five-loop route verification). It defaults to the cores available to the
+process, at most ten, and to one without a Symbolica license. With `n_cores = 1` every computation
+runs on the calling thread. `ordered_weight_arithmetic` selects `modular_polynomial` (the default
+and the fastest), `modular_sampled` or `exact` frontier weights. Advanced options use RustRed's
+syntax, for example `modular_sampled:batch_points=64`. All choices return identical exact results:
 
 ```python
 vakint = Vakint(n_cores=8, ordered_weight_arithmetic="modular_sampled")

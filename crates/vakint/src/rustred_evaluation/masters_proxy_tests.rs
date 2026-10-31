@@ -46,7 +46,7 @@ pub(crate) fn reference_combine_master_coefficients(raw: Atom) -> Atom {
     )
 }
 
-/// Workers of the timed combination (`VAKINT_POSTPROCESSING_THREADS`, default 1).
+/// Workers of the timed combination: the default `n_cores` (`VakintSettings::default()`).
 fn proxy_threads() -> usize {
     super::super::postprocessing_threads(&VakintSettings::default())
 }

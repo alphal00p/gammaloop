@@ -76,7 +76,12 @@ pub(super) struct FourLoopPrograms {
 }
 
 impl FourLoopPrograms {
-    pub(super) fn load(data: &super::data::LoopData) -> Result<Self, RustRedEvaluationError> {
+    /// Load the four programs of a pack whose data release is `data_version`
+    /// (part of their Ordered step-cache identity).
+    pub(super) fn load(
+        data: &super::data::LoopData,
+        data_version: &str,
+    ) -> Result<Self, RustRedEvaluationError> {
         Vakint::initialize_vakint_symbols();
         let mut inputs = Vec::new();
         for (name, label) in [
@@ -102,7 +107,7 @@ impl FourLoopPrograms {
         let programs = inputs
             .iter()
             .zip(&descriptors)
-            .map(|(input, descriptor)| load(input, descriptor))
+            .map(|(input, descriptor)| load(input, descriptor, data_version))
             .collect::<Result<Vec<_>, _>>()
             .map_err(super::data::failure)?;
         Ok(Self {
@@ -224,7 +229,11 @@ fn descriptor(label: &'static str, source: &str) -> Result<Descriptor, String> {
     })
 }
 
-fn load(input: &Input, descriptor: &Descriptor) -> Result<LoadedProgram, String> {
+fn load(
+    input: &Input,
+    descriptor: &Descriptor,
+    data_version: &str,
+) -> Result<LoadedProgram, String> {
     let bytes = super::experimental::compressed::decode(&input.program, MAX_PROGRAM_BYTES)
         .map_err(|error| format!("decompress {}: {error}", input.label))?;
     let limits = CandidateBundleLimits {
@@ -254,11 +263,13 @@ fn load(input: &Input, descriptor: &Descriptor) -> Result<LoadedProgram, String>
     catalog.require_complete()?;
     catalog.require_exact_keys(native.output_terminals())?;
     native.preserve_unresolved()?;
-    // The program, normalization and policy are final here; RustRed digests
-    // them (and the loaded bundle bytes) into the cache binding.
+    // The program, normalization and policy are final here. The cache
+    // binding holds cheap identity fields only; the data version keys it to
+    // this release's rule tables.
     let step_cache = super::cache::OrderedCacheProgram::new(
         4,
         input.label,
+        data_version,
         native.ordered_step_cache_binding()?,
     );
     Ok(LoadedProgram {
@@ -482,6 +493,7 @@ pub(super) fn evaluate_ordered_batch(
                         terms,
                         settings.rustred_application_options.reduction_limits,
                         arithmetic,
+                        super::ordered_scheduler(settings),
                         step_cache,
                         observation,
                     )

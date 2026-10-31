@@ -124,10 +124,11 @@ five-loop application:
   fields at sample points and interpolates every terminal coefficient per prime
   (Thiele continued fractions). Every replay re-checks each recorded erasure and
   fails the request on a disagreement.
-- #raw("modular_polynomial") runs scheduler passes whose weights are rational
-  functions of the dimension over prime fields, without interpolation. Until
-  RustRed implements it, a request fails with a
-  #raw("modular_polynomial weight arithmetic is not implemented yet") error.
+- #raw("modular_polynomial") records the same trace and replays it once per
+  64-bit prime with weights that are rational functions of the dimension over
+  that prime field, without sample points or interpolation. It is the fastest
+  arithmetic: at five loops (quadratic projection) it needs about 28 times less
+  replay CPU than #raw("modular_sampled").
 
 Both modular modes lift their prime images over the rationals (Chinese
 remaindering and rational reconstruction) and verify every coefficient on fresh
@@ -135,8 +136,9 @@ primes. They need a coefficient context with at most one variable, which holds
 for Vakint's native requests. Every mode expands the same keys and returns the
 same terms and nonzero conditions; only the monitor's frontier monomial counters
 differ (modular weights count one monomial per key). The default is
-#raw("vakint::DEFAULT_ORDERED_WEIGHT_ARITHMETIC") (#raw("exact")), a single
-constant that also sets the Python default.
+#raw("vakint::DEFAULT_ORDERED_WEIGHT_ARITHMETIC")
+(#raw("modular_polynomial")), a single constant that also sets the Python
+default; #raw("exact") and #raw("modular_sampled") stay selectable.
 
 The text form is RustRed's canonical syntax #raw("exact"),
 #raw("modular_sampled[:key=value,...]") or
@@ -159,11 +161,15 @@ more than one core without a license are rejected before any work. One core
 runs every computation on the calling thread, without a thread pool or a
 spawned thread; only an enabled progress monitor adds its presentation thread.
 A modular arithmetic runs on #raw("n_cores") workers unless its selection sets
-#raw("threads"). The same count verifies the five-loop routes while the saved
-application loads (#raw("preparation_workers"), derived and otherwise left at
-its default; data loaders take it from
-#raw("OfficialExternalDataOptions::n_cores")). Results are identical for every
-core count.
+#raw("threads"). The same count sets the worker threads of RustRed's Ordered
+scheduler for four- and five-loop requests (closed one- to three-loop programs
+always use the sequential scheduler), the five-loop frontend workers (witness
+screening and per-contribution scalar lowering), the retained post-processing
+workers (guards, coefficients and the master catalogue combination) and the
+workers verifying the five-loop routes while the saved application loads
+(#raw("preparation_workers"), derived and otherwise left at its default; data
+loaders take it from #raw("OfficialExternalDataOptions::n_cores")). Results are
+identical for every core count.
 
 ```rust
 let mut settings = vakint::VakintSettings::default();
@@ -347,18 +353,20 @@ read-write) and saves. The rung tests and examples read
 counters in #raw("ordered_step_cache").
 
 A cache directory holds one subdirectory per program,
-#raw("<loops>L-<program>.<stamp>") (e.g. #raw("4L-four-loop-h.1f2e...")): a
-manifest and content-addressed shard files written atomically, so an
-interrupted save keeps the previous cache valid. The stamp is a BLAKE3 digest
-of the binding: the program bytes (closed artifacts: the #raw("rules.rrbin")
-bytes; candidate programs and saved applications: digests RustRed computes
-from the bundle or package it loaded), the family, coefficient variables,
-unresolved policy, the installed four-loop terminal convention, the RustRed
-step semantics and a build-time digest of the RustRed sources and the
-Symbolica build. A newer engine or data release therefore writes a new
-subdirectory and never replays foreign records; stale subdirectories can be
-deleted. RustRed rejects a manifest or shard whose stamp or payload digest
-differs; Vakint reports this as an error naming the directory. A directory
+#raw("<loops>L-<program>.<data version>.<stamp>") (e.g.
+#raw("4L-four-loop-h.v0.1.2.1f2e...")): a manifest and content-addressed shard
+files written atomically, so an interrupted save keeps the previous cache
+valid. Validity is decided by versions only, never by digests of sources or
+program bytes. The stamp is a BLAKE3 digest of RustRed's binding: its cache
+schema version, its hand-bumped step-semantics version and cheap identity
+fields (adapter, family fingerprint, coefficient variables, unresolved
+policy). The data version is the loaded external-data release (or the
+vendored or local pack version), so a new data release or a RustRed version
+bump writes a new subdirectory and never replays foreign records; stale
+subdirectories can be deleted. Rule tables edited locally without a new data
+version need a fresh cache directory. RustRed rejects a manifest or shard
+whose stamp or payload digest differs; Vakint reports this as an error naming
+the directory. A directory
 has one writer at a time: two engines or processes writing the same
 directory lose records of one of them (never mix them); readers are safe.
 
@@ -400,7 +408,7 @@ cargo run --locked --release -p vakint \
 
 #raw("--arithmetic") selects #raw("exact"), #raw("modular[:key=value,...]") or
 #raw("both"); without it the collector uses
-#raw("VAKINT_ORDERED_WEIGHT_ARITHMETIC") (exact when unset). #raw("both")
+#raw("VAKINT_ORDERED_WEIGHT_ARITHMETIC") (Vakint's default when unset). #raw("both")
 creates two fresh engines in one process and checks that they retain the same
 expression; it is not two fresh-process measurements. Use separate invocations
 with fixed affinity, #raw("--no-monitor") and a release build for qualified

@@ -205,17 +205,21 @@ impl RustRedEvaluationError {
 /// reduction: guard and retained-coefficient materialization and the retained
 /// catalogue combination. Each item is computed exactly as on one thread and
 /// the results are consumed in input order, so the output never depends on
-/// this count; `1` runs everything inline on the calling thread.
-///
-/// n_cores plumbing point: replace the interim `VAKINT_POSTPROCESSING_THREADS`
-/// override (default 1) by the engine's `n_cores` setting.
+/// this count; `1` runs everything inline on the calling thread. Follows
+/// [`VakintSettings::n_cores`].
 pub(crate) fn postprocessing_threads(settings: &VakintSettings) -> usize {
-    let _ = settings;
-    std::env::var("VAKINT_POSTPROCESSING_THREADS")
-        .ok()
-        .and_then(|threads| threads.trim().parse::<usize>().ok())
-        .filter(|threads| *threads > 0)
-        .unwrap_or(1)
+    settings.n_cores.max(1)
+}
+
+/// The Ordered scheduler of four- and five-loop requests: worker threads
+/// follow [`VakintSettings::n_cores`] (`1` is RustRed's sequential scheduler
+/// on the calling thread, with no pool), with RustRed's default window. The
+/// result is identical for every setting. Closed one- to three-loop programs
+/// always use the sequential scheduler.
+pub(crate) fn ordered_scheduler(
+    settings: &VakintSettings,
+) -> rustred::reduction::OrderedSchedulerOptions {
+    rustred::reduction::OrderedSchedulerOptions::with_threads(settings.n_cores.max(1))
 }
 
 /// Whether the opt-in scalar backend owns a shipped program for this matcher class.
@@ -234,8 +238,8 @@ pub(crate) fn supports(
 /// RustRed's ordered scheduler and preserves exact uncovered leaves; the
 /// `reduction_strategy` of [`VakintSettings::rustred_application_options`] is
 /// ignored. The Ordered weight arithmetic comes from
-/// [`VakintSettings::ordered_weight_arithmetic`] and the five-loop
-/// route-verification workers from [`VakintSettings::n_cores`].
+/// [`VakintSettings::ordered_weight_arithmetic`]; the scheduler threads and
+/// the five-loop route-verification workers follow [`VakintSettings::n_cores`].
 pub(crate) fn application_options(
     settings: &VakintSettings,
 ) -> rustred_app::SavedApplicationOptions {
@@ -243,6 +247,7 @@ pub(crate) fn application_options(
         reduction_strategy: rustred::reduction::ReductionStrategy::Ordered,
         unresolved_policy: rustred::solver::UnresolvedPolicy::Preserve,
         ordered_weight_arithmetic: settings.rustred_ordered_weight_arithmetic(),
+        ordered_scheduler: ordered_scheduler(settings),
         preparation_workers: settings.n_cores,
         ..settings.rustred_application_options
     }

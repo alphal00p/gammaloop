@@ -41,7 +41,6 @@ fn decode_current_artifact(bytes: &[u8]) -> Result<ClosedArtifact, ArtifactPersi
 struct FamilyAssets {
     artifact: Arc<ClosedArtifact>,
     source_digest: [u8; 32],
-    ordered_step_digest: [u8; 32],
 }
 
 /// The digest and artifact originate from the same authenticated immutable
@@ -50,9 +49,6 @@ struct FamilyAssets {
 pub(super) struct ArtifactSnapshot {
     artifact: Arc<ClosedArtifact>,
     source_digest: [u8; 32],
-    /// BLAKE3 of the same bytes: the program digest that binds Ordered step
-    /// caches of this artifact (RustRed's replay tool uses the same digest).
-    ordered_step_digest: [u8; 32],
 }
 
 impl ArtifactSnapshot {
@@ -71,13 +67,13 @@ impl ArtifactSnapshot {
         self.source_digest
     }
 
-    /// Binding of an Ordered step cache to this closed program. Closed
-    /// artifacts have no unresolved policy or terminal convention; the
-    /// program digest is the caller's statement about the decoded bytes.
+    /// Binding of an Ordered step cache to this closed program: adapter,
+    /// family and coefficient variables (closed artifacts have no unresolved
+    /// policy or terminal convention). The rule bytes are not digested; Vakint
+    /// keys its caches by the data version as well.
     pub(super) fn ordered_step_cache_binding(&self) -> rustred::reduction::OrderedStepCacheBinding {
         rustred::reduction::OrderedStepCacheBinding::new(
             rustred::reduction::OrderedStepCacheAdapter::ClosedArtifact,
-            self.ordered_step_digest,
             self.artifact.family_fingerprint(),
             self.artifact.coefficient_context(),
             None,
@@ -95,7 +91,6 @@ fn load_assets(
     Ok(FamilyAssets {
         artifact: Arc::new(artifact),
         source_digest: Sha256::digest(bytes).into(),
-        ordered_step_digest: *blake3::hash(bytes).as_bytes(),
     })
 }
 
@@ -204,7 +199,6 @@ impl ArtifactFamily {
         Ok(ArtifactSnapshot {
             artifact: Arc::clone(&assets.artifact),
             source_digest: assets.source_digest,
-            ordered_step_digest: assets.ordered_step_digest,
         })
     }
 
@@ -240,7 +234,6 @@ impl ArtifactFamily {
         Ok(ArtifactSnapshot {
             artifact: Arc::new(artifact),
             source_digest: Sha256::digest(bytes).into(),
-            ordered_step_digest: *blake3::hash(bytes).as_bytes(),
         })
     }
 }

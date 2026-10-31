@@ -207,6 +207,7 @@ pub(super) fn evaluate_ordered_batch(
             &super::cache::OrderedCacheProgram::new(
                 first.loop_count,
                 first.family.name(),
+                &data.version,
                 snapshot.ordered_step_cache_binding(),
             ),
         )?

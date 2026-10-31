@@ -15,13 +15,19 @@
 //! artifacts, the four four-loop candidate programs and the five-loop saved
 //! application). [`OrderedCacheSettings`] selects how evaluations use them:
 //! off, read-only or read-write (live population), in memory or backed by a
-//! directory, with a resident-byte ceiling and an autosave policy. A cache
-//! directory holds one subdirectory per program and binding stamp,
-//! `<loops>L-<program>.<stamp>`; the stamp digests the program bytes, its
-//! family, coefficient variables, unresolved policy, terminal convention and
-//! the RustRed engine build, so records are only ever replayed into the
-//! program and engine that recorded them. A newer engine or program uses a new
-//! subdirectory; RustRed rejects any file whose stamp or digest differs.
+//! directory, with a resident-byte ceiling and an autosave policy.
+//!
+//! Validity is decided by versions only, never by digests of sources or
+//! program bytes. RustRed's binding stamp covers its cache schema version, its
+//! hand-bumped step-semantics version and cheap identity fields (adapter,
+//! family fingerprint, coefficient variables, unresolved policy). Vakint adds
+//! the version of the loaded data (the external-data release, or the vendored
+//! or local pack version), so new rule tables never replay old records. A
+//! cache directory holds one subdirectory per program, data version and
+//! stamp, `<loops>L-<program>.<data version>.<stamp>`: a new data release or a
+//! RustRed version bump uses a new subdirectory, and RustRed rejects a file
+//! whose stamp differs. Local edits of rule tables that keep the data version
+//! must use a fresh cache directory.
 //!
 //! The depth-first completed-result caches (prepared bundles, running caches
 //! and their transport) were removed together with depth-first reduction: a
@@ -216,6 +222,8 @@ pub struct OrderedCacheProgramStatistics {
     pub loop_count: usize,
     /// Program label, e.g. `3L-unit-mass-vacuum-k6` or `4L-four-loop-h`.
     pub program: String,
+    /// Version of the data the program was loaded from (file-name safe).
+    pub data_version: String,
     /// Hexadecimal binding stamp of the cache.
     pub stamp: String,
     /// The program's cache directory, if the cache is backed by one.
@@ -281,27 +289,50 @@ pub(crate) struct OrderedCacheProgram {
     pub loop_count: usize,
     /// File-name safe label, unique per program within a loop count.
     pub label: String,
+    /// File-name safe version of the data the program was loaded from.
+    pub data_version: String,
     pub binding: OrderedStepCacheBinding,
 }
 
-impl OrderedCacheProgram {
-    pub(crate) fn new(loop_count: usize, name: &str, binding: OrderedStepCacheBinding) -> Self {
-        let name: String = name
-            .chars()
-            .map(|character| {
-                if character.is_ascii_alphanumeric() || character == '-' {
+/// At most 64 ASCII letters, digits, `-`, `.` and `_` (others become `-`).
+fn file_name_safe(text: &str, lowercase: bool) -> String {
+    text.chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric() || matches!(character, '-' | '.' | '_') {
+                if lowercase {
                     character.to_ascii_lowercase()
                 } else {
-                    '-'
+                    character
                 }
-            })
-            .take(64)
-            .collect();
+            } else {
+                '-'
+            }
+        })
+        .take(64)
+        .collect()
+}
+
+impl OrderedCacheProgram {
+    pub(crate) fn new(
+        loop_count: usize,
+        name: &str,
+        data_version: &str,
+        binding: OrderedStepCacheBinding,
+    ) -> Self {
         Self {
             loop_count,
-            label: format!("{loop_count}L-{name}"),
+            label: format!(
+                "{loop_count}L-{}",
+                file_name_safe(&name.replace(['.', '_'], "-"), true)
+            ),
+            data_version: file_name_safe(data_version, false),
             binding,
         }
+    }
+
+    /// Registry key: one cache per data version and binding stamp.
+    fn key(&self) -> (String, [u8; 32]) {
+        (self.data_version.clone(), self.binding.stamp())
     }
 }
 
@@ -316,6 +347,7 @@ struct Configuration {
 struct Attached {
     loop_count: usize,
     label: String,
+    data_version: String,
     stamp: [u8; 32],
     configuration: Configuration,
     autosave: OrderedCacheAutosave,
@@ -362,6 +394,7 @@ impl Attached {
         OrderedCacheProgramStatistics {
             loop_count: self.loop_count,
             program: self.label.clone(),
+            data_version: self.data_version.clone(),
             stamp: hex(&self.stamp),
             directory: self.configuration.directory.clone(),
             mode: self.mode(),
@@ -372,10 +405,10 @@ impl Attached {
 }
 
 /// The Ordered step caches of one engine, shared by its clones. Caches are
-/// keyed by their binding stamp, so one program has one cache.
+/// keyed by data version and binding stamp, so one program has one cache.
 #[derive(Default)]
 pub(crate) struct OrderedCacheRegistry {
-    attached: Mutex<BTreeMap<[u8; 32], Attached>>,
+    attached: Mutex<BTreeMap<(String, [u8; 32]), Attached>>,
     last_autosave_error: Mutex<Option<String>>,
 }
 
@@ -406,7 +439,7 @@ fn invalid_setting(detail: String) -> VakintError {
 mod tests;
 
 impl OrderedCacheRegistry {
-    fn lock(&self) -> std::sync::MutexGuard<'_, BTreeMap<[u8; 32], Attached>> {
+    fn lock(&self) -> std::sync::MutexGuard<'_, BTreeMap<(String, [u8; 32]), Attached>> {
         self.attached.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
@@ -423,17 +456,18 @@ impl OrderedCacheRegistry {
         {
             return Ok(None);
         }
-        let stamp = program.binding.stamp();
+        let key = program.key();
+        let stamp = key.1;
         let configuration = Configuration {
             directory: settings
                 .directory
                 .as_ref()
-                .map(|root| program_directory(root, &program.label, &stamp)),
+                .map(|root| program_directory(root, program, &stamp)),
             populate: settings.mode == OrderedCacheMode::ReadWrite,
             max_resident_bytes: settings.max_resident_bytes,
         };
         let mut attached = self.lock();
-        if let Some(current) = attached.get_mut(&stamp) {
+        if let Some(current) = attached.get_mut(&key) {
             if current.configuration == configuration {
                 current.autosave = settings.autosave;
                 return Ok(Some(Arc::clone(&current.cache)));
@@ -461,10 +495,11 @@ impl OrderedCacheRegistry {
             None => OrderedStepCache::in_memory(program.binding.clone(), options),
         };
         attached.insert(
-            stamp,
+            key,
             Attached {
                 loop_count: program.loop_count,
                 label: program.label.clone(),
+                data_version: program.data_version.clone(),
                 stamp,
                 configuration,
                 autosave: settings.autosave,
@@ -479,11 +514,18 @@ impl OrderedCacheRegistry {
         let mut programs: Vec<_> = attached.values().map(Attached::statistics).collect();
         drop(attached);
         programs.sort_by(|left, right| {
-            (left.loop_count, &left.program, &left.stamp).cmp(&(
-                right.loop_count,
-                &right.program,
-                &right.stamp,
-            ))
+            (
+                left.loop_count,
+                &left.program,
+                &left.data_version,
+                &left.stamp,
+            )
+                .cmp(&(
+                    right.loop_count,
+                    &right.program,
+                    &right.data_version,
+                    &right.stamp,
+                ))
         });
         let mut statistics = OrderedCacheStatistics {
             last_autosave_error: self
@@ -565,9 +607,14 @@ impl Drop for OrderedCacheRegistry {
     }
 }
 
-/// `<root>/<label>.<first 16 hex digits of the stamp>`.
-fn program_directory(root: &Path, label: &str, stamp: &[u8; 32]) -> PathBuf {
-    root.join(format!("{label}.{}", hex(&stamp[..8])))
+/// `<root>/<label>.<data version>.<first 16 hex digits of the stamp>`.
+fn program_directory(root: &Path, program: &OrderedCacheProgram, stamp: &[u8; 32]) -> PathBuf {
+    root.join(format!(
+        "{}.{}.{}",
+        program.label,
+        program.data_version,
+        hex(&stamp[..8])
+    ))
 }
 
 impl Vakint {

@@ -18,15 +18,11 @@ use std::{
 use symbolica::atom::{Atom, AtomCore, AtomView};
 use symbolica::domains::{integer::Integer, rational::Rational};
 
-/// Workers for the fixture's independent per-guard and per-product work. It
-/// mirrors the library's interim post-processing plumbing point
-/// (`VAKINT_POSTPROCESSING_THREADS`, default 1) until the engine has `n_cores`.
+/// Workers for the fixture's independent per-guard and per-product work: the
+/// run's cores (`VAKINT_N_CORES`, else Vakint's default), like the library's
+/// post-processing. Results never depend on this count.
 pub fn fixture_threads() -> usize {
-    std::env::var("VAKINT_POSTPROCESSING_THREADS")
-        .ok()
-        .and_then(|threads| threads.trim().parse::<usize>().ok())
-        .filter(|threads| *threads > 0)
-        .unwrap_or(1)
+    n_cores_from_environment().unwrap_or(1).max(1)
 }
 
 /// Map `items` on up to `threads` scoped workers and return the results in
@@ -331,7 +327,8 @@ fn ordered_cache_report(engine: &Vakint, settings: &OrderedCacheSettings) -> ser
         "file_bytes": statistics.file_bytes,
         "last_autosave_error": statistics.last_autosave_error,
         "programs": statistics.programs.iter().map(|program| serde_json::json!({
-            "program": program.program, "stamp": program.stamp, "directory": program.directory,
+            "program": program.program, "data_version": program.data_version,
+            "stamp": program.stamp, "directory": program.directory,
             "records": program.native.records, "hits": program.native.hits,
             "misses": program.native.misses, "inserts": program.native.inserts,
             "loaded_shards": program.native.loaded_shards, "shards": program.native.shards.len(),
@@ -609,7 +606,8 @@ fn run_scoped(
         "execution":{"n_cores":settings.n_cores,
             "ordered_weight_arithmetic":settings.ordered_weight_arithmetic.to_string(),
             "native_ordered_weight_arithmetic":format!("{:#}",settings.rustred_ordered_weight_arithmetic()),
-            "scope":"identical results for every core count and arithmetic; owner preparation stays on the request thread"},
+            "scheduler_threads":settings.n_cores,
+            "scope":"identical results for every core count and arithmetic; n_cores sets the scheduler (4L/5L), modular, frontend, post-processing and route-verification workers; with more than one scheduler thread the 5L reduction_math_seconds is not reported"},
         "input_sha256":sha256(prepared.input.to_canonical_string().as_bytes()),
         "evaluated_input_sha256":sha256(evaluation_input.to_canonical_string().as_bytes()),
         "dimension_binding":{"source":native_d.to_canonical_string(),"target":physical_d.to_canonical_string(),"scope":"exact fixture trace dimension; all public evaluations share this binding"},

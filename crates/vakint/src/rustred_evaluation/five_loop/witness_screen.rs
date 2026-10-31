@@ -202,12 +202,12 @@ impl NumeratorGroups {
             for factor in factors {
                 if contains_loop_momentum(factor) {
                     degree = degree.checked_add(scalar_product_degree(factor)?)?;
-                    scalar_products = scalar_products * factor.to_owned();
+                    scalar_products *= factor.to_owned();
                 } else if let AtomView::Num(_) = factor {
                     rational(factor)?;
-                    number = number * factor.to_owned();
+                    number *= factor.to_owned();
                 } else if is_plain(factor) {
-                    coefficient = coefficient * factor.to_owned();
+                    coefficient *= factor.to_owned();
                 } else {
                     return None;
                 }
@@ -438,7 +438,7 @@ impl NumeratorGroups {
                     })?;
                 let mass_power = u32::try_from(i64::from(group.degree).checked_sub(shift)?).ok()?;
                 let weight = match mass {
-                    Some(mass) => weight * mass.pow(&Atom::num(i64::from(mass_power))),
+                    Some(mass) => weight * mass.pow(Atom::num(i64::from(mass_power))),
                     None => weight,
                 };
                 Some((lowered.integral().clone(), weight))
@@ -613,9 +613,9 @@ mod tests {
     #[test]
     #[ignore = "loads the official five-loop saved application (minutes)"]
     fn screened_selection_matches_first_minimal_full_key_with_the_official_package() {
-        let directory = super::super::super::cache_tests::external_path_through(5).join("5L/ibps");
+        let directory = super::super::super::test_data::external_path_through(5).join("5L/ibps");
         let mut settings = VakintSettings::default();
-        let engine = super::super::super::cache_tests::external_engine()
+        let engine = super::super::super::test_data::external_engine()
             .with_rustred_application(&mut settings, &directory)
             .unwrap();
         let input = vk_parse!(

@@ -326,6 +326,18 @@ class Vakint:
     RustRed, which always reduces with its ordered scheduler, is the default
     backend; it does not need FORM.
     """
+    @property
+    def n_cores(self) -> builtins.int:
+        r"""
+        Worker threads of this instance (the `n_cores` constructor argument).
+        """
+    @property
+    def ordered_weight_arithmetic(self) -> builtins.str:
+        r"""
+        Selected Ordered weight arithmetic in RustRed's canonical text, e.g.
+        "exact" or "modular_sampled"; "threads" appears only when the selection
+        fixes the modular workers instead of following `n_cores`.
+        """
     def load_external_data(self, path: builtins.str | os.PathLike | pathlib.Path, max_loop_count: builtins.int) -> None:
         r"""
         Load a local external-data checkout without network access.
@@ -339,7 +351,7 @@ class Vakint:
         Install all official loop packs through the requested maximum, or load a
         supplied checkout directly. Existing validated installations work offline.
         """
-    def __new__(cls, run_time_decimal_precision: typing.Optional[builtins.int] = None, evaluation_order: typing.Optional[typing.Sequence[VakintEvaluationMethod]] = None, tensor_reduction_method: typing.Optional[builtins.str] = None, epsilon_symbol: typing.Optional[Expression] = None, mu_r_sq_symbol: typing.Optional[Expression] = None, form_exe_path: typing.Optional[builtins.str] = None, python_exe_path: typing.Optional[builtins.str] = None, verify_numerator_identification: typing.Optional[builtins.bool] = None, integral_normalization_factor: typing.Optional[builtins.str] = None, allow_unknown_integrals: typing.Optional[builtins.bool] = None, clean_tmp_dir: typing.Optional[builtins.bool] = None, number_of_terms_in_epsilon_expansion: typing.Optional[builtins.int] = None, use_dot_product_notation: typing.Optional[builtins.bool] = None, temporary_directory: typing.Optional[builtins.str] = None, rustred_artifact_path: typing.Optional[builtins.str] = None, rustred_cache_bytes: typing.Optional[builtins.int] = None, rustred_cache_terms: typing.Optional[builtins.int] = None, rustred_product_cache_bytes: typing.Optional[builtins.int] = None, rustred_product_cache_terms: typing.Optional[builtins.int] = None, rustred_scalar_max_work: typing.Optional[builtins.int] = None, max_process_rss_bytes: typing.Optional[builtins.int] = None, max_elapsed_seconds: typing.Optional[builtins.float] = None, ordered_cache: builtins.str = 'read-write', ordered_cache_directory: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, ordered_cache_ram_bytes: typing.Optional[builtins.int] = None, ordered_cache_autosave: builtins.str = 'after-evaluation') -> Vakint:
+    def __new__(cls, run_time_decimal_precision: typing.Optional[builtins.int] = None, evaluation_order: typing.Optional[typing.Sequence[VakintEvaluationMethod]] = None, tensor_reduction_method: typing.Optional[builtins.str] = None, epsilon_symbol: typing.Optional[Expression] = None, mu_r_sq_symbol: typing.Optional[Expression] = None, form_exe_path: typing.Optional[builtins.str] = None, python_exe_path: typing.Optional[builtins.str] = None, verify_numerator_identification: typing.Optional[builtins.bool] = None, integral_normalization_factor: typing.Optional[builtins.str] = None, allow_unknown_integrals: typing.Optional[builtins.bool] = None, clean_tmp_dir: typing.Optional[builtins.bool] = None, number_of_terms_in_epsilon_expansion: typing.Optional[builtins.int] = None, use_dot_product_notation: typing.Optional[builtins.bool] = None, temporary_directory: typing.Optional[builtins.str] = None, rustred_artifact_path: typing.Optional[builtins.str] = None, rustred_cache_bytes: typing.Optional[builtins.int] = None, rustred_cache_terms: typing.Optional[builtins.int] = None, rustred_product_cache_bytes: typing.Optional[builtins.int] = None, rustred_product_cache_terms: typing.Optional[builtins.int] = None, rustred_scalar_max_work: typing.Optional[builtins.int] = None, max_process_rss_bytes: typing.Optional[builtins.int] = None, max_elapsed_seconds: typing.Optional[builtins.float] = None, n_cores: typing.Optional[builtins.int] = None, ordered_weight_arithmetic: typing.Optional[builtins.str] = None, ordered_cache: builtins.str = 'read-write', ordered_cache_directory: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, ordered_cache_ram_bytes: typing.Optional[builtins.int] = None, ordered_cache_autosave: builtins.str = 'after-evaluation') -> Vakint:
         r"""
         Create a new Vakint instance, specifying details of the evaluation stack. Note that the same instance can be recycled across multiple evaluations.
         Note that the creation of a Vakint instance involves the processing and creation of the library of all known topologies, which can be time consuming.
@@ -436,6 +448,19 @@ class Vakint:
             Cooperative elapsed-time ceiling per public operation, including data
             loading and lookup. None disables it. Native kernels are checked at
             boundaries, so an external supervisor is needed for a hard deadline.
+        n_cores : Optional[int]
+            Worker threads of this instance: the single source of every Vakint and RustRed
+            worker count (Ordered scheduler, modular weight arithmetic, five-loop frontend,
+            retained post-processing, five-loop route verification in data loading).
+            1 runs every computation on the calling thread without spawning a thread.
+            None (default) uses min(10, cores available to this process), or 1 without a
+            Symbolica license. Results are identical for every value.
+        ordered_weight_arithmetic : Optional[str]
+            Frontier weight arithmetic of Ordered reduction: "exact", "modular_sampled" or
+            "modular_polynomial", optionally with RustRed's advanced options as
+            "modular_sampled:key=value,..." ("modular" is an alias of "modular_sampled").
+            Every arithmetic returns the same exact result. Modular arithmetics run on n_cores
+            workers unless the options set threads. None (default) selects "modular_polynomial".
         ordered_cache : str
             Use of the persistent Ordered step cache: "read-write" (default; replay
             recorded reduction steps and record new ones), "read-only" (replay the

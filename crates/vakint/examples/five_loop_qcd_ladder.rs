@@ -24,7 +24,7 @@ use vakint::{
     VakintSettings,
 };
 
-const USAGE: &str = "usage: five_loop_qcd_ladder --work-dir PATH [--artifacts PATH] [--projection quadratic|zero-momentum] [--prepared-input PATH|--fresh-prepare] [--prepare-only|--dress-only] [--warm] [--monitor] [--progress-snapshot PATH] [--progress-interval-seconds N]\nThe reduction uses RustRed's ordered scheduler with the weight arithmetic of VAKINT_ORDERED_WEIGHT_ARITHMETIC (exact when unset). --warm repeats the evaluation in the same engine and checks exact parity; there is no result cache.\nMonitoring defaults off. --monitor requires progress-tui and defaults its snapshot to work-dir/monitor.json. A snapshot path enables native JSON without a TUI; interval defaults to 1s and must be finite and nonnegative. Monitored timings include diagnostic observation overhead.";
+const USAGE: &str = "usage: five_loop_qcd_ladder --work-dir PATH [--artifacts PATH] [--projection quadratic|zero-momentum] [--prepared-input PATH|--fresh-prepare] [--prepare-only|--dress-only] [--warm] [--monitor] [--progress-snapshot PATH] [--progress-interval-seconds N]\nThe reduction uses RustRed's ordered scheduler with the weight arithmetic of VAKINT_ORDERED_WEIGHT_ARITHMETIC (Vakint's default, modular_polynomial, when unset) on VAKINT_N_CORES cores (Vakint's default when unset). --warm repeats the evaluation in the same engine and checks exact parity; there is no result cache.\nMonitoring defaults off. --monitor requires progress-tui and defaults its snapshot to work-dir/monitor.json. A snapshot path enables native JSON without a TUI; interval defaults to 1s and must be finite and nonnegative. Monitored timings include diagnostic observation overhead.";
 
 struct StageLogger {
     phases: Mutex<BTreeMap<String, Vec<f64>>>,
@@ -275,7 +275,7 @@ fn main() -> fixture::Result<()> {
             .map(|(name, bytes)| (name, format!("{:x}", Sha256::digest(bytes))))
             .collect::<BTreeMap<_, _>>();
         let mut report = json!({"schema":"vakint.qcd-ladder.benchmark.v1", "projection":prepared.projection,
-            "reduction_strategy":"Ordered","ordered_weight_arithmetic":format!("{arithmetic:?}"),
+            "reduction_strategy":"Ordered","ordered_weight_arithmetic":arithmetic.to_string(),
             "source_commit":git(&["rev-parse", "HEAD"]), "source_dirty":git(&["status", "--porcelain"]).map(|value| !value.is_empty()),
             "compiled_cohort":{
                 "main_revision":option_env!("VAKINT_CACHE_BUILD_GIT_REVISION"),
@@ -347,9 +347,8 @@ fn main() -> fixture::Result<()> {
         // the recorded options describe the application that actually runs.
         settings.rustred_application_options.unresolved_policy =
             rustred::solver::UnresolvedPolicy::Preserve;
-        settings
-            .rustred_application_options
-            .ordered_weight_arithmetic = arithmetic;
+        settings.ordered_weight_arithmetic = arithmetic;
+        settings.n_cores = fixture::comparison::n_cores_from_environment()?;
         report["conventions"] = json!({
             "integral_normalization":format!("{:?}",settings.integral_normalization_factor),
             "integral_normalization_expression":settings.get_integral_normalization_factor_atom()?.to_canonical_string(),
@@ -365,6 +364,7 @@ fn main() -> fixture::Result<()> {
             5,
             &OfficialExternalDataOptions {
                 local_artifacts_path: artifacts,
+                n_cores: settings.n_cores,
                 ..Default::default()
             },
         )?;

@@ -15,8 +15,6 @@ use vakint::{
 const CHILD: &str = "VAKINT_SINGLE_CORE_CHILD";
 /// Printed by the child after the guarded evaluations completed.
 const COMPLETED: &str = "single-core guarded evaluations completed";
-/// Error of RustRed's polynomial modular arithmetic while it is a stub.
-const POLYNOMIAL_STUB: &str = "modular_polynomial weight arithmetic is not implemented yet";
 
 fn settings(n_cores: usize, arithmetic: OrderedWeightArithmetic) -> VakintSettings {
     VakintSettings {
@@ -48,8 +46,7 @@ fn four_loop_input() -> Atom {
 }
 
 /// Evaluate `input` with every arithmetic on `n_cores` and check that the
-/// results agree with the exact one; the polynomial arithmetic may still be
-/// RustRed's stub.
+/// results agree with the exact one.
 fn evaluate_with_every_arithmetic(vakint: &Vakint, input: &Atom, n_cores: usize) -> Atom {
     let exact = vakint
         .evaluate(
@@ -65,13 +62,13 @@ fn evaluate_with_every_arithmetic(vakint: &Vakint, input: &Atom, n_cores: usize)
         )
         .unwrap();
     assert_eq!(sampled, exact, "modular_sampled on {n_cores} cores");
-    match vakint.evaluate(
-        &settings(n_cores, OrderedWeightArithmetic::modular_polynomial()),
-        input.as_view(),
-    ) {
-        Ok(polynomial) => assert_eq!(polynomial, exact, "modular_polynomial on {n_cores} cores"),
-        Err(error) => assert!(error.to_string().contains(POLYNOMIAL_STUB), "{error}"),
-    }
+    let polynomial = vakint
+        .evaluate(
+            &settings(n_cores, OrderedWeightArithmetic::modular_polynomial()),
+            input.as_view(),
+        )
+        .unwrap();
+    assert_eq!(polynomial, exact, "modular_polynomial on {n_cores} cores");
     exact
 }
 
@@ -86,7 +83,6 @@ fn load_four_loops(vakint: &mut Vakint, path: std::path::PathBuf, n_cores: usize
             4,
             &vakint::OfficialExternalDataOptions {
                 local_artifacts_path: Some(path),
-                load_prepared_caches: false,
                 n_cores,
                 ..Default::default()
             },
@@ -219,7 +215,8 @@ fn single_core_reductions_never_create_threads() {
         let _ = evaluate_with_every_arithmetic(&vakint, &four_loop_input(), 1);
         evaluated_loops = "1-4";
     }
-    // Control: more cores reach RustRed's modular pool, which cannot start.
+    // Controls: more cores reach RustRed's modular pool and, at four loops,
+    // its Ordered scheduler pool; neither can start under the filter.
     if available > 1 {
         let error = vakint
             .evaluate(
@@ -228,6 +225,18 @@ fn single_core_reductions_never_create_threads() {
             )
             .unwrap_err();
         assert!(error.to_string().contains("thread pool"), "{error}");
+        if evaluated_loops == "1-4" {
+            let error = vakint
+                .evaluate(
+                    &settings(2, OrderedWeightArithmetic::exact()),
+                    four_loop_input().as_view(),
+                )
+                .unwrap_err();
+            assert!(
+                error.to_string().contains("ordered scheduler pool"),
+                "{error}"
+            );
+        }
     }
     println!("{COMPLETED} ({evaluated_loops} loops)");
 }

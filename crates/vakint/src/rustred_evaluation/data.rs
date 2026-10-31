@@ -361,7 +361,9 @@ impl RustRedData {
         }
         let four_loop = loops
             .get(&4)
-            .map(|data| super::four_loop::FourLoopPrograms::load(data).map(Arc::new))
+            .map(|data| {
+                super::four_loop::FourLoopPrograms::load(data, &manifest.version).map(Arc::new)
+            })
             .transpose()?;
         let masters = Arc::new(super::masters::MasterCatalog::load(
             &loops,
@@ -484,6 +486,7 @@ impl RustRedData {
             programs.push(super::cache::OrderedCacheProgram::new(
                 *loop_count,
                 family.name(),
+                &self.version,
                 snapshot.ordered_step_cache_binding(),
             ));
         }

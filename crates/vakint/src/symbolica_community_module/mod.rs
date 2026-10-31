@@ -944,8 +944,9 @@ impl VakintWrapper {
     ///     boundaries, so an external supervisor is needed for a hard deadline.
     /// n_cores : Optional[int]
     ///     Worker threads of this instance: the single source of every Vakint and RustRed
-    ///     worker count (modular weight arithmetic, five-loop route verification in data
-    ///     loading). 1 runs every computation on the calling thread without spawning a thread.
+    ///     worker count (Ordered scheduler, modular weight arithmetic, five-loop frontend,
+    ///     retained post-processing, five-loop route verification in data loading).
+    ///     1 runs every computation on the calling thread without spawning a thread.
     ///     None (default) uses min(10, cores available to this process), or 1 without a
     ///     Symbolica license. Results are identical for every value.
     /// ordered_weight_arithmetic : Optional[str]
@@ -953,7 +954,7 @@ impl VakintWrapper {
     ///     "modular_polynomial", optionally with RustRed's advanced options as
     ///     "modular_sampled:key=value,..." ("modular" is an alias of "modular_sampled").
     ///     Every arithmetic returns the same exact result. Modular arithmetics run on n_cores
-    ///     workers unless the options set threads. None (default) selects "exact".
+    ///     workers unless the options set threads. None (default) selects "modular_polynomial".
     /// ordered_cache : str
     ///     Use of the persistent Ordered step cache: "read-write" (default; replay
     ///     recorded reduction steps and record new ones), "read-only" (replay the
@@ -995,7 +996,7 @@ impl VakintWrapper {
         max_elapsed_seconds: Option<f64>,
         n_cores: Option<usize>,
         ordered_weight_arithmetic: Option<&str>,
-            ordered_cache: &str,
+        ordered_cache: &str,
         ordered_cache_directory: Option<PathBuf>,
         ordered_cache_ram_bytes: Option<usize>,
         ordered_cache_autosave: &str,

@@ -260,7 +260,7 @@ a single real-argument simplification after batching and before master substitut
 per-integral simplification is applied to them. `VakintSettings.ordered_weight_arithmetic`
 (`OrderedWeightArithmetic`, RustRed's canonical text
 `exact | modular_sampled[:...] | modular_polynomial[:...]`) selects the frontier weights at every
-loop count; the default is the single constant `DEFAULT_ORDERED_WEIGHT_ARITHMETIC` (exact). All
+loop count; the default is the single constant `DEFAULT_ORDERED_WEIGHT_ARITHMETIC` (`modular_polynomial`, the fastest). All
 modes expand the same keys and return the same terms and guards. `VakintSettings.n_cores`
 (default `default_n_cores()`: available cores, at most ten, one without a Symbolica license) is
 the single source of every worker count: the modular workers unless the selection fixes
@@ -449,8 +449,9 @@ Instead, `rustred_evaluation::cache` owns one RustRed `OrderedStepCache` per red
 engine's clones. It stores the weight-independent checked step of each expanded key, replayed
 exactly by every arithmetic, pass, channel and request, never weights, zero decisions or results.
 `VakintSettings::ordered_cache` selects off, read-only or read-write (default, in memory), an
-optional directory with one `<loops>L-<program>.<stamp>` subdirectory per program binding (the
-stamp digests the program, its family and policy, and the RustRed/Symbolica build), a resident
+optional directory with one `<loops>L-<program>.<data version>.<stamp>` subdirectory per program
+(validity by versions only: RustRed's stamp covers its cache schema and step-semantics versions
+and cheap identity fields, Vakint adds the loaded data version; no source or program digests), a resident
 ceiling and an autosave policy; `load_`, `save_`, `warm_`, `clear_ordered_cache` and
 `ordered_cache_statistics` are the operations (`symbolica_community_module::cache` holds the
 Python report conversion). A foreign or corrupt directory is rejected, not replayed.

@@ -118,7 +118,10 @@ fn main() -> fixture::Result<()> {
         )],
         Some("both") => vec![
             ("exact", vakint::OrderedWeightArithmetic::exact()),
-            ("modular", fixture::comparison::modular_arithmetic_from_environment()?),
+            (
+                "modular",
+                fixture::comparison::modular_arithmetic_from_environment()?,
+            ),
         ],
         Some(text) => vec![("ordered", text.parse::<vakint::OrderedWeightArithmetic>()?)],
     };

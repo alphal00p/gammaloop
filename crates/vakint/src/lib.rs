@@ -2332,8 +2332,10 @@ pub struct VakintSettings {
     /// be checked at their boundaries; hard deadlines require a supervisor.
     pub rustred_resources: ResourceLimits,
     /// Worker threads of one call: the single source of every Vakint and
-    /// RustRed worker count (modular weight arithmetic, five-loop route
-    /// verification). `1` runs every computation on the calling thread, with
+    /// RustRed worker count (Ordered scheduler threads at four and five loops,
+    /// modular weight arithmetic, five-loop frontend, retained
+    /// post-processing and five-loop route verification). `1` runs every
+    /// computation on the calling thread, with
     /// no thread pool and no spawned thread; only an enabled progress monitor
     /// adds its presentation thread. Defaults to [`default_n_cores`]; zero, more
     /// cores than this process may use, and more than one core without a
@@ -2348,9 +2350,10 @@ pub struct VakintSettings {
     /// always reduces with RustRed's ordered scheduler, so `reduction_strategy`
     /// is ignored (and the depth-first `cache_policy`/`cache_representation`
     /// never apply). No option enlarges the saved entry domains. Complete
-    /// factorization remains a checked action. `ordered_weight_arithmetic` and
-    /// `preparation_workers` are derived from [`Self::ordered_weight_arithmetic`]
-    /// and [`Self::n_cores`] and must keep their defaults here.
+    /// factorization remains a checked action. `ordered_weight_arithmetic`,
+    /// `ordered_scheduler` and `preparation_workers` are derived from
+    /// [`Self::ordered_weight_arithmetic`] and [`Self::n_cores`] and must keep
+    /// their defaults here.
     pub rustred_application_options: rustred_app::SavedApplicationOptions,
     /// Use of the persistent Ordered step cache (mode, directory, resident
     /// ceiling, autosave). The default records steps in memory for the
@@ -2435,6 +2438,14 @@ impl VakintSettings {
                 n_cores: self.n_cores,
                 reason: "set the workers with VakintSettings::n_cores; \
                          rustred_application_options.preparation_workers is derived from it"
+                    .into(),
+            });
+        }
+        if self.rustred_application_options.ordered_scheduler != defaults.ordered_scheduler {
+            return Err(VakintError::InvalidNCores {
+                n_cores: self.n_cores,
+                reason: "set the scheduler threads with VakintSettings::n_cores; \
+                         rustred_application_options.ordered_scheduler is derived from it"
                     .into(),
             });
         }

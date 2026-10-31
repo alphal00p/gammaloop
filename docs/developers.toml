@@ -668,7 +668,13 @@ anchor = "pub struct Vakint {"
 # Arc-shared registry of one RustRed OrderedStepCache per reduction program.
 # Public evaluation entry points run the after-evaluation autosave; replayed
 # steps equal checked ones, so results, guards and ownership are unchanged.
-digest = "a10a061c27833372df4e9281e24ce928fb3f70ec"
+# Reviewed 2026-10-31 for the consolidation of ncores-arith, DFS removal and the
+# Ordered step cache on RustRed 0ac6c0bd: one settings struct carries n_cores, the
+# arithmetic and ordered_cache; n_cores also sets the Ordered scheduler threads, the
+# five-loop frontend and the retained post-processing workers. validate_settings also
+# rejects a user-set rustred_application_options.ordered_scheduler (derived). The
+# default arithmetic constant is modular_polynomial. Topology and FORM contracts are unchanged.
+digest = "8d2d91e47f0471049e783da351c60156e840dd0e"
 
 [[section.note.scope]]
 path = "crates/vakint/src/lorentz.rs"
@@ -752,7 +758,11 @@ anchor = "pub struct VakintWrapper {"
 # ordered_cache* constructor keywords and the load/save/statistics/clear/warm
 # cache methods (reports built in the private cache module). Wrapper ownership,
 # defaults of the existing keywords and evaluation entry points are unchanged.
-digest = "0b81ae906b1aba18af5f58aba30d8a6977e92713"
+# Reviewed 2026-10-31 for the consolidation: the constructor takes n_cores,
+# ordered_weight_arithmetic (default the modular_polynomial constant) and the
+# ordered_cache* keywords together, without strategy or cache-policy keywords; both
+# getters and the cache methods remain, loaders pass n_cores. Ownership is unchanged.
+digest = "6270e7563d48833a707ab0c82b9ca6898ae0ae04"
 
 [[section.note.scope]]
 path = "crates/vakint/src/symbolica_community_module/numerical.rs"
@@ -808,7 +818,11 @@ anchor = "pub(crate) struct RustRedData {"
 # Reviewed 2026-10-31 for the Ordered step cache: RustRedData lists the
 # step-cache identities (bindings) of its loaded lower-loop and four-loop
 # programs for load_ordered_cache; loading, validation and activation are unchanged.
-digest = "0d8bc17126c1b816a9e98e225c3c95b7a384d7a8"
+# Reviewed 2026-10-31 for the consolidation: loaders without prepared caches take
+# n_cores only (load_external_data_on, load_rustred_artifacts_on, activate_external_data);
+# step-cache identities carry the data version (versioning-only binding), four-loop
+# programs load with the manifest version. Validation and activation are unchanged.
+digest = "ae764be22bab8e16d37684bce439e3b204be0ddd"
 
 [[section.note.scope]]
 path = "crates/vakint/src/rustred_evaluation/masters.rs"

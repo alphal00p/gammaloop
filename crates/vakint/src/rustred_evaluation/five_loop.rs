@@ -51,18 +51,17 @@ static PARENTS: LazyLock<Vec<ParentDescriptor>> = LazyLock::new(descriptors);
 /// Guards materialized per parallel chunk between progress updates.
 const GUARD_CHUNK: usize = 4096;
 
-/// PLUMBING POINT (n_cores): worker threads for the independent five-loop
-/// frontend items (witness screening, full witness keys, and per-contribution
-/// scalar lowering). `1` is strictly sequential on the calling thread, with no
-/// pool. Replace the interim `VAKINT_FRONTEND_THREADS` override by the shared
-/// `n_cores` setting once it exists; results never depend on this value.
-fn frontend_threads(_settings: &VakintSettings) -> usize {
-    std::env::var("VAKINT_FRONTEND_THREADS")
-        .ok()
-        .and_then(|threads| threads.parse::<usize>().ok())
-        .filter(|threads| *threads >= 1)
-        .unwrap_or(1)
+/// Worker threads for the independent five-loop frontend items (witness
+/// screening, full witness keys, and per-contribution scalar lowering):
+/// [`VakintSettings::n_cores`]. `1` is strictly sequential on the calling
+/// thread, with no pool; results never depend on this value.
+fn frontend_threads(settings: &VakintSettings) -> usize {
+    settings.n_cores.max(1)
 }
+
+/// A selected five-loop witness and, when a selector ran, whether it proved
+/// the witness admitted (with its exact lowered key support) or not.
+type SelectedWitness = (ReplacementRules, Option<Option<Vec<IntegralKey>>>);
 
 #[path = "five_loop/witness_cache.rs"]
 mod witness_cache;
@@ -347,7 +346,7 @@ impl Vakint {
         settings: &VakintSettings,
         integral: AtomView,
         numerator: AtomView,
-    ) -> Result<Option<(ReplacementRules, Option<Option<Vec<IntegralKey>>>)>, VakintError> {
+    ) -> Result<Option<SelectedWitness>, VakintError> {
         #[cfg(all(
             test,
             feature = "weighted-lowering-diagnostics",
@@ -732,12 +731,14 @@ impl Vakint {
             .ok_or(RustRedEvaluationError::SavedApplicationUnavailable)?;
         let path = path.canonicalize().map_err(failure)?;
         let options = super::application_options(settings);
-        // Requests select their weight arithmetic under the prepared-owner
-        // lock before reducing, and preparation workers only parallelize route
-        // verification during the load: neither changes the prepared
-        // application, so neither may reload and re-prepare the package.
+        // Requests select their weight arithmetic and scheduler under the
+        // prepared-owner lock before reducing, and preparation workers only
+        // parallelize route verification during the load: none of them
+        // changes the prepared application, so none may reload and re-prepare
+        // the package.
         let prepared_identity = |options: SavedApplicationOptions| SavedApplicationOptions {
             ordered_weight_arithmetic: Default::default(),
+            ordered_scheduler: Default::default(),
             preparation_workers: 1,
             ..options
         };
@@ -1100,6 +1101,7 @@ impl SavedApplication {
         let step_cache = super::cache::OrderedCacheProgram::new(
             5,
             prepared.family().name(),
+            &data.version,
             prepared.ordered_step_cache_binding(),
         );
         Ok(Self {
@@ -1178,9 +1180,9 @@ impl SavedApplication {
         MonitorContext::native_phase(observation.as_deref_mut(), "scalar_lowering", None);
         let mut application = self.prepared.lock().map_err(failure)?;
         application.set_reduction_strategy(rustred::reduction::ReductionStrategy::Ordered);
-        application.set_ordered_weight_arithmetic(
-            settings.rustred_ordered_weight_arithmetic(),
-        );
+        application.set_ordered_weight_arithmetic(settings.rustred_ordered_weight_arithmetic());
+        let scheduler = super::ordered_scheduler(settings);
+        application.set_ordered_scheduler_options(scheduler);
         // The cache is opened with this package's own binding, so its stamp
         // matches; RustRed checks family, variables and policy again here
         // and at every request.
@@ -1414,12 +1416,15 @@ impl SavedApplication {
             }
             // Declare this before the returned native values: the complete
             // exact reduction/assembly interval includes their natural cleanup.
-            // Deferred owners are prepared on this request's thread whatever
-            // n_cores is (preparation workers only verify routes while the
-            // application loads), so their summed preparation time is a part
-            // of this span. Stepping keys on several threads would have to
-            // invalidate it.
+            // With one scheduler thread, deferred owners are prepared on this
+            // request's thread (preparation workers only verify routes while
+            // the application loads), so their summed preparation time is a
+            // part of this span. Concurrent Apply steps may prepare owners at
+            // the same time; their summed time then no longer nests here.
             let math = MathSpan::new();
+            if scheduler.threads > 1 {
+                math.invalidate("ordered scheduler threads > 1");
+            }
             let spectator = spectator
                 .replace(dimension.to_pattern())
                 .with(physical_dimension.to_pattern());
@@ -1779,7 +1784,6 @@ mod tests {
                 5,
                 &crate::OfficialExternalDataOptions {
                     local_artifacts_path: Some(artifacts),
-                    load_prepared_caches: false,
                     ..Default::default()
                 },
             )

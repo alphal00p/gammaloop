@@ -364,3 +364,45 @@ fn ordered_cache_modes_and_autosave_policies_round_trip() {
     assert!(defaults.directory.is_none());
     assert_eq!(VakintSettings::default().ordered_cache, defaults);
 }
+
+#[test]
+fn caches_are_keyed_by_data_version_and_binding_stamp() {
+    let snapshot = super::super::artifact::ArtifactFamily::UnitMassVacuumK1
+        .snapshot()
+        .unwrap();
+    let program = |version: &str| {
+        super::OrderedCacheProgram::new(
+            1,
+            "unit-mass-vacuum-k1",
+            version,
+            snapshot.ordered_step_cache_binding(),
+        )
+    };
+    let (release, next, local) = (program("v0.1.2"), program("v0.2.0"), program("local/a b"));
+    // Same binding (versions and identity fields only), different data.
+    assert_eq!(release.binding.stamp(), next.binding.stamp());
+    assert_eq!(local.data_version, "local-a-b");
+    let root = Path::new("/caches");
+    let stamp = release.binding.stamp();
+    let directory = super::program_directory(root, &release, &stamp);
+    let name = directory.file_name().unwrap().to_str().unwrap().to_owned();
+    assert!(name.starts_with("1L-unit-mass-vacuum-k1.v0.1.2."), "{name}");
+    assert_ne!(directory, super::program_directory(root, &next, &stamp));
+    // A new data version never shares the records of the previous one.
+    let registry = super::OrderedCacheRegistry::default();
+    let settings = OrderedCacheSettings::default();
+    let first = registry.cache(&settings, &release).unwrap().unwrap();
+    let again = registry.cache(&settings, &release).unwrap().unwrap();
+    let other = registry.cache(&settings, &next).unwrap().unwrap();
+    assert!(std::sync::Arc::ptr_eq(&first, &again));
+    assert!(!std::sync::Arc::ptr_eq(&first, &other));
+    let statistics = registry.statistics();
+    assert_eq!(
+        statistics
+            .programs
+            .iter()
+            .map(|program| program.data_version.as_str())
+            .collect::<Vec<_>>(),
+        ["v0.1.2", "v0.2.0"]
+    );
+}

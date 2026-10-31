@@ -96,19 +96,22 @@ impl<const N: usize> NativeCandidate<N> {
             terms,
             limits,
             rustred::reduction::OrderedWeightArithmetic::Exact,
+            Default::default(),
             None,
             observation,
         )
     }
 
     /// As [`Self::reduce_linear_combination_ordered`] with an explicit
-    /// frontier weight arithmetic and an optional Ordered step cache bound
-    /// to [`Self::ordered_step_cache_binding`] (identical exact results).
+    /// frontier weight arithmetic, Ordered scheduler options and an optional
+    /// Ordered step cache bound to [`Self::ordered_step_cache_binding`]
+    /// (identical exact results for every combination).
     pub(crate) fn reduce_linear_combination_ordered_with_arithmetic(
         &self,
         terms: Vec<(IntegralKey, rustred::algebra::Coefficient)>,
         limits: ReductionLimits,
         arithmetic: rustred::reduction::OrderedWeightArithmetic,
+        scheduler: rustred::reduction::OrderedSchedulerOptions,
         step_cache: Option<Arc<rustred::reduction::OrderedStepCache>>,
         observation: Option<&mut rustred::solver::CandidateRoutedApplicationObserver<'_>>,
     ) -> Result<rustred::solver::CandidateOrderedReduction, crate::RustRedEvaluationError> {
@@ -135,9 +138,10 @@ impl<const N: usize> NativeCandidate<N> {
                 );
                 envelope.caller_phase = Some("entry_admission");
                 observer.emit(envelope);
-                reducer.reduce_linear_combination_ordered_with_arithmetic(
+                reducer.reduce_linear_combination_ordered_with_scheduler(
                     terms,
                     arithmetic,
+                    scheduler,
                     Some(&mut |progress, current| {
                         observer.emit_ordered_progress(
                             self.family.fingerprint(),
@@ -146,26 +150,27 @@ impl<const N: usize> NativeCandidate<N> {
                         );
                         Ok(())
                     }),
+                    None,
                 )
             }
-            None => {
-                reducer.reduce_linear_combination_ordered_with_arithmetic(terms, arithmetic, None)
-            }
+            None => reducer.reduce_linear_combination_ordered_with_scheduler(
+                terms, arithmetic, scheduler, None, None,
+            ),
         }
         .map_err(crate::RustRedEvaluationError::from_native)
     }
 
-    /// RustRed's Ordered step-cache binding of this program: the digest its
-    /// bundle loader declared, family, coefficient variables, unresolved
-    /// policy and installed terminal convention.
+    /// RustRed's Ordered step-cache binding of this program: candidate
+    /// adapter, family, coefficient variables and unresolved policy (with
+    /// RustRed's cache schema and step semantics versions in its stamp).
     pub(crate) fn ordered_step_cache_binding(
         &self,
     ) -> Result<rustred::reduction::OrderedStepCacheBinding, String> {
-        self.reducer
+        Ok(self
+            .reducer
             .lock()
             .map_err(|_| "candidate reducer lock poisoned".to_owned())?
-            .ordered_step_cache_binding()
-            .map_err(|error| error.to_string())
+            .ordered_step_cache_binding())
     }
 
     pub(crate) fn preserve_unresolved(&mut self) -> Result<(), String> {

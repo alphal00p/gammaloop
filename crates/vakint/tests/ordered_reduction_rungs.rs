@@ -268,8 +268,26 @@ fn four_loop_quadratic_rung_matches_depth_first_and_reference() -> fixture::Resu
     compare(4, fixture::Projection::QuadraticTransverse)
 }
 
+/// Slow optional five-loop fixture tests (ignored by default). Invocation,
+/// from the workspace root (release build; 5L zero takes minutes, 5L quadratic
+/// about half an hour on 16 cores):
+///
+/// ```text
+/// VAKINT_TEST_EXTERNAL_DATA=<vakint-external-data checkout> \
+/// VAKINT_QCD_LADDER_PREPARED_INPUT=<authenticated 5L scalar bundle of the projection> \
+/// VAKINT_ORDERED_RUN_EVIDENCE=<fresh evidence directory> \
+/// [VAKINT_N_CORES=16] [VAKINT_ORDERED_WEIGHT_ARITHMETIC=modular_polynomial] \
+/// cargo test --release -p vakint --features feynkit-ingress,experimental-rustred \
+///     --test ordered_reduction_rungs <test name> -- --ignored --nocapture
+/// ```
+///
+/// The zero-momentum test compares with the accepted historical result shipped
+/// in `examples/data/five_loop_q0`. The quadratic test compares the retained
+/// expression and its nonzero conditions with saved digests, which hold only
+/// for the data release they were produced with (see
+/// [`FIVE_LOOP_QUADRATIC_FIXTURE`]).
 #[test]
-#[ignore = "ordered-only full 5L reduction against the accepted saved zero-momentum result; requires explicit prepared input and durable evidence directories"]
+#[ignore = "slow optional fixture: full ordered 5L zero-momentum reduction against the accepted saved result; needs VAKINT_TEST_EXTERNAL_DATA, VAKINT_QCD_LADDER_PREPARED_INPUT and a fresh VAKINT_ORDERED_RUN_EVIDENCE (see the invocation above)"]
 fn five_loop_zero_momentum_ordered_matches_saved_depth_first_result() -> fixture::Result<()> {
     let completed = ordered_five_loop(fixture::Projection::ZeroMomentumMetric)?;
     let expected_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -283,10 +301,99 @@ fn five_loop_zero_momentum_ordered_matches_saved_depth_first_result() -> fixture
     Ok(())
 }
 
+/// The saved 5L quadratic result: digests of the canonical retained
+/// expression and of its nonzero conditions, for one data release and one
+/// prepared input.
+struct FiveLoopFixture {
+    /// Data release the digests belong to.
+    data: &'static str,
+    /// sha256 of that release's `manifest.json`.
+    data_manifest_sha256: &'static str,
+    /// sha256 of the canonical prepared input.
+    input_sha256: &'static str,
+    /// sha256 of `retained.symbolica`.
+    retained_sha256: &'static str,
+    /// sha256 of `nonzero-conditions.symbolica`.
+    nonzero_conditions_sha256: &'static str,
+}
+
+/// Produced with vakint-external-data v0.1.2 (commit f1626f67) and the prepared
+/// quadratic bundle `prepared-input-quadratic-4bd7448-v1`; cross-checked by
+/// independent `modular_sampled` and `modular_polynomial` runs (byte-identical
+/// outputs). To regenerate it for another data release: run the test with the
+/// new data and a fresh evidence directory under two different weight
+/// arithmetics (e.g. `modular_polynomial` and `modular_sampled`), check that
+/// both `retained.symbolica` and `nonzero-conditions.symbolica` agree byte for
+/// byte, then replace the release name and all four digests here (the manifest
+/// digest is `sha256sum manifest.json` of the data checkout; the others are the
+/// `report.json` fields `input_sha256`, `retained.sha256` and
+/// `guards.payload.sha256`).
+const FIVE_LOOP_QUADRATIC_FIXTURE: FiveLoopFixture = FiveLoopFixture {
+    data: "vakint-external-data v0.1.2 (f1626f67)",
+    data_manifest_sha256: "028b4e66affca59138c7913c0ee718de6a4d07913e9a88bd905bd5d850e902f2",
+    input_sha256: "276d17a136aa5292b82effe05354d0b7cb639966a5f3797f960bbdf9f301a1fa",
+    retained_sha256: "093086472ecdc75fd7180f5ce08a758f822a3048a3661eb8cc60c06e07ce34a4",
+    nonzero_conditions_sha256: "5a56684173706ff69d9991147666a47fe04fff88beb888d67f006e45041a7be3",
+};
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    use sha2::Digest;
+    format!("{:x}", sha2::Sha256::digest(bytes))
+}
+
 #[test]
-#[ignore = "ordered-only quadratic 5L reduction; run only after ordered zero-momentum acceptance; requires explicit prepared input and durable evidence directories"]
+#[ignore = "slow optional fixture: full ordered 5L quadratic reduction against the saved retained and nonzero-condition digests (data v0.1.2); needs VAKINT_TEST_EXTERNAL_DATA, VAKINT_QCD_LADDER_PREPARED_INPUT and a fresh VAKINT_ORDERED_RUN_EVIDENCE (see the invocation above)"]
 fn five_loop_quadratic_ordered_retains_declared_masters() -> fixture::Result<()> {
-    ordered_five_loop(fixture::Projection::QuadraticTransverse)?;
+    let fixture_data = &FIVE_LOOP_QUADRATIC_FIXTURE;
+    let data = std::path::PathBuf::from(
+        std::env::var_os("VAKINT_TEST_EXTERNAL_DATA")
+            .ok_or("set VAKINT_TEST_EXTERNAL_DATA to the vakint-external-data checkout")?,
+    );
+    let manifest = sha256_hex(&std::fs::read(data.join("manifest.json"))?);
+    if manifest != fixture_data.data_manifest_sha256 {
+        println!(
+            "SKIPPED five_loop_quadratic_ordered_retains_declared_masters: the saved digests \
+             belong to {} (manifest.json sha256 {}), but {} has manifest.json sha256 {manifest}. \
+             Run against that release, or regenerate the fixture as documented at \
+             FIVE_LOOP_QUADRATIC_FIXTURE in tests/ordered_reduction_rungs.rs.",
+            fixture_data.data,
+            fixture_data.data_manifest_sha256,
+            data.display()
+        );
+        return Ok(());
+    }
+    let completed = ordered_five_loop(fixture::Projection::QuadraticTransverse)?;
+    assert_eq!(
+        completed.report["input_sha256"], fixture_data.input_sha256,
+        "the saved digests belong to a different prepared quadratic input"
+    );
+    assert_eq!(
+        completed.report["data"]["manifest_sha256"],
+        fixture_data.data_manifest_sha256
+    );
+    let evidence = std::path::PathBuf::from(
+        std::env::var_os("VAKINT_ORDERED_RUN_EVIDENCE")
+            .ok_or("set VAKINT_ORDERED_RUN_EVIDENCE to the completed run directory")?,
+    );
+    for (file, report, expected) in [
+        (
+            "retained.symbolica",
+            &completed.report["retained"]["sha256"],
+            fixture_data.retained_sha256,
+        ),
+        (
+            "nonzero-conditions.symbolica",
+            &completed.report["guards"]["payload"]["sha256"],
+            fixture_data.nonzero_conditions_sha256,
+        ),
+    ] {
+        assert_eq!(report, expected, "{file}: report digest");
+        assert_eq!(
+            sha256_hex(&std::fs::read(evidence.join(file))?),
+            expected,
+            "{file}: written payload"
+        );
+    }
     Ok(())
 }
 
