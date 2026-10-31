@@ -1658,8 +1658,9 @@ const PUBLIC_MASTER: &str = "Public Vakint/FMFT master normalization";
 const MATAD_MASTER: &str = "MATAD normalization";
 const EVEN_MASTER: &str = "Public Vakint/FMFT and MATAD normalization (identical for even Σa)";
 const MATAD_BAR: &str = "MATAD bar";
-const D2_PERIOD: &str = "D = 2 period";
-const D2_JET: &str = "D = 2-2δ jet";
+/// The external-data acceptance tests select the D = 2 constants by these labels.
+pub(crate) const D2_PERIOD: &str = "D = 2 period";
+pub(crate) const D2_JET: &str = "D = 2-2δ jet";
 const LOOP_INTEGRAL: &str = "Loop integral with explicit factors";
 
 /// A loop-integral definition read off its structure:
