@@ -124,7 +124,7 @@
       "worker_script": "${worker}/share/cargo-dyndrv/worker.py",
       "vendor_expression": ${builtins.toJSON vendorExpression},
       "vendor_lockfile_only": True,
-      "runtime_environment_names": ["SYMBOLICA_LICENSE", "SYMBOLICA_LICENSE_PATH", "SYMBOLICA_LICENSE_SIGNED", "SYMBOLICA_LICENSE_FILE", "FEYNKIT_ORACLE_DUMP"],
+      "runtime_environment_names": ["SYMBOLICA_LICENSE", "SYMBOLICA_LICENSE_PATH", "SYMBOLICA_LICENSE_SIGNED", "SYMBOLICA_LICENSE_FILE", "FEYNKIT_ORACLE_DUMP", "FEYNKIT_ORACLE_THREADS"],
       "runtime_environment_prefixes": ["GL_", "GAMMALOOP_"],
       "private_environment_names": ["SYMBOLICA_LICENSE", "SYMBOLICA_LICENSE_PATH", "SYMBOLICA_LICENSE_SIGNED", "SYMBOLICA_LICENSE_FILE"],
       "forward_environment_names": ["NO_SYMBOLICA_OEM_LICENSE"],
