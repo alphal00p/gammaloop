@@ -13,6 +13,21 @@ title = "Implemented architecture"
 summary = "How the current runtime, physics layers, parsers, and symbolic engines are organized."
 
 [[section.note]]
+id = "generation-grouped-identical-migration"
+title = "Grouped Identical numerator migration qualification"
+summary = "One accepted grouped numerator literal, actual new pure archive and bounded thirteen-row runtime qualification; finite named-consumer operand/output maps and separate None/Auto premises retained."
+source = "docs/architecture/generation-grouped-identical-migration.typ"
+kind = "Bounded migration qualification candidate"
+status = "NEW_INDEPENDENT_INTEGRATION_REVIEW_REQUIRED"
+lifecycle = "investigation"
+owner = "Lucien Huber"
+review_ref = "pending-new-independent-integration-review"
+evidence_revision = "6f41807b064bcf2f579883134daef65c8ac279d3"
+products = ["feynkit", "gammaloop"]
+topics = ["generation", "testing", "numerators"]
+review_triggers = ["crates/feynkit-generator/tests/generation_oracle/**", "docs/architecture/generation-grouped-identical-migration.typ", "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration/**"]
+
+[[section.note]]
 id = "generation-host-stub-rustred"
 title = "Corrected notebook stub and private RustRed host qualification"
 summary = "Two corrected distributions, a private one-denominator RustRed composition, and eight exact bounded runtime passes."

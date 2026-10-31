@@ -1,0 +1,11 @@
+{
+  "actual_new_archive": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/grouped-identical-migration-20261031/retained-actual-archive.tar.zst",
+    "sha256": "ba02f91fc47a35b03cc9d51dded39836a7635bdf423c6025ab6e4775c504fc35",
+    "bytes": 86344600,
+    "original_store": "/nix/store/m6jl5zp0l1fkv26yrhm2ylbpbvfabamm-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0/gammaloop-nextest-feynkit-feynkit-generator.tar.zst"
+  },
+  "source_durable_reference": "generation-grouped-identical-migration-code-20261031",
+  "retained_terminal_layer": "/nix/store/8c82yf8vscm7gvj2nn09wbwan3qis7d2-gammaloop-crate-test-binaries-feynkit-generator-b6f177b7bc15beb1-deps-0.1.0/target.tar.zst",
+  "reason": "Actual new archive/extracted ELF and dependency audit retained for pending independent review; no extra realization or resource policy change."
+}

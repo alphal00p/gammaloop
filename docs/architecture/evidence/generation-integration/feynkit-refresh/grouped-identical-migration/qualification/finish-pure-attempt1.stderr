@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/grouped-identical-migration-20261031/finish_pure.py", line 16, in <module>
+    assert len(derivers)==1
+           ^^^^^^^^^^^^^^^^
+AssertionError

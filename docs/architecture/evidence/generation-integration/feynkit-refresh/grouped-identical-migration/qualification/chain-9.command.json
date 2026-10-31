@@ -1,0 +1,26 @@
+{
+  "argv": [
+    "nix",
+    "--offline",
+    "--option",
+    "allow-import-from-derivation",
+    "false",
+    "derivation",
+    "show",
+    "/nix/store/12zmlq80hvfxx2wbpv7hdqb1g9yjak9n-gammaloop-crate-feynkit-generator-dependency-deps-0.1.0.drv",
+    "/nix/store/qsvii6clzi2y7iyilsbigspx34gc7z0g-gammaloop-crate-test-dependencies-e1a6f2470f75ab47-deps-0.1.0.drv",
+    "/nix/store/vvjdyngkdsf9ipph7wmkcwqzr1g04an2-gammaloop-crate-test-dependencies-e2c2622702ffb500-deps-0.1.0.drv"
+  ],
+  "cwd": "/tmp",
+  "license_keys_removed": [
+    "SYMBOLICA_LICENSE",
+    "SYMBOLICA_LICENSE_PATH",
+    "SYMBOLICA_LICENSE_SIGNED",
+    "SYMBOLICA_LICENSE_FILE"
+  ],
+  "start": "2026-10-31T03:12:45.106848+00:00",
+  "exit": 0,
+  "end": "2026-10-31T03:12:45.166069+00:00",
+  "stdout_sha256": "09a292892469531c470e5bc89268884397781a1cd82a867b034295f7843b100b",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+}

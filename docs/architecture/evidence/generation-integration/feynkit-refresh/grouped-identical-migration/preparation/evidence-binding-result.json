@@ -1,0 +1,13 @@
+{
+  "status": "FINITE_BINDINGS_PREPARED_FOR_REVIEW",
+  "sealed_files_verified": 4898,
+  "raw_sources": 30,
+  "groups": 29,
+  "raw_owner_bindings": 540,
+  "phase_owner_axis_maps": 1080,
+  "final_owner_bindings": 522,
+  "historical_grouped_equivalence": false,
+  "Auto_aggregation": "AUTO_AGGREGATION_REVIEW_PENDING",
+  "migration": "NEW_MIGRATION_REVIEW_REQUIRED",
+  "native_executions": 0
+}

@@ -1,0 +1,22 @@
+{
+  "encoding": "gzip-chunks",
+  "uncompressed_sha256": "1d598b2215ee329d59a2ded5df59ea21f823325bcc2c68785fdc5cf033be648a",
+  "uncompressed_bytes": 8320370,
+  "parts": [
+    {
+      "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration/qualification/producer-chain.json.gz.part000",
+      "sha256": "9ee7835162607dd77386c2387306f164cf34e81a3d211b5624a9c5d57bca57fe",
+      "bytes": 524288
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration/qualification/producer-chain.json.gz.part001",
+      "sha256": "9026e23ddced06d382d3e0189def6140bf0673dc5ee26768e9b04e76699df731",
+      "bytes": 524288
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration/qualification/producer-chain.json.gz.part002",
+      "sha256": "c3b27b5fa07e6c5e796f1b28dc279c9a3a2d2d5d80a2a1f9e2add3c6ddad9134",
+      "bytes": 381063
+    }
+  ]
+}

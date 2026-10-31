@@ -1,0 +1,47 @@
+{
+  "schema": "root-full-generator-pool1-characterization-acceptance/1",
+  "recorded_utc": "2026-10-31 02:37:40 UTC",
+  "decision": "ACCEPT_EXACT_FULL_PACKAGE_POOL1_CHARACTERIZATION_AND_ASSERTED_SUMMARY_CLASSIFICATION",
+  "review": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-full-generator-characterization-astra-20261031-022430Z-320628f7/review.json",
+  "review_sha256": "fb688585bc7efd0b494fef7648df5abad398f88bfe8c439e8b42c0dd520eaa37",
+  "seal_sha256": "5e4792d8c2a2e678b21f92b3e3e4f28348a9ca8e30d7b8b6edf4d751dc769776",
+  "coordinator_rehashed_review_files": 44,
+  "code": "ffa76ec420642c03349ab756d2d7720ab93c0057",
+  "kernel": "8eb7c3729d6abefc916decc1bdf0c06536f8af80",
+  "actual": {
+    "inventory": 420,
+    "selected": 371,
+    "passed": 302,
+    "failed": 69,
+    "ignored": 49,
+    "errors": 0,
+    "selected_skips": 0,
+    "retries": 0,
+    "exit": 100,
+    "package_runs": 1,
+    "oracle_loop_pool": 1,
+    "all12_approved_rows_pass": true
+  },
+  "historical": "Same420 inventory and371 selected identities as eae78e11/1a1829b1 with298pass73fail49ignored.69 unchanged actual/expected ten-field Summary pairs; four approved literal migrations account for four failure-to-pass transitions. Assertion granularity only.",
+  "findings_retained": {
+    "FULLGEN_I1": "Current explicit oracle pool1 does not recertify complete8/32 coverage; registration tests retain own explicit pools.",
+    "FULLGEN_I2": "Four terminal/archive executables differ by qualified loader packaging. No whole-file equality or oracle-only approval transfer.",
+    "FULLGEN_I3": "69 automatic physical dumps deleted after hash/attribution; retained assertions support classification, not fresh physical decoding.",
+    "FULLGEN_I4": "Numerator-only Summary equality supplies neither physical theorem nor migration authorization."
+  },
+  "remaining_failures": {
+    "GroupingNone": 60,
+    "Identical": 3,
+    "UpToSign": 3,
+    "UpToScalar": 3
+  },
+  "status": "Package remains failing; separate finite correctness and migration evidence required.",
+  "resource_policy": "Unchanged ci_gammaloop240s,zero retries,16workers,two memory-intensive slots; no20GiB cap, no isolated timing credit.",
+  "new_reviewer_native_runs": 0,
+  "root_native_runs": 0,
+  "original_candidate_native_runs": 1,
+  "next": "Existing nextQcdPreflight and groupedMigrationPrep continue under their separate scopes. Host candidate independent review remains active.",
+  "global_integration_advanced": false,
+  "publication_authorized": false,
+  "retention": "Candidate and44-file independent review retained; no root-owned process or VCS mutation."
+}

@@ -1,0 +1,340 @@
+{
+  "schema": "independent-grouped-Auto-aggregation-review/1",
+  "verdict": "APPROVE",
+  "verdict_scope": "PINNED_CONDITIONAL_AUTO_AGGREGATION_HELPER_DURABILITY_AND_NARROW_STRICT_GUARD",
+  "summary": "Approve the concrete finite conjunction of exact observational Scope A and conditional mathematical Scope B at candidate113608b3917d903d0fcc730aa3760f114fbc3f04. Matching consumed records, actual source/owner/phase joins, complete regenerated native input batches and independently replayed B derivations support the theorem under Auto-P1\u2013P5. This is a new independent aggregation recommendation, not root acceptance or migration/integration/publication authorization.",
+  "reviewer": {
+    "model": "gpt-6-astra",
+    "role": "NEW independent aggregation reviewer",
+    "fallback": "User-authorized Astra fallback after Opus unavailability/rate limit",
+    "candidate_implementation_participation": false,
+    "delegation": false
+  },
+  "completed_utc": "2026-10-31T02:33:01.514983+00:00",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families",
+  "review_directory": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-auto-aggregation-astra-20261031-independent-r1-1793413266607828149",
+  "candidate": {
+    "commit": "113608b3917d903d0fcc730aa3760f114fbc3f04",
+    "bookmark": "grouped-auto-aggregation-candidate-20261031-r1",
+    "parent": "ad7ccbe7cee2373ed54fe16d17971491eb581e80",
+    "receipt": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-xs-qed-eemm-identical-auto-aggregation-r1/receipt.json",
+      "sha256": "d7ad071e60426eafe5662b9f5b57fb8484508e99e9967252a342e1abc3f3fce3",
+      "bytes": 6190
+    },
+    "seal": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-xs-qed-eemm-identical-auto-aggregation-r1/seal.json",
+      "sha256": "a2446a215715c2e4757dd08b6f4cccdcc953b2543932671e3c91cd1e8283fb3c",
+      "bytes": 19352
+    },
+    "protected_entry": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-xs-qed-eemm-identical-auto-aggregation-r1/protected_join.py",
+      "sha256": "5cb3d98caf12acb4a72b8b4297ac981e9b9d66290e4e0d838c36eddb0bd31686",
+      "bytes": 20124
+    },
+    "strict_guard": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-xs-qed-eemm-identical-auto-aggregation-r1/strict_guard.py",
+      "sha256": "9e46415689e720c4425d8addfb8fa5f0947a68af664fa09c02d9aeb0fd91568e",
+      "bytes": 4089
+    },
+    "new_tracked_files_only": 102,
+    "all_existing_tracked_bytes_preserved": true
+  },
+  "actual_producer": {
+    "source": "5ba04864ca506e259d9eef4a54f65acdd8323fc2",
+    "built_dependency_archive": "5ea149ffd88ae3afc4072a38c0871c1329be8424",
+    "kernel": "8eb7c3729d6abefc916decc1bdf0c06536f8af80",
+    "later_source_commits_do_not_rename_producer": true,
+    "native_helper_qualification_code": "5ea149ffd88ae3afc4072a38c0871c1329be8424",
+    "native_helper_ELF_sha256": "5141d8fddacf40a81f5452e212cd788daa15c3cb3e6d2290fbfc6b65f76c48e1"
+  },
+  "domain": {
+    "case": "xs_qed_eemm_identical_L2",
+    "classes": "Auto",
+    "grouping": "Identical",
+    "settings": {
+      "check_canonical_numerator": false,
+      "differentiate_particle_masses_only": true,
+      "fully_numerical_substitution": false,
+      "number_of_numerical_samples": 5,
+      "numerical_sample_seed": 3,
+      "symmetric_polarizations": false
+    },
+    "naming": "D",
+    "generation_pool": 1
+  },
+  "conditional_theorem_verbatim": "Assuming Auto-P1\u2013P5, for this exact xs_qed_eemm_identical_L2 Classes::Auto request, each of60 actual source-to-comparison/representative preparations descends through the11->9 sewing quotient to a signed9-edge,18-attached-half-edge,6-vertex physical/rule/slot isomorphism, excluding exactly four absent placeholders. All18 post-construction owner factors correspond with the checked named ports/flags and a commuting formal unimodular4x4 momentum chart. Every raw/comparison/representative/final aggregate numerator is the unexpanded product of its local factors. The unique observed two-member merge, selected by complete physical keys, has exactly ratio1 by the source-matrix local charge-conjugation proof and closed cancellation of eight bispinor ports; its representative relation is induced by the actual sewn maps and loop-negation/external-identity chart. The exact first-match source partition, factors, zero/cancellation decisions and cut/threshold transport yield30->29 with total scalar weight4. Consequently each final factorized decoded numerator times its overall factor equals the factor-weighted sum of the raw decoded numerators of its actual members, up to the certified signed maps and unimodular formal charts. Sampled non-merges carry no non-relation or maximality conclusion.",
+  "root_acceptance": "PENDING_ROOT_ADJUDICATION_OF_THIS_REVIEW",
+  "blocking_findings": [],
+  "prior_findings_disposition": [
+    {
+      "id": "AUTO-A1",
+      "disposition": "CLOSED_FOR_PINNED_AGGREGATION_BY_ADDITIVE_STRICT_GUARD",
+      "evidence": "Fresh unchanged full CLI executes the new strict guard before finite(). Own independent checks confirm all30 sample counts are actual integer5, all60 zero flags are actual Boolean false, all29 cancellation flags are actual Boolean false, all210 member-ratio occurrences across seven30-record populations are nonnull string1, and the three actual comparison ratios are [null,null,string1]. Candidate45 intended-predicate negatives reproduced. Own162 targeted negatives include all30 sample positions, all89 zero/cancellation flags with integer0, last-record missing fields, every member population and each comparison distribution. No generic exception gets rejection credit. Frozen old accepted mutants remain preserved.",
+      "limit": "This is a narrow exact-corpus factual guard, not a general capture schema or changed-capture approval."
+    },
+    {
+      "id": "AUTO-B-N2",
+      "disposition": "CLOSED_FOR_PINNED_AGGREGATION_BY_ADDITIVE_STRICT_GUARD",
+      "evidence": "All30 sample_count=6 heldouts and last-record0/5.0/True/False/string5/null reject strict-sample-count. The old finite checker accepted count6 historically; that record is untouched. Actual valid records and property-order positive pass."
+    },
+    {
+      "id": "AUTO-A2",
+      "disposition": "CLOSED_FOR_CANDIDATE_EXECUTABLE_HELPER_SOURCE_DURABILITY",
+      "evidence": "Read-only pure Python Git object verification establishes the candidate as a102-file packet-only addition directly on ad7ccbe7. All205 original/hash/role/durable bindings equal committed bytes; before/after source bindings match. Independently reconstructed coverage includes53 actual helper sources,59 retained versions, every .rs/.py/.patch input across the four original compile records,20 A/B retained Python files, B executed source reads, unregistered Auto ledger/common modules, parser/checker AST sources and all19 fresh runtime module entries. Genuine observation overlays and source attempts are preserved. This checks executed paths, not merely copied filenames.",
+      "limit": "Full captures, native artifacts/libraries, source trees, large data and native command/results remain necessary at external sealed paths. No portable, relocated or self-contained execution claim. This new independent review itself is retained in authorized ignored storage for root adjudication; no ref mutation was permitted."
+    },
+    {
+      "id": "AUTO-B-N1",
+      "disposition": "ACCEPTED_WITH_EXPLICIT_NARROWED_SCOPE_NOT_REMOVED",
+      "evidence": "Identity derivation uses full physical keys and direct exact32-hex native IDs. Own independent physical matching uses all90 frames exactly once and agrees with source phases. Original B planned rounded-ID positive still fails Auto-raw30-owner, and the one-frame rounded-ID mutation still fails finalization-physical-link in the retained records. Existing full-record predicates continue to compare rounded json.id redundantly. Final record/premise/qualification text says so explicitly; no whole-validator rounded-ID independence is claimed.",
+      "limit": "No arbitrary rounded-ID mutability requirement is imposed on this fixed certificate."
+    }
+  ],
+  "nonblocking_findings": [
+    {
+      "id": "AUTO-AGG-N1",
+      "severity": "info",
+      "location": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-xs-qed-eemm-identical-auto-aggregation-r1/protected_join.py:264",
+      "title": "Hash-heldout comment overstates its original fixture",
+      "evidence": "The comment says the guard projection remains valid, but the candidate fixture changes sample_count to6, which the new strict guard rejects. Its separately invoked verify_records still gives a valid specific frozen-input-hash rejection; the committed receipt claims only that weaker property.",
+      "disposition": "No certificate blocker or source edit. Reviewer added a separate private JSON key-order serialization with all decoded values unchanged, explicitly passed strict_guard.check on it, and observed the intended frozen-input-hash rejection. Stronger property is supported by this new evidence, not retroactively attributed to candidate replay4.",
+      "evidence_binding": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-auto-aggregation-astra-20261031-independent-r1-1793413266607828149/hash-control-result.json",
+        "sha256": "03fa482d811c00e8f5a3774487362eef25541456658125ad7918a5cc71b85f1f",
+        "bytes": 626
+      }
+    }
+  ],
+  "premise_conjunction": {
+    "Auto-P1": "A80e87... and Bac52... bind the identical4207fc... receipt,33218d... original seal,85d6c... ledger,3ad299... FinalFrames, source5ba/archive5ea/kernel8eb and exact Auto request. A actual nine-artifact byte-identical fresh observation supports its exact observational premise. That runtime is reused evidence, not rerun here. Allocation, serialization, I/O, panic, interner/cache effects and finite-only public equality remain explicit.",
+    "Auto-P2": "Own all90 physical/key matches within source-inspected phase populations use no offset as a match selector; every frame is used once, and exact native IDs then agree. The fresh finite replay checks506 exact-ID records, raw/source/census identities and the60 source-induced quotient maps/charts. Normalized keys are not structural IDs; rounded IDs are not identity authority.",
+    "Auto-P3": "Actual decoded observations feed exact30-definition/317-text grammar checks plus8 heldouts. Whole325 native grammar input pairs and labels are regenerated byte-exact. Definition tables remain load-bearing despite native tag-subset tolerance. No raw/cook semantic theorem.",
+    "Auto-P4": "Actual18-owner records, ordered interfaces and flags feed1080 covariance obligations,119 unexpanded15-local-factor products and local source-matrix/closed-port checks. These certify named-port/component transport under captured premises; no positional-consumer/free-index/locality theorem.",
+    "Auto-P5": "Fresh B raw_bridge and independent replay match exact Auto model/request/options/Run/raw30 census and540 typed owners to the separately approved prior-eight/c95 Auto raw application. The exact prior-eight review pin and protected inputs remain intact. No Auto conclusion is inferred from accepted grouped None.",
+    "historical_pending_A": "B remains verbatim, including its historical pending-A wording. The matching actual A approval is supplied additively by the new aggregate; no old review rewritten.",
+    "separate_None": "Review45368ac2... and ad7ccbe7 remain byte-identical and None-only."
+  },
+  "finite_certificate": {
+    "raw_sources": 30,
+    "raw_owners": 540,
+    "exact_native_ID_records": 506,
+    "FinalFrames": 90,
+    "source_induced_11_to_9_quotients": 60,
+    "physical_edges_each": 9,
+    "attached_halfedges_each": 18,
+    "vertices_each": 6,
+    "absent_placeholders_each": 4,
+    "commuting_unimodular_charts": 60,
+    "determinants": {
+      "1": 52,
+      "-1": 8
+    },
+    "covariance_pairs": 1080,
+    "aggregate_unexpanded_products": 119,
+    "grammar_pairs": 325,
+    "actual_decoded_and_port_texts": 317,
+    "grammar_heldouts": 8,
+    "exact_definitions": 30,
+    "local_Weyl_coefficients": 1024,
+    "faithfulness_pairs": 76,
+    "unique_merge_IDs": [
+      "02957fc4e974ffa2c5b5785e8683a949",
+      "5b4c349a74178fbed0bf4321725f53a3"
+    ],
+    "selection": "Actual two-member group first, joined by complete physical keys and exact IDs; D22/D23 and positions22/23, sorted12/15, are consequences.",
+    "merge_proof": "Source Weyl tables, exact integer Gaussian polynomial B derivation,16 Clifford identities,4 C-gamma identities and C-transpose C identity. Eight bispinor ports in each frame close once on an edge and once on a vertex, with no other nonaggregate owner escape. Four vertex signs multiply to+1. Actual sewn maps induce the representative port map and diag(-1,-1,1,1) chart, with all four affected-edge external shifts checked. Exact ratio1; no graph expansion or numeric momentum substitution.",
+    "partition": "Complete first-match replay,27 buckets,3 comparisons, one merge, every source exactly once, all factors/zero/cancellation decisions/cut-threshold unions/final tensor and routing descent checked.30->29, raw weights13(-1)+17(+1), final11(-1)+17(+1)+1(-2), both total4 derived from actual factor trees/member sums.",
+    "nonmerges": "Sampled observations only; no nonrelation or maximality conclusion.",
+    "mathematical_conjunction_not_verdict_strings": true
+  },
+  "fresh_full_protected_CLI": {
+    "ran_unchanged_entry": true,
+    "output": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-aggregation-20261031-r1/review-astra-1793413266607828149",
+    "command": [
+      "/nix/store/3n4qphl9s728sz8frmpqqrv9b1m87g68-python3-3.14.7/bin/python3",
+      "-I",
+      "-S",
+      "-B",
+      "docs/architecture/evidence/generation-xs-qed-eemm-identical-auto-aggregation-r1/protected_join.py",
+      "target/grouped-auto-aggregation-20261031-r1/review-astra-1793413266607828149"
+    ],
+    "environment": "env -i; pinned Python3.14.7 -I -S -B, no -O; login=false",
+    "exit": 0,
+    "tested_final_committed_seal": "a2446a215715c2e4757dd08b6f4cccdcc953b2543932671e3c91cd1e8283fb3c",
+    "before": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-aggregation-20261031-r1/review-astra-1793413266607828149/before.json",
+      "sha256": "00e175240c13a1a8606116f9d42b143f509be210d8e39e1e41abe72a5dad3201",
+      "bytes": 100
+    },
+    "after": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-aggregation-20261031-r1/review-astra-1793413266607828149/after.json",
+      "sha256": "00e175240c13a1a8606116f9d42b143f509be210d8e39e1e41abe72a5dad3201",
+      "bytes": 100
+    },
+    "validation": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-aggregation-20261031-r1/review-astra-1793413266607828149/validation.json",
+      "sha256": "badab6b8102bf607fb36891835c868e75ed3de6024508cd431998f245a8df51c",
+      "bytes": 165
+    },
+    "composition": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-aggregation-20261031-r1/review-astra-1793413266607828149/composition.json",
+      "sha256": "cf49c3574bcf5a5bad9023524a386a792ff979a78bb980103eb0263076bf0218",
+      "bytes": 13587
+    },
+    "all15709_protected_files_five_seals_and100_composition_files_checked_before_after": true,
+    "complete_native_batches_regenerated": [
+      325,
+      2160,
+      238,
+      2048,
+      152
+    ],
+    "Auto_obligations_reused": 2624,
+    "new_native_checker_executions": 0,
+    "B_artifacts_reproduced": [
+      "independent-aggregate-pairs.json",
+      "independent-charts.json",
+      "independent-maps.json",
+      "independent-obligations-result.json",
+      "independent-partition.json",
+      "independent-result.json",
+      "independent-spinor.json",
+      "independent-transport-index.json",
+      "independent-transport-pairs.json",
+      "independent-triangle.json",
+      "pipeline-matrix.json",
+      "raw-bridge-result.json",
+      "registry-result.json"
+    ],
+    "candidate_guard_negatives": 45,
+    "candidate_changed_hash_negative": 1,
+    "own_additional_typed_negatives": 162,
+    "own_positive_checks": 2,
+    "own_guard_valid_changed_hash_negative": 1,
+    "scope_of_prior_replay4": "Original successful replay4 used60982a... seal. Independently compared old/new read maps: only seven packet metadata/document/seal files differ; no old read is missing,83 additional read bindings are present, mathematical code and original inputs are unchanged. This review additionally runs the actual final-seal fullCLI; it does not substitute private function-only execution for that claim."
+  },
+  "native_evidence": {
+    "fresh": "Pure regeneration and record/result/byte binding checks only.",
+    "reused": "Exact original independent native n1 grammar,n2 covariance,n3 aggregate,n10 local,n10 faithfulness command/results under ELF5141d8... and kernel8eb. Full ordered batch bytes, argv helper association,input-before/after invariance,result counts,exact five-Boolean schemas,stdout/stderr pins checked. Only parsed/canonical equality proves the input relations; sign/coefficient/power controls are not substitute pair proofs.",
+    "registration_order": "Whole batches preserve all prior left/right parse calls and historical/None entries. B pure registry proof replays complete definition consistency in both field orders/reversed batch; no new native reverse-order run.",
+    "no_crosscredit": "Historical/None portions preserve whole-program input order only. No Auto mode evidence, old producer qualification or kernel relabel is inferred from them."
+  },
+  "adapter_review": {
+    "output_only_AST_changes": 7,
+    "independent_AST_round_trip": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-auto-aggregation-astra-20261031-independent-r1-1793413266607828149/adapter-audit.json",
+      "sha256": "cfa51175f9c2fb178d24b6a730bd3f3d577df790563114b6227fe2c2fb404de1",
+      "bytes": 1474
+    },
+    "details": "For each actual adapted source, independently undo private_output_method wrappers, restore the one removed sys.addaudithook registration and compare the entire AST without locations to the original. Exact match. Common.write is redirected to private output; B receives private HERE/save and the same prepared R. No original proof predicate or input is rewritten. U/spinor still read sealed original intermediate records, but preceding regeneration/equality assertions bind each one to the private regenerated result before reuse.",
+    "boundary": "Reviewed cooperative source/fixture filesystem. Private output audit denies outside writes and application subprocess/network/ctypes execution. No general adversarial Python sandbox, TOCTOU-resistant filesystem or arbitrary-import guarantee is inferred."
+  },
+  "immutability": {
+    "before": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-auto-aggregation-astra-20261031-independent-r1-1793413266607828149/before-integrity.json",
+      "sha256": "ca384cb06e74bb853e93bc3896e8db12a04242dbc851b2a8dcbaba5f8e168529",
+      "bytes": 2437
+    },
+    "after": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-auto-aggregation-astra-20261031-independent-r1-1793413266607828149/after-integrity.json",
+      "sha256": "5eb8fa378581b427e8d305133e71dd5d9dcec5cb01be3391cc8aac0e076c0b1c",
+      "bytes": 2437
+    },
+    "tracked_files_unchanged": 4557,
+    "protected_files_unchanged": 15709,
+    "source_bindings_unchanged": 205,
+    "main_index_unchanged": true,
+    "named_refs_unchanged": [
+      "grouped-auto-aggregation-candidate-20261031-r1",
+      "grouped-none-aggregation-candidate-20261030-r1",
+      "grouped-none-helper-durability-20261030-r1",
+      "generation-feynkit-refresh-clean-code",
+      "generation-feynkit-refresh-clean-replay",
+      "generation-feynkit-refresh-precision-code"
+    ],
+    "no_jj_snapshot_ref_or_index_mutation": true,
+    "no_general_global_operation_invariance_claim": true,
+    "all_original_inputs_errors_reviews_and_scratch_retained": true
+  },
+  "retained_qualifications": [
+    "P1\u2013P4 remain captured-observation premises; finite public equality does not prove universal observer transparency. Observer allocation/I/O/panic/interner/cache effects retained.",
+    "Actual source5ba,dependency archive5ea,kernel8eb and qualified diagnostic source-only/current-kernel profiles. No broad CI/dev/Clippy qualification. Qualified build/store honesty remains inherited.",
+    "Generation pool1 is not a process-wide single-thread theorem.",
+    "Original candidate and A selected tests both exit101 at the old numerator literal. No passing-test credit or expectation change.",
+    "Historical frames retain consistency value with unapproved original producer provenance. Old12 unresolved compiler diagnostics plus terminal abort, initial missing-source limits and historical c78/1a roles remain unchanged.",
+    "All original errors retained: normalized-key->ID setup mistake; skipped prior-eight placeholder then corrected full pin; NDG leaf-parser failure/repeated retained stderr with first stderr transcript-only; malformed discarded definition control; B missing-key/report-key errors and failed rounded-ID positive; aggregate preparation path/absent-sidecar and replay1\u20133 failures. None counted as meaningful semantic rejection.",
+    "4586 retained regular source files do not assert a symlink-complete checkout; eleven unrelated layout/notebook symlinks omitted. Embedded source metadata is corroboration only (graph23/24,amplitude3/3,generator12/26,stripped test0/26).",
+    "Complete source/hash binding does not make external captures/libraries/data portable or self-contained.",
+    "Typst single title,all relative links and subordinate registered-owner metadata checked only; unrendered, no full documentation validation."
+  ],
+  "excluded": [
+    "raw/cooked-decoded semantic theorem",
+    "positional interface/free-index/physical-locality theorem",
+    "denominators/full-integrand theorem",
+    "sampled non-relation/maximality",
+    "literal/token/expectation migration",
+    "production/grouping-option changes",
+    "WP3/WP9 completion or integration/publication approval",
+    "other Classes modes/rows/pools",
+    "historical/current grouped equivalence",
+    "global integration approval"
+  ],
+  "constraints_and_own_errors": {
+    "no_build_compiler_Nix_network_native_checker_observer_browser_or_delegation": true,
+    "no_application_native_library_loaded": true,
+    "no_explicit_private_license_or_runtime_config_read": true,
+    "pure_execution": "All review programs ran env -i with exact pinned Python -I -S -B. VCS verification was pure read-only Git object/JJ protobuf parsing, no VCS process or metadata write.",
+    "initial_setup_error": {
+      "initial_shell_attempt": {
+        "command": "env -i /bin/bash --noprofile --norc ...",
+        "exit": 127,
+        "error": "env: /bin/bash: No such file or directory",
+        "effect": "No requested read ran; default tool shell login semantics were inadvertently used for this first read-only attempt. All subsequent calls use login=false and env -i pinned Python. No explicit secret/config read; no shell-startup syscall audit claimed."
+      }
+    },
+    "configuration_hashing": "Complete frozen inventories necessarily hash repository source configuration bytes as inert sealed data; they are never sourced/interpreted. No license/private configuration file is explicitly read.",
+    "owned_processes_remaining": []
+  },
+  "evidence": {
+    "controls-result.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-auto-aggregation-astra-20261031-independent-r1-1793413266607828149/controls-result.json",
+      "sha256": "8998763ffbd352c98a67524f3bdc0257478ae0d1661cb2514f428ce62a0df53c",
+      "bytes": 26826
+    },
+    "closure-audit.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-auto-aggregation-astra-20261031-independent-r1-1793413266607828149/closure-audit.json",
+      "sha256": "28023effbde7b64972301e27e1594aae836330115b0e3ffd1198afd332f15187",
+      "bytes": 919
+    },
+    "joins-result.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-auto-aggregation-astra-20261031-independent-r1-1793413266607828149/joins-result.json",
+      "sha256": "98fa30ac4d232de0cb21dc635ebfa7aab2802623db7b07e0f22bd359cd549ac0",
+      "bytes": 15658
+    },
+    "hash-control-result.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-auto-aggregation-astra-20261031-independent-r1-1793413266607828149/hash-control-result.json",
+      "sha256": "03fa482d811c00e8f5a3774487362eef25541456658125ad7918a5cc71b85f1f",
+      "bytes": 626
+    },
+    "cli-completion.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-auto-aggregation-astra-20261031-independent-r1-1793413266607828149/cli-completion.json",
+      "sha256": "d83cc87dfd6ad4295ba0c64d94704f6c902a20c8159a221fe73d9443c412087f",
+      "bytes": 834
+    },
+    "adapter-audit.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-auto-aggregation-astra-20261031-independent-r1-1793413266607828149/adapter-audit.json",
+      "sha256": "cfa51175f9c2fb178d24b6a730bd3f3d577df790563114b6227fe2c2fb404de1",
+      "bytes": 1474
+    }
+  },
+  "retention": {
+    "directories": [
+      "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-auto-aggregation-astra-20261031-independent-r1-1793413266607828149",
+      "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-aggregation-20261031-r1/review-astra-1793413266607828149"
+    ],
+    "purpose": "Keep all independent scripts,probe declarations/results,private ledger fixture,logs,source/Git bindings and full freshCLI outputs for root adjudication and continuation. No existing artifact was overwritten, deleted or cleaned. No owned process remains.",
+    "review_durable_ref_mutation": "Not authorized/performed; candidate durable named reference verified unchanged."
+  },
+  "hash_binding": "review.json.sha256 binds exact review.json. seal.json covers every local review file except itself/seal.sha256 and also binds every regular file in the sole freshCLI output tree. seal.sha256 binds seal.json. No circular self-hash."
+}

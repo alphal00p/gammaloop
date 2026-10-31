@@ -1,0 +1,16 @@
+{
+  "Nix_commands": 25,
+  "selected_build_calls": 1,
+  "all_exit_zero_before_boundary": true,
+  "boundary": "2026-10-31T03:14:51.679059+00:00",
+  "licensed_start": "2026-10-31T03:15:48.929573+00:00",
+  "Nix_calls_after_licensed_start": 0,
+  "compiler_calls_after_licensed_start": 0,
+  "four_private_variables_removed": [
+    "SYMBOLICA_LICENSE",
+    "SYMBOLICA_LICENSE_PATH",
+    "SYMBOLICA_LICENSE_SIGNED",
+    "SYMBOLICA_LICENSE_FILE"
+  ],
+  "realization_script_environment": "Four exclusions; no private input read. Later graph/qualification queries use explicit environment allowlist."
+}

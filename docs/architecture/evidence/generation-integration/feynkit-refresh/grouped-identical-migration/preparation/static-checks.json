@@ -1,0 +1,35 @@
+{
+  "Python_AST_parsed": [
+    "bind_evidence.py",
+    "finalize.py",
+    "auto_rebind.py",
+    "verify_closure.py",
+    "reconstruct.py",
+    "inspect.py",
+    "strict_guard_source_copy.py",
+    "chain_controls.py"
+  ],
+  "Typst_single_title": true,
+  "Typst_relative_links_checked": [
+    "proposed-NOT-APPLIED.patch",
+    "patch-binding.json",
+    "reconstructed-None-row.json",
+    "source-invariance.json",
+    "new-characterization-observation.json",
+    "raw30-current-owner-bindings.json",
+    "source-phase-owner-axis-maps.json",
+    "membership-weight-payload-chain.json",
+    "physical-chain-reconstruction.json",
+    "dependency-gap-matrix.json",
+    "Auto-separate-exact-rebind.json",
+    "strict-factual-guards.json",
+    "consumer-interface-boundary.json",
+    "focused-negative-controls.json",
+    "complete-input-guard.json",
+    "workspace-guard.json",
+    "manifest.json",
+    "seal.json"
+  ],
+  "unrendered": true,
+  "no_linter_compiler_or_native_checks": true
+}

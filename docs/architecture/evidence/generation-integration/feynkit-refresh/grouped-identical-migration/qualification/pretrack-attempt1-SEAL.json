@@ -1,0 +1,19 @@
+{
+  "schema": "grouped-identical-migration-evidence-seal/1",
+  "status": "NEW_INDEPENDENT_INTEGRATION_REVIEW_REQUIRED",
+  "code": "6f41807b064bcf2f579883134daef65c8ac279d3",
+  "accepted_base": "457e361d7d39e0a3daae801651f8c1dfabbf47aa",
+  "manifest_sha256": "031ec8b561d3839919296a4f68b0e14bbd47d0ed22780d62cf666d0eca51b0e9",
+  "receipt_sha256": "8e2596fdb67640f91b70697f7a8f53006334deca02fdffc3a4f3aa8b6676f00d",
+  "canonical_note_sha256": "537751fc110c4a379c869f49e757a954245920312d10616ecb379764fa40cfd7",
+  "files": 412,
+  "bytes": 21378711,
+  "actual_selected_executions": 39,
+  "actual_failures_retries_skips": 0,
+  "self_or_integration_approval": false,
+  "declared_large_input_binding": "large-evidence-bindings.json",
+  "exclusions": [
+    "SHA256SUMS (bound by seal)",
+    "SEAL.json (exact hash returned separately)"
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "candidate_ordinary_files": 71,
+  "candidate_pins": {
+    "SHA256SUMS": "c91611445713af77e9bd8acd0c5de60f0a93318048fc88086761119dcee3c065",
+    "handoff.json": "6279084309a00acfadede1c160cee1a2715f5b45a2e16e82dfba3470194b099c",
+    "manifest.json": "2b767c3244605ab814c5dce3eab09fbe846bd10cc3b74b58b1dae7e45b5fe1f4",
+    "proposed-NOT-APPLIED.patch": "2450f56adfe23ea3b157b4d687c4ad6edd39866ff841f6ba8e85fa6f6d864fb7",
+    "seal.json": "49bfcf3c5b9bf9dd67552b5811498f2c3a80d12c1813c9aba973497ad0635b42"
+  },
+  "configuration_note": "Complete frozen repository/config-source bytes are inert hash inputs only; no private license/environment/tool config is inspected or sourced.",
+  "expected": 15899,
+  "mismatches": [],
+  "no_VCS_process_or_ref_index_operation": true,
+  "private_config_reads": 0,
+  "registry": {
+    "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/docs/developers.toml": "9e2ef1846586777d052bed6848d2d63dec7b9a8ebf4a5dca6059786d6f00b59f",
+    "/shared/lcnbr/dev/gammaloop/generation-integration-plan/docs/developers.toml": "37773f677663cafae0a8b873e60f5e5b7d4d93e30f9bf6040ea6e4ca138dcf9b",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/developers.toml": "a6198024711b0ca52420c7f5239a8cf525560f25c664efc5c920c8758876d641",
+    "/shared/lcnbr/dev/gammaloop/main/docs/developers.toml": "fb48db632a743f19ed76f090f809ab13d76c66c697e3f4a71bcfe8e6ebddd0ec"
+  },
+  "root_and_review_seals": {
+    "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/root-full-generator-pool1-acceptance-20261031.json": "297b23048d86665efa8832b50848173a6ae7a08a5b45251ef8e9e15fb3377b87",
+    "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/root-grouped-auto-acceptance-20261031.json": "e0a659e8798eba47179623e218340852c1d2fafe2ca09d03bc1b7e6a9ede86e4",
+    "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/root-grouped-none-acceptance-20261031.json": "8141146a38484454c8fc65d72845f0f360c462bc16604349d67fb8fdf25d1224",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-auto-aggregation-astra-20261031-independent-r1-1793413266607828149/seal.json": "fea4337d34fb0f22c71f6e80b33be456db9d1193d80be46fb68b5d2cb4eb5a9f",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-none-aggregation-astra-20261030-independent-b1/seal.json": "abd2b7018207a7925c712d4b555b2910299619b3cb06408236a349ae4749cb90"
+  },
+  "utc": "2026-10-31T02:55:36.998701+00:00",
+  "verified": 15899
+}

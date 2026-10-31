@@ -1,0 +1,7 @@
+	linux-vdso.so.1 (0x00007b5fe1a46000)
+	libpython3.13.so.1.0 => /nix/store/wj1f56qky4pmjc7l0r6b6l7whnnw7hp6-python3-3.13.15/lib/libpython3.13.so.1.0 (0x00007b5fde5e2000)
+	libgcc_s.so.1 => /nix/store/604gsr59rj7dzd0nrhp143rpvf7gyiaz-gcc-15.3.0-lib/lib/libgcc_s.so.1 (0x00007b5fde5b5000)
+	libm.so.6 => /nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84/lib/libm.so.6 (0x00007b5fde4bd000)
+	libc.so.6 => /nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84/lib/libc.so.6 (0x00007b5fde2b4000)
+	/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84/lib/ld-linux-x86-64.so.2 (0x00007b5fe1a48000)
+	libdl.so.2 => /nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84/lib/libdl.so.2 (0x00007b5fde2ad000)

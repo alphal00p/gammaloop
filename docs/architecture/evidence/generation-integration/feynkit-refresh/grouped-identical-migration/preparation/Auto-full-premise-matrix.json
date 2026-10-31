@@ -1,0 +1,186 @@
+{
+  "premises": [
+    {
+      "id": "Auto-P1",
+      "premise": "The actual Auto NamingD ledger and90 FinalFrames are faithful observations of the pinned source5ba plus observation-only overlay under the exact qualified8eb diagnostic closure.",
+      "qualification": "Actual A exact-observation approval and fresh nine-artifact replay now bound. Observer allocation/serialization/I/O/panic/interner/cache effects remain; finite six-public-file equality only.",
+      "candidate_original_support": [
+        {
+          "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-fresh8eb-20261031-r1/source-manifest.json",
+          "sha256": "2acafbc009c98bcbcd79832c5377ffb74f6ad952df48be884ead12aff60dde92",
+          "bytes": 901605
+        },
+        {
+          "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-fresh8eb-20261031-r1/precompile-design.json",
+          "sha256": "6c630d9e6d0423e07d8305e46df6ac96f705319087b5c7f2449d4a3ec7353357",
+          "bytes": 5385
+        },
+        {
+          "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-fresh8eb-20261031-r1/compiled/generation_oracle/command.json",
+          "sha256": "e5beb2a4e89ca9c5449e3ce4381793fb7c5649eb8eea98274e72bdb1ee0870f8",
+          "bytes": 47769
+        },
+        {
+          "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-fresh8eb-20261031-r1/observer-runtime/command.json",
+          "sha256": "4bccc700108ecac7d2204fbe5c63fd7b88f9191069c5924bfb4956b992aea77b",
+          "bytes": 19184
+        },
+        {
+          "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-fresh8eb-20261031-r1/runtime-result.json",
+          "sha256": "d4518acdc0bdf1db4f619c1cbbe827df5634124ff6c826a5446e4b5bc82f95a2",
+          "bytes": 5070
+        },
+        {
+          "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-fresh8eb-20261031-r1/dependency-byte-joins.json",
+          "sha256": "b839efada35c4ec4a511ae774712c8795f2be4c1894f485ebd4bfdea4c053586",
+          "bytes": 29410
+        }
+      ],
+      "A_support": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-auto-provenance-astra-20261031-independent-c1/review.json",
+        "sha256": "80e87bc1dfc062183d1d5bb62b2ca889b1ebc6f82461fc9e1b033259c79e3d5a",
+        "bytes": 28036
+      },
+      "B_derivation": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-auto-math-astra-20261031-independent-b1/review.json",
+        "sha256": "ac52b96f58e87e9180c5c7083d9dccdf973de38fa66aee549bcb7341d01dd76a",
+        "bytes": 21040
+      },
+      "aggregation_status": "PROPOSED_CONDITIONAL; pending independent aggregation review"
+    },
+    {
+      "id": "Auto-P2",
+      "premise": "Captured provisional maps, builder projection, actual native FinalFrames and source-derived phase associations belong to their exact Auto source/phase/full physical key.",
+      "qualification": "Identity derivation uses direct exact native hex/full physical keys. Existing raw30/full-record/finalization predicates still compare rounded json.id redundantly; the whole validator is not rounded-ID-independent.",
+      "candidate_original_support": [
+        {
+          "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-fresh8eb-20261031-r1/capture-guard.json",
+          "sha256": "370e8775f5ed59a21bbb1954c7c4760e77299f3c597d500a24d541c48c13bf40",
+          "bytes": 471957
+        },
+        {
+          "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-fresh8eb-20261031-r1/capture-binding.json",
+          "sha256": "64ddf931d8d25a33f03b619d238c2b1009d174233bc9e9d40ac5e5f1a083854b",
+          "bytes": 474220
+        },
+        {
+          "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-fresh8eb-20261031-r1/maps.json",
+          "sha256": "9d809742d2c763f9eaaeae9d4e19a2b95eddd2b7154b0457e8145b82d52d8c62",
+          "bytes": 60326
+        }
+      ],
+      "A_support": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-auto-provenance-astra-20261031-independent-c1/review.json",
+        "sha256": "80e87bc1dfc062183d1d5bb62b2ca889b1ebc6f82461fc9e1b033259c79e3d5a",
+        "bytes": 28036
+      },
+      "B_derivation": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-auto-math-astra-20261031-independent-b1/review.json",
+        "sha256": "ac52b96f58e87e9180c5c7083d9dccdf973de38fa66aee549bcb7341d01dd76a",
+        "bytes": 21040
+      },
+      "aggregation_status": "PROPOSED_CONDITIONAL; pending independent aggregation review"
+    },
+    {
+      "id": "Auto-P3",
+      "premise": "Decoded tensor strings are the actual producer uncook observations and use the exact checked definitions.",
+      "qualification": "All finite raw strings equal decoded strings, but no general raw/cooked/decoded semantic theorem follows. Exact Python definition tables are required despite native tag-subset tolerance.",
+      "candidate_original_support": [
+        {
+          "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-fresh8eb-20261031-r1/definitions.json",
+          "sha256": "42148382f8f04c9598df92e2627f2e1a5810f77be7d71d1fbc24a040e8b83cfd",
+          "bytes": 1625
+        },
+        {
+          "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-fresh8eb-20261031-r1/grammar-texts.json",
+          "sha256": "973a1739dde89394ca24f26f20f9e8f68874ea5634a69c5690f60bfabc7b4222",
+          "bytes": 2345371
+        },
+        {
+          "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-fresh8eb-20261031-r1/reuse-batches/grammar/pairs.json",
+          "sha256": "21cc445ab8540dad75b7ec6046e5442e072d8f6b5778b71ca2591d9fff9926c3",
+          "bytes": 2033237
+        }
+      ],
+      "A_support": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-auto-provenance-astra-20261031-independent-c1/review.json",
+        "sha256": "80e87bc1dfc062183d1d5bb62b2ca889b1ebc6f82461fc9e1b033259c79e3d5a",
+        "bytes": 28036
+      },
+      "B_derivation": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-auto-math-astra-20261031-independent-b1/review.json",
+        "sha256": "ac52b96f58e87e9180c5c7083d9dccdf973de38fa66aee549bcb7341d01dd76a",
+        "bytes": 21040
+      },
+      "aggregation_status": "PROPOSED_CONDITIONAL; pending independent aggregation review"
+    },
+    {
+      "id": "Auto-P4",
+      "premise": "Captured ordered interfaces, owners, flags and physical incidence/source metadata are the observed producer values.",
+      "qualification": "Named port transport and exact local component algebra do not prove positional consumers, free-index typing, physical locality or full-integrand equality.",
+      "candidate_original_support": [
+        {
+          "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-fresh8eb-20261031-r1/Auto-None-correspondence.json",
+          "sha256": "56770ebc8bd32a0834334db31fc3801a0c6c9389eda4a7cbf87cedad33293b06",
+          "bytes": 159987
+        },
+        {
+          "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-fresh8eb-20261031-r1/transport/index.json",
+          "sha256": "650956fcbf61c6c4d7a3d7cecfc86faf95fde306d8bd5d2c3376ad0a0673382d",
+          "bytes": 229098
+        },
+        {
+          "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-fresh8eb-20261031-r1/spinor/source-matrix.json",
+          "sha256": "4366b835b255992c7804dc5b8cb04abdfb4289dc0b809a5a2c371d824a769c03",
+          "bytes": 38636
+        }
+      ],
+      "A_support": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-auto-provenance-astra-20261031-independent-c1/review.json",
+        "sha256": "80e87bc1dfc062183d1d5bb62b2ca889b1ebc6f82461fc9e1b033259c79e3d5a",
+        "bytes": 28036
+      },
+      "B_derivation": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-auto-math-astra-20261031-independent-b1/review.json",
+        "sha256": "ac52b96f58e87e9180c5c7083d9dccdf973de38fa66aee549bcb7341d01dd76a",
+        "bytes": 21040
+      },
+      "aggregation_status": "PROPOSED_CONDITIONAL; pending independent aggregation review"
+    },
+    {
+      "id": "Auto-P5",
+      "premise": "The separately approved prior-eight raw30 Auto finite certificate applies to these exact Auto inputs.",
+      "qualification": "Full current Auto Request/model/options/Run and raw30 census plus all540 typed owners match independently approved Auto data. This is independent Auto credit; accepted grouped None supplies no mode approval.",
+      "candidate_original_support": [
+        {
+          "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-fresh8eb-20261031-r1/accepted-inputs.json",
+          "sha256": "b4f2408ace2d5c50c02e6faa156d95adf3614dd7544467cfb2f68a61bebdc196",
+          "bytes": 45805
+        },
+        {
+          "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-fresh8eb-20261031-r1/capture-guard.json",
+          "sha256": "370e8775f5ed59a21bbb1954c7c4760e77299f3c597d500a24d541c48c13bf40",
+          "bytes": 471957
+        },
+        {
+          "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-fresh8eb-20261031-r1/frozen-inputs-final.json",
+          "sha256": "1100c1f6e22f654c4ca69fb5b13dae8a8ef0373bb458ba734edfc21180c2e96c",
+          "bytes": 1506027
+        }
+      ],
+      "A_support": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-auto-provenance-astra-20261031-independent-c1/review.json",
+        "sha256": "80e87bc1dfc062183d1d5bb62b2ca889b1ebc6f82461fc9e1b033259c79e3d5a",
+        "bytes": 28036
+      },
+      "B_derivation": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-auto-math-astra-20261031-independent-b1/review.json",
+        "sha256": "ac52b96f58e87e9180c5c7083d9dccdf973de38fa66aee549bcb7341d01dd76a",
+        "bytes": 21040
+      },
+      "aggregation_status": "PROPOSED_CONDITIONAL; pending independent aggregation review"
+    }
+  ],
+  "conditional_capture_premises_remain": true,
+  "root_Auto_approval": "PENDING_NEW_INDEPENDENT_AGGREGATION_REVIEW"
+}

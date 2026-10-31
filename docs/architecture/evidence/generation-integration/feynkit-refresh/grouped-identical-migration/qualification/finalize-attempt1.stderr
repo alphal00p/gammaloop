@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/grouped-identical-migration-20261031/finalize.py", line 105, in <module>
+    if p.is_file() and p.name!='retained-actual-archive.tar.zst':cp(p,'qualification/'+p.name)
+                                                                 ~~^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/grouped-identical-migration-20261031/finalize.py", line 102, in cp
+    assert dest.stat().st_size<=1048576
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError

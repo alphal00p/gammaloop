@@ -1,0 +1,101 @@
+{
+  "characterization_path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/full-generator-characterization-20261031-r1/characterization.json",
+  "characterization_sha256": "27d2a759526fb0be9fdc29cb4666be5698e6f675715264e5243fcb1cbaad647d",
+  "seal_sha256": "f5a23e6157c9430bcea95a8f1c89c3ac0c79db40a8ed4d521b717723fb18ff55",
+  "first_failure_records": [
+    {
+      "binary": "feynkit-generator::generation_oracle",
+      "name": "xs_qed_eemm_identical_L2",
+      "status": "failed",
+      "seconds": 3.693,
+      "junit_attributes": {
+        "name": "xs_qed_eemm_identical_L2",
+        "classname": "feynkit-generator::generation_oracle",
+        "timestamp": "2026-10-31T02:09:54.630+00:00",
+        "time": "3.693"
+      },
+      "failure_attributes": {
+        "message": "thread 'xs_qed_eemm_identical_L2' (66919) panicked at crates/feynkit-generator/tests/generation_oracle/main.rs:147:9",
+        "type": "test failure with exit code 101"
+      },
+      "raw_failure": "thread 'xs_qed_eemm_identical_L2' (66919) panicked at crates/feynkit-generator/tests/generation_oracle/main.rs:147:9:\nassertion `left == right` failed: xs_qed_eemm_identical_L2: summary differs from its oracle row\n  left: Summary { diagrams: 29, topologies: 157, assignments: 714, inverse_symmetry: Fraction { numerator: 29, denominator: 1 }, weights: Fraction { numerator: 4, denominator: 1 }, symmetry_factors: [(1, 29)], content: 14332662944654766447, numerators: 11965487560827894243, named: 4427813161249353281, ids: 14779335372597709007 }\n right: Summary { diagrams: 29, topologies: 157, assignments: 714, inverse_symmetry: Fraction { numerator: 29, denominator: 1 }, weights: Fraction { numerator: 4, denominator: 1 }, symmetry_factors: [(1, 29)], content: 14332662944654766447, numerators: 70588155281068377, named: 4427813161249353281, ids: 14779335372597709007 }\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace",
+      "stdout": "\nrunning 1 test\ntest xs_qed_eemm_identical_L2 ... FAILED\n\nfailures:\n\nfailures:\n    xs_qed_eemm_identical_L2\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 182 filtered out; finished in 3.67s\n\n",
+      "stderr": "xs_qed_eemm_identical_L2: historical row: complete failure inventories: /work/tmp/oracle-failure-xs_qed_eemm_identical_L2__historical_row-66917\n\nthread 'xs_qed_eemm_identical_L2' (66919) panicked at crates/feynkit-generator/tests/generation_oracle/main.rs:147:9:\nassertion `left == right` failed: xs_qed_eemm_identical_L2: summary differs from its oracle row\n  left: Summary { diagrams: 29, topologies: 157, assignments: 714, inverse_symmetry: Fraction { numerator: 29, denominator: 1 }, weights: Fraction { numerator: 4, denominator: 1 }, symmetry_factors: [(1, 29)], content: 14332662944654766447, numerators: 11965487560827894243, named: 4427813161249353281, ids: 14779335372597709007 }\n right: Summary { diagrams: 29, topologies: 157, assignments: 714, inverse_symmetry: Fraction { numerator: 29, denominator: 1 }, weights: Fraction { numerator: 4, denominator: 1 }, symmetry_factors: [(1, 29)], content: 14332662944654766447, numerators: 70588155281068377, named: 4427813161249353281, ids: 14779335372597709007 }\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n",
+      "smallest_asserted_different_field": "numerators",
+      "all_differing_fields": [
+        "numerators"
+      ],
+      "actual_vs_expected_summary": {
+        "left": {
+          "diagrams": "29",
+          "topologies": "157",
+          "assignments": "714",
+          "inverse_symmetry": "Fraction { numerator: 29, denominator: 1 }",
+          "weights": "Fraction { numerator: 4, denominator: 1 }",
+          "symmetry_factors": "[(1, 29)]",
+          "content": "14332662944654766447",
+          "numerators": "11965487560827894243",
+          "named": "4427813161249353281",
+          "ids": "14779335372597709007"
+        },
+        "right": {
+          "diagrams": "29",
+          "topologies": "157",
+          "assignments": "714",
+          "inverse_symmetry": "Fraction { numerator: 29, denominator: 1 }",
+          "weights": "Fraction { numerator: 4, denominator: 1 }",
+          "symmetry_factors": "[(1, 29)]",
+          "content": "14332662944654766447",
+          "numerators": "70588155281068377",
+          "named": "4427813161249353281",
+          "ids": "14779335372597709007"
+        }
+      },
+      "panic_location": "crates/feynkit-generator/tests/generation_oracle/main.rs:147:9",
+      "case_definition": {
+        "kind": "cross_section",
+        "case": "xs_qed_eemm_identical_L2",
+        "grouping_expression": "Grouping::Identical",
+        "zero_color_filter": false,
+        "literal_constructor": "cross_section(\"xs_qed_eemm_identical_L2\", Model::qed, EE, MUMU, 2, plain)\n        .with_grouping(Grouping::Identical)",
+        "source": "crates/feynkit-generator/tests/generation_oracle/cases.rs",
+        "line": 820,
+        "row_source": "crates/feynkit-generator/tests/generation_oracle/main.rs",
+        "row_line": 334
+      },
+      "mode": "Returned Classes::None historical literal after current None/Auto physical/Named/Minimal checks completed",
+      "loop_pool": 1,
+      "first_failure_boundary": "Historical numerator-digest literal comparison after successful current classes pipeline",
+      "physics_equivalence_proven": false,
+      "normalization_performed": false,
+      "priority": "P1 separate conditional certificates; no migration",
+      "next_required_producer": "For this exact grouping/mode/request, independently qualify source-group membership, factorized full numerators, signed routing and operand/output-axis transports. Retain count/weight and conditional premises; no numerator normalization or equal-count inference.",
+      "historical_same_name_failed": true,
+      "historical_actual_summary": {
+        "diagrams": "29",
+        "topologies": "157",
+        "assignments": "714",
+        "inverse_symmetry": "Fraction { numerator: 29, denominator: 1 }",
+        "weights": "Fraction { numerator: 4, denominator: 1 }",
+        "symmetry_factors": "[(1, 29)]",
+        "content": "14332662944654766447",
+        "numerators": "11965487560827894243",
+        "named": "4427813161249353281",
+        "ids": "14779335372597709007"
+      },
+      "historical_actual_to_current_actual_differing_fields": [],
+      "historical_asserted_summary_pair_identical": true
+    }
+  ],
+  "scope": "pool1, codeffa76ec; 302pass69fail49ignored,371selected420inventory. Runtime first-failure observation only; physical dumps hashed then removed, no new payload-equivalence or passing-after-patch credit.",
+  "review_at_initial_read": "PENDING_INDEPENDENT_REVIEW",
+  "current_review": "ROOT_ACCEPTED_EXACT_POOL1_CHARACTERIZATION_ASSERTION_ONLY",
+  "accepted_binding": {
+    "review": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-full-generator-characterization-astra-20261031-022430Z-320628f7/review.json",
+    "review_sha256": "fb688585bc7efd0b494fef7648df5abad398f88bfe8c439e8b42c0dd520eaa37",
+    "seal_sha256": "5e4792d8c2a2e678b21f92b3e3e4f28348a9ca8e30d7b8b6edf4d751dc769776",
+    "root_record": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/root-full-generator-pool1-acceptance-20261031.json",
+    "root_record_sha256": "297b23048d86665efa8832b50848173a6ae7a08a5b45251ef8e9e15fb3377b87",
+    "scope": "Accepted characterization/asserted-summary classification only; no payload equivalence, new native or mathematical/migration approval."
+  }
+}

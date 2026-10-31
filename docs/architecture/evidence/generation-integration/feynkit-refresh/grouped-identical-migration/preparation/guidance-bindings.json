@@ -1,0 +1,12 @@
+{
+  "files": {
+    "/shared/lcnbr/dev/gammaloop/AGENTS.md": "73cc2124e5437bd38fc03022b69097577eb89340fb7ef846fa8bd49af9820925",
+    "/shared/lcnbr/dev/gammaloop/main/AGENTS.md": "8567f7ce8b5c575299d0800af34f66c9684e6b1b2617c615f5d8823df9a971fa",
+    "/shared/lcnbr/dev/gammaloop/main/CONTRIBUTING.typ": "c92c023af016d801889eea170203916c4f50bd6dce848ac18484e0b04667c2e1",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/AGENTS.md": "e1add0d8d63969c9218b31a8caa12539776b8e2db4b8d72ce5e2af6154082645",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/CONTRIBUTING.typ": "109a7a0caaf9d654291f1ea62cd72dde21ea81b40048c9c7089f89e154a8f9fa",
+    "/shared/lcnbr/dev/gammaloop/generation-integration-plan/docs/architecture/generation-integration-plan.typ": "4489dc7383468cf2daf7f8c177d3ea87fe9cad45c99af1afc0f160b202ff06f6"
+  },
+  "applicable_local_guidance": "rg --files found only root AGENTS/CONTRIBUTING and unrelated crates/vakint/AGENTS; no additional target/local guidance applies.",
+  "user_scope_precedence": "Resume existing workspace, ignored-output-only; user forbids tracked edits, VCS mutations and builds. No new workspace/JJ change or CI toggle is appropriate."
+}

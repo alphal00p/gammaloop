@@ -1,0 +1,22 @@
+{
+  "finite_matching_serialized_declarations": 54,
+  "owner_ports_checked": {
+    "raw": 540,
+    "source_phase": 1080,
+    "final": 522
+  },
+  "all_typed_ports": "Explicit repeat-free self-dual bis/mink dimension4 and cof/dual-cof dimension3; complete tags and dual orientation retained, including the quark-loop sources; exact ordered capture ports retained. No compact/unresolved port observed.",
+  "source_read": [
+    "crates/feynkit-graph/src/numerator_interface.rs:admit/export/canonical_ports",
+    "crates/feynkit-graph/src/lib.rs:numerator/fragment_numerator",
+    "crates/feynkit-generator/src/grouping.rs:complete.multiply(prefactor).multiply(projector)",
+    "crates/idenso/src/tensor/composition.rs:interface_is_named/product_plan/named/free_interface/multiply",
+    "crates/idenso/src/tensor/composition/product.rs:multiply_many/merge_named",
+    "crates/spenso/src/structure/partial.rs:from_logical_slots/logical_slots"
+  ],
+  "inference": "Declared serialization is bound to actual current logical owner order. Current consumers select named plans afresh, with canonical survivors; no arbitrary historical positional plan is reused. This is finite source/data evidence offered to the migration reviewer, not imported three-QED/QCD interface approval.",
+  "material_boundary": "P4/accepted raw30 certificates certify named axis multisets and captured interfaces, excluding a positional/free-index theorem. Direct native grouped product-plan/layout/whole-import results are not present for this owner set. Source inspection and ordered declarations narrow this boundary but are not a new independent interface approval.",
+  "smallest_remaining_witness_if_source_argument_not_accepted": "For the exact current raw30, 60 comparison/representative graphs and 29 final graphs in this packet, bind logical/canonical layouts and named product operand/output-axis maps (including prefactor/projector and 54 declared final owner interfaces) to the already qualified actual consumer; show finite commutation and reject an order-only mutation. It need not prove arbitrary tensors or historical positional identity. Fresh native work or an additional theorem requires a separate assignment.",
+  "status": "NEW_MIGRATION_REVIEW_MUST_DISPOSE_INTERFACE_BOUNDARY",
+  "borrowed_three_QED_QCD_approval": false
+}

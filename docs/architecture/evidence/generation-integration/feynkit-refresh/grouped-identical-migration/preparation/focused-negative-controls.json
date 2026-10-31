@@ -1,0 +1,44 @@
+[
+  {
+    "name": "mirrored wrong model",
+    "accepted": false,
+    "predicate": "independent-raw30-model",
+    "final_census_unchanged": true,
+    "semantic_credit": "Focused join premise only, not a producer or native control."
+  },
+  {
+    "name": "wrong Classes mode",
+    "accepted": false,
+    "predicate": "independent-None-mode",
+    "final_census_unchanged": true,
+    "semantic_credit": "Focused join premise only, not a producer or native control."
+  },
+  {
+    "name": "mirrored wrong group membership",
+    "accepted": false,
+    "predicate": "group-source-identity",
+    "final_census_unchanged": true,
+    "semantic_credit": "Focused join premise only, not a producer or native control."
+  },
+  {
+    "name": "mirrored wrong source member weight",
+    "accepted": false,
+    "predicate": "group-source-weight",
+    "final_census_unchanged": true,
+    "semantic_credit": "Focused join premise only, not a producer or native control."
+  },
+  {
+    "name": "wrong physical owner",
+    "accepted": false,
+    "predicate": "final-representative-physical",
+    "final_census_unchanged": true,
+    "semantic_credit": "Focused join premise only, not a producer or native control."
+  },
+  {
+    "name": "order-only captured interface",
+    "accepted": false,
+    "predicate": "declared-interface-ordered edge:7",
+    "final_census_unchanged": true,
+    "semantic_credit": "Focused join premise only, not a producer or native control."
+  }
+]

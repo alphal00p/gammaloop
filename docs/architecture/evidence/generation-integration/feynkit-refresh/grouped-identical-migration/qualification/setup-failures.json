@@ -1,0 +1,54 @@
+{
+  "retained": [
+    {
+      "attempt": "guard-attempt1.py",
+      "stderr": "guard-attempt1.stderr",
+      "cause": "Incorrect after preparation filename. Pure guard stopped before tracked edit; corrected to exact sealed filename."
+    },
+    {
+      "attempt": "jj describe --author",
+      "exit": 2,
+      "stderr": "error: unexpected argument '--author' found",
+      "cause": "Unsupported optional author reassertion. Both new changes were already explicitly authored via per-command user.name/user.email; author independently verified."
+    },
+    {
+      "attempt": "finish-pure-attempt1.py",
+      "stderr": "finish-pure-attempt1.stderr",
+      "cause": "Nix path-info --derivation returns keyed drv records, not output.deriver. Pure metadata postprocessing stopped before license; successful query reused, no build retry."
+    },
+    {
+      "attempt": "finish-pure stdout retention label",
+      "cause": "GC-root wording erratum: actual retained-artifacts record and archive copy are authoritative. No GC root or extra realization."
+    },
+    {
+      "attempt": "initial setup-failures record inline Python",
+      "exit": 1,
+      "stderr": "SyntaxError: unterminated string literal (detected at line 5)",
+      "cause": "No script statement executed. Corrected record written as literal JSON; no artifact, runtime or license effect."
+    },
+    {
+      "attempt": "finalize-attempt1.py",
+      "stderr": "finalize-attempt1.stderr",
+      "cause": "Producer-chain gzip was1429639bytes, above unchanged1MiB tracking cap. Stopped before tracking. Added exact lossless gzip chunks with complete indexes/hashes and preserved original input; no runtime rerun or limit change."
+    },
+    {
+      "attempt": "finalize-attempt2.py",
+      "stderr": "finalize-attempt2.stderr",
+      "cause": "Final pure gzip-chunk roundtrip verification used path subscript instead of path join. Corrected one expression. Original script, stderr and provisional seal/manifest retained. No tracking/native/build rerun."
+    },
+    {
+      "attempt": "pretrack pure verifier inline line13",
+      "stderr": "TypeError: 'PosixPath' object is not subscriptable",
+      "cause": "Repeated path-join typo in separate verifier prevented explicit file tracking. Shell continued to create two partial bookmarks on registry-only commit a9e974f2. Both refs/commit are preserved; final evidence resumes from immutable code6f under new r2 refs. No runtime/build rerun."
+    },
+    {
+      "attempt": "verify-packet-attempt2.py",
+      "stderr": "verify-packet-attempt2.stderr",
+      "cause": "Broad Git diff --check used shared main index, exposing inherited whitespace outside this task. Corrected to immutable457->actualcode and actualcode->evidence authored canonical note/registry. No unrelated repair or native/build rerun; bounded checks pass."
+    }
+  ],
+  "native_failures": [],
+  "Nix_build_failures": [],
+  "build_calls": 1,
+  "semantic_negative_credit_for_setup_failures": false
+}

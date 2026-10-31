@@ -1,0 +1,26 @@
+{
+  "argv": [
+    "nix",
+    "--offline",
+    "--option",
+    "allow-import-from-derivation",
+    "false",
+    "path-info",
+    "--json",
+    "/nix/store/kwm3g9vh36d9zd171v0nz64fyan1hvfz-cargo-nextest-0.9.143",
+    "/nix/store/4168xqs4l5jbfc7xyi9zrhdhszx0pnlb-python3-3.13.16",
+    "/nix/store/dk9qhjgg469lv6mriys7v4c59igarmvx-bubblewrap-0.11.1"
+  ],
+  "cwd": "/tmp",
+  "license_keys_removed": [
+    "SYMBOLICA_LICENSE",
+    "SYMBOLICA_LICENSE_PATH",
+    "SYMBOLICA_LICENSE_SIGNED",
+    "SYMBOLICA_LICENSE_FILE"
+  ],
+  "start": "2026-10-31T03:12:56.015809+00:00",
+  "exit": 0,
+  "end": "2026-10-31T03:12:56.089137+00:00",
+  "stdout_sha256": "3e1dca040da03691a99fc430a9c4f48286e8266ac44311191e82275fe7b94320",
+  "stderr_sha256": "8c3df0940dc02f6a3d0dd88e5456309caed56b9648b9bf9e84085a7b1ee2956d"
+}

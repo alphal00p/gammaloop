@@ -1,0 +1,12 @@
+{
+  "single_matching_title": true,
+  "all118_scopes_unchanged": true,
+  "old_registry_semantics_unchanged_after_removing_one_new_entry": true,
+  "old_base_files_preserved_except_main_literal_and_additive_registry": true,
+  "new_review_ref_pending": true,
+  "new_approval_date": false,
+  "Typst_rendered": false,
+  "reason": "No Typst/compiler after licensed phase; source explicitly UNRENDERED",
+  "full_docs_Clippy_claimed": false,
+  "applicable_Rust_policy": "Single lowercase hexadecimal literal only; pinned rustfmt passed; no design-policy departure."
+}

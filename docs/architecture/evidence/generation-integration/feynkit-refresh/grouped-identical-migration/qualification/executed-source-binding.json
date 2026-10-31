@@ -1,0 +1,7 @@
+{
+  "successful_finish_pure_source": "finish-pure-executed.py",
+  "sha256": "290d5f2fae552816752c8eca9ec83b03f8a8ae20dd938272eddb53b8f6904d0f",
+  "current_finish_pure_source": "finish_pure.py",
+  "difference": "Only stdout retention wording and marker retention key. Marker/manual erratum was corrected before licensed start; no GC root or extra realization was created.",
+  "syntax_record_scope": "Exact prelicensed script versions recorded by hash; no finalizer/native compiler check claim."
+}

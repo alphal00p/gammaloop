@@ -1,0 +1,20 @@
+{
+  "argv": [
+    "jj",
+    "--config",
+    "snapshot.auto-track=none()",
+    "file",
+    "track",
+    "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration",
+    "docs/architecture/generation-grouped-identical-migration.typ",
+    "docs/developers.toml"
+  ],
+  "exit": 0,
+  "snapshot_auto_track": "none()",
+  "tracking_limit": "1MiB",
+  "max_new_file_bytes": 1029805,
+  "explicit_new_paths": 419,
+  "manifest_complete": true,
+  "all_original_and_durable_input_bytes_verified": true,
+  "git_diff_check_exit": 0
+}

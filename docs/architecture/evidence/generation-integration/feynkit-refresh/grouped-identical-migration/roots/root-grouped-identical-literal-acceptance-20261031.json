@@ -1,0 +1,32 @@
+{
+  "schema": "root-grouped-identical-literal-acceptance/1",
+  "recorded_utc": "2026-10-31 03:02:54 UTC",
+  "decision": "ACCEPT_EXACT_SINGLE_TOKEN_MIGRATION_UNDER_RETAINED_PINNED_PREMISES",
+  "case": "xs_qed_eemm_identical_L2",
+  "field": "numerators",
+  "old": "0x00fac78da0e0d159",
+  "new": "0xa60df38a6b8079e3",
+  "review": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-identical-migration-astra-20261031-024225Z-1469f5e4/review.json",
+  "review_sha256": "7d96505dcb700eeae42b5a4e87676551ba910cb660df586cafe34d6b90e944f1",
+  "seal_sha256": "e4f574d2346fd4c32c27fbcfbe5b027acd1c8772185371d83bc701429218a26f",
+  "review_files_rehashed": 43,
+  "patch_sha256": "2450f56adfe23ea3b157b4d687c4ad6edd39866ff841f6ba8e85fa6f6d864fb7",
+  "before_blob": "9ef9f1ba005f20149716b22346d45c5501b62e87",
+  "after_blob": "7283198bf0152c82c1cd5f0173703cddfa7f5c0f",
+  "original_patch_base": "d0fb4e906140a6a0fc8dd6401ca839cab0c2734d",
+  "intended_application_base": "457e361d7d39e0a3daae801651f8c1dfabbf47aa",
+  "WP9_basis": "Independently correct current raw30, separate accepted None/Auto grouped factorized certificates and complete member/source-factor bindings; exact pristine None token reconstruction.",
+  "interface_disposition": "Discharged for exact current named symbolic consumers by source layout-inverse argument plus119 graphs/2142owners per mode and60 logical contraction/operand/output commutation squares. Includes54 declaredinterfaces, scalarprefactor andprojector. No actual native layout run or universal import/dense-storage/positional theorem.",
+  "conditions": [
+    "Before application on accepted host457, verify exact main before bytes and complete relevant source invariance; approval not attached blindly to laterHEAD.",
+    "All149Rows/prior12 and other9fields/everyotherbyte preserved.",
+    "Both mode P1-P5, producer/source/definition/observer premises retained.",
+    "Both operand AND output-axis maps mandatory; no historical positional identity or borrowed80-owner proof.",
+    "New postapplication archive/runtime and independent integration review required; no passing-afterpatch credit yet."
+  ],
+  "applied_by_root": false,
+  "global_integration_advanced": false,
+  "publication_authorized": false,
+  "root_owned_processes": 0,
+  "retention": "Review and preparation packets retained for application and new independent integration review."
+}

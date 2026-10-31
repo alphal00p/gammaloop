@@ -1,0 +1,49 @@
+{
+  "schema": "root-grouped-Auto-acceptance/1",
+  "recorded_utc": "2026-10-31 02:34:08 UTC",
+  "decision": "ACCEPT_PINNED_CONDITIONAL_AUTO_AGGREGATION_HELPER_DURABILITY_AND_NARROW_STRICT_GUARD",
+  "candidate": "113608b3917d903d0fcc730aa3760f114fbc3f04",
+  "review": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-auto-aggregation-astra-20261031-independent-r1-1793413266607828149/review.json",
+  "review_sha256": "e4ca45aff35c11bbd6397a32265502f79ff6b622141c1fe75214f17f830919db",
+  "seal_sha256": "fea4337d34fb0f22c71f6e80b33be456db9d1193d80be46fb68b5d2cb4eb5a9f",
+  "coordinator_rehashed_review_and_CLI_output_files": 87,
+  "scope": {
+    "case": "xs_qed_eemm_identical_L2",
+    "classes": "Auto",
+    "grouping": "Identical",
+    "samples": 5,
+    "seed": 3,
+    "canonical": false,
+    "particle_mass_differentiation": true,
+    "fully_numerical": false,
+    "symmetric_polarizations": false,
+    "naming": "D",
+    "pool": 1,
+    "source": "5ba04864ca506e259d9eef4a54f65acdd8323fc2",
+    "archive": "5ea149ffd88ae3afc4072a38c0871c1329be8424",
+    "kernel": "8eb7c3729d6abefc916decc1bdf0c06536f8af80"
+  },
+  "grounds": "Actual Auto-P1\u2013P5 conjunction, source/owner/phase joins, 60 quotient maps and charts, complete factorized aggregate and first-match partition, source-matrix closed-spinor ratio1, raw30 bridge, and2624 exact native obligations bound to full prior batches. Fresh reviewer full protected CLI passes final committed seal, plus162 intended typed rejections.",
+  "native_executions_new": 0,
+  "original_test_exit_codes": [
+    101,
+    101
+  ],
+  "None_acceptance_separate": true,
+  "finding_disposition": {
+    "AUTO_A1": "Closed for exact corpus by additive typed guard.",
+    "AUTO_B_N2": "Closed for exact corpus by sample-count guard.",
+    "AUTO_A2": "Executable helper durability verified with205 source bindings; external data still required.",
+    "AUTO_B_N1": "Rounded json.id comparisons remain redundant in full-record predicates; narrowed identity claim accepted.",
+    "AUTO_AGG_N1": "Informational comment overstates original hash fixture validity. Candidate hash rejection remains valid; stronger guard-valid key-order mutation supplied by independent reviewer, not retroactively credited."
+  },
+  "restrictions": [
+    "All Auto-P1\u2013P5 premises and observer effects remain explicit.",
+    "No raw/cook semantics, positional/free-index/locality, denominator/full-integrand or historical-current grouped equivalence theorem.",
+    "No sampled non-relation/maximality or other case/mode/pool approval.",
+    "No literal migration or global integration/WP3/publication authorization.",
+    "No portable/self-contained or adversarial general Python sandbox claim."
+  ],
+  "followup": "Existing groupedMigrationPrep may consume exact accepted Auto aggregate for its NOT-APPLIED migration packet; a new independent migration review remains mandatory.",
+  "retention": "Original and review packets plus fresh CLI outputs retained; no root-owned processes or ref mutations."
+}

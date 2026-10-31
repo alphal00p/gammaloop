@@ -1,0 +1,15 @@
+{
+  "commit": "6f41807b064bcf2f579883134daef65c8ac279d3",
+  "parent": "457e361d7d39e0a3daae801651f8c1dfabbf47aa",
+  "bookmark": "generation-grouped-identical-migration-code-20261031",
+  "author": "Lucien Huber <im@lcnbr.ch>",
+  "changed_paths": [
+    "crates/feynkit-generator/tests/generation_oracle/main.rs"
+  ],
+  "after_sha256": "66f01bcc855552ae888f1fb7c5bb158afbd448492b4e27a26e2bda40f09b07d2",
+  "integration_approved": false,
+  "retained_setup_failures": [
+    "guard-attempt1.py/guard-attempt1.stderr: misnamed after preparation file, no tracked edit",
+    "jj describe --author unsupported exit2; new code and evidence changes already explicitly authored via per-command user.name/user.email; author independently verified"
+  ]
+}

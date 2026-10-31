@@ -1,0 +1,265 @@
+{
+  "schema": "independent-grouped-none-aggregation-astra-review/1",
+  "verdict": "APPROVE_PINNED_CONDITIONAL_NONE_AGGREGATE_AND_HELPER_DURABILITY",
+  "verdict_summary": "No blocking finding remains for accepting the full pinned conditional None decoded-numerator aggregate certificate and the S4/F6/R2-N1/R2-N2 completion at ad7ccbe7. This is an independent aggregation review recommendation to the root coordinator, not a forged root decision, migration authorization, Auto certificate, or integration approval.",
+  "reviewer": {
+    "role": "NEW independent Astra review sub-agent",
+    "model": "gpt-6-astra",
+    "fallback": "User explicitly permits Astra because Opus was unavailable due to API rate limits.",
+    "implemented_candidate": false,
+    "delegation": false,
+    "new_native_mathematics": false
+  },
+  "completed_utc": "2026-10-31T00:07:13.331257+00:00",
+  "review_directory": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-none-aggregation-astra-20261030-independent-b1",
+  "candidate": {
+    "commit": "ad7ccbe7cee2373ed54fe16d17971491eb581e80",
+    "bookmarks": [
+      "grouped-none-aggregation-candidate-20261030-r1",
+      "grouped-none-helper-durability-20261030-r1"
+    ],
+    "parent": "195a876efc37adbadf56e95f5440bd991dd9edc3",
+    "preserved_prior": "e23a88fe867aa3f2c03e8552b60b0bfcd2618e3f",
+    "changed_files": 113,
+    "added_lines": 22245,
+    "deleted_lines": 0,
+    "receipt": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-xs-qed-eemm-identical-aggregation-r1/receipt.json",
+      "sha256": "4a91e2bd0036c7e32933069dfa147d3141ab4438a706bb7d96dc81a56b8994ac",
+      "bytes": 12417
+    },
+    "seal": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-xs-qed-eemm-identical-aggregation-r1/seal.json",
+      "sha256": "c2e4448d0930b5422e8a40bcda6d0a9ab81cc41a1ef9e1be23c3fbdf177f7710",
+      "bytes": 28134
+    },
+    "source_closure": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-xs-qed-eemm-identical-aggregation-r1/source-closure.json",
+      "sha256": "c22e54b6ac8046e3f6682671429e2392044f21b41be1c276c7d7d35bc4eabe28",
+      "bytes": 115978
+    },
+    "entrypoint": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-xs-qed-eemm-identical-aggregation-r1/protected_join.py",
+      "sha256": "a8ffcc47fe90ac7771bde7a1c3a3a3b1c6a80a1473ea342231f2f4a3a7ce67bd",
+      "bytes": 20208
+    }
+  },
+  "scope": {
+    "case": "xs_qed_eemm_identical_L2",
+    "classes": "None",
+    "grouping": "Identical",
+    "settings": {
+      "check_canonical_numerator": false,
+      "differentiate_particle_masses_only": true,
+      "fully_numerical_substitution": false,
+      "number_of_numerical_samples": 5,
+      "numerical_sample_seed": 3,
+      "symmetric_polarizations": false
+    },
+    "naming": "D",
+    "generation_pool": 1,
+    "code": "5ba04864ca506e259d9eef4a54f65acdd8323fc2",
+    "dependency_archive_code": "5ea149ffd88ae3afc4072a38c0871c1329be8424",
+    "kernel": "8eb7c3729d6abefc916decc1bdf0c06536f8af80"
+  },
+  "root_decision": null,
+  "integration_authorized": false,
+  "blocking_findings": [],
+  "qualifications_not_blockers": [
+    {
+      "id": "AGG-Q1",
+      "topic": "Fresh executable coverage",
+      "detail": "The original CLI hardcodes target/grouped-none-aggregation-20261030-r1 as its output root, outside the user-authorized .local-only write area. The unchanged main() was exercised and correctly refused the .local output before creating it. The reviewer then executed the unchanged frozen_inputs -> protected_map -> strict_join -> native_reuse -> frozen_inputs functions, including the exact-ID and adapter controls, with outputs only in the new review packet. No source/global/input guard was changed. Full CLI success is reused from its pinned validation-r2 logs plus source inspection of mandatory ordering, not claimed as a new reviewer CLI execution. This does not leave a certificate predicate unchecked."
+    },
+    {
+      "id": "AGG-Q2",
+      "topic": "Historical guard failures",
+      "detail": "The retained final-guard.stderr records the local-versus-@git bookmark assertion failure. The corrected source uses remote-aware keys and its output agrees with the sealed final guard. The earlier newline-splitting failure is narrative-only in the retained target; no separate original script/transcript was found or execution credit assigned. The reviewer independently checked the actual named refs, candidate/parent trees, main index and original tracked bytes."
+    }
+  ],
+  "prior_independent_reviews": [
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-grouped-provenance-r2-astra-20261030-independent-a1/review.json",
+      "sha256": "5d97495099729b3f407802effc692540bfadcf13a58ba6fade2034f21bb8a71c",
+      "bytes": 32409,
+      "verdict": "APPROVE_BOUNDED_CORRECTED_OBSERVATIONAL_PROVENANCE",
+      "durable_path": "docs/architecture/evidence/generation-xs-qed-eemm-identical-aggregation-r1/reviews/observation-r2.json"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-identical-none-fresh8eb-math-opus-20261030T202307Z-195933/review.json",
+      "sha256": "b5e0f3d4fff0b43cd8fbc955140e6d62938be02c9cfc8d943206e1effcf5a01a",
+      "bytes": 28959,
+      "verdict": "APPROVE_CERTIFICATE_SCOPE_B_NONE",
+      "durable_path": "docs/architecture/evidence/generation-xs-qed-eemm-identical-aggregation-r1/reviews/math-None.json"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-feynkit-refresh-shared-provenance-opus-20261030T193404Z-3c0453ff/review.json",
+      "sha256": "565caeace0112a30fb9118f94b2bb759e4267d2b802395c314e485b89b4b2b70",
+      "bytes": 74728,
+      "verdict": "APPROVE_SHARED_SCOPE_A",
+      "durable_path": "docs/architecture/evidence/generation-xs-qed-eemm-identical-aggregation-r1/reviews/shared-Scope-A.json"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-identical-grouped8eb-provenance-opus-20261030T194220Z-caaf7f95/review.json",
+      "sha256": "d5e93e0a03d1a5fd7a8e8b08e1ae9a4577917b1c03256d0d5b23607df0909387",
+      "bytes": 54596,
+      "verdict": "REQUEST_CHANGES",
+      "durable_path": "docs/architecture/evidence/generation-xs-qed-eemm-identical-aggregation-r1/reviews/historical-grouped-REQUEST_CHANGES.json"
+    }
+  ],
+  "review_composition": {
+    "full_reviews_read": "All four complete independent reviews read, including the original REQUEST_CHANGES findings, limitations, failed attempts and shared Scope A manifest. Each original and committed verbatim copy was rehashed against the requested SHA256.",
+    "not_verdict_string_conjunction": "The observational approval supplies only the source/runtime/capture premises on exactly the ledger and frames consumed by the math review. The math outputs, original helper bytes, native pairs/results, source/frame associations and adoption records were joined independently as below. No pending historical component flag was changed or treated as an unconditional theorem.",
+    "P1": "The 5ba+patch observer ledger SHA 2f3f5b28 and FinalFrames SHA 6f8ee1a3 are identical across corrected provenance, math summary/input manifests, r3 resolved inputs, spinor adoption and strict join. Source5ba, dependency archive5ea and kernel8eb remain separate. Actual pristine and observer row exits are 101; no passing-test credit.",
+    "P2": "All 30 full physical source keys/exact IDs were matched between the protected 416/90 map and the reviewed full source inventory. D22/D23 are sources22/23, observed sorted positions12/15. Both sides of each source appear in the 60 current maps. Candidate maps equal the independent derivation as complete JSON. The 11->9 sewn quotient has 9 edges, 18 attached half-edges, 6 vertices and four explicitly absent placeholders. Actual FinalFrames are unit-tensor geometry before local construction, so later covariance is a separate necessary constituent.",
+    "P3": "Producer uncook calls and finite raw==decoded observations are provenance premises. Decoded formal expressions are the theorem objects. The exact-definition gates and normalized grammar/native results are separately bound; no raw(cook)-decoded semantic equivalence is inferred. Native tag-subset tolerance is retained, so Python exact definitions remain mandatory.",
+    "P4": "Captured ordered interfaces, flags, owners and physical data remain premises. The original strict checker compares comparison and representative for D22/D23 (four joins,72 owners) including ordered ports and whole graph fields; old model comes from sealed checker-run-6 matrices. Math transport compares named multisets; this is not a positional consumer, free-index typing or locality proof.",
+    "P5": "Fresh pure JSON replay matched complete grouped raw30 payload bytes and all 540 named typed owners per route against the c95 inputs. Raw/decoded strings, ordered ports and both flags match; only owner-container ordering is projected. c95 approval is reused as a premise on those exact inputs. Its c78/old-current1a1 kernel roles are not relabelled8eb.",
+    "consequences": "The independently reviewed conjunction covers sewn finite signed isomorphisms, actual post-construction owner covariance, commuting unimodular charts, exact definitions/grammar, local source-matrix D22/D23 charge-conjugation relations and closed-port cancellation, representative triangle, unexpanded aggregate factorization, and the full 30->29 weights/cuts/thresholds chain. The sole merge has ratio1, group factor -2, no zero omissions/cancellations, raw and final scalar total4. Sampled non-merges are observations, with no non-relation/maximality inference.",
+    "finite_theorem_attributed_verbatim": "Premises: P1 grouped observer ledger and FinalFrames bound by the grouped receipt/seal (provenance under separate review); P2 captured provisional frame maps; P3 decoded tensors are the producer's reversible uncook of the actual tensors; P4 captured ordered interfaces; P5 approved c95 raw30 None inputs (byte-equal). Then: (T1) the 30 raw built diagrams equal the approved ungrouped raw30 domain; (T2) for each of 60 (source, comparison|representative) pairs per route, the source-induced signed final map is a final-graph isomorphism (9 edges, 18 attached half-edges, 6 vertices; 4 absent placeholders excluded) under which all 18 actual post-construction owner tensors correspond exactly with equal interface multisets and flags, with a commuting unimodular formal momentum chart; (T3) every aggregate numerator is the product of its local factors (raw, final, comparison, representative); (T4) the complete comparison numerators of D22 and D23 are exactly equal (ratio 1) by local charge-conjugation covariance and closed-circuit cancellation, and the representative relation holds under the induced port permutation and loop negation; (T5) the 30->29 collapse is exactly the observed first-match partition with one group {22,23} at ratio 1, no zero omissions or cancellations, exact source factors, source-defined merged partitions and final outputs equal to master representatives; total weight 4 conserved. Consequently each of the 29 final diagrams' factorized decoded numerator times its overall factor equals the factor-weighted sum of its members' raw decoded numerators, up to the certified signed isomorphisms and unimodular loop/external charts.",
+    "current_vs_historical": "Acceptance is primarily for the actual current5ba/8eb route. Historical FinalFrames keep their unapproved old-base producer provenance and serve only as consistency evidence. No historical-current grouped-equivalence or migration theorem follows.",
+    "source_profile_limits": "Shared Scope A compiler/kernel/archive/helper and original stricter observer runtime results are reused on invariant bytes. Historical dev-optim/source/library roles remain distinct from the current CI-derived diagnostic closure. Usual Nix build-honesty and kernel store-content binding limitations remain those of the shared review; no new derivation or native runtime executed here."
+  },
+  "specific_obligations": {
+    "S4": "CLOSED for this candidate: 90 original-path source records,85 distinct byte contents, every mapping/hash/size/static-import list and recorded/final manifest binding verified; every durable target exists byte-exact in commit ad7ccbe7 under both named bookmarks. All non-product Python helpers in the r3 audit/native and spinor input manifests are represented, as are all16 r3 and5 spinor top-level entrypoints. The maps->frozen ledger->round2 parser dynamic chain and spinor fresh_join->representative-controls->checker/frozen parser+syntax chain were inspected. Zero-byte historical exec placeholders remain empty. Archival auto_build/auto_capture/historical_auto and build/runtime helpers acquire no Auto or execution approval. No relocated execution or self-contained-data claim: external sealed captures, matrices, binaries/libraries/native logs/reviewer results remain required. Missing early e23 versions remain missing.",
+    "F6": "CLOSED within bounded conditional aggregate scope. Sealed old model is projected from matrices.bindings[route=current], not manufactured from live input; independent equality with the live model succeeds. All17 adapter fields have documented owners. code=archive5ea and actual_source.code=5ba with the true manifest+patch bindings. The unchanged strict comparison produced four joins/72 owners and its exact result was reproduced. Wrong actual source, archive and old model reject at their named wrapper predicates; two legacy controls also reject at their intended strict predicates. All13 reviewed physical controls (3 positive,10 negative) remain bound with source and actual input manifests. qualification_basis attributes the actual independent reviews and explicitly leaves root aggregation pending. The historical pending-native flag remains true; the separately source-regenerated2048 local and152 faithfulness pairs are byte-bound to the two independently executed math reviewer native commands/results.",
+    "R2_N1": "CLOSED as frozen-input protection, not general mapper validation. Full four review pins/copies, G4676/P52 seals, G/P symlink domains,10254 observational inputs,485 math outputs,560 r3 final files,4716 audit inputs,513 native inputs and4699 spinor inputs were checked before mapping and after composition, then again in final guard. The actual416 records have62 geometry classes and zero exact-ID conflicts. The retained single-hex-character mutation on ledger line35 was copied into fresh private output: standalone generate accepts; protected_map rejects with exactly old sealed file changed observer-runtime/captures/ledger.jsonl before invoking generation on that mutant. Source inspection confirms the advertised main() has no alternate input or skip-guard option and places frozen_inputs before mapping and after joins.",
+    "R2_N2": "CLOSED additively: independent regex count from hash-bound attempt-2 stderr is1 E0432+11 E0433=12 unresolved diagnostics, followed by the separate abort summary. Historical13 statements and their seals remain unchanged.",
+    "premise_matrix": "P1-P4 remain explicitly conditional capture premises; P5 is separately bound. The matrix quotes the Scope B finite theorem verbatim and lists actual constituent bindings. The validator alone remains explicitly insufficient.",
+    "S1_S7": "S1 conjunctive certificate/independent map controls; S2 det+-1 only for120 finite charts; S3 exact Python definitions mandatory despite native tag-subset tolerance; S5 historical unapproved FinalFrames not migration basis; S6 transcript-only setup errors no rejection credit and disclosed expected-exit fill; S7 sampled non-merges not maximality all retained.",
+    "metadata_and_docs": "All113 changed paths are the deliberate evidence/helper archive,172-line old-base note and16-line registry addition; no production/expectation or unrelated WIP changes. All4343 initial tracked bytes match both current files and candidate blobs. Existing registry notes/sections/paired-review fields remain exact after removing the single additive old-base preparation entry; its title matches the Typst title, lifecycle is investigation, review_ref pending, source revision fdff. The old note is preserved at SHA9b1f5fda and is explicitly OLD-BASE ONLY; the aggregate record is a separate candidate with no self/root approval. Typst single-title/local-link checks only, no full rendering or documentation-build claim.",
+    "inventory_and_no_circularity": "114 sealed files means the candidate evidence plus durable helper owners, including three pre-existing frozen owners;90 source records counts original paths, not90 unique contents or standalone runtime closure. Every sealed path matches the named commit. Receipt binds prior inputs, source closure, checks and record; seal binds receipt and files, with seal/self digest excluded. No future self-hash is used as proof of this review.",
+    "invariance": "Main index matches36fca299; ad7/195/e23 objects and trees retained; frozen integration fdff and refresh aggregation48d0 bookmarks unchanged. Checks use explicit main/.git and GIT_OPTIONAL_LOCKS=0; all reviewer jj invocations use --ignore-working-copy. Other agents may add ignored packets/new refs; no global JJ operation-invariance assertion."
+  },
+  "fresh_checks": {
+    "inventory": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-none-aggregation-astra-20261030-independent-b1/inventory.json",
+      "sha256": "6e2ef2f51733fb44e6de5f58902d41e23ed80cebd6e7619c9ba9309c32c6402c",
+      "bytes": 1117
+    },
+    "source_mapping_audit": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-none-aggregation-astra-20261030-independent-b1/source-closure-audit.json",
+      "sha256": "daefa9b00791b43a4aac6dd7cd7f79df8ad7027dcbece06b6373bbfa91a8d88a",
+      "bytes": 116291
+    },
+    "protected_composition": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-none-aggregation-astra-20261030-independent-b1/replay.json",
+      "sha256": "f951f18b4cfecfc15cb116b482b8edbff3339f335115b1c17552497e3f57fd1b",
+      "bytes": 1569
+    },
+    "exact_map": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-none-aggregation-astra-20261030-independent-b1/exact-map-replay.json",
+      "sha256": "67680851b8d8595ad7558dc0960bbdbe2167f6486fef94611986cd0f1eb2b05c",
+      "bytes": 540862
+    },
+    "ID_holdout": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-none-aggregation-astra-20261030-independent-b1/heldout-conflicting-id.json",
+      "sha256": "51b21546bf876ed0e7830591942072345b15e916e1a2ae8ac643a0c5adea189b",
+      "bytes": 2494
+    },
+    "CLI_output_refusal": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-none-aggregation-astra-20261030-independent-b1/original-cli-output-refusal.json",
+      "sha256": "6835b59930c852b6a870fda26dbd6f0c1564e7992b2ce08237bda4ee7fb006c6",
+      "bytes": 1203
+    },
+    "CLI_source_order": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-none-aggregation-astra-20261030-independent-b1/cli-source-order.json",
+      "sha256": "b02de72d4225a3a162fdb6edf4731b9133b158c00ef0ae11c541ac178daedce6",
+      "bytes": 4154
+    },
+    "execution_order": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-none-aggregation-astra-20261030-independent-b1/execution-order.json",
+      "sha256": "29b00ec1ae3f43fa786bec922b814725d1724e7bffe073e8089c5930647fdbb9",
+      "bytes": 3753
+    },
+    "strict_join": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-none-aggregation-astra-20261030-independent-b1/strict-join-replay.json",
+      "sha256": "1fc4c25f3b0004e129b97f7f5a7d853279b5cabcd9b85e865ae118780eab6106",
+      "bytes": 4136
+    },
+    "native_binding_replay": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-none-aggregation-astra-20261030-independent-b1/native-reuse-replay.json",
+      "sha256": "bd5a0bef49174c0842771faca9a5dc49ee7660323f777c3b98f10d65a46f4c4e",
+      "bytes": 29194
+    },
+    "composition_audit": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-none-aggregation-astra-20261030-independent-b1/composition.json",
+      "sha256": "4330cb6729976487505487eae5cc2e815d5208a77c42d052be951cdec125da9f",
+      "bytes": 21282
+    },
+    "final_guard": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-none-aggregation-astra-20261030-independent-b1/final-guard.json",
+      "sha256": "fa69caad9b552334b69fdbfcafa3e364143e4d4a4b69f431efe3386cd3f51716",
+      "bytes": 4855
+    },
+    "additional_input_hashes": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-none-aggregation-astra-20261030-independent-b1/complete-additional-inputs.json",
+      "sha256": "ebc4f3b6bf61ecf7e3381e24176a22fe313ffc601605ae00f29e1d0c595a0260",
+      "bytes": 121636
+    },
+    "pure_replay_write_audit": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-none-aggregation-astra-20261030-independent-b1/write-audit.json",
+      "sha256": "0d8b578899499843140d98e383cd5ed81ba25fc3cfd7959103e5940815c0717d",
+      "bytes": 3289
+    }
+  },
+  "fresh_vs_invariant_reuse": {
+    "fresh": "Pinned Python3.14.7 -I -S -B source/JSON/hash checks, complete protected function sequence and exact-ID holdout, strict adapter/checker+five controls, source/helper commit mapping, original tracked/registry checks, raw30 payload+typed-owner bridge, native command/pair/output bindings and final guards.",
+    "invariant_reuse": "All native equalities/rejections and polynomial/source-matrix derivations were already independently executed in the pinned Scope B review; all34 native records revalidated against exact command/input/pair/output bytes. Shared Scope A and original grouped native provenance/runtime results are reused under complete observational input invariance. No native algebra, build, producer, observer or capture rerun.",
+    "not_claimed": "Fresh successful unmodified full CLI execution, new mathematics, portable archive execution, recapture, passing original row tests, full documentation render, or any broader approval."
+  },
+  "excluded": [
+    "Classes Auto, Sign, Scalar, other rows or pools",
+    "historical-current grouped equivalence, literal/digest/expectation migration",
+    "raw(cook)-decoded semantic identity, positional interface, free-index or physical-locality theorem",
+    "denominators or full integrand",
+    "source R4 f47 or metadata48d0 relabelled as actual grouped source5ba",
+    "combined FeynKit, WP3, MAIN, CI, publication or integration approval"
+  ],
+  "failed_attempts_preserved": [
+    {
+      "attempt": "Initial read-only git discovery",
+      "record": "initial.json.initial_read_only_error",
+      "exit": 127,
+      "cause": "PATH=/usr/bin:/bin has no git on this Nix host; retried with discovered absolute Git executable. No VCS mutation."
+    },
+    {
+      "attempt": "composition.py",
+      "command": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-none-aggregation-astra-20261030-independent-b1/composition-command.json",
+        "sha256": "17ef7068dd6a500ac0e31e956e1bb61440d4eae7893a79a7f88bbf307dab44a1",
+        "bytes": 318
+      },
+      "stderr": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-none-aggregation-astra-20261030-independent-b1/composition.stderr",
+        "sha256": "8ea2cd996fdfc9e845996eca3421d9a5fb8ce0a3221ebfbf30934b0eba0eb6f0",
+        "bytes": 454
+      },
+      "exit": 1,
+      "cause": "Reviewer incorrectly expected flat actual_source hash fields. Actual candidate uses nested source_manifest/patch binding records. Preserved first source/logs; corrected field-schema check in composition-v2.py passes. Not a candidate finding or rejection credit."
+    },
+    {
+      "attempt": "Original CLI output placement",
+      "record": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-none-aggregation-astra-20261030-independent-b1/original-cli-output-refusal.json",
+        "sha256": "6835b59930c852b6a870fda26dbd6f0c1564e7992b2ce08237bda4ee7fb006c6",
+        "bytes": 1203
+      },
+      "cause": "Expected task-policy location refusal; not claimed as successful CLI or a semantic rejection."
+    }
+  ],
+  "method_and_constraints": {
+    "workspace": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families",
+    "writes_only": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-none-aggregation-astra-20261030-independent-b1",
+    "ignored": true,
+    "guidance": "main and selected AGENTS.md/CONTRIBUTING.typ, selected accepted generation-integration plan read. Only narrower user-authorized read-only aggregation review performed; no workspace creation or delegation.",
+    "environment": "Every executable probe uses explicit env -i LANG=C.UTF-8 and pinned Python3.14.7 -I -S -B. The protected replay also installs a Python audit hook denying writes outside this packet, native subprocess/network/ctypes events. Initial guidance-only shell calls used default login behavior; later calls use login=false. No task code explicitly opened license/environment configuration files; shell startup is not claimed syscall-audited.",
+    "no_actions": "No candidate/VCS/source/expectation mutation, Nix/build/compiler/licensed/native-product/observer/capture/network execution, license/config-file inspection, new workspace, delegated/self-review, publication or integration advancement.",
+    "owned_background_processes": []
+  },
+  "retention": {
+    "directory": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-none-aggregation-astra-20261030-independent-b1",
+    "reason": "Review, all probe sources/results, failed attempts, candidate diff, source mappings, exact heldout mutant and hash seals retained for root adjudication and repeatability. No disposable build workspace or background process created; shared evidence and caches untouched."
+  },
+  "hash_binding": "review.json.sha256 binds this exact review; seal.json binds every retained regular output and symlink target except seal.json/seal.sha256; seal.sha256 binds the seal. No circular self-hash proof."
+}

@@ -1,0 +1,22 @@
+{
+  "argv": [
+    "git",
+    "--git-dir=/shared/lcnbr/dev/gammaloop/main/.git",
+    "ls-tree",
+    "-rz",
+    "--full-tree",
+    "6f41807b064bcf2f579883134daef65c8ac279d3"
+  ],
+  "cwd": "/tmp",
+  "license_keys_removed": [
+    "SYMBOLICA_LICENSE",
+    "SYMBOLICA_LICENSE_PATH",
+    "SYMBOLICA_LICENSE_SIGNED",
+    "SYMBOLICA_LICENSE_FILE"
+  ],
+  "start": "2026-10-31T03:12:49.812747+00:00",
+  "exit": 0,
+  "end": "2026-10-31T03:12:49.827732+00:00",
+  "stdout_sha256": "be3f61e53c968521606661f1a321872c7103571543339a0567a2e145c0b1431e",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+}

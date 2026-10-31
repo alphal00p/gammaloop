@@ -1,0 +1,43 @@
+{
+  "baseline": "PASS",
+  "six_focused_controls": [
+    {
+      "name": "mirrored model",
+      "predicate": "independently-approved-model",
+      "rejected": true,
+      "complete_final_census_unchanged": true
+    },
+    {
+      "name": "wrong mode",
+      "predicate": "separate-mode",
+      "rejected": true,
+      "complete_final_census_unchanged": true
+    },
+    {
+      "name": "mirrored membership",
+      "predicate": "complete-membership-binding",
+      "rejected": true,
+      "complete_final_census_unchanged": true
+    },
+    {
+      "name": "mirrored member factor",
+      "predicate": "source-member-factor-binding",
+      "rejected": true,
+      "complete_final_census_unchanged": true
+    },
+    {
+      "name": "physical numerator owner",
+      "predicate": "physical-representative-binding",
+      "rejected": true,
+      "complete_final_census_unchanged": true
+    },
+    {
+      "name": "order-only captured declaration",
+      "predicate": "declared-ordered-owner-binding",
+      "rejected": true,
+      "complete_final_census_unchanged": true
+    }
+  ],
+  "additional_output_axis_control": "finite-named-consumer.json",
+  "scope": "Pure finite proof-binding negatives; no native or producer execution"
+}

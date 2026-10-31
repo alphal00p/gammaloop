@@ -1,0 +1,129 @@
+"""Focused current chain reconstruction and counter-preserving binding controls."""
+import collections
+import copy
+from fractions import Fraction
+import hashlib
+import json
+from pathlib import Path
+import runpy
+import traceback
+
+O=Path(__file__).resolve().parent
+U=runpy.run_path(str(O/'inspect.py'))
+W,N,A=(U[k] for k in ['W','N','A'])
+j,read,save=(U[k] for k in ['j','read','save'])
+B=runpy.run_path(str(O/'bind_evidence.py'))
+one,need,owners=(B[k] for k in ['one','need','owners'])
+R=runpy.run_path(str(O/'reconstruct.py'))
+P=B['P']
+
+def norm(x):
+    return json.dumps(x,sort_keys=True,separators=(',',':'))
+
+def validate(rows,approved_model):
+    live=one(rows,'live-inputs')
+    need(live['model']==approved_model,'independent-raw30-model')
+    need(live['request']['classes']=='None','independent-None-mode')
+    raw=one(rows,'raw-diagrams')
+    groups=one(rows,'collapse-entry')['groups']
+    collapsed=one(rows,'collapse-entry')
+    pairs=one(rows,'group-entry')['pairs']
+    order=one(rows,'staged-order')['order']
+    census=one(rows,'final-census')
+    plans=[x['value'] for x in rows if x['stage']=='collapse-plan']
+    final=one(rows,'final-diagrams')
+    representatives=[x['value'] for x in rows if x['stage']=='representative-output']
+    need(len(groups)==len(census['groups'])==len(final)==len(plans)==29,'complete-group-domain')
+    seen=[]
+    groupweights=[]
+    for i,(g,cg,plan,d,rep) in enumerate(zip(groups,census['groups'],plans,final,representatives,strict=True)):
+        need(plan['group']==[g] and cg['master']==i,'source-defined-master-policy')
+        p=pairs[g['master']]
+        representative=p['representative'] if p['kind']=='distinct' else p['comparison']
+        parts=[]
+        for gm,cm in zip(g['members'],cg['members'],strict=True):
+            idx=gm['source_index'];seen.append(idx)
+            need(order[gm['diagram']]==idx,'retained-raw-source-map')
+            need(cm['source_index']==idx and (cm['id'],cm['name'])==(raw[idx]['id'],raw[idx]['name']),'group-source-identity')
+            need(gm['overall_factor']==cm['overall_factor']==raw[idx]['json']['overall_factor'],'group-source-weight')
+            need(gm['ratio']==cm['ratio']=='1','group-source-ratio')
+            parts.append(R['weight'](gm['overall_factor']))
+        need(plan['factor']==d['json']['overall_factor'],'final-factor-tree')
+        need(sum(parts,Fraction())==R['weight'](plan['factor']),'per-group-member-weight-sum')
+        groupweights.append(str(sum(parts,Fraction())))
+        # Complete current representative descent; only these source-owned fields change.
+        a,b=copy.deepcopy(d['json']),copy.deepcopy(representative['json'])
+        for field in ['cuts','topology_threshold_candidates','overall_factor','name','id','loop_momentum_basis']:
+            a.pop(field);b.pop(field)
+        need(a==b,'final-representative-physical')
+        need(owners(d)==owners(representative),'final-representative-ordered-owners')
+        need(B['project'](d)==B['project'](rep),'representative-output-complete-payload')
+        need(d['json']['loop_momentum_basis']==representative['json']['loop_momentum_basis'],'representative-routing-chart')
+        flip=set(p.get('reversed_edges',[]))
+        def side(hs):
+            return sorted([{'edge':h['edge'],'endpoint':('target' if h['endpoint']=='source' else 'source') if h['edge'] in flip else h['endpoint']} for h in hs],key=lambda h:(h['edge'],h['endpoint']))
+        # Reconstruct the complete source->comparison-master partition union.
+        for field,pfield in [('cuts','cuts'),('topology_threshold_candidates','thresholds')]:
+            union=[]
+            master=p['comparison'];mf=collapsed['frames'][g['master']]
+            for m in g['members']:
+                source=pairs[m['diagram']]['comparison'];sf=collapsed['frames'][m['diagram']]
+                def remap(hs):
+                    verts={mf['vertices'].index(sf['vertices'][source['json']['edges'][h['edge']][0][h['endpoint']]]) for h in hs}
+                    return [{'edge':ei,'endpoint':end} for ei,e in enumerate(master['json']['edges']) for end in ['source','target'] if e[0][end] in verts]
+                for part in source['json'][field]:
+                    lr=[remap(part[s]['half_edges'] if field=='cuts' else part[s]) for s in ['left','right']]
+                    if sf['left_right_swapped']!=mf['left_right_swapped']:lr.reverse()
+                    union.append(lr)
+            need(set(map(norm,union))==set(map(norm,plan[pfield])) and len(set(map(norm,plan[pfield])))==len(plan[pfield]),'complete-source-'+pfield+'-union')
+            actual=[[sorted(part[s]['half_edges'] if field=='cuts' else part[s],key=lambda h:(h['edge'],h['endpoint'])) for s in ['left','right']] for part in d['json'][field]]
+            expected=[[side(l),side(r)] for l,r in plan[pfield]]
+            need(sorted(map(norm,actual))==sorted(map(norm,expected)),'final-'+pfield+'-endpoint-transport')
+    need(sorted(seen)==list(range(30)),'source-no-omission-cancellation')
+    need(sum(map(Fraction,groupweights))==4,'total-four-after-per-group-binding')
+    return {'groups':29,'raw_sources':30,'per_group_weights':groupweights,'total':'4','cut_threshold_unions':58,'representative_ordered_owners':522}
+
+def main():
+    rows=[json.loads(s) for s in read(P/'observer-runtime/captures/ledger.jsonl').splitlines()]
+    model=j(B['RAW']/'model.json')
+    baseline=validate(rows,model)
+    # Exact, verified source copied into owned output; functions have no I/O.
+    source=read(A/'strict_guard.py')
+    (O/'strict_guard_source_copy.py').write_bytes(source)
+    check=runpy.run_path(str(O/'strict_guard_source_copy.py'))['check']
+    auto_path=W/'target/grouped-auto-fresh8eb-20261031-r1/observer-runtime/output/captures/ledger.jsonl'
+    auto=[json.loads(s) for s in read(auto_path).splitlines()]
+    facts={'None_separate_factual_reconstruction':check(rows),'Auto_exact_narrow_guard':check(auto),'guard_source_sha256':hashlib.sha256(source).hexdigest(),'Auto_approval':'AUTO_AGGREGATION_REVIEW_PENDING'}
+    save('strict-factual-guards.json',facts)
+    controls=[]
+    def negative(name,predicate,mutate):
+        r=copy.deepcopy(rows);mutate(r)
+        # The existing final-census Row payload/counters remain frozen in these controls.
+        same=one(r,'final-census')==one(rows,'final-census')
+        try:validate(r,model)
+        except AssertionError as e:
+            need(str(e)==predicate,'intended-control-predicate '+name+' got '+str(e))
+            controls.append({'name':name,'accepted':False,'predicate':str(e),'final_census_unchanged':same,'semantic_credit':'Focused join premise only, not a producer or native control.'})
+        else:raise AssertionError('holdout-accepted '+name)
+    def model_mutation(r):
+        one(r,'live-inputs')['model']['name']='mirrored-wrong-model'
+        for d in one(r,'raw-diagrams')+one(r,'final-diagrams'):d['json']['model']='mirrored-wrong-model'
+    negative('mirrored wrong model','independent-raw30-model',model_mutation)
+    negative('wrong Classes mode','independent-None-mode',lambda r:one(r,'live-inputs')['request'].__setitem__('classes','Auto'))
+    negative('wrong group membership','source-defined-master-policy',lambda r:one(r,'collapse-entry')['groups'][0]['members'][0].__setitem__('source_index',19))
+    negative('wrong source member weight','source-defined-master-policy',lambda r:one(r,'collapse-entry')['groups'][0]['members'][0].__setitem__('overall_factor','-1'))
+    negative('wrong physical owner','final-representative-physical',lambda r:one(r,'final-diagrams')[0]['json']['vertices'][0].__setitem__('numerator','1'))
+    def interface_mutation(r):
+        d=next(d for d in one(r,'final-diagrams') if any('num_interface' in e[1] for e in d['json']['edges']))
+        owner=next(o for o in d['owners'] if o['owner'].startswith('edge:') and 'num_interface' in d['json']['edges'][int(o['owner'].split(':')[1])][1])
+        owner['tensor']['ports'].reverse()
+    negative('order-only captured interface','declared-interface-ordered edge:2',interface_mutation)
+    save('focused-negative-controls.json',controls)
+    save('physical-chain-reconstruction.json',{'status':'PREPARED_NOT_APPROVED','current_None':baseline,'all_controls':len(controls),'source':'source-equivalent current finite partition and representative-descent checks; no historical helper imported','native_executions':0})
+    print(json.dumps({'status':'PREPARED_NOT_APPROVED','controls':len(controls),'guards':facts['Auto_exact_narrow_guard'],'chain':baseline}))
+
+if __name__=='__main__':
+    try:main()
+    except BaseException:
+        with (O/'chain-controls-failed-attempts.log').open('a') as f:f.write(traceback.format_exc())
+        raise

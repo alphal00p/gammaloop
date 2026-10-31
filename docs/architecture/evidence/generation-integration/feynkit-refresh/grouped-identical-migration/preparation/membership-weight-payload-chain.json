@@ -1,0 +1,660 @@
+{
+  "groups": [
+    {
+      "final_native_ID": "5a7f2cf79c17047538ee8f2549c4a949",
+      "full_key_sha256": "54c0d91ef7d05a6786df3f9a8687daf587b249697f09722be9086a5045193b1e",
+      "master_retained_position": 0,
+      "members": [
+        {
+          "raw_index": 18,
+          "native_ID": "5a7f2cf79c17047538ee8f2549c4a949",
+          "source_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(-1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(-1)",
+          "ratio": "1",
+          "map_records": [
+            0,
+            1
+          ]
+        }
+      ],
+      "final_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(-1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(-1)",
+      "cuts_sha256": "3424ba145771c6676ab21a157b815f07d32f1fcb53becb0ec4e06b3e89bb0b8f",
+      "thresholds_sha256": "575fd20d5b6bc21ed928adc25a806a32ef8f1ca7cd5cdaea00e0e3ca4b2bd44f",
+      "collapse_plan_sha256": "5514443a7a2e546b49b9ee16f75b5be7d38219c7dd6cffb3447cd0c9a919fa2c",
+      "payload_sha256": "245960ae4d089fd5d4ad4a645cace85177164e4190bbcb2b394926bf5f38be90"
+    },
+    {
+      "final_native_ID": "f4397cd6c7d2b80ef65c083aec8b8dbb",
+      "full_key_sha256": "14dc4db73eb7bb0f4beb08226d99075581a4d24b55917471c33b186b4693511d",
+      "master_retained_position": 1,
+      "members": [
+        {
+          "raw_index": 28,
+          "native_ID": "f4397cd6c7d2b80ef65c083aec8b8dbb",
+          "source_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(-1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(-1)*feynkit_generator_factor::{}::InternalFermionLoopSign(-1)",
+          "ratio": "1",
+          "map_records": [
+            2,
+            3
+          ]
+        }
+      ],
+      "final_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(-1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(-1)*feynkit_generator_factor::{}::InternalFermionLoopSign(-1)",
+      "cuts_sha256": "3424ba145771c6676ab21a157b815f07d32f1fcb53becb0ec4e06b3e89bb0b8f",
+      "thresholds_sha256": "5cd875c98bb5128abd0d691bed8e2abb0eeb0c4ec15858bb9548ba82a2429341",
+      "collapse_plan_sha256": "119d53b4baf488af8944833653a78a686769239272228ef95b6e0e9e00fc6d5f",
+      "payload_sha256": "d5fb6b2856eb1da5d4756d22a6e9c3e6f032783b1d32f1fb0e9dbce4a5ed88b2"
+    },
+    {
+      "final_native_ID": "7871cbb835ae0d6f8c29d6017332039f",
+      "full_key_sha256": "145ab921e78e580455f608d7d429aab415a076c68bfa03738578819b270d655f",
+      "master_retained_position": 2,
+      "members": [
+        {
+          "raw_index": 29,
+          "native_ID": "7871cbb835ae0d6f8c29d6017332039f",
+          "source_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(-1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(-1)*feynkit_generator_factor::{}::InternalFermionLoopSign(-1)",
+          "ratio": "1",
+          "map_records": [
+            4,
+            5
+          ]
+        }
+      ],
+      "final_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(-1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(-1)*feynkit_generator_factor::{}::InternalFermionLoopSign(-1)",
+      "cuts_sha256": "3424ba145771c6676ab21a157b815f07d32f1fcb53becb0ec4e06b3e89bb0b8f",
+      "thresholds_sha256": "32f1cbfccf6108ca877944d6e099ab30f6aede2d30b2e190e4a239894aebc9d9",
+      "collapse_plan_sha256": "c04d76b65512bf09fb1b375fd9a76864da4cff25fd247d38a00c59ba4185c605",
+      "payload_sha256": "3daabb5d78d79bd0e7d9b0330dcb36f23f806329da5bac93e19465aa3007d3a0"
+    },
+    {
+      "final_native_ID": "7fcf7f7a801ef334c3c48c8cf110d805",
+      "full_key_sha256": "ab9d7395c492335a9ca31dc32f1bca569ec414ff52c4107d7a37c6e5bbd0d96a",
+      "master_retained_position": 3,
+      "members": [
+        {
+          "raw_index": 25,
+          "native_ID": "7fcf7f7a801ef334c3c48c8cf110d805",
+          "source_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(-1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(-1)*feynkit_generator_factor::{}::InternalFermionLoopSign(-1)",
+          "ratio": "1",
+          "map_records": [
+            6,
+            7
+          ]
+        }
+      ],
+      "final_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(-1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(-1)*feynkit_generator_factor::{}::InternalFermionLoopSign(-1)",
+      "cuts_sha256": "3424ba145771c6676ab21a157b815f07d32f1fcb53becb0ec4e06b3e89bb0b8f",
+      "thresholds_sha256": "34742a11dcf2850d1d99cb2898f83f92cebd98dfd7df183ecfe7c0e95f0275ee",
+      "collapse_plan_sha256": "d973b839ab76f82cbcb1dd79efa49d11e29e5d2ca80e719a0217d72a848dfe9c",
+      "payload_sha256": "dc7b8220044a33c70c31ddc4a8873fa2108b81ca23c337643eaee0d675e6f50d"
+    },
+    {
+      "final_native_ID": "92f74763744d1cc19c72058a345cdc49",
+      "full_key_sha256": "c961523b6ad8f47571e18ddef558e7ece96b7c94b80518a288a13746b1a8123e",
+      "master_retained_position": 4,
+      "members": [
+        {
+          "raw_index": 26,
+          "native_ID": "92f74763744d1cc19c72058a345cdc49",
+          "source_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(-1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(-1)*feynkit_generator_factor::{}::InternalFermionLoopSign(-1)",
+          "ratio": "1",
+          "map_records": [
+            8,
+            9
+          ]
+        }
+      ],
+      "final_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(-1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(-1)*feynkit_generator_factor::{}::InternalFermionLoopSign(-1)",
+      "cuts_sha256": "bdadfe156a9887d712858d33673c7b7ac56ef0952f0b90b63c1dbec9b73a80f7",
+      "thresholds_sha256": "140dceffe3e4b1a8f0255b080aa2395772222842347756011b2ebd6fdfe26998",
+      "collapse_plan_sha256": "c7447ac174e7e77e6ac572c947abc6296daeeb32bedc20d0b72cbaa1258f5ee0",
+      "payload_sha256": "dbfc9d2b2ad7075b31cc76adf9ce013b42474e1e6e2d35ec283240d0326ef52d"
+    },
+    {
+      "final_native_ID": "51aa005e8dbc17ef208387b279616e8f",
+      "full_key_sha256": "cd583ac7e2ea3eacc1470fcf4bb93444ebe2ef289b6f88566a690e8d33df0658",
+      "master_retained_position": 5,
+      "members": [
+        {
+          "raw_index": 24,
+          "native_ID": "51aa005e8dbc17ef208387b279616e8f",
+          "source_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(-1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(-1)*feynkit_generator_factor::{}::InternalFermionLoopSign(-1)",
+          "ratio": "1",
+          "map_records": [
+            10,
+            11
+          ]
+        }
+      ],
+      "final_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(-1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(-1)*feynkit_generator_factor::{}::InternalFermionLoopSign(-1)",
+      "cuts_sha256": "bdadfe156a9887d712858d33673c7b7ac56ef0952f0b90b63c1dbec9b73a80f7",
+      "thresholds_sha256": "49a7c95bb3e58d46ec77868763e095b0dbb639bfca9dc9dab9157f0751c548da",
+      "collapse_plan_sha256": "ed4e35ba78083adab5c78748c56eb21d685665035074e57d73f9ccc016b754cc",
+      "payload_sha256": "43c77e8136409b4b13d2ba3991e7540b10d0d9132eae5669fcfc9a1ea256fb3f"
+    },
+    {
+      "final_native_ID": "da63ae3f18dfb4d0ceea3d374c32ac41",
+      "full_key_sha256": "fd128f30c658d293f1cb77c10bf1aba3848fabdc5b5294ab02bc40b63c1218b5",
+      "master_retained_position": 6,
+      "members": [
+        {
+          "raw_index": 11,
+          "native_ID": "da63ae3f18dfb4d0ceea3d374c32ac41",
+          "source_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(-1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(-1)",
+          "ratio": "1",
+          "map_records": [
+            12,
+            13
+          ]
+        }
+      ],
+      "final_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(-1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(-1)",
+      "cuts_sha256": "bdadfe156a9887d712858d33673c7b7ac56ef0952f0b90b63c1dbec9b73a80f7",
+      "thresholds_sha256": "a06a524fb8ea0e53167e5bf5a8b96f0bc747a0c27e9c8e03a473db688aacf503",
+      "collapse_plan_sha256": "474c32e7d0e52d84fe0e0371f7d867829f91fcc2c4f1e16eafc358fcc03070e7",
+      "payload_sha256": "75eea473b6cfa63ca304d68ee2766b9ff1ebd704d70fc108e62d32dbc688e04b"
+    },
+    {
+      "final_native_ID": "6fd465acd1be1513206bc0cee7bf7977",
+      "full_key_sha256": "8e48bac66b59ad74271517ec69129b0ce3c03ec5a18cc3fed4b0e23a2c87b384",
+      "master_retained_position": 7,
+      "members": [
+        {
+          "raw_index": 27,
+          "native_ID": "6fd465acd1be1513206bc0cee7bf7977",
+          "source_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(-1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(-1)*feynkit_generator_factor::{}::InternalFermionLoopSign(-1)",
+          "ratio": "1",
+          "map_records": [
+            14,
+            15
+          ]
+        }
+      ],
+      "final_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(-1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(-1)*feynkit_generator_factor::{}::InternalFermionLoopSign(-1)",
+      "cuts_sha256": "bdadfe156a9887d712858d33673c7b7ac56ef0952f0b90b63c1dbec9b73a80f7",
+      "thresholds_sha256": "e3001a1d30edf6fa00545b0849097cddfc17f43ac073c373174df17478e38612",
+      "collapse_plan_sha256": "449b1cab75f87287034b2366533779eec42f3bee242c1096106a899fc1f56d6a",
+      "payload_sha256": "b2481bc42d66e9ef6bcc3872c93db4f8d550557cc893e58d7e79f66bf39cc933"
+    },
+    {
+      "final_native_ID": "6157c9d8deb88f6d124f1d99a45cfbe4",
+      "full_key_sha256": "ea6f91390d39191cb14762d6c4498b035555f7dd402ac39e2a8814f5e0646ff6",
+      "master_retained_position": 8,
+      "members": [
+        {
+          "raw_index": 4,
+          "native_ID": "6157c9d8deb88f6d124f1d99a45cfbe4",
+          "source_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(-1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(-1)*feynkit_generator_factor::{}::InternalFermionLoopSign(-1)",
+          "ratio": "1",
+          "map_records": [
+            16,
+            17
+          ]
+        }
+      ],
+      "final_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(-1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(-1)*feynkit_generator_factor::{}::InternalFermionLoopSign(-1)",
+      "cuts_sha256": "7cf2c9bbb61d5266cf9048d647548012040432275a65dd928cab4b8ac7fc0bc7",
+      "thresholds_sha256": "c6d1a57d22bde2044df5e6fb253bff3599dd53126343c2c03915844e14050744",
+      "collapse_plan_sha256": "8caf9f55afc6369ca40544edd07c6b0ae8182d6cadb1f9d231b23f221816d78e",
+      "payload_sha256": "388e5039afbbc31af8be4c0c531ffaf4969e8e27ee804bf6092d98024a5e2fe9"
+    },
+    {
+      "final_native_ID": "b5d34ea002cedb51ea90626597d8365d",
+      "full_key_sha256": "808fd018d80813f6163222cba976ba5c9ed4d66d790f3aeed7faab4aa42588f7",
+      "master_retained_position": 9,
+      "members": [
+        {
+          "raw_index": 3,
+          "native_ID": "b5d34ea002cedb51ea90626597d8365d",
+          "source_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(-1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(-1)*feynkit_generator_factor::{}::InternalFermionLoopSign(-1)",
+          "ratio": "1",
+          "map_records": [
+            18,
+            19
+          ]
+        }
+      ],
+      "final_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(-1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(-1)*feynkit_generator_factor::{}::InternalFermionLoopSign(-1)",
+      "cuts_sha256": "756be3835f31ae1dae64712242f14258ce6eaa4e89f972986cb2d22fd48b577d",
+      "thresholds_sha256": "36c4a364597d9b733bfd8abebdc07e5e901d68ad034e50d6a213c3b73cac7fe9",
+      "collapse_plan_sha256": "34b54d596720c5de917e6e877ea198d6a1176b971d4289a9fd9039d98d084759",
+      "payload_sha256": "abec7f3d0e3667acdbfad8713a4baec0084b7b38c5857ea50c1983ef22fdd296"
+    },
+    {
+      "final_native_ID": "9528f694d29d2eaee48784d1aa2e95b0",
+      "full_key_sha256": "7b43f8a787e3c4e64a0b7fbf60e461a62894ef2f8c58a9df679c95c3e7ae8ef0",
+      "master_retained_position": 10,
+      "members": [
+        {
+          "raw_index": 2,
+          "native_ID": "9528f694d29d2eaee48784d1aa2e95b0",
+          "source_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(-1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(-1)*feynkit_generator_factor::{}::InternalFermionLoopSign(-1)",
+          "ratio": "1",
+          "map_records": [
+            20,
+            21
+          ]
+        }
+      ],
+      "final_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(-1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(-1)*feynkit_generator_factor::{}::InternalFermionLoopSign(-1)",
+      "cuts_sha256": "f65819fdb8195e25adc3c1e93fcb7dd2ac6842a30c1c5179041ea2bab745f6cb",
+      "thresholds_sha256": "e5116efb66594e5ec672baaa993227f8d45b6dc12383dd8d8cfa2397fe7e43ce",
+      "collapse_plan_sha256": "d8f4f51506fb9e2015432f2c4c83ccdf862b9ae19f3e64b8ab749d02c8d154ef",
+      "payload_sha256": "4a5ba950a9de84e751a8e28e721116c9273954b71a1c2598bdbe852d47795005"
+    },
+    {
+      "final_native_ID": "61630b50853eb93bf6e778278027e516",
+      "full_key_sha256": "2f42023da65f06c6a74777d09b308e60c673bc6d37d7a6e75ebdf14d87721a04",
+      "master_retained_position": 11,
+      "members": [
+        {
+          "raw_index": 1,
+          "native_ID": "61630b50853eb93bf6e778278027e516",
+          "source_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(-1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(-1)*feynkit_generator_factor::{}::InternalFermionLoopSign(-1)",
+          "ratio": "1",
+          "map_records": [
+            22,
+            23
+          ]
+        }
+      ],
+      "final_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(-1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(-1)*feynkit_generator_factor::{}::InternalFermionLoopSign(-1)",
+      "cuts_sha256": "faa8e27f0dcbd438022777664fa6200d4ef15b5ab0ab06b593df0c057a56d8ab",
+      "thresholds_sha256": "f1f27f68a517620df5d6d67c38141ec4c47332d2cc08d8a8a885d9072839d463",
+      "collapse_plan_sha256": "662250e15af43cac9103b5dcf6c7f0cd403f8e17c16f43997bbd61efb18ef4f4",
+      "payload_sha256": "c506e7be30a3d07cfc2ce1f56eb853869387ad58a6f31f3969e4cd0188753743"
+    },
+    {
+      "final_native_ID": "02957fc4e974ffa2c5b5785e8683a949",
+      "full_key_sha256": "4e72035185a99d7824336d486fef1bf0d54ff85f26b4e9af4a87f0a34b2b1b94",
+      "master_retained_position": 12,
+      "members": [
+        {
+          "raw_index": 22,
+          "native_ID": "02957fc4e974ffa2c5b5785e8683a949",
+          "source_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(-1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(-1)*feynkit_generator_factor::{}::InternalFermionLoopSign(-1)",
+          "ratio": "1",
+          "map_records": [
+            24,
+            25
+          ]
+        },
+        {
+          "raw_index": 23,
+          "native_ID": "5b4c349a74178fbed0bf4321725f53a3",
+          "source_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(-1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(-1)*feynkit_generator_factor::{}::InternalFermionLoopSign(-1)",
+          "ratio": "1",
+          "map_records": [
+            30,
+            31
+          ]
+        }
+      ],
+      "final_factor": "feynkit_generator_factor::{}::NumeratorDependentGrouping(22,1,(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(-1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(-1)*feynkit_generator_factor::{}::InternalFermionLoopSign(-1))+feynkit_generator_factor::{}::NumeratorDependentGrouping(23,1,(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(-1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(-1)*feynkit_generator_factor::{}::InternalFermionLoopSign(-1))",
+      "cuts_sha256": "99d95246b01e94ef62fb0a6c2ff87a0aac765c4a4017aadf858d7f6ff98f3d5e",
+      "thresholds_sha256": "4c5ae8766ddd0141cb4290012fd354cbacb6c18abfc3db85ba5ecd518e58e150",
+      "collapse_plan_sha256": "e416d94f8e2cae4cc8b6e045b8893d39e4fd2916a115ce741ae44ee92d7115f9",
+      "payload_sha256": "26d72410cba3197d0026c101efe39953d8b1c3cf87f87a507f47b19c05859b2d"
+    },
+    {
+      "final_native_ID": "ac346e01153f6a05704695cae1b38d7d",
+      "full_key_sha256": "cdf019cdd308354052fe7f82811478b9c01812cf192b001aa0468fc3c4df1d0b",
+      "master_retained_position": 13,
+      "members": [
+        {
+          "raw_index": 19,
+          "native_ID": "ac346e01153f6a05704695cae1b38d7d",
+          "source_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(-1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(-1)",
+          "ratio": "1",
+          "map_records": [
+            26,
+            27
+          ]
+        }
+      ],
+      "final_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(-1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(-1)",
+      "cuts_sha256": "a7c8d35688a1afcf108729d8a49228f1546e32beb2b10c43127535f470701c9c",
+      "thresholds_sha256": "1e2e20a3f0ad1239eb307185f7404b5041a294cb83141486e743a250a463d993",
+      "collapse_plan_sha256": "0e52d4c9fea8d8b97054df40dd23b012ca57dc3936369b382405769509f3f434",
+      "payload_sha256": "06c729fdf53c9f1972c64da3aaa4e25c87d344d3502103d16b281ee7d942cf56"
+    },
+    {
+      "final_native_ID": "b4a65f23ea3bbedc9e5b169015e626e5",
+      "full_key_sha256": "94ff5578d018c4c02cae4b68a945b904eac81b29b35ae35a5bca544cc5566bc1",
+      "master_retained_position": 14,
+      "members": [
+        {
+          "raw_index": 0,
+          "native_ID": "b4a65f23ea3bbedc9e5b169015e626e5",
+          "source_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(-1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(-1)*feynkit_generator_factor::{}::InternalFermionLoopSign(-1)",
+          "ratio": "1",
+          "map_records": [
+            28,
+            29
+          ]
+        }
+      ],
+      "final_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(-1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(-1)*feynkit_generator_factor::{}::InternalFermionLoopSign(-1)",
+      "cuts_sha256": "9fe9f929648c779690600298714f7449e96c1a7d9e6a8c086f5165c19d9f791b",
+      "thresholds_sha256": "1b1b0ac08d8b93953b0092b6cbc02497947c8babd853487aebb8c705976bb3a1",
+      "collapse_plan_sha256": "112adb791880ddcb6487210891726b861828109ca00318da6afe09b23792291c",
+      "payload_sha256": "9730ace9d14883d21028fb1849fb5939f11e4a71ee5c670c44050bfc3b73a337"
+    },
+    {
+      "final_native_ID": "349316b8dfd921edbf8a29b5bfc4579c",
+      "full_key_sha256": "f55998f231ccaf6e2a1ae8d38e659342862aac3fce18200d0e99a38104c43dac",
+      "master_retained_position": 15,
+      "members": [
+        {
+          "raw_index": 21,
+          "native_ID": "349316b8dfd921edbf8a29b5bfc4579c",
+          "source_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(-1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(-1)",
+          "ratio": "1",
+          "map_records": [
+            32,
+            33
+          ]
+        }
+      ],
+      "final_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(-1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(-1)",
+      "cuts_sha256": "bdadfe156a9887d712858d33673c7b7ac56ef0952f0b90b63c1dbec9b73a80f7",
+      "thresholds_sha256": "a06a524fb8ea0e53167e5bf5a8b96f0bc747a0c27e9c8e03a473db688aacf503",
+      "collapse_plan_sha256": "28756890ae5d9256c29449fd1442a7d1e243efc573a218e7d7b8620b489e9560",
+      "payload_sha256": "2476d4f17197dd1a7841b10afad1b5393f4f4d529b8f118473a31a0eafc882a1"
+    },
+    {
+      "final_native_ID": "421ab32c026d889a1e38b4ce7931eb1f",
+      "full_key_sha256": "72f909883171165ff2341d964c2d0a952bbacc8303cb1a67489a69a569a4116c",
+      "master_retained_position": 16,
+      "members": [
+        {
+          "raw_index": 5,
+          "native_ID": "421ab32c026d889a1e38b4ce7931eb1f",
+          "source_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(-1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(-1)",
+          "ratio": "1",
+          "map_records": [
+            34,
+            35
+          ]
+        }
+      ],
+      "final_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(-1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(-1)",
+      "cuts_sha256": "bdadfe156a9887d712858d33673c7b7ac56ef0952f0b90b63c1dbec9b73a80f7",
+      "thresholds_sha256": "a06a524fb8ea0e53167e5bf5a8b96f0bc747a0c27e9c8e03a473db688aacf503",
+      "collapse_plan_sha256": "600cfdad93f945b1cd8970ba6623daffb9d530dccab3aabdbcbc37dd110223f0",
+      "payload_sha256": "2bd21b0010a7ff236601f0ead5e07c01baa497fac34ed3fe5a91a5a86c45d6da"
+    },
+    {
+      "final_native_ID": "6b9bc12c81c03e3b78c5509eda78b9c8",
+      "full_key_sha256": "d0ea5ef4721b8161283d8431465dd904cf03aefc0689f9edfaa8eac49e066124",
+      "master_retained_position": 17,
+      "members": [
+        {
+          "raw_index": 6,
+          "native_ID": "6b9bc12c81c03e3b78c5509eda78b9c8",
+          "source_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(-1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(-1)",
+          "ratio": "1",
+          "map_records": [
+            36,
+            37
+          ]
+        }
+      ],
+      "final_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(-1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(-1)",
+      "cuts_sha256": "e69336611165501d9f063a683277869681427c78f92ad6e30fd5a6ad9a8ad54e",
+      "thresholds_sha256": "575fd20d5b6bc21ed928adc25a806a32ef8f1ca7cd5cdaea00e0e3ca4b2bd44f",
+      "collapse_plan_sha256": "59a3bfa31247632bc4cdaff1eb271224dca96cb40edadcbf8e4a2b12e295ee51",
+      "payload_sha256": "dd2697374c76fd93db7ea6c17359be7ba87e9d47591691da0a0989eb04cadc90"
+    },
+    {
+      "final_native_ID": "b479fab53b5b53bc9e36c07aa8d7defe",
+      "full_key_sha256": "1485a1d36cfcfa352fd6ae958407a8bad95d378fa482c2bd87b909ecb9018888",
+      "master_retained_position": 18,
+      "members": [
+        {
+          "raw_index": 7,
+          "native_ID": "b479fab53b5b53bc9e36c07aa8d7defe",
+          "source_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(-1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(-1)",
+          "ratio": "1",
+          "map_records": [
+            38,
+            39
+          ]
+        }
+      ],
+      "final_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(-1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(-1)",
+      "cuts_sha256": "bdadfe156a9887d712858d33673c7b7ac56ef0952f0b90b63c1dbec9b73a80f7",
+      "thresholds_sha256": "a06a524fb8ea0e53167e5bf5a8b96f0bc747a0c27e9c8e03a473db688aacf503",
+      "collapse_plan_sha256": "8ab423337c1e2d9c2798f6a98fb34b839b46aebe4b17343fd4d856add7c06446",
+      "payload_sha256": "fb9237a3fda94c68e6658d09dd5aa25ca8ec5ce080b769483de22de9a9101a66"
+    },
+    {
+      "final_native_ID": "490f58839c35891608e6306297dbe14e",
+      "full_key_sha256": "c89b79497e7283adf289a5eac95b53790c2decb1038227452faf9e541b19eb9d",
+      "master_retained_position": 19,
+      "members": [
+        {
+          "raw_index": 15,
+          "native_ID": "490f58839c35891608e6306297dbe14e",
+          "source_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(-1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(-1)",
+          "ratio": "1",
+          "map_records": [
+            40,
+            41
+          ]
+        }
+      ],
+      "final_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(-1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(-1)",
+      "cuts_sha256": "fcab3441f6f342fde5862e54fb52a50c0d8cad9eab86b28f941937320480a0eb",
+      "thresholds_sha256": "a06a524fb8ea0e53167e5bf5a8b96f0bc747a0c27e9c8e03a473db688aacf503",
+      "collapse_plan_sha256": "3577abe3730d65e4b794f73d1d707c7e559d8446f73c66f25e25a780e4b72873",
+      "payload_sha256": "962cf3d0da69876db0d2c6779308cd1d65ab76d52947612f3ebf2c6beec22b10"
+    },
+    {
+      "final_native_ID": "1d308705e7ba3cc724f5c1f618b0676f",
+      "full_key_sha256": "e41629cc973a9807457fa054ae3b98b28bc4394264c02d6da3a238d4ef4e99ab",
+      "master_retained_position": 20,
+      "members": [
+        {
+          "raw_index": 16,
+          "native_ID": "1d308705e7ba3cc724f5c1f618b0676f",
+          "source_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(-1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(-1)",
+          "ratio": "1",
+          "map_records": [
+            42,
+            43
+          ]
+        }
+      ],
+      "final_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(-1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(-1)",
+      "cuts_sha256": "3424ba145771c6676ab21a157b815f07d32f1fcb53becb0ec4e06b3e89bb0b8f",
+      "thresholds_sha256": "575fd20d5b6bc21ed928adc25a806a32ef8f1ca7cd5cdaea00e0e3ca4b2bd44f",
+      "collapse_plan_sha256": "8d04e164402f4b48186135dd7eab6bc6d4ac60ae8d4756ee41df203986611deb",
+      "payload_sha256": "259cd97fa860ea11e8036c21314cec005a0f8fa006ea1fe3da1d82d08631519f"
+    },
+    {
+      "final_native_ID": "8777e5d7a0cc2eb85a619c0d6fe3a45c",
+      "full_key_sha256": "3b58a8557174dd5bb4ac69430b6e9947377253e8070263b036034a8c29e2b281",
+      "master_retained_position": 21,
+      "members": [
+        {
+          "raw_index": 17,
+          "native_ID": "8777e5d7a0cc2eb85a619c0d6fe3a45c",
+          "source_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(-1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(-1)",
+          "ratio": "1",
+          "map_records": [
+            44,
+            45
+          ]
+        }
+      ],
+      "final_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(-1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(-1)",
+      "cuts_sha256": "fcab3441f6f342fde5862e54fb52a50c0d8cad9eab86b28f941937320480a0eb",
+      "thresholds_sha256": "a06a524fb8ea0e53167e5bf5a8b96f0bc747a0c27e9c8e03a473db688aacf503",
+      "collapse_plan_sha256": "38db24dcbf587c5c9da8c91d2e77234e2d52886ce3346a0964d13fe6fc460ac9",
+      "payload_sha256": "238b8e953632aa895a608400bd75104a1f573ff0caad69670144b32cf332faea"
+    },
+    {
+      "final_native_ID": "c864c2c8c707c656a1e3647689258005",
+      "full_key_sha256": "dc211975e36545b544c7fefb5aeff45495f343f7cabdd60ba444c95b767a8dfd",
+      "master_retained_position": 22,
+      "members": [
+        {
+          "raw_index": 8,
+          "native_ID": "c864c2c8c707c656a1e3647689258005",
+          "source_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(-1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(-1)",
+          "ratio": "1",
+          "map_records": [
+            46,
+            47
+          ]
+        }
+      ],
+      "final_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(-1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(-1)",
+      "cuts_sha256": "e69336611165501d9f063a683277869681427c78f92ad6e30fd5a6ad9a8ad54e",
+      "thresholds_sha256": "575fd20d5b6bc21ed928adc25a806a32ef8f1ca7cd5cdaea00e0e3ca4b2bd44f",
+      "collapse_plan_sha256": "c7475deb385041a2ab5a7f2e9ec4d81ca2ca394eedf3ea3e2264c4525bb5fd18",
+      "payload_sha256": "42441d19b2720c914575ed76f0bafbc41ea31015b1c89efe5587dc12f9c71bc3"
+    },
+    {
+      "final_native_ID": "e7b6388d74521c73918b7970455f0ded",
+      "full_key_sha256": "487183adc50453e0a987040d7e53ad77644e714c08a287f5531f5add3c3f958a",
+      "master_retained_position": 23,
+      "members": [
+        {
+          "raw_index": 9,
+          "native_ID": "e7b6388d74521c73918b7970455f0ded",
+          "source_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(-1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(-1)",
+          "ratio": "1",
+          "map_records": [
+            48,
+            49
+          ]
+        }
+      ],
+      "final_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(-1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(-1)",
+      "cuts_sha256": "bdadfe156a9887d712858d33673c7b7ac56ef0952f0b90b63c1dbec9b73a80f7",
+      "thresholds_sha256": "a06a524fb8ea0e53167e5bf5a8b96f0bc747a0c27e9c8e03a473db688aacf503",
+      "collapse_plan_sha256": "4de3a64c968c6fd1fa97a8761e568d4d905ae9c9a6ce04120498cb1342562ee0",
+      "payload_sha256": "e6fddd8c4a7be719e440f88851b71b82ced82f4c0d548ad14cbf14d2547d88e3"
+    },
+    {
+      "final_native_ID": "1e5dbfdf5681cf723ad5934106f0d492",
+      "full_key_sha256": "0e979db7ac07aca448d7df46ec62fb08e7f5a0e85f629206b941310dc6934ed5",
+      "master_retained_position": 24,
+      "members": [
+        {
+          "raw_index": 10,
+          "native_ID": "1e5dbfdf5681cf723ad5934106f0d492",
+          "source_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(-1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(-1)",
+          "ratio": "1",
+          "map_records": [
+            50,
+            51
+          ]
+        }
+      ],
+      "final_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(-1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(-1)",
+      "cuts_sha256": "e69336611165501d9f063a683277869681427c78f92ad6e30fd5a6ad9a8ad54e",
+      "thresholds_sha256": "575fd20d5b6bc21ed928adc25a806a32ef8f1ca7cd5cdaea00e0e3ca4b2bd44f",
+      "collapse_plan_sha256": "aef4e280a5f162d885156aef571d4c827dd9d7e33bb6f3054986b079224520d1",
+      "payload_sha256": "45b81bd0a24eefd9882f4b13a0e297fb7b8644d827d55fffd2a2f7615c0e974e"
+    },
+    {
+      "final_native_ID": "8c67097702331be46178a49aef209dc6",
+      "full_key_sha256": "f16bd51675651811cf9b478bf649f41301cc23bda42611b99bffef182f9a9c24",
+      "master_retained_position": 25,
+      "members": [
+        {
+          "raw_index": 20,
+          "native_ID": "8c67097702331be46178a49aef209dc6",
+          "source_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(-1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(-1)",
+          "ratio": "1",
+          "map_records": [
+            52,
+            53
+          ]
+        }
+      ],
+      "final_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(-1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(-1)",
+      "cuts_sha256": "3424ba145771c6676ab21a157b815f07d32f1fcb53becb0ec4e06b3e89bb0b8f",
+      "thresholds_sha256": "575fd20d5b6bc21ed928adc25a806a32ef8f1ca7cd5cdaea00e0e3ca4b2bd44f",
+      "collapse_plan_sha256": "a6a81b80f5a2f69829c113f34d4b6079aa1327fc3912315e9111c14928a13c2e",
+      "payload_sha256": "28adbb251cfd144696cd8d1c4eb6890f843ce9e3e7fc0afd3b1369c54633ffbb"
+    },
+    {
+      "final_native_ID": "2cb1bacd5230920166bde70367c7f471",
+      "full_key_sha256": "c84110a7e51c6521ad6b5a7001de0563f1ac195e8f39e830229d0957138894be",
+      "master_retained_position": 26,
+      "members": [
+        {
+          "raw_index": 12,
+          "native_ID": "2cb1bacd5230920166bde70367c7f471",
+          "source_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(-1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(-1)",
+          "ratio": "1",
+          "map_records": [
+            54,
+            55
+          ]
+        }
+      ],
+      "final_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(-1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(-1)",
+      "cuts_sha256": "3424ba145771c6676ab21a157b815f07d32f1fcb53becb0ec4e06b3e89bb0b8f",
+      "thresholds_sha256": "575fd20d5b6bc21ed928adc25a806a32ef8f1ca7cd5cdaea00e0e3ca4b2bd44f",
+      "collapse_plan_sha256": "2ba0cda05e453bfbb86c10383c93534b214713d600565af695829decce4582dd",
+      "payload_sha256": "26c5462b14db6a3021e119a773ef9e432242a051a52be4add078a163afe73bf4"
+    },
+    {
+      "final_native_ID": "c57be14a4309b1c90fd38c5fe51195a8",
+      "full_key_sha256": "c961cc0c9baacca0f5c0df450469fc6310211ff24e4c77cbf3f43eb300812ebb",
+      "master_retained_position": 27,
+      "members": [
+        {
+          "raw_index": 13,
+          "native_ID": "c57be14a4309b1c90fd38c5fe51195a8",
+          "source_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(-1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(-1)",
+          "ratio": "1",
+          "map_records": [
+            56,
+            57
+          ]
+        }
+      ],
+      "final_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(-1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(-1)",
+      "cuts_sha256": "fcab3441f6f342fde5862e54fb52a50c0d8cad9eab86b28f941937320480a0eb",
+      "thresholds_sha256": "a06a524fb8ea0e53167e5bf5a8b96f0bc747a0c27e9c8e03a473db688aacf503",
+      "collapse_plan_sha256": "6fb799be12f51bbe02ecc18ae5dececfe8992ca73d85aede85f85a6f7e0bfcd3",
+      "payload_sha256": "1b4fb2229064888f494e65189afc4c0bf9a622667647fb636fdc14e0c235f70f"
+    },
+    {
+      "final_native_ID": "8afddd32498177d4549a5f68f31ad539",
+      "full_key_sha256": "f60c90558f8dd1a3088c1f489dbc3574ca977fd344a1528c0931987e5db8c0b2",
+      "master_retained_position": 28,
+      "members": [
+        {
+          "raw_index": 14,
+          "native_ID": "8afddd32498177d4549a5f68f31ad539",
+          "source_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(-1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(-1)",
+          "ratio": "1",
+          "map_records": [
+            58,
+            59
+          ]
+        }
+      ],
+      "final_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(-1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(-1)",
+      "cuts_sha256": "3424ba145771c6676ab21a157b815f07d32f1fcb53becb0ec4e06b3e89bb0b8f",
+      "thresholds_sha256": "575fd20d5b6bc21ed928adc25a806a32ef8f1ca7cd5cdaea00e0e3ca4b2bd44f",
+      "collapse_plan_sha256": "3af37a57ea49dd246d651992bdddc448d7d01a32543eb0c7c666e23d55a624f2",
+      "payload_sha256": "b9385bc0d7871dbe36df43eb01d1c66d9067b2b6806bfb6c468d78e867b64dbe"
+    }
+  ],
+  "no_omission_duplicate": true,
+  "sole_merge": [
+    22,
+    23
+  ],
+  "ratio": "1",
+  "current_correctness_argument": "Accepted independent raw30 correctness + exact current raw30/input/owner rebind + accepted conditional None signed sewing/chart/owner-covariance/closed-spinor relation + complete partition, source-factor, no-zero/cancellation, cut/threshold and final physical joins. No historical grouped frame is a correctness premise.",
+  "limits": "The new migration requires independent review of this composition and its material interface conditions; ports alone and scalar total4 do not prove it."
+}

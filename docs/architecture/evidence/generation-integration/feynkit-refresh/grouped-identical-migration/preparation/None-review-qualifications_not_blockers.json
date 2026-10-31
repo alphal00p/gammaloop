@@ -1,0 +1,12 @@
+[
+  {
+    "id": "AGG-Q1",
+    "topic": "Fresh executable coverage",
+    "detail": "The original CLI hardcodes target/grouped-none-aggregation-20261030-r1 as its output root, outside the user-authorized .local-only write area. The unchanged main() was exercised and correctly refused the .local output before creating it. The reviewer then executed the unchanged frozen_inputs -> protected_map -> strict_join -> native_reuse -> frozen_inputs functions, including the exact-ID and adapter controls, with outputs only in the new review packet. No source/global/input guard was changed. Full CLI success is reused from its pinned validation-r2 logs plus source inspection of mandatory ordering, not claimed as a new reviewer CLI execution. This does not leave a certificate predicate unchecked."
+  },
+  {
+    "id": "AGG-Q2",
+    "topic": "Historical guard failures",
+    "detail": "The retained final-guard.stderr records the local-versus-@git bookmark assertion failure. The corrected source uses remote-aware keys and its output agrees with the sealed final guard. The earlier newline-splitting failure is narrative-only in the retained target; no separate original script/transcript was found or execution credit assigned. The reviewer independently checked the actual named refs, candidate/parent trees, main index and original tracked bytes."
+  }
+]

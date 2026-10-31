@@ -1,0 +1,26 @@
+{
+  "argv": [
+    "nix",
+    "--offline",
+    "--option",
+    "allow-import-from-derivation",
+    "false",
+    "derivation",
+    "show",
+    "/nix/store/8g1lph77r1h10gqcip2bn9j9hlg99s59-gammaloop-ci-test-binary-dependencies-c3179818d3c1e5a4-Cargo.toml.drv",
+    "/nix/store/d37z9ja54029b83fg08qwhzq04l2ax3p-gammaloop-ci-test-dependencies-c3179818d3c1e5a4-Cargo.toml.drv",
+    "/nix/store/p68jbysl9pidqdxiifkais6l63d8x612-gammaloop-crate-test-dependencies-c3179818d3c1e5a4-inputs.drv"
+  ],
+  "cwd": "/tmp",
+  "license_keys_removed": [
+    "SYMBOLICA_LICENSE",
+    "SYMBOLICA_LICENSE_PATH",
+    "SYMBOLICA_LICENSE_SIGNED",
+    "SYMBOLICA_LICENSE_FILE"
+  ],
+  "start": "2026-10-31T03:12:49.638548+00:00",
+  "exit": 0,
+  "end": "2026-10-31T03:12:49.709050+00:00",
+  "stdout_sha256": "e42faa1e1ee7c8b496d97a9c3089dc05f013bcaefb67508610cc315211b844c9",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+}

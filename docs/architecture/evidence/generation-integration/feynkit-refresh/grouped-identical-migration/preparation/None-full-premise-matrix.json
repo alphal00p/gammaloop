@@ -1,0 +1,227 @@
+{
+  "schema": "grouped-none-premise-matrix/1",
+  "P1_P4": [
+    {
+      "id": "P1",
+      "premise": "Actual grouped observer ledger, FinalFrames and associations for the exact current None request.",
+      "observational_support": "Corrected R2 closes F1-F3 only for exact frozen inputs; original grouped native review and shared Scope A bind producer, archive, compiler, ELF and runtime. Exact IDs use the additive map and full seals; rounded json.id is excluded.",
+      "math_conclusion": "Finite ledger/chain, complete source/frame associations, factorized aggregate identities and exact 30->29 bookkeeping use these captured values.",
+      "bindings": [
+        {
+          "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/grouped-none-qualification-20261030T191919/observer-runtime/captures/ledger.jsonl",
+          "sha256": "2f3f5b2879c0295e473d0d753c39adee46329d31d8d9663eacb5e5ccd3356771",
+          "bytes": 25166086
+        },
+        {
+          "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/grouped-none-qualification-20261030T191919/observer-runtime/captures/finalframes.jsonl",
+          "sha256": "6f8ee1a327268292bb6a0262c4a61553311f6519d3d98106677cb063d3b1fb1e",
+          "bytes": 1307546
+        },
+        {
+          "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/grouped-none-provenance-disposition-20261030-r2/records/exact-id-map.json",
+          "sha256": "67680851b8d8595ad7558dc0960bbdbe2167f6486fef94611986cd0f1eb2b05c",
+          "bytes": 540862
+        }
+      ],
+      "boundary": "Source 5ba; archive 5ea; kernel 8eb. Both actual row tests exit 101; no test-pass or migration credit."
+    },
+    {
+      "id": "P2",
+      "premise": "Captured provisional frame maps, actual source-owned finalization maps and whole-geometry/name/call-phase associations.",
+      "observational_support": "90 actual FinalFrames; input is a selected-field builder projection. Finalization precedes local rule construction and its owner tensors are units.",
+      "math_conclusion": "Reviewer simulation of 180 frames, 120 induced maps (60 current), well-defined 11->9 sewing quotient, 9-edge/18-attached-half-edge bijections, signed final-graph isomorphisms, covariance of actual later owner factors, commuting unimodular momentum charts. Four absent placeholders are excluded exactly.",
+      "bindings": [
+        {
+          "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-eemm-identical-fresh8eb-r3/maps.json",
+          "sha256": "4d51eb47af5def310551f037ee16b801053adc87a4041e473bc3cd79fcfc8289",
+          "bytes": 139890
+        },
+        {
+          "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-identical-none-fresh8eb-math-opus-20261030T202307Z-195933/runs/indep-v1/maps.json",
+          "sha256": "615fdc9265e03645cd0034676ba662422d303c801ec141a91ecc1e0dfa0108d6",
+          "bytes": 101246
+        },
+        {
+          "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-identical-none-fresh8eb-math-opus-20261030T202307Z-195933/runs/indep-v1/frames.json",
+          "sha256": "e0c01064a1164e7a669bae98d2c5d4eccd04df9868563ad8a4b61a8d766afdaf",
+          "bytes": 20722
+        },
+        {
+          "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-eemm-identical-fresh8eb-r3/transport/routing.json",
+          "sha256": "63ecee6a9f48c026cfc8b9131280d50154178b9fd2a075f1879ca2571fbcf4ea",
+          "bytes": 43679
+        },
+        {
+          "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-identical-none-fresh8eb-math-opus-20261030T202307Z-195933/runs/indep-v1/routing-charts.json",
+          "sha256": "a8b00982a79b06a951cd082a45e088896fbd65c1561ca53edcf5669d6be3b022",
+          "bytes": 30735
+        }
+      ],
+      "boundary": "No nonunit provisional tensor invented; unit FinalFrame observations alone prove no tensor identity. Determinant +-1 is verified for the finite corpus only."
+    },
+    {
+      "id": "P3",
+      "premise": "Captured decoded tensors are recorded through the producer uncook call on the actual tensors.",
+      "observational_support": "Source-inspected call path; all 10,908 captured tensors have decoded == raw and no cooked_ occurrence. Observer has I/O, allocation, panic and possible symbol-interning side effects; public-byte non-interference is finite.",
+      "math_conclusion": "Exact identities concern the decoded formal expressions, with exact definitions mandatory, native admitted grammar, local tensor covariance, factorization, finite D22/D23 charge-conjugation cancellation and representative triangle.",
+      "bindings": [
+        {
+          "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-eemm-identical-fresh8eb-r3/grammar/pairs.json",
+          "sha256": "21cc445ab8540dad75b7ec6046e5442e072d8f6b5778b71ca2591d9fff9926c3",
+          "bytes": 2033237
+        },
+        {
+          "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-eemm-identical-fresh8eb-r3/grammar/native8eb/command.json",
+          "sha256": "6a01cd01a72217b1ada4565183feafbee5d05944d3efecb02b760fee0dd035a6",
+          "bytes": 276716
+        },
+        {
+          "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-identical-none-fresh8eb-math-opus-20261030T202307Z-195933/runs/indep-v1/grammar.json",
+          "sha256": "63429b70eb0469566e4f5fc82b05ba4d5a243c8eaabc83c908e1bfa2b1754647",
+          "bytes": 5521
+        },
+        {
+          "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-identical-none-fresh8eb-math-opus-20261030T202307Z-195933/runs/n4-reviewer-grammar-actual/command.json",
+          "sha256": "e775345c607e90ea753699dc2eb9597cbce45a18df2b5ef0c63841fc29fdb64c",
+          "bytes": 17114
+        },
+        {
+          "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-identical-none-fresh8eb-math-opus-20261030T202307Z-195933/runs/n9-probe-tag-subset/command.json",
+          "sha256": "3225cf3b522b58d2d2be45991c6d801fbbe4994cf3e96380d01fa14090fe5c80",
+          "bytes": 17059
+        },
+        {
+          "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-identical-none-fresh8eb-math-opus-20261030T202307Z-195933/runs/n9-probe-tag-superset/command.json",
+          "sha256": "16e905193aa3976426b4fe4dca26eb4504270697e4529352a15329f3f9d252d5",
+          "bytes": 17113
+        },
+        {
+          "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-identical-none-fresh8eb-math-opus-20261030T202307Z-195933/runs/n9-probe-metric-without-symmetric/command.json",
+          "sha256": "0465c55f0ca07cf4958b7f4bc269034e4f9223f57f07a3ef63c723172608ff0f",
+          "bytes": 17182
+        },
+        {
+          "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-eemm-identical-fresh8eb-r3/spinor-adoption.json",
+          "sha256": "0d883e100692bb72df6cb481769504b0c5fb20f58f22d93fb462c400a8b57b69",
+          "bytes": 5965
+        },
+        {
+          "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-eemm-identical-fresh8eb-r3/fresh-triangle.json",
+          "sha256": "07a839652a8025ff0ac71daf065f51c54e6236ae3a3b85990037016369e4efec",
+          "bytes": 16310
+        },
+        {
+          "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/identical-spinor-transport-fresh8eb-join-20261030-sol-r3/check/fresh-source-join.json",
+          "sha256": "11213174473f9209a907c979489237ea48beb7fa0c3d9acc8b0eaca0b189f9de",
+          "bytes": 194421
+        },
+        {
+          "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/identical-spinor-transport-fresh8eb-join-20261030-sol-r3/check/matrices.json",
+          "sha256": "ce762a866a1cdb478b086752c882dec0957724dbab2633ee68eb4bcb69dd332c",
+          "bytes": 184360
+        },
+        {
+          "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/identical-spinor-transport-fresh8eb-join-20261030-sol-r3/check/bounded-fresh-result.json",
+          "sha256": "85c19dfb214a7ea0ec5465e8ce4edfea79b5c0b80cfc6c45024ec39b4cae1810",
+          "bytes": 14624
+        },
+        {
+          "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/identical-spinor-transport-fresh8eb-join-20261030-sol-r3/native-reuse.json",
+          "sha256": "61d0bb5f1a4527a820756de07f8aece32e70f7ae2f6391d9f0e35e7ff6c35470",
+          "bytes": 1208
+        },
+        {
+          "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-identical-none-fresh8eb-math-opus-20261030T202307Z-195933/runs/indep-v1/spinor.json",
+          "sha256": "d49ad4576bb86c54aab243d21052d835a49775e7f8679c6117920ec02fa020c7",
+          "bytes": 19579
+        },
+        {
+          "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-identical-none-fresh8eb-math-opus-20261030T202307Z-195933/runs/n10-worker-local-pairs/command.json",
+          "sha256": "5a6d264a8166bfc695eef0e3dbfc8e214d690e9483352dd7bdbeae4a93168112",
+          "bytes": 17008
+        },
+        {
+          "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-identical-none-fresh8eb-math-opus-20261030T202307Z-195933/runs/n10-worker-faithfulness-pairs/command.json",
+          "sha256": "fec07dac9591cd541dc72e87dc93b9e8629d32df1db14740820fd679172cf395",
+          "bytes": 17048
+        }
+      ],
+      "boundary": "No general raw/cook semantic identity or decode theorem. Native tag-subset acceptance makes Python exact definitions load-bearing."
+    },
+    {
+      "id": "P4",
+      "premise": "Captured ordered interfaces, owner presence and physical endpoint/source metadata.",
+      "observational_support": "Exact bound tensor ports/flags, full source inventory and association. Strict old-model/producer adapter uses sealed old model, actual source manifest and reviewed qualification, with four selected frame joins and 72 owners.",
+      "math_conclusion": "Transport of named port multisets and flags, closed spinor circuit with eight bispinor labels, C^T C = 1 cancellation, product of four vertex signs +1, exact comparison ratio 1 and coherent representative relation.",
+      "bindings": [
+        {
+          "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-eemm-identical-fresh8eb-r3/spinor-adoption.json",
+          "sha256": "0d883e100692bb72df6cb481769504b0c5fb20f58f22d93fb462c400a8b57b69",
+          "bytes": 5965
+        },
+        {
+          "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-eemm-identical-fresh8eb-r3/fresh-triangle.json",
+          "sha256": "07a839652a8025ff0ac71daf065f51c54e6236ae3a3b85990037016369e4efec",
+          "bytes": 16310
+        },
+        {
+          "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/identical-spinor-transport-fresh8eb-join-20261030-sol-r3/check/fresh-source-join.json",
+          "sha256": "11213174473f9209a907c979489237ea48beb7fa0c3d9acc8b0eaca0b189f9de",
+          "bytes": 194421
+        },
+        {
+          "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/identical-spinor-transport-fresh8eb-join-20261030-sol-r3/check/matrices.json",
+          "sha256": "ce762a866a1cdb478b086752c882dec0957724dbab2633ee68eb4bcb69dd332c",
+          "bytes": 184360
+        },
+        {
+          "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/identical-spinor-transport-fresh8eb-join-20261030-sol-r3/check/bounded-fresh-result.json",
+          "sha256": "85c19dfb214a7ea0ec5465e8ce4edfea79b5c0b80cfc6c45024ec39b4cae1810",
+          "bytes": 14624
+        },
+        {
+          "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/identical-spinor-transport-fresh8eb-join-20261030-sol-r3/native-reuse.json",
+          "sha256": "61d0bb5f1a4527a820756de07f8aece32e70f7ae2f6391d9f0e35e7ff6c35470",
+          "bytes": 1208
+        },
+        {
+          "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-identical-none-fresh8eb-math-opus-20261030T202307Z-195933/runs/indep-v1/spinor.json",
+          "sha256": "d49ad4576bb86c54aab243d21052d835a49775e7f8679c6117920ec02fa020c7",
+          "bytes": 19579
+        },
+        {
+          "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-identical-none-fresh8eb-math-opus-20261030T202307Z-195933/runs/n10-worker-local-pairs/command.json",
+          "sha256": "5a6d264a8166bfc695eef0e3dbfc8e214d690e9483352dd7bdbeae4a93168112",
+          "bytes": 17008
+        },
+        {
+          "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-identical-none-fresh8eb-math-opus-20261030T202307Z-195933/runs/n10-worker-faithfulness-pairs/command.json",
+          "sha256": "fec07dac9591cd541dc72e87dc93b9e8629d32df1db14740820fd679172cf395",
+          "bytes": 17048
+        }
+      ],
+      "boundary": "No positional-consumer, free-index typing, physical locality, denominator or full-integrand theorem."
+    }
+  ],
+  "separate_P5": {
+    "premise": "Previously approved c95 raw30 None certificate on byte-identical domain",
+    "current_bridge": "30 complete source payloads and 540 named typed owners match per route; current payload SHA 08ebf574d98a7d953fa7ed582d2c61b5b7091515866cadd5b378b0c79916af93",
+    "historical_role": "Historical raw30 bridge and historical-route FinalFrames are consistency evidence; historical FinalFrame provenance remains unapproved, not migration basis.",
+    "kernel_roles": "c95 native results remain on historical c78 / old-current 1a1. Fresh 8eb admissions are separate; no source or kernel relabel.",
+    "bindings": [
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-eemm-identical-fresh8eb-r3/raw-bridge.json",
+        "sha256": "bfff9927d7f0d2ccc30a40eeebfe1b67839970f56a7ce5ab8f32ae97aeaea964",
+        "bytes": 33562
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-identical-none-fresh8eb-math-opus-20261030T202307Z-195933/runs/bridge-v1/bridge.json",
+        "sha256": "ed7e7f8c5df5daf832ca17023f56b2159c4689da597864773ff9dba9feea207c",
+        "bytes": 465
+      }
+    ]
+  },
+  "attributed_scope_B_conclusion_verbatim": "Premises: P1 grouped observer ledger and FinalFrames bound by the grouped receipt/seal (provenance under separate review); P2 captured provisional frame maps; P3 decoded tensors are the producer's reversible uncook of the actual tensors; P4 captured ordered interfaces; P5 approved c95 raw30 None inputs (byte-equal). Then: (T1) the 30 raw built diagrams equal the approved ungrouped raw30 domain; (T2) for each of 60 (source, comparison|representative) pairs per route, the source-induced signed final map is a final-graph isomorphism (9 edges, 18 attached half-edges, 6 vertices; 4 absent placeholders excluded) under which all 18 actual post-construction owner tensors correspond exactly with equal interface multisets and flags, with a commuting unimodular formal momentum chart; (T3) every aggregate numerator is the product of its local factors (raw, final, comparison, representative); (T4) the complete comparison numerators of D22 and D23 are exactly equal (ratio 1) by local charge-conjugation covariance and closed-circuit cancellation, and the representative relation holds under the induced port permutation and loop negation; (T5) the 30->29 collapse is exactly the observed first-match partition with one group {22,23} at ratio 1, no zero omissions or cancellations, exact source factors, source-defined merged partitions and final outputs equal to master representatives; total weight 4 conserved. Consequently each of the 29 final diagrams' factorized decoded numerator times its overall factor equals the factor-weighted sum of its members' raw decoded numerators, up to the certified signed isomorphisms and unimodular loop/external charts.",
+  "aggregation_decision": "PENDING_NEW_INDEPENDENT_REVIEW",
+  "validator_alone_is_certificate": false
+}

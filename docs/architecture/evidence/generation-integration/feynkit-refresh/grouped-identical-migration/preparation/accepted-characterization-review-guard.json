@@ -1,0 +1,182 @@
+{
+  "status": "PASS",
+  "files": [
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-full-generator-characterization-astra-20261031-022430Z-320628f7/audit-attempt1.py",
+      "sha256": "09f83d6399e2990dd507942e126ea2bdd4d53620267f2e2ace1cf097643a1303"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-full-generator-characterization-astra-20261031-022430Z-320628f7/audit-attempt2.py",
+      "sha256": "47be193f43abdc9ac1da7327f40afbdb800b1493998aa5a7e81a918b8dcb5c77"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-full-generator-characterization-astra-20261031-022430Z-320628f7/audit-attempt3.py",
+      "sha256": "dae76e5a110065b548701f6e88dabbc0d970ac6b0dc6b11c0c8b615d65ea927c"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-full-generator-characterization-astra-20261031-022430Z-320628f7/audit-attempt4.py",
+      "sha256": "4fa84d76902a934d86d230d0c94080284a2011350972d5e23f462191a4d6c6c1"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-full-generator-characterization-astra-20261031-022430Z-320628f7/audit-attempt5.py",
+      "sha256": "4ba784c5460e7b9e5c135a7d28533b546b337f3cad997aac684228322cfa524c"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-full-generator-characterization-astra-20261031-022430Z-320628f7/audit-attempt6.py",
+      "sha256": "20829bfdbe947fcc508e32886a5df42f9bc6c17c7a118d0af98300611c29ddb3"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-full-generator-characterization-astra-20261031-022430Z-320628f7/audit-attempt7.py",
+      "sha256": "6d83d2cd5490e4c27e4f960a687412cef36b55c767949f2a7144a4f894caf541"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-full-generator-characterization-astra-20261031-022430Z-320628f7/audit.py",
+      "sha256": "be0301320de4f6915257b3196d8e886dc9a597d0461368cae8897883f4d5774e"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-full-generator-characterization-astra-20261031-022430Z-320628f7/candidate-seal-verification.json",
+      "sha256": "4814aa4b2bb0bcfbecdf45b2cac8f3f993530a693b6363bdc5942c589f4eb152"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-full-generator-characterization-astra-20261031-022430Z-320628f7/controls-ERROR-023257.json",
+      "sha256": "ae09945b4db7a37938a31f4813233a6011cdffc599773a3ee28e51d7802f1cd4"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-full-generator-characterization-astra-20261031-022430Z-320628f7/controls-commands.json",
+      "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-full-generator-characterization-astra-20261031-022430Z-320628f7/controls-reads.json",
+      "sha256": "c6505ccb77360a1005a4f7b3ecc6f1c6183ec8da43693fa32f767fa453ea5cd2"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-full-generator-characterization-astra-20261031-022430Z-320628f7/final-input-and-process-check.json",
+      "sha256": "49b3322a462e6335ae62097298ede9f5dd62498610a6aabbcf6fa70a040fd003"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-full-generator-characterization-astra-20261031-022430Z-320628f7/final_guard-commands.json",
+      "sha256": "9b1377ebc0955a10d7b32d2064c08cc7872cd964d4c1d29baf1f5a962ac0ebb7"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-full-generator-characterization-astra-20261031-022430Z-320628f7/final_guard-reads.json",
+      "sha256": "27e693744f24b6b3fb19e8ee510d74e2b172301ba561d86f38f637c349c34b39"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-full-generator-characterization-astra-20261031-022430Z-320628f7/fresh-pure-controls.json",
+      "sha256": "fdc60da985ec5a2e76459fd7832ac80fc07abbda330d1c87b40c8ad0ec3897bd"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-full-generator-characterization-astra-20261031-022430Z-320628f7/guard-final.json",
+      "sha256": "c7177256bdfcb6a5d7c53ac7f66a7e35e1749d87c1f151174f044253a406a09c"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-full-generator-characterization-astra-20261031-022430Z-320628f7/guard-start.json",
+      "sha256": "09e8c4fba44c7651c4eaf284749b4b91f7ddf4c6cb6f9861bf8aab10de527818"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-full-generator-characterization-astra-20261031-022430Z-320628f7/independent-kernel-locks.json",
+      "sha256": "858ffb476e541d4fb02d602ebaee66522f164e8dcfa061f6ddd75c3cc39ed36a"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-full-generator-characterization-astra-20261031-022430Z-320628f7/independent-policy.json",
+      "sha256": "296b1a5c877aedefce9c15aec096fb014a32dd880db2ff604fe423de8901a2c5"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-full-generator-characterization-astra-20261031-022430Z-320628f7/independent-provenance.json",
+      "sha256": "40a1a96ed7afb0e25d0bc8d9b7f83ceb9b4a5143e2a01b34347029ceb87ce1e5"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-full-generator-characterization-astra-20261031-022430Z-320628f7/independent-reporting.json",
+      "sha256": "b5e65cb9f5adfebe292c98027ac5dbd020547f0ec701471c984e9a3ddd783644"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-full-generator-characterization-astra-20261031-022430Z-320628f7/independent-results.json",
+      "sha256": "7a55fb40d3dcd3273b2d67b653539bfef6c96941f38f5f386e2849ab9c1e0198"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-full-generator-characterization-astra-20261031-022430Z-320628f7/policy-commands.json",
+      "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-full-generator-characterization-astra-20261031-022430Z-320628f7/policy-reads.json",
+      "sha256": "048a79ee53a0bfe751b1e1608d47138bb5a2ffa9d3af0cd2a43f1baa985be0b3"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-full-generator-characterization-astra-20261031-022430Z-320628f7/prior-inventory-schema.json",
+      "sha256": "f160d87a086d844c0f76ee34477b412ab9c3d28184df1bdf47024291092f8206"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-full-generator-characterization-astra-20261031-022430Z-320628f7/provenance-ERROR-022802.json",
+      "sha256": "b839743e9f4864f01cb9e65f8761eb07ae47918d308a05f8102db6125703fbcd"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-full-generator-characterization-astra-20261031-022430Z-320628f7/provenance-ERROR-022826.json",
+      "sha256": "c58f417512a53ef0cb16bb81843c0f0ce536143bd8c1345dbf15decfc67ffe79"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-full-generator-characterization-astra-20261031-022430Z-320628f7/provenance-ERROR-022924.json",
+      "sha256": "52c9e9b07a89c62c9add53e7f616b100d1209766f48eb485eeb2a8077b494352"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-full-generator-characterization-astra-20261031-022430Z-320628f7/provenance-ERROR-023002.json",
+      "sha256": "34ce35e5bf220c9f4b06df6e111c410c0c712c1f241cf0c9149dcbb3ed5c9a91"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-full-generator-characterization-astra-20261031-022430Z-320628f7/provenance-commands.json",
+      "sha256": "b82b948959e6dc3ca8fab33002e288f9edac1d4dc5fb7ec3c407ee9d11658e30"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-full-generator-characterization-astra-20261031-022430Z-320628f7/provenance-reads.json",
+      "sha256": "32bfd40b7b3003a9759634e86c14ace0c918101c0a232b4e2fad3552c19788f0"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-full-generator-characterization-astra-20261031-022430Z-320628f7/results-ERROR-022613.json",
+      "sha256": "367ef9ccf94631178e40243fc681089c5b77bbbe00341dfb19f31f61b5b44b57"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-full-generator-characterization-astra-20261031-022430Z-320628f7/results-ERROR-022642.json",
+      "sha256": "c91a890ea70d778e3f833888a0747888b078139b997b8f51f0a41d3ac73a484c"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-full-generator-characterization-astra-20261031-022430Z-320628f7/results-commands.json",
+      "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-full-generator-characterization-astra-20261031-022430Z-320628f7/results-reads.json",
+      "sha256": "eb4147886b0bc166a8ffc50e3aa7725d4621193c84960366cbef8a7d9eecab30"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-full-generator-characterization-astra-20261031-022430Z-320628f7/review.json",
+      "sha256": "fb688585bc7efd0b494fef7648df5abad398f88bfe8c439e8b42c0dd520eaa37"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-full-generator-characterization-astra-20261031-022430Z-320628f7/reviewer-probes.json",
+      "sha256": "f6eaef0f7970ea0191fd4de4f1f5d7150b31d53655e81c1cb7cf0354dc029c6f"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-full-generator-characterization-astra-20261031-022430Z-320628f7/source_reporting-commands.json",
+      "sha256": "aa4dae387ddccd312e46bef704cd1c71e6cd757376d85f918fd40c9e1b60cfbd"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-full-generator-characterization-astra-20261031-022430Z-320628f7/source_reporting-reads.json",
+      "sha256": "b9b0c3e0817c2d0503593ba778ff72b31745f404e133a9e01255271ff442579f"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-full-generator-characterization-astra-20261031-022430Z-320628f7/start-commands.json",
+      "sha256": "8659e5c22516f904e9dba75aaef5820614e23cb412b84a18bc41260cd864f118"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-full-generator-characterization-astra-20261031-022430Z-320628f7/start-reads.json",
+      "sha256": "cc0a758df99b90a34157529c75e288863010d58148e2bc352a7cd76287ad1e17"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-full-generator-characterization-astra-20261031-022430Z-320628f7/start.json",
+      "sha256": "2b52265448eff57ce27771507c3f6f952d0c6c4998bb94978bfafe8b5b81b26c"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-full-generator-characterization-astra-20261031-022430Z-320628f7/write_review.py",
+      "sha256": "1efb7638fa43f925ab4abca21b7c19c9054640db1d55c88a21e973f94fbe19d5"
+    }
+  ],
+  "approval_scope": "Root accepted asserted-summary/pool1 characterization only, with deleted payloads and no pool8/32/mathematical/migration credit."
+}

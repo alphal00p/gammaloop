@@ -1,0 +1,22 @@
+{
+  "completed": "2026-10-31T03:14:51.679059+00:00",
+  "source": "6f41807b064bcf2f579883134daef65c8ac279d3",
+  "selected_archive": "/nix/store/kgs8cx1wxnjfaf31achyg5033ll4mxhc-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0.drv",
+  "all_nix_queries_complete": true,
+  "all_closure_and_compiler_profile_queries_complete": true,
+  "no_nix_or_compiler_after_this_boundary": true,
+  "license_keys_removed": [
+    "SYMBOLICA_LICENSE",
+    "SYMBOLICA_LICENSE_PATH",
+    "SYMBOLICA_LICENSE_SIGNED",
+    "SYMBOLICA_LICENSE_FILE"
+  ],
+  "one_selected_build_invocation": true,
+  "actual_closure_units": 452,
+  "Nix_commands": 25,
+  "qualification_complete_before_licensed_phase": true,
+  "retained_archive_bytes": {
+    "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/grouped-identical-migration-20261031/retained-actual-archive.tar.zst": "/nix/store/m6jl5zp0l1fkv26yrhm2ylbpbvfabamm-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0/gammaloop-nextest-feynkit-feynkit-generator.tar.zst"
+  },
+  "retention_label_erratum": "Earlier stdout used GC-root label; actual action copied the new archive locally. No GC root or extra realization was created."
+}

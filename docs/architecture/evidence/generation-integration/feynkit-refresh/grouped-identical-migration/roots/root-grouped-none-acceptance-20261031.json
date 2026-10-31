@@ -1,0 +1,91 @@
+{
+  "schema": 1,
+  "status": "ROOT_ACCEPTS_PINNED_CONDITIONAL_NONE_AGGREGATE_FOR_CONTINUATION",
+  "candidate": "ad7ccbe7cee2373ed54fe16d17971491eb581e80",
+  "bookmarks": [
+    "grouped-none-aggregation-candidate-20261030-r1",
+    "grouped-none-helper-durability-20261030-r1"
+  ],
+  "independentReview": {
+    "path": "../generation-oracle-numerator-families/.local/review-grouped-none-aggregation-astra-20261030-independent-b1/review.json",
+    "sha256": "45368ac2dc5783a6ba31daa9b7e8bd7f03a80746bf3b07b6d3e34cc909adcb81",
+    "sealSha256": "abd2b7018207a7925c712d4b555b2910299619b3cb06408236a349ae4749cb90",
+    "verdict": "APPROVE_PINNED_CONDITIONAL_NONE_AGGREGATE_AND_HELPER_DURABILITY"
+  },
+  "scope": {
+    "case": "xs_qed_eemm_identical_L2",
+    "classes": "None",
+    "grouping": "Identical",
+    "naming": "D",
+    "generationPool": 1,
+    "samples": 5,
+    "seed": 3,
+    "checkCanonicalNumerator": false,
+    "differentiateParticleMassesOnly": true,
+    "fullyNumericalSubstitution": false,
+    "symmetricPolarizations": false,
+    "source": "5ba04864ca506e259d9eef4a54f65acdd8323fc2",
+    "dependencyArchive": "5ea149ffd88ae3afc4072a38c0871c1329be8424",
+    "kernel": "8eb7c3729d6abefc916decc1bdf0c06536f8af80"
+  },
+  "premises": [
+    "P1 captured ledger/FinalFrames",
+    "P2 captured frame maps",
+    "P3 producer reversible-uncook observation; decoded expressions are theorem objects",
+    "P4 captured ordered interfaces/flags/owners",
+    "P5 exact raw30 bridge to approved c95 inputs"
+  ],
+  "closed": [
+    "S4 exact helper durability",
+    "F6 four-frame72owner strictjoin and qualificationownership",
+    "R2-N1 mandatory completefrozeninputguard beforemapping",
+    "R2-N2 additive12diagnostics plusabortsummary erratum",
+    "root composition of observational premises and finite None mathematics"
+  ],
+  "qualifications": [
+    "Reviewer replayed unchanged protected functions; successful fullCLI execution reused from implementation logs, not freshly reviewer-executed",
+    "All34 native records reused by exact verifiedbytes; no native rerun inaggregation",
+    "HistoricalFinalFrames remain unapprovedproducer consistency evidence only",
+    "Samplednonmerges not maximality/nonrelationtheorem",
+    "Both actualrowtests still exit101"
+  ],
+  "excluded": [
+    "Auto",
+    "Sign",
+    "Scalar",
+    "otherrows/pools",
+    "historical-currentgrouped equivalence",
+    "raw-cook semantic identity",
+    "positionalinterface/freeindex/localitytheorem",
+    "denominator/fullintegrand",
+    "literal/digest migration",
+    "integration/WP3/publication"
+  ],
+  "activeTasks": [
+    {
+      "key": "groupAuto",
+      "taskId": "node:delegated-task:command%3Amcp%3A4985cec9-8e94-44e4-b120-162e0b230921%3Adelegate-task%3Ageneration-grouped-auto-certificate-sol61-20261031-r1",
+      "childThreadId": "thread:delegated-task:command%3Amcp%3A4985cec9-8e94-44e4-b120-162e0b230921%3Adelegate-task%3Ageneration-grouped-auto-certificate-sol61-20261031-r1",
+      "model": "gpt-6.1-sol"
+    },
+    {
+      "key": "smIntegration",
+      "taskId": "node:delegated-task:command%3Amcp%3A4985cec9-8e94-44e4-b120-162e0b230921%3Adelegate-task%3Ageneration-sm-eeww-integration-sol61-20261031-r1",
+      "childThreadId": "thread:delegated-task:command%3Amcp%3A4985cec9-8e94-44e4-b120-162e0b230921%3Adelegate-task%3Ageneration-sm-eeww-integration-sol61-20261031-r1",
+      "model": "gpt-6.1-sol"
+    },
+    {
+      "key": "interfaceProof",
+      "taskId": "node:delegated-task:command%3Amcp%3A4985cec9-8e94-44e4-b120-162e0b230921%3Adelegate-task%3Ageneration-raw-three-interface-proof-sol61-20261030-r1",
+      "childThreadId": "thread:delegated-task:command%3Amcp%3A4985cec9-8e94-44e4-b120-162e0b230921%3Adelegate-task%3Ageneration-raw-three-interface-proof-sol61-20261030-r1",
+      "model": "gpt-6.1-sol"
+    },
+    {
+      "key": "hostBuild",
+      "taskId": "node:delegated-task:command%3Amcp%3A4985cec9-8e94-44e4-b120-162e0b230921%3Adelegate-task%3Ageneration-refresh-installed-host-build-sol61-20261030-r1",
+      "childThreadId": "thread:delegated-task:command%3Amcp%3A4985cec9-8e94-44e4-b120-162e0b230921%3Adelegate-task%3Ageneration-refresh-installed-host-build-sol61-20261030-r1",
+      "model": "gpt-6.1-sol"
+    }
+  ],
+  "next": "Separate Auto certificate preparation, then independent review; no inherited approval. SMtokenintegration and3rawinterfaceobligations remain separate."
+}

@@ -1,0 +1,20 @@
+{
+  "Python_AST": "PASS",
+  "sources": {
+    "archive_inputs.py": "3d4a224033669fa06ba914e4f6e2800e8da7f276edcced5208f02c1d5992dad1",
+    "guard_apply.py": "cf968f683225eba810cb2f427d78f4277a3a2c5a893470c42918314984d2307f",
+    "elf_helpers.py": "d7b332ca98ed3f317c1e7678ad15d949a222ee6053fd022c0ab0c52400241859",
+    "finish_pure.py": "290d5f2fae552816752c8eca9ec83b03f8a8ae20dd938272eddb53b8f6904d0f",
+    "pure-realization.py": "0b3f80904b786b7882a576339916c14896e7e0046551670e674e9e8737615e7a",
+    "runtime_common.py": "b6510c70343b4b21278a3c096e59ee566e2ae77e3828fb18832be299ce343086",
+    "runtime_prepare.py": "034e8d9ac4f65472b5a60b1ae720a8a1ce2488a99c9f0d2c9ef7b3c7e0f06ec5",
+    "guard-attempt1.py": "67c5c34c1304aee6b017c47434921103dddd6e716b93f6d4ca740de5dd93b544",
+    "dependency_invariance.py": "e53faf540e7574f18ff72759ab96fed9ff0daddb552365916c40919eb9d64ecc",
+    "run_native.py": "2761af952e89589ba91975191616779461d823ac26e9f516789375e9d44259a6",
+    "qualify.py": "c5bfd555605efd07be5cd4dd8d1a5bf4688912452a740b023d51e1b99886d5d7",
+    "pure.py": "89c3b4549bd16d2ebadedb9af9068242ee423df69781d4ab53ce8a3bf242fe39",
+    "finish-pure-attempt1.py": "372d28d6bd5c5f856172617e3fac50cd9338d810c7a5baae2d989abaeefb6b38",
+    "capture_join.py": "c73b0602ec80c30735a05b44b370da7699dd41ad9f246b54b11071a1d9625886"
+  },
+  "no_native_imports": true
+}

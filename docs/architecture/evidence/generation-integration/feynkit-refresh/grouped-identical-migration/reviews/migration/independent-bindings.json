@@ -1,0 +1,77 @@
+{
+  "Auto_raw_owners": 540,
+  "Auto_raw_sources": 30,
+  "None_raw_owners": 540,
+  "None_raw_sources": 30,
+  "final_groups": 29,
+  "final_owners": 522,
+  "group_weights": [
+    "1",
+    "-1",
+    "-1",
+    "-1",
+    "-1",
+    "-1",
+    "1",
+    "-1",
+    "-1",
+    "-1",
+    "-1",
+    "-1",
+    "-2",
+    "1",
+    "-1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1"
+  ],
+  "historical_grouped_equivalence_claimed": false,
+  "native_execution": 0,
+  "nonidentity_permutations": 57,
+  "phase_graphs_per_mode": 60,
+  "phase_owner_axis_maps": 1080,
+  "strict_facts": {
+    "Auto": {
+      "cancellations_boolfalse": 29,
+      "member_string1": 210,
+      "ratios": [
+        null,
+        null,
+        "1"
+      ],
+      "samples_int5": 30,
+      "zeros_boolfalse": 60
+    },
+    "None": {
+      "cancellations_boolfalse": 29,
+      "member_string1": 210,
+      "ratios": [
+        null,
+        null,
+        "1"
+      ],
+      "samples_int5": 30,
+      "zeros_boolfalse": 60
+    }
+  },
+  "unique_merge_ids": [
+    "02957fc4e974ffa2c5b5785e8683a949",
+    "5b4c349a74178fbed0bf4321725f53a3"
+  ],
+  "weight_histogram": {
+    "-1": 11,
+    "-2": 1,
+    "1": 17
+  }
+}

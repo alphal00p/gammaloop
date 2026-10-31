@@ -1,0 +1,6012 @@
+//! Lightweight, application-independent Feynman diagrams.
+//!
+//! This crate owns the structural and symbolic diagram layer, including the
+//! physical cut partitions selected during canonical cross-section generation.
+//! Runtime cut evaluators, subtraction data, parametrizations, and caches belong
+//! to applications consuming these diagrams.
+
+#![forbid(unsafe_code)]
+
+use linnet::half_edge::subgraph::ModifySubSet;
+mod canonical_form;
+mod compact_dot;
+mod display;
+mod dot;
+pub mod expressions;
+mod finalization;
+mod integrals;
+#[cfg(test)]
+mod lazy_tests;
+mod numerator_interface;
+mod partition_check;
+mod power_counting;
+pub mod routing;
+#[cfg(feature = "svg")]
+mod scene;
+mod subgraph;
+pub mod symbols;
+pub mod thresholds;
+mod uv;
+
+pub use dot::{DotAttributes, DotDiagram, ExplicitFactors};
+pub use integrals::{
+    IntegralFamily, IntegralFamilyError, IntegralMapping, PropagatorMapping, QuadraticMomentum,
+};
+pub use numerator_interface::NumeratorInterface;
+pub use power_counting::DOD;
+#[cfg(feature = "svg")]
+pub use scene::SceneOptions;
+
+// Symbolica does not permit adding tags after a bare symbol with the same name
+// has been registered. Claim momentum, index and Lorentz heads during global state
+// initialization so parsing and generation always agree on their tensor types.
+// Use Spenso's canonical tag names and shared printer so FeynKit interoperates
+// with the Spenso instance embedded by the host.
+symbolica::initialize!(|| spenso::symbolica_init::in_symbolica_initializer(|| {
+    let _ = Minkowski {}.to_symbolic([Atom::Zero]);
+    symbols::momentum();
+    symbols::loop_momentum();
+    symbols::external_momentum();
+    symbols::edge_index();
+    symbols::vertex_index();
+    symbols::hedge_index();
+    symbols::dimension();
+    symbols::denominator();
+    symbols::u();
+    symbols::ubar();
+    symbols::v();
+    symbols::vbar();
+    symbols::epsilon();
+    symbols::epsilonbar();
+}));
+
+pub fn momentum_symbol() -> symbolica::atom::Symbol {
+    symbols::momentum()
+}
+
+use std::collections::{BTreeMap, BTreeSet};
+use std::fmt;
+use std::fmt::Write;
+use std::str::FromStr;
+use std::sync::LazyLock;
+use std::sync::{Arc, OnceLock};
+
+pub use feynkit_kinematics::MomentumSignature;
+use feynkit_kinematics::Signature;
+use feynkit_model::{Model, ModelError, ModelFingerprint, Particle, ParticleId, VertexRuleId};
+use idenso::cook::CookingError;
+use idenso::tensor::SymbolicTensor;
+use idenso::tensor::composition::TensorCompositionError;
+use idenso::tensor::inference::TensorInferenceError;
+use linnet::half_edge::builder::HedgeGraphBuilder;
+use linnet::half_edge::involution::{EdgeIndex, Flow, HedgePair, Orientation};
+use linnet::half_edge::subgraph::{Inclusion, SuBitGraph, SubSetLike, SubSetOps};
+use linnet::half_edge::tree::SimpleTraversalTree;
+use linnet::half_edge::{HedgeGraph, NodeIndex};
+use linnet::parser::DotGraph;
+use linnet::parser::dot_value;
+use linnet::parser::set::DotGraphSet;
+use once_cell::sync::OnceCell;
+use serde::{Deserialize, Serialize};
+use spenso::structure::abstract_index::AbstractIndexError;
+use spenso::structure::partial::PartialStructure;
+#[cfg(test)]
+use spenso::structure::partial::PartialStructureExt;
+use spenso::structure::representation::{Minkowski, RepName};
+use spenso::structure::slot::SlotError;
+use symbolica::atom::{Atom, AtomCore, UserData};
+use symbolica::parser::{ParseSettings, Token};
+use symbolica::state::{State, Workspace};
+use symbolica::with_default_namespace;
+use thiserror::Error;
+
+/// The scalar one, built once for unset numerator fragments and products.
+pub(crate) static ONE: LazyLock<SymbolicTensor<PartialStructure>> =
+    LazyLock::new(|| SymbolicTensor::infer(Atom::one()).expect("literal one is scalar"));
+
+/// Whether a numerator fragment is the scalar one, as unset fragments are.
+pub(crate) fn is_unit(fragment: &SymbolicTensor<PartialStructure>) -> bool {
+    fragment.is_scalar() && fragment.expression().is_one()
+}
+
+/// Stable vertex identifier in a [`FeynmanDiagram`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct VertexId(pub usize);
+
+/// Stable edge identifier in a [`FeynmanDiagram`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct EdgeId(pub usize);
+
+/// Stable interaction-leg position of one edge endpoint.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct VertexSlot(pub usize);
+
+/// Stable content-derived identifier for a finalized diagram topology.
+///
+/// The id hashes the diagram's structural canonical form: the canonical form of its colored
+/// topology with particle orientations as stored (the [`CanonicalDiagramKey`] layout, without
+/// the normalization of [`FeynmanDiagram::canonical_key`]). It is the first 128 bits of the
+/// BLAKE3 hash of a prefix-free encoding of the form's words and key tables, in which particles
+/// and vertex rules appear as their model index and name. Distinct forms are encoded by distinct
+/// bytes, so structurally distinct diagrams get distinct ids barring a BLAKE3 collision.
+///
+/// Ids depend on nothing but the form and those model names: not on the model's parameters, on
+/// numerators or names, on the order in which Symbolica registered its symbols, or on the number
+/// of generation threads. Canonical forms, and therefore ids, are comparable only between
+/// diagrams canonized by the same version of Linnet.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct DiagramId(pub u128);
+
+impl fmt::Display for DiagramId {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "{:032x}", self.0)
+    }
+}
+
+impl FromStr for DiagramId {
+    type Err = std::num::ParseIntError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        u128::from_str_radix(value, 16).map(Self)
+    }
+}
+
+/// Whether an external momentum carrier belongs to the initial or final state.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ExternalState {
+    Incoming,
+    Outgoing,
+}
+
+impl ExternalState {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Incoming => "incoming",
+            Self::Outgoing => "outgoing",
+        }
+    }
+}
+
+/// Metadata carried by an external edge, including sewn initial-state connections.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct ExternalLeg {
+    pub name: String,
+    /// Unique momentum label of this external leg.
+    pub index: usize,
+    pub state: ExternalState,
+    /// Sewing identity. Amplitude legs use distinct values; the incoming and
+    /// outgoing copies of a cross-section initial state share one value.
+    pub connection: usize,
+}
+
+/// Structural and symbolic information associated with a vertex.
+#[derive(Debug, Clone)]
+pub struct DiagramVertex {
+    pub name: String,
+    pub interaction: Option<VertexRuleId>,
+    pub numerator: SymbolicTensor<PartialStructure>,
+}
+
+impl DiagramVertex {
+    pub fn interaction(name: impl Into<String>, rule: VertexRuleId) -> Self {
+        Self {
+            name: name.into(),
+            interaction: Some(rule),
+            numerator: SymbolicTensor::infer(Atom::one()).expect("literal one is scalar"),
+        }
+    }
+}
+
+/// Structural and symbolic information associated with an edge.
+#[derive(Debug, Clone)]
+pub struct DiagramEdge {
+    pub external: Option<ExternalLeg>,
+    pub is_dummy: bool,
+    pub particle: ParticleId,
+    pub directed: bool,
+    pub numerator: SymbolicTensor<PartialStructure>,
+    source_slot: VertexSlot,
+    target_slot: VertexSlot,
+}
+
+impl DiagramEdge {
+    pub fn new(particle: ParticleId, directed: bool) -> Self {
+        Self {
+            external: None,
+            is_dummy: false,
+            particle,
+            directed,
+            numerator: SymbolicTensor::infer(Atom::one()).expect("literal one is scalar"),
+            source_slot: VertexSlot(0),
+            target_slot: VertexSlot(0),
+        }
+    }
+
+    pub fn source_slot(&self) -> VertexSlot {
+        self.source_slot
+    }
+
+    pub fn target_slot(&self) -> VertexSlot {
+        self.target_slot
+    }
+
+    pub fn with_slots(mut self, source: VertexSlot, target: VertexSlot) -> Self {
+        self.source_slot = source;
+        self.target_slot = target;
+        self
+    }
+}
+
+/// Source and target in the canonical orientation of an edge.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct EdgeEndpoints {
+    pub source: Option<VertexId>,
+    pub target: Option<VertexId>,
+}
+
+/// One stable half-edge endpoint in a finalized diagram.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DiagramEndpoint {
+    Source,
+    Target,
+}
+
+/// A stable half-edge reference used by canonical cut metadata.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct DiagramHalfEdge {
+    pub edge: EdgeId,
+    pub endpoint: DiagramEndpoint,
+}
+
+/// One amplitude side retained for a physical cross-section cut.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct DiagramCutSide {
+    pub half_edges: Vec<DiagramHalfEdge>,
+    pub coupling_orders: BTreeMap<String, usize>,
+    pub loop_count: usize,
+}
+
+/// A physical cross-section cut selected by canonical FeynKit generation.
+///
+/// `cut` contains the half-edge on the left side of every oriented cut edge;
+/// the opposite endpoints are implied. `left` and `right` preserve the exact
+/// amplitude partitions used by generation filters.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct DiagramCut {
+    pub cut: Vec<DiagramHalfEdge>,
+    pub left: DiagramCutSide,
+    pub right: DiagramCutSide,
+}
+
+/// A checked partition of the half-edges into two sides, with the oriented
+/// endpoints of the internal edges crossing from left to right.
+struct Partition {
+    left: BTreeSet<DiagramHalfEdge>,
+    right: BTreeSet<DiagramHalfEdge>,
+    crossing: BTreeSet<DiagramHalfEdge>,
+}
+
+/// One topology-only threshold candidate retained during cross-section finalization.
+///
+/// Unlike [`DiagramCut`], this partition is not required to match the requested
+/// physical final state. It records the complete, process-independent s-channel
+/// cut inventory used to construct threshold counterterms downstream. Keeping
+/// this metadata separate prevents topology candidates from being mistaken for
+/// physical Cutkosky cuts.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct DiagramThresholdCandidate {
+    /// The half-edge on the left side of every oriented crossing edge.
+    pub cut: Vec<DiagramHalfEdge>,
+    /// Every half-edge belonging to the source side of the partition.
+    pub left: Vec<DiagramHalfEdge>,
+    /// Every half-edge belonging to the target side of the partition.
+    pub right: Vec<DiagramHalfEdge>,
+}
+
+/// Side label used by the auxiliary cut-incidence graph in a canonical key.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CanonicalCutSide {
+    Left,
+    Right,
+}
+
+/// Vertex color retained by [`CanonicalDiagramKey`].
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CanonicalDiagramVertex {
+    Diagram {
+        interaction: Option<VertexRuleId>,
+    },
+    CutSide {
+        side: CanonicalCutSide,
+        coupling_orders: BTreeMap<String, usize>,
+        loop_count: usize,
+    },
+    TopologyThresholdSide {
+        side: CanonicalCutSide,
+    },
+}
+
+/// Edge color retained by [`CanonicalDiagramKey`]. Diagram edges keep their orientation and
+/// interaction slots in the canonical structure.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CanonicalDiagramEdge {
+    Diagram {
+        particle: ParticleId,
+        external: Option<ExternalLeg>,
+        is_dummy: bool,
+    },
+    CutPair,
+    CutMembership,
+}
+
+/// Deterministic colored-topology key for diagram grouping and parity checks.
+///
+/// Vertex names, numerators, symmetry factors, and overall factors are payload
+/// rather than graph colors and are intentionally excluded.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct CanonicalDiagramKey {
+    /// The canonically relabelled structure of Linnet's canonizer; its colors rank into the
+    /// sorted distinct keys below.
+    pub words: Vec<u32>,
+    pub vertices: Vec<CanonicalDiagramVertex>,
+    pub edges: Vec<CanonicalDiagramEdge>,
+    /// Interaction slots of diagram half-edges; `None` on the auxiliary cut edges.
+    pub half_edges: Vec<Option<VertexSlot>>,
+}
+
+/// A spanning-forest-induced loop momentum basis.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LoopMomentumBasis {
+    pub tree_edges: Vec<EdgeId>,
+    pub loop_edges: Vec<EdgeId>,
+    pub external_edges: Vec<EdgeId>,
+    /// One dependent external momentum is chosen for each connected component.
+    pub dependent_externals: Vec<EdgeId>,
+    pub edge_signatures: BTreeMap<EdgeId, MomentumSignature>,
+}
+
+impl LoopMomentumBasis {
+    /// Validate that this basis is a complete routing of `diagram`.
+    ///
+    /// Every edge must occur in exactly one structural role, the selected tree
+    /// must be a spanning forest, and every stored signature must agree with
+    /// the routing induced by that forest and the requested loop-edge order.
+    pub fn validate(&self, diagram: &FeynmanDiagram) -> Result<(), DiagramError> {
+        let expected = diagram
+            .basis_from_tree(&self.tree_edges)?
+            .with_loop_edge_order(&self.loop_edges)?;
+        if *self != expected {
+            return Err(DiagramError::InvalidLoopMomentumBasis(
+                "stored signatures or edge roles do not match the shared graph routing".into(),
+            ));
+        }
+        Ok(())
+    }
+
+    /// Return the same routing with its independent loop momenta ordered by edge.
+    pub fn with_loop_edge_order(mut self, requested: &[EdgeId]) -> Result<Self, DiagramError> {
+        let current: BTreeSet<_> = self.loop_edges.iter().copied().collect();
+        let requested_set: BTreeSet<_> = requested.iter().copied().collect();
+        if requested.len() != requested_set.len() || requested_set != current {
+            return Err(DiagramError::InvalidLoopMomentumEdges {
+                requested: requested.to_vec(),
+                available: self.loop_edges,
+            });
+        }
+
+        let positions = requested
+            .iter()
+            .map(|edge| {
+                self.loop_edges
+                    .iter()
+                    .position(|candidate| candidate == edge)
+                    .ok_or_else(|| {
+                        DiagramError::InvalidLoopMomentumBasis(format!(
+                            "requested loop edge {} is not present in the stored basis",
+                            edge.0
+                        ))
+                    })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        for signature in self.edge_signatures.values_mut() {
+            let loops = positions
+                .iter()
+                .map(|position| {
+                    signature.loops.get(*position).ok_or_else(|| {
+                        DiagramError::InvalidLoopMomentumBasis(format!(
+                            "a momentum signature has {} loop entries, expected {}",
+                            signature.loops.len(),
+                            self.loop_edges.len()
+                        ))
+                    })
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            signature.loops = Signature::new(loops);
+        }
+        self.loop_edges = requested.to_vec();
+        Ok(self)
+    }
+}
+
+/// Errors produced while constructing or transforming diagrams.
+/// See [`NumeratorInterface`] for fallible source admission and a complete round trip.
+#[derive(Debug, Error)]
+pub enum DiagramError {
+    #[error(transparent)]
+    IntegralFamily(#[from] IntegralFamilyError),
+    #[error("cannot expand UV counterterm: {0}")]
+    UvExpansion(String),
+    #[error("cannot determine superficial UV degree: {0}")]
+    UvPowerCounting(String),
+    #[error(transparent)]
+    Model(#[from] ModelError),
+    #[error("vertex {vertex} is outside a diagram with {vertices} vertices")]
+    UnknownVertex { vertex: usize, vertices: usize },
+    #[error("edge {edge} is outside a diagram with {edges} edges")]
+    UnknownEdge { edge: usize, edges: usize },
+    #[error("diagram contains duplicate external index {0}")]
+    DuplicateExternalIndex(usize),
+    #[error("diagram contains no external leg with index {0}")]
+    UnknownExternalIndex(usize),
+    #[error("external connection {connection} contains {legs} legs, expected one or two")]
+    InvalidExternalConnectionSize { connection: usize, legs: usize },
+    #[error("external connection {connection} contains two {state} legs")]
+    InvalidExternalConnectionStates {
+        connection: usize,
+        state: &'static str,
+    },
+    #[error("invalid external state '{0}'")]
+    InvalidExternalState(String),
+    #[error("missing required DOT attribute '{attribute}' on {target}")]
+    MissingDotAttribute {
+        target: String,
+        attribute: &'static str,
+    },
+    #[error("invalid DOT attribute '{attribute}' on {target}: {value}")]
+    InvalidDotAttribute {
+        target: String,
+        attribute: &'static str,
+        value: String,
+    },
+    #[error("external index {0} cannot be incremented while importing DOT")]
+    DotExternalIndexOverflow(usize),
+    #[error("failed to parse DOT: {0}")]
+    DotParse(String),
+    #[error("diagram DOT model fingerprint {serialized} does not match supplied model {actual}")]
+    DotModelFingerprintMismatch {
+        serialized: String,
+        actual: ModelFingerprint,
+    },
+    #[error("failed to serialize or parse diagram JSON: {0}")]
+    Json(#[from] serde_json::Error),
+    #[error("failed to parse diagram {field} '{expression}': {message}")]
+    SymbolicParse {
+        field: &'static str,
+        expression: String,
+        message: String,
+    },
+    #[error("diagram model fingerprint {serialized} does not match supplied model {actual}")]
+    ModelFingerprintMismatch {
+        serialized: ModelFingerprint,
+        actual: ModelFingerprint,
+    },
+    #[error(
+        "vertex {vertex} interaction {interaction:?} has incident signature {actual:?}, expected {expected:?}"
+    )]
+    InteractionSignatureMismatch {
+        vertex: usize,
+        interaction: VertexRuleId,
+        actual: Vec<(i64, Option<bool>)>,
+        expected: Vec<(i64, Option<bool>)>,
+    },
+    #[error("vertex {vertex} uses endpoint slot {slot} more than once")]
+    DuplicateVertexSlot { vertex: usize, slot: usize },
+    #[error("vertex {vertex} endpoint slots are {actual:?}, expected {expected:?}")]
+    InvalidVertexSlots {
+        vertex: usize,
+        actual: Vec<usize>,
+        expected: Vec<usize>,
+    },
+    #[error("generated external edge {edge} must have unit numerator")]
+    ExternalEdgeNumerator { edge: usize },
+    #[error("cross-section external connections require at least one finalized physical cut")]
+    MissingCrossSectionCuts,
+    #[error("invalid physical cut {cut}: {message}")]
+    InvalidCut { cut: usize, message: String },
+    #[error("invalid topology threshold candidate {candidate}: {message}")]
+    InvalidThresholdCandidate { candidate: usize, message: String },
+    #[error(
+        "diagram-wide numerator differs from the product of the vertex and edge numerator fragments"
+    )]
+    NumeratorFragmentMismatch,
+    /// Source notation could not be encoded during tensor admission or transport.
+    #[error("{operation}: {source}")]
+    TensorCooking {
+        operation: &'static str,
+        #[source]
+        source: Box<CookingError>,
+    },
+    /// A declared source port is not a supported tensor slot.
+    #[error("{operation}: {source}")]
+    TensorSlot {
+        operation: &'static str,
+        #[source]
+        source: Box<SlotError>,
+    },
+    /// A transported tensor label is not a valid abstract index.
+    #[error("{operation}: {source}")]
+    TensorIndex {
+        operation: &'static str,
+        #[source]
+        source: Box<AbstractIndexError>,
+    },
+    #[error("invalid diagram tensor: {0}")]
+    Tensor(#[from] TensorInferenceError),
+    #[error("incompatible diagram tensor product: {0}")]
+    TensorComposition(#[from] TensorCompositionError),
+    #[error("cannot replace the numerator of a diagram without an interaction vertex")]
+    MissingNumeratorAnchor,
+    #[error("diagram invariant failed while {operation}: {message}")]
+    Invariant {
+        operation: &'static str,
+        message: String,
+    },
+    /// Native drawing settings were rejected by the scene configuration owner.
+    #[error("invalid scene configuration: {0}")]
+    SceneConfiguration(String),
+    #[error("failed to format DOT")]
+    Formatting(#[from] std::fmt::Error),
+    #[error("the diagram has no loop-momentum basis")]
+    MissingLoopMomentumBasis,
+    #[error("invalid loop-momentum basis: {0}")]
+    InvalidLoopMomentumBasis(String),
+    #[error("serialized diagram ID {serialized} does not match its content-derived ID {actual}")]
+    DiagramIdMismatch {
+        serialized: DiagramId,
+        actual: DiagramId,
+    },
+    #[error(
+        "requested loop-momentum edges {requested:?} do not select the available basis {available:?}"
+    )]
+    InvalidLoopMomentumEdges {
+        requested: Vec<EdgeId>,
+        available: Vec<EdgeId>,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct DiagramSerde {
+    id: DiagramId,
+    model: ModelFingerprint,
+    name: Option<String>,
+    vertices: Vec<DiagramVertexSerde>,
+    edges: Vec<(EdgeEndpoints, DiagramEdgeSerde)>,
+    half_edge_order: Vec<DiagramHalfEdge>,
+    symmetry_factor: u128,
+    overall_factor: String,
+    numerator: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    num_interface: Option<NumeratorInterface>,
+    numerator_prefactor: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    numerator_prefactor_interface: Option<NumeratorInterface>,
+    projector: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    projector_interface: Option<NumeratorInterface>,
+    loop_momentum_basis: LoopMomentumBasis,
+    cuts: Vec<DiagramCut>,
+    topology_threshold_candidates: Vec<DiagramThresholdCandidate>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct DiagramVertexSerde {
+    name: String,
+    interaction: Option<VertexRuleId>,
+    numerator: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    num_interface: Option<NumeratorInterface>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct DiagramEdgeSerde {
+    external: Option<ExternalLeg>,
+    is_dummy: bool,
+    orientation: Orientation,
+    particle: ParticleId,
+    directed: bool,
+    numerator: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    num_interface: Option<NumeratorInterface>,
+    source_slot: VertexSlot,
+    target_slot: VertexSlot,
+}
+
+/// A derived aggregate is computed only at an explicit expression boundary.
+/// An imported or explicitly supplied aggregate remains independently checked.
+#[derive(Debug, Clone)]
+enum DiagramNumerator {
+    Derived(OnceCell<SymbolicTensor<PartialStructure>>),
+    Explicit(SymbolicTensor<PartialStructure>),
+}
+
+impl Default for DiagramNumerator {
+    fn default() -> Self {
+        Self::Derived(OnceCell::new())
+    }
+}
+
+/// Model-aware Feynman-diagram IR backed by Linnet's half-edge graph.
+#[derive(Debug, Clone)]
+pub struct FeynmanDiagram {
+    model: Arc<Model>,
+    id: OnceCell<DiagramId>,
+    name: Option<String>,
+    graph: HedgeGraph<DiagramEdge, DiagramVertex>,
+    symmetry_factor: u128,
+    overall_factor: Atom,
+    numerator: DiagramNumerator,
+    numerator_prefactor: SymbolicTensor<PartialStructure>,
+    projector: SymbolicTensor<PartialStructure>,
+    loop_momentum_basis: Arc<LoopMomentumBasis>,
+    cuts: Vec<DiagramCut>,
+    topology_threshold_candidates: Vec<DiagramThresholdCandidate>,
+    // Structural, routing, or numerator edits must invalidate this certificate.
+    validation: OnceLock<()>,
+    // Numerator and cut edits preserve the routing of the unchanged graph.
+    routing_validation: OnceLock<()>,
+}
+
+impl Serialize for FeynmanDiagram {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.serde_view()
+            .map_err(serde::ser::Error::custom)?
+            .serialize(serializer)
+    }
+}
+
+impl FeynmanDiagram {
+    pub fn builder(model: impl Into<Arc<Model>>, name: impl Into<String>) -> FeynmanDiagramBuilder {
+        FeynmanDiagramBuilder::new(model, Some(name.into()))
+    }
+
+    pub fn model(&self) -> &Model {
+        &self.model
+    }
+
+    pub fn model_arc(&self) -> Arc<Model> {
+        Arc::clone(&self.model)
+    }
+
+    /// Compute the structural identity on first successful demand.
+    pub fn id(&self) -> Result<DiagramId, DiagramError> {
+        self.id.get_or_try_init(|| self.structural_id()).copied()
+    }
+
+    /// The requested display name, absent for minimal generated output.
+    pub fn name(&self) -> Option<&str> {
+        self.name.as_deref()
+    }
+
+    /// Return the raw automorphism order retained as generation provenance.
+    ///
+    /// This value is diagnostic only. [`Self::overall_factor`] is the
+    /// authoritative symbolic weight and may also include grouping or fermion
+    /// signs, so runtime consumers must not apply the symmetry factor again.
+    pub fn symmetry_factor(&self) -> u128 {
+        self.symmetry_factor
+    }
+
+    pub fn overall_factor(&self) -> &Atom {
+        &self.overall_factor
+    }
+
+    /// The aggregate numerator. A derived aggregate is the product of the local
+    /// fragments, formed on first demand; the fragments may fail to compose.
+    pub fn numerator(&self) -> Result<&SymbolicTensor<PartialStructure>, DiagramError> {
+        match &self.numerator {
+            DiagramNumerator::Derived(value) => {
+                value.get_or_try_init(|| Self::fragment_numerator(&self.graph))
+            }
+            DiagramNumerator::Explicit(value) => Ok(value),
+        }
+    }
+
+    fn fragment_numerator(
+        graph: &HedgeGraph<DiagramEdge, DiagramVertex>,
+    ) -> Result<SymbolicTensor<PartialStructure>, DiagramError> {
+        let numerator = SymbolicTensor::multiply_many(
+            graph
+                .iter_edges()
+                .map(|(_, _, edge)| &edge.data.numerator)
+                .chain(graph.iter_nodes().map(|(_, _, vertex)| &vertex.numerator)),
+        )?;
+        NumeratorInterface::canonical_ports(numerator)
+    }
+
+    /// Replace local numerator fragments in the finalized index frame and
+    /// derive their product on demand. Fragment edits preserve topology and routing.
+    pub fn with_numerator_fragments(
+        mut self,
+        vertices: impl IntoIterator<Item = (VertexId, SymbolicTensor<PartialStructure>)>,
+        edges: impl IntoIterator<Item = (EdgeId, SymbolicTensor<PartialStructure>)>,
+    ) -> Result<Self, DiagramError> {
+        self.validation.take();
+        for (vertex, numerator) in vertices {
+            let node = self.vertex_node(vertex)?;
+            self.graph[node].numerator = numerator;
+        }
+        for (edge, numerator) in edges {
+            if edge.0 >= self.graph.n_edges() {
+                return Err(DiagramError::UnknownEdge {
+                    edge: edge.0,
+                    edges: self.graph.n_edges(),
+                });
+            }
+            self.graph[EdgeIndex(edge.0)].numerator = numerator;
+        }
+        self.numerator = DiagramNumerator::default();
+        self.validate()?;
+        Ok(self)
+    }
+
+    /// Product of internal quadratic propagators in GammaLoop's tagged form.
+    ///
+    /// Each `denom(edge, Q(edge), mass², Q(edge)² - mass²)` uses the symbolic
+    /// dimension `gammalooprs::dim` and the same momenta as the numerator. Masses
+    /// remain symbolic except the UFO `ZERO` parameter. External carriers,
+    /// widths, and an imaginary prescription are excluded. Custom UFO
+    /// propagator denominators are not instantiated here.
+    pub fn denominator_expression(&self) -> Result<Atom, DiagramError> {
+        self.denominator_of(&self.internal_subgraph(), &BTreeMap::new())
+    }
+
+    /// Global numerator multiplier supplied by the generation request.
+    pub fn numerator_prefactor(&self) -> &SymbolicTensor<PartialStructure> {
+        &self.numerator_prefactor
+    }
+
+    /// External-state projector applied to the generated numerator.
+    pub fn projector(&self) -> &SymbolicTensor<PartialStructure> {
+        &self.projector
+    }
+
+    /// The routing selected during diagram finalization.
+    pub fn loop_momentum_basis(&self) -> &LoopMomentumBasis {
+        &self.loop_momentum_basis
+    }
+
+    /// Physical cut partitions retained by cross-section generation.
+    pub fn cuts(&self) -> &[DiagramCut] {
+        &self.cuts
+    }
+
+    /// Internal edges crossed by any physical cut.
+    pub(crate) fn cut_edges(&self) -> BTreeSet<EdgeId> {
+        self.cuts
+            .iter()
+            .flat_map(|cut| cut.cut.iter().map(|half_edge| half_edge.edge))
+            .collect()
+    }
+
+    /// Physical final-state particles in the stored order of a finalized cut.
+    ///
+    /// The native left side contains the incoming endpoint of each sewn initial
+    /// state. A source endpoint on that side carries the stored species into
+    /// the final state; a target endpoint carries its antiparticle. The same
+    /// orientation determines the positive-energy cut momentum routing.
+    pub fn cut_particles(&self, cut: &DiagramCut) -> Result<Vec<ParticleId>, DiagramError> {
+        cut.cut
+            .iter()
+            .map(|half| {
+                if self.half_edge_id(*half).is_none() {
+                    return Err(DiagramError::Invariant {
+                        operation: "reading cut particles",
+                        message: format!("cut references missing half-edge {half:?}"),
+                    });
+                }
+                let particle = self.graph[EdgeIndex(half.edge.0)].particle;
+                Ok(match half.endpoint {
+                    DiagramEndpoint::Source => particle,
+                    DiagramEndpoint::Target => self.model.particle_by_id(particle)?.antiparticle,
+                })
+            })
+            .collect()
+    }
+
+    /// Complete topology-only s-channel inventory used for threshold construction.
+    pub fn topology_threshold_candidates(&self) -> &[DiagramThresholdCandidate] {
+        &self.topology_threshold_candidates
+    }
+
+    pub fn underlying(&self) -> &HedgeGraph<DiagramEdge, DiagramVertex> {
+        &self.graph
+    }
+
+    pub fn vertices(&self) -> impl Iterator<Item = (VertexId, &DiagramVertex)> {
+        self.graph
+            .iter_nodes()
+            .map(|(id, _, vertex)| (VertexId(id.0), vertex))
+    }
+
+    pub fn edges(&self) -> impl Iterator<Item = (EdgeId, EdgeEndpoints, &DiagramEdge)> {
+        self.graph.iter_edges().map(|(pair, id, data)| {
+            let endpoints = match pair {
+                HedgePair::Paired { source, sink } | HedgePair::Split { source, sink, .. } => {
+                    EdgeEndpoints {
+                        source: Some(VertexId(self.graph.node_id(source).0)),
+                        target: Some(VertexId(self.graph.node_id(sink).0)),
+                    }
+                }
+                HedgePair::Unpaired { hedge, flow } => {
+                    let vertex = Some(VertexId(self.graph.node_id(hedge).0));
+                    match flow {
+                        Flow::Source => EdgeEndpoints {
+                            source: vertex,
+                            target: None,
+                        },
+                        Flow::Sink => EdgeEndpoints {
+                            source: None,
+                            target: vertex,
+                        },
+                    }
+                }
+            };
+            (EdgeId(id.0), endpoints, data.data)
+        })
+    }
+
+    pub fn vertex(&self, id: impl Into<Option<VertexId>>) -> Option<&DiagramVertex> {
+        let node = self.vertex_node(id.into()?).ok()?;
+        Some(&self.graph[node])
+    }
+
+    /// Resolve a stable vertex id to its native Linnet node. Nodes absorbed by
+    /// a pending identification are no vertices.
+    fn vertex_node(&self, vertex: VertexId) -> Result<NodeIndex, DiagramError> {
+        let node = NodeIndex(vertex.0);
+        if vertex.0 < self.graph.node_bound() && self.graph.node_store.is_live(node) {
+            Ok(node)
+        } else {
+            Err(DiagramError::UnknownVertex {
+                vertex: vertex.0,
+                vertices: self.graph.node_bound(),
+            })
+        }
+    }
+
+    /// Transform vertex and edge metadata without changing the diagram
+    /// topology or stable identifiers.
+    pub fn map_data<V, E>(&self, mut map_vertex: V, mut map_edge: E) -> Result<Self, DiagramError>
+    where
+        V: FnMut(VertexId, &DiagramVertex) -> DiagramVertex,
+        E: FnMut(EdgeId, EdgeEndpoints, &DiagramEdge) -> DiagramEdge,
+    {
+        let mut diagram = self.clone();
+        diagram.validation.take();
+        diagram.routing_validation.take();
+        let endpoints = self
+            .edges()
+            .map(|(id, endpoints, _)| (id, endpoints))
+            .collect::<BTreeMap<_, _>>();
+        let mut vertex_structure_changed = false;
+        let mut edge_structure_changed = false;
+        let mut vertex_numerator_changed = false;
+        let mut edge_numerator_changed = false;
+        diagram.graph = diagram.graph.map_result(
+            |_, id, vertex| {
+                let mapped = map_vertex(VertexId(id.0), &vertex);
+                if let Some(interaction) = mapped.interaction {
+                    self.model.vertex_rule_by_id(interaction)?;
+                }
+                vertex_structure_changed |= !vertex.same_structure(&mapped);
+                vertex_numerator_changed |= vertex.numerator != mapped.numerator;
+                Ok::<_, DiagramError>(mapped)
+            },
+            |_, _, _, id, edge| {
+                let mapped = map_edge(EdgeId(id.0), endpoints[&EdgeId(id.0)], &edge.data);
+                self.model.particle_by_id(mapped.particle)?;
+                edge_structure_changed |= !edge.data.same_structure(&mapped);
+                edge_numerator_changed |= edge.data.numerator != mapped.numerator;
+                Ok(edge.map(|_| mapped))
+            },
+            |_, data| Ok(data),
+        )?;
+        if vertex_structure_changed || edge_structure_changed {
+            diagram.id.take();
+        }
+        if (vertex_numerator_changed || edge_numerator_changed)
+            && matches!(self.numerator, DiagramNumerator::Derived(_))
+        {
+            // Mapping is not an aggregate replacement: preserve the old value
+            // so validation still detects inconsistent fragment edits.
+            diagram.numerator = DiagramNumerator::Explicit(self.numerator()?.clone());
+        }
+        Ok(diagram)
+    }
+
+    /// Reverse a directed edge while preserving its physical particle flow.
+    ///
+    /// Reversal swaps the endpoints and replaces the referenced particle with
+    /// its antiparticle. Undirected edges are unchanged. The returned diagram
+    /// is fully model-validated and retains all stable identifiers.
+    pub fn reverse_edge(&self, edge_id: EdgeId) -> Result<Self, DiagramError> {
+        self.validate()?;
+        let Some((_, _, selected)) = self.edges().find(|(id, _, _)| *id == edge_id) else {
+            return Err(DiagramError::UnknownEdge {
+                edge: edge_id.0,
+                edges: self.graph.n_edges(),
+            });
+        };
+        if !selected.directed {
+            return Ok(self.clone());
+        }
+
+        let (particle, _) = self.resolve_particle(edge_id, selected)?;
+        let antiparticle = self.model.antiparticle(particle)?;
+        let antiparticle = self.model.particle_id(&antiparticle.name)?;
+        let reverse_half_edge = |half_edge: &mut DiagramHalfEdge| {
+            if half_edge.edge == edge_id {
+                half_edge.endpoint = match half_edge.endpoint {
+                    DiagramEndpoint::Source => DiagramEndpoint::Target,
+                    DiagramEndpoint::Target => DiagramEndpoint::Source,
+                };
+            }
+        };
+        let mut cuts = self.cuts.clone();
+        for cut in &mut cuts {
+            for half_edge in &mut cut.cut {
+                reverse_half_edge(half_edge);
+            }
+            for half_edge in &mut cut.left.half_edges {
+                reverse_half_edge(half_edge);
+            }
+            for half_edge in &mut cut.right.half_edges {
+                reverse_half_edge(half_edge);
+            }
+        }
+        let mut topology_threshold_candidates = self.topology_threshold_candidates.clone();
+        for candidate in &mut topology_threshold_candidates {
+            for half_edge in &mut candidate.cut {
+                reverse_half_edge(half_edge);
+            }
+            for half_edge in &mut candidate.left {
+                reverse_half_edge(half_edge);
+            }
+            for half_edge in &mut candidate.right {
+                reverse_half_edge(half_edge);
+            }
+        }
+        let mut builder = FeynmanDiagramBuilder::new(Arc::clone(&self.model), self.name.clone())
+            .symmetry_factor(self.symmetry_factor)
+            .overall_factor(self.overall_factor.clone())
+            .numerator_prefactor(self.numerator_prefactor.clone())
+            .projector(self.projector.clone())
+            .cuts(cuts)
+            .topology_threshold_candidates(topology_threshold_candidates);
+        if let DiagramNumerator::Explicit(numerator) = &self.numerator {
+            builder = builder.numerator(numerator.clone());
+        }
+        for (_, vertex) in self.vertices() {
+            builder.add_vertex(vertex.clone());
+        }
+        for (id, endpoints, edge) in self.edges() {
+            if id == edge_id {
+                let mut reversed = edge.clone();
+                reversed.particle = antiparticle;
+                builder.add_edge_with_slots(
+                    endpoints.target,
+                    endpoints.source,
+                    reversed,
+                    edge.target_slot,
+                    edge.source_slot,
+                )?;
+            } else {
+                builder.add_edge_with_slots(
+                    endpoints.source,
+                    endpoints.target,
+                    edge.clone(),
+                    edge.source_slot,
+                    edge.target_slot,
+                )?;
+            }
+        }
+        let reversed = builder
+            .build()?
+            .with_loop_momentum_edges(&self.loop_momentum_basis.loop_edges)?;
+        reversed.validate()?;
+        Ok(reversed)
+    }
+
+    /// Atomically relabel external indices, leaving unspecified legs unchanged.
+    pub fn relabel_external_legs(
+        &self,
+        relabeling: &BTreeMap<usize, usize>,
+    ) -> Result<Self, DiagramError> {
+        let external_indices: BTreeSet<_> = self
+            .edges()
+            .filter_map(|(_, _, edge)| edge.external.as_ref().map(|leg| leg.index))
+            .collect();
+        if let Some(index) = relabeling
+            .keys()
+            .find(|index| !external_indices.contains(index))
+        {
+            return Err(DiagramError::UnknownExternalIndex(*index));
+        }
+
+        let diagram = self.map_data(
+            |_, vertex| vertex.clone(),
+            |_, _, edge| {
+                let mut edge = edge.clone();
+                if let Some(external) = &mut edge.external
+                    && let Some(index) = relabeling.get(&external.index)
+                {
+                    external.index = *index;
+                }
+                edge
+            },
+        )?;
+        diagram.validate()?;
+        Ok(diagram)
+    }
+
+    /// Return this diagram with a finalized deterministic name.
+    pub fn with_name(mut self, name: impl Into<String>) -> Self {
+        self.name = Some(name.into());
+        self
+    }
+
+    /// Return this diagram with a finalized numerator-independent multiplier.
+    pub fn with_overall_factor(mut self, factor: Atom) -> Self {
+        self.overall_factor = factor;
+        self
+    }
+
+    /// Return this diagram with a replacement scalar or tensor numerator.
+    ///
+    /// The replacement becomes the numerator fragment of the first
+    /// interaction vertex; every other vertex and edge fragment becomes one.
+    /// This keeps the aggregate numerator authoritative while preserving the
+    /// interaction and particle assignments needed to interpret the topology.
+    /// A diagram without an interaction vertex cannot own such a replacement.
+    /// Diagram IDs identify the model-resolved topology and remain unchanged.
+    pub fn with_numerator(
+        self,
+        numerator: SymbolicTensor<PartialStructure>,
+    ) -> Result<Self, DiagramError> {
+        let one = SymbolicTensor::infer(Atom::one())?;
+        let anchor = self
+            .vertices()
+            .map(|(id, _)| id)
+            .next()
+            .ok_or(DiagramError::MissingNumeratorAnchor)?;
+        let vertices = self
+            .vertices()
+            .map(|(id, _)| {
+                (
+                    id,
+                    if id == anchor {
+                        numerator.clone()
+                    } else {
+                        one.clone()
+                    },
+                )
+            })
+            .collect::<Vec<_>>();
+        let edges = self
+            .edges()
+            .map(|(id, _, _)| (id, one.clone()))
+            .collect::<Vec<_>>();
+        self.with_numerator_fragments(vertices, edges)
+    }
+
+    /// Replace the global numerator multiplier in the finalized index frame.
+    ///
+    /// Local numerator fragments, their aggregate, topology and routing remain
+    /// unchanged. This replaces the previous multiplier without multiplying it
+    /// into the local fragments or re-inferring its logical ports and proofs.
+    pub fn with_numerator_prefactor(mut self, prefactor: SymbolicTensor<PartialStructure>) -> Self {
+        self.numerator_prefactor = prefactor;
+        self
+    }
+
+    /// Return this diagram with a replacement external-state projector.
+    ///
+    /// The projector is numerator payload and therefore does not alter the
+    /// topology-derived diagram ID.
+    pub fn with_projector(mut self, projector: SymbolicTensor<PartialStructure>) -> Self {
+        self.projector = projector;
+        self
+    }
+
+    /// Replace the finalized physical cuts and invalidate the cached structural ID.
+    pub fn with_cuts(mut self, mut cuts: Vec<DiagramCut>) -> Result<Self, DiagramError> {
+        for cut in &mut cuts {
+            cut.cut.sort();
+            cut.cut.dedup();
+            cut.left.half_edges.sort();
+            cut.left.half_edges.dedup();
+            cut.right.half_edges.sort();
+            cut.right.half_edges.dedup();
+        }
+        cuts.sort_by_cached_key(|cut| self.cut_order_key(&cut.cut));
+        cuts.dedup();
+        self.cuts = cuts;
+        self.validation.take();
+        self.validate()?;
+        self.id.take();
+        Ok(self)
+    }
+
+    /// Replace the complete topology-only threshold inventory.
+    pub fn with_topology_threshold_candidates(
+        mut self,
+        mut candidates: Vec<DiagramThresholdCandidate>,
+    ) -> Result<Self, DiagramError> {
+        for candidate in &mut candidates {
+            candidate.cut.sort();
+            candidate.cut.dedup();
+            candidate.left.sort();
+            candidate.left.dedup();
+            candidate.right.sort();
+            candidate.right.dedup();
+        }
+        let ignored = self.initial_state_tree().0;
+        for candidate in &mut candidates {
+            candidate.left.retain(|half_edge| {
+                self.half_edge_id(*half_edge)
+                    .is_none_or(|hedge| !ignored.includes(&hedge))
+            });
+            candidate.right.retain(|half_edge| {
+                self.half_edge_id(*half_edge)
+                    .is_none_or(|hedge| !ignored.includes(&hedge))
+            });
+        }
+        candidates.sort_by_cached_key(|candidate| self.cut_order_key(&candidate.cut));
+        candidates.dedup();
+        self.topology_threshold_candidates = candidates;
+        self.validation.take();
+        self.validate()?;
+        self.id.take();
+        Ok(self)
+    }
+
+    /// Install topology-only threshold candidates from complete half-edge partitions.
+    pub fn with_topology_threshold_partitions(
+        self,
+        partitions: Vec<(Vec<DiagramHalfEdge>, Vec<DiagramHalfEdge>)>,
+    ) -> Result<Self, DiagramError> {
+        let vertex_half_edges = self.vertex_half_edges();
+        let ignored = self.initial_state_tree().0;
+        let retained = |half_edge: &DiagramHalfEdge| {
+            self.half_edge_id(*half_edge)
+                .is_none_or(|hedge| !ignored.includes(&hedge))
+        };
+        let candidates = partitions
+            .into_iter()
+            .enumerate()
+            .map(|(candidate, (mut left, mut right))| {
+                left.retain(retained);
+                right.retain(retained);
+                self.partition_crossing(
+                    candidate,
+                    &left,
+                    &right,
+                    &vertex_half_edges,
+                    Some(&ignored),
+                )
+                .map(|partition| DiagramThresholdCandidate {
+                    cut: partition.crossing.into_iter().collect(),
+                    left: partition.left.into_iter().collect(),
+                    right: partition.right.into_iter().collect(),
+                })
+                .map_err(|error| match error {
+                    DiagramError::InvalidCut { message, .. } => {
+                        DiagramError::InvalidThresholdCandidate { candidate, message }
+                    }
+                    error => error,
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        self.with_topology_threshold_candidates(candidates)
+    }
+
+    /// Install physical cuts from authoritative left/right half-edge partitions.
+    ///
+    /// The oriented crossing endpoints, coupling-order summaries, and loop
+    /// counts are derived from this diagram's finalized topology. This is the
+    /// appropriate constructor when a valid partition is transported onto an
+    /// isomorphic representative whose interaction assignment may differ.
+    /// Supplied half-edge IDs must already use this diagram's edge-ID frame.
+    pub fn with_cut_partitions(
+        self,
+        partitions: Vec<(Vec<DiagramHalfEdge>, Vec<DiagramHalfEdge>)>,
+    ) -> Result<Self, DiagramError> {
+        let vertex_half_edges = self.vertex_half_edges();
+        let cuts = partitions
+            .into_iter()
+            .enumerate()
+            .map(|(cut, (left, right))| {
+                self.cut_from_partitions(cut, &left, &right, &vertex_half_edges)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        self.with_cuts(cuts)
+    }
+
+    /// Resolve a stable endpoint reference to its native Linnet half-edge.
+    pub fn half_edge_id(
+        &self,
+        half_edge: DiagramHalfEdge,
+    ) -> Option<linnet::half_edge::involution::Hedge> {
+        if half_edge.edge.0 >= self.graph.n_edges() {
+            return None;
+        }
+        let pair = self.graph[&EdgeIndex(half_edge.edge.0)].1;
+        match (pair, half_edge.endpoint) {
+            (
+                HedgePair::Paired { source, .. } | HedgePair::Split { source, .. },
+                DiagramEndpoint::Source,
+            ) => Some(source),
+            (
+                HedgePair::Paired { sink, .. } | HedgePair::Split { sink, .. },
+                DiagramEndpoint::Target,
+            ) => Some(sink),
+            (
+                HedgePair::Unpaired {
+                    hedge,
+                    flow: Flow::Source,
+                },
+                DiagramEndpoint::Source,
+            )
+            | (
+                HedgePair::Unpaired {
+                    hedge,
+                    flow: Flow::Sink,
+                },
+                DiagramEndpoint::Target,
+            ) => Some(hedge),
+            _ => None,
+        }
+    }
+
+    /// Enumerate existing half-edges, in their native channel order.
+    pub fn half_edges(&self) -> impl Iterator<Item = DiagramHalfEdge> + '_ {
+        self.graph.iter_hedges().map(|(hedge, _)| DiagramHalfEdge {
+            edge: EdgeId(self.graph[&hedge].0),
+            endpoint: if self.graph.flow(hedge) == Flow::Source {
+                DiagramEndpoint::Source
+            } else {
+                DiagramEndpoint::Target
+            },
+        })
+    }
+
+    fn vertex_half_edges(&self) -> Vec<Vec<DiagramHalfEdge>> {
+        let mut result = vec![Vec::new(); self.graph.node_bound()];
+        for half_edge in self.half_edges() {
+            let hedge = self.half_edge_id(half_edge).expect("existing half-edge");
+            result[self.graph.node_id(hedge).0].push(half_edge);
+        }
+        result
+    }
+
+    fn summarize_cut_side(
+        &self,
+        half_edges: &BTreeSet<DiagramHalfEdge>,
+        vertex_half_edges: &[Vec<DiagramHalfEdge>],
+    ) -> Result<DiagramCutSide, DiagramError> {
+        let mut selected = self.graph.empty_subgraph::<SuBitGraph>();
+        for half_edge in half_edges {
+            if let Some(hedge) = self.half_edge_id(*half_edge) {
+                selected.add(hedge);
+            }
+        }
+        let mut coupling_orders = BTreeMap::new();
+        for (vertex, incident) in vertex_half_edges.iter().enumerate() {
+            if incident.iter().any(|edge| half_edges.contains(edge))
+                && let Some(rule) = self.vertex(VertexId(vertex)).and_then(|v| v.interaction)
+            {
+                for (name, order) in self
+                    .model
+                    .vertex_rule_by_id(rule)?
+                    .coupling_orders(&self.model)
+                {
+                    *coupling_orders.entry(name).or_insert(0) += order;
+                }
+            }
+        }
+        Ok(DiagramCutSide {
+            half_edges: half_edges.iter().copied().collect(),
+            coupling_orders,
+            loop_count: self.graph.cyclotomatic_number(&selected),
+        })
+    }
+
+    fn cut_from_partitions(
+        &self,
+        cut: usize,
+        left_half_edges: &[DiagramHalfEdge],
+        right_half_edges: &[DiagramHalfEdge],
+        vertex_half_edges: &[Vec<DiagramHalfEdge>],
+    ) -> Result<DiagramCut, DiagramError> {
+        let partition = self.partition_crossing(
+            cut,
+            left_half_edges,
+            right_half_edges,
+            vertex_half_edges,
+            None,
+        )?;
+        Ok(DiagramCut {
+            cut: partition.crossing.into_iter().collect(),
+            left: self.summarize_cut_side(&partition.left, vertex_half_edges)?,
+            right: self.summarize_cut_side(&partition.right, vertex_half_edges)?,
+        })
+    }
+
+    /// Check that the two sides partition the half-edges outside `ignored`
+    /// without splitting a vertex, and orient the internal edges crossing them.
+    fn partition_crossing(
+        &self,
+        cut: usize,
+        left_half_edges: &[DiagramHalfEdge],
+        right_half_edges: &[DiagramHalfEdge],
+        vertex_half_edges: &[Vec<DiagramHalfEdge>],
+        ignored: Option<&SuBitGraph>,
+    ) -> Result<Partition, DiagramError> {
+        let left = left_half_edges.iter().copied().collect::<BTreeSet<_>>();
+        let right = right_half_edges.iter().copied().collect::<BTreeSet<_>>();
+        if left.len() != left_half_edges.len() || right.len() != right_half_edges.len() {
+            return Err(DiagramError::InvalidCut {
+                cut,
+                message: "half-edge sets contain duplicates".to_owned(),
+            });
+        }
+        let is_ignored = |half_edge: &DiagramHalfEdge| {
+            ignored.is_some_and(|ignored| {
+                self.half_edge_id(*half_edge)
+                    .is_some_and(|hedge| ignored.includes(&hedge))
+            })
+        };
+        let universe = self
+            .half_edges()
+            .filter(|half_edge| !is_ignored(half_edge))
+            .collect::<BTreeSet<_>>();
+        if !left.is_disjoint(&right)
+            || left.union(&right).copied().collect::<BTreeSet<_>>() != universe
+        {
+            return Err(DiagramError::InvalidCut {
+                cut,
+                message: format!(
+                    "left and right half-edge partitions are not disjoint and complementary (missing {:?}, overlap {:?}, outside {:?})",
+                    universe
+                        .difference(&left.union(&right).copied().collect())
+                        .collect::<Vec<_>>(),
+                    left.intersection(&right).collect::<Vec<_>>(),
+                    left.union(&right)
+                        .filter(|half| !universe.contains(half))
+                        .collect::<Vec<_>>()
+                ),
+            });
+        }
+
+        let mut oriented = BTreeSet::new();
+        for (edge, endpoints, data) in self.edges() {
+            if data.external.is_some() || endpoints.source.is_none() || endpoints.target.is_none() {
+                continue;
+            }
+            let source = DiagramHalfEdge {
+                edge,
+                endpoint: DiagramEndpoint::Source,
+            };
+            let target = DiagramHalfEdge {
+                edge,
+                endpoint: DiagramEndpoint::Target,
+            };
+            // Initial-state normalization may remove one complete attachment
+            // crown. A loop-carrying crossing retains its oriented boundary;
+            // the loop-independent attachment tree itself contributes no cut.
+            let crosses_ignored = self.loop_momentum_basis.edge_signatures[&edge]
+                .loops
+                .iter()
+                .any(|sign| !sign.is_zero());
+            let source_to_target = left.contains(&source) && right.contains(&target)
+                || crosses_ignored
+                    && (left.contains(&source) && is_ignored(&target)
+                        || is_ignored(&source) && right.contains(&target));
+            let target_to_source = left.contains(&target) && right.contains(&source)
+                || crosses_ignored
+                    && (left.contains(&target) && is_ignored(&source)
+                        || is_ignored(&target) && right.contains(&source));
+            match (source_to_target, target_to_source) {
+                (true, false) => {
+                    oriented.insert(source);
+                }
+                (false, true) => {
+                    oriented.insert(target);
+                }
+                _ => {}
+            }
+        }
+        for (vertex, incident) in vertex_half_edges.iter().enumerate() {
+            if incident.iter().any(|edge| left.contains(edge))
+                && incident.iter().any(|edge| right.contains(edge))
+            {
+                return Err(DiagramError::InvalidCut {
+                    cut,
+                    message: format!("vertex {vertex} is split between the two sides"),
+                });
+            }
+        }
+
+        Ok(Partition {
+            left,
+            right,
+            crossing: oriented,
+        })
+    }
+
+    /// Select a spanning-forest routing by its ordered independent edges.
+    pub fn with_loop_momentum_edges(self, requested: &[EdgeId]) -> Result<Self, DiagramError> {
+        let requested_set: BTreeSet<_> = requested.iter().copied().collect();
+        let internal = self.internal_subgraph();
+        let tree_edges = self
+            .graph
+            .iter_edges_of(&internal)
+            .filter_map(|(_, edge, _)| {
+                (!requested_set.contains(&EdgeId(edge.0))).then_some(EdgeId(edge.0))
+            })
+            .collect::<Vec<_>>();
+        let basis = self
+            .basis_from_tree(&tree_edges)?
+            .with_loop_edge_order(requested)?;
+        Ok(self.with_routing(basis))
+    }
+
+    /// Select a spanning-forest routing by its ordered tree edges.
+    ///
+    /// The requested edges are validated and materialized directly. This is
+    /// useful when a generator already chose a deterministic spanning forest:
+    /// it does not enumerate the other spanning forests of the diagram.
+    pub fn with_loop_momentum_tree_edges(self, requested: &[EdgeId]) -> Result<Self, DiagramError> {
+        let basis = self.basis_from_tree(requested)?;
+        Ok(self.with_routing(basis))
+    }
+
+    /// Store a routing materialized from one of this diagram's spanning forests.
+    fn with_routing(mut self, basis: impl Into<Arc<LoopMomentumBasis>>) -> Self {
+        self.validation.take();
+        self.loop_momentum_basis = basis.into();
+        let _ = self.routing_validation.set(());
+        self
+    }
+
+    /// Select the default routing: the first depth-first spanning forest in the
+    /// canonical topology order historically used by GammaLoop's `sorted_g`
+    /// graphs, unless a physical cut edge would carry a partial beam momentum.
+    ///
+    /// Stable FeynKit edge IDs remain the momentum labels. Only the ordering
+    /// used to choose the default tree is changed, so the coordinate convention
+    /// is fixed before downstream transport.
+    ///
+    /// Cross-section integrands rescale the loop momenta about the origin of
+    /// this basis, which must lie inside the energy surface of every physical
+    /// cut. At that origin a cut edge carries only its external shift. A shift
+    /// of zero or of the total incoming momentum has no spatial part in the
+    /// centre-of-mass frame, so the cut energies there add up to the final-state
+    /// masses, below the collision energy. A partial beam momentum such as
+    /// `K + P1` can instead put the origin outside the cut surface: with the
+    /// cut edges at `K + P1` and `K - P0` it does so whenever the beams carry
+    /// more spatial momentum than the final state. Diagrams with physical cuts
+    /// therefore keep the depth-first forest only if none of their cut edges
+    /// carries a partial beam momentum, and otherwise take the forest of
+    /// `cut_aligned_loop_momentum_basis` when it has strictly fewer such edges;
+    /// a tie keeps the depth-first forest. Amplitudes and vacuum graphs have no
+    /// cuts, and a single beam has no partial momentum, so these and decays
+    /// keep the depth-first forest.
+    pub fn with_canonical_loop_momentum_basis(self) -> Result<Self, DiagramError> {
+        let ordered = self.canonical_internal_edge_order()?;
+        let depth_first = self.basis_from_tree(&self.first_depth_first_forest(&ordered)?)?;
+        self.with_cut_aware_loop_momentum_basis(&ordered, depth_first)
+    }
+
+    /// Select between the initial DFS basis and the cut-aligned basis. Both
+    /// general and freshly finalized routing keep the initial basis on a tie.
+    fn with_cut_aware_loop_momentum_basis(
+        self,
+        ordered: &[EdgeId],
+        depth_first: LoopMomentumBasis,
+    ) -> Result<Self, DiagramError> {
+        let cut_edges = self.cut_edges();
+        let partial = depth_first.partial_beam_momenta(&cut_edges);
+        let basis = if partial == 0 {
+            depth_first
+        } else {
+            match self.cut_aligned_loop_momentum_basis(ordered, &cut_edges)? {
+                (aligned_partial, aligned) if aligned_partial < partial => aligned,
+                _ => depth_first,
+            }
+        };
+        Ok(self.with_routing(basis))
+    }
+
+    /// Internal edges in the canonical topology order of the default routing.
+    fn canonical_internal_edge_order(&self) -> Result<Vec<EdgeId>, DiagramError> {
+        let mut ordered = self
+            .edges()
+            .filter(|(_, _, edge)| edge.external.is_none() && !edge.is_dummy)
+            .map(|(edge_id, endpoints, edge)| {
+                edge.canonical_order_key(&self.model, edge_id, endpoints)
+                    .map(|key| (key, edge_id))
+            })
+            .collect::<Result<Vec<_>, DiagramError>>()?;
+        ordered.sort_by_key(|(key, _)| *key);
+        Ok(ordered.into_iter().map(|(_, edge)| edge).collect())
+    }
+
+    /// Tree edges of the first depth-first spanning forest for the `ordered`
+    /// internal edges.
+    ///
+    /// Each connected component is traversed from the attachment of its first
+    /// external connection: the source of a sewn cross-section connection,
+    /// which is the outgoing-side attachment of that beam, or the only
+    /// attachment of a one-sided amplitude connection. Rooting a forward graph
+    /// there makes its independent loop a physical cut momentum. No other
+    /// spanning forests are enumerated.
+    fn first_depth_first_forest(&self, ordered: &[EdgeId]) -> Result<Vec<EdgeId>, DiagramError> {
+        if ordered.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let mut builder = HedgeGraphBuilder::<EdgeId, ()>::new();
+        let nodes = self
+            .vertices()
+            .map(|(vertex, _)| (vertex, builder.add_node(())))
+            .collect::<BTreeMap<_, _>>();
+        let endpoints = self
+            .edges()
+            .map(|(edge, endpoints, _)| (edge, endpoints))
+            .collect::<BTreeMap<_, _>>();
+        let mut external_attachments =
+            BTreeMap::<usize, (Option<VertexId>, Option<VertexId>)>::new();
+        for (_, endpoints, edge) in self.edges() {
+            if let Some(external) = &edge.external {
+                external_attachments
+                    .insert(external.connection, (endpoints.source, endpoints.target));
+            }
+        }
+        for edge in ordered {
+            let endpoints = endpoints.get(edge).ok_or_else(|| DiagramError::Invariant {
+                operation: "selecting the first ordered loop-momentum basis",
+                message: format!("missing internal edge {}", edge.0),
+            })?;
+            builder.add_edge(
+                nodes[&endpoints.source.expect("internal edge source")],
+                nodes[&endpoints.target.expect("internal edge target")],
+                *edge,
+                Orientation::Undirected,
+            );
+        }
+        let ordered_graph: HedgeGraph<EdgeId, ()> = builder.into();
+        let full = ordered_graph.full_filter();
+        let roots = external_attachments
+            .values()
+            .filter_map(|(source, target)| (*source).or(*target))
+            .collect::<Vec<_>>();
+        let mut remaining = full.clone();
+        let mut forest: SuBitGraph = ordered_graph.empty_subgraph();
+        let mut root_nodes = roots
+            .into_iter()
+            .filter_map(|vertex| nodes.get(&vertex).copied())
+            .collect::<Vec<_>>();
+        while !remaining.is_empty() {
+            let root = root_nodes
+                .iter()
+                .position(|node| {
+                    ordered_graph
+                        .iter_crown(*node)
+                        .any(|hedge| remaining.includes(&hedge))
+                })
+                .map(|position| root_nodes.remove(position))
+                .unwrap_or_else(|| {
+                    let hedge = remaining
+                        .included_iter()
+                        .next()
+                        .expect("a non-empty subgraph has an included half-edge");
+                    ordered_graph.node_id(hedge)
+                });
+            let tree =
+                SimpleTraversalTree::depth_first_traverse(&ordered_graph, &full, &root, None)
+                    .map_err(|error| {
+                        DiagramError::InvalidLoopMomentumBasis(format!(
+                            "ordered depth-first traversal failed: {error:?}"
+                        ))
+                    })?;
+            forest.union_with(&tree.tree_subgraph);
+            remaining.subtract_with(&tree.covers(&full));
+        }
+        Ok(ordered_graph
+            .iter_edges_of(&forest)
+            .map(|(_, _, edge)| *edge.data)
+            .collect())
+    }
+
+    pub fn to_json(&self) -> Result<String, DiagramError> {
+        Ok(serde_json::to_string_pretty(&self.serde_view()?)?)
+    }
+
+    pub fn from_json(model: impl Into<Arc<Model>>, input: &str) -> Result<Self, DiagramError> {
+        Self::from_serde(model.into(), serde_json::from_str(input)?)
+    }
+
+    /// Check model references and the structural invariants expected of a
+    /// generated Feynman diagram.
+    pub fn validate(&self) -> Result<(), DiagramError> {
+        if self.validation.get().is_some() {
+            return Ok(());
+        }
+        let node_bound = self.graph.node_bound();
+        let mut external_indices = BTreeSet::new();
+        let mut external_connections = BTreeSet::new();
+        let mut paired_external_edges = BTreeSet::new();
+        // The endpoint signatures of vertex `v` occupy `offsets[v]..offsets[v + 1]`,
+        // indexed by slot. A vertex with `degree` distinct slots has exactly the
+        // slots `0..degree` when none of them is out of range.
+        let mut offsets = vec![0_usize; node_bound + 1];
+        for (_, endpoints, _) in self.edges() {
+            for vertex in [endpoints.source, endpoints.target].into_iter().flatten() {
+                offsets[vertex.0 + 1] += 1;
+            }
+        }
+        for vertex in 0..node_bound {
+            offsets[vertex + 1] += offsets[vertex];
+        }
+        let mut signatures = vec![None::<(i64, Option<bool>)>; offsets[node_bound]];
+        let mut dummy_slots = vec![false; offsets[node_bound]];
+        let mut out_of_range_slots = BTreeSet::<(usize, usize)>::new();
+        let mut base_particle_error = None;
+        for (edge_id, endpoints, edge) in self.edges() {
+            let (particle, base_id) = self.resolve_particle(edge_id, edge)?;
+            if let Some(external) = &edge.external {
+                if !external_indices.insert(external.index) {
+                    return Err(DiagramError::DuplicateExternalIndex(external.index));
+                }
+                if !external_connections.insert(external.connection) {
+                    return Err(DiagramError::InvalidExternalConnectionSize {
+                        connection: external.connection,
+                        legs: 2,
+                    });
+                }
+                if !is_unit(&edge.numerator) {
+                    return Err(DiagramError::ExternalEdgeNumerator { edge: edge_id.0 });
+                }
+                if endpoints.source.is_some() && endpoints.target.is_some() {
+                    if external.state != ExternalState::Incoming {
+                        return Err(DiagramError::Invariant {
+                            operation: "validating sewn external flow",
+                            message: format!(
+                                "edge {} must carry the incoming external momentum convention",
+                                edge_id.0
+                            ),
+                        });
+                    }
+                    paired_external_edges.insert(edge_id);
+                } else if (external.state == ExternalState::Incoming) != endpoints.source.is_none()
+                {
+                    return Err(DiagramError::Invariant {
+                        operation: "validating external flow",
+                        message: format!("edge {} disagrees with its process state", edge_id.0),
+                    });
+                }
+            } else if !edge.is_dummy && (endpoints.source.is_none() || endpoints.target.is_none()) {
+                return Err(DiagramError::Invariant {
+                    operation: "validating dangling external metadata",
+                    message: format!("edge {} has no external-leg metadata", edge_id.0),
+                });
+            }
+            // The first failed base lookup is reported by the first interaction
+            // vertex, after its slot checks.
+            let pdg_code = match self.model.particle_by_id(base_id) {
+                Ok(base) => base.pdg_code,
+                Err(error) => {
+                    base_particle_error.get_or_insert(error);
+                    0
+                }
+            };
+            for (vertex, slot, direction) in [
+                (
+                    endpoints.source,
+                    edge.source_slot,
+                    !particle.is_antiparticle(),
+                ),
+                (
+                    endpoints.target,
+                    edge.target_slot,
+                    particle.is_antiparticle(),
+                ),
+            ] {
+                if let Some(vertex) = vertex {
+                    let start = offsets[vertex.0];
+                    let fresh = if slot.0 < offsets[vertex.0 + 1] - start {
+                        dummy_slots[start + slot.0] = edge.is_dummy;
+                        signatures[start + slot.0]
+                            .replace((pdg_code, edge.directed.then_some(direction)))
+                            .is_none()
+                    } else {
+                        out_of_range_slots.insert((vertex.0, slot.0))
+                    };
+                    if !fresh {
+                        return Err(DiagramError::DuplicateVertexSlot {
+                            vertex: vertex.0,
+                            slot: slot.0,
+                        });
+                    }
+                }
+            }
+        }
+        for (vertex_id, vertex) in self.vertices() {
+            let (start, end) = (offsets[vertex_id.0], offsets[vertex_id.0 + 1]);
+            let degree = end - start;
+            let mut out_of_range = out_of_range_slots
+                .range((vertex_id.0, 0)..(vertex_id.0 + 1, 0))
+                .map(|(_, slot)| *slot)
+                .peekable();
+            if out_of_range.peek().is_some() {
+                return Err(DiagramError::InvalidVertexSlots {
+                    vertex: vertex_id.0,
+                    actual: (0..degree)
+                        .filter(|slot| signatures[start + slot].is_some())
+                        .chain(out_of_range)
+                        .collect(),
+                    expected: (0..degree).collect(),
+                });
+            }
+            if let Some(interaction) = vertex.interaction {
+                let rule = self.model.vertex_rule_by_id(interaction)?;
+                if let Some(error) = base_particle_error.take() {
+                    return Err(error.into());
+                }
+                // Dummy edges take slots after the interaction's legs, and do not
+                // contribute to its signature. Keep their occupancy for slot checks.
+                let legs = rule.particles.len().min(degree);
+                let dummy_takes_a_leg = dummy_slots[start..start + legs].iter().any(|dummy| *dummy);
+                let actual = || {
+                    signatures[start..end]
+                        .iter()
+                        .zip(&dummy_slots[start..end])
+                        .filter_map(|(signature, dummy)| (!*dummy).then_some(*signature).flatten())
+                };
+                let expected_entry = |particle_id: &ParticleId| {
+                    let particle = self.model.particle_by_id(*particle_id)?;
+                    let base = if particle.is_antiparticle() {
+                        self.model.antiparticle(particle)?
+                    } else {
+                        particle
+                    };
+                    Ok::<_, ModelError>((
+                        base.pdg_code,
+                        (particle.antiparticle != *particle_id)
+                            .then_some(particle.is_antiparticle()),
+                    ))
+                };
+                // Compare entry by entry. On a mismatch, collecting the expected
+                // signature reports the rule's first model error, if any, first.
+                let mut matches = !dummy_takes_a_leg && actual().count() == rule.particles.len();
+                if matches {
+                    for (actual, particle_id) in actual().zip(&rule.particles) {
+                        if actual != expected_entry(particle_id)? {
+                            matches = false;
+                            break;
+                        }
+                    }
+                }
+                if !matches {
+                    let expected: Vec<_> = rule
+                        .particles
+                        .iter()
+                        .map(expected_entry)
+                        .collect::<Result<_, _>>()?;
+                    return Err(DiagramError::InteractionSignatureMismatch {
+                        vertex: vertex_id.0,
+                        interaction,
+                        actual: if dummy_takes_a_leg {
+                            // Report the gap instead of a shifted signature that could match.
+                            Vec::new()
+                        } else {
+                            actual().collect()
+                        },
+                        expected,
+                    });
+                }
+            }
+        }
+        let has_paired_external_connection = !paired_external_edges.is_empty();
+        if has_paired_external_connection && self.cuts.is_empty() {
+            return Err(DiagramError::MissingCrossSectionCuts);
+        }
+        if !has_paired_external_connection && !self.cuts.is_empty() {
+            return Err(DiagramError::InvalidCut {
+                cut: 0,
+                message: "physical cuts require paired incoming/outgoing external connections"
+                    .to_owned(),
+            });
+        }
+        if !has_paired_external_connection && !self.topology_threshold_candidates.is_empty() {
+            return Err(DiagramError::InvalidThresholdCandidate {
+                candidate: 0,
+                message: "topology threshold candidates require paired incoming/outgoing external connections"
+                    .to_owned(),
+            });
+        }
+        self.validate_partitions(&paired_external_edges)?;
+        if let DiagramNumerator::Explicit(numerator) = &self.numerator {
+            let fragments = Self::fragment_numerator(&self.graph)?;
+            if !fragments.same_value(numerator) {
+                // Artifact validation must also accept exact polynomial identities
+                // in scalar coefficients. The conservative grouping proof leaves
+                // those inconclusive; collect tensor factors first, then use the
+                // existing exact-only scalar owner without expanding the numerator.
+                // An artifact may also list the same explicit ports in another
+                // order: subtraction matches them by label, and the exact zero
+                // keeps their rank, so it is not a scalar coefficient.
+                let difference = fragments.try_sub(numerator)?;
+                let coefficients = difference
+                    .coefficient_list(spenso::shadowing::TensorCollectFilter::<0>::Tensors)?;
+                let zero_settings = symbolica::atom::ZeroTestSettings::default()
+                    .finite_field_samples(0)
+                    .numerical_samples(0)
+                    .exact_fallback(true);
+                if !coefficients.into_iter().all(|(tensor, coefficient)| {
+                    tensor.is_zero()
+                        || coefficient.is_zero()
+                        || coefficient.is_scalar()
+                            && coefficient.expression().check_zero_with(&zero_settings)
+                                == symbolica::id::ConditionResult::True
+                }) {
+                    return Err(DiagramError::NumeratorFragmentMismatch);
+                }
+            }
+        }
+        if self.routing_validation.get().is_none() {
+            self.loop_momentum_basis.validate(self)?;
+            let _ = self.routing_validation.set(());
+        }
+        let _ = self.validation.set(());
+        Ok(())
+    }
+
+    /// Serialize to a stable DOT dialect that can be parsed by [`Self::from_dot`].
+    /// The graph's `feynkit_name` attribute contains a JSON optional string, so
+    /// an absent name remains distinct from an explicitly empty name.
+    pub fn to_dot(&self) -> Result<String, DiagramError> {
+        let mut output = String::new();
+        let snapshot = self.serde_view()?;
+        let loop_momentum_edges = self
+            .loop_momentum_basis
+            .loop_edges
+            .iter()
+            .map(|edge| edge.0.to_string())
+            .collect::<Vec<_>>()
+            .join(",");
+        writeln!(output, "digraph feynkit {{")?;
+        let mut interfaces = String::new();
+        for (key, interface) in [
+            ("num_interface", &snapshot.num_interface),
+            (
+                "numerator_prefactor_interface",
+                &snapshot.numerator_prefactor_interface,
+            ),
+            ("projector_interface", &snapshot.projector_interface),
+        ] {
+            if let Some(interface) = interface {
+                write!(interfaces, ", {key}={}", dot_value(&interface.to_json()))?;
+            }
+        }
+        writeln!(
+            output,
+            "  graph [feynkit_name={}, model_fingerprint={}, symmetry_factor={}, overall_factor={}, numerator={}, numerator_prefactor={}, projector={}, loop_momentum_edges={}, loop_momentum_basis={}, half_edge_order={}, cuts={}, topology_threshold_candidates={}{}];",
+            dot_value(&serde_json::to_string(&self.name)?),
+            dot_value(&self.model.fingerprint().to_string()),
+            self.symmetry_factor,
+            dot_value(&snapshot.overall_factor),
+            dot_value(&snapshot.numerator),
+            dot_value(&snapshot.numerator_prefactor),
+            dot_value(&snapshot.projector),
+            dot_value(&loop_momentum_edges),
+            dot_value(&serde_json::to_string(self.loop_momentum_basis())?),
+            dot_value(&serde_json::to_string(&snapshot.half_edge_order)?),
+            dot_value(&serde_json::to_string(&self.cuts)?),
+            dot_value(&serde_json::to_string(&self.topology_threshold_candidates)?),
+            interfaces,
+        )?;
+        for (id, vertex) in self.vertices() {
+            write!(
+                output,
+                "  v{} [id={}, feynkit_name={}",
+                id.0,
+                id.0,
+                dot_value(&vertex.name)
+            )?;
+            if let Some(rule) = vertex.interaction {
+                write!(
+                    output,
+                    ", interaction_id={}, interaction={}",
+                    rule.index(),
+                    dot_value(&self.model.vertex_rule_by_id(rule)?.name)
+                )?;
+            }
+            let (numerator, interface) = NumeratorInterface::export(&vertex.numerator);
+            if let Some(interface) = interface {
+                write!(
+                    output,
+                    ", num_interface={}",
+                    dot_value(&interface.to_json())
+                )?;
+            }
+            writeln!(
+                output,
+                ", numerator={}];",
+                dot_value(&numerator.to_canonical_string())
+            )?;
+        }
+        for (id, endpoints, edge) in self.edges() {
+            let source = endpoints
+                .source
+                .map(|vertex| format!("v{}", vertex.0))
+                .unwrap_or_else(|| format!("ext{}", id.0));
+            let target = endpoints
+                .target
+                .map(|vertex| format!("v{}", vertex.0))
+                .unwrap_or_else(|| format!("ext{}", id.0));
+            if endpoints.source.is_none() || endpoints.target.is_none() {
+                // Linnet consumes invisible DOT endpoints as dangling half-edges,
+                // never as interaction vertices in the imported graph.
+                writeln!(output, "  ext{} [style=invis];", id.0)?;
+            }
+            let particle = self.model.particle_by_id(edge.particle)?;
+            let orientation =
+                linnet::half_edge::EdgeAccessors::orientation(&self.graph, EdgeIndex(id.0));
+            let direction = match orientation {
+                Orientation::Default => "forward",
+                Orientation::Reversed => "back",
+                Orientation::Undirected => "none",
+            };
+            let (numerator, interface) = NumeratorInterface::export(&edge.numerator);
+            let interface = interface
+                .map(|interface| format!(", num_interface={}", dot_value(&interface.to_json())))
+                .unwrap_or_default();
+            writeln!(
+                output,
+                "  {source} -> {target} [id={}, particle_id={}, pdg={}, particle={}, directed={}, source_slot={}, target_slot={}, dir={}, external={}, is_dummy={}, numerator={}{}];",
+                id.0,
+                edge.particle.index(),
+                particle.pdg_code,
+                dot_value(&particle.name),
+                edge.directed,
+                edge.source_slot.0,
+                edge.target_slot.0,
+                direction,
+                dot_value(&serde_json::to_string(&edge.external)?),
+                edge.is_dummy,
+                dot_value(&numerator.to_canonical_string()),
+                interface,
+            )?;
+        }
+        writeln!(output, "}}")?;
+        Ok(output)
+    }
+
+    /// Parse compact model-aware DOT or the stable dialect emitted by [`Self::to_dot`].
+    ///
+    /// [`DotDiagram::from_dot`] also returns the input's attributes and explicit factors.
+    pub fn from_dot(model: impl Into<Arc<Model>>, input: &str) -> Result<Self, DiagramError> {
+        DotDiagram::from_dot(model, input).map(|dot| dot.diagram)
+    }
+
+    /// Parse the stable dialect emitted by [`Self::to_dot`]. All of its factors are explicit.
+    fn from_annotated_dot(model: Arc<Model>, parsed: DotGraph) -> Result<DotDiagram, DiagramError> {
+        let serialized_fingerprint = parsed
+            .global_data
+            .statements
+            .get("model_fingerprint")
+            .ok_or_else(|| DiagramError::MissingDotAttribute {
+                target: "graph".to_owned(),
+                attribute: "model_fingerprint",
+            })?;
+        let actual_fingerprint = model.fingerprint();
+        if serialized_fingerprint != &actual_fingerprint.to_string() {
+            return Err(DiagramError::DotModelFingerprintMismatch {
+                serialized: serialized_fingerprint.clone(),
+                actual: actual_fingerprint,
+            });
+        }
+        let name = parsed
+            .global_data
+            .statements
+            .get("feynkit_name")
+            .map(|name| serde_json::from_str::<Option<String>>(name))
+            .transpose()?
+            .unwrap_or_else(|| Some(parsed.global_data.name.clone()));
+        let symmetry_factor = parsed
+            .global_data
+            .statements
+            .get("symmetry_factor")
+            .map_or(Ok(1), |value| {
+                value
+                    .parse()
+                    .map_err(|_| DiagramError::InvalidDotAttribute {
+                        target: "graph".to_owned(),
+                        attribute: "symmetry_factor",
+                        value: value.clone(),
+                    })
+            })?;
+        let overall_factor = parsed
+            .global_data
+            .statements
+            .get("overall_factor")
+            .cloned()
+            .unwrap_or_else(|| "1".to_owned());
+        let numerator = parsed
+            .global_data
+            .statements
+            .get("numerator")
+            .cloned()
+            .unwrap_or_else(|| "1".to_owned());
+        let numerator_prefactor = parsed
+            .global_data
+            .statements
+            .get("numerator_prefactor")
+            .cloned()
+            .unwrap_or_else(|| "1".to_owned());
+        let projector = parsed
+            .global_data
+            .statements
+            .get("projector")
+            .cloned()
+            .unwrap_or_else(|| "1".to_owned());
+        let loop_momentum_edges = parsed
+            .global_data
+            .statements
+            .get("loop_momentum_edges")
+            .map(|edges| {
+                edges
+                    .split(',')
+                    .filter(|edge| !edge.is_empty())
+                    .map(|edge| {
+                        edge.parse()
+                            .map(EdgeId)
+                            .map_err(|_| DiagramError::InvalidDotAttribute {
+                                target: "graph".to_owned(),
+                                attribute: "loop_momentum_edges",
+                                value: edges.clone(),
+                            })
+                    })
+                    .collect::<Result<Vec<_>, _>>()
+            })
+            .transpose()?;
+        let cuts = parsed
+            .global_data
+            .statements
+            .get("cuts")
+            .ok_or_else(|| DiagramError::MissingDotAttribute {
+                target: "graph".to_owned(),
+                attribute: "cuts",
+            })
+            .and_then(|cuts| {
+                serde_json::from_str::<Vec<DiagramCut>>(cuts).map_err(|_| {
+                    DiagramError::InvalidDotAttribute {
+                        target: "graph".to_owned(),
+                        attribute: "cuts",
+                        value: cuts.clone(),
+                    }
+                })
+            })?;
+        let topology_threshold_candidates = parsed
+            .global_data
+            .statements
+            .get("topology_threshold_candidates")
+            .ok_or_else(|| DiagramError::MissingDotAttribute {
+                target: "graph".to_owned(),
+                attribute: "topology_threshold_candidates",
+            })
+            .and_then(|candidates| {
+                serde_json::from_str::<Vec<DiagramThresholdCandidate>>(candidates).map_err(|_| {
+                    DiagramError::InvalidDotAttribute {
+                        target: "graph".to_owned(),
+                        attribute: "topology_threshold_candidates",
+                        value: candidates.clone(),
+                    }
+                })
+            })?;
+
+        let mut builder = FeynmanDiagramBuilder::new(Arc::clone(&model), name)
+            .symmetry_factor(symmetry_factor)
+            .overall_factor(Self::parse_expression("overall factor", overall_factor)?)
+            .numerator(NumeratorInterface::admit(
+                Self::parse_expression("numerator", numerator)?,
+                parsed
+                    .global_data
+                    .statements
+                    .get("num_interface")
+                    .map(|value| NumeratorInterface::parse(value))
+                    .transpose()?,
+            )?)
+            .numerator_prefactor(NumeratorInterface::admit(
+                Self::parse_expression("numerator prefactor", numerator_prefactor)?,
+                parsed
+                    .global_data
+                    .statements
+                    .get("numerator_prefactor_interface")
+                    .map(|value| NumeratorInterface::parse(value))
+                    .transpose()?,
+            )?)
+            .projector(NumeratorInterface::admit(
+                Self::parse_expression("projector", projector)?,
+                parsed
+                    .global_data
+                    .statements
+                    .get("projector_interface")
+                    .map(|value| NumeratorInterface::parse(value))
+                    .transpose()?,
+            )?)
+            .cuts(cuts)
+            .topology_threshold_candidates(topology_threshold_candidates);
+        let mut node_map = BTreeMap::new();
+        for (node, _, data) in parsed.iter_nodes() {
+            let target = format!("vertex {}", node.0);
+            let vertex_name = data
+                .statements
+                .get("feynkit_name")
+                .cloned()
+                .or_else(|| data.name.clone())
+                .unwrap_or_else(|| format!("v{}", node.0));
+            let interaction = data
+                .statements
+                .get("interaction_id")
+                .map(|id| {
+                    id.parse::<usize>()
+                        .map_err(|_| DiagramError::InvalidDotAttribute {
+                            target: target.clone(),
+                            attribute: "interaction_id",
+                            value: id.clone(),
+                        })
+                        .and_then(|id| model.vertex_rule_id_at(id).map_err(Into::into))
+                })
+                .transpose()?;
+            if data.statements.contains_key("external_state") {
+                return Err(DiagramError::Invariant {
+                    operation: "reading finalized DOT vertices",
+                    message: "external states must be represented by dangling or sewn edges, not vertices".into(),
+                });
+            }
+            let vertex = DiagramVertex {
+                name: vertex_name,
+                interaction,
+                numerator: NumeratorInterface::admit(
+                    Self::parse_expression(
+                        "vertex numerator",
+                        data.statements
+                            .get("numerator")
+                            .cloned()
+                            .unwrap_or_else(|| "1".to_owned()),
+                    )?,
+                    data.statements
+                        .get("num_interface")
+                        .map(|value| NumeratorInterface::parse(value))
+                        .transpose()?,
+                )?,
+            };
+            node_map.insert(node, builder.add_vertex(vertex));
+        }
+
+        let mut next_external = 0;
+        for (_, _, data) in parsed.iter_edges() {
+            if let Some(value) = data.data.statements.get("external")
+                && let Some(external) = serde_json::from_str::<Option<ExternalLeg>>(value)?
+            {
+                next_external = next_external.max(
+                    external
+                        .index
+                        .checked_add(1)
+                        .ok_or(DiagramError::DotExternalIndexOverflow(external.index))?,
+                );
+            }
+        }
+        for (pair, edge_id, data) in parsed.iter_edges() {
+            let target = format!("edge {}", edge_id.0);
+            let _pdg: i64 = data
+                .data
+                .statements
+                .get("pdg")
+                .ok_or_else(|| DiagramError::MissingDotAttribute {
+                    target: target.clone(),
+                    attribute: "pdg",
+                })?
+                .parse()
+                .map_err(|_| DiagramError::InvalidDotAttribute {
+                    target: target.clone(),
+                    attribute: "pdg",
+                    value: data.data.statements["pdg"].clone(),
+                })?;
+            let _particle_name =
+                data.data
+                    .statements
+                    .get("particle")
+                    .cloned()
+                    .ok_or_else(|| DiagramError::MissingDotAttribute {
+                        target: target.clone(),
+                        attribute: "particle",
+                    })?;
+            let particle_id = data
+                .data
+                .statements
+                .get("particle_id")
+                .ok_or_else(|| DiagramError::MissingDotAttribute {
+                    target: target.clone(),
+                    attribute: "particle_id",
+                })?
+                .parse::<usize>()
+                .map_err(|_| DiagramError::InvalidDotAttribute {
+                    target: target.clone(),
+                    attribute: "particle_id",
+                    value: data.data.statements["particle_id"].clone(),
+                })?;
+            let mut edge = DiagramEdge {
+                external: data
+                    .data
+                    .statements
+                    .get("external")
+                    .map(|value| serde_json::from_str::<Option<ExternalLeg>>(value))
+                    .transpose()?
+                    .flatten(),
+                is_dummy: data
+                    .data
+                    .statements
+                    .get("is_dummy")
+                    .map(|value| {
+                        value
+                            .parse::<bool>()
+                            .map_err(|_| DiagramError::InvalidDotAttribute {
+                                target: target.clone(),
+                                attribute: "is_dummy",
+                                value: value.clone(),
+                            })
+                    })
+                    .transpose()?
+                    .unwrap_or(false),
+                particle: model.particle_id_at(particle_id)?,
+                directed: data.orientation != Orientation::Undirected,
+                numerator: NumeratorInterface::admit(
+                    Self::parse_expression(
+                        "edge numerator",
+                        data.data
+                            .statements
+                            .get("numerator")
+                            .cloned()
+                            .unwrap_or_else(|| "1".to_owned()),
+                    )?,
+                    data.data
+                        .statements
+                        .get("num_interface")
+                        .map(|value| NumeratorInterface::parse(value))
+                        .transpose()?,
+                )?,
+                source_slot: VertexSlot(0),
+                target_slot: VertexSlot(0),
+            };
+            let source_slot = data
+                .data
+                .statements
+                .get("source_slot")
+                .ok_or_else(|| DiagramError::MissingDotAttribute {
+                    target: target.clone(),
+                    attribute: "source_slot",
+                })?
+                .parse()
+                .map(VertexSlot)
+                .map_err(|_| DiagramError::InvalidDotAttribute {
+                    target: target.clone(),
+                    attribute: "source_slot",
+                    value: data.data.statements["source_slot"].clone(),
+                })?;
+            let target_slot = data
+                .data
+                .statements
+                .get("target_slot")
+                .ok_or_else(|| DiagramError::MissingDotAttribute {
+                    target: target.clone(),
+                    attribute: "target_slot",
+                })?
+                .parse()
+                .map(VertexSlot)
+                .map_err(|_| DiagramError::InvalidDotAttribute {
+                    target: target.clone(),
+                    attribute: "target_slot",
+                    value: data.data.statements["target_slot"].clone(),
+                })?;
+            if let Some(directed) = data.data.statements.get("directed") {
+                edge.directed =
+                    directed
+                        .parse()
+                        .map_err(|_| DiagramError::InvalidDotAttribute {
+                            target: target.clone(),
+                            attribute: "directed",
+                            value: directed.clone(),
+                        })?;
+            }
+
+            match pair {
+                HedgePair::Paired { source, sink } | HedgePair::Split { source, sink, .. } => {
+                    let source_id = parsed.node_id(source);
+                    let sink_id = parsed.node_id(sink);
+                    let source = *node_map
+                        .get(&source_id)
+                        .ok_or(DiagramError::UnknownVertex {
+                            vertex: source_id.0,
+                            vertices: node_map.len(),
+                        })?;
+                    let sink = *node_map.get(&sink_id).ok_or(DiagramError::UnknownVertex {
+                        vertex: sink_id.0,
+                        vertices: node_map.len(),
+                    })?;
+                    builder.add_edge_with_slots(source, sink, edge, source_slot, target_slot)?;
+                }
+                HedgePair::Unpaired { hedge, flow } => {
+                    let internal_id = parsed.node_id(hedge);
+                    let internal =
+                        *node_map
+                            .get(&internal_id)
+                            .ok_or(DiagramError::UnknownVertex {
+                                vertex: internal_id.0,
+                                vertices: node_map.len(),
+                            })?;
+                    if edge.external.is_none() && !edge.is_dummy {
+                        let index = next_external;
+                        next_external = next_external
+                            .checked_add(1)
+                            .ok_or(DiagramError::DotExternalIndexOverflow(next_external))?;
+                        edge.external = Some(ExternalLeg {
+                            name: format!("ext{index}"),
+                            index,
+                            connection: index,
+                            state: match flow {
+                                Flow::Sink => ExternalState::Incoming,
+                                Flow::Source => ExternalState::Outgoing,
+                            },
+                        });
+                    }
+                    let (source, target) = match flow {
+                        Flow::Source => (Some(internal), None),
+                        Flow::Sink => (None, Some(internal)),
+                    };
+                    builder.add_edge_with_slots(source, target, edge, source_slot, target_slot)?;
+                }
+            }
+        }
+        builder.edge_orientations = Some(
+            parsed
+                .iter_edges()
+                .map(|(_, _, edge)| edge.orientation)
+                .collect(),
+        );
+        builder.half_edge_order =
+            Some(match parsed.global_data.statements.get("half_edge_order") {
+                Some(order) => serde_json::from_str(order)?,
+                None => parsed
+                    .iter_hedges()
+                    .map(|(hedge, _)| DiagramHalfEdge {
+                        edge: EdgeId(parsed[&hedge].0),
+                        endpoint: match parsed.flow(hedge) {
+                            Flow::Source => DiagramEndpoint::Source,
+                            Flow::Sink => DiagramEndpoint::Target,
+                        },
+                    })
+                    .collect(),
+            });
+        if let Some(basis) = parsed.global_data.statements.get("loop_momentum_basis") {
+            builder.loop_momentum_basis = Some(serde_json::from_str(basis)?);
+        }
+        let stored_basis = builder.loop_momentum_basis.is_some();
+        let diagram = builder.build()?;
+        let diagram = match loop_momentum_edges.filter(|_| !stored_basis) {
+            Some(edges) => diagram.with_loop_momentum_edges(&edges),
+            None => Ok(diagram),
+        }?;
+        diagram.validate()?;
+        // The annotated dialect keeps every edge and vertex ID of the finalized diagram.
+        let attributes = DotAttributes {
+            graph: parsed.global_data.statements.clone(),
+            vertices: parsed
+                .iter_nodes()
+                .map(|(_, _, data)| data.statements.clone())
+                .collect(),
+            edges: parsed
+                .iter_edges()
+                .map(|(_, _, data)| data.data.statements.clone())
+                .collect(),
+        };
+        let explicit = ExplicitFactors {
+            vertices: diagram.vertices().map(|(id, _)| id).collect(),
+            edges: diagram.edges().map(|(id, _, _)| id).collect(),
+            projector: true,
+        };
+        // The annotated dialect is already in the finalized frame.
+        let source_map = DiagramSourceMap {
+            edges: diagram.edges().map(|(id, ..)| id).collect(),
+            vertices: (0..diagram.graph.node_bound())
+                .map(|vertex| Some(VertexId(vertex)))
+                .collect(),
+        };
+        Ok(DotDiagram {
+            diagram,
+            attributes,
+            explicit,
+            source_map,
+        })
+    }
+
+    /// Parse one or more model-aware FeynKit DOT diagrams from a single document.
+    ///
+    /// Each graph accepts the same compact or annotated dialect as [`Self::from_dot`].
+    /// Annotated exports must carry the same model fingerprint as `model`.
+    /// This is the canonical
+    /// import path for a set of finalized cross-section diagrams because their
+    /// typed physical cuts are retained graph by graph.
+    pub fn from_dot_set(
+        model: impl Into<Arc<Model>>,
+        input: &str,
+    ) -> Result<Vec<Self>, DiagramError> {
+        DotDiagram::from_dot_set(model, input)
+            .map(|diagrams| diagrams.into_iter().map(|dot| dot.diagram).collect())
+    }
+
+    pub fn loop_count(&self) -> usize {
+        self.loop_momentum_basis.loop_edges.len()
+    }
+
+    /// Return the local superficial UV degree in `dimension` spacetime dimensions.
+    ///
+    /// This is `dimension * loops + sum(vertex degrees) + sum(edge degrees - 2)`.
+    /// Degrees come from the stored local numerators; each internal propagator
+    /// contributes its quadratic denominator. External legs, the projector, and
+    /// diagram-wide prefactors are excluded, as in GammaLoop's local UV counting.
+    /// All momenta at a vertex scale together. This is a superficial bound, not
+    /// a test of cancellations in the contracted numerator or of subdivergences.
+    /// Zero means logarithmic, positive means power divergent, and negative means
+    /// superficially convergent.
+    pub fn superficial_degree_of_divergence(&self, dimension: i32) -> Result<i32, DiagramError> {
+        self.superficial_degree_of_divergence_of(&self.momentum_subgraph(), dimension)
+    }
+
+    /// Enumerate every spanning-forest-induced loop momentum basis.
+    pub fn loop_momentum_bases(&self) -> Result<Vec<LoopMomentumBasis>, DiagramError> {
+        self.loop_momentum_bases_with_limit(usize::MAX)
+    }
+
+    /// Enumerate at most `limit` loop momentum bases.
+    pub fn loop_momentum_bases_with_limit(
+        &self,
+        limit: usize,
+    ) -> Result<Vec<LoopMomentumBasis>, DiagramError> {
+        self.loop_momentum_bases_of(&self.graph.full_filter(), limit)
+    }
+
+    fn resolve_particle(
+        &self,
+        _edge_id: EdgeId,
+        edge: &DiagramEdge,
+    ) -> Result<(&Particle, ParticleId), DiagramError> {
+        let particle = self.model.particle_by_id(edge.particle)?;
+        let base = if particle.is_antiparticle() {
+            let antiparticle = self.model.antiparticle(particle)?;
+            self.model.particle_id(&antiparticle.name)?
+        } else {
+            edge.particle
+        };
+        Ok((particle, base))
+    }
+
+    fn serde_view(&self) -> Result<DiagramSerde, DiagramError> {
+        let (numerator, num_interface) = NumeratorInterface::export(self.numerator()?);
+        let (numerator_prefactor, numerator_prefactor_interface) =
+            NumeratorInterface::export(&self.numerator_prefactor);
+        let (projector, projector_interface) = NumeratorInterface::export(&self.projector);
+        Ok(DiagramSerde {
+            id: self.id()?,
+            model: self.model.fingerprint(),
+            name: self.name.clone(),
+            vertices: self
+                .vertices()
+                .map(|(_, vertex)| {
+                    let (numerator, num_interface) = NumeratorInterface::export(&vertex.numerator);
+                    DiagramVertexSerde {
+                        name: vertex.name.clone(),
+                        interaction: vertex.interaction,
+                        numerator: numerator.to_canonical_string(),
+                        num_interface,
+                    }
+                })
+                .collect(),
+            edges: self
+                .edges()
+                .map(|(id, endpoints, edge)| {
+                    let (numerator, num_interface) = NumeratorInterface::export(&edge.numerator);
+                    (
+                        endpoints,
+                        DiagramEdgeSerde {
+                            external: edge.external.clone(),
+                            is_dummy: edge.is_dummy,
+                            orientation: linnet::half_edge::EdgeAccessors::orientation(
+                                &self.graph,
+                                EdgeIndex(id.0),
+                            ),
+                            particle: edge.particle,
+                            directed: edge.directed,
+                            numerator: numerator.to_canonical_string(),
+                            num_interface,
+                            source_slot: edge.source_slot,
+                            target_slot: edge.target_slot,
+                        },
+                    )
+                })
+                .collect(),
+            half_edge_order: self.half_edges().collect(),
+            symmetry_factor: self.symmetry_factor,
+            overall_factor: self.overall_factor.to_canonical_string(),
+            numerator: numerator.to_canonical_string(),
+            num_interface,
+            numerator_prefactor: numerator_prefactor.to_canonical_string(),
+            numerator_prefactor_interface,
+            projector: projector.to_canonical_string(),
+            projector_interface,
+            loop_momentum_basis: self.loop_momentum_basis().clone(),
+            cuts: self.cuts.clone(),
+            topology_threshold_candidates: self.topology_threshold_candidates.clone(),
+        })
+    }
+
+    fn from_serde(model: Arc<Model>, data: DiagramSerde) -> Result<Self, DiagramError> {
+        let actual_fingerprint = model.fingerprint();
+        if data.model != actual_fingerprint {
+            return Err(DiagramError::ModelFingerprintMismatch {
+                serialized: data.model,
+                actual: actual_fingerprint,
+            });
+        }
+        let serialized_id = data.id;
+        let mut builder = FeynmanDiagramBuilder::new(model, data.name)
+            .symmetry_factor(data.symmetry_factor)
+            .overall_factor(Self::parse_expression(
+                "overall factor",
+                data.overall_factor,
+            )?)
+            .numerator(NumeratorInterface::admit(
+                Self::parse_expression("numerator", data.numerator)?,
+                data.num_interface,
+            )?)
+            .numerator_prefactor(NumeratorInterface::admit(
+                Self::parse_expression("numerator prefactor", data.numerator_prefactor)?,
+                data.numerator_prefactor_interface,
+            )?)
+            .projector(NumeratorInterface::admit(
+                Self::parse_expression("projector", data.projector)?,
+                data.projector_interface,
+            )?)
+            .loop_momentum_basis(data.loop_momentum_basis)
+            .cuts(data.cuts)
+            .topology_threshold_candidates(data.topology_threshold_candidates);
+        builder.half_edge_order = Some(data.half_edge_order);
+        builder.edge_orientations = Some(
+            data.edges
+                .iter()
+                .map(|(_, edge)| edge.orientation)
+                .collect(),
+        );
+        for vertex in data.vertices {
+            builder.add_vertex(DiagramVertex {
+                name: vertex.name,
+                interaction: vertex.interaction,
+                numerator: NumeratorInterface::admit(
+                    Self::parse_expression("vertex numerator", vertex.numerator)?,
+                    vertex.num_interface,
+                )?,
+            });
+        }
+        for (endpoints, edge) in data.edges {
+            builder.add_edge_with_slots(
+                endpoints.source,
+                endpoints.target,
+                DiagramEdge {
+                    external: edge.external,
+                    is_dummy: edge.is_dummy,
+                    particle: edge.particle,
+                    directed: edge.directed,
+                    numerator: NumeratorInterface::admit(
+                        Self::parse_expression("edge numerator", edge.numerator)?,
+                        edge.num_interface,
+                    )?,
+                    source_slot: edge.source_slot,
+                    target_slot: edge.target_slot,
+                },
+                edge.source_slot,
+                edge.target_slot,
+            )?;
+        }
+        let diagram = builder.build()?;
+        let actual = diagram.id()?;
+        if actual != serialized_id {
+            return Err(DiagramError::DiagramIdMismatch {
+                serialized: serialized_id,
+                actual,
+            });
+        }
+        diagram.validate()?;
+        Ok(diagram)
+    }
+
+    fn parse_expression(field: &'static str, expression: String) -> Result<Atom, DiagramError> {
+        // Canonical strings include attributes and tags, but not Symbolica user data.
+        // Reuse exact registered declarations so Spenso representation metadata survives.
+        let mut symbols = State::symbol_iter()
+            .filter(|(symbol, _)| !matches!(symbol.get_data(), UserData::None))
+            .map(|(symbol, _)| (Atom::var(symbol).to_canonical_string().into(), symbol))
+            .collect();
+        // The index, momentum and polarization heads of `symbols` live in this
+        // namespace, so unqualified DOT references such as `hedge(3)` or
+        // `Q(1, ...)` resolve to them. Canonical strings are fully qualified.
+        let namespace = with_default_namespace!(&expression, "gammalooprs");
+        Workspace::get_local()
+            .with(|workspace| {
+                Token::parse_with_atom_info(
+                    &expression,
+                    ParseSettings::default(),
+                    Some((&namespace, &mut symbols, workspace)),
+                )?
+                .to_atom(&namespace, &mut symbols, workspace)
+            })
+            .map_err(|message| DiagramError::SymbolicParse {
+                field,
+                expression,
+                message,
+            })
+    }
+}
+
+/// Incremental owner for enforcing diagram-construction invariants.
+pub struct FeynmanDiagramBuilder {
+    model: Arc<Model>,
+    name: Option<String>,
+    vertices: Vec<DiagramVertex>,
+    /// Generated external legs, by their provisional dangling edge.
+    generation_externals: BTreeMap<EdgeId, ExternalLeg>,
+    edges: Vec<(EdgeEndpoints, DiagramEdge)>,
+    half_edge_order: Option<Vec<DiagramHalfEdge>>,
+    edge_orientations: Option<Vec<Orientation>>,
+    symmetry_factor: u128,
+    overall_factor: Atom,
+    numerator: Option<SymbolicTensor<PartialStructure>>,
+    numerator_prefactor: SymbolicTensor<PartialStructure>,
+    projector: SymbolicTensor<PartialStructure>,
+    loop_momentum_basis: Option<LoopMomentumBasis>,
+    canonical_loop_momentum_basis: bool,
+    canonical_routing_cache: Option<Arc<routing::CanonicalRoutingCache>>,
+    cuts: Vec<DiagramCut>,
+    topology_threshold_candidates: Vec<DiagramThresholdCandidate>,
+}
+
+impl FeynmanDiagramBuilder {
+    /// Start a diagram with an optional display name; `None` requests no name.
+    pub fn new(model: impl Into<Arc<Model>>, name: Option<String>) -> Self {
+        Self {
+            model: model.into(),
+            name,
+            vertices: Vec::new(),
+            generation_externals: BTreeMap::new(),
+            edges: Vec::new(),
+            half_edge_order: None,
+            edge_orientations: None,
+            symmetry_factor: 1,
+            overall_factor: Atom::one(),
+            numerator: None,
+            numerator_prefactor: SymbolicTensor::infer(Atom::one()).expect("literal one is scalar"),
+            projector: SymbolicTensor::infer(Atom::one()).expect("literal one is scalar"),
+            loop_momentum_basis: None,
+            canonical_loop_momentum_basis: false,
+            canonical_routing_cache: None,
+            cuts: Vec::new(),
+            topology_threshold_candidates: Vec::new(),
+        }
+    }
+
+    /// Record the raw automorphism order as diagnostic provenance.
+    ///
+    /// The builder does not fold it into the authoritative `overall_factor`.
+    pub fn symmetry_factor(mut self, symmetry_factor: u128) -> Self {
+        self.symmetry_factor = symmetry_factor;
+        self
+    }
+
+    pub fn overall_factor(mut self, overall_factor: Atom) -> Self {
+        self.overall_factor = overall_factor;
+        self
+    }
+
+    /// Supply an explicit aggregate numerator. By default, the builder multiplies
+    /// the local vertex and edge fragments after finalizing their indices.
+    pub fn numerator(mut self, numerator: SymbolicTensor<PartialStructure>) -> Self {
+        self.numerator = Some(numerator);
+        self
+    }
+
+    pub fn numerator_prefactor(
+        mut self,
+        numerator_prefactor: SymbolicTensor<PartialStructure>,
+    ) -> Self {
+        self.numerator_prefactor = numerator_prefactor;
+        self
+    }
+
+    pub fn projector(mut self, projector: SymbolicTensor<PartialStructure>) -> Self {
+        self.projector = projector;
+        self
+    }
+
+    /// Retain an already finalized half-edge frame. Build validates that every
+    /// attached endpoint occurs exactly once; symbolic payloads keep this frame.
+    pub fn half_edge_order(mut self, order: Vec<DiagramHalfEdge>) -> Self {
+        self.half_edge_order = Some(order);
+        self
+    }
+
+    /// Retain the orientation attached to each stable edge ID during transport.
+    pub fn edge_orientations(mut self, orientations: Vec<Orientation>) -> Self {
+        self.edge_orientations = Some(orientations);
+        self
+    }
+
+    /// Choose canonical topology order when no explicit basis is supplied.
+    pub fn canonical_loop_momentum_basis(mut self) -> Self {
+        self.canonical_loop_momentum_basis = true;
+        self
+    }
+
+    /// Reuse canonical amplitude routing across decorations in this request.
+    /// This preserves the edge and half-edge frame chosen during finalization.
+    pub fn canonical_routing_cache(mut self, cache: Arc<routing::CanonicalRoutingCache>) -> Self {
+        self.canonical_routing_cache = Some(cache);
+        self
+    }
+
+    pub fn loop_momentum_basis(mut self, basis: LoopMomentumBasis) -> Self {
+        self.loop_momentum_basis = Some(basis);
+        self
+    }
+
+    pub fn cuts(mut self, cuts: Vec<DiagramCut>) -> Self {
+        self.cuts = cuts;
+        self
+    }
+
+    pub fn topology_threshold_candidates(
+        mut self,
+        candidates: Vec<DiagramThresholdCandidate>,
+    ) -> Self {
+        self.topology_threshold_candidates = candidates;
+        self
+    }
+
+    pub fn add_vertex(&mut self, vertex: DiagramVertex) -> VertexId {
+        let id = VertexId(self.vertices.len());
+        self.vertices.push(vertex);
+        id
+    }
+
+    /// Attach a generated external leg to `vertex` as a dangling edge whose end at `vertex`
+    /// has `flow` and `slot`.
+    ///
+    /// Finalization orders the generated legs by connection, sews the incoming and outgoing
+    /// copies of each cross-section initial state, and orients every leg along its process
+    /// flow (conjugating the particle of a reversed directed leg). Expression indices of the
+    /// leg refer to the provisional edge. Every other edge of a diagram with generated legs
+    /// must be attached at both ends and carry no leg.
+    pub fn add_generation_external(
+        &mut self,
+        vertex: VertexId,
+        flow: Flow,
+        edge: DiagramEdge,
+        slot: VertexSlot,
+        leg: ExternalLeg,
+    ) -> Result<EdgeId, DiagramError> {
+        let (source, target, source_slot, target_slot) = match flow {
+            Flow::Source => (Some(vertex), None, slot, VertexSlot(0)),
+            Flow::Sink => (None, Some(vertex), VertexSlot(0), slot),
+        };
+        let id = self.add_edge_with_slots(source, target, edge, source_slot, target_slot)?;
+        self.generation_externals.insert(id, leg);
+        Ok(id)
+    }
+
+    pub fn add_edge(
+        &mut self,
+        source: impl Into<Option<VertexId>>,
+        target: impl Into<Option<VertexId>>,
+        mut edge: DiagramEdge,
+    ) -> Result<EdgeId, DiagramError> {
+        let (source, target) = (source.into(), target.into());
+        let degree = |vertex: Option<VertexId>| {
+            self.edges
+                .iter()
+                .map(|(endpoints, _)| {
+                    usize::from(vertex.is_some() && endpoints.source == vertex)
+                        + usize::from(vertex.is_some() && endpoints.target == vertex)
+                })
+                .sum()
+        };
+        let source_slot = VertexSlot(degree(source));
+        let target_slot =
+            VertexSlot(degree(target) + usize::from(source.is_some() && source == target));
+        edge.source_slot = source_slot;
+        edge.target_slot = target_slot;
+        self.add_edge_with_slots(source, target, edge, source_slot, target_slot)
+    }
+
+    pub fn add_edge_with_slots(
+        &mut self,
+        source: impl Into<Option<VertexId>>,
+        target: impl Into<Option<VertexId>>,
+        mut edge: DiagramEdge,
+        source_slot: VertexSlot,
+        target_slot: VertexSlot,
+    ) -> Result<EdgeId, DiagramError> {
+        let (source, target) = (source.into(), target.into());
+        if source.is_none() && target.is_none() {
+            return Err(DiagramError::Invariant {
+                operation: "adding an edge",
+                message: "an edge must have an attached half-edge".into(),
+            });
+        }
+        for vertex in [source, target].into_iter().flatten() {
+            if vertex.0 >= self.vertices.len() {
+                return Err(DiagramError::UnknownVertex {
+                    vertex: vertex.0,
+                    vertices: self.vertices.len(),
+                });
+            }
+        }
+        edge.source_slot = source_slot;
+        edge.target_slot = target_slot;
+        let id = EdgeId(self.edges.len());
+        self.edges.push((EdgeEndpoints { source, target }, edge));
+        Ok(id)
+    }
+
+    pub fn build(self) -> Result<FeynmanDiagram, DiagramError> {
+        self.finalize().map(|(diagram, _)| diagram)
+    }
+}
+
+/// Exact source ownership recorded by diagram finalization. Sewing maps two
+/// source legs to one final edge; removed generation vertices have no image.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DiagramSourceMap {
+    edges: Vec<EdgeId>,
+    vertices: Vec<Option<VertexId>>,
+}
+
+impl DiagramSourceMap {
+    pub fn edges(&self) -> &[EdgeId] {
+        &self.edges
+    }
+
+    pub fn vertices(&self) -> &[Option<VertexId>] {
+        &self.vertices
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use feynkit_kinematics::SignOrZero;
+    use linnet::half_edge::remap::HedgeRemap;
+    use linnet::half_edge::subgraph::ModifySubSet;
+    use linnet::permutation::Permutation;
+    use serde_json::json;
+    use spenso::structure::representation::Euclidean;
+    use spenso::tensor_symbol;
+    use std::sync::Arc;
+    use symbolica::atom::AtomView;
+    use symbolica::function;
+
+    const PHI3: &str = r#"{
+        "name":"phi3","restriction":null,"orders":[],
+        "parameters":[
+            {"name":"ZERO","lhablock":null,"lhacode":null,"nature":"internal","parameter_type":"real","value":[0.0,0.0],"expression":null},
+            {"name":"M","lhablock":"MASS","lhacode":[25],"nature":"external","parameter_type":"real","value":[1.0,0.0],"expression":null}
+        ],
+        "particles":[{"pdg_code":25,"name":"phi","antiname":"phi","spin":1,"color":1,"mass":"M","width":"ZERO","texname":"phi","antitexname":"phi","charge":0.0,"ghost_number":0,"lepton_number":0,"y_charge":0}],
+        "propagators":[{"name":"phi_prop","particle":"phi","numerator":"1","denominator":"P^2-M^2"}],
+        "lorentz_structures":[{"name":"L1","spins":[1,1,1],"structure":"1"}],
+        "couplings":[],
+        "vertex_rules":[{"name":"V_1","particles":["phi","phi","phi"],"color_structures":["1"],"lorentz_structures":["L1"],"couplings":[[null]]}]
+    }"#;
+
+    pub(crate) fn scalar_model() -> Arc<Model> {
+        Arc::new(Model::from_json(PHI3).unwrap())
+    }
+
+    #[test]
+    fn compact_dot_resolves_particles_slots_numerators_ports_and_routing() {
+        let model = scalar_model();
+        let dot = r#"digraph triangle {
+            graph [num="5"];
+            ext [style=invis];
+            a [num="2"];
+            ext -> a:4 [id=0, pdg=25];
+            b -> ext [id=1, particle="phi"];
+            c -> ext [id=2, particle="phi"];
+            a -> b [id=3, particle="phi", num="3", lmb_id=0];
+            b -> c [id=4, particle="phi"];
+            c -> a [id=5, particle="phi"];
+        }"#;
+        let diagram = FeynmanDiagram::from_dot(model.clone(), dot).unwrap();
+        diagram.validate().unwrap();
+        assert_eq!(diagram.loop_count(), 1);
+        assert_eq!(diagram.numerator().unwrap().expression(), &Atom::num(6));
+        assert_eq!(diagram.numerator_prefactor().expression(), &Atom::num(5));
+        assert_eq!(diagram.loop_momentum_basis().loop_edges, vec![EdgeId(3)]);
+        assert!(
+            diagram
+                .vertices()
+                .all(|(_, vertex)| vertex.interaction.is_some())
+        );
+        assert_eq!(
+            diagram
+                .half_edge_id(DiagramHalfEdge {
+                    edge: EdgeId(0),
+                    endpoint: DiagramEndpoint::Target
+                })
+                .unwrap()
+                .0,
+            4
+        );
+        assert_eq!(
+            FeynmanDiagram::from_dot(model, &diagram.to_dot().unwrap())
+                .unwrap()
+                .to_json()
+                .unwrap(),
+            diagram.to_json().unwrap()
+        );
+    }
+
+    #[test]
+    fn compact_dot_sews_initial_states_and_selects_physical_cuts() {
+        let model = scalar_model();
+        let dot = r#"digraph bubble {
+            graph [final_state="phi,phi"];
+            ext [style=invis];
+            ext -> a [particle="phi", is_cut=9];
+            b -> ext [particle="phi", is_cut=9];
+            a -> b [particle="phi", lmb_id=0];
+            b -> a [particle="phi"];
+        }"#;
+        let diagram = FeynmanDiagram::from_dot(model.clone(), dot).unwrap();
+        diagram.validate().unwrap();
+        assert_eq!(diagram.loop_count(), 1);
+        assert_eq!(diagram.cuts().len(), 1);
+        assert_eq!(diagram.cuts()[0].cut.len(), 2);
+        assert_eq!(diagram.cuts()[0].left.loop_count, 0);
+        assert_eq!(diagram.cuts()[0].right.loop_count, 0);
+        assert_eq!(diagram.topology_threshold_candidates().len(), 1);
+        assert_eq!(
+            diagram
+                .edges()
+                .filter(|(_, _, edge)| edge.external.is_some())
+                .count(),
+            1
+        );
+        assert_eq!(
+            FeynmanDiagram::from_dot(model.clone(), &diagram.to_dot().unwrap())
+                .unwrap()
+                .to_json()
+                .unwrap(),
+            diagram.to_json().unwrap()
+        );
+        assert!(FeynmanDiagram::from_dot(model.clone(), &dot.replace("phi,phi", "phi")).is_err());
+        // Without a final state every separating cut is physical; here there is one.
+        let all_cuts = FeynmanDiagram::from_dot(
+            model.clone(),
+            &dot.replace("graph [final_state=\"phi,phi\"];", ""),
+        )
+        .unwrap();
+        assert_eq!(all_cuts.cuts(), diagram.cuts());
+        assert!(FeynmanDiagram::from_dot(model, &dot.replace("b -> ext", "ext -> b")).is_err());
+    }
+
+    #[test]
+    fn compact_dot_rejects_inconsistent_model_data_and_loop_slots() {
+        let model = scalar_model();
+        for dot in [
+            r#"digraph { ext [style=invis]; ext -> a [particle="missing"]; a -> ext [particle="phi"]; a -> ext [particle="phi"]; }"#,
+            r#"digraph { ext [style=invis]; ext -> a [particle="phi"]; a -> ext [particle="phi"]; }"#,
+            r#"digraph { ext [style=invis]; ext -> a [particle="phi", lmb_id=0]; a -> ext [particle="phi"]; a -> ext [particle="phi"]; }"#,
+            r#"digraph { ext [style=invis]; ext -> a [particle="phi", pdg=999]; a -> ext [particle="phi"]; a -> ext [particle="phi"]; }"#,
+            // Loop slots must be contiguous from zero and form a basis.
+            r#"digraph { ext [style=invis]; ext -> a [particle="phi"]; a -> b [particle="phi", lmb_id=1]; a -> b [particle="phi"]; b -> ext [particle="phi"]; }"#,
+            r#"digraph { ext [style=invis]; ext -> a [particle="phi"]; a -> b [particle="phi", lmb_id=0]; a -> b [particle="phi", lmb_id=1]; b -> ext [particle="phi"]; }"#,
+        ] {
+            assert!(
+                FeynmanDiagram::from_dot(model.clone(), dot).is_err(),
+                "{dot}"
+            );
+        }
+    }
+
+    #[test]
+    fn compact_dot_rejects_mass_only_edges_including_defaults() {
+        for dot in [
+            "digraph { a -> b [mass=1]; }",
+            "digraph { edge [mass=1]; a -> b; }",
+        ] {
+            let error = FeynmanDiagram::from_dot(scalar_model(), dot).unwrap_err();
+            assert!(matches!(
+                &error,
+                DiagramError::InvalidDotAttribute {
+                    attribute: "mass",
+                    ..
+                }
+            ));
+            let message = error.to_string();
+            assert!(
+                message.contains("mass-only edges are unsupported"),
+                "{message}"
+            );
+            assert!(message.contains("`particle` or `pdg`"), "{message}");
+        }
+        assert!(matches!(
+            FeynmanDiagram::from_dot(scalar_model(), "digraph { a -> b; }"),
+            Err(DiagramError::MissingDotAttribute {
+                attribute: "particle or pdg",
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn compact_dot_keeps_mass_metadata_with_explicit_particle_or_pdg() {
+        let model = scalar_model();
+        let baseline = FeynmanDiagram::from_dot(
+            model.clone(),
+            r#"digraph mass_metadata {
+            edge [particle="phi"]; ext [style=invis]; ext -> a; a -> ext; a -> ext;
+        }"#,
+        )
+        .unwrap();
+        for identifier in [r#"particle="phi""#, "pdg=25"] {
+            for (defaults, local) in [("edge [mass=123];", ""), ("", ", mass=123")] {
+                let input = format!(
+                    "digraph mass_metadata {{ {defaults} ext [style=invis]; ext -> a [{identifier}{local}]; a -> ext [{identifier}]; a -> ext [{identifier}]; }}"
+                );
+                let imported = DotDiagram::from_dot(model.clone(), &input).unwrap();
+                imported.diagram.validate().unwrap();
+                let incoming = imported
+                    .diagram
+                    .edges()
+                    .filter_map(|(id, _, edge)| {
+                        edge.external
+                            .as_ref()
+                            .is_some_and(|leg| leg.state == ExternalState::Incoming)
+                            .then_some(id)
+                    })
+                    .collect::<Vec<_>>();
+                assert_eq!(incoming.len(), 1);
+                assert_eq!(imported.attributes.edges[incoming[0].0]["mass"], "123");
+                assert_eq!(
+                    imported.diagram.to_json().unwrap(),
+                    baseline.to_json().unwrap()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn compact_dot_records_attributes_and_explicit_factors() {
+        let model = scalar_model();
+        let dot = DotDiagram::from_dot(
+            model,
+            r#"digraph triangle {
+                graph [num="5", tool="x"];
+                ext [style=invis];
+                a [num="2", tag=left];
+                ext -> a:4 [id=0, particle="phi"];
+                b -> ext [id=1, particle="phi", num="7"];
+                c -> ext [id=2, particle="phi"];
+                a -> b [id=3, particle="phi", num="3", lmb_id=0, label=q];
+                b -> c [id=4, particle="phi"];
+                c -> a [id=5, particle="phi"];
+            }"#,
+        )
+        .unwrap();
+        assert_eq!(dot.explicit.vertices, BTreeSet::from([VertexId(0)]));
+        assert_eq!(dot.explicit.edges, BTreeSet::from([EdgeId(3)]));
+        assert!(!dot.explicit.projector);
+        assert_eq!(dot.attributes.graph["tool"], "x");
+        assert_eq!(dot.attributes.vertices[0]["tag"], "left");
+        assert_eq!(dot.attributes.edges[3]["label"], "q");
+        // External legs carry no numerator fragment: their `num` stays an attribute.
+        assert_eq!(dot.attributes.edges[1]["num"], "7");
+        assert_eq!(dot.diagram.numerator().unwrap().expression(), &Atom::num(6));
+        assert_eq!(
+            dot.diagram.numerator_prefactor().expression(),
+            &Atom::num(5)
+        );
+    }
+
+    #[test]
+    fn compact_dot_sewn_initial_state_takes_the_incoming_leg_attributes() {
+        let dot = DotDiagram::from_dot(
+            scalar_model(),
+            r#"digraph bubble {
+                ext [style=invis];
+                b -> ext [particle="phi", is_cut=0, name=out, mass=7, tag=out];
+                ext -> a [particle="phi", is_cut=0, name=in, colour=red];
+                a -> b [particle="phi"];
+                b -> a [particle="phi"];
+            }"#,
+        )
+        .unwrap();
+        let (sewn, _, data) = dot.diagram.edges().next().unwrap();
+        assert!(data.external.is_some());
+        let attributes = &dot.attributes.edges[sewn.0];
+        assert_eq!(attributes["name"], "in");
+        assert_eq!(attributes["colour"], "red");
+        // The outgoing leg completes what the incoming one leaves out.
+        assert_eq!(attributes["mass"], "7");
+        assert_eq!(attributes["tag"], "out");
+    }
+
+    #[test]
+    fn compact_dot_rejects_particle_indices_without_a_model_fingerprint() {
+        // Earlier GammaLoop exports named particles by model index.
+        assert!(matches!(
+            FeynmanDiagram::from_dot(
+                scalar_model(),
+                r#"digraph { ext [style=invis]; ext -> a [particle_id=0]; a -> ext [particle_id=0]; a -> ext [particle_id=0]; }"#,
+            ),
+            Err(DiagramError::InvalidDotAttribute {
+                attribute: "particle_id",
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn compact_dot_cut_internal_edge_is_a_sewn_initial_state() {
+        let model = scalar_model();
+        let split = FeynmanDiagram::from_dot(
+            model.clone(),
+            r#"digraph bubble {
+                ext [style=invis];
+                ext -> a [particle="phi", is_cut=3];
+                b -> ext [particle="phi", is_cut=3];
+                a -> b [particle="phi", lmb_id=0];
+                b -> a [particle="phi"];
+            }"#,
+        )
+        .unwrap();
+        let internal = FeynmanDiagram::from_dot(
+            model,
+            r#"digraph bubble {
+                b -> a [particle="phi", is_cut=3];
+                a -> b [particle="phi", lmb_id=0];
+                b -> a [particle="phi"];
+            }"#,
+        )
+        .unwrap();
+        // Leg names and interaction slots follow the DOT statement order.
+        assert_eq!(internal.cuts(), split.cuts());
+        assert_eq!(internal.loop_momentum_basis(), split.loop_momentum_basis());
+    }
+
+    #[test]
+    fn compact_dot_selects_cuts_by_final_state_or_keeps_them_all() {
+        let model = scalar_model();
+        let dot = |final_state: &str| {
+            format!(
+                r#"digraph two_loop {{
+                    {final_state}
+                    ext [style=invis];
+                    ext -> a [particle="phi", is_cut=0];
+                    d -> ext [particle="phi", is_cut=0];
+                    a -> b [particle="phi"];
+                    a -> c [particle="phi"];
+                    b -> c [particle="phi"];
+                    b -> d [particle="phi"];
+                    c -> d [particle="phi"];
+                }}"#
+            )
+        };
+        let cuts = |final_state: &str| {
+            FeynmanDiagram::from_dot(model.clone(), &dot(final_state))
+                .unwrap()
+                .cuts()
+                .iter()
+                .map(|cut| cut.cut.len())
+                .collect::<Vec<_>>()
+        };
+        let mut all = cuts("");
+        all.sort();
+        assert_eq!(all, [2, 2, 3, 3]);
+        assert_eq!(cuts(r#"graph [final_state="phi,phi"];"#), [2, 2]);
+        assert_eq!(cuts(r#"graph [final_state="phi,phi,phi"];"#), [3, 3]);
+        assert!(
+            FeynmanDiagram::from_dot(model, &dot(r#"graph [final_state="phi,phi,phi,phi"];"#))
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn compact_dot_transports_cross_section_expressions_to_the_sewn_frame() {
+        let model = scalar_model();
+        let diagram = FeynmanDiagram::from_dot(
+            model,
+            r#"digraph bubble {
+                graph [projector="hedge(1)", overall_factor="edge(3)"];
+                ext [style=invis];
+                a [num="hedge(0)*hedge(2)"];
+                ext -> a:0 [id=0, particle="phi", is_cut=0];
+                b:1 -> ext [id=1, particle="phi", is_cut=0];
+                a:2 -> b:3 [id=2, particle="phi", lmb_id=0];
+                a:4 -> b:5 [id=3, particle="phi", num="Q(eid,spenso::mink(4,1))*source"];
+            }"#,
+        )
+        .unwrap();
+        diagram.validate().unwrap();
+        // The legs sew into edge 0; the internal edges follow in DOT order.
+        let hedge = |edge, endpoint| {
+            diagram
+                .half_edge_id(DiagramHalfEdge {
+                    edge: EdgeId(edge),
+                    endpoint,
+                })
+                .unwrap()
+                .0
+        };
+        let index = |hedge: usize| symbols::hedge_index().call((hedge,));
+        let (_, vertex) = diagram.vertices().next().unwrap();
+        assert_eq!(
+            NumeratorInterface::export(&vertex.numerator).0,
+            index(hedge(0, DiagramEndpoint::Target)) * index(hedge(1, DiagramEndpoint::Source))
+        );
+        let (_, _, edge) = diagram.edges().nth(2).unwrap();
+        let momentum =
+            symbols::momentum().call((2, Minkowski {}.new_rep(4).to_symbolic([Atom::num(1)])));
+        assert_eq!(
+            NumeratorInterface::export(&edge.numerator).0,
+            momentum * Atom::num(hedge(2, DiagramEndpoint::Source) as i64)
+        );
+        assert_eq!(
+            NumeratorInterface::export(diagram.projector()).0,
+            index(hedge(0, DiagramEndpoint::Source))
+        );
+        assert_eq!(diagram.overall_factor(), &symbols::edge_index().call((2,)));
+    }
+
+    #[test]
+    fn compact_dot_resolves_unqualified_heads_and_edge_shorthand() {
+        let model = scalar_model();
+        let diagram = FeynmanDiagram::from_dot(
+            model,
+            r#"digraph bubble {
+                ext [style=invis];
+                a [num="hedge(1)*Q(2,spenso::mink(4,1))"];
+                ext -> a:0 [id=0, particle="phi"];
+                b:1 -> ext [id=1, particle="phi"];
+                a:2 -> b:3 [id=2, particle="phi", lmb_id=0, num="eid*source(1)*sink(0)*eid(2)"];
+                a:4 -> b:5 [id=3, particle="phi"];
+            }"#,
+        )
+        .unwrap();
+        let (_, vertex) = diagram.vertices().next().unwrap();
+        let momentum =
+            symbols::momentum().call((2, Minkowski {}.new_rep(4).to_symbolic([Atom::num(1)])));
+        assert_eq!(
+            NumeratorInterface::export(&vertex.numerator).0,
+            symbols::hedge_index().call((1,)) * momentum
+        );
+        let (_, _, edge) = diagram.edges().nth(2).unwrap();
+        assert_eq!(
+            NumeratorInterface::export(&edge.numerator).0,
+            Atom::num(2)
+                * symbols::hedge_index().call((2, 1))
+                * symbols::hedge_index().call((3,))
+                * symbols::edge_index().call((2, 2))
+        );
+    }
+
+    #[test]
+    fn compact_dot_dummy_edges_and_vertices_without_interactions() {
+        let model = scalar_model();
+        let dot = DotDiagram::from_dot(
+            model.clone(),
+            r#"digraph dummy {
+                ext [style=invis];
+                c [num="4"];
+                ext -> a [particle="phi"];
+                ext -> a [particle="phi", is_dummy=true];
+                a -> b [particle="phi", lmb_id=0];
+                a -> c [particle="phi"];
+                c -> b [particle="phi"];
+                b -> ext [particle="phi"];
+            }"#,
+        )
+        .unwrap();
+        let diagram = &dot.diagram;
+        diagram.validate().unwrap();
+        let rule = model.vertex_rule_id("V_1").unwrap();
+        let interactions = diagram
+            .vertices()
+            .map(|(_, vertex)| (vertex.name.as_str(), vertex.interaction))
+            .collect::<BTreeMap<_, _>>();
+        // `c` joins two lines: no interaction, so its numerator must be given.
+        assert_eq!(
+            interactions,
+            BTreeMap::from([("a", Some(rule)), ("b", Some(rule)), ("c", None)])
+        );
+        let (dummy_id, dummy_ends, dummy) =
+            diagram.edges().find(|(_, _, edge)| edge.is_dummy).unwrap();
+        assert!(dummy.external.is_none());
+        assert_eq!(dummy.target_slot(), VertexSlot(3));
+        let (leg_id, _, leg) = diagram
+            .edges()
+            .find(|(_, ends, edge)| ends.target == dummy_ends.target && edge.external.is_some())
+            .unwrap();
+        // Contiguous slots alone do not suffice: a dummy cannot displace a rule leg.
+        let misplaced = reslotted(
+            diagram,
+            &[
+                (dummy_id.0, dummy.source_slot(), leg.target_slot()),
+                (leg_id.0, leg.source_slot(), dummy.target_slot()),
+            ],
+        );
+        assert!(matches!(
+            misplaced.validate(),
+            Err(DiagramError::InteractionSignatureMismatch { vertex, actual, .. })
+                if Some(VertexId(vertex)) == dummy_ends.target && actual.is_empty()
+        ));
+        assert!(
+            FeynmanDiagram::from_dot(model, &diagram_without(r#"c [num="4"];"#)).is_err(),
+            "a vertex without interaction needs a numerator"
+        );
+
+        fn diagram_without(statement: &str) -> String {
+            r#"digraph dummy {
+                ext [style=invis];
+                c [num="4"];
+                ext -> a [particle="phi"];
+                a -> b [particle="phi", lmb_id=0];
+                a -> c [particle="phi"];
+                c -> b [particle="phi"];
+                b -> ext [particle="phi"];
+            }"#
+            .replace(statement, "")
+        }
+    }
+
+    #[test]
+    fn compact_dot_checks_only_explicit_edge_directions() {
+        let model = scalar_model();
+        let bubble = |direction: &str| {
+            format!(
+                r#"digraph bubble {{
+                    ext [style=invis];
+                    {direction}
+                    ext -> a [particle="phi"];
+                    a -> b [particle="phi"];
+                    a -> b [particle="phi"];
+                    b -> ext [particle="phi"];
+                }}"#
+            )
+        };
+        assert!(FeynmanDiagram::from_dot(model.clone(), &bubble("edge [dir=forward];")).is_ok());
+        assert!(
+            FeynmanDiagram::from_dot(
+                model,
+                &bubble("").replace(
+                    r#"a -> b [particle="phi"];"#,
+                    r#"a -> b [particle="phi", dir=forward];"#
+                )
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn compact_dot_int_id_selects_among_matching_interactions() {
+        let model = Arc::new(
+            Model::from_json(&PHI3.replace(
+                r#""vertex_rules":["#,
+                r#""vertex_rules":[{"name":"V_2","particles":["phi","phi","phi"],"color_structures":["1"],"lorentz_structures":["L1"],"couplings":[[null]]},"#,
+            ))
+            .unwrap(),
+        );
+        let bubble = |rule: &str| {
+            format!(
+                r#"digraph bubble {{
+                    ext [style=invis];
+                    node [{rule}];
+                    ext -> a [particle="phi"];
+                    a -> b [particle="phi"];
+                    a -> b [particle="phi"];
+                    b -> ext [particle="phi"];
+                }}"#
+            )
+        };
+        let diagram = FeynmanDiagram::from_dot(model.clone(), &bubble("int_id=V_1")).unwrap();
+        let rule = model.vertex_rule_id("V_1").unwrap();
+        assert!(
+            diagram
+                .vertices()
+                .all(|(_, vertex)| vertex.interaction == Some(rule))
+        );
+        for ambiguous_or_unknown in ["", "int_id=V_3"] {
+            assert!(
+                FeynmanDiagram::from_dot(model.clone(), &bubble(ambiguous_or_unknown)).is_err(),
+                "{ambiguous_or_unknown}"
+            );
+        }
+    }
+
+    #[test]
+    fn compact_dot_without_loop_slots_routes_canonically() {
+        let model = scalar_model();
+        let diagram = FeynmanDiagram::from_dot(
+            model,
+            r#"digraph bubble {
+                ext [style=invis];
+                ext -> a [particle="phi", is_cut=0];
+                b -> ext [particle="phi", is_cut=0];
+                a -> b [particle="phi"];
+                b -> a [particle="phi"];
+            }"#,
+        )
+        .unwrap();
+        let canonical = diagram
+            .clone()
+            .with_canonical_loop_momentum_basis()
+            .unwrap();
+        assert_eq!(
+            diagram.loop_momentum_basis(),
+            canonical.loop_momentum_basis()
+        );
+    }
+
+    #[test]
+    fn native_vertex_metadata_does_not_become_compact() {
+        let model = scalar_model();
+        let input = r#"digraph sunset {
+            a [ATTRIBUTES];
+            a -> b [particle="phi"];
+            a -> b [particle="phi"];
+            a -> b [particle="phi"];
+        }"#;
+        let compact = input.replace("ATTRIBUTES", "label=\"a\"");
+        assert_eq!(
+            FeynmanDiagram::from_dot(model.clone(), &compact)
+                .unwrap()
+                .loop_count(),
+            2
+        );
+        let compact = input.replace("ATTRIBUTES", "num=\"2\", label=\"a\"");
+        assert_eq!(
+            FeynmanDiagram::from_dot(model.clone(), &compact)
+                .unwrap()
+                .numerator()
+                .unwrap()
+                .expression(),
+            &Atom::num(2)
+        );
+        let mut accepted = Vec::new();
+        for metadata in [
+            "interaction_id=9999",
+            "feynkit_name=\"native-vertex\"",
+            "numerator=\"2\"",
+            "external_state=\"incoming\"",
+            "external_index=0",
+            "external_connection=3",
+        ] {
+            let annotated = input.replace("ATTRIBUTES", metadata);
+            for result in [
+                FeynmanDiagram::from_dot(model.clone(), &annotated).map(|_| ()),
+                FeynmanDiagram::from_dot_set(model.clone(), &annotated).map(|_| ()),
+            ] {
+                match result {
+                    Err(DiagramError::MissingDotAttribute {
+                        attribute: "model_fingerprint",
+                        ..
+                    }) => {}
+                    Ok(_) => accepted.push(metadata),
+                    Err(error) => panic!("unexpected error for {metadata}: {error}"),
+                }
+            }
+        }
+        assert!(
+            accepted.is_empty(),
+            "native vertex metadata was silently accepted as compact: {accepted:?}"
+        );
+    }
+
+    #[test]
+    fn canonical_dot_missing_fingerprint_does_not_become_compact() {
+        let model = scalar_model();
+        let diagram = FeynmanDiagram::from_dot(model.clone(), r#"digraph { ext [style=invis]; ext -> a [particle="phi"]; a -> ext [particle="phi"]; a -> ext [particle="phi"]; }"#).unwrap();
+        let dot = diagram.to_dot().unwrap().replace(
+            &format!("model_fingerprint=\"{}\", ", model.fingerprint()),
+            "",
+        );
+        assert!(matches!(
+            FeynmanDiagram::from_dot(model, &dot),
+            Err(DiagramError::MissingDotAttribute {
+                attribute: "model_fingerprint",
+                ..
+            })
+        ));
+    }
+
+    fn external_edge(
+        particle: ParticleId,
+        name: &str,
+        index: usize,
+        state: ExternalState,
+    ) -> DiagramEdge {
+        let mut edge = DiagramEdge::new(particle, false);
+        edge.external = Some(ExternalLeg {
+            name: name.into(),
+            index,
+            state,
+            connection: index,
+        });
+        edge
+    }
+
+    pub(crate) fn one_loop() -> FeynmanDiagram {
+        one_loop_in(scalar_model())
+    }
+
+    /// The scalar bubble of [`one_loop`] in `model`, a variant of the scalar model: its first
+    /// vertex rule and particle.
+    pub(crate) fn one_loop_in(model: Arc<Model>) -> FeynmanDiagram {
+        let rule = model.vertex_rule_id_at(0).unwrap();
+        let particle = model.particle_id_at(0).unwrap();
+        let mut builder = FeynmanDiagram::builder(Arc::clone(&model), "bubble");
+        let left = builder.add_vertex(DiagramVertex::interaction("v0", rule));
+        let right = builder.add_vertex(DiagramVertex::interaction("v1", rule));
+        builder
+            .add_edge(
+                None,
+                left,
+                external_edge(particle, "p1", 0, ExternalState::Incoming),
+            )
+            .unwrap();
+        builder
+            .add_edge(left, right, DiagramEdge::new(particle, false))
+            .unwrap();
+        builder
+            .add_edge(left, right, DiagramEdge::new(particle, false))
+            .unwrap();
+        builder
+            .add_edge(
+                right,
+                None,
+                external_edge(particle, "p2", 1, ExternalState::Outgoing),
+            )
+            .unwrap();
+        builder.build().unwrap()
+    }
+
+    #[test]
+    fn sewn_box_default_routing_roots_at_the_outgoing_attachment() {
+        // Beam i enters at a or b and leaves at c or d; the physical cut
+        // separates {a, b} from {c, d}.
+        let dot = r#"digraph sewn_box {
+            graph [final_state="phi,phi"];
+            ext [style=invis];
+            ext -> a [particle="phi", is_cut=0];
+            ext -> b [particle="phi", is_cut=1];
+            c -> ext [particle="phi", is_cut=0];
+            d -> ext [particle="phi", is_cut=1];
+            b -> a [particle="phi"];
+            a -> d [particle="phi"];
+            c -> b [particle="phi"];
+            d -> c [particle="phi"];
+        }"#;
+        let diagram = FeynmanDiagram::from_dot(scalar_model(), dot).unwrap();
+        let edge = |source, target| internal_edge(&diagram, source, target);
+        let cut = diagram.cut_edges();
+        assert_eq!(cut, BTreeSet::from([edge("a", "d"), edge("c", "b")]));
+        let ordered = [
+            edge("b", "a"),
+            edge("a", "d"),
+            edge("c", "b"),
+            edge("d", "c"),
+        ];
+        let depth_first = diagram
+            .basis_from_tree(&diagram.first_depth_first_forest(&ordered).unwrap())
+            .unwrap();
+        // With the outgoing root, the independent loop is a physical cut
+        // momentum. Both cut momenta vanish spatially at K=0 in the centre-of-
+        // mass frame P0=-P1. An incoming root instead selects the t-channel
+        // edge, putting K=0 outside the massive two-particle LU cut surface.
+        assert_eq!(depth_first.loop_edges, [edge("c", "b")]);
+        for cut_edge in &cut {
+            let shift = &depth_first.edge_signatures[cut_edge].external;
+            assert_eq!(shift.len(), 2);
+            assert_eq!(shift.get(0), shift.get(1));
+        }
+        assert_eq!(depth_first.partial_beam_momenta(&cut), 0);
+    }
+
+    pub(crate) fn one_loop_reordered() -> FeynmanDiagram {
+        let model = scalar_model();
+        let rule = model.vertex_rule_id("V_1").unwrap();
+        let particle = model.particle_id("phi").unwrap();
+        let mut builder = FeynmanDiagram::builder(Arc::clone(&model), "renamed");
+        let right = builder.add_vertex(DiagramVertex::interaction("right", rule));
+        let left = builder.add_vertex(DiagramVertex::interaction("left", rule));
+        builder
+            .add_edge_with_slots(
+                right,
+                None,
+                external_edge(particle, "out", 1, ExternalState::Outgoing),
+                VertexSlot(2),
+                VertexSlot(0),
+            )
+            .unwrap();
+        builder
+            .add_edge_with_slots(
+                left,
+                right,
+                DiagramEdge::new(particle, false),
+                VertexSlot(1),
+                VertexSlot(0),
+            )
+            .unwrap();
+        builder
+            .add_edge_with_slots(
+                None,
+                left,
+                external_edge(particle, "in", 0, ExternalState::Incoming),
+                VertexSlot(0),
+                VertexSlot(0),
+            )
+            .unwrap();
+        builder
+            .add_edge_with_slots(
+                left,
+                right,
+                DiagramEdge::new(particle, false),
+                VertexSlot(2),
+                VertexSlot(1),
+            )
+            .unwrap();
+        builder.build().unwrap()
+    }
+
+    pub(crate) fn cut_scalar_line() -> FeynmanDiagram {
+        let model = scalar_model();
+        let particle = model.particle_id("phi").unwrap();
+        let mut builder = FeynmanDiagram::builder(model, "cut-scalar-line");
+        let left = builder.add_vertex(DiagramVertex {
+            name: "left".into(),
+            interaction: None,
+            numerator: SymbolicTensor::infer(Atom::one()).unwrap(),
+        });
+        let right = builder.add_vertex(DiagramVertex {
+            name: "right".into(),
+            interaction: None,
+            numerator: SymbolicTensor::infer(Atom::one()).unwrap(),
+        });
+        let initial = builder
+            .add_edge(
+                left,
+                right,
+                external_edge(particle, "p", 0, ExternalState::Incoming),
+            )
+            .unwrap();
+        let crossing = builder
+            .add_edge(left, right, DiagramEdge::new(particle, false))
+            .unwrap();
+        let source = |edge| DiagramHalfEdge {
+            edge,
+            endpoint: DiagramEndpoint::Source,
+        };
+        let target = |edge| DiagramHalfEdge {
+            edge,
+            endpoint: DiagramEndpoint::Target,
+        };
+        let side = |half_edges| DiagramCutSide {
+            half_edges,
+            coupling_orders: BTreeMap::new(),
+            loop_count: 0,
+        };
+        builder
+            .cuts(vec![DiagramCut {
+                cut: vec![target(crossing)],
+                left: side(vec![target(initial), target(crossing)]),
+                right: side(vec![source(initial), source(crossing)]),
+            }])
+            .build()
+            .unwrap()
+    }
+
+    pub(crate) fn cut_scalar_bubble() -> FeynmanDiagram {
+        let model = scalar_model();
+        let rule = model.vertex_rule_id("V_1").unwrap();
+        let particle = model.particle_id("phi").unwrap();
+        let mut builder = FeynmanDiagram::builder(model, "cut-scalar-bubble");
+        let a = builder.add_vertex(DiagramVertex::interaction("left", rule));
+        let b = builder.add_vertex(DiagramVertex::interaction("right", rule));
+        let initial = builder
+            .add_edge(
+                a,
+                b,
+                external_edge(particle, "p", 0, ExternalState::Incoming),
+            )
+            .unwrap();
+        let first = builder
+            .add_edge(a, b, DiagramEdge::new(particle, false))
+            .unwrap();
+        let second = builder
+            .add_edge(a, b, DiagramEdge::new(particle, false))
+            .unwrap();
+        let source = |edge| DiagramHalfEdge {
+            edge,
+            endpoint: DiagramEndpoint::Source,
+        };
+        let target = |edge| DiagramHalfEdge {
+            edge,
+            endpoint: DiagramEndpoint::Target,
+        };
+        let left = vec![target(initial), target(first), target(second)];
+        let right = vec![source(initial), source(first), source(second)];
+        let cut = vec![target(first), target(second)];
+        let side = |half_edges| DiagramCutSide {
+            half_edges,
+            coupling_orders: BTreeMap::new(),
+            loop_count: 0,
+        };
+        let diagram = builder
+            .cuts(vec![DiagramCut {
+                cut: cut.clone(),
+                left: side(left.clone()),
+                right: side(right.clone()),
+            }])
+            .topology_threshold_candidates(vec![DiagramThresholdCandidate { cut, left, right }])
+            .build()
+            .unwrap();
+        diagram.validate().unwrap();
+        diagram
+    }
+
+    pub(crate) fn fermion_model() -> Arc<Model> {
+        Arc::new(Model::from_json(
+            r#"{
+                "name":"fermion","restriction":null,"orders":[],
+                "parameters":[
+                    {"name":"ZERO","lhablock":null,"lhacode":null,"nature":"internal","parameter_type":"real","value":[0.0,0.0],"expression":null},
+                    {"name":"M","lhablock":"MASS","lhacode":[1],"nature":"external","parameter_type":"real","value":[1.0,0.0],"expression":null}
+                ],
+                "particles":[
+                    {"pdg_code":1,"name":"f","antiname":"f~","spin":2,"color":1,"mass":"M","width":"ZERO","texname":"f","antitexname":"fbar","charge":0.0,"ghost_number":0,"lepton_number":1,"y_charge":0},
+                    {"pdg_code":-1,"name":"f~","antiname":"f","spin":2,"color":1,"mass":"M","width":"ZERO","texname":"fbar","antitexname":"f","charge":0.0,"ghost_number":0,"lepton_number":-1,"y_charge":0}
+                ],
+                "propagators":[{"name":"f_prop","particle":"f","numerator":"1","denominator":"P-M"}],
+                "lorentz_structures":[{"name":"L_f","spins":[2],"structure":"1"}],
+                "couplings":[],
+                "vertex_rules":[
+                    {"name":"V_f","particles":["f"],"color_structures":["1"],"lorentz_structures":["L_f"],"couplings":[[null]]},
+                    {"name":"V_af","particles":["f~"],"color_structures":["1"],"lorentz_structures":["L_f"],"couplings":[[null]]}
+                ]
+            }"#,
+        )
+        .unwrap())
+    }
+
+    pub(crate) fn directed_fermion_line() -> FeynmanDiagram {
+        let model = fermion_model();
+        let anti_rule = model.vertex_rule_id("V_af").unwrap();
+        let particle_rule = model.vertex_rule_id("V_f").unwrap();
+        let fermion = model.particle_id("f").unwrap();
+        let mut builder = FeynmanDiagram::builder(Arc::clone(&model), "fermion-line");
+        let anti = builder.add_vertex(DiagramVertex::interaction("anti", anti_rule));
+        let particle = builder.add_vertex(DiagramVertex::interaction("particle", particle_rule));
+        builder
+            .add_edge(anti, particle, DiagramEdge::new(fermion, true))
+            .unwrap();
+        builder.build().unwrap()
+    }
+
+    #[test]
+    fn finalization_remaps_indices_inside_momentum_arguments() {
+        let model = scalar_model();
+        let particle = model.particle_id("phi").unwrap();
+        let rule = model.vertex_rule_id("V_1").unwrap();
+        let mut builder = FeynmanDiagram::builder(model, "nested-momentum-indices");
+        let vertex = builder.add_vertex(DiagramVertex::interaction("vertex", rule));
+        builder
+            .add_edge(vertex, vertex, DiagramEdge::new(particle, false))
+            .unwrap();
+        builder
+            .add_generation_external(
+                vertex,
+                Flow::Sink,
+                DiagramEdge::new(particle, false),
+                VertexSlot(2),
+                ExternalLeg {
+                    name: "in".into(),
+                    index: 0,
+                    state: ExternalState::Incoming,
+                    connection: 0,
+                },
+            )
+            .unwrap();
+        let numerator = Atom::parse(
+            "gammalooprs::Q(0,spenso::mink(4,gammalooprs::edge(0,1)))\
+             *spenso::g(spenso::mink(4,gammalooprs::edge(0,1)),\
+             spenso::mink(4,gammalooprs::hedge(0,1)))\
+             +gammalooprs::Q(0,spenso::mink(4,gammalooprs::hedge(0,1)))",
+            "feynkit_graph",
+            ParseSettings::default(),
+        )
+        .unwrap();
+        let diagram = builder
+            .numerator(NumeratorInterface::admit(numerator, None).unwrap())
+            .build()
+            .unwrap();
+        let (edge, _, _) = diagram
+            .edges()
+            .find(|(_, _, edge)| edge.external.is_none())
+            .unwrap();
+        let hedge = diagram
+            .half_edge_id(DiagramHalfEdge {
+                edge,
+                endpoint: DiagramEndpoint::Source,
+            })
+            .unwrap();
+        assert_ne!(edge.0, 0);
+        assert_ne!(hedge.0, 0);
+        let expected = Atom::parse(
+            format!(
+                "gammalooprs::Q({e},spenso::mink(4,gammalooprs::edge({e},1)))\
+                 *spenso::g(spenso::mink(4,gammalooprs::edge({e},1)),\
+                 spenso::mink(4,gammalooprs::hedge({h},1)))\
+                 +gammalooprs::Q({e},spenso::mink(4,gammalooprs::hedge({h},1)))",
+                e = edge.0,
+                h = hedge.0,
+            ),
+            "feynkit_graph",
+            ParseSettings::default(),
+        )
+        .unwrap();
+        assert_eq!(
+            NumeratorInterface::export(diagram.numerator().unwrap()).0,
+            expected
+        );
+    }
+
+    #[test]
+    fn finalization_transports_signed_momentum_sums_once() {
+        for (coefficient, explicit) in [(1, false), (1, true), (2, false), (2, true)] {
+            let model = scalar_model();
+            let particle = model.particle_id("phi").unwrap();
+            let rule = model.vertex_rule_id("V_1").unwrap();
+            let mut builder = FeynmanDiagram::builder(model, "signed-momentum-sum");
+            let vertex = builder.add_vertex(DiagramVertex::interaction("vertex", rule));
+            // All edge IDs change; the incoming edge also reverses its flow.
+            for (slot, (name, index, state)) in [
+                ("out2", 2, ExternalState::Outgoing),
+                ("in", 0, ExternalState::Incoming),
+                ("out1", 1, ExternalState::Outgoing),
+            ]
+            .into_iter()
+            .enumerate()
+            {
+                builder
+                    .add_generation_external(
+                        vertex,
+                        Flow::Source,
+                        DiagramEdge::new(particle, false),
+                        VertexSlot(slot),
+                        ExternalLeg {
+                            name: name.into(),
+                            index,
+                            state,
+                            connection: index,
+                        },
+                    )
+                    .unwrap();
+            }
+            // Each transported vector contributes to one common output port.
+            // Different free labels cannot be added as a typed tensor sum.
+            let numerator = Atom::parse(
+                format!(
+                    "-{coefficient}*gammalooprs::Q(1,spenso::mink(4,gammalooprs::hedge(2,1)))*spenso::g(spenso::mink(4,gammalooprs::hedge(2,1)),spenso::mink(4,991))\
+                     -gammalooprs::Q(0,spenso::mink(4,gammalooprs::edge(0,1)))*spenso::g(spenso::mink(4,gammalooprs::edge(0,1)),spenso::mink(4,991))\
+                     +gammalooprs::Q(2,spenso::mink(4,gammalooprs::vertex(0,1)))*spenso::g(spenso::mink(4,gammalooprs::vertex(0,1)),spenso::mink(4,991))"
+                ),
+                "feynkit_graph",
+                ParseSettings::default(),
+            )
+            .unwrap();
+            let numerator = NumeratorInterface::admit(numerator, None).unwrap();
+            builder.vertices[vertex.0].numerator = numerator.clone();
+            if explicit {
+                builder = builder.numerator(numerator);
+            }
+            let diagram = builder.build().unwrap();
+            let expected = Atom::parse(
+                format!(
+                    "{coefficient}*gammalooprs::Q(0,spenso::mink(4,gammalooprs::hedge(0,1)))*spenso::g(spenso::mink(4,gammalooprs::hedge(0,1)),spenso::mink(4,991))\
+                     -gammalooprs::Q(2,spenso::mink(4,gammalooprs::edge(2,1)))*spenso::g(spenso::mink(4,gammalooprs::edge(2,1)),spenso::mink(4,991))\
+                     +gammalooprs::Q(1,spenso::mink(4,gammalooprs::vertex(0,1)))*spenso::g(spenso::mink(4,gammalooprs::vertex(0,1)),spenso::mink(4,991))"
+                ),
+                "feynkit_graph",
+                ParseSettings::default(),
+            )
+            .unwrap();
+            assert_eq!(
+                NumeratorInterface::export(diagram.numerator().unwrap()).0,
+                expected,
+                "coefficient {coefficient}"
+            );
+        }
+    }
+
+    #[test]
+    fn routing_collects_numeric_signs_without_distributing_products() {
+        let diagram = one_loop();
+        let basis = diagram.loop_momentum_basis();
+        let q = symbols::momentum().call(basis.tree_edges[0].0);
+        let routed = basis.route_expression(&q);
+        assert!(matches!(routed.as_view(), AtomView::Add(_)));
+        let a = Atom::var(symbolica::symbol!("routing_test::a"));
+        let b = Atom::var(symbolica::symbol!("routing_test::b"));
+        let c = Atom::var(symbolica::symbol!("routing_test::c"));
+        let factors = (&a + &b) * (&a + &c);
+
+        // Substitution exposes a negated momentum sum. Cancel its components
+        // while leaving the other numerator factors as a product of sums.
+        let expression = (-&q + &routed + &c) * &factors;
+        let expected = &c * factors;
+        assert_eq!(basis.route_expression(&expression), expected);
+        assert_eq!(basis.route_expression(&(-q + routed)), Atom::Zero);
+        assert_eq!(basis.route_expression(&expected), expected);
+    }
+
+    #[test]
+    fn uv_expansion_preserves_boundary_momenta() {
+        let bubble = one_loop();
+        let full = bubble
+            .momentum_basis_of(&bubble.graph.full_filter())
+            .unwrap();
+        let selected = bubble
+            .momentum_basis_of(&bubble.internal_subgraph())
+            .unwrap();
+        assert_eq!(selected.external_edges, full.external_edges);
+        assert_eq!(selected.dependent_externals, full.dependent_externals);
+        for edge in selected.external_edges {
+            assert_eq!(selected.edge_signatures[&edge], full.edge_signatures[&edge]);
+        }
+    }
+
+    #[test]
+    fn uv_expansion_treats_an_omitted_chord_as_soft() {
+        let model = scalar_model();
+        let particle = model.particle_id("phi").unwrap();
+        let rule = model.vertex_rule_id("V_1").unwrap();
+        let mut builder = FeynmanDiagram::builder(model, "sunset");
+        let left = builder.add_vertex(DiagramVertex::interaction("left", rule));
+        let right = builder.add_vertex(DiagramVertex::interaction("right", rule));
+        for _ in 0..3 {
+            builder
+                .add_edge(left, right, DiagramEdge::new(particle, false))
+                .unwrap();
+        }
+        let diagram = builder.build().unwrap();
+        let mut selected = diagram.internal_subgraph();
+        selected.sub(diagram.graph[&EdgeIndex(2)].1);
+        let basis = diagram.momentum_basis_of(&selected).unwrap();
+        assert_eq!(basis.loop_edges.len(), 1);
+        assert_eq!(basis.external_edges, vec![EdgeId(2)]);
+        assert!(basis.dependent_externals.is_empty());
+        let mass = Atom::var(symbolica::symbol!("feynkit_graph::test_mUV"));
+        let soft = symbolica::function!(symbols::momentum(), 2, 0);
+        let scalar = diagram
+            .uv_expansion_of(&selected, &mass, 4, None, &BTreeMap::new())
+            .unwrap();
+        let tensor = diagram
+            .uv_expansion_of(&selected, &mass, 4, Some(&soft), &BTreeMap::new())
+            .unwrap();
+        assert_eq!(tensor, &soft * scalar);
+        let momenta = (0..3)
+            .map(|edge| basis.route_expression(&symbols::momentum().call(edge)))
+            .fold(Atom::Zero, |a, b| a + b);
+        assert_eq!(momenta.expand(), Atom::Zero);
+    }
+
+    #[test]
+    fn uv_expansion_retains_logarithmic_bubble_and_quadratic_mass_correction() {
+        let bubble = one_loop();
+        let mass = Atom::var(symbolica::symbol!("feynkit_graph::test_mUV"));
+        let selected = bubble.internal_subgraph();
+        let loop_edge = bubble.momentum_basis_of(&selected).unwrap().loop_edges[0];
+        let q = symbols::momentum().call(loop_edge.0);
+        let q2 = Minkowski {}
+            .new_rep(symbols::dimension())
+            .inner_product(&q, &q);
+        let a = symbolica::symbol!("feynkit_graph::uv_a_");
+        let b = symbolica::symbol!("feynkit_graph::uv_b_");
+        let c = symbolica::symbol!("feynkit_graph::uv_c_");
+        let d = symbolica::symbol!("feynkit_graph::uv_d_");
+        let explicit = |atom: Atom| {
+            atom.replace(symbolica::function!(symbols::denominator(), a, b, c, d))
+                .with(d)
+        };
+        let expansion = bubble
+            .uv_expansion_of(&selected, &mass, 4, None, &BTreeMap::new())
+            .unwrap();
+        assert_eq!(
+            (explicit(expansion) - (&q2 - mass.pow(2)).pow(-2))
+                .expand()
+                .cancel(),
+            Atom::Zero
+        );
+        assert_eq!(
+            bubble
+                .uv_expansion_of(&selected, &mass, 2, None, &BTreeMap::new())
+                .unwrap(),
+            Atom::Zero
+        );
+        assert_eq!(
+            bubble
+                .uv_expansion_of(&selected, &mass, 4, Some(&Atom::Zero), &BTreeMap::new())
+                .unwrap(),
+            Atom::Zero
+        );
+
+        // With all soft momenta set to zero, the six-dimensional bubble keeps
+        // the quadratic leading term and the logarithmic physical-mass term.
+        let expansion = bubble
+            .uv_expansion_of(&selected, &mass, 6, None, &BTreeMap::new())
+            .unwrap();
+        let basis = bubble.momentum_basis_of(&selected).unwrap();
+        // Before setting external momenta to zero, the subtraction must remove
+        // every divergent coefficient of the original, undeformed integrand.
+        let bare = Atom::one() / bubble.denominator_of(&selected, &BTreeMap::new()).unwrap();
+        let scale = symbolica::symbol!("feynkit_graph::uv_test_scale"; Scalar);
+        let args = symbolica::symbol!("feynkit_graph::uv_test_args___");
+        let loop_momentum = symbolica::function!(symbols::loop_momentum(), args);
+        let remainder = basis
+            .route_expression(&explicit(bare - &expansion))
+            .replace(loop_momentum.to_pattern())
+            .with(&loop_momentum / scale)
+            * Atom::var(scale).pow(-6);
+        assert_eq!(
+            remainder
+                .series(scale, Atom::Zero, 0)
+                .unwrap()
+                .to_atom()
+                .expand()
+                .cancel(),
+            Atom::Zero
+        );
+        let mut expansion = explicit(expansion);
+        for edge in basis.external_edges {
+            expansion = expansion
+                .replace(symbolica::function!(symbols::momentum(), edge.0, args))
+                .with(Atom::Zero);
+        }
+        let vacuum = &q2 - mass.pow(2);
+        let expected = vacuum.pow(-2)
+            + Atom::num(2)
+                * (Atom::var(symbolica::symbol!("UFO::M")).pow(2) - mass.pow(2))
+                * vacuum.pow(-3);
+        assert_eq!((expansion - expected).expand().cancel(), Atom::Zero);
+    }
+
+    #[test]
+    fn uv_expansion_matches_taylor_coefficients_for_signed_edge_powers() {
+        let bubble = one_loop();
+        let selected = bubble.internal_subgraph();
+        let basis = bubble.momentum_basis_of(&selected).unwrap();
+        let loop_edge = basis.loop_edges[0];
+        let shifted_edge = basis.tree_edges[0];
+        let external_edge = basis.external_edges[0];
+        let k = symbols::momentum().call(loop_edge.0);
+        let p = symbols::momentum().call(external_edge.0);
+        assert_eq!(
+            basis.route_expression(&symbols::momentum().call(shifted_edge.0)),
+            basis.route_expression(&(&p - &k))
+        );
+        let metric = Minkowski {}.new_rep(symbols::dimension());
+        let k2 = metric.inner_product(&k, &k);
+        let kp = metric.inner_product(&k, &p);
+        let p2 = metric.inner_product(&p, &p);
+        let mass = Atom::var(symbolica::symbol!("feynkit_graph::test_mUV"));
+        let mass_difference = Atom::var(symbolica::symbol!("UFO::M")).pow(2) - mass.pow(2);
+        let vacuum = &k2 - mass.pow(2);
+        let a = symbolica::symbol!("feynkit_graph::uv_a_");
+        let b = symbolica::symbol!("feynkit_graph::uv_b_");
+        let c = symbolica::symbol!("feynkit_graph::uv_c_");
+        let d = symbolica::symbol!("feynkit_graph::uv_d_");
+        for (hard_power, shifted_power, dimension) in [(1, 2, 8), (1, 0, 4), (2, -1, 4)] {
+            let powers = BTreeMap::from([(loop_edge, hard_power), (shifted_edge, shifted_power)]);
+            let expanded = bubble
+                .uv_expansion_of(&selected, &mass, dimension, None, &powers)
+                .unwrap()
+                .replace(symbolica::function!(symbols::denominator(), a, b, c, d))
+                .with(d);
+            // Taylor-expand (V + mUV² - m²)^-a [V - 2 k.p + p² + mUV² - m²]^-b
+            // through degree two. Keep the odd term before tensor integration.
+            let n = (hard_power + shifted_power) as i64;
+            let shifted_power = shifted_power as i64;
+            let expected = vacuum.pow(-n)
+                + Atom::num(2 * shifted_power) * &kp * vacuum.pow(-n - 1)
+                + (Atom::num(n) * &mass_difference - Atom::num(shifted_power) * &p2)
+                    * vacuum.pow(-n - 1)
+                + Atom::num(2 * shifted_power * (shifted_power + 1))
+                    * kp.pow(2)
+                    * vacuum.pow(-n - 2);
+            // Compare rational functions over a common denominator. `cancel`
+            // alone simplifies each summand and cannot certify this identity
+            // when the series and oracle factor their denominators differently.
+            assert_eq!((expanded - expected).together().cancel(), Atom::Zero);
+        }
+        let powers = BTreeMap::from([(shifted_edge, 2)]);
+        assert_eq!(
+            bubble
+                .uv_expansion_of(&selected, &mass, 4, None, &powers)
+                .unwrap(),
+            Atom::Zero
+        );
+        let logarithmic = bubble
+            .uv_expansion_of(&selected, &mass, 6, None, &powers)
+            .unwrap();
+        assert_eq!(
+            (logarithmic
+                .clone()
+                .replace(symbolica::function!(symbols::denominator(), a, b, c, d))
+                .with(d)
+                - vacuum.pow(-3))
+            .expand()
+            .cancel(),
+            Atom::Zero
+        );
+        // As for denominator_of, powers for non-selected or unknown edges are ignored.
+        let mut unused_powers = powers.clone();
+        unused_powers.insert(external_edge, -2);
+        unused_powers.insert(EdgeId(usize::MAX), 3);
+        assert_eq!(
+            bubble.denominator_of(&selected, &unused_powers).unwrap(),
+            bubble.denominator_of(&selected, &powers).unwrap()
+        );
+        assert_eq!(
+            bubble
+                .uv_expansion_of(&selected, &mass, 6, None, &unused_powers)
+                .unwrap(),
+            logarithmic
+        );
+    }
+
+    #[test]
+    fn uv_expansion_uses_only_selected_loops_and_preserves_tensor_numerators() {
+        let model = scalar_model();
+        let particle = model.particle_id("phi").unwrap();
+        let rule = model.vertex_rule_id("V_1").unwrap();
+        let mut builder = FeynmanDiagram::builder(model, "two-tadpoles");
+        let left = builder.add_vertex(DiagramVertex::interaction("left", rule));
+        let right = builder.add_vertex(DiagramVertex::interaction("right", rule));
+        builder
+            .add_edge(left, left, DiagramEdge::new(particle, false))
+            .unwrap();
+        builder
+            .add_edge(left, right, DiagramEdge::new(particle, false))
+            .unwrap();
+        builder
+            .add_edge(right, right, DiagramEdge::new(particle, false))
+            .unwrap();
+        let diagram = builder.build().unwrap();
+        let loop_edge = diagram
+            .edges()
+            .find(|(_, ends, _)| ends.source == ends.target)
+            .unwrap()
+            .0;
+        let mut selected = diagram.graph.empty_subgraph::<SuBitGraph>();
+        selected.add(diagram.graph[&EdgeIndex(loop_edge.0)].1);
+        assert_eq!(
+            diagram
+                .momentum_basis_of(&selected)
+                .unwrap()
+                .loop_edges
+                .len(),
+            1
+        );
+        let mass = Atom::var(symbolica::symbol!("feynkit_graph::test_mUV"));
+        let mass2 = mass.pow(2);
+        let vacuum = expressions::PropagatorSymbols {
+            momentum: symbols::momentum(),
+            denominator: symbols::denominator(),
+        }
+        .denominator(EdgeIndex(loop_edge.0), &mass2, symbols::dimension());
+        let expected = vacuum.pow(-1)
+            + (Atom::var(symbolica::symbol!("UFO::M")).pow(2) - mass2) * vacuum.pow(-2);
+        assert_eq!(
+            (diagram
+                .uv_expansion_of(&selected, &mass, 4, None, &BTreeMap::new())
+                .unwrap()
+                - expected)
+                .expand(),
+            Atom::Zero
+        );
+        let index = symbolica::symbol!("feynkit_graph::uv_test_mu");
+        let tensor = symbolica::function!(
+            symbols::momentum(),
+            loop_edge.0,
+            symbolica::function!(symbolica::symbol!("spenso::mink"), 4, index)
+        );
+        assert_eq!(
+            diagram
+                .uv_expansion_of(&selected, &mass, 2, Some(&tensor), &BTreeMap::new())
+                .unwrap(),
+            &tensor / &vacuum
+        );
+        assert_eq!(
+            diagram
+                .uv_expansion_of(
+                    &diagram.graph.empty_subgraph(),
+                    &mass,
+                    4,
+                    None,
+                    &BTreeMap::new()
+                )
+                .unwrap(),
+            Atom::Zero
+        );
+        assert!(
+            diagram
+                .uv_expansion_of(&selected, &mass, 0, None, &BTreeMap::new())
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn superficial_uv_degree_counts_local_numerators_and_internal_edges() {
+        let bubble = one_loop();
+        assert_eq!(bubble.superficial_degree_of_divergence(4).unwrap(), 0);
+        assert_eq!(bubble.superficial_degree_of_divergence(6).unwrap(), 2);
+        assert_eq!(bubble.superficial_degree_of_divergence(2).unwrap(), -2);
+        let internal_edges = bubble
+            .underlying()
+            .iter_edges_of(&bubble.internal_subgraph())
+            .map(|(_, edge, _)| EdgeId(edge.0))
+            .collect::<Vec<_>>();
+        let mut with_momenta = bubble
+            .map_data(
+                |_, vertex| {
+                    let mut vertex = vertex.clone();
+                    vertex.numerator = NumeratorInterface::admit(
+                        symbolica::function!(
+                            momentum_symbol(),
+                            internal_edges[0].0,
+                            symbolica::function!(
+                                spenso::structure::abstract_index::AIND_SYMBOLS.cind,
+                                0
+                            )
+                        ) + symbolica::symbol!("feynkit_graph::uv_test_mass"),
+                        None,
+                    )
+                    .unwrap();
+                    vertex
+                },
+                |id, _, edge| {
+                    let mut edge = edge.clone();
+                    if internal_edges.contains(&id) {
+                        edge.numerator = NumeratorInterface::admit(
+                            symbolica::function!(
+                                momentum_symbol(),
+                                id.0,
+                                symbolica::function!(
+                                    spenso::structure::abstract_index::AIND_SYMBOLS.cind,
+                                    0
+                                )
+                            ) + symbolica::symbol!("feynkit_graph::uv_test_mass"),
+                            None,
+                        )
+                        .unwrap();
+                    }
+                    edge
+                },
+            )
+            .unwrap();
+        with_momenta.numerator = DiagramNumerator::default();
+        assert_eq!(with_momenta.superficial_degree_of_divergence(4).unwrap(), 4);
+        let restored =
+            FeynmanDiagram::from_json(with_momenta.model_arc(), &with_momenta.to_json().unwrap())
+                .unwrap();
+        assert_eq!(restored.superficial_degree_of_divergence(4).unwrap(), 4);
+    }
+
+    #[test]
+    fn diagram_integral_family_matches_bubble_for_every_routing() {
+        let bubble = one_loop();
+        let generic = bubble
+            .integral_family(&feynkit_kinematics::Kinematics::new(), &[])
+            .unwrap();
+        assert_eq!(generic.loop_momenta().len(), 1);
+        assert_eq!(generic.external_momenta().len(), 1);
+        assert_eq!(generic.denominators().len(), 2);
+        let kin = generic
+            .kinematics()
+            .clone()
+            .with_mass_squared(&generic.external_momenta()[0], symbolica::parse!("s"))
+            .unwrap();
+        let reference = bubble.integral_family(&kin, &[]).unwrap();
+        for basis in bubble.loop_momentum_bases().unwrap() {
+            let diagram = bubble
+                .clone()
+                .with_loop_momentum_edges(&basis.loop_edges)
+                .unwrap();
+            let family = diagram.integral_family(&kin, &[]).unwrap();
+            assert!(family.is_complete() && family.is_independent());
+            let (u, f) = family
+                .symanzik(&[symbolica::parse!("x"), symbolica::parse!("y")])
+                .unwrap();
+            assert_eq!(u, symbolica::parse!("x+y"));
+            assert!(
+                (f - symbolica::parse!("UFO::M^2*(x+y)^2-s*x*y"))
+                    .expand()
+                    .is_zero()
+            );
+            assert!(family.find_mapping(&reference, 100).unwrap().is_some());
+        }
+        assert!(matches!(
+            directed_fermion_line().integral_family(&kin, &[]),
+            Err(DiagramError::IntegralFamily(IntegralFamilyError::NoLoops))
+        ));
+    }
+
+    #[test]
+    fn denominator_uses_only_internal_edges_and_symbolic_masses() {
+        let bubble = one_loop();
+        let q1 = symbolica::function!(momentum_symbol(), 1);
+        let q2 = symbolica::function!(momentum_symbol(), 2);
+        let mass2 = Atom::var(symbolica::symbol!("UFO::M")).pow(2);
+        let metric = Minkowski {}.new_rep(symbols::dimension());
+        let expected = symbolica::function!(
+            symbols::denominator(),
+            1,
+            &q1,
+            &mass2,
+            metric.inner_product(&q1, &q1) - &mass2
+        ) * symbolica::function!(
+            symbols::denominator(),
+            2,
+            &q2,
+            &mass2,
+            metric.inner_product(&q2, &q2) - &mass2
+        );
+        assert_eq!(
+            bubble
+                .underlying()
+                .iter_edges_of(&bubble.internal_subgraph())
+                .map(|(_, edge, _)| EdgeId(edge.0))
+                .collect::<Vec<_>>()
+                .len(),
+            2
+        );
+        assert_eq!(bubble.denominator_expression().unwrap(), expected);
+        let restored =
+            FeynmanDiagram::from_json(bubble.model_arc(), &bubble.to_json().unwrap()).unwrap();
+        assert_eq!(restored.denominator_expression().unwrap(), expected);
+        let contact = FeynmanDiagram::builder(scalar_model(), "empty")
+            .build()
+            .unwrap();
+        assert_eq!(contact.denominator_expression().unwrap(), Atom::num(1));
+    }
+
+    #[test]
+    fn json_and_dot_round_trip() {
+        let diagram = one_loop();
+        let from_json =
+            FeynmanDiagram::from_json(diagram.model_arc(), &diagram.to_json().unwrap()).unwrap();
+        assert_eq!(from_json.loop_count(), 1);
+        assert_eq!(from_json.vertices().count(), 2);
+
+        let dot = diagram.to_dot().unwrap();
+        assert!(
+            dot.lines().all(|line| line.trim_end() == line),
+            "canonical DOT must not contain trailing whitespace"
+        );
+        let from_dot = FeynmanDiagram::from_dot(diagram.model_arc(), &dot).unwrap();
+        assert_eq!(from_dot.name(), Some("bubble"));
+        assert_eq!(from_dot.loop_count(), 1);
+        assert_eq!(from_dot.edges().count(), 4);
+    }
+
+    #[test]
+    fn dot_set_round_trip() {
+        let first = cut_scalar_line().with_name("first");
+        let second = cut_scalar_line().with_name("second");
+        let input = format!("{}\n{}", first.to_dot().unwrap(), second.to_dot().unwrap());
+        let diagrams = FeynmanDiagram::from_dot_set(first.model_arc(), &input).unwrap();
+
+        assert_eq!(
+            diagrams
+                .iter()
+                .map(|diagram| diagram.name())
+                .collect::<Vec<_>>(),
+            [Some("first"), Some("second")]
+        );
+        assert!(
+            diagrams
+                .iter()
+                .all(|diagram| diagram.cuts() == first.cuts())
+        );
+        assert_eq!(
+            FeynmanDiagram::from_dot_set(
+                first.model_arc(),
+                &format!("{input}\n// trailing comment\n")
+            )
+            .unwrap()
+            .len(),
+            2
+        );
+        for suffix in [
+            "digraph broken {",
+            "trailing garbage",
+            "/* unclosed comment",
+        ] {
+            assert!(
+                FeynmanDiagram::from_dot_set(first.model_arc(), &format!("{input}\n{suffix}"))
+                    .is_err(),
+                "accepted a valid prefix and discarded {suffix:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn diagram_source_roundtrips_keep_ranked_zero_and_logical_ports() {
+        let ports = [
+            Minkowski {}.new_rep(4).to_symbolic([]),
+            spenso::structure::representation::Euclidean {}
+                .new_rep(2)
+                .to_symbolic([]),
+        ];
+        let matrix = NumeratorInterface::admit(
+            symbolica::function!(
+                spenso::tensor_symbol!("feynkit_graph::roundtrip_matrix"),
+                &ports[0],
+                &ports[1]
+            ),
+            None,
+        )
+        .unwrap();
+        let zero = matrix.with_checked_expression(Atom::Zero).unwrap();
+        let diagram = one_loop()
+            .with_numerator(zero.clone())
+            .unwrap()
+            .with_projector(matrix.clone());
+        for restored in [
+            FeynmanDiagram::from_json(diagram.model_arc(), &diagram.to_json().unwrap()).unwrap(),
+            FeynmanDiagram::from_dot(diagram.model_arc(), &diagram.to_dot().unwrap()).unwrap(),
+        ] {
+            assert!(restored.numerator().unwrap().same_value(&zero));
+            assert!(restored.projector().same_value(&matrix));
+            assert_eq!(
+                restored.numerator().unwrap().structure().logical_slots(),
+                zero.structure().logical_slots()
+            );
+            restored.validate().unwrap();
+        }
+        assert!(diagram.to_json().unwrap().contains("num_interface"));
+        assert!(diagram.to_dot().unwrap().contains("num_interface"));
+    }
+
+    #[test]
+    fn fragment_products_export_their_ports_without_metadata() {
+        let original = one_loop();
+        let [left, right] = [0, 1].map(|position| original.vertices().nth(position).unwrap().0);
+        // Concatenation puts the left port first. Canonical order and, with the
+        // right head registered first, Symbolica's term order both put it last.
+        let right_head = tensor_symbol!("feynkit_graph::fragment_port_right");
+        let left_head = tensor_symbol!("feynkit_graph::fragment_port_left");
+        let vector = |head, owner: usize| {
+            let index = function!(symbols::hedge_index(), owner, 1);
+            NumeratorInterface::admit(
+                function!(head, Minkowski {}.new_rep(4).to_symbolic([index])),
+                None,
+            )
+            .unwrap()
+        };
+        let diagram = original
+            .with_numerator_fragments(
+                [(left, vector(left_head, 2)), (right, vector(right_head, 1))],
+                [],
+            )
+            .unwrap();
+        assert!(
+            NumeratorInterface::export(diagram.numerator().unwrap())
+                .1
+                .is_none()
+        );
+        assert!(!diagram.to_json().unwrap().contains("num_interface"));
+        assert!(!diagram.to_dot().unwrap().contains("num_interface"));
+        for restored in [
+            FeynmanDiagram::from_json(diagram.model_arc(), &diagram.to_json().unwrap()).unwrap(),
+            FeynmanDiagram::from_dot(diagram.model_arc(), &diagram.to_dot().unwrap()).unwrap(),
+        ] {
+            assert!(
+                restored
+                    .numerator()
+                    .unwrap()
+                    .same_value(diagram.numerator().unwrap())
+            );
+        }
+    }
+
+    #[test]
+    fn imports_aggregates_that_declare_their_ports_in_another_order() {
+        let original = one_loop();
+        let [left, right] = [0, 1].map(|position| original.vertices().nth(position).unwrap().0);
+        let head = tensor_symbol!("feynkit_graph::declared_port_order");
+        let port = |owner: usize| {
+            let index = function!(symbols::hedge_index(), owner, 1);
+            Minkowski {}.new_rep(4).to_symbolic([index])
+        };
+        let vector = |owner| NumeratorInterface::admit(function!(head, port(owner)), None).unwrap();
+        let diagram = original
+            .with_numerator_fragments([(left, vector(1)), (right, vector(2))], [])
+            .unwrap();
+        let (expression, _) = NumeratorInterface::export(diagram.numerator().unwrap());
+        // Artifacts written by other processes or versions may list the
+        // aggregate's ports in either order; both describe the same numerator.
+        for owners in [[1, 2], [2, 1]] {
+            let interface = NumeratorInterface(owners.map(port).to_vec());
+            let declared =
+                NumeratorInterface::admit(expression.clone(), Some(interface.clone())).unwrap();
+            let mut source = diagram.serde_view().unwrap();
+            source.num_interface = Some(interface);
+            let source = serde_json::to_string(&source).unwrap();
+            let restored = FeynmanDiagram::from_json(diagram.model_arc(), &source).unwrap();
+            assert!(restored.numerator().unwrap().same_value(&declared));
+        }
+    }
+
+    #[test]
+    fn validates_factored_and_expanded_numerators_and_rejects_mismatches() {
+        let factored =
+            Atom::parse("(x+y)*(x-y)", "validation_test", ParseSettings::default()).unwrap();
+        let mut diagram = one_loop()
+            .with_numerator(NumeratorInterface::admit(factored.clone(), None).unwrap())
+            .unwrap();
+        diagram.validate().unwrap();
+        diagram.validation.take();
+        diagram.numerator = DiagramNumerator::Explicit(
+            diagram
+                .numerator()
+                .unwrap()
+                .with_algebra_result(factored.expand())
+                .unwrap(),
+        );
+        diagram.validate().unwrap();
+        assert_eq!(
+            diagram.vertices().next().unwrap().1.numerator.expression(),
+            &factored,
+            "exact coefficient validation must preserve the factored source fragment"
+        );
+        diagram.validation.take();
+        diagram.numerator = DiagramNumerator::Explicit(
+            diagram
+                .numerator()
+                .unwrap()
+                .try_add(&SymbolicTensor::infer(Atom::one()).unwrap())
+                .unwrap(),
+        );
+        assert!(matches!(
+            diagram.validate(),
+            Err(DiagramError::NumeratorFragmentMismatch)
+        ));
+    }
+
+    #[test]
+    fn fragment_updates_preserve_routing_and_invalidate_validation() {
+        let original = one_loop();
+        original.validate().unwrap();
+        let vertex = original.vertices().next().unwrap().0;
+        let edge = original
+            .edges()
+            .find(|(_, _, data)| data.external.is_none())
+            .unwrap()
+            .0;
+        let updated = original
+            .clone()
+            .with_numerator_fragments(
+                [(vertex, SymbolicTensor::infer(Atom::num(2)).unwrap())],
+                [(edge, SymbolicTensor::infer(Atom::num(3)).unwrap())],
+            )
+            .unwrap();
+        assert_eq!(updated.numerator().unwrap().expression(), &Atom::num(6));
+        assert_eq!(updated.id().unwrap(), original.id().unwrap());
+        assert_eq!(
+            updated.loop_momentum_basis(),
+            original.loop_momentum_basis()
+        );
+        updated.validate().unwrap();
+
+        let inconsistent = updated
+            .map_data(
+                |_, data| data.clone(),
+                |id, _, data| {
+                    let mut data = data.clone();
+                    if id == edge {
+                        data.numerator = SymbolicTensor::infer(Atom::num(5)).unwrap();
+                    }
+                    data
+                },
+            )
+            .unwrap();
+        assert!(matches!(
+            inconsistent.validate(),
+            Err(DiagramError::NumeratorFragmentMismatch)
+        ));
+        let repaired = inconsistent.with_numerator_fragments([], []).unwrap();
+        assert_eq!(repaired.numerator().unwrap().expression(), &Atom::num(10));
+
+        let external = original
+            .edges()
+            .find(|(_, _, data)| data.external.is_some())
+            .unwrap()
+            .0;
+        assert!(matches!(
+            original
+                .clone()
+                .with_numerator_fragments([], [(external, SymbolicTensor::infer(Atom::num(2)).unwrap())]),
+            Err(DiagramError::ExternalEdgeNumerator { edge }) if edge == external.0
+        ));
+        updated.validate().unwrap();
+        original.validate().unwrap();
+    }
+
+    /// Nodes absorbed by a pending identification are no vertices: vertex ids
+    /// name the live nodes, which the compacted copy renumbers.
+    #[test]
+    fn vertex_ids_name_live_nodes_only() {
+        let model = scalar_model();
+        let rule = model.vertex_rule_id("V_1").unwrap();
+        let particle = model.particle_id("phi").unwrap();
+        let mut builder = FeynmanDiagram::builder(Arc::clone(&model), "triangle");
+        let vertices = ["v0", "v1", "v2"]
+            .map(|name| builder.add_vertex(DiagramVertex::interaction(name, rule)));
+        for (index, &vertex) in vertices.iter().enumerate() {
+            let leg = external_edge(particle, "p", index, ExternalState::Incoming);
+            builder.add_edge(None, vertex, leg).unwrap();
+            let next = vertices[(index + 1) % vertices.len()];
+            builder
+                .add_edge(vertex, next, DiagramEdge::new(particle, false))
+                .unwrap();
+        }
+        let mut pending = builder.build().unwrap();
+        let merged = pending.graph[NodeIndex(0)].clone();
+        // Ties keep the first node, so `v1` is absorbed and `v2` fills its slot.
+        pending
+            .graph
+            .identify_nodes(&[NodeIndex(0), NodeIndex(1)], merged);
+        let mut compacted = pending.clone();
+        let remap = compacted.graph.compact();
+
+        let name = |diagram: &FeynmanDiagram, vertex| {
+            diagram.vertex(VertexId(vertex)).map(|v| v.name.clone())
+        };
+        assert_eq!(name(&pending, 1), None);
+        assert_eq!(name(&compacted, 1).as_deref(), Some("v2"));
+        for live in [0, 2] {
+            let moved = remap.get(NodeIndex(live)).unwrap().0;
+            assert_eq!(name(&pending, live), name(&compacted, moved));
+        }
+        assert_eq!(pending.vertices().count(), compacted.vertices().count());
+        assert!(matches!(
+            pending.with_numerator_fragments(
+                [(VertexId(1), SymbolicTensor::infer(Atom::num(2)).unwrap())],
+                []
+            ),
+            Err(DiagramError::UnknownVertex {
+                vertex: 1,
+                vertices: 3
+            })
+        ));
+    }
+
+    #[test]
+    fn numerator_prefactor_replacement_preserves_native_diagram() {
+        let original = one_loop()
+            .with_numerator(SymbolicTensor::infer(Atom::num(7)).unwrap())
+            .unwrap()
+            .with_projector(SymbolicTensor::infer(Atom::num(11)).unwrap())
+            .with_overall_factor(Atom::num(13));
+        original.validate().unwrap();
+        let prefactor = SymbolicTensor::infer(
+            Atom::parse("g*(a+b)", "prefactor_test", ParseSettings::default()).unwrap(),
+        )
+        .unwrap();
+        let replacement = original
+            .clone()
+            .with_numerator_prefactor(SymbolicTensor::infer(Atom::num(3)).unwrap())
+            .with_numerator_prefactor(prefactor.clone());
+        replacement.validate().unwrap();
+        assert!(replacement.numerator_prefactor().same_value(&prefactor));
+        assert!(
+            replacement
+                .numerator_prefactor()
+                .same_reduction_state(&prefactor)
+        );
+        assert_eq!(original.numerator_prefactor().expression(), &Atom::one());
+        assert!(Arc::ptr_eq(&replacement.model_arc(), &original.model_arc()));
+        assert_eq!(
+            replacement.loop_momentum_basis(),
+            original.loop_momentum_basis()
+        );
+        // Native serialization inventories fragments, aggregate, global weights,
+        // stable IDs and physical cuts. Only the requested field may change.
+        let mut expected = original.serde_view().unwrap();
+        let (expression, interface) = NumeratorInterface::export(&prefactor);
+        expected.numerator_prefactor = expression.to_canonical_string();
+        expected.numerator_prefactor_interface = interface;
+        assert_eq!(
+            replacement.to_json().unwrap(),
+            serde_json::to_string_pretty(&expected).unwrap()
+        );
+        let restored =
+            FeynmanDiagram::from_json(original.model_arc(), &replacement.to_json().unwrap())
+                .unwrap();
+        assert!(restored.numerator_prefactor().same_value(&prefactor));
+    }
+
+    #[test]
+    fn numerator_prefactor_keeps_zero_and_native_precision() {
+        let original = one_loop();
+        let high = SymbolicTensor::infer(Atom::num(
+            symbolica::domains::float::Float::parse(
+                "0.1000000000000000000000000000000000000001",
+                Some(192),
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        let replacement = original.clone().with_numerator_prefactor(high.clone());
+        assert!(replacement.numerator_prefactor().same_value(&high));
+        let zero = SymbolicTensor::infer(Atom::zero()).unwrap();
+        let replacement = replacement.with_numerator_prefactor(zero.clone());
+        assert!(replacement.numerator_prefactor().same_value(&zero));
+        assert!(
+            replacement
+                .numerator()
+                .unwrap()
+                .same_value(original.numerator().unwrap())
+        );
+        replacement.validate().unwrap();
+    }
+
+    #[test]
+    fn numerator_prefactor_preserves_ranked_zero_and_logical_ports() {
+        let matrix = NumeratorInterface::admit(
+            symbolica::function!(
+                spenso::tensor_symbol!("feynkit_graph::prefactor_matrix"),
+                Minkowski {}.new_rep(4).to_symbolic([]),
+                spenso::structure::representation::Euclidean {}
+                    .new_rep(2)
+                    .to_symbolic([])
+            ),
+            None,
+        )
+        .unwrap();
+        let zero = matrix.with_checked_expression(Atom::zero()).unwrap();
+        assert_eq!(zero.rank(), 2);
+        let diagram = one_loop().with_numerator_prefactor(zero.clone());
+        assert!(diagram.numerator_prefactor().same_value(&zero));
+        assert!(diagram.numerator_prefactor().same_reduction_state(&zero));
+        for restored in [
+            FeynmanDiagram::from_json(diagram.model_arc(), &diagram.to_json().unwrap()).unwrap(),
+            FeynmanDiagram::from_dot(diagram.model_arc(), &diagram.to_dot().unwrap()).unwrap(),
+        ] {
+            assert!(restored.numerator_prefactor().same_value(&zero));
+            assert_eq!(
+                restored.numerator_prefactor().structure().logical_slots(),
+                zero.structure().logical_slots()
+            );
+            restored.validate().unwrap();
+        }
+    }
+
+    #[test]
+    fn replacing_a_numerator_preserves_identity_and_fragment_invariants() {
+        let diagram = one_loop();
+        let topology_id = diagram.id().unwrap();
+        let replaced = diagram
+            .with_numerator(SymbolicTensor::infer(Atom::num(7)).unwrap())
+            .unwrap();
+
+        assert_eq!(replaced.id().unwrap(), topology_id);
+        assert_eq!(replaced.numerator().unwrap().expression(), &Atom::num(7));
+        assert_eq!(
+            replaced
+                .vertices()
+                .filter(|(_, vertex)| vertex.numerator.expression() != &Atom::one())
+                .count(),
+            1
+        );
+        assert!(
+            replaced
+                .edges()
+                .all(|(_, _, edge)| edge.numerator.expression() == &Atom::one())
+        );
+        replaced.validate().unwrap();
+        let from_json =
+            FeynmanDiagram::from_json(replaced.model_arc(), &replaced.to_json().unwrap()).unwrap();
+        let from_dot =
+            FeynmanDiagram::from_dot(replaced.model_arc(), &replaced.to_dot().unwrap()).unwrap();
+        assert_eq!(from_json.numerator().unwrap().expression(), &Atom::num(7));
+        assert_eq!(from_dot.numerator().unwrap().expression(), &Atom::num(7));
+    }
+
+    #[test]
+    fn replacing_a_numerator_requires_a_non_external_anchor() {
+        let diagram = FeynmanDiagram::builder(scalar_model(), "empty")
+            .build()
+            .unwrap();
+        assert!(matches!(
+            diagram.with_numerator(SymbolicTensor::infer(Atom::num(7)).unwrap()),
+            Err(DiagramError::MissingNumeratorAnchor)
+        ));
+    }
+
+    #[test]
+    fn fragment_products_reconstruct_positional_interfaces_and_ranked_zero() {
+        let original = one_loop();
+        let vertex = original.vertices().next().unwrap().0;
+        let edge = original
+            .edges()
+            .find(|(_, _, data)| data.external.is_none())
+            .unwrap()
+            .0;
+        let matrix = NumeratorInterface::admit(
+            function!(
+                tensor_symbol!("feynkit_graph::fragment_positional_matrix"),
+                Minkowski {}.new_rep(4).to_symbolic([]),
+                Euclidean {}.new_rep(2).to_symbolic([])
+            ),
+            None,
+        )
+        .unwrap()
+        .permuted(&[1, 0])
+        .unwrap();
+        let zero = matrix.with_checked_expression(Atom::Zero).unwrap();
+        for fragment in [matrix, zero] {
+            let diagram = original
+                .clone()
+                .with_numerator_fragments(
+                    [(vertex, fragment)],
+                    [(edge, SymbolicTensor::infer(Atom::num(3)).unwrap())],
+                )
+                .unwrap();
+            let expected = diagram
+                .graph
+                .iter_edges()
+                .map(|(_, _, edge)| &edge.data.numerator)
+                .chain(
+                    diagram
+                        .graph
+                        .iter_nodes()
+                        .map(|(_, _, vertex)| &vertex.numerator),
+                )
+                .try_fold(
+                    SymbolicTensor::infer(Atom::one()).unwrap(),
+                    |product, factor| product.multiply(factor),
+                )
+                .unwrap();
+            assert!(diagram.numerator().unwrap().same_value(&expected));
+            assert_eq!(diagram.numerator().unwrap().rank(), 2);
+            for reconstructed in [
+                diagram.clone().with_numerator_fragments([], []).unwrap(),
+                FeynmanDiagram::from_json(diagram.model_arc(), &diagram.to_json().unwrap())
+                    .unwrap(),
+                FeynmanDiagram::from_dot(diagram.model_arc(), &diagram.to_dot().unwrap()).unwrap(),
+            ] {
+                assert!(reconstructed.numerator().unwrap().same_value(&expected));
+                assert_eq!(
+                    reconstructed
+                        .numerator()
+                        .unwrap()
+                        .structure()
+                        .logical_slots(),
+                    expected.structure().logical_slots()
+                );
+                reconstructed.validate().unwrap();
+            }
+        }
+    }
+
+    #[test]
+    fn validates_and_round_trips_typed_cuts() {
+        let diagram = cut_scalar_line();
+        diagram.validate().unwrap();
+
+        let from_json =
+            FeynmanDiagram::from_json(diagram.model_arc(), &diagram.to_json().unwrap()).unwrap();
+        assert_eq!(from_json.cuts(), diagram.cuts());
+
+        let from_dot =
+            FeynmanDiagram::from_dot(diagram.model_arc(), &diagram.to_dot().unwrap()).unwrap();
+        assert_eq!(from_dot.cuts(), diagram.cuts());
+
+        let source = diagram
+            .to_linnest(None, &Default::default(), None, "(:)")
+            .unwrap();
+        assert!(source.contains("mode: \"cross-section\""));
+        assert_eq!(source.matches("is_cut: 0").count(), 1);
+
+        let mut invalid_cut = diagram.cuts()[0].clone();
+        invalid_cut.cut.clear();
+        assert!(matches!(
+            diagram.with_cuts(vec![invalid_cut]),
+            Err(DiagramError::InvalidCut { cut: 0, message })
+                if message.contains("crossing edges")
+        ));
+    }
+
+    #[test]
+    fn validates_and_round_trips_topology_threshold_candidates() {
+        let diagram = cut_scalar_bubble();
+        let expected = diagram.topology_threshold_candidates().to_vec();
+        assert_eq!(expected.len(), 1);
+        assert_eq!(expected[0].cut.len(), 2);
+
+        let from_json =
+            FeynmanDiagram::from_json(diagram.model_arc(), &diagram.to_json().unwrap()).unwrap();
+        assert_eq!(from_json.topology_threshold_candidates(), expected);
+
+        let from_dot =
+            FeynmanDiagram::from_dot(diagram.model_arc(), &diagram.to_dot().unwrap()).unwrap();
+        assert_eq!(from_dot.topology_threshold_candidates(), expected);
+
+        let rebuilt = diagram
+            .clone()
+            .with_topology_threshold_partitions(vec![(
+                expected[0].left.clone(),
+                expected[0].right.clone(),
+            )])
+            .unwrap();
+        assert_eq!(rebuilt.topology_threshold_candidates(), expected);
+
+        let without_candidates = diagram
+            .clone()
+            .with_topology_threshold_candidates(Vec::new())
+            .unwrap();
+        assert_ne!(diagram.id().unwrap(), without_candidates.id().unwrap());
+        assert_ne!(
+            diagram.canonical_key().unwrap(),
+            without_candidates.canonical_key().unwrap()
+        );
+    }
+
+    #[test]
+    fn rejects_invalid_topology_threshold_candidates() {
+        let diagram = cut_scalar_bubble();
+        let source = diagram.topology_threshold_candidates()[0].clone();
+
+        let mut incomplete = source.clone();
+        incomplete.right.pop();
+        assert!(matches!(
+            diagram
+                .clone()
+                .with_topology_threshold_candidates(vec![incomplete]),
+            Err(DiagramError::InvalidThresholdCandidate {
+                candidate: 0,
+                message
+            }) if message.contains("disjoint and complementary")
+        ));
+
+        let mut wrong_crossing = source.clone();
+        wrong_crossing.cut.pop();
+        assert!(matches!(
+            diagram
+                .clone()
+                .with_topology_threshold_candidates(vec![wrong_crossing]),
+            Err(DiagramError::InvalidThresholdCandidate {
+                candidate: 0,
+                message
+            }) if message.contains("at least two non-initial-state edges")
+        ));
+
+        let mut split = source;
+        let moved = split.left.pop().unwrap();
+        split.right.push(moved);
+        assert!(matches!(
+            diagram
+                .clone()
+                .with_topology_threshold_candidates(vec![split]),
+            Err(DiagramError::InvalidThresholdCandidate {
+                candidate: 0,
+                message
+            }) if message.contains("is split")
+        ));
+
+        let candidate = diagram.topology_threshold_candidates()[0].clone();
+        assert!(matches!(
+            one_loop().with_topology_threshold_candidates(vec![candidate]),
+            Err(DiagramError::InvalidThresholdCandidate {
+                candidate: 0,
+                message
+            }) if message.contains("paired incoming/outgoing")
+        ));
+
+        let line = cut_scalar_line();
+        let source = |edge| DiagramHalfEdge {
+            edge: EdgeId(edge),
+            endpoint: DiagramEndpoint::Source,
+        };
+        let target = |edge| DiagramHalfEdge {
+            edge: EdgeId(edge),
+            endpoint: DiagramEndpoint::Target,
+        };
+        assert!(matches!(
+            line.with_topology_threshold_candidates(vec![DiagramThresholdCandidate {
+                cut: vec![target(1)],
+                left: vec![target(0), target(1)],
+                right: vec![source(0), source(1)],
+            }]),
+            Err(DiagramError::InvalidThresholdCandidate {
+                candidate: 0,
+                message
+            }) if message.contains("non-initial-state")
+        ));
+    }
+
+    #[test]
+    fn cut_partitions_recompute_crossings_and_side_summaries() {
+        let diagram = cut_scalar_line();
+        let source = diagram.cuts()[0].clone();
+        let rebuilt = diagram
+            .clone()
+            .with_cut_partitions(vec![(
+                source.left.half_edges.clone(),
+                source.right.half_edges.clone(),
+            )])
+            .unwrap();
+        assert_eq!(rebuilt.cuts(), diagram.cuts());
+        rebuilt.validate().unwrap();
+
+        let mirrored = diagram
+            .with_cut_partitions(vec![(
+                source.right.half_edges.clone(),
+                source.left.half_edges.clone(),
+            )])
+            .unwrap();
+        assert_eq!(mirrored.cuts()[0].cut.len(), source.cut.len());
+        assert_ne!(mirrored.cuts()[0].cut, source.cut);
+        assert!(mirrored.cuts()[0].left.coupling_orders.is_empty());
+        assert_eq!(mirrored.cuts()[0].left.loop_count, 0);
+        mirrored.validate().unwrap();
+    }
+
+    #[test]
+    fn cut_partitions_reject_incomplete_and_split_vertices() {
+        let diagram = cut_scalar_line();
+        let source = diagram.cuts()[0].clone();
+        let mut incomplete_right = source.right.half_edges.clone();
+        incomplete_right.pop();
+        assert!(matches!(
+            diagram.clone().with_cut_partitions(vec![(
+                source.left.half_edges.clone(),
+                incomplete_right,
+            )]),
+            Err(DiagramError::InvalidCut { cut: 0, message })
+                if message.contains("disjoint and complementary")
+        ));
+
+        let mut split_left = source.left.half_edges.clone();
+        let moved = split_left.remove(1);
+        let mut split_right = source.right.half_edges.clone();
+        split_right.push(moved);
+        assert!(matches!(
+            diagram.with_cut_partitions(vec![(split_left, split_right)]),
+            Err(DiagramError::InvalidCut { cut: 0, message })
+                if message.contains("is split")
+        ));
+    }
+
+    #[test]
+    fn json_import_rejects_invalid_external_structure() {
+        let diagram = one_loop();
+        let mut missing_edge = diagram.serde_view().unwrap();
+        missing_edge.edges.remove(0);
+        assert!(matches!(
+            FeynmanDiagram::from_json(
+                diagram.model_arc(),
+                &serde_json::to_string(&missing_edge).unwrap()
+            ),
+            Err(DiagramError::UnknownEdge { .. } | DiagramError::Invariant { .. })
+        ));
+
+        let mut external_edge = diagram.serde_view().unwrap();
+        external_edge.edges[0].0.target = None;
+        assert!(matches!(
+            FeynmanDiagram::from_json(
+                diagram.model_arc(),
+                &serde_json::to_string(&external_edge).unwrap()
+            ),
+            Err(error) if error.to_string().contains("attached half-edge")
+        ));
+    }
+
+    #[test]
+    fn native_external_metadata_matches_dangling_and_sewn_roles() {
+        let amplitude = one_loop()
+            .map_data(
+                |_, vertex| vertex.clone(),
+                |_, _, edge| {
+                    let mut edge = edge.clone();
+                    edge.external = None;
+                    edge
+                },
+            )
+            .unwrap();
+        assert!(matches!(
+            amplitude.validate(),
+            Err(DiagramError::Invariant {
+                operation: "validating dangling external metadata",
+                ..
+            })
+        ));
+
+        let sewn = cut_scalar_line()
+            .map_data(
+                |_, vertex| vertex.clone(),
+                |_, _, edge| {
+                    let mut edge = edge.clone();
+                    if let Some(external) = &mut edge.external {
+                        external.state = ExternalState::Outgoing;
+                    }
+                    edge
+                },
+            )
+            .unwrap();
+        assert!(matches!(
+            sewn.validate(),
+            Err(DiagramError::Invariant {
+                operation: "validating sewn external flow",
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn json_import_rejects_a_different_model_fingerprint() {
+        let diagram = one_loop();
+        let wrong_model = Arc::new(Model::empty("different-model"));
+
+        assert!(matches!(
+            FeynmanDiagram::from_json(wrong_model, &diagram.to_json().unwrap()),
+            Err(DiagramError::ModelFingerprintMismatch { .. })
+        ));
+    }
+
+    #[test]
+    fn dot_import_rejects_a_different_model_fingerprint() {
+        let diagram = one_loop();
+        let wrong_model = Arc::new(Model::empty("different-model"));
+
+        assert!(matches!(
+            FeynmanDiagram::from_dot(wrong_model, &diagram.to_dot().unwrap()),
+            Err(DiagramError::DotModelFingerprintMismatch { .. })
+        ));
+    }
+
+    #[test]
+    fn dot_import_rejects_external_index_overflow() {
+        let diagram = one_loop();
+        let metadata = diagram.edges().next().unwrap().2.external.clone();
+        let mut overflow = metadata.clone();
+        overflow.as_mut().unwrap().index = usize::MAX;
+        let dot = diagram.to_dot().unwrap().replacen(
+            &dot_value(&serde_json::to_string(&metadata).unwrap()),
+            &dot_value(&serde_json::to_string(&overflow).unwrap()),
+            1,
+        );
+        assert!(matches!(
+            FeynmanDiagram::from_dot(diagram.model_arc(), &dot),
+            Err(DiagramError::DotExternalIndexOverflow(index)) if index == usize::MAX
+        ));
+    }
+
+    #[test]
+    fn dot_import_requires_canonical_particle_attribute() {
+        let diagram = one_loop();
+        let dot = diagram
+            .to_dot()
+            .unwrap()
+            .replacen("particle=\"phi\", ", "", 1);
+        assert!(matches!(
+            FeynmanDiagram::from_dot(diagram.model_arc(), &dot),
+            Err(DiagramError::MissingDotAttribute {
+                target,
+                attribute: "particle"
+            }) if target == "edge 0"
+        ));
+    }
+
+    #[test]
+    fn validates_particle_identity_and_interaction_signature() {
+        let diagram = one_loop();
+        diagram.validate().unwrap();
+
+        // The diagram id names the particle, so the unknown particle fails before validation.
+        let unknown_particle = diagram.map_data(
+            |_, vertex| vertex.clone(),
+            |id, _, edge| {
+                let mut edge = edge.clone();
+                if id == EdgeId(0) {
+                    edge.particle = ParticleId::from_index(usize::MAX);
+                }
+                edge
+            },
+        );
+        assert!(matches!(
+            unknown_particle,
+            Err(DiagramError::Model(ModelError::NotFound {
+                kind: feynkit_model::EntityKind::Particle,
+                ..
+            }))
+        ));
+
+        let wrong_flow = diagram
+            .map_data(
+                |_, vertex| vertex.clone(),
+                |id, _, edge| {
+                    let mut edge = edge.clone();
+                    if id == EdgeId(0) {
+                        edge.directed = true;
+                    }
+                    edge
+                },
+            )
+            .unwrap();
+        // Edge 0 enters slot 0 of vertex 0; a directed self-conjugate scalar
+        // reads as a particle there.
+        assert!(matches!(
+            wrong_flow.validate(),
+            Err(DiagramError::InteractionSignatureMismatch { vertex: 0, actual, expected, .. })
+                if actual == [(25, Some(false)), (25, None), (25, None)]
+                    && expected == [(25, None); 3]
+        ));
+    }
+
+    /// `diagram` with new slots for the given edges.
+    fn reslotted(
+        diagram: &FeynmanDiagram,
+        slots: &[(usize, VertexSlot, VertexSlot)],
+    ) -> FeynmanDiagram {
+        diagram
+            .map_data(
+                |_, vertex| vertex.clone(),
+                |id, _, edge| match slots.iter().find(|(edge, _, _)| *edge == id.0) {
+                    Some(&(_, source, target)) => edge.clone().with_slots(source, target),
+                    None => edge.clone(),
+                },
+            )
+            .unwrap()
+    }
+
+    #[test]
+    fn vertex_slot_errors_name_the_first_bad_vertex_and_its_sorted_slots() {
+        // Vertex 0 holds edge 0 (target slot 0) and edges 1 and 2 (source slots
+        // 1 and 2); vertex 1 holds edges 1 and 2 (target slots 0 and 1) and edge
+        // 3 (source slot 2).
+        let diagram = one_loop();
+        let slot = VertexSlot;
+        for (slots, expected) in [
+            (vec![(2, slot(1), slot(1))], (0, 1)),
+            (vec![(1, slot(7), slot(0)), (2, slot(7), slot(1))], (0, 7)),
+            (vec![(1, slot(0), slot(0))], (0, 0)),
+        ] {
+            assert!(
+                matches!(
+                    reslotted(&diagram, &slots).validate(),
+                    Err(DiagramError::DuplicateVertexSlot { vertex, slot })
+                        if (vertex, slot) == expected
+                ),
+                "{slots:?}"
+            );
+        }
+        for (slots, expected) in [
+            (vec![(2, slot(5), slot(1))], (0, vec![0, 1, 5])),
+            (
+                vec![(1, slot(6), slot(0)), (2, slot(4), slot(1))],
+                (0, vec![0, 4, 6]),
+            ),
+            (vec![(3, slot(4), slot(0))], (1, vec![0, 1, 4])),
+            (
+                vec![(2, slot(9), slot(1)), (3, slot(4), slot(0))],
+                (0, vec![0, 1, 9]),
+            ),
+        ] {
+            assert!(
+                matches!(
+                    reslotted(&diagram, &slots).validate(),
+                    Err(DiagramError::InvalidVertexSlots { vertex, actual, expected: all })
+                        if vertex == expected.0 && actual == expected.1 && all == [0, 1, 2]
+                ),
+                "{slots:?}"
+            );
+        }
+        // Vertices of any degree and without an interaction are checked too:
+        // vertex 0 of the fermion line holds only edge 0 (source slot 0), and
+        // the untyped vertex 0 of the cut scalar line holds edges 0 and 1
+        // (source slots 0 and 1).
+        for (diagram, slots, expected) in [
+            (
+                directed_fermion_line(),
+                vec![(0, slot(3), slot(0))],
+                (vec![3], vec![0]),
+            ),
+            (
+                cut_scalar_line(),
+                vec![(1, slot(4), slot(1))],
+                (vec![0, 4], vec![0, 1]),
+            ),
+        ] {
+            assert!(
+                matches!(
+                    reslotted(&diagram, &slots).validate(),
+                    Err(DiagramError::InvalidVertexSlots { vertex: 0, actual, expected: all })
+                        if actual == expected.0 && all == expected.1
+                ),
+                "{}: {slots:?}",
+                diagram.name().unwrap_or("<unnamed>")
+            );
+        }
+        // A permutation of the slots of one vertex is valid.
+        reslotted(&diagram, &[(1, slot(2), slot(0)), (2, slot(1), slot(1))])
+            .validate()
+            .unwrap();
+    }
+
+    #[test]
+    fn interaction_signature_errors_list_both_signatures() {
+        // The rules of the two fermion-line vertices swapped: the antiparticle
+        // end now carries `V_f`, whose fermion points into the vertex.
+        let line = directed_fermion_line();
+        let rules = line
+            .vertices()
+            .map(|(_, vertex)| vertex.interaction.unwrap())
+            .collect::<Vec<_>>();
+        let swapped = line
+            .map_data(
+                |id, vertex| {
+                    let mut vertex = vertex.clone();
+                    vertex.interaction = Some(rules[1 - id.0]);
+                    vertex
+                },
+                |_, _, edge| edge.clone(),
+            )
+            .unwrap();
+        assert!(matches!(
+            swapped.validate(),
+            Err(DiagramError::InteractionSignatureMismatch { vertex: 0, actual, expected, .. })
+                if actual == [(1, Some(true))] && expected == [(1, Some(false))]
+        ));
+
+        // A cubic vertex given the quartic rule: the signatures differ in length.
+        let mut definition = serde_json::to_value(&*scalar_model()).unwrap();
+        definition["lorentz_structures"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!({"name":"L2","spins":[1,1,1,1],"structure":"1"}));
+        definition["vertex_rules"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!({
+                "name":"V_2","particles":["phi","phi","phi","phi"],"color_structures":["1"],
+                "lorentz_structures":["L2"],"couplings":[[null]]
+            }));
+        let model = Arc::new(Model::from_json(&definition.to_string()).unwrap());
+        let quartic = model.vertex_rule_id("V_2").unwrap();
+        let bubble = one_loop_in(model)
+            .map_data(
+                |id, vertex| {
+                    let mut vertex = vertex.clone();
+                    if id.0 == 1 {
+                        vertex.interaction = Some(quartic);
+                    }
+                    vertex
+                },
+                |_, _, edge| edge.clone(),
+            )
+            .unwrap();
+        assert!(matches!(
+            bubble.validate(),
+            Err(DiagramError::InteractionSignatureMismatch { vertex: 1, actual, expected, .. })
+                if actual == [(25, None); 3] && expected == [(25, None); 4]
+        ));
+    }
+
+    #[test]
+    fn external_legs_need_unit_numerators_and_distinct_connections() {
+        let diagram = one_loop();
+        let with_leg = |change: &dyn Fn(&mut DiagramEdge)| {
+            diagram
+                .map_data(
+                    |_, vertex| vertex.clone(),
+                    |id, _, edge| {
+                        let mut edge = edge.clone();
+                        if id.0 == 3 {
+                            change(&mut edge);
+                        }
+                        edge
+                    },
+                )
+                .unwrap()
+                .validate()
+        };
+        // One is compared by value, however it was built.
+        with_leg(&|edge| {
+            edge.numerator = SymbolicTensor::infer(Atom::num(3) / Atom::num(3)).unwrap()
+        })
+        .unwrap();
+        assert!(matches!(
+            with_leg(&|edge| edge.numerator = SymbolicTensor::infer(Atom::num(2)).unwrap()),
+            Err(DiagramError::ExternalEdgeNumerator { edge: 3 })
+        ));
+        assert!(matches!(
+            with_leg(&|edge| edge.external.as_mut().unwrap().connection = 0),
+            Err(DiagramError::InvalidExternalConnectionSize {
+                connection: 0,
+                legs: 2
+            })
+        ));
+        assert!(matches!(
+            cut_scalar_line().with_cuts(Vec::new()),
+            Err(DiagramError::MissingCrossSectionCuts)
+        ));
+    }
+
+    #[test]
+    fn enumerates_parallel_edge_bases() {
+        let diagram = one_loop();
+        let bases = diagram.loop_momentum_bases().unwrap();
+        assert_eq!(bases.len(), 2);
+        assert!(bases.iter().all(|basis| basis.loop_edges.len() == 1));
+        assert!(
+            bases
+                .iter()
+                .all(|basis| basis.dependent_externals.len() == 1)
+        );
+        assert!(bases.iter().all(|basis| {
+            basis
+                .edge_signatures
+                .values()
+                .all(|signature| signature.loops.len() == 1 && signature.external.len() == 2)
+        }));
+    }
+
+    #[test]
+    fn requested_forests_match_enumerated_bases() {
+        let model = scalar_model();
+        let particle = model.particle_id("phi").unwrap();
+        let mut builder = FeynmanDiagram::builder(model, "disconnected_cycles");
+        let vertices = (0..5)
+            .map(|i| {
+                builder.add_vertex(DiagramVertex {
+                    name: format!("v{i}"),
+                    interaction: None,
+                    numerator: SymbolicTensor::infer(Atom::one()).unwrap(),
+                })
+            })
+            .collect::<Vec<_>>();
+        // Parallel edges, a separate component with a self-loop, and an
+        // isolated vertex exercise both acyclicity and component coverage.
+        for (source, target) in [(0, 1), (0, 1), (2, 3), (2, 2)] {
+            builder
+                .add_edge(
+                    vertices[source],
+                    vertices[target],
+                    DiagramEdge::new(particle, false),
+                )
+                .unwrap();
+        }
+        for diagram in [one_loop(), builder.build().unwrap()] {
+            let expected = diagram
+                .loop_momentum_bases()
+                .unwrap()
+                .into_iter()
+                .map(|basis| (basis.tree_edges.clone(), basis))
+                .collect::<BTreeMap<_, _>>();
+            assert_eq!(expected.len(), 2);
+            let edges = diagram.edges().count();
+            for mask in 0..(1 << edges) {
+                let requested = (0..edges)
+                    .filter(|edge| mask & (1 << edge) != 0)
+                    .map(EdgeId)
+                    .collect::<Vec<_>>();
+                match diagram.basis_from_tree(&requested) {
+                    Ok(basis) => assert_eq!(Some(&basis), expected.get(&requested)),
+                    Err(_) => assert!(!expected.contains_key(&requested)),
+                }
+            }
+            assert!(diagram.basis_from_tree(&[EdgeId(edges)]).is_err());
+            let edge = expected.keys().next().unwrap()[0];
+            assert!(diagram.basis_from_tree(&[edge, edge]).is_err());
+        }
+    }
+
+    /// The internal edge from the vertex named `source` to the one named `target`.
+    fn internal_edge(diagram: &FeynmanDiagram, source: &str, target: &str) -> EdgeId {
+        let vertex = |name| {
+            diagram
+                .vertices()
+                .find(|(_, vertex)| vertex.name == name)
+                .unwrap()
+                .0
+        };
+        let ends = (Some(vertex(source)), Some(vertex(target)));
+        diagram
+            .edges()
+            .find(|(_, endpoints, edge)| {
+                edge.external.is_none() && (endpoints.source, endpoints.target) == ends
+            })
+            .unwrap()
+            .0
+    }
+
+    fn assert_finalized_cut_routing_matches_reference(diagram: &FeynmanDiagram) {
+        // These scalar cut fixtures have no half-edge-indexed numerator data.
+        // Put their internal half-edges in finalization's insertion order while
+        // retaining the stable edge IDs used by cuts and momentum labels.
+        let mut diagram = diagram.clone();
+        let ordered = diagram.canonical_internal_edge_order().unwrap();
+        let hedges = ordered
+            .iter()
+            .flat_map(|edge| match diagram.graph[&EdgeIndex(edge.0)].1 {
+                HedgePair::Paired { source, sink } => [source, sink],
+                _ => unreachable!("internal edges are paired"),
+            })
+            .collect::<Vec<_>>();
+        let mut positions = hedges.clone();
+        positions.sort_unstable();
+        let permutation = Permutation::from_mappings(
+            hedges
+                .iter()
+                .zip(positions)
+                .map(|(old, new)| (old.0, new.0)),
+            diagram.graph.n_hedges(),
+        )
+        .unwrap();
+        diagram
+            .graph
+            .permute_hedges(&HedgeRemap::from_permutation(&permutation))
+            .unwrap();
+        let reference = diagram
+            .clone()
+            .with_canonical_loop_momentum_basis()
+            .unwrap();
+        let finalized = diagram
+            .with_canonical_loop_momentum_basis_finalized(&ordered)
+            .unwrap();
+        finalized.validate().unwrap();
+        assert_eq!(
+            finalized.loop_momentum_basis(),
+            reference.loop_momentum_basis()
+        );
+    }
+
+    #[test]
+    fn canonical_routing_keeps_partial_beam_momenta_off_cut_edges() {
+        // Forward scattering through a t-channel exchange: beam i enters at ai
+        // and leaves at bi, and a0 -> b0, a1 -> b1 form the cut.
+        let dot = r#"digraph forward_box {
+            graph [final_state="phi,phi"];
+            ext [style=invis];
+            ext -> a0 [particle="phi", is_cut=0];
+            ext -> a1 [particle="phi", is_cut=1];
+            b0 -> ext [particle="phi", is_cut=0];
+            b1 -> ext [particle="phi", is_cut=1];
+            a0 -> a1 [particle="phi"];
+            a0 -> b0 [particle="phi"];
+            a1 -> b1 [particle="phi"];
+            b0 -> b1 [particle="phi"];
+        }"#;
+        let diagram = FeynmanDiagram::from_dot(scalar_model(), dot).unwrap();
+        let edge = |source, target| internal_edge(&diagram, source, target);
+        let cut = diagram.cut_edges();
+        assert_eq!(cut, BTreeSet::from([edge("a0", "b0"), edge("a1", "b1")]));
+
+        // Rooted at the outgoing attachment b0, the depth-first tree leaves the
+        // cut edge a0 -> b0 as the loop edge. An incoming root would leave
+        // a0 -> a1, putting K - P0 and K + P1 on the cut edges.
+        let ordered = diagram.canonical_internal_edge_order().unwrap();
+        let depth_first = diagram
+            .basis_from_tree(&diagram.first_depth_first_forest(&ordered).unwrap())
+            .unwrap();
+        assert_eq!(depth_first.loop_edges, [edge("a0", "b0")]);
+        assert_eq!(depth_first.partial_beam_momenta(&cut), 0);
+
+        let routed = diagram
+            .clone()
+            .with_canonical_loop_momentum_basis()
+            .unwrap();
+        routed.validate().unwrap();
+        let basis = routed.loop_momentum_basis();
+        assert_eq!(basis, &depth_first);
+        // The remaining cut edge carries the total incoming momentum.
+        assert!(
+            basis.edge_signatures[&edge("a1", "b1")]
+                .external
+                .iter()
+                .all(|sign| !sign.is_zero())
+        );
+        assert_finalized_cut_routing_matches_reference(&diagram);
+    }
+
+    /// Two loops whose three-particle cuts {i0, i1, m0 | m1, f0, f1} and
+    /// {i0, i1, m1 | m0, f0, f1} cut every edge except f0 -> f1, so each beam
+    /// enters its own uncut component. Beam k enters at vertex `{incoming}k`
+    /// and leaves at `{outgoing}k`; these names fix the canonical edge order.
+    fn crossed_cuts(incoming: &str, outgoing: &str) -> FeynmanDiagram {
+        let dot = format!(
+            r#"digraph crossed_cuts {{
+            graph [final_state="phi,phi,phi"];
+            ext [style=invis];
+            ext -> {incoming}0 [particle="phi", is_cut=0];
+            ext -> {incoming}1 [particle="phi", is_cut=1];
+            {outgoing}0 -> ext [particle="phi", is_cut=0];
+            {outgoing}1 -> ext [particle="phi", is_cut=1];
+            {incoming}0 -> m0 [particle="phi"];
+            {incoming}1 -> m0 [particle="phi"];
+            {incoming}0 -> m1 [particle="phi"];
+            {incoming}1 -> m1 [particle="phi"];
+            m0 -> {outgoing}0 [particle="phi"];
+            m1 -> {outgoing}1 [particle="phi"];
+            {outgoing}0 -> {outgoing}1 [particle="phi"];
+        }}"#
+        );
+        let diagram = FeynmanDiagram::from_dot(scalar_model(), &dot).unwrap();
+        assert_eq!(diagram.cuts().len(), 2);
+        assert_eq!(diagram.cut_edges().len(), 6);
+        diagram
+    }
+
+    #[test]
+    fn cut_aligned_routing_searches_bridges_when_beams_enter_separate_components() {
+        let diagram = crossed_cuts("a", "b");
+        let edge = |source, target| internal_edge(&diagram, source, target);
+        let cut = diagram.cut_edges();
+
+        // In this order Kruskal's bridges form the path a0 m0 b m1 a1, on which
+        // every cut edge separates the two beams.
+        let ordered = [
+            ("b0", "b1"),
+            ("a0", "m0"),
+            ("m0", "b0"),
+            ("m1", "b1"),
+            ("a1", "m1"),
+            ("a0", "m1"),
+            ("a1", "m0"),
+        ]
+        .map(|(source, target)| edge(source, target));
+        let kruskal = diagram.basis_from_tree(&ordered[..5]).unwrap();
+        assert_eq!(kruskal.partial_beam_momenta(&cut), 4);
+
+        // The search joins both beams at m0 with the earliest such bridges.
+        let (partial, basis) = diagram
+            .cut_aligned_loop_momentum_basis(&ordered, &cut)
+            .unwrap();
+        assert_eq!(partial, 2);
+        assert_eq!(basis.partial_beam_momenta(&cut), 2);
+        assert_eq!(
+            BTreeSet::from_iter(basis.loop_edges),
+            BTreeSet::from([edge("a0", "m1"), edge("a1", "m1")])
+        );
+    }
+
+    #[test]
+    fn canonical_routing_replaces_the_depth_first_forest_only_with_fewer_partial_beam_momenta() {
+        // Naming the beam vertices a/b orders the edges so that the depth-first
+        // forest routes 5 partial beam momenta and the cut-aligned one 2;
+        // naming them i/o, after the middle vertices, gives both forests 2 on
+        // different loop edges.
+        for (incoming, outgoing, depth_first_partial, routed_by_search) in
+            [("a", "b", 5, true), ("i", "o", 2, false)]
+        {
+            let diagram = crossed_cuts(incoming, outgoing);
+            let cut = diagram.cut_edges();
+            let ordered = diagram.canonical_internal_edge_order().unwrap();
+            let depth_first = diagram
+                .basis_from_tree(&diagram.first_depth_first_forest(&ordered).unwrap())
+                .unwrap();
+            let (aligned_partial, aligned) = diagram
+                .cut_aligned_loop_momentum_basis(&ordered, &cut)
+                .unwrap();
+            assert_eq!(depth_first.partial_beam_momenta(&cut), depth_first_partial);
+            assert_eq!(aligned_partial, 2);
+            assert_ne!(
+                BTreeSet::from_iter(&depth_first.loop_edges),
+                BTreeSet::from_iter(&aligned.loop_edges)
+            );
+
+            assert_finalized_cut_routing_matches_reference(&diagram);
+            let routed = diagram.with_canonical_loop_momentum_basis().unwrap();
+            let expected = if routed_by_search {
+                &aligned
+            } else {
+                &depth_first
+            };
+            assert_eq!(routed.loop_momentum_basis(), expected);
+        }
+    }
+
+    #[test]
+    fn routing_validation_survives_numerator_edits_and_checks_metadata_edits() {
+        let diagram = one_loop();
+        diagram.validate().unwrap();
+        let updated = diagram
+            .with_numerator_fragments(
+                [(VertexId(0), SymbolicTensor::infer(Atom::num(7)).unwrap())],
+                [],
+            )
+            .unwrap();
+        updated.loop_momentum_basis().validate(&updated).unwrap();
+        let tree_edge = updated.loop_momentum_basis().tree_edges[0];
+        // A dummy edge is no interaction leg, so drop the interactions to isolate the routing.
+        let changed = updated
+            .map_data(
+                |_, vertex| DiagramVertex {
+                    interaction: None,
+                    ..vertex.clone()
+                },
+                |edge, _, data| {
+                    let mut data = data.clone();
+                    data.is_dummy |= edge == tree_edge;
+                    data
+                },
+            )
+            .unwrap();
+        let error = changed.validate().unwrap_err();
+        assert!(
+            matches!(error, DiagramError::InvalidLoopMomentumBasis(_)),
+            "{error}"
+        );
+
+        let mut basis = updated.loop_momentum_basis().clone();
+        let loop_edge = basis.loop_edges[0];
+        basis.edge_signatures.get_mut(&loop_edge).unwrap().loops =
+            Signature::new([SignOrZero::Zero]);
+        assert!(basis.validate(&updated).is_err());
+        let json = updated.to_json().unwrap();
+        let mut serialized: serde_json::Value = serde_json::from_str(&json).unwrap();
+        serialized["loop_momentum_basis"] = serde_json::to_value(basis).unwrap();
+        assert!(
+            FeynmanDiagram::from_json(updated.model().clone(), &serialized.to_string()).is_err()
+        );
+    }
+
+    #[test]
+    fn basis_limit_counts_spanning_forests_instead_of_candidates() {
+        let model = scalar_model();
+        let rule = model.vertex_rule_id("V_1").unwrap();
+        let particle = model.particle_id("phi").unwrap();
+        let mut builder = FeynmanDiagram::builder(model, "triangle_with_tail");
+        let vertices: Vec<_> = (0..4)
+            .map(|index| builder.add_vertex(DiagramVertex::interaction(format!("v{index}"), rule)))
+            .collect();
+        let scalar = || DiagramEdge::new(particle, false);
+        // The lexicographically first three-edge candidate is the triangle and
+        // leaves vertex 3 disconnected. A limit of one must still find the
+        // next candidate, which is a valid spanning tree.
+        builder
+            .add_edge(vertices[0], vertices[1], scalar())
+            .unwrap();
+        builder
+            .add_edge(vertices[1], vertices[2], scalar())
+            .unwrap();
+        builder
+            .add_edge(vertices[2], vertices[0], scalar())
+            .unwrap();
+        builder
+            .add_edge(vertices[2], vertices[3], scalar())
+            .unwrap();
+        let diagram = builder.build().unwrap();
+
+        let bases = diagram.loop_momentum_bases_with_limit(1).unwrap();
+        assert_eq!(bases.len(), 1);
+        assert_eq!(bases[0].tree_edges.len(), 3);
+        assert_eq!(bases[0].loop_edges.len(), 1);
+
+        let direct = diagram
+            .with_loop_momentum_tree_edges(&[EdgeId(0), EdgeId(1), EdgeId(3)])
+            .unwrap();
+        assert_eq!(
+            direct.loop_momentum_basis().tree_edges,
+            vec![EdgeId(0), EdgeId(1), EdgeId(3)]
+        );
+        assert_eq!(direct.loop_momentum_basis().loop_edges, vec![EdgeId(2)]);
+    }
+
+    #[test]
+    fn maps_symbolic_data_without_changing_topology() {
+        let diagram = one_loop();
+        let mapped = diagram
+            .map_data(
+                |id, vertex| {
+                    let mut vertex = vertex.clone();
+                    vertex.name = format!("mapped_{}_{id:?}", vertex.name);
+                    vertex
+                },
+                |id, _, edge| {
+                    let mut edge = edge.clone();
+                    edge.numerator = NumeratorInterface::admit(
+                        Atom::parse(
+                            format!("N({})", id.0),
+                            "feynkit_graph_test",
+                            ParseSettings::default(),
+                        )
+                        .unwrap(),
+                        None,
+                    )
+                    .unwrap();
+                    edge
+                },
+            )
+            .unwrap();
+
+        assert_eq!(mapped.loop_count(), diagram.loop_count());
+        assert_eq!(mapped.vertices().count(), diagram.vertices().count());
+        assert_eq!(mapped.edges().count(), diagram.edges().count());
+        assert!(
+            mapped
+                .vertices()
+                .all(|(_, vertex)| vertex.name.starts_with("mapped_"))
+        );
+        assert!(
+            mapped
+                .edges()
+                .all(|(_, _, edge)| !edge.numerator.expression().is_one())
+        );
+    }
+
+    #[test]
+    fn canonical_key_is_insertion_order_invariant_and_color_sensitive() {
+        let diagram = one_loop();
+        let key = diagram.canonical_key().unwrap();
+        assert_eq!(key, one_loop_reordered().canonical_key().unwrap());
+
+        let changed_state = diagram
+            .map_data(
+                |_, vertex| vertex.clone(),
+                |_, _, edge| {
+                    let mut edge = edge.clone();
+                    if let Some(external) = &mut edge.external
+                        && external.index == 0
+                    {
+                        external.connection = 2;
+                    }
+                    edge
+                },
+            )
+            .unwrap();
+        assert_ne!(key, changed_state.canonical_key().unwrap());
+
+        let changed_interaction = diagram
+            .map_data(
+                |id, vertex| {
+                    let mut vertex = vertex.clone();
+                    if id == VertexId(0) {
+                        vertex.interaction = None;
+                    }
+                    vertex
+                },
+                |_, _, edge| edge.clone(),
+            )
+            .unwrap();
+        assert_ne!(key, changed_interaction.canonical_key().unwrap());
+    }
+
+    #[test]
+    fn reverses_particle_flow_with_antiparticle_semantics() {
+        let diagram = directed_fermion_line();
+        diagram.validate().unwrap();
+        let original_json = diagram.to_json().unwrap();
+        let original_key = diagram.canonical_key().unwrap();
+
+        let reversed = diagram.reverse_edge(EdgeId(0)).unwrap();
+        let (_, endpoints, edge) = reversed.edges().next().unwrap();
+        assert_eq!(endpoints.source, Some(VertexId(1)));
+        assert_eq!(endpoints.target, Some(VertexId(0)));
+        assert_eq!(edge.particle, reversed.model().particle_id("f~").unwrap());
+        assert_eq!(reversed.canonical_key().unwrap(), original_key);
+
+        let restored = reversed.reverse_edge(EdgeId(0)).unwrap();
+        assert_eq!(restored.to_json().unwrap(), original_json);
+        assert!(matches!(
+            diagram.reverse_edge(EdgeId(1)),
+            Err(DiagramError::UnknownEdge { edge: 1, edges: 1 })
+        ));
+    }
+
+    #[test]
+    fn relabels_external_legs_atomically_and_round_trips() {
+        let diagram = one_loop();
+        let swap = BTreeMap::from([(0, 1), (1, 0)]);
+        let relabeled = diagram.relabel_external_legs(&swap).unwrap();
+        let indices = relabeled
+            .edges()
+            .filter_map(|(_, _, edge)| edge.external.as_ref().map(|leg| leg.index))
+            .collect::<Vec<_>>();
+        assert_eq!(indices, vec![1, 0]);
+        assert_eq!(
+            relabeled
+                .relabel_external_legs(&swap)
+                .unwrap()
+                .to_json()
+                .unwrap(),
+            diagram.to_json().unwrap()
+        );
+
+        assert!(matches!(
+            diagram.relabel_external_legs(&BTreeMap::from([(2, 3)])),
+            Err(DiagramError::UnknownExternalIndex(2))
+        ));
+        assert!(matches!(
+            diagram.relabel_external_legs(&BTreeMap::from([(0, 1)])),
+            Err(DiagramError::DuplicateExternalIndex(1))
+        ));
+    }
+
+    #[test]
+    fn rejects_duplicate_external_indices() {
+        let model = scalar_model();
+        let particle = model.particle_id("phi").unwrap();
+        let mut builder = FeynmanDiagram::builder(model, "invalid");
+        let vertex = builder.add_vertex(DiagramVertex {
+            name: "v".into(),
+            interaction: None,
+            numerator: SymbolicTensor::infer(Atom::one()).unwrap(),
+        });
+        builder
+            .add_edge(
+                None,
+                vertex,
+                external_edge(particle, "p1", 0, ExternalState::Incoming),
+            )
+            .unwrap();
+        builder
+            .add_edge(
+                vertex,
+                None,
+                external_edge(particle, "p2", 0, ExternalState::Outgoing),
+            )
+            .unwrap();
+        assert!(matches!(
+            builder.build().and_then(|diagram| diagram.validate()),
+            Err(DiagramError::DuplicateExternalIndex(0))
+        ));
+    }
+}

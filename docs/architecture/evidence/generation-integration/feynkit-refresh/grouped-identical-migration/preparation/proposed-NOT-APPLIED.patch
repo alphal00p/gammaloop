@@ -1,0 +1,13 @@
+diff --git a/crates/feynkit-generator/tests/generation_oracle/main.rs b/crates/feynkit-generator/tests/generation_oracle/main.rs
+index 9ef9f1ba005f20149716b22346d45c5501b62e87..7283198bf0152c82c1cd5f0173703cddfa7f5c0f 100644
+--- a/crates/feynkit-generator/tests/generation_oracle/main.rs
++++ b/crates/feynkit-generator/tests/generation_oracle/main.rs
+@@ -331,7 +331,7 @@
+     fast xs_qed_eemm_L1: Row { diagrams: 1, topologies: 17, assignments: 34, inverse_symmetry: (1, 1), weights: (-1, 1), symmetry_factors: &[(1, 1)], content: 0x831ae534b022fd0f, numerators: 0x414e2a7a954beae8, named: 0xf40bfdc791015105, ids: 0xedd739fe2aef9d55 };
+     fast xs_qed_eemm_L2: Row { diagrams: 30, topologies: 157, assignments: 714, inverse_symmetry: (30, 1), weights: (4, 1), symmetry_factors: &[(1, 30)], content: 0x6fcfea2ac818e3eb, numerators: 0xf889b37c1fd93143, named: 0x0b41c948729c87ec, ids: 0xc6537de685c0ec01 };
+     fast xs_qed_eemm_L3: Row { diagrams: 824, topologies: 1536, assignments: 17448, inverse_symmetry: (824, 1), weights: (94, 1), symmetry_factors: &[(1, 824)], content: 0xc1a748638be6f398, numerators: 0x0f8c863152a43152, named: 0xb5205b5cda3bf8ff, ids: 0xc3905035e4cb6566 };
+-    fast xs_qed_eemm_identical_L2: Row { diagrams: 29, topologies: 157, assignments: 714, inverse_symmetry: (29, 1), weights: (4, 1), symmetry_factors: &[(1, 29)], content: 0xc6e7d902ad8d316f, numerators: 0x00fac78da0e0d159, named: 0x3d72c09c50112e41, ids: 0xcd1abf37940d48cf };
++    fast xs_qed_eemm_identical_L2: Row { diagrams: 29, topologies: 157, assignments: 714, inverse_symmetry: (29, 1), weights: (4, 1), symmetry_factors: &[(1, 29)], content: 0xc6e7d902ad8d316f, numerators: 0xa60df38a6b8079e3, named: 0x3d72c09c50112e41, ids: 0xcd1abf37940d48cf };
+     fast xs_qed_eemm_sign_L2: Row { diagrams: 25, topologies: 157, assignments: 714, inverse_symmetry: (25, 1), weights: (8, 1), symmetry_factors: &[(1, 25)], content: 0x76af0acc0f7b7896, numerators: 0x5d7e712797f78751, named: 0x54e6507e4c865b62, ids: 0x52893e0efe85f881 };
+     fast xs_qed_eemm_scalar_L2: Row { diagrams: 25, topologies: 157, assignments: 714, inverse_symmetry: (25, 1), weights: (8, 1), symmetry_factors: &[(1, 25)], content: 0x76af0acc0f7b7896, numerators: 0x5d7e712797f78751, named: 0x54e6507e4c865b62, ids: 0x52893e0efe85f881 };
+     fast xs_qed_eedd_L1: Row { diagrams: 1, topologies: 17, assignments: 34, inverse_symmetry: (1, 1), weights: (-1, 1), symmetry_factors: &[(1, 1)], content: 0xb467d6be7a12aefa, numerators: 0xd3ad2f3a0802b6ab, named: 0xdd30b2e206f30267, ids: 0x58ebcb07ba6255d3 };

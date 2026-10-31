@@ -1,0 +1,51 @@
+{
+  "schema": "root-host-stub-rustred-bounded-acceptance/1",
+  "recorded_utc": "2026-10-31 02:49:27 UTC",
+  "decision": "ACCEPT_BOUNDED_APPLIED_STUB_DISTRIBUTIONS_AND_PRIVATE_RUSTRED_INTEGRATION",
+  "candidate": "457e361d7d39e0a3daae801651f8c1dfabbf47aa",
+  "code": "2cfb52b28d99f92305a9d571bbe3911cf04b8a19",
+  "review": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-host-stub-rustred-integration-astra-20261031-023354Z-777117b1/review.json",
+  "review_sha256": "f472e199cf3805d9364ef9158c18628fbc5c7ee8d72317c56a6af787628e8a5c",
+  "seal_sha256": "a325a993b718e82567e6b77e4060e2857cf7d8265b88e69541bd8978cfbf2624",
+  "coordinator_rehashed_review_files": 246,
+  "accepted_scopes": [
+    "Exact one-file generated notebook stub on bounded twelve-row base.",
+    "Corrected ordinary distribution, full-wheel installation, stub/import identity and qualified prior ordinary reuse.",
+    "Exact private three-file RustRed7c1/kernel8eb single-extension validation composition and distribution.",
+    "Original private QCD all23assertions, targets[[2],[3]],depth2,residual[[1]],genuine native reduction.",
+    "Private UFO/squared/sector and unchanged four-drawing Chromium/WebKit method.",
+    "Declared additive339-file Git packet/external evidence closure and docs structure only."
+  ],
+  "fresh_independent_review": {
+    "licensed_checks": 8,
+    "passes": 8,
+    "failures": 0,
+    "whole_wheel_installs": 2,
+    "browser_drawings": 4,
+    "browser_engines": 2,
+    "browser_pages": 2,
+    "browser_skips": 0,
+    "native_builds": 0
+  },
+  "retained_findings": {
+    "HOSTINT_N1": "Exact ordinary ELF loader relocation/RUNPATH/header details qualified; no whole-file equality.",
+    "HOSTINT_N2": "Private graph intentionally adds symbolica/tracing_max_level_info via unchanged RustRed. No lock-reconciliation feature change does not mean ordinary/private graphs identical.",
+    "HOSTINT_N3": "Actual installed wheel native member differs from separately Nix-fixed loose output companion; execution credit belongs wheel member.",
+    "HOSTINT_N4": "337 manifest entries plus2 seal/manifest files committed; two oversizedJSONs and other store/local evidence remain external exact dependencies.",
+    "historical": "ASTRA-N1 symbol suffixes and ASTRA-N2 formatter cache incident unchanged. Prior interface restrictions retained; carried verbatim R3 pending text is superseded only by separate root r3 acceptance."
+  },
+  "ordinary_QCD": "Still absent IBPFamily; no ordinary QCD pass. Private validation host only.",
+  "no_approval_for": [
+    "production RustRed adoption",
+    "full Community/campaign/reconstruction/multiple-denominator scope",
+    "broad math/generator/evaluator/Auto full-Row",
+    "full docs/Clippy/site/widget",
+    "WP3/M-rebuild/global integration advance",
+    "performance/memory limit/publication"
+  ],
+  "global_integration": "fdff0d18953348b84a0f1b7e6ab5ef703a5090de",
+  "CI": false,
+  "publication_authorized": false,
+  "root_runtime_credit": 0,
+  "retention": "Candidate, review246files, store outputs, whole-wheel environments and historical records retained. No root-owned processes or ref mutation."
+}

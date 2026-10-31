@@ -1,0 +1,80 @@
+{
+  "schema": "grouped-identical-migration-preparation/1",
+  "status": "NEW_MIGRATION_REVIEW_REQUIRED",
+  "Auto_aggregation": "ROOT_ACCEPTED_PINNED_CONDITIONALLY",
+  "None_aggregation": "ROOT_ACCEPTED_PINNED_CONDITIONALLY_SEPARATE",
+  "applied": false,
+  "self_approval": false,
+  "source_workspace": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families",
+  "output": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-identical-migration-preparation-20261031-r1",
+  "patch": "proposed-NOT-APPLIED.patch",
+  "record": "handoff.typ",
+  "dependency_matrix": "dependency-gap-matrix.json",
+  "old": "0x00fac78da0e0d159",
+  "proposed": "0xa60df38a6b8079e3",
+  "before_blob": "9ef9f1ba005f20149716b22346d45c5501b62e87",
+  "after_blob": "7283198bf0152c82c1cd5f0173703cddfa7f5c0f",
+  "before_sha256": "6dacf61baca9f13f3e4a6d719f89eaced429fb3cb14c7904dcb41fe4c86b66df",
+  "after_sha256": "66f01bcc855552ae888f1fb7c5bb158afbd448492b4e27a26e2bda40f09b07d2",
+  "immutable_refresh_base": "d0fb4e906140a6a0fc8dd6401ca839cab0c2734d",
+  "producer_applicability": "ffa76ec420642c03349ab756d2d7720ab93c0057",
+  "new_token_origin": "Exact sealed pristine current None physical payload + source Census algorithm; fresh native recorded hash only corroborates.",
+  "proof_bindings": {
+    "raw_sources": 30,
+    "raw_owners": 540,
+    "source_phase_graphs": 60,
+    "source_phase_owner_axis_maps": 1080,
+    "final_owners": 522,
+    "groups": 29,
+    "per_group_weights_before_total": true,
+    "cut_threshold_unions": 58,
+    "final_declared_interfaces_matched": 54,
+    "protected_inputs_verified_and_final_unchanged": 15899
+  },
+  "meaningful_controls": 6,
+  "strict_guard": "Both exact modes30int5/60boolfalsezero/29boolfalsecancel/210string1member/3comparison(two null,one string1); source/narrow corpus only.",
+  "remaining_material_boundary": "Independent migration reviewer must dispose current grouped declared/ordered-consumer premise from finite source/data evidence. If insufficient, separately assign exact grouped consumer/layout/operand-output-axis witness; no borrowed three-QED/QCD approval.",
+  "WP9_argument": "Independent current raw30 correctness plus accepted exact conditional grouped membership/weights/expression relation; does not assert historical-current grouped equivalence.",
+  "qualification_records": [
+    "None-full-premise-matrix.json",
+    "Auto-full-premise-matrix.json",
+    "None-review-excluded.json",
+    "consumed-Auto-independent-review-copy.json",
+    "consumer-interface-boundary.json"
+  ],
+  "failing_tests": "Original grouped tests101; full ffa characterization and assertion-only classification accepted by root (302pass69fail49ignored,371selected420inventory). Deleted physical dumps give no fresh payload proof; no passing-after-patch or fullpool8/32 credit.",
+  "Row_preservation": {
+    "Rows": 149,
+    "prior_migrations": 12,
+    "other_bytes": "all byte-identical"
+  },
+  "workspace_guard": "PASS_OWN_SCOPE",
+  "external_VCS_movement": {
+    "main_head": false,
+    "refs_sha256": true,
+    "index_sha256": false
+  },
+  "refresh_external_changes": [
+    {
+      "path": "docs/developers.toml",
+      "before": "e69387779add2c299598f80aad98bd61a3d11cfb20c59794c70220692fee15ef",
+      "after": "9e2ef1846586777d052bed6848d2d63dec7b9a8ebf4a5dca6059786d6f00b59f"
+    }
+  ],
+  "retention": "Keep only this new ignored output for independent migration review/continuation. No durable ref was created because ref mutations were forbidden. All pre-existing artifacts preserved.",
+  "prohibited_actions_performed": false,
+  "native_build_network_licensing_delegation_count": 0,
+  "owned_live_processes": [],
+  "Typst_rendered": false,
+  "no_global_WP3_WP9_or_integration_credit": true,
+  "accepted_characterization": {
+    "review": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-full-generator-characterization-astra-20261031-022430Z-320628f7/review.json",
+    "review_sha256": "fb688585bc7efd0b494fef7648df5abad398f88bfe8c439e8b42c0dd520eaa37",
+    "seal_sha256": "5e4792d8c2a2e678b21f92b3e3e4f28348a9ca8e30d7b8b6edf4d751dc769776",
+    "root_record": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/root-full-generator-pool1-acceptance-20261031.json",
+    "root_record_sha256": "297b23048d86665efa8832b50848173a6ae7a08a5b45251ef8e9e15fb3377b87",
+    "scope": "Accepted characterization/asserted-summary classification only; no payload equivalence, new native or mathematical/migration approval."
+  },
+  "characterization_review_files_rehashed": 44,
+  "guard_utc": "2026-10-31T02:39:12.692173+00:00"
+}

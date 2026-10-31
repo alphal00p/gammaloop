@@ -1,0 +1,13 @@
+{
+  "oracle_elf": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/grouped-identical-migration-20261031/archive-extracted/target/ci-optim/deps/generation_oracle-3892f55f31822180",
+    "sha256": "7f00172ace12f04ef53d51a70e6ac4a12248e05e3d61edbde42e5e02079f5c81",
+    "size": 61186320
+  },
+  "expected_token": "0xa60df38a6b8079e3",
+  "new_little_endian_occurrences": 1,
+  "old_little_endian_occurrences": 0,
+  "selected_source_sha256": "66f01bcc855552ae888f1fb7c5bb158afbd448492b4e27a26e2bda40f09b07d2",
+  "source_hash_expected": "66f01bcc855552ae888f1fb7c5bb158afbd448492b4e27a26e2bda40f09b07d2",
+  "claim": "Actual pure producer source/build graph plus ELF literal corroboration; forthcoming exact native assertion is separate."
+}

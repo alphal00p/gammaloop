@@ -1,0 +1,8 @@
+{
+  "seal_sha256": "20f915230a29c6ecbba3b7bd6266b8a396008769d3be17baf532ad0865724674",
+  "manifest_sha256": "031ec8b561d3839919296a4f68b0e14bbd47d0ed22780d62cf666d0eca51b0e9",
+  "receipt_sha256": "8e2596fdb67640f91b70697f7a8f53006334deca02fdffc3a4f3aa8b6676f00d",
+  "packet_files": 410,
+  "all_max_new_file_size_bytes": 1029805,
+  "status": "NEW_INDEPENDENT_INTEGRATION_REVIEW_REQUIRED"
+}

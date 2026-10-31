@@ -1,0 +1,11 @@
+{
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families",
+  "review": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-identical-migration-astra-20261031-024225Z-1469f5e4",
+  "candidate": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-identical-migration-preparation-20261031-r1",
+  "start_utc": "2026-10-31T02:42:25.970401+00:00",
+  "scope": "read-only pure independent migration review; standard-library-only analysis; no native execution/delegation/VCS operations",
+  "initial_read_failures": [
+    "cat .git returned missing (workspace uses .jj); no mutation or config read performed",
+    "python3 absent from PATH; command failed127 before execution; selected installed standalone Python3.13.12 by absolute path; no Nix invocation"
+  ]
+}

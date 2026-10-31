@@ -1,0 +1,174 @@
+{
+  "schema": "grouped-identical-migration-dependencies/1",
+  "as_of": "2026-10-31T02:36:37.421704+00:00",
+  "status": "NEW_MIGRATION_REVIEW_REQUIRED",
+  "approval": false,
+  "applied": false,
+  "Auto_aggregation_gate": "ACCEPTED_PINNED_CONDITIONALLY_BY_ROOT",
+  "None_aggregation_gate": "ACCEPTED_PINNED_CONDITIONALLY_BY_ROOT_SEPARATELY",
+  "root_Auto_acceptance": {
+    "record": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/root-grouped-auto-acceptance-20261031.json",
+    "sha256": "e0a659e8798eba47179623e218340852c1d2fafe2ca09d03bc1b7e6a9ede86e4",
+    "candidate": "113608b3917d903d0fcc730aa3760f114fbc3f04",
+    "review": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-auto-aggregation-astra-20261031-independent-r1-1793413266607828149/review.json",
+    "review_sha256": "e4ca45aff35c11bbd6397a32265502f79ff6b622141c1fe75214f17f830919db",
+    "review_seal_sha256": "fea4337d34fb0f22c71f6e80b33be456db9d1193d80be46fb68b5d2cb4eb5a9f"
+  },
+  "None_acceptance": {
+    "base": "ad7ccbe7cee2373ed54fe16d17971491eb581e80",
+    "receipt_sha256": "4a91e2bd0036c7e32933069dfa147d3141ab4438a706bb7d96dc81a56b8994ac",
+    "seal_sha256": "c2e4448d0930b5422e8a40bcda6d0a9ab81cc41a1ef9e1be23c3fbdf177f7710",
+    "review_sha256": "45368ac2dc5783a6ba31daa9b7e8bd7f03a80746bf3b07b6d3e34cc909adcb81"
+  },
+  "matrix": [
+    {
+      "dependency": "exact None token reconstruction",
+      "status": "PREPARED_STRICT_CHECKS_PASS",
+      "evidence": [
+        "reconstruct.py",
+        "reconstructed-None-row.json",
+        "patch-binding.json"
+      ],
+      "limits": "No approval or native passing test; hashing is a derived encoding, not independent physics."
+    },
+    {
+      "dependency": "immutable source applicability",
+      "status": "PREPARED_CONTENT_INVARIANCE",
+      "evidence": [
+        "source-invariance.json",
+        "producer-source-delta.txt",
+        "main-source-delta.patch"
+      ],
+      "limits": "Actual5ba/archive5ea/kernel8eb not renamed as ffa/d0fb. Later notebook-stub writer does not change this target base."
+    },
+    {
+      "dependency": "None P1-P5 exact conditional aggregate",
+      "status": "ROOT_ACCEPTED_SEPARATE_NONE",
+      "evidence": [
+        "None-full-premise-matrix.json",
+        "accepted-None-review-copy.json"
+      ],
+      "limits": "All capture/observer/source/native qualifications survive; no migration approval."
+    },
+    {
+      "dependency": "Auto-P1-P5 exact conditional aggregate/durability/strict guard",
+      "status": "ROOT_ACCEPTED_AUTO_AS_SUPPLIED_LATER",
+      "evidence": [
+        "Auto-full-premise-matrix.json",
+        "consumed-Auto-independent-review-copy.json",
+        "consumed-root-Auto-acceptance-copy.json",
+        "strict-factual-guards.json"
+      ],
+      "limits": "Earlier preparation pending labels remain chronological only. Separate actual Auto raw30 inputs required. No None-to-Auto approval inference."
+    },
+    {
+      "dependency": "independent current raw30 correctness rebind",
+      "status": "EXACT_CURRENT_INPUT_OWNER_BINDINGS_PREPARED",
+      "evidence": [
+        "raw30-current-owner-bindings.json",
+        "Auto-separate-exact-rebind.json"
+      ],
+      "limits": "Underlying approved raw30 theorem reused on exactly matching model/request/options/Run/payload/owners only; historical kernels retain identities."
+    },
+    {
+      "dependency": "group membership AND source factors/weights/maps/final payload",
+      "status": "FINITE_CHAIN_PREPARED",
+      "evidence": [
+        "membership-weight-payload-chain.json",
+        "physical-chain-reconstruction.json",
+        "source-phase-owner-axis-maps.json",
+        "final-physical-owner-bindings.json"
+      ],
+      "limits": "Total4 and groupcount29 are consequences, never sufficient proof. Factorized covariance and source-matrix argument are reused from accepted conditional theorems, not re-proved by port matching."
+    },
+    {
+      "dependency": "own-row declared/ordered consumer premise",
+      "status": "NEW_MIGRATION_REVIEW_MUST_DISPOSE_MATERIAL_BOUNDARY",
+      "evidence": [
+        "consumer-interface-boundary.json",
+        "source-phase-owner-axis-maps.json",
+        "source/"
+      ],
+      "smallest_obligation": "Independently review finite current declared-port/actual named-consumer source argument for this owner set. If insufficient, separately assign exact grouped logical/canonical product/layout commutation witness and order-only control; no universal or historical positional theorem required.",
+      "borrow_three_QED_QCD_approval": false
+    },
+    {
+      "dependency": "historical grouped producer provenance",
+      "status": "STILL_UNAPPROVED_NOT_USED_AS_CORRECTNESS_PREMISE",
+      "obligation": "Do not assert historical-current grouped equivalence. New reviewer can instead accept independently certified current physical result as WP9 correctness basis, with historical literal obsolete; no invented historical frames proof."
+    },
+    {
+      "dependency": "raw/cooked/decoded association",
+      "status": "REVIEWED_CONDITIONAL_PREMISE_RETAINED",
+      "obligation": "Preserve exact P1-P5 capture/uncook/definition assumptions. No universal decoder proof is claimed or demanded merely by this preparation."
+    },
+    {
+      "dependency": "new WP9 literal migration review",
+      "status": "NEW_MIGRATION_REVIEW_REQUIRED",
+      "obligation": "Review exact single-token patch, the independent-current correctness composition, own-owner interface disposition, all assumptions and preserved149Rows/prior12. Acceptance of aggregates alone authorizes no literal."
+    },
+    {
+      "dependency": "fresh ffa characterization",
+      "status": "ROOT_ACCEPTED_EXACT_POOL1_CHARACTERIZATION_ASSERTION_ONLY",
+      "evidence": [
+        "new-characterization-observation.json"
+      ],
+      "limits": "Runtime first-failure and nine equal fields only. Deleted physical dumps supply no payload-equivalence or passing-after-patch credit.",
+      "accepted_binding": {
+        "review": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-full-generator-characterization-astra-20261031-022430Z-320628f7/review.json",
+        "review_sha256": "fb688585bc7efd0b494fef7648df5abad398f88bfe8c439e8b42c0dd520eaa37",
+        "seal_sha256": "5e4792d8c2a2e678b21f92b3e3e4f28348a9ca8e30d7b8b6edf4d751dc769776",
+        "root_record": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/root-full-generator-pool1-acceptance-20261031.json",
+        "root_record_sha256": "297b23048d86665efa8832b50848173a6ae7a08a5b45251ef8e9e15fb3377b87",
+        "scope": "Accepted characterization/asserted-summary classification only; no payload equivalence, new native or mathematical/migration approval."
+      }
+    },
+    {
+      "dependency": "application and fresh native/consumer theorem work",
+      "status": "NOT_ASSIGNED_NOT_PERFORMED",
+      "obligation": "Separate root assignment for any such work after review; no new native batch needed to prepare exact binding."
+    }
+  ],
+  "scope": {
+    "case": "xs_qed_eemm_identical_L2",
+    "modes": "None literal separately; Auto physical/source equivalence",
+    "grouping": "Identical",
+    "settings": {
+      "number_of_numerical_samples": 5,
+      "numerical_sample_seed": 3,
+      "check_canonical_numerator": false,
+      "differentiate_particle_masses_only": true,
+      "fully_numerical_substitution": false,
+      "symmetric_polarizations": false
+    },
+    "naming": "D",
+    "pool": 1,
+    "actual_source": "5ba04864ca506e259d9eef4a54f65acdd8323fc2",
+    "archive": "5ea149ffd88ae3afc4072a38c0871c1329be8424",
+    "kernel": "8eb7c3729d6abefc916decc1bdf0c06536f8af80"
+  },
+  "Auto_AGG_N1": "Original count6 hash fixture was not guard-valid. Reviewer key-order mutation passed guard and rejected hash; independent-review-only credit, never candidate replay credit.",
+  "exclusions": [
+    "self-approval",
+    "literal application",
+    "new native runtime/fullRow or package passing credit",
+    "historical-current grouped equivalence",
+    "universal raw/cook decoder theorem",
+    "positional/free-index/locality theorem",
+    "denominator/full-integrand theorem",
+    "sampled nonrelation/maximality",
+    "other modes/rows/pools",
+    "pool8/32",
+    "global WP3/WP9 completion",
+    "integration/publication"
+  ],
+  "chronology": "AUTO_AGGREGATION_REVIEW_PENDING was correct for early preparation scripts/results. This additive matrix consumes only root supplied exact Auto acceptance; it supersedes that pending dependency status, preserving all original external records.",
+  "accepted_characterization": {
+    "review": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-full-generator-characterization-astra-20261031-022430Z-320628f7/review.json",
+    "review_sha256": "fb688585bc7efd0b494fef7648df5abad398f88bfe8c439e8b42c0dd520eaa37",
+    "seal_sha256": "5e4792d8c2a2e678b21f92b3e3e4f28348a9ca8e30d7b8b6edf4d751dc769776",
+    "root_record": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/root-full-generator-pool1-acceptance-20261031.json",
+    "root_record_sha256": "297b23048d86665efa8832b50848173a6ae7a08a5b45251ef8e9e15fb3377b87",
+    "scope": "Accepted characterization/asserted-summary classification only; no payload equivalence, new native or mathematical/migration approval."
+  }
+}

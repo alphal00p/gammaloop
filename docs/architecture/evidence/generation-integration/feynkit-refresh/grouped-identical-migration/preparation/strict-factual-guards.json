@@ -1,0 +1,28 @@
+{
+  "None_separate_factual_reconstruction": {
+    "sample_counts_integer_5": 30,
+    "zero_flags_boolean_false": 60,
+    "cancellation_flags_boolean_false": 29,
+    "nonnull_member_ratio_string_1_occurrences": 210,
+    "comparison_ratios": [
+      null,
+      null,
+      "1"
+    ],
+    "scope": "Factual guard for this source-defined shape; no general capture validation approval."
+  },
+  "Auto_exact_narrow_guard": {
+    "sample_counts_integer_5": 30,
+    "zero_flags_boolean_false": 60,
+    "cancellation_flags_boolean_false": 29,
+    "nonnull_member_ratio_string_1_occurrences": 210,
+    "comparison_ratios": [
+      null,
+      null,
+      "1"
+    ],
+    "scope": "Factual guard for this source-defined shape; no general capture validation approval."
+  },
+  "guard_source_sha256": "9e46415689e720c4425d8addfb8fa5f0947a68af664fa09c02d9aeb0fd91568e",
+  "Auto_approval": "AUTO_AGGREGATION_REVIEW_PENDING"
+}

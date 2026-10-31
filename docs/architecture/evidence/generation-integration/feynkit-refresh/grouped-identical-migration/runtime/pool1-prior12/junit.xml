@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="nextest-run" tests="12" skipped="0" failures="0" errors="0" uuid="c49a791f-55bd-4180-acbc-6ebb30133d83" timestamp="2026-10-31T03:15:53.529+00:00" time="0.607">
+    <testsuite name="feynkit-generator::generation_oracle" tests="12" skipped="0" errors="0" failures="0">
+        <testcase name="xs_qed_eeee_1pi_L1" classname="feynkit-generator::generation_oracle" timestamp="2026-10-31T03:15:53.533+00:00" time="0.072"/>
+        <testcase name="xs_qed_eemm_L1" classname="feynkit-generator::generation_oracle" timestamp="2026-10-31T03:15:53.533+00:00" time="0.084"/>
+        <testcase name="sm_eemm_L0" classname="feynkit-generator::generation_oracle" timestamp="2026-10-31T03:15:53.533+00:00" time="0.090"/>
+        <testcase name="xs_qed_eedd_L1" classname="feynkit-generator::generation_oracle" timestamp="2026-10-31T03:15:53.533+00:00" time="0.091"/>
+        <testcase name="xs_qed_eeee_L1" classname="feynkit-generator::generation_oracle" timestamp="2026-10-31T03:15:53.533+00:00" time="0.094"/>
+        <testcase name="xs_qcd_gguu_1pi_L1" classname="feynkit-generator::generation_oracle" timestamp="2026-10-31T03:15:53.533+00:00" time="0.097"/>
+        <testcase name="sm_eeww_L0" classname="feynkit-generator::generation_oracle" timestamp="2026-10-31T03:15:53.533+00:00" time="0.108"/>
+        <testcase name="qed_ee4f_L0" classname="feynkit-generator::generation_oracle" timestamp="2026-10-31T03:15:53.533+00:00" time="0.108"/>
+        <testcase name="qed_eemm_L1" classname="feynkit-generator::generation_oracle" timestamp="2026-10-31T03:15:53.533+00:00" time="0.128"/>
+        <testcase name="xs_qed_eemm_L2" classname="feynkit-generator::generation_oracle" timestamp="2026-10-31T03:15:53.533+00:00" time="0.222"/>
+        <testcase name="ym_g6_L0" classname="feynkit-generator::generation_oracle" timestamp="2026-10-31T03:15:53.533+00:00" time="0.596"/>
+        <testcase name="ctorder_qcd_uugg_L1" classname="feynkit-generator::generation_oracle" timestamp="2026-10-31T03:15:53.533+00:00" time="0.604"/>
+    </testsuite>
+</testsuites>

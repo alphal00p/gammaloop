@@ -1,0 +1,17 @@
+{
+  "schema": "grouped-identical-preparation-seal/1",
+  "status": "NEW_MIGRATION_REVIEW_REQUIRED",
+  "manifest_sha256": "2b767c3244605ab814c5dce3eab09fbe846bd10cc3b74b58b1dae7e45b5fe1f4",
+  "SHA256SUMS_sha256": "c91611445713af77e9bd8acd0c5de60f0a93318048fc88086761119dcee3c065",
+  "handoff_sha256": "6279084309a00acfadede1c160cee1a2715f5b45a2e16e82dfba3470194b099c",
+  "patch_sha256": "2450f56adfe23ea3b157b4d687c4ad6edd39866ff841f6ba8e85fa6f6d864fb7",
+  "files": 71,
+  "before_blob": "9ef9f1ba005f20149716b22346d45c5501b62e87",
+  "after_blob": "7283198bf0152c82c1cd5f0173703cddfa7f5c0f",
+  "approval": false,
+  "applied": false,
+  "Auto_accepted_conditionally_by_root": true,
+  "None_accepted_separately_conditionally_by_root": true,
+  "self_exclusions": "manifest.json and SHA256SUMS bind ordinary files; seal.json binds both. seal.sha256 binds seal.json; no circular self-hash.",
+  "owned_live_processes": []
+}

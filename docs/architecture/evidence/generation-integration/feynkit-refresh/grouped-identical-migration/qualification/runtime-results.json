@@ -1,0 +1,257 @@
+{
+  "code": "6f41807b064bcf2f579883134daef65c8ac279d3",
+  "archive_sha256": "ba02f91fc47a35b03cc9d51dded39836a7635bdf423c6025ab6e4775c504fc35",
+  "oracle_elf": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/grouped-identical-migration-20261031/archive-extracted/target/ci-optim/deps/generation_oracle-3892f55f31822180",
+    "sha256": "7f00172ace12f04ef53d51a70e6ac4a12248e05e3d61edbde42e5e02079f5c81",
+    "size": 61186320
+  },
+  "results": [
+    {
+      "step": "pool1-grouped",
+      "pool": 1,
+      "exit": 0,
+      "outcomes": [
+        {
+          "case": "xs_qed_eemm_identical_L2",
+          "status": "passed",
+          "time": "3.567"
+        }
+      ],
+      "actual_executions": 1,
+      "junit_sha256": "0f590819a150c6d421a05dbd250e80f82b9aefada2d0cc886b2b3894d5ae2c0d",
+      "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/grouped-identical-migration-20261031/runs/pool1-grouped/command.json",
+      "public_dump_hook_enabled": true
+    },
+    {
+      "step": "pool1-prior12",
+      "pool": 1,
+      "exit": 0,
+      "outcomes": [
+        {
+          "case": "xs_qed_eeee_1pi_L1",
+          "status": "passed",
+          "time": "0.072"
+        },
+        {
+          "case": "xs_qed_eemm_L1",
+          "status": "passed",
+          "time": "0.084"
+        },
+        {
+          "case": "sm_eemm_L0",
+          "status": "passed",
+          "time": "0.090"
+        },
+        {
+          "case": "xs_qed_eedd_L1",
+          "status": "passed",
+          "time": "0.091"
+        },
+        {
+          "case": "xs_qed_eeee_L1",
+          "status": "passed",
+          "time": "0.094"
+        },
+        {
+          "case": "xs_qcd_gguu_1pi_L1",
+          "status": "passed",
+          "time": "0.097"
+        },
+        {
+          "case": "sm_eeww_L0",
+          "status": "passed",
+          "time": "0.108"
+        },
+        {
+          "case": "qed_ee4f_L0",
+          "status": "passed",
+          "time": "0.108"
+        },
+        {
+          "case": "qed_eemm_L1",
+          "status": "passed",
+          "time": "0.128"
+        },
+        {
+          "case": "xs_qed_eemm_L2",
+          "status": "passed",
+          "time": "0.222"
+        },
+        {
+          "case": "ym_g6_L0",
+          "status": "passed",
+          "time": "0.596"
+        },
+        {
+          "case": "ctorder_qcd_uugg_L1",
+          "status": "passed",
+          "time": "0.604"
+        }
+      ],
+      "actual_executions": 12,
+      "junit_sha256": "263434ce9e7531ceaa7dc8d766b6229820d6e4253bfdf66bd6f758ca3aa04a39",
+      "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/grouped-identical-migration-20261031/runs/pool1-prior12/command.json",
+      "public_dump_hook_enabled": false
+    },
+    {
+      "step": "pool8",
+      "pool": 8,
+      "exit": 0,
+      "outcomes": [
+        {
+          "case": "sm_eemm_L0",
+          "status": "passed",
+          "time": "0.085"
+        },
+        {
+          "case": "xs_qed_eemm_L1",
+          "status": "passed",
+          "time": "0.086"
+        },
+        {
+          "case": "xs_qed_eedd_L1",
+          "status": "passed",
+          "time": "0.089"
+        },
+        {
+          "case": "xs_qed_eeee_1pi_L1",
+          "status": "passed",
+          "time": "0.094"
+        },
+        {
+          "case": "sm_eeww_L0",
+          "status": "passed",
+          "time": "0.094"
+        },
+        {
+          "case": "qed_ee4f_L0",
+          "status": "passed",
+          "time": "0.097"
+        },
+        {
+          "case": "xs_qcd_gguu_1pi_L1",
+          "status": "passed",
+          "time": "0.099"
+        },
+        {
+          "case": "xs_qed_eeee_L1",
+          "status": "passed",
+          "time": "0.102"
+        },
+        {
+          "case": "qed_eemm_L1",
+          "status": "passed",
+          "time": "0.113"
+        },
+        {
+          "case": "xs_qed_eemm_L2",
+          "status": "passed",
+          "time": "0.182"
+        },
+        {
+          "case": "ctorder_qcd_uugg_L1",
+          "status": "passed",
+          "time": "0.465"
+        },
+        {
+          "case": "ym_g6_L0",
+          "status": "passed",
+          "time": "0.502"
+        },
+        {
+          "case": "xs_qed_eemm_identical_L2",
+          "status": "passed",
+          "time": "3.212"
+        }
+      ],
+      "actual_executions": 13,
+      "junit_sha256": "7c15cd002a9f841584a39874844c716de4f0247f9d29e13bee6357046724e2c7",
+      "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/grouped-identical-migration-20261031/runs/pool8/command.json",
+      "public_dump_hook_enabled": false
+    },
+    {
+      "step": "pool32",
+      "pool": 32,
+      "exit": 0,
+      "outcomes": [
+        {
+          "case": "sm_eemm_L0",
+          "status": "passed",
+          "time": "0.114"
+        },
+        {
+          "case": "xs_qed_eemm_L1",
+          "status": "passed",
+          "time": "0.120"
+        },
+        {
+          "case": "xs_qed_eedd_L1",
+          "status": "passed",
+          "time": "0.124"
+        },
+        {
+          "case": "xs_qcd_gguu_1pi_L1",
+          "status": "passed",
+          "time": "0.132"
+        },
+        {
+          "case": "qed_ee4f_L0",
+          "status": "passed",
+          "time": "0.134"
+        },
+        {
+          "case": "sm_eeww_L0",
+          "status": "passed",
+          "time": "0.135"
+        },
+        {
+          "case": "qed_eemm_L1",
+          "status": "passed",
+          "time": "0.138"
+        },
+        {
+          "case": "xs_qed_eeee_L1",
+          "status": "passed",
+          "time": "0.146"
+        },
+        {
+          "case": "xs_qed_eeee_1pi_L1",
+          "status": "passed",
+          "time": "0.154"
+        },
+        {
+          "case": "xs_qed_eemm_L2",
+          "status": "passed",
+          "time": "0.192"
+        },
+        {
+          "case": "ctorder_qcd_uugg_L1",
+          "status": "passed",
+          "time": "0.476"
+        },
+        {
+          "case": "ym_g6_L0",
+          "status": "passed",
+          "time": "0.542"
+        },
+        {
+          "case": "xs_qed_eemm_identical_L2",
+          "status": "passed",
+          "time": "3.238"
+        }
+      ],
+      "actual_executions": 13,
+      "junit_sha256": "8111baa3799802a32f91b81f808c2fb8b8a15e1b95729a14bb2ad807d4103897",
+      "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/grouped-identical-migration-20261031/runs/pool32/command.json",
+      "public_dump_hook_enabled": false
+    }
+  ],
+  "expected_selected_executions": 39,
+  "actual_executions": 39,
+  "passes": 39,
+  "failures": 0,
+  "retries": 0,
+  "skipped_credit": 0,
+  "finite_math_scope": "Separately accepted pool1 None and Auto proofs; pools8/32 runtime only."
+}

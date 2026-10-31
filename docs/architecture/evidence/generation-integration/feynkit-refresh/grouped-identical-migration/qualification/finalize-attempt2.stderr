@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/grouped-identical-migration-20261031/finalize.py", line 137, in <module>
+    f=W/b['durable_copy'];packed=b''.join((W[x['path']]).read_bytes() for x in b['parts']) if b['encoding']=='gzip-chunks' else f.read_bytes();raw=gzip.decompress(packed) if b['encoding']!='identity' else packed;assert hashlib.sha256(raw).hexdigest()==b['sha256'] and len(raw)==b['bytes']
+                                 ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/grouped-identical-migration-20261031/finalize.py", line 137, in <genexpr>
+    f=W/b['durable_copy'];packed=b''.join((W[x['path']]).read_bytes() for x in b['parts']) if b['encoding']=='gzip-chunks' else f.read_bytes();raw=gzip.decompress(packed) if b['encoding']!='identity' else packed;assert hashlib.sha256(raw).hexdigest()==b['sha256'] and len(raw)==b['bytes']
+                                           ~^^^^^^^^^^^
+TypeError: 'PosixPath' object is not subscriptable

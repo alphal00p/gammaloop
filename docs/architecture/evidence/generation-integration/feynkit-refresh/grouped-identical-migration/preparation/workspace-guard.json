@@ -1,0 +1,32 @@
+{
+  "feature_tracked_changes": [],
+  "refresh_external_tracked_changes": [
+    {
+      "path": "docs/developers.toml",
+      "before": "e69387779add2c299598f80aad98bd61a3d11cfb20c59794c70220692fee15ef",
+      "after": "9e2ef1846586777d052bed6848d2d63dec7b9a8ebf4a5dca6059786d6f00b59f"
+    }
+  ],
+  "tracked_paths_checked_per_workspace": 4970,
+  "shared_metadata_before": {
+    "main_head": "89d420b55cd31bca13a3a7eed233369698ee7afc",
+    "refs_sha256": "5cdb810093da1ca4867ac4419a52aaca135ea83d1b10e7d3ab70567d086db590",
+    "index_sha256": "36fca2996228d0adb018933745a106061d3febe8921980864b5cc50dbad4af5d"
+  },
+  "shared_metadata_after": {
+    "main_head": "89d420b55cd31bca13a3a7eed233369698ee7afc",
+    "refs_sha256": "61581d5fc5d25c743ac230878612972d3fde5848fffe93109811847274a3d183",
+    "index_sha256": "36fca2996228d0adb018933745a106061d3febe8921980864b5cc50dbad4af5d"
+  },
+  "external_VCS_movement": {
+    "main_head": false,
+    "refs_sha256": true,
+    "index_sha256": false
+  },
+  "no_revert_performed": true,
+  "own_actions": "Only ignored output writes; Git show/ls-tree/diff/rev-parse/show-ref/check-ignore read-only with optional locks disabled and lazy fetch disabled. No JJ/index/ref/object/commit/snapshot mutation.",
+  "owned_live_processes": [],
+  "process_basis": "All launched foreground tool sessions completed; no background child or native execution launched.",
+  "status": "PASS_OWN_SCOPE",
+  "final_guard_utc": "2026-10-31T02:39:12.692173+00:00"
+}

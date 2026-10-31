@@ -1,0 +1,103 @@
+[
+  {
+    "action": "initial guidance batch",
+    "outcome": "oversized output truncated; replaced by targeted reads; no validation credit"
+  },
+  {
+    "action": "ls requested new directory",
+    "exit": 2,
+    "stderr": "No such file or directory",
+    "meaning": "expected new output directory"
+  },
+  {
+    "action": "cat selected .git",
+    "exit": 1,
+    "stderr": "No such file or directory",
+    "resolution": "JJ workspace repo pointer read; use main/.git explicit, no JJ"
+  },
+  {
+    "action": "ls main/.jj/repo/store/git",
+    "exit": 2,
+    "stderr": "No such file or directory",
+    "resolution": "main/.git exists"
+  },
+  {
+    "action": "command -v python3 with login=false",
+    "stdout": "",
+    "resolution": "known existing pinned Python absolute path"
+  },
+  {
+    "action": "large evidence batch reads",
+    "outcome": "truncated output; replaced with focused reads; no proof credit"
+  },
+  {
+    "action": "broad rg main.rs numerator pattern",
+    "exit": 2,
+    "detail": "oversized output; missing target/xs-qed-eemm-identical-r2/resolved.json and target/grouped-none-aggregation-20261030-r1/protected-map.json; corrected to r3 and evidence owner; no proof credit"
+  },
+  {
+    "action": "guessed graph numerator.rs/diagram.rs paths",
+    "detail": "both absent; corrected to lib.rs/numerator_interface.rs"
+  },
+  {
+    "action": "payload schema probe",
+    "exit": 1,
+    "error": "KeyError: json at census d['json']",
+    "resolution": "actual field is payload; corrected read-only probe; no proof credit"
+  },
+  {
+    "action": "raw30 proof report.typ/result.json and target Auto strict_guard.py reads",
+    "exit": 2,
+    "detail": "absent; actual summary.json/verdict.json and evidence-owned strict_guard.py read"
+  },
+  {
+    "action": "ls Auto observer-runtime/captures",
+    "exit": 2,
+    "detail": "absent; locate actual captures from bound command/receipt; no proof credit"
+  },
+  {
+    "action": "bind_evidence.py launch attempt1",
+    "exit": 127,
+    "stderr": "env: /nix/store/3n4qphl9s7288sz8frmpqqrv9b1m87g68-python3-3.14.7/bin/python3: No such file or directory",
+    "resolution": "correct existing path spelling; no process launched or evidence credit"
+  },
+  {
+    "action": "Auto native receipt guessed under evidence/candidate/native-reuse.json",
+    "error": "FileNotFoundError; actual target/grouped-auto-fresh8eb-20261031-r1/native-reuse.json",
+    "exit": 1,
+    "credit": false
+  },
+  {
+    "action": "native-binding.batches presumed dictionary",
+    "error": "AttributeError: list object has no attribute items",
+    "exit": 1,
+    "resolution": "read actual list of five native batch records",
+    "credit": false
+  },
+  {
+    "action": "bind_evidence first finite port domain",
+    "error": "AssertionError finite-explicit-port-domain",
+    "source": "bind_evidence.py.initial-source",
+    "traceback": "evidence-failed-attempts.log",
+    "resolution": "actual raw30 includes quark-loop cof/dual-cof3; exact observed full tagged domain retained in port-domain-probe.json. Corrected source separately reran successfully.",
+    "credit": false
+  },
+  {
+    "action": "first interface-control label",
+    "error": "expected declared-interface-ordered edge:2, actual edge:7; intended-label assertion failed",
+    "source": "chain_controls.initial-source",
+    "traceback": "chain-controls-failed-attempts.log",
+    "resolution": "select exact declared owner from actual baseline before executing new control; old failed attempt receives no semantic credit",
+    "credit": false
+  },
+  {
+    "action": "early shell semantics",
+    "detail": "Initial read-only commands used default login shell; later commands login=false and pure Python env-i. No explicit private license/config access; no shell-startup syscall audit claimed."
+  },
+  {
+    "action": "new full characterization review seal discovery",
+    "error": "AttributeError: int object has no attribute items; files is a count, not inventory",
+    "exit": 1,
+    "resolution": "read actual SHA256SUMS-bound manifest schema; no mutation before failure and no semantic credit"
+  }
+]
