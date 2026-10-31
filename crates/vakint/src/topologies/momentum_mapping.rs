@@ -5,6 +5,7 @@
 
 mod alternatives;
 pub use alternatives::MomentumMatchLimits;
+pub(crate) use alternatives::first_minimal_acceptance;
 
 use std::{
     collections::{BTreeMap, BTreeSet},

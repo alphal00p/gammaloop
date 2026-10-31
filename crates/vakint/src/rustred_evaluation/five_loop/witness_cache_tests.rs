@@ -7,7 +7,7 @@ fn registry() -> Topologies {
 }
 
 fn accepted() -> AcceptedKey {
-    vec![(IntegralKey::try_new([1]).unwrap(), Atom::one())]
+    vec![IntegralKey::try_new([1]).unwrap()]
 }
 
 fn insert(cache: &mut WitnessCache, registry: &Topologies, value: i64) {
@@ -382,9 +382,9 @@ fn external_package_witness_memo_preserves_native_minimum_and_policy() {
             .hits,
         3
     );
-    // Deliberately corrupt only the remembered comparison key, not the native
-    // artifact. Hit revalidation must invalidate and recompute the same exact
-    // minimum through the ordinary matcher instead of trusting stale metadata.
+    // Deliberately corrupt only the remembered admission support, not the
+    // native artifact. Hit revalidation must invalidate and recompute the same
+    // exact minimum through the ordinary matcher instead of trusting stale metadata.
     let application = engine.saved_application(&settings).unwrap();
     {
         let registry = engine.topologies.registry_identity();
@@ -396,8 +396,8 @@ fn external_package_witness_memo_preserves_native_minimum_and_policy() {
             .unwrap();
         Arc::get_mut(entry)
             .expect("no memo readers remain")
-            .accepted[0]
-            .1 = Atom::num(999);
+            .accepted
+            .push(IntegralKey::try_new([999]).unwrap());
     }
     let repaired = engine
         .match_rustred_input(&settings, input.as_view(), numerator.as_view())

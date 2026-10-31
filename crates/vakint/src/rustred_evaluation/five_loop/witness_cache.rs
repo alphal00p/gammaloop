@@ -15,7 +15,9 @@ use crate::{
     topologies::{MomentumMatchLimits, RegistryIdentity},
 };
 
-pub(super) type AcceptedKey = Vec<(IntegralKey, Atom)>;
+/// Exact sorted key support of the selected witness's weighted lowering, all
+/// inside the saved entry union. Hits re-derive it before reuse.
+pub(super) type AcceptedKey = Vec<IntegralKey>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct Policy {
@@ -138,9 +140,6 @@ impl WitnessCache {
             .get_byte_size()
             .checked_add(numerator.get_byte_size());
         let atom_bytes = atom_bytes.and_then(|bytes| witness_atom_bytes(witness, bytes));
-        let atom_bytes = accepted.iter().fold(atom_bytes, |bytes, (_, coefficient)| {
-            bytes.and_then(|bytes| bytes.checked_add(coefficient.as_view().get_byte_size()))
-        });
         let Some(atom_bytes) = atom_bytes.filter(|bytes| *bytes <= self.max_atom_bytes) else {
             self.statistics.oversized_skips = self.statistics.oversized_skips.saturating_add(1);
             return;

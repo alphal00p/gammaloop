@@ -24,6 +24,8 @@ pub(crate) use catalogue::FiveLoopCatalogue;
 pub use catalogue::FiveLoopCatalogueStatistics;
 mod momentum_mapping;
 pub use momentum_mapping::MomentumMatchLimits;
+#[cfg(test)]
+pub(crate) use momentum_mapping::first_minimal_acceptance;
 
 pub enum TopologyContractions {
     Custom(Vec<Vec<usize>>),
@@ -415,15 +417,35 @@ impl Topologies {
         limits: MomentumMatchLimits,
         mut criterion: impl FnMut(&ReplacementRules) -> Result<Option<K>, VakintError>,
     ) -> Result<Option<ReplacementRules>, VakintError> {
+        self.match_topologies_to_user_input_with_selection(
+            input,
+            allow_unknown_integrals,
+            limits,
+            |witnesses| momentum_mapping::first_minimal_acceptance(witnesses, &mut criterion),
+        )
+    }
+
+    /// Like [`Self::match_topologies_to_user_input_with_acceptance`], but the
+    /// caller selects among all verified long-form witnesses at once (by index;
+    /// `None` keeps the ordinary first witness). The selector is called at most
+    /// once with the verified witnesses; with the parametric/short-form
+    /// fallback it is called with that single witness only to propagate errors.
+    pub fn match_topologies_to_user_input_with_selection(
+        &self,
+        input: AtomView,
+        allow_unknown_integrals: bool,
+        limits: MomentumMatchLimits,
+        mut select: impl FnMut(&[ReplacementRules]) -> Result<Option<usize>, VakintError>,
+    ) -> Result<Option<ReplacementRules>, VakintError> {
         if self
             .iter()
             .any(|topology| matches!(topology, Topology::FiveLoop(_)))
             && let Some(source) = momentum_mapping::MomentumInput::from_expression(input, 5)?
-            && let Some(candidate) = source.match_topologies_with_acceptance(
+            && let Some(candidate) = source.match_topologies_with_selection(
                 self.iter()
                     .filter(|topology| matches!(topology, Topology::FiveLoop(_))),
                 limits,
-                &mut criterion,
+                &mut select,
             )?
         {
             return Ok(Some(candidate));
@@ -434,7 +456,7 @@ impl Topologies {
         {
             // The unchanged parametric/short-form fallback may supply one
             // extra exact witness, but never suppress a criterion error.
-            let _ = criterion(candidate)?;
+            let _ = select(std::slice::from_ref(candidate))?;
         }
         Ok(matched)
     }

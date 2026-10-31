@@ -647,7 +647,14 @@ anchor = "pub struct Vakint {"
 # missing FORM for an explicit FORM backend is the typed FormRequired error.
 # Ordered requests honour the selected weight arithmetic (exact or modular), parsed by
 # parse_rustred_ordered_weight_arithmetic. Topology and FORM contracts are unchanged.
-digest = "7574da9f84af693df5782d200cdff6a9eac80fc0"
+# Reviewed 2026-10-31 against 01a0c49c7: identification-test copies in
+# numerator replacement are built only when verification is enabled; five-loop
+# witness selection decides admission from the exact grouped lowering support
+# (unchanged full keys for ties and other inputs) and may screen witnesses and
+# lower contributions on scoped workers with input-ordered results.
+# lower contributions on scoped workers with input-ordered results;
+# split_integrals orders its topo() variables, so term order is deterministic.
+digest = "c5a023ef8758534e10bc341c4c192d10510d6865"
 
 [[section.note.scope]]
 path = "crates/vakint/src/lorentz.rs"
@@ -669,7 +676,11 @@ anchor = "pub fn match_topologies_to_user_input("
 # Reviewed 2026-10-27: The matcher comment clarifies the existing verified
 # fallback for attempted reductions outside certified predicates; advisory
 # coverage and safe partial reduction are already documented.
-digest = "0ec8eb2eebb2235d8fb3214301c8ffe4c60ccac6"
+# Reviewed 2026-10-31 against 01a0c49c7: long-form five-loop witnesses are
+# enumerated before one caller selection (index, or the first witness); the
+# acceptance API is a wrapper keeping the first minimal key. Matching and
+# replacement mappings are unchanged.
+digest = "f91c7e3a321365f5022dacb92664ffebed3c23be"
 
 [[section.note.scope]]
 path = "crates/vakint/src/graph.rs"
