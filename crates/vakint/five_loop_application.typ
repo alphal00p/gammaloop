@@ -56,15 +56,13 @@ loads the selected artifact before attaching the immutable five-loop catalogue.
 publication and reports its topology count and preparation time afterward.
 
 `VakintSettings::rustred_application_options` controls the native application's
-operational allowances. The default coefficient cache has no payload-byte
-ceiling (`usize::MAX`), and count/work diagnostics are disabled. Its default
-policy evicts inactive, completed results in least-recently-used order when a
-configured ceiling requires it. Entries needed by pending combinations or the
-current result stay protected. Under an explicit byte ceiling or enabled
-diagnostic ceiling, a protected working set or single entry that cannot fit
-produces a resource error, not a missing-rule or closure failure.
-A different path or different options reloads
-the application, so an older cache cannot bypass tightened allowances.
+operational allowances: reduction limits, owner-preparation workers and the
+ordered weight arithmetic. Vakint always applies the package with RustRed's
+ordered scheduler, which keeps no completed-result cache between requests; the
+depth-first coefficient cache and its eviction policy are no longer used.
+Count/work diagnostics are disabled by default. A different path or different
+options reloads the application, so old sessions cannot bypass tightened
+allowances.
 
 The loaded package also owns a separate bounded frontend witness memo. It
 retains the exact witness selected by the unchanged minimum-key matcher, keyed
@@ -72,35 +70,27 @@ by the full integral and scalar numerator, relevant lowering/matching settings,
 and the actual immutable registry/catalogue incarnation. Package selection and
 settings validation precede lookup; a hit reruns native admission and compares
 the accepted key before use. Unsupported fallbacks and errors are not cached.
-The coefficient cache's LRU/LFU policy and numerical results are unchanged.
+Numerical results are unchanged.
 
 This metadata memo has at most 32 entries and 16MiB of tracked encoded Atom
 payload. The byte counter is not a total RSS estimate: graph, pattern, container,
 index-vector and shared-symbol overhead are excluded. Oversized entries are
 skipped, and old entries are evicted; optional memo pressure does not fail a
 reduction. `rustred_application_witness_cache_statistics()` reports its distinct
-hit/miss, invalidation, eviction and payload counters. The existing
-`clear_rustred_application_cache()` also clears retained witnesses. A poisoned
+hit/miss, invalidation, eviction and payload counters, and
+`clear_rustred_application_witness_cache()` clears retained witnesses. A poisoned
 optional memo is bypassed, while failures from actual native admission propagate.
 
-For a byte-governed cache in Rust, set `max_cached_coefficient_bytes` on the
-options' `reduction_limits`; this ceiling is enforced without enabling count/work
-diagnostics. For a term ceiling, set `max_cached_coefficient_terms` and enable
-the limits' diagnostic profile with `with_diagnostics()`. Python's
+The options' `reduction_limits` also bound retained coefficient payloads inside
+native checked actions: `max_cached_coefficient_bytes` is enforced without
+enabling count/work diagnostics, while `max_cached_coefficient_terms` requires
+the limits' diagnostic profile (`with_diagnostics()`). Python's
 `rustred_cache_bytes` sets the byte ceiling without enabling diagnostics;
 supplying `rustred_cache_terms` enables the corresponding native diagnostic
 profile and sets its aggregate term ceiling. Enabling a diagnostic profile also
-activates its other configured count/work thresholds.
-For example `rustred_cache_bytes=32*1024**3` requests a 32 GiB coefficient cache.
-These are per-cache retained-payload allowances, not total process memory or RSS
-limits. None of these settings enlarge the saved mathematical entry union.
-
-Rust callers select the policy through
-`settings.rustred_application_options.cache_policy`, using
-`vakint::RustRedCachePolicy::EvictLeastRecentlyUsed` or `FailOnLimit`. Python's
-`rustred_cache_policy` accepts `"evict-lru"` (default) or `"fail-on-limit"`.
-This changes reuse only. The legacy raw core reducer's default remains
-fail-on-limit, and the separate lower-factor cache retains its existing policy.
+activates its other configured count/work thresholds. These are retained-payload
+allowances, not total process memory or RSS limits. None of these settings
+enlarge the saved mathematical entry union.
 
 `settings.rustred_scalar_numerator_limits` controls caller-numerator lowering
 in the saved five-loop frontend, both when choosing a verified witness and when
@@ -110,22 +100,21 @@ enable them with `with_diagnostics()` and configure
 `rustred_scalar_max_work` keyword enables that diagnostic profile and sets the
 work allowance. An enabled allowance applies per lowering call, not to process
 memory or the total across all matching candidates. It never changes the entry
-union. Tightening it is checked before cached rule results can be used, without
-reloading the immutable package. The legacy one-through-four-loop programs and
+union. Tightening it applies to the next request without reloading the
+immutable package. The legacy one-through-four-loop programs and
 the separate factor-product policy are not configured by this setting.
 
 `rustred_product_limits` separately configures lower-factor sum-of-products work
-and its coefficient cache. It defaults to no payload-byte ceiling and disabled
+and the request-local memo of its checked factorization. It defaults to no payload-byte ceiling and disabled
 count/work diagnostics. Rust callers explicitly enable its diagnostic profile
 with `with_diagnostics()`. Python's `rustred_product_cache_bytes` sets an enforced
 byte ceiling without enabling diagnostics; supplying `rustred_product_cache_terms`
 enables the corresponding diagnostic profile and sets its aggregate term ceiling.
-These allowances are separate from the saved application's cache and do not
-form an aggregate RSS budget or change campaign coverage. Changing either typed
-limits setting replaces both owned sessions; no old cache bypasses new limits.
-The existing four-loop native program also retains its own operational policy;
-raising the outer product allowance does not relax that inner session's cache
-or per-root limits.
+These allowances are separate from the application's reduction limits and do not
+form an aggregate RSS budget or change campaign coverage. Changing the product
+limits reloads the application. The existing four-loop native program also
+retains its own operational policy; raising the outer product allowance does not
+relax its per-root limits.
 
 Select `EvaluationMethod::RustRed` with `master_mode: RustRedMasterMode::Retain`
 for exact reductions, `Symbolic` for available Laurent formulas, or `Numerical`
@@ -151,7 +140,7 @@ identical condition lists.
 
 RustRed's exact vacuum-product service prepares proven separations once after
 loading. Existing one-through-four-loop native programs reduce each lower
-factor under its original guards. FeynKit verifies the full momentum map to
+factor under its original guards, in a fresh product session per request. FeynKit verifies the full momentum map to
 the selected program, including a unit Jacobian. RustRed owns coefficient
 products, coalescing, recursive separation and qualified-factor memoization;
 the adapter does not implement an additional reducer. Numerator-aware charts
@@ -173,13 +162,8 @@ five-loop normalization are applied once, never once per factor.
 nonzero conditions and the map from master family labels to full semantic
 fingerprints. Its Python counterpart returns `(value, nonzero_conditions,
 families)`, with label/fingerprint pairs in `families`.
-`rustred_application_cache_statistics` and
-`clear_rustred_application_cache` inspect and clear the owned cache without
-changing the accepted entry domain. `rustred_application_product_statistics`
+`rustred_application_product_statistics`
 reports the one-time factor preparation and explicitly counts retained terms.
-`rustred_application_factor_cache_statistics` separately reports the lower
-factor cache. Clearing application caches clears both mutable sessions while
-retaining the immutable structural product plan.
 `rustred_application_product_chart_statistics` separately counts native verified
 numerator charts; these are geometry witnesses, not completed tensor reductions.
 Projection occurs when such a terminal is used, so no additional unbounded
@@ -187,19 +171,11 @@ adapter coefficient cache is created. Owner decoding and validation are reported
 by `rustred_application_owner_preparation_statistics`.
 
 Catalogue preparation, package import, owner preparation and reduction are
-separate stages. Owner programs are prepared lazily on first use; rule results
-and lower-factor products have separate mutable caches with independent
-operational allowances. Input matching,
-verified witness selection and numerator lowering still run for each request;
-a warm saved-rule cache does not imply that the whole frontend is cached.
+separate stages. Owner programs are prepared lazily on first use and remain
+prepared for later requests; rule applications and lower-factor products are
+recomputed by every request. Input matching, verified witness selection and
+numerator lowering also run for each request, apart from the witness memo above.
 The family's native inverse scalar-product basis is reused during lowering.
-`rustred_application_cache_work_statistics` reports evicted entries, charged
-coefficient terms/bytes, and recomputed nodes. Python includes these fields in
-`rustred_application_cache_statistics()`. Work counters are cumulative, include
-failed requests, and survive cache clearing. Recomputed nodes count repeated
-cache misses within a single request; no unbounded cross-request history is
-maintained. Cache byte allowances describe retained coefficient payloads, not
-total process memory or an RSS limit.
 
 RustRed combines scalar coefficients, spectators and common-mass factors before
 requesting admission for lowered keys. Thus an expanded denominator-cancelling
@@ -215,9 +191,7 @@ recorded union, emit a warning and apply only individually justified rules.
 Missing rules leave exact residual integrals. Final undeclared masters are listed
 with parent DOT references, and numerical evaluation reports unavailable values.
 Invalid guards, transports, malformed input and resource exhaustion remain errors.
-Strict cache preparation uses advisory entry coverage but requires complete
-reduction; a completely reduced input outside the recorded union can be cached.
-Strict product caches accept only complete lower-factor reductions; a typed
+Lower-factor products accept only complete lower-factor reductions; a typed
 missing-coverage result retains the exact parent terminal instead.
 There is no adapter-wide cutoff at a particular numerator degree or total
 denominator power. Explicit scalar-algebra and verified-matching count/work
@@ -290,7 +264,7 @@ The admitted suite uses three generation-54 witnesses: scalar point 162,
 inverse-denominator numerator point 60, and scalar rank-eleven point 0.
 It checks exact warm reuse, expanded numerator equality, simultaneous unimodular
 basis changes with vertex/edge relabeling and orientation reversal, nonunit mass,
-independent one-loop factor reductions, cache clearing, and settings opt-out.
+independent one-loop factor reductions, and settings opt-out.
 Six additional positive-line controls compare an expanded cancelling numerator
 against a separately constructed and parsed pinched DOT: single, doubled,
 multiple and mixed dotted cancellations, including nonunit mass. Native
@@ -345,8 +319,8 @@ maps), using RustRed `78cbc5c1`, Symbolica `400a53c4` and FeynKit `024f96d6` opt
 libraries. The external test took 231.84s, including 75.014s package preparation.
 Whole-frontend first and warm applications took 51.866s and 50.630s, respectively:
 these figures demonstrate correctness, not an end-to-end warm-cache speedup.
-The terminal application cache recorded 47,804 cumulative hits and 3,753 rules,
-retaining 7,627 integrals and 7.807MB of coefficients. The test did not separately
+The depth-first terminal application cache of that historical run recorded 47,804
+cumulative hits and 3,753 rules, retaining 7,627 integrals and 7.807MB of coefficients. The test did not separately
 time each frontend phase, so a routing bottleneck remains a hypothesis rather
 than a measured attribution in that test. Exact DOT/reference values, qualified
 families and normalized guard sets agree. No numerical masters or FORM were used.
@@ -404,9 +378,9 @@ witness set, not an exhaustive enumeration of every point in the domain union.
 The admission test reconstructs each common-family integrand, proves its
 weighted-lowering identity, and runs ordinary canonicalization, tensor
 preprocessing and verified witness selection. It asserts that no owner program
-was prepared and no IBP rule was applied. The bounded-cache test separately
-requires actual eviction and compares exact repeated values, guards and family
-identities while checking the retained byte allowance.
+was prepared and no IBP rule was applied. (A separate bounded-cache test of the
+removed depth-first coefficient cache required actual eviction and compared exact
+repeated values, guards and family identities.)
 
 The 813-witness diagnostic can explicitly select
 `VAKINT_SAVED_APPLICATION_TRANSPORT_PROFILE=materialize-512m`. This test-only

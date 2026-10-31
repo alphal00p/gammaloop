@@ -4,11 +4,10 @@ Vakint matches, canonicalizes, tensor-reduces, and evaluates single-scale vacuum
 high-energy physics. It combines Symbolica expression handling with the FORM-independent RustRed
 reduction, analytic FORM-backed methods and numerical pySecDec evaluation.
 
-By default Vakint evaluates with RustRed using the ordered reduction strategy, and needs neither
-FORM nor pySecDec. When FORM (4.2.1 or newer) is available, the default evaluation order keeps
-AlphaLoop, MATAD and FMFT after RustRed as fallbacks, followed by pySecDec when it can be imported.
-Explicitly requested FORM-based backends report a missing FORM installation. Cache operations
-require selecting the depth-first strategy explicitly.
+By default Vakint evaluates with RustRed, which needs neither FORM nor pySecDec. When FORM
+(4.2.1 or newer) is available, the default evaluation order keeps AlphaLoop, MATAD and FMFT after
+RustRed as fallbacks, followed by pySecDec when it can be imported. Explicitly requested
+FORM-based backends report a missing FORM installation.
 
 Use the canonical Typst documentation for maintained workflows:
 
@@ -31,7 +30,7 @@ operation as `integral_from_diagram`; no Python-side graph or algebra adapter is
 involved. Neither entry point rematches the graph or changes evaluation defaults.
 
 RustRed provides FORM-independent scalar reduction. Its 1L–3L programs and master
-coefficients are available offline. Additional data and prepared caches live in
+coefficients are available offline. Additional data live in
 [vakint-external-data](https://github.com/alphal00p/vakint-external-data).
 Explicitly loading a maximum loop count installs every lower loop count as well:
 
@@ -57,9 +56,11 @@ substitution uses Symbolica's arbitrary-precision sixth-root algorithms in both
 FORM and RustRed paths. Other finite FORM tables retain their existing precision
 warnings. Working precision alone does not certify the accuracy of a final result.
 
-Prepared caches are optional and read-only during evaluation. See [cache
-preparation](cache_preparation.typ), [the cache example](examples/native_cache.rs),
-and the [historical program refresh record](rustred_package_refresh.typ).
+Vakint reduces with RustRed's ordered scheduler only: all contributions of a request share one
+exact frontier per compatible coefficient channel, with exact or modular weight arithmetic. See
+[ordered reduction](docs/ordered_reduction.typ). Depth-first reduction and its completed-result
+caches were removed from Vakint; prepared depth-first caches shipped by older external-data
+releases are ignored. See also the [historical program refresh record](rustred_package_refresh.typ).
 
 Licensed Symbolica execution uses `SYMBOLICA_LICENSE` in the environment. Neither
 building nor running Vakint requires Mathematica.

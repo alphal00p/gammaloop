@@ -5,6 +5,22 @@
 
 = Benchmark report maintenance
 
+#block(width: 100%, inset: 8pt, stroke: 0.5pt)[
+  *Depth-first reduction was removed from Vakint.* Vakint now reduces only with
+  RustRed's ordered scheduler and has no prepared, running or transported
+  result caches. The depth-first collector modes and tools described below
+  (#raw("--engine dfs"), #raw("--engine dfs-no-memo"), #raw("--compare-reports"),
+  #raw("measure_cache"), #raw("build_cache"), #raw("authenticate_owner_roots"),
+  the cache flags of #raw("five_loop_qcd_ladder") and the cached mode of
+  #raw("benchmark_reduction")) no longer exist. Their sections are kept as the
+  provenance of the historical cohorts recorded in #raw("data/results.json"),
+  which the adapters still validate. New rung measurements use
+  #raw("ordered_reduction_rungs --arithmetic exact|modular|both") and
+  #raw("--compare-two-reports"); #raw("benchmark_reduction") now measures FMFT
+  against Ordered RustRed (#raw("ordered") mode). See
+  #link("../ordered_reduction.typ")[the ordered reduction guide].
+]
+
 == Ordered-engine physical rung comparisons
 
 Completed functional observations that cannot establish a qualified cohort are
@@ -1127,8 +1143,9 @@ Use measured completed-record hits, input diversity and demonstrated benefit to
 select records; aggregate monitor snapshots do not establish per-record frequency.
 Keep final held-out results out of selection and report loading, reduction and
 end-to-end measurements for both immutable tiers. Record actual sizes and
-operational allowances; trimming never deletes the heavy cache or its prefixes. See
-#link("../../cache_preparation.typ")[cache preparation and cumulative capture].
+operational allowances; trimming never deletes the heavy cache or its prefixes.
+(The cache preparation and cumulative capture guide was removed with depth-first
+reduction; see the git history before the removal.)
 
 The physical capture producer and its fresh seen-input reuse have a separate
 append-only report path:

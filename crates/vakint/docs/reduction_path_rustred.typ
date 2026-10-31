@@ -23,7 +23,10 @@
 #text(size: 11.8pt)[Where equal integrals meet, what “fully reduced” means, and what a cache remembers.]
 
 #small[Source snapshot: Native `4190f2c6` and Vakint `d29eca063` · 26 October 2026.
-This describes the existing default path. The examples are schematic exact identities, not measured reductions.]
+This describes RustRed's depth-first path, Vakint's default at that snapshot. Vakint has since
+removed depth-first reduction and its caches and reduces only with the ordered scheduler
+(see `ordered_reduction.typ`); the description remains accurate for RustRed itself.
+The examples are schematic exact identities, not measured reductions.]
 
 == There are intermediate merges
 

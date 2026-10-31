@@ -40,7 +40,7 @@ build without profile overrides. Diagnostic `ci-optim` runs must declare that
 profile and retain their distinct provenance. Optimization/LTO settings are never
 inferred from the absence of debug assertions.
 
-Preserve the exact-agreement and cache-hit checks, report the measured source,
+Preserve the exact-agreement checks, report the measured source,
 compiler, FORM and data versions, and keep setup outside the reduction timer.
 Never hand-edit timings or carry old measurements forward as new results.
 Review the rendered PDF and commit its source, measured JSON and PDF
@@ -55,42 +55,34 @@ comparisons require matched fresh samples and an explicitly accepted serialized
 window. Preserve original cohorts, full result/guard checks, and unmeasured null
 phases. The adapter's synthetic file-contract tests do not run reductions.
 
-The cumulative physical-example cache and its fresh seen-input reuse use the
-separate `merge_physical_capture_results.py` adapter described in the same
-maintenance contract. Keep incomplete runs pending until accepted completion,
-flush/close and exact output/guard receipts exist. Preserve every durable cache
-prefix in the full heavy cache, including useful completed work from physical
-examples rather than only a finite `build_cache` selection. Deliver its compressed
-local path for independent hosting. Publish a separate trimmed five-loop cache
-of at most 95,000,000 compressed bytes in external data. Select its records using
-measured usage and usefulness from training, tuning and physical examples; do not
-use final held-out measurements for selection. Report both tiers separately. Never promote a
-single seen reuse, a live counter or diagnostic timing into a held-out or repeated-performance
-claim. Preserve all 48 original four-loop measurements and their provenance.
+Vakint reduces only with RustRed's ordered scheduler. Depth-first reduction,
+its prepared/running caches and their collectors (`measure_cache`,
+`build_cache`, the cached `benchmark_reduction` mode) were removed; the
+historical depth-first and cache cohorts in `results.json` remain unchanged
+records, and their adapters keep validating them. Never present them as current
+measurements.
 
 The five-loop physical collector saves its complete scalar input as
 `prepared-input.json` plus authenticated input/condition payloads. Repeated runs
 reuse a valid bundle in their work directory; use `--prepared-input PATH` to share
-it across fresh uncached/cached processes. Keep native preparation timing separate
+it across fresh processes. Keep native preparation timing separate
 from repeated reduction timing. `--fresh-prepare --prepare-only` in a new work
 directory validates generation independently. See the maintenance contract for
 slow-test environment controls and provenance requirements.
 
-For ordered/DFS comparisons, use `examples/ordered_reduction_rungs.rs` and the
+For physical rung measurements, use `examples/ordered_reduction_rungs.rs` and the
 append-only `docs/benchmark/merge_ordered_rung_results.py` adapter described in
-the same maintenance contract. Keep prepared/saved caches and previous-run
-result state off in all arms. Measure ordinary DFS and the real no-memo/no-
-bookkeeping DFS separately, with Ordered third. Same-process `--engine all` establishes
-functional parity; fresh-process release measurements need the bound protocol
-receipt before reporting a speed ratio. All new rung cases use MSbar; preserve
-earlier pySecDec records as historical cohorts. Headline and ratio use checked
-`reduction_math_seconds` (IBP plus exact weighted assembly/grouping), requiring
-`experimental-rustred`; retain the broader public-call timer separately.
-Qualified fresh-process measurements use `--no-monitor` for every arm;
-current qualification runs ordinary DFS once, no-memo DFS once, and Ordered
-three times. Repeated references to the saved DFS outputs are proof inputs,
-never additional samples; preserve per-arm counts and prior balanced cohorts.
-dashboard/snapshot observations remain diagnostic, with RAM guarding independent.
+the same maintenance contract. No prepared or previous-run result state is
+loaded. `--arithmetic both` establishes exact/modular functional parity in one
+process; fresh-process release measurements of one arithmetic per process need
+the bound protocol receipt before reporting a speed ratio. The historical
+depth-first results are exact references (frozen rung fixtures and the saved
+five-loop result), never new timing samples. All new rung cases use MSbar;
+preserve earlier pySecDec records as historical cohorts. Headline and ratio use
+checked `reduction_math_seconds` (IBP plus exact weighted assembly/grouping),
+requiring `experimental-rustred`; retain the broader public-call timer
+separately. Qualified fresh-process measurements use `--no-monitor`.
+Dashboard/snapshot observations remain diagnostic, with RAM guarding independent.
 Never use the old 40-hour public timer as reduction-only time. Preserve unavailable phase times as null
 and all earlier cohorts unchanged. See `docs/ordered_reduction.typ` for phase and
 grouping-counter semantics.

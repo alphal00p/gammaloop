@@ -2,8 +2,8 @@
 
 RustRed master data lives in the
 #link("https://github.com/alphal00p/vakint-external-data")[external-data repository].
-Vakint vendors its 1L–3L programs, coefficients and graphs under `data/`, without
-caches. Higher-loop data and prepared caches require an explicit load. See
+Vakint vendors its 1L–3L programs, coefficients and graphs under `data/`.
+Higher-loop data require an explicit load. See
 #link("external_data.typ")[external-data loading] for releases, local checkouts,
 snapshot replacement and the `retain`, `symbolic` and `numerical` modes.
 FORM reductions and their hard-coded master formulas remain in Vakint.
