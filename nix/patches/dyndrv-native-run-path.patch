@@ -1,0 +1,13 @@
+--- a/worker/worker.py
++++ b/worker/worker.py
+@@ -1237,7 +1237,9 @@
+             if self.action == "run":
+                 runner = stage / "runtime-runner.py"
+                 runner.write_text(
+-                    "import os,sys\nos.chdir(os.environ['CARGO_DYNDRV_ORIGINAL_CWD'])\nos.execvpe(sys.argv[1],sys.argv[1:],os.environ)\n"
++                    "import os,sys\n"
++                    f"os.environ['PATH'] = {self.spec['runtime_path']!r}\n"
++                    "os.chdir(os.environ['CARGO_DYNDRV_ORIGINAL_CWD'])\nos.execvpe(sys.argv[1],sys.argv[1:],os.environ)\n"
+                 )
+                 self.environment["CARGO_DYNDRV_ORIGINAL_CWD"] = str(self.workspace)
+                 host = (

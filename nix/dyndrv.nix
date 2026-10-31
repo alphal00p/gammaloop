@@ -12,7 +12,13 @@
   };
   forkPackages = pkgs.extend forkOutputs.overlays.default;
   driver = forkPackages.cargo-dyndrv;
-  worker = forkPackages.cargo-dyndrv-worker;
+  worker = forkPackages.cargo-dyndrv-worker.overrideAttrs (old: {
+    buildCommand =
+      old.buildCommand
+      + ''
+        ${pkgs.patch}/bin/patch -d "$out/share/cargo-dyndrv" -p2 < ${./patches/dyndrv-native-run-path.patch}
+      '';
+  });
   toolchain = fenix.stable.withComponents [
     "cargo"
     "clippy"
