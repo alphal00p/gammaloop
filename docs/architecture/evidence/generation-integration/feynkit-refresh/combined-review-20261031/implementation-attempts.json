@@ -24,6 +24,16 @@
     {
       "attempt": "verify.py variable collision found during static inspection",
       "result": "fixed copied_records name before first execution; no false validation claim"
+    },
+    {
+      "attempt": "first immutable audit bookmark dict",
+      "result": "guard assertion falsely collapsed localfdff and @git863f duplicate template names",
+      "resolution": "preserve both as a multiset, independently read authoritative local JJ revision; no reference changed"
+    },
+    {
+      "attempt": "jj diff --check",
+      "result": "unsupported argument",
+      "resolution": "use read-only Git diff --check against exact immutable commits"
     }
   ],
   "all_errors_preserved_without_runtime_or_semantic_credit": true,

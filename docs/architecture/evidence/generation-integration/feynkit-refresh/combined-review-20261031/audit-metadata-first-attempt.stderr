@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-candidate-20261031-r1/verify.py", line 215, in <module>
+    main()
+    ~~~~^^
+  File "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-candidate-20261031-r1/verify.py", line 201, in main
+    assert now[name] == oid, ('old bookmark moved', name, oid, now[name])
+           ^^^^^^^^^^^^^^^^
+AssertionError: ('old bookmark moved', 'generation-integration', 'fdff0d18953348b84a0f1b7e6ab5ef703a5090de', '863f506c5211afef007d975387af86d8052d646e')

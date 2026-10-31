@@ -1,5 +1,6 @@
 """Pure audit of exact Git blobs, original seals, lossless copies and guards."""
 from pathlib import Path
+from collections import Counter
 import gzip
 import hashlib
 import json
@@ -195,11 +196,12 @@ def main():
     for p, h in guards['main_files'].items():
         assert sha((main / p).read_bytes()) == h, ('main changed', p)
     bookmarks = subprocess.check_output(['jj', '--ignore-working-copy', 'bookmark', 'list', '-T', 'name ++ " " ++ normal_target.commit_id() ++ "\n"'], cwd=W).decode()
-    now = dict(line.split(' ', 1) for line in bookmarks.splitlines())
-    for line in guards['bookmarks'].splitlines():
-        name, oid = line.split(' ', 1)
-        assert now[name] == oid, ('old bookmark moved', name, oid, now[name])
-    assert now['generation-integration'] == 'fdff0d18953348b84a0f1b7e6ab5ef703a5090de'
+    # The original template intentionally retains local AND remote (@git) entries.
+    # Preserve the complete multiset rather than losing one in a name-keyed dict.
+    before_refs, now_refs = Counter(guards['bookmarks'].splitlines()), Counter(bookmarks.splitlines())
+    assert not before_refs - now_refs, ('old bookmark entries changed', before_refs - now_refs)
+    local_global = subprocess.check_output(['jj', '--ignore-working-copy', 'log', '-r', 'generation-integration', '--no-graph', '-T', 'commit_id'], cwd=W).decode().strip()
+    assert local_global == 'fdff0d18953348b84a0f1b7e6ab5ef703a5090de'
     assert git('rev-parse', rev + ':crates/feynkit-generator/tests/generation_oracle/main.rs').decode().strip() == '7283198bf0152c82c1cd5f0173703cddfa7f5c0f'
     assert read('nix-ci.nix') == git('show', BASE + ':nix-ci.nix')
     author = git('show', '-s', '--format=%an <%ae>', rev).decode().strip()
