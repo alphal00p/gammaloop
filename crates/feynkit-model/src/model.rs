@@ -9,7 +9,7 @@ use linnet::half_edge::algorithms::topological_order::TopoError;
 use linnet::half_edge::builder::HedgeGraphBuilder;
 use linnet::half_edge::involution::Orientation;
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
-use symbolica::atom::{Atom, AtomCore, AtomView};
+use symbolica::atom::{Atom, AtomCore, AtomView, Symbol, UserData};
 use symbolica::domains::rational::Rational;
 use symbolica::id::{Pattern, Replacement};
 use symbolica::parser::ParseSettings;
@@ -814,6 +814,41 @@ impl Model {
                 }
             })?;
         }
+        // Match the UFO importer's standard helper lowering for scalar data.
+        // Explicit model functions and customized symbol definitions keep their
+        // own semantics; tensor/form-factor expressions are outside this boundary.
+        let declared_conjugate = definition.functions.iter().any(|function| {
+            matches!(
+                function.name.as_str(),
+                "complexconjugate" | "UFO::complexconjugate" | "UFO::{}::complexconjugate"
+            )
+        });
+        let parse_scalar =
+            |kind, name: &str, field: &'static str, source: &str| -> Result<Atom, ModelError> {
+                let expression = parse_expression(kind, name, field, source)?;
+                if declared_conjugate {
+                    return Ok(expression);
+                }
+                let Some(helper) = Symbol::get_symbol("UFO::complexconjugate") else {
+                    return Ok(expression);
+                };
+                if helper.has_attributes()
+                    || !helper.get_aliases().is_empty()
+                    || !matches!(helper.get_data(), UserData::None)
+                    || !helper.is_exportable()
+                {
+                    return Ok(expression);
+                }
+                Ok(expression.replace_map_bottom_up(|atom, _, out| {
+                    if let AtomView::Fun(function) = atom
+                        && function.get_symbol() == helper
+                        && function.get_nargs() == 1
+                    {
+                        **out = Symbol::CONJ
+                            .call(function.iter().next().expect("checked conjugation arity"));
+                    }
+                }))
+            };
         let mut parameters = definition
             .parameters
             .iter()
@@ -831,7 +866,7 @@ impl Model {
                         .expression
                         .as_deref()
                         .map(|expression| {
-                            parse_expression(
+                            parse_scalar(
                                 EntityKind::Parameter,
                                 &parameter.name,
                                 "expression",
@@ -991,7 +1026,7 @@ impl Model {
             .map(|coupling| {
                 Ok(Coupling {
                     name: coupling.name.clone(),
-                    expression: parse_expression(
+                    expression: parse_scalar(
                         EntityKind::Coupling,
                         &coupling.name,
                         "expression",
@@ -1235,6 +1270,17 @@ impl Model {
         Ok(expanded.into_iter().collect())
     }
 
+    /// Load a validated native model, lowering the undeclared standard unary
+    /// `UFO::complexconjugate` helper in parameter and coupling expressions to
+    /// builtin conjugation. Declared functions and customized symbols are retained.
+    ///
+    /// ```
+    /// use feynkit_model::Model;
+    /// let model = Model::standard_model();
+    /// let restored = Model::from_json(&model.to_json()?)?;
+    /// assert_eq!(restored.fingerprint(), model.fingerprint());
+    /// # Ok::<(), feynkit_model::ModelError>(())
+    /// ```
     pub fn from_json(json: &str) -> Result<Self, ModelError> {
         Self::new(serde_json::from_str(json)?)
     }

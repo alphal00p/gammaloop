@@ -960,7 +960,15 @@ anchor = "pub struct Model {"
 # scoped source reconciliation and regression results are recorded in WP3 units03-07.
 # SOURCE31 semantic attestation (candidate, not independent approval):
 # Construction declares UFO coupling symbols in model order. Preserve literal model Lorentz structures, shortest momentum-conserving rule reduction and canonical fingerprint semantics; later changes are import regrouping and a model reduction doctest.
-digest = "b04029827b0ecb3c8f23289bf0937e1ea422e176"
+# Native UFO repair candidate 2026-10-31: Model admission lowers the undeclared
+# plain canonical unary complexconjugate helper in scalar parameter/coupling data
+# to builtin conjugation, matching the existing UFO import route. Explicit model
+# functions and customized symbols keep their semantics; tensor expressions are
+# unchanged. Analytic exports and model/sector fingerprints change, including
+# helper-bearing internal parameters; cached numeric values and GC names do not.
+# Original registration order is retained. New-source code/result review remains
+# separate from the frozen f2f714 scientific evidence and prior source attestations.
+digest = "f7e2ddcd2bccefa45a0d7f031483621d58804ed4"
 
 [[section.note.scope]]
 path = "crates/feynkit-graph/src/lib.rs"
