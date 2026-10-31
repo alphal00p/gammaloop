@@ -1,0 +1,81 @@
+{
+  "old_sha256": "53c5efb6344b233dfba09612835c33940f4daf64b215462f4292335067c420a2",
+  "new_sha256": "d4cbe4e0fe79ebe128d8729b0d7081cb6eb2de1aee575d568fc533301098d957",
+  "sections": [
+    {
+      "section": ".dynamic",
+      "old": {
+        "size": 560,
+        "sha256": "e405fb4a7fcb91ace9d810c880730a7a938a862fb2228607d76338f0490b2b37",
+        "flags": 3
+      },
+      "new": {
+        "size": 560,
+        "sha256": "06561ad9334383e86bf081308cf13345d41a5114305e5d25ffd13613448fdffe",
+        "flags": 3
+      }
+    },
+    {
+      "section": ".dynstr",
+      "old": {
+        "size": 5758,
+        "sha256": "dd74d4be004a3f1dff6fe4206aeeabad565c99861aa297906f9e704be84cc460",
+        "flags": 2
+      },
+      "new": {
+        "size": 5763,
+        "sha256": "8706fc675008abca6755cf9990a1578734150174770144e355c3854b81686031",
+        "flags": 2
+      }
+    }
+  ],
+  "allocated_differences": [
+    ".dynamic",
+    ".dynstr"
+  ],
+  "old_dynamic": [
+    {
+      "tag": "NEEDED",
+      "value": "libgcc_s.so.1"
+    },
+    {
+      "tag": "NEEDED",
+      "value": "libm.so.6"
+    },
+    {
+      "tag": "NEEDED",
+      "value": "libc.so.6"
+    },
+    {
+      "tag": "NEEDED",
+      "value": "ld-linux-x86-64.so.2"
+    },
+    {
+      "tag": "RUNPATH",
+      "value": "/nix/store/yg65yzb4ckljb4bg5w673j8ap56yrxfb-generation-refresh-installed-host-wheel-0.1.0/lib:/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84/lib:/nix/store/604gsr59rj7dzd0nrhp143rpvf7gyiaz-gcc-15.3.0-lib/lib"
+    }
+  ],
+  "new_dynamic": [
+    {
+      "tag": "NEEDED",
+      "value": "libgcc_s.so.1"
+    },
+    {
+      "tag": "NEEDED",
+      "value": "libm.so.6"
+    },
+    {
+      "tag": "NEEDED",
+      "value": "libc.so.6"
+    },
+    {
+      "tag": "NEEDED",
+      "value": "ld-linux-x86-64.so.2"
+    },
+    {
+      "tag": "RUNPATH",
+      "value": "/nix/store/w5d0wdnv1c4iic9f6qlg6zv87zglb6f0-generation-refresh-corrected-stub-host-wheel-0.1.0/lib:/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84/lib:/nix/store/604gsr59rj7dzd0nrhp143rpvf7gyiaz-gcc-15.3.0-lib/lib"
+    }
+  ],
+  "qualified_reuse": "All sections other than loader .dynamic/.dynstr are byte-exact, including .text/.rodata, every allocated non-loader section and static/dynamic symbol tables. Exact new RUNPATH resolution is separately qualified before runtime. Prior ordinary coexistence/browser passes reused, not fresh."
+}

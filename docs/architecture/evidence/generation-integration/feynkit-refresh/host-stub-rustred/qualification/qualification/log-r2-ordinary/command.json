@@ -1,0 +1,10 @@
+{
+  "argv": [
+    "/run/current-system/sw/bin/nix",
+    "log",
+    "/nix/store/5vvg7gyp1n3ma9rw57m37p81vn75h1ch-generation-refresh-corrected-stub-host-wheel-0.1.0.drv"
+  ],
+  "cwd": "/tmp",
+  "exit_code": 0,
+  "private_variables_absent": true
+}

@@ -1,0 +1,226 @@
+{
+  "schema_version": 1,
+  "kind": "corrected-stub-distributions-and-private-rustred-validation-host",
+  "completed_utc": "2026-10-31T02:22:37.196038+00:00",
+  "status": "NEW_INDEPENDENT_SOURCE_PACKAGING_PRIVATE_HOST_RUNTIME_REVIEW_REQUIRED",
+  "independent_approval_claimed": false,
+  "base": "d0fb4e906140a6a0fc8dd6401ca839cab0c2734d",
+  "base_acceptance": "Root accepted bounded twelve-row step only under reviews/bounded-twelve-row; all restrictions retained",
+  "code": "2cfb52b28d99f92305a9d571bbe3911cf04b8a19",
+  "code_bookmark": "generation-host-stub-code-20261031",
+  "author": "Lucien Huber <im@lcnbr.ch>",
+  "code_change": {
+    "only": "examples/notebooks/symbolica-host/python/symbolica/community/hepkit/__init__.pyi",
+    "approved_patch_sha256": "0666eba15326649c0e1fb3dc035bfe0bc8cbc1238ec5fcec99622ecbf2d58e47",
+    "old_sha256": "bf9d4ce3f4b5f3871c39164d3c11db248123eecd8a1939a845ad7569da4de92f",
+    "new_sha256": "5e2dfa31a10d9c545d38f4257b006daa7b1b53bcf0d96aafb060ee71a68f77e5",
+    "all149_literal_Rows_and12_migrations_and118_scope_bindings_preserved": true
+  },
+  "pure_build": {
+    "first_coordinated_attempt": "Private --locked metadata exit101; ordinary output not realized. No native compilation in failing private lane. Preserved build-completion/logs.",
+    "private_lock_wiring_correction": "Only prune rustred-app/rustred-python and unused optional bridge edge; no version/source/feature change. Exact reviewed proposal and corrected final patch both retained.",
+    "final_coordinated_attempt": {
+      "argv": [
+        "/run/current-system/sw/bin/nix",
+        "build",
+        "--no-link",
+        "--keep-going",
+        "--json",
+        "/nix/store/5vvg7gyp1n3ma9rw57m37p81vn75h1ch-generation-refresh-corrected-stub-host-wheel-0.1.0.drv^out",
+        "/nix/store/x43msadi65xf8zr234lg5dbwgjzblcz6-generation-refresh-rustred-validation-host-wheel-0.1.0.drv^out"
+      ],
+      "cwd": "/tmp",
+      "started": "2026-10-31T02:12:34.304950+00:00",
+      "private_variables_absent": true,
+      "normal_substituters": true,
+      "resource_policy": "unchanged",
+      "concurrent_characterization": "timings are not isolated performance evidence",
+      "exit_code": 0,
+      "elapsed_s": 355.75625564996153,
+      "reaped": true,
+      "finished": "2026-10-31T02:18:30.061209+00:00"
+    },
+    "successful_wheel_outputs": 2,
+    "extra_archive_exporter_site_builds": 0,
+    "new_builds_used_old_stub": false,
+    "no_semantic_RustRed_or_kernel_modification": true,
+    "kernel": "8eb7c3729d6abefc916decc1bdf0c06536f8af80",
+    "rustred": "7c1ed03722b8c05daf60c89ba4ecc79457ed2ada",
+    "source_bindings": "qualification/source-bindings-r2.json",
+    "metadata_and_final_fingerprints": "qualification/artifacts/",
+    "ordinary_vs_private": "Ordinary remains minimal production composition. RustRed is only private validation composition; no production dependency/lock/registration change.",
+    "private_scope": "Single extension, single pinned kernel/PyO3 graph, features[], no campaign/app/python/reconstruction, upstream RUSTRED_RUNTIME_ARITIES=1."
+  },
+  "artifacts": {
+    "ordinary": {
+      "drv": "/nix/store/5vvg7gyp1n3ma9rw57m37p81vn75h1ch-generation-refresh-corrected-stub-host-wheel-0.1.0.drv",
+      "output": "/nix/store/w5d0wdnv1c4iic9f6qlg6zv87zglb6f0-generation-refresh-corrected-stub-host-wheel-0.1.0",
+      "output_nar": "sha256-I7oT5R2H9CM18yJkanJCQHM5WqRAJmmqbU3pQ3Tz6i4=",
+      "wheel": {
+        "path": "/nix/store/w5d0wdnv1c4iic9f6qlg6zv87zglb6f0-generation-refresh-corrected-stub-host-wheel-0.1.0/dist/symbolica-3.0.1-cp310-abi3-linux_x86_64.whl",
+        "sha256": "edecffa95ae3d4318e83ac5e6af56e4cd504804b85165fd4766ed81167b5fd87",
+        "bytes": 49514067
+      },
+      "native_sha256": "d4cbe4e0fe79ebe128d8729b0d7081cb6eb2de1aee575d568fc533301098d957",
+      "stub_sha256": "5e2dfa31a10d9c545d38f4257b006daa7b1b53bcf0d96aafb060ee71a68f77e5"
+    },
+    "private": {
+      "drv": "/nix/store/x43msadi65xf8zr234lg5dbwgjzblcz6-generation-refresh-rustred-validation-host-wheel-0.1.0.drv",
+      "output": "/nix/store/cbvphdpy05pb8r414dmn5xfxxdqs3slx-generation-refresh-rustred-validation-host-wheel-0.1.0",
+      "output_nar": "sha256-byouUecKN+GjqpOrnC/h9QJc5T+7QWGVZ8NjBEFeuVw=",
+      "wheel": {
+        "path": "/nix/store/cbvphdpy05pb8r414dmn5xfxxdqs3slx-generation-refresh-rustred-validation-host-wheel-0.1.0/dist/symbolica-3.0.1-cp310-abi3-linux_x86_64.whl",
+        "sha256": "d2669a2abe40d8286d24f0c8a03a7624e73321bb9e0df7df8b89fcb29583703b",
+        "bytes": 51953714
+      },
+      "native_sha256": "4d4231b32962669db1ec4bc8efef586e93318b9200468235a78b25919dc98ecb",
+      "stub_sha256": "5e2dfa31a10d9c545d38f4257b006daa7b1b53bcf0d96aafb060ee71a68f77e5"
+    }
+  },
+  "runtime": {
+    "fresh_complete_wheel_installations": 2,
+    "unlicensed_loader_probes": 2,
+    "containment_probes": 2,
+    "licensed_checks": 8,
+    "passes": 8,
+    "failures": 0,
+    "fresh_native_import_identities": 2,
+    "canonical_exporter_targets_checked": 3,
+    "QCD": {
+      "script_sha256": "2622f4f8f53624e177e6ae059eb12953f1b16f6cf08ebe85b70ff6155423dfc6",
+      "assertion_sites_preserved": 23,
+      "targets": [
+        [
+          2
+        ],
+        [
+          3
+        ]
+      ],
+      "max_depth": 2,
+      "residuals": [
+        [
+          1
+        ]
+      ],
+      "trees": 2,
+      "loop_groups": 6,
+      "completion_marker_present": true,
+      "original_source_fixture_and_expectations": true,
+      "observer_no_scientific_modification": true
+    },
+    "UFO": {
+      "EW_crossings": 36,
+      "QCD_crossings": 3,
+      "Lorentz_linearity_probes": 15,
+      "original_marker": true
+    },
+    "squared_display": true,
+    "sector_native_methods": 2,
+    "sector_three_stub_checks": 3,
+    "browser": {
+      "complete": true,
+      "tests_run": 1,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0,
+      "drawings": [
+        [
+          0,
+          2
+        ],
+        [
+          22,
+          2
+        ],
+        [
+          0,
+          42
+        ],
+        [
+          64,
+          2
+        ]
+      ],
+      "engines": [
+        {
+          "engine": "chromium",
+          "version": "153.0.8010.36",
+          "default_executable": "/nix/store/h8903h8s8x5zr3la0pnbgh24sbl5pf62-playwright-browsers/chromium-1228/chrome-linux64/chrome",
+          "requested_executable": "/nix/store/ds6wq0gzyimhl7c1kmzdvql0w4d2rcv4-chromium-153.0.8010.36/bin/chromium",
+          "private_variables_absent": true
+        },
+        {
+          "engine": "webkit",
+          "version": "26.5",
+          "default_executable": "/nix/store/h8903h8s8x5zr3la0pnbgh24sbl5pf62-playwright-browsers/webkit-2311/pw_run.sh",
+          "requested_executable": null,
+          "private_variables_absent": true
+        }
+      ],
+      "pages": [
+        {
+          "dpr": 1,
+          "viewport": {
+            "width": 1100,
+            "height": 1000
+          }
+        },
+        {
+          "dpr": 1,
+          "viewport": {
+            "width": 1100,
+            "height": 1000
+          }
+        }
+      ],
+      "subtests": [
+        {
+          "engine": "chromium",
+          "passed": true
+        },
+        {
+          "engine": "webkit",
+          "passed": true
+        }
+      ],
+      "driver_environment_calls": 1,
+      "source_sha256": "ee700e0629fad62358e1f0a778353757a9a305bdbc131f2ae2675b7b74d82c6c",
+      "installed_core_sha256": "4d4231b32962669db1ec4bc8efef586e93318b9200468235a78b25919dc98ecb",
+      "installed_core_path": "/work/venv/lib/python3.13/site-packages/symbolica/core.abi3.so",
+      "native_display_methods_present": true,
+      "wrappers_on_page_content_locator_reads_or_assertions": false
+    },
+    "budgets_timeouts_retries": "unchanged; no new cap or retry",
+    "compiler_or_nix_after_licensed_start": false,
+    "private_delivery": "Existing exported license else current-user XDG config, privately in controller memory -> anonymous pipe -> immediate native exec. All four private variables excluded from pure children and browser descendants. No value/path/hash/file logged.",
+    "network_compiler_credentials_exclusion": "Fresh empty-root bwrap, read-only exact inputs, network namespace loopback only/no routes, no host root/config/Nixsocket/compiler/GPU. Stdout/stderr and controller receipts outside child writable root.",
+    "runtime_commands": "qualification/runtime/"
+  },
+  "reused": "qualified-reuse.json",
+  "original_failures_preserved": [
+    "Original minimal-host QCD IBPFamily absence",
+    "Old browser/stub setup and runtime failures under exact prior packets/reviews",
+    "Original proposed private metadata lock failure",
+    "Guard Git object-store discovery setup failure and Nix-v4 graph JSON adapter setup failure"
+  ],
+  "mandatory_prior_distinctions": {
+    "ASTRA-N1": "Historical combined_community .symtab/.strtab four hidden LLVM suffix changes remain distinct from allocated-content equality. Current ordinary comparison is separate and does not generalize generator loader-only deltas.",
+    "ASTRA-N2": "Historical workspace-root formatter cache write, ownership/cleanup and --no-cache correction remain disclosed; no perfect historical no-outside-write assertion.",
+    "prior_twelve_row_review": "All mandatory retained premises remain binding; no generator/Auto/math/native obligation reruns in this step."
+  },
+  "pending_gates": [
+    "NEW independent source/packaging/private-host/runtime combined review",
+    "No full Community/campaign/multi-denominator certification",
+    "No broad generator/math/native obligation or full module/docs/site/Clippy execution credit",
+    "No WP3/M-rebuild/global integration/performance/distribution/publication approval"
+  ],
+  "retention": "retained-artifacts.json",
+  "cleanup": {
+    "owned_build_and_runtime_processes_reaped": true,
+    "dispensable_lock_work_removed": true,
+    "store_inputs_scratch_and_environments_retained_for_review": true,
+    "no_publication_push_PR_fetch_upload": true,
+    "no_CI_budget_or_global_integration_change": true
+  }
+}

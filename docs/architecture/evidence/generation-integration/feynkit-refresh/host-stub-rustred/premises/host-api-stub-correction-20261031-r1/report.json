@@ -1,0 +1,413 @@
+{
+  "schema_version": 1,
+  "kind": "WP3-installed-host-api-and-generated-stub-correction-candidate",
+  "completed_utc": "2026-10-31T01:09:56.604720+00:00",
+  "status": "STUB_CANDIDATE_VALIDATED_QCD_NATIVE_OWNER_MISSING",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh",
+  "owned_directory": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/host-api-stub-correction-20261031-r1",
+  "base_revision": "f47f27213a1c55291239c9bc0f334a7ea1cd1cc1",
+  "kernel": "8eb7c3729d6abefc916decc1bdf0c06536f8af80",
+  "immutable_source": "/nix/store/0vsa28jjcrwyrna4iflavxm0gc8msqxm-source",
+  "original_packet": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/installed-host-qualification-20261030-r1",
+    "report_sha256": "e601f60b827bb4c8bdeba3a0e11002e18e84d5b633ddd46b6798f07e7e277ae1",
+    "manifest_sha256": "b2f5362bab892210549931dad7c6a5584425f0f62f11636f2228255c7f8ef0eb"
+  },
+  "input_verification": {
+    "complete_source_entries_verified_before_and_after": 4602,
+    "artifact_byte_hashes_verified": {
+      "outputs": {
+        "/nix/store/9ias2v2xlw2q7zxvfw4znwp3j9hwnsss-gammaloop-nextest-binaries-feynkit-feynkit-py-0.1.0.drv": "/nix/store/fgzh62fj2ydz2sb5kydh5adjhaz1psc2-gammaloop-nextest-binaries-feynkit-feynkit-py-0.1.0",
+        "/nix/store/3nc8dfhjxb7v9l2h1n0qd5536rdq99x0-generation-refresh-installed-host-wheel-0.1.0.drv": "/nix/store/yg65yzb4ckljb4bg5w673j8ap56yrxfb-generation-refresh-installed-host-wheel-0.1.0",
+        "/nix/store/f86dlazi7lzi5inshqhrcf0ym0z17wvc-generation-refresh-feynkit-stub-exporter-0.1.0.drv": "/nix/store/mn3vzg4c35q658jgg078hahj3hcic2f4-generation-refresh-feynkit-stub-exporter-0.1.0"
+      },
+      "archive": {
+        "path": "/nix/store/fgzh62fj2ydz2sb5kydh5adjhaz1psc2-gammaloop-nextest-binaries-feynkit-feynkit-py-0.1.0/gammaloop-nextest-feynkit-feynkit-py.tar.zst",
+        "sha256": "349770b6e47489ee434259d193483c2340b1009416961c45860b2e4801a72e92",
+        "bytes": 274937042
+      },
+      "wheel": {
+        "path": "/nix/store/yg65yzb4ckljb4bg5w673j8ap56yrxfb-generation-refresh-installed-host-wheel-0.1.0/dist/symbolica-3.0.1-cp310-abi3-linux_x86_64.whl",
+        "sha256": "3fc32efb7c073800da74e37dcf55deb95910d6168c0d3840aaf14cab3e3af318",
+        "bytes": 49513628
+      },
+      "exporter": {
+        "path": "/nix/store/mn3vzg4c35q658jgg078hahj3hcic2f4-generation-refresh-feynkit-stub-exporter-0.1.0/bin/alphal00p-docs-python-exporter",
+        "sha256": "ea6b689912dd12eb1d40fc9f65f6e52ded87a33a755b94ceb42363a6f5480e9e",
+        "bytes": 140159312
+      }
+    },
+    "output_NAR_bindings": {
+      "/nix/store/fgzh62fj2ydz2sb5kydh5adjhaz1psc2-gammaloop-nextest-binaries-feynkit-feynkit-py-0.1.0": "sha256-+A9+ZHEs/53eL/FQQdp6aNOJmHBEmquadUVKDWpIBQ8=",
+      "/nix/store/yg65yzb4ckljb4bg5w673j8ap56yrxfb-generation-refresh-installed-host-wheel-0.1.0": "sha256-3Ly3TDlqQOuIRVHlBlslAkolIryGcpM2X6YOihHjqMQ=",
+      "/nix/store/mn3vzg4c35q658jgg078hahj3hcic2f4-generation-refresh-feynkit-stub-exporter-0.1.0": "sha256-NEOENAU9/s8iHCwaRnOACsUSnww0Yh+IyJkKdF4aaME="
+    },
+    "current_NAR_contents_verified_without_Nix": 480,
+    "NAR_record": "inspection/current-nar-verification.json",
+    "read_and_hashed_complete_relevant_records_and_logs": "inspection/records-read.json",
+    "installed_venv_and_native_ELF_NEEDED_byte_hashes_verified": true,
+    "native_ELF_files": 15,
+    "native_NEEDED_edges": 42,
+    "compiled_feature_phase_and_source_boundaries": "inspection/compiled-boundaries.json",
+    "native_embedding_fingerprint_features": "inspection/source-boundaries.json"
+  },
+  "pipeline_comparison": {
+    "record": "pipeline.typ",
+    "embedding": "Embedded core -> GraphModule, FeynkitModule, SpensoModule -> shared native registration -> wrapper.",
+    "installed": "Exact stable-ABI wheel -> core -> same three owners -> same FeynKit registration -> byte-identical wrapper.",
+    "different_contexts": "Embedding/test versus stable-ABI extension final units; host also enables linnet-python. Final host/exporter fingerprints are not available and are not fabricated.",
+    "last_shared_registration": "FeynkitModule::register_module -> initialize_feynkit -> integrals::register.",
+    "first_observed_missing_API": "Public hep.IBPFamily lookup at unchanged script line 191; absent from native registration itself.",
+    "expected_full_community_host_composition": "The documentation assigns IBPFamily to the separate rustred-feynkit bridge. The selected lean notebook host does not link/register that owner.",
+    "logical_exclusions": [
+      "The Python wrapper is not hiding an existing native IBPFamily.",
+      "No linnet-python feature branch adds IBPFamily.",
+      "An embedding QCD pass was never established by the selected three Rust tests.",
+      "Shared generator/tensor/ghost physics do not explain an absent native attribute.",
+      "The pinned kernel does not supply a replacement IBP API."
+    ]
+  },
+  "candidate": {
+    "patch": "candidate.patch",
+    "sha256": "0666eba15326649c0e1fb3dc035bfe0bc8cbc1238ec5fcec99622ecbf2d58e47",
+    "applied_to_tracked_repository": false,
+    "independent_review_approval_claimed": false,
+    "changed_files": [
+      {
+        "path": "examples/notebooks/symbolica-host/python/symbolica/community/hepkit/__init__.pyi",
+        "before_sha256": "bf9d4ce3f4b5f3871c39164d3c11db248123eecd8a1939a845ad7569da4de92f",
+        "after_sha256": "5e2dfa31a10d9c545d38f4257b006daa7b1b53bcf0d96aafb060ee71a68f77e5",
+        "independent_byte_comparison_passed": true,
+        "changed": true,
+        "all_existing_callable_signatures_and_nonprose_bodies_preserved": true,
+        "existing_callable_count_including_overloads": 847,
+        "added_callables": [
+          "SquaredAmplitude.paged",
+          "SquaredAmplitude._display_",
+          "SquaredAmplitude._repr_mimebundle_"
+        ],
+        "sector_owners": {
+          "FeynmanDiagram": "typing.Optional[typing.Dict[int, int]]",
+          "IntegralFamily": "typing.Optional[typing.Sequence[int]]"
+        },
+        "syntax_passed": true,
+        "canonical_generator_whitespace_passed": true
+      }
+    ],
+    "independently_compared_stub_targets": [
+      {
+        "path": "docs/api/python/feynkit-community.pyi",
+        "before_sha256": "5e2dfa31a10d9c545d38f4257b006daa7b1b53bcf0d96aafb060ee71a68f77e5",
+        "after_sha256": "5e2dfa31a10d9c545d38f4257b006daa7b1b53bcf0d96aafb060ee71a68f77e5",
+        "independent_byte_comparison_passed": true,
+        "changed": false,
+        "all_existing_callable_signatures_and_nonprose_bodies_preserved": true,
+        "existing_callable_count_including_overloads": 850,
+        "added_callables": [],
+        "sector_owners": {
+          "FeynmanDiagram": "typing.Optional[typing.Dict[int, int]]",
+          "IntegralFamily": "typing.Optional[typing.Sequence[int]]"
+        },
+        "syntax_passed": true,
+        "canonical_generator_whitespace_passed": true
+      },
+      {
+        "path": "crates/feynkit-py/python/symbolica/community/hepkit/__init__.pyi",
+        "before_sha256": "5e2dfa31a10d9c545d38f4257b006daa7b1b53bcf0d96aafb060ee71a68f77e5",
+        "after_sha256": "5e2dfa31a10d9c545d38f4257b006daa7b1b53bcf0d96aafb060ee71a68f77e5",
+        "independent_byte_comparison_passed": true,
+        "changed": false,
+        "all_existing_callable_signatures_and_nonprose_bodies_preserved": true,
+        "existing_callable_count_including_overloads": 850,
+        "added_callables": [],
+        "sector_owners": {
+          "FeynmanDiagram": "typing.Optional[typing.Dict[int, int]]",
+          "IntegralFamily": "typing.Optional[typing.Sequence[int]]"
+        },
+        "syntax_passed": true,
+        "canonical_generator_whitespace_passed": true
+      },
+      {
+        "path": "examples/notebooks/symbolica-host/python/symbolica/community/hepkit/__init__.pyi",
+        "before_sha256": "bf9d4ce3f4b5f3871c39164d3c11db248123eecd8a1939a845ad7569da4de92f",
+        "after_sha256": "5e2dfa31a10d9c545d38f4257b006daa7b1b53bcf0d96aafb060ee71a68f77e5",
+        "independent_byte_comparison_passed": true,
+        "changed": true,
+        "all_existing_callable_signatures_and_nonprose_bodies_preserved": true,
+        "existing_callable_count_including_overloads": 847,
+        "added_callables": [
+          "SquaredAmplitude.paged",
+          "SquaredAmplitude._display_",
+          "SquaredAmplitude._repr_mimebundle_"
+        ],
+        "sector_owners": {
+          "FeynmanDiagram": "typing.Optional[typing.Dict[int, int]]",
+          "IntegralFamily": "typing.Optional[typing.Sequence[int]]"
+        },
+        "syntax_passed": true,
+        "canonical_generator_whitespace_passed": true
+      }
+    ],
+    "generator": {
+      "path": "/nix/store/mn3vzg4c35q658jgg078hahj3hcic2f4-generation-refresh-feynkit-stub-exporter-0.1.0/bin/alphal00p-docs-python-exporter",
+      "sha256": "ea6b689912dd12eb1d40fc9f65f6e52ded87a33a755b94ceb42363a6f5480e9e",
+      "compiled_features": "alphal00p-docs-python-exporter/feynkit with its recorded default FeynKit native/ufo/python_stubgen graph; no feature changes.",
+      "canonical_owner": "feynkit_py::stub_info -> stub_source -> exporter normalization",
+      "actual_generation_attempt": "evidence/stub-generate/completion.json",
+      "actual_generated_bytes": "work/stub-generate/generated",
+      "signatures_hand_edited": false
+    },
+    "cause": "Notebook-host checked-in stub snapshot was stale relative to its existing Rust source and exact feynkit-only exporter.",
+    "delta": [
+      "Add SquaredAmplitude.paged, _display_, _repr_mimebundle_.",
+      "Refresh Parameter.typstname, Particle.typstname/antitypstname documentation.",
+      "Refresh the source-owned TensorReductionError example."
+    ],
+    "all_existing_callable_signatures_preserved": true,
+    "both_sector_owner_annotations_preserved": true,
+    "format_syntax_and_diff_checks": "Canonical generated whitespace, all-three AST syntax, all-existing callable shape comparison, exact patch dry-run/private application and byte equality passed."
+  },
+  "QCD": {
+    "status": "FAILED_NATIVE_OWNER_ABSENT",
+    "source": {
+      "path": "crates/feynkit-py/tests/installed_feyncalc_qcd_ghost_vertex.py",
+      "before_sha256": "2622f4f8f53624e177e6ae059eb12953f1b16f6cf08ebe85b70ff6155423dfc6",
+      "after_sha256": "2622f4f8f53624e177e6ae059eb12953f1b16f6cf08ebe85b70ff6155423dfc6",
+      "byte_identical": true,
+      "complete_ast_identical": true,
+      "assertion_sites": 23,
+      "assertions_ast_sha256": "61efe18f0a316156b2d24e3f19e8c00b7b806d1a794a756fe6c8c427067f5190",
+      "selected_fixture": "/nix/store/0vsa28jjcrwyrna4iflavxm0gc8msqxm-source/crates/feynkit-model/tests/fixtures/sm.json",
+      "fixture_sha256": "a0193ae09a6f920c8fcfbe8231c6a70e820b82b573257e07c216bdcd8e57acd9",
+      "runtime_script_source": "/build/source/crates/feynkit-py/tests/installed_feyncalc_qcd_ghost_vertex.py",
+      "fixture_resolves_through_original_parents_layout": true,
+      "original_script_failure_retained": true,
+      "qcd_source_patch_proposed": false
+    },
+    "source_patch_produced": false,
+    "actual_failure": {
+      "exit_code": 1,
+      "line": 191,
+      "error": "AttributeError: module 'symbolica.community.hepkit' has no attribute 'IBPFamily'",
+      "targets": [
+        [
+          2
+        ],
+        [
+          3
+        ]
+      ],
+      "loop_term_groups": 6,
+      "trees": {
+        "9000005": "-G*P(0,mink(D,b))*f(coad(dA,a),coad(dA,b),coad(dA,c))",
+        "-9000005": "-G*P(0,mink(D,b))*f(coad(dA,a),coad(dA,b),coad(dA,c))+G*P(1,mink(D,b))*f(coad(dA,a),coad(dA,b),coad(dA,c))"
+      }
+    },
+    "installed_native_sha256": "53c5efb6344b233dfba09612835c33940f4daf64b215462f4292335067c420a2",
+    "boundary_observation": "work/qcd-boundary/qcd-boundary.json",
+    "actual_source_layout_and_selected_fixture_preserved": true,
+    "actual_completion_marker_present": false,
+    "physics_IBP_pole_coupling_assertions_all_passed": false,
+    "next_obsolete_call_reached": false,
+    "build_need": {
+      "required": true,
+      "cause": "The selected notebook host composition omits the RustRed native bridge required by the selected QCD test.",
+      "obsolete_python_api_call_proven": false,
+      "documented_owner": "rustred-feynkit",
+      "documented_call_matches_test": true,
+      "bridge_in_f47_sources_or_lockfiles": false,
+      "IBPFamily_in_installed_native_or_wrapper": false,
+      "replacement_owner_found_in_exact_f47_or_pinned_kernel": false,
+      "exact_native_patch_produced": false,
+      "exact_native_patch_limit": "No approved immutable bridge source, dependency pin or registration API exists in the supplied f47 source/store inputs. Do not invent a dependency pin or registration signature.",
+      "needed_from_root": "Approved local immutable RustRed/FeynKit bridge source and pin, then root-owned native host integration review and one coordinated frozen build.",
+      "minimal_change_sites": [
+        "examples/notebooks/symbolica-host/Cargo.toml",
+        "examples/notebooks/symbolica-host/Cargo.lock",
+        "examples/notebooks/symbolica-host/src/lib.rs"
+      ],
+      "feynkit_family_owner_must_be_reused": "PyIntegralFamily::as_family / existing native IntegralFamily bridge boundary",
+      "same_source_rebuild_would_fix": false,
+      "native_rebuild_performed": false,
+      "proof": "work/qcd-boundary/qcd-boundary.json",
+      "full_reproducer": "/build/source/crates/feynkit-py/tests/installed_feyncalc_qcd_ghost_vertex.py",
+      "minimal_reproducer": "minimal_reproducer.py",
+      "minimal_reproducer_executed": false,
+      "next_full_validation": "Run the unchanged selected QCD script on the later corrected host, preserving [[2],[3]], residual [[1]], all 23 assertion sites, and its original completion marker."
+    }
+  },
+  "attempts": [
+    {
+      "mode": "preflight",
+      "product_argv": null,
+      "cwd": "/work",
+      "licensed": false,
+      "exit_code": 0,
+      "elapsed_s": 0.18053103401325643,
+      "completion_record": "evidence/preflight/completion.json",
+      "completion_sha256": "df700f41a779d808eebf12c2ad57adeb360facd42df59495aae4ca6b1119011f",
+      "stdout_sha256": "46747fe998fa39e253c765a7be22d482bc8a46155f8757de5ea7461f7ae2c867",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "owned_processes_remaining": 0
+    },
+    {
+      "mode": "stub-generate",
+      "product_argv": [
+        "/nix/store/mn3vzg4c35q658jgg078hahj3hcic2f4-generation-refresh-feynkit-stub-exporter-0.1.0/bin/alphal00p-docs-python-exporter",
+        "feynkit-community",
+        "/build/source/docs/api/python/feynkit-community.pyi"
+      ],
+      "cwd": "/work",
+      "licensed": true,
+      "exit_code": 0,
+      "elapsed_s": 0.5576473991386592,
+      "completion_record": "evidence/stub-generate/completion.json",
+      "completion_sha256": "ee760bad7d8fd4ccabe4f9867d788ef31899983bff99c3fef6622d178bbd1a51",
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "owned_processes_remaining": 0
+    },
+    {
+      "mode": "stub-check",
+      "product_argv": [
+        "/nix/store/mn3vzg4c35q658jgg078hahj3hcic2f4-generation-refresh-feynkit-stub-exporter-0.1.0/bin/alphal00p-docs-python-exporter",
+        "feynkit-community",
+        "/build/source/docs/api/python/feynkit-community.pyi",
+        "--check"
+      ],
+      "cwd": "/work",
+      "licensed": true,
+      "exit_code": 0,
+      "elapsed_s": 0.3600014999974519,
+      "completion_record": "evidence/stub-check/completion.json",
+      "completion_sha256": "20b7090ae0f679f9a94dfe6a25b3ec49dac8f179115d36e4c828a06315cd31c4",
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "owned_processes_remaining": 0
+    },
+    {
+      "mode": "qcd-boundary",
+      "product_argv": [
+        "/work/venv/bin/python",
+        "-B",
+        "/proposal/qcd_boundary.py"
+      ],
+      "cwd": "/work",
+      "licensed": true,
+      "exit_code": 1,
+      "elapsed_s": 1.8444833171088248,
+      "completion_record": "evidence/qcd-boundary/completion.json",
+      "completion_sha256": "d1e13a0924d9586b64df9371de1bd3b10133040fa1ea7d3e4af7046f5a807d69",
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "cb00ed181de2c2bfda4650c6ac8f5f3d8954bf5eed4b4f82dedf6fc5df38dc31",
+      "owned_processes_remaining": 0
+    }
+  ],
+  "source_qualification": {
+    "artifacts_are_old_exact_f47_native_builds": true,
+    "new_host_build_claimed": false,
+    "private_correction_is_generated_stub_only": true,
+    "QCD_test_byte_and_full_AST_unchanged": true,
+    "Python_runtime_observer_is_new_helper_not_a_product_API_patch": true,
+    "artifact_source_fix_applicable": "Only a generated snapshot changes; relevant native source remains byte-identical. This justifies exporter reuse and does not cure the missing RustRed host composition."
+  },
+  "preserved_prior_qualification": {
+    "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/installed-host-qualification-20261030-r1/report.json",
+    "not_rerun": [
+      "three selected Rust tests",
+      "installed_ufo_ghost_crossing",
+      "installed_squared_amplitude_display",
+      "installed-sector-signatures"
+    ],
+    "passing_state": "Preserved as exact H evidence; no new credit from this packet.",
+    "signature_receipts_reverified": "inspection/source-boundaries.json"
+  },
+  "containment": {
+    "fresh_unshare_all_namespaces": true,
+    "network_unshared": true,
+    "existing_479_store_mount_set_reverified": true,
+    "mounted_runtime_subset": 144,
+    "code_libraries_inputs_venv_readonly": true,
+    "writable_mounts": "Only new per-command /work, ephemeral /tmp, and generation-only private target-file bind mounts.",
+    "evidence_outside_child_mounts": true,
+    "host_root_home_credentials_Git_Nixsocket_compilers_not_mounted": true,
+    "compiler_VCS_Nix_bin_scan": "No banned executable in mounted store bin directories.",
+    "three_private_variables_absent_in_pure_children_and_before_handoff": true,
+    "credential_handoff": "Preserved exported SYMBOLICA_LICENSE else current-user XDG config; memory -> anonymous stdin pipe -> fixed product-only immediate exec; no value/hash/file/receipt.",
+    "Playwright_or_browser_descendants_executed": false,
+    "secret_redaction_required": false,
+    "Nix_Cargo_native_compiler_or_producer_build_executed": false,
+    "new_timeout_memory_tolerance_feature_pin_or_expectation_changes": false,
+    "20GiB_policy_adopted": false
+  },
+  "validation": {
+    "generated_three_target_exporter_check_exit": 0,
+    "private_patch_dry_run_and_application": [
+      {
+        "argv": [
+          "/run/current-system/sw/bin/patch",
+          "--batch",
+          "-p1",
+          "-d",
+          "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/host-api-stub-correction-20261031-r1/patch-check",
+          "--dry-run"
+        ],
+        "exit_code": 0,
+        "dry_run": true
+      },
+      {
+        "argv": [
+          "/run/current-system/sw/bin/patch",
+          "--batch",
+          "-p1",
+          "-d",
+          "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/host-api-stub-correction-20261031-r1/patch-check"
+        ],
+        "exit_code": 0,
+        "dry_run": false
+      }
+    ],
+    "syntax": "inspection/syntax.json",
+    "reproducer_Ruff_format_check_exit": 0,
+    "Ruff_format_command": [
+      "/nix/store/0zh3g7fz7h3nh34cnzda1dbvg0cgwfsy-ruff-0.16.6/bin/ruff",
+      "format",
+      "--check",
+      "--no-cache",
+      "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/host-api-stub-correction-20261031-r1/minimal_reproducer.py"
+    ],
+    "native_Rustfmt_Clippy_or_build": "Not run; no Rust/native-source changes, and builds are prohibited in this phase.",
+    "Typst_document_render": "Not run; this packet supplies canonical Typst source only."
+  },
+  "operational_corrections": {
+    "initial_pure_lookup": {
+      "argv": [
+        "env",
+        "-u",
+        "SYMBOLICA_LICENSE",
+        "-u",
+        "SYMBOLICA_LICENSE_FILE",
+        "-u",
+        "SYMBOLICA_LICENSE_PATH",
+        "python3"
+      ],
+      "exit_code": 127,
+      "error": "env: \u2018python3\u2019: No such file or directory",
+      "resolution": "Use the exact prequalified /nix/store/...-python3-3.13.15/bin/python3 interpreter; no experiment ran under the unavailable PATH interpreter."
+    },
+    "guidance_lookup": "A main/CONTRIBUTING.typ lookup from the feature cwd failed; corrected to ../main/CONTRIBUTING.typ before implementation.",
+    "formatter_cache": "inspection/formatter-cache-correction.json",
+    "write_scope_exception": "One formatter --check created only a task cache at workspace-root .ruff_cache; ownership verified, moved into this packet, then removed. Rerun --no-cache passed; tracked files were untouched."
+  },
+  "scope": {
+    "tracked_source_index_refs_JJ_written": false,
+    "main_or_sealed_packet_written": false,
+    "new_workspace_or_delegation": false,
+    "approved_QED_QCD_tokens_or_generation_oracle_touched": false,
+    "browser_issues_touched": false,
+    "broad_suite_docs_site_or_old_math_oracle_reruns": false,
+    "integration_or_general_review_approval_claimed": false
+  },
+  "cleanup": "inspection/cleanup.json",
+  "retained_reason": "Private un-applied generated correction and complete source/command/attempt/provenance evidence for root and independent review; missing native bridge remains outstanding."
+}

@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "sealed_utc": "2026-10-31T02:25:00.168038+00:00",
+  "code": "2cfb52b28d99f92305a9d571bbe3911cf04b8a19",
+  "files": 329,
+  "manifest_sha256": "d5fdaa5aabc14bd23e1fbf701b9e51ab55e32dba5db347a259ed43f51413b555",
+  "receipt_sha256": "dbcc9a5ded82fee900ad4198dba94e1de5115db94422dcbf6823286cee4289e5",
+  "scope": "Candidate evidence integrity only; NEW independent review required, no self approval.",
+  "big_inputs": "retained-artifacts.json",
+  "all_original_packet_seals_verified": true,
+  "licensed_runtime_finished": true,
+  "owned_processes_remaining": 0
+}

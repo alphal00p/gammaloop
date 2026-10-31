@@ -1,0 +1,31 @@
+{
+  "ordinary": {
+    "native_comparison": "qualification/ordinary-native-comparison.json",
+    "prior_review": "reviews/host-browser-stub/review.json",
+    "actual_new_checks": [
+      "fresh complete-wheel install/RECORD/stub",
+      "ELF loader and containment",
+      "native import identity",
+      "canonical three-target exporter --check"
+    ],
+    "prior_passes_reused_not_fresh": [
+      "three selected Rust embedding tests",
+      "installed UFO crossing",
+      "squared display",
+      "two sector signatures",
+      "two-engine native browser method"
+    ],
+    "ordinary_QCD_failure": "Original missing-IBPFamily failure remains in exact prior packet; not rerun or erased. Current ordinary import still verifies absence of IBPFamily."
+  },
+  "exporter": {
+    "sha256": "ea6b689912dd12eb1d40fc9f65f6e52ded87a33a755b94ceb42363a6f5480e9e",
+    "owner_source_proof": "qualification/exporter-reuse-source-proof.json",
+    "fresh_check": true,
+    "new_build": false
+  },
+  "private": {
+    "new_composition": true,
+    "actual_native_hash": "4d4231b32962669db1ec4bc8efef586e93318b9200468235a78b25919dc98ecb",
+    "old_minimal_passes_not_transferred": true
+  }
+}

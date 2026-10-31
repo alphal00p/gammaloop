@@ -1,0 +1,25 @@
+{
+  "sha256": {
+    ".local/feynkit-refresh/host-api-stub-correction-20261031-r1/candidate.patch": "0666eba15326649c0e1fb3dc035bfe0bc8cbc1238ec5fcec99622ecbf2d58e47",
+    ".local/review-host-browser-stub-astra-20261031-013106Z-5655cc61/review.json": "8bd31e92448a517479fb2f2ec5a12c9999c31752cea08502392f290c47e37627",
+    ".local/review-host-browser-stub-astra-20261031-013106Z-5655cc61/SEAL.json": "6e104cabc93cb839a498c8b79ecb048a17693707704238288619ff41930759d6",
+    ".local/review-raw-three-integration-astra-20261031-012811Z-323f4486/review.json": "535b792610c531b446d8beb1a9f300246e6d498e8126509b637189e8eb80a091",
+    ".local/feynkit-refresh/rustred-host-preflight-20261031-r1/report.json": "855ecafaced15a291a4427d1fea0f3f27ac936ca14b95c1edb4fb5151a68e735"
+  },
+  "verified_entries": {
+    "rustred-host-preflight-20261031-r1": 3849,
+    "host-api-stub-correction-20261031-r1": 70,
+    "host-browser-correction-20261031-r1": 100
+  },
+  "preflight_seal": {
+    "schema_version": 1,
+    "sealed_utc": "2026-10-31T01:35:36.499370+00:00",
+    "report_sha256": "855ecafaced15a291a4427d1fea0f3f27ac936ca14b95c1edb4fb5151a68e735",
+    "SHA256SUMS_sha256": "ab5fb4c4fddb6c7a8925190038c24c2b66dd8266f29a21774f3148fc9fd7542e",
+    "regular_files_in_checksum_manifest": 3849,
+    "symlinks": 2,
+    "native_or_independent_approval": false,
+    "new_host_or_QCD_pass": false,
+    "owned_processes_remaining": 0
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "initial_existing_bookmark_changes": {},
+  "new_bookmarks_before_final_evidence": {
+    "generation-host-stub-code-20261031": "2cfb52b28d99f92305a9d571bbe3911cf04b8a19",
+    "grouped-auto-aggregation-candidate-20261031-r1": "113608b3917d903d0fcc730aa3760f114fbc3f04"
+  },
+  "not_reverted": true,
+  "no_global_vcs_invariance_claim": true,
+  "global_integration_preserved": "fdff0d18953348b84a0f1b7e6ab5ef703a5090de"
+}

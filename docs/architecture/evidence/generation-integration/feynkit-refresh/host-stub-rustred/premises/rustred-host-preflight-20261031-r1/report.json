@@ -1,0 +1,177 @@
+{
+  "schema_version": 1,
+  "kind": "rustred-private-host-source-and-pure-evaluation-proposal",
+  "completed_utc": "2026-10-31T01:34:44.021692+00:00",
+  "status": "EXACT_SOURCE_AND_PRIVATE_PRODUCER_PROPOSAL_READY_FOR_ROOT_REVIEW_NATIVE_COMPATIBILITY_UNQUALIFIED",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh",
+  "owned_packet": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/rustred-host-preflight-20261031-r1",
+  "canonical_candidate": {
+    "repository": "https://github.com/alphal00p/rustred",
+    "revision": "7c1ed03722b8c05daf60c89ba4ecc79457ed2ada",
+    "tree": "c78d15aec5648706f066e939650aecdced550bbd",
+    "selected_by": "Root explicitly selected committed Community 970c3faca3dcdcde221d9475a80705585c860604 RustRed pin as a private validation-proposal candidate only.",
+    "approved_8eb_compatibility": false,
+    "actual_local_source_available": true,
+    "source": "/nix/store/5hr22rycs6dpj77afgq0maqd8qbipk6a-rustred-source-7c1ed037",
+    "narHash": "sha256-6Sgm1lGDDGCe2ch784rGp0krsqlOiZtKAEuafvNnKlA=",
+    "git_file_entries_verified": 2955,
+    "gitlinks": [
+      {
+        "path": "vendor/symbolica",
+        "revision": "ef0db494533c87adb40356c996241680dc5a7bff",
+        "materialized_or_selected": false
+      }
+    ],
+    "network_retrieval_needed_or_used": false,
+    "donor_binding": "evidence/rustred-source-binding.json",
+    "tree_proof": "evidence/rustred-tree-verification.json"
+  },
+  "fixed_inputs": {
+    "feynkit": "f47f27213a1c55291239c9bc0f334a7ea1cd1cc1",
+    "kernel": "8eb7c3729d6abefc916decc1bdf0c06536f8af80",
+    "community_reference_only": "970c3faca3dcdcde221d9475a80705585c860604",
+    "community_kernel_and_feynkit_pins_adopted": false,
+    "old_failure_report_sha256": "e601f60b827bb4c8bdeba3a0e11002e18e84d5b633ddd46b6798f07e7e277ae1"
+  },
+  "pipeline_comparison": {
+    "shared": "Unchanged f47 script, model fixture, native FeynKit family and pinned Symbolica atoms.",
+    "minimal": "core -> FeynkitModule -> feynkit_native -> hepkit wrapper; no RustRed.",
+    "full_community": "core -> HepKitModule -> initialize_feynkit + register_hep_module -> hepkit_native -> hepkit wrapper; additional independent providers.",
+    "first_difference": "Native registration composition before IBPFamily attribute lookup; this is not evidence of a core family API bug.",
+    "private_proposal": "Same minimal core and child module, followed by exact RustRed register_hep_module on that very Bound<PyModule>.",
+    "production_minimal_host_recommendation": "Leave unchanged; build private validation superset.",
+    "excluded": "Aliases, deletions/skips, analytic substitutions, second incompatible DSO, alternate kernel, campaign feature adoption."
+  },
+  "proposal": {
+    "files": [
+      "proposal/private-host.patch",
+      "proposal/private-producer.nix",
+      "proposal/overlay/examples/notebooks/symbolica-host/Cargo.toml",
+      "proposal/overlay/examples/notebooks/symbolica-host/Cargo.lock",
+      "proposal/overlay/examples/notebooks/symbolica-host/src/lib.rs"
+    ],
+    "unapplied_to_tracked_work": true,
+    "three_private_host_change_sites_only": true,
+    "bridge_source_unchanged": true,
+    "dependency_strategy": "Exact Git-verified RustRed source content-addressed in Nix store; private path dependency records canonical source/pin here. Root host patches and unchanged old vendor bind every kernel crate to 8eb. This is neither a mutable Cargo cache transplant nor a proposed public pin.",
+    "runtime_arities": [
+      1
+    ],
+    "campaign_api": false,
+    "reconstruction": false,
+    "rustred_python_app_enabled": false,
+    "features_and_registration_evidence": "compatibility-matrix.json",
+    "lock_status": "Static reference-closed candidate only. Exact --locked offline Cargo resolver check is the first future producer gate; it has not executed.",
+    "old_package_records": 464,
+    "candidate_package_records": 469,
+    "old_registry_versions_changed": 0,
+    "root_lock_modified": false,
+    "canonical_subset_rule": "Private host adds RustRed to the host lock only; no claim that the production root/host lock subset gate passes for this unapplied private source. A later production adoption would require the canonical coordinated root lock/hakari/CI graph workflow, outside scope."
+  },
+  "pure_evaluation": {
+    "success": true,
+    "receipt": "evidence/sealed-pure-eval.command.json",
+    "pure_eval_enforced": true,
+    "import_from_derivation_disabled": true,
+    "offline": true,
+    "mutable_path_flake_used": false,
+    "sealed_proposal_source": "/nix/store/7n3l2hxa47zjg21y837f2rnbi1ajw6sk-rustred-host-proposal",
+    "sealed_proposal_narHash": "sha256-Mvw9KLVovykB2bDL2CLFUec5E75JAZ5if+HlHsFAofE=",
+    "proposal_source": "/nix/store/3rgbf8hy7dfaarqah5s1dm1blhf1a37w-source",
+    "proposal_source_narHash": "sha256-Xab4epwGb9q004L3u9QukLcIwKfpy5d3UYWTpRUOEUU=",
+    "derivation": "/nix/store/fi12rgbggh7fawqz80ci147qzwh8fdm7-generation-refresh-rustred-validation-host-wheel-0.1.0.drv",
+    "output": "/nix/store/71qf8fygyacc3wnr82l2a3lna1j24kis-generation-refresh-rustred-validation-host-wheel-0.1.0",
+    "built": false,
+    "root_drv_sha256": "db9e74ed9ad55c7e6dad7fc8a56673740fc838803a8d2563128f7d8391a41c33",
+    "deduplicated_frontier": "evidence/build-frontier.json",
+    "historical_recursive_derivations": 2996,
+    "reused_frontier_outputs": 28,
+    "required_new_outputs": [
+      {
+        "drv": "/nix/store/fi12rgbggh7fawqz80ci147qzwh8fdm7-generation-refresh-rustred-validation-host-wheel-0.1.0.drv",
+        "output": "out",
+        "path": "/nix/store/71qf8fygyacc3wnr82l2a3lna1j24kis-generation-refresh-rustred-validation-host-wheel-0.1.0"
+      }
+    ],
+    "new_crates_inside_wheel_derivation": [
+      "rustred-order",
+      "rustred",
+      "rustred-feynkit",
+      "host core final unit"
+    ],
+    "other_crate_rebuilds": "Cargo fingerprint/profile/features decide during later build; no unchanged kernel/final-unit artifact reuse is assumed.",
+    "existing_owners": {
+      "cargoArtifacts": "/nix/store/hgvfgwvrid0pilvrzqkxapd3jph7a77p-gammaloop-crate-feynkit-py-dependency-deps-0.1.0",
+      "cargoVendorDir": "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps",
+      "producer_pattern": "installed-host-preflight-20261030-r1/bounded-producers.nix hostWheel based on f47 crate-feynkit-py"
+    },
+    "new_vendor_or_source_packaging_producer_required": false,
+    "content_hashes": "evidence/source-nar-bindings.json"
+  },
+  "qcd": {
+    "path": "/nix/store/0vsa28jjcrwyrna4iflavxm0gc8msqxm-source/crates/feynkit-py/tests/installed_feyncalc_qcd_ghost_vertex.py",
+    "sha256": "2622f4f8f53624e177e6ae059eb12953f1b16f6cf08ebe85b70ff6155423dfc6",
+    "assertion_sites": 23,
+    "assertions_ast_sha256": "61efe18f0a316156b2d24e3f19e8c00b7b806d1a794a756fe6c8c427067f5190",
+    "targets": [
+      [
+        2
+      ],
+      [
+        3
+      ]
+    ],
+    "residuals": [
+      [
+        1
+      ]
+    ],
+    "max_depth": 2,
+    "script_modified": false,
+    "fixture": "/nix/store/0vsa28jjcrwyrna4iflavxm0gc8msqxm-source/crates/feynkit-model/tests/fixtures/sm.json",
+    "fixture_sha256": "a0193ae09a6f920c8fcfbe8231c6a70e820b82b573257e07c216bdcd8e57acd9",
+    "completion_marker": "Generated ghost and antighost UV: full tensors, crossing, two IBP targets and coupling consistency passed",
+    "assertions_ast_sha256_algorithm": "sha256(json.dumps([ast.dump(assert_node, include_attributes=False) in ast.walk order], sort_keys=True).encode())",
+    "prior_assertions_ast_sha256": "61efe18f0a316156b2d24e3f19e8c00b7b806d1a794a756fe6c8c427067f5190",
+    "prior_assertion_digest_not_relabelled_as_our_algorithm": true
+  },
+  "validation": {
+    "patch_dry_run": "passed against private copies of exact f47 files",
+    "Nix": "enforced pure immutable evaluation passed; no IFD or build",
+    "TOML": "parse and static closure checks passed",
+    "Python_inline_source": "syntax only passed",
+    "Rustfmt_Clippy_Cargo_metadata_native": "not run by instruction",
+    "new_host_tests": "not run",
+    "independent_review_or_approval": "not claimed"
+  },
+  "next": {
+    "build_command": "next-build.sh",
+    "complete_gates_and_runtime_command": "next-commands.json",
+    "no_pin_input_missing": true,
+    "remaining_required_authorization": "Root review of the concrete private candidate and explicit authorization for the native build phase; later runtime qualification requires separately completed preparation. Independent review is not claimed.",
+    "if_compilation_fails": "Retain exact missing method/type/link conflict; recommend a concrete source adjustment or different pin with evidence. Never silently change f47/8eb/7c1 or scientific assertions."
+  },
+  "scope": {
+    "no_delegation": true,
+    "no_new_workspace": true,
+    "no_tracked_ref_index_jj_changes": true,
+    "no_donor_worktree_writes": true,
+    "no_physical_dirty_community_manifest_consumption": true,
+    "no_compiler_or_native_product_execution": true,
+    "no_build_realization": true,
+    "no_license_credentials_or_user_config_read": true,
+    "no_secret_request": true,
+    "all_three_private_variables_absent_from_source_and_Nix_children": true,
+    "no_global_configuration_or_wildcard_git_trust": true,
+    "no_shared_install_publication_upload_or_new_public_pins": true,
+    "user_config_read": false
+  },
+  "cleanup": {
+    "owned_processes_remaining": 0,
+    "scratch_patch_input_removed": true,
+    "retained": "Exact source snapshots/archive, unapplied candidate, pure derivation/store bindings, source errors and complete evidence for root review. No Git named ref created, as requested; ignored packet preserves continuation.",
+    "Nix_store_retention": "Source-only additions and evaluated derivations are unrooted shared-store objects. Do not delete shared caches; exact owned snapshots and NAR bindings permit re-adding if collected.",
+    "no_test_credit_borrowed_for_new_host": true
+  },
+  "errors_and_corrections": "evidence/retained-errors-and-corrections.json"
+}

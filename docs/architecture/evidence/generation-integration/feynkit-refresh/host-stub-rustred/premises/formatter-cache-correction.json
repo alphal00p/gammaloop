@@ -1,0 +1,26 @@
+{
+  "initial_formatter_argv": [
+    "/nix/store/0zh3g7fz7h3nh34cnzda1dbvg0cgwfsy-ruff-0.16.6/bin/ruff",
+    "format",
+    "--check",
+    ".local/feynkit-refresh/host-api-stub-correction-20261031-r1/minimal_reproducer.py"
+  ],
+  "initial_exit_code": 0,
+  "initial_stdout": "1 file already formatted\n",
+  "unintended_cache": ".ruff_cache",
+  "owned_cache_entry": "0.16.6/3479066870161179364",
+  "cache_contains_only_task_reproducer_record": true,
+  "correction": "Moved task-owned cache into inspection/ruff-cache; subsequent formatter uses --no-cache.",
+  "tracked_files_affected": false,
+  "outside_cache_removed": true,
+  "dispensable_retained_cache_removed": true,
+  "corrected_formatter_argv": [
+    "/nix/store/0zh3g7fz7h3nh34cnzda1dbvg0cgwfsy-ruff-0.16.6/bin/ruff",
+    "format",
+    "--check",
+    "--no-cache",
+    "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/host-api-stub-correction-20261031-r1/minimal_reproducer.py"
+  ],
+  "corrected_formatter_exit_code": 0,
+  "corrected_formatter_stdout": "1 file already formatted\n"
+}

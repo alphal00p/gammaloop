@@ -1,0 +1,12 @@
+from pathlib import Path
+import os,subprocess,json,shutil,tomllib,hashlib,time
+P=Path(__file__).resolve().parent;W=P.parents[2];b=json.loads((P/'source-bindings.json').read_text());S=P/'private-lock-work';shutil.copytree(b['private_source'],S,symlinks=True)
+for p in [S,*S.rglob('*')]:
+ if not p.is_symlink():p.chmod(0o755 if p.is_dir() or p.stat().st_mode&0o111 else 0o644)
+H=P/'private-cargo-home';H.mkdir();(H/'config.toml').write_bytes(Path('/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/config.toml').read_bytes())
+E={k:v for k,v in os.environ.items() if k not in ('SYMBOLICA_LICENSE','SYMBOLICA_LICENSE_PATH','SYMBOLICA_LICENSE_SIGNED','SYMBOLICA_LICENSE_FILE')};E.update({'CARGO_HOME':str(H),'CARGO_NET_OFFLINE':'true','PATH':'/nix/store/c3bpv60f5wgp4pmgsifaykxk214h6463-rust-stable-with-components-2026-09-03/bin','HOME':str(P/'empty-home')});Path(E['HOME']).mkdir();a=['/nix/store/c3bpv60f5wgp4pmgsifaykxk214h6463-rust-stable-with-components-2026-09-03/bin/cargo','metadata','--offline','--format-version','1','--manifest-path','examples/notebooks/symbolica-host/Cargo.toml'];r=subprocess.run(a,cwd=S,env=E,capture_output=True);(P/'lock-resolver.stdout').write_bytes(r.stdout);(P/'lock-resolver.stderr').write_bytes(r.stderr);(P/'lock-resolver-command.json').write_text(json.dumps({'argv':a,'cwd':str(S),'exit_code':r.returncode,'compilation':False,'private_variables_absent':True},indent=2)+'\n');assert r.returncode==0,r.stderr.decode()
+old=tomllib.loads((Path(b['private_source'])/'examples/notebooks/symbolica-host/Cargo.lock').read_text());new=tomllib.loads((S/'examples/notebooks/symbolica-host/Cargo.lock').read_text())
+key=lambda p:(p['name'],p['version'],p.get('source'))
+a={key(x):x for x in old['package']};c={key(x):x for x in new['package']};removed=sorted(a.keys()-c.keys());added=sorted(c.keys()-a.keys());changed=[{'key':k,'old':a[k],'new':c[k]} for k in a.keys()&c.keys() if a[k]!=c[k]]
+(P/'lock-reconciliation.json').write_text(json.dumps({'removed':removed,'added':added,'changed':changed,'old_packages':len(a),'new_packages':len(c),'meaning_gate':'No version/source change permitted; removed optional unused nodes acceptable only if exact active graph stays finite bridge'},indent=2)+'\n');print(json.dumps({'removed':removed,'added':added,'changed':changed}),flush=True)
+shutil.copyfile(S/'examples/notebooks/symbolica-host/Cargo.lock',P/'corrected-private-Cargo.lock')

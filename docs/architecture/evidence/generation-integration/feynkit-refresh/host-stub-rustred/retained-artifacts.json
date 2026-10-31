@@ -1,0 +1,54 @@
+{
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh",
+  "ignored_packet": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/host-stub-rustred-integration-20261031-r1",
+  "code": "2cfb52b28d99f92305a9d571bbe3911cf04b8a19",
+  "sources": {
+    "full_source": "/nix/store/3sj3nw06s3vhl3j12wfp5gc3r1h6f0k3-source",
+    "full_source_nar": "sha256-RCGp7HErhoxa4nMbFUDXneWTb4992VxGY1T7eB57Rmk=",
+    "ordinary_source": "/nix/store/wsadhm1dqaik849gw251qbn0fbpaapjz-source",
+    "ordinary_nar": "sha256-tlTuNXXoy91vYs/0cb9RlUN7ORk3KlcwBc0a94Laqkw=",
+    "private_source": "/nix/store/r5j0ky0blrn8y18ssyakr4bf8iwhy296-source",
+    "private_nar": "sha256-DMCtTnskQgx8mMCmhRZnWjzNH6/KDnH3/rhdiQbnVus=",
+    "rustred_source": "/nix/store/5hr22rycs6dpj77afgq0maqd8qbipk6a-rustred-source-7c1ed037",
+    "rustred_nar": "sha256-6Sgm1lGDDGCe2ch784rGp0krsqlOiZtKAEuafvNnKlA=",
+    "proposal_source": "/nix/store/kf0x3kvibgwvs40nv28gfy3bifbsi7qn-host-stub-rustred-proposal",
+    "proposal_nar": "sha256-y+YE51NLB1oiHTghcr2iS5RFGusMimXZYD668Pql/ww="
+  },
+  "outputs": {
+    "ordinary": {
+      "drv": "/nix/store/5vvg7gyp1n3ma9rw57m37p81vn75h1ch-generation-refresh-corrected-stub-host-wheel-0.1.0.drv",
+      "output": "/nix/store/w5d0wdnv1c4iic9f6qlg6zv87zglb6f0-generation-refresh-corrected-stub-host-wheel-0.1.0",
+      "output_nar": "sha256-I7oT5R2H9CM18yJkanJCQHM5WqRAJmmqbU3pQ3Tz6i4=",
+      "wheel": {
+        "path": "/nix/store/w5d0wdnv1c4iic9f6qlg6zv87zglb6f0-generation-refresh-corrected-stub-host-wheel-0.1.0/dist/symbolica-3.0.1-cp310-abi3-linux_x86_64.whl",
+        "sha256": "edecffa95ae3d4318e83ac5e6af56e4cd504804b85165fd4766ed81167b5fd87",
+        "bytes": 49514067
+      }
+    },
+    "private": {
+      "drv": "/nix/store/x43msadi65xf8zr234lg5dbwgjzblcz6-generation-refresh-rustred-validation-host-wheel-0.1.0.drv",
+      "output": "/nix/store/cbvphdpy05pb8r414dmn5xfxxdqs3slx-generation-refresh-rustred-validation-host-wheel-0.1.0",
+      "output_nar": "sha256-byouUecKN+GjqpOrnC/h9QJc5T+7QWGVZ8NjBEFeuVw=",
+      "wheel": {
+        "path": "/nix/store/cbvphdpy05pb8r414dmn5xfxxdqs3slx-generation-refresh-rustred-validation-host-wheel-0.1.0/dist/symbolica-3.0.1-cp310-abi3-linux_x86_64.whl",
+        "sha256": "d2669a2abe40d8286d24f0c8a03a7624e73321bb9e0df7df8b89fcb29583703b",
+        "bytes": 51953714
+      }
+    }
+  },
+  "compiler": "qualification/compiler-binding.json",
+  "large_graphs": [
+    "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/host-stub-rustred-integration-20261031-r1/pure/ordinary-graph.json",
+    "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/host-stub-rustred-integration-20261031-r1/pure/r2-private-graph.json",
+    "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/host-stub-rustred-integration-20261031-r1/pure/private-graph.json"
+  ],
+  "native_extractions": [
+    "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/host-stub-rustred-integration-20261031-r1/artifacts/ordinary/symbolica/core.abi3.so",
+    "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/host-stub-rustred-integration-20261031-r1/artifacts/private/symbolica/core.abi3.so"
+  ],
+  "fresh_private_installations": [
+    "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/host-stub-rustred-integration-20261031-r1/runtime/ordinary/installed/venv",
+    "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/host-stub-rustred-integration-20261031-r1/runtime/private/installed/venv"
+  ],
+  "purpose": "Retain exact store sources, two built distributions, final native/fingerprint/depfile provenance, fresh whole-wheel environments and failures for independent review. No shared cache cleanup or donor/workspace removal."
+}

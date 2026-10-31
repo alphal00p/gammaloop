@@ -1,0 +1,14 @@
+{
+  "base_code": "2cfb52b28d99f92305a9d571bbe3911cf04b8a19",
+  "ordinary_source": "/nix/store/wsadhm1dqaik849gw251qbn0fbpaapjz-source",
+  "private_source": "/nix/store/h5g6njarsri3hacwzgzcrh4dzxm480ni-source",
+  "private_nar": "sha256-xVFNiWJSJzU3+3M9Lk1SHEx3mesvPOmS/2/oL3EW6p0=",
+  "reviewed_patch_sha256": "1f9d0b94111b589376dd8eba01c0f0704f92d80a12a4b8e76161365b3347ed2a",
+  "changed": [
+    "examples/notebooks/symbolica-host/Cargo.lock",
+    "examples/notebooks/symbolica-host/src/lib.rs",
+    "examples/notebooks/symbolica-host/Cargo.toml"
+  ],
+  "removed": [],
+  "added": []
+}

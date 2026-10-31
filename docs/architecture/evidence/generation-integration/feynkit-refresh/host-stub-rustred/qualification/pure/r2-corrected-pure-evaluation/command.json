@@ -1,0 +1,20 @@
+{
+  "argv": [
+    "/run/current-system/sw/bin/nix",
+    "eval",
+    "--offline",
+    "--option",
+    "pure-eval",
+    "true",
+    "--option",
+    "allow-import-from-derivation",
+    "false",
+    "--json",
+    "--expr",
+    "let s=builtins.path {path=/nix/store/kf0x3kvibgwvs40nv28gfy3bifbsi7qn-host-stub-rustred-proposal;name=\"host-stub-rustred-proposal\";sha256=\"sha256-y+YE51NLB1oiHTghcr2iS5RFGusMimXZYD668Pql/ww=\";}; o=import (s+\"/ordinary-producer.nix\"); p=import (s+\"/private-producer.nix\"); in {ordinary={drv=o.hostWheel.drvPath;out=o.hostWheel.outPath;};private={drv=p.hostWheel.drvPath;out=p.hostWheel.outPath;};}"
+  ],
+  "cwd": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh",
+  "exit_code": 0,
+  "elapsed_s": 46.23969270801172,
+  "private_variables_absent": true
+}

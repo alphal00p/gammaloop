@@ -1,0 +1,12 @@
+{
+  "argv": [
+    "/run/current-system/sw/bin/nix",
+    "hash",
+    "path",
+    "/nix/store/wsadhm1dqaik849gw251qbn0fbpaapjz-source"
+  ],
+  "cwd": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh",
+  "exit_code": 0,
+  "elapsed_s": 0.3024986181408167,
+  "private_variables_absent": true
+}

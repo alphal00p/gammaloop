@@ -1,0 +1,36 @@
+{
+  "native_methods": [
+    {
+      "owner": "FeynmanDiagram",
+      "signature": "(self, /, *, regulator, kinematics=None, dimension=None, powers=None, numerator=None, scalar_values=None, auxiliary_momenta=None, measure_multiplier=None, max_order=0, coefficient_expansion='physical', observer=None, progress='auto')"
+    },
+    {
+      "owner": "IntegralFamily",
+      "signature": "(self, /, *, regulator, kinematics=None, dimension=None, powers=None, numerator=None, scalar_values=None, auxiliary_momenta=None, measure_multiplier=None, max_order=0, coefficient_expansion='physical', observer=None, progress='auto')"
+    }
+  ],
+  "stub_checks": [
+    {
+      "path": "docs/api/python/feynkit-community.pyi",
+      "methods": {
+        "FeynmanDiagram": "typing.Optional[typing.Dict[int, int]]",
+        "IntegralFamily": "typing.Optional[typing.Sequence[int]]"
+      }
+    },
+    {
+      "path": "crates/feynkit-py/python/symbolica/community/hepkit/__init__.pyi",
+      "methods": {
+        "FeynmanDiagram": "typing.Optional[typing.Dict[int, int]]",
+        "IntegralFamily": "typing.Optional[typing.Sequence[int]]"
+      }
+    },
+    {
+      "path": "examples/notebooks/symbolica-host/python/symbolica/community/hepkit/__init__.pyi",
+      "methods": {
+        "FeynmanDiagram": "typing.Optional[typing.Dict[int, int]]",
+        "IntegralFamily": "typing.Optional[typing.Sequence[int]]"
+      }
+    }
+  ],
+  "backend_execution_claimed": false
+}

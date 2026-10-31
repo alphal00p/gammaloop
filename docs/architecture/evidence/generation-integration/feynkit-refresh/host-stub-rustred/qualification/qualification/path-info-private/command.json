@@ -1,0 +1,11 @@
+{
+  "argv": [
+    "/run/current-system/sw/bin/nix",
+    "path-info",
+    "--json",
+    "/nix/store/cbvphdpy05pb8r414dmn5xfxxdqs3slx-generation-refresh-rustred-validation-host-wheel-0.1.0"
+  ],
+  "cwd": "/tmp",
+  "exit_code": 0,
+  "private_variables_absent": true
+}

@@ -1,0 +1,106 @@
+[
+  {
+    "path": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/share/drirc.d/00-turnip-defaults.conf",
+    "sha256": "0d3066cfb8850dabc799d45a6cad2f438f39df589c74fa3a0763e79d8c3d09b6"
+  },
+  {
+    "path": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/share/drirc.d/00-v3dv-defaults.conf",
+    "sha256": "18fb401b745a945612f035aea0416d5ba8657e2b4f52d07897c473a8c16a4d7b"
+  },
+  {
+    "path": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/share/drirc.d/00-mesa-defaults.conf",
+    "sha256": "c325c4027540b7315d8f83a74d3f4a21ea6f5e02f009195882c1c0a22631e1cd"
+  },
+  {
+    "path": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/share/drirc.d/00-msm-defaults.conf",
+    "sha256": "f85d035bedbd320f76e59c40cfb5610873406d17c536cc3e6568a24f0313f35a"
+  },
+  {
+    "path": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/share/drirc.d/00-r600-defaults.conf",
+    "sha256": "026003a301229cde98be1aa2644db4b949dfeba40537bfeae943fe4ef69d0f8d"
+  },
+  {
+    "path": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/share/drirc.d/00-radv-defaults.conf",
+    "sha256": "0613b987fa05e14321f9c40c20a1777865ba1c0effcaf53bd2fb484fd53505b3"
+  },
+  {
+    "path": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/share/drirc.d/00-dzn-defaults.conf",
+    "sha256": "8d3dac5ea64db26706734b50ee21d7aa8a981e7a672a4db292a734eb74dd53ff"
+  },
+  {
+    "path": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/share/drirc.d/00-hasvk-defaults.conf",
+    "sha256": "55d001a80103b53cb3efafc635d98335897d3c95f6ea8139e80577f1c9041f3a"
+  },
+  {
+    "path": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/share/drirc.d/00-crocus-defaults.conf",
+    "sha256": "4c18a043e0ebd8247f2d24b8b4abf54e10a146c6fc1e380c027a2356dec33a3c"
+  },
+  {
+    "path": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/share/drirc.d/00-asahi-defaults.conf",
+    "sha256": "c8a1414ec52b017735c66a406dd24eac608eb28eb1a1b02adb7cecd8608707c3"
+  },
+  {
+    "path": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/share/drirc.d/00-zink-defaults.conf",
+    "sha256": "22ba73c372e3b291da2cbe22f6243fe463c9296626d2905cca8492799033ce44"
+  },
+  {
+    "path": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/share/drirc.d/00-hk-defaults.conf",
+    "sha256": "1798ecf1defb8972f04fcdb6ab777e70ed55e815364b2adf829709e510ab75f1"
+  },
+  {
+    "path": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/share/drirc.d/00-nvk-defaults.conf",
+    "sha256": "dc723c8f51676b288f5a99ee04d25133698edf2d37ff8685f3d924b353dab215"
+  },
+  {
+    "path": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/share/drirc.d/00-iris-defaults.conf",
+    "sha256": "9e648734d06e69c248f0f6eb170192f1708ab062af0ecf13f5424292d06f0ef9"
+  },
+  {
+    "path": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/share/drirc.d/00-venus-defaults.conf",
+    "sha256": "ce709012a58813853bd3e8129c91110c3fbb49c5d93ce04730966650eb95eba9"
+  },
+  {
+    "path": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/share/drirc.d/00-lavapipe-defaults.conf",
+    "sha256": "4f36639c5cd0b04116bbd0124f32785a7162b6bd24278ca322d86de384ce8c31"
+  },
+  {
+    "path": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/share/drirc.d/00-d3d12-defaults.conf",
+    "sha256": "7a29c37068cefdb1e023e00b1945ad28151ee58d77cd5c2f4ca3ef2d3cee0640"
+  },
+  {
+    "path": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/share/drirc.d/00-panvk-defaults.conf",
+    "sha256": "2f9988ee621bd2a5dbb09552433250fc27a2f33e209ad5765f3b1c5e742872e9"
+  },
+  {
+    "path": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/share/drirc.d/00-r300-defaults.conf",
+    "sha256": "666ac4b447b3a808a1e70936e438bb6724f9c0ee38af2c2531c8e33359dfaf11"
+  },
+  {
+    "path": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/share/drirc.d/00-anv-defaults.conf",
+    "sha256": "aa895b59cd3a3581b29d4cf3057dcbcf668002b50fb729aac25b5c73232a2cfc"
+  },
+  {
+    "path": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/share/drirc.d/00-panfrost-defaults.conf",
+    "sha256": "c290432a8d624f91a7abcfc02438b3a090d753d22814f6f25cf90519e5b105b4"
+  },
+  {
+    "path": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/share/drirc.d/00-vmwgfx-defaults.conf",
+    "sha256": "c4b689b153c7b88eff8b1132485f4e6165bb85c95a2657eed5727a506449f80a"
+  },
+  {
+    "path": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/share/drirc.d/00-radeonsi-defaults.conf",
+    "sha256": "a8c4ccc3c7dfe4a5f18825f3263117215c63804a6cd903258399900bdc7e8527"
+  },
+  {
+    "path": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/share/drirc.d/00-virtio_gpu-defaults.conf",
+    "sha256": "74a293c45f4247f1b3d383d5519f158ce7eee53e6765922355521c863cfd0959"
+  },
+  {
+    "path": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/share/drirc.d/00-pvr-defaults.conf",
+    "sha256": "98d9719cca76fcd59ee694fda0c952f3dfbe9a4df4a2ded9ba2b9058e2716111"
+  },
+  {
+    "path": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/share/drirc.d/00-v3d-defaults.conf",
+    "sha256": "302d0b2330436da00c7215aa629a816f265fc67c6b60d48d47a9c7778b50f7d9"
+  }
+]

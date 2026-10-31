@@ -1,0 +1,15 @@
+{
+  "argv": [
+    "/run/current-system/sw/bin/nix",
+    "build",
+    "--offline",
+    "--dry-run",
+    "--no-link",
+    "--json",
+    "/nix/store/x43msadi65xf8zr234lg5dbwgjzblcz6-generation-refresh-rustred-validation-host-wheel-0.1.0.drv^out"
+  ],
+  "cwd": "/tmp",
+  "exit_code": 0,
+  "elapsed_s": 0.5693742099683732,
+  "private_variables_absent": true
+}

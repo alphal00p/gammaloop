@@ -1,0 +1,12 @@
+{
+  "argv": [
+    "/run/current-system/sw/bin/nix",
+    "hash",
+    "path",
+    "/nix/store/dxdcf950ij2bbknmarw14bjh5z9g4mq8-host-stub-rustred-proposal"
+  ],
+  "cwd": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh",
+  "exit_code": 0,
+  "elapsed_s": 0.03856266988441348,
+  "private_variables_absent": true
+}

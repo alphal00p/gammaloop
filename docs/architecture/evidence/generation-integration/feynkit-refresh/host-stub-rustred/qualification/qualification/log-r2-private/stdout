@@ -1,0 +1,165 @@
+Running phase: unpackPhase
+@nix { "action": "setPhase", "phase": "unpackPhase" }
+unpacking source archive /nix/store/r5j0ky0blrn8y18ssyakr4bf8iwhy296-source
+source root is source
+Running phase: patchPhase
+@nix { "action": "setPhase", "phase": "patchPhase" }
+Executing configureCargoCommonVars
+decompressing cargo artifacts from /nix/store/hgvfgwvrid0pilvrzqkxapd3jph7a77p-gammaloop-crate-feynkit-py-dependency-deps-0.1.0/target.tar.zst to target
+Running phase: updateAutotoolsGnuConfigScriptsPhase
+@nix { "action": "setPhase", "phase": "updateAutotoolsGnuConfigScriptsPhase" }
+Running phase: configurePhase
+@nix { "action": "setPhase", "phase": "configurePhase" }
+will append /build/source/.cargo-home/config.toml with contents of /nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/config.toml
+default configurePhase, nothing to do
+Running phase: buildPhase
+@nix { "action": "setPhase", "phase": "buildPhase" }
++++ command cargo metadata --offline --locked --format-version 1 --manifest-path examples/notebooks/symbolica-host/Cargo.toml
+🍹 Building a mixed python/rust project
+🐍 Found CPython 3.13 at /nix/store/wj1f56qky4pmjc7l0r6b6l7whnnw7hp6-python3-3.13.15/bin/python3
+🔗 Found pyo3 bindings with abi3-py3.10 support
+[1m[92m   Compiling[0m symbolica v3.0.1 (https://github.com/symbolica-dev/symbolica?branch=community#8eb7c372)
+[1m[92m   Compiling[0m clarabel v0.11.1 (/build/source/vendor/clarabel)
+[1m[92m   Compiling[0m three-dimensional-reps v0.1.0 (/build/source/crates/three-dimensional-reps)
+[1m[92m   Compiling[0m rustred v0.1.0 (/nix/store/5hr22rycs6dpj77afgq0maqd8qbipk6a-rustred-source-7c1ed037/crates/rustred-core)
+[1m[92m   Compiling[0m rustred-order v0.1.0 (/nix/store/5hr22rycs6dpj77afgq0maqd8qbipk6a-rustred-source-7c1ed037/crates/rustred-order)
+[1m[92m   Compiling[0m pyo3-build-config v0.28.3
+[1m[92m   Compiling[0m spenso-macros v0.3.2 (/build/source/crates/spenso-macros)
+[1m[92m   Compiling[0m tempfile v3.27.0
+[1m[92m   Compiling[0m kurbo v0.13.1 (/build/source/vendor/kurbo)
+[1m[92m   Compiling[0m symbolica-data v0.1.0 (/build/source/crates/symbolica-data)
+[1m[33mwarning[0m[1m: unused import: `super::super::traits::*`[0m
+   [1m[94m--> [0m/build/source/vendor/clarabel/src/solver/core/solver.rs:470:9
+    [1m[94m|[0m
+[1m[94m470[0m [1m[94m|[0m     use super::super::traits::*;
+    [1m[94m|[0m         [1m[33m^^^^^^^^^^^^^^^^^^^^^^^[0m
+    [1m[94m|[0m
+    [1m[94m= [0m[1mnote[0m: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+[1m[92m   Compiling[0m linnet-render-py v0.1.0 (/build/source/crates/linnet-render-py)
+[1m[92m   Compiling[0m svgtypes v0.16.1
+[1m[92m   Compiling[0m write-fonts v0.48.1
+[1m[92m   Compiling[0m usvg v0.47.0
+[1m[92m   Compiling[0m kurvst v0.1.0 (/build/source/crates/kurvst)
+[1m[33mwarning[0m[1m: hiding a lifetime that's elided elsewhere is confusing[0m
+  [1m[94m--> [0m/build/source/vendor/clarabel/src/solver/core/kktsolvers/direct/quasidef/datamaps.rs:26:39
+   [1m[94m|[0m
+[1m[94m26[0m [1m[94m|[0m     pub(crate) fn to_sparse_expansion(&self) -> Option<SparseExpansionCone<T>> {
+   [1m[94m|[0m                                       [1m[33m^^^^^[0m            [1m[33m^^^^^^^^^^^^^^^^^^^^^^[0m [1m[33mthe same lifetime is hidden here[0m
+   [1m[94m|[0m                                       [1m[33m|[0m
+   [1m[94m|[0m                                       [1m[33mthe lifetime is elided here[0m
+   [1m[94m|[0m
+   [1m[94m= [0m[1mhelp[0m: the same lifetime is referred to in inconsistent ways, making the signature confusing
+   [1m[94m= [0m[1mnote[0m: `#[warn(mismatched_lifetime_syntaxes)]` on by default
+[1m[96mhelp[0m: use `'_` for type paths
+   [1m[94m|[0m
+[1m[94m26[0m [1m[94m| [0m    pub(crate) fn to_sparse_expansion(&self) -> Option<SparseExpansionCone<[92m'_, [0mT>> {
+   [1m[94m|[0m                                                                            [92m+++[0m
+
+[1m[33mwarning[0m: `clarabel` (lib) generated 2 warnings (run `cargo fix --lib -p clarabel` to apply 2 suggestions)
+[1m[92m   Compiling[0m pyo3-macros-backend v0.28.3
+[1m[92m   Compiling[0m pyo3-ffi v0.28.3
+[1m[92m   Compiling[0m pyo3 v0.28.3
+[1m[92m   Compiling[0m numpy v0.28.0
+[1m[92m   Compiling[0m resvg v0.47.0
+[1m[92m   Compiling[0m subsetter v0.2.6
+[1m[92m   Compiling[0m krilla v0.8.2
+[1m[92m   Compiling[0m pyo3-macros v0.28.3
+[1m[92m   Compiling[0m krilla-svg v0.8.1
+[1m[92m   Compiling[0m numerica v3.0.1 (https://github.com/symbolica-dev/symbolica?branch=community#8eb7c372)
+[1m[92m   Compiling[0m graphica v3.0.1 (https://github.com/symbolica-dev/symbolica?branch=community#8eb7c372)
+[1m[92m   Compiling[0m symbolica-utils v0.1.0 (/build/source/crates/symbolica-utils)
+[1m[92m   Compiling[0m symbolica-notation v0.1.0 (/build/source/crates/symbolica-notation)
+[1m[92m   Compiling[0m symbolica-typst-plugin v0.1.0 (https://github.com/symbolica-dev/symbolica-typst-plugin?rev=57b7455b37c30f4f87353c0073e49f5225e937ab#57b7455b)
+[1m[33mwarning[0m[1m: method `integer_zero_locus_misses_domain` is never used[0m
+   [1m[94m--> [0m/nix/store/5hr22rycs6dpj77afgq0maqd8qbipk6a-rustred-source-7c1ed037/crates/rustred-core/src/algebra/indexed/base_coefficients.rs:654:19
+    [1m[94m|[0m
+[1m[94m213[0m [1m[94m|[0m impl IndexedCoefficientContext {
+    [1m[94m|[0m [1m[94m------------------------------[0m [1m[94mmethod in this implementation[0m
+[1m[94m...[0m
+[1m[94m654[0m [1m[94m|[0m     pub(crate) fn integer_zero_locus_misses_domain(
+    [1m[94m|[0m                   [1m[33m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+    [1m[94m|[0m
+    [1m[94m= [0m[1mnote[0m: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+[1m[33mwarning[0m[1m: function `application_boxes` is never used[0m
+  [1m[94m--> [0m/nix/store/5hr22rycs6dpj77afgq0maqd8qbipk6a-rustred-source-7c1ed037/crates/rustred-core/src/foundry/artifact/source_port/geometry.rs:61:15
+   [1m[94m|[0m
+[1m[94m61[0m [1m[94m|[0m pub(super) fn application_boxes<const N: usize>(
+   [1m[94m|[0m               [1m[33m^^^^^^^^^^^^^^^^^[0m
+
+[1m[33mwarning[0m[1m: function `uniformly_zero_wide` is never used[0m
+   [1m[94m--> [0m/nix/store/5hr22rycs6dpj77afgq0maqd8qbipk6a-rustred-source-7c1ed037/crates/rustred-core/src/foundry/artifact/source_port/geometry.rs:444:15
+    [1m[94m|[0m
+[1m[94m444[0m [1m[94m|[0m pub(super) fn uniformly_zero_wide<Z: AsRef<[bool]>>(
+    [1m[94m|[0m               [1m[33m^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[33mwarning[0m[1m: function `coefficient_vanishes` is never used[0m
+   [1m[94m--> [0m/nix/store/5hr22rycs6dpj77afgq0maqd8qbipk6a-rustred-source-7c1ed037/crates/rustred-core/src/foundry/artifact/source_port/geometry.rs:512:4
+    [1m[94m|[0m
+[1m[94m512[0m [1m[94m|[0m fn coefficient_vanishes(
+    [1m[94m|[0m    [1m[33m^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[33mwarning[0m[1m: function `coefficient_vanishes` is never used[0m
+  [1m[94m--> [0m/nix/store/5hr22rycs6dpj77afgq0maqd8qbipk6a-rustred-source-7c1ed037/crates/rustred-core/src/foundry/artifact/source_port/geometry/bounded.rs:16:50
+   [1m[94m|[0m
+[1m[94m16[0m [1m[94m|[0m pub(in crate::foundry::artifact::source_port) fn coefficient_vanishes(
+   [1m[94m|[0m                                                  [1m[33m^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[33mwarning[0m[1m: function `certify_predicate_cover_within` is never used[0m
+   [1m[94m--> [0m/nix/store/5hr22rycs6dpj77afgq0maqd8qbipk6a-rustred-source-7c1ed037/crates/rustred-core/src/foundry/artifact/source_port/predicate_cover.rs:187:37
+    [1m[94m|[0m
+[1m[94m187[0m [1m[94m|[0m pub(in crate::foundry::artifact) fn certify_predicate_cover_within(
+    [1m[94m|[0m                                     [1m[33m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[33mwarning[0m[1m: associated function `try_new` is never used[0m
+   [1m[94m--> [0m/nix/store/5hr22rycs6dpj77afgq0maqd8qbipk6a-rustred-source-7c1ed037/crates/rustred-core/src/foundry/parametric/affine.rs:136:19
+    [1m[94m|[0m
+[1m[94m 59[0m [1m[94m|[0m impl AffineApplicationDomain {
+    [1m[94m|[0m [1m[94m----------------------------[0m [1m[94massociated function in this implementation[0m
+[1m[94m...[0m
+[1m[94m136[0m [1m[94m|[0m     pub(crate) fn try_new(
+    [1m[94m|[0m                   [1m[33m^^^^^^^[0m
+
+[1m[33mwarning[0m[1m: method `restrict_polynomial_value` is never used[0m
+   [1m[94m--> [0m/nix/store/5hr22rycs6dpj77afgq0maqd8qbipk6a-rustred-source-7c1ed037/crates/rustred-core/src/foundry/parametric/affine/restriction.rs:243:19
+    [1m[94m|[0m
+[1m[94m134[0m [1m[94m|[0m impl AffineDomainRestriction {
+    [1m[94m|[0m [1m[94m----------------------------[0m [1m[94mmethod in this implementation[0m
+[1m[94m...[0m
+[1m[94m243[0m [1m[94m|[0m     pub(crate) fn restrict_polynomial_value(
+    [1m[94m|[0m                   [1m[33m^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+
+[1m[92m   Compiling[0m rustred-feynkit v0.1.0 (/nix/store/5hr22rycs6dpj77afgq0maqd8qbipk6a-rustred-source-7c1ed037/crates/rustred-feynkit)
+[1m[33mwarning[0m: `rustred` (lib) generated 8 warnings
+[1m[92m   Compiling[0m gammaloop-workspace-hack v0.1.0 (/build/source/crates/gammaloop-workspace-hack)
+[1m[92m   Compiling[0m linnet v0.17.0 (/build/source/crates/linnet)
+[1m[92m   Compiling[0m spenso v0.6.0 (/build/source/crates/spenso)
+[1m[92m   Compiling[0m feynkit-model v0.1.0 (/build/source/crates/feynkit-model)
+[1m[92m   Compiling[0m feynkit-ufo v0.1.0 (/build/source/crates/feynkit-ufo)
+[1m[92m   Compiling[0m idenso v0.3.0 (/build/source/crates/idenso)
+[1m[92m   Compiling[0m feynkit-kinematics v0.1.0 (/build/source/crates/feynkit-kinematics)
+[1m[92m   Compiling[0m spenso-hep-lib v0.1.7 (/build/source/crates/spenso-hep-lib)
+[1m[92m   Compiling[0m linnest v0.1.0 (/build/source/crates/linnest)
+[1m[92m   Compiling[0m feynkit-graph v0.1.0 (/build/source/crates/feynkit-graph)
+[1m[92m   Compiling[0m spynso3 v0.1.2 (/build/source/crates/spynso3)
+[1m[92m   Compiling[0m linnet-py v0.1.0 (/build/source/crates/linnet-py)
+[1m[92m   Compiling[0m feynkit-amplitude v0.1.0 (/build/source/crates/feynkit-amplitude)
+[1m[92m   Compiling[0m feynkit-tensor v0.1.0 (/build/source/crates/feynkit-tensor)
+[1m[92m   Compiling[0m feynkit-cff v0.1.0 (/build/source/crates/feynkit-cff)
+[1m[92m   Compiling[0m feynkit-generator v0.1.0 (/build/source/crates/feynkit-generator)
+[1m[92m   Compiling[0m feynkit-py v0.1.0 (/build/source/crates/feynkit-py)
+[1m[92m   Compiling[0m alphal00p-notebook-host v0.1.0 (/build/source/examples/notebooks/symbolica-host)
+[1m[92m    Finished[0m `ci-optim` profile [optimized] target(s) in 5m 32s
+🚉 Overriding platform tag from _PYTHON_HOST_PLATFORM environment variable as linux_x86_64.
+📦 Built wheel for abi3 Python ≥ 3.10 to wheels/symbolica-3.0.1-cp310-abi3-linux_x86_64.whl
+buildPhase completed in 5 minutes 37 seconds
+Running phase: installPhase
+@nix { "action": "setPhase", "phase": "installPhase" }
+Running phase: fixupPhase
+@nix { "action": "setPhase", "phase": "fixupPhase" }
+shrinking RPATHs of ELF executables and libraries in /nix/store/cbvphdpy05pb8r414dmn5xfxxdqs3slx-generation-refresh-rustred-validation-host-wheel-0.1.0
+shrinking /nix/store/cbvphdpy05pb8r414dmn5xfxxdqs3slx-generation-refresh-rustred-validation-host-wheel-0.1.0/lib/symbolica/core.abi3.so
+checking for references to /build/ in /nix/store/cbvphdpy05pb8r414dmn5xfxxdqs3slx-generation-refresh-rustred-validation-host-wheel-0.1.0...
+patching script interpreter paths in /nix/store/cbvphdpy05pb8r414dmn5xfxxdqs3slx-generation-refresh-rustred-validation-host-wheel-0.1.0
+stripping (with command strip and flags -S -p) in /nix/store/cbvphdpy05pb8r414dmn5xfxxdqs3slx-generation-refresh-rustred-validation-host-wheel-0.1.0/lib

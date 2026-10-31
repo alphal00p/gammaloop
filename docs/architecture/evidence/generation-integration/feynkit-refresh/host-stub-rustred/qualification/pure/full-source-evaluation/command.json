@@ -1,0 +1,20 @@
+{
+  "argv": [
+    "/run/current-system/sw/bin/nix",
+    "eval",
+    "--offline",
+    "--option",
+    "pure-eval",
+    "true",
+    "--option",
+    "allow-import-from-derivation",
+    "false",
+    "--json",
+    "--expr",
+    "let f=builtins.getFlake \"git+file:///shared/lcnbr/dev/gammaloop/main?rev=2cfb52b28d99f92305a9d571bbe3911cf04b8a19&shallow=1&allRefs=1\"; in toString f.outPath"
+  ],
+  "cwd": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh",
+  "exit_code": 0,
+  "elapsed_s": 0.195536786923185,
+  "private_variables_absent": true
+}

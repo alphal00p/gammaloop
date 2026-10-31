@@ -1,0 +1,5 @@
+Using Python 3.13.15 environment at: venv
+Resolved 1 package in 2ms
+Prepared 1 package in 369ms
+Installed 1 package in 443ms
+ + symbolica==3.0.1 (from file:///nix/store/cbvphdpy05pb8r414dmn5xfxxdqs3slx-generation-refresh-rustred-validation-host-wheel-0.1.0/dist/symbolica-3.0.1-cp310-abi3-linux_x86_64.whl)

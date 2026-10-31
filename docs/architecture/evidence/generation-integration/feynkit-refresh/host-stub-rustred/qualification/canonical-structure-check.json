@@ -1,0 +1,9 @@
+{
+  "registry_TOML": true,
+  "all_prior_notes_unchanged": true,
+  "one_matching_Typst_title": true,
+  "invented_approval_fields": false,
+  "full_docs_Clippy_or_Typst_compile": false,
+  "no_compiler_or_Nix_after_licensed_boundary": true,
+  "source_sha256": "936d0bc2f1cab4a0c91dcd58ba8f5d287b7ff342e1f27f6f50d22a1dbee210e6"
+}

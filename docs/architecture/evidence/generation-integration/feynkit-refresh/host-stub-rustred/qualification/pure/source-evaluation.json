@@ -1,0 +1,5 @@
+{
+  "base": "/nix/store/hgvfgwvrid0pilvrzqkxapd3jph7a77p-gammaloop-crate-feynkit-py-dependency-deps-0.1.0",
+  "source": "/nix/store/wsadhm1dqaik849gw251qbn0fbpaapjz-source",
+  "vendor": "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps"
+}

@@ -1,0 +1,1 @@
+{"private_variables_absent": true, "distinct_network_namespace": true, "interfaces": ["lo"], "no_routes": true, "readonly_inputs_checked": 483, "compiler_vcs_nix_absent": true, "credentials_and_host_driver_tree_absent": true}

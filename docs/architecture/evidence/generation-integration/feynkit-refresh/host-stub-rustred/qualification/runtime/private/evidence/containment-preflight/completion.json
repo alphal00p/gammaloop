@@ -1,0 +1,8 @@
+{
+  "exit_code": 0,
+  "elapsed_s": 0.9579041749238968,
+  "reaped": true,
+  "secret_redaction_required": false,
+  "stdout_sha256": "5fbd1d74501d836cf17b7737356371b534cc23cfc9dfe7f12360abe90323abf1",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+}

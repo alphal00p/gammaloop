@@ -1,0 +1,15 @@
+{
+  "argv": [
+    "git",
+    "-C",
+    "/shared/lcnbr/dev/gammaloop/main",
+    "diff",
+    "--name-only",
+    "d0fb4e906140a6a0fc8dd6401ca839cab0c2734d",
+    "2cfb52b28d99f92305a9d571bbe3911cf04b8a19"
+  ],
+  "cwd": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh",
+  "exit_code": 0,
+  "elapsed_s": 0.006495010107755661,
+  "private_variables_absent": true
+}

@@ -1,0 +1,2563 @@
+{
+  "elf_metadata": {
+    "/nix/store/mn3vzg4c35q658jgg078hahj3hcic2f4-generation-refresh-feynkit-stub-exporter-0.1.0/bin/alphal00p-docs-python-exporter": {
+      "path": "/nix/store/mn3vzg4c35q658jgg078hahj3hcic2f4-generation-refresh-feynkit-stub-exporter-0.1.0/bin/alphal00p-docs-python-exporter",
+      "sha256": "ea6b689912dd12eb1d40fc9f65f6e52ded87a33a755b94ceb42363a6f5480e9e",
+      "bytes": 140159312,
+      "interpreter": "/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84/lib/ld-linux-x86-64.so.2",
+      "dynamic": [
+        {
+          "tag": "NEEDED",
+          "value": "libpython3.13.so.1.0"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libgcc_s.so.1"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libm.so.6"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libc.so.6"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "ld-linux-x86-64.so.2"
+        },
+        {
+          "tag": "RUNPATH",
+          "value": "/nix/store/wj1f56qky4pmjc7l0r6b6l7whnnw7hp6-python3-3.13.15/lib:/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84/lib:/nix/store/604gsr59rj7dzd0nrhp143rpvf7gyiaz-gcc-15.3.0-lib/lib"
+        }
+      ],
+      "sections": {
+        "": {
+          "size": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "flags": 0
+        },
+        ".interp": {
+          "size": 83,
+          "sha256": "c058fccbbf4344362a325488acd4d68ca3079ad0e096cda08566e7e856cff512",
+          "flags": 2
+        },
+        ".hash": {
+          "size": 4148,
+          "sha256": "51eee55da78edb1e49968596b44eaf1da1fcaa47039f2ccce8fa9be475a5284d",
+          "flags": 2
+        },
+        ".gnu.hash": {
+          "size": 116,
+          "sha256": "1da19a200ddd95460911ed9972509dea828e33fff7d22534c5c3dc98532552e3",
+          "flags": 2
+        },
+        ".dynsym": {
+          "size": 8784,
+          "sha256": "ce057e17ac55785ae2ed09e89a660d6ffa699876b794453dbbb841514db3ff10",
+          "flags": 2
+        },
+        ".dynstr": {
+          "size": 5928,
+          "sha256": "536f02b76541d2e81a8d4870d8832bb4f9f7bfda9d03c9a64d221e1062b08e96",
+          "flags": 2
+        },
+        ".gnu.version": {
+          "size": 732,
+          "sha256": "249983e743f0f8bd12ec32a3d7fda50f4988b110d763c9ae5f5bbee13bcea360",
+          "flags": 2
+        },
+        ".gnu.version_r": {
+          "size": 496,
+          "sha256": "e2bde0391cc780d3f49ff2e4997a8982b03240d9abc52d4b4c9cc858825d34b7",
+          "flags": 2
+        },
+        ".rela.dyn": {
+          "size": 3228864,
+          "sha256": "4cc1871d088bcb2212a71afc1280f073da6c809e2eee27a04a1fd8bde77049cd",
+          "flags": 2
+        },
+        ".rela.plt": {
+          "size": 288,
+          "sha256": "57d56bee8ab172aba49c049347f850f38bc089c725e07a21157a516261816f53",
+          "flags": 66
+        },
+        ".init": {
+          "size": 27,
+          "sha256": "ac5b06eab33c6d22a6ffd38bce3521b78242106db767243dd5c3ed26544caf1b",
+          "flags": 6
+        },
+        ".plt": {
+          "size": 208,
+          "sha256": "774e2b08e8c227ec60a9140972bc163f07d340b1b95ff3631fb0e9815d89aeaa",
+          "flags": 6
+        },
+        ".plt.got": {
+          "size": 72,
+          "sha256": "2527da2a61534107d84ee18ac5ee03158c0aa29981a8fb7c86793bc75bfe3322",
+          "flags": 6
+        },
+        ".text": {
+          "size": 85024386,
+          "sha256": "b64d1ba75e238ca6ad99817d53a427336b54f97024e74cc89ce22f3ebb735f3b",
+          "flags": 6
+        },
+        ".fini": {
+          "size": 13,
+          "sha256": "6a4f3e5efc7c1f7ee7d6f21afd9ed040ba1d7f0b97bb12b016f5b176cc558bd8",
+          "flags": 6
+        },
+        ".rodata": {
+          "size": 6825504,
+          "sha256": "262ed661c91250c642eac3c6c278c8503a88acc174f5862f048087b22ee9b595",
+          "flags": 2
+        },
+        ".eh_frame_hdr": {
+          "size": 824188,
+          "sha256": "de9bef94e5bfaeff3ac8cf0083d9ba1c1fb4039e5f8ece4b76cc11334a5d94ce",
+          "flags": 2
+        },
+        ".eh_frame": {
+          "size": 6535892,
+          "sha256": "bb74b4a3ec34e509bfc4ffb3c33c3609fc1aefa6053e3bf48efeb6562817f2a8",
+          "flags": 2
+        },
+        ".gcc_except_table": {
+          "size": 3374116,
+          "sha256": "e0e4b428b02f71c4691cf3aff8497b66e3f892722ae9dcc4b2adc93dd52661ed",
+          "flags": 2
+        },
+        ".note.gnu.property": {
+          "size": 32,
+          "sha256": "5978480398fc48bfa6c56246117c5bc1a40145463a2faca541e5e91d5067ff79",
+          "flags": 2
+        },
+        ".note.ABI-tag": {
+          "size": 32,
+          "sha256": "eccfb97e9738b8ca4f9a64423493b259209603712194c69346e25916b6186148",
+          "flags": 2
+        },
+        ".tdata": {
+          "size": 696,
+          "sha256": "0806e9eb932d22f12483a3a870c92395be830f7a3ffc4068ab1d4e915174847e",
+          "flags": 1027
+        },
+        ".tbss": {
+          "size": 2264,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "flags": 1027
+        },
+        ".init_array": {
+          "size": 7104,
+          "sha256": "42997d57ac93dae40e619d5f98394e77f38a62101f68fa5020dbe2cb38edc45d",
+          "flags": 2097155
+        },
+        ".fini_array": {
+          "size": 8,
+          "sha256": "fbe3a34aa01afb6141607c1978a9b481d30055f0b54c0a69be5de57a969519ab",
+          "flags": 3
+        },
+        ".data.rel.ro": {
+          "size": 2743472,
+          "sha256": "f6963985fba44f0bc0e321e83569170f52c847168240959d628ebaf927d9bde4",
+          "flags": 3
+        },
+        ".dynamic": {
+          "size": 592,
+          "sha256": "fa199f2206f445020ce7d6dcca7d3bfd411b08c871174e305b9434c5a8299ad7",
+          "flags": 3
+        },
+        ".got": {
+          "size": 84792,
+          "sha256": "2acc7da9aa3559e01942ed07bb0ec75762d7a6bf2dc42f24dfe27291a0e878c1",
+          "flags": 3
+        },
+        ".data": {
+          "size": 73560,
+          "sha256": "62289d2fd7b98fc947afda0adb3c35fe206ccc01597c4eeeaef11d4d16c1b305",
+          "flags": 3
+        },
+        ".bss": {
+          "size": 8224,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "flags": 3
+        },
+        ".comment": {
+          "size": 62,
+          "sha256": "acbe4080105391bd489e66bb416e07c8c26bfe1a0223c21b750babc6f8f7444c",
+          "flags": 48
+        },
+        ".symtab": {
+          "size": 4831248,
+          "sha256": "24e271c8b9a977c7a69cb765c120001a71196c962478cc28644cef18fac5c331",
+          "flags": 0
+        },
+        ".strtab": {
+          "size": 26576889,
+          "sha256": "05f4e79def71b266e42e8731618c6c564aa9417790b4df7bbd66e9f96cd6ec72",
+          "flags": 0
+        },
+        ".shstrtab": {
+          "size": 298,
+          "sha256": "22c162954dc3f8aba44b359835528e831db42837be22964f905655b96836f871",
+          "flags": 0
+        }
+      },
+      "nonstore_library_paths": [],
+      "static_strings_kernel_sources": [
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/graphica-3.0.1/src/lib.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/combinatorics.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/domains.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/domains/backend/integer.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/domains/dual.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/domains/finite_field.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/domains/finite_field/geometric_sequence_kernels.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/domains/finite_field/polynomial_kernels.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/domains/finite_field/remainder_kernels.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/domains/float/complex.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/domains/float/error.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/domains/float/field.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/domains/float/interval.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/domains/float/magnitude.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/domains/float/multiprecision.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/domains/float/native.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/domains/float/python.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/domains/float/python.rsThe",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/domains/float/serialization.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/domains/integer.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/domains/integer/polynomial_kernels.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/domains/polynomial_layouts.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/domains/rational.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/numerical_integration.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/printer.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/printer/mathml.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/tensors/matrix.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/tensors/sparse.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/symbolica-3.0.1/src/api/python.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/symbolica-3.0.1/src/api/python.rsevent",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/symbolica-3.0.1/src/api/python/atom.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/symbolica-3.0.1/src/api/python/atom.rsevent",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/symbolica-3.0.1/src/api/python/citation.rsA",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/symbolica-3.0.1/src/api/python/condition.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/symbolica-3.0.1/src/api/python/condition.rsunsafe",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/symbolica-3.0.1/src/api/python/display.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/symbolica-3.0.1/src/api/python/display/algebraic.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/symbolica-3.0.1/src/api/python/display/html.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/symbolica-3.0.1/src/api/python/display/matrix.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/symbolica-3.0.1/src/api/python/display/paging.rs"
+      ],
+      "product_executed": false
+    },
+    "/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84/lib/ld-linux-x86-64.so.2": {
+      "path": "/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84/lib/ld-linux-x86-64.so.2",
+      "sha256": "05657061620b22dbeb881cd13630ef66d39916d3b9c2a8efeb9ec6244367051f",
+      "bytes": 263056,
+      "interpreter": "",
+      "dynamic": [
+        {
+          "tag": "SONAME",
+          "value": "ld-linux-x86-64.so.2"
+        }
+      ],
+      "sections": {
+        "": {
+          "size": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "flags": 0
+        },
+        ".note.gnu.build-id": {
+          "size": 36,
+          "sha256": "531e8b4815d8067b4faa647263412bba186d449d705e0e5b81211353903b9f85",
+          "flags": 2
+        },
+        ".hash": {
+          "size": 312,
+          "sha256": "4649b2516e183cd5e70220035241443ebbd15b32d660c4f5621c06fe8fbd65c0",
+          "flags": 2
+        },
+        ".gnu.hash": {
+          "size": 348,
+          "sha256": "3199856a41d69762f554d16aa9cfa46517183332eabbdb55795d60680774ea5a",
+          "flags": 2
+        },
+        ".dynsym": {
+          "size": 936,
+          "sha256": "ba47370494c440b9af25b45f34aae4ad8728db8a3139ce71aad14a1ff1e7b730",
+          "flags": 2
+        },
+        ".dynstr": {
+          "size": 689,
+          "sha256": "e9d8defa84f08866cfb565a09075b12cc30fd55e414a86cf4e0bd7256299f3ba",
+          "flags": 2
+        },
+        ".gnu.version": {
+          "size": 78,
+          "sha256": "24bc0b1235b74a92a7fe01508acd2ec412176fd98d1aa10e8ae1060524eca2d7",
+          "flags": 2
+        },
+        ".gnu.version_d": {
+          "size": 236,
+          "sha256": "6c106a5aa7554c830611cb3069610e2c2d9b8c8f83fe4638a7827fb500092d79",
+          "flags": 2
+        },
+        ".rela.dyn": {
+          "size": 24,
+          "sha256": "310eefa339ce5c97a913bd85a1c1acb2bd22529c3cf931796ea95b74ca439fb8",
+          "flags": 2
+        },
+        ".relr.dyn": {
+          "size": 40,
+          "sha256": "5be741d84bd3527564223d1b9a2280806955d84e5e84f44ab12801db2edadc3e",
+          "flags": 2
+        },
+        ".text": {
+          "size": 175029,
+          "sha256": "9147061f3a30e79d07752f8300f5fa6f6f48049f9572765925f57a9bbc5e797e",
+          "flags": 6
+        },
+        ".rodata": {
+          "size": 26464,
+          "sha256": "7f2ac05de20a5d64c8ae2b3a54808853cc80529aa0f41cd5bb984b655c0a5c45",
+          "flags": 2
+        },
+        ".eh_frame_hdr": {
+          "size": 2996,
+          "sha256": "bb07f2861661e39dff1520fe11e44bbd8ee538c5d46dd1ae4fe7df17fbd93ebb",
+          "flags": 2
+        },
+        ".eh_frame": {
+          "size": 13460,
+          "sha256": "b60f020b2ef70a98977a9490542f64c415167752d4883595d8a02d8690a554f0",
+          "flags": 2
+        },
+        ".note.gnu.property": {
+          "size": 64,
+          "sha256": "65cc707d46c4ddc9fa2db2b10f6485d038e428b07c55fcd637ab2384362f9732",
+          "flags": 2
+        },
+        ".data.rel.ro": {
+          "size": 7168,
+          "sha256": "e940840f05eed26f54decd16efe4bf0f5585b861c0dc21d1049f3e128708f21a",
+          "flags": 3
+        },
+        ".dynamic": {
+          "size": 384,
+          "sha256": "aa1e682f25fd22d87f36b981eb09efe96155a8b65d2e20c1f2f18cfb03f91a89",
+          "flags": 3
+        },
+        ".got": {
+          "size": 32,
+          "sha256": "fcfdc1b76524ae55b1bdebce0ca2bed974feba4284f4d73ac3f249a5c2bfe992",
+          "flags": 3
+        },
+        ".data": {
+          "size": 2124,
+          "sha256": "27c2b18df5b4978736cb4bd675ea6831a135f1e870af9156bff9f6a6fcf20d02",
+          "flags": 3
+        },
+        ".bss": {
+          "size": 2696,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "flags": 3
+        },
+        ".comment": {
+          "size": 18,
+          "sha256": "3154fae630369801d0441c8861bef6caf2bbe188d803a11180c48895c493fc3a",
+          "flags": 48
+        },
+        ".symtab": {
+          "size": 16056,
+          "sha256": "0ae3f4d95d6c5c0edac716d30c074f3d90519846822b6633d1c412319a6ba365",
+          "flags": 0
+        },
+        ".strtab": {
+          "size": 9617,
+          "sha256": "92b357f7cec2e61100a25dc9aa82788308f19fcae485881ed979a1ec5fad02e4",
+          "flags": 0
+        },
+        ".shstrtab": {
+          "size": 224,
+          "sha256": "49f85ec823f3fb6d266c8199bb2a25b03546d39e7292486be42db1cc44f356a4",
+          "flags": 0
+        }
+      },
+      "nonstore_library_paths": [],
+      "static_strings_kernel_sources": [],
+      "product_executed": false
+    },
+    "/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84/lib/libc.so.6": {
+      "path": "/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84/lib/libc.so.6",
+      "sha256": "b8cb091b34bdd88f6902eebff8761f9ea306e6789b4ac4d06d4470c0d568c80c",
+      "bytes": 2404904,
+      "interpreter": "/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84/lib/ld-linux-x86-64.so.2",
+      "dynamic": [
+        {
+          "tag": "NEEDED",
+          "value": "ld-linux-x86-64.so.2"
+        },
+        {
+          "tag": "SONAME",
+          "value": "libc.so.6"
+        }
+      ],
+      "sections": {
+        "": {
+          "size": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "flags": 0
+        },
+        ".note.gnu.build-id": {
+          "size": 36,
+          "sha256": "b80c1d4e75b312a843892c8ee89da6bc6e6c869b7a6d171a906c539eec78ad80",
+          "flags": 2
+        },
+        ".hash": {
+          "size": 16800,
+          "sha256": "ee33df94088aaf5ee1c8676c9dbf43067c9f01740f1c946b46f66c877a336e7e",
+          "flags": 2
+        },
+        ".gnu.hash": {
+          "size": 20788,
+          "sha256": "582ea3c83d6f8ddf780abd994e427a30d936706b9edcd71a278123d58a3766a9",
+          "flags": 2
+        },
+        ".dynsym": {
+          "size": 76344,
+          "sha256": "0a67d75c3347ede9ce199ab6bb7c43a3a15e4df19691a806d7eb445a767d0ed2",
+          "flags": 2
+        },
+        ".dynstr": {
+          "size": 35165,
+          "sha256": "d0216c483de9b9f6a1f4be2b497dfcc534751c7295c1312e35b894bde9f72dd7",
+          "flags": 2
+        },
+        ".gnu.version": {
+          "size": 6362,
+          "sha256": "0face398e7cca1746810e3b9427c6b093c0798415346ab0ccf401c1d22074528",
+          "flags": 2
+        },
+        ".gnu.version_d": {
+          "size": 1580,
+          "sha256": "dc95cc2ff22494df6d2e290337348f19080ea4e4f4f3b43d671b60ad7fac352f",
+          "flags": 2
+        },
+        ".gnu.version_r": {
+          "size": 80,
+          "sha256": "11c190a6ff82a983e04a6c38b035495a5bd9f97494d413768650cac980188dc5",
+          "flags": 2
+        },
+        ".rela.dyn": {
+          "size": 2112,
+          "sha256": "0f5538fcdb20f02dfd90646752732a69dc8df0a3d2574b66ef19aa0fc87f08fb",
+          "flags": 2
+        },
+        ".rela.plt": {
+          "size": 1488,
+          "sha256": "60a8e902bcd5e8f1809e8e7f0b457757e67b2707ed7793bb70a70065d446294a",
+          "flags": 66
+        },
+        ".relr.dyn": {
+          "size": 280,
+          "sha256": "f274cb30ae6d2fa9a07abe177195a79830bb29182c1c044be42cb659131a7c24",
+          "flags": 2
+        },
+        ".plt": {
+          "size": 1008,
+          "sha256": "2fa7c6339fe76ef5b19edecc63a5779e9264f59b99d2896e3e516975efb05107",
+          "flags": 6
+        },
+        ".plt.got": {
+          "size": 32,
+          "sha256": "beb0970c4e5adc94171038e88526f4753460d11f1d4da7f84978c0ac3f62d974",
+          "flags": 6
+        },
+        ".plt.sec": {
+          "size": 992,
+          "sha256": "49c4b43ac0f40afd1883040e400251d03562d3e5b0577db009a6004c0fe5282b",
+          "flags": 6
+        },
+        ".text": {
+          "size": 1566525,
+          "sha256": "d278b6926368a72e9f7869b7abe60fadadb41744d258650d16411f22a4491e0a",
+          "flags": 6
+        },
+        ".rodata": {
+          "size": 156544,
+          "sha256": "fc4264be3633f0244194ef8d718020ae25a38502da05f150679b0c308f55f146",
+          "flags": 2
+        },
+        "rodata.cst32": {
+          "size": 96,
+          "sha256": "eceb0624a0f5e6fd90996bf45311eb217c85d6953a839b0891bcf2904e41edc4",
+          "flags": 18
+        },
+        ".interp": {
+          "size": 83,
+          "sha256": "c058fccbbf4344362a325488acd4d68ca3079ad0e096cda08566e7e856cff512",
+          "flags": 2
+        },
+        ".eh_frame_hdr": {
+          "size": 31684,
+          "sha256": "48c9ce12cf76046b086e1c0939cd069c977855f74ba4898334d074b41e1adb1c",
+          "flags": 2
+        },
+        ".eh_frame": {
+          "size": 131776,
+          "sha256": "74f9efc099cea28ca57ddbd82653a7dfadfa8c4bc759e606fccce2e0b809f542",
+          "flags": 2
+        },
+        ".gcc_except_table": {
+          "size": 1544,
+          "sha256": "01980b60c985fcf41d3a0035f4e4eb884377c4f98215dbe6fda9395ae5b35e06",
+          "flags": 2
+        },
+        ".note.gnu.property": {
+          "size": 80,
+          "sha256": "695e6ef3d0bf3e3da8f1c01e971f6db988bd56f24dc36cb8030c58189327ea88",
+          "flags": 2
+        },
+        ".note.ABI-tag": {
+          "size": 32,
+          "sha256": "eccfb97e9738b8ca4f9a64423493b259209603712194c69346e25916b6186148",
+          "flags": 2
+        },
+        ".tdata": {
+          "size": 40,
+          "sha256": "7564e6aa1767675a82d47f026ba8d445c9139761b8df660e606fab36ca9b5535",
+          "flags": 1027
+        },
+        ".tbss": {
+          "size": 96,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "flags": 1027
+        },
+        ".init_array": {
+          "size": 24,
+          "sha256": "5fc17956a16544c3016514e47cbcc1347a00c06f125d9325ace24f4f8377099a",
+          "flags": 3
+        },
+        ".data.rel.ro": {
+          "size": 11616,
+          "sha256": "0ddbbccd029f7bdd567d2fc9fa2b9fe852ba0871387e2c6cb83211b9b54ffd3f",
+          "flags": 3
+        },
+        ".dynamic": {
+          "size": 576,
+          "sha256": "7f3468c7dca9aa6af5b2e2d01fda2ab634a9d7393adc451b95a97b8a527eb943",
+          "flags": 3
+        },
+        ".got": {
+          "size": 1168,
+          "sha256": "91259e01e7e2de1838fe58f82262c1bf62c8926e0a37dfdeab4d04971b29809a",
+          "flags": 3
+        },
+        ".data": {
+          "size": 5832,
+          "sha256": "9c1d09bc02eae8eaa782d00847c4b68796faa90c065f6fd5cefc16f00b30dc51",
+          "flags": 3
+        },
+        ".bss": {
+          "size": 55152,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "flags": 3
+        },
+        ".comment": {
+          "size": 18,
+          "sha256": "3154fae630369801d0441c8861bef6caf2bbe188d803a11180c48895c493fc3a",
+          "flags": 48
+        },
+        ".gnu.warning.sigstack": {
+          "size": 77,
+          "sha256": "1ac209e0d6fe4ea01efee056f9e0399b311f961ba13244f05f6e531c9e101284",
+          "flags": 0
+        },
+        ".gnu.warning.sigreturn": {
+          "size": 50,
+          "sha256": "46c1819032a2f5ca4b9e0044c7e92443b96e7bfd2f996644a88d9477d7074241",
+          "flags": 0
+        },
+        ".gnu.warning.siggetmask": {
+          "size": 57,
+          "sha256": "fc04a31cd543c557eb263a8c13daf31696ecba05875885b590b8e100eb789757",
+          "flags": 0
+        },
+        ".gnu.warning.tempnam": {
+          "size": 56,
+          "sha256": "e80af4588a83c23432216ea45bf208fea80573021618822c7ca5a795bed88a9b",
+          "flags": 0
+        },
+        ".gnu.warning.tmpnam": {
+          "size": 55,
+          "sha256": "34bf8bbcce7b8fee257ace66cd5f6f455b4911049e26151fb89f976d761144b2",
+          "flags": 0
+        },
+        ".gnu.warning.tmpnam_r": {
+          "size": 57,
+          "sha256": "cca8854a0477063d6adffb0d02e0da9767971e94448a9ee387ad4ddcd5593aee",
+          "flags": 0
+        },
+        ".gnu.warning.gets": {
+          "size": 57,
+          "sha256": "916974ca456e92ee308e07896a8615d6afe85355069efaf223f8f11dfdff041d",
+          "flags": 0
+        },
+        ".gnu.warning.pthread_attr_getstackaddr": {
+          "size": 82,
+          "sha256": "2d7167d41c3627a738ea5169f7846b68daefbf58b48ce300a3046bd48d88a752",
+          "flags": 0
+        },
+        ".gnu.warning.pthread_attr_setstackaddr": {
+          "size": 82,
+          "sha256": "24d6ae9704b7dfc002240c0d0dea94cfc1b4ba87ef4cde3f57d1b3e820898c58",
+          "flags": 0
+        },
+        ".gnu.warning.re_max_failures": {
+          "size": 61,
+          "sha256": "15a981975c32a04928cf4e5cd0046659a4f8af1c382a09a1197c09894a50f703",
+          "flags": 0
+        },
+        ".gnu.warning.getwd": {
+          "size": 58,
+          "sha256": "2d5084251cd8d543c676f12a3bfce19526330ead241898fec74f943c4b9be8b4",
+          "flags": 0
+        },
+        ".gnu.warning.chflags": {
+          "size": 48,
+          "sha256": "2a833c7efec6c1cf7e379d02603ef65452ec479cf2f198274d18012098611107",
+          "flags": 0
+        },
+        ".gnu.warning.fchflags": {
+          "size": 49,
+          "sha256": "244fcb8b5b2a4d4ac97aba04954dc41c8ecc1ffcdc7b738c755e5080f86eae46",
+          "flags": 0
+        },
+        ".gnu.warning.gtty": {
+          "size": 45,
+          "sha256": "e6db94b83ef08c72bac2bcc45f9fb5aea46566e5573ca4bfe0b4285e7f1033ee",
+          "flags": 0
+        },
+        ".gnu.warning.mktemp": {
+          "size": 68,
+          "sha256": "41b4451acef7bf411e40e3c1870fd2c3b1540ccee2e1ef374843a64453c2ad9e",
+          "flags": 0
+        },
+        ".gnu.warning.revoke": {
+          "size": 47,
+          "sha256": "56107a298795a6b4ac5a67ac1c43dc8ccfb8d08d73f941f2b33495c68e84044d",
+          "flags": 0
+        },
+        ".gnu.warning.stty": {
+          "size": 45,
+          "sha256": "f3e294488051957c3579dd721cbbc2607b8602e6cddc578c5256523e64cda867",
+          "flags": 0
+        },
+        ".gnu.warning.__compat_bdflush": {
+          "size": 57,
+          "sha256": "85052a6401a0cf5bcdcbca976e5763b5dec1d9c5fcec07d755f12087856cc144",
+          "flags": 0
+        },
+        ".gnu.warning.__gets_chk": {
+          "size": 57,
+          "sha256": "916974ca456e92ee308e07896a8615d6afe85355069efaf223f8f11dfdff041d",
+          "flags": 0
+        },
+        ".gnu.warning.__getwd_chk": {
+          "size": 58,
+          "sha256": "2d5084251cd8d543c676f12a3bfce19526330ead241898fec74f943c4b9be8b4",
+          "flags": 0
+        },
+        ".gnu.warning.inet6_option_space": {
+          "size": 60,
+          "sha256": "e842068976a1353dffdbf0e628cf0bca2252b5d29fd2a4401c95c547adb09772",
+          "flags": 0
+        },
+        ".gnu.warning.inet6_option_init": {
+          "size": 59,
+          "sha256": "5e94a8ab5b484d220c980bae6ea471a796f0bed10a110bdcc3747b1ca0e3b9fb",
+          "flags": 0
+        },
+        ".gnu.warning.inet6_option_append": {
+          "size": 61,
+          "sha256": "c0b1ee04f34f4b76b04dd65f5530d3d2a8f1857e9bd93c7ca9aec58e06b7a03a",
+          "flags": 0
+        },
+        ".gnu.warning.inet6_option_alloc": {
+          "size": 60,
+          "sha256": "c0e7a8dcb35de154c22e86ea14c2e10564a953bb66d90537fa68886a21035634",
+          "flags": 0
+        },
+        ".gnu.warning.inet6_option_next": {
+          "size": 59,
+          "sha256": "87fe0fc31126c1deb0d336f01466daa8bffdb991246d5711880011bf14825652",
+          "flags": 0
+        },
+        ".gnu.warning.inet6_option_find": {
+          "size": 59,
+          "sha256": "e4b7d549006ba4e22c7c47cb9ba563701253b8b35c013a030297b4c2d7f87d4e",
+          "flags": 0
+        },
+        ".gnu.warning.getpw": {
+          "size": 58,
+          "sha256": "d8c5c4cd10410614be317b8dd0f04f693a7ba0b0bc6b2ab9bf3de07f7e1cff17",
+          "flags": 0
+        },
+        ".gnu.warning.setlogin": {
+          "size": 49,
+          "sha256": "a826df3e41c4aff4f2ca0fea5372b9ccca4d45faf26969cacdaf324200e64794",
+          "flags": 0
+        },
+        ".symtab": {
+          "size": 205920,
+          "sha256": "1159e159203e8019e34cbe6622916020a097734f3a0e802a2ca1a23cbb4499ea",
+          "flags": 0
+        },
+        ".strtab": {
+          "size": 117594,
+          "sha256": "9bba3e57934a0be13f47d8f6bfc839bad2a8e9601e46dabfc9e9dc5b317dfeb9",
+          "flags": 0
+        },
+        ".shstrtab": {
+          "size": 1045,
+          "sha256": "01ffbe4b7eb62b2d7a32f23b8e7989914c78085f23cd09662a7bc6835a4adbaf",
+          "flags": 0
+        }
+      },
+      "nonstore_library_paths": [],
+      "static_strings_kernel_sources": [],
+      "product_executed": false
+    },
+    "/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84/lib/libm.so.6": {
+      "path": "/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84/lib/libm.so.6",
+      "sha256": "864704dfd98b7025f21dd1dcc8f8f1f6388ecb44aa984b075f0188c253d4ab53",
+      "bytes": 1102240,
+      "interpreter": "",
+      "dynamic": [
+        {
+          "tag": "NEEDED",
+          "value": "libc.so.6"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "ld-linux-x86-64.so.2"
+        },
+        {
+          "tag": "SONAME",
+          "value": "libm.so.6"
+        }
+      ],
+      "sections": {
+        "": {
+          "size": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "flags": 0
+        },
+        ".note.gnu.build-id": {
+          "size": 36,
+          "sha256": "6110df577e8ccb94f3eecda8236a61ceaa79983307ed4c6ef33fdba48a6fe478",
+          "flags": 2
+        },
+        ".hash": {
+          "size": 9428,
+          "sha256": "10ceb11f3214434172172192a99acb4bb7f87a88a139967678924f5fc7ade748",
+          "flags": 2
+        },
+        ".gnu.hash": {
+          "size": 10468,
+          "sha256": "f19c3e9b319d722cc61b75cc97c94208ab18eeac066486b17838a03fff55e5cf",
+          "flags": 2
+        },
+        ".dynsym": {
+          "size": 32544,
+          "sha256": "357880e79848a6204cf77a9e147c5374db432a80d582d7bcf20052ecd987b71a",
+          "flags": 2
+        },
+        ".dynstr": {
+          "size": 11441,
+          "sha256": "9efcbe32a8c5ee2d3b024ea774b5af5736ba61d3da689643ff2e7de1bece136c",
+          "flags": 2
+        },
+        ".gnu.version": {
+          "size": 2712,
+          "sha256": "e1a012e8b91444a830818296080482d944d34bb77d77f6878534bab7c4100049",
+          "flags": 2
+        },
+        ".gnu.version_d": {
+          "size": 704,
+          "sha256": "692837ebd169b37e42161f42946a84195485c8c09d47e769322f43868a7e1646",
+          "flags": 2
+        },
+        ".gnu.version_r": {
+          "size": 128,
+          "sha256": "04720154ab5a6dd4c08e3d80e3d7cd227f6e5eb1f74a9b032c2605356ce4aaba",
+          "flags": 2
+        },
+        ".rela.dyn": {
+          "size": 240,
+          "sha256": "7622aae9a6c50a273a59638038c01a865929388e94077c13f0aac73d905fe2dd",
+          "flags": 2
+        },
+        ".rela.plt": {
+          "size": 936,
+          "sha256": "1594eaa6e85062b6822aad19bf318c093b93470f514d799856ce3b55d14d3f8e",
+          "flags": 66
+        },
+        ".relr.dyn": {
+          "size": 24,
+          "sha256": "105e76b2fad7f3f1c994a801b5cd12154fb770a0432d58dda8147bcc65e1839c",
+          "flags": 2
+        },
+        ".init": {
+          "size": 27,
+          "sha256": "a75efdb90449ea43ff907acec305ace22c9914f86f185380ee6e57cc9746d50d",
+          "flags": 6
+        },
+        ".plt": {
+          "size": 640,
+          "sha256": "f821aec4a3cef29d826736e7bc1bdcfeca64509aa39e6a9dd05f2f6f13d880ad",
+          "flags": 6
+        },
+        ".plt.got": {
+          "size": 16,
+          "sha256": "8e9f0aa46f38c93a7cbe5d59817612c1f5a679f5bdf63027e8a51eb705189f59",
+          "flags": 6
+        },
+        ".plt.sec": {
+          "size": 624,
+          "sha256": "d2aa44aabea1353db10ad9e9d916c9a27abd8533cc93dfdd5ce902202dfe039a",
+          "flags": 6
+        },
+        ".text": {
+          "size": 542998,
+          "sha256": "5508ad60d8bbcb58f926948cef1e1e335552a8104ef61ca00c9222322d52b721",
+          "flags": 6
+        },
+        ".fini": {
+          "size": 13,
+          "sha256": "6a4f3e5efc7c1f7ee7d6f21afd9ed040ba1d7f0b97bb12b016f5b176cc558bd8",
+          "flags": 6
+        },
+        ".rodata": {
+          "size": 346496,
+          "sha256": "9e3aa5906336acbf702340f050e3d4c37199ee4756d714c99bbe9001576823ba",
+          "flags": 2
+        },
+        ".eh_frame_hdr": {
+          "size": 7804,
+          "sha256": "b22a9ac98ddaa90dcdf471e8e39e8fa7769d2769b545394fd4250fec0bec8438",
+          "flags": 2
+        },
+        ".eh_frame": {
+          "size": 36652,
+          "sha256": "a2f90d4a76147bd3c28daaa7dcb41603d16ba2b9b775c2256277e3ce01b80d19",
+          "flags": 2
+        },
+        ".note.gnu.property": {
+          "size": 80,
+          "sha256": "a6868bed46e71a7c863d66897f111e50e392566676e7270288b706366c1d2117",
+          "flags": 2
+        },
+        ".note.ABI-tag": {
+          "size": 32,
+          "sha256": "eccfb97e9738b8ca4f9a64423493b259209603712194c69346e25916b6186148",
+          "flags": 2
+        },
+        ".init_array": {
+          "size": 8,
+          "sha256": "38d343dca41467b4a8bde85a2b3d9c0411cf24fe09088822d6c4d4a59cae8fe2",
+          "flags": 3
+        },
+        ".fini_array": {
+          "size": 8,
+          "sha256": "5f73c490c949f189f6f1eca051e8326ff5bf3181dd63ff1f24d1671af59ff26d",
+          "flags": 3
+        },
+        ".dynamic": {
+          "size": 656,
+          "sha256": "be7dbe7dfc413d9f1f2f243571d62173df5e4c58c679333e2a719b2b73c0f64e",
+          "flags": 3
+        },
+        ".got": {
+          "size": 416,
+          "sha256": "4bb2c0254715306b5fada436e0f1d09dabf9ac75275db1b45051fbe558135ad9",
+          "flags": 3
+        },
+        ".data": {
+          "size": 12,
+          "sha256": "09f612ce85a4076fc6dbc179cf120a8be19726625d929c99e1b336e5d306abd3",
+          "flags": 3
+        },
+        ".bss": {
+          "size": 12,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "flags": 3
+        },
+        ".comment": {
+          "size": 18,
+          "sha256": "3154fae630369801d0441c8861bef6caf2bbe188d803a11180c48895c493fc3a",
+          "flags": 48
+        },
+        ".symtab": {
+          "size": 67128,
+          "sha256": "ebd7b337e040eedbbbd1c05a801a043cf91fd1d6e690e1f0a370ee6235005360",
+          "flags": 0
+        },
+        ".strtab": {
+          "size": 25048,
+          "sha256": "169edb9c50ad910637af2cebd71a4d83f60a9172ac14de44ce26d900c616b556",
+          "flags": 0
+        },
+        ".shstrtab": {
+          "size": 299,
+          "sha256": "3dec5656aa721629308a777f0eda8b27019af70fe9d90b713d5a4ee1d3dfb45f",
+          "flags": 0
+        }
+      },
+      "nonstore_library_paths": [],
+      "static_strings_kernel_sources": [],
+      "product_executed": false
+    },
+    "/nix/store/wkiqjb44n5k0fwhmc523dvflspd47q3b-gcc-15.3.0-libgcc/lib/libgcc_s.so.1": {
+      "path": "/nix/store/wkiqjb44n5k0fwhmc523dvflspd47q3b-gcc-15.3.0-libgcc/lib/libgcc_s.so.1",
+      "sha256": "5e9e168007e3c97615d5891495e6ae4e5a07b9f3debfc5786aee94524bfcf5cb",
+      "bytes": 196968,
+      "interpreter": "",
+      "dynamic": [
+        {
+          "tag": "NEEDED",
+          "value": "libc.so.6"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "ld-linux-x86-64.so.2"
+        },
+        {
+          "tag": "SONAME",
+          "value": "libgcc_s.so.1"
+        },
+        {
+          "tag": "RUNPATH",
+          "value": ""
+        }
+      ],
+      "sections": {
+        "": {
+          "size": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "flags": 0
+        },
+        ".hash": {
+          "size": 1696,
+          "sha256": "15ca5ae4dad76b174b51ddb34906ca6618c05e681b4b5d5edbc46e73baf5316e",
+          "flags": 2
+        },
+        ".gnu.hash": {
+          "size": 1852,
+          "sha256": "15bd041d3daca1b7be012beda7e22688de6dbf59694440ba305fc31e5d1bd3af",
+          "flags": 2
+        },
+        ".dynsym": {
+          "size": 5400,
+          "sha256": "9d13da909deaa453f999f8aca934f5bcde33b052e0b121ec216f4b733db59101",
+          "flags": 2
+        },
+        ".dynstr": {
+          "size": 3148,
+          "sha256": "a968a7dd05fef4ce81640fbba875d8881af89b462cf05da4c4f03c0c92327815",
+          "flags": 2
+        },
+        ".gnu.version": {
+          "size": 450,
+          "sha256": "10c2e5a3ea31af315b3d91f845620af50aa6038d7658bcc546bd44d6c95ed26e",
+          "flags": 2
+        },
+        ".gnu.version_d": {
+          "size": 560,
+          "sha256": "1c84ca5ecf3052bb120d5f663a0f76cc418e4506cfa82bf5bdfcb89452055e16",
+          "flags": 2
+        },
+        ".gnu.version_r": {
+          "size": 128,
+          "sha256": "98733094f6a3ecc89cead0157f73b053bf3d572c79f228621b56c8f8bed41000",
+          "flags": 2
+        },
+        ".rela.dyn": {
+          "size": 264,
+          "sha256": "aeff38674d6c0e9340b0a81f594acb547c22ac8c3bca6f4cc34ce6698a284219",
+          "flags": 2
+        },
+        ".rela.plt": {
+          "size": 1344,
+          "sha256": "e409c200bcada70cb6a5a8384d287c4f660118b480c86ef27804b34bbf6e3d65",
+          "flags": 66
+        },
+        ".init": {
+          "size": 27,
+          "sha256": "19976c61cb7992d352fa208cb8bfe80aec8373c87f6762fa0b0da3576b96871e",
+          "flags": 6
+        },
+        ".plt": {
+          "size": 912,
+          "sha256": "d58b3aeca3f270b0d142e2b4ea4657af6de1a20c1a45bd899ceaecd178212dcf",
+          "flags": 6
+        },
+        ".plt.got": {
+          "size": 16,
+          "sha256": "c5de28def02192c93b02390fd104ef4bb6ad0785cf6aec0495751b9c3f4c5cd8",
+          "flags": 6
+        },
+        ".plt.sec": {
+          "size": 896,
+          "sha256": "ef13299c97c763547d20bd1224808493c114e1c324e572dcc404ed3dfbe7e0e6",
+          "flags": 6
+        },
+        ".text": {
+          "size": 140197,
+          "sha256": "47ec309dbc556a011f1ca4495472ad87ad5282311b12f67991fc28765d48c9e0",
+          "flags": 6
+        },
+        ".fini": {
+          "size": 13,
+          "sha256": "6a4f3e5efc7c1f7ee7d6f21afd9ed040ba1d7f0b97bb12b016f5b176cc558bd8",
+          "flags": 6
+        },
+        ".rodata": {
+          "size": 2860,
+          "sha256": "ea270824045ef4cfd36675052d7aa5f65270d354e8ce9c6a8377019066b1753e",
+          "flags": 2
+        },
+        ".eh_frame_hdr": {
+          "size": 2084,
+          "sha256": "fcc3c5ecb3dac15cd6266764f886ffbb1fd0f772b340032e9fc26796d62b5827",
+          "flags": 2
+        },
+        ".eh_frame": {
+          "size": 10344,
+          "sha256": "27adce389cb3a85cfcdbde4060ef5c06f603ba8310f845455f4d8974b4cb63c7",
+          "flags": 2
+        },
+        ".note.gnu.property": {
+          "size": 64,
+          "sha256": "9eeef440f0b01194daecad006b2357a7ce60a14edec41c02eaf30002a17ac398",
+          "flags": 2
+        },
+        ".tbss": {
+          "size": 8,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "flags": 1027
+        },
+        ".init_array": {
+          "size": 16,
+          "sha256": "d2d48cc2d0e88a0f8033039cb9f3612a8359b78792fda7b9a6404e5da848451b",
+          "flags": 3
+        },
+        ".fini_array": {
+          "size": 16,
+          "sha256": "f842e636bd331bedca68445c7a83bc908e209b43ff214778a0fce41ea8a3ac77",
+          "flags": 3
+        },
+        ".dynamic": {
+          "size": 576,
+          "sha256": "82b377ebf96c31535971388b88e1ff8e6b6dd8aa78ab57d847e7c20eabb3b9bd",
+          "flags": 3
+        },
+        ".got": {
+          "size": 528,
+          "sha256": "45e89d0d2193d57a509be75a1372c8b3a7f84c4be5829f67d6658f278ae31b8d",
+          "flags": 3
+        },
+        ".data": {
+          "size": 8,
+          "sha256": "3cfc63a0b4d5d7d2f081c656bfb62fb974b7245a32fc20f10c97935a1d3af1ae",
+          "flags": 3
+        },
+        ".bss": {
+          "size": 456,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "flags": 3
+        },
+        ".comment": {
+          "size": 18,
+          "sha256": "3154fae630369801d0441c8861bef6caf2bbe188d803a11180c48895c493fc3a",
+          "flags": 48
+        },
+        ".symtab": {
+          "size": 8520,
+          "sha256": "363dbf4f790bedb6c714ddde3422c152afe76cff31369a4bc6b0ba6c24493eaa",
+          "flags": 0
+        },
+        ".strtab": {
+          "size": 5939,
+          "sha256": "d655d1f5f02014a0b4404ba6a44f1a2776865e36e00e712cf2de0a5f6ff7668f",
+          "flags": 0
+        },
+        ".shstrtab": {
+          "size": 262,
+          "sha256": "d02118767a95ab9df8db4f49c5a572dfde106d39c68979381e32a3b2487304b2",
+          "flags": 0
+        }
+      },
+      "nonstore_library_paths": [
+        ""
+      ],
+      "static_strings_kernel_sources": [],
+      "product_executed": false
+    },
+    "/nix/store/fjkx1l5cnskzrqacf08z7i8z17256w0j-glibc-2.42-61/lib/ld-linux-x86-64.so.2": {
+      "path": "/nix/store/fjkx1l5cnskzrqacf08z7i8z17256w0j-glibc-2.42-61/lib/ld-linux-x86-64.so.2",
+      "sha256": "1640ec4d1cfcc3c19430b368cbbb057c5652eac340ecba12cf9dfbe2c3769d07",
+      "bytes": 263056,
+      "interpreter": "",
+      "dynamic": [
+        {
+          "tag": "SONAME",
+          "value": "ld-linux-x86-64.so.2"
+        }
+      ],
+      "sections": {
+        "": {
+          "size": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "flags": 0
+        },
+        ".note.gnu.build-id": {
+          "size": 36,
+          "sha256": "0821e051aff3f7dee1fb0b5c0eaf30ba02e4122171ee432f64631b27b024b193",
+          "flags": 2
+        },
+        ".hash": {
+          "size": 312,
+          "sha256": "4649b2516e183cd5e70220035241443ebbd15b32d660c4f5621c06fe8fbd65c0",
+          "flags": 2
+        },
+        ".gnu.hash": {
+          "size": 348,
+          "sha256": "3199856a41d69762f554d16aa9cfa46517183332eabbdb55795d60680774ea5a",
+          "flags": 2
+        },
+        ".dynsym": {
+          "size": 936,
+          "sha256": "413af6778fa3186804cf75836ad4b28e37ccffa942fcfd0c5de52b650dd07870",
+          "flags": 2
+        },
+        ".dynstr": {
+          "size": 689,
+          "sha256": "e9d8defa84f08866cfb565a09075b12cc30fd55e414a86cf4e0bd7256299f3ba",
+          "flags": 2
+        },
+        ".gnu.version": {
+          "size": 78,
+          "sha256": "24bc0b1235b74a92a7fe01508acd2ec412176fd98d1aa10e8ae1060524eca2d7",
+          "flags": 2
+        },
+        ".gnu.version_d": {
+          "size": 236,
+          "sha256": "6c106a5aa7554c830611cb3069610e2c2d9b8c8f83fe4638a7827fb500092d79",
+          "flags": 2
+        },
+        ".rela.dyn": {
+          "size": 24,
+          "sha256": "a0739c8481037ba0fb4e3cc27ac4f96159ad28a1bbf12a98b2122f307f525fc1",
+          "flags": 2
+        },
+        ".relr.dyn": {
+          "size": 40,
+          "sha256": "5be741d84bd3527564223d1b9a2280806955d84e5e84f44ab12801db2edadc3e",
+          "flags": 2
+        },
+        ".text": {
+          "size": 174901,
+          "sha256": "c2cfa33ae5ef40a47e0a4a50c4661b44152d97bf097e4a40d63e116434b90a17",
+          "flags": 6
+        },
+        ".rodata": {
+          "size": 26464,
+          "sha256": "e80af7581d5036c3a53d30fa86a73569bb9ba2ee50c3d5363575103361ccb96a",
+          "flags": 2
+        },
+        ".eh_frame_hdr": {
+          "size": 2996,
+          "sha256": "95c34253e5f2ea6ef9e018d852c14cbd4f717a6defcb79a7dd714d0282fadcc0",
+          "flags": 2
+        },
+        ".eh_frame": {
+          "size": 13456,
+          "sha256": "1f1f9cbe1c1b591409651dd1f5603151ad2c48f99843d957c831e20b23ca4e67",
+          "flags": 2
+        },
+        ".note.gnu.property": {
+          "size": 64,
+          "sha256": "65cc707d46c4ddc9fa2db2b10f6485d038e428b07c55fcd637ab2384362f9732",
+          "flags": 2
+        },
+        ".data.rel.ro": {
+          "size": 7168,
+          "sha256": "5b37af63f8ee8c20f0243ccfedd9f0d41a22ba2ca63b21d6929d5a24268a7f26",
+          "flags": 3
+        },
+        ".dynamic": {
+          "size": 384,
+          "sha256": "aa1e682f25fd22d87f36b981eb09efe96155a8b65d2e20c1f2f18cfb03f91a89",
+          "flags": 3
+        },
+        ".got": {
+          "size": 32,
+          "sha256": "fcfdc1b76524ae55b1bdebce0ca2bed974feba4284f4d73ac3f249a5c2bfe992",
+          "flags": 3
+        },
+        ".data": {
+          "size": 2124,
+          "sha256": "27c2b18df5b4978736cb4bd675ea6831a135f1e870af9156bff9f6a6fcf20d02",
+          "flags": 3
+        },
+        ".bss": {
+          "size": 2696,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "flags": 3
+        },
+        ".comment": {
+          "size": 18,
+          "sha256": "1cf64521291d6c752b30932f3b36088f5903a9bb1ea7a08559237b1280c9f226",
+          "flags": 48
+        },
+        ".symtab": {
+          "size": 16056,
+          "sha256": "08b4d1fd63902c4c21cc74bb0ecb25c621e99ed6d9e412a7c13f95faf01fc132",
+          "flags": 0
+        },
+        ".strtab": {
+          "size": 9617,
+          "sha256": "e3ee7e2085abfad908866017f49caca912a58e49530fc985395fa6120ac554c1",
+          "flags": 0
+        },
+        ".shstrtab": {
+          "size": 224,
+          "sha256": "49f85ec823f3fb6d266c8199bb2a25b03546d39e7292486be42db1cc44f356a4",
+          "flags": 0
+        }
+      },
+      "nonstore_library_paths": [],
+      "static_strings_kernel_sources": [],
+      "product_executed": false
+    },
+    "/nix/store/fjkx1l5cnskzrqacf08z7i8z17256w0j-glibc-2.42-61/lib/libc.so.6": {
+      "path": "/nix/store/fjkx1l5cnskzrqacf08z7i8z17256w0j-glibc-2.42-61/lib/libc.so.6",
+      "sha256": "6fcad203e10b304de3988b4e6e85df56a71f7ff9ae8898cb20fcf9bda330e2df",
+      "bytes": 2413096,
+      "interpreter": "/nix/store/fjkx1l5cnskzrqacf08z7i8z17256w0j-glibc-2.42-61/lib/ld-linux-x86-64.so.2",
+      "dynamic": [
+        {
+          "tag": "NEEDED",
+          "value": "ld-linux-x86-64.so.2"
+        },
+        {
+          "tag": "SONAME",
+          "value": "libc.so.6"
+        }
+      ],
+      "sections": {
+        "": {
+          "size": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "flags": 0
+        },
+        ".note.gnu.build-id": {
+          "size": 36,
+          "sha256": "aea9c8ac809e0917165a17bde9d1861acbbf341a9ce93e6dced4aad78bdd1bd5",
+          "flags": 2
+        },
+        ".hash": {
+          "size": 16800,
+          "sha256": "ee33df94088aaf5ee1c8676c9dbf43067c9f01740f1c946b46f66c877a336e7e",
+          "flags": 2
+        },
+        ".gnu.hash": {
+          "size": 20788,
+          "sha256": "582ea3c83d6f8ddf780abd994e427a30d936706b9edcd71a278123d58a3766a9",
+          "flags": 2
+        },
+        ".dynsym": {
+          "size": 76344,
+          "sha256": "1ce132e67cd8287acae3ecc221efa9166238820078fe7cc49a1485ce8870ee7c",
+          "flags": 2
+        },
+        ".dynstr": {
+          "size": 35165,
+          "sha256": "d0216c483de9b9f6a1f4be2b497dfcc534751c7295c1312e35b894bde9f72dd7",
+          "flags": 2
+        },
+        ".gnu.version": {
+          "size": 6362,
+          "sha256": "0face398e7cca1746810e3b9427c6b093c0798415346ab0ccf401c1d22074528",
+          "flags": 2
+        },
+        ".gnu.version_d": {
+          "size": 1580,
+          "sha256": "dc95cc2ff22494df6d2e290337348f19080ea4e4f4f3b43d671b60ad7fac352f",
+          "flags": 2
+        },
+        ".gnu.version_r": {
+          "size": 80,
+          "sha256": "11c190a6ff82a983e04a6c38b035495a5bd9f97494d413768650cac980188dc5",
+          "flags": 2
+        },
+        ".rela.dyn": {
+          "size": 2112,
+          "sha256": "1d675eb731acab01658f3d7e654ae9eaf68d7448d89b4672b516033e6e071f41",
+          "flags": 2
+        },
+        ".rela.plt": {
+          "size": 1488,
+          "sha256": "00df1cf7204567b817bd4ecd07b6a313e478ffd8a97d6024154b72e3fca57cd1",
+          "flags": 66
+        },
+        ".relr.dyn": {
+          "size": 280,
+          "sha256": "0a5b7ac69a81c3694247df19766f4acfa793aed422fdf399b2a152d967f52f73",
+          "flags": 2
+        },
+        ".plt": {
+          "size": 1008,
+          "sha256": "d3b75f6efd2c1f3b3290d25aabf68f9d77080806134aa9a553aafe923bcb8e6f",
+          "flags": 6
+        },
+        ".plt.got": {
+          "size": 32,
+          "sha256": "146e4fe1dbc14c7f001b9b0869d250e3609164235483c2b544187d7cb11f9eb9",
+          "flags": 6
+        },
+        ".plt.sec": {
+          "size": 992,
+          "sha256": "ec252ba2ddd9bc483a1590944845dbf17924a2e5c405d544c85459999ebd5f80",
+          "flags": 6
+        },
+        ".text": {
+          "size": 1571901,
+          "sha256": "23f4c15e9835962458bb0853552bd22835b99880e532ec07497e1ceca4b18bb3",
+          "flags": 6
+        },
+        ".rodata": {
+          "size": 156576,
+          "sha256": "384a237e13693360ca3b914e1a0d7528116318a51bbac2c7f1199488a5ce7787",
+          "flags": 2
+        },
+        "rodata.cst32": {
+          "size": 96,
+          "sha256": "eceb0624a0f5e6fd90996bf45311eb217c85d6953a839b0891bcf2904e41edc4",
+          "flags": 18
+        },
+        ".interp": {
+          "size": 83,
+          "sha256": "bb400b6b57ca89765d7fff52d8974414cd913ab73ff84c31ccbaf30c2eb28fae",
+          "flags": 2
+        },
+        ".eh_frame_hdr": {
+          "size": 31684,
+          "sha256": "4a6a20c3f4c64c05a358b650cbf94afc87cf6a58ba6efbfced7c6d8adb959438",
+          "flags": 2
+        },
+        ".eh_frame": {
+          "size": 131760,
+          "sha256": "79c800e7bd0538e200b17bf651ca21b90b3430ba515afd675aff2c794c9ae879",
+          "flags": 2
+        },
+        ".gcc_except_table": {
+          "size": 1544,
+          "sha256": "01980b60c985fcf41d3a0035f4e4eb884377c4f98215dbe6fda9395ae5b35e06",
+          "flags": 2
+        },
+        ".note.gnu.property": {
+          "size": 80,
+          "sha256": "695e6ef3d0bf3e3da8f1c01e971f6db988bd56f24dc36cb8030c58189327ea88",
+          "flags": 2
+        },
+        ".note.ABI-tag": {
+          "size": 32,
+          "sha256": "eccfb97e9738b8ca4f9a64423493b259209603712194c69346e25916b6186148",
+          "flags": 2
+        },
+        ".tdata": {
+          "size": 40,
+          "sha256": "3877bd4b8d2e50a43f8a65dced70c542fb3782b4f2b59cbc0f0935ca31f0e0f7",
+          "flags": 1027
+        },
+        ".tbss": {
+          "size": 96,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "flags": 1027
+        },
+        ".init_array": {
+          "size": 24,
+          "sha256": "5fc17956a16544c3016514e47cbcc1347a00c06f125d9325ace24f4f8377099a",
+          "flags": 3
+        },
+        ".data.rel.ro": {
+          "size": 11616,
+          "sha256": "6ee93670eb46655b897636cc6966cc8fa8069ad2228b12563b27b37e4039a6bf",
+          "flags": 3
+        },
+        ".dynamic": {
+          "size": 576,
+          "sha256": "73a1b61211d31bb82410516abebd5a0c50166b1917f4c56d83c1bd4c589cfed9",
+          "flags": 3
+        },
+        ".got": {
+          "size": 1168,
+          "sha256": "ea6397fa2409a2142201fa4d2c8b7f308ee97e91422775575cd272fe8972abc7",
+          "flags": 3
+        },
+        ".data": {
+          "size": 5832,
+          "sha256": "e1a13c33eb07437c8252d349dc10922bda73f84516093ee6f3b06c84d785d370",
+          "flags": 3
+        },
+        ".bss": {
+          "size": 55152,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "flags": 3
+        },
+        ".comment": {
+          "size": 18,
+          "sha256": "1cf64521291d6c752b30932f3b36088f5903a9bb1ea7a08559237b1280c9f226",
+          "flags": 48
+        },
+        ".gnu.warning.sigstack": {
+          "size": 77,
+          "sha256": "1ac209e0d6fe4ea01efee056f9e0399b311f961ba13244f05f6e531c9e101284",
+          "flags": 0
+        },
+        ".gnu.warning.sigreturn": {
+          "size": 50,
+          "sha256": "46c1819032a2f5ca4b9e0044c7e92443b96e7bfd2f996644a88d9477d7074241",
+          "flags": 0
+        },
+        ".gnu.warning.siggetmask": {
+          "size": 57,
+          "sha256": "fc04a31cd543c557eb263a8c13daf31696ecba05875885b590b8e100eb789757",
+          "flags": 0
+        },
+        ".gnu.warning.tempnam": {
+          "size": 56,
+          "sha256": "e80af4588a83c23432216ea45bf208fea80573021618822c7ca5a795bed88a9b",
+          "flags": 0
+        },
+        ".gnu.warning.tmpnam": {
+          "size": 55,
+          "sha256": "34bf8bbcce7b8fee257ace66cd5f6f455b4911049e26151fb89f976d761144b2",
+          "flags": 0
+        },
+        ".gnu.warning.tmpnam_r": {
+          "size": 57,
+          "sha256": "cca8854a0477063d6adffb0d02e0da9767971e94448a9ee387ad4ddcd5593aee",
+          "flags": 0
+        },
+        ".gnu.warning.gets": {
+          "size": 57,
+          "sha256": "916974ca456e92ee308e07896a8615d6afe85355069efaf223f8f11dfdff041d",
+          "flags": 0
+        },
+        ".gnu.warning.pthread_attr_getstackaddr": {
+          "size": 82,
+          "sha256": "2d7167d41c3627a738ea5169f7846b68daefbf58b48ce300a3046bd48d88a752",
+          "flags": 0
+        },
+        ".gnu.warning.pthread_attr_setstackaddr": {
+          "size": 82,
+          "sha256": "24d6ae9704b7dfc002240c0d0dea94cfc1b4ba87ef4cde3f57d1b3e820898c58",
+          "flags": 0
+        },
+        ".gnu.warning.re_max_failures": {
+          "size": 61,
+          "sha256": "15a981975c32a04928cf4e5cd0046659a4f8af1c382a09a1197c09894a50f703",
+          "flags": 0
+        },
+        ".gnu.warning.getwd": {
+          "size": 58,
+          "sha256": "2d5084251cd8d543c676f12a3bfce19526330ead241898fec74f943c4b9be8b4",
+          "flags": 0
+        },
+        ".gnu.warning.chflags": {
+          "size": 48,
+          "sha256": "2a833c7efec6c1cf7e379d02603ef65452ec479cf2f198274d18012098611107",
+          "flags": 0
+        },
+        ".gnu.warning.fchflags": {
+          "size": 49,
+          "sha256": "244fcb8b5b2a4d4ac97aba04954dc41c8ecc1ffcdc7b738c755e5080f86eae46",
+          "flags": 0
+        },
+        ".gnu.warning.gtty": {
+          "size": 45,
+          "sha256": "e6db94b83ef08c72bac2bcc45f9fb5aea46566e5573ca4bfe0b4285e7f1033ee",
+          "flags": 0
+        },
+        ".gnu.warning.mktemp": {
+          "size": 68,
+          "sha256": "41b4451acef7bf411e40e3c1870fd2c3b1540ccee2e1ef374843a64453c2ad9e",
+          "flags": 0
+        },
+        ".gnu.warning.revoke": {
+          "size": 47,
+          "sha256": "56107a298795a6b4ac5a67ac1c43dc8ccfb8d08d73f941f2b33495c68e84044d",
+          "flags": 0
+        },
+        ".gnu.warning.stty": {
+          "size": 45,
+          "sha256": "f3e294488051957c3579dd721cbbc2607b8602e6cddc578c5256523e64cda867",
+          "flags": 0
+        },
+        ".gnu.warning.__compat_bdflush": {
+          "size": 57,
+          "sha256": "85052a6401a0cf5bcdcbca976e5763b5dec1d9c5fcec07d755f12087856cc144",
+          "flags": 0
+        },
+        ".gnu.warning.__gets_chk": {
+          "size": 57,
+          "sha256": "916974ca456e92ee308e07896a8615d6afe85355069efaf223f8f11dfdff041d",
+          "flags": 0
+        },
+        ".gnu.warning.__getwd_chk": {
+          "size": 58,
+          "sha256": "2d5084251cd8d543c676f12a3bfce19526330ead241898fec74f943c4b9be8b4",
+          "flags": 0
+        },
+        ".gnu.warning.inet6_option_space": {
+          "size": 60,
+          "sha256": "e842068976a1353dffdbf0e628cf0bca2252b5d29fd2a4401c95c547adb09772",
+          "flags": 0
+        },
+        ".gnu.warning.inet6_option_init": {
+          "size": 59,
+          "sha256": "5e94a8ab5b484d220c980bae6ea471a796f0bed10a110bdcc3747b1ca0e3b9fb",
+          "flags": 0
+        },
+        ".gnu.warning.inet6_option_append": {
+          "size": 61,
+          "sha256": "c0b1ee04f34f4b76b04dd65f5530d3d2a8f1857e9bd93c7ca9aec58e06b7a03a",
+          "flags": 0
+        },
+        ".gnu.warning.inet6_option_alloc": {
+          "size": 60,
+          "sha256": "c0e7a8dcb35de154c22e86ea14c2e10564a953bb66d90537fa68886a21035634",
+          "flags": 0
+        },
+        ".gnu.warning.inet6_option_next": {
+          "size": 59,
+          "sha256": "87fe0fc31126c1deb0d336f01466daa8bffdb991246d5711880011bf14825652",
+          "flags": 0
+        },
+        ".gnu.warning.inet6_option_find": {
+          "size": 59,
+          "sha256": "e4b7d549006ba4e22c7c47cb9ba563701253b8b35c013a030297b4c2d7f87d4e",
+          "flags": 0
+        },
+        ".gnu.warning.getpw": {
+          "size": 58,
+          "sha256": "d8c5c4cd10410614be317b8dd0f04f693a7ba0b0bc6b2ab9bf3de07f7e1cff17",
+          "flags": 0
+        },
+        ".gnu.warning.setlogin": {
+          "size": 49,
+          "sha256": "a826df3e41c4aff4f2ca0fea5372b9ccca4d45faf26969cacdaf324200e64794",
+          "flags": 0
+        },
+        ".symtab": {
+          "size": 205920,
+          "sha256": "b04a2127bda80c075d22cfe2a3c9f755cac51b577b99a0d7e259faa190b8dd35",
+          "flags": 0
+        },
+        ".strtab": {
+          "size": 117594,
+          "sha256": "b2a8b79391f438dfdf10a1b0c006ce122d30ec930ef7075e81345b73ead31d29",
+          "flags": 0
+        },
+        ".shstrtab": {
+          "size": 1045,
+          "sha256": "01ffbe4b7eb62b2d7a32f23b8e7989914c78085f23cd09662a7bc6835a4adbaf",
+          "flags": 0
+        }
+      },
+      "nonstore_library_paths": [],
+      "static_strings_kernel_sources": [],
+      "product_executed": false
+    },
+    "/nix/store/wj1f56qky4pmjc7l0r6b6l7whnnw7hp6-python3-3.13.15/lib/libpython3.13.so.1.0": {
+      "path": "/nix/store/wj1f56qky4pmjc7l0r6b6l7whnnw7hp6-python3-3.13.15/lib/libpython3.13.so.1.0",
+      "sha256": "145bc8e096d66e2f729bfa0cec51323cfd3a8a783ba65da718e101f2a891515e",
+      "bytes": 6915168,
+      "interpreter": "",
+      "dynamic": [
+        {
+          "tag": "NEEDED",
+          "value": "libdl.so.2"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libm.so.6"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libgcc_s.so.1"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libc.so.6"
+        },
+        {
+          "tag": "SONAME",
+          "value": "libpython3.13.so.1.0"
+        },
+        {
+          "tag": "RUNPATH",
+          "value": "/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84/lib:/nix/store/604gsr59rj7dzd0nrhp143rpvf7gyiaz-gcc-15.3.0-lib/lib"
+        }
+      ],
+      "sections": {
+        "": {
+          "size": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "flags": 0
+        },
+        ".note.gnu.build-id": {
+          "size": 36,
+          "sha256": "22fec995d38d241214923221e3e9b2751d04c4b10c891f074feca3d425711197",
+          "flags": 2
+        },
+        ".hash": {
+          "size": 16496,
+          "sha256": "6de7c2f55745435a7d0ad8dd2e95d6e648b24408ae94f5532550cdbda2a1a219",
+          "flags": 2
+        },
+        ".gnu.hash": {
+          "size": 12920,
+          "sha256": "25ea2d0265ae1e35b1e0d59d39a97e08ab114949a741c3c4efb058f113dde8ca",
+          "flags": 2
+        },
+        ".dynsym": {
+          "size": 49656,
+          "sha256": "7bd1ba22ceecff7080ba9353aa1513587b2717b7077d0e5a53072c73837aa1a5",
+          "flags": 2
+        },
+        ".dynstr": {
+          "size": 39148,
+          "sha256": "f3c40794894161dd565a5e025dfbd9fe6ae0d0af51ca9f22c9770d70604e54af",
+          "flags": 2
+        },
+        ".gnu.version": {
+          "size": 4138,
+          "sha256": "43d8f822d80cf1aefb8b62b5a1ae68fd0bf0245c3474f9d405b09336dd8c2cbc",
+          "flags": 2
+        },
+        ".gnu.version_r": {
+          "size": 496,
+          "sha256": "78f482cb59d7a4d784ce459f9215e52988d6e92f71d86595575820ab3112359d",
+          "flags": 2
+        },
+        ".rela.dyn": {
+          "size": 404856,
+          "sha256": "f745e570b0db17d6c9828d12d98a9da286e5186defc64168346d1f437b27a955",
+          "flags": 2
+        },
+        ".rela.plt": {
+          "size": 9048,
+          "sha256": "7a34ab9b85c3ae648e4b4dcf0fd5609efb22169aeea5001f7017c90be30ee633",
+          "flags": 66
+        },
+        ".init": {
+          "size": 27,
+          "sha256": "a360dfc8d21ae49859789ce3264e3b68d930ef70b3768224dbb1114f3b6811c3",
+          "flags": 6
+        },
+        ".plt": {
+          "size": 6048,
+          "sha256": "ce5df173b546d19bc06b36252f5c978396c851d5b322d2392419f9041918049f",
+          "flags": 6
+        },
+        ".plt.got": {
+          "size": 48,
+          "sha256": "2b744dee07af978d2bdfff82234d90d826aefaec3ada3eff384ef84c11f1e7a6",
+          "flags": 6
+        },
+        ".text": {
+          "size": 3706690,
+          "sha256": "a69bb2d96860a4aab919c393f5bb419e29fa53c617016332cb325827cbf00e79",
+          "flags": 6
+        },
+        ".fini": {
+          "size": 13,
+          "sha256": "6a4f3e5efc7c1f7ee7d6f21afd9ed040ba1d7f0b97bb12b016f5b176cc558bd8",
+          "flags": 6
+        },
+        ".rodata": {
+          "size": 1067134,
+          "sha256": "d20fb9fe8ae435ef183f0f10efb99eca2c3a3f66962d967347a652ec112974ac",
+          "flags": 2
+        },
+        ".eh_frame_hdr": {
+          "size": 47052,
+          "sha256": "bcbda698e9493887b746f0167618ab78caba54c36b46c2f2c886b615f96d0947",
+          "flags": 2
+        },
+        ".eh_frame": {
+          "size": 249800,
+          "sha256": "1ed5a7e4f6c64ffe7dc86c6e15fcc2292abcdd1d9f33757dd71de898a40f3582",
+          "flags": 2
+        },
+        ".note.gnu.property": {
+          "size": 48,
+          "sha256": "2b98a283f95329d00ea9963e92ac5235797880be825947fdd8c285c0994a9e1d",
+          "flags": 2
+        },
+        ".tdata": {
+          "size": 8,
+          "sha256": "24237c67125b165b292dc6179b61c5ca49c3711cf7f2fe8b006eed24ef2cd317",
+          "flags": 1027
+        },
+        ".tbss": {
+          "size": 17,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "flags": 1027
+        },
+        ".init_array": {
+          "size": 16,
+          "sha256": "eba2193f97b461c1a15ff5f2d0a4f1eca68724af4e150162bea137820ab6a486",
+          "flags": 3
+        },
+        ".fini_array": {
+          "size": 8,
+          "sha256": "8433caf4282e6478e35ce6564e8cb0f63f8c8ac5afdb78ed09d39f380df014d5",
+          "flags": 3
+        },
+        ".data.rel.ro": {
+          "size": 312480,
+          "sha256": "31d62f8c074a4d12051f2ac25eef24a0f4a682e9dc68a474f8c76a5bec4afce8",
+          "flags": 3
+        },
+        ".dynamic": {
+          "size": 576,
+          "sha256": "aa343653411e9268c6d2dcfdb68383d2aa5e452269a7fdae47a02f38ae83f903",
+          "flags": 3
+        },
+        ".got": {
+          "size": 4952,
+          "sha256": "8a0ccb10090701acd4f49e15675938bf6c85a7d87d7a51c4c61424efaf572300",
+          "flags": 3
+        },
+        ".data": {
+          "size": 240704,
+          "sha256": "515b7bd48fc6c1f73e856f8939bac1294422ec34b7aee8ff503f01b5e96a9c2f",
+          "flags": 3
+        },
+        ".PyRuntime": {
+          "size": 283408,
+          "sha256": "39c8639230718bcee42da54df696e9994183616957fb59e97ff029dd92bab186",
+          "flags": 3
+        },
+        ".bss": {
+          "size": 467736,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "flags": 3
+        },
+        ".comment": {
+          "size": 18,
+          "sha256": "3154fae630369801d0441c8861bef6caf2bbe188d803a11180c48895c493fc3a",
+          "flags": 48
+        },
+        ".symtab": {
+          "size": 245832,
+          "sha256": "65c4dc04c82b1d046e6370f94d3d4bdbee43939d562a5880d9b17091b388e7af",
+          "flags": 0
+        },
+        ".strtab": {
+          "size": 203598,
+          "sha256": "c074c960c5c7d888258a8d8ddb9b6d7603bbd76335b81abd2a3a0ea849cd18b2",
+          "flags": 0
+        },
+        ".shstrtab": {
+          "size": 288,
+          "sha256": "8b7dcda217ad973514082d11b99947b68d41b536223efe421fa9c27d3226150d",
+          "flags": 0
+        }
+      },
+      "nonstore_library_paths": [],
+      "static_strings_kernel_sources": [],
+      "product_executed": false
+    },
+    "/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84/lib/libdl.so.2": {
+      "path": "/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84/lib/libdl.so.2",
+      "sha256": "cdc7cf03d3b7db61930406eb336c74ba71c0347b77f2dc1ff03ebe6519442f1b",
+      "bytes": 15688,
+      "interpreter": "",
+      "dynamic": [
+        {
+          "tag": "NEEDED",
+          "value": "libc.so.6"
+        },
+        {
+          "tag": "SONAME",
+          "value": "libdl.so.2"
+        }
+      ],
+      "sections": {
+        "": {
+          "size": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "flags": 0
+        },
+        ".note.gnu.build-id": {
+          "size": 36,
+          "sha256": "104960ca0f3f0bb979f67fde568d2b35db60e1d558e3d17769bb9f5c37ab280c",
+          "flags": 2
+        },
+        ".hash": {
+          "size": 120,
+          "sha256": "b0c8b8bf57c4b8b8f49ae51123fe3ae305766dc7ce20ab4ec265c23d555c6a1e",
+          "flags": 2
+        },
+        ".gnu.hash": {
+          "size": 68,
+          "sha256": "a2b1db5de324e14e38ec2cd9bb483c2c2cfd6048b4f521f47704e4e23c3a2309",
+          "flags": 2
+        },
+        ".dynsym": {
+          "size": 264,
+          "sha256": "b6c6b6f8df97f5815b4634e8924f47974cad975515f1a756f913daa63e731ff7",
+          "flags": 2
+        },
+        ".dynstr": {
+          "size": 212,
+          "sha256": "3e27b282ec9dc1c569883d30ff8e73db907e80f11e7fed5c81ef8631fadccc65",
+          "flags": 2
+        },
+        ".gnu.version": {
+          "size": 22,
+          "sha256": "87b5816e9931218066a322599c7a8e5bbb353dc3ee00ab5ed29687eca8913c8b",
+          "flags": 2
+        },
+        ".gnu.version_d": {
+          "size": 128,
+          "sha256": "8a6eb28607839e2054fb7447b63358999245fda6001ee3c059dffe3cbc516c86",
+          "flags": 2
+        },
+        ".gnu.version_r": {
+          "size": 64,
+          "sha256": "759b748f2188312571b9acc33bd2e49193d62ddb6d8aaa28208d3bf4f3c7a9ab",
+          "flags": 2
+        },
+        ".rela.dyn": {
+          "size": 96,
+          "sha256": "d09799b60bb025400175555bd1626bd163562b5d8d59968cc2fad7ca6f85b90a",
+          "flags": 2
+        },
+        ".relr.dyn": {
+          "size": 24,
+          "sha256": "6c3cc8515594362a70a46a683952aabfd24ab5d913e7b6989f4697c3b351120c",
+          "flags": 2
+        },
+        ".init": {
+          "size": 27,
+          "sha256": "0092924d233919451708320b0b5b60fb8e8f59c4ef8c5efb6d360db45a053f1f",
+          "flags": 6
+        },
+        ".plt": {
+          "size": 16,
+          "sha256": "4ef45c979a4cbfcd157e1bd6721655b00aa6b83bb3507d3b5c5b0454c3f9be7d",
+          "flags": 6
+        },
+        ".plt.got": {
+          "size": 16,
+          "sha256": "6c31844089e215a30c92288710f35d7b9559e5d3be965fb170f24f7f2af98b2f",
+          "flags": 6
+        },
+        ".text": {
+          "size": 197,
+          "sha256": "9b5cdb7a500f7993ac6aed03ac6df111f5a03f2ab27681a820099995ee43f12c",
+          "flags": 6
+        },
+        ".fini": {
+          "size": 13,
+          "sha256": "6a4f3e5efc7c1f7ee7d6f21afd9ed040ba1d7f0b97bb12b016f5b176cc558bd8",
+          "flags": 6
+        },
+        ".eh_frame_hdr": {
+          "size": 36,
+          "sha256": "90ab2f3bef5cb7f305328305048a7300545edb175d1c4efd01a309bc794908f4",
+          "flags": 2
+        },
+        ".eh_frame": {
+          "size": 112,
+          "sha256": "b83925210c3300960d9cfb6fbd1d1110e106250c42153519564c7e5c5dc5fb94",
+          "flags": 2
+        },
+        ".note.gnu.property": {
+          "size": 80,
+          "sha256": "9f59611d29a5b4ffe1fd64791c31220a1b7fd5c5b15eba1ae6758c1076a1b8c4",
+          "flags": 2
+        },
+        ".note.ABI-tag": {
+          "size": 32,
+          "sha256": "eccfb97e9738b8ca4f9a64423493b259209603712194c69346e25916b6186148",
+          "flags": 2
+        },
+        ".init_array": {
+          "size": 8,
+          "sha256": "1efe4258121a8103faf852bced0d4b614742bb5e22fcf90f5187b12fc60761f2",
+          "flags": 3
+        },
+        ".fini_array": {
+          "size": 8,
+          "sha256": "ce38aad636f75657af540e7b51cc9fdc0f078b88335ea6e2c0b8996860c4972d",
+          "flags": 3
+        },
+        ".dynamic": {
+          "size": 544,
+          "sha256": "0ef8675134fac3b4607a9b31ce96805af35811f77f086c1d71b67f1b96cd984c",
+          "flags": 3
+        },
+        ".got": {
+          "size": 56,
+          "sha256": "43fdb7b84be551a82095e1110c1e7a884bf30b10811f5a50b271215f2aa0c29e",
+          "flags": 3
+        },
+        ".data": {
+          "size": 8,
+          "sha256": "46386ff0eccd7a7871daa3122b418bbf8e0d0180eca74808a53b2c3ed970f50e",
+          "flags": 3
+        },
+        ".bss": {
+          "size": 8,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "flags": 3
+        },
+        ".comment": {
+          "size": 18,
+          "sha256": "3154fae630369801d0441c8861bef6caf2bbe188d803a11180c48895c493fc3a",
+          "flags": 48
+        },
+        ".symtab": {
+          "size": 672,
+          "sha256": "e3c333be1a20cc8d831337a1314da782af50b2d8285824d482d8633815dc31bb",
+          "flags": 0
+        },
+        ".strtab": {
+          "size": 495,
+          "sha256": "dfee3e183a707e37efbf1ca2cea057adb7cd28a00b7288fdb004179afa0f03ba",
+          "flags": 0
+        },
+        ".shstrtab": {
+          "size": 277,
+          "sha256": "c09c2f2d4cbe3c6d834be32b68cf043c1df7f2227f7f8ad9362f866cc449b9c9",
+          "flags": 0
+        }
+      },
+      "nonstore_library_paths": [],
+      "static_strings_kernel_sources": [],
+      "product_executed": false
+    },
+    "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/host-stub-rustred-integration-20261031-r1/artifacts/private/symbolica/core.abi3.so": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/host-stub-rustred-integration-20261031-r1/artifacts/private/symbolica/core.abi3.so",
+      "sha256": "4d4231b32962669db1ec4bc8efef586e93318b9200468235a78b25919dc98ecb",
+      "bytes": 144966800,
+      "interpreter": "",
+      "dynamic": [
+        {
+          "tag": "NEEDED",
+          "value": "libgcc_s.so.1"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libm.so.6"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libc.so.6"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "ld-linux-x86-64.so.2"
+        },
+        {
+          "tag": "RUNPATH",
+          "value": "/nix/store/cbvphdpy05pb8r414dmn5xfxxdqs3slx-generation-refresh-rustred-validation-host-wheel-0.1.0/lib:/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84/lib:/nix/store/604gsr59rj7dzd0nrhp143rpvf7gyiaz-gcc-15.3.0-lib/lib"
+        }
+      ],
+      "sections": {
+        "": {
+          "size": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "flags": 0
+        },
+        ".hash": {
+          "size": 4136,
+          "sha256": "875b622e4d5601b813688c36583273b76ef99712c294b8c7816695cc189ffcd0",
+          "flags": 2
+        },
+        ".gnu.hash": {
+          "size": 36,
+          "sha256": "10f26c9cd2bb9f0888e83bb33e7847f9549f1615c17aeb0095163494d852d289",
+          "flags": 2
+        },
+        ".dynsym": {
+          "size": 8712,
+          "sha256": "3a86aa17a67292eca0b46dead07f2d2aa0fcdbde5985266d109a704b61997dc8",
+          "flags": 2
+        },
+        ".dynstr": {
+          "size": 5767,
+          "sha256": "61d792d0f5eb85e90f12a616a4ac105bf0ec20d8ac65289e66ab75860ef00af7",
+          "flags": 2
+        },
+        ".gnu.version": {
+          "size": 726,
+          "sha256": "39cb56baec3be850d1e3ff831cf698e883f02e91a023b5a90127bf0c31739338",
+          "flags": 2
+        },
+        ".gnu.version_r": {
+          "size": 512,
+          "sha256": "edcd8e08ffda3d3328c802d54350b78c925a0430bbd9251efadcffbbc5896be7",
+          "flags": 2
+        },
+        ".rela.dyn": {
+          "size": 2781120,
+          "sha256": "ede43a7ba353f99167bc54b866daa01b6e619ed618f4e56f5357ce224e65dbb5",
+          "flags": 2
+        },
+        ".rela.plt": {
+          "size": 288,
+          "sha256": "64cda2bb1a0a96e288dcd7a4ad6384a60482ab66094e810af702e9f4a8bf7f7e",
+          "flags": 66
+        },
+        ".init": {
+          "size": 27,
+          "sha256": "828f0bcea576e621905db2dcb99f6b21332a22fed483482291dccdfe9e1793be",
+          "flags": 6
+        },
+        ".plt": {
+          "size": 208,
+          "sha256": "c70abf7675c44e6abbacbe3e79309330e9de22ee0e08bceff30a73d1ca38d97c",
+          "flags": 6
+        },
+        ".plt.got": {
+          "size": 72,
+          "sha256": "0e7b448a22120a4df83879d8aa605797c7540c5d330637f75afa02d47e08a233",
+          "flags": 6
+        },
+        ".text": {
+          "size": 90901650,
+          "sha256": "3c85f2278f2c1d31928ed82043c9ddb67415bc25f6392c94b19781915673e586",
+          "flags": 6
+        },
+        ".fini": {
+          "size": 13,
+          "sha256": "6a4f3e5efc7c1f7ee7d6f21afd9ed040ba1d7f0b97bb12b016f5b176cc558bd8",
+          "flags": 6
+        },
+        ".rodata": {
+          "size": 6172944,
+          "sha256": "c6b3799c5fd3802830006e7cb74f03fbe886cd0d363c9adfbae1382b7e1a4ba6",
+          "flags": 2
+        },
+        ".eh_frame_hdr": {
+          "size": 821940,
+          "sha256": "253ee90dae26ec97886c12916630bd18ad9c91a78c09df067648046e241baa3b",
+          "flags": 2
+        },
+        ".eh_frame": {
+          "size": 6710956,
+          "sha256": "a5daa083c6c4d8542a496b808e5c56f9c5714cff87c6902e9696fdf8b5aa0b26",
+          "flags": 2
+        },
+        ".gcc_except_table": {
+          "size": 3539908,
+          "sha256": "178c7ed25d87552316b617a13edb104e001825e0b04e1023fe53c82e2aff555a",
+          "flags": 2
+        },
+        ".tdata": {
+          "size": 776,
+          "sha256": "a8dc070b48ba7c803e7e582d3f479c44419bf54b74c962e84673b13c97597a95",
+          "flags": 1027
+        },
+        ".tbss": {
+          "size": 2272,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "flags": 1027
+        },
+        ".init_array": {
+          "size": 2160,
+          "sha256": "5bff957448d3d5059864638471c30d2df8bc9e43c192fbbd6c314f7455d09616",
+          "flags": 2097155
+        },
+        ".fini_array": {
+          "size": 8,
+          "sha256": "9ab1b20fb8cc770527dca0257404dd90bb912eb0d89f538318f677aaaa198b95",
+          "flags": 3
+        },
+        ".data.rel.ro": {
+          "size": 2275824,
+          "sha256": "b51e33757e3471c8422ec4755ac08cfd94b52aaa0cfdcbb8490d11eaf07d223a",
+          "flags": 3
+        },
+        ".dynamic": {
+          "size": 560,
+          "sha256": "8f1b59e26f341d9db09fbb9c540d9afa0e3f6570887533bb9bcf93127af99858",
+          "flags": 3
+        },
+        ".got": {
+          "size": 86680,
+          "sha256": "385cdb7ac2b09d32ca6c9e5eea8742830a788eb24c40415a1e6ed9b1219a7e9f",
+          "flags": 3
+        },
+        ".data": {
+          "size": 61256,
+          "sha256": "dbf186ae7a7538e943d77b11693c14fec7fb8565f4007b579504a9f97de0a023",
+          "flags": 3
+        },
+        ".bss": {
+          "size": 8256,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "flags": 3
+        },
+        ".comment": {
+          "size": 62,
+          "sha256": "acbe4080105391bd489e66bb416e07c8c26bfe1a0223c21b750babc6f8f7444c",
+          "flags": 48
+        },
+        ".symtab": {
+          "size": 4872912,
+          "sha256": "54c02212d39b2ef3279b106fb4b78d56f2533a2c6d44870f6d6cdbecd875e6ba",
+          "flags": 0
+        },
+        ".strtab": {
+          "size": 26706292,
+          "sha256": "26c9380e85ec4bef37476bcac5926dea2d216c128af4aa053b6ec6accf07502e",
+          "flags": 0
+        },
+        ".shstrtab": {
+          "size": 257,
+          "sha256": "0e86a7313db82b706f354c43d27c72addde63f7d6900c6a50490c28d99d00166",
+          "flags": 0
+        }
+      },
+      "nonstore_library_paths": [],
+      "static_strings_kernel_sources": [
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/graphica-3.0.1/src/lib.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/combinatorics.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/domains.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/domains/backend/integer.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/domains/dual.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/domains/finite_field.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/domains/finite_field/geometric_sequence_kernels.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/domains/finite_field/polynomial_kernels.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/domains/finite_field/remainder_kernels.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/domains/float/complex.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/domains/float/error.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/domains/float/field.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/domains/float/interval.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/domains/float/magnitude.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/domains/float/multiprecision.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/domains/float/native.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/domains/float/python.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/domains/float/serialization.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/domains/integer.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/domains/integer/polynomial_kernels.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/domains/polynomial_layouts.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/domains/rational.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/numerical_integration.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/printer.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/printer/mathml.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/tensors/matrix.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/tensors/sparse.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/symbolica-3.0.1/src/api/python.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/symbolica-3.0.1/src/api/python.rsevent",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/symbolica-3.0.1/src/api/python/atom.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/symbolica-3.0.1/src/api/python/atom.rsevent",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/symbolica-3.0.1/src/api/python/condition.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/symbolica-3.0.1/src/api/python/condition.rsunsafe",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/symbolica-3.0.1/src/api/python/display.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/symbolica-3.0.1/src/api/python/display/algebraic.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/symbolica-3.0.1/src/api/python/display/html.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/symbolica-3.0.1/src/api/python/display/matrix.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/symbolica-3.0.1/src/api/python/display/paging.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/symbolica-3.0.1/src/api/python/evaluator.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/symbolica-3.0.1/src/api/python/expression.rs"
+      ],
+      "product_executed": false
+    },
+    "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/host-stub-rustred-integration-20261031-r1/artifacts/ordinary/symbolica/core.abi3.so": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/host-stub-rustred-integration-20261031-r1/artifacts/ordinary/symbolica/core.abi3.so",
+      "sha256": "d4cbe4e0fe79ebe128d8729b0d7081cb6eb2de1aee575d568fc533301098d957",
+      "bytes": 138644552,
+      "interpreter": "",
+      "dynamic": [
+        {
+          "tag": "NEEDED",
+          "value": "libgcc_s.so.1"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libm.so.6"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libc.so.6"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "ld-linux-x86-64.so.2"
+        },
+        {
+          "tag": "RUNPATH",
+          "value": "/nix/store/w5d0wdnv1c4iic9f6qlg6zv87zglb6f0-generation-refresh-corrected-stub-host-wheel-0.1.0/lib:/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84/lib:/nix/store/604gsr59rj7dzd0nrhp143rpvf7gyiaz-gcc-15.3.0-lib/lib"
+        }
+      ],
+      "sections": {
+        "": {
+          "size": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "flags": 0
+        },
+        ".hash": {
+          "size": 4136,
+          "sha256": "875b622e4d5601b813688c36583273b76ef99712c294b8c7816695cc189ffcd0",
+          "flags": 2
+        },
+        ".gnu.hash": {
+          "size": 36,
+          "sha256": "10f26c9cd2bb9f0888e83bb33e7847f9549f1615c17aeb0095163494d852d289",
+          "flags": 2
+        },
+        ".dynsym": {
+          "size": 8712,
+          "sha256": "23b8695774db2bf8e18d1e9a7df7244aa673f13d1bf8e1cda25976ed1093d65b",
+          "flags": 2
+        },
+        ".dynstr": {
+          "size": 5763,
+          "sha256": "8706fc675008abca6755cf9990a1578734150174770144e355c3854b81686031",
+          "flags": 2
+        },
+        ".gnu.version": {
+          "size": 726,
+          "sha256": "39cb56baec3be850d1e3ff831cf698e883f02e91a023b5a90127bf0c31739338",
+          "flags": 2
+        },
+        ".gnu.version_r": {
+          "size": 512,
+          "sha256": "edcd8e08ffda3d3328c802d54350b78c925a0430bbd9251efadcffbbc5896be7",
+          "flags": 2
+        },
+        ".rela.dyn": {
+          "size": 2693952,
+          "sha256": "6338c068f390b61b17c7b149c8ca282ee3c8ebc7b1b30136532799c497907107",
+          "flags": 2
+        },
+        ".rela.plt": {
+          "size": 288,
+          "sha256": "22cc15f2892497ab8c1f9497223a93ecb4851ebab313950d2262b97b12c624e4",
+          "flags": 66
+        },
+        ".init": {
+          "size": 27,
+          "sha256": "79c3a2ee588e5efc4dfdeff686bd8f110acff5be6fa7ee84009c8d04fdbf15cb",
+          "flags": 6
+        },
+        ".plt": {
+          "size": 208,
+          "sha256": "56222bcc5763dcac54cffaf2e0b6362b358b889c0920734816814753a40ea595",
+          "flags": 6
+        },
+        ".plt.got": {
+          "size": 72,
+          "sha256": "936bae078697ffdab8cc027e45a54acb17c6aa61dbf0423bbad65043efec589f",
+          "flags": 6
+        },
+        ".text": {
+          "size": 86925106,
+          "sha256": "a7ded3113a249d2ee1d19c1ec82aaca44ceed0bfb9448908fc5beb1fdcf50e22",
+          "flags": 6
+        },
+        ".fini": {
+          "size": 13,
+          "sha256": "6a4f3e5efc7c1f7ee7d6f21afd9ed040ba1d7f0b97bb12b016f5b176cc558bd8",
+          "flags": 6
+        },
+        ".rodata": {
+          "size": 5932560,
+          "sha256": "3316ac3bcc6a047aa98df3f4601a249e6ea94960b524146294160a611a9b1986",
+          "flags": 2
+        },
+        ".eh_frame_hdr": {
+          "size": 786692,
+          "sha256": "436908325980a75bb64194b394d3a6f5211c5e3ddd7495c9a15be71998152cd7",
+          "flags": 2
+        },
+        ".eh_frame": {
+          "size": 6408340,
+          "sha256": "0869499fcf81bd4c9cd8af975df2979dfe0645d4be94a796cc90159ba62c27c1",
+          "flags": 2
+        },
+        ".gcc_except_table": {
+          "size": 3356416,
+          "sha256": "eebf74d556f5e79d2ca49c9ee72d826b9629d85af87f1db3afa15e390a542ec0",
+          "flags": 2
+        },
+        ".tdata": {
+          "size": 696,
+          "sha256": "f3ea9a24a6fa12016d275ce958e3c74c7c74a0e95a65851b43e8f43642bd3160",
+          "flags": 1027
+        },
+        ".tbss": {
+          "size": 2272,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "flags": 1027
+        },
+        ".init_array": {
+          "size": 2128,
+          "sha256": "e5eaf96340c3b92f3293907698edd88b487061b71f79c3e8f2c264e394b1224b",
+          "flags": 2097155
+        },
+        ".fini_array": {
+          "size": 8,
+          "sha256": "f871ba39b91e62893e1ad06cae42ac52020aad1f3672daaffe3b0e4b1e0e4b8a",
+          "flags": 3
+        },
+        ".data.rel.ro": {
+          "size": 2197232,
+          "sha256": "fd9b5c7f60b7f700e501305b8ea63acbd19a96e790ef15a62f1a9317ef7a6fa1",
+          "flags": 3
+        },
+        ".dynamic": {
+          "size": 560,
+          "sha256": "06561ad9334383e86bf081308cf13345d41a5114305e5d25ffd13613448fdffe",
+          "flags": 3
+        },
+        ".got": {
+          "size": 84560,
+          "sha256": "a75d7257daf9a0c94c60cb40c1ae3a267ac0972ed18ac7ea032536de4fd2b075",
+          "flags": 3
+        },
+        ".data": {
+          "size": 60712,
+          "sha256": "14a100b86271e4a6dedef0b3489fcb624ca7e6ab8bd58736107fa219f626ca68",
+          "flags": 3
+        },
+        ".bss": {
+          "size": 8216,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "flags": 3
+        },
+        ".comment": {
+          "size": 62,
+          "sha256": "acbe4080105391bd489e66bb416e07c8c26bfe1a0223c21b750babc6f8f7444c",
+          "flags": 48
+        },
+        ".symtab": {
+          "size": 4650792,
+          "sha256": "7c7b828fc5a1bdcf1317d252dba5cef6ae36e49f196d46b0ed92163cec5936c1",
+          "flags": 0
+        },
+        ".strtab": {
+          "size": 25513717,
+          "sha256": "2c4d50f3c0e5a7733a8b744ee4deca3836e02e3d7a5dea62328bc0fee0cf145c",
+          "flags": 0
+        },
+        ".shstrtab": {
+          "size": 257,
+          "sha256": "0e86a7313db82b706f354c43d27c72addde63f7d6900c6a50490c28d99d00166",
+          "flags": 0
+        }
+      },
+      "nonstore_library_paths": [],
+      "static_strings_kernel_sources": [
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/graphica-3.0.1/src/lib.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/combinatorics.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/domains.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/domains/backend/integer.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/domains/dual.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/domains/finite_field.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/domains/finite_field/geometric_sequence_kernels.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/domains/finite_field/polynomial_kernels.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/domains/finite_field/remainder_kernels.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/domains/float/complex.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/domains/float/error.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/domains/float/field.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/domains/float/interval.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/domains/float/magnitude.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/domains/float/multiprecision.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/domains/float/native.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/domains/float/python.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/domains/float/serialization.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/domains/integer.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/domains/integer/polynomial_kernels.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/domains/polynomial_layouts.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/domains/rational.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/numerical_integration.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/printer.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/printer/mathml.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/tensors/matrix.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/src/tensors/sparse.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/symbolica-3.0.1/src/api/python.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/symbolica-3.0.1/src/api/python.rsevent",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/symbolica-3.0.1/src/api/python/atom.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/symbolica-3.0.1/src/api/python/atom.rsevent",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/symbolica-3.0.1/src/api/python/condition.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/symbolica-3.0.1/src/api/python/condition.rsunsafe",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/symbolica-3.0.1/src/api/python/display.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/symbolica-3.0.1/src/api/python/display/algebraic.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/symbolica-3.0.1/src/api/python/display/html.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/symbolica-3.0.1/src/api/python/display/matrix.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/symbolica-3.0.1/src/api/python/display/paging.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/symbolica-3.0.1/src/api/python/evaluator.rs",
+        "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/symbolica-3.0.1/src/api/python/expression.rs"
+      ],
+      "product_executed": false
+    }
+  },
+  "resolved_NEEDED": [
+    {
+      "consumer": "/nix/store/mn3vzg4c35q658jgg078hahj3hcic2f4-generation-refresh-feynkit-stub-exporter-0.1.0/bin/alphal00p-docs-python-exporter",
+      "needed": "libpython3.13.so.1.0",
+      "resolved": "/nix/store/wj1f56qky4pmjc7l0r6b6l7whnnw7hp6-python3-3.13.15/lib/libpython3.13.so.1.0",
+      "sha256": "145bc8e096d66e2f729bfa0cec51323cfd3a8a783ba65da718e101f2a891515e"
+    },
+    {
+      "consumer": "/nix/store/mn3vzg4c35q658jgg078hahj3hcic2f4-generation-refresh-feynkit-stub-exporter-0.1.0/bin/alphal00p-docs-python-exporter",
+      "needed": "libgcc_s.so.1",
+      "resolved": "/nix/store/wkiqjb44n5k0fwhmc523dvflspd47q3b-gcc-15.3.0-libgcc/lib/libgcc_s.so.1",
+      "sha256": "5e9e168007e3c97615d5891495e6ae4e5a07b9f3debfc5786aee94524bfcf5cb"
+    },
+    {
+      "consumer": "/nix/store/mn3vzg4c35q658jgg078hahj3hcic2f4-generation-refresh-feynkit-stub-exporter-0.1.0/bin/alphal00p-docs-python-exporter",
+      "needed": "libm.so.6",
+      "resolved": "/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84/lib/libm.so.6",
+      "sha256": "864704dfd98b7025f21dd1dcc8f8f1f6388ecb44aa984b075f0188c253d4ab53"
+    },
+    {
+      "consumer": "/nix/store/mn3vzg4c35q658jgg078hahj3hcic2f4-generation-refresh-feynkit-stub-exporter-0.1.0/bin/alphal00p-docs-python-exporter",
+      "needed": "libc.so.6",
+      "resolved": "/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84/lib/libc.so.6",
+      "sha256": "b8cb091b34bdd88f6902eebff8761f9ea306e6789b4ac4d06d4470c0d568c80c"
+    },
+    {
+      "consumer": "/nix/store/mn3vzg4c35q658jgg078hahj3hcic2f4-generation-refresh-feynkit-stub-exporter-0.1.0/bin/alphal00p-docs-python-exporter",
+      "needed": "ld-linux-x86-64.so.2",
+      "resolved": "/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84/lib/ld-linux-x86-64.so.2",
+      "sha256": "05657061620b22dbeb881cd13630ef66d39916d3b9c2a8efeb9ec6244367051f"
+    },
+    {
+      "consumer": "/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84/lib/libc.so.6",
+      "needed": "ld-linux-x86-64.so.2",
+      "resolved": "/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84/lib/ld-linux-x86-64.so.2",
+      "sha256": "05657061620b22dbeb881cd13630ef66d39916d3b9c2a8efeb9ec6244367051f"
+    },
+    {
+      "consumer": "/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84/lib/libm.so.6",
+      "needed": "libc.so.6",
+      "resolved": "/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84/lib/libc.so.6",
+      "sha256": "b8cb091b34bdd88f6902eebff8761f9ea306e6789b4ac4d06d4470c0d568c80c"
+    },
+    {
+      "consumer": "/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84/lib/libm.so.6",
+      "needed": "ld-linux-x86-64.so.2",
+      "resolved": "/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84/lib/ld-linux-x86-64.so.2",
+      "sha256": "05657061620b22dbeb881cd13630ef66d39916d3b9c2a8efeb9ec6244367051f"
+    },
+    {
+      "consumer": "/nix/store/wkiqjb44n5k0fwhmc523dvflspd47q3b-gcc-15.3.0-libgcc/lib/libgcc_s.so.1",
+      "needed": "libc.so.6",
+      "resolved": "/nix/store/fjkx1l5cnskzrqacf08z7i8z17256w0j-glibc-2.42-61/lib/libc.so.6",
+      "sha256": "6fcad203e10b304de3988b4e6e85df56a71f7ff9ae8898cb20fcf9bda330e2df"
+    },
+    {
+      "consumer": "/nix/store/wkiqjb44n5k0fwhmc523dvflspd47q3b-gcc-15.3.0-libgcc/lib/libgcc_s.so.1",
+      "needed": "ld-linux-x86-64.so.2",
+      "resolved": "/nix/store/fjkx1l5cnskzrqacf08z7i8z17256w0j-glibc-2.42-61/lib/ld-linux-x86-64.so.2",
+      "sha256": "1640ec4d1cfcc3c19430b368cbbb057c5652eac340ecba12cf9dfbe2c3769d07"
+    },
+    {
+      "consumer": "/nix/store/fjkx1l5cnskzrqacf08z7i8z17256w0j-glibc-2.42-61/lib/libc.so.6",
+      "needed": "ld-linux-x86-64.so.2",
+      "resolved": "/nix/store/fjkx1l5cnskzrqacf08z7i8z17256w0j-glibc-2.42-61/lib/ld-linux-x86-64.so.2",
+      "sha256": "1640ec4d1cfcc3c19430b368cbbb057c5652eac340ecba12cf9dfbe2c3769d07"
+    },
+    {
+      "consumer": "/nix/store/wj1f56qky4pmjc7l0r6b6l7whnnw7hp6-python3-3.13.15/lib/libpython3.13.so.1.0",
+      "needed": "libdl.so.2",
+      "resolved": "/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84/lib/libdl.so.2",
+      "sha256": "cdc7cf03d3b7db61930406eb336c74ba71c0347b77f2dc1ff03ebe6519442f1b"
+    },
+    {
+      "consumer": "/nix/store/wj1f56qky4pmjc7l0r6b6l7whnnw7hp6-python3-3.13.15/lib/libpython3.13.so.1.0",
+      "needed": "libm.so.6",
+      "resolved": "/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84/lib/libm.so.6",
+      "sha256": "864704dfd98b7025f21dd1dcc8f8f1f6388ecb44aa984b075f0188c253d4ab53"
+    },
+    {
+      "consumer": "/nix/store/wj1f56qky4pmjc7l0r6b6l7whnnw7hp6-python3-3.13.15/lib/libpython3.13.so.1.0",
+      "needed": "libgcc_s.so.1",
+      "resolved": "/nix/store/wkiqjb44n5k0fwhmc523dvflspd47q3b-gcc-15.3.0-libgcc/lib/libgcc_s.so.1",
+      "sha256": "5e9e168007e3c97615d5891495e6ae4e5a07b9f3debfc5786aee94524bfcf5cb"
+    },
+    {
+      "consumer": "/nix/store/wj1f56qky4pmjc7l0r6b6l7whnnw7hp6-python3-3.13.15/lib/libpython3.13.so.1.0",
+      "needed": "libc.so.6",
+      "resolved": "/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84/lib/libc.so.6",
+      "sha256": "b8cb091b34bdd88f6902eebff8761f9ea306e6789b4ac4d06d4470c0d568c80c"
+    },
+    {
+      "consumer": "/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84/lib/libdl.so.2",
+      "needed": "libc.so.6",
+      "resolved": "/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84/lib/libc.so.6",
+      "sha256": "b8cb091b34bdd88f6902eebff8761f9ea306e6789b4ac4d06d4470c0d568c80c"
+    },
+    {
+      "consumer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/host-stub-rustred-integration-20261031-r1/artifacts/private/symbolica/core.abi3.so",
+      "needed": "libgcc_s.so.1",
+      "resolved": "/nix/store/wkiqjb44n5k0fwhmc523dvflspd47q3b-gcc-15.3.0-libgcc/lib/libgcc_s.so.1",
+      "sha256": "5e9e168007e3c97615d5891495e6ae4e5a07b9f3debfc5786aee94524bfcf5cb"
+    },
+    {
+      "consumer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/host-stub-rustred-integration-20261031-r1/artifacts/private/symbolica/core.abi3.so",
+      "needed": "libm.so.6",
+      "resolved": "/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84/lib/libm.so.6",
+      "sha256": "864704dfd98b7025f21dd1dcc8f8f1f6388ecb44aa984b075f0188c253d4ab53"
+    },
+    {
+      "consumer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/host-stub-rustred-integration-20261031-r1/artifacts/private/symbolica/core.abi3.so",
+      "needed": "libc.so.6",
+      "resolved": "/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84/lib/libc.so.6",
+      "sha256": "b8cb091b34bdd88f6902eebff8761f9ea306e6789b4ac4d06d4470c0d568c80c"
+    },
+    {
+      "consumer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/host-stub-rustred-integration-20261031-r1/artifacts/private/symbolica/core.abi3.so",
+      "needed": "ld-linux-x86-64.so.2",
+      "resolved": "/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84/lib/ld-linux-x86-64.so.2",
+      "sha256": "05657061620b22dbeb881cd13630ef66d39916d3b9c2a8efeb9ec6244367051f"
+    },
+    {
+      "consumer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/host-stub-rustred-integration-20261031-r1/artifacts/ordinary/symbolica/core.abi3.so",
+      "needed": "libgcc_s.so.1",
+      "resolved": "/nix/store/wkiqjb44n5k0fwhmc523dvflspd47q3b-gcc-15.3.0-libgcc/lib/libgcc_s.so.1",
+      "sha256": "5e9e168007e3c97615d5891495e6ae4e5a07b9f3debfc5786aee94524bfcf5cb"
+    },
+    {
+      "consumer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/host-stub-rustred-integration-20261031-r1/artifacts/ordinary/symbolica/core.abi3.so",
+      "needed": "libm.so.6",
+      "resolved": "/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84/lib/libm.so.6",
+      "sha256": "864704dfd98b7025f21dd1dcc8f8f1f6388ecb44aa984b075f0188c253d4ab53"
+    },
+    {
+      "consumer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/host-stub-rustred-integration-20261031-r1/artifacts/ordinary/symbolica/core.abi3.so",
+      "needed": "libc.so.6",
+      "resolved": "/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84/lib/libc.so.6",
+      "sha256": "b8cb091b34bdd88f6902eebff8761f9ea306e6789b4ac4d06d4470c0d568c80c"
+    },
+    {
+      "consumer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/host-stub-rustred-integration-20261031-r1/artifacts/ordinary/symbolica/core.abi3.so",
+      "needed": "ld-linux-x86-64.so.2",
+      "resolved": "/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84/lib/ld-linux-x86-64.so.2",
+      "sha256": "05657061620b22dbeb881cd13630ef66d39916d3b9c2a8efeb9ec6244367051f"
+    }
+  ],
+  "only_store_resolution": true,
+  "native_loader_not_yet_executed": true
+}

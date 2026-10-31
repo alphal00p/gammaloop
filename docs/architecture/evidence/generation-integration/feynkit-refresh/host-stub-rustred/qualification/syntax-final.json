@@ -1,0 +1,21 @@
+{
+  "python_AST": {
+    "realize_r2.py": "e0339c586504b03bf8762d9e59ee7c3c1346c8b5de2e79cb26b89e6423d01cee",
+    "prepare_inputs.attempt1.py": "3ca70567b08aaec58bb7aa11eb6c60c7d1161ad648a9cda004b286ccf492b462",
+    "realize.py": "b55d6df64d14d5762d873a2f8fff38338d8cc05d974a315a65e2430058928369",
+    "pure_stage.attempt1.py": "8188d15482400f9666dc89bf5047c099ab55c63bda85abf1850a4315e52ad9f2",
+    "qualify_artifacts.py": "de00bce323fb0218d33fc0dba93f31bc9d3f6b034427a6a327fa212ae6db16ec",
+    "reconcile_lock.py": "d9701c3ed007b9fb38c22be1be431dcef50428a08c417eb0f8dd747de245d53d",
+    "check_private_format.py": "2da805a05e3676d97a9212250083fa8e6696c7031f1a60c5ab69a60a49af6e36",
+    "check_invariants.py": "d708825a840155e76f19cd08dfe9ef80f19706a943e8de44ce0d5cc998065965",
+    "revise_proposal.py": "14b623edfe6843da3fa43e7efb4896aff80e29974ad38d96983544416ececdd4",
+    "pure_stage.py": "8188d15482400f9666dc89bf5047c099ab55c63bda85abf1850a4315e52ad9f2",
+    "finalize_evidence.py": "3bf48fc587dae0cf47cecce8918dacd1e4e7957cc44dfa476ede8cf52e62a067",
+    "finish_pure_stage.py": "d797561193641cd149e5bee73abf15c64a5821116610c65e228d2ab13bd8b977",
+    "seal_packet.py": "1fe5210a8aa9dac020d0e7c929156d84d2c9c0de00a470603dc32d77fa16f6a6",
+    "prepare_evidence.py": "694f739b76c890d8f12f9d5444440ca3e29c8fa666f65c238108a8a41fd0cb25",
+    "prepare_inputs.py": "bd86fde45e3dbd25b156acb4efa7757fdca6716d892fd75d6e0c3d8f4ee47128",
+    "runtime_controller.py": "de917b4749d3c3de0b9ae45fa14f5d1d34556a591206b912931d1d6d4c174aed"
+  },
+  "no_runtime_or_compile_credit": true
+}

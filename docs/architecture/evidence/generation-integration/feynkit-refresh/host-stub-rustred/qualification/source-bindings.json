@@ -1,0 +1,29 @@
+{
+  "new_code": "2cfb52b28d99f92305a9d571bbe3911cf04b8a19",
+  "old_host_code": "f47f27213a1c55291239c9bc0f334a7ea1cd1cc1",
+  "full_source": "/nix/store/3sj3nw06s3vhl3j12wfp5gc3r1h6f0k3-source",
+  "full_source_nar": "sha256-RCGp7HErhoxa4nMbFUDXneWTb4992VxGY1T7eB57Rmk=",
+  "ordinary_source": "/nix/store/wsadhm1dqaik849gw251qbn0fbpaapjz-source",
+  "ordinary_nar": "sha256-tlTuNXXoy91vYs/0cb9RlUN7ORk3KlcwBc0a94Laqkw=",
+  "private_source": "/nix/store/h5g6njarsri3hacwzgzcrh4dzxm480ni-source",
+  "private_nar": "sha256-xVFNiWJSJzU3+3M9Lk1SHEx3mesvPOmS/2/oL3EW6p0=",
+  "rustred_source": "/nix/store/5hr22rycs6dpj77afgq0maqd8qbipk6a-rustred-source-7c1ed037",
+  "rustred_nar": "sha256-6Sgm1lGDDGCe2ch784rGp0krsqlOiZtKAEuafvNnKlA=",
+  "proposal_source": "/nix/store/dxdcf950ij2bbknmarw14bjh5z9g4mq8-host-stub-rustred-proposal",
+  "proposal_nar": "sha256-4O3p4bSCxSYVIa87PZMmJ6mgMrg4UOBoWBFeZRXm0f0=",
+  "source_filter": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/host-stub-rustred-integration-20261031-r1/proposal/ordinary-base.nix",
+  "producer_outputs": {
+    "ordinary": {
+      "drv": "/nix/store/5vvg7gyp1n3ma9rw57m37p81vn75h1ch-generation-refresh-corrected-stub-host-wheel-0.1.0.drv",
+      "out": "/nix/store/w5d0wdnv1c4iic9f6qlg6zv87zglb6f0-generation-refresh-corrected-stub-host-wheel-0.1.0"
+    },
+    "private": {
+      "drv": "/nix/store/dn8lgrci5pdyl8z5ca9bd2drx4s7zyl3-generation-refresh-rustred-validation-host-wheel-0.1.0.drv",
+      "out": "/nix/store/p6rpnvhbx1p4jrxs30ma9p45qdb0dyg5-generation-refresh-rustred-validation-host-wheel-0.1.0"
+    }
+  },
+  "metadata_gate": "offline locked before each compilation",
+  "no_runtime_execution": true,
+  "secret_variables_omitted": true,
+  "retained_setup_failure": "Nix v4 graph has derivations wrapper and basename keys; adapter corrected without changing sources or producer inputs"
+}

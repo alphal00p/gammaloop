@@ -1,0 +1,17 @@
+{"start": "ordinary/identity"}
+{"done": "ordinary/identity", "exit_code": 0, "elapsed_s": 1.5356318710837513, "reaped": true, "secret_redaction_required": false, "stdout_sha256": "1e9794313660382a2557ad81a604107d54ed1eb642764cf2d503d14081728b4f", "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"}
+{"start": "ordinary/stub-check"}
+{"done": "ordinary/stub-check", "exit_code": 0, "elapsed_s": 1.0804344359785318, "reaped": true, "secret_redaction_required": false, "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"}
+{"start": "private/identity"}
+{"done": "private/identity", "exit_code": 0, "elapsed_s": 1.5468919018749148, "reaped": true, "secret_redaction_required": false, "stdout_sha256": "1e9794313660382a2557ad81a604107d54ed1eb642764cf2d503d14081728b4f", "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"}
+{"start": "private/qcd"}
+{"done": "private/qcd", "exit_code": 0, "elapsed_s": 2.561190381878987, "reaped": true, "secret_redaction_required": false, "stdout_sha256": "e5403be86531a3805a8e01f7ae5f364b684673b9bb0970bf39b633d4a6bc0152", "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"}
+{"start": "private/ufo"}
+{"done": "private/ufo", "exit_code": 0, "elapsed_s": 6.628318259026855, "reaped": true, "secret_redaction_required": false, "stdout_sha256": "8f552ba4853a690f31a3dae3a5e7228fd45c7009c3a1b74d5f5d8ceab8d455c1", "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"}
+{"start": "private/squared"}
+{"done": "private/squared", "exit_code": 0, "elapsed_s": 1.392780469963327, "reaped": true, "secret_redaction_required": false, "stdout_sha256": "c0ef11a8d4a47d73a98f60fc2c64f4cf68a59ad7bd2132d4147a920cf2659061", "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"}
+{"start": "private/sector"}
+{"done": "private/sector", "exit_code": 0, "elapsed_s": 1.6376651069149375, "reaped": true, "secret_redaction_required": false, "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"}
+{"start": "private/browser"}
+{"done": "private/browser", "exit_code": 0, "elapsed_s": 5.375909341964871, "reaped": true, "secret_redaction_required": false, "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "stderr_sha256": "7b4891e4c890d500ac3f841dea42764bb95a2697457f447a797051d016c603e6"}
+{"runtime_complete": true, "counts": {"checks": 8, "passed": 8, "failed": 0}}

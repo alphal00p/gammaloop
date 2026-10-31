@@ -1,0 +1,30 @@
+{
+  "retained_attempts": [
+    {
+      "id": "guard-object-store-attempt1",
+      "exit_code": 1,
+      "error": "fatal: not a git repository (or any parent up to mount point /)\nStopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).",
+      "cause": "Feature workspace has JJ metadata without a Git worktree; ls-tree object reads corrected to main Git store read-only.",
+      "script": "prepare_inputs.attempt1.py",
+      "source_or_runtime_started": false
+    },
+    {
+      "id": "pure-graph-adapter-attempt1",
+      "error_log": "pure-stage.stderr",
+      "error": "KeyError for full /nix/store/...drv in Nix version4 derivations wrapper/basename-key mapping",
+      "script": "pure_stage.attempt1.py",
+      "correction": "finish_pure_stage.py adapter only; no producer input change."
+    },
+    {
+      "id": "private-locked-metadata-attempt1",
+      "exit_code": 101,
+      "logs": [
+        "build-completion.json",
+        "qualification/log-private/stdout"
+      ],
+      "correction": "lock-reconciliation.json; no version/source/feature/semantic change; final locked gates and both builds pass."
+    }
+  ],
+  "runtime_failures": 0,
+  "old_failures": "Exact prior packets and reviews retained unchanged; original ordinary QCD failure is not relabelled as a private-host result."
+}

@@ -1,0 +1,14 @@
+{
+  "argv": [
+    "/run/current-system/sw/bin/nix",
+    "store",
+    "add-path",
+    "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/host-stub-rustred-integration-20261031-r1/proposal",
+    "--name",
+    "host-stub-rustred-proposal"
+  ],
+  "cwd": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh",
+  "exit_code": 0,
+  "elapsed_s": 0.2924331179820001,
+  "private_variables_absent": true
+}

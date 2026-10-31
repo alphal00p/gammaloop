@@ -1,0 +1,9 @@
+{
+  "core_path": "/work/venv/lib/python3.13/site-packages/symbolica/core.abi3.so",
+  "core_sha256": "4d4231b32962669db1ec4bc8efef586e93318b9200468235a78b25919dc98ecb",
+  "stub_path": "/work/venv/lib/python3.13/site-packages/symbolica/community/hepkit/__init__.pyi",
+  "stub_sha256": "5e2dfa31a10d9c545d38f4257b006daa7b1b53bcf0d96aafb060ee71a68f77e5",
+  "IBPFamily": true,
+  "native_class_identity": true,
+  "assertions_enabled": true
+}

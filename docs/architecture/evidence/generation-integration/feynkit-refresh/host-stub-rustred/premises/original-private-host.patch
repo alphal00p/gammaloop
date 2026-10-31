@@ -1,0 +1,131 @@
+--- a/examples/notebooks/symbolica-host/Cargo.toml
++++ b/examples/notebooks/symbolica-host/Cargo.toml
+@@ -11,6 +11,8 @@
+ crate-type = ["cdylib"]
+ 
+ [dependencies]
++# Private native QCD validation superset; finite IBP only, one shared kernel.
++rustred-feynkit = { path = "/nix/store/5hr22rycs6dpj77afgq0maqd8qbipk6a-rustred-source-7c1ed037/crates/rustred-feynkit", default-features = false }
+ symbolica-data = { path = "../../../crates/symbolica-data", features = ["python"] }
+ linnet-py = { path = "../../../crates/linnet-py", default-features = false }
+ feynkit-py = { path = "../../../crates/feynkit-py", default-features = false, features = ["ufo", "linnet-python"] }
+--- a/examples/notebooks/symbolica-host/Cargo.lock
++++ b/examples/notebooks/symbolica-host/Cargo.lock
+@@ -71,6 +71,7 @@
+  "feynkit-py",
+  "linnet-py",
+  "pyo3",
++ "rustred-feynkit",
+  "spynso3",
+  "symbolica",
+  "symbolica-data",
+@@ -636,18 +637,18 @@
+ 
+ [[package]]
+ name = "convert_case"
++version = "0.10.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "633458d4ef8c78b72454de2d54fd6ab2e60f9e02be22f3c6104cdc8a4e0fceb9"
++dependencies = [
++ "unicode-segmentation",
++]
++
++[[package]]
++name = "convert_case"
+ version = "0.4.0"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "6245d59a3e82a7fc217c5828a6692dbc6dfb63a0c8c90495621f7b9d79704a0e"
+-
+-[[package]]
+-name = "convert_case"
+-version = "0.10.0"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "633458d4ef8c78b72454de2d54fd6ab2e60f9e02be22f3c6104cdc8a4e0fceb9"
+-dependencies = [
+- "unicode-segmentation",
+-]
+ 
+ [[package]]
+ name = "core-foundation-sys"
+@@ -2964,6 +2965,56 @@
+ ]
+ 
+ [[package]]
++name = "rustred"
++version = "0.1.0"
++dependencies = [
++ "bincode",
++ "blake3",
++ "rand 0.9.4",
++ "rayon",
++ "rustred-order",
++ "symbolica",
++]
++
++[[package]]
++name = "rustred-app"
++version = "0.1.0"
++dependencies = [
++ "bincode",
++ "blake3",
++ "rayon",
++ "rustred",
++ "serde",
++ "serde_json",
++ "symbolica",
++ "toml 1.1.2+spec-1.1.0",
++]
++
++[[package]]
++name = "rustred-feynkit"
++version = "0.1.0"
++dependencies = [
++ "pyo3",
++ "rustred",
++ "rustred-python",
++ "symbolica",
++]
++
++[[package]]
++name = "rustred-order"
++version = "0.1.0"
++
++[[package]]
++name = "rustred-python"
++version = "0.1.0"
++dependencies = [
++ "pyo3",
++ "rustred-app",
++ "serde",
++ "serde_json",
++]
++
++[[package]]
+ name = "rustversion"
+ version = "1.0.22"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+@@ -4648,3 +4699,4 @@
+ dependencies = [
+  "zune-core",
+ ]
++
+--- a/examples/notebooks/symbolica-host/src/lib.rs
++++ b/examples/notebooks/symbolica-host/src/lib.rs
+@@ -26,6 +26,7 @@
+             format!("symbolica.community.{}", native_name),
+             &child_module,
+         )?;
++        child_module
+     }};
+ }
+ 
+@@ -35,7 +36,8 @@
+     data::register(m, RENDER_ASSETS)?;
+     register_module!(m, linnet_py::GraphModule);
+     m.add_function(pyo3::wrap_pyfunction!(get_citations, m)?)?;
+-    register_module!(m, feynkit_py::FeynkitModule);
++    let hepkit = register_module!(m, feynkit_py::FeynkitModule);
++    rustred_feynkit::register_hep_module(&hepkit)?;
+     register_module!(m, spynso3::SpensoModule);
+     Ok(())
+ }

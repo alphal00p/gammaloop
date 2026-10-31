@@ -1,0 +1,220 @@
+{
+  "wheel": {
+    "path": "/nix/store/w5d0wdnv1c4iic9f6qlg6zv87zglb6f0-generation-refresh-corrected-stub-host-wheel-0.1.0/dist/symbolica-3.0.1-cp310-abi3-linux_x86_64.whl",
+    "sha256": "edecffa95ae3d4318e83ac5e6af56e4cd504804b85165fd4766ed81167b5fd87",
+    "bytes": 49514067
+  },
+  "native": "d4cbe4e0fe79ebe128d8729b0d7081cb6eb2de1aee575d568fc533301098d957",
+  "files": [
+    {
+      "path": ".lock",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "pyvenv.cfg",
+      "sha256": "e5b5ac956fe6139af96288f860b5a87e7988b954ddc3f43d67c3027f8972dac9",
+      "bytes": 168
+    },
+    {
+      "path": ".gitignore",
+      "sha256": "684888c0ebb17f374298b65ee2807526c066094c701bcc7ebbe1c1095f494fc1",
+      "bytes": 1
+    },
+    {
+      "path": "CACHEDIR.TAG",
+      "sha256": "5953156d7e0c564a427251316eaf26f8870e6483ae2197f916b630e4f93e31ae",
+      "bytes": 43
+    },
+    {
+      "path": "bin/pydoc.bat",
+      "sha256": "09f9608d478fa48a9e49af8f413cfeaab47773effd185433088b7688ce75890e",
+      "bytes": 1219
+    },
+    {
+      "path": "bin/activate.csh",
+      "sha256": "142cafae7d4390f17502b82263f57f1ef4e7a3d227d0a66d93b3e8eb13bd7ede",
+      "bytes": 2593
+    },
+    {
+      "path": "bin/activate_this.py",
+      "sha256": "01c4edca7f1d037b2ef37bc466b144f5ac7f535aa6f33c9855c0044cd3438af1",
+      "bytes": 2383
+    },
+    {
+      "path": "bin/activate.bat",
+      "sha256": "e5a2e27cdb34ca127984b268f250b754b1e534f66afe5aea11eb8f9228b03b46",
+      "bytes": 2643
+    },
+    {
+      "path": "bin/activate.fish",
+      "sha256": "73363393918526001cc4412dc192a2c56977aa070ce8a2a5a12504697baffdc3",
+      "bytes": 4304
+    },
+    {
+      "path": "bin/activate",
+      "sha256": "308d088ca21f058d84761cca72db5a00e45e83c7f38ee9246645a0017f9f572a",
+      "bytes": 4063
+    },
+    {
+      "path": "bin/activate.xsh",
+      "sha256": "df312406d0948f4d7aabfda405ebf28b4b59a1099a8d8f16759e15eefff0a910",
+      "bytes": 3867
+    },
+    {
+      "path": "bin/activate.nu",
+      "sha256": "8791fdff45102314ed32fa3235ab3c263b6191837b2964acf0f51a3736627b46",
+      "bytes": 3919
+    },
+    {
+      "path": "bin/activate.ps1",
+      "sha256": "78e92217a9380caaccc1a7fe0a5623a878b9ed72f515c42f718c06c908742563",
+      "bytes": 2765
+    },
+    {
+      "path": "bin/deactivate.bat",
+      "sha256": "13ea86073a9ee43a66e3549312599dd47ff315758b4ca5a0406faf041fb82300",
+      "bytes": 1730
+    },
+    {
+      "path": "lib/python3.13/site-packages/_virtualenv.pth",
+      "sha256": "69ac3d8f27e679c81b94ab30b3b56e9cd138219b1ba94a1fa3606d5a76a1433d",
+      "bytes": 18
+    },
+    {
+      "path": "lib/python3.13/site-packages/_virtualenv.py",
+      "sha256": "cfb3db86aaa53bb62b5ff764970bec2d71c9228590a0ebec57f6ec926cc0bf1a",
+      "bytes": 5246
+    },
+    {
+      "path": "lib/python3.13/site-packages/symbolica-3.0.1.dist-info/REQUESTED",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "lib/python3.13/site-packages/symbolica-3.0.1.dist-info/direct_url.json",
+      "sha256": "a11efee2a3cc0d475adafcdc6255866b5ac40c80b5724fa6c27c5e7c5891c7b5",
+      "bytes": 178
+    },
+    {
+      "path": "lib/python3.13/site-packages/symbolica-3.0.1.dist-info/METADATA",
+      "sha256": "586ffd23c4922a46a4272220e816de635cd24d45dff8a5cc7764fb790f99f4a2",
+      "bytes": 551
+    },
+    {
+      "path": "lib/python3.13/site-packages/symbolica-3.0.1.dist-info/uv_cache.json",
+      "sha256": "bc116dfd4cb29ec614dd21d4807b682908c39b27b934615361fcc309330e6d4f",
+      "bytes": 127
+    },
+    {
+      "path": "lib/python3.13/site-packages/symbolica-3.0.1.dist-info/RECORD",
+      "sha256": "88ac7de00a873fa3f5050bd7db12e5dbf6cc2e950bb0948a959f82c0b1e7dfb3",
+      "bytes": 2106
+    },
+    {
+      "path": "lib/python3.13/site-packages/symbolica-3.0.1.dist-info/INSTALLER",
+      "sha256": "e6184ce10e266134fdcfa401e8f1a95005bcd4f18d16b62b757323e2833fe9a9",
+      "bytes": 2
+    },
+    {
+      "path": "lib/python3.13/site-packages/symbolica-3.0.1.dist-info/WHEEL",
+      "sha256": "de0ed507ada8e7fb009ef102440568e148c86d69e3333ad5e18af775f2b9604d",
+      "bytes": 99
+    },
+    {
+      "path": "lib/python3.13/site-packages/symbolica/data.py",
+      "sha256": "1c3cb483d1a0a9184b5316e222fde843d6d57ece41c553d295a6726e3f1f37b7",
+      "bytes": 1101
+    },
+    {
+      "path": "lib/python3.13/site-packages/symbolica/__init__.py",
+      "sha256": "08814443af5d3b4d336293ed7261b1594dd2c113efc4624b7566fe1e2857e2f2",
+      "bytes": 67
+    },
+    {
+      "path": "lib/python3.13/site-packages/symbolica/core.abi3.so",
+      "sha256": "d4cbe4e0fe79ebe128d8729b0d7081cb6eb2de1aee575d568fc533301098d957",
+      "bytes": 138644552
+    },
+    {
+      "path": "lib/python3.13/site-packages/symbolica/community/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "lib/python3.13/site-packages/symbolica/community/tensor/py.typed",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "lib/python3.13/site-packages/symbolica/community/tensor/__init__.py",
+      "sha256": "0890b1cb8c6e63b2950efac24551f3445f8f7030d15d7c5ba6a4c6dbbe6d5716",
+      "bytes": 51
+    },
+    {
+      "path": "lib/python3.13/site-packages/symbolica/community/tensor/__init__.pyi",
+      "sha256": "efbd5d1a724f8915b287ad44c560768486579b8e03aa3faa0c4c46cf0805c1a7",
+      "bytes": 447483
+    },
+    {
+      "path": "lib/python3.13/site-packages/symbolica/community/graph/py.typed",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "lib/python3.13/site-packages/symbolica/community/graph/__init__.py",
+      "sha256": "c892f69f80eddf695efdf09b56edbf08394062875e89259fa6dc799a306f0f72",
+      "bytes": 182
+    },
+    {
+      "path": "lib/python3.13/site-packages/symbolica/community/graph/__init__.pyi",
+      "sha256": "022bfb4fd01a5b3e59e74f68110af2b5748fa21bda1bfc09055becbe1b9be927",
+      "bytes": 98884
+    },
+    {
+      "path": "lib/python3.13/site-packages/symbolica/community/idenso/__init__.py",
+      "sha256": "9ba8d19a65b0b74d0a56bc1987430eed5416a6ac067e5a48f88ec3ee45c18e36",
+      "bytes": 51
+    },
+    {
+      "path": "lib/python3.13/site-packages/symbolica/community/hepkit/__init__.pyi",
+      "sha256": "5e2dfa31a10d9c545d38f4257b006daa7b1b53bcf0d96aafb060ee71a68f77e5",
+      "bytes": 492891
+    },
+    {
+      "path": "lib/python3.13/site-packages/symbolica/community/hepkit/__init__.py",
+      "sha256": "25bb8a82dd8dbfaf07f229ce811d7ffc4cf9a4572b12dd262b9532e73f5d6044",
+      "bytes": 237
+    },
+    {
+      "path": "lib/python3.13/site-packages/symbolica-3.0.1.dist-info/sboms/alphal00p-notebook-host.cyclonedx.json",
+      "sha256": "da795054a5ca3bf4f54f242f8ecc12a53eabe65416ce2629cc786c874103824e",
+      "bytes": 573911
+    },
+    {
+      "path": "lib/python3.13/site-packages/symbolica-3.0.1.dist-info/licenses/licenses/clarabel-LICENSE",
+      "sha256": "6e2f382771f8aab58e4868ddd0afe0c2fefe6b54f9681493a9c3d0f32906cfe1",
+      "bytes": 10779
+    },
+    {
+      "path": "lib/python3.13/site-packages/symbolica-3.0.1.dist-info/licenses/licenses/networkx-LICENSE",
+      "sha256": "6025f323ea29dc2f0ee0abd9523bf910186f55b0e148e6ebf646c55566278e2e",
+      "bytes": 1763
+    }
+  ],
+  "all_wheel_payload_members_byte_identical": true,
+  "RECORD": {
+    "wheel_RECORD_sha256": "cd949145f1a6904ae20ed84994dec060ae4dfc147867636518cf482c50fb0386",
+    "installed_RECORD_sha256": "88ac7de00a873fa3f5050bd7db12e5dbf6cc2e950bb0948a959f82c0b1e7dfb3",
+    "all_original_rows_preserved": true,
+    "installed_rows_verified": 23,
+    "installer_added_members": [
+      "symbolica-3.0.1.dist-info/INSTALLER",
+      "symbolica-3.0.1.dist-info/REQUESTED",
+      "symbolica-3.0.1.dist-info/direct_url.json",
+      "symbolica-3.0.1.dist-info/uv_cache.json"
+    ]
+  },
+  "stub_sha256": "5e2dfa31a10d9c545d38f4257b006daa7b1b53bcf0d96aafb060ee71a68f77e5",
+  "native_imported": false
+}

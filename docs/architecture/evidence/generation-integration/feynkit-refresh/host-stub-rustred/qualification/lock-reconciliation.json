@@ -1,0 +1,46 @@
+{
+  "removed": [
+    [
+      "rustred-app",
+      "0.1.0",
+      null
+    ],
+    [
+      "rustred-python",
+      "0.1.0",
+      null
+    ]
+  ],
+  "added": [],
+  "changed": [
+    {
+      "key": [
+        "rustred-feynkit",
+        "0.1.0",
+        null
+      ],
+      "old": {
+        "name": "rustred-feynkit",
+        "version": "0.1.0",
+        "dependencies": [
+          "pyo3",
+          "rustred",
+          "rustred-python",
+          "symbolica"
+        ]
+      },
+      "new": {
+        "name": "rustred-feynkit",
+        "version": "0.1.0",
+        "dependencies": [
+          "pyo3",
+          "rustred",
+          "symbolica"
+        ]
+      }
+    }
+  ],
+  "old_packages": 469,
+  "new_packages": 467,
+  "meaning_gate": "No version/source change permitted; removed optional unused nodes acceptable only if exact active graph stays finite bridge"
+}

@@ -1,0 +1,17 @@
+{
+  "schema": "independent-raw-three-integration-review-seal/1",
+  "verdict": "APPROVE_BOUNDED_RAW_THREE_QED_QCD_INTEGRATION",
+  "candidate": "d0fb4e906140a6a0fc8dd6401ca839cab0c2734d",
+  "code": "ffa76ec420642c03349ab756d2d7720ab93c0057",
+  "review_sha256": "535b792610c531b446d8beb1a9f300246e6d498e8126509b637189e8eb80a091",
+  "manifest_sha256": "6588fe962defe4fa12685a095a1571dfc9fd2240ee3c6a409545df9e16df490e",
+  "manifested_files": 209,
+  "exclusions": [
+    "SHA256SUMS bound by this seal",
+    "SEAL.json hash returned to coordinator"
+  ],
+  "reviewer_fresh_native_executions": 36,
+  "fresh_capture_joins": 15,
+  "candidate_unchanged": true,
+  "owned_processes_remaining": []
+}

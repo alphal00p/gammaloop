@@ -1,0 +1,24 @@
+{
+  "executable": "/work/venv/bin/python",
+  "modules": [
+    {
+      "module": "symbolica",
+      "file": "/work/venv/lib/python3.13/site-packages/symbolica/__init__.py",
+      "sha256": "08814443af5d3b4d336293ed7261b1594dd2c113efc4624b7566fe1e2857e2f2"
+    },
+    {
+      "module": "symbolica.core",
+      "file": "/work/venv/lib/python3.13/site-packages/symbolica/core.abi3.so",
+      "sha256": "4d4231b32962669db1ec4bc8efef586e93318b9200468235a78b25919dc98ecb"
+    },
+    {
+      "module": "symbolica.community.hepkit",
+      "file": "/work/venv/lib/python3.13/site-packages/symbolica/community/hepkit/__init__.py",
+      "sha256": "25bb8a82dd8dbfaf07f229ce811d7ffc4cf9a4572b12dd262b9532e73f5d6044"
+    }
+  ],
+  "owners": {
+    "FeynmanDiagram": "symbolica.community.hepkit",
+    "IntegralFamily": "symbolica.community.hepkit"
+  }
+}

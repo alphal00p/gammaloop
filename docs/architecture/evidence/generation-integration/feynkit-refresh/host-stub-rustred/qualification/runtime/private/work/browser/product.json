@@ -1,0 +1,73 @@
+{
+  "complete": true,
+  "tests_run": 1,
+  "failures": 0,
+  "errors": 0,
+  "skips": 0,
+  "drawings": [
+    [
+      0,
+      2
+    ],
+    [
+      22,
+      2
+    ],
+    [
+      0,
+      42
+    ],
+    [
+      64,
+      2
+    ]
+  ],
+  "engines": [
+    {
+      "engine": "chromium",
+      "version": "153.0.8010.36",
+      "default_executable": "/nix/store/h8903h8s8x5zr3la0pnbgh24sbl5pf62-playwright-browsers/chromium-1228/chrome-linux64/chrome",
+      "requested_executable": "/nix/store/ds6wq0gzyimhl7c1kmzdvql0w4d2rcv4-chromium-153.0.8010.36/bin/chromium",
+      "private_variables_absent": true
+    },
+    {
+      "engine": "webkit",
+      "version": "26.5",
+      "default_executable": "/nix/store/h8903h8s8x5zr3la0pnbgh24sbl5pf62-playwright-browsers/webkit-2311/pw_run.sh",
+      "requested_executable": null,
+      "private_variables_absent": true
+    }
+  ],
+  "pages": [
+    {
+      "dpr": 1,
+      "viewport": {
+        "width": 1100,
+        "height": 1000
+      }
+    },
+    {
+      "dpr": 1,
+      "viewport": {
+        "width": 1100,
+        "height": 1000
+      }
+    }
+  ],
+  "subtests": [
+    {
+      "engine": "chromium",
+      "passed": true
+    },
+    {
+      "engine": "webkit",
+      "passed": true
+    }
+  ],
+  "driver_environment_calls": 1,
+  "source_sha256": "ee700e0629fad62358e1f0a778353757a9a305bdbc131f2ae2675b7b74d82c6c",
+  "installed_core_sha256": "4d4231b32962669db1ec4bc8efef586e93318b9200468235a78b25919dc98ecb",
+  "installed_core_path": "/work/venv/lib/python3.13/site-packages/symbolica/core.abi3.so",
+  "native_display_methods_present": true,
+  "wrappers_on_page_content_locator_reads_or_assertions": false
+}

@@ -1,0 +1,2246 @@
+{
+  "reason": "Pinned WPE page target aborts creating EGL display. Pinned libEGL libglvnd searches /run/opengl-driver/share/glvnd/egl_vendor.d and /etc or /usr, none mounted. Select the already installed Mesa software EGL vendor explicitly, with only identified native files and data read-only.",
+  "system_driver_link": "/nix/store/r9s446y1lxwp671yr7ss1prkiy3snknx-graphics-drivers",
+  "mesa": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1",
+  "vendor": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/share/glvnd/egl_vendor.d/50_mesa.json",
+  "vendor_json": {
+    "file_format_version": "1.0.0",
+    "ICD": {
+      "library_path": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/lib/libEGL_mesa.so.0"
+    }
+  },
+  "files": {
+    "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/share/glvnd/egl_vendor.d/50_mesa.json": {
+      "sha256": "aea06bda1190f8ef93fa153586fe0f8e0c1cfc4f77f0c0673ddca20d0dd79336"
+    },
+    "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/lib/libgallium-26.2.1.so": {
+      "sha256": "3d6f6f1bab4e48679bd5f5da675c13b072f7827e456ebe601fa541837a92e294",
+      "bytes": 60997096
+    },
+    "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libc.so.6": {
+      "sha256": "55885ae8057bb63e8d085b4c8aa4b069ab7902b9deeffb85f907134ebe7d508f",
+      "bytes": 2404904
+    },
+    "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/ld-linux-x86-64.so.2": {
+      "sha256": "e655ec5a68127ee03586457e67039ea9deef55abaeae519c1f53ad1cf18ee5b2",
+      "bytes": 263056
+    },
+    "/nix/store/r48746qznwqxxl9qzd8f08ny8mg1dg2y-gcc-15.3.0-lib/lib/libgcc_s.so.1": {
+      "target": "/nix/store/cjgm8gv32xdrjgzbgc0zk2fypiys9ylf-gcc-15.3.0-libgcc/lib/libgcc_s.so.1"
+    },
+    "/nix/store/cjgm8gv32xdrjgzbgc0zk2fypiys9ylf-gcc-15.3.0-libgcc/lib/libgcc_s.so.1": {
+      "sha256": "5e9e168007e3c97615d5891495e6ae4e5a07b9f3debfc5786aee94524bfcf5cb",
+      "bytes": 196968
+    },
+    "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libm.so.6": {
+      "sha256": "45fcfe1d00e5145b10f7574ee5342314fe57bc6d20bb2abd4eaa3b2bfe6e6af9",
+      "bytes": 1102240
+    },
+    "/nix/store/r48746qznwqxxl9qzd8f08ny8mg1dg2y-gcc-15.3.0-lib/lib/libstdc++.so.6": {
+      "target": "libstdc++.so.6.0.34"
+    },
+    "/nix/store/r48746qznwqxxl9qzd8f08ny8mg1dg2y-gcc-15.3.0-lib/lib/libstdc++.so.6.0.34": {
+      "sha256": "a9beac36ef8a23642461e5c66f0dbd0fecb2e2d8644fcb181d15f824a7e4744c",
+      "bytes": 3235776
+    },
+    "/nix/store/62qx8cgv8h24cq4vgh5ipyflwg1naykl-libx11-1.8.13/lib/libX11-xcb.so.1": {
+      "target": "libX11-xcb.so.1.0.0"
+    },
+    "/nix/store/62qx8cgv8h24cq4vgh5ipyflwg1naykl-libx11-1.8.13/lib/libX11-xcb.so.1.0.0": {
+      "sha256": "d47efde3afd3c34cb538414d3d3df34829d4be9589743f84b040abaa972040d2",
+      "bytes": 15104
+    },
+    "/nix/store/yyvfjvdxxl26y0939wqfycc3x76k79cj-libdrm-2.4.134/lib/libdrm_intel.so.1": {
+      "target": "libdrm_intel.so.1.134.0"
+    },
+    "/nix/store/yyvfjvdxxl26y0939wqfycc3x76k79cj-libdrm-2.4.134/lib/libdrm_intel.so.1.134.0": {
+      "sha256": "42f3310ec6f137c3dac6bdfc8a48eb2463f3b655457c924df1beeff07989059b",
+      "bytes": 176752
+    },
+    "/nix/store/7c2wp3v32kx4dn21fmyf7smcyib5r0i6-libpciaccess-0.19/lib/libpciaccess.so.0": {
+      "target": "libpciaccess.so.0.11.1"
+    },
+    "/nix/store/7c2wp3v32kx4dn21fmyf7smcyib5r0i6-libpciaccess-0.19/lib/libpciaccess.so.0.11.1": {
+      "sha256": "51f37a17826f96e0e72a687bf0c4c01d562d813d2ca5e363d6f15143aff93629",
+      "bytes": 158536
+    },
+    "/nix/store/yyvfjvdxxl26y0939wqfycc3x76k79cj-libdrm-2.4.134/lib/libdrm.so.2": {
+      "target": "libdrm.so.2.134.0"
+    },
+    "/nix/store/yyvfjvdxxl26y0939wqfycc3x76k79cj-libdrm-2.4.134/lib/libdrm.so.2.134.0": {
+      "sha256": "3c45477556fe5ac42c234dca5b6a31e84191a7bfc7913892b1afc3ba62ed2010",
+      "bytes": 114592
+    },
+    "/nix/store/yyvfjvdxxl26y0939wqfycc3x76k79cj-libdrm-2.4.134/lib/libdrm_amdgpu.so.1": {
+      "target": "libdrm_amdgpu.so.1.134.0"
+    },
+    "/nix/store/yyvfjvdxxl26y0939wqfycc3x76k79cj-libdrm-2.4.134/lib/libdrm_amdgpu.so.1.134.0": {
+      "sha256": "62d46e5e061742dd6aadfdfcd8137547b65a4272268b792d8ade2ff5072e270a",
+      "bytes": 61176
+    },
+    "/nix/store/6ppdi802js8s56d0nwxwi6jkdxpzqvv1-elfutils-0.195/lib/libelf.so.1": {
+      "target": "libelf-0.195.so"
+    },
+    "/nix/store/6ppdi802js8s56d0nwxwi6jkdxpzqvv1-elfutils-0.195/lib/libelf-0.195.so": {
+      "sha256": "54b6c1e146d26d16bbf223f10b2515f46a6572d09b8a6b5028fb0729179158e0",
+      "bytes": 136440
+    },
+    "/nix/store/0hckf4kx70qifvrsbh64hc2s5xfyrf97-bzip2-1.0.8/lib/libbz2.so.1": {
+      "target": "libbz2.so.1.0.8"
+    },
+    "/nix/store/0hckf4kx70qifvrsbh64hc2s5xfyrf97-bzip2-1.0.8/lib/libbz2.so.1.0.8": {
+      "sha256": "7e9807a344e2e4b188ebc92beaed0a763c7a4b45317480fbfde3e01218fbe441",
+      "bytes": 86664
+    },
+    "/nix/store/96hgnqnikm0k4pag8x35hb6s46nag1l3-xz-5.8.3/lib/liblzma.so.5": {
+      "target": "liblzma.so.5.8.3"
+    },
+    "/nix/store/96hgnqnikm0k4pag8x35hb6s46nag1l3-xz-5.8.3/lib/liblzma.so.5.8.3": {
+      "sha256": "50a68a097918fbced7ecf8907b6b3d6bdfc0cf39e9106794438a9d9209c96b3e",
+      "bytes": 223824
+    },
+    "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libpthread.so.0": {
+      "sha256": "a39a01e7533290f53da59aa3d199bd8602fab2524890a1b825ce3251f9918ed9",
+      "bytes": 16536
+    },
+    "/nix/store/pxahscw9vl9vac1nbjpy6bhz3vbk3cpl-zstd-1.5.7/lib/libzstd.so.1": {
+      "target": "libzstd.so.1.5.7"
+    },
+    "/nix/store/pxahscw9vl9vac1nbjpy6bhz3vbk3cpl-zstd-1.5.7/lib/libzstd.so.1.5.7": {
+      "sha256": "370aba95965d60fc8aba4438baed050d222653d11101e11b199985f417f9aec5",
+      "bytes": 905672
+    },
+    "/nix/store/zks9mfsn4rqr6z9g6pcj2xqzcsplj0nb-zlib-1.3.2/lib/libz.so.1": {
+      "target": "libz.so.1.3.2"
+    },
+    "/nix/store/zks9mfsn4rqr6z9g6pcj2xqzcsplj0nb-zlib-1.3.2/lib/libz.so.1.3.2": {
+      "sha256": "80c3995633f635b941095d606782764dc115348b28907c0c3f21bd3d69f9a8ea",
+      "bytes": 128936
+    },
+    "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-dri3.so.0": {
+      "target": "libxcb-dri3.so.0.1.0"
+    },
+    "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-dri3.so.0.1.0": {
+      "sha256": "95fa635fdadaf77a4db58e85d604bc0013a40a68e4e08b1bca3db2bb424179ad",
+      "bytes": 27672
+    },
+    "/nix/store/w2dvvgma5r0iyhh53iq0yxxxgjikwdhb-libxdmcp-1.1.5/lib/libXdmcp.so.6": {
+      "target": "libXdmcp.so.6.0.0"
+    },
+    "/nix/store/w2dvvgma5r0iyhh53iq0yxxxgjikwdhb-libxdmcp-1.1.5/lib/libXdmcp.so.6.0.0": {
+      "sha256": "6c4f32d9a6a6ff4256aa28f9fe0789058f6265f8334d27b4f4ffc7acc2edb02e",
+      "bytes": 29792
+    },
+    "/nix/store/skiv9g443q6b5zanvnih7xsgnhwlc0v2-libxau-1.0.12/lib/libXau.so.6": {
+      "target": "libXau.so.6.0.0"
+    },
+    "/nix/store/skiv9g443q6b5zanvnih7xsgnhwlc0v2-libxau-1.0.12/lib/libXau.so.6.0.0": {
+      "sha256": "af0b0f5786e254ae7ff779341a3c376cea665329eefa4bf2c48570d5beeca599",
+      "bytes": 20912
+    },
+    "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb.so.1": {
+      "target": "libxcb.so.1.1.0"
+    },
+    "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb.so.1.1.0": {
+      "sha256": "eed195aa9242e08b92566ba472795f892b77d7f1d028d4ee36a20a5c6c3a1962",
+      "bytes": 227296
+    },
+    "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-xfixes.so.0": {
+      "target": "libxcb-xfixes.so.0.0.0"
+    },
+    "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-xfixes.so.0.0.0": {
+      "sha256": "9607c4e8f57f40a71d1b3d0c32e0b9f873aa6e725248df230ec8ff40d49dbdab",
+      "bytes": 49560
+    },
+    "/nix/store/7kkk71z1dsgz1mrla8xy0njykprjhxw5-libxshmfence-1.3.3/lib/libxshmfence.so.1": {
+      "target": "libxshmfence.so.1.0.0"
+    },
+    "/nix/store/7kkk71z1dsgz1mrla8xy0njykprjhxw5-libxshmfence-1.3.3/lib/libxshmfence.so.1.0.0": {
+      "sha256": "e7652f358d43befc8951f9b6440e7a90595795516897bdb6ec0e16101925c735",
+      "bytes": 16080
+    },
+    "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-present.so.0": {
+      "target": "libxcb-present.so.0.0.0"
+    },
+    "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-present.so.0.0.0": {
+      "sha256": "78f7fb64280e0646794d7393f90ea348e527c8b9065fa41836282a00017d69d7",
+      "bytes": 21616
+    },
+    "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-sync.so.1": {
+      "target": "libxcb-sync.so.1.0.0"
+    },
+    "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-sync.so.1.0.0": {
+      "sha256": "7985d645b23bb9bcc95e898767af6d22d27366168c971f8ceb6d78f947e16621",
+      "bytes": 42328
+    },
+    "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-randr.so.0": {
+      "target": "libxcb-randr.so.0.1.0"
+    },
+    "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-randr.so.0.1.0": {
+      "sha256": "9d1da06b667c849281b7899bb776f06808d718329a3daaa34fabbd1ccc292534",
+      "bytes": 95264
+    },
+    "/nix/store/wjkrn4y9akf3w18iagwz7rvhvn6v4l4r-lm-sensors-3.6.2/lib/libsensors.so.5": {
+      "target": "libsensors.so.5.0.0"
+    },
+    "/nix/store/wjkrn4y9akf3w18iagwz7rvhvn6v4l4r-lm-sensors-3.6.2/lib/libsensors.so.5.0.0": {
+      "sha256": "4254da53ceb2e4fe0fa1536eeacddb9bcee8820323ccb5aeeee2870420882ad4",
+      "bytes": 78024
+    },
+    "/nix/store/x7hyp2ndwysydy2q1djdvjzlqzvqhg8x-expat-2.8.2/lib/libexpat.so.1": {
+      "target": "libexpat.so.1.12.2"
+    },
+    "/nix/store/x7hyp2ndwysydy2q1djdvjzlqzvqhg8x-expat-2.8.2/lib/libexpat.so.1.12.2": {
+      "sha256": "1807ab537ad98d930d5fda45d438c7836636e30a1b604fa2bcd40274a9ce5fe0",
+      "bytes": 210304
+    },
+    "/nix/store/5kpahz1x5zi3jx7yk44k80ga23mnsrah-llvm-21.1.8-lib/lib/libLLVM.so.21.1": {
+      "sha256": "42cc711a4b7f4cf59276f5280fc68ea3275531d965019f78385b97416b74a6c2",
+      "bytes": 188199584
+    },
+    "/nix/store/fvzrihfjwmh1610sv7mz5vg2dnqc9fin-libxml2-2.15.3/lib/libxml2.so.16": {
+      "target": "libxml2.so.16.1.3"
+    },
+    "/nix/store/fvzrihfjwmh1610sv7mz5vg2dnqc9fin-libxml2-2.15.3/lib/libxml2.so.16.1.3": {
+      "sha256": "d66d6e3cef4381abb4ce192f317e6a50bce076fd3773581d11cf65ca4ebbfcf6",
+      "bytes": 1458296
+    },
+    "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libdl.so.2": {
+      "sha256": "0b602cfa968a329adb09aebea85514a40f801a6ba3730295ebb3da73c65010cf",
+      "bytes": 15688
+    },
+    "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/librt.so.1": {
+      "sha256": "ba46c0347a541cdc26c35374f10b6bb8447802bee76621d5c1902f3c6d709817",
+      "bytes": 16352
+    },
+    "/nix/store/wflv43s0i42ysmjvw1hiw4vdiidfzwnn-libffi-3.7.1/lib/libffi.so.8": {
+      "target": "libffi.so.8.4.1"
+    },
+    "/nix/store/wflv43s0i42ysmjvw1hiw4vdiidfzwnn-libffi-3.7.1/lib/libffi.so.8.4.1": {
+      "sha256": "e9d54d658a04d91b5c74564d589cf16a7ed64dea1b5a51bb75dd6845f7dcc922",
+      "bytes": 93400
+    },
+    "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/lib/dri/swrast_dri.so": {
+      "target": "libdril_dri.so"
+    },
+    "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/lib/dri/libdril_dri.so": {
+      "sha256": "3a77bc83c6eeabbe52751fa1e7beca4f0ac17a2ecab32f5f5d2661342d64f2ea",
+      "bytes": 126888
+    },
+    "/nix/store/qdz5ms1bzjpjq2nx4pvsjq629gqm7g6g-mesa-libgbm-26.1.3/lib/libgbm.so.1": {
+      "target": "libgbm.so.1.0.0"
+    },
+    "/nix/store/qdz5ms1bzjpjq2nx4pvsjq629gqm7g6g-mesa-libgbm-26.1.3/lib/libgbm.so.1.0.0": {
+      "sha256": "d7817a65eacfabccb0d39945713c4be1fb91241fe6ef27745c2d01ef5b86d6f1",
+      "bytes": 26488
+    },
+    "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/lib/libEGL_mesa.so.0": {
+      "target": "libEGL_mesa.so.0.0.0"
+    },
+    "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/lib/libEGL_mesa.so.0.0.0": {
+      "sha256": "d719e702ed075ff13354bf3369e42da53b1b36ff6710d3120aba7992db69804f",
+      "bytes": 489576
+    },
+    "/nix/store/4yrcph5895vdnc8crdzxh9vm51p3wgj3-wayland-1.26.0/lib/libwayland-client.so.0": {
+      "target": "libwayland-client.so.0.26.0"
+    },
+    "/nix/store/4yrcph5895vdnc8crdzxh9vm51p3wgj3-wayland-1.26.0/lib/libwayland-client.so.0.26.0": {
+      "sha256": "6bee15436de33f5529b5fc53d090a7dfc469a14def00a755c18e6971e395d83f",
+      "bytes": 97856
+    },
+    "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-shm.so.0": {
+      "target": "libxcb-shm.so.0.0.0"
+    },
+    "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-shm.so.0.0.0": {
+      "sha256": "12eb01aaa3f816e9bf27fbf634769f26b623fc4e9d95b0462661d5b102d4d2a0",
+      "bytes": 17120
+    },
+    "/nix/store/62qx8cgv8h24cq4vgh5ipyflwg1naykl-libx11-1.8.13/lib/libX11.so.6": {
+      "target": "libX11.so.6.4.0"
+    },
+    "/nix/store/62qx8cgv8h24cq4vgh5ipyflwg1naykl-libx11-1.8.13/lib/libX11.so.6.4.0": {
+      "sha256": "b89ca894ed45759cb140ec7d863af94d65a56b2b51f5b29924de1095fa1db21b",
+      "bytes": 1481840
+    }
+  },
+  "elf": {
+    "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/lib/libgallium-26.2.1.so": {
+      "sha256": "3d6f6f1bab4e48679bd5f5da675c13b072f7827e456ebe601fa541837a92e294",
+      "dynamic": [
+        {
+          "tag": "NEEDED",
+          "value": "libdrm.so.2"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libLLVM.so.21.1"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libexpat.so.1"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libzstd.so.1"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libsensors.so.5"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libxcb.so.1"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libxcb-randr.so.0"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libxcb-sync.so.1"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libxcb-present.so.0"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libxshmfence.so.1"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libxcb-xfixes.so.0"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libxcb-dri3.so.0"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libelf.so.1"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libdrm_amdgpu.so.1"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libdrm_intel.so.1"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libX11-xcb.so.1"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libstdc++.so.6"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libm.so.6"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libgcc_s.so.1"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libc.so.6"
+        },
+        {
+          "tag": "SONAME",
+          "value": "libgallium-26.2.1.so"
+        },
+        {
+          "tag": "RUNPATH",
+          "value": "/nix/store/5kpahz1x5zi3jx7yk44k80ga23mnsrah-llvm-21.1.8-lib/lib:/nix/store/6ppdi802js8s56d0nwxwi6jkdxpzqvv1-elfutils-0.195/lib:/nix/store/x7hyp2ndwysydy2q1djdvjzlqzvqhg8x-expat-2.8.2/lib:/nix/store/yyvfjvdxxl26y0939wqfycc3x76k79cj-libdrm-2.4.134/lib:/nix/store/62qx8cgv8h24cq4vgh5ipyflwg1naykl-libx11-1.8.13/lib:/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib:/nix/store/7kkk71z1dsgz1mrla8xy0njykprjhxw5-libxshmfence-1.3.3/lib:/nix/store/wjkrn4y9akf3w18iagwz7rvhvn6v4l4r-lm-sensors-3.6.2/lib:/nix/store/pxahscw9vl9vac1nbjpy6bhz3vbk3cpl-zstd-1.5.7/lib:/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib:/nix/store/r48746qznwqxxl9qzd8f08ny8mg1dg2y-gcc-15.3.0-lib/lib:/nix/store/wsawm4nismaxz5lzc40ywcwyi1mcn6xv-vulkan-loader-1.4.357.0/lib"
+        }
+      ],
+      "interpreter": "",
+      "nonstore_library_paths": []
+    },
+    "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libc.so.6": {
+      "sha256": "55885ae8057bb63e8d085b4c8aa4b069ab7902b9deeffb85f907134ebe7d508f",
+      "dynamic": [
+        {
+          "tag": "NEEDED",
+          "value": "ld-linux-x86-64.so.2"
+        },
+        {
+          "tag": "SONAME",
+          "value": "libc.so.6"
+        }
+      ],
+      "interpreter": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/ld-linux-x86-64.so.2",
+      "nonstore_library_paths": []
+    },
+    "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/ld-linux-x86-64.so.2": {
+      "sha256": "e655ec5a68127ee03586457e67039ea9deef55abaeae519c1f53ad1cf18ee5b2",
+      "dynamic": [
+        {
+          "tag": "SONAME",
+          "value": "ld-linux-x86-64.so.2"
+        }
+      ],
+      "interpreter": "",
+      "nonstore_library_paths": []
+    },
+    "/nix/store/cjgm8gv32xdrjgzbgc0zk2fypiys9ylf-gcc-15.3.0-libgcc/lib/libgcc_s.so.1": {
+      "sha256": "5e9e168007e3c97615d5891495e6ae4e5a07b9f3debfc5786aee94524bfcf5cb",
+      "dynamic": [
+        {
+          "tag": "NEEDED",
+          "value": "libc.so.6"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "ld-linux-x86-64.so.2"
+        },
+        {
+          "tag": "SONAME",
+          "value": "libgcc_s.so.1"
+        },
+        {
+          "tag": "RUNPATH",
+          "value": ""
+        }
+      ],
+      "interpreter": "",
+      "nonstore_library_paths": [
+        ""
+      ]
+    },
+    "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libm.so.6": {
+      "sha256": "45fcfe1d00e5145b10f7574ee5342314fe57bc6d20bb2abd4eaa3b2bfe6e6af9",
+      "dynamic": [
+        {
+          "tag": "NEEDED",
+          "value": "libc.so.6"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "ld-linux-x86-64.so.2"
+        },
+        {
+          "tag": "SONAME",
+          "value": "libm.so.6"
+        }
+      ],
+      "interpreter": "",
+      "nonstore_library_paths": []
+    },
+    "/nix/store/r48746qznwqxxl9qzd8f08ny8mg1dg2y-gcc-15.3.0-lib/lib/libstdc++.so.6.0.34": {
+      "sha256": "a9beac36ef8a23642461e5c66f0dbd0fecb2e2d8644fcb181d15f824a7e4744c",
+      "dynamic": [
+        {
+          "tag": "NEEDED",
+          "value": "libm.so.6"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libc.so.6"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "ld-linux-x86-64.so.2"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libgcc_s.so.1"
+        },
+        {
+          "tag": "SONAME",
+          "value": "libstdc++.so.6"
+        },
+        {
+          "tag": "RUNPATH",
+          "value": "/nix/store/r48746qznwqxxl9qzd8f08ny8mg1dg2y-gcc-15.3.0-lib/lib:/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib"
+        }
+      ],
+      "interpreter": "",
+      "nonstore_library_paths": []
+    },
+    "/nix/store/62qx8cgv8h24cq4vgh5ipyflwg1naykl-libx11-1.8.13/lib/libX11-xcb.so.1.0.0": {
+      "sha256": "d47efde3afd3c34cb538414d3d3df34829d4be9589743f84b040abaa972040d2",
+      "dynamic": [
+        {
+          "tag": "NEEDED",
+          "value": "libc.so.6"
+        },
+        {
+          "tag": "SONAME",
+          "value": "libX11-xcb.so.1"
+        },
+        {
+          "tag": "RUNPATH",
+          "value": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib"
+        }
+      ],
+      "interpreter": "",
+      "nonstore_library_paths": []
+    },
+    "/nix/store/yyvfjvdxxl26y0939wqfycc3x76k79cj-libdrm-2.4.134/lib/libdrm_intel.so.1.134.0": {
+      "sha256": "42f3310ec6f137c3dac6bdfc8a48eb2463f3b655457c924df1beeff07989059b",
+      "dynamic": [
+        {
+          "tag": "NEEDED",
+          "value": "libdrm.so.2"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libpciaccess.so.0"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libc.so.6"
+        },
+        {
+          "tag": "SONAME",
+          "value": "libdrm_intel.so.1"
+        },
+        {
+          "tag": "RUNPATH",
+          "value": "/nix/store/yyvfjvdxxl26y0939wqfycc3x76k79cj-libdrm-2.4.134/lib:/nix/store/7c2wp3v32kx4dn21fmyf7smcyib5r0i6-libpciaccess-0.19/lib:/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib"
+        }
+      ],
+      "interpreter": "",
+      "nonstore_library_paths": []
+    },
+    "/nix/store/7c2wp3v32kx4dn21fmyf7smcyib5r0i6-libpciaccess-0.19/lib/libpciaccess.so.0.11.1": {
+      "sha256": "51f37a17826f96e0e72a687bf0c4c01d562d813d2ca5e363d6f15143aff93629",
+      "dynamic": [
+        {
+          "tag": "NEEDED",
+          "value": "libc.so.6"
+        },
+        {
+          "tag": "SONAME",
+          "value": "libpciaccess.so.0"
+        },
+        {
+          "tag": "RUNPATH",
+          "value": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib"
+        }
+      ],
+      "interpreter": "",
+      "nonstore_library_paths": []
+    },
+    "/nix/store/yyvfjvdxxl26y0939wqfycc3x76k79cj-libdrm-2.4.134/lib/libdrm.so.2.134.0": {
+      "sha256": "3c45477556fe5ac42c234dca5b6a31e84191a7bfc7913892b1afc3ba62ed2010",
+      "dynamic": [
+        {
+          "tag": "NEEDED",
+          "value": "libc.so.6"
+        },
+        {
+          "tag": "SONAME",
+          "value": "libdrm.so.2"
+        },
+        {
+          "tag": "RUNPATH",
+          "value": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib"
+        }
+      ],
+      "interpreter": "",
+      "nonstore_library_paths": []
+    },
+    "/nix/store/yyvfjvdxxl26y0939wqfycc3x76k79cj-libdrm-2.4.134/lib/libdrm_amdgpu.so.1.134.0": {
+      "sha256": "62d46e5e061742dd6aadfdfcd8137547b65a4272268b792d8ade2ff5072e270a",
+      "dynamic": [
+        {
+          "tag": "NEEDED",
+          "value": "libdrm.so.2"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libc.so.6"
+        },
+        {
+          "tag": "SONAME",
+          "value": "libdrm_amdgpu.so.1"
+        },
+        {
+          "tag": "RUNPATH",
+          "value": "/nix/store/yyvfjvdxxl26y0939wqfycc3x76k79cj-libdrm-2.4.134/lib:/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib"
+        }
+      ],
+      "interpreter": "",
+      "nonstore_library_paths": []
+    },
+    "/nix/store/6ppdi802js8s56d0nwxwi6jkdxpzqvv1-elfutils-0.195/lib/libelf-0.195.so": {
+      "sha256": "54b6c1e146d26d16bbf223f10b2515f46a6572d09b8a6b5028fb0729179158e0",
+      "dynamic": [
+        {
+          "tag": "NEEDED",
+          "value": "libz.so.1"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libzstd.so.1"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "liblzma.so.5"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libbz2.so.1"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libc.so.6"
+        },
+        {
+          "tag": "SONAME",
+          "value": "libelf.so.1"
+        },
+        {
+          "tag": "RUNPATH",
+          "value": "/nix/store/0hckf4kx70qifvrsbh64hc2s5xfyrf97-bzip2-1.0.8/lib:/nix/store/zks9mfsn4rqr6z9g6pcj2xqzcsplj0nb-zlib-1.3.2/lib:/nix/store/pxahscw9vl9vac1nbjpy6bhz3vbk3cpl-zstd-1.5.7/lib:/nix/store/96hgnqnikm0k4pag8x35hb6s46nag1l3-xz-5.8.3/lib:/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib"
+        }
+      ],
+      "interpreter": "",
+      "nonstore_library_paths": []
+    },
+    "/nix/store/0hckf4kx70qifvrsbh64hc2s5xfyrf97-bzip2-1.0.8/lib/libbz2.so.1.0.8": {
+      "sha256": "7e9807a344e2e4b188ebc92beaed0a763c7a4b45317480fbfde3e01218fbe441",
+      "dynamic": [
+        {
+          "tag": "NEEDED",
+          "value": "libc.so.6"
+        },
+        {
+          "tag": "SONAME",
+          "value": "libbz2.so.1"
+        },
+        {
+          "tag": "RUNPATH",
+          "value": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib"
+        }
+      ],
+      "interpreter": "",
+      "nonstore_library_paths": []
+    },
+    "/nix/store/96hgnqnikm0k4pag8x35hb6s46nag1l3-xz-5.8.3/lib/liblzma.so.5.8.3": {
+      "sha256": "50a68a097918fbced7ecf8907b6b3d6bdfc0cf39e9106794438a9d9209c96b3e",
+      "dynamic": [
+        {
+          "tag": "NEEDED",
+          "value": "libpthread.so.0"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libc.so.6"
+        },
+        {
+          "tag": "SONAME",
+          "value": "liblzma.so.5"
+        },
+        {
+          "tag": "RUNPATH",
+          "value": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib"
+        }
+      ],
+      "interpreter": "",
+      "nonstore_library_paths": []
+    },
+    "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libpthread.so.0": {
+      "sha256": "a39a01e7533290f53da59aa3d199bd8602fab2524890a1b825ce3251f9918ed9",
+      "dynamic": [
+        {
+          "tag": "NEEDED",
+          "value": "libc.so.6"
+        },
+        {
+          "tag": "SONAME",
+          "value": "libpthread.so.0"
+        }
+      ],
+      "interpreter": "",
+      "nonstore_library_paths": []
+    },
+    "/nix/store/pxahscw9vl9vac1nbjpy6bhz3vbk3cpl-zstd-1.5.7/lib/libzstd.so.1.5.7": {
+      "sha256": "370aba95965d60fc8aba4438baed050d222653d11101e11b199985f417f9aec5",
+      "dynamic": [
+        {
+          "tag": "NEEDED",
+          "value": "libc.so.6"
+        },
+        {
+          "tag": "SONAME",
+          "value": "libzstd.so.1"
+        },
+        {
+          "tag": "RUNPATH",
+          "value": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib"
+        }
+      ],
+      "interpreter": "",
+      "nonstore_library_paths": []
+    },
+    "/nix/store/zks9mfsn4rqr6z9g6pcj2xqzcsplj0nb-zlib-1.3.2/lib/libz.so.1.3.2": {
+      "sha256": "80c3995633f635b941095d606782764dc115348b28907c0c3f21bd3d69f9a8ea",
+      "dynamic": [
+        {
+          "tag": "NEEDED",
+          "value": "libc.so.6"
+        },
+        {
+          "tag": "SONAME",
+          "value": "libz.so.1"
+        },
+        {
+          "tag": "RUNPATH",
+          "value": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib"
+        }
+      ],
+      "interpreter": "",
+      "nonstore_library_paths": []
+    },
+    "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-dri3.so.0.1.0": {
+      "sha256": "95fa635fdadaf77a4db58e85d604bc0013a40a68e4e08b1bca3db2bb424179ad",
+      "dynamic": [
+        {
+          "tag": "NEEDED",
+          "value": "libxcb.so.1"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libXau.so.6"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libXdmcp.so.6"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libc.so.6"
+        },
+        {
+          "tag": "SONAME",
+          "value": "libxcb-dri3.so.0"
+        },
+        {
+          "tag": "RUNPATH",
+          "value": "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib:/nix/store/skiv9g443q6b5zanvnih7xsgnhwlc0v2-libxau-1.0.12/lib:/nix/store/w2dvvgma5r0iyhh53iq0yxxxgjikwdhb-libxdmcp-1.1.5/lib:/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib"
+        }
+      ],
+      "interpreter": "",
+      "nonstore_library_paths": []
+    },
+    "/nix/store/w2dvvgma5r0iyhh53iq0yxxxgjikwdhb-libxdmcp-1.1.5/lib/libXdmcp.so.6.0.0": {
+      "sha256": "6c4f32d9a6a6ff4256aa28f9fe0789058f6265f8334d27b4f4ffc7acc2edb02e",
+      "dynamic": [
+        {
+          "tag": "NEEDED",
+          "value": "libc.so.6"
+        },
+        {
+          "tag": "SONAME",
+          "value": "libXdmcp.so.6"
+        },
+        {
+          "tag": "RUNPATH",
+          "value": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib"
+        }
+      ],
+      "interpreter": "",
+      "nonstore_library_paths": []
+    },
+    "/nix/store/skiv9g443q6b5zanvnih7xsgnhwlc0v2-libxau-1.0.12/lib/libXau.so.6.0.0": {
+      "sha256": "af0b0f5786e254ae7ff779341a3c376cea665329eefa4bf2c48570d5beeca599",
+      "dynamic": [
+        {
+          "tag": "NEEDED",
+          "value": "libc.so.6"
+        },
+        {
+          "tag": "SONAME",
+          "value": "libXau.so.6"
+        },
+        {
+          "tag": "RUNPATH",
+          "value": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib"
+        }
+      ],
+      "interpreter": "",
+      "nonstore_library_paths": []
+    },
+    "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb.so.1.1.0": {
+      "sha256": "eed195aa9242e08b92566ba472795f892b77d7f1d028d4ee36a20a5c6c3a1962",
+      "dynamic": [
+        {
+          "tag": "NEEDED",
+          "value": "libXau.so.6"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libXdmcp.so.6"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libc.so.6"
+        },
+        {
+          "tag": "SONAME",
+          "value": "libxcb.so.1"
+        },
+        {
+          "tag": "RUNPATH",
+          "value": "/nix/store/skiv9g443q6b5zanvnih7xsgnhwlc0v2-libxau-1.0.12/lib:/nix/store/w2dvvgma5r0iyhh53iq0yxxxgjikwdhb-libxdmcp-1.1.5/lib:/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib"
+        }
+      ],
+      "interpreter": "",
+      "nonstore_library_paths": []
+    },
+    "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-xfixes.so.0.0.0": {
+      "sha256": "9607c4e8f57f40a71d1b3d0c32e0b9f873aa6e725248df230ec8ff40d49dbdab",
+      "dynamic": [
+        {
+          "tag": "NEEDED",
+          "value": "libxcb.so.1"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libXau.so.6"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libXdmcp.so.6"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libc.so.6"
+        },
+        {
+          "tag": "SONAME",
+          "value": "libxcb-xfixes.so.0"
+        },
+        {
+          "tag": "RUNPATH",
+          "value": "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib:/nix/store/skiv9g443q6b5zanvnih7xsgnhwlc0v2-libxau-1.0.12/lib:/nix/store/w2dvvgma5r0iyhh53iq0yxxxgjikwdhb-libxdmcp-1.1.5/lib:/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib"
+        }
+      ],
+      "interpreter": "",
+      "nonstore_library_paths": []
+    },
+    "/nix/store/7kkk71z1dsgz1mrla8xy0njykprjhxw5-libxshmfence-1.3.3/lib/libxshmfence.so.1.0.0": {
+      "sha256": "e7652f358d43befc8951f9b6440e7a90595795516897bdb6ec0e16101925c735",
+      "dynamic": [
+        {
+          "tag": "NEEDED",
+          "value": "libc.so.6"
+        },
+        {
+          "tag": "SONAME",
+          "value": "libxshmfence.so.1"
+        },
+        {
+          "tag": "RUNPATH",
+          "value": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib"
+        }
+      ],
+      "interpreter": "",
+      "nonstore_library_paths": []
+    },
+    "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-present.so.0.0.0": {
+      "sha256": "78f7fb64280e0646794d7393f90ea348e527c8b9065fa41836282a00017d69d7",
+      "dynamic": [
+        {
+          "tag": "NEEDED",
+          "value": "libxcb.so.1"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libXau.so.6"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libXdmcp.so.6"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libc.so.6"
+        },
+        {
+          "tag": "SONAME",
+          "value": "libxcb-present.so.0"
+        },
+        {
+          "tag": "RUNPATH",
+          "value": "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib:/nix/store/skiv9g443q6b5zanvnih7xsgnhwlc0v2-libxau-1.0.12/lib:/nix/store/w2dvvgma5r0iyhh53iq0yxxxgjikwdhb-libxdmcp-1.1.5/lib:/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib"
+        }
+      ],
+      "interpreter": "",
+      "nonstore_library_paths": []
+    },
+    "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-sync.so.1.0.0": {
+      "sha256": "7985d645b23bb9bcc95e898767af6d22d27366168c971f8ceb6d78f947e16621",
+      "dynamic": [
+        {
+          "tag": "NEEDED",
+          "value": "libxcb.so.1"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libXau.so.6"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libXdmcp.so.6"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libc.so.6"
+        },
+        {
+          "tag": "SONAME",
+          "value": "libxcb-sync.so.1"
+        },
+        {
+          "tag": "RUNPATH",
+          "value": "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib:/nix/store/skiv9g443q6b5zanvnih7xsgnhwlc0v2-libxau-1.0.12/lib:/nix/store/w2dvvgma5r0iyhh53iq0yxxxgjikwdhb-libxdmcp-1.1.5/lib:/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib"
+        }
+      ],
+      "interpreter": "",
+      "nonstore_library_paths": []
+    },
+    "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-randr.so.0.1.0": {
+      "sha256": "9d1da06b667c849281b7899bb776f06808d718329a3daaa34fabbd1ccc292534",
+      "dynamic": [
+        {
+          "tag": "NEEDED",
+          "value": "libxcb.so.1"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libXau.so.6"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libXdmcp.so.6"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libc.so.6"
+        },
+        {
+          "tag": "SONAME",
+          "value": "libxcb-randr.so.0"
+        },
+        {
+          "tag": "RUNPATH",
+          "value": "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib:/nix/store/skiv9g443q6b5zanvnih7xsgnhwlc0v2-libxau-1.0.12/lib:/nix/store/w2dvvgma5r0iyhh53iq0yxxxgjikwdhb-libxdmcp-1.1.5/lib:/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib"
+        }
+      ],
+      "interpreter": "",
+      "nonstore_library_paths": []
+    },
+    "/nix/store/wjkrn4y9akf3w18iagwz7rvhvn6v4l4r-lm-sensors-3.6.2/lib/libsensors.so.5.0.0": {
+      "sha256": "4254da53ceb2e4fe0fa1536eeacddb9bcee8820323ccb5aeeee2870420882ad4",
+      "dynamic": [
+        {
+          "tag": "NEEDED",
+          "value": "libc.so.6"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libm.so.6"
+        },
+        {
+          "tag": "SONAME",
+          "value": "libsensors.so.5"
+        },
+        {
+          "tag": "RUNPATH",
+          "value": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib"
+        }
+      ],
+      "interpreter": "",
+      "nonstore_library_paths": []
+    },
+    "/nix/store/x7hyp2ndwysydy2q1djdvjzlqzvqhg8x-expat-2.8.2/lib/libexpat.so.1.12.2": {
+      "sha256": "1807ab537ad98d930d5fda45d438c7836636e30a1b604fa2bcd40274a9ce5fe0",
+      "dynamic": [
+        {
+          "tag": "NEEDED",
+          "value": "libm.so.6"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libc.so.6"
+        },
+        {
+          "tag": "SONAME",
+          "value": "libexpat.so.1"
+        },
+        {
+          "tag": "RUNPATH",
+          "value": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib"
+        }
+      ],
+      "interpreter": "",
+      "nonstore_library_paths": []
+    },
+    "/nix/store/5kpahz1x5zi3jx7yk44k80ga23mnsrah-llvm-21.1.8-lib/lib/libLLVM.so.21.1": {
+      "sha256": "42cc711a4b7f4cf59276f5280fc68ea3275531d965019f78385b97416b74a6c2",
+      "dynamic": [
+        {
+          "tag": "NEEDED",
+          "value": "libffi.so.8"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "librt.so.1"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libdl.so.2"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libz.so.1"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libxml2.so.16"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libstdc++.so.6"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libm.so.6"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libgcc_s.so.1"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libc.so.6"
+        },
+        {
+          "tag": "SONAME",
+          "value": "libLLVM.so.21.1"
+        },
+        {
+          "tag": "RUNPATH",
+          "value": "/nix/store/fvzrihfjwmh1610sv7mz5vg2dnqc9fin-libxml2-2.15.3/lib:/nix/store/wflv43s0i42ysmjvw1hiw4vdiidfzwnn-libffi-3.7.1/lib:/nix/store/zks9mfsn4rqr6z9g6pcj2xqzcsplj0nb-zlib-1.3.2/lib:/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib:/nix/store/r48746qznwqxxl9qzd8f08ny8mg1dg2y-gcc-15.3.0-lib/lib"
+        }
+      ],
+      "interpreter": "",
+      "nonstore_library_paths": []
+    },
+    "/nix/store/fvzrihfjwmh1610sv7mz5vg2dnqc9fin-libxml2-2.15.3/lib/libxml2.so.16.1.3": {
+      "sha256": "d66d6e3cef4381abb4ce192f317e6a50bce076fd3773581d11cf65ca4ebbfcf6",
+      "dynamic": [
+        {
+          "tag": "NEEDED",
+          "value": "libm.so.6"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libc.so.6"
+        },
+        {
+          "tag": "SONAME",
+          "value": "libxml2.so.16"
+        },
+        {
+          "tag": "RUNPATH",
+          "value": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib"
+        }
+      ],
+      "interpreter": "",
+      "nonstore_library_paths": []
+    },
+    "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libdl.so.2": {
+      "sha256": "0b602cfa968a329adb09aebea85514a40f801a6ba3730295ebb3da73c65010cf",
+      "dynamic": [
+        {
+          "tag": "NEEDED",
+          "value": "libc.so.6"
+        },
+        {
+          "tag": "SONAME",
+          "value": "libdl.so.2"
+        }
+      ],
+      "interpreter": "",
+      "nonstore_library_paths": []
+    },
+    "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/librt.so.1": {
+      "sha256": "ba46c0347a541cdc26c35374f10b6bb8447802bee76621d5c1902f3c6d709817",
+      "dynamic": [
+        {
+          "tag": "NEEDED",
+          "value": "libc.so.6"
+        },
+        {
+          "tag": "SONAME",
+          "value": "librt.so.1"
+        }
+      ],
+      "interpreter": "",
+      "nonstore_library_paths": []
+    },
+    "/nix/store/wflv43s0i42ysmjvw1hiw4vdiidfzwnn-libffi-3.7.1/lib/libffi.so.8.4.1": {
+      "sha256": "e9d54d658a04d91b5c74564d589cf16a7ed64dea1b5a51bb75dd6845f7dcc922",
+      "dynamic": [
+        {
+          "tag": "NEEDED",
+          "value": "libc.so.6"
+        },
+        {
+          "tag": "SONAME",
+          "value": "libffi.so.8"
+        },
+        {
+          "tag": "RUNPATH",
+          "value": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib"
+        }
+      ],
+      "interpreter": "",
+      "nonstore_library_paths": []
+    },
+    "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/lib/dri/libdril_dri.so": {
+      "sha256": "3a77bc83c6eeabbe52751fa1e7beca4f0ac17a2ecab32f5f5d2661342d64f2ea",
+      "dynamic": [
+        {
+          "tag": "NEEDED",
+          "value": "libgbm.so.1"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libm.so.6"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libc.so.6"
+        },
+        {
+          "tag": "SONAME",
+          "value": "libdril_dri.so"
+        },
+        {
+          "tag": "RUNPATH",
+          "value": "/nix/store/qdz5ms1bzjpjq2nx4pvsjq629gqm7g6g-mesa-libgbm-26.1.3/lib:/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib"
+        }
+      ],
+      "interpreter": "",
+      "nonstore_library_paths": []
+    },
+    "/nix/store/qdz5ms1bzjpjq2nx4pvsjq629gqm7g6g-mesa-libgbm-26.1.3/lib/libgbm.so.1.0.0": {
+      "sha256": "d7817a65eacfabccb0d39945713c4be1fb91241fe6ef27745c2d01ef5b86d6f1",
+      "dynamic": [
+        {
+          "tag": "NEEDED",
+          "value": "libdrm.so.2"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libm.so.6"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libgcc_s.so.1"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libc.so.6"
+        },
+        {
+          "tag": "SONAME",
+          "value": "libgbm.so.1"
+        },
+        {
+          "tag": "RUNPATH",
+          "value": "/nix/store/yyvfjvdxxl26y0939wqfycc3x76k79cj-libdrm-2.4.134/lib:/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib:/nix/store/r48746qznwqxxl9qzd8f08ny8mg1dg2y-gcc-15.3.0-lib/lib"
+        }
+      ],
+      "interpreter": "",
+      "nonstore_library_paths": []
+    },
+    "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/lib/libEGL_mesa.so.0.0.0": {
+      "sha256": "d719e702ed075ff13354bf3369e42da53b1b36ff6710d3120aba7992db69804f",
+      "dynamic": [
+        {
+          "tag": "NEEDED",
+          "value": "libgallium-26.2.1.so"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libexpat.so.1"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libX11-xcb.so.1"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libX11.so.6"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libxcb.so.1"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libxcb-randr.so.0"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libxcb-xfixes.so.0"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libxcb-shm.so.0"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libdrm.so.2"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libgbm.so.1"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libwayland-client.so.0"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libxcb-dri3.so.0"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libxcb-present.so.0"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libm.so.6"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libgcc_s.so.1"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libc.so.6"
+        },
+        {
+          "tag": "SONAME",
+          "value": "libEGL_mesa.so.0"
+        },
+        {
+          "tag": "RUNPATH",
+          "value": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/lib:/nix/store/x7hyp2ndwysydy2q1djdvjzlqzvqhg8x-expat-2.8.2/lib:/nix/store/yyvfjvdxxl26y0939wqfycc3x76k79cj-libdrm-2.4.134/lib:/nix/store/qdz5ms1bzjpjq2nx4pvsjq629gqm7g6g-mesa-libgbm-26.1.3/lib:/nix/store/62qx8cgv8h24cq4vgh5ipyflwg1naykl-libx11-1.8.13/lib:/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib:/nix/store/4yrcph5895vdnc8crdzxh9vm51p3wgj3-wayland-1.26.0/lib:/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib:/nix/store/r48746qznwqxxl9qzd8f08ny8mg1dg2y-gcc-15.3.0-lib/lib"
+        }
+      ],
+      "interpreter": "",
+      "nonstore_library_paths": []
+    },
+    "/nix/store/4yrcph5895vdnc8crdzxh9vm51p3wgj3-wayland-1.26.0/lib/libwayland-client.so.0.26.0": {
+      "sha256": "6bee15436de33f5529b5fc53d090a7dfc469a14def00a755c18e6971e395d83f",
+      "dynamic": [
+        {
+          "tag": "NEEDED",
+          "value": "libffi.so.8"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libc.so.6"
+        },
+        {
+          "tag": "SONAME",
+          "value": "libwayland-client.so.0"
+        },
+        {
+          "tag": "RUNPATH",
+          "value": "/nix/store/wflv43s0i42ysmjvw1hiw4vdiidfzwnn-libffi-3.7.1/lib:/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib"
+        }
+      ],
+      "interpreter": "",
+      "nonstore_library_paths": []
+    },
+    "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-shm.so.0.0.0": {
+      "sha256": "12eb01aaa3f816e9bf27fbf634769f26b623fc4e9d95b0462661d5b102d4d2a0",
+      "dynamic": [
+        {
+          "tag": "NEEDED",
+          "value": "libxcb.so.1"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libXau.so.6"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libXdmcp.so.6"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libc.so.6"
+        },
+        {
+          "tag": "SONAME",
+          "value": "libxcb-shm.so.0"
+        },
+        {
+          "tag": "RUNPATH",
+          "value": "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib:/nix/store/skiv9g443q6b5zanvnih7xsgnhwlc0v2-libxau-1.0.12/lib:/nix/store/w2dvvgma5r0iyhh53iq0yxxxgjikwdhb-libxdmcp-1.1.5/lib:/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib"
+        }
+      ],
+      "interpreter": "",
+      "nonstore_library_paths": []
+    },
+    "/nix/store/62qx8cgv8h24cq4vgh5ipyflwg1naykl-libx11-1.8.13/lib/libX11.so.6.4.0": {
+      "sha256": "b89ca894ed45759cb140ec7d863af94d65a56b2b51f5b29924de1095fa1db21b",
+      "dynamic": [
+        {
+          "tag": "NEEDED",
+          "value": "libpthread.so.0"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libxcb.so.1"
+        },
+        {
+          "tag": "NEEDED",
+          "value": "libc.so.6"
+        },
+        {
+          "tag": "SONAME",
+          "value": "libX11.so.6"
+        },
+        {
+          "tag": "RUNPATH",
+          "value": "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib:/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib"
+        }
+      ],
+      "interpreter": "",
+      "nonstore_library_paths": []
+    }
+  },
+  "edges": [
+    {
+      "consumer": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/lib/libgallium-26.2.1.so",
+      "needed": "libdrm.so.2",
+      "selected": "/nix/store/yyvfjvdxxl26y0939wqfycc3x76k79cj-libdrm-2.4.134/lib/libdrm.so.2"
+    },
+    {
+      "consumer": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/lib/libgallium-26.2.1.so",
+      "needed": "libLLVM.so.21.1",
+      "selected": "/nix/store/5kpahz1x5zi3jx7yk44k80ga23mnsrah-llvm-21.1.8-lib/lib/libLLVM.so.21.1"
+    },
+    {
+      "consumer": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/lib/libgallium-26.2.1.so",
+      "needed": "libexpat.so.1",
+      "selected": "/nix/store/x7hyp2ndwysydy2q1djdvjzlqzvqhg8x-expat-2.8.2/lib/libexpat.so.1"
+    },
+    {
+      "consumer": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/lib/libgallium-26.2.1.so",
+      "needed": "libzstd.so.1",
+      "selected": "/nix/store/pxahscw9vl9vac1nbjpy6bhz3vbk3cpl-zstd-1.5.7/lib/libzstd.so.1"
+    },
+    {
+      "consumer": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/lib/libgallium-26.2.1.so",
+      "needed": "libsensors.so.5",
+      "selected": "/nix/store/wjkrn4y9akf3w18iagwz7rvhvn6v4l4r-lm-sensors-3.6.2/lib/libsensors.so.5"
+    },
+    {
+      "consumer": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/lib/libgallium-26.2.1.so",
+      "needed": "libxcb.so.1",
+      "selected": "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb.so.1"
+    },
+    {
+      "consumer": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/lib/libgallium-26.2.1.so",
+      "needed": "libxcb-randr.so.0",
+      "selected": "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-randr.so.0"
+    },
+    {
+      "consumer": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/lib/libgallium-26.2.1.so",
+      "needed": "libxcb-sync.so.1",
+      "selected": "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-sync.so.1"
+    },
+    {
+      "consumer": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/lib/libgallium-26.2.1.so",
+      "needed": "libxcb-present.so.0",
+      "selected": "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-present.so.0"
+    },
+    {
+      "consumer": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/lib/libgallium-26.2.1.so",
+      "needed": "libxshmfence.so.1",
+      "selected": "/nix/store/7kkk71z1dsgz1mrla8xy0njykprjhxw5-libxshmfence-1.3.3/lib/libxshmfence.so.1"
+    },
+    {
+      "consumer": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/lib/libgallium-26.2.1.so",
+      "needed": "libxcb-xfixes.so.0",
+      "selected": "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-xfixes.so.0"
+    },
+    {
+      "consumer": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/lib/libgallium-26.2.1.so",
+      "needed": "libxcb-dri3.so.0",
+      "selected": "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-dri3.so.0"
+    },
+    {
+      "consumer": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/lib/libgallium-26.2.1.so",
+      "needed": "libelf.so.1",
+      "selected": "/nix/store/6ppdi802js8s56d0nwxwi6jkdxpzqvv1-elfutils-0.195/lib/libelf.so.1"
+    },
+    {
+      "consumer": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/lib/libgallium-26.2.1.so",
+      "needed": "libdrm_amdgpu.so.1",
+      "selected": "/nix/store/yyvfjvdxxl26y0939wqfycc3x76k79cj-libdrm-2.4.134/lib/libdrm_amdgpu.so.1"
+    },
+    {
+      "consumer": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/lib/libgallium-26.2.1.so",
+      "needed": "libdrm_intel.so.1",
+      "selected": "/nix/store/yyvfjvdxxl26y0939wqfycc3x76k79cj-libdrm-2.4.134/lib/libdrm_intel.so.1"
+    },
+    {
+      "consumer": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/lib/libgallium-26.2.1.so",
+      "needed": "libX11-xcb.so.1",
+      "selected": "/nix/store/62qx8cgv8h24cq4vgh5ipyflwg1naykl-libx11-1.8.13/lib/libX11-xcb.so.1"
+    },
+    {
+      "consumer": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/lib/libgallium-26.2.1.so",
+      "needed": "libstdc++.so.6",
+      "selected": "/nix/store/r48746qznwqxxl9qzd8f08ny8mg1dg2y-gcc-15.3.0-lib/lib/libstdc++.so.6"
+    },
+    {
+      "consumer": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/lib/libgallium-26.2.1.so",
+      "needed": "libm.so.6",
+      "selected": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libm.so.6"
+    },
+    {
+      "consumer": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/lib/libgallium-26.2.1.so",
+      "needed": "libgcc_s.so.1",
+      "selected": "/nix/store/r48746qznwqxxl9qzd8f08ny8mg1dg2y-gcc-15.3.0-lib/lib/libgcc_s.so.1"
+    },
+    {
+      "consumer": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/lib/libgallium-26.2.1.so",
+      "needed": "libc.so.6",
+      "selected": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libc.so.6"
+    },
+    {
+      "consumer": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libc.so.6",
+      "needed": "ld-linux-x86-64.so.2",
+      "selected": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/ld-linux-x86-64.so.2"
+    },
+    {
+      "consumer": "/nix/store/cjgm8gv32xdrjgzbgc0zk2fypiys9ylf-gcc-15.3.0-libgcc/lib/libgcc_s.so.1",
+      "needed": "libc.so.6",
+      "selected": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libc.so.6"
+    },
+    {
+      "consumer": "/nix/store/cjgm8gv32xdrjgzbgc0zk2fypiys9ylf-gcc-15.3.0-libgcc/lib/libgcc_s.so.1",
+      "needed": "ld-linux-x86-64.so.2",
+      "selected": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/ld-linux-x86-64.so.2"
+    },
+    {
+      "consumer": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libm.so.6",
+      "needed": "libc.so.6",
+      "selected": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libc.so.6"
+    },
+    {
+      "consumer": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libm.so.6",
+      "needed": "ld-linux-x86-64.so.2",
+      "selected": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/ld-linux-x86-64.so.2"
+    },
+    {
+      "consumer": "/nix/store/r48746qznwqxxl9qzd8f08ny8mg1dg2y-gcc-15.3.0-lib/lib/libstdc++.so.6.0.34",
+      "needed": "libm.so.6",
+      "selected": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libm.so.6"
+    },
+    {
+      "consumer": "/nix/store/r48746qznwqxxl9qzd8f08ny8mg1dg2y-gcc-15.3.0-lib/lib/libstdc++.so.6.0.34",
+      "needed": "libc.so.6",
+      "selected": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libc.so.6"
+    },
+    {
+      "consumer": "/nix/store/r48746qznwqxxl9qzd8f08ny8mg1dg2y-gcc-15.3.0-lib/lib/libstdc++.so.6.0.34",
+      "needed": "ld-linux-x86-64.so.2",
+      "selected": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/ld-linux-x86-64.so.2"
+    },
+    {
+      "consumer": "/nix/store/r48746qznwqxxl9qzd8f08ny8mg1dg2y-gcc-15.3.0-lib/lib/libstdc++.so.6.0.34",
+      "needed": "libgcc_s.so.1",
+      "selected": "/nix/store/r48746qznwqxxl9qzd8f08ny8mg1dg2y-gcc-15.3.0-lib/lib/libgcc_s.so.1"
+    },
+    {
+      "consumer": "/nix/store/62qx8cgv8h24cq4vgh5ipyflwg1naykl-libx11-1.8.13/lib/libX11-xcb.so.1.0.0",
+      "needed": "libc.so.6",
+      "selected": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libc.so.6"
+    },
+    {
+      "consumer": "/nix/store/yyvfjvdxxl26y0939wqfycc3x76k79cj-libdrm-2.4.134/lib/libdrm_intel.so.1.134.0",
+      "needed": "libdrm.so.2",
+      "selected": "/nix/store/yyvfjvdxxl26y0939wqfycc3x76k79cj-libdrm-2.4.134/lib/libdrm.so.2"
+    },
+    {
+      "consumer": "/nix/store/yyvfjvdxxl26y0939wqfycc3x76k79cj-libdrm-2.4.134/lib/libdrm_intel.so.1.134.0",
+      "needed": "libpciaccess.so.0",
+      "selected": "/nix/store/7c2wp3v32kx4dn21fmyf7smcyib5r0i6-libpciaccess-0.19/lib/libpciaccess.so.0"
+    },
+    {
+      "consumer": "/nix/store/yyvfjvdxxl26y0939wqfycc3x76k79cj-libdrm-2.4.134/lib/libdrm_intel.so.1.134.0",
+      "needed": "libc.so.6",
+      "selected": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libc.so.6"
+    },
+    {
+      "consumer": "/nix/store/7c2wp3v32kx4dn21fmyf7smcyib5r0i6-libpciaccess-0.19/lib/libpciaccess.so.0.11.1",
+      "needed": "libc.so.6",
+      "selected": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libc.so.6"
+    },
+    {
+      "consumer": "/nix/store/yyvfjvdxxl26y0939wqfycc3x76k79cj-libdrm-2.4.134/lib/libdrm.so.2.134.0",
+      "needed": "libc.so.6",
+      "selected": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libc.so.6"
+    },
+    {
+      "consumer": "/nix/store/yyvfjvdxxl26y0939wqfycc3x76k79cj-libdrm-2.4.134/lib/libdrm_amdgpu.so.1.134.0",
+      "needed": "libdrm.so.2",
+      "selected": "/nix/store/yyvfjvdxxl26y0939wqfycc3x76k79cj-libdrm-2.4.134/lib/libdrm.so.2"
+    },
+    {
+      "consumer": "/nix/store/yyvfjvdxxl26y0939wqfycc3x76k79cj-libdrm-2.4.134/lib/libdrm_amdgpu.so.1.134.0",
+      "needed": "libc.so.6",
+      "selected": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libc.so.6"
+    },
+    {
+      "consumer": "/nix/store/6ppdi802js8s56d0nwxwi6jkdxpzqvv1-elfutils-0.195/lib/libelf-0.195.so",
+      "needed": "libz.so.1",
+      "selected": "/nix/store/zks9mfsn4rqr6z9g6pcj2xqzcsplj0nb-zlib-1.3.2/lib/libz.so.1"
+    },
+    {
+      "consumer": "/nix/store/6ppdi802js8s56d0nwxwi6jkdxpzqvv1-elfutils-0.195/lib/libelf-0.195.so",
+      "needed": "libzstd.so.1",
+      "selected": "/nix/store/pxahscw9vl9vac1nbjpy6bhz3vbk3cpl-zstd-1.5.7/lib/libzstd.so.1"
+    },
+    {
+      "consumer": "/nix/store/6ppdi802js8s56d0nwxwi6jkdxpzqvv1-elfutils-0.195/lib/libelf-0.195.so",
+      "needed": "liblzma.so.5",
+      "selected": "/nix/store/96hgnqnikm0k4pag8x35hb6s46nag1l3-xz-5.8.3/lib/liblzma.so.5"
+    },
+    {
+      "consumer": "/nix/store/6ppdi802js8s56d0nwxwi6jkdxpzqvv1-elfutils-0.195/lib/libelf-0.195.so",
+      "needed": "libbz2.so.1",
+      "selected": "/nix/store/0hckf4kx70qifvrsbh64hc2s5xfyrf97-bzip2-1.0.8/lib/libbz2.so.1"
+    },
+    {
+      "consumer": "/nix/store/6ppdi802js8s56d0nwxwi6jkdxpzqvv1-elfutils-0.195/lib/libelf-0.195.so",
+      "needed": "libc.so.6",
+      "selected": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libc.so.6"
+    },
+    {
+      "consumer": "/nix/store/0hckf4kx70qifvrsbh64hc2s5xfyrf97-bzip2-1.0.8/lib/libbz2.so.1.0.8",
+      "needed": "libc.so.6",
+      "selected": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libc.so.6"
+    },
+    {
+      "consumer": "/nix/store/96hgnqnikm0k4pag8x35hb6s46nag1l3-xz-5.8.3/lib/liblzma.so.5.8.3",
+      "needed": "libpthread.so.0",
+      "selected": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libpthread.so.0"
+    },
+    {
+      "consumer": "/nix/store/96hgnqnikm0k4pag8x35hb6s46nag1l3-xz-5.8.3/lib/liblzma.so.5.8.3",
+      "needed": "libc.so.6",
+      "selected": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libc.so.6"
+    },
+    {
+      "consumer": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libpthread.so.0",
+      "needed": "libc.so.6",
+      "selected": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libc.so.6"
+    },
+    {
+      "consumer": "/nix/store/pxahscw9vl9vac1nbjpy6bhz3vbk3cpl-zstd-1.5.7/lib/libzstd.so.1.5.7",
+      "needed": "libc.so.6",
+      "selected": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libc.so.6"
+    },
+    {
+      "consumer": "/nix/store/zks9mfsn4rqr6z9g6pcj2xqzcsplj0nb-zlib-1.3.2/lib/libz.so.1.3.2",
+      "needed": "libc.so.6",
+      "selected": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libc.so.6"
+    },
+    {
+      "consumer": "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-dri3.so.0.1.0",
+      "needed": "libxcb.so.1",
+      "selected": "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb.so.1"
+    },
+    {
+      "consumer": "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-dri3.so.0.1.0",
+      "needed": "libXau.so.6",
+      "selected": "/nix/store/skiv9g443q6b5zanvnih7xsgnhwlc0v2-libxau-1.0.12/lib/libXau.so.6"
+    },
+    {
+      "consumer": "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-dri3.so.0.1.0",
+      "needed": "libXdmcp.so.6",
+      "selected": "/nix/store/w2dvvgma5r0iyhh53iq0yxxxgjikwdhb-libxdmcp-1.1.5/lib/libXdmcp.so.6"
+    },
+    {
+      "consumer": "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-dri3.so.0.1.0",
+      "needed": "libc.so.6",
+      "selected": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libc.so.6"
+    },
+    {
+      "consumer": "/nix/store/w2dvvgma5r0iyhh53iq0yxxxgjikwdhb-libxdmcp-1.1.5/lib/libXdmcp.so.6.0.0",
+      "needed": "libc.so.6",
+      "selected": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libc.so.6"
+    },
+    {
+      "consumer": "/nix/store/skiv9g443q6b5zanvnih7xsgnhwlc0v2-libxau-1.0.12/lib/libXau.so.6.0.0",
+      "needed": "libc.so.6",
+      "selected": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libc.so.6"
+    },
+    {
+      "consumer": "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb.so.1.1.0",
+      "needed": "libXau.so.6",
+      "selected": "/nix/store/skiv9g443q6b5zanvnih7xsgnhwlc0v2-libxau-1.0.12/lib/libXau.so.6"
+    },
+    {
+      "consumer": "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb.so.1.1.0",
+      "needed": "libXdmcp.so.6",
+      "selected": "/nix/store/w2dvvgma5r0iyhh53iq0yxxxgjikwdhb-libxdmcp-1.1.5/lib/libXdmcp.so.6"
+    },
+    {
+      "consumer": "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb.so.1.1.0",
+      "needed": "libc.so.6",
+      "selected": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libc.so.6"
+    },
+    {
+      "consumer": "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-xfixes.so.0.0.0",
+      "needed": "libxcb.so.1",
+      "selected": "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb.so.1"
+    },
+    {
+      "consumer": "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-xfixes.so.0.0.0",
+      "needed": "libXau.so.6",
+      "selected": "/nix/store/skiv9g443q6b5zanvnih7xsgnhwlc0v2-libxau-1.0.12/lib/libXau.so.6"
+    },
+    {
+      "consumer": "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-xfixes.so.0.0.0",
+      "needed": "libXdmcp.so.6",
+      "selected": "/nix/store/w2dvvgma5r0iyhh53iq0yxxxgjikwdhb-libxdmcp-1.1.5/lib/libXdmcp.so.6"
+    },
+    {
+      "consumer": "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-xfixes.so.0.0.0",
+      "needed": "libc.so.6",
+      "selected": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libc.so.6"
+    },
+    {
+      "consumer": "/nix/store/7kkk71z1dsgz1mrla8xy0njykprjhxw5-libxshmfence-1.3.3/lib/libxshmfence.so.1.0.0",
+      "needed": "libc.so.6",
+      "selected": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libc.so.6"
+    },
+    {
+      "consumer": "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-present.so.0.0.0",
+      "needed": "libxcb.so.1",
+      "selected": "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb.so.1"
+    },
+    {
+      "consumer": "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-present.so.0.0.0",
+      "needed": "libXau.so.6",
+      "selected": "/nix/store/skiv9g443q6b5zanvnih7xsgnhwlc0v2-libxau-1.0.12/lib/libXau.so.6"
+    },
+    {
+      "consumer": "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-present.so.0.0.0",
+      "needed": "libXdmcp.so.6",
+      "selected": "/nix/store/w2dvvgma5r0iyhh53iq0yxxxgjikwdhb-libxdmcp-1.1.5/lib/libXdmcp.so.6"
+    },
+    {
+      "consumer": "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-present.so.0.0.0",
+      "needed": "libc.so.6",
+      "selected": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libc.so.6"
+    },
+    {
+      "consumer": "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-sync.so.1.0.0",
+      "needed": "libxcb.so.1",
+      "selected": "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb.so.1"
+    },
+    {
+      "consumer": "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-sync.so.1.0.0",
+      "needed": "libXau.so.6",
+      "selected": "/nix/store/skiv9g443q6b5zanvnih7xsgnhwlc0v2-libxau-1.0.12/lib/libXau.so.6"
+    },
+    {
+      "consumer": "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-sync.so.1.0.0",
+      "needed": "libXdmcp.so.6",
+      "selected": "/nix/store/w2dvvgma5r0iyhh53iq0yxxxgjikwdhb-libxdmcp-1.1.5/lib/libXdmcp.so.6"
+    },
+    {
+      "consumer": "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-sync.so.1.0.0",
+      "needed": "libc.so.6",
+      "selected": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libc.so.6"
+    },
+    {
+      "consumer": "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-randr.so.0.1.0",
+      "needed": "libxcb.so.1",
+      "selected": "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb.so.1"
+    },
+    {
+      "consumer": "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-randr.so.0.1.0",
+      "needed": "libXau.so.6",
+      "selected": "/nix/store/skiv9g443q6b5zanvnih7xsgnhwlc0v2-libxau-1.0.12/lib/libXau.so.6"
+    },
+    {
+      "consumer": "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-randr.so.0.1.0",
+      "needed": "libXdmcp.so.6",
+      "selected": "/nix/store/w2dvvgma5r0iyhh53iq0yxxxgjikwdhb-libxdmcp-1.1.5/lib/libXdmcp.so.6"
+    },
+    {
+      "consumer": "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-randr.so.0.1.0",
+      "needed": "libc.so.6",
+      "selected": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libc.so.6"
+    },
+    {
+      "consumer": "/nix/store/wjkrn4y9akf3w18iagwz7rvhvn6v4l4r-lm-sensors-3.6.2/lib/libsensors.so.5.0.0",
+      "needed": "libc.so.6",
+      "selected": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libc.so.6"
+    },
+    {
+      "consumer": "/nix/store/wjkrn4y9akf3w18iagwz7rvhvn6v4l4r-lm-sensors-3.6.2/lib/libsensors.so.5.0.0",
+      "needed": "libm.so.6",
+      "selected": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libm.so.6"
+    },
+    {
+      "consumer": "/nix/store/x7hyp2ndwysydy2q1djdvjzlqzvqhg8x-expat-2.8.2/lib/libexpat.so.1.12.2",
+      "needed": "libm.so.6",
+      "selected": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libm.so.6"
+    },
+    {
+      "consumer": "/nix/store/x7hyp2ndwysydy2q1djdvjzlqzvqhg8x-expat-2.8.2/lib/libexpat.so.1.12.2",
+      "needed": "libc.so.6",
+      "selected": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libc.so.6"
+    },
+    {
+      "consumer": "/nix/store/5kpahz1x5zi3jx7yk44k80ga23mnsrah-llvm-21.1.8-lib/lib/libLLVM.so.21.1",
+      "needed": "libffi.so.8",
+      "selected": "/nix/store/wflv43s0i42ysmjvw1hiw4vdiidfzwnn-libffi-3.7.1/lib/libffi.so.8"
+    },
+    {
+      "consumer": "/nix/store/5kpahz1x5zi3jx7yk44k80ga23mnsrah-llvm-21.1.8-lib/lib/libLLVM.so.21.1",
+      "needed": "librt.so.1",
+      "selected": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/librt.so.1"
+    },
+    {
+      "consumer": "/nix/store/5kpahz1x5zi3jx7yk44k80ga23mnsrah-llvm-21.1.8-lib/lib/libLLVM.so.21.1",
+      "needed": "libdl.so.2",
+      "selected": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libdl.so.2"
+    },
+    {
+      "consumer": "/nix/store/5kpahz1x5zi3jx7yk44k80ga23mnsrah-llvm-21.1.8-lib/lib/libLLVM.so.21.1",
+      "needed": "libz.so.1",
+      "selected": "/nix/store/zks9mfsn4rqr6z9g6pcj2xqzcsplj0nb-zlib-1.3.2/lib/libz.so.1"
+    },
+    {
+      "consumer": "/nix/store/5kpahz1x5zi3jx7yk44k80ga23mnsrah-llvm-21.1.8-lib/lib/libLLVM.so.21.1",
+      "needed": "libxml2.so.16",
+      "selected": "/nix/store/fvzrihfjwmh1610sv7mz5vg2dnqc9fin-libxml2-2.15.3/lib/libxml2.so.16"
+    },
+    {
+      "consumer": "/nix/store/5kpahz1x5zi3jx7yk44k80ga23mnsrah-llvm-21.1.8-lib/lib/libLLVM.so.21.1",
+      "needed": "libstdc++.so.6",
+      "selected": "/nix/store/r48746qznwqxxl9qzd8f08ny8mg1dg2y-gcc-15.3.0-lib/lib/libstdc++.so.6"
+    },
+    {
+      "consumer": "/nix/store/5kpahz1x5zi3jx7yk44k80ga23mnsrah-llvm-21.1.8-lib/lib/libLLVM.so.21.1",
+      "needed": "libm.so.6",
+      "selected": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libm.so.6"
+    },
+    {
+      "consumer": "/nix/store/5kpahz1x5zi3jx7yk44k80ga23mnsrah-llvm-21.1.8-lib/lib/libLLVM.so.21.1",
+      "needed": "libgcc_s.so.1",
+      "selected": "/nix/store/r48746qznwqxxl9qzd8f08ny8mg1dg2y-gcc-15.3.0-lib/lib/libgcc_s.so.1"
+    },
+    {
+      "consumer": "/nix/store/5kpahz1x5zi3jx7yk44k80ga23mnsrah-llvm-21.1.8-lib/lib/libLLVM.so.21.1",
+      "needed": "libc.so.6",
+      "selected": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libc.so.6"
+    },
+    {
+      "consumer": "/nix/store/fvzrihfjwmh1610sv7mz5vg2dnqc9fin-libxml2-2.15.3/lib/libxml2.so.16.1.3",
+      "needed": "libm.so.6",
+      "selected": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libm.so.6"
+    },
+    {
+      "consumer": "/nix/store/fvzrihfjwmh1610sv7mz5vg2dnqc9fin-libxml2-2.15.3/lib/libxml2.so.16.1.3",
+      "needed": "libc.so.6",
+      "selected": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libc.so.6"
+    },
+    {
+      "consumer": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libdl.so.2",
+      "needed": "libc.so.6",
+      "selected": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libc.so.6"
+    },
+    {
+      "consumer": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/librt.so.1",
+      "needed": "libc.so.6",
+      "selected": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libc.so.6"
+    },
+    {
+      "consumer": "/nix/store/wflv43s0i42ysmjvw1hiw4vdiidfzwnn-libffi-3.7.1/lib/libffi.so.8.4.1",
+      "needed": "libc.so.6",
+      "selected": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libc.so.6"
+    },
+    {
+      "consumer": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/lib/dri/libdril_dri.so",
+      "needed": "libgbm.so.1",
+      "selected": "/nix/store/qdz5ms1bzjpjq2nx4pvsjq629gqm7g6g-mesa-libgbm-26.1.3/lib/libgbm.so.1"
+    },
+    {
+      "consumer": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/lib/dri/libdril_dri.so",
+      "needed": "libm.so.6",
+      "selected": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libm.so.6"
+    },
+    {
+      "consumer": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/lib/dri/libdril_dri.so",
+      "needed": "libc.so.6",
+      "selected": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libc.so.6"
+    },
+    {
+      "consumer": "/nix/store/qdz5ms1bzjpjq2nx4pvsjq629gqm7g6g-mesa-libgbm-26.1.3/lib/libgbm.so.1.0.0",
+      "needed": "libdrm.so.2",
+      "selected": "/nix/store/yyvfjvdxxl26y0939wqfycc3x76k79cj-libdrm-2.4.134/lib/libdrm.so.2"
+    },
+    {
+      "consumer": "/nix/store/qdz5ms1bzjpjq2nx4pvsjq629gqm7g6g-mesa-libgbm-26.1.3/lib/libgbm.so.1.0.0",
+      "needed": "libm.so.6",
+      "selected": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libm.so.6"
+    },
+    {
+      "consumer": "/nix/store/qdz5ms1bzjpjq2nx4pvsjq629gqm7g6g-mesa-libgbm-26.1.3/lib/libgbm.so.1.0.0",
+      "needed": "libgcc_s.so.1",
+      "selected": "/nix/store/r48746qznwqxxl9qzd8f08ny8mg1dg2y-gcc-15.3.0-lib/lib/libgcc_s.so.1"
+    },
+    {
+      "consumer": "/nix/store/qdz5ms1bzjpjq2nx4pvsjq629gqm7g6g-mesa-libgbm-26.1.3/lib/libgbm.so.1.0.0",
+      "needed": "libc.so.6",
+      "selected": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libc.so.6"
+    },
+    {
+      "consumer": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/lib/libEGL_mesa.so.0.0.0",
+      "needed": "libgallium-26.2.1.so",
+      "selected": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/lib/libgallium-26.2.1.so"
+    },
+    {
+      "consumer": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/lib/libEGL_mesa.so.0.0.0",
+      "needed": "libexpat.so.1",
+      "selected": "/nix/store/x7hyp2ndwysydy2q1djdvjzlqzvqhg8x-expat-2.8.2/lib/libexpat.so.1"
+    },
+    {
+      "consumer": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/lib/libEGL_mesa.so.0.0.0",
+      "needed": "libX11-xcb.so.1",
+      "selected": "/nix/store/62qx8cgv8h24cq4vgh5ipyflwg1naykl-libx11-1.8.13/lib/libX11-xcb.so.1"
+    },
+    {
+      "consumer": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/lib/libEGL_mesa.so.0.0.0",
+      "needed": "libX11.so.6",
+      "selected": "/nix/store/62qx8cgv8h24cq4vgh5ipyflwg1naykl-libx11-1.8.13/lib/libX11.so.6"
+    },
+    {
+      "consumer": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/lib/libEGL_mesa.so.0.0.0",
+      "needed": "libxcb.so.1",
+      "selected": "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb.so.1"
+    },
+    {
+      "consumer": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/lib/libEGL_mesa.so.0.0.0",
+      "needed": "libxcb-randr.so.0",
+      "selected": "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-randr.so.0"
+    },
+    {
+      "consumer": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/lib/libEGL_mesa.so.0.0.0",
+      "needed": "libxcb-xfixes.so.0",
+      "selected": "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-xfixes.so.0"
+    },
+    {
+      "consumer": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/lib/libEGL_mesa.so.0.0.0",
+      "needed": "libxcb-shm.so.0",
+      "selected": "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-shm.so.0"
+    },
+    {
+      "consumer": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/lib/libEGL_mesa.so.0.0.0",
+      "needed": "libdrm.so.2",
+      "selected": "/nix/store/yyvfjvdxxl26y0939wqfycc3x76k79cj-libdrm-2.4.134/lib/libdrm.so.2"
+    },
+    {
+      "consumer": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/lib/libEGL_mesa.so.0.0.0",
+      "needed": "libgbm.so.1",
+      "selected": "/nix/store/qdz5ms1bzjpjq2nx4pvsjq629gqm7g6g-mesa-libgbm-26.1.3/lib/libgbm.so.1"
+    },
+    {
+      "consumer": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/lib/libEGL_mesa.so.0.0.0",
+      "needed": "libwayland-client.so.0",
+      "selected": "/nix/store/4yrcph5895vdnc8crdzxh9vm51p3wgj3-wayland-1.26.0/lib/libwayland-client.so.0"
+    },
+    {
+      "consumer": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/lib/libEGL_mesa.so.0.0.0",
+      "needed": "libxcb-dri3.so.0",
+      "selected": "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-dri3.so.0"
+    },
+    {
+      "consumer": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/lib/libEGL_mesa.so.0.0.0",
+      "needed": "libxcb-present.so.0",
+      "selected": "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-present.so.0"
+    },
+    {
+      "consumer": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/lib/libEGL_mesa.so.0.0.0",
+      "needed": "libm.so.6",
+      "selected": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libm.so.6"
+    },
+    {
+      "consumer": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/lib/libEGL_mesa.so.0.0.0",
+      "needed": "libgcc_s.so.1",
+      "selected": "/nix/store/r48746qznwqxxl9qzd8f08ny8mg1dg2y-gcc-15.3.0-lib/lib/libgcc_s.so.1"
+    },
+    {
+      "consumer": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/lib/libEGL_mesa.so.0.0.0",
+      "needed": "libc.so.6",
+      "selected": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libc.so.6"
+    },
+    {
+      "consumer": "/nix/store/4yrcph5895vdnc8crdzxh9vm51p3wgj3-wayland-1.26.0/lib/libwayland-client.so.0.26.0",
+      "needed": "libffi.so.8",
+      "selected": "/nix/store/wflv43s0i42ysmjvw1hiw4vdiidfzwnn-libffi-3.7.1/lib/libffi.so.8"
+    },
+    {
+      "consumer": "/nix/store/4yrcph5895vdnc8crdzxh9vm51p3wgj3-wayland-1.26.0/lib/libwayland-client.so.0.26.0",
+      "needed": "libc.so.6",
+      "selected": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libc.so.6"
+    },
+    {
+      "consumer": "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-shm.so.0.0.0",
+      "needed": "libxcb.so.1",
+      "selected": "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb.so.1"
+    },
+    {
+      "consumer": "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-shm.so.0.0.0",
+      "needed": "libXau.so.6",
+      "selected": "/nix/store/skiv9g443q6b5zanvnih7xsgnhwlc0v2-libxau-1.0.12/lib/libXau.so.6"
+    },
+    {
+      "consumer": "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-shm.so.0.0.0",
+      "needed": "libXdmcp.so.6",
+      "selected": "/nix/store/w2dvvgma5r0iyhh53iq0yxxxgjikwdhb-libxdmcp-1.1.5/lib/libXdmcp.so.6"
+    },
+    {
+      "consumer": "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-shm.so.0.0.0",
+      "needed": "libc.so.6",
+      "selected": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libc.so.6"
+    },
+    {
+      "consumer": "/nix/store/62qx8cgv8h24cq4vgh5ipyflwg1naykl-libx11-1.8.13/lib/libX11.so.6.4.0",
+      "needed": "libpthread.so.0",
+      "selected": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libpthread.so.0"
+    },
+    {
+      "consumer": "/nix/store/62qx8cgv8h24cq4vgh5ipyflwg1naykl-libx11-1.8.13/lib/libX11.so.6.4.0",
+      "needed": "libxcb.so.1",
+      "selected": "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb.so.1"
+    },
+    {
+      "consumer": "/nix/store/62qx8cgv8h24cq4vgh5ipyflwg1naykl-libx11-1.8.13/lib/libX11.so.6.4.0",
+      "needed": "libc.so.6",
+      "selected": "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libc.so.6"
+    }
+  ],
+  "missing": [],
+  "extra_mounts": [
+    [
+      "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/share/glvnd/egl_vendor.d/50_mesa.json",
+      "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/share/glvnd/egl_vendor.d/50_mesa.json"
+    ],
+    [
+      "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/lib/libgallium-26.2.1.so",
+      "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/lib/libgallium-26.2.1.so"
+    ],
+    [
+      "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libc.so.6",
+      "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libc.so.6"
+    ],
+    [
+      "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/ld-linux-x86-64.so.2",
+      "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/ld-linux-x86-64.so.2"
+    ],
+    [
+      "/nix/store/r48746qznwqxxl9qzd8f08ny8mg1dg2y-gcc-15.3.0-lib/lib/libgcc_s.so.1",
+      "/nix/store/r48746qznwqxxl9qzd8f08ny8mg1dg2y-gcc-15.3.0-lib/lib/libgcc_s.so.1"
+    ],
+    [
+      "/nix/store/cjgm8gv32xdrjgzbgc0zk2fypiys9ylf-gcc-15.3.0-libgcc/lib/libgcc_s.so.1",
+      "/nix/store/cjgm8gv32xdrjgzbgc0zk2fypiys9ylf-gcc-15.3.0-libgcc/lib/libgcc_s.so.1"
+    ],
+    [
+      "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libm.so.6",
+      "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libm.so.6"
+    ],
+    [
+      "/nix/store/r48746qznwqxxl9qzd8f08ny8mg1dg2y-gcc-15.3.0-lib/lib/libstdc++.so.6",
+      "/nix/store/r48746qznwqxxl9qzd8f08ny8mg1dg2y-gcc-15.3.0-lib/lib/libstdc++.so.6"
+    ],
+    [
+      "/nix/store/r48746qznwqxxl9qzd8f08ny8mg1dg2y-gcc-15.3.0-lib/lib/libstdc++.so.6.0.34",
+      "/nix/store/r48746qznwqxxl9qzd8f08ny8mg1dg2y-gcc-15.3.0-lib/lib/libstdc++.so.6.0.34"
+    ],
+    [
+      "/nix/store/62qx8cgv8h24cq4vgh5ipyflwg1naykl-libx11-1.8.13/lib/libX11-xcb.so.1",
+      "/nix/store/62qx8cgv8h24cq4vgh5ipyflwg1naykl-libx11-1.8.13/lib/libX11-xcb.so.1"
+    ],
+    [
+      "/nix/store/62qx8cgv8h24cq4vgh5ipyflwg1naykl-libx11-1.8.13/lib/libX11-xcb.so.1.0.0",
+      "/nix/store/62qx8cgv8h24cq4vgh5ipyflwg1naykl-libx11-1.8.13/lib/libX11-xcb.so.1.0.0"
+    ],
+    [
+      "/nix/store/yyvfjvdxxl26y0939wqfycc3x76k79cj-libdrm-2.4.134/lib/libdrm_intel.so.1",
+      "/nix/store/yyvfjvdxxl26y0939wqfycc3x76k79cj-libdrm-2.4.134/lib/libdrm_intel.so.1"
+    ],
+    [
+      "/nix/store/yyvfjvdxxl26y0939wqfycc3x76k79cj-libdrm-2.4.134/lib/libdrm_intel.so.1.134.0",
+      "/nix/store/yyvfjvdxxl26y0939wqfycc3x76k79cj-libdrm-2.4.134/lib/libdrm_intel.so.1.134.0"
+    ],
+    [
+      "/nix/store/7c2wp3v32kx4dn21fmyf7smcyib5r0i6-libpciaccess-0.19/lib/libpciaccess.so.0",
+      "/nix/store/7c2wp3v32kx4dn21fmyf7smcyib5r0i6-libpciaccess-0.19/lib/libpciaccess.so.0"
+    ],
+    [
+      "/nix/store/7c2wp3v32kx4dn21fmyf7smcyib5r0i6-libpciaccess-0.19/lib/libpciaccess.so.0.11.1",
+      "/nix/store/7c2wp3v32kx4dn21fmyf7smcyib5r0i6-libpciaccess-0.19/lib/libpciaccess.so.0.11.1"
+    ],
+    [
+      "/nix/store/yyvfjvdxxl26y0939wqfycc3x76k79cj-libdrm-2.4.134/lib/libdrm.so.2",
+      "/nix/store/yyvfjvdxxl26y0939wqfycc3x76k79cj-libdrm-2.4.134/lib/libdrm.so.2"
+    ],
+    [
+      "/nix/store/yyvfjvdxxl26y0939wqfycc3x76k79cj-libdrm-2.4.134/lib/libdrm.so.2.134.0",
+      "/nix/store/yyvfjvdxxl26y0939wqfycc3x76k79cj-libdrm-2.4.134/lib/libdrm.so.2.134.0"
+    ],
+    [
+      "/nix/store/yyvfjvdxxl26y0939wqfycc3x76k79cj-libdrm-2.4.134/lib/libdrm_amdgpu.so.1",
+      "/nix/store/yyvfjvdxxl26y0939wqfycc3x76k79cj-libdrm-2.4.134/lib/libdrm_amdgpu.so.1"
+    ],
+    [
+      "/nix/store/yyvfjvdxxl26y0939wqfycc3x76k79cj-libdrm-2.4.134/lib/libdrm_amdgpu.so.1.134.0",
+      "/nix/store/yyvfjvdxxl26y0939wqfycc3x76k79cj-libdrm-2.4.134/lib/libdrm_amdgpu.so.1.134.0"
+    ],
+    [
+      "/nix/store/6ppdi802js8s56d0nwxwi6jkdxpzqvv1-elfutils-0.195/lib/libelf.so.1",
+      "/nix/store/6ppdi802js8s56d0nwxwi6jkdxpzqvv1-elfutils-0.195/lib/libelf.so.1"
+    ],
+    [
+      "/nix/store/6ppdi802js8s56d0nwxwi6jkdxpzqvv1-elfutils-0.195/lib/libelf-0.195.so",
+      "/nix/store/6ppdi802js8s56d0nwxwi6jkdxpzqvv1-elfutils-0.195/lib/libelf-0.195.so"
+    ],
+    [
+      "/nix/store/0hckf4kx70qifvrsbh64hc2s5xfyrf97-bzip2-1.0.8/lib/libbz2.so.1",
+      "/nix/store/0hckf4kx70qifvrsbh64hc2s5xfyrf97-bzip2-1.0.8/lib/libbz2.so.1"
+    ],
+    [
+      "/nix/store/0hckf4kx70qifvrsbh64hc2s5xfyrf97-bzip2-1.0.8/lib/libbz2.so.1.0.8",
+      "/nix/store/0hckf4kx70qifvrsbh64hc2s5xfyrf97-bzip2-1.0.8/lib/libbz2.so.1.0.8"
+    ],
+    [
+      "/nix/store/96hgnqnikm0k4pag8x35hb6s46nag1l3-xz-5.8.3/lib/liblzma.so.5",
+      "/nix/store/96hgnqnikm0k4pag8x35hb6s46nag1l3-xz-5.8.3/lib/liblzma.so.5"
+    ],
+    [
+      "/nix/store/96hgnqnikm0k4pag8x35hb6s46nag1l3-xz-5.8.3/lib/liblzma.so.5.8.3",
+      "/nix/store/96hgnqnikm0k4pag8x35hb6s46nag1l3-xz-5.8.3/lib/liblzma.so.5.8.3"
+    ],
+    [
+      "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libpthread.so.0",
+      "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libpthread.so.0"
+    ],
+    [
+      "/nix/store/pxahscw9vl9vac1nbjpy6bhz3vbk3cpl-zstd-1.5.7/lib/libzstd.so.1",
+      "/nix/store/pxahscw9vl9vac1nbjpy6bhz3vbk3cpl-zstd-1.5.7/lib/libzstd.so.1"
+    ],
+    [
+      "/nix/store/pxahscw9vl9vac1nbjpy6bhz3vbk3cpl-zstd-1.5.7/lib/libzstd.so.1.5.7",
+      "/nix/store/pxahscw9vl9vac1nbjpy6bhz3vbk3cpl-zstd-1.5.7/lib/libzstd.so.1.5.7"
+    ],
+    [
+      "/nix/store/zks9mfsn4rqr6z9g6pcj2xqzcsplj0nb-zlib-1.3.2/lib/libz.so.1",
+      "/nix/store/zks9mfsn4rqr6z9g6pcj2xqzcsplj0nb-zlib-1.3.2/lib/libz.so.1"
+    ],
+    [
+      "/nix/store/zks9mfsn4rqr6z9g6pcj2xqzcsplj0nb-zlib-1.3.2/lib/libz.so.1.3.2",
+      "/nix/store/zks9mfsn4rqr6z9g6pcj2xqzcsplj0nb-zlib-1.3.2/lib/libz.so.1.3.2"
+    ],
+    [
+      "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-dri3.so.0",
+      "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-dri3.so.0"
+    ],
+    [
+      "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-dri3.so.0.1.0",
+      "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-dri3.so.0.1.0"
+    ],
+    [
+      "/nix/store/w2dvvgma5r0iyhh53iq0yxxxgjikwdhb-libxdmcp-1.1.5/lib/libXdmcp.so.6",
+      "/nix/store/w2dvvgma5r0iyhh53iq0yxxxgjikwdhb-libxdmcp-1.1.5/lib/libXdmcp.so.6"
+    ],
+    [
+      "/nix/store/w2dvvgma5r0iyhh53iq0yxxxgjikwdhb-libxdmcp-1.1.5/lib/libXdmcp.so.6.0.0",
+      "/nix/store/w2dvvgma5r0iyhh53iq0yxxxgjikwdhb-libxdmcp-1.1.5/lib/libXdmcp.so.6.0.0"
+    ],
+    [
+      "/nix/store/skiv9g443q6b5zanvnih7xsgnhwlc0v2-libxau-1.0.12/lib/libXau.so.6",
+      "/nix/store/skiv9g443q6b5zanvnih7xsgnhwlc0v2-libxau-1.0.12/lib/libXau.so.6"
+    ],
+    [
+      "/nix/store/skiv9g443q6b5zanvnih7xsgnhwlc0v2-libxau-1.0.12/lib/libXau.so.6.0.0",
+      "/nix/store/skiv9g443q6b5zanvnih7xsgnhwlc0v2-libxau-1.0.12/lib/libXau.so.6.0.0"
+    ],
+    [
+      "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb.so.1",
+      "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb.so.1"
+    ],
+    [
+      "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb.so.1.1.0",
+      "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb.so.1.1.0"
+    ],
+    [
+      "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-xfixes.so.0",
+      "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-xfixes.so.0"
+    ],
+    [
+      "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-xfixes.so.0.0.0",
+      "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-xfixes.so.0.0.0"
+    ],
+    [
+      "/nix/store/7kkk71z1dsgz1mrla8xy0njykprjhxw5-libxshmfence-1.3.3/lib/libxshmfence.so.1",
+      "/nix/store/7kkk71z1dsgz1mrla8xy0njykprjhxw5-libxshmfence-1.3.3/lib/libxshmfence.so.1"
+    ],
+    [
+      "/nix/store/7kkk71z1dsgz1mrla8xy0njykprjhxw5-libxshmfence-1.3.3/lib/libxshmfence.so.1.0.0",
+      "/nix/store/7kkk71z1dsgz1mrla8xy0njykprjhxw5-libxshmfence-1.3.3/lib/libxshmfence.so.1.0.0"
+    ],
+    [
+      "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-present.so.0",
+      "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-present.so.0"
+    ],
+    [
+      "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-present.so.0.0.0",
+      "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-present.so.0.0.0"
+    ],
+    [
+      "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-sync.so.1",
+      "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-sync.so.1"
+    ],
+    [
+      "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-sync.so.1.0.0",
+      "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-sync.so.1.0.0"
+    ],
+    [
+      "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-randr.so.0",
+      "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-randr.so.0"
+    ],
+    [
+      "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-randr.so.0.1.0",
+      "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-randr.so.0.1.0"
+    ],
+    [
+      "/nix/store/wjkrn4y9akf3w18iagwz7rvhvn6v4l4r-lm-sensors-3.6.2/lib/libsensors.so.5",
+      "/nix/store/wjkrn4y9akf3w18iagwz7rvhvn6v4l4r-lm-sensors-3.6.2/lib/libsensors.so.5"
+    ],
+    [
+      "/nix/store/wjkrn4y9akf3w18iagwz7rvhvn6v4l4r-lm-sensors-3.6.2/lib/libsensors.so.5.0.0",
+      "/nix/store/wjkrn4y9akf3w18iagwz7rvhvn6v4l4r-lm-sensors-3.6.2/lib/libsensors.so.5.0.0"
+    ],
+    [
+      "/nix/store/x7hyp2ndwysydy2q1djdvjzlqzvqhg8x-expat-2.8.2/lib/libexpat.so.1",
+      "/nix/store/x7hyp2ndwysydy2q1djdvjzlqzvqhg8x-expat-2.8.2/lib/libexpat.so.1"
+    ],
+    [
+      "/nix/store/x7hyp2ndwysydy2q1djdvjzlqzvqhg8x-expat-2.8.2/lib/libexpat.so.1.12.2",
+      "/nix/store/x7hyp2ndwysydy2q1djdvjzlqzvqhg8x-expat-2.8.2/lib/libexpat.so.1.12.2"
+    ],
+    [
+      "/nix/store/5kpahz1x5zi3jx7yk44k80ga23mnsrah-llvm-21.1.8-lib/lib/libLLVM.so.21.1",
+      "/nix/store/5kpahz1x5zi3jx7yk44k80ga23mnsrah-llvm-21.1.8-lib/lib/libLLVM.so.21.1"
+    ],
+    [
+      "/nix/store/fvzrihfjwmh1610sv7mz5vg2dnqc9fin-libxml2-2.15.3/lib/libxml2.so.16",
+      "/nix/store/fvzrihfjwmh1610sv7mz5vg2dnqc9fin-libxml2-2.15.3/lib/libxml2.so.16"
+    ],
+    [
+      "/nix/store/fvzrihfjwmh1610sv7mz5vg2dnqc9fin-libxml2-2.15.3/lib/libxml2.so.16.1.3",
+      "/nix/store/fvzrihfjwmh1610sv7mz5vg2dnqc9fin-libxml2-2.15.3/lib/libxml2.so.16.1.3"
+    ],
+    [
+      "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libdl.so.2",
+      "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/libdl.so.2"
+    ],
+    [
+      "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/librt.so.1",
+      "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67/lib/librt.so.1"
+    ],
+    [
+      "/nix/store/wflv43s0i42ysmjvw1hiw4vdiidfzwnn-libffi-3.7.1/lib/libffi.so.8",
+      "/nix/store/wflv43s0i42ysmjvw1hiw4vdiidfzwnn-libffi-3.7.1/lib/libffi.so.8"
+    ],
+    [
+      "/nix/store/wflv43s0i42ysmjvw1hiw4vdiidfzwnn-libffi-3.7.1/lib/libffi.so.8.4.1",
+      "/nix/store/wflv43s0i42ysmjvw1hiw4vdiidfzwnn-libffi-3.7.1/lib/libffi.so.8.4.1"
+    ],
+    [
+      "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/lib/dri/swrast_dri.so",
+      "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/lib/dri/swrast_dri.so"
+    ],
+    [
+      "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/lib/dri/libdril_dri.so",
+      "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/lib/dri/libdril_dri.so"
+    ],
+    [
+      "/nix/store/qdz5ms1bzjpjq2nx4pvsjq629gqm7g6g-mesa-libgbm-26.1.3/lib/libgbm.so.1",
+      "/nix/store/qdz5ms1bzjpjq2nx4pvsjq629gqm7g6g-mesa-libgbm-26.1.3/lib/libgbm.so.1"
+    ],
+    [
+      "/nix/store/qdz5ms1bzjpjq2nx4pvsjq629gqm7g6g-mesa-libgbm-26.1.3/lib/libgbm.so.1.0.0",
+      "/nix/store/qdz5ms1bzjpjq2nx4pvsjq629gqm7g6g-mesa-libgbm-26.1.3/lib/libgbm.so.1.0.0"
+    ],
+    [
+      "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/lib/libEGL_mesa.so.0",
+      "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/lib/libEGL_mesa.so.0"
+    ],
+    [
+      "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/lib/libEGL_mesa.so.0.0.0",
+      "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/lib/libEGL_mesa.so.0.0.0"
+    ],
+    [
+      "/nix/store/4yrcph5895vdnc8crdzxh9vm51p3wgj3-wayland-1.26.0/lib/libwayland-client.so.0",
+      "/nix/store/4yrcph5895vdnc8crdzxh9vm51p3wgj3-wayland-1.26.0/lib/libwayland-client.so.0"
+    ],
+    [
+      "/nix/store/4yrcph5895vdnc8crdzxh9vm51p3wgj3-wayland-1.26.0/lib/libwayland-client.so.0.26.0",
+      "/nix/store/4yrcph5895vdnc8crdzxh9vm51p3wgj3-wayland-1.26.0/lib/libwayland-client.so.0.26.0"
+    ],
+    [
+      "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-shm.so.0",
+      "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-shm.so.0"
+    ],
+    [
+      "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-shm.so.0.0.0",
+      "/nix/store/nayywgvfsgzi1pma0a7c64pqz3zrz7vb-libxcb-1.17.0/lib/libxcb-shm.so.0.0.0"
+    ],
+    [
+      "/nix/store/62qx8cgv8h24cq4vgh5ipyflwg1naykl-libx11-1.8.13/lib/libX11.so.6",
+      "/nix/store/62qx8cgv8h24cq4vgh5ipyflwg1naykl-libx11-1.8.13/lib/libX11.so.6"
+    ],
+    [
+      "/nix/store/62qx8cgv8h24cq4vgh5ipyflwg1naykl-libx11-1.8.13/lib/libX11.so.6.4.0",
+      "/nix/store/62qx8cgv8h24cq4vgh5ipyflwg1naykl-libx11-1.8.13/lib/libX11.so.6.4.0"
+    ],
+    [
+      "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/share/drirc.d",
+      "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/share/drirc.d"
+    ]
+  ],
+  "env": {
+    "__EGL_VENDOR_LIBRARY_FILENAMES": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/share/glvnd/egl_vendor.d/50_mesa.json",
+    "LIBGL_DRIVERS_PATH": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1/lib/dri"
+  },
+  "compiler_executables_mounted": false,
+  "Nix_or_build_executed": false
+}

@@ -1,0 +1,16 @@
+{
+  "code": "2cfb52b28d99f92305a9d571bbe3911cf04b8a19",
+  "ordinary_source": "/nix/store/wsadhm1dqaik849gw251qbn0fbpaapjz-source",
+  "private_source": "/nix/store/r5j0ky0blrn8y18ssyakr4bf8iwhy296-source",
+  "private_nar": "sha256-DMCtTnskQgx8mMCmhRZnWjzNH6/KDnH3/rhdiQbnVus=",
+  "changed": [
+    "examples/notebooks/symbolica-host/Cargo.lock",
+    "examples/notebooks/symbolica-host/Cargo.toml",
+    "examples/notebooks/symbolica-host/src/lib.rs"
+  ],
+  "added": [],
+  "removed": [],
+  "stub_sha256": "5e2dfa31a10d9c545d38f4257b006daa7b1b53bcf0d96aafb060ee71a68f77e5",
+  "lock_correction": "lock-reconciliation.json",
+  "all_other_files_byte_invariant": true
+}

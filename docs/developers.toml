@@ -13,6 +13,19 @@ title = "Implemented architecture"
 summary = "How the current runtime, physics layers, parsers, and symbolic engines are organized."
 
 [[section.note]]
+id = "generation-host-stub-rustred"
+title = "Corrected notebook stub and private RustRed host qualification"
+summary = "Two corrected distributions, a private one-denominator RustRed composition, and eight exact bounded runtime passes."
+source = "docs/architecture/generation-host-stub-rustred.typ"
+kind = "Execution record"
+status = "New independent source, packaging, private-host and runtime review required"
+lifecycle = "investigation"
+owner = "unassigned"
+products = ["feynkit", "gammaloop"]
+topics = ["python", "testing", "provenance", "integration"]
+review_triggers = ["examples/notebooks/symbolica-host/**", "docs/architecture/generation-host-stub-rustred.typ", "docs/architecture/evidence/generation-integration/feynkit-refresh/host-stub-rustred/**"]
+
+[[section.note]]
 id = "generation-raw-three-migration"
 title = "Three-token numerator migration qualification"
 summary = "Three separately authorized numerator tokens with a new pure archive, 36 actual full-Row executions and exact pool1 production-capture joins."

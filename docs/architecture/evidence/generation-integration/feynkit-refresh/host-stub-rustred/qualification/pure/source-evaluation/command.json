@@ -1,0 +1,20 @@
+{
+  "argv": [
+    "/run/current-system/sw/bin/nix",
+    "eval",
+    "--offline",
+    "--option",
+    "pure-eval",
+    "true",
+    "--option",
+    "allow-import-from-derivation",
+    "false",
+    "--json",
+    "--expr",
+    "let p = import (builtins.path {path=/nix/store/gi1b4xdzgmvdnnvhrqbxn57da65jjh27-host-stub-ordinary-base.nix; sha256=\"sha256-7eDsgPZvATxHjymea/73Lm66mjvWIEZ/Mx6o8ffriOk=\"; name=\"host-stub-ordinary-base.nix\";}); in {source=toString p.selectedSource; base=toString p.hostWheel.cargoArtifacts; vendor=toString p.hostWheel.cargoVendorDir;}"
+  ],
+  "cwd": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh",
+  "exit_code": 0,
+  "elapsed_s": 27.86947050690651,
+  "private_variables_absent": true
+}

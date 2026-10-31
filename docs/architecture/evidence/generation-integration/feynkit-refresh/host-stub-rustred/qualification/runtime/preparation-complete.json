@@ -1,0 +1,33 @@
+{
+  "lanes": [
+    "ordinary",
+    "private"
+  ],
+  "artifacts_sha256": "34ac5a5e880c3a7a74b9a760eb26e2d7c1d1e1b5acf29c0435b9fac84bede81d",
+  "all_pure_queries_builds_and_installations_complete": true,
+  "licensed_execution_started": false,
+  "helpers": {
+    "private/helpers/cwd-library-policy.json": "b70f6533d80a5f77cc3c26aab52641cdbfe248908cf407254159437c998ec96f",
+    "private/helpers/product.py": "1103c649deea7820e26a39bd7f666eaeb27a9655696f98fcaa978af3419c5f1f",
+    "private/helpers/qcd.py": "2abaefee4f06b3d030f44888b2af6172a1d8bb2abf8509626f5d8d7a3629afbd",
+    "private/helpers/preflight.py": "89e7d3a69c228cf57fb412e2380a78bf19dfc0eb93283afc245829abcd6a1112",
+    "private/helpers/handoff.py": "52773f82b4792d1bb83d67b815d115dfaa722306163627b0b050f7e49d05db3d",
+    "private/helpers/installed_sector_signature.py": "4de7fd90a1ce29a3f67fedf7bca06b6574e5b731d154569495b9e3c4003e7403",
+    "private/helpers/mounts.json": "52d8f1edb99fe3a08dcfb4ca88d849fa91f14822b07aa31a29eea10a2d31bddc",
+    "private/helpers/commands.json": "cf4b7b50efed7d14e7693f0d51b2f6c711c2530d1f3551fc7d8309e617a1df93",
+    "private/helpers/fonts.conf": "d1d308d98cce112883e48a93550930559c6e30c1f4bacd93c94608bb75f26430",
+    "private/helpers/identity.py": "1bc367ad3f16dde7d1a27b4a2be6bfac06e03c01c9b2adb505690ef0f6b60c24",
+    "private/helpers/expected.json": "33e5e1699a510ee8659790edf18387af6476f95b8123191775c09ea1eac4f6fc",
+    "ordinary/helpers/cwd-library-policy.json": "b70f6533d80a5f77cc3c26aab52641cdbfe248908cf407254159437c998ec96f",
+    "ordinary/helpers/handoff.py": "52773f82b4792d1bb83d67b815d115dfaa722306163627b0b050f7e49d05db3d",
+    "ordinary/helpers/preflight.py": "89e7d3a69c228cf57fb412e2380a78bf19dfc0eb93283afc245829abcd6a1112",
+    "ordinary/helpers/product.py": "a79983f52520081a220cfadaa4bdd86bb39da9a0b9c531760d46c89d166b2842",
+    "ordinary/helpers/qcd.py": "2abaefee4f06b3d030f44888b2af6172a1d8bb2abf8509626f5d8d7a3629afbd",
+    "ordinary/helpers/identity.py": "1bc367ad3f16dde7d1a27b4a2be6bfac06e03c01c9b2adb505690ef0f6b60c24",
+    "ordinary/helpers/expected.json": "e69cf1816b34ce29209f174b7ee5a9a9e674fe9981872d19ff6c6d121b22c66d",
+    "ordinary/helpers/mounts.json": "52d8f1edb99fe3a08dcfb4ca88d849fa91f14822b07aa31a29eea10a2d31bddc",
+    "ordinary/helpers/installed_sector_signature.py": "4de7fd90a1ce29a3f67fedf7bca06b6574e5b731d154569495b9e3c4003e7403",
+    "ordinary/helpers/fonts.conf": "d1d308d98cce112883e48a93550930559c6e30c1f4bacd93c94608bb75f26430",
+    "ordinary/helpers/commands.json": "cf4b7b50efed7d14e7693f0d51b2f6c711c2530d1f3551fc7d8309e617a1df93"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "argv": [
+    "/run/current-system/sw/bin/nix",
+    "build",
+    "--no-link",
+    "--keep-going",
+    "--json",
+    "/nix/store/5vvg7gyp1n3ma9rw57m37p81vn75h1ch-generation-refresh-corrected-stub-host-wheel-0.1.0.drv^out",
+    "/nix/store/x43msadi65xf8zr234lg5dbwgjzblcz6-generation-refresh-rustred-validation-host-wheel-0.1.0.drv^out"
+  ],
+  "cwd": "/tmp",
+  "started": "2026-10-31T02:12:34.304950+00:00",
+  "private_variables_absent": true,
+  "normal_substituters": true,
+  "resource_policy": "unchanged",
+  "concurrent_characterization": "timings are not isolated performance evidence"
+}

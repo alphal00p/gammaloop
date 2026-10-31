@@ -1,0 +1,19 @@
+Running phase: unpackPhase
+@nix { "action": "setPhase", "phase": "unpackPhase" }
+unpacking source archive /nix/store/h5g6njarsri3hacwzgzcrh4dzxm480ni-source
+source root is source
+Running phase: patchPhase
+@nix { "action": "setPhase", "phase": "patchPhase" }
+Executing configureCargoCommonVars
+decompressing cargo artifacts from /nix/store/hgvfgwvrid0pilvrzqkxapd3jph7a77p-gammaloop-crate-feynkit-py-dependency-deps-0.1.0/target.tar.zst to target
+Running phase: updateAutotoolsGnuConfigScriptsPhase
+@nix { "action": "setPhase", "phase": "updateAutotoolsGnuConfigScriptsPhase" }
+Running phase: configurePhase
+@nix { "action": "setPhase", "phase": "configurePhase" }
+will append /build/source/.cargo-home/config.toml with contents of /nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/config.toml
+default configurePhase, nothing to do
+Running phase: buildPhase
+@nix { "action": "setPhase", "phase": "buildPhase" }
++++ command cargo metadata --offline --locked --format-version 1 --manifest-path examples/notebooks/symbolica-host/Cargo.toml
+[1m[91merror[0m: cannot update the lock file /build/source/examples/notebooks/symbolica-host/Cargo.lock because --locked was passed to prevent this
+help: to generate the lock file without accessing the network, remove the --locked flag and use --offline instead.

@@ -1,0 +1,7 @@
+{
+  "path": "/nix/store/c3bpv60f5wgp4pmgsifaykxk214h6463-rust-stable-with-components-2026-09-03/bin/rustc",
+  "sha256": "6bb1c5b8a8034b62bcb3683f5969bb83a555a24128c2fdfcc9d20ea33bc0e1e5",
+  "version": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8\n",
+  "root_derivations": "pure/*root-derivation.json",
+  "fingerprints": "artifacts/*/qualification.json"
+}

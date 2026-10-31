@@ -1,0 +1,26 @@
+these 2 derivations will be built:
+  /nix/store/5vvg7gyp1n3ma9rw57m37p81vn75h1ch-generation-refresh-corrected-stub-host-wheel-0.1.0.drv
+  /nix/store/dn8lgrci5pdyl8z5ca9bd2drx4s7zyl3-generation-refresh-rustred-validation-host-wheel-0.1.0.drv
+building '/nix/store/5vvg7gyp1n3ma9rw57m37p81vn75h1ch-generation-refresh-corrected-stub-host-wheel-0.1.0.drv'...
+building '/nix/store/dn8lgrci5pdyl8z5ca9bd2drx4s7zyl3-generation-refresh-rustred-validation-host-wheel-0.1.0.drv'...
+error: Cannot build '/nix/store/dn8lgrci5pdyl8z5ca9bd2drx4s7zyl3-generation-refresh-rustred-validation-host-wheel-0.1.0.drv'.
+       Reason: builder failed with exit code 101.
+       Output paths:
+         /nix/store/p6rpnvhbx1p4jrxs30ma9p45qdb0dyg5-generation-refresh-rustred-validation-host-wheel-0.1.0
+       Last 14 log lines:
+       > Running phase: unpackPhase
+       > unpacking source archive /nix/store/h5g6njarsri3hacwzgzcrh4dzxm480ni-source
+       > source root is source
+       > Running phase: patchPhase
+       > Executing configureCargoCommonVars
+       > decompressing cargo artifacts from /nix/store/hgvfgwvrid0pilvrzqkxapd3jph7a77p-gammaloop-crate-feynkit-py-dependency-deps-0.1.0/target.tar.zst to target
+       > Running phase: updateAutotoolsGnuConfigScriptsPhase
+       > Running phase: configurePhase
+       > will append /build/source/.cargo-home/config.toml with contents of /nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/config.toml
+       > default configurePhase, nothing to do
+       > Running phase: buildPhase
+       > +++ command cargo metadata --offline --locked --format-version 1 --manifest-path examples/notebooks/symbolica-host/Cargo.toml
+       > error: cannot update the lock file /build/source/examples/notebooks/symbolica-host/Cargo.lock because --locked was passed to prevent this
+       > help: to generate the lock file without accessing the network, remove the --locked flag and use --offline instead.
+       For full logs, run:
+         nix log /nix/store/dn8lgrci5pdyl8z5ca9bd2drx4s7zyl3-generation-refresh-rustred-validation-host-wheel-0.1.0.drv

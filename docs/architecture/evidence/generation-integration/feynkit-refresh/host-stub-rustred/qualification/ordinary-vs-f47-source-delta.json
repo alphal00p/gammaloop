@@ -1,0 +1,12 @@
+{
+  "old_source": "/nix/store/0q772x7ilixakyvvd43h9z4119409f9h-source",
+  "old_nar": "sha256-v6sYLwChTevqpYdSwSUtJ8p7A6rurhE2IWoC35qpWEA=",
+  "new_source": "/nix/store/wsadhm1dqaik849gw251qbn0fbpaapjz-source",
+  "new_nar": "sha256-tlTuNXXoy91vYs/0cb9RlUN7ORk3KlcwBc0a94Laqkw=",
+  "changed": [
+    "examples/notebooks/symbolica-host/python/symbolica/community/hepkit/__init__.pyi"
+  ],
+  "removed": [],
+  "added": [],
+  "native_and_generator_sources_byte_invariant": true
+}

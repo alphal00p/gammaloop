@@ -1,0 +1,1044 @@
+{
+  "exporter": "/nix/store/mn3vzg4c35q658jgg078hahj3hcic2f4-generation-refresh-feynkit-stub-exporter-0.1.0/bin/alphal00p-docs-python-exporter",
+  "sha256": "ea6b689912dd12eb1d40fc9f65f6e52ded87a33a755b94ceb42363a6f5480e9e",
+  "source_owners_verified": [
+    {
+      "path": "crates/alphal00p-docs-python-exporter/Cargo.toml",
+      "sha256": "358678a4c655ee4f04672f3499711fb69c0589f39463461e6f49deb52bf45aaa"
+    },
+    {
+      "path": "crates/alphal00p-docs-python-exporter/src/main.rs",
+      "sha256": "575510d847483d726d3b6a0aad9f6696468e6dbcf722ce0112250720372c6041"
+    },
+    {
+      "path": "crates/feynkit-py/Cargo.toml",
+      "sha256": "62ee7769822726ff367660d029afe4541f0bcbd23be11ebf04e63ec8d91fae0d"
+    },
+    {
+      "path": "crates/feynkit-py/README.md",
+      "sha256": "e04cba61df709ebbeca04b9c55fcc238478a34a455496f2f62d4f2c8c19c9b96"
+    },
+    {
+      "path": "crates/feynkit-py/src/collection.css",
+      "sha256": "963d56da41f85e1487294b6406acad2c602f04bc78ab704551ba7a6d7a8deb68"
+    },
+    {
+      "path": "crates/feynkit-py/src/notebook.js",
+      "sha256": "239420452d1ffc562459d77c3fb3a69a23460e564a97f8492c9cf845e610ba79"
+    },
+    {
+      "path": "crates/feynkit-py/src/graph.rs",
+      "sha256": "888a3e6539332a42c7e60df149b1b23ab6ea33454e920ba79f6678ec1d6853f5"
+    },
+    {
+      "path": "crates/feynkit-py/src/generation.rs",
+      "sha256": "f1745d7be39fddc6c3eaf538a7e2c714a95b32e6f6cf73c544b5ed7d885677e9"
+    },
+    {
+      "path": "crates/feynkit-py/src/kinematics.rs",
+      "sha256": "5d87679047c890cb53b55aae6a6dbaac5e97e589c9aaff48dbda5ed357cf5af7"
+    },
+    {
+      "path": "crates/feynkit-py/src/symbols.rs",
+      "sha256": "346b750476686adbd80511c6c8aaf9aa1d3693957320aef0c7c8bdc889fdd47c"
+    },
+    {
+      "path": "crates/feynkit-py/src/ufo.rs",
+      "sha256": "bca7f37100c057c65996849b4c460d91efaef5406c256d8285af41a18e7c1685"
+    },
+    {
+      "path": "crates/feynkit-py/src/wavefunction.rs",
+      "sha256": "a0a7b1abf050471111e7e32d106ad6ec7d38e8e3e463065142b550172a18a23b"
+    },
+    {
+      "path": "crates/feynkit-py/src/model.rs",
+      "sha256": "21ad5b495d56ddbcd2ae732d99d9edbde3554e3e7750f7c4b29038842636a8b8"
+    },
+    {
+      "path": "crates/feynkit-py/src/expression.js",
+      "sha256": "28d780cdd30b8c3ae0ff67f3d7ff2c384dedf50101310fab46d4ba49f08243f5"
+    },
+    {
+      "path": "crates/feynkit-py/src/display.rs",
+      "sha256": "2497f7c3eab76fdff0b401980dd556b06d904e5cbaa133fef8ef280e8f7e40b5"
+    },
+    {
+      "path": "crates/feynkit-py/src/graph_interop.rs",
+      "sha256": "2fd6ef021437cbc3b9ad5db3b007c5e7447ea4f6fd115be44852c2f2c17c8659"
+    },
+    {
+      "path": "crates/feynkit-py/src/collection.js",
+      "sha256": "51817bc8738884b0c7c08d83d28edca4a29f1a6820903d543b5515cffbacdd10"
+    },
+    {
+      "path": "crates/feynkit-py/src/cff.rs",
+      "sha256": "eeae13e8eb22f2debc025afe47144ff1e2c041f212d1a6ae1fc1a68057723e66"
+    },
+    {
+      "path": "crates/feynkit-py/src/progress.rs",
+      "sha256": "345cdbc901a17c033de7c6fa1ae17ab407e16282bc5b88b67e6252036d9437c0"
+    },
+    {
+      "path": "crates/feynkit-py/src/error.rs",
+      "sha256": "34dfb86d2c741a6d5d8c7d42f0da03aa764103c4c61e3283456dca153c8eb2d3"
+    },
+    {
+      "path": "crates/feynkit-py/src/render_settings.rs",
+      "sha256": "9ca1583137cbf73481e6cc785fde788871d20734300bee72a1fb523bd2cdba27"
+    },
+    {
+      "path": "crates/feynkit-py/src/energy.rs",
+      "sha256": "98aaf0b7bfd5dd7a554959cc966ff1ed1d64ee9d9047808a7c0507c721c55c55"
+    },
+    {
+      "path": "crates/feynkit-py/src/sector_decomposition.rs",
+      "sha256": "7095cd586b5ba0d9ab457604ee7f55079aca82f0ac2a5e7cdd2522b33470c4be"
+    },
+    {
+      "path": "crates/feynkit-py/src/amplitude.rs",
+      "sha256": "d27164f0a846179efb31bfcbafd74d9eeac10262064437cca7d6d2c33601160a"
+    },
+    {
+      "path": "crates/feynkit-py/src/tensor.rs",
+      "sha256": "df0f7b88be614fc558525ee4d4f41cade7c32c540235579e5fb31a05ad08695e"
+    },
+    {
+      "path": "crates/feynkit-py/src/expression.css",
+      "sha256": "eb12669c23917bae5d9744b00997f4e9f77a908215c05af18c7e3f5310ac5f1a"
+    },
+    {
+      "path": "crates/feynkit-py/src/lib.rs",
+      "sha256": "d769ab5dcbfd57120ebfffaba63cd10e103e0e56b43e05699eb83b461a724ce6"
+    },
+    {
+      "path": "crates/feynkit-py/src/integrals.rs",
+      "sha256": "ec1896f19e68e368f78e4f7861bff82ec512e6be3095acd6a8a5919cb76a4047"
+    },
+    {
+      "path": "crates/feynkit-py/src/ltd.rs",
+      "sha256": "9e06b137194c2869e5fa0220ec06822b19d803e03cf07f4209b41e1d03a4e9e2"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_ufo_parameter_formatters.py",
+      "sha256": "731c30f8682d45ac116e409ef041d93af49ac60c54b5cdc851bce3acd27ea876"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_color_conjugation.py",
+      "sha256": "5200a7e157e00125cb61bec91677b8d035d721351ced5822549f97c59c37a0cd"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_numerical_showcase.py",
+      "sha256": "b698d78ba872ff6f6a1c857edd94de3780de7a6d9a32a1362e59202a8f3f9f0c"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_feyncalc_gminus2.py",
+      "sha256": "7cd34b6dc08e7821dc2fd82b7ba845cd29788f1e2091b99827d981390eab952b"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_feyncalc_photon_gluon.py",
+      "sha256": "3d85758902cc22cd7512e8626f15069ad3ff2bf936b453c064c76de96c571bc6"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_feyncalc_identical_leptons.py",
+      "sha256": "dbe788cb076d8e22b175665399f306bfced31518857d7e0590eb1830ee0c492f"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_feyncalc_z_decay.py",
+      "sha256": "976cf1383dc1109e6d07f2c53ceb7c5b57e8bca4067db335063a151c7ee93e3e"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_generalized_cff.py",
+      "sha256": "6a532062b2e4a7747fa062d4bb50f9968937e0a34a58a370c39ea82e757071ee"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_wavefunctions.py",
+      "sha256": "acdfa303360462e4162abc145b2561a9f531db2a0eab50806be3bdc5a6309585"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_import_smoke.py",
+      "sha256": "cc6e7906da0953063918489564e9b19495e6cffa573d5029fdd27bf97466618b"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_feyncalc_higgs_gluons.py",
+      "sha256": "d7d3c5f624e73bacc4e3c864892ee27143a7fc2ff6844e37df7b42ec58554ae2"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_tensor_selectors.py",
+      "sha256": "08a6bcbfaed617fcae89875777f26caa1f09f30f9e101855ad9dcdab2c1926f0"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_diagram_integral_families.py",
+      "sha256": "a5a0645bbc83344d97c3146027176ea4a8caf5cf023bd5e083aa6cf55137ac18"
+    },
+    {
+      "path": "crates/feynkit-py/tests/request_decorator_contract.py",
+      "sha256": "299fbc5e57884f8117c75e91c2b98bc2c1e2125cbdbf9be2ab9a5136ea86f061"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_lmb_expressions.py",
+      "sha256": "cb5f8c8bced845df39ae51c7771d7557d771dd32ae0704acf12887dc1ae952c1"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_collection_display.py",
+      "sha256": "d036f1a1e831cd3d3c484272f57edac2b466327e8b70f118963f0a5d210f0483"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_graph_interop.py",
+      "sha256": "adea2b70d9ad4a92a60564c2441e9fb06f0eff2bd22f86f51dad50be6e614ef6"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_ufo_ghost_crossing.py",
+      "sha256": "22231e8bd4f950b386fd72a917c6468afa802ed24c2218b5c48e6d29ee44f314"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_feyncalc_electron_self_energy.py",
+      "sha256": "423272127cdf23ec29b3b027b215ba01f7ee6b9b47afd67560a526e145757cb5"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_energy_representations.py",
+      "sha256": "c7f49900a840cad64dea06a7605ef6eba3835e0cfe0216e616a7207435932a9d"
+    },
+    {
+      "path": "crates/feynkit-py/tests/combined_community.rs",
+      "sha256": "eeefb1e5df7222c961946d7be03d281bab05138d61e8fff2dfa057a95204c173"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_feyncalc_polarized_qed.py",
+      "sha256": "2b44d7d5311f7d156640af37306e9a8a88bb157f189e48ee11ce742b09aca45c"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_subgraph_cache.py",
+      "sha256": "0b2f343aed9f3f60417445f4fac2f319fe23d8aecf028857b0b7a54b68513dab"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_feyncalc_odd_photons.py",
+      "sha256": "dac50f4216b10a02e1c2b7f2d9d7487a7b8708e1afc6ff23ddea1b3f7fafa889"
+    },
+    {
+      "path": "crates/feynkit-py/tests/typing_energy_representations.py",
+      "sha256": "a33dea4c5345bc89e16b2c2ba59b26ce3e5fa69424c03ab7e3849b8a19966c7a"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_squared_amplitude_display.py",
+      "sha256": "ee598de2e554ef35f5ca2166e6789df5d8d3dbb7743bcaa77ce5dd994a7587d8"
+    },
+    {
+      "path": "crates/feynkit-py/tests/cff_display.rs",
+      "sha256": "88f1a0e3239f0c48a5a14f1d3e36360a1f83d7e4d6cc5fd335058200fe6d6234"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_feyncalc_soft_function.py",
+      "sha256": "175e4c1069324bdc038bf5396bf03dd7ca368cbfdf44964e46494893090a219a"
+    },
+    {
+      "path": "crates/feynkit-py/tests/energy_scoped_display_browser.py",
+      "sha256": "2a03db0b5486a4b4b8c827a63f4377d1166803c1695efea99acf66edc99ba7e5"
+    },
+    {
+      "path": "crates/feynkit-py/tests/ltd_display_browser.py",
+      "sha256": "4fa93db37b58a98b97a22ce34a918dcf2344074b110e2c22c96d252f32e79e66"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_partial_fractions.py",
+      "sha256": "6b20368af6fa9c317f97459853d6c1d3fe7700260c9fce585184c22173ee5b29"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_process.py",
+      "sha256": "63ccf0f02929af9cb6155abbc2b8e6740e9b28c3cce9cb16531f2b0519f38213"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_feyncalc_qcd_renormalization.py",
+      "sha256": "24ee634fa8ab45084f7086bc5fbbf6272a36d4ebaa31dad616c503342e363ffa"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_feyncalc_phi4_one_loop.py",
+      "sha256": "a186b4c48bbc83112fefd625241422afbbb2930ca0307f46ee9bdcb0b58663c5"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_feyncalc_qcd_annihilation.py",
+      "sha256": "3516a00b138fde960485b7cfb1663506d01b5b63a5d5663d7a739e13d410f700"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_feyncalc_photon_self_energy.py",
+      "sha256": "e5ae481b926de93fe88eab84b8fbd80f5d9da82c3c81495875c16fe791b790ab"
+    },
+    {
+      "path": "crates/feynkit-py/tests/generalized_energy_display_browser.py",
+      "sha256": "46a3f088fc8b70292a5ebc1dd3cb5337e62374234d14682bc4e0151946aff66f"
+    },
+    {
+      "path": "crates/feynkit-py/tests/native_forwarding.py",
+      "sha256": "28305c8c04f214302a1407449a4eec9bbac4cc7388d9d7bd5dcb9005c55ce2ce"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_model_display.py",
+      "sha256": "581ffdc8674d91f0a5b7bcb237e4a45fceb29b663c73584729839571e12c2453"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_feyncalc_weak_decays.py",
+      "sha256": "57135504fa78304c5341bd192fea928310041d80ab30e754903e22e8a4ad732d"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_feyncalc_generated_qed.py",
+      "sha256": "d6cadcf862bcae9d602ce2b014a84a47179c25d11b7e9ac680bed8816193680c"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_feyncalc_quark_gluon_scattering.py",
+      "sha256": "4335595c0d601105fc265f172ed01efcdb9132b86009ff9f0f74f3bebe1acf02"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_expand_couplings.py",
+      "sha256": "033d7237e8443d0cb82a085130fd8feb95551eba1e13ddaab9c37c81656d619c"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_color_fierz.py",
+      "sha256": "a66b5bbabd663957ef37f29f5f78e4f87fa167df2e5aea5ead887cc173a6abea"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_standard_model_metadata.py",
+      "sha256": "caee638d49e0dfb6e4bb668eb2e9c35e713e36389a95e5f5e7294c7febb640d2"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_charge_conjugation.py",
+      "sha256": "ecd1b5d69b6413f9a6da4592632d8666a59105b1d1bfe50f0a33e4d4fe28e865"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_feyncalc_diphoton.py",
+      "sha256": "f8aa5a95315ebc3d011e16cbb1ad37295f4f26f0402019ba58f208969998b6f4"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_tadpole_normalization.py",
+      "sha256": "bb9345d9fe192d292b3a95c819a2fe8a28d9870dcfb2dfb62782c8c02f246ae5"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_loop_1pi.py",
+      "sha256": "dca6872046dee30f163ed83fef24bd024925006d0525d176213ebb3946b70b97"
+    },
+    {
+      "path": "crates/feynkit-py/tests/browser_display_fixtures.py",
+      "sha256": "5ea334d7a4e1d35e3e8d0217d54348a59a8d1928dce628cfd54d1254f6cf35b8"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_feyncalc_etac_topologies.py",
+      "sha256": "360811c1bc3ddcbdac30b4a534c13052900c657f53908b50a417e0ad39165e46"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_uv_expansion.py",
+      "sha256": "3f6dfbff67f12a188b8dfae26f94e1ca2df475207c76d8be2d827be1673d056a"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_feyncalc_photon_radiation.py",
+      "sha256": "186dc3df5ab86c6e89e25c5acda925e3a299af5cb91413049388afe71532bb59"
+    },
+    {
+      "path": "crates/feynkit-py/tests/cff_display_browser.py",
+      "sha256": "9033d737a0a65626bbb3876db6262d6029a5382a55294d1c1d0e51de747b20d1"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_import.py",
+      "sha256": "00065c25310757e73825d343323f8fceb09a82ace92f78bc0b9bfe44960834ec"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_symbolic_kinematics.py",
+      "sha256": "1d1cd7adf0596b0d74d33180b39ce56c54f4c5fb5a9372169dd201e8b469e974"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_feyncalc_ibp_bubble.py",
+      "sha256": "d44896b0923f83cca7072cafc47032938a2c0f0b2c74489dd6e46bd275f3ffcc"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_feyncalc_electron_two_loop.py",
+      "sha256": "19746a9056cb0600e3229f4c8838e1e217415905818ed2d4eb1a7c7a2ab8ac81"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_feyncalc_qcd_ghosts.py",
+      "sha256": "0d2bcbadf5d7620048e7e4c94291b94aa3bb17def69467ae18f2a2742404ce4d"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_feyncalc_compton.py",
+      "sha256": "5ae34ac20f0ccbf34634a1dc76de7fa0606e552928b6ff6e2af8b92a35797b20"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_energy_documentation.py",
+      "sha256": "0112fb0b2bbb3466305a9136dc36911fea110050f2cd5fde176eb7f3b0db4f50"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_feyncalc_sewn_diphoton.py",
+      "sha256": "bb077482a199716dd823dacb7096593879bbad2a9d2e549e99c02e8f4bce6c06"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_feyncalc_sewn_qed.py",
+      "sha256": "0273da4f2c6d5486dbc965665dc57b6c0eb36349a30f7e3a4d21af9f779b42c7"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_feyncalc_qcd_gluons.py",
+      "sha256": "c7c35214f3d6d8d6930e9ead1cc36856c55d541030dea0a5bb77e8801e580b8f"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_integral_families.py",
+      "sha256": "997c3ba8b5adf4eb03cf471471042fb36ef02bcf8526d2083d202877ee20ff00"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_metric_factory.py",
+      "sha256": "dff27e540dbf3c591c82cf5f804f93c268280858bec34b9a4be7d4818c0a3b8d"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_subgraph_views.py",
+      "sha256": "569a6684d65cdab4f77a63a12b1079939a54b0f14e6c72ec1becf863047de7a3"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_feyncalc_photon_two_loop.py",
+      "sha256": "d98beff59f1a57bef601572d45242e37b60407f12cf411a95745d03de3ae5482"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_dimensional_spin_sums.py",
+      "sha256": "8746490d6d22faf76c47b6bb459c013c9b1ba5bc70d045b2e8970d02458e57fa"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_feyncalc_higgs_decay.py",
+      "sha256": "98566eda99ff0e5b5ff7945df0888eb088f6359fa9fe65f818619c1482e427f5"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_feyncalc_tensor.py",
+      "sha256": "efc101bc59800bc63d0d7445a1f0bad26bed9826fd3096064f73249fc6379eff"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_svg_interaction.py",
+      "sha256": "21b415562d6edc2d2569ed16e915fded8b5d5bcb24c1599103d12a95be827baf"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_parameter_labels.py",
+      "sha256": "70c06a104955950c94f93d4f4176085dbde9628de71a8b01e1d3f9995034e808"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_tensor_reduction.py",
+      "sha256": "8d9362de52286e81335717e4af412d7be8b29c148ff1739dc642487bee4756a0"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_energy_scoped_displays.py",
+      "sha256": "955014b5fc98088d3ed2416924722a36f4fd60811c5e01da59ec050c7b8bd8a0"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_parameter_formatters.py",
+      "sha256": "b4a9d8d4f83c5fcb1eefb8d7070641041a4ea95ad1912f5c6d844d47536d73a8"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_ufo_symmetric_color.py",
+      "sha256": "5b38b09d4a37378cfe3dde48f83d407142583d07ba9597a7e2393dcdacd14bbf"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_ufo_color_epsilon.py",
+      "sha256": "b4c776f3e8417d04365811c7dfd31ca0c69af6376323da85e8230905d0ffb565"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_feyncalc_gluon_scattering.py",
+      "sha256": "7d754f2311054ca4f078f07e4ee2cc96e21ec70b812ff7a442689b873b688a86"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_feyncalc_qcd_ghost_vertex.py",
+      "sha256": "2622f4f8f53624e177e6ae059eb12953f1b16f6cf08ebe85b70ff6155423dfc6"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_color_scalar_conjugation.py",
+      "sha256": "7ae8f40ff73a6facf779b5996a9df6dc3e9775e0635df5b93045f2f80abbd768"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_feyncalc_qed_renormalization.py",
+      "sha256": "4e387c82102b9f277376485dadefb4848685cfa08f44778311992d335d69f41c"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_feyncalc_tree.py",
+      "sha256": "7d3adaa076fcfa5cf76b7ec1aeb2718fae002b803c1ddbe1370b7a720a4b09c7"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_integral_mappings.py",
+      "sha256": "2942eec6bf9689653fb5077362f2c2e14e5877b263d19657c296fef2827f4070"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_cff_marimo.py",
+      "sha256": "8e3e7bdc3a79666279703021f66cdd58c7aaaa678d5704cc4002408c72cb364d"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_feyncalc_yukawa.py",
+      "sha256": "85dc897bc6c69419162b795e6918fae3054419b5a48bfc7a2f0f514f1428d032"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_feyncalc_ww.py",
+      "sha256": "abdfde6ee886336500631c556cc8b52b6f542caa390d721a9b7caecfb53baeac"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_feyncalc_quark_scattering.py",
+      "sha256": "989bf1b0c2f1ce012c69f159178f78944c7eac5c6f6713215a1ea4c7726d0dfb"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_energy_notation.py",
+      "sha256": "b7835ddc07796811c68aaa7988a3856dd3d5dd198d248c6ac7947daffdcb4d42"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_ltd_display.py",
+      "sha256": "b7992a50c7385d1c17f512251bdb1e0a46ce0021368580261778cd8627bed105"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_feyncalc_muon_decay.py",
+      "sha256": "ed58f161c7ae72ce3f16c5dd60806f1e99db32200d1697d3a79e8400b886d69d"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_feyncalc_ibp_phi4.py",
+      "sha256": "cf52c1c3a522f59b08ae6c7a98d1a49c93a49dab81aa2b59bd8d3770e604124a"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_graph_highlighting.py",
+      "sha256": "161104fb130016fd0dd14a898dfdec24a11731a1afe5be9decf96fcb135a2907"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_feyncalc_phi3.py",
+      "sha256": "cda1ccea21e699dd10e23da36a9b52169ec46b7f2da89da6f393f6309ca22b90"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_amplitude.py",
+      "sha256": "77bc0a1267f11ddec089c62d19c3553db4b60b104b3c2746b60e71665c54f380"
+    },
+    {
+      "path": "crates/feynkit-py/tests/cff_display.py",
+      "sha256": "19fc6dadf2fe6c4095534a7e616ce9f0f1be8357116934ceab11650c6dd9a6e3"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_polarized_spin_density.py",
+      "sha256": "444e7d215af500724f1e3b96b1e7153d559dace6186d1dabf55f08bbef672ec4"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_offline_rendering.py",
+      "sha256": "8ae8e1475f8504792fe6550f9dd64bfa98312547f288533e79c0082d95b94acf"
+    },
+    {
+      "path": "crates/feynkit-py/tests/cut_algebra.rs",
+      "sha256": "8e4abc73c8dbf1588e0e68ff7622cacd58f93c60d8766be466d79485c93a3e0c"
+    },
+    {
+      "path": "crates/feynkit-py/examples/ufo_generation.py",
+      "sha256": "23efff3c87fd3bc9ba7d4bbb4e0f1bd91d42a62856285bff88144e7d48994063"
+    },
+    {
+      "path": "crates/feynkit-py/python/symbolica/community/hepkit/__init__.py",
+      "sha256": "25bb8a82dd8dbfaf07f229ce811d7ffc4cf9a4572b12dd262b9532e73f5d6044"
+    },
+    {
+      "path": "crates/feynkit-py/tests/fixtures/progress_cross_batch_cancel.py",
+      "sha256": "f289185c07d17d5fa1c06f53b064126373e48a1055c71f5aa227c547df6ae4e8"
+    },
+    {
+      "path": "crates/feynkit-py/tests/fixtures/ltd_three_loop.dot",
+      "sha256": "9043b91b8357ca0903946c0b2a807faeb266294a6cc713d9811506c217417d49"
+    },
+    {
+      "path": "crates/feynkit-py/tests/fixtures/feyncalc_etac_topologies.json",
+      "sha256": "56ab9ec05930525862389e11062ff269f68ce8a0112d2eda94f4bb5731b74cf6"
+    },
+    {
+      "path": "crates/feynkit-py/tests/fixtures/scalars_2p_3p.json",
+      "sha256": "6457ddb8f2882530f74fd2b30ab1d100ad6ab1138f52525667e95f92db44dfe6"
+    },
+    {
+      "path": "crates/feynkit-py/src/generation/tests.rs",
+      "sha256": "e41543379734772abefe5570323e9586d8afb8ebfa853f0ec19d7dd0049c0dd7"
+    },
+    {
+      "path": "crates/feynkit-py/src/generation/groups.rs",
+      "sha256": "aff9b88b3e75e60db379c2d70ab2cbe1127670034642d8ee7a78ecd8ed532caf"
+    },
+    {
+      "path": "crates/feynkit-py/src/generation/execution.rs",
+      "sha256": "0a396e901e57ee71d0e5f7fe954e14e19bfaa136ef0797403c344ec523061bac"
+    },
+    {
+      "path": "crates/feynkit-py/src/generation/reports.rs",
+      "sha256": "372d72135f566dff4f7ca1025cff0b74b9cd6d7585dc0465d3c220e838a4aaf2"
+    },
+    {
+      "path": "crates/feynkit-py/src/generation/results.rs",
+      "sha256": "324a64526d68ad47f787b02c7350560d617085003f5366adcd1fcad3044b47b5"
+    },
+    {
+      "path": "crates/feynkit-py/src/generation/specs.rs",
+      "sha256": "bfbefa77e4355c5df12c453a97c47db87d1882838a9ffb34ebcc39645788550a"
+    },
+    {
+      "path": "crates/feynkit-py/src/cff/kernel.rs",
+      "sha256": "190cf243ba8e4ebb2699a9cbeb127cbd90ca69202c32ab6b4db46253fb1b98f4"
+    },
+    {
+      "path": "crates/feynkit-py/src/cff/display.html",
+      "sha256": "b76c1f49c05ad210a4f7912e5e68f965ea8cb877b30e3481f2b3ad13b74e756f"
+    },
+    {
+      "path": "crates/feynkit-py/src/cff/display.js",
+      "sha256": "aca8f5871d1ffe36219444ffc4d998b0e44e329849c78babc82ad759b960dbad"
+    },
+    {
+      "path": "crates/feynkit-py/src/cff/display.css",
+      "sha256": "0e7557e3983d6c5af06cfedcbb29a612ce1a7fe38d28903429e741746c9e5658"
+    },
+    {
+      "path": "crates/feynkit-py/src/cff/display.rs",
+      "sha256": "2f02a14cc24bca39a59903be0ad7c4b4f588394e30682ef5b064a694246abaae"
+    },
+    {
+      "path": "crates/feynkit-py/src/energy/integration.rs",
+      "sha256": "9910e1024146ea422fd8f35d28a7247a53fb21855748021135dee0e962306c29"
+    },
+    {
+      "path": "crates/feynkit-py/src/ltd/display.css",
+      "sha256": "4f2d269fe3c6f3508871c64313ddd014a46d0b4c1aa2b85b571a8d70b2002cab"
+    },
+    {
+      "path": "crates/feynkit-py/src/ltd/display.js",
+      "sha256": "d1a905ee4fefa9bb42dc68dcca9a7380509c873402c6e8cba5e21f495a471441"
+    },
+    {
+      "path": "crates/feynkit-py/src/ltd/display.rs",
+      "sha256": "b573d7cbae03181683c3ce4b6ae30c2b8017774e6a2904770168458d294684c5"
+    },
+    {
+      "path": "crates/feynkit-py/src/bin/stubgen.rs",
+      "sha256": "c248bcdbb61ee11033b9020523330c59951d3a966fe8e40f900e58d3b049ec50"
+    },
+    {
+      "path": "crates/spynso3/README.md",
+      "sha256": "c08e59b95cfc1f9ab476ad8038f32d2f22bcae9595275d11e02538614b83224f"
+    },
+    {
+      "path": "crates/spynso3/Cargo.toml",
+      "sha256": "cfb65fdcfaa7129dbfe83bc249996d7ebcb0c2bd2cae33ff19529ca8cbf7a9bc"
+    },
+    {
+      "path": "crates/spynso3/CHANGELOG.typ",
+      "sha256": "72a158468f25a704fdf1c5c1ec45ce0e1eb04025969fe308e18fcd963e3c4171"
+    },
+    {
+      "path": "crates/spynso3/tests/installed_tensor_library.py",
+      "sha256": "e6c1e377a6c3cff9c2dd2b1d6022911d0af49f2e27a6b2dbf593b8e8a4042b03"
+    },
+    {
+      "path": "crates/spynso3/tests/browser_math_font.py",
+      "sha256": "18dda0c923a76d7ae4f4b692d64491d50116df75698306590d02cc748bd68e0c"
+    },
+    {
+      "path": "crates/spynso3/tests/installed_library_display.py",
+      "sha256": "0ee87ebd9c83faf240f309538a000b3a97a15cc87ae96497c70414fa0f755dc3"
+    },
+    {
+      "path": "crates/spynso3/tests/installed_tensor_metadata.py",
+      "sha256": "ef40ceaf4a344cb4339c9bb75642a63b2a69ccc2657735f717ad3d5a4635beae"
+    },
+    {
+      "path": "crates/spynso3/tests/installed_api_operations.py",
+      "sha256": "389d5b577c7297b5e1b57501ebb4b4480e18dc3039ceb621c1916816d29baf71"
+    },
+    {
+      "path": "crates/spynso3/tests/installed_tensor_explorer.py",
+      "sha256": "920d9353bd9276430f3516f1fa25ab806f4a9af8c18be52dfb1b6e866363cd11"
+    },
+    {
+      "path": "crates/spynso3/tests/installed_symbolic_preview.py",
+      "sha256": "e06b29457bca8db7f9f8b769b1357ae96a35138ebc1dd6282953befc6e7dfb16"
+    },
+    {
+      "path": "crates/spynso3/tests/typing_tensor_products.py",
+      "sha256": "8fc13ac699ab8717345a3c197f3a3cca9c600a5b23884cb6c554e45da212ecb9"
+    },
+    {
+      "path": "crates/spynso3/tests/tensor_paging.rs",
+      "sha256": "5fc6d105e71894b4d09947d401d48c27019dcc7fddd5f34d3e7fbe653c5766b7"
+    },
+    {
+      "path": "crates/spynso3/tests/installed_tensor_print.py",
+      "sha256": "4e9712b7e6eed1a83abe7126b39b88769e29aefae7462140548a90fe15d09874"
+    },
+    {
+      "path": "crates/spynso3/tests/installed_api_invariants.py",
+      "sha256": "32dab24695ebb10188e450d947ac472425bec8b896a6bd44193f181f1041917c"
+    },
+    {
+      "path": "crates/spynso3/tests/evaluator_horner.rs",
+      "sha256": "f7ebe10ff8dadf333238e9f2e4fc252058536f38ae4148e12d8393ce5284ec9c"
+    },
+    {
+      "path": "crates/spynso3/tests/installed_expanded_traces.py",
+      "sha256": "1fd0ad858c7a5ffd59c387a422789cb1a5d72463608428c5f7988e7bb49cc7b5"
+    },
+    {
+      "path": "crates/spynso3/tests/installed_tensor_paging.py",
+      "sha256": "a71ac6ca795f5ce541e137ac4eb486ec7ce40e7b276f49ff83bb38134ea7f32d"
+    },
+    {
+      "path": "crates/spynso3/tests/typed_tensor_api.rs",
+      "sha256": "f0cc08392edd94e6cb809e7ce04f11c5898ffebe396be1c84ec020735dbca85d"
+    },
+    {
+      "path": "crates/spynso3/tests/installed_subclass_components.py",
+      "sha256": "00cf1530cc2d464c0f0ec27409f4eef87a4bdf7739bd2bf90612614d6e582ab6"
+    },
+    {
+      "path": "crates/spynso3/tests/installed_api_contract.py",
+      "sha256": "874f95af9bf88f310d4fca42c202323dc46f65d6e7874c6d075c11dc558d174c"
+    },
+    {
+      "path": "crates/spynso3/tests/installed_documentation.py",
+      "sha256": "bc1d2d65d5564ee9e6c7b9a984978c70003b3382b04b2874f69db276bc3aa39d"
+    },
+    {
+      "path": "crates/spynso3/tests/installed_tensor_vocabulary.py",
+      "sha256": "e6ecca35ecce39a506bb5f65fcd26c16ab878e076f219c4cf108fb1d8b545217"
+    },
+    {
+      "path": "crates/spynso3/tests/citations.rs",
+      "sha256": "c4f35825d84aca6deb555940483e664e080b88054a37df759b9e48aa8273aad6"
+    },
+    {
+      "path": "crates/spynso3/tests/installed_tensor_network_display.py",
+      "sha256": "ac4903aadf077ddf31ef64c4572688ea90bc08ca05811ad7bcafef1a8cc09595"
+    },
+    {
+      "path": "crates/spynso3/tests/installed_open_port_display.py",
+      "sha256": "63698b637d5cbcf33e2b42169fd4a43a0a307df493b6011ea149cc95d4f45f80"
+    },
+    {
+      "path": "crates/spynso3/tests/evaluator_horner.py",
+      "sha256": "7bcf69a057647c36ad69d63655261cde236b6c39230be07a60c50a9316769d34"
+    },
+    {
+      "path": "crates/spynso3/tests/installed_typed_surface.py",
+      "sha256": "b4115de29f827441f420fa0f5cc29c886eb606d849ec01ce77e7be653736e24e"
+    },
+    {
+      "path": "crates/spynso3/tests/installed_evaluator_parity.py",
+      "sha256": "73dfe5fd4afc624ecef6b80a59c97e8b96a4c9c21b7bb7a0459250d1d81a2e90"
+    },
+    {
+      "path": "crates/spynso3/tests/combined_core.rs",
+      "sha256": "851cd0b1c14e4851e11655dbdf4322231ab007739eb7808f719bbb16241a6348"
+    },
+    {
+      "path": "crates/spynso3/tests/installed_scoped_indices.py",
+      "sha256": "1971b017470193a2e1b07ddc9ef70a674bed0c9283185c4a2d3dae96d741f8e0"
+    },
+    {
+      "path": "crates/spynso3/tests/api_typing.py",
+      "sha256": "cea842ae721b8dfe2556fafc893a66a053ffc54972eac74e753be801c83f7e69"
+    },
+    {
+      "path": "crates/spynso3/tests/browser_tensor_explorer.py",
+      "sha256": "0fe6603546ed13a3e1a660c8aa598dad5aa820273dee9f303045b19858b704d6"
+    },
+    {
+      "path": "crates/spynso3/tests/installed_api_surface.py",
+      "sha256": "8bac918d464b9a2051c08b21692116504431ab472384d02f4d7edbe3f7020740"
+    },
+    {
+      "path": "crates/spynso3/typst/metadata.css",
+      "sha256": "1108054e3dc9482b4898f5c8a03aa00777e442e36369e32a58910cc8862f318d"
+    },
+    {
+      "path": "crates/spynso3/typst/library-copy.js",
+      "sha256": "09d0213c3e0c41a43126e09c5d0c4d76f87e62d165352390f8f58c65ce93f3e5"
+    },
+    {
+      "path": "crates/spynso3/typst/explorer.css",
+      "sha256": "ba7d3a2ebb43f0ddb6573ff2273186316e78d882108af52f501436c55590667d"
+    },
+    {
+      "path": "crates/spynso3/typst/render.typ",
+      "sha256": "b2688f79a45d852c19351e4df6aea708decfb7dc03a648f89a5617a6aacd89ff"
+    },
+    {
+      "path": "crates/spynso3/typst/library.css",
+      "sha256": "c8a50b178174f23c1ae5ad052e43455a1a82f8b497e7dccb3adee2f6229b72d1"
+    },
+    {
+      "path": "crates/spynso3/typst/notation.typ",
+      "sha256": "81a549bcc604b4091a893e93ae9886c8c079b34851c9d6fed90c309259953a93"
+    },
+    {
+      "path": "crates/spynso3/typst/explorer-host.js",
+      "sha256": "524d730e0cec605e6d1651923e8b833b6a6142f9aff8dfc00bbe517e78c3b5da"
+    },
+    {
+      "path": "crates/spynso3/typst/notebook.css",
+      "sha256": "e645e4c4799cd95a3d15ca6b1da2dce2df1d8643210f32d305c50115c281b951"
+    },
+    {
+      "path": "crates/spynso3/typst/explorer.js",
+      "sha256": "3691945a604c060426832ec669041bb2906d78e958f3a3420e03ba5b15f401c3"
+    },
+    {
+      "path": "crates/spynso3/typst/notebook-font.css",
+      "sha256": "02727170e2a8045a73bd8d7de1410d176a4b2b1ea074691d68ce889b4a0ed75c"
+    },
+    {
+      "path": "crates/spynso3/src/tensor_rule.rs",
+      "sha256": "f7045eb0cc70e626b0a66487d268800df17a57724a8cc578edbb43a4349f0e21"
+    },
+    {
+      "path": "crates/spynso3/src/expression.rs",
+      "sha256": "5fee0df9fe0f8293b92006c2dfce2a921804175c5604db4de92590985f6c716f"
+    },
+    {
+      "path": "crates/spynso3/src/lib.rs",
+      "sha256": "823ea4d52fd642521fc1134b3d2b4e77c78d40f55ebeb661bbe869bb0f3cd321"
+    },
+    {
+      "path": "crates/spynso3/src/simplification.rs",
+      "sha256": "725b45f6127a7047f367312392e3ee85a9c6e12bd83771774b2202410bac7338"
+    },
+    {
+      "path": "crates/spynso3/src/documentation.rs",
+      "sha256": "3b14aab5747ab4e6ae01133ec8039880dc688f5f36101585912f2d257d788e72"
+    },
+    {
+      "path": "crates/spynso3/src/projectors.rs",
+      "sha256": "24b9cb6bb43959d479c5409b9b52a9406ef81ce5716023d8567a32eaca8b9259"
+    },
+    {
+      "path": "crates/spynso3/src/library.rs",
+      "sha256": "7e50ebbaf4d28955416f185d01641691a415b25f64e78c86c412206fa5967d84"
+    },
+    {
+      "path": "crates/spynso3/src/display.rs",
+      "sha256": "c8211c8b1a06a07d11ae5d39366b097f98e72b9be53ac8a1b0709376270ad848"
+    },
+    {
+      "path": "crates/spynso3/src/stubs.rs",
+      "sha256": "3d791961897048b8f157c0fb555aa6d2f19a8cf30eb9d2de77c17858c5934eb4"
+    },
+    {
+      "path": "crates/spynso3/src/network.rs",
+      "sha256": "f3a07c254cc30e8b81d69f182580539741ef2453f7966c26cb9883d6bf3a3860"
+    },
+    {
+      "path": "crates/spynso3/src/citations.rs",
+      "sha256": "9f03d6ba5c22aa9273df4abb20aad74b630503ace123d71e1f43f855146ee3b5"
+    },
+    {
+      "path": "crates/spynso3/src/metadata.rs",
+      "sha256": "b8da9982593bf2789f28c8c0ab335a895a69b33f6b072a80142bd8a66b64615d"
+    },
+    {
+      "path": "crates/spynso3/src/pattern.rs",
+      "sha256": "6aaa86ee1367f643f3bef0e162a25b4c9cbe0687956df6485d6b9d067e92ef09"
+    },
+    {
+      "path": "crates/spynso3/src/broadcast.rs",
+      "sha256": "4ed8926971219f185cc6dd76279b38f9f1b8bacca4d44a5cae3bb9883098d140"
+    },
+    {
+      "path": "crates/spynso3/src/data.rs",
+      "sha256": "273c881e38531609422a14ccc26a47bdc5bab61812f5a82af3a209a6a834244d"
+    },
+    {
+      "path": "crates/spynso3/src/evaluator.rs",
+      "sha256": "c42cba80bd8677cb2dbe5ded32d58de9bef143e160be0d56ad5a50bd6dae5775"
+    },
+    {
+      "path": "crates/spynso3/src/structure.rs",
+      "sha256": "e0bf064075632620a2a96373d8337c1dabba1e1b2dae8c246945fcb695595408"
+    },
+    {
+      "path": "crates/spynso3/src/display/paging.rs",
+      "sha256": "67c38f2b30514926d889e0f501e024ac4865635218a34927ada8910ba6fdb5e9"
+    },
+    {
+      "path": "crates/spynso3/src/display/labels.rs",
+      "sha256": "22aadf7d7fd9a5b676b6e09586685c0c4fa7503fc4800ae41f665a5c848ff50e"
+    },
+    {
+      "path": "crates/spynso3/src/display/library.rs",
+      "sha256": "b663a6274285ca5f9fb1c12964f1eeca7058b7daa30c79cf0fb87ccc7b691817"
+    },
+    {
+      "path": "crates/spynso3/src/display/explorer.rs",
+      "sha256": "4402bc32457f8f15943bd4b9207423848211d9ba2c0ba2104a9d29f435ac47ab"
+    },
+    {
+      "path": "crates/spynso3/src/display/network.rs",
+      "sha256": "f9c46fbcd83bec42f3bf18ffb348d8c9cc43bc993a8087ebd9ad67dd32f693d6"
+    },
+    {
+      "path": "crates/spynso3/src/display/metadata.rs",
+      "sha256": "3ebac67f962088684e5a2d94036aeca9154c118e011bc3e3d48231d5b609835b"
+    },
+    {
+      "path": "crates/spynso3/src/simplification/pipeline.rs",
+      "sha256": "5c35a81943c85ca338d7671e4f0f8c6e59f1b1919a717d7c0424b7f43d17efd7"
+    },
+    {
+      "path": "crates/spynso3/src/simplification/expansion.rs",
+      "sha256": "ecf5da45009fedf42341b0d400e41a0c7359e1131e9c3e84560f891dfc1a3771"
+    },
+    {
+      "path": "crates/spynso3/src/simplification/tooling.rs",
+      "sha256": "b7007f9437b27a1081ff540d58e2086ef63bb5100c6af279cc965e2078a61f77"
+    },
+    {
+      "path": "crates/spynso3/src/network/execution.rs",
+      "sha256": "abb75e03c6c94fd9939dac4f0979ccacf86136c6815469a2098ab3c9637de93b"
+    },
+    {
+      "path": "crates/linnet-py/README.md",
+      "sha256": "1be54e99aeb05f341f832e18763a08d80ba21af4fcbb3a7767cccad0a26b2f68"
+    },
+    {
+      "path": "crates/linnet-py/Cargo.toml",
+      "sha256": "bc64d9fa13aef2cd2c1a0026c2c2606cdcbb83f0c31edb2e39d1c89a00135090"
+    },
+    {
+      "path": "crates/linnet-py/LICENSE",
+      "sha256": "397f68dfabb4c82acba023b23a640974a8444f8fca6a6655475ea3c3f902f22a"
+    },
+    {
+      "path": "crates/linnet-py/tests/test_render_sources.py",
+      "sha256": "d86cdb662b396b8257a06df3668cf850a5dc442a0079f26f30b48fb270659e7a"
+    },
+    {
+      "path": "crates/linnet-py/tests/test_algorithms.py",
+      "sha256": "9102135cc798a5ba19406c6097f341413791cf42f874a48f96907823a3d61a08"
+    },
+    {
+      "path": "crates/linnet-py/tests/test_svg_browser.py",
+      "sha256": "ee700e0629fad62358e1f0a778353757a9a305bdbc131f2ae2675b7b74d82c6c"
+    },
+    {
+      "path": "crates/linnet-py/tests/test_wasm.py",
+      "sha256": "d9f1bd8ecb1ed6b7057693e8bab775de6710e696b03e54e0fae19d384ed0eaa3"
+    },
+    {
+      "path": "crates/linnet-py/tests/test_streaming.py",
+      "sha256": "029843c20fe1dd78fd62267566935cad6b17bb1a9d072dff44b5f3d3bfdaa989"
+    },
+    {
+      "path": "crates/linnet-py/tests/rendering_metrics.py",
+      "sha256": "e3c7ddcc4d09879bb9ede6897776183f36b465ea8cff6eeb8fa04af431ddf890"
+    },
+    {
+      "path": "crates/linnet-py/tests/test_installed_data.py",
+      "sha256": "bb51544e71c421ccd40166ea0e8184930aef98b060aa048ecf2ed638cc530692"
+    },
+    {
+      "path": "crates/linnet-py/tests/test_community_rendering.py",
+      "sha256": "75373a380035e60e8fff0389bbe960068e247dc33cf98c0fa703e2ab3aad6b04"
+    },
+    {
+      "path": "crates/linnet-py/tests/test_basic.py",
+      "sha256": "da959e45e175019bb120db846450b2a71ef7b13eb249bd25179cde0f1169c6b6"
+    },
+    {
+      "path": "crates/linnet-py/tests/test_view_epochs.py",
+      "sha256": "f747df5cd56a2a2ac33a408e5f82cd85b6940d163851d3082280b6f09358030a"
+    },
+    {
+      "path": "crates/linnet-py/tests/test_svg_interaction.py",
+      "sha256": "fe25a6fb0703bd552feb7d71858bebd86fb4df809d74bb28d02e7bceb3e7b66a"
+    },
+    {
+      "path": "crates/linnet-py/tests/test_native_rendering.py",
+      "sha256": "589e70b161a8fc57d1d43d5d5c3ed1074269d5c5d673248c0e06ae1c492e0743"
+    },
+    {
+      "path": "crates/linnet-py/src/topology.rs",
+      "sha256": "3ab2d10a35268f7469861022162b7aed25b0c27beed3bca606a501bba10ee081"
+    },
+    {
+      "path": "crates/linnet-py/src/streaming.rs",
+      "sha256": "03a934d722bd0481f1752b5a948ad4a97f553d15928d5d79d81e38d14e023e65"
+    },
+    {
+      "path": "crates/linnet-py/src/render.rs",
+      "sha256": "dee4015cb4cd017f3a2d22121453767ffab44b7a9d1f3d773c58f939b3e11ab4"
+    },
+    {
+      "path": "crates/linnet-py/src/lib.rs",
+      "sha256": "f55dd38032b864d74d6e8e6c8d9e0b2d69a116abd713257837b3504ee529438d"
+    },
+    {
+      "path": "crates/linnet-py/src/graph.rs",
+      "sha256": "7f688289cb03e3fe2af2eb21cbbe6ea786145952eb68464ed21628d85980f7c0"
+    },
+    {
+      "path": "crates/linnet-py/src/native_graph.rs",
+      "sha256": "868696c69a90a1acd79e8a0113760be6cb5ef7ac7d81ec70550858e53f97156c"
+    },
+    {
+      "path": "crates/linnet-py/src/dot.rs",
+      "sha256": "f10e29afad195846b689847bd1bf864439bff8e491218c9d2e28f445812e5eba"
+    },
+    {
+      "path": "crates/linnet-py/src/mutations.rs",
+      "sha256": "d7588d9978b1ca76bfba892f1caf56652d037d16ca2e573945897418aac7eb09"
+    },
+    {
+      "path": "crates/linnet-py/typst/subgraph.css",
+      "sha256": "5a477a6c9d2024af2555695e994bdf46fbbbcd81e834410a89fc26239982dcb7"
+    },
+    {
+      "path": "crates/linnet-py/examples/physics_render_settings.py",
+      "sha256": "d19a3bd7f8eeda387890824d17e8f0e60dfa75001f575d76c4307bbce62f1081"
+    },
+    {
+      "path": "crates/linnet-py/examples/export_wasm.py",
+      "sha256": "8447caca5c096e6deb13a8ee2c049d1721b3af3c6282457e69cc869cad54fa8b"
+    },
+    {
+      "path": "crates/linnet-py/examples/rendering_api.py",
+      "sha256": "60f5658732ee1f5f7ecbead743544c26a959ec921f46757ed521b016e6b1a23e"
+    },
+    {
+      "path": "crates/linnet-py/examples/layout_stream.py",
+      "sha256": "fc9f8586bfe9f722f86d3d98e4ab868276c005441f04571d773c9c26d4175d78"
+    },
+    {
+      "path": "crates/linnet-py/examples/.gitignore",
+      "sha256": "5f335e8df283f479c16d59b4bb2bc7394a92908a4d203256b97d93fe663fdee2"
+    },
+    {
+      "path": "crates/linnet-py/python/symbolica/community/graph/py.typed",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "crates/linnet-py/python/symbolica/community/graph/__init__.py",
+      "sha256": "c892f69f80eddf695efdf09b56edbf08394062875e89259fa6dc799a306f0f72"
+    },
+    {
+      "path": "crates/linnet-py/python/symbolica/community/graph/__init__.pyi",
+      "sha256": "022bfb4fd01a5b3e59e74f68110af2b5748fa21bda1bfc09055becbe1b9be927"
+    },
+    {
+      "path": "crates/linnet-py/src/bin/stubgen.rs",
+      "sha256": "923d43bd782d004a2a3954e8af73ab870c17976fb58edffed69de4e330768bfc"
+    },
+    {
+      "path": "crates/linnet-py/src/graph/generate.rs",
+      "sha256": "c8f2ccbe085cff91c0a408c1d69e31bc95ebddfc57473aa6b51c3d9593a71c7b"
+    },
+    {
+      "path": "crates/linnet-py/src/graph/algorithms.rs",
+      "sha256": "437c432724c592984b3040d477e37c6d675d1c3215338b8a588f8ecb34965826"
+    },
+    {
+      "path": "crates/linnet-py/src/graph/keys.rs",
+      "sha256": "aa21468a520e527cb6b9076c23246215767ee6c8b00cfaf7e64ee60db2f6b526"
+    },
+    {
+      "path": "crates/linnet-py/src/graph/generate/callbacks.rs",
+      "sha256": "80aa8a008b6d454c0147cce166afaf07b383ca27e94a5fa7147bdb5ac3e4907e"
+    },
+    {
+      "path": "crates/linnet-py/src/graph/generate/views.rs",
+      "sha256": "bbbd6606197431e53e585c8d7cd72760c4637183d3a58aa90208d026558f3dbb"
+    },
+    {
+      "path": "crates/linnet-py/src/graph/generate/reports.rs",
+      "sha256": "c85c75481d0e114c067d4e8e6203d8e5d2f9102e0ebe5134be225c2fc62c1a2a"
+    }
+  ],
+  "new_build": false,
+  "canonical_check_pending": true
+}

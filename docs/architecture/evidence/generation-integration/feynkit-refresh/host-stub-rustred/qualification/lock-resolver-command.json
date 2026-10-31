@@ -1,0 +1,15 @@
+{
+  "argv": [
+    "/nix/store/c3bpv60f5wgp4pmgsifaykxk214h6463-rust-stable-with-components-2026-09-03/bin/cargo",
+    "metadata",
+    "--offline",
+    "--format-version",
+    "1",
+    "--manifest-path",
+    "examples/notebooks/symbolica-host/Cargo.toml"
+  ],
+  "cwd": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/host-stub-rustred-integration-20261031-r1/private-lock-work",
+  "exit_code": 0,
+  "compilation": false,
+  "private_variables_absent": true
+}

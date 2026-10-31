@@ -1,0 +1,3 @@
+patching file examples/notebooks/symbolica-host/Cargo.toml
+patching file examples/notebooks/symbolica-host/Cargo.lock
+patching file examples/notebooks/symbolica-host/src/lib.rs

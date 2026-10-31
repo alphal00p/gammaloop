@@ -1,0 +1,468 @@
+{
+  "schema_version": 1,
+  "kind": "f47-installed-host-browser-runtime-correction",
+  "status": "BOTH_PINNED_ENGINES_PASS_UNCHANGED_NATIVE_METHOD_PENDING_ROOT_INDEPENDENT_REVIEW",
+  "completed_utc": "2026-10-31T01:08:41.645505+00:00",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh",
+  "owned_new_directory": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/host-browser-correction-20261031-r1",
+  "selected_source": {
+    "selected_code": "f47f27213a1c55291239c9bc0f334a7ea1cd1cc1",
+    "selected_evidence": "cacd5182704082df929a066548e3501be22c9533",
+    "kernel": "8eb7c3729d6abefc916decc1bdf0c06536f8af80",
+    "immutable_uri": "git+file:///shared/lcnbr/dev/gammaloop/main?rev=f47f27213a1c55291239c9bc0f334a7ea1cd1cc1&shallow=1&allRefs=1",
+    "fetched_source": "/nix/store/0vsa28jjcrwyrna4iflavxm0gc8msqxm-source",
+    "full_source_binding": {
+      "commit": "f47f27213a1c55291239c9bc0f334a7ea1cd1cc1",
+      "tree": "501fc63d84c6c937f1e83ff206bc79c2edf3fd6e",
+      "source": "/nix/store/0vsa28jjcrwyrna4iflavxm0gc8msqxm-source",
+      "files": 4602,
+      "modes": {
+        "100644": 4567,
+        "100755": 24,
+        "120000": 11
+      },
+      "mismatches": [],
+      "missing": [],
+      "extra": []
+    }
+  },
+  "original_host_report": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/installed-host-qualification-20261030-r1/report.json",
+    "sha256": "e601f60b827bb4c8bdeba3a0e11002e18e84d5b633ddd46b6798f07e7e277ae1",
+    "seal_sha256": "b2f5362bab892210549931dad7c6a5584425f0f62f11636f2228255c7f8ef0eb",
+    "original_failures_and_f47_records_not_rewritten": true
+  },
+  "artifacts": {
+    "archive": {
+      "path": "/nix/store/fgzh62fj2ydz2sb5kydh5adjhaz1psc2-gammaloop-nextest-binaries-feynkit-feynkit-py-0.1.0/gammaloop-nextest-feynkit-feynkit-py.tar.zst",
+      "sha256": "349770b6e47489ee434259d193483c2340b1009416961c45860b2e4801a72e92",
+      "bytes": 274937042
+    },
+    "wheel": {
+      "path": "/nix/store/yg65yzb4ckljb4bg5w673j8ap56yrxfb-generation-refresh-installed-host-wheel-0.1.0/dist/symbolica-3.0.1-cp310-abi3-linux_x86_64.whl",
+      "sha256": "3fc32efb7c073800da74e37dcf55deb95910d6168c0d3840aaf14cab3e3af318",
+      "bytes": 49513628
+    },
+    "exporter": {
+      "path": "/nix/store/mn3vzg4c35q658jgg078hahj3hcic2f4-generation-refresh-feynkit-stub-exporter-0.1.0/bin/alphal00p-docs-python-exporter",
+      "sha256": "ea6b689912dd12eb1d40fc9f65f6e52ded87a33a755b94ceb42363a6f5480e9e",
+      "bytes": 140159312
+    }
+  },
+  "verified_inputs": {
+    "record": "verified-inputs.json",
+    "479_store_NARs_content_verified": 479,
+    "full_source_files_verified": 4602,
+    "installed_venv_files_verified": 39,
+    "native_library_resolutions_verified": 42,
+    "exact_browser_and_python_driver_NARs_included": true,
+    "old_c78_wheels_used": false
+  },
+  "pipeline_comparison": {
+    "prior_R4": "Same final method and JS/CSS, with a static fixture producer and inherited host filesystem under unshare. It was not an installed-host run. Prior records read; no fixture reruns.",
+    "installed": "Actual native pinned_drawing -> external_metrics_snapshot -> native SVG/HTML -> Page.set_content -> synchronous camera/label initialization -> geometry and rendered label reads.",
+    "shared": "f47 method and exact bundled JS/CSS; fixture sizes/producer and runtime filesystem/discovery differ.",
+    "first_proved_divergence": "Font/runtime discovery before text layout. Actual camera and DOM text are initialized, but rendered text has zero area without fontconfig. WPE blank-page startup independently lacks EGL vendor discovery.",
+    "source_HTML_export_error_found": false,
+    "test_wrong_oracle_found": false,
+    "asynchronous_readiness_race_found": false,
+    "readiness_wait_or_sleep_added_to_product_method": false
+  },
+  "Chromium_cause": {
+    "engine_version": "153.0.8010.36",
+    "baseline": {
+      "id": "graph-0",
+      "selection": {
+        "nodes": [],
+        "edges": [],
+        "half_edges": []
+      },
+      "outer": "0 0 520 236.65499924805508",
+      "camera": "-55.148269268406466 -7.812636937387651e-8 173.33333892133442 78.88500229248321",
+      "label": {
+        "textContent": "100%",
+        "innerText": "",
+        "value": "100%",
+        "html": "<output aria-label=\"Graph zoom\">100%</output>",
+        "display": "block",
+        "visibility": "visible",
+        "box": {
+          "x": 491.98638916015625,
+          "y": 24.99896812438965,
+          "width": 0,
+          "height": 0,
+          "top": 24.99896812438965,
+          "right": 491.98638916015625,
+          "bottom": 24.99896812438965,
+          "left": 491.98638916015625
+        }
+      }
+    },
+    "fontconfig_only_replay": {
+      "id": "graph-0",
+      "selection": {
+        "nodes": [],
+        "edges": [],
+        "half_edges": []
+      },
+      "outer": "0 0 520 236.65499924805508",
+      "camera": "-55.148269268406466 -7.812636937387651e-8 173.33333892133442 78.88500229248321",
+      "label": {
+        "textContent": "100%",
+        "innerText": "100%",
+        "value": "100%",
+        "html": "<output aria-label=\"Graph zoom\">100%</output>",
+        "display": "block",
+        "visibility": "visible",
+        "box": {
+          "x": 456.988525390625,
+          "y": 16.59322738647461,
+          "width": 34.99786376953125,
+          "height": 16.795856475830078,
+          "top": 16.59322738647461,
+          "right": 491.98638916015625,
+          "bottom": 33.38908386230469,
+          "left": 456.988525390625
+        }
+      }
+    },
+    "diagnosis": "Empty-root capsule mounted DejaVu font bytes but supplied no fontconfig directory list; system-ui text had no usable font. DOM output text/value already 100%; innerText empty and output box 0x0 persist after fonts.ready and a frame.",
+    "proof": "Identical captured product HTML/JS and camera/outer geometry, changing only FONTCONFIG_FILE to a private config pointing at the already verified DejaVu input, yields innerText 100% and positive text dimensions.",
+    "minimal_correction": "FONTCONFIG_FILE=/proposal/fonts.conf; readonly private config enumerates existing /nix/store/cnq79axmg834ya1xqzgb2sp1zj36vch0-dejavu-fonts-minimal-2.37/share/fonts.",
+    "replay_records": [
+      "work/chromium-actual-html-replay/replay.json",
+      "work/chromium-replay-fontconfig/replay.json"
+    ]
+  },
+  "WebKit_cause": {
+    "engine_version": "26.5",
+    "revision": "2311",
+    "baseline": "about:blank context created; createPage page target crashes with Could not create WPE EGL display: EGL_SUCCESS. Aborting...; diagnostic watchdog interruption retained, not a test failure/skip/pass.",
+    "source_identification": "Pinned libglvnd EGL vendor search embeds /run/opengl-driver/share/glvnd/egl_vendor.d, /etc/glvnd/egl_vendor.d and /usr/share/glvnd/egl_vendor.d, all absent in empty-root capsule.",
+    "correction": "Explicit already installed system Mesa vendor JSON and exact software driver/native NEEDED files plus Mesa drirc data, all readonly. __EGL_VENDOR_LIBRARY_FILENAMES and LIBGL_DRIVERS_PATH select those inputs; no host driver tree, GPU, host root, dbus, display server, credentials or outer-sandbox disabling.",
+    "runtime_record": "egl-runtime.json",
+    "extra_file_or_data_mounts": 72,
+    "system_Mesa": "/nix/store/4cvv9wbvhz36a1fhd9px1rvjr8j61ycr-mesa-26.2.1",
+    "system_runtime_is_additional_to_original_479": true,
+    "matching_browser_artifact_or_pin_changed": false,
+    "all_new_NEEDED_files_present": true,
+    "fresh_Nix_or_producer_build_needed": false,
+    "aboutblank_outcome": "new_context/new_page/about:blank readyState complete, DPR 1, exit 0; browser closed normally.",
+    "stderr_warnings": "Automation-context warning and Mesa device/dri2 probe warnings retained in successful blank diagnostic; no claim stderr was empty."
+  },
+  "native_product_result": {
+    "method": "SvgBrowserTests.test_readable_scale_and_fitted_drawings_are_not_cropped",
+    "test_source_sha256": "ee700e0629fad62358e1f0a778353757a9a305bdbc131f2ae2675b7b74d82c6c",
+    "test_source_unchanged": true,
+    "tests_run": 1,
+    "actual_native_drawings": 4,
+    "successful_engine_subtests": 2,
+    "launches": 2,
+    "pages": 2,
+    "skips": 0,
+    "failures": 0,
+    "errors": 0,
+    "exit_code": 0,
+    "engines": {
+      "chromium": {
+        "passed": true,
+        "DPR": 1,
+        "read_labels_in_test_order": [
+          "100%",
+          "100%",
+          "100%",
+          "43%",
+          "105%",
+          "100%"
+        ],
+        "geometry_records": [
+          {
+            "engine": "chromium",
+            "geometry": {
+              "a": 0.9999392627268766,
+              "b": 0,
+              "c": 0,
+              "d": 0.9999392627268766,
+              "width": 520,
+              "height": 236.640625,
+              "view_width": 520,
+              "view_height": 236.65499877929688
+            }
+          },
+          {
+            "engine": "chromium",
+            "geometry": {
+              "a": 0.9999226760414833,
+              "b": 0,
+              "c": 0,
+              "d": 0.9999226760414833,
+              "width": 520,
+              "height": 105.171875,
+              "view_width": 520,
+              "view_height": 105.18000793457031
+            }
+          },
+          {
+            "engine": "chromium",
+            "geometry": {
+              "a": 0.9999901625392602,
+              "b": 0,
+              "c": 0,
+              "d": 0.9999901625392602,
+              "width": 520,
+              "height": 825.171875,
+              "view_width": 520,
+              "view_height": 825.1799926757812
+            }
+          },
+          {
+            "engine": "chromium",
+            "geometry": {
+              "a": 0.9998604010382619,
+              "b": 0,
+              "c": 0,
+              "d": 0.9998604010382619,
+              "width": 520,
+              "height": 44.78125,
+              "view_width": 520,
+              "view_height": 44.78750228881836
+            }
+          },
+          {
+            "engine": "chromium",
+            "geometry": {
+              "a": 0.9999392627268766,
+              "b": 0,
+              "c": 0,
+              "d": 0.9999392627268766,
+              "width": 300,
+              "height": 236.640625,
+              "view_width": 300,
+              "view_height": 236.65499877929688
+            }
+          }
+        ],
+        "pageerrors": [],
+        "console": []
+      },
+      "webkit": {
+        "passed": true,
+        "DPR": 1,
+        "read_labels_in_test_order": [
+          "100%",
+          "100%",
+          "100%",
+          "43%",
+          "105%",
+          "100%"
+        ],
+        "geometry_records": [
+          {
+            "engine": "webkit",
+            "geometry": {
+              "a": 0.9999392627268766,
+              "b": 0,
+              "c": 0,
+              "d": 0.9999392627268766,
+              "width": 520,
+              "height": 236.640625,
+              "view_width": 520,
+              "view_height": 236.65499877929688
+            }
+          },
+          {
+            "engine": "webkit",
+            "geometry": {
+              "a": 0.9999226760414833,
+              "b": 0,
+              "c": 0,
+              "d": 0.9999226760414833,
+              "width": 520,
+              "height": 105.171875,
+              "view_width": 520,
+              "view_height": 105.18000793457031
+            }
+          },
+          {
+            "engine": "webkit",
+            "geometry": {
+              "a": 0.9999901625392602,
+              "b": 0,
+              "c": 0,
+              "d": 0.9999901625392602,
+              "width": 520,
+              "height": 825.171875,
+              "view_width": 520,
+              "view_height": 825.1799926757812
+            }
+          },
+          {
+            "engine": "webkit",
+            "geometry": {
+              "a": 0.9998604010382619,
+              "b": 0,
+              "c": 0,
+              "d": 0.9998604010382619,
+              "width": 520,
+              "height": 44.78125,
+              "view_width": 520,
+              "view_height": 44.78750228881836
+            }
+          },
+          {
+            "engine": "webkit",
+            "geometry": {
+              "a": 0.9999392627268766,
+              "b": 0,
+              "c": 0,
+              "d": 0.9999392627268766,
+              "width": 300,
+              "height": 236.640625,
+              "view_width": 300,
+              "view_height": 236.65499877929688
+            }
+          }
+        ],
+        "pageerrors": [],
+        "console": []
+      }
+    },
+    "receipt": "work/native-browser-corrected-capsule/product-browser.json",
+    "initial_plus_resize_reset_coverage": "Original exact method performs initial scale/crop/label comparisons and tall-height check, plus, 520->300 resize, 105% label and reset to 100% in each engine.",
+    "formulas_delta1e4_places2_float32_1e6_tall1over64_regimeguards_locators_fixtures": "All unchanged; no test patch or monkeypatch changes expected behavior. Wrapper only records actual inputs/results and strips private vars from children."
+  },
+  "patches": {
+    "production_source_patch_required": false,
+    "host_rebuild_required": false,
+    "review_only_capsule_patch": "capsule-correction.patch",
+    "patch_target": "Historical writable-state controller functions, shown as a diff only. Port into the final runtime owner with fresh work/evidence paths; never execute it in sealed H.",
+    "executed_private_controller": "capsule.py",
+    "executed_observation_helper": "helpers/selected_browser_runner.py",
+    "fontconfig": "helpers/fonts.conf",
+    "extra_runtime_inventory": "egl-runtime.json",
+    "proposal_font_mountpoint": "/browser-fonts.conf (same file bytes as executed /proposal/fonts.conf; independent mountpoint avoids writing into the historical read-only helper directory)"
+  },
+  "attempts": [
+    {
+      "label": "native-browser-corrected-capsule",
+      "start": "evidence/native-browser-corrected-capsule/start.json",
+      "completion": "evidence/native-browser-corrected-capsule/completion.json",
+      "exit_code": 0,
+      "elapsed_s": 5.391288890037686,
+      "interrupted": false,
+      "process_reaped": true,
+      "owned_tree_remaining": [],
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "b8d5d29e81240c946fe9fa908647fb9489839a44f5034e9d13cd64c50513fa43"
+    },
+    {
+      "label": "corrected-containment-audit",
+      "start": "evidence/corrected-containment-audit/start.json",
+      "completion": "evidence/corrected-containment-audit/completion.json",
+      "exit_code": 0,
+      "elapsed_s": 0.9469511169008911,
+      "interrupted": false,
+      "process_reaped": true,
+      "owned_tree_remaining": [],
+      "stdout_sha256": "e8b3d5529d69d2b6160f854c2c2481af85f5fc82956ab1cf74c64e9ae84a8858",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "native-capture",
+      "start": "evidence/native-capture/start.json",
+      "completion": "evidence/native-capture/completion.json",
+      "exit_code": 0,
+      "elapsed_s": 0.8798019769601524,
+      "interrupted": false,
+      "process_reaped": true,
+      "owned_tree_remaining": [],
+      "stdout_sha256": "e3e7ba935bff15cc7a4ef9edc70c57e7f6203f5fc09384897699d32ea9a2500b",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "chromium-actual-html-replay",
+      "start": "evidence/chromium-actual-html-replay/start.json",
+      "completion": "evidence/chromium-actual-html-replay/completion.json",
+      "exit_code": 0,
+      "elapsed_s": 3.0473460329230875,
+      "interrupted": false,
+      "process_reaped": true,
+      "owned_tree_remaining": [],
+      "stdout_sha256": "4188120e5dfa7ebb82e11eb87868bd29929c8ce844a46100a33be716b7cb067e",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "chromium-replay-fontconfig",
+      "start": "evidence/chromium-replay-fontconfig/start.json",
+      "completion": "evidence/chromium-replay-fontconfig/completion.json",
+      "exit_code": 0,
+      "elapsed_s": 3.4226239919662476,
+      "interrupted": false,
+      "process_reaped": true,
+      "owned_tree_remaining": [],
+      "stdout_sha256": "bd02d9402fbf8fd64c1feb4b33c71cd44e494e1439aa33c0d5d8900a8540e5c0",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "webkit-blank-protocol",
+      "start": "evidence/webkit-blank-protocol/start.json",
+      "completion": "evidence/webkit-blank-protocol/completion.json",
+      "exit_code": -15,
+      "elapsed_s": 25.048161446116865,
+      "interrupted": true,
+      "process_reaped": true,
+      "owned_tree_remaining": [],
+      "stdout_sha256": "5215847fb96d172e6f06d0e1e8df7973cd62ac9daed44176203f19ce202b547f",
+      "stderr_sha256": "4c5f779be2c2ad34c3883c5e7a4cb5b19725e6e6bb656fd81c475258085658d3"
+    },
+    {
+      "label": "webkit-blank-explicit-egl",
+      "start": "evidence/webkit-blank-explicit-egl/start.json",
+      "completion": "evidence/webkit-blank-explicit-egl/completion.json",
+      "exit_code": 0,
+      "elapsed_s": 2.7134099090471864,
+      "interrupted": false,
+      "process_reaped": true,
+      "owned_tree_remaining": [],
+      "stdout_sha256": "6b80e7862c55491596332b9659f60b65899a0c835c264dacd017d7be3b6de1ef",
+      "stderr_sha256": "0e51613e72efcdbc4400155ae173cf9fab621e7a61073d7ea69c9c15b16b6a55"
+    }
+  ],
+  "setup_failures": "setup-failures.json",
+  "containment": {
+    "audit": "evidence/corrected-containment-audit/stdout",
+    "all_private_variables_absent_in_pure_driver_browser_children": true,
+    "licence_boundary": "Preserve exported license or privately read current user XDG config; anonymous pipe to restricted immediate product exec only. No value/argv/hash/file/receipt or Nix use. Driver/browser env explicitly strip all three.",
+    "source_venv_store_helpers_extra_runtime_read_only": true,
+    "fresh_namespace_and_only_work_writable": true,
+    "evidence_outside_child_mounts": true,
+    "compiler_VCS_Nix_executables_absent": true,
+    "network_namespace_distinct_loopback_only_no_routes": true,
+    "no_Nix_Cargo_compiler_build_or_network_command_executed": true,
+    "diagnostic_watchdogs": "25s baseline/diagnostics and 60s actual validation guard; baseline interrupted after known page-target crash. No test timeout/retry/memory policy was changed; all successful runs completed before guards.",
+    "20GiB_adopted": false
+  },
+  "preservation": {
+    "tracked_source_index_refs_JJ_main_operations": false,
+    "moving_at_or_f47_record_rewrites": false,
+    "API_stubs_or_later_three_tokens_touched": false,
+    "unaffected_Rust3_UFO_squared_signature_runs": "Preserved original passing records without rerunning. No pass credit transferred to previously failed QCD/stub owners.",
+    "new_workspace_delegation_independent_approval": false
+  },
+  "limits": [
+    "This is bounded current installed-host camera validation with the existing fixed external metrics snapshot, not browser font-metric/widget/site/full WP3 qualification.",
+    "The extra Mesa 26.2.1 software runtime is an explicitly inventoried installed system input, not a replacement of Chromium/WebKit/Python pins or a qualification of a future rebuilt host. The final combined runtime must supply/reverify these inputs or an independently qualified equivalent.",
+    "Original R4-N3 synthetic residual remains recorded; no tolerance or expected value was altered to address it.",
+    "Root requires a new independent review before integration. No review approval is claimed."
+  ],
+  "cleanup": "cleanup.json",
+  "owned_processes_remaining": 0,
+  "retained_for_review": true,
+  "diagnostic_native_capture": {
+    "drawings": 4,
+    "tests": 0,
+    "completion": "evidence/native-capture/completion.json",
+    "actual_native_drawings_this_phase_total": 8,
+    "note": "Four diagnostic captures plus four fresh native drawings in the final method; replay passes alone confer no full-product credit."
+  }
+}

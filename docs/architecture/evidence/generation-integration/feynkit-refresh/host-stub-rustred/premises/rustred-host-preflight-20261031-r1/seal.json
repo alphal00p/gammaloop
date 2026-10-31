@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "sealed_utc": "2026-10-31T01:35:36.499370+00:00",
+  "report_sha256": "855ecafaced15a291a4427d1fea0f3f27ac936ca14b95c1edb4fb5151a68e735",
+  "SHA256SUMS_sha256": "ab5fb4c4fddb6c7a8925190038c24c2b66dd8266f29a21774f3148fc9fd7542e",
+  "regular_files_in_checksum_manifest": 3849,
+  "symlinks": 2,
+  "native_or_independent_approval": false,
+  "new_host_or_QCD_pass": false,
+  "owned_processes_remaining": 0
+}

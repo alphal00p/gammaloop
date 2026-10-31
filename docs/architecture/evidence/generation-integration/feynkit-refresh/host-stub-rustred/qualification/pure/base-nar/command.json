@@ -1,0 +1,12 @@
+{
+  "argv": [
+    "/run/current-system/sw/bin/nix",
+    "hash",
+    "path",
+    "/nix/store/gi1b4xdzgmvdnnvhrqbxn57da65jjh27-host-stub-ordinary-base.nix"
+  ],
+  "cwd": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh",
+  "exit_code": 0,
+  "elapsed_s": 0.03798060608096421,
+  "private_variables_absent": true
+}

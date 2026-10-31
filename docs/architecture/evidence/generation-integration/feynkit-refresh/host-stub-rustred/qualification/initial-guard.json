@@ -1,0 +1,10 @@
+{
+  "source": "d0fb4e906140a6a0fc8dd6401ca839cab0c2734d",
+  "main_head": "89d420b55cd31bca13a3a7eed233369698ee7afc",
+  "main_index_path": "/shared/lcnbr/dev/gammaloop/main/.git/index",
+  "main_index_sha256": "36fca2996228d0adb018933745a106061d3febe8921980864b5cc50dbad4af5d",
+  "global_integration": "fdff0d18953348b84a0f1b7e6ab5ef703a5090de",
+  "author": "Lucien Huber <im@lcnbr.ch>",
+  "private_environment_removed_for_children": true,
+  "started_epoch": 1793412389.4618814
+}

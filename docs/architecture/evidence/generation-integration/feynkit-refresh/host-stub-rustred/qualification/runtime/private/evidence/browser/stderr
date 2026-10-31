@@ -1,0 +1,6 @@
+test_readable_scale_and_fitted_drawings_are_not_cropped (test_svg_browser.SvgBrowserTests.test_readable_scale_and_fitted_drawings_are_not_cropped) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 3.378s
+
+OK

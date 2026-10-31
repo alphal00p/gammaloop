@@ -1,0 +1,13 @@
+{
+  "argv": [
+    "/nix/store/c3bpv60f5wgp4pmgsifaykxk214h6463-rust-stable-with-components-2026-09-03/bin/rustfmt",
+    "--check",
+    "--edition",
+    "2024",
+    "/nix/store/r5j0ky0blrn8y18ssyakr4bf8iwhy296-source/examples/notebooks/symbolica-host/src/lib.rs"
+  ],
+  "exit_code": 0,
+  "scope": "Private registration delta only; no tracked Rust change. No Clippy result.",
+  "private_variables_absent": true,
+  "source_sha256": "e86f7403b6bc86f3aede8db4d4a3d5129611a69ee2ad3cd4d2bf2f5e44d46dad"
+}

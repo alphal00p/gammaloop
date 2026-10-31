@@ -1,0 +1,14 @@
+{
+  "host-api-stub-correction-20261031-r1": {
+    "verified_entries": 70,
+    "manifest_sha256": "06d2ff8dfedf4866ee94e9d215d161c4d109c259eb0848b92f9997110bfce010"
+  },
+  "host-browser-correction-20261031-r1": {
+    "verified_entries": 100,
+    "manifest_sha256": "176aabf3e58c423773a78f88bd819cb9d7715232d476e47cb6a5b051b4a66e96"
+  },
+  "rustred-host-preflight-20261031-r1": {
+    "verified_entries": 3849,
+    "manifest_sha256": "ab5fb4c4fddb6c7a8925190038c24c2b66dd8266f29a21774f3148fc9fd7542e"
+  }
+}

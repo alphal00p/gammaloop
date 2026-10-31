@@ -1,0 +1,39 @@
+{
+  "identity": [
+    "/work/venv/bin/python",
+    "-B",
+    "/proposal/identity.py"
+  ],
+  "qcd": [
+    "/work/venv/bin/python",
+    "-B",
+    "/proposal/qcd.py"
+  ],
+  "ufo": [
+    "/work/venv/bin/python",
+    "-B",
+    "/build/source/crates/feynkit-py/tests/installed_ufo_ghost_crossing.py"
+  ],
+  "squared": [
+    "/work/venv/bin/python",
+    "-B",
+    "/build/source/crates/feynkit-py/tests/installed_squared_amplitude_display.py"
+  ],
+  "sector": [
+    "/work/venv/bin/python",
+    "-B",
+    "/proposal/installed_sector_signature.py",
+    "/work/sector.json"
+  ],
+  "browser": [
+    "/work/venv/bin/python",
+    "-B",
+    "/proposal/product.py"
+  ],
+  "stub-check": [
+    "/nix/store/mn3vzg4c35q658jgg078hahj3hcic2f4-generation-refresh-feynkit-stub-exporter-0.1.0/bin/alphal00p-docs-python-exporter",
+    "feynkit-community",
+    "/build/source/docs/api/python/feynkit-community.pyi",
+    "--check"
+  ]
+}

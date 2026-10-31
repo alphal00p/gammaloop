@@ -1,0 +1,12 @@
+{
+  "needed_names": [
+    "ld-linux-x86-64.so.2",
+    "libc.so.6",
+    "libdl.so.2",
+    "libgcc_s.so.1",
+    "libm.so.6",
+    "libpython3.13.so.1.0"
+  ],
+  "source": "/nix/store/3sj3nw06s3vhl3j12wfp5gc3r1h6f0k3-source",
+  "empty_runpath_exception": "/nix/store/wkiqjb44n5k0fwhmc523dvflspd47q3b-gcc-15.3.0-libgcc/lib/libgcc_s.so.1"
+}

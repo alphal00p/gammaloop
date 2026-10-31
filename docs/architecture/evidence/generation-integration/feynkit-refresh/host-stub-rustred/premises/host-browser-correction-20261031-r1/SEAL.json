@@ -1,0 +1,15 @@
+{
+  "sealed_utc": "2026-10-31T01:10:32.995123+00:00",
+  "schema_version": 1,
+  "kind": "review-evidence-content-seal-not-independent-approval",
+  "files": 100,
+  "manifest_sha256": "176aabf3e58c423773a78f88bd819cb9d7715232d476e47cb6a5b051b4a66e96",
+  "report_sha256": "3b77c19c44d889fd52e5d64be1d6decaf4e6abf11ab336dd384d8f23cbd6ee90",
+  "typst_sha256": "f5677e5c500cd389bd5a8ec890e7fda4634e68d4a2eaae9e20851cb0748a941b",
+  "original_report_sha256": "e601f60b827bb4c8bdeba3a0e11002e18e84d5b633ddd46b6798f07e7e277ae1",
+  "actual_native_method_passes": 1,
+  "successful_engine_subtests": 2,
+  "skips": 0,
+  "owned_processes_remaining": 0,
+  "independent_review_pending": true
+}

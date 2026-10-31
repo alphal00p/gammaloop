@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/host-stub-rustred-integration-20261031-r1/pure_stage.py", line 48, in <module>
+    save('pure/'+name+'-root-derivation.json',graph[item['drv']])
+                                              ~~~~~^^^^^^^^^^^^^
+KeyError: '/nix/store/5vvg7gyp1n3ma9rw57m37p81vn75h1ch-generation-refresh-corrected-stub-host-wheel-0.1.0.drv'

@@ -1,0 +1,5 @@
+	linux-vdso.so.1 (0x000077547da09000)
+	libgcc_s.so.1 => /nix/store/604gsr59rj7dzd0nrhp143rpvf7gyiaz-gcc-15.3.0-lib/lib/libgcc_s.so.1 (0x0000775476db0000)
+	libm.so.6 => /nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84/lib/libm.so.6 (0x0000775476cb8000)
+	libc.so.6 => /nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84/lib/libc.so.6 (0x0000775476aaf000)
+	/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84/lib/ld-linux-x86-64.so.2 (0x000077547da0b000)
