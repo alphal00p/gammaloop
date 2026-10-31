@@ -2901,7 +2901,6 @@ impl VakintTerm {
         vakint_settings: &VakintSettings,
     ) -> Result<(), VakintError> {
         let mut new_numerator = self.numerator.clone();
-        let mut test = self.numerator.clone();
         // Here we must be careful that substituations can be of the form:
         // {a-> b, b->c}
         // so that we must not apply the substitutions to the outcome of the previous substitution.
@@ -2945,53 +2944,55 @@ impl VakintTerm {
         //             .as_slice(),
         //     );
         // }
-        test = test.replace_multiple(
-            casted_replacement_rules
-                .iter()
-                .map(|(source, _target)| {
-                    Replacement::new(source.to_owned(), one_substitution_pattern.clone())
-                })
-                .collect::<Vec<_>>()
-                .as_slice(),
-        );
-
-        // Make sure to also set all externals to zero for the test
-        test = test
-            .replace(
-                vk_parse!(format!("{}(momID_,idx___)", EXTERNAL_MOMENTUM_SYMBOL).as_str())
-                    .unwrap()
-                    .to_pattern(),
-            )
-            .with(vk_parse!("1").unwrap().to_pattern());
-
-        // Substitute metric as well
-        test = test
-            .replace(
-                vk_parse!(format!("{}(idx1_,idx2_)", METRIC_SYMBOL))
-                    .unwrap()
-                    .to_pattern(),
-            )
-            .with(vk_parse!("1").unwrap().to_pattern());
-
-        // Substitute dot product wrappers as well, with the understanding that all momenta in arguments should now have been mapped to 1 at this point.
-        test = test
-            .replace(
-                vk_parse!(format!("{}(1,1)", DOT_SYMBOL))
-                    .unwrap()
-                    .to_pattern(),
-            )
-            .with(vk_parse!("1").unwrap().to_pattern());
-
-        // Substitute epsilon regulator
-        test = test
-            .replace(
-                vk_parse!(&vakint_settings.epsilon_symbol)
-                    .unwrap()
-                    .to_pattern(),
-            )
-            .with(vk_parse!("1").unwrap().to_pattern());
-
         if vakint_settings.verify_numerator_identification {
+            // The identification test copy is only needed for verification.
+            let mut test = self.numerator.clone();
+            test = test.replace_multiple(
+                casted_replacement_rules
+                    .iter()
+                    .map(|(source, _target)| {
+                        Replacement::new(source.to_owned(), one_substitution_pattern.clone())
+                    })
+                    .collect::<Vec<_>>()
+                    .as_slice(),
+            );
+
+            // Make sure to also set all externals to zero for the test
+            test = test
+                .replace(
+                    vk_parse!(format!("{}(momID_,idx___)", EXTERNAL_MOMENTUM_SYMBOL).as_str())
+                        .unwrap()
+                        .to_pattern(),
+                )
+                .with(vk_parse!("1").unwrap().to_pattern());
+
+            // Substitute metric as well
+            test = test
+                .replace(
+                    vk_parse!(format!("{}(idx1_,idx2_)", METRIC_SYMBOL))
+                        .unwrap()
+                        .to_pattern(),
+                )
+                .with(vk_parse!("1").unwrap().to_pattern());
+
+            // Substitute dot product wrappers as well, with the understanding that all momenta in arguments should now have been mapped to 1 at this point.
+            test = test
+                .replace(
+                    vk_parse!(format!("{}(1,1)", DOT_SYMBOL))
+                        .unwrap()
+                        .to_pattern(),
+                )
+                .with(vk_parse!("1").unwrap().to_pattern());
+
+            // Substitute epsilon regulator
+            test = test
+                .replace(
+                    vk_parse!(&vakint_settings.epsilon_symbol)
+                        .unwrap()
+                        .to_pattern(),
+                )
+                .with(vk_parse!("1").unwrap().to_pattern());
+
             // Matched propagators authenticate scalar mass parameters; retain
             // their arithmetic symbolically in this verification copy.
             let mut mass_parameters = HashSet::new();
