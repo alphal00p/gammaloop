@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="nextest-run" tests="9" skipped="0" failures="0" errors="0" uuid="14378c40-88e5-4fb0-b445-972443b732d4" timestamp="2026-10-31T00:15:16.815+00:00" time="0.494">
+    <testsuite name="feynkit-generator::generation_oracle" tests="9" skipped="0" errors="0" failures="0">
+        <testcase name="sm_eeww_L0" classname="feynkit-generator::generation_oracle" timestamp="2026-10-31T00:15:16.818+00:00" time="0.087"/>
+        <testcase name="xs_qed_eedd_L1" classname="feynkit-generator::generation_oracle" timestamp="2026-10-31T00:15:16.819+00:00" time="0.091"/>
+        <testcase name="xs_qed_eeee_1pi_L1" classname="feynkit-generator::generation_oracle" timestamp="2026-10-31T00:15:16.819+00:00" time="0.091"/>
+        <testcase name="xs_qed_eemm_L1" classname="feynkit-generator::generation_oracle" timestamp="2026-10-31T00:15:16.819+00:00" time="0.094"/>
+        <testcase name="sm_eemm_L0" classname="feynkit-generator::generation_oracle" timestamp="2026-10-31T00:15:16.819+00:00" time="0.097"/>
+        <testcase name="qed_eemm_L1" classname="feynkit-generator::generation_oracle" timestamp="2026-10-31T00:15:16.819+00:00" time="0.118"/>
+        <testcase name="xs_qed_eemm_L2" classname="feynkit-generator::generation_oracle" timestamp="2026-10-31T00:15:16.819+00:00" time="0.190"/>
+        <testcase name="ym_g6_L0" classname="feynkit-generator::generation_oracle" timestamp="2026-10-31T00:15:16.819+00:00" time="0.485"/>
+        <testcase name="ctorder_qcd_uugg_L1" classname="feynkit-generator::generation_oracle" timestamp="2026-10-31T00:15:16.819+00:00" time="0.490"/>
+    </testsuite>
+</testsuites>

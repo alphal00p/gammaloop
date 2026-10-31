@@ -1,0 +1,384 @@
+{
+  "schema": "sm-eeww-one-token-integration-candidate/1",
+  "status": "NEW_INDEPENDENT_INTEGRATION_REVIEW_REQUIRED",
+  "created": "2026-10-31T00:21:27.674677+00:00",
+  "author": "Lucien Huber <im@lcnbr.ch>",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh",
+  "base_metadata_commit": "48d0b98b97b368b2a2f58abe67cb19dddec623df",
+  "new_code_commit": "605178a65620b104805b012f1edc299710e8a176",
+  "code_bookmark": "generation-sm-eeww-migration-code-20261031",
+  "decision": {
+    "verdict": "APPROVE_BOUNDED_SM_ONE_TOKEN_MIGRATION",
+    "review_sha256": "096128cbe5cabf7159c4c6039fd7bd693d19c1bad60ca2533c656bd2a9356335",
+    "attribution": "Independent Astra migration reviewer; root expressly adopted and authorized exact token plus routine qualification. This candidate is not independently integration-reviewed.",
+    "source_blob_before": "d61a4beebfc1b0d650cd17b001a1fdc6433b60d5",
+    "source_blob_after": "e6af4ec644688e1333064c50e3b157ae631473ee",
+    "source_sha256_after": "c642b5cc8145610854a8681d6987ea392266064c429cfa86719e72296083f0f7",
+    "every_other_byte_equal": true,
+    "other_nine_Row_fields_and_prior_eight_preserved": true,
+    "proposed_patch_sha256": "8746bdbf6418e2fa67a5480ac61e548394bbf000b270c11422e51085b2d535c9"
+  },
+  "new_producer": {
+    "uri": "git+file:///shared/lcnbr/dev/gammaloop/main?rev=605178a65620b104805b012f1edc299710e8a176&shallow=1&allRefs=1",
+    "archive_drv": "/nix/store/1cacz18cwvb635kfzxawcqg64lf94y74-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0.drv",
+    "archive": "/nix/store/nnj9ziyb72j965b1rw9vppkisy6skn0v-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0/gammaloop-nextest-feynkit-feynkit-generator.tar.zst",
+    "archive_sha256": "4076ada2455f2a8ad90ad271087d095b8aa2b38bde4169fce844ee221c91ebfe",
+    "oracle_elf": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/sm-eeww-migration-20261031/archive-extracted/target/ci-optim/deps/generation_oracle-3892f55f31822180",
+      "sha256": "f68d94f23c9c12696583f2902b6f949f29143d55864b017613c68d94b4da6538",
+      "size": 61186320
+    },
+    "source_paths": 4625,
+    "selected_source_files": 670,
+    "dependency_units": 452,
+    "unchanged_dependency_layers": [
+      {
+        "path": "/nix/store/cx447jb5zb3gxcpslza3gkldr2vs7kah-gammaloop-crate-test-dependencies-b6f177b7bc15beb1-deps-0.1.0/target.tar.zst",
+        "sha256": "ee04a717e612ac9e599614998271fa420858c122ad9a247fa06cb49d5dfd7018"
+      },
+      {
+        "path": "/nix/store/kck3a2p03gvd9162cnkl6g96viy1bpp1-gammaloop-crate-test-dependencies-b6f177b7bc15beb1-inputs/target.tar.zst",
+        "sha256": "06efc2c933e9103e1b8ba5fe597834b2e8b1af355aa7444567fdb3ded778427f"
+      }
+    ],
+    "new_terminal_layer": {
+      "path": "/nix/store/zcq6b3hja0mh763hva74gb44l93a9122-gammaloop-crate-test-binaries-feynkit-generator-b6f177b7bc15beb1-deps-0.1.0/target.tar.zst",
+      "sha256": "eafe0cf643d705b3c3a5801596d0bc74f453430cda9bb6d96e0bffac5caa4797"
+    },
+    "compiler": {
+      "path": "/nix/store/c3bpv60f5wgp4pmgsifaykxk214h6463-rust-stable-with-components-2026-09-03/bin/rustc",
+      "version": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8"
+    },
+    "profile": "ci-optim",
+    "kernel": "8eb7c3729d6abefc916decc1bdf0c06536f8af80",
+    "prior_proof_source": "5ba04864ca506e259d9eef4a54f65acdd8323fc2",
+    "prior_built_source": "5ea149ffd88ae3afc4072a38c0871c1329be8424",
+    "one_selected_Nix_realization": true,
+    "Nix_pure_license_keys_removed": [
+      "SYMBOLICA_LICENSE",
+      "SYMBOLICA_LICENSE_PATH",
+      "SYMBOLICA_LICENSE_SIGNED"
+    ],
+    "Nix_calls_after_licensed_phase": 0,
+    "cache_policy": "Normal configured substitution; unchanged dependency producers reused. No cache transplant, relink, pin/feature/budget change."
+  },
+  "runtime": {
+    "code": "605178a65620b104805b012f1edc299710e8a176",
+    "archive_sha256": "4076ada2455f2a8ad90ad271087d095b8aa2b38bde4169fce844ee221c91ebfe",
+    "oracle_elf": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/sm-eeww-migration-20261031/archive-extracted/target/ci-optim/deps/generation_oracle-3892f55f31822180",
+      "sha256": "f68d94f23c9c12696583f2902b6f949f29143d55864b017613c68d94b4da6538",
+      "size": 61186320
+    },
+    "results": [
+      {
+        "pool": 1,
+        "exit": 0,
+        "outcomes": [
+          {
+            "case": "xs_qed_eedd_L1",
+            "status": "passed",
+            "time": "0.091",
+            "classname": "feynkit-generator::generation_oracle"
+          },
+          {
+            "case": "xs_qed_eemm_L1",
+            "status": "passed",
+            "time": "0.097",
+            "classname": "feynkit-generator::generation_oracle"
+          },
+          {
+            "case": "sm_eemm_L0",
+            "status": "passed",
+            "time": "0.097",
+            "classname": "feynkit-generator::generation_oracle"
+          },
+          {
+            "case": "xs_qed_eeee_1pi_L1",
+            "status": "passed",
+            "time": "0.097",
+            "classname": "feynkit-generator::generation_oracle"
+          },
+          {
+            "case": "sm_eeww_L0",
+            "status": "passed",
+            "time": "0.104",
+            "classname": "feynkit-generator::generation_oracle"
+          },
+          {
+            "case": "qed_eemm_L1",
+            "status": "passed",
+            "time": "0.132",
+            "classname": "feynkit-generator::generation_oracle"
+          },
+          {
+            "case": "xs_qed_eemm_L2",
+            "status": "passed",
+            "time": "0.236",
+            "classname": "feynkit-generator::generation_oracle"
+          },
+          {
+            "case": "ctorder_qcd_uugg_L1",
+            "status": "passed",
+            "time": "0.580",
+            "classname": "feynkit-generator::generation_oracle"
+          },
+          {
+            "case": "ym_g6_L0",
+            "status": "passed",
+            "time": "0.621",
+            "classname": "feynkit-generator::generation_oracle"
+          }
+        ],
+        "actual_executions": 9,
+        "junit": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/sm-eeww-migration-20261031/pool1/nextest/ci_gammaloop/junit.xml",
+        "junit_sha256": "659ac545c8acec704882116b7b6c96cc3d6dc6208652fb540bb0752025d266d7",
+        "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/sm-eeww-migration-20261031/pool1/command.json"
+      },
+      {
+        "pool": 8,
+        "exit": 0,
+        "outcomes": [
+          {
+            "case": "sm_eeww_L0",
+            "status": "passed",
+            "time": "0.087",
+            "classname": "feynkit-generator::generation_oracle"
+          },
+          {
+            "case": "xs_qed_eedd_L1",
+            "status": "passed",
+            "time": "0.091",
+            "classname": "feynkit-generator::generation_oracle"
+          },
+          {
+            "case": "xs_qed_eeee_1pi_L1",
+            "status": "passed",
+            "time": "0.091",
+            "classname": "feynkit-generator::generation_oracle"
+          },
+          {
+            "case": "xs_qed_eemm_L1",
+            "status": "passed",
+            "time": "0.094",
+            "classname": "feynkit-generator::generation_oracle"
+          },
+          {
+            "case": "sm_eemm_L0",
+            "status": "passed",
+            "time": "0.097",
+            "classname": "feynkit-generator::generation_oracle"
+          },
+          {
+            "case": "qed_eemm_L1",
+            "status": "passed",
+            "time": "0.118",
+            "classname": "feynkit-generator::generation_oracle"
+          },
+          {
+            "case": "xs_qed_eemm_L2",
+            "status": "passed",
+            "time": "0.190",
+            "classname": "feynkit-generator::generation_oracle"
+          },
+          {
+            "case": "ym_g6_L0",
+            "status": "passed",
+            "time": "0.485",
+            "classname": "feynkit-generator::generation_oracle"
+          },
+          {
+            "case": "ctorder_qcd_uugg_L1",
+            "status": "passed",
+            "time": "0.490",
+            "classname": "feynkit-generator::generation_oracle"
+          }
+        ],
+        "actual_executions": 9,
+        "junit": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/sm-eeww-migration-20261031/pool8/nextest/ci_gammaloop/junit.xml",
+        "junit_sha256": "524108c6723a5e264413e28bccb974e1c33e11ba78907ea72a50744e55c8c9cb",
+        "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/sm-eeww-migration-20261031/pool8/command.json"
+      },
+      {
+        "pool": 32,
+        "exit": 0,
+        "outcomes": [
+          {
+            "case": "sm_eemm_L0",
+            "status": "passed",
+            "time": "0.110",
+            "classname": "feynkit-generator::generation_oracle"
+          },
+          {
+            "case": "xs_qed_eedd_L1",
+            "status": "passed",
+            "time": "0.114",
+            "classname": "feynkit-generator::generation_oracle"
+          },
+          {
+            "case": "xs_qed_eemm_L1",
+            "status": "passed",
+            "time": "0.114",
+            "classname": "feynkit-generator::generation_oracle"
+          },
+          {
+            "case": "xs_qed_eeee_1pi_L1",
+            "status": "passed",
+            "time": "0.124",
+            "classname": "feynkit-generator::generation_oracle"
+          },
+          {
+            "case": "sm_eeww_L0",
+            "status": "passed",
+            "time": "0.145",
+            "classname": "feynkit-generator::generation_oracle"
+          },
+          {
+            "case": "qed_eemm_L1",
+            "status": "passed",
+            "time": "0.147",
+            "classname": "feynkit-generator::generation_oracle"
+          },
+          {
+            "case": "xs_qed_eemm_L2",
+            "status": "passed",
+            "time": "0.199",
+            "classname": "feynkit-generator::generation_oracle"
+          },
+          {
+            "case": "ctorder_qcd_uugg_L1",
+            "status": "passed",
+            "time": "0.518",
+            "classname": "feynkit-generator::generation_oracle"
+          },
+          {
+            "case": "ym_g6_L0",
+            "status": "passed",
+            "time": "0.520",
+            "classname": "feynkit-generator::generation_oracle"
+          }
+        ],
+        "actual_executions": 9,
+        "junit": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/sm-eeww-migration-20261031/pool32/nextest/ci_gammaloop/junit.xml",
+        "junit_sha256": "f4d2877e25b34198446ea033adf789e5c95f6412fc6a44711e5e1df28ed0b071",
+        "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/sm-eeww-migration-20261031/pool32/command.json"
+      }
+    ],
+    "expected_selected_executions": 27,
+    "actual_executions": 27,
+    "passes": 27,
+    "failures": 0,
+    "skip_credit": 0,
+    "proof_scope": "Prior finite SM proof remains pool1; pools8/32 are runtime evidence only."
+  },
+  "coverage": {
+    "compiled_inventory": 9,
+    "oracle_suite_listed": 183,
+    "other_suites": "skipped by binary/package filter; zero execution credit",
+    "complete_Row_assertions": 27,
+    "class_modes": "Actual classes::check_request loops None and Auto; Named/Minimal, count, payload and source checks run; only returned None reference asserts historical Row. No duplicate Auto Row claim.",
+    "generation_pools": [
+      1,
+      8,
+      32
+    ],
+    "profile": "ci_gammaloop",
+    "timeout_seconds": 240,
+    "workers": 16,
+    "retries": 0,
+    "record_update_flags": "ABSENT",
+    "math_scope": "Finite SM proof remains pool1. Pools8/32 are runtime evidence only. No new algebra, observer or old-capture rerun."
+  },
+  "source_scope_policy": {
+    "all118_preserved": true,
+    "anchors_and_digests_changed": 0,
+    "owner_test_expectation_bindings": "All existing main.rs owner regions exclude this SM row and remain byte-identical; no anchor change or blanket approval.",
+    "checks": [
+      "whole physical base tree before edit",
+      "exact reviewed patch and after blob",
+      "all149 fast/heavy literal Row source entries",
+      "all9 non-numerator fields",
+      "prior8 and every other row byte",
+      "all118 scope bindings",
+      "pinned rustfmt",
+      "one pure archive build",
+      "actual nine compiled identities",
+      "27 actual JUnit outcomes",
+      "standalone final Typst compile"
+    ],
+    "additional_Clippy_full_docs_suite_credit": false,
+    "Rust_policy_departures": "None; one lowercase hexadecimal token only."
+  },
+  "carried_qualifications": {
+    "preparation_global_VCS_guard": "FAILED during separate root-authorized grouped metadata; verbatim disclosure retained. No retroactive global guard pass.",
+    "formal_premises": "Exact original-input invariance, definitions and finite capture/decoder premises, not digest equality. No universal decoder/consumer theorem.",
+    "native_reuse": "32 SM substage batches/1022 obligations within72 total/4110; 8 SM baseline batches/230 obligations, 115 per mode; other24 successful control substages; zero new native batches.",
+    "controls": "15 implementation pure controls and8 additional reviewer predicates remain separate. Original inverse-QCD label perturbed a vertex; additive same-rank edge/vertex controls, journal completion/archived-version and duplicate4-graph qualifications preserved.",
+    "definition_limit": "Native subset-tag parsing is not attribute/tag identity evidence; exact definition tables remain premises."
+  },
+  "failures_retained": [
+    {
+      "kind": "qualification infrastructure",
+      "result": "premature call KeyError before build completion; no new build or test credit",
+      "path": "qualification/qualify.stderr.premature-attempt1"
+    },
+    {
+      "kind": "pure loader preflight",
+      "result": "libstd visited before libgcc carrier discovery; queue ordering corrected; no license delivered or tests executed",
+      "path": "qualification/runtime-driver-attempt1.stderr"
+    },
+    {
+      "kind": "initial tool lookup",
+      "result": "Unqualified python3 lookup exited127 before the guard script ran; corrected to explicit existing pinned interpreter. No test or license delivery.",
+      "path": "qualification/initial-tool-setup.json"
+    }
+  ],
+  "build_warnings": "Existing Clarabel unused import and elided-lifetime warnings retained; no lint fixes or test weakening.",
+  "remaining_gates": [
+    "NEW independent integration review of this candidate",
+    "other3 raw rows: declared interfaces and ordered consumers",
+    "groupedAuto and full371 lane",
+    "M-rebuild and combined/WP3/whole-workspace integration approval",
+    "installed-host/browser/stub/full-docs/performance/distribution/publication"
+  ],
+  "guard": {
+    "base_preserved": "48d0b98b97b368b2a2f58abe67cb19dddec623df",
+    "code_preserved": "605178a65620b104805b012f1edc299710e8a176",
+    "main_HEAD_index_packed_refs_equal": true,
+    "preexisting_git_refs_equal": true,
+    "new_git_refs": {
+      "refs/jj/keep/605178a65620b104805b012f1edc299710e8a176": "605178a65620b104805b012f1edc299710e8a176",
+      "refs/jj/keep/c6ce197c21cde2cd613ee6f40dee99fc0ff58904": "c6ce197c21cde2cd613ee6f40dee99fc0ff58904",
+      "refs/jj/keep/ecd9bf8d1395b895229130a08df74867b8e9665f": "ecd9bf8d1395b895229130a08df74867b8e9665f",
+      "refs/jj/keep/f30976eb1c25e0b564be0cae402fa44912a13fdf": "f30976eb1c25e0b564be0cae402fa44912a13fdf"
+    },
+    "generation_integration": "fdff0d18953348b84a0f1b7e6ab5ef703a5090de",
+    "CI": false,
+    "all118_ordered_scopes_and_digests_unchanged": true,
+    "scope_anchors_loosened": false,
+    "preexisting_notes_unchanged": true,
+    "new_note_approval_claim": false,
+    "full_source_and_runtime_ELF_libraries_rehashed": true,
+    "runtime_27_results_reparsed": true
+  },
+  "canonical_note": {
+    "path": "docs/architecture/generation-sm-eeww-migration.typ",
+    "sha256": "07bcafe949790c34a82cda0b5a6a7c7a0ec8577681cd2ccb9bc69e602c7d3456",
+    "standalone_compile": "PASS; final PDF ignored, no full-site/doc-suite claim"
+  },
+  "process": {
+    "delegations": 0,
+    "owned_background_processes_remaining": [],
+    "publication_push_fetch_PR_upload_label": false,
+    "old_history_bookmarks_main_index_rewritten": false,
+    "integration_ref_advanced": false,
+    "CI": false,
+    "budget_policy_changed": false,
+    "twenty_GiB_proposal_adopted": false
+  },
+  "retention": {
+    "tracked": "Scoped verbatim approval/bindings, actual producer qualification, commands, JUnit/logs and receipt.",
+    "ignored_holder": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/sm-eeww-migration-20261031",
+    "ignored_purpose": "Actual archive/extraction, fingerprints, complete queries/failed setup artifacts and standalone PDF retained for independent review; shared caches and host-task productions untouched."
+  }
+}

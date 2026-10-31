@@ -1,0 +1,18 @@
+{
+  "argv": [
+    "nix",
+    "log",
+    "/nix/store/2dzws1cgqxqr08wc12cgv7n5b78g3ca5-gammaloop-crate-test-binaries-feynkit-generator-b6f177b7bc15beb1-deps-0.1.0.drv"
+  ],
+  "cwd": "/tmp",
+  "license_keys_removed": [
+    "SYMBOLICA_LICENSE",
+    "SYMBOLICA_LICENSE_PATH",
+    "SYMBOLICA_LICENSE_SIGNED"
+  ],
+  "start": "2026-10-31T00:14:46.864257+00:00",
+  "exit": 0,
+  "end": "2026-10-31T00:14:46.984486+00:00",
+  "stdout_sha256": "d1c055f0b286ba28b98851f85c1e43c5a6cf1fa3fc39f08483f837003cf52b35",
+  "stderr_sha256": "0875018bd89ff5d89bb32886df2050dc060e1522e624c4fea41497f76a177242"
+}

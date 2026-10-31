@@ -1,0 +1,25 @@
+{
+  "approval_sha256": "096128cbe5cabf7159c4c6039fd7bd693d19c1bad60ca2533c656bd2a9356335",
+  "original_packet": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-four-migration-preparation-20261030-r1",
+  "verified_packet_entries": 447,
+  "copied_verbatim": {
+    "approval/review.json": "096128cbe5cabf7159c4c6039fd7bd693d19c1bad60ca2533c656bd2a9356335",
+    "preparation/process-disclosure.json": "938bdb224e234059fb651d3b7d5f6680febbc32013a85e6678e37c632cf63ca1",
+    "preparation/additional-negative-controls.json": "93258ec7b893111d27d8de75d533a4d83cc2810aaccb0af381d54bb1a08a55d8",
+    "preparation/guard-final.json": "a8e13c815e8e16ca9696a41088750f35a4f1d62b99213dd173c0449b4a46c6ab",
+    "preparation/native-reuse-index.json": "c8c8f7becb9ecbdde18a6c458a40a5fd8654afbeb65a434c1ab46527fe9ecdbb",
+    "preparation/concurrent-metadata-disclosure.json": "6523fb8fd2f183a70f7e0a69d7a8e5ad511c30ce8928e49bad7e3ec0b061ffcf",
+    "preparation/negative-controls.json": "0e80ba7fd68254a6d7ab183e684ce5f8c675d2d81044cd35d6ff6f2370b2eaeb",
+    "preparation/handoff.json": "d696b93c4b85fb3b733f09cd57f833858efac8a672ee1a4471f5fe87dbb49544",
+    "preparation/final-validation.json": "cab9edca7d04369c845bd0b69c8e8366da5acc3c1a14128a04af37f5e7e0c951",
+    "preparation/source-boundaries.json": "373110bfd8c339de1275268234c747f783f5dc13adff30adb5cecce004470b00",
+    "preparation/relevant-source-invariance.json": "49f9febff5887918126f49a4317b21523f1a89574c8656ec61c564d91d9578a0",
+    "preparation/SHA256SUMS": "4df30037ad00d50fbceb65d34b221daaf4eeefa0bfd7406275edca3cfda91a0f",
+    "preparation/proposed-not-applied.patch": "8746bdbf6418e2fa67a5480ac61e548394bbf000b270c11422e51085b2d535c9",
+    "preparation/patch-binding.json": "7d549408ff0a74327d9dcf72df7e25b164f486c74424fdeab56065088461476d",
+    "preparation/boundary-verification.json": "f9e47136d355ca2cdc085ad6becc1ea4baccbfbbd53e2b08e52b92f059f11ed5",
+    "preparation/SEAL.json": "cfaf891b7c88327a11999c8b252edeecba4262c9b075fa3b4aaef5683f38ca6a",
+    "preparation/original-failure-and-reviewer-audit.json": "8cdf2e75576babc2c29587536da5ecf4767aede1e5b7b3765e400c9bbf60666d"
+  },
+  "original_packets_immutable": true
+}

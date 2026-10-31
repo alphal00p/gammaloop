@@ -1,0 +1,209 @@
+{
+  "code": "605178a65620b104805b012f1edc299710e8a176",
+  "archive_sha256": "4076ada2455f2a8ad90ad271087d095b8aa2b38bde4169fce844ee221c91ebfe",
+  "oracle_elf": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/sm-eeww-migration-20261031/archive-extracted/target/ci-optim/deps/generation_oracle-3892f55f31822180",
+    "sha256": "f68d94f23c9c12696583f2902b6f949f29143d55864b017613c68d94b4da6538",
+    "size": 61186320
+  },
+  "results": [
+    {
+      "pool": 1,
+      "exit": 0,
+      "outcomes": [
+        {
+          "case": "xs_qed_eedd_L1",
+          "status": "passed",
+          "time": "0.091",
+          "classname": "feynkit-generator::generation_oracle"
+        },
+        {
+          "case": "xs_qed_eemm_L1",
+          "status": "passed",
+          "time": "0.097",
+          "classname": "feynkit-generator::generation_oracle"
+        },
+        {
+          "case": "sm_eemm_L0",
+          "status": "passed",
+          "time": "0.097",
+          "classname": "feynkit-generator::generation_oracle"
+        },
+        {
+          "case": "xs_qed_eeee_1pi_L1",
+          "status": "passed",
+          "time": "0.097",
+          "classname": "feynkit-generator::generation_oracle"
+        },
+        {
+          "case": "sm_eeww_L0",
+          "status": "passed",
+          "time": "0.104",
+          "classname": "feynkit-generator::generation_oracle"
+        },
+        {
+          "case": "qed_eemm_L1",
+          "status": "passed",
+          "time": "0.132",
+          "classname": "feynkit-generator::generation_oracle"
+        },
+        {
+          "case": "xs_qed_eemm_L2",
+          "status": "passed",
+          "time": "0.236",
+          "classname": "feynkit-generator::generation_oracle"
+        },
+        {
+          "case": "ctorder_qcd_uugg_L1",
+          "status": "passed",
+          "time": "0.580",
+          "classname": "feynkit-generator::generation_oracle"
+        },
+        {
+          "case": "ym_g6_L0",
+          "status": "passed",
+          "time": "0.621",
+          "classname": "feynkit-generator::generation_oracle"
+        }
+      ],
+      "actual_executions": 9,
+      "junit": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/sm-eeww-migration-20261031/pool1/nextest/ci_gammaloop/junit.xml",
+      "junit_sha256": "659ac545c8acec704882116b7b6c96cc3d6dc6208652fb540bb0752025d266d7",
+      "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/sm-eeww-migration-20261031/pool1/command.json"
+    },
+    {
+      "pool": 8,
+      "exit": 0,
+      "outcomes": [
+        {
+          "case": "sm_eeww_L0",
+          "status": "passed",
+          "time": "0.087",
+          "classname": "feynkit-generator::generation_oracle"
+        },
+        {
+          "case": "xs_qed_eedd_L1",
+          "status": "passed",
+          "time": "0.091",
+          "classname": "feynkit-generator::generation_oracle"
+        },
+        {
+          "case": "xs_qed_eeee_1pi_L1",
+          "status": "passed",
+          "time": "0.091",
+          "classname": "feynkit-generator::generation_oracle"
+        },
+        {
+          "case": "xs_qed_eemm_L1",
+          "status": "passed",
+          "time": "0.094",
+          "classname": "feynkit-generator::generation_oracle"
+        },
+        {
+          "case": "sm_eemm_L0",
+          "status": "passed",
+          "time": "0.097",
+          "classname": "feynkit-generator::generation_oracle"
+        },
+        {
+          "case": "qed_eemm_L1",
+          "status": "passed",
+          "time": "0.118",
+          "classname": "feynkit-generator::generation_oracle"
+        },
+        {
+          "case": "xs_qed_eemm_L2",
+          "status": "passed",
+          "time": "0.190",
+          "classname": "feynkit-generator::generation_oracle"
+        },
+        {
+          "case": "ym_g6_L0",
+          "status": "passed",
+          "time": "0.485",
+          "classname": "feynkit-generator::generation_oracle"
+        },
+        {
+          "case": "ctorder_qcd_uugg_L1",
+          "status": "passed",
+          "time": "0.490",
+          "classname": "feynkit-generator::generation_oracle"
+        }
+      ],
+      "actual_executions": 9,
+      "junit": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/sm-eeww-migration-20261031/pool8/nextest/ci_gammaloop/junit.xml",
+      "junit_sha256": "524108c6723a5e264413e28bccb974e1c33e11ba78907ea72a50744e55c8c9cb",
+      "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/sm-eeww-migration-20261031/pool8/command.json"
+    },
+    {
+      "pool": 32,
+      "exit": 0,
+      "outcomes": [
+        {
+          "case": "sm_eemm_L0",
+          "status": "passed",
+          "time": "0.110",
+          "classname": "feynkit-generator::generation_oracle"
+        },
+        {
+          "case": "xs_qed_eedd_L1",
+          "status": "passed",
+          "time": "0.114",
+          "classname": "feynkit-generator::generation_oracle"
+        },
+        {
+          "case": "xs_qed_eemm_L1",
+          "status": "passed",
+          "time": "0.114",
+          "classname": "feynkit-generator::generation_oracle"
+        },
+        {
+          "case": "xs_qed_eeee_1pi_L1",
+          "status": "passed",
+          "time": "0.124",
+          "classname": "feynkit-generator::generation_oracle"
+        },
+        {
+          "case": "sm_eeww_L0",
+          "status": "passed",
+          "time": "0.145",
+          "classname": "feynkit-generator::generation_oracle"
+        },
+        {
+          "case": "qed_eemm_L1",
+          "status": "passed",
+          "time": "0.147",
+          "classname": "feynkit-generator::generation_oracle"
+        },
+        {
+          "case": "xs_qed_eemm_L2",
+          "status": "passed",
+          "time": "0.199",
+          "classname": "feynkit-generator::generation_oracle"
+        },
+        {
+          "case": "ctorder_qcd_uugg_L1",
+          "status": "passed",
+          "time": "0.518",
+          "classname": "feynkit-generator::generation_oracle"
+        },
+        {
+          "case": "ym_g6_L0",
+          "status": "passed",
+          "time": "0.520",
+          "classname": "feynkit-generator::generation_oracle"
+        }
+      ],
+      "actual_executions": 9,
+      "junit": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/sm-eeww-migration-20261031/pool32/nextest/ci_gammaloop/junit.xml",
+      "junit_sha256": "f4d2877e25b34198446ea033adf789e5c95f6412fc6a44711e5e1df28ed0b071",
+      "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/sm-eeww-migration-20261031/pool32/command.json"
+    }
+  ],
+  "expected_selected_executions": 27,
+  "actual_executions": 27,
+  "passes": 27,
+  "failures": 0,
+  "skip_credit": 0,
+  "proof_scope": "Prior finite SM proof remains pool1; pools8/32 are runtime evidence only."
+}

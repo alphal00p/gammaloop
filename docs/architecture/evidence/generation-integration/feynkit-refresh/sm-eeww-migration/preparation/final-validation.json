@@ -1,0 +1,215 @@
+{
+  "status": "PURE_IMPLEMENTATION_VALIDATION_PASS_WITH_DISCLOSED_CONCURRENT_METADATA_FAILURE",
+  "approval": false,
+  "python_syntax": [
+    {
+      "path": "audit.py",
+      "sha256": "0da0bd766d232144171aa23c6f75541a912cb97f195378fc025a3d1fa5064345"
+    },
+    {
+      "path": "bootstrap.py",
+      "sha256": "7e7adca659485f3b662caecc12c94c36af20d644153ed9763851e9a0b932d9ad"
+    },
+    {
+      "path": "boundary.py",
+      "sha256": "344a6f3fe95f0a811544a908c387510e6a1ce261cb5ea0dbe8e1ae4e494f6a9b"
+    },
+    {
+      "path": "complete.py",
+      "sha256": "dee76da1f73a7a5e84a84bf4f7f0ffb0cb0a3356b8e2fa6f223bf21fd1e5f18e"
+    },
+    {
+      "path": "extra_controls.py",
+      "sha256": "2b6d661e5860573f0d2feb3e4cbaec4c4a54f9d8d70a8a40576993b23620ccaa"
+    },
+    {
+      "path": "guard_end.py",
+      "sha256": "8450da72473c439cb7926729b86369e40edc3469ee7a41147e3046827c0638d7"
+    },
+    {
+      "path": "handoff.py",
+      "sha256": "30ec49a5b542138ed2fa46daade33fc5c99896dd5be2f1bc2737f22870cbbe9f"
+    },
+    {
+      "path": "journal.py",
+      "sha256": "d70427d7fa1b00f932e9eaccaf59d53ee59189a00b6b22170de1c178991dfbdc"
+    },
+    {
+      "path": "metadata_disclosure.py",
+      "sha256": "2b8d1945df2418b0a77ac0401d3ffbaf8b933733b84c53c8c4a98eaf4632d2f6"
+    },
+    {
+      "path": "parser_pure.py",
+      "sha256": "d9d8619adb9f38b9e8000e4f5375acc687cd6209c82dbc3bbd6015baf405df38"
+    },
+    {
+      "path": "prepare.py",
+      "sha256": "f7d4cf01fe20e5e35b12c8e4b89df57a8221f323037d2bda84b63a3e82282b19"
+    },
+    {
+      "path": "record.py",
+      "sha256": "2233f462d72620822f1a0528c7855df9955ec3135640feee3112caa705f1413f"
+    },
+    {
+      "path": "reuse.py",
+      "sha256": "e9d74343af43ffccc1442c8f795d631a8eabadee22d1f68556ee3aee303be61a"
+    },
+    {
+      "path": "seal.py",
+      "sha256": "0b87462584e724915c422e3381936d427da48f6948234f613b1eb972019978c4"
+    },
+    {
+      "path": "source-versions/0b87462584e724915c422e3381936d427da48f6948234f613b1eb972019978c4/seal.py",
+      "sha256": "0b87462584e724915c422e3381936d427da48f6948234f613b1eb972019978c4"
+    },
+    {
+      "path": "source-versions/0da0bd766d232144171aa23c6f75541a912cb97f195378fc025a3d1fa5064345/audit.py",
+      "sha256": "0da0bd766d232144171aa23c6f75541a912cb97f195378fc025a3d1fa5064345"
+    },
+    {
+      "path": "source-versions/13d4b7eb499cd2276e960bee711059d0f5c23c446431954bebf2edc9aa2c05ec/handoff.py",
+      "sha256": "13d4b7eb499cd2276e960bee711059d0f5c23c446431954bebf2edc9aa2c05ec"
+    },
+    {
+      "path": "source-versions/2233f462d72620822f1a0528c7855df9955ec3135640feee3112caa705f1413f/record.py",
+      "sha256": "2233f462d72620822f1a0528c7855df9955ec3135640feee3112caa705f1413f"
+    },
+    {
+      "path": "source-versions/2b6d661e5860573f0d2feb3e4cbaec4c4a54f9d8d70a8a40576993b23620ccaa/extra_controls.py",
+      "sha256": "2b6d661e5860573f0d2feb3e4cbaec4c4a54f9d8d70a8a40576993b23620ccaa"
+    },
+    {
+      "path": "source-versions/2b8d1945df2418b0a77ac0401d3ffbaf8b933733b84c53c8c4a98eaf4632d2f6/metadata_disclosure.py",
+      "sha256": "2b8d1945df2418b0a77ac0401d3ffbaf8b933733b84c53c8c4a98eaf4632d2f6"
+    },
+    {
+      "path": "source-versions/30ec49a5b542138ed2fa46daade33fc5c99896dd5be2f1bc2737f22870cbbe9f/handoff.py",
+      "sha256": "30ec49a5b542138ed2fa46daade33fc5c99896dd5be2f1bc2737f22870cbbe9f"
+    },
+    {
+      "path": "source-versions/344a6f3fe95f0a811544a908c387510e6a1ce261cb5ea0dbe8e1ae4e494f6a9b/boundary.py",
+      "sha256": "344a6f3fe95f0a811544a908c387510e6a1ce261cb5ea0dbe8e1ae4e494f6a9b"
+    },
+    {
+      "path": "source-versions/7d91f29a3b36fc8e0cdca72a1347747be4dda9ca08974739ed3a9cb573468d88/record.py",
+      "sha256": "7d91f29a3b36fc8e0cdca72a1347747be4dda9ca08974739ed3a9cb573468d88"
+    },
+    {
+      "path": "source-versions/7e7adca659485f3b662caecc12c94c36af20d644153ed9763851e9a0b932d9ad/bootstrap.py",
+      "sha256": "7e7adca659485f3b662caecc12c94c36af20d644153ed9763851e9a0b932d9ad"
+    },
+    {
+      "path": "source-versions/8450da72473c439cb7926729b86369e40edc3469ee7a41147e3046827c0638d7/guard_end.py",
+      "sha256": "8450da72473c439cb7926729b86369e40edc3469ee7a41147e3046827c0638d7"
+    },
+    {
+      "path": "source-versions/b0b5e41058defc3cff42beabef98af181519718e0c5a3b7c500cf99b93972c10/audit.py",
+      "sha256": "b0b5e41058defc3cff42beabef98af181519718e0c5a3b7c500cf99b93972c10"
+    },
+    {
+      "path": "source-versions/c463027983b92ad2dc4e4ba0daa0c1661902ae6553c32b2c2dd4de55260eec43/prepare.py",
+      "sha256": "c463027983b92ad2dc4e4ba0daa0c1661902ae6553c32b2c2dd4de55260eec43"
+    },
+    {
+      "path": "source-versions/d70427d7fa1b00f932e9eaccaf59d53ee59189a00b6b22170de1c178991dfbdc/journal.py",
+      "sha256": "d70427d7fa1b00f932e9eaccaf59d53ee59189a00b6b22170de1c178991dfbdc"
+    },
+    {
+      "path": "source-versions/d9d8619adb9f38b9e8000e4f5375acc687cd6209c82dbc3bbd6015baf405df38/parser_pure.py",
+      "sha256": "d9d8619adb9f38b9e8000e4f5375acc687cd6209c82dbc3bbd6015baf405df38"
+    },
+    {
+      "path": "source-versions/dee76da1f73a7a5e84a84bf4f7f0ffb0cb0a3356b8e2fa6f223bf21fd1e5f18e/complete.py",
+      "sha256": "dee76da1f73a7a5e84a84bf4f7f0ffb0cb0a3356b8e2fa6f223bf21fd1e5f18e"
+    },
+    {
+      "path": "source-versions/e7ef0aefd6b60f36af8a5c4401f98d0b880878f6cedfb1b759c4fb8443f4c3f1/prepare.py",
+      "sha256": "e7ef0aefd6b60f36af8a5c4401f98d0b880878f6cedfb1b759c4fb8443f4c3f1"
+    },
+    {
+      "path": "source-versions/e9d74343af43ffccc1442c8f795d631a8eabadee22d1f68556ee3aee303be61a/reuse.py",
+      "sha256": "e9d74343af43ffccc1442c8f795d631a8eabadee22d1f68556ee3aee303be61a"
+    },
+    {
+      "path": "source-versions/ed09731d08bdd5b06df9bdfb7eac1901518a22ec5de6d119c8f8161f5e7c6fad/prepare.py",
+      "sha256": "ed09731d08bdd5b06df9bdfb7eac1901518a22ec5de6d119c8f8161f5e7c6fad"
+    },
+    {
+      "path": "source-versions/f7d4cf01fe20e5e35b12c8e4b89df57a8221f323037d2bda84b63a3e82282b19/prepare.py",
+      "sha256": "f7d4cf01fe20e5e35b12c8e4b89df57a8221f323037d2bda84b63a3e82282b19"
+    }
+  ],
+  "immutable_source_blob_checks": 311,
+  "tracked_changed": [],
+  "recorded_commands": [
+    {
+      "command": "additional-controls-v1",
+      "exit": 0,
+      "result_sha256": "9571b207a07fbaad4ec5e14a4952b28041df42268014b98041e928a44fed583a"
+    },
+    {
+      "command": "audit-v1",
+      "exit": 1,
+      "result_sha256": "817a81b7e5b966c2a590e19b489680a538afddbc4fb58dd3df2744507db38569"
+    },
+    {
+      "command": "audit-v2",
+      "exit": 0,
+      "result_sha256": "1cb4b39423e9755ce1b3aaf3f71ba1a6486f81fa6f339bc773247630f9f20363"
+    },
+    {
+      "command": "boundary-v1",
+      "exit": 0,
+      "result_sha256": "16a74e5fd46a7fcc878b657c11015178d294e56d6e1bb92ed835017470e2ddfe"
+    },
+    {
+      "command": "final-invariance-v1",
+      "exit": 1,
+      "result_sha256": "2f40b42b83301796c0785305029c3f0eb0f0ce959426404f3cf4598531d5f0ed"
+    },
+    {
+      "command": "handoff-v1",
+      "exit": 0,
+      "result_sha256": "bc7c86f11574b358b110bf7b54cb5e377c1972b03cb1fea4ac61c71f84d13048"
+    },
+    {
+      "command": "metadata-disclosure-v1",
+      "exit": 0,
+      "result_sha256": "d76a71396efdec7dd9ac33e499a980198652d8365e52bb9d31021b3d08a55152"
+    },
+    {
+      "command": "native-reuse-v1",
+      "exit": 0,
+      "result_sha256": "1ce1bdde1100e4b9a8004e8b38dbdb79eb11caaad2d205a2dbc4a8d09c39702a"
+    },
+    {
+      "command": "prepare-v1",
+      "exit": 1,
+      "result_sha256": "9128af234b94ef750d1225026060c69bfc060b1b94542791801c5b40c11a0278"
+    },
+    {
+      "command": "prepare-v2",
+      "exit": 1,
+      "result_sha256": "ec86061601b8be36a3f7bdeb10cb9557327999aaaf9826cfd33c7c258ec7e46f"
+    },
+    {
+      "command": "prepare-v3",
+      "exit": 1,
+      "result_sha256": "66f6ce1c12ea4d927534a02344b964d432c16e905bdacd3b0634ad6ee146d62c"
+    },
+    {
+      "command": "prepare-v4",
+      "exit": 0,
+      "result_sha256": "f7640d9821aa889605c508c112fcc264efd97cf0948ada3f5126b092ed8f74f3"
+    }
+  ],
+  "current_completion": "Parent journal writes this command's observed exit after completion; no self-asserted exit is evidence.",
+  "frozen_evidence_guard": "7218 entries unchanged",
+  "consumed_input_guard": "510 inputs unchanged",
+  "jj_ref_invariance": "FAILED from concurrent external grouped-task operations; original exit1 retained",
+  "negative_controls": 15,
+  "prior_successful_native_batches_reused": 72,
+  "proposed_tokens": 1,
+  "applied_tokens": 0,
+  "native_product_build_network_delegation": 0
+}

@@ -1,0 +1,443 @@
+────────────
+ Nextest run ID f2ce6b13-5760-4ebb-8215-c3abc0d055bd with nextest profile: ci_gammaloop
+    Starting 9 tests across 1 binary (174 tests and 3 binaries skipped)
+        SKIP [         ] (───) feynkit-generator::generation_oracle census::census_weights_substitute_parameters_only_in_group_ratios
+        SKIP [         ] (───) feynkit-generator::generation_oracle census::class_factor_bindings_reject_invalid_provenance_or_weights
+        SKIP [         ] (───) feynkit-generator::generation_oracle census::payload_comparisons_preserve_semantics_and_reject_truncated_storage
+        SKIP [         ] (───) feynkit-generator::generation_oracle census::payload_storage_preserves_content_and_clone_lifetime
+        SKIP [         ] (───) feynkit-generator::generation_oracle census::streamed_exact_dump_matches_original_diagram_values
+        SKIP [         ] (───) feynkit-generator::generation_oracle classes::cut_amplitude_orders_and_unresolved_membership_preserve_class_content
+        SKIP [         ] (───) feynkit-generator::generation_oracle classes::mass_selective_vetoes_preserve_physical_content
+        SKIP [         ] (───) feynkit-generator::generation_oracle classes::restrictions_preserve_original_ids_and_empty_intersections
+        SKIP [         ] (───) feynkit-generator::generation_oracle classes::unrestricted_sm_uudd_retains_every_original_rule
+        SKIP [         ] (───) feynkit-generator::generation_oracle counterterm_copies_weight_every_rule_choice
+        SKIP [         ] (───) feynkit-generator::generation_oracle counterterm_orders_select_rule_choices_by_count
+        SKIP [         ] (───) feynkit-generator::generation_oracle ct_phi3_2pt_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle ct_phi3_2pt_tad_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle ct_phi3_vac_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle ct_phi3_vac_L3
+        SKIP [         ] (───) feynkit-generator::generation_oracle ct_phi3_vac_L4
+        SKIP [         ] (───) feynkit-generator::generation_oracle ct_qcd_gggg_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle ct_qcd_uugg_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle ct_qcd_vac_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle ct_qcd_vac_L3
+        SKIP [         ] (───) feynkit-generator::generation_oracle ctorder_phi3_vac_L4
+        SKIP [         ] (───) feynkit-generator::generation_oracle ctorder_qcd_gggg_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle ctorder_qcd_vac_L3
+        SKIP [         ] (───) feynkit-generator::generation_oracle ew_eemm_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle ew_eemm_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle frame_certificate::d65_prefactor_constructor_admission
+        SKIP [         ] (───) feynkit-generator::generation_oracle frame_certificate::model_fingerprint_from_file
+        SKIP [         ] (───) feynkit-generator::generation_oracle frames::certificate_massless_qed_model
+        SKIP [         ] (───) feynkit-generator::generation_oracle frames::comparison_frames_with_fermion_flow_reversals
+        SKIP [         ] (───) feynkit-generator::generation_oracle frames::representative_frames_with_fermion_flow_reversals
+        SKIP [         ] (───) feynkit-generator::generation_oracle frames::representative_frames_with_left_right_symmetrization
+        SKIP [         ] (───) feynkit-generator::generation_oracle ids_do_not_depend_on_threads_or_symbol_registration
+        SKIP [         ] (───) feynkit-generator::generation_oracle in_flight_filters_select_like_vetoes_and_post_filtering
+        SKIP [         ] (───) feynkit-generator::generation_oracle index_registration_child_failure_propagates
+        SKIP [         ] (───) feynkit-generator::generation_oracle oracle_rows_cover_every_case
+        SKIP [         ] (───) feynkit-generator::generation_oracle outputs_do_not_depend_on_index_registration_order_decreasing_1
+        SKIP [         ] (───) feynkit-generator::generation_oracle outputs_do_not_depend_on_index_registration_order_decreasing_32
+        SKIP [         ] (───) feynkit-generator::generation_oracle outputs_do_not_depend_on_index_registration_order_decreasing_8
+        SKIP [         ] (───) feynkit-generator::generation_oracle outputs_do_not_depend_on_index_registration_order_generation_1
+        SKIP [         ] (───) feynkit-generator::generation_oracle outputs_do_not_depend_on_index_registration_order_generation_32
+        SKIP [         ] (───) feynkit-generator::generation_oracle outputs_do_not_depend_on_index_registration_order_generation_8
+        SKIP [         ] (───) feynkit-generator::generation_oracle outputs_do_not_depend_on_index_registration_order_increasing_1
+        SKIP [         ] (───) feynkit-generator::generation_oracle outputs_do_not_depend_on_index_registration_order_increasing_32
+        SKIP [         ] (───) feynkit-generator::generation_oracle outputs_do_not_depend_on_index_registration_order_increasing_8
+        SKIP [         ] (───) feynkit-generator::generation_oracle outputs_do_not_depend_on_index_registration_order_shuffled_1
+        SKIP [         ] (───) feynkit-generator::generation_oracle outputs_do_not_depend_on_index_registration_order_shuffled_32
+        SKIP [         ] (───) feynkit-generator::generation_oracle outputs_do_not_depend_on_index_registration_order_shuffled_8
+        SKIP [         ] (───) feynkit-generator::generation_oracle phi34_2pt_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle phi34_2pt_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle phi34_2pt_L3
+        SKIP [         ] (───) feynkit-generator::generation_oracle phi34_2pt_L4
+        SKIP [         ] (───) feynkit-generator::generation_oracle phi34_2pt_L5
+        SKIP [         ] (───) feynkit-generator::generation_oracle phi34_2pt_identical_L3
+        SKIP [         ] (───) feynkit-generator::generation_oracle phi3_2pt_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle phi3_2pt_tad_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle phi3_vac_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle phi3_vac_L3
+        SKIP [         ] (───) feynkit-generator::generation_oracle phi3_vac_L4
+        SKIP [         ] (───) feynkit-generator::generation_oracle phi3_vac_L5
+        SKIP [         ] (───) feynkit-generator::generation_oracle phi3_vac_L6
+        SKIP [         ] (───) feynkit-generator::generation_oracle phi3_vac_L7
+        SKIP [         ] (───) feynkit-generator::generation_oracle phi4_vac_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle phi4_vac_L3
+        SKIP [         ] (───) feynkit-generator::generation_oracle phi4_vac_L4
+        SKIP [         ] (───) feynkit-generator::generation_oracle phi4_vac_L5
+        SKIP [         ] (───) feynkit-generator::generation_oracle phi4_vac_L6
+        SKIP [         ] (───) feynkit-generator::generation_oracle phi4_vac_L7
+        SKIP [         ] (───) feynkit-generator::generation_oracle printed_numerators_do_not_depend_on_threads
+        SKIP [         ] (───) feynkit-generator::generation_oracle qcd_gggg_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle qcd_gggg_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle qcd_gggg_L3
+        SKIP [         ] (───) feynkit-generator::generation_oracle qcd_gggg_floop1_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle qcd_gggg_ghost_filter_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle qcd_gggg_ghost_veto_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle qcd_gggg_identical_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle qcd_gggg_scalar_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle qcd_gggg_sign_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle qcd_gggg_sym_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle qcd_ggggg_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle qcd_ggggg_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle qcd_gse_L3
+        SKIP [         ] (───) feynkit-generator::generation_oracle qcd_gse_L4
+        SKIP [         ] (───) feynkit-generator::generation_oracle qcd_gse_L5
+        SKIP [         ] (───) feynkit-generator::generation_oracle qcd_gse_all_L3
+        SKIP [         ] (───) feynkit-generator::generation_oracle qcd_gse_all_floop1_dfilter_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle qcd_tad_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle qcd_tad_L3
+        SKIP [         ] (───) feynkit-generator::generation_oracle qcd_uugg_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle qcd_uugg_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle qcd_uugg_L3
+        SKIP [         ] (───) feynkit-generator::generation_oracle qcd_uuuu_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle qcd_vac1pi_L4
+        SKIP [         ] (───) feynkit-generator::generation_oracle qcd_vac1pi_L5
+        SKIP [         ] (───) feynkit-generator::generation_oracle qcd_vac_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle qcd_vac_L3
+        SKIP [         ] (───) feynkit-generator::generation_oracle qcd_vac_L4
+        SKIP [         ] (───) feynkit-generator::generation_oracle qed_ase_L3
+        SKIP [         ] (───) feynkit-generator::generation_oracle qed_ase_L4
+        SKIP [         ] (───) feynkit-generator::generation_oracle qed_ase_L5
+        SKIP [         ] (───) feynkit-generator::generation_oracle qed_ase_floop2_L3
+        SKIP [         ] (───) feynkit-generator::generation_oracle qed_ee4f_L0
+        SKIP [         ] (───) feynkit-generator::generation_oracle qed_ee4f_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle qed_ee4f_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle qed_ee4f_identical_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle qed_ee4f_scalar_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle qed_ee4f_sign_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle qed_eeaa_identical_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle qed_eeaa_identical_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle qed_eeaa_scalar_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle qed_eeaa_scalar_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle qed_eeaa_sign_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle qed_eeaa_sign_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle qed_eeaaa_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle qed_eeaaa_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle qed_eemm_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle qed_eemm_L3
+        SKIP [         ] (───) feynkit-generator::generation_oracle qed_eemm_identical_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle qed_eemm_scalar_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle qed_eemm_sign_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle qed_ese_L3
+        SKIP [         ] (───) feynkit-generator::generation_oracle qed_ese_L4
+        SKIP [         ] (───) feynkit-generator::generation_oracle sm_ase_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle sm_ee4f_L0
+        SKIP [         ] (───) feynkit-generator::generation_oracle sm_ee4f_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle sm_eemm_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle sm_eemm_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle sm_eemm_floop0_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle sm_eemm_floop1_tfilter_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle sm_eemm_identical_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle sm_eemm_qcd0_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle sm_eemm_qcd0_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle sm_eemm_qed4_L0to1
+        SKIP [         ] (───) feynkit-generator::generation_oracle sm_eemm_scalar_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle sm_eemm_sign_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle sm_eeww_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle sm_ggtt_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle sm_ggttg_L0
+        SKIP [         ] (───) feynkit-generator::generation_oracle sm_ggttg_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle sm_hse_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle sm_hse_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle sm_uudd_qcd2_qed2_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle sm_uudd_qcd3_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle sm_uudd_qed2_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle sm_uudd_qed2_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle xs_qcd_gggg_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle xs_qcd_gggg_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle xs_qcd_gggg_sym_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle xs_qcd_gguu_1pi_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle xs_qcd_gguu_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle xs_qcd_gguu_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle xs_qcd_gguu_sym_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle xs_qcdqed_addx_canonical_scalar_lr_L3
+        SKIP [         ] (───) feynkit-generator::generation_oracle xs_qed_aaee_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle xs_qed_aaee_lr_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle xs_qed_aaee_sym_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle xs_qed_aaee_sym_lr_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle xs_qed_eeaa_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle xs_qed_eedd_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle xs_qed_eeee_1pi_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle xs_qed_eeee_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle xs_qed_eeee_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle xs_qed_eemm_L3
+        SKIP [         ] (───) feynkit-generator::generation_oracle xs_qed_eemm_identical_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle xs_qed_eemm_scalar_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle xs_qed_eemm_sign_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle xs_sm_eemm_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle xs_sm_eemm_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle xs_sm_uudd_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle ym_g7_L0
+        SKIP [         ] (───) feynkit-generator::generation_oracle ym_g8_L0
+        SKIP [         ] (───) feynkit-generator::generation_oracle ym_ggg_zero_color_L3
+        SKIP [         ] (───) feynkit-generator::generation_oracle ym_gse_L4
+        SKIP [         ] (───) feynkit-generator::generation_oracle ym_gse_L5
+        SKIP [         ] (───) feynkit-generator::generation_oracle ym_vac_L5
+        PASS [   0.091s] (1/9) feynkit-generator::generation_oracle xs_qed_eedd_L1
+        PASS [   0.097s] (2/9) feynkit-generator::generation_oracle xs_qed_eemm_L1
+        PASS [   0.097s] (3/9) feynkit-generator::generation_oracle sm_eemm_L0
+        PASS [   0.097s] (4/9) feynkit-generator::generation_oracle xs_qed_eeee_1pi_L1
+        PASS [   0.104s] (5/9) feynkit-generator::generation_oracle sm_eeww_L0
+        PASS [   0.132s] (6/9) feynkit-generator::generation_oracle qed_eemm_L1
+        PASS [   0.236s] (7/9) feynkit-generator::generation_oracle xs_qed_eemm_L2
+        PASS [   0.580s] (8/9) feynkit-generator::generation_oracle ctorder_qcd_uugg_L1
+        PASS [   0.621s] (9/9) feynkit-generator::generation_oracle ym_g6_L0
+────────────
+     Summary [   0.627s] 9 tests run: 9 passed, 174 skipped
+        PASS [   0.091s] (1/9) feynkit-generator::generation_oracle xs_qed_eedd_L1
+  stdout ───
+
+    running 1 test
+    test xs_qed_eedd_L1 ... ok
+
+    test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 182 filtered out; finished in 0.07s
+
+
+        PASS [   0.097s] (2/9) feynkit-generator::generation_oracle xs_qed_eemm_L1
+  stdout ───
+
+    running 1 test
+    test xs_qed_eemm_L1 ... ok
+
+    test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 182 filtered out; finished in 0.08s
+
+
+        PASS [   0.097s] (3/9) feynkit-generator::generation_oracle sm_eemm_L0
+  stdout ───
+
+    running 1 test
+    test sm_eemm_L0 ... ok
+
+    test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 182 filtered out; finished in 0.08s
+
+
+        PASS [   0.097s] (4/9) feynkit-generator::generation_oracle xs_qed_eeee_1pi_L1
+  stdout ───
+
+    running 1 test
+    test xs_qed_eeee_1pi_L1 ... ok
+
+    test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 182 filtered out; finished in 0.07s
+
+
+        PASS [   0.104s] (5/9) feynkit-generator::generation_oracle sm_eeww_L0
+  stdout ───
+
+    running 1 test
+    test sm_eeww_L0 ... ok
+
+    test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 182 filtered out; finished in 0.09s
+
+
+        PASS [   0.132s] (6/9) feynkit-generator::generation_oracle qed_eemm_L1
+  stdout ───
+
+    running 1 test
+    test qed_eemm_L1 ... ok
+
+    test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 182 filtered out; finished in 0.12s
+
+
+        PASS [   0.236s] (7/9) feynkit-generator::generation_oracle xs_qed_eemm_L2
+  stdout ───
+
+    running 1 test
+    test xs_qed_eemm_L2 ... ok
+
+    test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 182 filtered out; finished in 0.22s
+
+
+        PASS [   0.580s] (8/9) feynkit-generator::generation_oracle ctorder_qcd_uugg_L1
+  stdout ───
+
+    running 1 test
+    test ctorder_qcd_uugg_L1 ... ok
+
+    test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 182 filtered out; finished in 0.56s
+
+
+        PASS [   0.621s] (9/9) feynkit-generator::generation_oracle ym_g6_L0
+  stdout ───
+
+    running 1 test
+    test ym_g6_L0 ... ok
+
+    test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 182 filtered out; finished in 0.60s
+
+
+        SKIP [         ] (───) feynkit-generator::generation_oracle census::census_weights_substitute_parameters_only_in_group_ratios
+        SKIP [         ] (───) feynkit-generator::generation_oracle census::class_factor_bindings_reject_invalid_provenance_or_weights
+        SKIP [         ] (───) feynkit-generator::generation_oracle census::payload_comparisons_preserve_semantics_and_reject_truncated_storage
+        SKIP [         ] (───) feynkit-generator::generation_oracle census::payload_storage_preserves_content_and_clone_lifetime
+        SKIP [         ] (───) feynkit-generator::generation_oracle census::streamed_exact_dump_matches_original_diagram_values
+        SKIP [         ] (───) feynkit-generator::generation_oracle classes::cut_amplitude_orders_and_unresolved_membership_preserve_class_content
+        SKIP [         ] (───) feynkit-generator::generation_oracle classes::mass_selective_vetoes_preserve_physical_content
+        SKIP [         ] (───) feynkit-generator::generation_oracle classes::restrictions_preserve_original_ids_and_empty_intersections
+        SKIP [         ] (───) feynkit-generator::generation_oracle classes::unrestricted_sm_uudd_retains_every_original_rule
+        SKIP [         ] (───) feynkit-generator::generation_oracle counterterm_copies_weight_every_rule_choice
+        SKIP [         ] (───) feynkit-generator::generation_oracle counterterm_orders_select_rule_choices_by_count
+        SKIP [         ] (───) feynkit-generator::generation_oracle ct_phi3_2pt_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle ct_phi3_2pt_tad_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle ct_phi3_vac_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle ct_phi3_vac_L3
+        SKIP [         ] (───) feynkit-generator::generation_oracle ct_phi3_vac_L4
+        SKIP [         ] (───) feynkit-generator::generation_oracle ct_qcd_gggg_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle ct_qcd_uugg_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle ct_qcd_vac_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle ct_qcd_vac_L3
+        SKIP [         ] (───) feynkit-generator::generation_oracle ctorder_phi3_vac_L4
+        SKIP [         ] (───) feynkit-generator::generation_oracle ctorder_qcd_gggg_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle ctorder_qcd_vac_L3
+        SKIP [         ] (───) feynkit-generator::generation_oracle ew_eemm_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle ew_eemm_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle frame_certificate::d65_prefactor_constructor_admission
+        SKIP [         ] (───) feynkit-generator::generation_oracle frame_certificate::model_fingerprint_from_file
+        SKIP [         ] (───) feynkit-generator::generation_oracle frames::certificate_massless_qed_model
+        SKIP [         ] (───) feynkit-generator::generation_oracle frames::comparison_frames_with_fermion_flow_reversals
+        SKIP [         ] (───) feynkit-generator::generation_oracle frames::representative_frames_with_fermion_flow_reversals
+        SKIP [         ] (───) feynkit-generator::generation_oracle frames::representative_frames_with_left_right_symmetrization
+        SKIP [         ] (───) feynkit-generator::generation_oracle ids_do_not_depend_on_threads_or_symbol_registration
+        SKIP [         ] (───) feynkit-generator::generation_oracle in_flight_filters_select_like_vetoes_and_post_filtering
+        SKIP [         ] (───) feynkit-generator::generation_oracle index_registration_child_failure_propagates
+        SKIP [         ] (───) feynkit-generator::generation_oracle oracle_rows_cover_every_case
+        SKIP [         ] (───) feynkit-generator::generation_oracle outputs_do_not_depend_on_index_registration_order_decreasing_1
+        SKIP [         ] (───) feynkit-generator::generation_oracle outputs_do_not_depend_on_index_registration_order_decreasing_32
+        SKIP [         ] (───) feynkit-generator::generation_oracle outputs_do_not_depend_on_index_registration_order_decreasing_8
+        SKIP [         ] (───) feynkit-generator::generation_oracle outputs_do_not_depend_on_index_registration_order_generation_1
+        SKIP [         ] (───) feynkit-generator::generation_oracle outputs_do_not_depend_on_index_registration_order_generation_32
+        SKIP [         ] (───) feynkit-generator::generation_oracle outputs_do_not_depend_on_index_registration_order_generation_8
+        SKIP [         ] (───) feynkit-generator::generation_oracle outputs_do_not_depend_on_index_registration_order_increasing_1
+        SKIP [         ] (───) feynkit-generator::generation_oracle outputs_do_not_depend_on_index_registration_order_increasing_32
+        SKIP [         ] (───) feynkit-generator::generation_oracle outputs_do_not_depend_on_index_registration_order_increasing_8
+        SKIP [         ] (───) feynkit-generator::generation_oracle outputs_do_not_depend_on_index_registration_order_shuffled_1
+        SKIP [         ] (───) feynkit-generator::generation_oracle outputs_do_not_depend_on_index_registration_order_shuffled_32
+        SKIP [         ] (───) feynkit-generator::generation_oracle outputs_do_not_depend_on_index_registration_order_shuffled_8
+        SKIP [         ] (───) feynkit-generator::generation_oracle phi34_2pt_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle phi34_2pt_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle phi34_2pt_L3
+        SKIP [         ] (───) feynkit-generator::generation_oracle phi34_2pt_L4
+        SKIP [         ] (───) feynkit-generator::generation_oracle phi34_2pt_L5
+        SKIP [         ] (───) feynkit-generator::generation_oracle phi34_2pt_identical_L3
+        SKIP [         ] (───) feynkit-generator::generation_oracle phi3_2pt_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle phi3_2pt_tad_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle phi3_vac_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle phi3_vac_L3
+        SKIP [         ] (───) feynkit-generator::generation_oracle phi3_vac_L4
+        SKIP [         ] (───) feynkit-generator::generation_oracle phi3_vac_L5
+        SKIP [         ] (───) feynkit-generator::generation_oracle phi3_vac_L6
+        SKIP [         ] (───) feynkit-generator::generation_oracle phi3_vac_L7
+        SKIP [         ] (───) feynkit-generator::generation_oracle phi4_vac_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle phi4_vac_L3
+        SKIP [         ] (───) feynkit-generator::generation_oracle phi4_vac_L4
+        SKIP [         ] (───) feynkit-generator::generation_oracle phi4_vac_L5
+        SKIP [         ] (───) feynkit-generator::generation_oracle phi4_vac_L6
+        SKIP [         ] (───) feynkit-generator::generation_oracle phi4_vac_L7
+        SKIP [         ] (───) feynkit-generator::generation_oracle printed_numerators_do_not_depend_on_threads
+        SKIP [         ] (───) feynkit-generator::generation_oracle qcd_gggg_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle qcd_gggg_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle qcd_gggg_L3
+        SKIP [         ] (───) feynkit-generator::generation_oracle qcd_gggg_floop1_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle qcd_gggg_ghost_filter_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle qcd_gggg_ghost_veto_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle qcd_gggg_identical_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle qcd_gggg_scalar_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle qcd_gggg_sign_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle qcd_gggg_sym_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle qcd_ggggg_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle qcd_ggggg_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle qcd_gse_L3
+        SKIP [         ] (───) feynkit-generator::generation_oracle qcd_gse_L4
+        SKIP [         ] (───) feynkit-generator::generation_oracle qcd_gse_L5
+        SKIP [         ] (───) feynkit-generator::generation_oracle qcd_gse_all_L3
+        SKIP [         ] (───) feynkit-generator::generation_oracle qcd_gse_all_floop1_dfilter_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle qcd_tad_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle qcd_tad_L3
+        SKIP [         ] (───) feynkit-generator::generation_oracle qcd_uugg_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle qcd_uugg_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle qcd_uugg_L3
+        SKIP [         ] (───) feynkit-generator::generation_oracle qcd_uuuu_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle qcd_vac1pi_L4
+        SKIP [         ] (───) feynkit-generator::generation_oracle qcd_vac1pi_L5
+        SKIP [         ] (───) feynkit-generator::generation_oracle qcd_vac_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle qcd_vac_L3
+        SKIP [         ] (───) feynkit-generator::generation_oracle qcd_vac_L4
+        SKIP [         ] (───) feynkit-generator::generation_oracle qed_ase_L3
+        SKIP [         ] (───) feynkit-generator::generation_oracle qed_ase_L4
+        SKIP [         ] (───) feynkit-generator::generation_oracle qed_ase_L5
+        SKIP [         ] (───) feynkit-generator::generation_oracle qed_ase_floop2_L3
+        SKIP [         ] (───) feynkit-generator::generation_oracle qed_ee4f_L0
+        SKIP [         ] (───) feynkit-generator::generation_oracle qed_ee4f_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle qed_ee4f_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle qed_ee4f_identical_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle qed_ee4f_scalar_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle qed_ee4f_sign_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle qed_eeaa_identical_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle qed_eeaa_identical_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle qed_eeaa_scalar_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle qed_eeaa_scalar_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle qed_eeaa_sign_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle qed_eeaa_sign_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle qed_eeaaa_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle qed_eeaaa_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle qed_eemm_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle qed_eemm_L3
+        SKIP [         ] (───) feynkit-generator::generation_oracle qed_eemm_identical_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle qed_eemm_scalar_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle qed_eemm_sign_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle qed_ese_L3
+        SKIP [         ] (───) feynkit-generator::generation_oracle qed_ese_L4
+        SKIP [         ] (───) feynkit-generator::generation_oracle sm_ase_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle sm_ee4f_L0
+        SKIP [         ] (───) feynkit-generator::generation_oracle sm_ee4f_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle sm_eemm_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle sm_eemm_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle sm_eemm_floop0_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle sm_eemm_floop1_tfilter_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle sm_eemm_identical_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle sm_eemm_qcd0_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle sm_eemm_qcd0_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle sm_eemm_qed4_L0to1
+        SKIP [         ] (───) feynkit-generator::generation_oracle sm_eemm_scalar_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle sm_eemm_sign_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle sm_eeww_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle sm_ggtt_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle sm_ggttg_L0
+        SKIP [         ] (───) feynkit-generator::generation_oracle sm_ggttg_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle sm_hse_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle sm_hse_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle sm_uudd_qcd2_qed2_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle sm_uudd_qcd3_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle sm_uudd_qed2_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle sm_uudd_qed2_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle xs_qcd_gggg_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle xs_qcd_gggg_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle xs_qcd_gggg_sym_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle xs_qcd_gguu_1pi_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle xs_qcd_gguu_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle xs_qcd_gguu_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle xs_qcd_gguu_sym_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle xs_qcdqed_addx_canonical_scalar_lr_L3
+        SKIP [         ] (───) feynkit-generator::generation_oracle xs_qed_aaee_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle xs_qed_aaee_lr_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle xs_qed_aaee_sym_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle xs_qed_aaee_sym_lr_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle xs_qed_eeaa_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle xs_qed_eedd_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle xs_qed_eeee_1pi_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle xs_qed_eeee_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle xs_qed_eeee_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle xs_qed_eemm_L3
+        SKIP [         ] (───) feynkit-generator::generation_oracle xs_qed_eemm_identical_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle xs_qed_eemm_scalar_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle xs_qed_eemm_sign_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle xs_sm_eemm_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle xs_sm_eemm_L2
+        SKIP [         ] (───) feynkit-generator::generation_oracle xs_sm_uudd_L1
+        SKIP [         ] (───) feynkit-generator::generation_oracle ym_g7_L0
+        SKIP [         ] (───) feynkit-generator::generation_oracle ym_g8_L0
+        SKIP [         ] (───) feynkit-generator::generation_oracle ym_ggg_zero_color_L3
+        SKIP [         ] (───) feynkit-generator::generation_oracle ym_gse_L4
+        SKIP [         ] (───) feynkit-generator::generation_oracle ym_gse_L5
+        SKIP [         ] (───) feynkit-generator::generation_oracle ym_vac_L5

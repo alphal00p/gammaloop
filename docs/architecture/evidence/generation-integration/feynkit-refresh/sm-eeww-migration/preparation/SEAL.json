@@ -1,0 +1,20 @@
+{
+  "schema": "raw-four-migration-preparation-seal/1",
+  "created": "2026-10-30T23:47:12.424053+00:00",
+  "manifest": "SHA256SUMS",
+  "manifest_sha256": "4df30037ad00d50fbceb65d34b221daaf4eeefa0bfd7406275edca3cfda91a0f",
+  "file_count": 447,
+  "total_manifested_bytes": 25043862,
+  "exclusions": [
+    "SHA256SUMS",
+    "SEAL.json"
+  ],
+  "symlinks": 0,
+  "status": "PROPOSED_PENDING_NEW_INDEPENDENT_REVIEW",
+  "approval": false,
+  "source_ref": "f47f27213a1c55291239c9bc0f334a7ea1cd1cc1",
+  "before_blob": "d61a4beebfc1b0d650cd17b001a1fdc6433b60d5",
+  "after_blob": "e6af4ec644688e1333064c50e3b157ae631473ee",
+  "known_guard_failure": "Concurrent external JJ/ref operations; frozen inputs and tracked bytes unchanged. See concurrent-metadata-disclosure.json.",
+  "retention": "Keep complete packet and all referenced original frozen evidence for root review; no process retained."
+}

@@ -1,0 +1,26 @@
+{
+  "argv": [
+    "nix",
+    "derivation",
+    "show",
+    "/nix/store/1rx6gycv9xmywr178sn3nlgfx9drip8d-gammaloop-ci-test-dependencies-e2c2622702ffb500-Cargo.toml.drv",
+    "/nix/store/1sindq8l7y2j0jd65dqbi8f04ynzvsv3-gammaloop-crate-test-dependencies-e2c2622702ffb500-inputs.drv",
+    "/nix/store/2fh5g2d6iycg3iwmkymsy7a7vzh9iygy-gammaloop-crate-test-dependencies-e1a6f2470f75ab47-inputs.drv",
+    "/nix/store/hfjpj2pkl74h19ff12r3r2shwzsk60fl-gammaloop-crate-feynkit-generator-dependency-inputs.drv",
+    "/nix/store/qnmclaxdlx0kfiw7a4c17q09780qmp9k-gammaloop-ci-test-binary-dependencies-e2c2622702ffb500-Cargo.toml.drv",
+    "/nix/store/w9yif79in8w8r44bx3afid8260442dp5-gammaloop-ci-consumer-feynkit-generator-Cargo.toml.drv",
+    "/nix/store/yfd438a8mxlhm5jh8chl5zz2prpfwvqw-gammaloop-ci-test-binary-dependencies-e1a6f2470f75ab47-Cargo.toml.drv",
+    "/nix/store/zkrns69kj2c1rzsjlml81x0mp9gcgfy1-gammaloop-ci-test-dependencies-e1a6f2470f75ab47-Cargo.toml.drv"
+  ],
+  "cwd": "/tmp",
+  "license_keys_removed": [
+    "SYMBOLICA_LICENSE",
+    "SYMBOLICA_LICENSE_PATH",
+    "SYMBOLICA_LICENSE_SIGNED"
+  ],
+  "start": "2026-10-31T00:13:56.508729+00:00",
+  "exit": 0,
+  "end": "2026-10-31T00:13:56.580605+00:00",
+  "stdout_sha256": "7683164d33903aab8a14e836d05b0e3564e2e2383578941ead0642651d4c0af6",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+}

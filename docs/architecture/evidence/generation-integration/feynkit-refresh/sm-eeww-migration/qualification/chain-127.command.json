@@ -1,0 +1,32 @@
+{
+  "argv": [
+    "nix",
+    "derivation",
+    "show",
+    "/nix/store/1jjkzpw86rdm0lgby4j8nr95haa9ifhv-gammaloop-ci-test-dependencies-47470ef98b5d7a99-Cargo.toml.drv",
+    "/nix/store/1jk15ka3i84vgkr9ia4dl7xybninqdc5-gammaloop-crate-test-dependencies-fa566e2f29692039-inputs.drv",
+    "/nix/store/6ddsa9hxah9b4xdxx64adqja9ik2fphd-gammaloop-ci-test-binary-dependencies-9ddd49c3d058a560-Cargo.toml.drv",
+    "/nix/store/dcgkg4szszaz4jiig7ih1krkwsfhgmbr-gammaloop-ci-test-binary-dependencies-5b902a1fa04e9164-Cargo.toml.drv",
+    "/nix/store/g1jrbc62ixnjvnl8rmgv1hkx9b959pz3-gammaloop-crate-test-dependencies-9ddd49c3d058a560-inputs.drv",
+    "/nix/store/hqrdjx11izn3fhps1ldrwfjpl6b7z58d-gammaloop-ci-test-binary-dependencies-fa566e2f29692039-Cargo.toml.drv",
+    "/nix/store/nndg4nwj2gdzkprbk23gw7w3xnrxx9cz-gammaloop-ci-test-dependencies-fa566e2f29692039-Cargo.toml.drv",
+    "/nix/store/qah4kckyq4cb8h2h5hxiqxlq67wsab94-gammaloop-ci-test-binary-dependencies-47470ef98b5d7a99-target-spenso-macros-Cargo.toml.drv",
+    "/nix/store/rj3mn855b04s84mx26bbr5rq4xzpymyq-gammaloop-ci-test-binary-dependencies-47470ef98b5d7a99-Cargo.toml.drv",
+    "/nix/store/rs5dhm5iwxw27ai0kplcfydmipspq1k2-gammaloop-crate-test-dependencies-5b902a1fa04e9164-inputs.drv",
+    "/nix/store/rvcy949i4k7yl6qid16lsws42wndk71g-gammaloop-ci-test-binary-dependencies-47470ef98b5d7a99-host-Cargo.toml.drv",
+    "/nix/store/xwxdc4x7gnvqnhl2z33qa0xfnnnmp06j-gammaloop-crate-test-dependencies-47470ef98b5d7a99-inputs.drv",
+    "/nix/store/ys0ac80d5nzh4k9zcsv11r1p556xswjc-gammaloop-ci-test-dependencies-9ddd49c3d058a560-Cargo.toml.drv",
+    "/nix/store/yw0y8f8bjwzcz33nb1x7y61jg8iay84k-gammaloop-ci-test-dependencies-5b902a1fa04e9164-Cargo.toml.drv"
+  ],
+  "cwd": "/tmp",
+  "license_keys_removed": [
+    "SYMBOLICA_LICENSE",
+    "SYMBOLICA_LICENSE_PATH",
+    "SYMBOLICA_LICENSE_SIGNED"
+  ],
+  "start": "2026-10-31T00:14:00.272252+00:00",
+  "exit": 0,
+  "end": "2026-10-31T00:14:00.349517+00:00",
+  "stdout_sha256": "4580e23b188a667093f325caca4bca20894ca20d35616b59c73aa4d84d2d92b1",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+}

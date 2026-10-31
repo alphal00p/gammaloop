@@ -1,0 +1,17 @@
+{
+  "argv": [
+    "/nix/store/wzpxqpc3v2xxah69rqifq5kac67hx36g-typst-0.15.1/bin/typst",
+    "compile",
+    "--root",
+    "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh",
+    "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/docs/architecture/generation-sm-eeww-migration.typ",
+    "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/sm-eeww-migration-20261031/canonical-note.pdf"
+  ],
+  "exit": 0,
+  "stdout": "",
+  "stderr": "",
+  "source_sha256": "2a730b4563e8a7c5c68a9cc73709d62cb3affce7782c8da0a2452c7e843ad2c0",
+  "tool_sha256": "3c381d7d3e2259f81766ff77a1e6dec18ec4c7b7702b9c51ad34d56432b9633c",
+  "scope": "standalone new canonical Typst only; no whole documentation/site result",
+  "pdf_retained_ignored_only": true
+}

@@ -1,0 +1,19 @@
+{
+  "argv": [
+    "nix",
+    "derivation",
+    "show",
+    "/nix/store/1cacz18cwvb635kfzxawcqg64lf94y74-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0.drv"
+  ],
+  "cwd": "/tmp",
+  "license_keys_removed": [
+    "SYMBOLICA_LICENSE",
+    "SYMBOLICA_LICENSE_PATH",
+    "SYMBOLICA_LICENSE_SIGNED"
+  ],
+  "start": "2026-10-31T00:13:55.247154+00:00",
+  "exit": 0,
+  "end": "2026-10-31T00:13:55.366722+00:00",
+  "stdout_sha256": "96d1f71cfb911ec3453df8aa8099bd9e0ccc0359191ddba2ad6ef687bad4e340",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+}

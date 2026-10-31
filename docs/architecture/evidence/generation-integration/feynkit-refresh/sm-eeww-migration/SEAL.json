@@ -1,0 +1,14 @@
+{
+  "schema": "sm-eeww-migration-evidence-seal/1",
+  "status": "NEW_INDEPENDENT_INTEGRATION_REVIEW_REQUIRED",
+  "manifest_sha256": "c1303e62af68ba2e8e43d1f145108cdb22b0a466c854b1f273bc1025dba77245",
+  "files": 110,
+  "receipt_sha256": "15a2e085e2edb1fdd8ee8060a3b51b0be909b05e9128579c8f5cb0cb3b52481f",
+  "code_commit": "605178a65620b104805b012f1edc299710e8a176",
+  "canonical_note_sha256": "07bcafe949790c34a82cda0b5a6a7c7a0ec8577681cd2ccb9bc69e602c7d3456",
+  "exclusions": [
+    "SHA256SUMS",
+    "SEAL.json"
+  ],
+  "no_combined_approval": true
+}

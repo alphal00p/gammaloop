@@ -1,0 +1,91 @@
+{
+  "tests": [
+    {
+      "name": "wrong QED Auto interface permutation",
+      "expected_predicate": "finite-interface-permutation",
+      "actual_predicate": "finite-interface-permutation",
+      "detail": "finite-interface-permutation: ('e9ff090d108cca55fc5d5ccb38cc2a9f', 'vertex:2')",
+      "passed": true
+    },
+    {
+      "name": "wrong QED Auto interface owner",
+      "expected_predicate": "finite-interface-owner",
+      "actual_predicate": "finite-interface-owner",
+      "detail": "finite-interface-owner: ",
+      "passed": true
+    },
+    {
+      "name": "inverse QCD edge convention",
+      "expected_predicate": "finite-interface-permutation",
+      "actual_predicate": "finite-interface-permutation",
+      "detail": "finite-interface-permutation: ('ad0818e3abc13783bfcc2695b849034d', 'vertex:0')",
+      "passed": true
+    },
+    {
+      "name": "wrong QCD interface order",
+      "expected_predicate": "finite-interface-convention",
+      "actual_predicate": "finite-interface-convention",
+      "detail": "finite-interface-convention: ('ad0818e3abc13783bfcc2695b849034d', 'vertex:0')",
+      "passed": true
+    },
+    {
+      "name": "wrong whole-symbol target tag",
+      "expected_predicate": "whole-symbol-tags-definitions",
+      "actual_predicate": "whole-symbol-tags-definitions",
+      "detail": "whole-symbol-tags-definitions: ",
+      "passed": true
+    },
+    {
+      "name": "missing row from four candidate scopes",
+      "expected_predicate": "candidate-row-selection-count",
+      "actual_predicate": "candidate-row-selection-count",
+      "detail": "candidate-row-selection-count: ",
+      "passed": true
+    },
+    {
+      "name": "pool8 scope promotion",
+      "expected_predicate": "candidate-scope",
+      "actual_predicate": "candidate-scope",
+      "detail": "candidate-scope: ",
+      "passed": true
+    },
+    {
+      "name": "blocked row included in patch",
+      "expected_predicate": "patch-row-eligibility",
+      "actual_predicate": "patch-row-eligibility",
+      "detail": "patch-row-eligibility: ",
+      "passed": true
+    },
+    {
+      "name": "derived Auto mislabelled native None reference",
+      "expected_predicate": "none-reference-row",
+      "actual_predicate": "none-reference-row",
+      "detail": "none-reference-row: ",
+      "passed": true
+    },
+    {
+      "name": "unrelated Rust token changed",
+      "expected_predicate": "patch-only-authorized-numerator-token",
+      "actual_predicate": "patch-only-authorized-numerator-token",
+      "detail": "patch-only-authorized-numerator-token: ",
+      "passed": true
+    },
+    {
+      "name": "second numerator changed",
+      "expected_predicate": "patch-only-authorized-numerator-token",
+      "actual_predicate": "patch-only-authorized-numerator-token",
+      "detail": "patch-only-authorized-numerator-token: ",
+      "passed": true
+    },
+    {
+      "name": "old family current source mistaken for target",
+      "expected_predicate": "target-source-selection",
+      "actual_predicate": "target-source-selection",
+      "detail": "target-source-selection: ",
+      "passed": true
+    }
+  ],
+  "count": 12,
+  "all_intended_predicates": true,
+  "scope": "Live pure execution of new migration/ownership/definition/patch boundaries. No native or previous control reruns."
+}

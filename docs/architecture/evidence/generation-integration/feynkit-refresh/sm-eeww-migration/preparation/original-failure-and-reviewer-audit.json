@@ -1,0 +1,118 @@
+{
+  "qed_ee4f_L0": {
+    "original_stderr_None_Row_matches_all_ten_fields": true,
+    "source_expected_matches_right_all_ten_fields": true,
+    "unchanged_five_companions": [
+      {
+        "file": "qed_ee4f_L0.census",
+        "sha256": "567391c51101889748f8aec467b7d961ad0b070b983c037c06ada75c0705c789"
+      },
+      {
+        "file": "qed_ee4f_L0.classes-None-t1.json",
+        "sha256": "1c12989d75e7f9e12513d0c726e3f700cba9e8088630ab9c43260b961e2a811e"
+      },
+      {
+        "file": "qed_ee4f_L0.classes-None-t1.sources.json",
+        "sha256": "1c12989d75e7f9e12513d0c726e3f700cba9e8088630ab9c43260b961e2a811e"
+      },
+      {
+        "file": "qed_ee4f_L0.classes-Auto-t1.json",
+        "sha256": "49f3993180875dbf3d06adf86b5714b888b3db7a3b109237b1a747769f2a4f34"
+      },
+      {
+        "file": "qed_ee4f_L0.classes-Auto-t1.sources.json",
+        "sha256": "49f3993180875dbf3d06adf86b5714b888b3db7a3b109237b1a747769f2a4f34"
+      }
+    ],
+    "complete_historical_current_census_lines": true,
+    "independent_reviewer_decomposition_matches": true,
+    "Auto_native_Row_assertion": false
+  },
+  "xs_qed_eeee_L1": {
+    "original_stderr_None_Row_matches_all_ten_fields": true,
+    "source_expected_matches_right_all_ten_fields": true,
+    "unchanged_five_companions": [
+      {
+        "file": "xs_qed_eeee_L1.census",
+        "sha256": "07fb1b099af1b8fe7a9d09d6cab48119a7888b8d785c26f46a7460008fc52497"
+      },
+      {
+        "file": "xs_qed_eeee_L1.classes-None-t1.json",
+        "sha256": "fb3fb55248f0eb4c0407db787f9c3753a251ed2357a623f60c88e484f89505b5"
+      },
+      {
+        "file": "xs_qed_eeee_L1.classes-None-t1.sources.json",
+        "sha256": "fb3fb55248f0eb4c0407db787f9c3753a251ed2357a623f60c88e484f89505b5"
+      },
+      {
+        "file": "xs_qed_eeee_L1.classes-Auto-t1.json",
+        "sha256": "fb3fb55248f0eb4c0407db787f9c3753a251ed2357a623f60c88e484f89505b5"
+      },
+      {
+        "file": "xs_qed_eeee_L1.classes-Auto-t1.sources.json",
+        "sha256": "fb3fb55248f0eb4c0407db787f9c3753a251ed2357a623f60c88e484f89505b5"
+      }
+    ],
+    "complete_historical_current_census_lines": true,
+    "independent_reviewer_decomposition_matches": true,
+    "Auto_native_Row_assertion": false
+  },
+  "sm_eeww_L0": {
+    "original_stderr_None_Row_matches_all_ten_fields": true,
+    "source_expected_matches_right_all_ten_fields": true,
+    "unchanged_five_companions": [
+      {
+        "file": "sm_eeww_L0.census",
+        "sha256": "329517427420d1c6c498c04ac2761c04608d61b1bd0cd13dfcc9926e1411317c"
+      },
+      {
+        "file": "sm_eeww_L0.classes-None-t1.json",
+        "sha256": "c61eb6dd91e664deabd0caa93b149801b041f31869f024325d5b86137e862738"
+      },
+      {
+        "file": "sm_eeww_L0.classes-None-t1.sources.json",
+        "sha256": "c61eb6dd91e664deabd0caa93b149801b041f31869f024325d5b86137e862738"
+      },
+      {
+        "file": "sm_eeww_L0.classes-Auto-t1.json",
+        "sha256": "c61eb6dd91e664deabd0caa93b149801b041f31869f024325d5b86137e862738"
+      },
+      {
+        "file": "sm_eeww_L0.classes-Auto-t1.sources.json",
+        "sha256": "c61eb6dd91e664deabd0caa93b149801b041f31869f024325d5b86137e862738"
+      }
+    ],
+    "complete_historical_current_census_lines": true,
+    "independent_reviewer_decomposition_matches": true,
+    "Auto_native_Row_assertion": false
+  },
+  "xs_qcd_gguu_1pi_L1": {
+    "original_stderr_None_Row_matches_all_ten_fields": true,
+    "source_expected_matches_right_all_ten_fields": true,
+    "unchanged_five_companions": [
+      {
+        "file": "xs_qcd_gguu_1pi_L1.census",
+        "sha256": "fbbcf106715b8952970e0d70abbd96fa582e851fc9f86064c031d10eeee5dec4"
+      },
+      {
+        "file": "xs_qcd_gguu_1pi_L1.classes-None-t1.json",
+        "sha256": "d1d7a59c555387b6fadef81ed52aa2615f455aedcb14c416fabf61fe44b1ed15"
+      },
+      {
+        "file": "xs_qcd_gguu_1pi_L1.classes-None-t1.sources.json",
+        "sha256": "d1d7a59c555387b6fadef81ed52aa2615f455aedcb14c416fabf61fe44b1ed15"
+      },
+      {
+        "file": "xs_qcd_gguu_1pi_L1.classes-Auto-t1.json",
+        "sha256": "d1d7a59c555387b6fadef81ed52aa2615f455aedcb14c416fabf61fe44b1ed15"
+      },
+      {
+        "file": "xs_qcd_gguu_1pi_L1.classes-Auto-t1.sources.json",
+        "sha256": "d1d7a59c555387b6fadef81ed52aa2615f455aedcb14c416fabf61fe44b1ed15"
+      }
+    ],
+    "complete_historical_current_census_lines": true,
+    "independent_reviewer_decomposition_matches": true,
+    "Auto_native_Row_assertion": false
+  }
+}

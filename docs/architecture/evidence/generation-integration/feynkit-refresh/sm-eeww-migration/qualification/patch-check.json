@@ -1,0 +1,13 @@
+{
+  "argv": [
+    "git",
+    "apply",
+    "--no-add",
+    "--unsafe-paths",
+    "--check",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-four-migration-preparation-20261030-r1/proposed-not-applied.patch"
+  ],
+  "exit": 0,
+  "stdout": "",
+  "stderr": ""
+}

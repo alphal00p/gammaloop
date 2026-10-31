@@ -1,0 +1,64 @@
+{
+  "substantive_recorded_failures": [
+    {
+      "command": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-four-migration-preparation-20261030-r1/commands/audit-v1",
+      "exit": 1,
+      "stderr": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-four-migration-preparation-20261030-r1/commands/audit-v1/stderr",
+        "sha256": "2c1d8b9f1004e811e5162407e8de3b0f9a2a41d7156a1e84fd569402f5783c47"
+      }
+    },
+    {
+      "command": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-four-migration-preparation-20261030-r1/commands/final-invariance-v1",
+      "exit": 1,
+      "stderr": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-four-migration-preparation-20261030-r1/commands/final-invariance-v1/stderr",
+        "sha256": "52f3bcb0e51a4f1dd0046759ef5f9bc3986b979941de19aed9dce0deb66d582b"
+      }
+    },
+    {
+      "command": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-four-migration-preparation-20261030-r1/commands/prepare-v1",
+      "exit": 1,
+      "stderr": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-four-migration-preparation-20261030-r1/commands/prepare-v1/stderr",
+        "sha256": "e0267c8eb49776476b17d3e7e8dfc7bf7e542ddabf203213cfe3b2905ef08536"
+      }
+    },
+    {
+      "command": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-four-migration-preparation-20261030-r1/commands/prepare-v2",
+      "exit": 1,
+      "stderr": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-four-migration-preparation-20261030-r1/commands/prepare-v2/stderr",
+        "sha256": "6f89a904a045ace485f82c41e9377660f7a80f14a198fcd5895b2d12dffc980b"
+      }
+    },
+    {
+      "command": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-four-migration-preparation-20261030-r1/commands/prepare-v3",
+      "exit": 1,
+      "stderr": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-four-migration-preparation-20261030-r1/commands/prepare-v3/stderr",
+        "sha256": "e26f4235846fccaf3934d71f3bdc75dd29cb610c1c5416d8e0ce8823a7403f3d"
+      }
+    }
+  ],
+  "bootstrap": "Direct tool-observed pinned-Python bootstrap completed at exit0; its source and result/baseline are retained. No retroactive argv/exit record is invented for tool-authored file creation or direct discovery reads.",
+  "unrecorded_failed_launcher": {
+    "exit": 127,
+    "detail": "One tool call mistyped the Python store path (s7288frmp instead of s728sz8frmp); env reported No such file or directory. No child launched, output file or product execution. Actual launch used the existing correct pin."
+  },
+  "failures_explained": [
+    "prepare-v1: non-mode historical ancillary event accessed as a mode event; fixed by explicit stage selection.",
+    "prepare-v2: exact decimal-string aut rejected as non-int; fixed by bounded integer/string validation, preserving bool rejection.",
+    "prepare-v3: historical gauge has small-gauge-live/raw and no census event; fixed by its actual frozen cell/public capture bindings, without fabricating an event.",
+    "audit-v1: historical tree has no symbolica-notation crate; failed read retained, absence is now explicit. Source files already emitted are compared, never overwritten."
+  ],
+  "controls_label_qualification": "boundary-v1's control labelled inverse QCD edge convention actually modifies the first QCD explicit witness (a vertex) with the four-entry inverse-edge vector. It proves rejection of a wrong permutation, not the isolated same-rank edge inverse. The two actual same-rank inverse controls here supply that isolation; original evidence stays unchanged.",
+  "all_writes": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-four-migration-preparation-20261030-r1",
+  "delegations": 0,
+  "native_licensed_producer_capture_execution": 0,
+  "Nix_build_network": 0,
+  "license_user_application_config_reads": 0,
+  "metadata_identity_note": "The preservation inventory hashes jj config-id (metadata identity, not configuration settings); no license/config contents were loaded.",
+  "general_runner_redesign": false,
+  "self_approval": false
+}

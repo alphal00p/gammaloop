@@ -1,0 +1,55 @@
+{
+  "finished": "2026-10-30T23:42:16.877500+00:00",
+  "frozen_files": 7218,
+  "frozen": {
+    "changed": [],
+    "added": [],
+    "missing": []
+  },
+  "tracked": {
+    "changed": [],
+    "added": [],
+    "missing": []
+  },
+  "vcs_metadata_files": 17169,
+  "vcs_metadata": {
+    "changed": [
+      "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.jj/working_copy/checkout",
+      "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.jj/working_copy/tree_state"
+    ],
+    "added": [
+      "/shared/lcnbr/dev/gammaloop/main/.jj/repo/index/op_links/03d25150b7beb60a434aa73abc966cfcf25c4993c0c743973a3f6d6fc1b84b7b36520ad3bb623312a2eabf27ebc4e4aacf107a1c09b0fb3851f857f319058a91",
+      "/shared/lcnbr/dev/gammaloop/main/.jj/repo/index/op_links/8d3554dcbbc99d45b812b0d66b4ba427763b4b8ab0444814f9e931f383dd5fe88b13ff9745209651e5a00604a956ee0546456a53c305b8ca0334ef6af6b0d081",
+      "/shared/lcnbr/dev/gammaloop/main/.jj/repo/index/segments/deffbca382c8fb2dad745cd882138e60a208fb004dda0a9d88306457d24d4aa4ff22c71444d867d7cf58b977191836a44854df7eaf64880bc440199e029875fd",
+      "/shared/lcnbr/dev/gammaloop/main/.jj/repo/index/segments/ee33ee287d82073de3ec594ebd3792f72ca6df89d8839dd5fc2fbc601144e6b01e53cf9f798857d809e47ece9628804c26791dcd4b7afc40bff4692c62e478a7",
+      "/shared/lcnbr/dev/gammaloop/main/.jj/repo/op_heads/heads/03d25150b7beb60a434aa73abc966cfcf25c4993c0c743973a3f6d6fc1b84b7b36520ad3bb623312a2eabf27ebc4e4aacf107a1c09b0fb3851f857f319058a91",
+      "/shared/lcnbr/dev/gammaloop/main/.jj/repo/op_store/operations/03d25150b7beb60a434aa73abc966cfcf25c4993c0c743973a3f6d6fc1b84b7b36520ad3bb623312a2eabf27ebc4e4aacf107a1c09b0fb3851f857f319058a91",
+      "/shared/lcnbr/dev/gammaloop/main/.jj/repo/op_store/operations/8d3554dcbbc99d45b812b0d66b4ba427763b4b8ab0444814f9e931f383dd5fe88b13ff9745209651e5a00604a956ee0546456a53c305b8ca0334ef6af6b0d081",
+      "/shared/lcnbr/dev/gammaloop/main/.jj/repo/op_store/views/3ec1b221dd6edcd5b4a59323c5eadb641f1496a785a0cd7352bff4193212d19c200498bd2bf42f0b0e1a36e39b850f8cb71b4ede5f482317a434839fd536e782",
+      "/shared/lcnbr/dev/gammaloop/main/.jj/repo/op_store/views/e6bcc1df21b0e52e9fb99f6a9e921d9bd8d0bf8a7d04282806ced3de49ad5fde43c7aa1abe6fa8bda809c931fbe862e9e434a99ade64f880dc250a2381963c57",
+      "/shared/lcnbr/dev/gammaloop/main/.jj/repo/store/extra/61d9b8c38ffaf3a56b98d6176eff002dd0d6a847353ff736233830fe942160ace9f9918a01152557e3afb38a2a357500aefe09df06e3d80385c5d7597f4d8e77",
+      "/shared/lcnbr/dev/gammaloop/main/.jj/repo/store/extra/f88b66a3a3c9d5e4e92bd8c6d72b50722e3f12b9efa7ee79f968bc83f4d0103761d72463e530eebdbbb3206f3ca1ad2d3a7ad44719829a310eee5d751b832f41",
+      "/shared/lcnbr/dev/gammaloop/main/.jj/repo/store/extra/heads/61d9b8c38ffaf3a56b98d6176eff002dd0d6a847353ff736233830fe942160ace9f9918a01152557e3afb38a2a357500aefe09df06e3d80385c5d7597f4d8e77"
+    ],
+    "missing": [
+      "/shared/lcnbr/dev/gammaloop/main/.jj/repo/op_heads/heads/14ef40145f759076237ace62d44e971c6222049087deef4be195ecbe72e9e5fd3d03327582c1da8664da79e0004074db49464c9d43f9b295f7d6c9bac62667c4",
+      "/shared/lcnbr/dev/gammaloop/main/.jj/repo/store/extra/heads/af8958ff9bbfd29d6201efadf4ad6bcb0fea8551a3b9b42c6cfe3844c919bd8aefabd3dad195d1d2742724106b4b5a84cdff3060272bf3c17cddbd3c53e8d5f3"
+    ]
+  },
+  "git_refs_unchanged": false,
+  "consumed_input_count": 510,
+  "consumed_input_mismatches": {},
+  "pins": {
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-small-qed-fresh8eb-math-opus-20261030T192901Z-3624403/review.json": "b5f46f1b682a5f5ed8191bcc591003d4d553173e105c26b88094ae7ba7660433",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-small-gauge-fresh8eb-math-opus-20261030T192536Z-3568994/review.json": "1591408caad7566439fcd54a1c76398691473bb4e41c59ddd3cb85a5e1337823",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-raw-four-dispositions-opus-20261030T202304Z-196212/review.json": "6e4410dd16ef6c2366b08793af0e835c21e55526bf124a2d3581283c32f1a9a2",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-raw-four-wrapper-r5-astra-20261030-231903Z/review.json": "84b98b9711e498cc88c6e901a09ce9d37b8a514a1d860cba3f3c157554f69093",
+    "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-feynkit-refresh-shared-provenance-opus-20261030T193404Z-3c0453ff/review.json": "565caeace0112a30fb9118f94b2bb759e4267d2b802395c314e485b89b4b2b70",
+    "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-feynkit-refresh-source-opus-round4-20261030T201146Z-697912d5/review.json": "5d9db6c6d385bd25ea9e276a2a1ebd2e95c0678171854e4ccb73a1362130e1af",
+    "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-refresh-aggregation-astra-20261030-independent/review.json": "567fba9cfa9287478d5c1531fd46eac49c79f4cd6fbcc878c50bd364cf279342"
+  },
+  "all_frozen_and_consumed_inputs_unchanged": true,
+  "task_mutating_vcs_commands": 0,
+  "config_note": "Only Jujutsu config-id identity metadata was hashed by the metadata guard; no user/application configuration or license file was opened. Git uses explicit main/.git and disabled global/system config.",
+  "scope": "Frozen r1-r5 packets and relevant review trees, selected workspace checked-out tracked bytes, refs/index/jj metadata, and declared consumed inputs. Initial metadata guard is observational, not a jj snapshot."
+}

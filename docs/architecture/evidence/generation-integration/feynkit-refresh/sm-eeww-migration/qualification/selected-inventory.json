@@ -1,0 +1,89 @@
+{
+  "actual_compiled_selected": [
+    {
+      "binary_id": "feynkit-generator::generation_oracle",
+      "name": "ctorder_qcd_uugg_L1",
+      "kind": "test",
+      "ignored": false,
+      "filter-match": {
+        "status": "matches"
+      }
+    },
+    {
+      "binary_id": "feynkit-generator::generation_oracle",
+      "name": "qed_eemm_L1",
+      "kind": "test",
+      "ignored": false,
+      "filter-match": {
+        "status": "matches"
+      }
+    },
+    {
+      "binary_id": "feynkit-generator::generation_oracle",
+      "name": "sm_eemm_L0",
+      "kind": "test",
+      "ignored": false,
+      "filter-match": {
+        "status": "matches"
+      }
+    },
+    {
+      "binary_id": "feynkit-generator::generation_oracle",
+      "name": "sm_eeww_L0",
+      "kind": "test",
+      "ignored": false,
+      "filter-match": {
+        "status": "matches"
+      }
+    },
+    {
+      "binary_id": "feynkit-generator::generation_oracle",
+      "name": "xs_qed_eedd_L1",
+      "kind": "test",
+      "ignored": false,
+      "filter-match": {
+        "status": "matches"
+      }
+    },
+    {
+      "binary_id": "feynkit-generator::generation_oracle",
+      "name": "xs_qed_eeee_1pi_L1",
+      "kind": "test",
+      "ignored": false,
+      "filter-match": {
+        "status": "matches"
+      }
+    },
+    {
+      "binary_id": "feynkit-generator::generation_oracle",
+      "name": "xs_qed_eemm_L1",
+      "kind": "test",
+      "ignored": false,
+      "filter-match": {
+        "status": "matches"
+      }
+    },
+    {
+      "binary_id": "feynkit-generator::generation_oracle",
+      "name": "xs_qed_eemm_L2",
+      "kind": "test",
+      "ignored": false,
+      "filter-match": {
+        "status": "matches"
+      }
+    },
+    {
+      "binary_id": "feynkit-generator::generation_oracle",
+      "name": "ym_g6_L0",
+      "kind": "test",
+      "ignored": false,
+      "filter-match": {
+        "status": "matches"
+      }
+    }
+  ],
+  "count": 9,
+  "filter": "package(=feynkit-generator) and binary(=generation_oracle) and (test(=xs_qed_eemm_L1) or test(=xs_qed_eedd_L1) or test(=xs_qed_eeee_1pi_L1) or test(=qed_eemm_L1) or test(=ctorder_qcd_uugg_L1) or test(=sm_eemm_L0) or test(=ym_g6_L0) or test(=xs_qed_eemm_L2) or test(=sm_eeww_L0))",
+  "inventory_sha256": "47dcb8e991cb2f730dafe229f999a2ff62bf3a32461df2c5702d61540e912ba2",
+  "ignored_will_be_explicitly_run": true
+}

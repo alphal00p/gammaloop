@@ -1,0 +1,72 @@
+{
+  "guard_exit": 1,
+  "guard_result": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-four-migration-preparation-20261030-r1/commands/final-invariance-v1/result.json",
+  "scope_that_passed": {
+    "frozen_entries": 7218,
+    "frozen_file_sets_and_bytes": "unchanged",
+    "consumed_inputs": 510,
+    "all_consumed_hashes": "unchanged",
+    "selected_workspace_tracked_bytes": "unchanged",
+    "main_index_HEAD_packed_refs": {
+      "/shared/lcnbr/dev/gammaloop/main/.git/index": {
+        "sha256": "36fca2996228d0adb018933745a106061d3febe8921980864b5cc50dbad4af5d",
+        "unchanged": true
+      },
+      "/shared/lcnbr/dev/gammaloop/main/.git/HEAD": {
+        "sha256": "ad9a6439c4eb1e0d10eb1541c40089e677f898fcbb440664e4922eed98a4721b",
+        "unchanged": true
+      },
+      "/shared/lcnbr/dev/gammaloop/main/.git/packed-refs": {
+        "sha256": "0da18278197341776df580891f9a883e05b5e2dd5dd3082e251e02345619f5a3",
+        "unchanged": true
+      }
+    }
+  },
+  "failed_predicate": "VCS metadata unchanged",
+  "observed_operations": [
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/main/.jj/repo/op_store/operations/03d25150b7beb60a434aa73abc966cfcf25c4993c0c743973a3f6d6fc1b84b7b36520ad3bb623312a2eabf27ebc4e4aacf107a1c09b0fb3851f857f319058a91",
+      "sha256": "97a91c7d9d6811d9cc2075f5081fca3094a0d867e82401bf01a73f0835d50494",
+      "printable_metadata": [
+        "snapshot working copy\"",
+        "itphlies*",
+        "lcnbr2",
+        "~jj --config 'snapshot.auto-track=none()' --config 'user.name=Lucien Huber' --config 'user.email=im@lcnbr.ch' --no-pager status8",
+        "B$generation-oracle-numerator-families\","
+      ]
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/main/.jj/repo/op_store/operations/8d3554dcbbc99d45b812b0d66b4ba427763b4b8ab0444814f9e931f383dd5fe88b13ff9745209651e5a00604a956ee0546456a53c305b8ca0334ef6af6b0d081",
+      "sha256": "51b9e957e5aa8705d6f86e97b1f69f19777910ba9f3caa1da6f935e7ad9ade5b",
+      "printable_metadata": [
+        "new empty commit\"",
+        "itphlies*",
+        "lcnbr2",
+        "jj --ignore-working-copy --config 'snapshot.auto-track=none()' --config 'user.name=Lucien Huber' --config 'user.email=im@lcnbr.ch' new 195a876efc37adbadf56e95f5440bd991dd9edc3 -m 'preserve grouped None helpers and prepare bounded aggregation review'B$generation-oracle-numerator-families\""
+      ]
+    }
+  ],
+  "git_ref_delta": {
+    "changed": {},
+    "added": {
+      "refs/jj/keep/b468bd46c6d099a1f130683a4265f0dcfabf7474": "b468bd46c6d099a1f130683a4265f0dcfabf7474",
+      "refs/jj/keep/278bd26dcf5d787fce70182499393122f5d7fd77": "278bd26dcf5d787fce70182499393122f5d7fd77",
+      "refs/jj/keep/d3d62c5335d9594e7d5a469c45f1e219ab50b0ef": "d3d62c5335d9594e7d5a469c45f1e219ab50b0ef",
+      "refs/jj/keep/9630e06f6f381ab1254406103b083ab6f2fc48d5": "9630e06f6f381ab1254406103b083ab6f2fc48d5",
+      "refs/jj/keep/271593f8cb270a880dcbb03a7cbf82937069de5e": "271593f8cb270a880dcbb03a7cbf82937069de5e"
+    },
+    "removed": {}
+  },
+  "attribution": "Operation metadata identifies a snapshot through jj status and a new empty change described 'preserve grouped None helpers and prepare bounded aggregation review'. These are concurrent external grouped-task activity, not commands issued by this packet. This is an inference from the retained operation bytes and this task's zero mutating VCS calls, not knowledge of the external thread's full history.",
+  "action": "Preserve external metadata; no reset, restore, checkout, jj operation or ref change. Frozen evidence and exact immutable target remain usable. Root should account for concurrent workspace metadata before continuation.",
+  "claim_limit": "Do not report globally unchanged jj snapshots or refs. No replacement historical exit or successful final-invariance result is fabricated.",
+  "other_tool_failures": [
+    {
+      "exit": 127,
+      "detail": "Initial guidance wrapper used absent literal /bin/bash; no child launched."
+    },
+    {
+      "detail": "One additive documentation patch failed its context check atomically; no files changed. The corrected patch was applied afterward."
+    }
+  ]
+}

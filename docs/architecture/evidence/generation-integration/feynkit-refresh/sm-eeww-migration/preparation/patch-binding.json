@@ -1,0 +1,59 @@
+{
+  "status": "PROPOSED_NOT_APPLIED_PENDING_NEW_INDEPENDENT_REVIEW",
+  "approval": false,
+  "target_revision": "f47f27213a1c55291239c9bc0f334a7ea1cd1cc1",
+  "path": "crates/feynkit-generator/tests/generation_oracle/main.rs",
+  "before_blob": "d61a4beebfc1b0d650cd17b001a1fdc6433b60d5",
+  "after_blob": "e6af4ec644688e1333064c50e3b157ae631473ee",
+  "before_sha256": "aedd07670ad16ae72ae1c96970668c80ea0ecd5d6d5992c736af71de7d00999b",
+  "after_sha256": "c642b5cc8145610854a8681d6987ea392266064c429cfa86719e72296083f0f7",
+  "patch_sha256": "8746bdbf6418e2fa67a5480ac61e548394bbf000b270c11422e51085b2d535c9",
+  "changed_rows": [
+    "sm_eeww_L0"
+  ],
+  "changed_fields": [
+    "numerators"
+  ],
+  "changed_tokens": 1,
+  "excluded_blocked_rows": [
+    "qed_ee4f_L0",
+    "xs_qed_eeee_L1",
+    "xs_qcd_gguu_1pi_L1"
+  ],
+  "prior_eight": {
+    "xs_qed_eemm_L1": {
+      "bytes_equal": true,
+      "row_sha256": "25b964b968545f8d85783d23ae70ad09e529290cd63ddc7804b44905d5ba9129"
+    },
+    "xs_qed_eedd_L1": {
+      "bytes_equal": true,
+      "row_sha256": "fdb64a1d535ec319b16fa9cb956636fff09c9a8d1c6634a8bc08e8493b70d891"
+    },
+    "xs_qed_eeee_1pi_L1": {
+      "bytes_equal": true,
+      "row_sha256": "edfb50abaf3ef5955d917c8705c3ed1f705e45cca221e6131dec94ef55f336bc"
+    },
+    "qed_eemm_L1": {
+      "bytes_equal": true,
+      "row_sha256": "13360392d6a7852c1e04869aa123b1c788228a0daa246328985f758784095e89"
+    },
+    "ctorder_qcd_uugg_L1": {
+      "bytes_equal": true,
+      "row_sha256": "99e2a0316bf4ae745df84e9ef72049ce7949d1c596b7c6a49cb7353a031244d2"
+    },
+    "sm_eemm_L0": {
+      "bytes_equal": true,
+      "row_sha256": "db4c8b1c6f8099a8744708a3c10ea7f79e942e225361bed519886e413c09d27c"
+    },
+    "ym_g6_L0": {
+      "bytes_equal": true,
+      "row_sha256": "9a62b02e11caee7bcd084cddbaec6740fb0abda40cc540da2f3f2163dd7f8881"
+    },
+    "xs_qed_eemm_L2": {
+      "bytes_equal": true,
+      "row_sha256": "aae7e01c752e73202a39e9f905e017b910c54c9e20c09db46993cce4735ce50f"
+    }
+  },
+  "every_other_byte": "Equal after reverting the single specified numerator token; established by complete-byte comparison.",
+  "applied": false
+}

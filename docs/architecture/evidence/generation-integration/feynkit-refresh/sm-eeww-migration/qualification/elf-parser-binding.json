@@ -1,0 +1,9 @@
+{
+  "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime-owner/common.py",
+  "sha256": "798118d2cd428c53d541faa18ed4088b934d40b9d292b37f27f8b80082834524",
+  "copied_unchanged_functions": [
+    "require",
+    "elf"
+  ],
+  "copy_sha256": "d7b332ca98ed3f317c1e7678ad15d949a222ee6053fd022c0ab0c52400241859"
+}

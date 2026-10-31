@@ -1,0 +1,428 @@
+{
+  "schema": "independent-sm-eeww-one-token-migration-review/1",
+  "reviewer": "Independent Astra migration reviewer; user-authorized Astra fallback; no delegation",
+  "completed_utc": "2026-10-31T00:03:33.907108+00:00",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families",
+  "review_directory": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-sm-eeww-migration-astra-20261030-independent-r1",
+  "verdict": "APPROVE_BOUNDED_SM_ONE_TOKEN_MIGRATION",
+  "blocking_findings": [],
+  "decision": {
+    "case": "sm_eeww_L0",
+    "approved_action": "Later application of only this one numerator token to the exact reviewed target, preserving every other byte. This reviewer has not applied it.",
+    "old": "0xec3019645ae8d3e5",
+    "new": "0x0098a2a731e2a6fb",
+    "field": "numerators",
+    "target_revision": "f47f27213a1c55291239c9bc0f334a7ea1cd1cc1",
+    "metadata_equivalent_revision": "48d0b98b97b368b2a2f58abe67cb19dddec623df",
+    "proof_revision": "5ba04864ca506e259d9eef4a54f65acdd8323fc2",
+    "built_revision": "5ea149ffd88ae3afc4072a38c0871c1329be8424",
+    "kernel": "8eb7c3729d6abefc916decc1bdf0c06536f8af80",
+    "source_path": "crates/feynkit-generator/tests/generation_oracle/main.rs",
+    "before_blob": "d61a4beebfc1b0d650cd17b001a1fdc6433b60d5",
+    "after_blob": "e6af4ec644688e1333064c50e3b157ae631473ee",
+    "before_sha256": "aedd07670ad16ae72ae1c96970668c80ea0ecd5d6d5992c736af71de7d00999b",
+    "after_sha256": "c642b5cc8145610854a8681d6987ea392266064c429cfa86719e72296083f0f7",
+    "patch_sha256": "8746bdbf6418e2fa67a5480ac61e548394bbf000b270c11422e51085b2d535c9",
+    "changed_tokens": 1,
+    "all_other_target_bytes_and_prior_eight_rows": "Verified exact",
+    "applied": false,
+    "post_patch_runtime_pass": false
+  },
+  "scope": {
+    "graphs": 4,
+    "owners_per_mode": 40,
+    "classes": [
+      "None",
+      "Auto"
+    ],
+    "independent_mode_checks": true,
+    "grouping": "None",
+    "generation_pool": 1,
+    "literal_assertion": "Only the particle-only None reference is compared to Row by main.rs/check; actual Auto captured and derived independently.",
+    "integration_plan": "WP9 finite standard: full expression/group-source equivalence plus previously independently reviewed correctness argument; no authorization from equal counts, weights or FNV alone."
+  },
+  "why_approved": [
+    "The exact source-defined, injective, whole-symbol map changes only gammalooprs Q/edge/vertex presentation spellings. The entire historical census JSON maps to the entire current census JSON, in each mode and in reverse. No interface insertion, arbitrary normalization, factor distribution, trace or numeric/model-parameter substitution is used.",
+    "All forty actual owners per mode join by exact outer hexadecimal ID and owner. Their decoded expressions match the public payloads; mapped expressions, typed flags and ordered logical ports agree. There are zero explicit interface arrays in both routes and modes. Captured model/request/options/Run, physical frames, full canonical keys, groups and signed source factors are exact.",
+    "The actual export/admit/from_serde contract was traced in immutable source: export omits metadata only after inferred re-admission recovers the stored logical slots; same_value compares expression and logical order; generation and finalization use retained tensor owners, and graph consumers use typed multiplication. For this finite SM cell no slot-order change is being accepted. This is sufficient under the accepted observer/decoder premises; it is not a universal decoder or positional-consumer theorem.",
+    "The prior independent local/aggregate mathematical certificate is carried by exact original-input invariance, not by the new digest. Fresh syntax-only reconstruction binds all forty local comparison pairs and eight factorized aggregate pairs per mode to actual captured factors. Raw/decoded/port faithfulness inputs, complete definition tables, original pair wrappers, model/rule/coupling bindings, native programs and retained results all join exactly.",
+    "Independent census.rs byte reconstruction reproduces the entire historical and proposed ten-field Rows and the original pristine/observer stderr. The current original test exits101 with only numerator inequality; the old literal is obsolete because of the justified three-symbol serialization change. The proposed patch is exactly one token, with all nine other Row fields and every other target byte preserved."
+  ],
+  "row_reconstruction": {
+    "historical_None": {
+      "diagrams": 4,
+      "topologies": 2,
+      "assignments": 4,
+      "inverse_symmetry": [
+        4,
+        1
+      ],
+      "weights": [
+        -4,
+        1
+      ],
+      "symmetry_factors": [
+        [
+          1,
+          4
+        ]
+      ],
+      "content": 8392395207565614451,
+      "numerators": 17019130910645736421,
+      "named": 5198450464672462412,
+      "ids": 17749905428536467506
+    },
+    "current_None": {
+      "diagrams": 4,
+      "topologies": 2,
+      "assignments": 4,
+      "inverse_symmetry": [
+        4,
+        1
+      ],
+      "weights": [
+        -4,
+        1
+      ],
+      "symmetry_factors": [
+        [
+          1,
+          4
+        ]
+      ],
+      "content": 8392395207565614451,
+      "numerators": 42963035440195323,
+      "named": 5198450464672462412,
+      "ids": 17749905428536467506
+    },
+    "historical_Auto_derived": {
+      "diagrams": 4,
+      "topologies": 2,
+      "assignments": 4,
+      "inverse_symmetry": [
+        4,
+        1
+      ],
+      "weights": [
+        -4,
+        1
+      ],
+      "symmetry_factors": [
+        [
+          1,
+          4
+        ]
+      ],
+      "content": 8392395207565614451,
+      "numerators": 17019130910645736421,
+      "named": 5198450464672462412,
+      "ids": 17749905428536467506
+    },
+    "current_Auto_derived": {
+      "diagrams": 4,
+      "topologies": 2,
+      "assignments": 4,
+      "inverse_symmetry": [
+        4,
+        1
+      ],
+      "weights": [
+        -4,
+        1
+      ],
+      "symmetry_factors": [
+        [
+          1,
+          4
+        ]
+      ],
+      "content": 8392395207565614451,
+      "numerators": 42963035440195323,
+      "named": 5198450464672462412,
+      "ids": 17749905428536467506
+    },
+    "Auto_is_not_another_native_Row_assertion": true,
+    "do_not_generalize_SM_mode_identity": "qed_ee4f_L0 has different None/Auto topology counts and naming. No equality for another case is inferred."
+  },
+  "separate_blocked_rows": {
+    "qed_ee4f_L0": {
+      "decision": "NO APPROVAL; excluded from patch and this migration decision",
+      "blockers_retained": "Finite declared-interface admission/round-trip and ordered-consumer correspondence for the actual changed arrays remain open; port multisets or native Atom equality do not discharge them."
+    },
+    "xs_qed_eeee_L1": {
+      "decision": "NO APPROVAL; excluded from patch and this migration decision",
+      "blockers_retained": "Finite declared-interface admission/round-trip and ordered-consumer correspondence for the actual changed arrays remain open; port multisets or native Atom equality do not discharge them."
+    },
+    "xs_qcd_gguu_1pi_L1": {
+      "decision": "NO APPROVAL; excluded from patch and this migration decision",
+      "blockers_retained": "Finite declared-interface admission/round-trip and ordered-consumer correspondence for the actual changed arrays remain open; port multisets or native Atom equality do not discharge them."
+    }
+  },
+  "prior_reviews": [
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-small-qed-fresh8eb-math-opus-20261030T192901Z-3624403/review.json",
+      "sha256": "b5f46f1b682a5f5ed8191bcc591003d4d553173e105c26b88094ae7ba7660433",
+      "verdict": "APPROVE_SCOPE_B",
+      "scope": "Bounded preparation only: qed_ee4f_L0 (6 graphs/96 owners) and xs_qed_eeee_L1 (4 graphs/52 owners), Classes None and Auto independently, Grouping None, captured pool 1, fresh 5ea/community-8eb producer captures joined to frozen historical 2b1ef4/c78. Not an approval to change any literal, of the other 71/73 rows, pooled 8/32, FeynKit integration/WP3, CI, full docs/source/runtime or combined approval. Scope A (build/provenance) and the separate source Opus review remain pending and are not inferred.",
+      "grants_this_migration_approval": false
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-small-gauge-fresh8eb-math-opus-20261030T192536Z-3568994/review.json",
+      "sha256": "1591408caad7566439fcd54a1c76398691473bb4e41c59ddd3cb85a5e1337823",
+      "verdict": "REQUEST_CHANGES",
+      "scope": "B: mathematics/control review of two separate finite preparations; no migration, no combined FeynKit/WP3 approval",
+      "grants_this_migration_approval": false
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-raw-four-dispositions-opus-20261030T202304Z-196212/review.json",
+      "sha256": "6e4410dd16ef6c2366b08793af0e835c21e55526bf124a2d3581283c32f1a9a2",
+      "verdict": "APPROVE_CORRECTED_SCOPE_B_PREPARATIONS",
+      "scope": null,
+      "grants_this_migration_approval": false
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-raw-four-wrapper-r5-astra-20261030-231903Z/review.json",
+      "sha256": "84b98b9711e498cc88c6e901a09ce9d37b8a514a1d860cba3f3c157554f69093",
+      "verdict": "APPROVE_R5_SCOPED_WRAPPER_REPORTING_ERRATA",
+      "scope": "Approve the additive R1-R8 reporting corrections and the exact r5 copies for bounded cooperative pure-Python execution under the conditions below. Preserve only the existing four DISTINCT finite Scope B preparation approvals by verified evidence invariance. No new mathematics, native, literal/expectation, migration, interface-order, general-runner, source-integration or combined approval.",
+      "grants_this_migration_approval": false
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-feynkit-refresh-shared-provenance-opus-20261030T193404Z-3c0453ff/review.json",
+      "sha256": "565caeace0112a30fb9118f94b2bb759e4267d2b802395c314e485b89b4b2b70",
+      "verdict": "APPROVE_SHARED_SCOPE_A",
+      "scope": "Shared Scope A provenance/runtime/evidence only, serving the twelve-case pool1 characterization and the provenance of BOTH new raw certificate lanes (QED r3, gauge r3). NOT source reconciliation, mathematics/native-control, ScopeB lane, migration, combined or integration approval.",
+      "grants_this_migration_approval": false
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-feynkit-refresh-source-opus-round4-20261030T201146Z-697912d5/review.json",
+      "sha256": "5d9db6c6d385bd25ea9e276a2a1ebd2e95c0678171854e4ccb73a1362130e1af",
+      "verdict": "APPROVE_SOURCE_RECONCILIATION",
+      "scope": "SOURCE_RECONCILIATION only. Covers the reconciled source content through code f47f27213a1c55291239c9bc0f334a7ea1cd1cc1: the prior reviewed source (106-commit replay plus the f842/5ba0 repairs, carried by invariance) and the one-file R3-1 correction. Also covers the truthfulness of the additive cacd evidence. EXCLUDES the c3449988 shared metadata (docs/developers.toml note, docs/architecture/generation-feynkit-community-refresh.typ and qualification/*.json), which has its own active ScopeA review; see XS-1. Grants no installed-host, runtime, WebKit, product-rendering, proof, stub-parity, full-site, budget, migration, WP3 or combined approval.",
+      "grants_this_migration_approval": false
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-refresh-aggregation-astra-20261030-independent/review.json",
+      "sha256": "567fba9cfa9287478d5c1531fd46eac49c79f4cd6fbcc878c50bd364cf279342",
+      "verdict": "APPROVE_FOCUSED_METADATA_AGGREGATION",
+      "scope": "Only metadata delta cacd5182704082df929a066548e3501be22c9533..48d0b98b97b368b2a2f58abe67cb19dddec623df: retention and faithful attribution of six completed independent reviews, canonical note update, XS-1 paired-field repair, and additive prior-eight F1-F7 reporting disclosures. No combined/integration/WP3/M-rebuild, migration/literal/expectation, mathematical/runtime, product/browser or full-docs approval.",
+      "grants_this_migration_approval": false
+    }
+  ],
+  "prior_review_interpretation": {
+    "gauge_original": "1591408c remained REQUEST_CHANGES for reporting, with mathematics passed and no blocking SM mathematical finding. Never relabelled as migration approval.",
+    "corrected_dispositions": "6e4410dd approves corrected bounded preparations only; its SM3-symbol/QCD-interface/native-subset/None-assertion qualifications are retained.",
+    "r5": "84b98b97 only approves bounded pure wrapper/reporting use. r5common.run was not called here or by the candidate; no general runner/native adapter approval.",
+    "provenance_source_metadata": "Shared ScopeA, source-f47f and metadata-48d0 reviews are distinct reused premises with their original exclusions. Their conjunction did not previously grant this migration; this report supplies the new, separate decision."
+  },
+  "fresh_checks": {
+    "execution": "Pinned Python3.14.7 -I -S -B, stdlib-only, env -i; read-only explicit-main/.git ls-tree/cat-file with GIT_OPTIONAL_LOCKS=0 and global/system config disabled. No jj command was needed.",
+    "integrity": "447 sealed packet files, all supplied hashes, all7218 original frozen entries, all510 packet-consumed inputs; fresh final review-input hashes and selected physical-source comparison retained.",
+    "source": "158 selected source blobs plus supplemental Spenso display/notation sources checked against immutable Git objects; target/proof/built/metadata relevant blobs and root Cargo.lock agree. Source-boundary anchors verified; exact patch reconstructed in memory only.",
+    "payloads": "Both modes, full historical/current live inputs and census payloads, all80 owner comparisons, zero declared arrays, exact ordered ports, complete definitions and actual map, singleton source factors and finite Q-carrier incidence checks.",
+    "pairs": {
+      "None": {
+        "cross_pairs": 40,
+        "aggregate_pairs": 8,
+        "faithfulness": [
+          41,
+          26
+        ],
+        "original_factor_and_owner_syntax_bound": true,
+        "no_new_algebra": true
+      },
+      "Auto": {
+        "cross_pairs": 40,
+        "aggregate_pairs": 8,
+        "faithfulness": [
+          41,
+          26
+        ],
+        "original_factor_and_owner_syntax_bound": true,
+        "no_new_algebra": true
+      }
+    },
+    "runtime_record_audit": {
+      "both_exits": 101,
+      "selected_case": "sm_eeww_L0",
+      "pool": 1,
+      "five_companions_exact": true,
+      "full_None_summaries_exact": true,
+      "post_patch_runtime": "NOT RUN",
+      "Auto_native_Row_assertion": false
+    },
+    "heldout_pure_predicates": [
+      {
+        "name": "wrong case",
+        "expected": "exact-case",
+        "observed": "exact-case",
+        "outcome": "REJECT",
+        "execution": "fresh pure in-memory"
+      },
+      {
+        "name": "wrong new token",
+        "expected": "exact-one-token",
+        "observed": "exact-one-token",
+        "outcome": "REJECT",
+        "execution": "fresh pure in-memory"
+      },
+      {
+        "name": "extra Rust change",
+        "expected": "every-other-byte",
+        "observed": "every-other-byte",
+        "outcome": "REJECT",
+        "execution": "fresh pure in-memory"
+      },
+      {
+        "name": "omit Q whole-symbol map",
+        "expected": "whole-payload-map",
+        "observed": "whole-payload-map",
+        "outcome": "REJECT",
+        "execution": "fresh pure in-memory"
+      },
+      {
+        "name": "drop semantic edge index tag",
+        "expected": "whole-payload-map",
+        "observed": "whole-payload-map",
+        "outcome": "REJECT",
+        "execution": "fresh pure in-memory"
+      },
+      {
+        "name": "valid-domain vertex owner swap",
+        "expected": "typed-owner-decoded-payload",
+        "observed": "typed-owner-decoded-payload",
+        "outcome": "REJECT",
+        "execution": "fresh pure in-memory"
+      },
+      {
+        "name": "ordered-port swap with same multiset",
+        "expected": "ordered-port-identity",
+        "observed": "ordered-port-identity",
+        "outcome": "REJECT",
+        "execution": "fresh pure in-memory"
+      },
+      {
+        "name": "group source factor mutation",
+        "expected": "singleton-exact-source-factor",
+        "observed": "singleton-exact-source-factor",
+        "outcome": "REJECT",
+        "execution": "fresh pure in-memory"
+      }
+    ],
+    "controls": "15 implementation controls audited as retained pure results, with exact predicates and source inspection; not rerun here. Eight additional reviewer pure in-memory heldouts reject wrong case/token/extra source byte/missing Q mapping/dropped semantic tag/valid owner swap/ordered port swap/source factor mutation."
+  },
+  "native_reuse_accounting": {
+    "all_cases_prior_successful_batches": 72,
+    "all_cases_pair_execution_obligations": 4110,
+    "counts_by_case": {
+      "qed_ee4f_L0": 4,
+      "xs_qed_eeee_L1": 4,
+      "sm_eeww_L0": 32,
+      "xs_qcd_gguu_1pi_L1": 32
+    },
+    "pair_obligations_by_case": {
+      "qed_ee4f_L0": 740,
+      "xs_qed_eeee_L1": 524,
+      "sm_eeww_L0": 1022,
+      "xs_qcd_gguu_1pi_L1": 1824
+    },
+    "SM_only": "32 prior successful substage batches /1022 pair obligations:8 baseline batches (230 obligations,115 per mode), plus24 successful substages of controls. Not32 distinct baseline proofs; not all72 SM; none new.",
+    "new_native_batches": 0,
+    "baseline_per_mode": "41 historical faithfulness +26 current faithfulness +40 cross-owner +8 aggregate =115",
+    "native_definition_limit": "Later subset-tag spellings can parse as the already registered symbol. Native equality is not tag/attribute identity evidence. Complete exact Python definition tables and source bindings carry that burden.",
+    "other_prior_kernels": "Original H/c78 and old-current1A reviewer runs retain only their historical scope; old1A is not substituted for current8eb."
+  },
+  "findings": [
+    {
+      "id": "SM-N1",
+      "severity": "INFO",
+      "title": "Physical family checkout is not the exact proposal target",
+      "detail": "The physical main.rs differs from f47f in three pre-existing QED literals. It is unchanged since this review started and its SM Row equals the target. Approval binds the explicit d61a4bee -> e6af4ec6 target blobs; do not transplant the whole evidence main.rs into this workspace. See physical-main-comparison.json."
+    },
+    {
+      "id": "SM-N2",
+      "severity": "INFO",
+      "title": "Concurrent metadata guard remains failed",
+      "detail": "Candidate final guard exit1 is genuine. All7218 frozen entries and510 consumed inputs rehash exact; selected semantic physical source files remain unchanged against its baseline and main index/HEAD/packed-refs match. External grouped-helper snapshots/new family changes are authorized separately. No global JJ/ref pass or reversal of others' work is claimed."
+    },
+    {
+      "id": "SM-N3",
+      "severity": "INFO",
+      "title": "Control and journal counts require their retained qualifications",
+      "detail": "The original control labelled inverse QCD edge convention actually perturbs a vertex with a four-entry vector. The additive controls isolate the real same-rank edge and vertex inverses. Fifteen is the implementation pure count; eight fresh SM reviewer predicates are separate. The journal hashes after child exit before writing result: absent/empty result is incomplete. Twelve results existed before complete-v1; its later nonempty result makes13. Six earlier input paths bind exact archived source versions, not their later file contents."
+    },
+    {
+      "id": "SM-N4",
+      "severity": "INFO",
+      "title": "Current model-binding list repeats the same four graphs",
+      "detail": "The retained r3 baseline list has two identical current four-graph blocks from owner_table during joining and again during validation. Both reproduce actual rule/coupling bindings; no extra graph or proof credit. See model-rule-joins.json."
+    }
+  ],
+  "carried_premises": [
+    "Historical raw/cooked/decoded association, observed logical ports and registration state remain the accepted finite capture premises. No universal historical decoder, free-index, locality or consumer interchangeability theorem is asserted.",
+    "Independent Opus mathematics/control and shared provenance reviews remain authoritative only for their unchanged exact inputs. New checks are source/JSON/syntax/hash checks; native algebra, producer builds and captures were not redone.",
+    "Shared build qualification retains its original daemon/store/compiler/vendor assumptions, historical command gaps and source/built distinctions. Kernel pin is bound through the retained reviewed chain; no new local kernel-tree reconstruction or Nix qualification.",
+    "Original wrappers' posthash completion condition and historical r4/earlier reporting gaps remain disclosed. Missing histories are not invented and failed/infrastructure runs are not successes."
+  ],
+  "remaining_gates": [
+    "Actual application by the authorized owner, preserving the exact one-token scope; refresh target invariance if integrating onto a different tree.",
+    "Qualify the resulting assertion producer and run the actual non-record, non-zero-selection full-Row SM test after application. No post-patch runtime pass exists in this review.",
+    "Pools8/32, the three other raw rows, groupedAuto, full371 lane, combined FeynKit/WP3, M-rebuild and source-whole-workspace/integration approval remain open.",
+    "All original installed-host/browser/stub/full-docs/performance/distribution/publication gates stay outside this verdict. Typst was inspected as source only; no build, render, formatter or Nix command was permitted."
+  ],
+  "guards": {
+    "created": "2026-10-31T00:01:32.625141+00:00",
+    "status": "PASS_PINNED_INPUTS_AND_SELECTED_SOURCE",
+    "exact_review_inputs_rehashed": 7717,
+    "packet_447_manifest_entries_rehashed": true,
+    "packet_pins_unchanged": true,
+    "selected_physical_source_paths_compared_to_implementation_baseline": 161,
+    "selected_physical_source_changes": [],
+    "physical_main_unchanged_since_review_start": true,
+    "frozen_7218_entries_rehashed_in": "evidence-v5.json",
+    "global_jj_ref_invariance_claimed": false,
+    "concurrent_metadata_disclosure_preserved": "6523fb8fd2f183a70f7e0a69d7a8e5ad511c30ce8928e49bad7e3ec0b061ffcf",
+    "guidance_hashes_at_finish": {
+      "../main/AGENTS.md": "8567f7ce8b5c575299d0800af34f66c9684e6b1b2617c615f5d8823df9a971fa",
+      "../main/CONTRIBUTING.typ": "c92c023af016d801889eea170203916c4f50bd6dce848ac18484e0b04667c2e1",
+      "AGENTS.md": "e1add0d8d63969c9218b31a8caa12539776b8e2db4b8d72ce5e2af6154082645",
+      "CONTRIBUTING.typ": "109a7a0caaf9d654291f1ea62cd72dde21ea81b40048c9c7089f89e154a8f9fa",
+      "docs/architecture/generation-integration-plan.typ": "e1ff7645596b88d02de20dc21316c890888746a5768443e4e5d0e33bf506ee85",
+      "docs/architecture/generation-oracle-family-migration.typ": "14187c6f51a09b7c6fc5c29cc90ac72f2da394fff0c392355de81224179c62ac"
+    },
+    "new_processes_remaining": [],
+    "writes": "Only new files under this review output directory; no patch applied."
+  },
+  "process": {
+    "writes": "Only new ignored files in this review directory",
+    "source_candidate_expectation_ref_index_changes": 0,
+    "native_licensed_capture_producer_Nix_build_network_commands": 0,
+    "license_or_user_configuration_reads": 0,
+    "delegations": 0,
+    "patch_applied": false,
+    "owned_processes_remaining": [],
+    "review_probe_errors": "All failed probes and subsequent corrected versions retained. They were reviewer schema/attribution assumptions (physical target vs checkout, omitted id/name, decimal-string Aut, duplicate factor occurrence labels, decoded-only definition table, prose vs actual calls, archived helper versions), not candidate changes or failed native proofs."
+  },
+  "packet_bindings": {
+    "handoff.json": "d696b93c4b85fb3b733f09cd57f833858efac8a672ee1a4471f5fe87dbb49544",
+    "SEAL.json": "cfaf891b7c88327a11999c8b252edeecba4262c9b075fa3b4aaef5683f38ca6a",
+    "proposed-not-applied.patch": "8746bdbf6418e2fa67a5480ac61e548394bbf000b270c11422e51085b2d535c9",
+    "source-boundaries.json": "373110bfd8c339de1275268234c747f783f5dc13adff30adb5cecce004470b00",
+    "boundary-verification.json": "f9e47136d355ca2cdc085ad6becc1ea4baccbfbbd53e2b08e52b92f059f11ed5",
+    "concurrent-metadata-disclosure.json": "6523fb8fd2f183a70f7e0a69d7a8e5ad511c30ce8928e49bad7e3ec0b061ffcf"
+  },
+  "candidate_sha256": "59472d1a96ffdc75c16b27c6c85473ed27efe7fb1f3a3a5acf49771f49c5a75b",
+  "artifacts": {
+    "start.json": "c2166f2aac75dcaa5e70d8c6c3b61f73c5fcc238fc6bf17d0d2da6c8c16b567d",
+    "probe-v5.py": "9c6ff6c97044689dc862e6d20fd14f7590db4ef240e72008f8d042b14e14ac84",
+    "probe-v5.json": "140a8b00f880ac786bf24f3ce9ac8595a22880ba6ffe7eadf395752135fa3796",
+    "evidence-v5.py": "945e70d9f51b138505554ef3dfef8348100a9e7db2dd1066c48ea8bc5360ca6d",
+    "evidence-v5.json": "bffc55e8c7dc6042e56965d0fab68e5d7c9ba9429cf04b81a141f69ee47e3da0",
+    "physical-main-comparison.json": "d50f2e53b4e1527c7b5d81144e1f58764bb7531eba01dbf62a8603393cdfaed0",
+    "supplemental-source-checks.json": "73feaa2bbeb6b29867bc7095002068f69d28941cd6afae962494cf04844c4287",
+    "model-rule-joins.json": "d47fc52c81545097dfae2b29d886bc383030d22388ff394f482f16ccac80ad4c",
+    "probe-errors.json": "6c9adeef98dee8bf65f7105d72c6ef5d9222c61e0e47a285dfbbdf2adc70751f",
+    "final-guard.json": "88e459f297deacc43533dc33dfe30c7ff5c79bac66da2f1d7363ddb5bc2194e3"
+  },
+  "retention": "Retain this entire ignored review directory (probes, errors, hashes and decision) for root review/application and audit. No temporary external files or processes remain; no earlier evidence or contributor work removed."
+}

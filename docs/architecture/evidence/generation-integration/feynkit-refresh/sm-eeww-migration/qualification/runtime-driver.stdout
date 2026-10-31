@@ -1,0 +1,5 @@
+actual compiled inventory: exact nine nonempty identities
+pool 1 exit 0 [('xs_qed_eedd_L1', 'passed'), ('xs_qed_eemm_L1', 'passed'), ('sm_eemm_L0', 'passed'), ('xs_qed_eeee_1pi_L1', 'passed'), ('sm_eeww_L0', 'passed'), ('qed_eemm_L1', 'passed'), ('xs_qed_eemm_L2', 'passed'), ('ctorder_qcd_uugg_L1', 'passed'), ('ym_g6_L0', 'passed')]
+pool 8 exit 0 [('sm_eeww_L0', 'passed'), ('xs_qed_eedd_L1', 'passed'), ('xs_qed_eeee_1pi_L1', 'passed'), ('xs_qed_eemm_L1', 'passed'), ('sm_eemm_L0', 'passed'), ('qed_eemm_L1', 'passed'), ('xs_qed_eemm_L2', 'passed'), ('ym_g6_L0', 'passed'), ('ctorder_qcd_uugg_L1', 'passed')]
+pool 32 exit 0 [('sm_eemm_L0', 'passed'), ('xs_qed_eedd_L1', 'passed'), ('xs_qed_eemm_L1', 'passed'), ('xs_qed_eeee_1pi_L1', 'passed'), ('sm_eeww_L0', 'passed'), ('qed_eemm_L1', 'passed'), ('xs_qed_eemm_L2', 'passed'), ('ctorder_qcd_uugg_L1', 'passed'), ('ym_g6_L0', 'passed')]
+complete: 27 actual full-Row executions, zero retries or skip credit

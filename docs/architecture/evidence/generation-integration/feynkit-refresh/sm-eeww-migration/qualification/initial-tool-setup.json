@@ -1,0 +1,27 @@
+{
+  "initial_guard_lookup": {
+    "command_prefix": [
+      "env",
+      "-u",
+      "SYMBOLICA_LICENSE",
+      "-u",
+      "SYMBOLICA_LICENSE_PATH",
+      "-u",
+      "SYMBOLICA_LICENSE_SIGNED",
+      "python3",
+      "-I",
+      "-S",
+      "-B",
+      "-"
+    ],
+    "exit": 127,
+    "stderr": "env: \u2018python3\u2019: No such file or directory\n",
+    "stdout": "",
+    "attribution": "Observed exec-tool result transcribed here after the tool call; stdin guard script never executed. Corrected invocation used the explicit pre-existing pinned Python3.13.16 path. No test, Nix or license delivery occurred."
+  },
+  "temporary_search_cleanup": {
+    "command": "rg --files /nix/store -g cargo-nextest -g python3 -g bwrap",
+    "exit": 130,
+    "stopped": "Sent Ctrl-C to owned session5989; no file changes or remaining process; selected tool paths then read from retained qualification metadata."
+  }
+}

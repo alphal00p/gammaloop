@@ -1,0 +1,10 @@
+Traceback (most recent call last):
+  File "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/sm-eeww-migration-20261031/runtime.py", line 137, in <module>
+    packages,elfs,resolutions=prepare();write(O/'runtime-closure.json',{'packages':list(map(str,packages)),'ELF_RUNPATH_NEEDED':elfs,'resolutions':resolutions,'tools':{k:{'path':v,'sha256':sha(v)} for k,v in TOOLS.items()},'Nix_queries_complete':True})
+                              ~~~~~~~^^
+  File "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/sm-eeww-migration-20261031/runtime.py", line 93, in prepare
+    return closure()
+  File "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/sm-eeww-migration-20261031/runtime.py", line 62, in closure
+    assert hits,(p,needed)
+           ^^^^
+AssertionError: (PosixPath('/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/sm-eeww-migration-20261031/archive-extracted/target/nextest/libdirs/host/libstd-64f5f36fb0927694.so'), 'libgcc_s.so.1')

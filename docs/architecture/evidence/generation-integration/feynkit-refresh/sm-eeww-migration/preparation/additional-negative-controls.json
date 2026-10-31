@@ -1,0 +1,59 @@
+{
+  "count": 3,
+  "tests": [
+    {
+      "test": "same-rank inverse edge:",
+      "owner": "edge:2",
+      "id": "ad0818e3abc13783bfcc2695b849034d",
+      "actual_permutation": [
+        3,
+        2,
+        0,
+        1
+      ],
+      "mutant": [
+        2,
+        3,
+        1,
+        0
+      ],
+      "expected_predicate": "finite-interface-permutation",
+      "actual_predicate": "finite-interface-permutation"
+    },
+    {
+      "test": "same-rank inverse vertex:",
+      "owner": "vertex:0",
+      "id": "ad0818e3abc13783bfcc2695b849034d",
+      "actual_permutation": [
+        5,
+        4,
+        0,
+        1,
+        2,
+        3
+      ],
+      "mutant": [
+        2,
+        3,
+        4,
+        5,
+        1,
+        0
+      ],
+      "expected_predicate": "finite-interface-permutation",
+      "actual_predicate": "finite-interface-permutation"
+    },
+    {
+      "test": "QED Auto valid-domain owner swap",
+      "id": "e9ff090d108cca55fc5d5ccb38cc2a9f",
+      "owners": [
+        "vertex:3",
+        "vertex:2"
+      ],
+      "expected_predicate": "finite-interface-payload-binding",
+      "actual_predicate": "finite-interface-payload-binding"
+    }
+  ],
+  "all_intended_predicates": true,
+  "label_qualification": "boundary-v1's control labelled inverse QCD edge convention actually modifies the first QCD explicit witness (a vertex) with the four-entry inverse-edge vector. It proves rejection of a wrong permutation, not the isolated same-rank edge inverse. The two actual same-rank inverse controls here supply that isolation; original evidence stays unchanged."
+}

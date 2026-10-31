@@ -1,0 +1,17 @@
+{
+  "argv": [
+    "/nix/store/wzpxqpc3v2xxah69rqifq5kac67hx36g-typst-0.15.1/bin/typst",
+    "compile",
+    "--root",
+    "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh",
+    "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/docs/architecture/generation-sm-eeww-migration.typ",
+    "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/sm-eeww-migration-20261031/canonical-note-final.pdf"
+  ],
+  "exit": 0,
+  "stdout": "",
+  "stderr": "",
+  "tool_sha256": "3c381d7d3e2259f81766ff77a1e6dec18ec4c7b7702b9c51ad34d56432b9633c",
+  "source_sha256": "07bcafe949790c34a82cda0b5a6a7c7a0ec8577681cd2ccb9bc69e602c7d3456",
+  "output_sha256": "9874eef9b60429bdb00eeb29d39d1a0f8cd5153a5381c0eb755221f530aa07b8",
+  "scope": "only new standalone canonical note; final PDF is ignored review artifact"
+}

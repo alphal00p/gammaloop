@@ -1,0 +1,154 @@
+[
+  {
+    "path": "crates/feynkit-graph/src/symbols.rs",
+    "revision": "f47f27213a1c55291239c9bc0f334a7ea1cd1cc1",
+    "source_sha256": "b580b7c70db4f11bf79fd02f8109a715c01b74d63a560a54d49868b8e5c4aa9d",
+    "line": 32,
+    "anchor": "pub fn momentum()",
+    "conclusion": "Q/edge/vertex spelling definitions; historical display tags become process-local Notation. Semantic tags are retained."
+  },
+  {
+    "path": "crates/feynkit-graph/src/numerator_interface.rs",
+    "revision": "f47f27213a1c55291239c9bc0f334a7ea1cd1cc1",
+    "source_sha256": "596a58fda9f2f182ba19a3da2457b3ed45e73b554d1dd67092cc42a4c2f68ed8",
+    "line": 74,
+    "anchor": "pub fn admit(",
+    "conclusion": "Reversible cooking, inferred versus declared slots. Explicit arrays go through from_declared_parts; no omitted-metadata round-trip is assumed."
+  },
+  {
+    "path": "crates/feynkit-graph/src/numerator_interface.rs",
+    "revision": "f47f27213a1c55291239c9bc0f334a7ea1cd1cc1",
+    "source_sha256": "596a58fda9f2f182ba19a3da2457b3ed45e73b554d1dd67092cc42a4c2f68ed8",
+    "line": 125,
+    "anchor": "pub(crate) fn canonical_ports(",
+    "conclusion": "Canonical decoded-source order of inferred named ports. Historical implementation rebuilds normalized parts; target uses permuted with retained histories."
+  },
+  {
+    "path": "crates/feynkit-graph/src/numerator_interface.rs",
+    "revision": "f47f27213a1c55291239c9bc0f334a7ea1cd1cc1",
+    "source_sha256": "596a58fda9f2f182ba19a3da2457b3ed45e73b554d1dd67092cc42a4c2f68ed8",
+    "line": 154,
+    "anchor": "pub fn export<A>(",
+    "conclusion": "Exports uncooked expression, compares restored logical slots, emits array when they differ. Explicitness is meaningful serialization."
+  },
+  {
+    "path": "crates/feynkit-generator/src/generation.rs",
+    "revision": "f47f27213a1c55291239c9bc0f334a7ea1cd1cc1",
+    "source_sha256": "0e6f4a83632be8fc13633a66a7fc3ba68819b49e78fcbf26363dd0f5469c4042",
+    "line": 2433,
+    "anchor": "fn interaction_numerator(",
+    "conclusion": "Existing NumeratorOwner/NumeratorInstantiation/NumeratorTemplate owners admit or instantiate rule-local tensors, then canonicalize_named_interface."
+  },
+  {
+    "path": "crates/feynkit-generator/src/generation.rs",
+    "revision": "f47f27213a1c55291239c9bc0f334a7ea1cd1cc1",
+    "source_sha256": "0e6f4a83632be8fc13633a66a7fc3ba68819b49e78fcbf26363dd0f5469c4042",
+    "line": 2658,
+    "anchor": "fn edge_numerator(",
+    "conclusion": "Existing propagator owner and particle/model bindings instantiate edge-local tensors, then canonicalize_named_interface; no new production abstraction is added."
+  },
+  {
+    "path": "crates/feynkit-graph/src/finalization.rs",
+    "revision": "f47f27213a1c55291239c9bc0f334a7ea1cd1cc1",
+    "source_sha256": "7f537b6608fd6f82402675fc28f2e0907d3916a0df5fae8c03412ad1273da221",
+    "line": 335,
+    "anchor": "NumeratorInterface::translate(tensor",
+    "conclusion": "Finalization transports retained logical layout and index identities, including hidden zero history, instead of re-inferring payload syntax."
+  },
+  {
+    "path": "crates/feynkit-graph/src/lib.rs",
+    "revision": "f47f27213a1c55291239c9bc0f334a7ea1cd1cc1",
+    "source_sha256": "5cb3612abc2f45eb9e2317d476ad5b9c29469c8a6f6d30cef9b4578d99ce2848",
+    "line": 2520,
+    "anchor": "fn serde_view(",
+    "conclusion": "Actual public JSON serializer exports every graph/edge/vertex tensor using NumeratorInterface::export."
+  },
+  {
+    "path": "crates/feynkit-graph/src/lib.rs",
+    "revision": "f47f27213a1c55291239c9bc0f334a7ea1cd1cc1",
+    "source_sha256": "5cb3612abc2f45eb9e2317d476ad5b9c29469c8a6f6d30cef9b4578d99ce2848",
+    "line": 2579,
+    "anchor": "fn from_serde(",
+    "conclusion": "Actual JSON consumer admits each corresponding array and checks model fingerprint and diagram ID. Source contract inspected; no native round-trip run."
+  },
+  {
+    "path": "crates/idenso/src/tensor/inference.rs",
+    "revision": "f47f27213a1c55291239c9bc0f334a7ea1cd1cc1",
+    "source_sha256": "e8ee6b861580c65f116e462906980f2d3f0cf8781ea55fcc4dfefbdc9dfd730a",
+    "line": 1037,
+    "anchor": "pub fn from_declared_parts(",
+    "conclusion": "Checks observed expression scopes/index multiplicities against declared ordered interface; does not replay normalizers. Prior Atom checker is not this API."
+  },
+  {
+    "path": "crates/idenso/src/tensor/composition.rs",
+    "revision": "f47f27213a1c55291239c9bc0f334a7ea1cd1cc1",
+    "source_sha256": "b81e984ae44962ce16da32b63dba41d1fbbe02ed0297446d6aee2555379951ad",
+    "line": 112,
+    "anchor": "pub fn same_value(",
+    "conclusion": "Compares expression AND logical_slots; multiset port equality is insufficient."
+  },
+  {
+    "path": "crates/idenso/src/tensor/composition.rs",
+    "revision": "f47f27213a1c55291239c9bc0f334a7ea1cd1cc1",
+    "source_sha256": "b81e984ae44962ce16da32b63dba41d1fbbe02ed0297446d6aee2555379951ad",
+    "line": 2591,
+    "anchor": "pub fn canonicalize_named_interface(",
+    "conclusion": "Changes only layout when all public ports are named; leaves leaf arguments intact. This is a contract, not a new captured-consumer theorem."
+  },
+  {
+    "path": "crates/idenso/src/tensor/composition.rs",
+    "revision": "f47f27213a1c55291239c9bc0f334a7ea1cd1cc1",
+    "source_sha256": "b81e984ae44962ce16da32b63dba41d1fbbe02ed0297446d6aee2555379951ad",
+    "line": 2510,
+    "anchor": "pub fn permuted(",
+    "conclusion": "Checks bijection and preserves named payload; unresolved-port case materializes identities, so cannot generalize a named-port observation."
+  },
+  {
+    "path": "crates/idenso/src/tensor/composition.rs",
+    "revision": "f47f27213a1c55291239c9bc0f334a7ea1cd1cc1",
+    "source_sha256": "b81e984ae44962ce16da32b63dba41d1fbbe02ed0297446d6aee2555379951ad",
+    "line": 3588,
+    "anchor": "pub fn multiply(",
+    "conclusion": "Selects named/positional/chain product plan from stored interfaces. Explicit positional plans and alignment_indices consume logical positions."
+  },
+  {
+    "path": "crates/feynkit-graph/src/expressions.rs",
+    "revision": "f47f27213a1c55291239c9bc0f334a7ea1cd1cc1",
+    "source_sha256": "6cac6b79f31f4090fc960eb18100cfc7759fb9171422a67532020dba3e8ab948",
+    "line": 211,
+    "anchor": "pub fn numerator_of<S:",
+    "conclusion": "Actual graph consumer uses try_fold_numerator with local tensors and multiply. Selected paired edges/incident vertices belong to the existing graph owner."
+  },
+  {
+    "path": "crates/feynkit-generator/tests/generation_oracle/census.rs",
+    "revision": "f47f27213a1c55291239c9bc0f334a7ea1cd1cc1",
+    "source_sha256": "b46641d3c13dd70304a457ad4f884cedd486f188ce86dd92c73328a6b1da05d3",
+    "line": 928,
+    "anchor": "fn digest_json(",
+    "conclusion": "Numerator hash includes exact expression strings AND interface arrays; nine other Row fields separately reconstructed."
+  },
+  {
+    "path": "crates/feynkit-generator/tests/generation_oracle/census.rs",
+    "revision": "f47f27213a1c55291239c9bc0f334a7ea1cd1cc1",
+    "source_sha256": "b46641d3c13dd70304a457ad4f884cedd486f188ce86dd92c73328a6b1da05d3",
+    "line": 1078,
+    "anchor": "pub fn summary(",
+    "conclusion": "Ten-field Row bookkeeping and exact rational weights; no hash is a correctness theorem."
+  },
+  {
+    "path": "crates/feynkit-generator/tests/generation_oracle/classes.rs",
+    "revision": "f47f27213a1c55291239c9bc0f334a7ea1cd1cc1",
+    "source_sha256": "f605e4436ff0a2225155840fdad2065d50e74fd88b34979faaa97f7153a3e4fe",
+    "line": 48,
+    "anchor": "for mode in [Classes::None, Classes::Auto]",
+    "conclusion": "Runs each mode, compares class-equivalent census, returns particle-only None reference. Topology reports need not agree across classes."
+  },
+  {
+    "path": "crates/feynkit-generator/tests/generation_oracle/main.rs",
+    "revision": "f47f27213a1c55291239c9bc0f334a7ea1cd1cc1",
+    "source_sha256": "aedd07670ad16ae72ae1c96970668c80ea0ecd5d6d5992c736af71de7d00999b",
+    "line": 116,
+    "anchor": "fn check(",
+    "conclusion": "Only the returned None reference Summary is compared with the literal Row."
+  }
+]

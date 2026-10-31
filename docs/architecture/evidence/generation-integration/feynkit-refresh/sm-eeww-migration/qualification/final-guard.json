@@ -1,0 +1,20 @@
+{
+  "base_preserved": "48d0b98b97b368b2a2f58abe67cb19dddec623df",
+  "code_preserved": "605178a65620b104805b012f1edc299710e8a176",
+  "main_HEAD_index_packed_refs_equal": true,
+  "preexisting_git_refs_equal": true,
+  "new_git_refs": {
+    "refs/jj/keep/605178a65620b104805b012f1edc299710e8a176": "605178a65620b104805b012f1edc299710e8a176",
+    "refs/jj/keep/c6ce197c21cde2cd613ee6f40dee99fc0ff58904": "c6ce197c21cde2cd613ee6f40dee99fc0ff58904",
+    "refs/jj/keep/ecd9bf8d1395b895229130a08df74867b8e9665f": "ecd9bf8d1395b895229130a08df74867b8e9665f",
+    "refs/jj/keep/f30976eb1c25e0b564be0cae402fa44912a13fdf": "f30976eb1c25e0b564be0cae402fa44912a13fdf"
+  },
+  "generation_integration": "fdff0d18953348b84a0f1b7e6ab5ef703a5090de",
+  "CI": false,
+  "all118_ordered_scopes_and_digests_unchanged": true,
+  "scope_anchors_loosened": false,
+  "preexisting_notes_unchanged": true,
+  "new_note_approval_claim": false,
+  "full_source_and_runtime_ELF_libraries_rehashed": true,
+  "runtime_27_results_reparsed": true
+}
