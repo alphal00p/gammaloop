@@ -339,7 +339,7 @@ class Vakint:
         Install all official loop packs through the requested maximum, or load a
         supplied checkout directly. Existing validated installations work offline.
         """
-    def __new__(cls, run_time_decimal_precision: typing.Optional[builtins.int] = None, evaluation_order: typing.Optional[typing.Sequence[VakintEvaluationMethod]] = None, tensor_reduction_method: typing.Optional[builtins.str] = None, epsilon_symbol: typing.Optional[Expression] = None, mu_r_sq_symbol: typing.Optional[Expression] = None, form_exe_path: typing.Optional[builtins.str] = None, python_exe_path: typing.Optional[builtins.str] = None, verify_numerator_identification: typing.Optional[builtins.bool] = None, integral_normalization_factor: typing.Optional[builtins.str] = None, allow_unknown_integrals: typing.Optional[builtins.bool] = None, clean_tmp_dir: typing.Optional[builtins.bool] = None, number_of_terms_in_epsilon_expansion: typing.Optional[builtins.int] = None, use_dot_product_notation: typing.Optional[builtins.bool] = None, temporary_directory: typing.Optional[builtins.str] = None, rustred_artifact_path: typing.Optional[builtins.str] = None, rustred_cache_bytes: typing.Optional[builtins.int] = None, rustred_cache_terms: typing.Optional[builtins.int] = None, rustred_product_cache_bytes: typing.Optional[builtins.int] = None, rustred_product_cache_terms: typing.Optional[builtins.int] = None, rustred_scalar_max_work: typing.Optional[builtins.int] = None, max_process_rss_bytes: typing.Optional[builtins.int] = None, max_elapsed_seconds: typing.Optional[builtins.float] = None) -> Vakint:
+    def __new__(cls, run_time_decimal_precision: typing.Optional[builtins.int] = None, evaluation_order: typing.Optional[typing.Sequence[VakintEvaluationMethod]] = None, tensor_reduction_method: typing.Optional[builtins.str] = None, epsilon_symbol: typing.Optional[Expression] = None, mu_r_sq_symbol: typing.Optional[Expression] = None, form_exe_path: typing.Optional[builtins.str] = None, python_exe_path: typing.Optional[builtins.str] = None, verify_numerator_identification: typing.Optional[builtins.bool] = None, integral_normalization_factor: typing.Optional[builtins.str] = None, allow_unknown_integrals: typing.Optional[builtins.bool] = None, clean_tmp_dir: typing.Optional[builtins.bool] = None, number_of_terms_in_epsilon_expansion: typing.Optional[builtins.int] = None, use_dot_product_notation: typing.Optional[builtins.bool] = None, temporary_directory: typing.Optional[builtins.str] = None, rustred_artifact_path: typing.Optional[builtins.str] = None, rustred_cache_bytes: typing.Optional[builtins.int] = None, rustred_cache_terms: typing.Optional[builtins.int] = None, rustred_product_cache_bytes: typing.Optional[builtins.int] = None, rustred_product_cache_terms: typing.Optional[builtins.int] = None, rustred_scalar_max_work: typing.Optional[builtins.int] = None, max_process_rss_bytes: typing.Optional[builtins.int] = None, max_elapsed_seconds: typing.Optional[builtins.float] = None, ordered_cache: builtins.str = 'read-write', ordered_cache_directory: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, ordered_cache_ram_bytes: typing.Optional[builtins.int] = None, ordered_cache_autosave: builtins.str = 'after-evaluation') -> Vakint:
         r"""
         Create a new Vakint instance, specifying details of the evaluation stack. Note that the same instance can be recycled across multiple evaluations.
         Note that the creation of a Vakint instance involves the processing and creation of the library of all known topologies, which can be time consuming.
@@ -436,6 +436,67 @@ class Vakint:
             Cooperative elapsed-time ceiling per public operation, including data
             loading and lookup. None disables it. Native kernels are checked at
             boundaries, so an external supervisor is needed for a hard deadline.
+        ordered_cache : str
+            Use of the persistent Ordered step cache: "read-write" (default; replay
+            recorded reduction steps and record new ones), "read-only" (replay the
+            steps saved in `ordered_cache_directory`) or "off". Replayed steps are
+            identical to computed ones, so results never depend on this setting.
+        ordered_cache_directory : Optional[str]
+            Directory of the Ordered step cache, one subdirectory per reduction
+            program and engine build. None (default) keeps records in memory for
+            the lifetime of this engine. One writer per directory at a time.
+        ordered_cache_ram_bytes : Optional[int]
+            Ceiling on the estimated resident bytes of each program's cache.
+            Default 8 GiB; records beyond it are recomputed instead of kept.
+        ordered_cache_autosave : str
+            When new records of a directory-backed read-write cache are written:
+            "after-evaluation" (default), "on-drop" (when the engine is released)
+            or "never" (only `save_ordered_cache`).
+        """
+    def load_ordered_cache(self) -> dict:
+        r"""
+        Attach the Ordered step caches of every loaded reduction program now,
+        as evaluations would on first use, and return their statistics.
+
+        Opening a cache directory checks its manifests; shard files are read at
+        their first lookup. A five-loop application is covered once loaded.
+        Raises if a directory holds a cache of another program or engine build.
+        """
+    def save_ordered_cache(self) -> dict:
+        r"""
+        Write the unsaved records of every directory-backed read-write Ordered
+        step cache and return what was written.
+
+        Shard files are content-addressed and the manifest is replaced
+        atomically, so an interrupted save keeps the previous cache valid.
+        """
+    def ordered_cache_statistics(self) -> dict:
+        r"""
+        Cumulative hits, misses, inserts, records and bytes of every attached
+        Ordered step cache, in total and per reduction program.
+        """
+    def clear_ordered_cache(self) -> None:
+        r"""
+        Detach every Ordered step cache and drop its resident records.
+
+        Files are kept and reopened by the next evaluation; unsaved records are
+        discarded (call `save_ordered_cache` first to keep them).
+        """
+    def warm_ordered_cache(self, integrals: typing.Sequence[Expression]) -> dict:
+        r"""
+        Populate the Ordered step caches by reducing each integral expression
+        with RustRed (retained masters; the results are discarded), then save
+        them when a cache directory is configured.
+
+        Each expression is one evaluation. The cache is used read-write here
+        whatever its configured mode. Returns the replayed and recorded steps,
+        the save report and the resulting statistics.
+
+        Parameters
+        ----------
+
+        integrals : Sequence[Expression]
+          Vakint integral expressions, as accepted by `evaluate`.
         """
     def load_rustred_application(self, path: builtins.str) -> None:
         r"""
