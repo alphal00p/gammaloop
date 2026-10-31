@@ -1179,6 +1179,11 @@ mod tests {
                 "invalid finite constant identity",
             ),
             (
+                "vakint::s6",
+                "vakint::Integral(vakint::t^2,vakint::Interval(vakint::t,0,1))",
+                "invalid finite constant identity",
+            ),
+            (
                 "vakint::K5Moment(1)",
                 "vakint::Integral(vakint::t^3*symbolica::bessel_k(0,vakint::t)^5,vakint::Interval(vakint::t,0,∞))",
                 "contradicts",

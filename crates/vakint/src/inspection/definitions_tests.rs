@@ -75,7 +75,7 @@ fn every_builtin_constant_has_a_valid_round_tripping_definition() {
         );
     }
     for name in [
-        "cl4", "D5bar1", "D5bar2", "D6bar1", "D6bar2", "T111bar4", "BNbar4",
+        "cl4", "s6", "D5bar1", "D5bar2", "D6bar1", "D6bar2", "T111bar4", "BNbar4",
     ] {
         assert!(
             advertised.contains(&vk_parse!(name).unwrap()),
@@ -257,6 +257,48 @@ fn logarithms_and_clausen_four_have_explicit_integrals() {
 }
 
 #[test]
+fn s6_is_the_alternating_euler_sum_of_the_external_record() {
+    Vakint::initialize_vakint_symbols();
+    let s6 = vk_parse!("s6").unwrap();
+    // The defining integral is the one recorded for the external-data
+    // constant `s6weak`, which holds the same number.
+    assert_eq!(
+        builtin(s6.as_view()).unwrap().unwrap(),
+        vk_parse!("vakint::Integral(((-1*vakint::x(1)*vakint::x(2)+1)^(-1)*vakint::x(2)+(1+vakint::x(1))^(-1))*(1+vakint::x(2))^(-1)*(log(vakint::x(1)))^4*1/24,vakint::Interval(vakint::x(1),0,1),vakint::Interval(vakint::x(2),0,1))").unwrap()
+    );
+    // π^6/945 + G(0,0,0,0,-1,1; 1) agrees with the first 530 digits of the
+    // 20000-digit `s6weak` value (PARI/GP polylogmult) to 10^-520.
+    let reference = concat!(
+        "0.987441426403299713771650008041820214136027148914268457275159051545613699118788",
+        "95355863956404477558915203056255385484634405674146808430963398029349014388073675",
+        "78223891443107286824544624274697958426558527272542518301085916762833332868503803",
+        "93291446383742558888665518877211584486938570223932316983125303760473057025165832",
+        "02905810931661490473936355942820783847449825120107884979332566716367272547925735",
+        "28141616623873609332067371359425038714180930009895421875037734928695044736738749",
+        "9265350018206576197727009048919335710221093120894275",
+    );
+    let bits = 1800;
+    let settings = VakintSettings {
+        run_time_decimal_precision: 540,
+        ..Default::default()
+    };
+    let value = crate::hpl::substitute_numerically(
+        super::super::constants::builtin_definition(s6.as_view())
+            .unwrap()
+            .unwrap()
+            .as_view(),
+        &settings,
+    )
+    .unwrap()
+    .evaluate_with_prec(&ahash::HashMap::<Atom, Complex<Float>>::default(), bits)
+    .unwrap();
+    let bound = Float::parse("1e-520", Some(bits)).unwrap();
+    let reference = Float::parse(reference, Some(bits)).unwrap();
+    assert!((value.re - reference).norm() < bound);
+    assert!(value.im.norm() < bound);
+}
+
+#[test]
 fn matad_bar_definitions_invert_the_matad_expansions() {
     Vakint::initialize_vakint_symbols();
     let ep = Atom::var(vk_symbol!("ep"));
@@ -340,6 +382,7 @@ fn normalisation_statements_follow_the_definition_class() {
         ("sqrt3", "Exact algebraic"),
         ("cl2", "Clausen value"),
         ("cl4", "Clausen value"),
+        ("s6", "Alternating Euler sum"),
         ("S2", "Clausen value"),
         (
             "HR(1,0,1,om1)",

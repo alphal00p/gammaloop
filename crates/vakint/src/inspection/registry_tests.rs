@@ -627,6 +627,18 @@ fn constants_without_a_definition_keep_their_values_and_reason() {
         card.contains("Normalisation") && card.contains("Clausen value"),
         "{card}"
     );
+    let euler_sum = catalog
+        .get_constant("s6".parse::<ConstantSymbol>().unwrap(), 30)
+        .unwrap();
+    let card = format!("{:#}", euler_sum.presentation());
+    assert!(
+        card.contains("Definition") && card.contains("Integral"),
+        "{card}"
+    );
+    assert!(card.contains("Alternating Euler sum"), "{card}");
+    let difference = euler_sum.numerical_value().clone()
+        - Float::parse("0.98744142640329971377165000804182", Some(128)).unwrap();
+    assert!(difference.norm() < Float::with_val(128, 1e-29));
 }
 
 #[test]

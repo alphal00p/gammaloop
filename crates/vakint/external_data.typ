@@ -125,7 +125,7 @@ reject the pack. A recorded definition must be explicit: it may not reference
 another named constant (no `vakint` constant, HPL, GPL or master symbol, and
 `zeta`/`polylog` only as the complete definition of that standard function), and
 every normalization factor is written out. The data definition is authoritative
-for its symbol. Names of built-in constants, such as `cl2`, `cl4`, `D5bar1`,
+for its symbol. Names of built-in constants, such as `cl2`, `cl4`, `s6`, `D5bar1`,
 `D5bar2`, `D6bar1`, `D6bar2`, `T111bar4`, `BNbar4`, `D6`, `T1ep`, `T1ep2` or `S2`,
 cannot be redefined by a record. Packs without the field remain valid:
 the four `K5Moment`/`K5LogMoment` records and the `PR7D2`, `PR10D2`, `PR15D2`,
@@ -135,7 +135,11 @@ record is returned without a definition, with the reason, on inspection.
 Built-in identities are reserved. This version adds the built-in constants
 `log(q)` for every positive rational `q ≠ 1`, `cl4`, `D5bar1`, `D5bar2`, `D6bar1`,
 `D6bar2`, `T111bar4` and `BNbar4` (the last one is a convenience consistent with
-`matad.rs`, not a basis generator). Formulas should use these names directly:
+`matad.rs`, not a basis generator), and the alternating Euler sum
+`s6 = Σ_(m≥k≥1) (-1)^(m+k)/(m^5 k) = ζ(-5,-1) + ζ(6)` (diagonal included), evaluated
+as `π^6/945 + GPLReal(0,0,0,0,-1,1,1)` at any precision. Three-loop and four-loop
+formulas both use the built-in `s6`; the four-loop record `s6weak` holds the same
+number and stays loadable. Formulas should use these names directly:
 `validate_parameter` rejects them as runtime parameter names, and a
 `constants.json` record with one of these identities, with another built-in
 identity, or with a definition head (`Integral`, `Interval`, `LoopIntegral`,
@@ -155,9 +159,14 @@ The constant card states the normalization of each definition class:
   columns: (1fr, 1.3fr, 2.4fr),
   [*Class*], [*Examples*], [*Normalisation*],
   [Elementary and polylogarithmic numbers],
-  [`𝜋`, `γ`, `zeta(n)`, `log(q)`, `polylog(n,q)`, `s6weak`],
+  [`𝜋`, `γ`, `zeta(n)`, `log(q)`, `polylog(n,q)`],
   [Plain real number given by the convergent integral shown, first interval
    outermost; no loop measure and no further factor.],
+  [Alternating Euler sum],
+  [`s6` (and the external-data record `s6weak`, same number)],
+  [`s6 = Σ_(m≥k≥1) (-1)^(m+k)/(m^5 k) = ζ(-5,-1) + ζ(6)`, diagonal included:
+   the double integral `∫_0^1 ∫_0^1 log(x_1)^4/24 · 1/(1+x_2) · (1/(1+x_1) + x_2/(1-x_1 x_2)) dx_2 dx_1`;
+   a plain real number, no further factor.],
   [Clausen values],
   [`cl2`, `cl4`, `S2`],
   [`Cl_n(π/3) = Im Li_n(exp(i π/3))`, with `Cl_2(π/3) = -∫_0^(π/3) log(2 sin(t/2)) dt`
