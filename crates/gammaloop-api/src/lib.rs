@@ -48,10 +48,10 @@ use ::tracing::level_filters::LevelFilter;
 use ::tracing::warn;
 use clap::parser::ValueSource;
 use clap::{CommandFactory, FromArgMatches, Parser};
-use commands::Commands;
 use commands::save::SaveState;
+use commands::Commands;
 
-use gammalooprs::utils::serde_utils::{SHOWDEFAULTS, SerdeFileError};
+use gammalooprs::utils::serde_utils::{SerdeFileError, SHOWDEFAULTS};
 use session::{CliSession, CliSessionState};
 use tracing::{
     configure_file_log_boot_mode, set_file_log_filter, set_file_log_filter_override,
@@ -65,7 +65,7 @@ use tracing::{
 
 use color_eyre::Result;
 use colored::Colorize;
-use eyre::{Context, eyre};
+use eyre::{eyre, Context};
 use gammaloop_tracing_filter::LogFormat;
 use gammalooprs::{
     initialisation::initialise,
@@ -73,14 +73,14 @@ use gammalooprs::{
     settings::{GlobalSettings, RuntimeSettings},
     utils::serde_utils::IsDefault,
     utils::{
-        serde_utils::{SmartSerde, get_schema_folder, is_false, is_true},
+        serde_utils::{get_schema_folder, is_false, is_true, SmartSerde},
         tracing::LogLevel,
     },
 };
-use schemars::{JsonSchema, schema_for};
+use schemars::{schema_for, JsonSchema};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use state::{RunHistory, State, StateFolderKind, SyncSettings, classify_state_folder};
+use state::{classify_state_folder, RunHistory, State, StateFolderKind, SyncSettings};
 #[cfg(test)]
 use std::env;
 #[cfg(test)]
@@ -1921,12 +1921,12 @@ mod tests {
     };
 
     use super::{
-        CLISettings, Commands, GLOBAL_SETTINGS_FILENAME, LOG_TEST_MUTEX, LogFormat, LogLevel,
-        OneShot, Repl, RunHistory, StateSettings,
+        CLISettings, Commands, LogFormat, LogLevel, OneShot, Repl, RunHistory, StateSettings,
+        GLOBAL_SETTINGS_FILENAME, LOG_TEST_MUTEX,
     };
     #[cfg(feature = "cli")]
     use {
-        super::{CompletionShell, State, generate_completion_script},
+        super::{generate_completion_script, CompletionShell, State},
         crate::{
             commands::save::SaveState,
             state::{CommandHistory, CommandsBlock},
@@ -2167,25 +2167,23 @@ mod tests {
             command_blocks: vec![
                 CommandsBlock {
                     name: "cmdBlockA".to_string(),
-                    commands: vec![
-                        CommandHistory::from_raw_string(
-                            "set global kv global.logfile_directive=error",
-                        )
-                        .unwrap(),
-                    ],
+                    commands: vec![CommandHistory::from_raw_string(
+                        "set global kv global.logfile_directive=error",
+                    )
+                    .unwrap()],
                 },
                 CommandsBlock {
                     name: "cmdBlockB".to_string(),
-                    commands: vec![
-                        CommandHistory::from_raw_string("set default-runtime kv general.mu_r=12.0")
-                            .unwrap(),
-                    ],
+                    commands: vec![CommandHistory::from_raw_string(
+                        "set default-runtime kv general.mu_r=12.0",
+                    )
+                    .unwrap()],
                 },
             ],
-            commands: vec![
-                CommandHistory::from_raw_string("set global kv global.display_directive=warn")
-                    .unwrap(),
-            ],
+            commands: vec![CommandHistory::from_raw_string(
+                "set global kv global.display_directive=warn",
+            )
+            .unwrap()],
             ..RunHistory::default()
         };
         fs::write(&run_path, run_history.to_toml_string(true).unwrap()).unwrap();
