@@ -1,0 +1,9 @@
+{
+  "schema": "next-QCD-durability-seal/1",
+  "manifest_sha256": "8d15a9abb9ef61936d8bdf6f6400fc1652937e3b5e6fcc32b26db1d757b49a26",
+  "files": 4,
+  "evidence_commit": "6cf91fc314a0300b31e2acd4ac413c65a96c002a",
+  "primary_manifest_sha256": "245fe268474e67165b0c12aacf855118333340d21263be87c3634ae2b7fc98a9",
+  "primary_seal_sha256": "def3554d2cbd649bf2bcc682bcb54c3ffce0bef886bad2e8732f4af7e24a32bb",
+  "pending_independent_review": true
+}
