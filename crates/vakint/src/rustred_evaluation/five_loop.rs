@@ -1790,12 +1790,27 @@ mod tests {
             .unwrap();
         let loaded = vakint.loaded_application().unwrap();
         let mut settings = VakintSettings::default();
-        for arithmetic in ["modular:threads=1", "modular:threads=2,batch=8", "exact"] {
+        for arithmetic in [
+            "modular:threads=1",
+            "modular:threads=2,batch=8",
+            "modular_polynomial",
+            "exact",
+        ] {
             settings.ordered_weight_arithmetic = arithmetic.parse().unwrap();
             let reused = vakint.saved_application(&settings).unwrap();
             assert!(
                 Arc::ptr_eq(&loaded, &reused),
                 "{arithmetic} reloaded the package"
+            );
+        }
+        // n_cores sets the scheduler threads and the route-verification
+        // workers, neither of which is part of the prepared application.
+        for n_cores in [1, 2] {
+            settings.n_cores = n_cores;
+            let reused = vakint.saved_application(&settings).unwrap();
+            assert!(
+                Arc::ptr_eq(&loaded, &reused),
+                "n_cores = {n_cores} reloaded the package"
             );
         }
     }

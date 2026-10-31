@@ -159,11 +159,14 @@ impl DumpProgram<'_> {
                 family_fingerprint,
                 options,
             } => {
-                // Preparation workers (Vakint's n_cores) only parallelize
-                // route verification while loading; results do not depend on them.
+                // Preparation workers and scheduler threads (Vakint's
+                // n_cores) and the weight arithmetic (recorded separately)
+                // never change results; the replay selects its own.
                 let replayable = rustred_app::SavedApplicationOptions {
                     reduction_strategy: rustred::reduction::ReductionStrategy::Ordered,
                     unresolved_policy: rustred::solver::UnresolvedPolicy::Preserve,
+                    ordered_weight_arithmetic: options.ordered_weight_arithmetic,
+                    ordered_scheduler: options.ordered_scheduler,
                     preparation_workers: options.preparation_workers,
                     ..Default::default()
                 };
@@ -174,6 +177,7 @@ impl DumpProgram<'_> {
                     "unresolved_policy": format!("{:?}", options.unresolved_policy),
                     "entry_coverage_policy": format!("{:?}", options.entry_coverage_policy),
                     "preparation_workers": options.preparation_workers,
+                    "ordered_scheduler_threads": options.ordered_scheduler.threads,
                     "options_are_defaults_with_preserve": **options == replayable,
                     "operational_options": format!("{options:?}"),
                 })
@@ -556,10 +560,12 @@ mod tests {
             .unwrap();
         let key = IntegralKey::try_new([2, -1]).unwrap();
         let inputs = vec![(key.clone(), weight.clone())];
-        // Vakint's n_cores sets the preparation workers; they do not change results.
+        // Vakint's n_cores sets the preparation workers and the scheduler
+        // threads; they do not change results.
         let options = rustred_app::SavedApplicationOptions {
             reduction_strategy: rustred::reduction::ReductionStrategy::Ordered,
             unresolved_policy: rustred::solver::UnresolvedPolicy::Preserve,
+            ordered_scheduler: rustred::reduction::OrderedSchedulerOptions::with_threads(4),
             preparation_workers: 4,
             ..Default::default()
         };
@@ -602,6 +608,7 @@ mod tests {
             true
         );
         assert_eq!(request["program"]["preparation_workers"], 4);
+        assert_eq!(request["program"]["ordered_scheduler_threads"], 4);
         assert_eq!(request["reduction_limits_are_default"], true);
         assert_eq!(request["inputs"][0]["powers"], json!([2, -1]));
         let text = request["inputs"][0]["coefficient"].as_str().unwrap();
