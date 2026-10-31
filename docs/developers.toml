@@ -21,6 +21,7 @@ kind = "Execution record"
 status = "New independent integration-review candidate; no combined or whole-WP3 approval"
 lifecycle = "investigation"
 owner = "unassigned"
+evidence_revision = "70f48f684ec4e465907ff125fa462b55ee0d67ec"
 products = ["feynkit", "gammaloop"]
 topics = ["generation", "testing", "provenance", "integration"]
 review_triggers = ["crates/feynkit-generator/tests/generation_oracle/**", "docs/architecture/generation-sm-eeww-migration.typ", "docs/architecture/evidence/generation-integration/feynkit-refresh/sm-eeww-migration/**"]
