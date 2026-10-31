@@ -1025,7 +1025,9 @@ impl SavedApplication {
         let mut application = self.prepared.lock().map_err(failure)?;
         application.set_reduction_strategy(settings.rustred_application_options.reduction_strategy);
         application.set_ordered_weight_arithmetic(
-            settings.rustred_application_options.ordered_weight_arithmetic,
+            settings
+                .rustred_application_options
+                .ordered_weight_arithmetic,
         );
         let family = application.family();
         let loop_count = family.loop_count();
@@ -1240,7 +1242,9 @@ impl SavedApplication {
                     options: &options,
                 },
                 strategy: settings.rustred_application_options.reduction_strategy,
-                weight_arithmetic: settings.rustred_application_options.ordered_weight_arithmetic,
+                weight_arithmetic: settings
+                    .rustred_application_options
+                    .ordered_weight_arithmetic,
                 master_mode: request_dump::master_mode(settings),
                 channel: DumpChannel {
                     index: cohort_index,

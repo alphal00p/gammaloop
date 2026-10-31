@@ -59,7 +59,11 @@ pub fn parse_rustred_ordered_weight_arithmetic(
     };
     let mut options = RustRedModularWeightOptions::default();
     let rest = rest.strip_prefix(':').unwrap_or(rest);
-    for item in rest.split(',').map(str::trim).filter(|item| !item.is_empty()) {
+    for item in rest
+        .split(',')
+        .map(str::trim)
+        .filter(|item| !item.is_empty())
+    {
         let (key, value) = item
             .split_once('=')
             .ok_or_else(|| format!("expected key=value in modular options, found {item:?}"))?;
@@ -2857,7 +2861,7 @@ impl VakintTerm {
                     settings,
                     self.numerator.as_view(),
                     &integral_specs,
-                    observation.as_deref_mut(),
+                    observation,
                 )?,
                 IntegralEvaluation::RustRed {
                     loop_count: integral_specs.canonical_topology.get_integral().n_loops,

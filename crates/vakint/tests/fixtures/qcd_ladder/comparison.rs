@@ -396,7 +396,9 @@ fn run_scoped(
     settings.rustred_application_options.reduction_strategy = options.strategy;
     // Optional prototype switch: identical exact results with modular weights.
     if let Some(text) = std::env::var_os("VAKINT_ORDERED_WEIGHT_ARITHMETIC") {
-        settings.rustred_application_options.ordered_weight_arithmetic =
+        settings
+            .rustred_application_options
+            .ordered_weight_arithmetic =
             super::super::vakint::parse_rustred_ordered_weight_arithmetic(&text.to_string_lossy())?;
     }
     // Native owner-preparation diagnostics sum worker wall times. Keep one

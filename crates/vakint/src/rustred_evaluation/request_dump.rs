@@ -336,10 +336,10 @@ impl RequestDump {
         progress: Option<CandidateOrderedReductionProgress>,
     ) -> Result<(), RustRedEvaluationError> {
         let seconds = self.started.elapsed().as_secs_f64();
-        if let Some(log) = self.phases {
-            if let Some(error) = log.error {
-                return Err(failure(error));
-            }
+        if let Some(log) = self.phases
+            && let Some(error) = log.error
+        {
+            return Err(failure(error));
         }
         let digest = output_digest(terms, nonzero_conditions);
         let file = format!("{}.result.json", self.stem);
@@ -578,7 +578,10 @@ mod tests {
         .unwrap();
         assert_eq!(request["schema"], REQUEST_SCHEMA);
         assert_eq!(request["ordered_weight_arithmetic"], "Exact");
-        assert_eq!(request["program"]["options_are_defaults_with_preserve"], true);
+        assert_eq!(
+            request["program"]["options_are_defaults_with_preserve"],
+            true
+        );
         assert_eq!(request["reduction_limits_are_default"], true);
         assert_eq!(request["inputs"][0]["powers"], json!([2, -1]));
         let text = request["inputs"][0]["coefficient"].as_str().unwrap();
@@ -596,7 +599,10 @@ mod tests {
         let output = &result["output"];
         assert_eq!(output["scheme"], OUTPUT_DIGEST_SCHEME);
         assert_eq!(
-            (output["terms"].as_u64(), output["nonzero_conditions"].as_u64()),
+            (
+                output["terms"].as_u64(),
+                output["nonzero_conditions"].as_u64()
+            ),
             (Some(1), Some(2))
         );
         assert_eq!(output["distinct_nonzero_conditions"], 1);

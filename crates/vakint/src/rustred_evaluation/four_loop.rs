@@ -479,7 +479,9 @@ pub(super) fn evaluate_ordered_batch(
                 data: &data.loops[&4],
             },
             strategy: settings.rustred_application_options.reduction_strategy,
-            weight_arithmetic: settings.rustred_application_options.ordered_weight_arithmetic,
+            weight_arithmetic: settings
+                .rustred_application_options
+                .ordered_weight_arithmetic,
             master_mode: request_dump::master_mode(settings),
             channel: DumpChannel {
                 index: cohort_index,
@@ -507,12 +509,16 @@ pub(super) fn evaluate_ordered_batch(
             dump.as_mut(),
             observation.as_deref_mut(),
             |observation| {
-                program.native.reduce_linear_combination_ordered_with_arithmetic(
-                    terms,
-                    settings.rustred_application_options.reduction_limits,
-                    settings.rustred_application_options.ordered_weight_arithmetic,
-                    observation,
-                )
+                program
+                    .native
+                    .reduce_linear_combination_ordered_with_arithmetic(
+                        terms,
+                        settings.rustred_application_options.reduction_limits,
+                        settings
+                            .rustred_application_options
+                            .ordered_weight_arithmetic,
+                        observation,
+                    )
             },
         )??;
         if let Some(dump) = dump {

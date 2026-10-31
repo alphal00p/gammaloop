@@ -382,7 +382,9 @@ pub(super) fn evaluate_ordered_batch(
                 data: &data.loops[&first.loop_count],
             },
             strategy: settings.rustred_application_options.reduction_strategy,
-            weight_arithmetic: settings.rustred_application_options.ordered_weight_arithmetic,
+            weight_arithmetic: settings
+                .rustred_application_options
+                .ordered_weight_arithmetic,
             master_mode: request_dump::master_mode(settings),
             channel: DumpChannel {
                 index: cohort_index,
@@ -417,7 +419,9 @@ pub(super) fn evaluate_ordered_batch(
                         artifact,
                         terms,
                         settings.rustred_application_options.reduction_limits,
-                        settings.rustred_application_options.ordered_weight_arithmetic,
+                        settings
+                            .rustred_application_options
+                            .ordered_weight_arithmetic,
                         &mut |progress, current| {
                             observer.emit_ordered_progress(
                                 artifact.family_fingerprint(),
@@ -432,7 +436,9 @@ pub(super) fn evaluate_ordered_batch(
                     artifact,
                     terms,
                     settings.rustred_application_options.reduction_limits,
-                    settings.rustred_application_options.ordered_weight_arithmetic,
+                    settings
+                        .rustred_application_options
+                        .ordered_weight_arithmetic,
                     &mut |_, _| Ok(()),
                 ),
             },

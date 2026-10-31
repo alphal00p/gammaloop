@@ -137,7 +137,9 @@ impl<const N: usize> NativeCandidate<N> {
                     }),
                 )
             }
-            None => reducer.reduce_linear_combination_ordered_with_arithmetic(terms, arithmetic, None),
+            None => {
+                reducer.reduce_linear_combination_ordered_with_arithmetic(terms, arithmetic, None)
+            }
         }
         .map_err(crate::RustRedEvaluationError::from_native)
     }
