@@ -12,7 +12,73 @@
   "CI_enabled": false,
   "publication_authorized": false,
   "global_advance_performed": false,
-  "accepted_reviews": [
+  "combined_review": "Unassigned: root must obtain a NEW independent review of this exact conjunction; constituent approvals alone do not approve it.",
+  "bounded_grouped": {
+    "root_disposition": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/root-dispositions/root-grouped-applied-integration-acceptance-20261031.json",
+    "scope": "ENTIRE corrected bounded applied grouped conjunction at7f, not durability alone",
+    "archive_sha256": "ba02f91fc47a35b03cc9d51dded39836a7635bdf423c6025ab6e4775c504fc35",
+    "oracle_elf_sha256": "7f00172ace12f04ef53d51a70e6ac4a12248e05e3d61edbde42e5e02079f5c81",
+    "migrated_rows": 13,
+    "actual_runtime_passes": 39,
+    "pools": [
+      1,
+      8,
+      32
+    ],
+    "public_files": 5,
+    "owner_associations": 2124,
+    "full_Row": "Only literal Classes::None; Auto physical captures and captured search-counter premises separately retained. Pools8/32 are runtime evidence only.",
+    "proof": "Independent current raw30 plus separate None/Auto P1-P5. Both operand AND output-axis maps; finite current named logical consumers with validated canonical p/p-inverse. No historical grouped producer upgrade, dense/positional/general decoder/import/locality/full-integrand theorem.",
+    "historical_B1": "Old7c review0f0851e remains REQUEST_CHANGES:412/425 closure and13 missing logs. Repaired7f425/425 plus29 subordinate entries accepted by66db3d6d. Prior positive39freshchecks reused by correction; zero additional native runs."
+  },
+  "prior_full_generator_pool1": {
+    "source": "ffa76ec420642c03349ab756d2d7720ab93c0057",
+    "inventory": 420,
+    "selected": 371,
+    "passed": 302,
+    "failed": 69,
+    "ignored": 49,
+    "fresh": false,
+    "meaning": "Actual prior characterization; numerator-only asserted Summary pairs are not physical proof.",
+    "derived_pending_other_identities": 68,
+    "derivation": "One of prior69 failure identities now has an accepted bounded grouped migration. This is a worklist subtraction, never a newly executed303/68/49 result.",
+    "complete_pool8_or32": false
+  },
+  "prior_twelve_rows": "Accepted raw-three integration535b7926 on SM/prior-eight prerequisites:36 actual full-Row None checks at1/8/32 and15 pool1 physical joins; mode-specific physical Auto and observer/whole-definition/complete operand-output maps retained.",
+  "host_scope": "Accepted applied stub2cf, corrected ordinary wheel and separate private RustRed7c1/kernel8eb host with8fresh independent passes. Ordinary lacksIBPFamily. Private arity1 only; tracing_max_level_info differs ordinary. Loader, wheel-vs-loose-companion and external closure qualifications retained. No production RustRed/fullCommunity.",
+  "finite_runner": "Exact finite r3 F1/F2 guards accepted under b370752/root disposition. Old verbatim pending wording does not reopen them. No generic runner/adapter/native/math approval.",
+  "source46": "Cumulative79dfeaab approval is real and source/profile/kernel-bound. No repeat implementation. New8eb consumer qualification is separate.",
+  "production_core_API_evaluator": {
+    "status": "ACTIVE_SIBLING_NO_COMPLETION_OR_RUNTIME_RESULTS_SUPPLIED",
+    "source": "2cfb52b28d99f92305a9d571bbe3911cf04b8a19",
+    "producer_roots": 6,
+    "source_filter_transition": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/compiled-input-invariance.json",
+    "positive_runtime_credit_here": 0,
+    "limits": "No producer completion, current native discovery counts or runtime passes inferred. Source/filter byte comparison does not replace exact derivation or runtime qualification."
+  },
+  "next_three_QCD": {
+    "capture_review_sha256": "7ccf8f133bff073e5f428d1fabc0ebd6552aa1e04a8b7edd149f526b37330aa7",
+    "capture_scope": "12invocations;6oldpass/6current101;24worlds only",
+    "preparation_review_sha256": "62dade9062105a077ae6089d7e261742d57d63d9d07737b020c9b3098a71db95",
+    "preparation_status": "REQUEST_CHANGES: PREP1 fold endpoints; PREP2 live case/mode. r2 repair/supervisor ACTIVE, no completion supplied.",
+    "math_interface_native21_migration_approval": false
+  },
+  "remaining_gates": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/current-status-matrix.json",
+  "WP3": "incomplete",
+  "M_rebuild": "not claimed",
+  "all_numerator_migrations_blanket_prerequisite": false,
+  "proposed_local_bookmark_advance": {
+    "bookmark": "generation-integration",
+    "from": "fdff0d18953348b84a0f1b7e6ab5ef703a5090de",
+    "to": "this exact frozen combined candidate, only after NEW independent combined review and root scoped disposition",
+    "performed": false,
+    "publication": "separate explicit user-go gate; no push/fetch/PR/upload/CI enable"
+  },
+  "historical_metadata": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/historical-snapshots.json",
+  "scope_bindings_preserved": 118,
+  "new_runtime_build_or_native_executions": 0,
+  "no_self_contained_native_proof_archive_claim": true,
+  "review_records": [
     {
       "id": "host-integration",
       "original_review": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-host-stub-rustred-integration-astra-20261031-023354Z-777117b1/review.json",
@@ -184,70 +250,8 @@
       "sealed_external_entries": 0
     }
   ],
-  "combined_review": "Unassigned: root must obtain a NEW independent review of this exact conjunction; constituent approvals alone do not approve it.",
-  "bounded_grouped": {
-    "root_disposition": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/root-dispositions/root-grouped-applied-integration-acceptance-20261031.json",
-    "scope": "ENTIRE corrected bounded applied grouped conjunction at7f, not durability alone",
-    "archive_sha256": "ba02f91fc47a35b03cc9d51dded39836a7635bdf423c6025ab6e4775c504fc35",
-    "oracle_elf_sha256": "7f00172ace12f04ef53d51a70e6ac4a12248e05e3d61edbde42e5e02079f5c81",
-    "migrated_rows": 13,
-    "actual_runtime_passes": 39,
-    "pools": [
-      1,
-      8,
-      32
-    ],
-    "public_files": 5,
-    "owner_associations": 2124,
-    "full_Row": "Only literal Classes::None; Auto physical captures and captured search-counter premises separately retained. Pools8/32 are runtime evidence only.",
-    "proof": "Independent current raw30 plus separate None/Auto P1-P5. Both operand AND output-axis maps; finite current named logical consumers with validated canonical p/p-inverse. No historical grouped producer upgrade, dense/positional/general decoder/import/locality/full-integrand theorem.",
-    "historical_B1": "Old7c review0f0851e remains REQUEST_CHANGES:412/425 closure and13 missing logs. Repaired7f425/425 plus29 subordinate entries accepted by66db3d6d. Prior positive39freshchecks reused by correction; zero additional native runs."
-  },
-  "prior_full_generator_pool1": {
-    "source": "ffa76ec420642c03349ab756d2d7720ab93c0057",
-    "inventory": 420,
-    "selected": 371,
-    "passed": 302,
-    "failed": 69,
-    "ignored": 49,
-    "fresh": false,
-    "meaning": "Actual prior characterization; numerator-only asserted Summary pairs are not physical proof.",
-    "derived_pending_other_identities": 68,
-    "derivation": "One of prior69 failure identities now has an accepted bounded grouped migration. This is a worklist subtraction, never a newly executed303/68/49 result.",
-    "complete_pool8_or32": false
-  },
-  "prior_twelve_rows": "Accepted raw-three integration535b7926 on SM/prior-eight prerequisites:36 actual full-Row None checks at1/8/32 and15 pool1 physical joins; mode-specific physical Auto and observer/whole-definition/complete operand-output maps retained.",
-  "host_scope": "Accepted applied stub2cf, corrected ordinary wheel and separate private RustRed7c1/kernel8eb host with8fresh independent passes. Ordinary lacksIBPFamily. Private arity1 only; tracing_max_level_info differs ordinary. Loader, wheel-vs-loose-companion and external closure qualifications retained. No production RustRed/fullCommunity.",
-  "finite_runner": "Exact finite r3 F1/F2 guards accepted under b370752/root disposition. Old verbatim pending wording does not reopen them. No generic runner/adapter/native/math approval.",
-  "source46": "Cumulative79dfeaab approval is real and source/profile/kernel-bound. No repeat implementation. New8eb consumer qualification is separate.",
-  "production_core_API_evaluator": {
-    "status": "ACTIVE_SIBLING_NO_COMPLETION_OR_RUNTIME_RESULTS_SUPPLIED",
-    "source": "2cfb52b28d99f92305a9d571bbe3911cf04b8a19",
-    "producer_roots": 6,
-    "source_filter_transition": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/compiled-input-invariance.json",
-    "positive_runtime_credit_here": 0,
-    "limits": "No producer completion, current native discovery counts or runtime passes inferred. Source/filter byte comparison does not replace exact derivation or runtime qualification."
-  },
-  "next_three_QCD": {
-    "capture_review_sha256": "7ccf8f133bff073e5f428d1fabc0ebd6552aa1e04a8b7edd149f526b37330aa7",
-    "capture_scope": "12invocations;6oldpass/6current101;24worlds only",
-    "preparation_review_sha256": "62dade9062105a077ae6089d7e261742d57d63d9d07737b020c9b3098a71db95",
-    "preparation_status": "REQUEST_CHANGES: PREP1 fold endpoints; PREP2 live case/mode. r2 repair/supervisor ACTIVE, no completion supplied.",
-    "math_interface_native21_migration_approval": false
-  },
-  "remaining_gates": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/current-status-matrix.json",
-  "WP3": "incomplete",
-  "M_rebuild": "not claimed",
-  "all_numerator_migrations_blanket_prerequisite": false,
-  "proposed_local_bookmark_advance": {
-    "bookmark": "generation-integration",
-    "from": "fdff0d18953348b84a0f1b7e6ab5ef703a5090de",
-    "to": "this exact frozen combined candidate, only after NEW independent combined review and root scoped disposition",
-    "performed": false,
-    "publication": "separate explicit user-go gate; no push/fetch/PR/upload/CI enable"
-  },
-  "historical_metadata": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/historical-snapshots.json",
-  "scope_bindings_preserved": 118,
-  "new_runtime_build_or_native_executions": 0,
-  "no_self_contained_native_proof_archive_claim": true
+  "historical_rejected_review_ids": [
+    "grouped-applied-original"
+  ],
+  "review_record_semantics": "Verbatim review index includes approvals within their scopes AND original0f0851e REQUEST_CHANGES. Only latest66db3d6d/root disposition accepts the corrected entire bounded applied grouped conjunction at7f. No combined review approval."
 }

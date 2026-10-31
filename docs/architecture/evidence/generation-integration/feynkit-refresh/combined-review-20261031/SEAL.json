@@ -3,7 +3,7 @@
   "accepted_evidence_base": "7f03ab8fd5834d7c78164429e2a44dab8d01ef74",
   "actual_grouped_source": "6f41807b064bcf2f579883134daef65c8ac279d3",
   "manifest": "SHA256SUMS",
-  "manifest_sha256": "c685e7ca99ede879e75dfd0277aacb67c16a2f2edcbd05e0aa0b135825b87a1f",
+  "manifest_sha256": "9a0f73c5e20209e46eb2826d57bab6b93207bdad3a761f51e23cd9be77ffa700",
   "files": 154,
   "status": "NEW_INDEPENDENT_COMBINED_REVIEW_REQUIRED",
   "scope": "New combined metadata/evidence files and four canonical files; original grouped manifests verify via immutable revision/snapshot bindings. External review/scientific/native premises explicitly retained, not claimed committed.",

@@ -1,0 +1,9 @@
+{
+  "schema": "combined-refresh-freeze-seal/1",
+  "manifest": "SHA256SUMS",
+  "manifest_sha256": "a8ed04af9ca7b98973bb31757c46c425d3b78ff23a927cfcf4fc76598d2f61a7",
+  "files": 6,
+  "status": "NEW_INDEPENDENT_COMBINED_REVIEW_REQUIRED",
+  "audited_parent_metadata": "6a12f775c8671194dfb05f4e382c3064575c9186",
+  "approval": false
+}
