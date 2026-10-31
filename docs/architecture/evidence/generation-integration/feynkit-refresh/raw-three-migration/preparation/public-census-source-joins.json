@@ -1,0 +1,259 @@
+[
+  {
+    "case": "qed_ee4f_L0",
+    "public_capture_binding": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/qed_ee4f_L0/capture-binding.json",
+      "sha256": "e2d368860f59a69850d2139ae79f0a8ef66407fe77837d644a4ebbe5b80e992b",
+      "bytes": 142823
+    },
+    "original_assertion": {
+      "status": "FAILED",
+      "passed": 0,
+      "failed": 1,
+      "filtered": 182,
+      "exit": 101
+    },
+    "public_joins": [
+      {
+        "file": "qed_ee4f_L0.census",
+        "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/qed_ee4f_L0/dumps/qed_ee4f_L0.census",
+        "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/qed_ee4f_L0/dumps/qed_ee4f_L0.census",
+        "sha256": "567391c51101889748f8aec467b7d961ad0b070b983c037c06ada75c0705c789"
+      },
+      {
+        "file": "qed_ee4f_L0.classes-None-t1.json",
+        "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/qed_ee4f_L0/dumps/qed_ee4f_L0.classes-None-t1.json",
+        "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/qed_ee4f_L0/dumps/qed_ee4f_L0.classes-None-t1.json",
+        "sha256": "1c12989d75e7f9e12513d0c726e3f700cba9e8088630ab9c43260b961e2a811e"
+      },
+      {
+        "file": "qed_ee4f_L0.classes-None-t1.sources.json",
+        "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/qed_ee4f_L0/dumps/qed_ee4f_L0.classes-None-t1.sources.json",
+        "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/qed_ee4f_L0/dumps/qed_ee4f_L0.classes-None-t1.sources.json",
+        "sha256": "1c12989d75e7f9e12513d0c726e3f700cba9e8088630ab9c43260b961e2a811e"
+      },
+      {
+        "file": "qed_ee4f_L0.classes-Auto-t1.json",
+        "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/qed_ee4f_L0/dumps/qed_ee4f_L0.classes-Auto-t1.json",
+        "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/qed_ee4f_L0/dumps/qed_ee4f_L0.classes-Auto-t1.json",
+        "sha256": "49f3993180875dbf3d06adf86b5714b888b3db7a3b109237b1a747769f2a4f34"
+      },
+      {
+        "file": "qed_ee4f_L0.classes-Auto-t1.sources.json",
+        "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/qed_ee4f_L0/dumps/qed_ee4f_L0.classes-Auto-t1.sources.json",
+        "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/qed_ee4f_L0/dumps/qed_ee4f_L0.classes-Auto-t1.sources.json",
+        "sha256": "49f3993180875dbf3d06adf86b5714b888b3db7a3b109237b1a747769f2a4f34"
+      }
+    ],
+    "None_summary_equals_reconstructed_before_after": true,
+    "Auto_native_Row_assertion": false,
+    "mode_correspondence": [
+      {
+        "id": "03bce2b69eac73e2ba471b9d2e94e195",
+        "None_index": 0,
+        "Auto_index": 0,
+        "None_name": "D0",
+        "Auto_name": "D0"
+      },
+      {
+        "id": "44ae97440e9239c809c1f1131adfe368",
+        "None_index": 1,
+        "Auto_index": 1,
+        "None_name": "D1",
+        "Auto_name": "D1"
+      },
+      {
+        "id": "eb56b44e19164ab9dbd246ae1fc1358e",
+        "None_index": 2,
+        "Auto_index": 4,
+        "None_name": "D2",
+        "Auto_name": "D4"
+      },
+      {
+        "id": "fb4a768078488cd9ec8edaf1f8b6683a",
+        "None_index": 3,
+        "Auto_index": 2,
+        "None_name": "D3",
+        "Auto_name": "D2"
+      },
+      {
+        "id": "8213ae5fb9f98789a010294f31bff51a",
+        "None_index": 4,
+        "Auto_index": 5,
+        "None_name": "D4",
+        "Auto_name": "D5"
+      },
+      {
+        "id": "e9ff090d108cca55fc5d5ccb38cc2a9f",
+        "None_index": 5,
+        "Auto_index": 3,
+        "None_name": "D5",
+        "Auto_name": "D3"
+      }
+    ],
+    "None_Auto_Row_differences": [
+      "topologies",
+      "named"
+    ]
+  },
+  {
+    "case": "xs_qed_eeee_L1",
+    "public_capture_binding": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qed_eeee_L1/capture-binding.json",
+      "sha256": "6d8e4e5b0e7108748d6dbc6397e21b421450d39419bebefe6ef1fa4ad12ad98c",
+      "bytes": 142930
+    },
+    "original_assertion": {
+      "status": "FAILED",
+      "passed": 0,
+      "failed": 1,
+      "filtered": 182,
+      "exit": 101
+    },
+    "public_joins": [
+      {
+        "file": "xs_qed_eeee_L1.census",
+        "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eeee_L1/dumps/xs_qed_eeee_L1.census",
+        "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qed_eeee_L1/dumps/xs_qed_eeee_L1.census",
+        "sha256": "07fb1b099af1b8fe7a9d09d6cab48119a7888b8d785c26f46a7460008fc52497"
+      },
+      {
+        "file": "xs_qed_eeee_L1.classes-None-t1.json",
+        "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eeee_L1/dumps/xs_qed_eeee_L1.classes-None-t1.json",
+        "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qed_eeee_L1/dumps/xs_qed_eeee_L1.classes-None-t1.json",
+        "sha256": "fb3fb55248f0eb4c0407db787f9c3753a251ed2357a623f60c88e484f89505b5"
+      },
+      {
+        "file": "xs_qed_eeee_L1.classes-None-t1.sources.json",
+        "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eeee_L1/dumps/xs_qed_eeee_L1.classes-None-t1.sources.json",
+        "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qed_eeee_L1/dumps/xs_qed_eeee_L1.classes-None-t1.sources.json",
+        "sha256": "fb3fb55248f0eb4c0407db787f9c3753a251ed2357a623f60c88e484f89505b5"
+      },
+      {
+        "file": "xs_qed_eeee_L1.classes-Auto-t1.json",
+        "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eeee_L1/dumps/xs_qed_eeee_L1.classes-Auto-t1.json",
+        "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qed_eeee_L1/dumps/xs_qed_eeee_L1.classes-Auto-t1.json",
+        "sha256": "fb3fb55248f0eb4c0407db787f9c3753a251ed2357a623f60c88e484f89505b5"
+      },
+      {
+        "file": "xs_qed_eeee_L1.classes-Auto-t1.sources.json",
+        "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eeee_L1/dumps/xs_qed_eeee_L1.classes-Auto-t1.sources.json",
+        "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qed_eeee_L1/dumps/xs_qed_eeee_L1.classes-Auto-t1.sources.json",
+        "sha256": "fb3fb55248f0eb4c0407db787f9c3753a251ed2357a623f60c88e484f89505b5"
+      }
+    ],
+    "None_summary_equals_reconstructed_before_after": true,
+    "Auto_native_Row_assertion": false,
+    "mode_correspondence": [
+      {
+        "id": "d9a1f4b74e7edcf37c2b095299a89854",
+        "None_index": 0,
+        "Auto_index": 0,
+        "None_name": "D0",
+        "Auto_name": "D0"
+      },
+      {
+        "id": "8c07d98cdf34666feb5b87a516adeeab",
+        "None_index": 1,
+        "Auto_index": 1,
+        "None_name": "D1",
+        "Auto_name": "D1"
+      },
+      {
+        "id": "ed03bfa8f6a6b6b8ff8bc1cb74ab5750",
+        "None_index": 2,
+        "Auto_index": 2,
+        "None_name": "D2",
+        "Auto_name": "D2"
+      },
+      {
+        "id": "19313a3947e130179589bbd41aa5957c",
+        "None_index": 3,
+        "Auto_index": 3,
+        "None_name": "D3",
+        "Auto_name": "D3"
+      }
+    ],
+    "None_Auto_Row_differences": []
+  },
+  {
+    "case": "xs_qcd_gguu_1pi_L1",
+    "public_capture_binding": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qcd_gguu_1pi_L1/capture-binding.json",
+      "sha256": "e00634261b6f840f3055a4e80f06fc8e633de1bd1f809a8accbe64c676326610",
+      "bytes": 139689
+    },
+    "original_assertion": {
+      "status": "FAILED",
+      "passed": 0,
+      "failed": 1,
+      "filtered": 182,
+      "exit": 101
+    },
+    "public_joins": [
+      {
+        "file": "xs_qcd_gguu_1pi_L1.census",
+        "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qcd_gguu_1pi_L1/dumps/xs_qcd_gguu_1pi_L1.census",
+        "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qcd_gguu_1pi_L1/dumps/xs_qcd_gguu_1pi_L1.census",
+        "sha256": "fbbcf106715b8952970e0d70abbd96fa582e851fc9f86064c031d10eeee5dec4"
+      },
+      {
+        "file": "xs_qcd_gguu_1pi_L1.classes-None-t1.json",
+        "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qcd_gguu_1pi_L1/dumps/xs_qcd_gguu_1pi_L1.classes-None-t1.json",
+        "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qcd_gguu_1pi_L1/dumps/xs_qcd_gguu_1pi_L1.classes-None-t1.json",
+        "sha256": "d1d7a59c555387b6fadef81ed52aa2615f455aedcb14c416fabf61fe44b1ed15"
+      },
+      {
+        "file": "xs_qcd_gguu_1pi_L1.classes-None-t1.sources.json",
+        "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qcd_gguu_1pi_L1/dumps/xs_qcd_gguu_1pi_L1.classes-None-t1.sources.json",
+        "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qcd_gguu_1pi_L1/dumps/xs_qcd_gguu_1pi_L1.classes-None-t1.sources.json",
+        "sha256": "d1d7a59c555387b6fadef81ed52aa2615f455aedcb14c416fabf61fe44b1ed15"
+      },
+      {
+        "file": "xs_qcd_gguu_1pi_L1.classes-Auto-t1.json",
+        "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qcd_gguu_1pi_L1/dumps/xs_qcd_gguu_1pi_L1.classes-Auto-t1.json",
+        "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qcd_gguu_1pi_L1/dumps/xs_qcd_gguu_1pi_L1.classes-Auto-t1.json",
+        "sha256": "d1d7a59c555387b6fadef81ed52aa2615f455aedcb14c416fabf61fe44b1ed15"
+      },
+      {
+        "file": "xs_qcd_gguu_1pi_L1.classes-Auto-t1.sources.json",
+        "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qcd_gguu_1pi_L1/dumps/xs_qcd_gguu_1pi_L1.classes-Auto-t1.sources.json",
+        "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qcd_gguu_1pi_L1/dumps/xs_qcd_gguu_1pi_L1.classes-Auto-t1.sources.json",
+        "sha256": "d1d7a59c555387b6fadef81ed52aa2615f455aedcb14c416fabf61fe44b1ed15"
+      }
+    ],
+    "None_summary_equals_reconstructed_before_after": true,
+    "Auto_native_Row_assertion": false,
+    "mode_correspondence": [
+      {
+        "id": "ad0818e3abc13783bfcc2695b849034d",
+        "None_index": 0,
+        "Auto_index": 0,
+        "None_name": "D0",
+        "Auto_name": "D0"
+      },
+      {
+        "id": "31d0890641674e5ee9afceaff1e22206",
+        "None_index": 1,
+        "Auto_index": 1,
+        "None_name": "D1",
+        "Auto_name": "D1"
+      },
+      {
+        "id": "14ac74bf7c503631cbbf625890f7ea67",
+        "None_index": 2,
+        "Auto_index": 2,
+        "None_name": "D2",
+        "Auto_name": "D2"
+      },
+      {
+        "id": "c490e590d90aa4c6acda54e116e788a7",
+        "None_index": 3,
+        "Auto_index": 3,
+        "None_name": "D3",
+        "Auto_name": "D3"
+      }
+    ],
+    "None_Auto_Row_differences": []
+  }
+]

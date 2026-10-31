@@ -1,0 +1,14 @@
+{
+  "base": "5ea4c93b79dd33094072d7717e912aa4b05d6689",
+  "code": "ffa76ec420642c03349ab756d2d7720ab93c0057",
+  "all_base_files_except_exact_main_tokens_and_additive_registry_unchanged": true,
+  "all_host_API_browser_files_byte_pinned": true,
+  "all118_scopes_anchors_and_digests_equal": true,
+  "all_prior_registry_notes_equal": true,
+  "main_HEAD_index_packed_refs_equal": true,
+  "all_initial_git_refs_equal": true,
+  "generation_integration": "fdff0d18953348b84a0f1b7e6ab5ef703a5090de",
+  "CI": false,
+  "all_archive_source_runtime_files_rehashed": true,
+  "new_independent_review_required": true
+}

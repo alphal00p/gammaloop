@@ -1,0 +1,348 @@
+{
+  "copies": [
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-raw-three-migration-astra-20261031-004323Z-a3d128ed/review.json",
+      "copy": "reviews/migration/review.json",
+      "sha256": "c0692180c797034f923ae4bcf0a91712816a67bcf726d088787914c9a4d211e6",
+      "bytes": 60735
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-raw-three-migration-astra-20261031-004323Z-a3d128ed/SEAL.json",
+      "copy": "reviews/migration/SEAL.json",
+      "sha256": "a7eb2b7d437e7c761681d3163bc7dad6bc3e67a71ee72be68be972274d7b2d59",
+      "bytes": 918
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-raw-three-migration-astra-20261031-004323Z-a3d128ed/SHA256SUMS",
+      "copy": "reviews/migration/SHA256SUMS",
+      "sha256": "6c66edda00419760f24ef505504a2de4b09b7747ba32e3177624f849b03f214f",
+      "bytes": 4034
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-raw-three-interface-astra-20261031-002103Z-8a5d8001/review.json",
+      "copy": "reviews/interface/review.json",
+      "sha256": "d9303d91d922c994f87b07e10cce895b44dba96e294d64be231a3ecdf921b14c",
+      "bytes": 43579
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-raw-three-interface-astra-20261031-002103Z-8a5d8001/SEAL.json",
+      "copy": "reviews/interface/SEAL.json",
+      "sha256": "0ce63d1e764a9c5a36d8639174738eecc3a0c921aa800ed7e089e355991318f8",
+      "bytes": 771
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-raw-three-interface-astra-20261031-002103Z-8a5d8001/SHA256SUMS",
+      "copy": "reviews/interface/SHA256SUMS",
+      "sha256": "8c649cf31042ca936f907bd80ce139992447999137ccd300e98a0976f33a1afa",
+      "bytes": 4777
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-sm-eeww-integration-astra-20261031-independent-r1/review.json",
+      "copy": "reviews/sm-parent/review.json",
+      "sha256": "5564bed2f642ba72a9208858d86292f8b9326fb1c55f24ef23a07d027a93624b",
+      "bytes": 24623
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-sm-eeww-integration-astra-20261031-independent-r1/SEAL.json",
+      "copy": "reviews/sm-parent/SEAL.json",
+      "sha256": "740a537002c817054b2cf97315509298d144dd0c2c46d53cfbf332d939d48abc",
+      "bytes": 752
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-sm-eeww-integration-astra-20261031-independent-r1/SHA256SUMS",
+      "copy": "reviews/sm-parent/SHA256SUMS",
+      "sha256": "287808ef6b9a27293ad1617144ec0666327c07a796aed3dbaa7a3f06d06a43d1",
+      "bytes": 10361
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/handoff.json",
+      "copy": "preparation/handoff.json",
+      "sha256": "067f4aa62546e10fdf35d8a99b40812ae4ac5c0e927daddcf2190ae353eb23ad",
+      "bytes": 3230
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/SEAL.json",
+      "copy": "preparation/SEAL.json",
+      "sha256": "6a6ee263fa4d69d48023b896a607675af0ec88b3993ccfa3fd5ce8b17fddd6c2",
+      "bytes": 1515
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/SHA256SUMS",
+      "copy": "preparation/SHA256SUMS",
+      "sha256": "47eda054ab43b504dd492394b87ccc3626d55aafde3d5b6713e0ace75aab538c",
+      "bytes": 10274
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/acceptance-brief.json",
+      "copy": "preparation/acceptance-brief.json",
+      "sha256": "68d35af875eede4bb1db9cfc1dacfa7bd6108fbe4df85bb3b8a19b8d73f26b63",
+      "bytes": 51027
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/acceptance-brief.typ",
+      "copy": "preparation/acceptance-brief.typ",
+      "sha256": "ec5d8a71810315ed0ce50c263eb702fb7056c3f53edc41de8763d29b2affd382",
+      "bytes": 6199
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/actual-SM-commit-source-binding.json",
+      "copy": "preparation/actual-SM-commit-source-binding.json",
+      "sha256": "d93bb1a5b5edc4dbec3fb591b67db94b0a6303fb4506368fd998e55973d013da",
+      "bytes": 380
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/before-composition.json",
+      "copy": "preparation/before-composition.json",
+      "sha256": "737d0d91c39a98cf3c57dd649eeff51dfcd89d29baf313238b990d49a4acc2c1",
+      "bytes": 2563
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/before-main.rs.txt",
+      "copy": "preparation/before-main.rs.txt",
+      "sha256": "c642b5cc8145610854a8681d6987ea392266064c429cfa86719e72296083f0f7",
+      "bytes": 77616
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/proposed-main.rs.txt",
+      "copy": "preparation/proposed-main.rs.txt",
+      "sha256": "6dacf61baca9f13f3e4a6d719f89eaced429fb3cb14c7904dcb41fe4c86b66df",
+      "bytes": 77616
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/proposed-not-applied.patch",
+      "copy": "preparation/proposed-not-applied.patch",
+      "sha256": "872261e0211f57960a1eb0544dbdb303934cd95e4c44b47c4e9cccd358d09fe6",
+      "bytes": 6960
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/patch-binding.json",
+      "copy": "preparation/patch-binding.json",
+      "sha256": "51edb04919adfb8d9623e39de0cc2555187db9e750b33cd16453f18f62b18ca7",
+      "bytes": 4857
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/source-boundary-audit.json",
+      "copy": "preparation/source-boundary-audit.json",
+      "sha256": "ca04925947330d754e39dc04eb84771b792e35ddbcf09293a4b6501dff18843b",
+      "bytes": 69346
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/review-scope-bindings.json",
+      "copy": "preparation/review-scope-bindings.json",
+      "sha256": "2958fb81a29dc857b71e060753eca1128bedc80d60ed944bf33589d5ef85f482",
+      "bytes": 6433
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/typed-proof-actual-results-audit.json",
+      "copy": "preparation/typed-proof-actual-results-audit.json",
+      "sha256": "4a9e08a9c513513dae4536a985e74a00ed1f5b68123c4180e7a6ad7d91aee455",
+      "bytes": 20138
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/representation-macro-binding.json",
+      "copy": "preparation/representation-macro-binding.json",
+      "sha256": "0533632e034a9cc5d9b6a7d43ab62b1c80d478118770baca80a4c3f3f3bd6c2f",
+      "bytes": 1041
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/public-census-source-joins.json",
+      "copy": "preparation/public-census-source-joins.json",
+      "sha256": "28c5423d5ae84790ba51547821d03a7cc7730bd9f9188c4377bd22bdd45846a1",
+      "bytes": 12613
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/native-algebra-reuse.json",
+      "copy": "preparation/native-algebra-reuse.json",
+      "sha256": "0af3ecce8a8ded248d36c6e38123294319d2e53ae0095e13029c18c93fd49cb2",
+      "bytes": 63371
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/executed-source-versions.json",
+      "copy": "preparation/executed-source-versions.json",
+      "sha256": "ed662b2fd17b4b50f33565d7e27c5e9e3fda9543cf7152823aed6a3dda766d78",
+      "bytes": 4967
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/audit-result.json",
+      "copy": "preparation/audit-result.json",
+      "sha256": "86e39632e55db39af75b669d8140770d6528507f96fe3d4ece7e4e94b4aca27e",
+      "bytes": 2908
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/candidate-index.json",
+      "copy": "preparation/candidate-index.json",
+      "sha256": "6f54bba431b9490cd5cc4bada9015866294cb1dfc616d58cd46d5bb82ad0a8f3",
+      "bytes": 22687
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/candidates/qed_ee4f_L0.json",
+      "copy": "preparation/candidates/qed_ee4f_L0.json",
+      "sha256": "9b31469e3cd2a1c0f7836d44248c3385c1f8619b874e17781245e471e7ab13cf",
+      "bytes": 7259
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/candidates/xs_qcd_gguu_1pi_L1.json",
+      "copy": "preparation/candidates/xs_qcd_gguu_1pi_L1.json",
+      "sha256": "0bd8d584246b60ee68ae266714d2e094eec4797abf865ad629889a9f7934bdeb",
+      "bytes": 6987
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/candidates/xs_qed_eeee_L1.json",
+      "copy": "preparation/candidates/xs_qed_eeee_L1.json",
+      "sha256": "c534777b9295ba5398fb3d61d93c82d198fc695238a09ea1198e4e716dc86799",
+      "bytes": 6954
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/cells/qed_ee4f_L0/Auto.json",
+      "copy": "preparation/cells/qed_ee4f_L0/Auto.json",
+      "sha256": "678a3e112ef753fd5c24ac0c37ad84e5cde52f55932740c07776d15739ed6f40",
+      "bytes": 8295
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/cells/qed_ee4f_L0/None.json",
+      "copy": "preparation/cells/qed_ee4f_L0/None.json",
+      "sha256": "bf8c333dfb014d69cdb690e0290e0a443e21c6582fb99084037b2e14560765e7",
+      "bytes": 8292
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/cells/xs_qcd_gguu_1pi_L1/Auto.json",
+      "copy": "preparation/cells/xs_qcd_gguu_1pi_L1/Auto.json",
+      "sha256": "d0de649335189c8cdad5b74aa2d64d8f25e5be5c54de91738ad9fa09b0b1bdc9",
+      "bytes": 50314
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/cells/xs_qcd_gguu_1pi_L1/None.json",
+      "copy": "preparation/cells/xs_qcd_gguu_1pi_L1/None.json",
+      "sha256": "ee9c92cedf93b09de58343cd1c4f64705a0113ad83013144e76dd18c992fe861",
+      "bytes": 50313
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/cells/xs_qed_eeee_L1/Auto.json",
+      "copy": "preparation/cells/xs_qed_eeee_L1/Auto.json",
+      "sha256": "4c5d688f6d88f1da47a89d628d1a4b8a692eeb5fdf104cddcf24420df233ef12",
+      "bytes": 7528
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/cells/xs_qed_eeee_L1/None.json",
+      "copy": "preparation/cells/xs_qed_eeee_L1/None.json",
+      "sha256": "99de8a252573ac37959d94dc749aaa9af9c86777e75eca526bbd8ce2de1b4315",
+      "bytes": 7527
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/retained-proof/interface_probe_v4.rs",
+      "copy": "preparation/retained-proof/interface_probe_v4.rs",
+      "sha256": "362a7fa3edce435e7957350e8f2b97da6e92a1bead4a1a450953ae6cb095afd4",
+      "bytes": 15720
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/retained-proof/report.typ",
+      "copy": "preparation/retained-proof/report.typ",
+      "sha256": "681a6b2ed9b9c442ae9565ba69965f37783c4d7251a699825d43d27b75efe230",
+      "bytes": 11950
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/retained-proof/validation-receipt.json",
+      "copy": "preparation/retained-proof/validation-receipt.json",
+      "sha256": "7c443ba689cd2e04cddf4d6a2d1f60c4e41512cdad9cf64237e770b86d74349f",
+      "bytes": 31340
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/retained-source/historical/crates/feynkit-graph/src/numerator_interface.rs",
+      "copy": "preparation/retained-source/historical/crates/feynkit-graph/src/numerator_interface.rs",
+      "sha256": "436093f48d817627895fb68286971f90e116c2f2999239f2b1afe17a531d2d0e",
+      "bytes": 20701
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/retained-source/macro/2b1ef4f07a44bc061bcc97c378bbdd9c41cb0e94/crates/spenso-macros/src/lib.rs",
+      "copy": "preparation/retained-source/macro/2b1ef4f07a44bc061bcc97c378bbdd9c41cb0e94/crates/spenso-macros/src/lib.rs",
+      "sha256": "3f38f0a2211994bd21873608e11907bc3f59ecdf34a10e4f8ac35902f775d879",
+      "bytes": 23140
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/retained-source/macro/5ba04864ca506e259d9eef4a54f65acdd8323fc2/crates/spenso-macros/src/lib.rs",
+      "copy": "preparation/retained-source/macro/5ba04864ca506e259d9eef4a54f65acdd8323fc2/crates/spenso-macros/src/lib.rs",
+      "sha256": "3f38f0a2211994bd21873608e11907bc3f59ecdf34a10e4f8ac35902f775d879",
+      "bytes": 23140
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/retained-source/macro/5ea149ffd88ae3afc4072a38c0871c1329be8424/crates/spenso-macros/src/lib.rs",
+      "copy": "preparation/retained-source/macro/5ea149ffd88ae3afc4072a38c0871c1329be8424/crates/spenso-macros/src/lib.rs",
+      "sha256": "3f38f0a2211994bd21873608e11907bc3f59ecdf34a10e4f8ac35902f775d879",
+      "bytes": 23140
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/retained-source/macro/f47f27213a1c55291239c9bc0f334a7ea1cd1cc1/crates/spenso-macros/src/lib.rs",
+      "copy": "preparation/retained-source/macro/f47f27213a1c55291239c9bc0f334a7ea1cd1cc1/crates/spenso-macros/src/lib.rs",
+      "sha256": "3f38f0a2211994bd21873608e11907bc3f59ecdf34a10e4f8ac35902f775d879",
+      "bytes": 23140
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/retained-source/target/crates/feynkit-generator/src/generation.rs",
+      "copy": "preparation/retained-source/target/crates/feynkit-generator/src/generation.rs",
+      "sha256": "0e6f4a83632be8fc13633a66a7fc3ba68819b49e78fcbf26363dd0f5469c4042",
+      "bytes": 455743
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/retained-source/target/crates/feynkit-generator/src/grouping.rs",
+      "copy": "preparation/retained-source/target/crates/feynkit-generator/src/grouping.rs",
+      "sha256": "ee0e666ae2c7b8d13c14741d03d49adc41de50ace966034561f9d39d20191c00",
+      "bytes": 227293
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/retained-source/target/crates/feynkit-graph/src/expressions.rs",
+      "copy": "preparation/retained-source/target/crates/feynkit-graph/src/expressions.rs",
+      "sha256": "6cac6b79f31f4090fc960eb18100cfc7759fb9171422a67532020dba3e8ab948",
+      "bytes": 17460
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/retained-source/target/crates/feynkit-graph/src/finalization.rs",
+      "copy": "preparation/retained-source/target/crates/feynkit-graph/src/finalization.rs",
+      "sha256": "7f537b6608fd6f82402675fc28f2e0907d3916a0df5fae8c03412ad1273da221",
+      "bytes": 79700
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/retained-source/target/crates/feynkit-graph/src/lib.rs",
+      "copy": "preparation/retained-source/target/crates/feynkit-graph/src/lib.rs",
+      "sha256": "5cb3612abc2f45eb9e2317d476ad5b9c29469c8a6f6d30cef9b4578d99ce2848",
+      "bytes": 241884
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/retained-source/target/crates/feynkit-graph/src/numerator_interface.rs",
+      "copy": "preparation/retained-source/target/crates/feynkit-graph/src/numerator_interface.rs",
+      "sha256": "596a58fda9f2f182ba19a3da2457b3ed45e73b554d1dd67092cc42a4c2f68ed8",
+      "bytes": 43267
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/retained-source/target/crates/idenso/src/tensor/composition/product.rs",
+      "copy": "preparation/retained-source/target/crates/idenso/src/tensor/composition/product.rs",
+      "sha256": "446af47385609650a55b87d85e37afed79fcfd9ff9021d4b1f24c2b294791dac",
+      "bytes": 25701
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/retained-source/target/crates/idenso/src/tensor/composition.rs",
+      "copy": "preparation/retained-source/target/crates/idenso/src/tensor/composition.rs",
+      "sha256": "b81e984ae44962ce16da32b63dba41d1fbbe02ed0297446d6aee2555379951ad",
+      "bytes": 358633
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/retained-source/target/crates/idenso/src/tensor/inference.rs",
+      "copy": "preparation/retained-source/target/crates/idenso/src/tensor/inference.rs",
+      "sha256": "e8ee6b861580c65f116e462906980f2d3f0cf8781ea55fcc4dfefbdc9dfd730a",
+      "bytes": 353390
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/retained-source/target/crates/idenso/src/tensor/network.rs",
+      "copy": "preparation/retained-source/target/crates/idenso/src/tensor/network.rs",
+      "sha256": "7ee42dec38f5379b006376508d854f344d6e9688969ad04b8a90624cc62c2732",
+      "bytes": 18020
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/retained-source/target/crates/spenso/src/structure/permuted.rs",
+      "copy": "preparation/retained-source/target/crates/spenso/src/structure/permuted.rs",
+      "sha256": "ab5e96b4513a4d184abe37e861aff165964fd2d0027296fc2c947b0b6202241c",
+      "bytes": 26197
+    }
+  ],
+  "original_manifests": "Verbatim original packet seals/manifests provide provenance; only scoped listed members copied here. New seal will enumerate this complete new evidence tree.",
+  "approval_attribution": "Root expressly adopted three-token migration and approved bounded SM base. Current application/runtime/capture candidate requires NEW independent integration review."
+}

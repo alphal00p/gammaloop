@@ -1,0 +1,30 @@
+{
+  "immutable_macro_sources": [
+    {
+      "revision": "2b1ef4f07a44bc061bcc97c378bbdd9c41cb0e94",
+      "path": "crates/spenso-macros/src/lib.rs",
+      "sha256": "3f38f0a2211994bd21873608e11907bc3f59ecdf34a10e4f8ac35902f775d879",
+      "bytes": 23140
+    },
+    {
+      "revision": "f47f27213a1c55291239c9bc0f334a7ea1cd1cc1",
+      "path": "crates/spenso-macros/src/lib.rs",
+      "sha256": "3f38f0a2211994bd21873608e11907bc3f59ecdf34a10e4f8ac35902f775d879",
+      "bytes": 23140
+    },
+    {
+      "revision": "5ba04864ca506e259d9eef4a54f65acdd8323fc2",
+      "path": "crates/spenso-macros/src/lib.rs",
+      "sha256": "3f38f0a2211994bd21873608e11907bc3f59ecdf34a10e4f8ac35902f775d879",
+      "bytes": 23140
+    },
+    {
+      "revision": "5ea149ffd88ae3afc4072a38c0871c1329be8424",
+      "path": "crates/spenso-macros/src/lib.rs",
+      "sha256": "3f38f0a2211994bd21873608e11907bc3f59ecdf34a10e4f8ac35902f775d879",
+      "bytes": 23140
+    }
+  ],
+  "retained_source_block_hashes_verified": 8,
+  "independent_interface_verdict": null
+}

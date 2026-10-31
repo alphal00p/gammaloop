@@ -1,0 +1,23 @@
+[
+  {
+    "path": "pure.py",
+    "source": ".local/feynkit-refresh/sm-eeww-migration-20261031/pure.py",
+    "source_sha256": "2e8fe31f4160901abc8b6d4f48a7175a7b26aaacacd7281831be791282193379",
+    "new_sha256": "acc7ade39099d63d4097fdaad7ef7d3a5cceb38cd862ac3aeb569d8d56b6c67b",
+    "change": "new immutable code revision only"
+  },
+  {
+    "path": "qualify.py",
+    "source": ".local/feynkit-refresh/sm-eeww-migration-20261031/qualify.py",
+    "source_sha256": "c5bfd555605efd07be5cd4dd8d1a5bf4688912452a740b023d51e1b99886d5d7",
+    "new_sha256": "c5bfd555605efd07be5cd4dd8d1a5bf4688912452a740b023d51e1b99886d5d7",
+    "change": "verbatim reuse; assumptions inspected"
+  },
+  {
+    "path": "elf_helpers.py",
+    "source": ".local/feynkit-refresh/sm-eeww-migration-20261031/elf_helpers.py",
+    "source_sha256": "d7b332ca98ed3f317c1e7678ad15d949a222ee6053fd022c0ab0c52400241859",
+    "new_sha256": "d7b332ca98ed3f317c1e7678ad15d949a222ee6053fd022c0ab0c52400241859",
+    "change": "verbatim reuse; assumptions inspected"
+  }
+]

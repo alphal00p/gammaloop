@@ -1,0 +1,53 @@
+{
+  "source_target_revision": "f47f27213a1c55291239c9bc0f334a7ea1cd1cc1",
+  "target_blob": "d61a4beebfc1b0d650cd17b001a1fdc6433b60d5",
+  "intended_before_blob": "e6af4ec644688e1333064c50e3b157ae631473ee",
+  "before_sha256": "c642b5cc8145610854a8681d6987ea392266064c429cfa86719e72296083f0f7",
+  "evidence_copy": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-four-migration-preparation-20261030-r1/proposed-main.rs.txt",
+    "sha256": "c642b5cc8145610854a8681d6987ea392266064c429cfa86719e72296083f0f7",
+    "bytes": 77616
+  },
+  "composition": "Exact immutable f47f main.rs plus the ONE separately approved SM numerator token, with every other byte equal.",
+  "SM_review": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-sm-eeww-migration-astra-20261030-independent-r1/review.json",
+    "sha256": "096128cbe5cabf7159c4c6039fd7bd693d19c1bad60ca2533c656bd2a9356335",
+    "bytes": 26262
+  },
+  "SM_review_verdict": "APPROVE_BOUNDED_SM_ONE_TOKEN_MIGRATION",
+  "actual_code_commit_bindings": [
+    {
+      "commit": "605178a65620b104805b012f1edc299710e8a176",
+      "main_blob": "e6af4ec644688e1333064c50e3b157ae631473ee"
+    }
+  ],
+  "recent_path_commits_inspected": [
+    "605178a65620b104805b012f1edc299710e8a176",
+    "6abf2c89f7f8ccb2584426d652660d1b69bcb22f",
+    "7fa6269899504e157e66f2ac7e86a4eade36db05",
+    "cac6308828b7958164b7967c88c4d54193a96381",
+    "d119b7112cc632e7380c9172d3c97d2a6ccb5578",
+    "071fa257b6ac94d6e5096e2601840637a157baf1",
+    "109e82b013bcd1b476a4241d3c26fb1dd0dd1d09",
+    "44ad7885cba72800308777f06e774a6be9872ed6",
+    "4853cdd244667bcd593598bc8008d07fd9113f3c",
+    "96dcf780c93fdeed81d760b852f180847a954f0d",
+    "dd9452b0da07b2961466f8f41ea1aaf4d34e3b9b",
+    "ed58a33d6f9714b11c54e071763ca1d6f5f02d17",
+    "37784d1806bc2069eb195a1cc86019881004d157",
+    "8160a16c13e7cd225ab89af0999caa4fa5efff91",
+    "8d3ab1302cb48012370d83a314b1972bc1fab366",
+    "ae706381d719c46b9d37cf1e396ec6742de8cb14",
+    "cecb8e950a968b3bdc5038f5d934c6cd51909153",
+    "d2f5d7623bf2e231cd0c6e970c59cfae934875cf",
+    "e72c85428183645dcc92a0ce90676430070756aa",
+    "0fa1e9542999a720b60f6c8401c0b4c81361df2e",
+    "1546693c2c17d4d0ff668f3ca50d9ace9c8b38bc",
+    "2d63bf0692a83d195e545bc229c5b6a5e707b4d6",
+    "537f19f2b0bc93385601aceae1f8ce355add841e",
+    "5d0789ff5e4eb3aa72c54efaa0234e8128037422"
+  ],
+  "commit_binding_status": "BOUND_TO_OBSERVED_IMMUTABLE_CODE_COMMIT",
+  "physical_family_main_used_as_base": false,
+  "SM_change_in_this_patch": false
+}

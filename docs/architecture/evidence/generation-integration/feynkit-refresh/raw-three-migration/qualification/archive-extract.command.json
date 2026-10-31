@@ -1,0 +1,23 @@
+{
+  "argv": [
+    "tar",
+    "--zstd",
+    "--no-same-owner",
+    "--no-same-permissions",
+    "-xf",
+    "/nix/store/qg5nc1vcxjbdb5zzjigilx3wngy8xyfd-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0/gammaloop-nextest-feynkit-feynkit-generator.tar.zst",
+    "-C",
+    "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/raw-three-migration-20261031/archive-extracted"
+  ],
+  "cwd": "/tmp",
+  "license_keys_removed": [
+    "SYMBOLICA_LICENSE",
+    "SYMBOLICA_LICENSE_PATH",
+    "SYMBOLICA_LICENSE_SIGNED"
+  ],
+  "start": "2026-10-31T01:08:47.941214+00:00",
+  "exit": 0,
+  "end": "2026-10-31T01:08:48.295603+00:00",
+  "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+}

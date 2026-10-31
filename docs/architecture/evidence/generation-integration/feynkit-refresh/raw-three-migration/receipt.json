@@ -1,0 +1,634 @@
+{
+  "schema": "raw-three-token-integration-candidate/1",
+  "status": "NEW_INDEPENDENT_INTEGRATION_REVIEW_REQUIRED",
+  "created_utc": "2026-10-31T01:13:32.573710+00:00",
+  "author": "Lucien Huber <im@lcnbr.ch>",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh",
+  "accepted_SM_base": "5ea4c93b79dd33094072d7717e912aa4b05d6689",
+  "new_code_commit": "ffa76ec420642c03349ab756d2d7720ab93c0057",
+  "code_bookmark": "generation-raw-three-migration-code-20261031",
+  "expected_candidate_bookmark": "generation-raw-three-migration-candidate-20261031",
+  "literal_approval": {
+    "review_sha256": "c0692180c797034f923ae4bcf0a91712816a67bcf726d088787914c9a4d211e6",
+    "verdict": "APPROVE_THREE_BOUNDED_LITERAL_MIGRATIONS_WITH_EXPLICIT_REPRESENTATION_AND_RUNTIME_LIMITS",
+    "root_explicitly_adopted": true,
+    "new_integration_self_approval": false,
+    "before_blob": "e6af4ec644688e1333064c50e3b157ae631473ee",
+    "after_blob": "9ef9f1ba005f20149716b22346d45c5501b62e87",
+    "patch_sha256": "872261e0211f57960a1eb0544dbdb303934cd95e4c44b47c4e9cccd358d09fe6",
+    "exact_three_tokens_only": true,
+    "all149_literal_Rows_10_fields_prior9_every_other_byte_preserved": true
+  },
+  "actual_producer": {
+    "uri": "git+file:///shared/lcnbr/dev/gammaloop/main?rev=ffa76ec420642c03349ab756d2d7720ab93c0057&shallow=1&allRefs=1",
+    "source_paths": 4738,
+    "selected_source_files": 670,
+    "selected_source_delta": [
+      "crates/feynkit-generator/tests/generation_oracle/main.rs"
+    ],
+    "archive_drv": "/nix/store/b3psgc7ywm8ccnq0kpsh2zswy82p0cfv-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0.drv",
+    "archive": "/nix/store/qg5nc1vcxjbdb5zzjigilx3wngy8xyfd-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0/gammaloop-nextest-feynkit-feynkit-generator.tar.zst",
+    "archive_sha256": "8993e6c8346b84f6d91c7e65c4c4fc5ed83cf6d932e969bb7fc55cbdced20740",
+    "oracle_elf": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/raw-three-migration-20261031/archive-extracted/target/ci-optim/deps/generation_oracle-3892f55f31822180",
+      "sha256": "5d7275d26392474f2490963dd0503f4f46ccebc30572a4f31f7a66228303b30f",
+      "size": 61186320
+    },
+    "profile": "ci-optim",
+    "compiler": {
+      "rustc": {
+        "path": "/nix/store/c3bpv60f5wgp4pmgsifaykxk214h6463-rust-stable-with-components-2026-09-03/bin/rustc",
+        "version": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8"
+      },
+      "cargo": {
+        "path": "/nix/store/c3bpv60f5wgp4pmgsifaykxk214h6463-rust-stable-with-components-2026-09-03/bin/cargo",
+        "version": "cargo 1.98.1 (797e8a9bc 2026-08-05)"
+      },
+      "rustfmt": {
+        "path": "/nix/store/c3bpv60f5wgp4pmgsifaykxk214h6463-rust-stable-with-components-2026-09-03/bin/rustfmt",
+        "version": "rustfmt 1.9.0-stable (48a229ceae 2026-09-01)"
+      }
+    },
+    "kernel_packages": [
+      {
+        "name": "graphica",
+        "version": "3.0.1",
+        "source": "git+https://github.com/symbolica-dev/symbolica?branch=community#8eb7c3729d6abefc916decc1bdf0c06536f8af80",
+        "manifest_path": "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/graphica-3.0.1/Cargo.toml"
+      },
+      {
+        "name": "numerica",
+        "version": "3.0.1",
+        "source": "git+https://github.com/symbolica-dev/symbolica?branch=community#8eb7c3729d6abefc916decc1bdf0c06536f8af80",
+        "manifest_path": "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/Cargo.toml"
+      },
+      {
+        "name": "symbolica",
+        "version": "3.0.1",
+        "source": "git+https://github.com/symbolica-dev/symbolica?branch=community#8eb7c3729d6abefc916decc1bdf0c06536f8af80",
+        "manifest_path": "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/symbolica-3.0.1/Cargo.toml"
+      }
+    ],
+    "actual_root_fingerprint": {
+      "unit": "feynkit-generator-3892f55f31822180",
+      "kind": "test-integration-test-generation_oracle",
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/raw-three-migration-20261031/new-fingerprints/ci-optim/.fingerprint/feynkit-generator-3892f55f31822180/test-integration-test-generation_oracle.json",
+      "sha256": "18981ea7da5c4ce801ddeb9a754175839cdf8cedf0ed0f0177037f0713346ab7",
+      "stored_fingerprint": "6491f340a9c81379",
+      "data": {
+        "rustc": 1625334936438085654,
+        "features": "[\"default\", \"native\"]",
+        "declared_features": "[\"default\", \"native\", \"wasm\"]",
+        "target": 11526694154387375423,
+        "profile": 16057468363761213068,
+        "path": 15726402853306774164,
+        "deps": [
+          [
+            824141387789191317,
+            "feynkit_amplitude",
+            false,
+            28645559533351344
+          ],
+          [
+            2448563160050429386,
+            "thiserror",
+            false,
+            8019520362216416025
+          ],
+          [
+            2819946551904607991,
+            "num_rational",
+            false,
+            2913073195146597074
+          ],
+          [
+            2878135982285137535,
+            "linnet",
+            false,
+            7185944718529395182
+          ],
+          [
+            4479790829530052811,
+            "spenso",
+            false,
+            17567610443348394733
+          ],
+          [
+            4796842932013701455,
+            "spenso_hep_lib",
+            false,
+            15040607518570268959
+          ],
+          [
+            5156925218712681703,
+            "feynkit_generator",
+            false,
+            7279540722025656220
+          ],
+          [
+            7497922256016908689,
+            "feynkit_model",
+            false,
+            1707358708327190684
+          ],
+          [
+            9723370144619655183,
+            "tempfile",
+            false,
+            16876693854882113829
+          ],
+          [
+            9917544417685332479,
+            "idenso",
+            false,
+            13777358641193376275
+          ],
+          [
+            11862723254873017773,
+            "bincode",
+            false,
+            12025675163425707939
+          ],
+          [
+            11910974697091955563,
+            "rayon",
+            false,
+            7127050247782661200
+          ],
+          [
+            12405394076909343869,
+            "bincode_trait_derive",
+            false,
+            16688621338624518158
+          ],
+          [
+            12528732512569713347,
+            "num_bigint",
+            false,
+            8054893253489706379
+          ],
+          [
+            13548984313718623784,
+            "serde",
+            false,
+            10536416393539824496
+          ],
+          [
+            13795362694956882968,
+            "serde_json",
+            false,
+            1220147813903593688
+          ],
+          [
+            15115587472993760548,
+            "gammaloop_ci_test_binary_dependencies_b6f177b7bc15beb1",
+            false,
+            11751027145718042199
+          ],
+          [
+            17020882691900786901,
+            "symbolica",
+            false,
+            10965849249385673509
+          ],
+          [
+            17109794424245468765,
+            "regex",
+            false,
+            5030923632659425269
+          ],
+          [
+            17283853990992084357,
+            "feynkit_graph",
+            false,
+            14114268181327805300
+          ]
+        ],
+        "local": [
+          {
+            "CheckDepInfo": {
+              "dep_info": "ci-optim/.fingerprint/feynkit-generator-3892f55f31822180/dep-test-integration-test-generation_oracle",
+              "checksum": false
+            }
+          }
+        ],
+        "rustflags": [
+          "-C",
+          "linker=/nix/store/z4c6k0mrlkwl3s4w9ysxc8vq1wylm3ms-gcc-wrapper-15.3.0/bin/gcc"
+        ],
+        "config": 1282902399306750302,
+        "compile_kind": 0
+      },
+      "source_layer": "/nix/store/rdjfjq9i5dap927sylh6984zj54xra2z-gammaloop-crate-test-binaries-feynkit-generator-b6f177b7bc15beb1-deps-0.1.0/target.tar.zst"
+    },
+    "compiled_dependency_units": 452,
+    "compiled_layers": [
+      {
+        "path": "/nix/store/rdjfjq9i5dap927sylh6984zj54xra2z-gammaloop-crate-test-binaries-feynkit-generator-b6f177b7bc15beb1-deps-0.1.0/target.tar.zst",
+        "sha256": "57be5454c21f195331cdea921054595dd14147ca6fc1ea92f9c6fee029cf0790"
+      },
+      {
+        "path": "/nix/store/cx447jb5zb3gxcpslza3gkldr2vs7kah-gammaloop-crate-test-dependencies-b6f177b7bc15beb1-deps-0.1.0/target.tar.zst",
+        "sha256": "ee04a717e612ac9e599614998271fa420858c122ad9a247fa06cb49d5dfd7018"
+      },
+      {
+        "path": "/nix/store/kck3a2p03gvd9162cnkl6g96viy1bpp1-gammaloop-crate-test-dependencies-b6f177b7bc15beb1-inputs/target.tar.zst",
+        "sha256": "06efc2c933e9103e1b8ba5fe597834b2e8b1af355aa7444567fdb3ded778427f"
+      }
+    ],
+    "producer_derivations": 145,
+    "one_pure_package_archive_realization": true,
+    "actual_new_ELF_not_SM605": true,
+    "reuse_policy": "Only exact unchanged dependency-layer bytes/fingerprints. No donor cache mount, relink, feature/pin/dependency/budget change.",
+    "pure_chronology": {
+      "Nix_commands": 23,
+      "selected_build_calls": 1,
+      "all_exit_zero_before_boundary": true,
+      "boundary": "2026-10-31T01:09:36.779501+00:00",
+      "Nix_calls_after_licensed_phase": 0,
+      "license_keys_removed": [
+        "SYMBOLICA_LICENSE",
+        "SYMBOLICA_LICENSE_PATH",
+        "SYMBOLICA_LICENSE_SIGNED"
+      ]
+    }
+  },
+  "runtime": {
+    "code": "ffa76ec420642c03349ab756d2d7720ab93c0057",
+    "archive_sha256": "8993e6c8346b84f6d91c7e65c4c4fc5ed83cf6d932e969bb7fc55cbdced20740",
+    "oracle_elf": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/raw-three-migration-20261031/archive-extracted/target/ci-optim/deps/generation_oracle-3892f55f31822180",
+      "sha256": "5d7275d26392474f2490963dd0503f4f46ccebc30572a4f31f7a66228303b30f",
+      "size": 61186320
+    },
+    "results": [
+      {
+        "pool": 1,
+        "exit": 0,
+        "outcomes": [
+          {
+            "case": "xs_qed_eeee_1pi_L1",
+            "status": "passed",
+            "time": "0.280"
+          },
+          {
+            "case": "xs_qed_eemm_L1",
+            "status": "passed",
+            "time": "0.319"
+          },
+          {
+            "case": "xs_qed_eedd_L1",
+            "status": "passed",
+            "time": "0.319"
+          },
+          {
+            "case": "xs_qcd_gguu_1pi_L1",
+            "status": "passed",
+            "time": "0.321"
+          },
+          {
+            "case": "sm_eemm_L0",
+            "status": "passed",
+            "time": "0.321"
+          },
+          {
+            "case": "qed_ee4f_L0",
+            "status": "passed",
+            "time": "0.322"
+          },
+          {
+            "case": "sm_eeww_L0",
+            "status": "passed",
+            "time": "0.323"
+          },
+          {
+            "case": "qed_eemm_L1",
+            "status": "passed",
+            "time": "0.324"
+          },
+          {
+            "case": "xs_qed_eeee_L1",
+            "status": "passed",
+            "time": "0.324"
+          },
+          {
+            "case": "xs_qed_eemm_L2",
+            "status": "passed",
+            "time": "0.391"
+          },
+          {
+            "case": "ym_g6_L0",
+            "status": "passed",
+            "time": "0.887"
+          },
+          {
+            "case": "ctorder_qcd_uugg_L1",
+            "status": "passed",
+            "time": "0.939"
+          }
+        ],
+        "actual_executions": 12,
+        "junit_sha256": "f45d6dd3848c92fb10371848cbee09afa5c72dd1901abb8abc848f1c2c34164d",
+        "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/raw-three-migration-20261031/runs/pool1/command.json",
+        "public_dump_hook_enabled": true
+      },
+      {
+        "pool": 8,
+        "exit": 0,
+        "outcomes": [
+          {
+            "case": "xs_qed_eemm_L1",
+            "status": "passed",
+            "time": "0.084"
+          },
+          {
+            "case": "xs_qed_eeee_1pi_L1",
+            "status": "passed",
+            "time": "0.088"
+          },
+          {
+            "case": "sm_eeww_L0",
+            "status": "passed",
+            "time": "0.088"
+          },
+          {
+            "case": "xs_qed_eeee_L1",
+            "status": "passed",
+            "time": "0.094"
+          },
+          {
+            "case": "sm_eemm_L0",
+            "status": "passed",
+            "time": "0.098"
+          },
+          {
+            "case": "qed_ee4f_L0",
+            "status": "passed",
+            "time": "0.098"
+          },
+          {
+            "case": "xs_qcd_gguu_1pi_L1",
+            "status": "passed",
+            "time": "0.106"
+          },
+          {
+            "case": "qed_eemm_L1",
+            "status": "passed",
+            "time": "0.113"
+          },
+          {
+            "case": "xs_qed_eedd_L1",
+            "status": "passed",
+            "time": "0.130"
+          },
+          {
+            "case": "xs_qed_eemm_L2",
+            "status": "passed",
+            "time": "0.183"
+          },
+          {
+            "case": "ym_g6_L0",
+            "status": "passed",
+            "time": "0.469"
+          },
+          {
+            "case": "ctorder_qcd_uugg_L1",
+            "status": "passed",
+            "time": "0.492"
+          }
+        ],
+        "actual_executions": 12,
+        "junit_sha256": "ea95acaac9a9a185dfb835a7da68e1fefed26b92b731561e610fb70239635df0",
+        "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/raw-three-migration-20261031/runs/pool8/command.json",
+        "public_dump_hook_enabled": false
+      },
+      {
+        "pool": 32,
+        "exit": 0,
+        "outcomes": [
+          {
+            "case": "xs_qed_eeee_1pi_L1",
+            "status": "passed",
+            "time": "0.102"
+          },
+          {
+            "case": "sm_eemm_L0",
+            "status": "passed",
+            "time": "0.112"
+          },
+          {
+            "case": "xs_qed_eeee_L1",
+            "status": "passed",
+            "time": "0.115"
+          },
+          {
+            "case": "xs_qed_eemm_L1",
+            "status": "passed",
+            "time": "0.118"
+          },
+          {
+            "case": "xs_qed_eedd_L1",
+            "status": "passed",
+            "time": "0.136"
+          },
+          {
+            "case": "qed_ee4f_L0",
+            "status": "passed",
+            "time": "0.136"
+          },
+          {
+            "case": "xs_qcd_gguu_1pi_L1",
+            "status": "passed",
+            "time": "0.144"
+          },
+          {
+            "case": "sm_eeww_L0",
+            "status": "passed",
+            "time": "0.153"
+          },
+          {
+            "case": "qed_eemm_L1",
+            "status": "passed",
+            "time": "0.153"
+          },
+          {
+            "case": "xs_qed_eemm_L2",
+            "status": "passed",
+            "time": "0.194"
+          },
+          {
+            "case": "ym_g6_L0",
+            "status": "passed",
+            "time": "0.500"
+          },
+          {
+            "case": "ctorder_qcd_uugg_L1",
+            "status": "passed",
+            "time": "0.504"
+          }
+        ],
+        "actual_executions": 12,
+        "junit_sha256": "850a50ea90c638218d29157ce879d9a6f33382156f40a06a67f2bb2f3d99a78e",
+        "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/raw-three-migration-20261031/runs/pool32/command.json",
+        "public_dump_hook_enabled": false
+      }
+    ],
+    "expected_selected_executions": 36,
+    "actual_executions": 36,
+    "passes": 36,
+    "failures": 0,
+    "retries": 0,
+    "skipped_credit": 0,
+    "finite_math_scope": "Existing three separately approved pool1 None/Auto proofs only; pools8/32 runtime only."
+  },
+  "runtime_log_audit": {
+    "records": [
+      {
+        "pool": 1,
+        "JUnit_selected": 12,
+        "unique_before_summary_PASS_records": 12,
+        "summary_selected_run": 12,
+        "summary_selected_pass": 12,
+        "selected_skips": 0,
+        "unselected_filtered_tests": 171,
+        "unselected_filtered_binaries": 3,
+        "final_output_repeats_not_new_executions": true
+      },
+      {
+        "pool": 8,
+        "JUnit_selected": 12,
+        "unique_before_summary_PASS_records": 12,
+        "summary_selected_run": 12,
+        "summary_selected_pass": 12,
+        "selected_skips": 0,
+        "unselected_filtered_tests": 171,
+        "unselected_filtered_binaries": 3,
+        "final_output_repeats_not_new_executions": true
+      },
+      {
+        "pool": 32,
+        "JUnit_selected": 12,
+        "unique_before_summary_PASS_records": 12,
+        "summary_selected_run": 12,
+        "summary_selected_pass": 12,
+        "selected_skips": 0,
+        "unselected_filtered_tests": 171,
+        "unselected_filtered_binaries": 3,
+        "final_output_repeats_not_new_executions": true
+      }
+    ],
+    "actual_selected_executions": 36,
+    "retries": 0,
+    "selected_skips": 0,
+    "filtered_skip_credit": 0
+  },
+  "capture_joins": {
+    "path": "capture-joins.json",
+    "sha256": "3583f0a534a169e3e1ca0c533ad9466bcc8ddbd7fafd4d4730c5dda45a52caa2",
+    "actual_new_files": 15,
+    "mode_cells": 6,
+    "owners": 400,
+    "affected": 80,
+    "unaffected": 320,
+    "all_physical_payloads_exact_byte_equal": true,
+    "normalizations": [],
+    "Auto_native_Row_assertions": 0,
+    "Auto_report_counter_limit": "Existing public hook emits the returned None report only. Auto topology/assignment counters retain the explicit approved original-capture premise; actual Auto JSON/source payloads, names, identities, interfaces and all other serialized physics are fresh exact joins. ee4f7 vs42/name permutation preserved."
+  },
+  "capsule": {
+    "new_command_stdout_stderr_outside_child_writable_mount": true,
+    "SMINT_N1_historical_caveat_preserved": true,
+    "empty_root_bwrap_unshare_all": true,
+    "source_archive_input_runtime_files_readonly": true,
+    "host_roots_home_credentials_Nix_socket_compiler_donorcache_absent": true,
+    "unlicensed_loader_netns_input_preflight": "PASS",
+    "license": "Exported value preserved else current XDG config; private memory -> anonymous pipe -> immediate native exec only. No value in argv/logs/files/hash/Nix/pure child environments.",
+    "Nix_after_licensed_phase": 0
+  },
+  "finite_semantics": {
+    "review": "d9303d91d922c994f87b07e10cce895b44dba96e294d64be231a3ecdf921b14c",
+    "scope": "Three separate finite cases, None/Auto independently, GroupingNone, math pool1. Pooled8/32 are runtime only.",
+    "operand_and_output_maps": "H[i]=C[p[i]], b[p[i]]=a[i]. Recompute named plans or transport every positional operand AND retain output-axis map. No historical positional output identity or arbitrary stale ProductPlan interchangeability.",
+    "M2": "12 flag controls bind claims to actual imported owners, not serialized flags.",
+    "M3": "Separate formatted control-generator repair is not assumed approved; neither generator used here.",
+    "native_reuse": "40 successful algebra batches/3088 obligations only; SM32 excluded. No old observer/algebra/helper/producer reruns.",
+    "source_roles": {
+      "historical": "2b1ef4f07a44bc061bcc97c378bbdd9c41cb0e94",
+      "proof": "5ba04864ca506e259d9eef4a54f65acdd8323fc2",
+      "reconciled": "f47f27213a1c55291239c9bc0f334a7ea1cd1cc1",
+      "prior_built": "5ea149ffd88ae3afc4072a38c0871c1329be8424",
+      "actual_new_built": "ffa76ec420642c03349ab756d2d7720ab93c0057",
+      "kernel": "8eb7c3729d6abefc916decc1bdf0c06536f8af80"
+    },
+    "premises": "Exact original raw/cooked/decoded capture association, registration state, complete symbol definitions, local/aggregate/projector meaning and usual compiler/build honesty remain finite premises. No universal decoder/locality/history/component-physics theorem."
+  },
+  "validation": {
+    "guard": {
+      "base": "5ea4c93b79dd33094072d7717e912aa4b05d6689",
+      "code": "ffa76ec420642c03349ab756d2d7720ab93c0057",
+      "all_base_files_except_exact_main_tokens_and_additive_registry_unchanged": true,
+      "all_host_API_browser_files_byte_pinned": true,
+      "all118_scopes_anchors_and_digests_equal": true,
+      "all_prior_registry_notes_equal": true,
+      "main_HEAD_index_packed_refs_equal": true,
+      "all_initial_git_refs_equal": true,
+      "generation_integration": "fdff0d18953348b84a0f1b7e6ab5ef703a5090de",
+      "CI": false,
+      "all_archive_source_runtime_files_rehashed": true,
+      "new_independent_review_required": true
+    },
+    "pinned_rustfmt": "PASS",
+    "source_scope_118": "PASS unchanged",
+    "standalone_Typst": {
+      "argv": [
+        "/nix/store/wzpxqpc3v2xxah69rqifq5kac67hx36g-typst-0.15.1/bin/typst",
+        "compile",
+        "--root",
+        "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh",
+        "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/docs/architecture/generation-raw-three-migration.typ",
+        "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/raw-three-migration-20261031/canonical-note.pdf"
+      ],
+      "exit": 0,
+      "stdout": "",
+      "stderr": "",
+      "tool_sha256": "3c381d7d3e2259f81766ff77a1e6dec18ec4c7b7702b9c51ad34d56432b9633c",
+      "source_sha256": "1fb023f01c57ecc3c659e9c4b38eec853a9beb7d7cd43b35e55aed63ee093bcb",
+      "output_sha256": "ac410b822271804cb629c3f3e826a41b829a79033c7f09203e4778792fde0f47",
+      "scope": "Only this standalone note. No full docs/site suite credit."
+    },
+    "Python_and_registry_syntax": "PASS",
+    "Rust_policy_departures": null,
+    "new_Clippy_or_full_docs_credit": false,
+    "existing_build_warnings": "Clarabel unused import and elided lifetimes remain in retained build log."
+  },
+  "failures_retained": [
+    {
+      "stage": "qualification attempt1",
+      "cause": "Started while selected Nix build still active. Guard read build.command.json without completed exit field and failed KeyError before any provenance child, runtime or licensing.",
+      "stderr": "qualify-attempt1.stderr",
+      "stdout": "qualify-attempt1.stdout",
+      "correction": "Waited for actual selected build command exit0 before starting qualification again.",
+      "success_credit": 0
+    }
+  ],
+  "remaining_gates": [
+    "NEW independent integration review of this actual candidate",
+    "Auto mathematical review and root aggregation; only Auto ScopeA approved",
+    "host API/stubs/browser failed qualification and separate corrective work",
+    "other371/full oracle/heavy, performance/memory, wholeWP3/M-rebuild and combined integration",
+    "full docs/site, distribution and publication"
+  ],
+  "process": {
+    "CI": false,
+    "generation_integration_advanced": false,
+    "main_index_frozen_refs_or_history_changed": false,
+    "delegations_push_fetch_PR_upload_publication": false,
+    "20_GiB_policy_adopted": false,
+    "owned_background_processes_remaining": []
+  },
+  "retention": {
+    "tracked": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/docs/architecture/evidence/generation-integration/feynkit-refresh/raw-three-migration",
+    "ignored_holder": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/raw-three-migration-20261031",
+    "purpose": "Actual archive extraction, new fingerprints, complete queries/results, full selected dumps and failed setup retained for independent review. All prior packets/shared caches/other workers artifacts untouched."
+  }
+}

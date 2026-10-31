@@ -13,6 +13,19 @@ title = "Implemented architecture"
 summary = "How the current runtime, physics layers, parsers, and symbolic engines are organized."
 
 [[section.note]]
+id = "generation-raw-three-migration"
+title = "Three-token numerator migration qualification"
+summary = "Three separately authorized numerator tokens with a new pure archive, 36 actual full-Row executions and exact pool1 production-capture joins."
+source = "docs/architecture/generation-raw-three-migration.typ"
+kind = "Execution record"
+status = "New independent integration-review candidate; bounded three-token application only"
+lifecycle = "investigation"
+owner = "unassigned"
+products = ["feynkit", "gammaloop"]
+topics = ["generation", "testing", "provenance", "integration"]
+review_triggers = ["crates/feynkit-generator/tests/generation_oracle/**", "docs/architecture/generation-raw-three-migration.typ", "docs/architecture/evidence/generation-integration/feynkit-refresh/raw-three-migration/**"]
+
+[[section.note]]
 id = "generation-sm-eeww-migration"
 title = "SM eeww one-token migration qualification"
 summary = "Separately authorized one-token SM migration with a new pure archive and 27 actual nine-row pool executions."

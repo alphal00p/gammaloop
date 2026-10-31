@@ -1,0 +1,18 @@
+{
+  "schema": "independent-three-token-migration-astra-review-seal/1",
+  "created_utc": "2026-10-31T00:54:59.629194+00:00",
+  "verdict": "APPROVE_THREE_BOUNDED_LITERAL_MIGRATIONS_WITH_EXPLICIT_REPRESENTATION_AND_RUNTIME_LIMITS",
+  "review_sha256": "c0692180c797034f923ae4bcf0a91712816a67bcf726d088787914c9a4d211e6",
+  "manifest": "SHA256SUMS",
+  "manifest_sha256": "6c66edda00419760f24ef505504a2de4b09b7747ba32e3177624f849b03f214f",
+  "files": 46,
+  "bytes": 14104938,
+  "exclusions": [
+    "SHA256SUMS bound by this seal",
+    "SEAL.json external SHA256 returned to coordinator"
+  ],
+  "candidate_patch_sha256": "872261e0211f57960a1eb0544dbdb303934cd95e4c44b47c4e9cccd358d09fe6",
+  "actual_interface_review_sha256": "d9303d91d922c994f87b07e10cce895b44dba96e294d64be231a3ecdf921b14c",
+  "scope": "Three exact literal decisions only; no source/application/runtime/combined approval",
+  "owned_processes_remaining": 0
+}

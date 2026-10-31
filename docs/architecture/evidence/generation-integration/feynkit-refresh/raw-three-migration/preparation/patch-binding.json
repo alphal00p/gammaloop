@@ -1,0 +1,75 @@
+{
+  "status": "NOT_APPLIED",
+  "approval": false,
+  "gates": [
+    "INTERFACE_REVIEW_PENDING",
+    "NEW_MIGRATION_REVIEW_REQUIRED"
+  ],
+  "path": "crates/feynkit-generator/tests/generation_oracle/main.rs",
+  "before_blob": "e6af4ec644688e1333064c50e3b157ae631473ee",
+  "after_blob": "9ef9f1ba005f20149716b22346d45c5501b62e87",
+  "before_sha256": "c642b5cc8145610854a8681d6987ea392266064c429cfa86719e72296083f0f7",
+  "after_sha256": "6dacf61baca9f13f3e4a6d719f89eaced429fb3cb14c7904dcb41fe4c86b66df",
+  "patch_sha256": "872261e0211f57960a1eb0544dbdb303934cd95e4c44b47c4e9cccd358d09fe6",
+  "changed_rows": [
+    "qed_ee4f_L0",
+    "xs_qed_eeee_L1",
+    "xs_qcd_gguu_1pi_L1"
+  ],
+  "changed_fields": [
+    "numerators"
+  ],
+  "changed_tokens": 3,
+  "preserved_migrations": {
+    "xs_qed_eemm_L1": {
+      "row_sha256": "25b964b968545f8d85783d23ae70ad09e529290cd63ddc7804b44905d5ba9129",
+      "byte_identical": true,
+      "complete_row": "xs_qed_eemm_L1: Row { diagrams: 1, topologies: 17, assignments: 34, inverse_symmetry: (1, 1), weights: (-1, 1), symmetry_factors: &[(1, 1)], content: 0x831ae534b022fd0f, numerators: 0x414e2a7a954beae8, named: 0xf40bfdc791015105, ids: 0xedd739fe2aef9d55 }"
+    },
+    "xs_qed_eedd_L1": {
+      "row_sha256": "fdb64a1d535ec319b16fa9cb956636fff09c9a8d1c6634a8bc08e8493b70d891",
+      "byte_identical": true,
+      "complete_row": "xs_qed_eedd_L1: Row { diagrams: 1, topologies: 17, assignments: 34, inverse_symmetry: (1, 1), weights: (-1, 1), symmetry_factors: &[(1, 1)], content: 0xb467d6be7a12aefa, numerators: 0xd3ad2f3a0802b6ab, named: 0xdd30b2e206f30267, ids: 0x58ebcb07ba6255d3 }"
+    },
+    "xs_qed_eeee_1pi_L1": {
+      "row_sha256": "edfb50abaf3ef5955d917c8705c3ed1f705e45cca221e6131dec94ef55f336bc",
+      "byte_identical": true,
+      "complete_row": "xs_qed_eeee_1pi_L1: Row { diagrams: 1, topologies: 3, assignments: 4, inverse_symmetry: (1, 1), weights: (-1, 1), symmetry_factors: &[(1, 1)], content: 0x8686eb17d2b0f293, numerators: 0x1fa84d9ad4fdf0b0, named: 0xf5ac9fd01b9eabd7, ids: 0xf777e735b39d93bf }"
+    },
+    "qed_eemm_L1": {
+      "row_sha256": "13360392d6a7852c1e04869aa123b1c788228a0daa246328985f758784095e89",
+      "byte_identical": true,
+      "complete_row": "qed_eemm_L1: Row { diagrams: 17, topologies: 10, assignments: 17, inverse_symmetry: (17, 1), weights: (1, 1), symmetry_factors: &[(1, 17)], content: 0x67015758ee0dfcf5, numerators: 0x3866ebfda57f6fb8, named: 0x92ff7810a94d1ff7, ids: 0x1dc5ec5f97f654ff }"
+    },
+    "ctorder_qcd_uugg_L1": {
+      "row_sha256": "99e2a0316bf4ae745df84e9ef72049ce7949d1c596b7c6a49cb7353a031244d2",
+      "byte_identical": true,
+      "complete_row": "ctorder_qcd_uugg_L1: Row { diagrams: 268, topologies: 32, assignments: 268, inverse_symmetry: (251, 1), weights: (13, 1), symmetry_factors: &[(1, 234), (2, 34)], content: 0x33e52219b458ee2e, numerators: 0x3a743bf033456b6f, named: 0xc760bf1c8a759334, ids: 0x019e715c187af508 }"
+    },
+    "sm_eemm_L0": {
+      "row_sha256": "db4c8b1c6f8099a8744708a3c10ea7f79e942e225361bed519886e413c09d27c",
+      "byte_identical": true,
+      "complete_row": "sm_eemm_L0: Row { diagrams: 4, topologies: 1, assignments: 4, inverse_symmetry: (4, 1), weights: (-4, 1), symmetry_factors: &[(1, 4)], content: 0x97af00ae91ef62c4, numerators: 0xc030c29958e57000, named: 0xc01c07a8158bc53a, ids: 0x91a782bcdd47cb2a }"
+    },
+    "ym_g6_L0": {
+      "row_sha256": "9a62b02e11caee7bcd084cddbaec6740fb0abda40cc540da2f3f2163dd7f8881",
+      "byte_identical": true,
+      "complete_row": "ym_g6_L0: Row { diagrams: 220, topologies: 220, assignments: 220, inverse_symmetry: (220, 1), weights: (220, 1), symmetry_factors: &[(1, 220)], content: 0xe166545bc76a8cd8, numerators: 0xc742a6c3a2526c64, named: 0x0855fe3d5967a4de, ids: 0x4a0b7e227d7ace53 }"
+    },
+    "xs_qed_eemm_L2": {
+      "row_sha256": "aae7e01c752e73202a39e9f905e017b910c54c9e20c09db46993cce4735ce50f",
+      "byte_identical": true,
+      "complete_row": "xs_qed_eemm_L2: Row { diagrams: 30, topologies: 157, assignments: 714, inverse_symmetry: (30, 1), weights: (4, 1), symmetry_factors: &[(1, 30)], content: 0x6fcfea2ac818e3eb, numerators: 0xf889b37c1fd93143, named: 0x0b41c948729c87ec, ids: 0xc6537de685c0ec01 }"
+    },
+    "sm_eeww_L0": {
+      "row_sha256": "b4ac9f5b9ac8f6c3d11c358be866ecee68f45be0d29b06a9ef5a1dc319e18b0b",
+      "byte_identical": true,
+      "complete_row": "sm_eeww_L0: Row { diagrams: 4, topologies: 2, assignments: 4, inverse_symmetry: (4, 1), weights: (-4, 1), symmetry_factors: &[(1, 4)], content: 0x7477c6f9f9a39d73, numerators: 0x0098a2a731e2a6fb, named: 0x48249b27b144364c, ids: 0xf65454f1b8b1a032 }"
+    }
+  },
+  "all_other_bytes": "Complete byte equality after reverting exactly these three row-local tokens.",
+  "all_other_rows_and_fields_unchanged": true,
+  "SM_in_patch": false,
+  "applied": false,
+  "runtime_tested": false
+}

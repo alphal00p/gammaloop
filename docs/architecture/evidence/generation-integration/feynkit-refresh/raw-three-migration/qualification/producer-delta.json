@@ -1,0 +1,17 @@
+{
+  "old_drv": "/nix/store/5pxm7dg3gnz25a30iqzmyvh7kwcrwbsq-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0.drv",
+  "new_drv": "/nix/store/b3psgc7ywm8ccnq0kpsh2zswy82p0cfv-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0.drv",
+  "old_source": "/nix/store/w2mb00qab6ql3ir9fcqwkn083133321p-source",
+  "new_source": "/nix/store/x4ypq6dl7k9lbpxy2g0mmn959a16gsw2-source",
+  "old_artifacts": "/nix/store/h2xam7y7dhqfq333sml2wcv9r5xn8gcj-gammaloop-crate-test-binaries-feynkit-generator-b6f177b7bc15beb1-deps-0.1.0",
+  "new_artifacts": "/nix/store/rdjfjq9i5dap927sylh6984zj54xra2z-gammaloop-crate-test-binaries-feynkit-generator-b6f177b7bc15beb1-deps-0.1.0",
+  "invariant_env_fields": {
+    "RUSTFLAGS": true,
+    "cargoExtraArgs": true,
+    "buildPhase": true,
+    "installPhase": true,
+    "nativeBuildInputs": true,
+    "buildInputs": true,
+    "stdenv": true
+  }
+}

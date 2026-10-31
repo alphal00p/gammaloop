@@ -1,0 +1,232 @@
+{
+  "case": "xs_qcd_gguu_1pi_L1",
+  "scope": {
+    "graphs": 4,
+    "owners_per_mode": 52,
+    "classes": [
+      "None",
+      "Auto"
+    ],
+    "classes_obligation": "independent cells",
+    "grouping": "None",
+    "pool": 1
+  },
+  "status": "NOT_APPLIED_INTERFACE_REVIEW_PENDING_NEW_MIGRATION_REVIEW_REQUIRED",
+  "patch_included": true,
+  "expected_Row": {
+    "diagrams": 4,
+    "topologies": 12,
+    "assignments": 54,
+    "content": 13292509521889608637,
+    "numerators": 8501616522639327483,
+    "named": 15278292068172816218,
+    "ids": 9379374420500739387,
+    "inverse_symmetry": [
+      4,
+      1
+    ],
+    "weights": [
+      -4,
+      1
+    ],
+    "symmetry_factors": [
+      [
+        1,
+        4
+      ]
+    ]
+  },
+  "actual_None_Row": {
+    "diagrams": 4,
+    "topologies": 12,
+    "assignments": 54,
+    "content": 13292509521889608637,
+    "numerators": 7142019012713190507,
+    "named": 15278292068172816218,
+    "ids": 9379374420500739387,
+    "inverse_symmetry": [
+      4,
+      1
+    ],
+    "weights": [
+      -4,
+      1
+    ],
+    "symmetry_factors": [
+      [
+        1,
+        4
+      ]
+    ]
+  },
+  "changed_fields": [
+    "numerators"
+  ],
+  "other_nine_fields_verified": true,
+  "unchanged_source_row": "xs_qcd_gguu_1pi_L1: Row { diagrams: 4, topologies: 12, assignments: 54, inverse_symmetry: (4, 1), weights: (-4, 1), symmetry_factors: &[(1, 4)], content: 0xb8787afbc1ba43bd, numerators: 0x75fbcf2f108240fb, named: 0xd40765b02a1bdf5a, ids: 0x822a3b576554f53b }",
+  "old_numerator_hex": "0x75fbcf2f108240fb",
+  "new_numerator_hex": "0x631d8c73b7db146b",
+  "modes": {
+    "None": "cells/xs_qcd_gguu_1pi_L1/None.json",
+    "Auto": "cells/xs_qcd_gguu_1pi_L1/Auto.json"
+  },
+  "None_Auto_correspondence": [
+    {
+      "id": "ad0818e3abc13783bfcc2695b849034d",
+      "None_index": 0,
+      "Auto_index": 0,
+      "None_name": "D0",
+      "Auto_name": "D0"
+    },
+    {
+      "id": "31d0890641674e5ee9afceaff1e22206",
+      "None_index": 1,
+      "Auto_index": 1,
+      "None_name": "D1",
+      "Auto_name": "D1"
+    },
+    {
+      "id": "14ac74bf7c503631cbbf625890f7ea67",
+      "None_index": 2,
+      "Auto_index": 2,
+      "None_name": "D2",
+      "Auto_name": "D2"
+    },
+    {
+      "id": "c490e590d90aa4c6acda54e116e788a7",
+      "None_index": 3,
+      "Auto_index": 3,
+      "None_name": "D3",
+      "Auto_name": "D3"
+    }
+  ],
+  "derived_None_Auto_Row_differences": [],
+  "Auto_Row_assertion": false,
+  "original_failure": {
+    "observer_command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qcd_gguu_1pi_L1/command.json",
+    "pristine_command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qcd_gguu_1pi_L1/command.json",
+    "assertion_summaries": [
+      "Summary { diagrams: 4, topologies: 12, assignments: 54, inverse_symmetry: Fraction { numerator: 4, denominator: 1 }, weights: Fraction { numerator: -4, denominator: 1 }, symmetry_factors: [(1, 4)], content: 13292509521889608637, numerators: 7142019012713190507, named: 15278292068172816218, ids: 9379374420500739387 }",
+      "Summary { diagrams: 4, topologies: 12, assignments: 54, inverse_symmetry: Fraction { numerator: 4, denominator: 1 }, weights: Fraction { numerator: -4, denominator: 1 }, symmetry_factors: [(1, 4)], content: 13292509521889608637, numerators: 8501616522639327483, named: 15278292068172816218, ids: 9379374420500739387 }"
+    ]
+  },
+  "blockers": [
+    "Ordered interface compatibility at actual downstream consumers after the displayed owner-specific permutations. same_value includes logical order; named multisets and Atom equality alone cannot discharge it.",
+    "Finite from_declared_parts admission/round-trip and consumer-layout correspondence for these exact captured arrays under reversible cooking. No universal free-index/locality/decoder theorem inferred."
+  ],
+  "semantic_basis": "Existing independently approved local and factorized aggregate proofs, exact-input reuse only; fresh complete whole-symbol and payload checks, exact mode binding, finite Q carrier locality. No numerator algebra rerun.",
+  "before_Row": {
+    "diagrams": 4,
+    "topologies": 12,
+    "assignments": 54,
+    "content": 13292509521889608637,
+    "numerators": 8501616522639327483,
+    "named": 15278292068172816218,
+    "ids": 9379374420500739387,
+    "inverse_symmetry": [
+      4,
+      1
+    ],
+    "weights": [
+      -4,
+      1
+    ],
+    "symmetry_factors": [
+      [
+        1,
+        4
+      ]
+    ]
+  },
+  "after_Row": {
+    "diagrams": 4,
+    "topologies": 12,
+    "assignments": 54,
+    "content": 13292509521889608637,
+    "numerators": 7142019012713190507,
+    "named": 15278292068172816218,
+    "ids": 9379374420500739387,
+    "inverse_symmetry": [
+      4,
+      1
+    ],
+    "weights": [
+      -4,
+      1
+    ],
+    "symmetry_factors": [
+      [
+        1,
+        4
+      ]
+    ]
+  },
+  "Auto_Row": {
+    "diagrams": 4,
+    "topologies": 12,
+    "assignments": 54,
+    "inverse_symmetry": [
+      4,
+      1
+    ],
+    "weights": [
+      -4,
+      1
+    ],
+    "symmetry_factors": [
+      [
+        1,
+        4
+      ]
+    ],
+    "content": 13292509521889608637,
+    "numerators": 7142019012713190507,
+    "named": 15278292068172816218,
+    "ids": 9379374420500739387
+  },
+  "Auto_historical_Row": {
+    "diagrams": 4,
+    "topologies": 12,
+    "assignments": 54,
+    "inverse_symmetry": [
+      4,
+      1
+    ],
+    "weights": [
+      -4,
+      1
+    ],
+    "symmetry_factors": [
+      [
+        1,
+        4
+      ]
+    ],
+    "content": 13292509521889608637,
+    "numerators": 8501616522639327483,
+    "named": 15278292068172816218,
+    "ids": 9379374420500739387
+  },
+  "original_candidate": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-four-migration-preparation-20261030-r1/candidates/xs_qcd_gguu_1pi_L1.json",
+    "sha256": "be2a3a18417c0eefa6868c1b03f5967f80f1b512a4af680e733421508bb45bda",
+    "bytes": 4148
+  },
+  "original_interface_blockers": [
+    "Ordered interface compatibility at actual downstream consumers after the displayed owner-specific permutations. same_value includes logical order; named multisets and Atom equality alone cannot discharge it.",
+    "Finite from_declared_parts admission/round-trip and consumer-layout correspondence for these exact captured arrays under reversible cooking. No universal free-index/locality/decoder theorem inferred."
+  ],
+  "interface_evidence": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/validation-receipt.json",
+    "sha256": "7c443ba689cd2e04cddf4d6a2d1f60c4e41512cdad9cf64237e770b86d74349f",
+    "bytes": 31340
+  },
+  "interface_review_verdict": null,
+  "gates": [
+    "INTERFACE_REVIEW_PENDING",
+    "NEW_MIGRATION_REVIEW_REQUIRED"
+  ],
+  "approval": false,
+  "applied": false,
+  "post_patch_runtime": "NOT_RUN"
+}

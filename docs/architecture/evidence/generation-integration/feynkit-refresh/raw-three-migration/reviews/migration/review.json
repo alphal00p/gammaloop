@@ -1,0 +1,1318 @@
+{
+  "schema": "independent-three-token-migration-astra-review/1",
+  "reviewer": "NEW independent Astra THREE-TOKEN MIGRATION review after actual interface verdict; user-authorized fallback for rate-limited Opus; no delegation",
+  "completed_utc": "2026-10-31T00:54:29.004543+00:00",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families",
+  "review_directory": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-raw-three-migration-astra-20261031-004323Z-a3d128ed",
+  "verdict": "APPROVE_THREE_BOUNDED_LITERAL_MIGRATIONS_WITH_EXPLICIT_REPRESENTATION_AND_RUNTIME_LIMITS",
+  "per_row": [
+    {
+      "case": "qed_ee4f_L0",
+      "verdict": "APPROVE",
+      "old_numerator": "0x7f2a34ae141a6f7c",
+      "new_numerator": "0x1d107b2170d73cd2",
+      "field": "numerators",
+      "literal_assertion": "Classes::None only",
+      "grouping": "None",
+      "pool": 1,
+      "mathematical_mode_scope": [
+        "None",
+        "Auto independently"
+      ],
+      "before_Row": {
+        "diagrams": 6,
+        "topologies": 7,
+        "assignments": 6,
+        "inverse_symmetry": [
+          6,
+          1
+        ],
+        "weights": [
+          -6,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            6
+          ]
+        ],
+        "content": 7418213026047758212,
+        "numerators": 9163194314104926076,
+        "named": 9955192864026428413,
+        "ids": 15420108436151051566
+      },
+      "after_Row": {
+        "diagrams": 6,
+        "topologies": 7,
+        "assignments": 6,
+        "inverse_symmetry": [
+          6,
+          1
+        ],
+        "weights": [
+          -6,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            6
+          ]
+        ],
+        "content": 7418213026047758212,
+        "numerators": 2094309210284571858,
+        "named": 9955192864026428413,
+        "ids": 15420108436151051566
+      },
+      "Auto_historical_Row": {
+        "diagrams": 6,
+        "topologies": 42,
+        "assignments": 6,
+        "inverse_symmetry": [
+          6,
+          1
+        ],
+        "weights": [
+          -6,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            6
+          ]
+        ],
+        "content": 7418213026047758212,
+        "numerators": 9163194314104926076,
+        "named": 3630688608974482237,
+        "ids": 15420108436151051566
+      },
+      "Auto_current_Row": {
+        "diagrams": 6,
+        "topologies": 42,
+        "assignments": 6,
+        "inverse_symmetry": [
+          6,
+          1
+        ],
+        "weights": [
+          -6,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            6
+          ]
+        ],
+        "content": 7418213026047758212,
+        "numerators": 2094309210284571858,
+        "named": 3630688608974482237,
+        "ids": 15420108436151051566
+      },
+      "Auto_native_Row_assertion": false,
+      "mode_correspondence": {
+        "pairs": [
+          {
+            "id": "03bce2b69eac73e2ba471b9d2e94e195",
+            "None_index": 0,
+            "Auto_index": 0,
+            "None_name": "D0",
+            "Auto_name": "D0"
+          },
+          {
+            "id": "44ae97440e9239c809c1f1131adfe368",
+            "None_index": 1,
+            "Auto_index": 1,
+            "None_name": "D1",
+            "Auto_name": "D1"
+          },
+          {
+            "id": "eb56b44e19164ab9dbd246ae1fc1358e",
+            "None_index": 2,
+            "Auto_index": 4,
+            "None_name": "D2",
+            "Auto_name": "D4"
+          },
+          {
+            "id": "fb4a768078488cd9ec8edaf1f8b6683a",
+            "None_index": 3,
+            "Auto_index": 2,
+            "None_name": "D3",
+            "Auto_name": "D2"
+          },
+          {
+            "id": "8213ae5fb9f98789a010294f31bff51a",
+            "None_index": 4,
+            "Auto_index": 5,
+            "None_name": "D4",
+            "Auto_name": "D5"
+          },
+          {
+            "id": "e9ff090d108cca55fc5d5ccb38cc2a9f",
+            "None_index": 5,
+            "Auto_index": 3,
+            "None_name": "D5",
+            "Auto_name": "D3"
+          }
+        ],
+        "Row_differences": [
+          "topologies",
+          "named"
+        ],
+        "Auto_native_Row_assertion": false
+      },
+      "independent_decision_basis": "The6 exact physical diagrams and96 owner entries per mode retain the same model, requests, full canonical keys, particle/rule/edge/vertex incidence, routing, cuts, source factors and projectors. Exactly4 vertices per mode change inferred-to-explicit logical order by [1,0,2]. Their exact mapped ordered gamma/spinor expressions and typed-field assignment establish the same finite physical tensor. All9 other Row fields are unchanged within each route comparison. None/Auto stay independent:7 vs42 topologies and a real name/order permutation.",
+      "interface_review_row_reused": {
+        "case": "qed_ee4f_L0",
+        "verdict": "APPROVE_FINITE_INTERFACE_AND_SELECTED_NAMED_CONSUMER_PROOF",
+        "grouping": "None",
+        "pool": 1,
+        "classes": [
+          "None",
+          "Auto"
+        ],
+        "mode_cells": [
+          {
+            "case": "qed_ee4f_L0",
+            "mode": "None",
+            "owners": 96,
+            "affected": 4,
+            "unaffected": 92,
+            "fold_stages": 42,
+            "graphs": 6,
+            "plans": 48,
+            "stale": 4
+          },
+          {
+            "case": "qed_ee4f_L0",
+            "mode": "Auto",
+            "owners": 96,
+            "affected": 4,
+            "unaffected": 92,
+            "fold_stages": 42,
+            "graphs": 6,
+            "plans": 48,
+            "stale": 4
+          }
+        ],
+        "combined_mode_counts": {
+          "graphs": 12,
+          "owners": 192,
+          "affected": 8,
+          "unaffected": 184,
+          "plans": 96,
+          "stale": 8,
+          "fold_stages": 84
+        },
+        "actual_component_lowerings": 16,
+        "public_output_rank": 6,
+        "graph_identity_by_mode": {
+          "None": [
+            {
+              "id": "03bce2b69eac73e2ba471b9d2e94e195",
+              "name": "D0",
+              "affected_owners": []
+            },
+            {
+              "id": "44ae97440e9239c809c1f1131adfe368",
+              "name": "D1",
+              "affected_owners": []
+            },
+            {
+              "id": "eb56b44e19164ab9dbd246ae1fc1358e",
+              "name": "D2",
+              "affected_owners": []
+            },
+            {
+              "id": "fb4a768078488cd9ec8edaf1f8b6683a",
+              "name": "D3",
+              "affected_owners": []
+            },
+            {
+              "id": "8213ae5fb9f98789a010294f31bff51a",
+              "name": "D4",
+              "affected_owners": [
+                "vertex:2",
+                "vertex:3"
+              ]
+            },
+            {
+              "id": "e9ff090d108cca55fc5d5ccb38cc2a9f",
+              "name": "D5",
+              "affected_owners": [
+                "vertex:2",
+                "vertex:3"
+              ]
+            }
+          ],
+          "Auto": [
+            {
+              "id": "03bce2b69eac73e2ba471b9d2e94e195",
+              "name": "D0",
+              "affected_owners": []
+            },
+            {
+              "id": "44ae97440e9239c809c1f1131adfe368",
+              "name": "D1",
+              "affected_owners": []
+            },
+            {
+              "id": "fb4a768078488cd9ec8edaf1f8b6683a",
+              "name": "D2",
+              "affected_owners": []
+            },
+            {
+              "id": "e9ff090d108cca55fc5d5ccb38cc2a9f",
+              "name": "D3",
+              "affected_owners": [
+                "vertex:2",
+                "vertex:3"
+              ]
+            },
+            {
+              "id": "eb56b44e19164ab9dbd246ae1fc1358e",
+              "name": "D4",
+              "affected_owners": []
+            },
+            {
+              "id": "8213ae5fb9f98789a010294f31bff51a",
+              "name": "D5",
+              "affected_owners": [
+                "vertex:2",
+                "vertex:3"
+              ]
+            }
+          ]
+        },
+        "owner_permutations": {
+          "vertex": [
+            1,
+            0,
+            2
+          ]
+        },
+        "permutation_convention": "H[i] = C[p[i]]; for arbitrary components b[p[i]]=a[i]",
+        "original_obligation_1": "CLOSED: exact finite declared admission and export/admit plus whole-public-diagram roundtrip through the qualified current library, with the historical raw/cooked/decoded capture premise retained.",
+        "original_obligation_2": "CLOSED for the selected current source-defined named consumers and complete output-axis correspondence; recompute named plans or transport each positional operand. Not unconditional historical-library positional output or cached-plan interchangeability.",
+        "migration_literal_token_approval": false
+      },
+      "application_performed": false,
+      "postpatch_runtime_approved": false
+    },
+    {
+      "case": "xs_qed_eeee_L1",
+      "verdict": "APPROVE",
+      "old_numerator": "0x8eb2c3186607a1a2",
+      "new_numerator": "0x7734a2de85dd54c9",
+      "field": "numerators",
+      "literal_assertion": "Classes::None only",
+      "grouping": "None",
+      "pool": 1,
+      "mathematical_mode_scope": [
+        "None",
+        "Auto independently"
+      ],
+      "before_Row": {
+        "diagrams": 4,
+        "topologies": 17,
+        "assignments": 34,
+        "inverse_symmetry": [
+          4,
+          1
+        ],
+        "weights": [
+          0,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            4
+          ]
+        ],
+        "content": 3022486068726070230,
+        "numerators": 10282495408798671266,
+        "named": 13426690394181497681,
+        "ids": 18306469787178189955
+      },
+      "after_Row": {
+        "diagrams": 4,
+        "topologies": 17,
+        "assignments": 34,
+        "inverse_symmetry": [
+          4,
+          1
+        ],
+        "weights": [
+          0,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            4
+          ]
+        ],
+        "content": 3022486068726070230,
+        "numerators": 8589669465914692809,
+        "named": 13426690394181497681,
+        "ids": 18306469787178189955
+      },
+      "Auto_historical_Row": {
+        "diagrams": 4,
+        "topologies": 17,
+        "assignments": 34,
+        "inverse_symmetry": [
+          4,
+          1
+        ],
+        "weights": [
+          0,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            4
+          ]
+        ],
+        "content": 3022486068726070230,
+        "numerators": 10282495408798671266,
+        "named": 13426690394181497681,
+        "ids": 18306469787178189955
+      },
+      "Auto_current_Row": {
+        "diagrams": 4,
+        "topologies": 17,
+        "assignments": 34,
+        "inverse_symmetry": [
+          4,
+          1
+        ],
+        "weights": [
+          0,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            4
+          ]
+        ],
+        "content": 3022486068726070230,
+        "numerators": 8589669465914692809,
+        "named": 13426690394181497681,
+        "ids": 18306469787178189955
+      },
+      "Auto_native_Row_assertion": false,
+      "mode_correspondence": {
+        "pairs": [
+          {
+            "id": "d9a1f4b74e7edcf37c2b095299a89854",
+            "None_index": 0,
+            "Auto_index": 0,
+            "None_name": "D0",
+            "Auto_name": "D0"
+          },
+          {
+            "id": "8c07d98cdf34666feb5b87a516adeeab",
+            "None_index": 1,
+            "Auto_index": 1,
+            "None_name": "D1",
+            "Auto_name": "D1"
+          },
+          {
+            "id": "ed03bfa8f6a6b6b8ff8bc1cb74ab5750",
+            "None_index": 2,
+            "Auto_index": 2,
+            "None_name": "D2",
+            "Auto_name": "D2"
+          },
+          {
+            "id": "19313a3947e130179589bbd41aa5957c",
+            "None_index": 3,
+            "Auto_index": 3,
+            "None_name": "D3",
+            "Auto_name": "D3"
+          }
+        ],
+        "Row_differences": [],
+        "Auto_native_Row_assertion": false
+      },
+      "independent_decision_basis": "The4 exact physical diagrams and52 owners per mode retain the complete physical inputs and source-factor identities. Exactly4 vertices per mode change inferred-to-explicit logical order by [1,0,2]. Literal mapped ordered expressions, separately approved local/aggregate/projector meanings, declared admission and the named-consumer/output-map argument establish the finite value covariance. The zero summed weight is not used as a physics proof. All9 other Row fields are unchanged.",
+      "interface_review_row_reused": {
+        "case": "xs_qed_eeee_L1",
+        "verdict": "APPROVE_FINITE_INTERFACE_AND_SELECTED_NAMED_CONSUMER_PROOF",
+        "grouping": "None",
+        "pool": 1,
+        "classes": [
+          "None",
+          "Auto"
+        ],
+        "mode_cells": [
+          {
+            "case": "xs_qed_eeee_L1",
+            "mode": "None",
+            "owners": 52,
+            "affected": 4,
+            "unaffected": 48,
+            "fold_stages": 40,
+            "graphs": 4,
+            "plans": 36,
+            "stale": 4
+          },
+          {
+            "case": "xs_qed_eeee_L1",
+            "mode": "Auto",
+            "owners": 52,
+            "affected": 4,
+            "unaffected": 48,
+            "fold_stages": 40,
+            "graphs": 4,
+            "plans": 36,
+            "stale": 4
+          }
+        ],
+        "combined_mode_counts": {
+          "graphs": 8,
+          "owners": 104,
+          "affected": 8,
+          "unaffected": 96,
+          "plans": 72,
+          "stale": 8,
+          "fold_stages": 80
+        },
+        "actual_component_lowerings": 16,
+        "public_output_rank": 4,
+        "graph_identity_by_mode": {
+          "None": [
+            {
+              "id": "d9a1f4b74e7edcf37c2b095299a89854",
+              "name": "D0",
+              "affected_owners": []
+            },
+            {
+              "id": "8c07d98cdf34666feb5b87a516adeeab",
+              "name": "D1",
+              "affected_owners": []
+            },
+            {
+              "id": "ed03bfa8f6a6b6b8ff8bc1cb74ab5750",
+              "name": "D2",
+              "affected_owners": [
+                "vertex:2",
+                "vertex:3"
+              ]
+            },
+            {
+              "id": "19313a3947e130179589bbd41aa5957c",
+              "name": "D3",
+              "affected_owners": [
+                "vertex:1",
+                "vertex:2"
+              ]
+            }
+          ],
+          "Auto": [
+            {
+              "id": "d9a1f4b74e7edcf37c2b095299a89854",
+              "name": "D0",
+              "affected_owners": []
+            },
+            {
+              "id": "8c07d98cdf34666feb5b87a516adeeab",
+              "name": "D1",
+              "affected_owners": []
+            },
+            {
+              "id": "ed03bfa8f6a6b6b8ff8bc1cb74ab5750",
+              "name": "D2",
+              "affected_owners": [
+                "vertex:2",
+                "vertex:3"
+              ]
+            },
+            {
+              "id": "19313a3947e130179589bbd41aa5957c",
+              "name": "D3",
+              "affected_owners": [
+                "vertex:1",
+                "vertex:2"
+              ]
+            }
+          ]
+        },
+        "owner_permutations": {
+          "vertex": [
+            1,
+            0,
+            2
+          ]
+        },
+        "permutation_convention": "H[i] = C[p[i]]; for arbitrary components b[p[i]]=a[i]",
+        "original_obligation_1": "CLOSED: exact finite declared admission and export/admit plus whole-public-diagram roundtrip through the qualified current library, with the historical raw/cooked/decoded capture premise retained.",
+        "original_obligation_2": "CLOSED for the selected current source-defined named consumers and complete output-axis correspondence; recompute named plans or transport each positional operand. Not unconditional historical-library positional output or cached-plan interchangeability.",
+        "migration_literal_token_approval": false
+      },
+      "application_performed": false,
+      "postpatch_runtime_approved": false
+    },
+    {
+      "case": "xs_qcd_gguu_1pi_L1",
+      "verdict": "APPROVE",
+      "old_numerator": "0x75fbcf2f108240fb",
+      "new_numerator": "0x631d8c73b7db146b",
+      "field": "numerators",
+      "literal_assertion": "Classes::None only",
+      "grouping": "None",
+      "pool": 1,
+      "mathematical_mode_scope": [
+        "None",
+        "Auto independently"
+      ],
+      "before_Row": {
+        "diagrams": 4,
+        "topologies": 12,
+        "assignments": 54,
+        "inverse_symmetry": [
+          4,
+          1
+        ],
+        "weights": [
+          -4,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            4
+          ]
+        ],
+        "content": 13292509521889608637,
+        "numerators": 8501616522639327483,
+        "named": 15278292068172816218,
+        "ids": 9379374420500739387
+      },
+      "after_Row": {
+        "diagrams": 4,
+        "topologies": 12,
+        "assignments": 54,
+        "inverse_symmetry": [
+          4,
+          1
+        ],
+        "weights": [
+          -4,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            4
+          ]
+        ],
+        "content": 13292509521889608637,
+        "numerators": 7142019012713190507,
+        "named": 15278292068172816218,
+        "ids": 9379374420500739387
+      },
+      "Auto_historical_Row": {
+        "diagrams": 4,
+        "topologies": 12,
+        "assignments": 54,
+        "inverse_symmetry": [
+          4,
+          1
+        ],
+        "weights": [
+          -4,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            4
+          ]
+        ],
+        "content": 13292509521889608637,
+        "numerators": 8501616522639327483,
+        "named": 15278292068172816218,
+        "ids": 9379374420500739387
+      },
+      "Auto_current_Row": {
+        "diagrams": 4,
+        "topologies": 12,
+        "assignments": 54,
+        "inverse_symmetry": [
+          4,
+          1
+        ],
+        "weights": [
+          -4,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            4
+          ]
+        ],
+        "content": 13292509521889608637,
+        "numerators": 7142019012713190507,
+        "named": 15278292068172816218,
+        "ids": 9379374420500739387
+      },
+      "Auto_native_Row_assertion": false,
+      "mode_correspondence": {
+        "pairs": [
+          {
+            "id": "ad0818e3abc13783bfcc2695b849034d",
+            "None_index": 0,
+            "Auto_index": 0,
+            "None_name": "D0",
+            "Auto_name": "D0"
+          },
+          {
+            "id": "31d0890641674e5ee9afceaff1e22206",
+            "None_index": 1,
+            "Auto_index": 1,
+            "None_name": "D1",
+            "Auto_name": "D1"
+          },
+          {
+            "id": "14ac74bf7c503631cbbf625890f7ea67",
+            "None_index": 2,
+            "Auto_index": 2,
+            "None_name": "D2",
+            "Auto_name": "D2"
+          },
+          {
+            "id": "c490e590d90aa4c6acda54e116e788a7",
+            "None_index": 3,
+            "Auto_index": 3,
+            "None_name": "D3",
+            "Auto_name": "D3"
+          }
+        ],
+        "Row_differences": [],
+        "Auto_native_Row_assertion": false
+      },
+      "independent_decision_basis": "The4 exact diagrams and52 owners per mode retain the complete physical model/incidence/routing/cut/source-factor data. Per mode,16 quark edges use [3,2,0,1] and16 vertices use [5,4,0,1,2,3]. Exact complete representation/dimension/cofundamental dual/hedge/lane fields and ordered gamma/color/metric arguments are retained. The separately reviewed source-factor and aggregate proof plus native declared admission and named-plan/output-map covariance justify the finite physical value. All9 other Row fields are unchanged.",
+      "interface_review_row_reused": {
+        "case": "xs_qcd_gguu_1pi_L1",
+        "verdict": "APPROVE_FINITE_INTERFACE_AND_SELECTED_NAMED_CONSUMER_PROOF",
+        "grouping": "None",
+        "pool": 1,
+        "classes": [
+          "None",
+          "Auto"
+        ],
+        "mode_cells": [
+          {
+            "case": "xs_qcd_gguu_1pi_L1",
+            "mode": "None",
+            "owners": 52,
+            "affected": 32,
+            "unaffected": 20,
+            "plans": 288,
+            "stale": 64,
+            "fold_stages": 40,
+            "graphs": 4
+          },
+          {
+            "case": "xs_qcd_gguu_1pi_L1",
+            "mode": "Auto",
+            "owners": 52,
+            "affected": 32,
+            "unaffected": 20,
+            "plans": 288,
+            "stale": 64,
+            "fold_stages": 40,
+            "graphs": 4
+          }
+        ],
+        "combined_mode_counts": {
+          "graphs": 8,
+          "owners": 104,
+          "affected": 64,
+          "unaffected": 40,
+          "plans": 576,
+          "stale": 128,
+          "fold_stages": 80
+        },
+        "actual_component_lowerings": 128,
+        "public_output_rank": 8,
+        "graph_identity_by_mode": {
+          "None": [
+            {
+              "id": "ad0818e3abc13783bfcc2695b849034d",
+              "name": "D0",
+              "affected_owners": [
+                "vertex:0",
+                "vertex:1",
+                "vertex:2",
+                "vertex:3",
+                "edge:2",
+                "edge:3",
+                "edge:4",
+                "edge:5"
+              ]
+            },
+            {
+              "id": "31d0890641674e5ee9afceaff1e22206",
+              "name": "D1",
+              "affected_owners": [
+                "vertex:0",
+                "vertex:1",
+                "vertex:2",
+                "vertex:3",
+                "edge:2",
+                "edge:3",
+                "edge:4",
+                "edge:5"
+              ]
+            },
+            {
+              "id": "14ac74bf7c503631cbbf625890f7ea67",
+              "name": "D2",
+              "affected_owners": [
+                "vertex:0",
+                "vertex:1",
+                "vertex:2",
+                "vertex:3",
+                "edge:2",
+                "edge:3",
+                "edge:4",
+                "edge:5"
+              ]
+            },
+            {
+              "id": "c490e590d90aa4c6acda54e116e788a7",
+              "name": "D3",
+              "affected_owners": [
+                "vertex:0",
+                "vertex:1",
+                "vertex:2",
+                "vertex:3",
+                "edge:2",
+                "edge:3",
+                "edge:4",
+                "edge:5"
+              ]
+            }
+          ],
+          "Auto": [
+            {
+              "id": "ad0818e3abc13783bfcc2695b849034d",
+              "name": "D0",
+              "affected_owners": [
+                "vertex:0",
+                "vertex:1",
+                "vertex:2",
+                "vertex:3",
+                "edge:2",
+                "edge:3",
+                "edge:4",
+                "edge:5"
+              ]
+            },
+            {
+              "id": "31d0890641674e5ee9afceaff1e22206",
+              "name": "D1",
+              "affected_owners": [
+                "vertex:0",
+                "vertex:1",
+                "vertex:2",
+                "vertex:3",
+                "edge:2",
+                "edge:3",
+                "edge:4",
+                "edge:5"
+              ]
+            },
+            {
+              "id": "14ac74bf7c503631cbbf625890f7ea67",
+              "name": "D2",
+              "affected_owners": [
+                "vertex:0",
+                "vertex:1",
+                "vertex:2",
+                "vertex:3",
+                "edge:2",
+                "edge:3",
+                "edge:4",
+                "edge:5"
+              ]
+            },
+            {
+              "id": "c490e590d90aa4c6acda54e116e788a7",
+              "name": "D3",
+              "affected_owners": [
+                "vertex:0",
+                "vertex:1",
+                "vertex:2",
+                "vertex:3",
+                "edge:2",
+                "edge:3",
+                "edge:4",
+                "edge:5"
+              ]
+            }
+          ]
+        },
+        "owner_permutations": {
+          "edge": [
+            3,
+            2,
+            0,
+            1
+          ],
+          "vertex": [
+            5,
+            4,
+            0,
+            1,
+            2,
+            3
+          ]
+        },
+        "permutation_convention": "H[i] = C[p[i]]; for arbitrary components b[p[i]]=a[i]",
+        "original_obligation_1": "CLOSED: exact finite declared admission and export/admit plus whole-public-diagram roundtrip through the qualified current library, with the historical raw/cooked/decoded capture premise retained.",
+        "original_obligation_2": "CLOSED for the selected current source-defined named consumers and complete output-axis correspondence; recompute named plans or transport each positional operand. Not unconditional historical-library positional output or cached-plan interchangeability.",
+        "migration_literal_token_approval": false
+      },
+      "application_performed": false,
+      "postpatch_runtime_approved": false
+    }
+  ],
+  "must_fix_findings_for_exact_literal_decision": [],
+  "new_literal_decision": true,
+  "applied": false,
+  "bound_candidate": {
+    "packet": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2",
+    "handoff_sha256": "067f4aa62546e10fdf35d8a99b40812ae4ac5c0e927daddcf2190ae353eb23ad",
+    "seal_sha256": "6a6ee263fa4d69d48023b896a607675af0ec88b3993ccfa3fd5ce8b17fddd6c2",
+    "acceptance_brief_sha256": "68d35af875eede4bb1db9cfc1dacfa7bd6108fbe4df85bb3b8a19b8d73f26b63",
+    "patch_sha256": "872261e0211f57960a1eb0544dbdb303934cd95e4c44b47c4e9cccd358d09fe6",
+    "path": "crates/feynkit-generator/tests/generation_oracle/main.rs",
+    "base_commit": "605178a65620b104805b012f1edc299710e8a176",
+    "refresh_evidence_descendant": "5ea4c93b79dd33094072d7717e912aa4b05d6689",
+    "before_blob": "e6af4ec644688e1333064c50e3b157ae631473ee",
+    "after_blob": "9ef9f1ba005f20149716b22346d45c5501b62e87",
+    "prior_nine_complete_Rows_preserved": [
+      "xs_qed_eemm_L1",
+      "xs_qed_eedd_L1",
+      "xs_qed_eeee_1pi_L1",
+      "qed_eemm_L1",
+      "ctorder_qcd_uugg_L1",
+      "sm_eemm_L0",
+      "ym_g6_L0",
+      "xs_qed_eemm_L2",
+      "sm_eeww_L0"
+    ],
+    "every_other_byte_preserved": true,
+    "whole_file_transplant_allowed": false,
+    "refresh_integration_approval": false
+  },
+  "actual_interface_verdict": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-raw-three-interface-astra-20261031-002103Z-8a5d8001/review.json",
+    "sha256": "d9303d91d922c994f87b07e10cce895b44dba96e294d64be231a3ecdf921b14c",
+    "seal_sha256": "0ce63d1e764a9c5a36d8639174738eecc3a0c921aa800ed7e089e355991318f8",
+    "verdict": "APPROVE_THREE_FINITE_PROOFS_AND_NEW_HELPER_PROVENANCE_WITH_EXPLICIT_SCOPE",
+    "proof_receipt_sha256": "7c443ba689cd2e04cddf4d6a2d1f60c4e41512cdad9cf64237e770b86d74349f",
+    "proof_seal_sha256": "b504c7c0a49df349a9fe667ffe1e516dad98375152a41321f692428a33e9ebed",
+    "final_helper_source_sha256": "362a7fa3edce435e7957350e8f2b97da6e92a1bead4a1a450953ae6cb095afd4",
+    "final_helper_ELF_sha256": "f54f28b032308dbd040958945fb4895efde0ff4fe0a9fa276481a23267349ef6",
+    "scope_and_findings_consumed_in_full": true
+  },
+  "independent_WP9_assessment": {
+    "standard": "Accepted generation-integration-plan.typ WP9 requires full expression equivalence or group membership/weights plus an independent correctness argument. Counts, summed weights and rerecorded hashes are insufficient. All three decisions here meet the finite exact-expression plus source-defined physical-field argument; no expectation bypass or stronger scientific theorem is assumed.",
+    "shared_and_first_differing_boundary": "Actual model/request/options/grouping, full graph identities/incidence/routing/cuts, owner-factor expressions and source-factor/group identities are shared. Admission/template/finalization representation changes affect the exported logical interface, alongside only the approved injective whole-symbol display-tag map. Native algebra, graph distribution and momentum/Dirac evaluation do not explain these shallow differences.",
+    "physical_value": "Each exact historical local expression maps literally to its current expression, preserving ordered leaf arguments, coefficients, internal labels, metric/dual orientation and scoped contractions. Every complete named free field satisfies H[i]=C[p[i]]. Giving the current tensor b[p[i]]=a[i] assigns every same physical field the same arbitrary component, so evaluation of the finite expression commutes structurally with transport. No symmetry of gamma matrices or color tensors is assumed. The exact source-defined representation/metric rules, incidence and actual declared admission independently support that assignment.",
+    "aggregation_and_consumers": "The separately approved exact owner/prefactor/aggregate/projector facts are reused only on the same bound captures. Actual current product_plan and multiply compute named matches; the unchanged selection geometry chooses the same factors. Named pair sets and complete free-axis maps preserve typed contraction value; fragment multiply_many uses named keyed history merge. All native observations are reused by exact helper/input/command/output binding. Historical survivor-order differences require the explicit output transport and are not suppressed.",
+    "why_this_expected_value_is_valid": "The oracle fingerprints the complete ordered serialized numerator representation, including explicit interface arrays. Its approved finite physical meaning is preserved with a documented axis-coordinate change. Fresh reconstruction shows that whole-symbol spelling and explicit/order changes jointly account for all changed bytes and produce exactly each proposed literal while preserving the other9 fields. Updating these3 expectations accepts that specific new representation without accepting an unexplained physical-value change or relaxing the full-Row test.",
+    "independence_from_FNV": "Fresh model-fingerprint mutants leave all10 Row fields unchanged because census digest excludes that field, yet fail exact full-payload binding. This directly confirms why full model/physical-key/source-factor/definition checks and the reviewed covariance proof are required beyond digest/count agreement."
+  },
+  "findings": [
+    {
+      "id": "M1/R1",
+      "severity": "MANDATORY SCOPE / nonblocking for these literal decisions",
+      "title": "Accept the explicit representation change and semantic covariance, preserving complete output-axis maps",
+      "assessment": "Historical left-then-right survivor order and current canonical free-axis order are distinct source contracts. The22 source-only same-traversal differing final orders are retained, not recast as c78 executions or failures of the actual current-library replay. This review explicitly accepts that representation change for this numerator-serialization oracle under the finite WP9 standard: complete source expressions and named physical fields are preserved, and their ordered component correspondence is explicit. It does not require identical old positional output arrays. No required in-scope cross-version cached positional-plan reuse was found in the actual named consumer paths. Internal API compatibility is not a repository goal, but this alone would never establish the physical value.",
+      "restriction": "For H[i]=C[p[i]], assign b[p[i]]=a[i]. Recompute named plans or transport every positional operand by its own map AND preserve the output-axis map. No arbitrary stale ProductPlan::apply interchangeability, old/new positional-output identity or historical hidden-history equivalence.",
+      "blocks_three_literal_migration": false
+    },
+    {
+      "id": "M2/R2",
+      "severity": "CONTROL INTERPRETATION / nonblocking",
+      "title": "Twelve flag controls are actual-owner claim binding",
+      "assessment": "is_metric/is_composite are constructor-derived, not independent serialized inputs. All400 actual observations are false/true. The12 executed mutations reject a false claim about the imported owner; baseline boolean negation earns no additional negative-control credit.",
+      "blocks_three_literal_migration": false
+    },
+    {
+      "id": "M3/R3",
+      "severity": "LOW / nonblocking archival reuse issue",
+      "title": "Formatted control generators require additive repair before future reuse",
+      "assessment": "The reviewed post-format literal replacements in prepare_focused_controls.py and prepare_flag_controls.py do not match the formatted runtime-v3 template. No such generator was run in this migration review. The exact executed snapshots, final v4 helper and20 native controls remain bound and usable as retained finite evidence. Root reports an independently assigned additive repair; its completion is not assumed here.",
+      "restriction": "No general runner/generator API approval. Future regeneration must use a coherent retained executed-version set or separately repair and requalify the generators.",
+      "blocks_three_literal_migration": false
+    },
+    {
+      "id": "M4",
+      "severity": "APPLICATION BOUNDARY / required follow-up",
+      "title": "Approval is of three tokens on the exact source blob; no postpatch runtime exists here",
+      "assessment": "Base605178a65620b104805b012f1edc299710e8a176 and evidence descendant5ea4c93b79dd33094072d7717e912aa4b05d6689 share e6af4ec644688e1333064c50e3b157ae631473ee. Refresh integration approval is not inferred. Family workspace physical main.rs has the3 preexisting QED variants and is not a transplant source.",
+      "restriction": "Only a later authorized owner applies the exact3 row-local numerator replacements, keeping all9 prior complete Rows/every other byte. Build/qualify a NEW actual postapplication archive/producer and run the actual selected full-Row assertions, with real selection and no RECORD/update/force-pass bypass. Bind source/compiler/dependencies/ELF/commands/outputs and capture the same physical payloads/modes. Obtain the separately required runtime/integration review.",
+      "blocks_three_literal_decision": false
+    }
+  ],
+  "restrictions_and_retained_premises": [
+    "Exactly these three separately decided finite migrations; proof scope is each None/Auto mode independently, GroupingNone, captured pool1. Only None owns the literal Row assertion; no invented Auto assertion.",
+    "The capture association between historical raw/cooked/decoded data, actual port capture and registration state is the accepted finite premise. This is not a universal decoder, free-index/locality, hidden-zero/history/callback/future-collision or cached-fact theorem.",
+    "Historical2b1ef4/c78 and current5ba/f47/built5ea/kernel8eb remain distinct. Current8eb import of the historical source payload is not a historical c78 execution. Original historical command/build gaps remain disclosed.",
+    "Exact source-defined whole-symbol definitions remain load-bearing; native first-registration/subset-tag tolerance supplies no definition-identity proof. Reused immutable source/dependency/compiler/build chains and usual compiler/build honesty remain premises.",
+    "Value argument is finite structural covariance at arbitrary corresponding components/formal scalars using identical ordered expressions and typed physical fields. No graph distribution/expansion, Dirac trace, numeric momentum/mass/parameter substitution or numerical component physics theorem.",
+    "160 native component-network lowerings are nonarithmetic boundary/layout checks.744 plans and244 full-selection empty-exclusion fold stages,28 public numerator_of paths and28 fragment paths are actual bounded observations, not exhaustive subsets or a general evaluator/TensorReduction theorem.",
+    "Preserve the full free-axis map and named contraction relation; output ranks6/4/8 are not scalars.144 stale-plan wiring witnesses and600 accepted holdouts do not support arbitrary positional interchangeability.",
+    "Only40 original successful algebra batches/3088 pair execution obligations belong to these rows:4ee4f,4eeee,32QCD. QCD32 means8baseline plus24 successful control substages. SM32 excluded; failed substages are not successes.",
+    "Typed43 attempts mean initial setup failure plus v3/v4 baseline and20 controls each, not43 independent proofs. The actual independent interface reviewer separately ran one exact baseline plus4 heldouts; all are reuse here, not new migration executions. QED16 self-inverse controls are accepted holdouts.",
+    "Original source46/TensorReduction consumer work remains separately owned, outstanding within its own scope and not waived. No SM candidate integration approval is conferred.",
+    "No pools8/32, grouped modes, broader Auto/other rows/full371, producer runtime, CI/full-site/product rendering, MAIN, combined FeynKit integration, WP3 or M-rebuild approval.",
+    "Frozen packet INTERFACE_REVIEW_PENDING is historical. This review consumes the actual additive verdict d9303d91 without rewriting the old packet. Prior mathematical, source, ScopeA, wrapper and SM reviews did not automatically authorize these three literals."
+  ],
+  "fresh_vs_reuse": {
+    "fresh_here": {
+      "pinned_python": "/nix/store/3n4qphl9s728sz8frmpqqrv9b1m87g68-python3-3.14.7/bin/python3 -I -B",
+      "full_Rows": 12,
+      "mode_cells": 6,
+      "fields_each": 10,
+      "all9_other_fields_equal_per_route": true,
+      "actual_None_assertions_bound": 3,
+      "public_pristine_observer_source_companions_and_census": true,
+      "full_physical_key_and_group_source_member_checks": 56,
+      "all400_complete_typed_owner_permutations": true,
+      "exact_whole_definition_tables": true,
+      "patch_in_memory_and_all_bytes": true,
+      "15_patch_rejection_checks": 15,
+      "6_transport_checks_plus1_parameter_rejection": 7,
+      "30_full_pipeline_heldout_rejections": 30,
+      "18_Row_field_sensitivity_observations": 18,
+      "source322_immutable_blobs_and_SM_refresh_delta": true,
+      "native_result_binding_audit": {
+        "owners": 400,
+        "unaffected": 320,
+        "fold_stages": 244,
+        "graphs": 28,
+        "affected": 80,
+        "lowerings": 160,
+        "plans": 744,
+        "holdouts": 600,
+        "stale": 144
+      },
+      "frozen_inputs_reverified": 8819
+    },
+    "reused": "Prior finite QED/gauge mathematics and corrected disclosures; shared ScopeA producer/compiler/dependency qualification; source reconciliation within its exact scope; the NEW actual interface/helper provenance review with its exact baseline+4 heldouts and20 original final controls. Exact hashes and command/source versions, not packet self-approval, authorize reuse. The pure syntax parser is reused by hash; the Row byte reconstruction and patch fence are independently written here.",
+    "new_native_executions": 0,
+    "new_build_Nix_compiler_producer_capture": 0,
+    "algebra_batches_reused": 40,
+    "algebra_obligations_reused": 3088,
+    "SM32_algebra_excluded": true,
+    "whole_old72_suite_rerun": false,
+    "source_representation_extraction": "Actual source anchors/Git bytes and the representation macro freshly bound; the detailed source representation extraction, full loader/fingerprint/compiler qualification and arbitrary-component interface review are reused from the independently verified exact verdict, not re-executed here."
+  },
+  "prior_reviews": [
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-small-qed-fresh8eb-math-opus-20261030T192901Z-3624403/review.json",
+      "sha256": "b5f46f1b682a5f5ed8191bcc591003d4d553173e105c26b88094ae7ba7660433",
+      "verdict": "APPROVE_SCOPE_B",
+      "scope": "Bounded preparation only: qed_ee4f_L0 (6 graphs/96 owners) and xs_qed_eeee_L1 (4 graphs/52 owners), Classes None and Auto independently, Grouping None, captured pool 1, fresh 5ea/community-8eb producer captures joined to frozen historical 2b1ef4/c78. Not an approval to change any literal, of the other 71/73 rows, pooled 8/32, FeynKit integration/WP3, CI, full docs/source/runtime or combined approval. Scope A (build/provenance) and the separate source Opus review remain pending and are not inferred."
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-small-gauge-fresh8eb-math-opus-20261030T192536Z-3568994/review.json",
+      "sha256": "1591408caad7566439fcd54a1c76398691473bb4e41c59ddd3cb85a5e1337823",
+      "verdict": "REQUEST_CHANGES",
+      "scope": "B: mathematics/control review of two separate finite preparations; no migration, no combined FeynKit/WP3 approval"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-raw-four-dispositions-opus-20261030T202304Z-196212/review.json",
+      "sha256": "6e4410dd16ef6c2366b08793af0e835c21e55526bf124a2d3581283c32f1a9a2",
+      "verdict": "APPROVE_CORRECTED_SCOPE_B_PREPARATIONS",
+      "scope": null
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-raw-four-wrapper-r5-astra-20261030-231903Z/review.json",
+      "sha256": "84b98b9711e498cc88c6e901a09ce9d37b8a514a1d860cba3f3c157554f69093",
+      "verdict": "APPROVE_R5_SCOPED_WRAPPER_REPORTING_ERRATA",
+      "scope": "Approve the additive R1-R8 reporting corrections and the exact r5 copies for bounded cooperative pure-Python execution under the conditions below. Preserve only the existing four DISTINCT finite Scope B preparation approvals by verified evidence invariance. No new mathematics, native, literal/expectation, migration, interface-order, general-runner, source-integration or combined approval."
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-feynkit-refresh-shared-provenance-opus-20261030T193404Z-3c0453ff/review.json",
+      "sha256": "565caeace0112a30fb9118f94b2bb759e4267d2b802395c314e485b89b4b2b70",
+      "verdict": "APPROVE_SHARED_SCOPE_A",
+      "scope": "Shared Scope A provenance/runtime/evidence only, serving the twelve-case pool1 characterization and the provenance of BOTH new raw certificate lanes (QED r3, gauge r3). NOT source reconciliation, mathematics/native-control, ScopeB lane, migration, combined or integration approval."
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-feynkit-refresh-source-opus-round4-20261030T201146Z-697912d5/review.json",
+      "sha256": "5d9db6c6d385bd25ea9e276a2a1ebd2e95c0678171854e4ccb73a1362130e1af",
+      "verdict": "APPROVE_SOURCE_RECONCILIATION",
+      "scope": "SOURCE_RECONCILIATION only. Covers the reconciled source content through code f47f27213a1c55291239c9bc0f334a7ea1cd1cc1: the prior reviewed source (106-commit replay plus the f842/5ba0 repairs, carried by invariance) and the one-file R3-1 correction. Also covers the truthfulness of the additive cacd evidence. EXCLUDES the c3449988 shared metadata (docs/developers.toml note, docs/architecture/generation-feynkit-community-refresh.typ and qualification/*.json), which has its own active ScopeA review; see XS-1. Grants no installed-host, runtime, WebKit, product-rendering, proof, stub-parity, full-site, budget, migration, WP3 or combined approval."
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-refresh-aggregation-astra-20261030-independent/review.json",
+      "sha256": "567fba9cfa9287478d5c1531fd46eac49c79f4cd6fbcc878c50bd364cf279342",
+      "verdict": "APPROVE_FOCUSED_METADATA_AGGREGATION",
+      "scope": "Only metadata delta cacd5182704082df929a066548e3501be22c9533..48d0b98b97b368b2a2f58abe67cb19dddec623df: retention and faithful attribution of six completed independent reviews, canonical note update, XS-1 paired-field repair, and additive prior-eight F1-F7 reporting disclosures. No combined/integration/WP3/M-rebuild, migration/literal/expectation, mathematical/runtime, product/browser or full-docs approval."
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-sm-eeww-migration-astra-20261030-independent-r1/review.json",
+      "sha256": "096128cbe5cabf7159c4c6039fd7bd693d19c1bad60ca2533c656bd2a9356335",
+      "verdict": "APPROVE_BOUNDED_SM_ONE_TOKEN_MIGRATION",
+      "scope": {
+        "graphs": 4,
+        "owners_per_mode": 40,
+        "classes": [
+          "None",
+          "Auto"
+        ],
+        "independent_mode_checks": true,
+        "grouping": "None",
+        "generation_pool": 1,
+        "literal_assertion": "Only the particle-only None reference is compared to Row by main.rs/check; actual Auto captured and derived independently.",
+        "integration_plan": "WP9 finite standard: full expression/group-source equivalence plus previously independently reviewed correctness argument; no authorization from equal counts, weights or FNV alone."
+      }
+    }
+  ],
+  "review_probe_error_dispositions": [
+    "Initial read-only discovery queried a nonexistent localguidance directory and a guessed retained-source main.rs path; canonical guidance and immutable source were located. No source mutation or semantic credit.",
+    "initial.py guard completed all8819 frozen hashes then deliberately rejected a tracked .config entry before reading it. initial-v2 skips the2 configuration paths; final guard preserves that limit. No secret/configuration lookup was enabled.",
+    "source_patch.py retained an unexecuted draft SM-old constant; source_patch_v2.py uses the actual immutable source token ec3019645ae8d3e5 and passes. The draft did not execute or alter any candidate.",
+    "reconstruction.py failed at reviewer summary-regex double-brace typo. reconstruction_v2.py corrected only the reader pattern and completed all12 Rows; error retained, no semantic rejection credit.",
+    "proof_binding.py first used a missing fresh-baseline/results.json path; actual retained path is fresh-baseline/output/results.json. v2 reached the final count check but expected28 diagnostic entries; the diagnostic intentionally contains the22 changed-order cases from28 graphs. v3 fixes that reviewer assumption, preserves R1, and passes all exact bindings.",
+    "initial-v2 labeled10 symlink records as drift because their records contain symlink targets rather than sha256. Final readlink checks match all10 exactly, and targets remained byte-identical. This was reviewer metadata classification, not candidate drift.",
+    "All exact executed source versions, failed probes and successful successors remain retained for audit. No failed setup/probe earns validation credit."
+  ],
+  "preservation_and_cleanup": {
+    "finished_utc": "2026-10-31T00:52:17.289240+00:00",
+    "frozen_files_verified": 8819,
+    "frozen_changes": [],
+    "tracked_regular_files_checked": 4309,
+    "tracked_symlinks_checked": 11,
+    "tracked_changes": [],
+    "skipped_configuration_paths": [
+      "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.config/hakari.toml",
+      "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.config/nextest.toml"
+    ],
+    "other_tracked_records": [],
+    "tracked_symlink_metadata": [
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/examples/layout/embedding_constraints/coordinates.py",
+        "target": "../../../crates/linnest/layout/coordinates.py"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/examples/layout/embedding_constraints/ec_planarity.py",
+        "target": "../../../crates/linnest/layout/ec_planarity.py"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/examples/layout/embedding_constraints/geometry.py",
+        "target": "../../../crates/linnest/layout/geometry.py"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/examples/layout/embedding_constraints/insertion.py",
+        "target": "../../../crates/linnest/layout/insertion.py"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/examples/layout/embedding_constraints/native",
+        "target": "../../../crates/linnest/layout/native"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/examples/layout/embedding_constraints/planarization.py",
+        "target": "../../../crates/linnest/layout/planarization.py"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/examples/layout/embedding_constraints/seed.py",
+        "target": "../../../crates/linnest/layout/seed.py"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/examples/layout/impred/movement.py",
+        "target": "../../../crates/linnest/layout/movement.py"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/examples/layout/impred/solver.py",
+        "target": "../../../crates/linnest/layout/solver.py"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/examples/notebooks/symbolica-host/python/symbolica/community/graph/__init__.py",
+        "target": "../../../../../../../crates/linnet-py/python/symbolica/community/graph/__init__.py"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/examples/notebooks/symbolica-host/python/symbolica/community/hepkit/__init__.py",
+        "target": "../../../../../../../crates/feynkit-py/python/symbolica/community/hepkit/__init__.py"
+      }
+    ],
+    "consumed_inputs": 522,
+    "consumed_changes": [],
+    "sealed_packets": [
+      {
+        "root": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2",
+        "files": 96,
+        "seal_sha256": "6a6ee263fa4d69d48023b896a607675af0ec88b3993ccfa3fd5ce8b17fddd6c2"
+      },
+      {
+        "root": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1",
+        "files": 1157,
+        "seal_sha256": "b504c7c0a49df349a9fe667ffe1e516dad98375152a41321f692428a33e9ebed"
+      },
+      {
+        "root": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-raw-three-interface-astra-20261031-002103Z-8a5d8001",
+        "files": 50,
+        "seal_sha256": "0ce63d1e764a9c5a36d8639174738eecc3a0c921aa800ed7e089e355991318f8"
+      }
+    ],
+    "initial_guard_clarification": "The10 entries called preexisting_tracked_drift in initial-v2 were symlinks compared incorrectly to absent sha256 fields; readlink targets exactly match the old guard and contents stayed identical. No actual source drift.",
+    "source_token_ref_index_snapshot_writes": 0,
+    "delegations": 0,
+    "new_workspaces": 0,
+    "native_Nix_build_compiler_capture_network_operations": 0,
+    "private_license_configuration_reads": 0,
+    "owned_processes_remaining": 0,
+    "metadata": "No global unchanged-ref or jj state claim; explicit readonly Git only, GIT_OPTIONAL_LOCKS=0"
+  },
+  "retention": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-raw-three-migration-astra-20261031-004323Z-a3d128ed",
+    "reason": "Independent literal decisions, exact reconstruction/source/patch/native-reuse probes, meaningful failures, hashes and seal needed by the authorized owner and later application/runtime reviewer. No abandoned process; older packets/candidate/workspaces/caches preserved."
+  },
+  "probe_artifacts": {
+    "guard-final-commands.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-raw-three-migration-astra-20261031-004323Z-a3d128ed/guard-final-commands.json",
+      "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+      "bytes": 3
+    },
+    "proof-binding-v3-commands.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-raw-three-migration-astra-20261031-004323Z-a3d128ed/proof-binding-v3-commands.json",
+      "sha256": "cc1ef53a5c297e3a8a177f0e2484fb6d7869da19016b0548cd2103016a8c81eb",
+      "bytes": 11205
+    },
+    "initial-ERROR.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-raw-three-migration-astra-20261031-004323Z-a3d128ed/initial-ERROR.json",
+      "sha256": "e215aca297f40fae86011b9c455ecb9b98eae26bfe11b2840103db74888bb48d",
+      "bytes": 2365585
+    },
+    "source-patch-commands.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-raw-three-migration-astra-20261031-004323Z-a3d128ed/source-patch-commands.json",
+      "sha256": "e0b2c67c3a179d86cba32e4f53f781847cf0e896f04b249362d9c8b169e067b1",
+      "bytes": 4259
+    },
+    "full-reconstructed-Rows.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-raw-three-migration-astra-20261031-004323Z-a3d128ed/full-reconstructed-Rows.json",
+      "sha256": "3494112fb9cd5968b6528f6cf7bb76dc6011d7b0fc87e2d61972d635c5bf1555",
+      "bytes": 502351
+    },
+    "initial-v2-commands.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-raw-three-migration-astra-20261031-004323Z-a3d128ed/initial-v2-commands.json",
+      "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+      "bytes": 3
+    },
+    "reconstruction-ERROR.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-raw-three-migration-astra-20261031-004323Z-a3d128ed/reconstruction-ERROR.json",
+      "sha256": "fcc179b922d120fb3c11ee6ca77171c2d49c0393aeab7892ec03d2ba367a8351",
+      "bytes": 3984
+    },
+    "read-input-bindings.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-raw-three-migration-astra-20261031-004323Z-a3d128ed/read-input-bindings.json",
+      "sha256": "1d1293ce1a8a771434442dac8ba347cf2942b8b5c0302e626fadd92a999b71bd",
+      "bytes": 3211149
+    },
+    "reconstruction-v2-result.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-raw-three-migration-astra-20261031-004323Z-a3d128ed/reconstruction-v2-result.json",
+      "sha256": "5748b1453bcc8eeedb9d8025287ac2251f5c7c86454cfeb8ce674232bccd81af",
+      "bytes": 5217
+    },
+    "source-patch-inputs.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-raw-three-migration-astra-20261031-004323Z-a3d128ed/source-patch-inputs.json",
+      "sha256": "25065f3b082ca18930b536ee060de1c0681d786ec751b866f03a516d41a988a3",
+      "bytes": 1245
+    },
+    "reconstruction-v2-commands.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-raw-three-migration-astra-20261031-004323Z-a3d128ed/reconstruction-v2-commands.json",
+      "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+      "bytes": 3
+    },
+    "source-patch-result.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-raw-three-migration-astra-20261031-004323Z-a3d128ed/source-patch-result.json",
+      "sha256": "9567cef8136bcac408e95cd103a3df8e7cc55fc10692bbe704d5fbeeaa623dd6",
+      "bytes": 18721
+    },
+    "reconstruction-v2-inputs.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-raw-three-migration-astra-20261031-004323Z-a3d128ed/reconstruction-v2-inputs.json",
+      "sha256": "7ade40ec04d6b61643ccd886b5773ea8840d9231ccb02181c15138ebfeb372fe",
+      "bytes": 19848
+    },
+    "proof-binding-v3-inputs.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-raw-three-migration-astra-20261031-004323Z-a3d128ed/proof-binding-v3-inputs.json",
+      "sha256": "03ea5512bcd8d06c7d8d3ae5624458106d1344d8a6164416f8dbdaeb05cd1d50",
+      "bytes": 121511
+    },
+    "heldouts-result.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-raw-three-migration-astra-20261031-004323Z-a3d128ed/heldouts-result.json",
+      "sha256": "6fec148ef9eceb579c42999483801c004eb10dae84fba35db3ec744dfcbba5fd",
+      "bytes": 12220
+    },
+    "proof-binding-ERROR.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-raw-three-migration-astra-20261031-004323Z-a3d128ed/proof-binding-ERROR.json",
+      "sha256": "0908e7ac073e86649626d21b5be0d40b075a3ba24a394b895f2149c23e31cb2b",
+      "bytes": 22740
+    },
+    "heldouts-inputs.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-raw-three-migration-astra-20261031-004323Z-a3d128ed/heldouts-inputs.json",
+      "sha256": "37346f09919d9069fdf98341d617b5cc0ee2c336bfa31aa717ba3a86de87fec0",
+      "bytes": 10448
+    },
+    "proof-binding-v3-result.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-raw-three-migration-astra-20261031-004323Z-a3d128ed/proof-binding-v3-result.json",
+      "sha256": "2d44e88fa243c2956d7764e16c1b841ddf342913c77b1e6f2819f65c49e4f0ab",
+      "bytes": 186745
+    },
+    "proof-binding-v2-ERROR.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-raw-three-migration-astra-20261031-004323Z-a3d128ed/proof-binding-v2-ERROR.json",
+      "sha256": "e5183511c25c4cd2227ac507d0ed2e053c08f696acd0aa76ae577957219f451c",
+      "bytes": 135534
+    },
+    "heldouts-commands.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-raw-three-migration-astra-20261031-004323Z-a3d128ed/heldouts-commands.json",
+      "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+      "bytes": 3
+    },
+    "initial-v2-result.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-raw-three-migration-astra-20261031-004323Z-a3d128ed/initial-v2-result.json",
+      "sha256": "c4b38c2a0d315a3693119046e05afd67b1a099cbc7afb526c0d7016c11d9f206",
+      "bytes": 3835
+    },
+    "guard-final-inputs.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-raw-three-migration-astra-20261031-004323Z-a3d128ed/guard-final-inputs.json",
+      "sha256": "70d776e904a3d62254e4f87a0160f9054e5a2a8cab7bbd3718f295ebc33a703d",
+      "bytes": 3212291
+    },
+    "start.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-raw-three-migration-astra-20261031-004323Z-a3d128ed/start.json",
+      "sha256": "02c544abeb9a616741235776b7505c6e185de28191035c4da3483a2fcaf21688",
+      "bytes": 536
+    },
+    "guard-start.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-raw-three-migration-astra-20261031-004323Z-a3d128ed/guard-start.json",
+      "sha256": "b23687a3580271e99c4750db9dfde9fd15cdbc83907cb51e5d3ddb55a0d78e04",
+      "bytes": 3197272
+    },
+    "guard-final-result.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-raw-three-migration-astra-20261031-004323Z-a3d128ed/guard-final-result.json",
+      "sha256": "0bc08b627c1dad22205b5837053a83aca7a6c6ae2837e6d225c4992b3a9d34c8",
+      "bytes": 4329
+    },
+    "initial-v2-inputs.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-raw-three-migration-astra-20261031-004323Z-a3d128ed/initial-v2-inputs.json",
+      "sha256": "ffdb43adf481a1130586a71f0e0bafecaf0ea0ecb8a125b3ee8ce988b3ba08c1",
+      "bytes": 854138
+    }
+  }
+}

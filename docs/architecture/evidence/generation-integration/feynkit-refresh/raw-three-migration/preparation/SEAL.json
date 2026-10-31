@@ -1,0 +1,30 @@
+{
+  "schema": "raw-three-not-applied-migration-seal/2",
+  "created": "2026-10-31T00:30:25.310809+00:00",
+  "status": "NOT_APPLIED_INTERFACE_REVIEW_PENDING_NEW_MIGRATION_REVIEW_REQUIRED",
+  "approval": false,
+  "migration_approval": false,
+  "applied": false,
+  "manifest": "SHA256SUMS",
+  "manifest_sha256": "47eda054ab43b504dd492394b87ccc3626d55aafde3d5b6713e0ace75aab538c",
+  "files": 96,
+  "total_manifested_bytes": 16189139,
+  "exclusions": [
+    "SHA256SUMS (bound by this seal)",
+    "SEAL.json (external SHA-256 returned to root)"
+  ],
+  "handoff_sha256": "067f4aa62546e10fdf35d8a99b40812ae4ac5c0e927daddcf2190ae353eb23ad",
+  "acceptance_brief_sha256": "68d35af875eede4bb1db9cfc1dacfa7bd6108fbe4df85bb3b8a19b8d73f26b63",
+  "typst_sha256": "ec5d8a71810315ed0ce50c263eb702fb7056c3f53edc41de8763d29b2affd382",
+  "patch_sha256": "872261e0211f57960a1eb0544dbdb303934cd95e4c44b47c4e9cccd358d09fe6",
+  "before_blob": "e6af4ec644688e1333064c50e3b157ae631473ee",
+  "after_blob": "9ef9f1ba005f20149716b22346d45c5501b62e87",
+  "actual_SM_code_commit": "605178a65620b104805b012f1edc299710e8a176",
+  "source_scope": "Exactly three row-local numerator values in one proposed file. Prior8+SM/all9 preserved; all other bytes equal.",
+  "interface_review_verdict": null,
+  "review_gates": [
+    "INTERFACE_REVIEW_PENDING",
+    "NEW_MIGRATION_REVIEW_REQUIRED"
+  ],
+  "retention": "Entire new ignored packet retained for root and independent migration review. Older sealed packets preserved. No background process retained."
+}

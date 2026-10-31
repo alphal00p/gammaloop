@@ -1,0 +1,18 @@
+{
+  "schema": "independent-raw-three-interface-astra-review-seal/1",
+  "created": "2026-10-31T00:36:27.590879+00:00",
+  "verdict": "APPROVE_THREE_FINITE_PROOFS_AND_NEW_HELPER_PROVENANCE_WITH_EXPLICIT_SCOPE",
+  "review_sha256": "d9303d91d922c994f87b07e10cce895b44dba96e294d64be231a3ecdf921b14c",
+  "manifest_sha256": "8c649cf31042ca936f907bd80ce139992447999137ccd300e98a0976f33a1afa",
+  "files": 50,
+  "bytes": 5358181,
+  "exclusions": [
+    "SEAL.json",
+    "SHA256SUMS"
+  ],
+  "source_unchanged": true,
+  "owned_processes_remaining": 0,
+  "migration_literal_token_approval": false,
+  "packet_receipt_sha256": "7c443ba689cd2e04cddf4d6a2d1f60c4e41512cdad9cf64237e770b86d74349f",
+  "packet_seal_sha256": "b504c7c0a49df349a9fe667ffe1e516dad98375152a41321f692428a33e9ebed"
+}

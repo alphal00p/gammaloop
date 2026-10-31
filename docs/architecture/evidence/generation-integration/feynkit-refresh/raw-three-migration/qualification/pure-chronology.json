@@ -1,0 +1,12 @@
+{
+  "Nix_commands": 23,
+  "selected_build_calls": 1,
+  "all_exit_zero_before_boundary": true,
+  "boundary": "2026-10-31T01:09:36.779501+00:00",
+  "Nix_calls_after_licensed_phase": 0,
+  "license_keys_removed": [
+    "SYMBOLICA_LICENSE",
+    "SYMBOLICA_LICENSE_PATH",
+    "SYMBOLICA_LICENSE_SIGNED"
+  ]
+}

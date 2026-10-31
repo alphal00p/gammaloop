@@ -1,0 +1,446 @@
+{
+  "status": "PASS_RETAINED_FINITE_INPUT_RESULT_SOURCE_JOINS",
+  "independent_review_status": "INTERFACE_REVIEW_PENDING",
+  "independent_review_verdict": null,
+  "approval": false,
+  "receipt": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/validation-receipt.json",
+    "sha256": "7c443ba689cd2e04cddf4d6a2d1f60c4e41512cdad9cf64237e770b86d74349f",
+    "bytes": 31340
+  },
+  "seal": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/SEAL.json",
+    "sha256": "b504c7c0a49df349a9fe667ffe1e516dad98375152a41321f692428a33e9ebed",
+    "bytes": 775
+  },
+  "final_helper": {
+    "one_diagnostic_program_versions_retained": true,
+    "final_source": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/interface_probe_v4.rs",
+      "sha256": "362a7fa3edce435e7957350e8f2b97da6e92a1bead4a1a450953ae6cb095afd4",
+      "bytes": 15720
+    },
+    "final_ELF": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/build-v4/raw_three_interface_probe",
+      "sha256": "f54f28b032308dbd040958945fb4895efde0ff4fe0a9fa276481a23267349ef6",
+      "bytes": 47764736
+    },
+    "qualified_units": 452,
+    "environment": "Pinned Nix-derived rustc/linker/native search against readonly qualified current8eb units. Diagnostic compile flags are distinct, no producer/profile/feature identity fabricated.",
+    "build_license_variables": "SYMBOLICA_LICENSE, SYMBOLICA_LICENSE_PATH, SYMBOLICA_LICENSE_SIGNED all absent",
+    "runtime": "Fresh empty-root no-network bwrap, exact program/input/runtime closure readonly, only new output writable. Existing license via memory/anonymous pipe/immediate native exec only. No value/hash/file snapshot of license.",
+    "Nix_invocations": 0,
+    "production_changes": false
+  },
+  "result": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/runtime-v4/results.json",
+    "sha256": "936641124bf3ef8a0949e2907bfec5d3236dbcb13412ec4eb373f113cab2d85d",
+    "bytes": 2224165
+  },
+  "command_result": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/runtime-v4/command-result.json",
+    "sha256": "2a409be66538f324464e7eb91c830ffb9ffdac716f93190a43be129ee7a87a57",
+    "bytes": 3592
+  },
+  "summaries": [
+    {
+      "case": "qed_ee4f_L0",
+      "mode": "None",
+      "graphs": 6,
+      "actual_fold_stages": 42,
+      "owner_pair_plans": 48,
+      "stale_wiring_rejected": 4,
+      "owners": 96,
+      "unaffected": 92,
+      "affected": 4,
+      "native_lowerings_reused": 8,
+      "public_output_ranks": [
+        6,
+        6,
+        6,
+        6,
+        6,
+        6
+      ]
+    },
+    {
+      "case": "qed_ee4f_L0",
+      "mode": "Auto",
+      "graphs": 6,
+      "actual_fold_stages": 42,
+      "owner_pair_plans": 48,
+      "stale_wiring_rejected": 4,
+      "owners": 96,
+      "unaffected": 92,
+      "affected": 4,
+      "native_lowerings_reused": 8,
+      "public_output_ranks": [
+        6,
+        6,
+        6,
+        6,
+        6,
+        6
+      ]
+    },
+    {
+      "case": "xs_qed_eeee_L1",
+      "mode": "None",
+      "graphs": 4,
+      "actual_fold_stages": 40,
+      "owner_pair_plans": 36,
+      "stale_wiring_rejected": 4,
+      "owners": 52,
+      "unaffected": 48,
+      "affected": 4,
+      "native_lowerings_reused": 8,
+      "public_output_ranks": [
+        4,
+        4,
+        4,
+        4
+      ]
+    },
+    {
+      "case": "xs_qed_eeee_L1",
+      "mode": "Auto",
+      "graphs": 4,
+      "actual_fold_stages": 40,
+      "owner_pair_plans": 36,
+      "stale_wiring_rejected": 4,
+      "owners": 52,
+      "unaffected": 48,
+      "affected": 4,
+      "native_lowerings_reused": 8,
+      "public_output_ranks": [
+        4,
+        4,
+        4,
+        4
+      ]
+    },
+    {
+      "case": "xs_qcd_gguu_1pi_L1",
+      "mode": "None",
+      "graphs": 4,
+      "actual_fold_stages": 40,
+      "owner_pair_plans": 288,
+      "stale_wiring_rejected": 64,
+      "owners": 52,
+      "affected": 32,
+      "native_lowerings_reused": 64,
+      "unaffected": 20,
+      "public_output_ranks": [
+        8,
+        8,
+        8,
+        8
+      ]
+    },
+    {
+      "case": "xs_qcd_gguu_1pi_L1",
+      "mode": "Auto",
+      "graphs": 4,
+      "actual_fold_stages": 40,
+      "owner_pair_plans": 288,
+      "stale_wiring_rejected": 64,
+      "owners": 52,
+      "affected": 32,
+      "native_lowerings_reused": 64,
+      "unaffected": 20,
+      "public_output_ranks": [
+        8,
+        8,
+        8,
+        8
+      ]
+    }
+  ],
+  "totals": {
+    "graphs": 28,
+    "owners": 400,
+    "affected": 80,
+    "unaffected": 320,
+    "actual_fold_stages": 244,
+    "owner_pair_plans": 744,
+    "stale_wiring_rejected": 144,
+    "native_lowerings_reused": 160
+  },
+  "accepted_plan_holdouts": 600,
+  "final_semantic_controls": {
+    "records": [
+      {
+        "id": "qed_ee4f_L0-None-actual-other-owner-v4",
+        "driver_exit": 0,
+        "driver_stdout": "native exit 1 results_present True\n",
+        "driver_stderr": "",
+        "native_exit": 1,
+        "error": "invalid diagram tensor: transformed expression does not preserve a compatible tensor interface",
+        "classification": "SEMANTIC_REJECTION_AT_PREDECLARED_PREDICATE",
+        "expected": true,
+        "start": "2026-10-31T00:11:41.281373+00:00",
+        "end": "2026-10-31T00:11:41.729803+00:00"
+      },
+      {
+        "id": "qed_ee4f_L0-Auto-actual-other-owner-v4",
+        "driver_exit": 0,
+        "driver_stdout": "native exit 1 results_present True\n",
+        "driver_stderr": "",
+        "native_exit": 1,
+        "error": "invalid diagram tensor: transformed expression does not preserve a compatible tensor interface",
+        "classification": "SEMANTIC_REJECTION_AT_PREDECLARED_PREDICATE",
+        "expected": true,
+        "start": "2026-10-31T00:11:41.730101+00:00",
+        "end": "2026-10-31T00:11:42.022291+00:00"
+      },
+      {
+        "id": "xs_qed_eeee_L1-None-actual-other-owner-v4",
+        "driver_exit": 0,
+        "driver_stdout": "native exit 1 results_present True\n",
+        "driver_stderr": "",
+        "native_exit": 1,
+        "error": "invalid diagram tensor: transformed expression does not preserve a compatible tensor interface",
+        "classification": "SEMANTIC_REJECTION_AT_PREDECLARED_PREDICATE",
+        "expected": true,
+        "start": "2026-10-31T00:11:42.022890+00:00",
+        "end": "2026-10-31T00:11:42.315943+00:00"
+      },
+      {
+        "id": "xs_qed_eeee_L1-Auto-actual-other-owner-v4",
+        "driver_exit": 0,
+        "driver_stdout": "native exit 1 results_present True\n",
+        "driver_stderr": "",
+        "native_exit": 1,
+        "error": "invalid diagram tensor: transformed expression does not preserve a compatible tensor interface",
+        "classification": "SEMANTIC_REJECTION_AT_PREDECLARED_PREDICATE",
+        "expected": true,
+        "start": "2026-10-31T00:11:42.316254+00:00",
+        "end": "2026-10-31T00:11:42.619951+00:00"
+      },
+      {
+        "id": "xs_qcd_gguu_1pi_L1-None-actual-other-owner-v4",
+        "driver_exit": 0,
+        "driver_stdout": "native exit 1 results_present True\n",
+        "driver_stderr": "",
+        "native_exit": 1,
+        "error": "invalid diagram tensor: transformed expression does not preserve a compatible tensor interface",
+        "classification": "SEMANTIC_REJECTION_AT_PREDECLARED_PREDICATE",
+        "expected": true,
+        "start": "2026-10-31T00:11:42.620382+00:00",
+        "end": "2026-10-31T00:11:42.916910+00:00"
+      },
+      {
+        "id": "xs_qcd_gguu_1pi_L1-None-wrong-cofund-dual-v4",
+        "driver_exit": 0,
+        "driver_stdout": "native exit 1 results_present True\n",
+        "driver_stderr": "",
+        "native_exit": 1,
+        "error": "invalid diagram tensor: transformed expression does not preserve a compatible tensor interface",
+        "classification": "SEMANTIC_REJECTION_AT_PREDECLARED_PREDICATE",
+        "expected": true,
+        "start": "2026-10-31T00:11:42.917475+00:00",
+        "end": "2026-10-31T00:11:43.213920+00:00"
+      },
+      {
+        "id": "xs_qcd_gguu_1pi_L1-Auto-actual-other-owner-v4",
+        "driver_exit": 0,
+        "driver_stdout": "native exit 1 results_present True\n",
+        "driver_stderr": "",
+        "native_exit": 1,
+        "error": "invalid diagram tensor: transformed expression does not preserve a compatible tensor interface",
+        "classification": "SEMANTIC_REJECTION_AT_PREDECLARED_PREDICATE",
+        "expected": true,
+        "start": "2026-10-31T00:11:43.214210+00:00",
+        "end": "2026-10-31T00:11:43.510892+00:00"
+      },
+      {
+        "id": "xs_qcd_gguu_1pi_L1-Auto-wrong-cofund-dual-v4",
+        "driver_exit": 0,
+        "driver_stdout": "native exit 1 results_present True\n",
+        "driver_stderr": "",
+        "native_exit": 1,
+        "error": "invalid diagram tensor: transformed expression does not preserve a compatible tensor interface",
+        "classification": "SEMANTIC_REJECTION_AT_PREDECLARED_PREDICATE",
+        "expected": true,
+        "start": "2026-10-31T00:11:43.511179+00:00",
+        "end": "2026-10-31T00:11:43.816245+00:00"
+      },
+      {
+        "id": "qed_ee4f_L0-None-altered-is_metric-v4",
+        "driver_exit": 0,
+        "driver_stdout": "native exit 1 results_present True\n",
+        "driver_stderr": "",
+        "native_exit": 1,
+        "error": "owner vertex:2: metric owner binding",
+        "classification": "SEMANTIC_REJECTION_AT_PREDECLARED_PREDICATE",
+        "expected": true,
+        "start": "2026-10-31T00:11:43.816695+00:00",
+        "end": "2026-10-31T00:11:44.118669+00:00"
+      },
+      {
+        "id": "qed_ee4f_L0-None-altered-is_composite-v4",
+        "driver_exit": 0,
+        "driver_stdout": "native exit 1 results_present True\n",
+        "driver_stderr": "",
+        "native_exit": 1,
+        "error": "owner vertex:2: composite owner binding",
+        "classification": "SEMANTIC_REJECTION_AT_PREDECLARED_PREDICATE",
+        "expected": true,
+        "start": "2026-10-31T00:11:44.118995+00:00",
+        "end": "2026-10-31T00:11:44.413003+00:00"
+      },
+      {
+        "id": "qed_ee4f_L0-Auto-altered-is_metric-v4",
+        "driver_exit": 0,
+        "driver_stdout": "native exit 1 results_present True\n",
+        "driver_stderr": "",
+        "native_exit": 1,
+        "error": "owner vertex:2: metric owner binding",
+        "classification": "SEMANTIC_REJECTION_AT_PREDECLARED_PREDICATE",
+        "expected": true,
+        "start": "2026-10-31T00:11:44.413269+00:00",
+        "end": "2026-10-31T00:11:44.731696+00:00"
+      },
+      {
+        "id": "qed_ee4f_L0-Auto-altered-is_composite-v4",
+        "driver_exit": 0,
+        "driver_stdout": "native exit 1 results_present True\n",
+        "driver_stderr": "",
+        "native_exit": 1,
+        "error": "owner vertex:2: composite owner binding",
+        "classification": "SEMANTIC_REJECTION_AT_PREDECLARED_PREDICATE",
+        "expected": true,
+        "start": "2026-10-31T00:11:44.732022+00:00",
+        "end": "2026-10-31T00:11:45.033044+00:00"
+      },
+      {
+        "id": "xs_qed_eeee_L1-None-altered-is_metric-v4",
+        "driver_exit": 0,
+        "driver_stdout": "native exit 1 results_present True\n",
+        "driver_stderr": "",
+        "native_exit": 1,
+        "error": "owner vertex:2: metric owner binding",
+        "classification": "SEMANTIC_REJECTION_AT_PREDECLARED_PREDICATE",
+        "expected": true,
+        "start": "2026-10-31T00:11:45.033368+00:00",
+        "end": "2026-10-31T00:11:45.333094+00:00"
+      },
+      {
+        "id": "xs_qed_eeee_L1-None-altered-is_composite-v4",
+        "driver_exit": 0,
+        "driver_stdout": "native exit 1 results_present True\n",
+        "driver_stderr": "",
+        "native_exit": 1,
+        "error": "owner vertex:2: composite owner binding",
+        "classification": "SEMANTIC_REJECTION_AT_PREDECLARED_PREDICATE",
+        "expected": true,
+        "start": "2026-10-31T00:11:45.333645+00:00",
+        "end": "2026-10-31T00:11:45.648596+00:00"
+      },
+      {
+        "id": "xs_qed_eeee_L1-Auto-altered-is_metric-v4",
+        "driver_exit": 0,
+        "driver_stdout": "native exit 1 results_present True\n",
+        "driver_stderr": "",
+        "native_exit": 1,
+        "error": "owner vertex:2: metric owner binding",
+        "classification": "SEMANTIC_REJECTION_AT_PREDECLARED_PREDICATE",
+        "expected": true,
+        "start": "2026-10-31T00:11:45.648897+00:00",
+        "end": "2026-10-31T00:11:45.976536+00:00"
+      },
+      {
+        "id": "xs_qed_eeee_L1-Auto-altered-is_composite-v4",
+        "driver_exit": 0,
+        "driver_stdout": "native exit 1 results_present True\n",
+        "driver_stderr": "",
+        "native_exit": 1,
+        "error": "owner vertex:2: composite owner binding",
+        "classification": "SEMANTIC_REJECTION_AT_PREDECLARED_PREDICATE",
+        "expected": true,
+        "start": "2026-10-31T00:11:45.976867+00:00",
+        "end": "2026-10-31T00:11:46.300272+00:00"
+      },
+      {
+        "id": "xs_qcd_gguu_1pi_L1-None-altered-is_metric-v4",
+        "driver_exit": 0,
+        "driver_stdout": "native exit 1 results_present True\n",
+        "driver_stderr": "",
+        "native_exit": 1,
+        "error": "owner vertex:0: metric owner binding",
+        "classification": "SEMANTIC_REJECTION_AT_PREDECLARED_PREDICATE",
+        "expected": true,
+        "start": "2026-10-31T00:11:46.300663+00:00",
+        "end": "2026-10-31T00:11:46.606784+00:00"
+      },
+      {
+        "id": "xs_qcd_gguu_1pi_L1-None-altered-is_composite-v4",
+        "driver_exit": 0,
+        "driver_stdout": "native exit 1 results_present True\n",
+        "driver_stderr": "",
+        "native_exit": 1,
+        "error": "owner vertex:0: composite owner binding",
+        "classification": "SEMANTIC_REJECTION_AT_PREDECLARED_PREDICATE",
+        "expected": true,
+        "start": "2026-10-31T00:11:46.607424+00:00",
+        "end": "2026-10-31T00:11:46.914651+00:00"
+      },
+      {
+        "id": "xs_qcd_gguu_1pi_L1-Auto-altered-is_metric-v4",
+        "driver_exit": 0,
+        "driver_stdout": "native exit 1 results_present True\n",
+        "driver_stderr": "",
+        "native_exit": 1,
+        "error": "owner vertex:0: metric owner binding",
+        "classification": "SEMANTIC_REJECTION_AT_PREDECLARED_PREDICATE",
+        "expected": true,
+        "start": "2026-10-31T00:11:46.914958+00:00",
+        "end": "2026-10-31T00:11:47.239471+00:00"
+      },
+      {
+        "id": "xs_qcd_gguu_1pi_L1-Auto-altered-is_composite-v4",
+        "driver_exit": 0,
+        "driver_stdout": "native exit 1 results_present True\n",
+        "driver_stderr": "",
+        "native_exit": 1,
+        "error": "owner vertex:0: composite owner binding",
+        "classification": "SEMANTIC_REJECTION_AT_PREDECLARED_PREDICATE",
+        "expected": true,
+        "start": "2026-10-31T00:11:47.239812+00:00",
+        "end": "2026-10-31T00:11:47.556733+00:00"
+      }
+    ],
+    "all_as_predeclared": true
+  },
+  "exact_executed_source_resolution": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/execution-source-resolution.json",
+    "sha256": "5d8268ec53735bc22682bcb241d6c3e3407d587a2f51c984b8bd25f01d4adfec",
+    "bytes": 56631
+  },
+  "executed_source_versions_verified": 43,
+  "attempts": {
+    "retained_total": 43,
+    "explanation": "v1 setup failure; v3 baseline plus20 controls; v4 import-style-only baseline plus same20 controls. One diagnostic program with retained versions; not43 independent baseline proofs.",
+    "new_here": 0
+  },
+  "positional_consumer_restriction": "Recompute named plans or transport each operand by its own proved permutation; stale positional plans are not interchangeable.",
+  "covariance_basis": [
+    "Finite hypotheses: exact frozen graph/model/request/mode and every formal owner expression match under only the approved injective whole-symbol map. Source-defined slot types and metric conventions are separately checked; native tag tolerance is not a definition proof.",
+    "For every owner, historical slot H[i] equals current C[p[i]] as the complete typed field, including representation, dimension, duality, hedge owner and lane. Port incidence is checked against the serialized half-edge/endpoint/particle/rule-slot geometry. Every free field is named, repeat-free, and the actual native declared admission validates scopes and multiplicities.",
+    "For arbitrary old local components a define current b by b[p[i]]=a[i]. This bijection assigns identical components to every identical typed name in the unchanged expression. The finite expression has the same ordered leaf arguments and scalar factors, internal binder/metric data and scoped contractions. Structural evaluation therefore gives identical local values at all corresponding component tuples, with arbitrary formal scalar data, without expansion, Dirac tracing or numerical substitution. This is a source-defined physical-field covariance proof, not a sampling claim.",
+    "The native owning permuted API changes only named layout and establishes exact same_value after this justified permutation. Untransported same_value is false for all80 changed owners and true for all320 unchanged owners. The complete native canonical-to-logical maps commute with the inverse permutation.",
+    "Actual product_plan maps typed canonical matches to logical positions. The old pair (i,j) transports to (p_left[i],p_right[j]); free named survivors have canonical field order. The744 native owner-pair plans agree by physical identities; stale raw positional reuse changes wiring in144 explicit witnesses and preserves it in600 holdouts.",
+    "Actual graph geometry selects the same factors in GraphExpressions. All244 stages of the full-selection/empty-exclusion typed fold and28 public numerator_of calls agree, with full free-axis maps. All28 derived fragment_numerator/multiply_many paths agree. Source merge_named uses exact type/dimension/index keys and retained occurrence records; logical position contributes only source diagnostics. No exhaustive subset execution is claimed.",
+    "Actual into_network lowering is exercised on both routes for all80 affected owners, checks the exact dangling typed fields and retains ordered layouts. No component arithmetic is executed. Unchanged projector/prefactor and other owner boundaries are separately verified; the named-product argument preserves their later typed combination."
+  ],
+  "remaining_limits": [
+    "Root must assign NEW independent review of these three separate finite interface proofs; no migration/literal/expectation approval.",
+    "Historical raw/cooked/decoded association remains the original approved capture premise. New native execution is current8eb only, not a new c78 run.",
+    "No universal decoder/free-index/locality/hidden-history/future-collision theorem. Exact same_value does not certify arbitrary future cached facts.",
+    "Positional consumers must transport each operand or recompute its named plan. This proof explicitly rejects an unconditional positional-interchangeability claim.",
+    "Native component lowering is a real owner-boundary check, not a numerical component proof. Physical-field covariance follows from the source-defined arbitrary-component assignment argument.",
+    "Only the full-selection empty-exclusion graph fold was executed. Unchanged selection geometry and the finite named-factor argument explain other fixed selections; they were not exhaustively run.",
+    "No broader Auto, grouped/pooled/other-row/runtime/WP3/combined approval. Prior ten-field Row reconstruction is reused and no token was changed.",
+    "No Cargo/Clippy producer build for standalone diagnostics; pinned rustfmt, warning-free rustc, Ruff, Python syntax and Typst rendering pass."
+  ]
+}

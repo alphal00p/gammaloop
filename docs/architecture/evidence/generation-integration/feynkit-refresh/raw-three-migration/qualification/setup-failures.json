@@ -1,0 +1,10 @@
+[
+  {
+    "stage": "qualification attempt1",
+    "cause": "Started while selected Nix build still active. Guard read build.command.json without completed exit field and failed KeyError before any provenance child, runtime or licensing.",
+    "stderr": "qualify-attempt1.stderr",
+    "stdout": "qualify-attempt1.stdout",
+    "correction": "Waited for actual selected build command exit0 before starting qualification again.",
+    "success_credit": 0
+  }
+]

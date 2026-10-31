@@ -1,0 +1,35 @@
+{
+  "argv": [
+    "nix",
+    "derivation",
+    "show",
+    "/nix/store/0g85b729k00r23y50y5ynq71lraw99hc-gammaloop-crate-feynkit-graph-dependency-deps-0.1.0.drv",
+    "/nix/store/12z0qyxmn3a82ys6f571vdfj1nf7dhg9-gammaloop-crate-feynkit-generator-dependency-deps-deps-0.1.0.drv",
+    "/nix/store/1rq9bk42v41l98hw94gsm68pyy3szc03-gammaloop-crate-spenso-macros-dependency-deps-0.1.0.drv",
+    "/nix/store/25dl3cn94gfk9y3bxfch720ils8p2mg8-gammaloop-crate-symbolica-notation-dependency-deps-0.1.0.drv",
+    "/nix/store/3ywv8p92y4xcmj8acnwaq822l69hby7n-gammaloop-crate-idenso-dependency-deps-0.1.0.drv",
+    "/nix/store/5m1102dxf41apwifsxg0jqrmcfb2xm7i-gammaloop-crate-symbolica-utils-dependency-deps-0.1.0.drv",
+    "/nix/store/6ky2abjvzmiq6sgqfgasi27y442alzsc-gammaloop-crate-feynkit-kinematics-dependency-deps-0.1.0.drv",
+    "/nix/store/7ykgdfdq553qmvpiz91z36bx5ynhww6s-gammaloop-crate-feynkit-amplitude-dependency-deps-0.1.0.drv",
+    "/nix/store/bccfw688cvxapwd0kbh4z5dr979xp27w-gammaloop-crate-spenso-hep-lib-dependency-deps-0.1.0.drv",
+    "/nix/store/cl0j23wy6a1iqk94i9pw45izc8vd31nk-gammaloop-crate-spenso-dependency-deps-0.1.0.drv",
+    "/nix/store/ilf0wdq5s7av93ykllrkj9yaphmbq6nx-gammaloop-crate-linnest-dependency-deps-0.1.0.drv",
+    "/nix/store/kyv4ld7km5q32rqp7ih3gik918ncdnbd-gammaloop-crate-gammaloop-workspace-hack-build-0.1.0.drv",
+    "/nix/store/nbfvfb8cmsgcd7kb50hvq5p0ycx5g995-gammaloop-crate-kurvst-dependency-deps-0.1.0.drv",
+    "/nix/store/rxw1hwbx1wm3bnh125rbrj7d2akz93bq-gammaloop-crate-test-dependencies-023fd5aa591a61ed-deps-0.1.0.drv",
+    "/nix/store/vyp6avl3pa7ipwjm483bc0l95j9rsfm3-gammaloop-crate-linnet-dependency-deps-0.1.0.drv",
+    "/nix/store/z4g8qax7dcvwpqcf9dkjch2m3d9xc3s3-gammaloop-crate-feynkit-model-dependency-deps-0.1.0.drv",
+    "/nix/store/zcwwkprsqgmhr5chkz1b427m5qwvzifv-gammaloop-crate-test-dependencies-07ca23be421c4700-deps-0.1.0.drv"
+  ],
+  "cwd": "/tmp",
+  "license_keys_removed": [
+    "SYMBOLICA_LICENSE",
+    "SYMBOLICA_LICENSE_PATH",
+    "SYMBOLICA_LICENSE_SIGNED"
+  ],
+  "start": "2026-10-31T01:08:42.233563+00:00",
+  "exit": 0,
+  "end": "2026-10-31T01:08:42.313368+00:00",
+  "stdout_sha256": "8a66a6db1b4e006f1585862ba0d04278e57fc13a8fe0f7e1501ed6819d1402f6",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+}

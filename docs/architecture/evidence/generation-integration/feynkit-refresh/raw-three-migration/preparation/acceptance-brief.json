@@ -1,0 +1,1087 @@
+{
+  "schema": "raw-three-not-applied-migration-preparation/2",
+  "created": "2026-10-31T00:29:51.022135+00:00",
+  "status": "NOT_APPLIED_READY_FOR_NEW_INDEPENDENT_REVIEW_AFTER_ROOT_CONSUMES_INTERFACE_VERDICT",
+  "approval": false,
+  "self_approval": false,
+  "applied": false,
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families",
+  "only_write_root": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2",
+  "gates": [
+    "INTERFACE_REVIEW_PENDING",
+    "NEW_MIGRATION_REVIEW_REQUIRED"
+  ],
+  "decision_boundaries": {
+    "source_proof_migration_decisions_separate": true,
+    "prior_reviews": [
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-small-qed-fresh8eb-math-opus-20261030T192901Z-3624403/review.json",
+        "sha256": "b5f46f1b682a5f5ed8191bcc591003d4d553173e105c26b88094ae7ba7660433",
+        "verdict": "APPROVE_SCOPE_B",
+        "scope": "Bounded preparation only: qed_ee4f_L0 (6 graphs/96 owners) and xs_qed_eeee_L1 (4 graphs/52 owners), Classes None and Auto independently, Grouping None, captured pool 1, fresh 5ea/community-8eb producer captures joined to frozen historical 2b1ef4/c78. Not an approval to change any literal, of the other 71/73 rows, pooled 8/32, FeynKit integration/WP3, CI, full docs/source/runtime or combined approval. Scope A (build/provenance) and the separate source Opus review remain pending and are not inferred.",
+        "grants_this_migration_approval": false,
+        "actual_verdict": "APPROVE_SCOPE_B",
+        "grants_three_row_literal_approval": false
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-small-gauge-fresh8eb-math-opus-20261030T192536Z-3568994/review.json",
+        "sha256": "1591408caad7566439fcd54a1c76398691473bb4e41c59ddd3cb85a5e1337823",
+        "verdict": "REQUEST_CHANGES",
+        "scope": "B: mathematics/control review of two separate finite preparations; no migration, no combined FeynKit/WP3 approval",
+        "grants_this_migration_approval": false,
+        "actual_verdict": "REQUEST_CHANGES",
+        "grants_three_row_literal_approval": false
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-raw-four-dispositions-opus-20261030T202304Z-196212/review.json",
+        "sha256": "6e4410dd16ef6c2366b08793af0e835c21e55526bf124a2d3581283c32f1a9a2",
+        "verdict": "APPROVE_CORRECTED_SCOPE_B_PREPARATIONS",
+        "scope": null,
+        "grants_this_migration_approval": false,
+        "actual_verdict": "APPROVE_CORRECTED_SCOPE_B_PREPARATIONS",
+        "grants_three_row_literal_approval": false
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-raw-four-wrapper-r5-astra-20261030-231903Z/review.json",
+        "sha256": "84b98b9711e498cc88c6e901a09ce9d37b8a514a1d860cba3f3c157554f69093",
+        "verdict": "APPROVE_R5_SCOPED_WRAPPER_REPORTING_ERRATA",
+        "scope": "Approve the additive R1-R8 reporting corrections and the exact r5 copies for bounded cooperative pure-Python execution under the conditions below. Preserve only the existing four DISTINCT finite Scope B preparation approvals by verified evidence invariance. No new mathematics, native, literal/expectation, migration, interface-order, general-runner, source-integration or combined approval.",
+        "grants_this_migration_approval": false,
+        "actual_verdict": "APPROVE_R5_SCOPED_WRAPPER_REPORTING_ERRATA",
+        "grants_three_row_literal_approval": false
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-feynkit-refresh-shared-provenance-opus-20261030T193404Z-3c0453ff/review.json",
+        "sha256": "565caeace0112a30fb9118f94b2bb759e4267d2b802395c314e485b89b4b2b70",
+        "verdict": "APPROVE_SHARED_SCOPE_A",
+        "scope": "Shared Scope A provenance/runtime/evidence only, serving the twelve-case pool1 characterization and the provenance of BOTH new raw certificate lanes (QED r3, gauge r3). NOT source reconciliation, mathematics/native-control, ScopeB lane, migration, combined or integration approval.",
+        "grants_this_migration_approval": false,
+        "actual_verdict": "APPROVE_SHARED_SCOPE_A",
+        "grants_three_row_literal_approval": false
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-feynkit-refresh-source-opus-round4-20261030T201146Z-697912d5/review.json",
+        "sha256": "5d9db6c6d385bd25ea9e276a2a1ebd2e95c0678171854e4ccb73a1362130e1af",
+        "verdict": "APPROVE_SOURCE_RECONCILIATION",
+        "scope": "SOURCE_RECONCILIATION only. Covers the reconciled source content through code f47f27213a1c55291239c9bc0f334a7ea1cd1cc1: the prior reviewed source (106-commit replay plus the f842/5ba0 repairs, carried by invariance) and the one-file R3-1 correction. Also covers the truthfulness of the additive cacd evidence. EXCLUDES the c3449988 shared metadata (docs/developers.toml note, docs/architecture/generation-feynkit-community-refresh.typ and qualification/*.json), which has its own active ScopeA review; see XS-1. Grants no installed-host, runtime, WebKit, product-rendering, proof, stub-parity, full-site, budget, migration, WP3 or combined approval.",
+        "grants_this_migration_approval": false,
+        "actual_verdict": "APPROVE_SOURCE_RECONCILIATION",
+        "grants_three_row_literal_approval": false
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-refresh-aggregation-astra-20261030-independent/review.json",
+        "sha256": "567fba9cfa9287478d5c1531fd46eac49c79f4cd6fbcc878c50bd364cf279342",
+        "verdict": "APPROVE_FOCUSED_METADATA_AGGREGATION",
+        "scope": "Only metadata delta cacd5182704082df929a066548e3501be22c9533..48d0b98b97b368b2a2f58abe67cb19dddec623df: retention and faithful attribution of six completed independent reviews, canonical note update, XS-1 paired-field repair, and additive prior-eight F1-F7 reporting disclosures. No combined/integration/WP3/M-rebuild, migration/literal/expectation, mathematical/runtime, product/browser or full-docs approval.",
+        "grants_this_migration_approval": false,
+        "actual_verdict": "APPROVE_FOCUSED_METADATA_AGGREGATION",
+        "grants_three_row_literal_approval": false
+      }
+    ],
+    "new_interface_review": {
+      "status": "RUNNING_AS_REPORTED_BY_ROOT",
+      "verdict": null,
+      "gate": "INTERFACE_REVIEW_PENDING",
+      "root_must_attach_actual_result_later": true
+    },
+    "new_three_row_migration_review": {
+      "status": "REQUIRED",
+      "verdict": null,
+      "gate": "NEW_MIGRATION_REVIEW_REQUIRED"
+    },
+    "SM_review": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-sm-eeww-migration-astra-20261030-independent-r1/review.json",
+      "sha256": "096128cbe5cabf7159c4c6039fd7bd693d19c1bad60ca2533c656bd2a9356335",
+      "bytes": 26262
+    },
+    "SM_migration_separately_approved_only": true,
+    "three_row_approval": false
+  },
+  "before_composition": {
+    "source_target_revision": "f47f27213a1c55291239c9bc0f334a7ea1cd1cc1",
+    "target_blob": "d61a4beebfc1b0d650cd17b001a1fdc6433b60d5",
+    "intended_before_blob": "e6af4ec644688e1333064c50e3b157ae631473ee",
+    "before_sha256": "c642b5cc8145610854a8681d6987ea392266064c429cfa86719e72296083f0f7",
+    "evidence_copy": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-four-migration-preparation-20261030-r1/proposed-main.rs.txt",
+      "sha256": "c642b5cc8145610854a8681d6987ea392266064c429cfa86719e72296083f0f7",
+      "bytes": 77616
+    },
+    "composition": "Exact immutable f47f main.rs plus the ONE separately approved SM numerator token, with every other byte equal.",
+    "SM_review": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-sm-eeww-migration-astra-20261030-independent-r1/review.json",
+      "sha256": "096128cbe5cabf7159c4c6039fd7bd693d19c1bad60ca2533c656bd2a9356335",
+      "bytes": 26262
+    },
+    "SM_review_verdict": "APPROVE_BOUNDED_SM_ONE_TOKEN_MIGRATION",
+    "actual_code_commit_bindings": [
+      {
+        "commit": "605178a65620b104805b012f1edc299710e8a176",
+        "main_blob": "e6af4ec644688e1333064c50e3b157ae631473ee"
+      }
+    ],
+    "recent_path_commits_inspected": [
+      "605178a65620b104805b012f1edc299710e8a176",
+      "6abf2c89f7f8ccb2584426d652660d1b69bcb22f",
+      "7fa6269899504e157e66f2ac7e86a4eade36db05",
+      "cac6308828b7958164b7967c88c4d54193a96381",
+      "d119b7112cc632e7380c9172d3c97d2a6ccb5578",
+      "071fa257b6ac94d6e5096e2601840637a157baf1",
+      "109e82b013bcd1b476a4241d3c26fb1dd0dd1d09",
+      "44ad7885cba72800308777f06e774a6be9872ed6",
+      "4853cdd244667bcd593598bc8008d07fd9113f3c",
+      "96dcf780c93fdeed81d760b852f180847a954f0d",
+      "dd9452b0da07b2961466f8f41ea1aaf4d34e3b9b",
+      "ed58a33d6f9714b11c54e071763ca1d6f5f02d17",
+      "37784d1806bc2069eb195a1cc86019881004d157",
+      "8160a16c13e7cd225ab89af0999caa4fa5efff91",
+      "8d3ab1302cb48012370d83a314b1972bc1fab366",
+      "ae706381d719c46b9d37cf1e396ec6742de8cb14",
+      "cecb8e950a968b3bdc5038f5d934c6cd51909153",
+      "d2f5d7623bf2e231cd0c6e970c59cfae934875cf",
+      "e72c85428183645dcc92a0ce90676430070756aa",
+      "0fa1e9542999a720b60f6c8401c0b4c81361df2e",
+      "1546693c2c17d4d0ff668f3ca50d9ace9c8b38bc",
+      "2d63bf0692a83d195e545bc229c5b6a5e707b4d6",
+      "537f19f2b0bc93385601aceae1f8ce355add841e",
+      "5d0789ff5e4eb3aa72c54efaa0234e8128037422"
+    ],
+    "commit_binding_status": "BOUND_TO_OBSERVED_IMMUTABLE_CODE_COMMIT",
+    "physical_family_main_used_as_base": false,
+    "SM_change_in_this_patch": false
+  },
+  "patch_binding": {
+    "status": "NOT_APPLIED",
+    "approval": false,
+    "gates": [
+      "INTERFACE_REVIEW_PENDING",
+      "NEW_MIGRATION_REVIEW_REQUIRED"
+    ],
+    "path": "crates/feynkit-generator/tests/generation_oracle/main.rs",
+    "before_blob": "e6af4ec644688e1333064c50e3b157ae631473ee",
+    "after_blob": "9ef9f1ba005f20149716b22346d45c5501b62e87",
+    "before_sha256": "c642b5cc8145610854a8681d6987ea392266064c429cfa86719e72296083f0f7",
+    "after_sha256": "6dacf61baca9f13f3e4a6d719f89eaced429fb3cb14c7904dcb41fe4c86b66df",
+    "patch_sha256": "872261e0211f57960a1eb0544dbdb303934cd95e4c44b47c4e9cccd358d09fe6",
+    "changed_rows": [
+      "qed_ee4f_L0",
+      "xs_qed_eeee_L1",
+      "xs_qcd_gguu_1pi_L1"
+    ],
+    "changed_fields": [
+      "numerators"
+    ],
+    "changed_tokens": 3,
+    "preserved_migrations": {
+      "xs_qed_eemm_L1": {
+        "row_sha256": "25b964b968545f8d85783d23ae70ad09e529290cd63ddc7804b44905d5ba9129",
+        "byte_identical": true,
+        "complete_row": "xs_qed_eemm_L1: Row { diagrams: 1, topologies: 17, assignments: 34, inverse_symmetry: (1, 1), weights: (-1, 1), symmetry_factors: &[(1, 1)], content: 0x831ae534b022fd0f, numerators: 0x414e2a7a954beae8, named: 0xf40bfdc791015105, ids: 0xedd739fe2aef9d55 }"
+      },
+      "xs_qed_eedd_L1": {
+        "row_sha256": "fdb64a1d535ec319b16fa9cb956636fff09c9a8d1c6634a8bc08e8493b70d891",
+        "byte_identical": true,
+        "complete_row": "xs_qed_eedd_L1: Row { diagrams: 1, topologies: 17, assignments: 34, inverse_symmetry: (1, 1), weights: (-1, 1), symmetry_factors: &[(1, 1)], content: 0xb467d6be7a12aefa, numerators: 0xd3ad2f3a0802b6ab, named: 0xdd30b2e206f30267, ids: 0x58ebcb07ba6255d3 }"
+      },
+      "xs_qed_eeee_1pi_L1": {
+        "row_sha256": "edfb50abaf3ef5955d917c8705c3ed1f705e45cca221e6131dec94ef55f336bc",
+        "byte_identical": true,
+        "complete_row": "xs_qed_eeee_1pi_L1: Row { diagrams: 1, topologies: 3, assignments: 4, inverse_symmetry: (1, 1), weights: (-1, 1), symmetry_factors: &[(1, 1)], content: 0x8686eb17d2b0f293, numerators: 0x1fa84d9ad4fdf0b0, named: 0xf5ac9fd01b9eabd7, ids: 0xf777e735b39d93bf }"
+      },
+      "qed_eemm_L1": {
+        "row_sha256": "13360392d6a7852c1e04869aa123b1c788228a0daa246328985f758784095e89",
+        "byte_identical": true,
+        "complete_row": "qed_eemm_L1: Row { diagrams: 17, topologies: 10, assignments: 17, inverse_symmetry: (17, 1), weights: (1, 1), symmetry_factors: &[(1, 17)], content: 0x67015758ee0dfcf5, numerators: 0x3866ebfda57f6fb8, named: 0x92ff7810a94d1ff7, ids: 0x1dc5ec5f97f654ff }"
+      },
+      "ctorder_qcd_uugg_L1": {
+        "row_sha256": "99e2a0316bf4ae745df84e9ef72049ce7949d1c596b7c6a49cb7353a031244d2",
+        "byte_identical": true,
+        "complete_row": "ctorder_qcd_uugg_L1: Row { diagrams: 268, topologies: 32, assignments: 268, inverse_symmetry: (251, 1), weights: (13, 1), symmetry_factors: &[(1, 234), (2, 34)], content: 0x33e52219b458ee2e, numerators: 0x3a743bf033456b6f, named: 0xc760bf1c8a759334, ids: 0x019e715c187af508 }"
+      },
+      "sm_eemm_L0": {
+        "row_sha256": "db4c8b1c6f8099a8744708a3c10ea7f79e942e225361bed519886e413c09d27c",
+        "byte_identical": true,
+        "complete_row": "sm_eemm_L0: Row { diagrams: 4, topologies: 1, assignments: 4, inverse_symmetry: (4, 1), weights: (-4, 1), symmetry_factors: &[(1, 4)], content: 0x97af00ae91ef62c4, numerators: 0xc030c29958e57000, named: 0xc01c07a8158bc53a, ids: 0x91a782bcdd47cb2a }"
+      },
+      "ym_g6_L0": {
+        "row_sha256": "9a62b02e11caee7bcd084cddbaec6740fb0abda40cc540da2f3f2163dd7f8881",
+        "byte_identical": true,
+        "complete_row": "ym_g6_L0: Row { diagrams: 220, topologies: 220, assignments: 220, inverse_symmetry: (220, 1), weights: (220, 1), symmetry_factors: &[(1, 220)], content: 0xe166545bc76a8cd8, numerators: 0xc742a6c3a2526c64, named: 0x0855fe3d5967a4de, ids: 0x4a0b7e227d7ace53 }"
+      },
+      "xs_qed_eemm_L2": {
+        "row_sha256": "aae7e01c752e73202a39e9f905e017b910c54c9e20c09db46993cce4735ce50f",
+        "byte_identical": true,
+        "complete_row": "xs_qed_eemm_L2: Row { diagrams: 30, topologies: 157, assignments: 714, inverse_symmetry: (30, 1), weights: (4, 1), symmetry_factors: &[(1, 30)], content: 0x6fcfea2ac818e3eb, numerators: 0xf889b37c1fd93143, named: 0x0b41c948729c87ec, ids: 0xc6537de685c0ec01 }"
+      },
+      "sm_eeww_L0": {
+        "row_sha256": "b4ac9f5b9ac8f6c3d11c358be866ecee68f45be0d29b06a9ef5a1dc319e18b0b",
+        "byte_identical": true,
+        "complete_row": "sm_eeww_L0: Row { diagrams: 4, topologies: 2, assignments: 4, inverse_symmetry: (4, 1), weights: (-4, 1), symmetry_factors: &[(1, 4)], content: 0x7477c6f9f9a39d73, numerators: 0x0098a2a731e2a6fb, named: 0x48249b27b144364c, ids: 0xf65454f1b8b1a032 }"
+      }
+    },
+    "all_other_bytes": "Complete byte equality after reverting exactly these three row-local tokens.",
+    "all_other_rows_and_fields_unchanged": true,
+    "SM_in_patch": false,
+    "applied": false,
+    "runtime_tested": false
+  },
+  "source_provenance": {
+    "historical": {
+      "revision": "2b1ef4f07a44bc061bcc97c378bbdd9c41cb0e94",
+      "Cargo_lock_blob": "3fb57ae3f63f758f9488e0a670d3077af3aeb001",
+      "Cargo_lock_sha256": "29abed8df55accfd70d23546274008d42a694c26018b58c7a76bba2e907604b5"
+    },
+    "target": {
+      "revision": "f47f27213a1c55291239c9bc0f334a7ea1cd1cc1",
+      "Cargo_lock_blob": "ceae72cbcbf552aff4b969c1ce81a8930dfc03ea",
+      "Cargo_lock_sha256": "e111296686b2573ac88b9274cac2bf1e10aad07669f8fc6d243ac5b47d985ae0"
+    },
+    "proof": {
+      "revision": "5ba04864ca506e259d9eef4a54f65acdd8323fc2",
+      "Cargo_lock_blob": "ceae72cbcbf552aff4b969c1ce81a8930dfc03ea",
+      "Cargo_lock_sha256": "e111296686b2573ac88b9274cac2bf1e10aad07669f8fc6d243ac5b47d985ae0"
+    },
+    "built": {
+      "revision": "5ea149ffd88ae3afc4072a38c0871c1329be8424",
+      "Cargo_lock_blob": "ceae72cbcbf552aff4b969c1ce81a8930dfc03ea",
+      "Cargo_lock_sha256": "e111296686b2573ac88b9274cac2bf1e10aad07669f8fc6d243ac5b47d985ae0"
+    },
+    "metadata": {
+      "revision": "48d0b98b97b368b2a2f58abe67cb19dddec623df",
+      "Cargo_lock_blob": "ceae72cbcbf552aff4b969c1ce81a8930dfc03ea",
+      "Cargo_lock_sha256": "e111296686b2573ac88b9274cac2bf1e10aad07669f8fc6d243ac5b47d985ae0"
+    }
+  },
+  "kernel": "8eb7c3729d6abefc916decc1bdf0c06536f8af80",
+  "source_proof_binding": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/source-boundary-audit.json",
+    "sha256": "ca04925947330d754e39dc04eb84771b792e35ddbcf09293a4b6501dff18843b",
+    "relevant_files": 322
+  },
+  "rows": [
+    {
+      "case": "qed_ee4f_L0",
+      "scope": {
+        "graphs": 6,
+        "owners_per_mode": 96,
+        "classes": [
+          "None",
+          "Auto"
+        ],
+        "classes_obligation": "independent cells",
+        "grouping": "None",
+        "pool": 1
+      },
+      "before_Row": {
+        "diagrams": 6,
+        "topologies": 7,
+        "assignments": 6,
+        "content": 7418213026047758212,
+        "numerators": 9163194314104926076,
+        "named": 9955192864026428413,
+        "ids": 15420108436151051566,
+        "inverse_symmetry": [
+          6,
+          1
+        ],
+        "weights": [
+          -6,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            6
+          ]
+        ]
+      },
+      "after_Row": {
+        "diagrams": 6,
+        "topologies": 7,
+        "assignments": 6,
+        "content": 7418213026047758212,
+        "numerators": 2094309210284571858,
+        "named": 9955192864026428413,
+        "ids": 15420108436151051566,
+        "inverse_symmetry": [
+          6,
+          1
+        ],
+        "weights": [
+          -6,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            6
+          ]
+        ]
+      },
+      "old_numerator_hex": "0x7f2a34ae141a6f7c",
+      "new_numerator_hex": "0x1d107b2170d73cd2",
+      "Auto_Row": {
+        "diagrams": 6,
+        "topologies": 42,
+        "assignments": 6,
+        "inverse_symmetry": [
+          6,
+          1
+        ],
+        "weights": [
+          -6,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            6
+          ]
+        ],
+        "content": 7418213026047758212,
+        "numerators": 2094309210284571858,
+        "named": 3630688608974482237,
+        "ids": 15420108436151051566
+      },
+      "Auto_historical_Row": {
+        "diagrams": 6,
+        "topologies": 42,
+        "assignments": 6,
+        "inverse_symmetry": [
+          6,
+          1
+        ],
+        "weights": [
+          -6,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            6
+          ]
+        ],
+        "content": 7418213026047758212,
+        "numerators": 9163194314104926076,
+        "named": 3630688608974482237,
+        "ids": 15420108436151051566
+      },
+      "Auto_Row_assertion": false,
+      "None_Auto_correspondence": [
+        {
+          "id": "03bce2b69eac73e2ba471b9d2e94e195",
+          "None_index": 0,
+          "Auto_index": 0,
+          "None_name": "D0",
+          "Auto_name": "D0"
+        },
+        {
+          "id": "44ae97440e9239c809c1f1131adfe368",
+          "None_index": 1,
+          "Auto_index": 1,
+          "None_name": "D1",
+          "Auto_name": "D1"
+        },
+        {
+          "id": "eb56b44e19164ab9dbd246ae1fc1358e",
+          "None_index": 2,
+          "Auto_index": 4,
+          "None_name": "D2",
+          "Auto_name": "D4"
+        },
+        {
+          "id": "fb4a768078488cd9ec8edaf1f8b6683a",
+          "None_index": 3,
+          "Auto_index": 2,
+          "None_name": "D3",
+          "Auto_name": "D2"
+        },
+        {
+          "id": "8213ae5fb9f98789a010294f31bff51a",
+          "None_index": 4,
+          "Auto_index": 5,
+          "None_name": "D4",
+          "Auto_name": "D5"
+        },
+        {
+          "id": "e9ff090d108cca55fc5d5ccb38cc2a9f",
+          "None_index": 5,
+          "Auto_index": 3,
+          "None_name": "D5",
+          "Auto_name": "D3"
+        }
+      ],
+      "derived_None_Auto_Row_differences": [
+        "topologies",
+        "named"
+      ],
+      "original_candidate": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-four-migration-preparation-20261030-r1/candidates/qed_ee4f_L0.json",
+        "sha256": "921a32543f7f5b9688c6fe76dec9ce74427f0f5f8b56b6ca4df46a87b6178f25",
+        "bytes": 4437
+      },
+      "original_interface_blockers": [
+        "Ordered interface compatibility at actual downstream consumers after the displayed owner-specific permutations. same_value includes logical order; named multisets and Atom equality alone cannot discharge it.",
+        "Finite from_declared_parts admission/round-trip and consumer-layout correspondence for these exact captured arrays under reversible cooking. No universal free-index/locality/decoder theorem inferred."
+      ]
+    },
+    {
+      "case": "xs_qed_eeee_L1",
+      "scope": {
+        "graphs": 4,
+        "owners_per_mode": 52,
+        "classes": [
+          "None",
+          "Auto"
+        ],
+        "classes_obligation": "independent cells",
+        "grouping": "None",
+        "pool": 1
+      },
+      "before_Row": {
+        "diagrams": 4,
+        "topologies": 17,
+        "assignments": 34,
+        "content": 3022486068726070230,
+        "numerators": 10282495408798671266,
+        "named": 13426690394181497681,
+        "ids": 18306469787178189955,
+        "inverse_symmetry": [
+          4,
+          1
+        ],
+        "weights": [
+          0,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            4
+          ]
+        ]
+      },
+      "after_Row": {
+        "diagrams": 4,
+        "topologies": 17,
+        "assignments": 34,
+        "content": 3022486068726070230,
+        "numerators": 8589669465914692809,
+        "named": 13426690394181497681,
+        "ids": 18306469787178189955,
+        "inverse_symmetry": [
+          4,
+          1
+        ],
+        "weights": [
+          0,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            4
+          ]
+        ]
+      },
+      "old_numerator_hex": "0x8eb2c3186607a1a2",
+      "new_numerator_hex": "0x7734a2de85dd54c9",
+      "Auto_Row": {
+        "diagrams": 4,
+        "topologies": 17,
+        "assignments": 34,
+        "inverse_symmetry": [
+          4,
+          1
+        ],
+        "weights": [
+          0,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            4
+          ]
+        ],
+        "content": 3022486068726070230,
+        "numerators": 8589669465914692809,
+        "named": 13426690394181497681,
+        "ids": 18306469787178189955
+      },
+      "Auto_historical_Row": {
+        "diagrams": 4,
+        "topologies": 17,
+        "assignments": 34,
+        "inverse_symmetry": [
+          4,
+          1
+        ],
+        "weights": [
+          0,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            4
+          ]
+        ],
+        "content": 3022486068726070230,
+        "numerators": 10282495408798671266,
+        "named": 13426690394181497681,
+        "ids": 18306469787178189955
+      },
+      "Auto_Row_assertion": false,
+      "None_Auto_correspondence": [
+        {
+          "id": "d9a1f4b74e7edcf37c2b095299a89854",
+          "None_index": 0,
+          "Auto_index": 0,
+          "None_name": "D0",
+          "Auto_name": "D0"
+        },
+        {
+          "id": "8c07d98cdf34666feb5b87a516adeeab",
+          "None_index": 1,
+          "Auto_index": 1,
+          "None_name": "D1",
+          "Auto_name": "D1"
+        },
+        {
+          "id": "ed03bfa8f6a6b6b8ff8bc1cb74ab5750",
+          "None_index": 2,
+          "Auto_index": 2,
+          "None_name": "D2",
+          "Auto_name": "D2"
+        },
+        {
+          "id": "19313a3947e130179589bbd41aa5957c",
+          "None_index": 3,
+          "Auto_index": 3,
+          "None_name": "D3",
+          "Auto_name": "D3"
+        }
+      ],
+      "derived_None_Auto_Row_differences": [],
+      "original_candidate": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-four-migration-preparation-20261030-r1/candidates/xs_qed_eeee_L1.json",
+        "sha256": "51ea337f15f30937b84399d3e9d81c5d52d250238877b8f1ad2ad05b23480f2f",
+        "bytes": 4121
+      },
+      "original_interface_blockers": [
+        "Ordered interface compatibility at actual downstream consumers after the displayed owner-specific permutations. same_value includes logical order; named multisets and Atom equality alone cannot discharge it.",
+        "Finite from_declared_parts admission/round-trip and consumer-layout correspondence for these exact captured arrays under reversible cooking. No universal free-index/locality/decoder theorem inferred."
+      ]
+    },
+    {
+      "case": "xs_qcd_gguu_1pi_L1",
+      "scope": {
+        "graphs": 4,
+        "owners_per_mode": 52,
+        "classes": [
+          "None",
+          "Auto"
+        ],
+        "classes_obligation": "independent cells",
+        "grouping": "None",
+        "pool": 1
+      },
+      "before_Row": {
+        "diagrams": 4,
+        "topologies": 12,
+        "assignments": 54,
+        "content": 13292509521889608637,
+        "numerators": 8501616522639327483,
+        "named": 15278292068172816218,
+        "ids": 9379374420500739387,
+        "inverse_symmetry": [
+          4,
+          1
+        ],
+        "weights": [
+          -4,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            4
+          ]
+        ]
+      },
+      "after_Row": {
+        "diagrams": 4,
+        "topologies": 12,
+        "assignments": 54,
+        "content": 13292509521889608637,
+        "numerators": 7142019012713190507,
+        "named": 15278292068172816218,
+        "ids": 9379374420500739387,
+        "inverse_symmetry": [
+          4,
+          1
+        ],
+        "weights": [
+          -4,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            4
+          ]
+        ]
+      },
+      "old_numerator_hex": "0x75fbcf2f108240fb",
+      "new_numerator_hex": "0x631d8c73b7db146b",
+      "Auto_Row": {
+        "diagrams": 4,
+        "topologies": 12,
+        "assignments": 54,
+        "inverse_symmetry": [
+          4,
+          1
+        ],
+        "weights": [
+          -4,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            4
+          ]
+        ],
+        "content": 13292509521889608637,
+        "numerators": 7142019012713190507,
+        "named": 15278292068172816218,
+        "ids": 9379374420500739387
+      },
+      "Auto_historical_Row": {
+        "diagrams": 4,
+        "topologies": 12,
+        "assignments": 54,
+        "inverse_symmetry": [
+          4,
+          1
+        ],
+        "weights": [
+          -4,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            4
+          ]
+        ],
+        "content": 13292509521889608637,
+        "numerators": 8501616522639327483,
+        "named": 15278292068172816218,
+        "ids": 9379374420500739387
+      },
+      "Auto_Row_assertion": false,
+      "None_Auto_correspondence": [
+        {
+          "id": "ad0818e3abc13783bfcc2695b849034d",
+          "None_index": 0,
+          "Auto_index": 0,
+          "None_name": "D0",
+          "Auto_name": "D0"
+        },
+        {
+          "id": "31d0890641674e5ee9afceaff1e22206",
+          "None_index": 1,
+          "Auto_index": 1,
+          "None_name": "D1",
+          "Auto_name": "D1"
+        },
+        {
+          "id": "14ac74bf7c503631cbbf625890f7ea67",
+          "None_index": 2,
+          "Auto_index": 2,
+          "None_name": "D2",
+          "Auto_name": "D2"
+        },
+        {
+          "id": "c490e590d90aa4c6acda54e116e788a7",
+          "None_index": 3,
+          "Auto_index": 3,
+          "None_name": "D3",
+          "Auto_name": "D3"
+        }
+      ],
+      "derived_None_Auto_Row_differences": [],
+      "original_candidate": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-four-migration-preparation-20261030-r1/candidates/xs_qcd_gguu_1pi_L1.json",
+        "sha256": "be2a3a18417c0eefa6868c1b03f5967f80f1b512a4af680e733421508bb45bda",
+        "bytes": 4148
+      },
+      "original_interface_blockers": [
+        "Ordered interface compatibility at actual downstream consumers after the displayed owner-specific permutations. same_value includes logical order; named multisets and Atom equality alone cannot discharge it.",
+        "Finite from_declared_parts admission/round-trip and consumer-layout correspondence for these exact captured arrays under reversible cooking. No universal free-index/locality/decoder theorem inferred."
+      ]
+    }
+  ],
+  "public_census_source_joins": [
+    {
+      "case": "qed_ee4f_L0",
+      "public_capture_binding": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/qed_ee4f_L0/capture-binding.json",
+        "sha256": "e2d368860f59a69850d2139ae79f0a8ef66407fe77837d644a4ebbe5b80e992b",
+        "bytes": 142823
+      },
+      "original_assertion": {
+        "status": "FAILED",
+        "passed": 0,
+        "failed": 1,
+        "filtered": 182,
+        "exit": 101
+      },
+      "public_joins": [
+        {
+          "file": "qed_ee4f_L0.census",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/qed_ee4f_L0/dumps/qed_ee4f_L0.census",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/qed_ee4f_L0/dumps/qed_ee4f_L0.census",
+          "sha256": "567391c51101889748f8aec467b7d961ad0b070b983c037c06ada75c0705c789"
+        },
+        {
+          "file": "qed_ee4f_L0.classes-None-t1.json",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/qed_ee4f_L0/dumps/qed_ee4f_L0.classes-None-t1.json",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/qed_ee4f_L0/dumps/qed_ee4f_L0.classes-None-t1.json",
+          "sha256": "1c12989d75e7f9e12513d0c726e3f700cba9e8088630ab9c43260b961e2a811e"
+        },
+        {
+          "file": "qed_ee4f_L0.classes-None-t1.sources.json",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/qed_ee4f_L0/dumps/qed_ee4f_L0.classes-None-t1.sources.json",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/qed_ee4f_L0/dumps/qed_ee4f_L0.classes-None-t1.sources.json",
+          "sha256": "1c12989d75e7f9e12513d0c726e3f700cba9e8088630ab9c43260b961e2a811e"
+        },
+        {
+          "file": "qed_ee4f_L0.classes-Auto-t1.json",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/qed_ee4f_L0/dumps/qed_ee4f_L0.classes-Auto-t1.json",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/qed_ee4f_L0/dumps/qed_ee4f_L0.classes-Auto-t1.json",
+          "sha256": "49f3993180875dbf3d06adf86b5714b888b3db7a3b109237b1a747769f2a4f34"
+        },
+        {
+          "file": "qed_ee4f_L0.classes-Auto-t1.sources.json",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/qed_ee4f_L0/dumps/qed_ee4f_L0.classes-Auto-t1.sources.json",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/qed_ee4f_L0/dumps/qed_ee4f_L0.classes-Auto-t1.sources.json",
+          "sha256": "49f3993180875dbf3d06adf86b5714b888b3db7a3b109237b1a747769f2a4f34"
+        }
+      ],
+      "None_summary_equals_reconstructed_before_after": true,
+      "Auto_native_Row_assertion": false,
+      "mode_correspondence": [
+        {
+          "id": "03bce2b69eac73e2ba471b9d2e94e195",
+          "None_index": 0,
+          "Auto_index": 0,
+          "None_name": "D0",
+          "Auto_name": "D0"
+        },
+        {
+          "id": "44ae97440e9239c809c1f1131adfe368",
+          "None_index": 1,
+          "Auto_index": 1,
+          "None_name": "D1",
+          "Auto_name": "D1"
+        },
+        {
+          "id": "eb56b44e19164ab9dbd246ae1fc1358e",
+          "None_index": 2,
+          "Auto_index": 4,
+          "None_name": "D2",
+          "Auto_name": "D4"
+        },
+        {
+          "id": "fb4a768078488cd9ec8edaf1f8b6683a",
+          "None_index": 3,
+          "Auto_index": 2,
+          "None_name": "D3",
+          "Auto_name": "D2"
+        },
+        {
+          "id": "8213ae5fb9f98789a010294f31bff51a",
+          "None_index": 4,
+          "Auto_index": 5,
+          "None_name": "D4",
+          "Auto_name": "D5"
+        },
+        {
+          "id": "e9ff090d108cca55fc5d5ccb38cc2a9f",
+          "None_index": 5,
+          "Auto_index": 3,
+          "None_name": "D5",
+          "Auto_name": "D3"
+        }
+      ],
+      "None_Auto_Row_differences": [
+        "topologies",
+        "named"
+      ]
+    },
+    {
+      "case": "xs_qed_eeee_L1",
+      "public_capture_binding": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qed_eeee_L1/capture-binding.json",
+        "sha256": "6d8e4e5b0e7108748d6dbc6397e21b421450d39419bebefe6ef1fa4ad12ad98c",
+        "bytes": 142930
+      },
+      "original_assertion": {
+        "status": "FAILED",
+        "passed": 0,
+        "failed": 1,
+        "filtered": 182,
+        "exit": 101
+      },
+      "public_joins": [
+        {
+          "file": "xs_qed_eeee_L1.census",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eeee_L1/dumps/xs_qed_eeee_L1.census",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qed_eeee_L1/dumps/xs_qed_eeee_L1.census",
+          "sha256": "07fb1b099af1b8fe7a9d09d6cab48119a7888b8d785c26f46a7460008fc52497"
+        },
+        {
+          "file": "xs_qed_eeee_L1.classes-None-t1.json",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eeee_L1/dumps/xs_qed_eeee_L1.classes-None-t1.json",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qed_eeee_L1/dumps/xs_qed_eeee_L1.classes-None-t1.json",
+          "sha256": "fb3fb55248f0eb4c0407db787f9c3753a251ed2357a623f60c88e484f89505b5"
+        },
+        {
+          "file": "xs_qed_eeee_L1.classes-None-t1.sources.json",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eeee_L1/dumps/xs_qed_eeee_L1.classes-None-t1.sources.json",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qed_eeee_L1/dumps/xs_qed_eeee_L1.classes-None-t1.sources.json",
+          "sha256": "fb3fb55248f0eb4c0407db787f9c3753a251ed2357a623f60c88e484f89505b5"
+        },
+        {
+          "file": "xs_qed_eeee_L1.classes-Auto-t1.json",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eeee_L1/dumps/xs_qed_eeee_L1.classes-Auto-t1.json",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qed_eeee_L1/dumps/xs_qed_eeee_L1.classes-Auto-t1.json",
+          "sha256": "fb3fb55248f0eb4c0407db787f9c3753a251ed2357a623f60c88e484f89505b5"
+        },
+        {
+          "file": "xs_qed_eeee_L1.classes-Auto-t1.sources.json",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eeee_L1/dumps/xs_qed_eeee_L1.classes-Auto-t1.sources.json",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qed_eeee_L1/dumps/xs_qed_eeee_L1.classes-Auto-t1.sources.json",
+          "sha256": "fb3fb55248f0eb4c0407db787f9c3753a251ed2357a623f60c88e484f89505b5"
+        }
+      ],
+      "None_summary_equals_reconstructed_before_after": true,
+      "Auto_native_Row_assertion": false,
+      "mode_correspondence": [
+        {
+          "id": "d9a1f4b74e7edcf37c2b095299a89854",
+          "None_index": 0,
+          "Auto_index": 0,
+          "None_name": "D0",
+          "Auto_name": "D0"
+        },
+        {
+          "id": "8c07d98cdf34666feb5b87a516adeeab",
+          "None_index": 1,
+          "Auto_index": 1,
+          "None_name": "D1",
+          "Auto_name": "D1"
+        },
+        {
+          "id": "ed03bfa8f6a6b6b8ff8bc1cb74ab5750",
+          "None_index": 2,
+          "Auto_index": 2,
+          "None_name": "D2",
+          "Auto_name": "D2"
+        },
+        {
+          "id": "19313a3947e130179589bbd41aa5957c",
+          "None_index": 3,
+          "Auto_index": 3,
+          "None_name": "D3",
+          "Auto_name": "D3"
+        }
+      ],
+      "None_Auto_Row_differences": []
+    },
+    {
+      "case": "xs_qcd_gguu_1pi_L1",
+      "public_capture_binding": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qcd_gguu_1pi_L1/capture-binding.json",
+        "sha256": "e00634261b6f840f3055a4e80f06fc8e633de1bd1f809a8accbe64c676326610",
+        "bytes": 139689
+      },
+      "original_assertion": {
+        "status": "FAILED",
+        "passed": 0,
+        "failed": 1,
+        "filtered": 182,
+        "exit": 101
+      },
+      "public_joins": [
+        {
+          "file": "xs_qcd_gguu_1pi_L1.census",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qcd_gguu_1pi_L1/dumps/xs_qcd_gguu_1pi_L1.census",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qcd_gguu_1pi_L1/dumps/xs_qcd_gguu_1pi_L1.census",
+          "sha256": "fbbcf106715b8952970e0d70abbd96fa582e851fc9f86064c031d10eeee5dec4"
+        },
+        {
+          "file": "xs_qcd_gguu_1pi_L1.classes-None-t1.json",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qcd_gguu_1pi_L1/dumps/xs_qcd_gguu_1pi_L1.classes-None-t1.json",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qcd_gguu_1pi_L1/dumps/xs_qcd_gguu_1pi_L1.classes-None-t1.json",
+          "sha256": "d1d7a59c555387b6fadef81ed52aa2615f455aedcb14c416fabf61fe44b1ed15"
+        },
+        {
+          "file": "xs_qcd_gguu_1pi_L1.classes-None-t1.sources.json",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qcd_gguu_1pi_L1/dumps/xs_qcd_gguu_1pi_L1.classes-None-t1.sources.json",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qcd_gguu_1pi_L1/dumps/xs_qcd_gguu_1pi_L1.classes-None-t1.sources.json",
+          "sha256": "d1d7a59c555387b6fadef81ed52aa2615f455aedcb14c416fabf61fe44b1ed15"
+        },
+        {
+          "file": "xs_qcd_gguu_1pi_L1.classes-Auto-t1.json",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qcd_gguu_1pi_L1/dumps/xs_qcd_gguu_1pi_L1.classes-Auto-t1.json",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qcd_gguu_1pi_L1/dumps/xs_qcd_gguu_1pi_L1.classes-Auto-t1.json",
+          "sha256": "d1d7a59c555387b6fadef81ed52aa2615f455aedcb14c416fabf61fe44b1ed15"
+        },
+        {
+          "file": "xs_qcd_gguu_1pi_L1.classes-Auto-t1.sources.json",
+          "pristine": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qcd_gguu_1pi_L1/dumps/xs_qcd_gguu_1pi_L1.classes-Auto-t1.sources.json",
+          "observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qcd_gguu_1pi_L1/dumps/xs_qcd_gguu_1pi_L1.classes-Auto-t1.sources.json",
+          "sha256": "d1d7a59c555387b6fadef81ed52aa2615f455aedcb14c416fabf61fe44b1ed15"
+        }
+      ],
+      "None_summary_equals_reconstructed_before_after": true,
+      "Auto_native_Row_assertion": false,
+      "mode_correspondence": [
+        {
+          "id": "ad0818e3abc13783bfcc2695b849034d",
+          "None_index": 0,
+          "Auto_index": 0,
+          "None_name": "D0",
+          "Auto_name": "D0"
+        },
+        {
+          "id": "31d0890641674e5ee9afceaff1e22206",
+          "None_index": 1,
+          "Auto_index": 1,
+          "None_name": "D1",
+          "Auto_name": "D1"
+        },
+        {
+          "id": "14ac74bf7c503631cbbf625890f7ea67",
+          "None_index": 2,
+          "Auto_index": 2,
+          "None_name": "D2",
+          "Auto_name": "D2"
+        },
+        {
+          "id": "c490e590d90aa4c6acda54e116e788a7",
+          "None_index": 3,
+          "Auto_index": 3,
+          "None_name": "D3",
+          "Auto_name": "D3"
+        }
+      ],
+      "None_Auto_Row_differences": []
+    }
+  ],
+  "typed_proof": {
+    "receipt": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/validation-receipt.json",
+    "receipt_sha256": "7c443ba689cd2e04cddf4d6a2d1f60c4e41512cdad9cf64237e770b86d74349f",
+    "seal_sha256": "b504c7c0a49df349a9fe667ffe1e516dad98375152a41321f692428a33e9ebed",
+    "independent_review_verdict": null,
+    "status": "INTERFACE_REVIEW_PENDING",
+    "actual_results_audit": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/typed-proof-actual-results-audit.json",
+    "original_claims": {
+      "owner_mode_entries": 400,
+      "affected": 80,
+      "unaffected": 320,
+      "whole_graph_pairs": 28,
+      "declared_roundtrip": "all400 owners including all80 affected explicit declarations",
+      "actual_component_lowerings": 160,
+      "component_arithmetic": false,
+      "native_physical_owner_pair_plans": 744,
+      "stale_wiring_semantic_witnesses": 144,
+      "stale_wiring_accepted_holdouts": 600,
+      "actual_fold_stages": 244,
+      "native_fragment_and_subgraph_paths": "28each",
+      "baseline_negative_controls": "80each duplicate/omitted/wrong-index/wrong-dimension typed admission errors; wrong-permutation checks; QED self-inverse16 accepted holdouts",
+      "focused_final_controls": {
+        "count": 20,
+        "actual_other_owner": 6,
+        "cofund_dual": 2,
+        "altered_metric_claim": 6,
+        "altered_composite_claim": 6,
+        "classification": "Exact intended semantic predicate matched; setup/parse errors excluded"
+      },
+      "prior_native_batches": {
+        "all72_hash_bindings_verified": true,
+        "in_scope": 40,
+        "SM_not_credited": 32,
+        "rerun": false,
+        "typed_admission_credit_from_old_batches": false
+      },
+      "native_executions_total": 43,
+      "explanation": "v1setup failure; v3baseline+20controls; final v4import-style-only baseline+same20controls. No old algebra suite repeated."
+    },
+    "new_executions_here": 0,
+    "positional_restriction": "Recompute named plans or transport each operand by its own proved permutation. No arbitrary positional plan interchangeability.",
+    "covariance_basis": [
+      "Finite hypotheses: exact frozen graph/model/request/mode and every formal owner expression match under only the approved injective whole-symbol map. Source-defined slot types and metric conventions are separately checked; native tag tolerance is not a definition proof.",
+      "For every owner, historical slot H[i] equals current C[p[i]] as the complete typed field, including representation, dimension, duality, hedge owner and lane. Port incidence is checked against the serialized half-edge/endpoint/particle/rule-slot geometry. Every free field is named, repeat-free, and the actual native declared admission validates scopes and multiplicities.",
+      "For arbitrary old local components a define current b by b[p[i]]=a[i]. This bijection assigns identical components to every identical typed name in the unchanged expression. The finite expression has the same ordered leaf arguments and scalar factors, internal binder/metric data and scoped contractions. Structural evaluation therefore gives identical local values at all corresponding component tuples, with arbitrary formal scalar data, without expansion, Dirac tracing or numerical substitution. This is a source-defined physical-field covariance proof, not a sampling claim.",
+      "The native owning permuted API changes only named layout and establishes exact same_value after this justified permutation. Untransported same_value is false for all80 changed owners and true for all320 unchanged owners. The complete native canonical-to-logical maps commute with the inverse permutation.",
+      "Actual product_plan maps typed canonical matches to logical positions. The old pair (i,j) transports to (p_left[i],p_right[j]); free named survivors have canonical field order. The744 native owner-pair plans agree by physical identities; stale raw positional reuse changes wiring in144 explicit witnesses and preserves it in600 holdouts.",
+      "Actual graph geometry selects the same factors in GraphExpressions. All244 stages of the full-selection/empty-exclusion typed fold and28 public numerator_of calls agree, with full free-axis maps. All28 derived fragment_numerator/multiply_many paths agree. Source merge_named uses exact type/dimension/index keys and retained occurrence records; logical position contributes only source diagnostics. No exhaustive subset execution is claimed.",
+      "Actual into_network lowering is exercised on both routes for all80 affected owners, checks the exact dangling typed fields and retains ordered layouts. No component arithmetic is executed. Unchanged projector/prefactor and other owner boundaries are separately verified; the named-product argument preserves their later typed combination."
+    ],
+    "component_lowering": "No component arithmetic; source-defined arbitrary-component covariance is separate.",
+    "executed_selection": "Full graph with empty exclusion; no exhaustive subset execution."
+  },
+  "native_algebra_reuse": {
+    "successful_batches": 40,
+    "pair_execution_obligations": 3088,
+    "counts_by_case": {
+      "qed_ee4f_L0": 4,
+      "xs_qed_eeee_L1": 4,
+      "xs_qcd_gguu_1pi_L1": 32
+    },
+    "SM_32_excluded_from_three_row_credit": true,
+    "new_native_or_math_reruns": 0,
+    "scoped_accounting": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/native-algebra-reuse.json",
+    "interpretation": "QCD32 is8 baseline plus24 successful control substages. Failed substages receive no success credit. The40 are not40 independent baseline proofs."
+  },
+  "pure_validation": {
+    "cells": 6,
+    "focused_negative_controls": 17,
+    "commands": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/commands"
+  },
+  "remaining_premises": [
+    "Root must assign NEW independent review of these three separate finite interface proofs; no migration/literal/expectation approval.",
+    "Historical raw/cooked/decoded association remains the original approved capture premise. New native execution is current8eb only, not a new c78 run.",
+    "No universal decoder/free-index/locality/hidden-history/future-collision theorem. Exact same_value does not certify arbitrary future cached facts.",
+    "Positional consumers must transport each operand or recompute its named plan. This proof explicitly rejects an unconditional positional-interchangeability claim.",
+    "Native component lowering is a real owner-boundary check, not a numerical component proof. Physical-field covariance follows from the source-defined arbitrary-component assignment argument.",
+    "Only the full-selection empty-exclusion graph fold was executed. Unchanged selection geometry and the finite named-factor argument explain other fixed selections; they were not exhaustively run.",
+    "No broader Auto, grouped/pooled/other-row/runtime/WP3/combined approval. Prior ten-field Row reconstruction is reused and no token was changed.",
+    "No Cargo/Clippy producer build for standalone diagnostics; pinned rustfmt, warning-free rustc, Ruff, Python syntax and Typst rendering pass.",
+    "Historical raw/cooked/decoded association, observed ports and registration state remain finite capture premises.",
+    "Complete symbol definitions and exact source/qualified dependency/compiler/build/kernel chain remain reused premises with original historical command gaps.",
+    "Root must attach and consume the actual independent interface result. This preparation consumes no such verdict and closes no blocker by review.",
+    "A NEW independent three-row migration/literal decision remains required; no existing mathematical/source/SM review automatically authorizes these literals.",
+    "No post-patch producer qualification or actual full-Row runtime assertion exists for this candidate."
+  ],
+  "process": {
+    "writes": "Exclusive new ignored target output only",
+    "tracked_source_token_ref_index_jj_mutations": 0,
+    "native_Nix_build_capture_network_license_configuration_reads": 0,
+    "delegations": 0,
+    "new_workspaces": 0,
+    "owned_processes_remaining": []
+  },
+  "typst": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/acceptance-brief.typ",
+    "sha256": "ec5d8a71810315ed0ce50c263eb702fb7056c3f53edc41de8763d29b2affd382",
+    "rendered": false,
+    "reason": "Pure pinned Python restriction; no Typst/build command authorized."
+  },
+  "retention": "Keep entire new packet for root and new independent migration review, including exact executed sources, consumed hashes, command outputs, errors and guards. All older evidence is preserved; no process retained."
+}

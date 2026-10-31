@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/raw-three-migration-20261031/qualify.py", line 15, in <module>
+    assert load('build.command.json')['exit']==0
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^
+KeyError: 'exit'

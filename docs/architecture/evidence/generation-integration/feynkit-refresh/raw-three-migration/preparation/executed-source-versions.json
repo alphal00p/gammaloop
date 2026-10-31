@@ -1,0 +1,62 @@
+[
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/audit_evidence.py",
+    "sha256": "61a10bddbb33f4217cb8bc7601ef057ad333b8060a0d3b18270c071a235a19b7",
+    "retained_source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/source-versions/61a10bddbb33f4217cb8bc7601ef057ad333b8060a0d3b18270c071a235a19b7/audit_evidence.py",
+    "syntax": "PASS"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/bootstrap.py",
+    "sha256": "e4821146b8169e49f400c7befd42a86e00753b29d8481b7b4087ec5406f65279",
+    "retained_source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/source-versions/e4821146b8169e49f400c7befd42a86e00753b29d8481b7b4087ec5406f65279/bootstrap.py",
+    "syntax": "PASS"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/bootstrap_v2.py",
+    "sha256": "b070f6e441239c3646502ba986c5a11b1c771c3b50672a89d18387948eb1bf4f",
+    "retained_source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/source-versions/b070f6e441239c3646502ba986c5a11b1c771c3b50672a89d18387948eb1bf4f/bootstrap_v2.py",
+    "syntax": "PASS"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/finalize.py",
+    "sha256": "46fbc5cc480f9d105475381c278114170799c2be086a7d9b28ef725bb8b453be",
+    "retained_source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/source-versions/46fbc5cc480f9d105475381c278114170799c2be086a7d9b28ef725bb8b453be/finalize.py",
+    "syntax": "PASS"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/prepare_candidate.py",
+    "sha256": "c976c4375cf6d9632f1683e6331263168f42809242df6f30f4de257ae9594fb6",
+    "retained_source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/source-versions/c976c4375cf6d9632f1683e6331263168f42809242df6f30f4de257ae9594fb6/prepare_candidate.py",
+    "syntax": "PASS"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/run.py",
+    "sha256": "ecea075e4216bd82aa58137d8a430a2dbd54af3f6e3c47208e4cbd8922902800",
+    "retained_source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/source-versions/ecea075e4216bd82aa58137d8a430a2dbd54af3f6e3c47208e4cbd8922902800/run.py",
+    "syntax": "PASS"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/reused/bootstrap.py",
+    "sha256": "7e7adca659485f3b662caecc12c94c36af20d644153ed9763851e9a0b932d9ad",
+    "retained_source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/source-versions/7e7adca659485f3b662caecc12c94c36af20d644153ed9763851e9a0b932d9ad/bootstrap.py",
+    "syntax": "PASS"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/reused/boundary.py",
+    "sha256": "344a6f3fe95f0a811544a908c387510e6a1ce261cb5ea0dbe8e1ae4e494f6a9b",
+    "retained_source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/source-versions/344a6f3fe95f0a811544a908c387510e6a1ce261cb5ea0dbe8e1ae4e494f6a9b/boundary.py",
+    "syntax": "PASS"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/reused/parser_pure.py",
+    "sha256": "d9d8619adb9f38b9e8000e4f5375acc687cd6209c82dbc3bbd6015baf405df38",
+    "retained_source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/source-versions/d9d8619adb9f38b9e8000e4f5375acc687cd6209c82dbc3bbd6015baf405df38/parser_pure.py",
+    "syntax": "PASS"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/reused/prepare.py",
+    "sha256": "f7d4cf01fe20e5e35b12c8e4b89df57a8221f323037d2bda84b63a3e82282b19",
+    "retained_source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/source-versions/f7d4cf01fe20e5e35b12c8e4b89df57a8221f323037d2bda84b63a3e82282b19/prepare.py",
+    "syntax": "PASS"
+  }
+]

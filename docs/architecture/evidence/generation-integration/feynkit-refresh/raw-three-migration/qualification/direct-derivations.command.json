@@ -1,0 +1,30 @@
+{
+  "argv": [
+    "nix",
+    "derivation",
+    "show",
+    "/nix/store/35k6kqrpijnqcvgbqc0ar1fc8qkjhzj8-gammaloop-nextest-binaries-feynkit-feynkit-kinematics-0.1.0.drv",
+    "/nix/store/7lgw47mivd6hq2rgvrjrvcdq2dc2rj6j-gammaloop-nextest-binaries-feynkit-feynkit-cff-0.1.0.drv",
+    "/nix/store/9ias2v2xlw2q7zxvfw4znwp3j9hwnsss-gammaloop-nextest-binaries-feynkit-feynkit-py-0.1.0.drv",
+    "/nix/store/b3psgc7ywm8ccnq0kpsh2zswy82p0cfv-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0.drv",
+    "/nix/store/fay0gd8jfxgxkr3i0g05dk86ywmk4q9x-gammaloop-nextest-binaries-feynkit-feynkit-tensor-0.1.0.drv",
+    "/nix/store/gzadqn6n1ajy9fql21qf1izw2dg4fs7g-gammaloop-nextest-binaries-feynkit-feynkit-amplitude-0.1.0.drv",
+    "/nix/store/m64jd37862c5lmcg8y7s797vrnn266cl-stdenv-linux-no-cc.drv",
+    "/nix/store/pnczqlpna9w28x9yhjkvrr5f8llrz5w4-gammaloop-nextest-binaries-feynkit-feynkit-model-0.1.0.drv",
+    "/nix/store/rd04775wk6vm40zq8wc51bxxwpjvcbh1-gammaloop-nextest-binaries-feynkit-feynkit-ufo-0.1.0.drv",
+    "/nix/store/rv9r3rgsphlmjjwgabq6g3chq6vkyy6r-gammaloop-nextest-binaries-feynkit-feynkit-0.1.0.drv",
+    "/nix/store/s3s5s80y5sq8fvxivxxz3bqfpyhx8cb4-bash-5.3p15.drv",
+    "/nix/store/s6q02lh8hm98vh9vmnn8ckg622rnx8sq-gammaloop-nextest-binaries-feynkit-feynkit-graph-0.1.0.drv"
+  ],
+  "cwd": "/tmp",
+  "license_keys_removed": [
+    "SYMBOLICA_LICENSE",
+    "SYMBOLICA_LICENSE_PATH",
+    "SYMBOLICA_LICENSE_SIGNED"
+  ],
+  "start": "2026-10-31T01:03:58.180749+00:00",
+  "exit": 0,
+  "end": "2026-10-31T01:03:58.239210+00:00",
+  "stdout_sha256": "ca3780abea09528729836c650588d967be77fefe4c2c212b79291e10c0124f03",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+}

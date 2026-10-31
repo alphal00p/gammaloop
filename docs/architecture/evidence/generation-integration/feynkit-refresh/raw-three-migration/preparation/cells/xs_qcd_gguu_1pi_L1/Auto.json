@@ -1,0 +1,1004 @@
+{
+  "case": "xs_qcd_gguu_1pi_L1",
+  "mode": "Auto",
+  "original_cell": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-four-migration-preparation-20261030-r1/cells/xs_qcd_gguu_1pi_L1/Auto.json",
+    "sha256": "ea63d1d3b3ffa4f49b8e981e51a22080ffd55b228ba2686af83414056c976ad2",
+    "bytes": 131261
+  },
+  "historical_Row": {
+    "diagrams": 4,
+    "topologies": 12,
+    "assignments": 54,
+    "inverse_symmetry": [
+      4,
+      1
+    ],
+    "weights": [
+      -4,
+      1
+    ],
+    "symmetry_factors": [
+      [
+        1,
+        4
+      ]
+    ],
+    "content": 13292509521889608637,
+    "numerators": 8501616522639327483,
+    "named": 15278292068172816218,
+    "ids": 9379374420500739387
+  },
+  "current_Row": {
+    "diagrams": 4,
+    "topologies": 12,
+    "assignments": 54,
+    "inverse_symmetry": [
+      4,
+      1
+    ],
+    "weights": [
+      -4,
+      1
+    ],
+    "symmetry_factors": [
+      [
+        1,
+        4
+      ]
+    ],
+    "content": 13292509521889608637,
+    "numerators": 7142019012713190507,
+    "named": 15278292068172816218,
+    "ids": 9379374420500739387
+  },
+  "native_Row_assertion": false,
+  "graphs": 4,
+  "owners": 52,
+  "interfaces": [
+    {
+      "id": "ad0818e3abc13783bfcc2695b849034d",
+      "name": "D0",
+      "owner": "vertex:0",
+      "historical": [
+        "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(2,1)))",
+        "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(5,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(2,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(5,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::coad(8,gammalooprs::{spenso::index}::hedge(1,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(1,1))"
+      ],
+      "current": [
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(2,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(5,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::coad(8,gammalooprs::{spenso::index}::hedge(1,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(1,1))",
+        "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(5,1))",
+        "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(2,1)))"
+      ],
+      "permutation": [
+        5,
+        4,
+        0,
+        1,
+        2,
+        3
+      ],
+      "explicit": true
+    },
+    {
+      "id": "ad0818e3abc13783bfcc2695b849034d",
+      "name": "D0",
+      "owner": "vertex:1",
+      "historical": [
+        "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(6,1)))",
+        "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(3,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(3,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(6,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::coad(8,gammalooprs::{spenso::index}::hedge(10,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(10,1))"
+      ],
+      "current": [
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(3,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(6,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::coad(8,gammalooprs::{spenso::index}::hedge(10,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(10,1))",
+        "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(3,1))",
+        "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(6,1)))"
+      ],
+      "permutation": [
+        5,
+        4,
+        0,
+        1,
+        2,
+        3
+      ],
+      "explicit": true
+    },
+    {
+      "id": "ad0818e3abc13783bfcc2695b849034d",
+      "name": "D0",
+      "owner": "vertex:2",
+      "historical": [
+        "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(4,1)))",
+        "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(9,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(4,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(9,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::coad(8,gammalooprs::{spenso::index}::hedge(0,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(0,1))"
+      ],
+      "current": [
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(4,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(9,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::coad(8,gammalooprs::{spenso::index}::hedge(0,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(0,1))",
+        "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(9,1))",
+        "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(4,1)))"
+      ],
+      "permutation": [
+        5,
+        4,
+        0,
+        1,
+        2,
+        3
+      ],
+      "explicit": true
+    },
+    {
+      "id": "ad0818e3abc13783bfcc2695b849034d",
+      "name": "D0",
+      "owner": "vertex:3",
+      "historical": [
+        "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(8,1)))",
+        "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(7,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(7,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(8,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::coad(8,gammalooprs::{spenso::index}::hedge(11,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(11,1))"
+      ],
+      "current": [
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(7,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(8,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::coad(8,gammalooprs::{spenso::index}::hedge(11,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(11,1))",
+        "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(7,1))",
+        "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(8,1)))"
+      ],
+      "permutation": [
+        5,
+        4,
+        0,
+        1,
+        2,
+        3
+      ],
+      "explicit": true
+    },
+    {
+      "id": "ad0818e3abc13783bfcc2695b849034d",
+      "name": "D0",
+      "owner": "edge:2",
+      "historical": [
+        "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(3,1)))",
+        "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(2,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(2,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(3,1))"
+      ],
+      "current": [
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(2,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(3,1))",
+        "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(2,1))",
+        "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(3,1)))"
+      ],
+      "permutation": [
+        3,
+        2,
+        0,
+        1
+      ],
+      "explicit": true
+    },
+    {
+      "id": "ad0818e3abc13783bfcc2695b849034d",
+      "name": "D0",
+      "owner": "edge:3",
+      "historical": [
+        "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(5,1)))",
+        "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(4,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(4,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(5,1))"
+      ],
+      "current": [
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(4,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(5,1))",
+        "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(4,1))",
+        "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(5,1)))"
+      ],
+      "permutation": [
+        3,
+        2,
+        0,
+        1
+      ],
+      "explicit": true
+    },
+    {
+      "id": "ad0818e3abc13783bfcc2695b849034d",
+      "name": "D0",
+      "owner": "edge:4",
+      "historical": [
+        "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(7,1)))",
+        "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(6,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(6,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(7,1))"
+      ],
+      "current": [
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(6,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(7,1))",
+        "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(6,1))",
+        "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(7,1)))"
+      ],
+      "permutation": [
+        3,
+        2,
+        0,
+        1
+      ],
+      "explicit": true
+    },
+    {
+      "id": "ad0818e3abc13783bfcc2695b849034d",
+      "name": "D0",
+      "owner": "edge:5",
+      "historical": [
+        "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(9,1)))",
+        "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(8,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(8,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(9,1))"
+      ],
+      "current": [
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(8,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(9,1))",
+        "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(8,1))",
+        "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(9,1)))"
+      ],
+      "permutation": [
+        3,
+        2,
+        0,
+        1
+      ],
+      "explicit": true
+    },
+    {
+      "id": "31d0890641674e5ee9afceaff1e22206",
+      "name": "D1",
+      "owner": "vertex:0",
+      "historical": [
+        "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(4,1)))",
+        "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(3,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(3,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(4,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::coad(8,gammalooprs::{spenso::index}::hedge(1,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(1,1))"
+      ],
+      "current": [
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(3,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(4,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::coad(8,gammalooprs::{spenso::index}::hedge(1,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(1,1))",
+        "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(3,1))",
+        "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(4,1)))"
+      ],
+      "permutation": [
+        5,
+        4,
+        0,
+        1,
+        2,
+        3
+      ],
+      "explicit": true
+    },
+    {
+      "id": "31d0890641674e5ee9afceaff1e22206",
+      "name": "D1",
+      "owner": "vertex:1",
+      "historical": [
+        "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(2,1)))",
+        "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(7,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(2,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(7,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::coad(8,gammalooprs::{spenso::index}::hedge(10,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(10,1))"
+      ],
+      "current": [
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(2,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(7,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::coad(8,gammalooprs::{spenso::index}::hedge(10,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(10,1))",
+        "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(7,1))",
+        "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(2,1)))"
+      ],
+      "permutation": [
+        5,
+        4,
+        0,
+        1,
+        2,
+        3
+      ],
+      "explicit": true
+    },
+    {
+      "id": "31d0890641674e5ee9afceaff1e22206",
+      "name": "D1",
+      "owner": "vertex:2",
+      "historical": [
+        "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(8,1)))",
+        "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(5,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(5,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(8,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::coad(8,gammalooprs::{spenso::index}::hedge(0,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(0,1))"
+      ],
+      "current": [
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(5,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(8,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::coad(8,gammalooprs::{spenso::index}::hedge(0,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(0,1))",
+        "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(5,1))",
+        "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(8,1)))"
+      ],
+      "permutation": [
+        5,
+        4,
+        0,
+        1,
+        2,
+        3
+      ],
+      "explicit": true
+    },
+    {
+      "id": "31d0890641674e5ee9afceaff1e22206",
+      "name": "D1",
+      "owner": "vertex:3",
+      "historical": [
+        "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(6,1)))",
+        "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(9,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(6,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(9,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::coad(8,gammalooprs::{spenso::index}::hedge(11,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(11,1))"
+      ],
+      "current": [
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(6,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(9,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::coad(8,gammalooprs::{spenso::index}::hedge(11,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(11,1))",
+        "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(9,1))",
+        "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(6,1)))"
+      ],
+      "permutation": [
+        5,
+        4,
+        0,
+        1,
+        2,
+        3
+      ],
+      "explicit": true
+    },
+    {
+      "id": "31d0890641674e5ee9afceaff1e22206",
+      "name": "D1",
+      "owner": "edge:2",
+      "historical": [
+        "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(3,1)))",
+        "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(2,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(2,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(3,1))"
+      ],
+      "current": [
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(2,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(3,1))",
+        "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(2,1))",
+        "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(3,1)))"
+      ],
+      "permutation": [
+        3,
+        2,
+        0,
+        1
+      ],
+      "explicit": true
+    },
+    {
+      "id": "31d0890641674e5ee9afceaff1e22206",
+      "name": "D1",
+      "owner": "edge:3",
+      "historical": [
+        "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(5,1)))",
+        "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(4,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(4,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(5,1))"
+      ],
+      "current": [
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(4,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(5,1))",
+        "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(4,1))",
+        "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(5,1)))"
+      ],
+      "permutation": [
+        3,
+        2,
+        0,
+        1
+      ],
+      "explicit": true
+    },
+    {
+      "id": "31d0890641674e5ee9afceaff1e22206",
+      "name": "D1",
+      "owner": "edge:4",
+      "historical": [
+        "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(7,1)))",
+        "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(6,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(6,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(7,1))"
+      ],
+      "current": [
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(6,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(7,1))",
+        "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(6,1))",
+        "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(7,1)))"
+      ],
+      "permutation": [
+        3,
+        2,
+        0,
+        1
+      ],
+      "explicit": true
+    },
+    {
+      "id": "31d0890641674e5ee9afceaff1e22206",
+      "name": "D1",
+      "owner": "edge:5",
+      "historical": [
+        "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(9,1)))",
+        "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(8,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(8,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(9,1))"
+      ],
+      "current": [
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(8,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(9,1))",
+        "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(8,1))",
+        "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(9,1)))"
+      ],
+      "permutation": [
+        3,
+        2,
+        0,
+        1
+      ],
+      "explicit": true
+    },
+    {
+      "id": "14ac74bf7c503631cbbf625890f7ea67",
+      "name": "D2",
+      "owner": "vertex:0",
+      "historical": [
+        "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(4,1)))",
+        "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(3,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(3,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(4,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::coad(8,gammalooprs::{spenso::index}::hedge(1,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(1,1))"
+      ],
+      "current": [
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(3,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(4,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::coad(8,gammalooprs::{spenso::index}::hedge(1,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(1,1))",
+        "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(3,1))",
+        "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(4,1)))"
+      ],
+      "permutation": [
+        5,
+        4,
+        0,
+        1,
+        2,
+        3
+      ],
+      "explicit": true
+    },
+    {
+      "id": "14ac74bf7c503631cbbf625890f7ea67",
+      "name": "D2",
+      "owner": "vertex:1",
+      "historical": [
+        "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(6,1)))",
+        "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(9,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(6,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(9,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::coad(8,gammalooprs::{spenso::index}::hedge(10,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(10,1))"
+      ],
+      "current": [
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(6,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(9,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::coad(8,gammalooprs::{spenso::index}::hedge(10,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(10,1))",
+        "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(9,1))",
+        "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(6,1)))"
+      ],
+      "permutation": [
+        5,
+        4,
+        0,
+        1,
+        2,
+        3
+      ],
+      "explicit": true
+    },
+    {
+      "id": "14ac74bf7c503631cbbf625890f7ea67",
+      "name": "D2",
+      "owner": "vertex:2",
+      "historical": [
+        "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(2,1)))",
+        "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(7,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(2,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(7,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::coad(8,gammalooprs::{spenso::index}::hedge(0,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(0,1))"
+      ],
+      "current": [
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(2,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(7,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::coad(8,gammalooprs::{spenso::index}::hedge(0,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(0,1))",
+        "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(7,1))",
+        "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(2,1)))"
+      ],
+      "permutation": [
+        5,
+        4,
+        0,
+        1,
+        2,
+        3
+      ],
+      "explicit": true
+    },
+    {
+      "id": "14ac74bf7c503631cbbf625890f7ea67",
+      "name": "D2",
+      "owner": "vertex:3",
+      "historical": [
+        "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(8,1)))",
+        "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(5,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(5,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(8,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::coad(8,gammalooprs::{spenso::index}::hedge(11,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(11,1))"
+      ],
+      "current": [
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(5,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(8,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::coad(8,gammalooprs::{spenso::index}::hedge(11,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(11,1))",
+        "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(5,1))",
+        "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(8,1)))"
+      ],
+      "permutation": [
+        5,
+        4,
+        0,
+        1,
+        2,
+        3
+      ],
+      "explicit": true
+    },
+    {
+      "id": "14ac74bf7c503631cbbf625890f7ea67",
+      "name": "D2",
+      "owner": "edge:2",
+      "historical": [
+        "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(3,1)))",
+        "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(2,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(2,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(3,1))"
+      ],
+      "current": [
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(2,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(3,1))",
+        "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(2,1))",
+        "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(3,1)))"
+      ],
+      "permutation": [
+        3,
+        2,
+        0,
+        1
+      ],
+      "explicit": true
+    },
+    {
+      "id": "14ac74bf7c503631cbbf625890f7ea67",
+      "name": "D2",
+      "owner": "edge:3",
+      "historical": [
+        "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(5,1)))",
+        "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(4,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(4,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(5,1))"
+      ],
+      "current": [
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(4,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(5,1))",
+        "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(4,1))",
+        "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(5,1)))"
+      ],
+      "permutation": [
+        3,
+        2,
+        0,
+        1
+      ],
+      "explicit": true
+    },
+    {
+      "id": "14ac74bf7c503631cbbf625890f7ea67",
+      "name": "D2",
+      "owner": "edge:4",
+      "historical": [
+        "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(7,1)))",
+        "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(6,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(6,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(7,1))"
+      ],
+      "current": [
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(6,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(7,1))",
+        "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(6,1))",
+        "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(7,1)))"
+      ],
+      "permutation": [
+        3,
+        2,
+        0,
+        1
+      ],
+      "explicit": true
+    },
+    {
+      "id": "14ac74bf7c503631cbbf625890f7ea67",
+      "name": "D2",
+      "owner": "edge:5",
+      "historical": [
+        "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(9,1)))",
+        "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(8,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(8,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(9,1))"
+      ],
+      "current": [
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(8,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(9,1))",
+        "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(8,1))",
+        "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(9,1)))"
+      ],
+      "permutation": [
+        3,
+        2,
+        0,
+        1
+      ],
+      "explicit": true
+    },
+    {
+      "id": "c490e590d90aa4c6acda54e116e788a7",
+      "name": "D3",
+      "owner": "vertex:0",
+      "historical": [
+        "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(2,1)))",
+        "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(5,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(2,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(5,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::coad(8,gammalooprs::{spenso::index}::hedge(1,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(1,1))"
+      ],
+      "current": [
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(2,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(5,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::coad(8,gammalooprs::{spenso::index}::hedge(1,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(1,1))",
+        "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(5,1))",
+        "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(2,1)))"
+      ],
+      "permutation": [
+        5,
+        4,
+        0,
+        1,
+        2,
+        3
+      ],
+      "explicit": true
+    },
+    {
+      "id": "c490e590d90aa4c6acda54e116e788a7",
+      "name": "D3",
+      "owner": "vertex:1",
+      "historical": [
+        "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(8,1)))",
+        "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(7,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(7,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(8,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::coad(8,gammalooprs::{spenso::index}::hedge(10,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(10,1))"
+      ],
+      "current": [
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(7,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(8,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::coad(8,gammalooprs::{spenso::index}::hedge(10,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(10,1))",
+        "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(7,1))",
+        "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(8,1)))"
+      ],
+      "permutation": [
+        5,
+        4,
+        0,
+        1,
+        2,
+        3
+      ],
+      "explicit": true
+    },
+    {
+      "id": "c490e590d90aa4c6acda54e116e788a7",
+      "name": "D3",
+      "owner": "vertex:2",
+      "historical": [
+        "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(6,1)))",
+        "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(3,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(3,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(6,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::coad(8,gammalooprs::{spenso::index}::hedge(0,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(0,1))"
+      ],
+      "current": [
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(3,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(6,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::coad(8,gammalooprs::{spenso::index}::hedge(0,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(0,1))",
+        "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(3,1))",
+        "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(6,1)))"
+      ],
+      "permutation": [
+        5,
+        4,
+        0,
+        1,
+        2,
+        3
+      ],
+      "explicit": true
+    },
+    {
+      "id": "c490e590d90aa4c6acda54e116e788a7",
+      "name": "D3",
+      "owner": "vertex:3",
+      "historical": [
+        "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(4,1)))",
+        "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(9,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(4,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(9,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::coad(8,gammalooprs::{spenso::index}::hedge(11,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(11,1))"
+      ],
+      "current": [
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(4,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(9,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::coad(8,gammalooprs::{spenso::index}::hedge(11,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(11,1))",
+        "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(9,1))",
+        "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(4,1)))"
+      ],
+      "permutation": [
+        5,
+        4,
+        0,
+        1,
+        2,
+        3
+      ],
+      "explicit": true
+    },
+    {
+      "id": "c490e590d90aa4c6acda54e116e788a7",
+      "name": "D3",
+      "owner": "edge:2",
+      "historical": [
+        "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(3,1)))",
+        "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(2,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(2,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(3,1))"
+      ],
+      "current": [
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(2,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(3,1))",
+        "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(2,1))",
+        "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(3,1)))"
+      ],
+      "permutation": [
+        3,
+        2,
+        0,
+        1
+      ],
+      "explicit": true
+    },
+    {
+      "id": "c490e590d90aa4c6acda54e116e788a7",
+      "name": "D3",
+      "owner": "edge:3",
+      "historical": [
+        "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(5,1)))",
+        "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(4,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(4,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(5,1))"
+      ],
+      "current": [
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(4,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(5,1))",
+        "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(4,1))",
+        "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(5,1)))"
+      ],
+      "permutation": [
+        3,
+        2,
+        0,
+        1
+      ],
+      "explicit": true
+    },
+    {
+      "id": "c490e590d90aa4c6acda54e116e788a7",
+      "name": "D3",
+      "owner": "edge:4",
+      "historical": [
+        "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(7,1)))",
+        "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(6,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(6,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(7,1))"
+      ],
+      "current": [
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(6,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(7,1))",
+        "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(6,1))",
+        "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(7,1)))"
+      ],
+      "permutation": [
+        3,
+        2,
+        0,
+        1
+      ],
+      "explicit": true
+    },
+    {
+      "id": "c490e590d90aa4c6acda54e116e788a7",
+      "name": "D3",
+      "owner": "edge:5",
+      "historical": [
+        "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(9,1)))",
+        "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(8,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(8,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(9,1))"
+      ],
+      "current": [
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(8,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(9,1))",
+        "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(8,1))",
+        "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(9,1)))"
+      ],
+      "permutation": [
+        3,
+        2,
+        0,
+        1
+      ],
+      "explicit": true
+    }
+  ],
+  "public_payload_decomposition": {
+    "spelling_only": {
+      "payload_equals_current": false,
+      "numerators": 18080972050354831569
+    },
+    "interfaces_only": {
+      "payload_equals_current": false,
+      "numerators": 3665596082484979989
+    },
+    "combined": {
+      "payload_equals_current": true,
+      "numerators": 7142019012713190507
+    }
+  },
+  "historical_diagram_digests": [
+    {
+      "id": "ad0818e3abc13783bfcc2695b849034d",
+      "name": "D0",
+      "key": 13446518621302993431,
+      "frame": 2682793624790118723,
+      "numerator": 12968066664739819109
+    },
+    {
+      "id": "31d0890641674e5ee9afceaff1e22206",
+      "name": "D1",
+      "key": 2649929728826765127,
+      "frame": 98458475986363531,
+      "numerator": 3308007994231738849
+    },
+    {
+      "id": "14ac74bf7c503631cbbf625890f7ea67",
+      "name": "D2",
+      "key": 17603366725561205763,
+      "frame": 2673938410601721807,
+      "numerator": 3942575211090813843
+    },
+    {
+      "id": "c490e590d90aa4c6acda54e116e788a7",
+      "name": "D3",
+      "key": 2039901449409590195,
+      "frame": 4631626377404957471,
+      "numerator": 8525103351450377777
+    }
+  ],
+  "current_diagram_digests": [
+    {
+      "id": "ad0818e3abc13783bfcc2695b849034d",
+      "name": "D0",
+      "key": 13446518621302993431,
+      "frame": 2682793624790118723,
+      "numerator": 15263055022245191247
+    },
+    {
+      "id": "31d0890641674e5ee9afceaff1e22206",
+      "name": "D1",
+      "key": 2649929728826765127,
+      "frame": 98458475986363531,
+      "numerator": 2526424083215185403
+    },
+    {
+      "id": "14ac74bf7c503631cbbf625890f7ea67",
+      "name": "D2",
+      "key": 17603366725561205763,
+      "frame": 2673938410601721807,
+      "numerator": 15232816078721853549
+    },
+    {
+      "id": "c490e590d90aa4c6acda54e116e788a7",
+      "name": "D3",
+      "key": 2039901449409590195,
+      "frame": 4631626377404957471,
+      "numerator": 2062699093479008171
+    }
+  ],
+  "pure_checks": "Reused world/check_cell/derive/validate_cell implementations; no native execution.",
+  "unresolved_original_interface_obligations": [
+    "Ordered interface compatibility at actual downstream consumers after the displayed owner-specific permutations. same_value includes logical order; named multisets and Atom equality alone cannot discharge it.",
+    "Finite from_declared_parts admission/round-trip and consumer-layout correspondence for these exact captured arrays under reversible cooking. No universal free-index/locality/decoder theorem inferred."
+  ],
+  "new_evidence_status": "Finite typed proof supplied separately; INTERFACE_REVIEW_PENDING"
+}

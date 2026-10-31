@@ -1,0 +1,135 @@
+{
+  "status": "PASS_RETAINED_EVIDENCE_BINDINGS",
+  "native_reruns": 0,
+  "typed_helper_reruns": 0,
+  "source_anchors": 24,
+  "actual_SM_commit_source_binding": [
+    {
+      "commit": "605178a65620b104805b012f1edc299710e8a176",
+      "main_blob": "e6af4ec644688e1333064c50e3b157ae631473ee",
+      "relevant_files_checked": 322,
+      "only_relevant_delta": {
+        "crates/feynkit-generator/tests/generation_oracle/main.rs": [
+          "d61a4beebfc1b0d650cd17b001a1fdc6433b60d5",
+          "e6af4ec644688e1333064c50e3b157ae631473ee"
+        ]
+      }
+    }
+  ],
+  "finite_summaries": [
+    {
+      "case": "qed_ee4f_L0",
+      "mode": "None",
+      "graphs": 6,
+      "actual_fold_stages": 42,
+      "owner_pair_plans": 48,
+      "stale_wiring_rejected": 4,
+      "owners": 96,
+      "unaffected": 92,
+      "affected": 4,
+      "native_lowerings_reused": 8,
+      "public_output_ranks": [
+        6,
+        6,
+        6,
+        6,
+        6,
+        6
+      ]
+    },
+    {
+      "case": "qed_ee4f_L0",
+      "mode": "Auto",
+      "graphs": 6,
+      "actual_fold_stages": 42,
+      "owner_pair_plans": 48,
+      "stale_wiring_rejected": 4,
+      "owners": 96,
+      "unaffected": 92,
+      "affected": 4,
+      "native_lowerings_reused": 8,
+      "public_output_ranks": [
+        6,
+        6,
+        6,
+        6,
+        6,
+        6
+      ]
+    },
+    {
+      "case": "xs_qed_eeee_L1",
+      "mode": "None",
+      "graphs": 4,
+      "actual_fold_stages": 40,
+      "owner_pair_plans": 36,
+      "stale_wiring_rejected": 4,
+      "owners": 52,
+      "unaffected": 48,
+      "affected": 4,
+      "native_lowerings_reused": 8,
+      "public_output_ranks": [
+        4,
+        4,
+        4,
+        4
+      ]
+    },
+    {
+      "case": "xs_qed_eeee_L1",
+      "mode": "Auto",
+      "graphs": 4,
+      "actual_fold_stages": 40,
+      "owner_pair_plans": 36,
+      "stale_wiring_rejected": 4,
+      "owners": 52,
+      "unaffected": 48,
+      "affected": 4,
+      "native_lowerings_reused": 8,
+      "public_output_ranks": [
+        4,
+        4,
+        4,
+        4
+      ]
+    },
+    {
+      "case": "xs_qcd_gguu_1pi_L1",
+      "mode": "None",
+      "graphs": 4,
+      "actual_fold_stages": 40,
+      "owner_pair_plans": 288,
+      "stale_wiring_rejected": 64,
+      "owners": 52,
+      "affected": 32,
+      "native_lowerings_reused": 64,
+      "unaffected": 20,
+      "public_output_ranks": [
+        8,
+        8,
+        8,
+        8
+      ]
+    },
+    {
+      "case": "xs_qcd_gguu_1pi_L1",
+      "mode": "Auto",
+      "graphs": 4,
+      "actual_fold_stages": 40,
+      "owner_pair_plans": 288,
+      "stale_wiring_rejected": 64,
+      "owners": 52,
+      "affected": 32,
+      "native_lowerings_reused": 64,
+      "unaffected": 20,
+      "public_output_ranks": [
+        8,
+        8,
+        8,
+        8
+      ]
+    }
+  ],
+  "prior_algebra_successful_batches_reused": 40,
+  "approval": false
+}

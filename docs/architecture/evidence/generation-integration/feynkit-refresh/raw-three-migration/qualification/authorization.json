@@ -1,0 +1,69 @@
+{
+  "schema": "root-authorized-three-token-application/1",
+  "authority": "User/root explicit current task instruction; author already approved; no renewed permission required.",
+  "author": "Lucien Huber <im@lcnbr.ch>",
+  "base": "5ea4c93b79dd33094072d7717e912aa4b05d6689",
+  "new_code": "ffa76ec420642c03349ab756d2d7720ab93c0057",
+  "literal_verdict": "APPROVE_THREE_BOUNDED_LITERAL_MIGRATIONS_WITH_EXPLICIT_REPRESENTATION_AND_RUNTIME_LIMITS",
+  "review_sha256": "c0692180c797034f923ae4bcf0a91712816a67bcf726d088787914c9a4d211e6",
+  "rows": [
+    {
+      "case": "qed_ee4f_L0",
+      "old": "0x7f2a34ae141a6f7c",
+      "new": "0x1d107b2170d73cd2"
+    },
+    {
+      "case": "xs_qed_eeee_L1",
+      "old": "0x8eb2c3186607a1a2",
+      "new": "0x7734a2de85dd54c9"
+    },
+    {
+      "case": "xs_qcd_gguu_1pi_L1",
+      "old": "0x75fbcf2f108240fb",
+      "new": "0x631d8c73b7db146b"
+    }
+  ],
+  "adopted_restrictions": [
+    {
+      "id": "M1/R1",
+      "severity": "MANDATORY SCOPE / nonblocking for these literal decisions",
+      "title": "Accept the explicit representation change and semantic covariance, preserving complete output-axis maps",
+      "assessment": "Historical left-then-right survivor order and current canonical free-axis order are distinct source contracts. The22 source-only same-traversal differing final orders are retained, not recast as c78 executions or failures of the actual current-library replay. This review explicitly accepts that representation change for this numerator-serialization oracle under the finite WP9 standard: complete source expressions and named physical fields are preserved, and their ordered component correspondence is explicit. It does not require identical old positional output arrays. No required in-scope cross-version cached positional-plan reuse was found in the actual named consumer paths. Internal API compatibility is not a repository goal, but this alone would never establish the physical value.",
+      "restriction": "For H[i]=C[p[i]], assign b[p[i]]=a[i]. Recompute named plans or transport every positional operand by its own map AND preserve the output-axis map. No arbitrary stale ProductPlan::apply interchangeability, old/new positional-output identity or historical hidden-history equivalence.",
+      "blocks_three_literal_migration": false
+    },
+    {
+      "id": "M2/R2",
+      "severity": "CONTROL INTERPRETATION / nonblocking",
+      "title": "Twelve flag controls are actual-owner claim binding",
+      "assessment": "is_metric/is_composite are constructor-derived, not independent serialized inputs. All400 actual observations are false/true. The12 executed mutations reject a false claim about the imported owner; baseline boolean negation earns no additional negative-control credit.",
+      "blocks_three_literal_migration": false
+    },
+    {
+      "id": "M3/R3",
+      "severity": "LOW / nonblocking archival reuse issue",
+      "title": "Formatted control generators require additive repair before future reuse",
+      "assessment": "The reviewed post-format literal replacements in prepare_focused_controls.py and prepare_flag_controls.py do not match the formatted runtime-v3 template. No such generator was run in this migration review. The exact executed snapshots, final v4 helper and20 native controls remain bound and usable as retained finite evidence. Root reports an independently assigned additive repair; its completion is not assumed here.",
+      "restriction": "No general runner/generator API approval. Future regeneration must use a coherent retained executed-version set or separately repair and requalify the generators.",
+      "blocks_three_literal_migration": false
+    },
+    {
+      "id": "M4",
+      "severity": "APPLICATION BOUNDARY / required follow-up",
+      "title": "Approval is of three tokens on the exact source blob; no postpatch runtime exists here",
+      "assessment": "Base605178a65620b104805b012f1edc299710e8a176 and evidence descendant5ea4c93b79dd33094072d7717e912aa4b05d6689 share e6af4ec644688e1333064c50e3b157ae631473ee. Refresh integration approval is not inferred. Family workspace physical main.rs has the3 preexisting QED variants and is not a transplant source.",
+      "restriction": "Only a later authorized owner applies the exact3 row-local numerator replacements, keeping all9 prior complete Rows/every other byte. Build/qualify a NEW actual postapplication archive/producer and run the actual selected full-Row assertions, with real selection and no RECORD/update/force-pass bypass. Bind source/compiler/dependencies/ELF/commands/outputs and capture the same physical payloads/modes. Obtain the separately required runtime/integration review.",
+      "blocks_three_literal_decision": false
+    }
+  ],
+  "new_application_scope": "Apply exact three tokens, qualify a new actual archive, 12 selected complete Row identities at1/8/32 and fresh pool1 public payload joins. Current candidate needs NEW independent integration review.",
+  "old_SMINT_N1": "Historical original logs remained inside child writable root. No rewrite. All new command/stdout/stderr records live outside child writable work.",
+  "remaining_gates": [
+    "NEW independent integration review",
+    "groupedAuto math/root aggregation",
+    "full371/other rows and wholeWP3/M-rebuild",
+    "installed-host/API/stubs/browser corrections and qualification",
+    "performance/full-docs/distribution/publication"
+  ],
+  "prohibited": "No generation-integration advance, CI enablement, main/index/frozen-ref/history change, delegation, push/fetch/PR/upload/publication."
+}

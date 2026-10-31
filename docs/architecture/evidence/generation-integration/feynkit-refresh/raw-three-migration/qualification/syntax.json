@@ -1,0 +1,33 @@
+{
+  "Python_AST": {
+    "capture_join.py": "f2ab656a9f8570b35a8014557f38d9463a99d2487e8b9b3d14117c7a03020717",
+    "elf_helpers.py": "d7b332ca98ed3f317c1e7678ad15d949a222ee6053fd022c0ab0c52400241859",
+    "finish.py": "07c9121fa5758cdbbca59cb11208bee9f279a2cd6d532d54051ac90a03e48f08",
+    "guard_apply.py": "2c74c2d67244ab6d9bb05b5fbc38e6850efcd7acd0cdf95ef055e0561dad25b9",
+    "pure.py": "acc7ade39099d63d4097fdaad7ef7d3a5cceb38cd862ac3aeb569d8d56b6c67b",
+    "qualify.py": "c5bfd555605efd07be5cd4dd8d1a5bf4688912452a740b023d51e1b99886d5d7",
+    "run_native.py": "b3b80d2625386a471b880bd68416d7a72bafb70473cfe1cafb8751690c34eca7",
+    "runtime_common.py": "40226070abc84e798eab689cbcb0509f80eba8dc3bca4b61462db9f7e8300969",
+    "runtime_prepare.py": "119b513be477cf42aee1b528f6163a88a5eab8fe661b2f71a40a6c8e1c8e17c0"
+  },
+  "registry_toml": "PASS",
+  "one_matching_Typst_title": true,
+  "pinned_rustfmt_record": {
+    "argv": [
+      "/nix/store/c3bpv60f5wgp4pmgsifaykxk214h6463-rust-stable-with-components-2026-09-03/bin/rustfmt",
+      "--check",
+      "--edition",
+      "2024",
+      "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/feynkit-generator/tests/generation_oracle/main.rs"
+    ],
+    "exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "tool_sha256": "0c922eec8fad715512cb7f0393c0c58fbdddd64c5ed9e7657d125257c0d6f33a",
+    "source_sha256": "6dacf61baca9f13f3e4a6d719f89eaced429fb3cb14c7904dcb41fe4c86b66df",
+    "python_syntax": "all current task-local scripts parse; no bytecode writes",
+    "Clippy_credit": false,
+    "Rust_policy_departures": null
+  },
+  "Clippy_full_docs_credit": false
+}

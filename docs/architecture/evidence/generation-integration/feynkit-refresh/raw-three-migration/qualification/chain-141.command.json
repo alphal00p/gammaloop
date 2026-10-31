@@ -1,0 +1,19 @@
+{
+  "argv": [
+    "nix",
+    "derivation",
+    "show",
+    "/nix/store/77bphvj8pavx2dfjyshwhwdgdfpkmxg1-gammaloop-crate-test-dependencies-c3179818d3c1e5a4-deps-0.1.0.drv"
+  ],
+  "cwd": "/tmp",
+  "license_keys_removed": [
+    "SYMBOLICA_LICENSE",
+    "SYMBOLICA_LICENSE_PATH",
+    "SYMBOLICA_LICENSE_SIGNED"
+  ],
+  "start": "2026-10-31T01:08:45.906207+00:00",
+  "exit": 0,
+  "end": "2026-10-31T01:08:45.951087+00:00",
+  "stdout_sha256": "94f371ad838d04aa42bf16a63bcb1d35e8da1f9b742ee69690b6d8195f85ef5e",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+}

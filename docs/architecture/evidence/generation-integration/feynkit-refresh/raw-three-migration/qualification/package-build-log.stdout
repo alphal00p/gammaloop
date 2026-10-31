@@ -1,0 +1,76 @@
+Running phase: unpackPhase
+@nix { "action": "setPhase", "phase": "unpackPhase" }
+unpacking source archive /nix/store/nxxqyfzfq5gijmr8za6rdf56gyhilb90-source
+source root is source
+Running phase: patchPhase
+@nix { "action": "setPhase", "phase": "patchPhase" }
+Executing configureCargoCommonVars
+decompressing cargo artifacts from /nix/store/kck3a2p03gvd9162cnkl6g96viy1bpp1-gammaloop-crate-test-dependencies-b6f177b7bc15beb1-inputs/target.tar.zst to target
+decompressing cargo artifacts from /nix/store/cx447jb5zb3gxcpslza3gkldr2vs7kah-gammaloop-crate-test-dependencies-b6f177b7bc15beb1-deps-0.1.0/target.tar.zst to target
+Running phase: updateAutotoolsGnuConfigScriptsPhase
+@nix { "action": "setPhase", "phase": "updateAutotoolsGnuConfigScriptsPhase" }
+Running phase: configurePhase
+@nix { "action": "setPhase", "phase": "configurePhase" }
+will append /build/source/.cargo-home/config.toml with contents of /nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/config.toml
+default configurePhase, nothing to do
+Running phase: buildPhase
+@nix { "action": "setPhase", "phase": "buildPhase" }
++++ command cargo --version
+cargo 1.98.1 (797e8a9bc 2026-08-05)
++++ command cargo test --profile ci-optim --no-run --offline -p feynkit-generator
+[1m[92m   Compiling[0m clarabel v0.11.1 (/build/source/vendor/clarabel)
+[1m[33mwarning[0m[1m: unused import: `super::super::traits::*`[0m
+   [1m[94m--> [0mvendor/clarabel/src/solver/core/solver.rs:470:9
+    [1m[94m|[0m
+[1m[94m470[0m [1m[94m|[0m     use super::super::traits::*;
+    [1m[94m|[0m         [1m[33m^^^^^^^^^^^^^^^^^^^^^^^[0m
+    [1m[94m|[0m
+    [1m[94m= [0m[1mnote[0m: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+[1m[33mwarning[0m[1m: hiding a lifetime that's elided elsewhere is confusing[0m
+  [1m[94m--> [0mvendor/clarabel/src/solver/core/kktsolvers/direct/quasidef/datamaps.rs:26:39
+   [1m[94m|[0m
+[1m[94m26[0m [1m[94m|[0m     pub(crate) fn to_sparse_expansion(&self) -> Option<SparseExpansionCone<T>> {
+   [1m[94m|[0m                                       [1m[33m^^^^^[0m            [1m[33m^^^^^^^^^^^^^^^^^^^^^^[0m [1m[33mthe same lifetime is hidden here[0m
+   [1m[94m|[0m                                       [1m[33m|[0m
+   [1m[94m|[0m                                       [1m[33mthe lifetime is elided here[0m
+   [1m[94m|[0m
+   [1m[94m= [0m[1mhelp[0m: the same lifetime is referred to in inconsistent ways, making the signature confusing
+   [1m[94m= [0m[1mnote[0m: `#[warn(mismatched_lifetime_syntaxes)]` on by default
+[1m[96mhelp[0m: use `'_` for type paths
+   [1m[94m|[0m
+[1m[94m26[0m [1m[94m| [0m    pub(crate) fn to_sparse_expansion(&self) -> Option<SparseExpansionCone<[92m'_, [0mT>> {
+   [1m[94m|[0m                                                                            [92m+++[0m
+
+[1m[33mwarning[0m: `clarabel` (lib) generated 2 warnings (run `cargo fix --lib -p clarabel` to apply 2 suggestions)
+[1m[92m   Compiling[0m linnet v0.17.0 (/build/source/crates/linnet)
+[1m[92m   Compiling[0m spenso v0.6.0 (/build/source/crates/spenso)
+[1m[92m   Compiling[0m feynkit-model v0.1.0 (/build/source/crates/feynkit-model)
+[1m[92m   Compiling[0m linnest v0.1.0 (/build/source/crates/linnest)
+[1m[92m   Compiling[0m idenso v0.3.0 (/build/source/crates/idenso)
+[1m[92m   Compiling[0m feynkit-kinematics v0.1.0 (/build/source/crates/feynkit-kinematics)
+[1m[92m   Compiling[0m spenso-hep-lib v0.1.7 (/build/source/crates/spenso-hep-lib)
+[1m[92m   Compiling[0m feynkit-graph v0.1.0 (/build/source/crates/feynkit-graph)
+[1m[92m   Compiling[0m feynkit-amplitude v0.1.0 (/build/source/crates/feynkit-amplitude)
+[1m[92m   Compiling[0m gammaloop-ci-test-binary-dependencies-b6f177b7bc15beb1 v0.1.0 (/build/source/crates/gammaloop-ci-test-binary-dependencies-b6f177b7bc15beb1)
+[1m[92m   Compiling[0m feynkit-generator v0.1.0 (/build/source/crates/feynkit-generator)
+[1m[92m    Finished[0m `ci-optim` profile [optimized] target(s) in 1m 38s
+[1m[92m  Executable[0m unittests src/lib.rs (target/ci-optim/deps/feynkit_generator-9c81726e5f0078f8)
+[1m[92m  Executable[0m tests/amplitude.rs (target/ci-optim/deps/amplitude-0bcbb9273998b3e1)
+[1m[92m  Executable[0m tests/generation_oracle/main.rs (target/ci-optim/deps/generation_oracle-3892f55f31822180)
+[1m[92m  Executable[0m tests/momentum_tensor.rs (target/ci-optim/deps/momentum_tensor-43d9cde778a19275)
+compressing and installing full archive of ci-incremental-target to /nix/store/9hdg5krik1f9mscyqz3i1383axmlrg3w-gammaloop-crate-test-binaries-feynkit-generator-b6f177b7bc15beb1-deps-0.1.0-incremental/target.tar.zst as requested
+                                                                               Read:     0   B  ==>  0%                                                                               Read:  38.5 MiB  ==> 32%                                                                               Read:  88.0 MiB  ==> 36%                                                                               Read:   144 MiB  ==> 33%                                                                               Read:   208 MiB  ==> 27%                                                                               Read:   260 MiB  ==> 29%                                                                               Read:   314 MiB  ==> 33%                                                                               Read:   382 MiB  ==> 35%                                                                               Read:   430 MiB  ==> 33%                                                                               Read:   500 MiB  ==> 32%                                                                               Read:   548 MiB  ==> 32%                                                                               Read:   610 MiB  ==> 34%                                                                               Read:   664 MiB  ==> 33%                                                                               Read:   713 MiB  ==> 34%                                                                               Read:   774 MiB  ==> 34%                                                                               Read:   820 MiB  ==> 34%                                                                               Read:   868 MiB  ==> 35%                                                                               Read:   914 MiB  ==> 35%                                                                               Read:   964 MiB  ==> 35%                                                                               Read:  1.00 GiB  ==> 34%                                                                               Read:  1.06 GiB  ==> 34%                                                                               Read:  1.11 GiB  ==> 35%                                                                               Read:  1.17 GiB  ==> 35%                                                                               Read:  1.22 GiB  ==> 35%                                                                               Read:  1.27 GiB  ==> 34%                                                                               Read:  1.32 GiB  ==> 35%                                                                               Read:  1.38 GiB  ==> 35%                                                                               Read:  1.42 GiB  ==> 35%                                                                               Read:  1.46 GiB  ==> 35%                                                                               Read:  1.52 GiB  ==> 35%                                                                               Read:  1.56 GiB  ==> 36%                                                                               Read:  1.61 GiB  ==> 36%                                                                               Read:  1.66 GiB  ==> 36%                                                                               /*stdin*\            : 35.87%   (  1.67 GiB =>    615 MiB, /nix/store/9hdg5krik1f9mscyqz3i1383axmlrg3w-gammaloop-crate-test-binaries-feynkit-generator-b6f177b7bc15beb1-deps-0.1.0-incremental/target.tar.zst) 
+buildPhase completed in 1 minutes 45 seconds
+Running phase: installPhase
+@nix { "action": "setPhase", "phase": "installPhase" }
+linking previous artifacts /nix/store/cx447jb5zb3gxcpslza3gkldr2vs7kah-gammaloop-crate-test-dependencies-b6f177b7bc15beb1-deps-0.1.0/target.tar.zst to /nix/store/rdjfjq9i5dap927sylh6984zj54xra2z-gammaloop-crate-test-binaries-feynkit-generator-b6f177b7bc15beb1-deps-0.1.0/target.tar.zst
+                                                                               Read:     0   B  ==>  0%                                                                               Read:  32.0 MiB  ==> 32%                                                                               Read:  78.0 MiB  ==> 30%                                                                               Read:   139 MiB  ==> 30%                                                                               Read:   183 MiB  ==> 31%                                                                               Read:   232 MiB  ==> 30%                                                                               Read:   286 MiB  ==> 29%                                                                               Read:   346 MiB  ==> 28%                                                                               Read:   392 MiB  ==> 29%                                                                               Read:   438 MiB  ==> 29%                                                                               Read:   492 MiB  ==> 28%                                                                               Read:   553 MiB  ==> 27%                                                                               /*stdin*\            : 27.23%   (   559 MiB =>    152 MiB, /nix/store/rdjfjq9i5dap927sylh6984zj54xra2z-gammaloop-crate-test-binaries-feynkit-generator-b6f177b7bc15beb1-deps-0.1.0/target.tar.zst) 
+Running phase: fixupPhase
+@nix { "action": "setPhase", "phase": "fixupPhase" }
+shrinking RPATHs of ELF executables and libraries in /nix/store/rdjfjq9i5dap927sylh6984zj54xra2z-gammaloop-crate-test-binaries-feynkit-generator-b6f177b7bc15beb1-deps-0.1.0
+checking for references to /build/ in /nix/store/rdjfjq9i5dap927sylh6984zj54xra2z-gammaloop-crate-test-binaries-feynkit-generator-b6f177b7bc15beb1-deps-0.1.0...
+patching script interpreter paths in /nix/store/rdjfjq9i5dap927sylh6984zj54xra2z-gammaloop-crate-test-binaries-feynkit-generator-b6f177b7bc15beb1-deps-0.1.0
+shrinking RPATHs of ELF executables and libraries in /nix/store/9hdg5krik1f9mscyqz3i1383axmlrg3w-gammaloop-crate-test-binaries-feynkit-generator-b6f177b7bc15beb1-deps-0.1.0-incremental
+checking for references to /build/ in /nix/store/9hdg5krik1f9mscyqz3i1383axmlrg3w-gammaloop-crate-test-binaries-feynkit-generator-b6f177b7bc15beb1-deps-0.1.0-incremental...
+patching script interpreter paths in /nix/store/9hdg5krik1f9mscyqz3i1383axmlrg3w-gammaloop-crate-test-binaries-feynkit-generator-b6f177b7bc15beb1-deps-0.1.0-incremental

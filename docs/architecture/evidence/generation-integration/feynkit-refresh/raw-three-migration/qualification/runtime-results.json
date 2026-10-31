@@ -1,0 +1,228 @@
+{
+  "code": "ffa76ec420642c03349ab756d2d7720ab93c0057",
+  "archive_sha256": "8993e6c8346b84f6d91c7e65c4c4fc5ed83cf6d932e969bb7fc55cbdced20740",
+  "oracle_elf": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/raw-three-migration-20261031/archive-extracted/target/ci-optim/deps/generation_oracle-3892f55f31822180",
+    "sha256": "5d7275d26392474f2490963dd0503f4f46ccebc30572a4f31f7a66228303b30f",
+    "size": 61186320
+  },
+  "results": [
+    {
+      "pool": 1,
+      "exit": 0,
+      "outcomes": [
+        {
+          "case": "xs_qed_eeee_1pi_L1",
+          "status": "passed",
+          "time": "0.280"
+        },
+        {
+          "case": "xs_qed_eemm_L1",
+          "status": "passed",
+          "time": "0.319"
+        },
+        {
+          "case": "xs_qed_eedd_L1",
+          "status": "passed",
+          "time": "0.319"
+        },
+        {
+          "case": "xs_qcd_gguu_1pi_L1",
+          "status": "passed",
+          "time": "0.321"
+        },
+        {
+          "case": "sm_eemm_L0",
+          "status": "passed",
+          "time": "0.321"
+        },
+        {
+          "case": "qed_ee4f_L0",
+          "status": "passed",
+          "time": "0.322"
+        },
+        {
+          "case": "sm_eeww_L0",
+          "status": "passed",
+          "time": "0.323"
+        },
+        {
+          "case": "qed_eemm_L1",
+          "status": "passed",
+          "time": "0.324"
+        },
+        {
+          "case": "xs_qed_eeee_L1",
+          "status": "passed",
+          "time": "0.324"
+        },
+        {
+          "case": "xs_qed_eemm_L2",
+          "status": "passed",
+          "time": "0.391"
+        },
+        {
+          "case": "ym_g6_L0",
+          "status": "passed",
+          "time": "0.887"
+        },
+        {
+          "case": "ctorder_qcd_uugg_L1",
+          "status": "passed",
+          "time": "0.939"
+        }
+      ],
+      "actual_executions": 12,
+      "junit_sha256": "f45d6dd3848c92fb10371848cbee09afa5c72dd1901abb8abc848f1c2c34164d",
+      "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/raw-three-migration-20261031/runs/pool1/command.json",
+      "public_dump_hook_enabled": true
+    },
+    {
+      "pool": 8,
+      "exit": 0,
+      "outcomes": [
+        {
+          "case": "xs_qed_eemm_L1",
+          "status": "passed",
+          "time": "0.084"
+        },
+        {
+          "case": "xs_qed_eeee_1pi_L1",
+          "status": "passed",
+          "time": "0.088"
+        },
+        {
+          "case": "sm_eeww_L0",
+          "status": "passed",
+          "time": "0.088"
+        },
+        {
+          "case": "xs_qed_eeee_L1",
+          "status": "passed",
+          "time": "0.094"
+        },
+        {
+          "case": "sm_eemm_L0",
+          "status": "passed",
+          "time": "0.098"
+        },
+        {
+          "case": "qed_ee4f_L0",
+          "status": "passed",
+          "time": "0.098"
+        },
+        {
+          "case": "xs_qcd_gguu_1pi_L1",
+          "status": "passed",
+          "time": "0.106"
+        },
+        {
+          "case": "qed_eemm_L1",
+          "status": "passed",
+          "time": "0.113"
+        },
+        {
+          "case": "xs_qed_eedd_L1",
+          "status": "passed",
+          "time": "0.130"
+        },
+        {
+          "case": "xs_qed_eemm_L2",
+          "status": "passed",
+          "time": "0.183"
+        },
+        {
+          "case": "ym_g6_L0",
+          "status": "passed",
+          "time": "0.469"
+        },
+        {
+          "case": "ctorder_qcd_uugg_L1",
+          "status": "passed",
+          "time": "0.492"
+        }
+      ],
+      "actual_executions": 12,
+      "junit_sha256": "ea95acaac9a9a185dfb835a7da68e1fefed26b92b731561e610fb70239635df0",
+      "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/raw-three-migration-20261031/runs/pool8/command.json",
+      "public_dump_hook_enabled": false
+    },
+    {
+      "pool": 32,
+      "exit": 0,
+      "outcomes": [
+        {
+          "case": "xs_qed_eeee_1pi_L1",
+          "status": "passed",
+          "time": "0.102"
+        },
+        {
+          "case": "sm_eemm_L0",
+          "status": "passed",
+          "time": "0.112"
+        },
+        {
+          "case": "xs_qed_eeee_L1",
+          "status": "passed",
+          "time": "0.115"
+        },
+        {
+          "case": "xs_qed_eemm_L1",
+          "status": "passed",
+          "time": "0.118"
+        },
+        {
+          "case": "xs_qed_eedd_L1",
+          "status": "passed",
+          "time": "0.136"
+        },
+        {
+          "case": "qed_ee4f_L0",
+          "status": "passed",
+          "time": "0.136"
+        },
+        {
+          "case": "xs_qcd_gguu_1pi_L1",
+          "status": "passed",
+          "time": "0.144"
+        },
+        {
+          "case": "sm_eeww_L0",
+          "status": "passed",
+          "time": "0.153"
+        },
+        {
+          "case": "qed_eemm_L1",
+          "status": "passed",
+          "time": "0.153"
+        },
+        {
+          "case": "xs_qed_eemm_L2",
+          "status": "passed",
+          "time": "0.194"
+        },
+        {
+          "case": "ym_g6_L0",
+          "status": "passed",
+          "time": "0.500"
+        },
+        {
+          "case": "ctorder_qcd_uugg_L1",
+          "status": "passed",
+          "time": "0.504"
+        }
+      ],
+      "actual_executions": 12,
+      "junit_sha256": "850a50ea90c638218d29157ce879d9a6f33382156f40a06a67f2bb2f3d99a78e",
+      "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/raw-three-migration-20261031/runs/pool32/command.json",
+      "public_dump_hook_enabled": false
+    }
+  ],
+  "expected_selected_executions": 36,
+  "actual_executions": 36,
+  "passes": 36,
+  "failures": 0,
+  "retries": 0,
+  "skipped_credit": 0,
+  "finite_math_scope": "Existing three separately approved pool1 None/Auto proofs only; pools8/32 runtime only."
+}

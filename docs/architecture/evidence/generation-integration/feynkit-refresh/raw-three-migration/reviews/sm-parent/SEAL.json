@@ -1,0 +1,19 @@
+{
+  "schema": "independent-sm-eeww-integration-review-seal/1",
+  "verdict": "APPROVE_BOUNDED_SM_EEWW_INTEGRATION",
+  "candidate": "5ea4c93b79dd33094072d7717e912aa4b05d6689",
+  "code": "605178a65620b104805b012f1edc299710e8a176",
+  "evidence_revision": "70f48f684ec4e465907ff125fa462b55ee0d67ec",
+  "files": 106,
+  "review_sha256": "5564bed2f642ba72a9208858d86292f8b9326fb1c55f24ef23a07d027a93624b",
+  "manifest_sha256": "287808ef6b9a27293ad1617144ec0666327c07a796aed3dbaa7a3f06d06a43d1",
+  "exclusions": [
+    "SHA256SUMS",
+    "SEAL.json",
+    "write-review.stdout",
+    "write-review.stderr"
+  ],
+  "exclusion_reason": "Seal/manifest self-reference and current writer streams only.",
+  "candidate_unchanged": true,
+  "owned_processes_remaining": []
+}

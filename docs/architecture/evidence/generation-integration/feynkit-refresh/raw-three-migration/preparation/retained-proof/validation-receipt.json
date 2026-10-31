@@ -1,0 +1,545 @@
+{
+  "schema": "raw-three-finite-interface-proof/1",
+  "created": "2026-10-31T00:15:57.780352+00:00",
+  "status": "FINITE_MISSING_OBLIGATIONS_DISCHARGED_PENDING_NEW_INDEPENDENT_REVIEW",
+  "approval": false,
+  "migration_approval": false,
+  "self_review_or_approval": false,
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families",
+  "only_write_root": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1",
+  "source_provenance": {
+    "historical": {
+      "revision": "2b1ef4f07a44bc061bcc97c378bbdd9c41cb0e94",
+      "Cargo_lock_blob": "3fb57ae3f63f758f9488e0a670d3077af3aeb001",
+      "Cargo_lock_sha256": "29abed8df55accfd70d23546274008d42a694c26018b58c7a76bba2e907604b5"
+    },
+    "target": {
+      "revision": "f47f27213a1c55291239c9bc0f334a7ea1cd1cc1",
+      "Cargo_lock_blob": "ceae72cbcbf552aff4b969c1ce81a8930dfc03ea",
+      "Cargo_lock_sha256": "e111296686b2573ac88b9274cac2bf1e10aad07669f8fc6d243ac5b47d985ae0"
+    },
+    "proof": {
+      "revision": "5ba04864ca506e259d9eef4a54f65acdd8323fc2",
+      "Cargo_lock_blob": "ceae72cbcbf552aff4b969c1ce81a8930dfc03ea",
+      "Cargo_lock_sha256": "e111296686b2573ac88b9274cac2bf1e10aad07669f8fc6d243ac5b47d985ae0"
+    },
+    "built": {
+      "revision": "5ea149ffd88ae3afc4072a38c0871c1329be8424",
+      "Cargo_lock_blob": "ceae72cbcbf552aff4b969c1ce81a8930dfc03ea",
+      "Cargo_lock_sha256": "e111296686b2573ac88b9274cac2bf1e10aad07669f8fc6d243ac5b47d985ae0"
+    },
+    "metadata": {
+      "revision": "48d0b98b97b368b2a2f58abe67cb19dddec623df",
+      "Cargo_lock_blob": "ceae72cbcbf552aff4b969c1ce81a8930dfc03ea",
+      "Cargo_lock_sha256": "e111296686b2573ac88b9274cac2bf1e10aad07669f8fc6d243ac5b47d985ae0"
+    }
+  },
+  "kernel": "8eb7c3729d6abefc916decc1bdf0c06536f8af80",
+  "source_selection": "Immutable Git sources/blobs, not current workspace ancestry.322 relevant files and the representation macro equal across f47/5ba/5ea.",
+  "frozen_input_packet": {
+    "handoff": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-four-migration-preparation-20261030-r1/handoff.json",
+      "sha256": "d696b93c4b85fb3b733f09cd57f833858efac8a672ee1a4471f5fe87dbb49544",
+      "bytes": 152573
+    },
+    "seal": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-four-migration-preparation-20261030-r1/SEAL.json",
+      "sha256": "cfaf891b7c88327a11999c8b252edeecba4262c9b075fa3b4aaef5683f38ca6a",
+      "bytes": 884
+    },
+    "source_boundaries": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-four-migration-preparation-20261030-r1/source-boundaries.json",
+      "sha256": "373110bfd8c339de1275268234c747f783f5dc13adff30adb5cecce004470b00",
+      "bytes": 8070
+    }
+  },
+  "cases": [
+    {
+      "case": "qed_ee4f_L0",
+      "frozen_candidate": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-four-migration-preparation-20261030-r1/candidates/qed_ee4f_L0.json",
+        "sha256": "921a32543f7f5b9688c6fe76dec9ce74427f0f5f8b56b6ca4df46a87b6178f25"
+      },
+      "scope": {
+        "graphs": 6,
+        "owners_per_mode": 96,
+        "classes": [
+          "None",
+          "Auto"
+        ],
+        "classes_obligation": "independent cells",
+        "grouping": "None",
+        "pool": 1
+      },
+      "modes": [
+        {
+          "case": "qed_ee4f_L0",
+          "mode": "None",
+          "owners": 96,
+          "affected": 4,
+          "unaffected": 92,
+          "actual_fold_stages": 42,
+          "graphs": 6,
+          "owner_pair_plans": 48,
+          "stale_wiring_rejected": 4,
+          "public_output_ranks": [
+            6,
+            6,
+            6,
+            6,
+            6,
+            6
+          ],
+          "status": "finite admission/roundtrip and named-consumer transport established, pending independent review"
+        },
+        {
+          "case": "qed_ee4f_L0",
+          "mode": "Auto",
+          "owners": 96,
+          "affected": 4,
+          "unaffected": 92,
+          "actual_fold_stages": 42,
+          "graphs": 6,
+          "owner_pair_plans": 48,
+          "stale_wiring_rejected": 4,
+          "public_output_ranks": [
+            6,
+            6,
+            6,
+            6,
+            6,
+            6
+          ],
+          "status": "finite admission/roundtrip and named-consumer transport established, pending independent review"
+        }
+      ],
+      "admission_roundtrip_obligation": "DISCHARGED_FOR_ENUMERATED_CAPTURED_OWNERS_PENDING_INDEPENDENT_REVIEW",
+      "consumer_obligation": "DISCHARGED_AS_TYPED_OWNER_TRANSPORT_AT_ENUMERATED_SOURCE_CONSUMERS_PENDING_INDEPENDENT_REVIEW",
+      "migration_approval": false,
+      "token_change": false
+    },
+    {
+      "case": "xs_qed_eeee_L1",
+      "frozen_candidate": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-four-migration-preparation-20261030-r1/candidates/xs_qed_eeee_L1.json",
+        "sha256": "51ea337f15f30937b84399d3e9d81c5d52d250238877b8f1ad2ad05b23480f2f"
+      },
+      "scope": {
+        "graphs": 4,
+        "owners_per_mode": 52,
+        "classes": [
+          "None",
+          "Auto"
+        ],
+        "classes_obligation": "independent cells",
+        "grouping": "None",
+        "pool": 1
+      },
+      "modes": [
+        {
+          "case": "xs_qed_eeee_L1",
+          "mode": "None",
+          "owners": 52,
+          "affected": 4,
+          "unaffected": 48,
+          "actual_fold_stages": 40,
+          "graphs": 4,
+          "owner_pair_plans": 36,
+          "stale_wiring_rejected": 4,
+          "public_output_ranks": [
+            4,
+            4,
+            4,
+            4
+          ],
+          "status": "finite admission/roundtrip and named-consumer transport established, pending independent review"
+        },
+        {
+          "case": "xs_qed_eeee_L1",
+          "mode": "Auto",
+          "owners": 52,
+          "affected": 4,
+          "unaffected": 48,
+          "actual_fold_stages": 40,
+          "graphs": 4,
+          "owner_pair_plans": 36,
+          "stale_wiring_rejected": 4,
+          "public_output_ranks": [
+            4,
+            4,
+            4,
+            4
+          ],
+          "status": "finite admission/roundtrip and named-consumer transport established, pending independent review"
+        }
+      ],
+      "admission_roundtrip_obligation": "DISCHARGED_FOR_ENUMERATED_CAPTURED_OWNERS_PENDING_INDEPENDENT_REVIEW",
+      "consumer_obligation": "DISCHARGED_AS_TYPED_OWNER_TRANSPORT_AT_ENUMERATED_SOURCE_CONSUMERS_PENDING_INDEPENDENT_REVIEW",
+      "migration_approval": false,
+      "token_change": false
+    },
+    {
+      "case": "xs_qcd_gguu_1pi_L1",
+      "frozen_candidate": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-four-migration-preparation-20261030-r1/candidates/xs_qcd_gguu_1pi_L1.json",
+        "sha256": "be2a3a18417c0eefa6868c1b03f5967f80f1b512a4af680e733421508bb45bda"
+      },
+      "scope": {
+        "graphs": 4,
+        "owners_per_mode": 52,
+        "classes": [
+          "None",
+          "Auto"
+        ],
+        "classes_obligation": "independent cells",
+        "grouping": "None",
+        "pool": 1
+      },
+      "modes": [
+        {
+          "case": "xs_qcd_gguu_1pi_L1",
+          "mode": "None",
+          "owners": 52,
+          "affected": 32,
+          "unaffected": 20,
+          "owner_pair_plans": 288,
+          "stale_wiring_rejected": 64,
+          "actual_fold_stages": 40,
+          "graphs": 4,
+          "public_output_ranks": [
+            8,
+            8,
+            8,
+            8
+          ],
+          "status": "finite admission/roundtrip and named-consumer transport established, pending independent review"
+        },
+        {
+          "case": "xs_qcd_gguu_1pi_L1",
+          "mode": "Auto",
+          "owners": 52,
+          "affected": 32,
+          "unaffected": 20,
+          "owner_pair_plans": 288,
+          "stale_wiring_rejected": 64,
+          "actual_fold_stages": 40,
+          "graphs": 4,
+          "public_output_ranks": [
+            8,
+            8,
+            8,
+            8
+          ],
+          "status": "finite admission/roundtrip and named-consumer transport established, pending independent review"
+        }
+      ],
+      "admission_roundtrip_obligation": "DISCHARGED_FOR_ENUMERATED_CAPTURED_OWNERS_PENDING_INDEPENDENT_REVIEW",
+      "consumer_obligation": "DISCHARGED_AS_TYPED_OWNER_TRANSPORT_AT_ENUMERATED_SOURCE_CONSUMERS_PENDING_INDEPENDENT_REVIEW",
+      "migration_approval": false,
+      "token_change": false
+    }
+  ],
+  "SM_excluded": true,
+  "pipeline": [
+    {
+      "stage": "case/model/request/options/Run",
+      "historical": "Exact historical captured model, request/classes, options, GroupingNone, Run pool1.",
+      "current": "Same complete model/request/options/Run per mode; target relevant source and root lock equal proof/built source by immutable blobs.",
+      "classification": "Exact finite input equality; whole upstream implementation is not asserted identical."
+    },
+    {
+      "stage": "enumeration and Classes",
+      "historical": "Particle-only and Auto own enumeration and report.",
+      "current": "Same canonical-key/id/frame/weight diagram domain after independent mode matching; Auto counters/order may differ from None.",
+      "classification": "Observed discrete identity within each route pair; no enumeration theorem or pool8/32 credit."
+    },
+    {
+      "stage": "physical frame/rule binding",
+      "historical": "Exact particles, interactions, incidence, half-edge order, routing, cuts and source/group factors.",
+      "current": "Equal after removing only tensor expressions/interfaces; equality of complete payload restored by exact spelling-plus-interface decomposition.",
+      "classification": "Last semantically shared finite boundary. Existing reviewed owner/model/local-factor arguments are reused only at identical inputs."
+    },
+    {
+      "stage": "tensor admission and construction",
+      "historical": "Reversible cooked index payloads, historical inference/canonical_ports; raw owner strings may contain cooked symbols.",
+      "current": "Native-index reversible admission, retained templates via NumeratorOwner/NumeratorInstantiation/NumeratorTemplate; interaction and edge owners call canonicalize_named_interface.",
+      "classification": "First source boundary capable of changing representation. Historical raw-to-decoded association stays capture-bound."
+    },
+    {
+      "stage": "frame finalization and owner transport",
+      "historical": "Historical index relabeling and inferred logical orders.",
+      "current": "NumeratorInterface::translate retains index identities, collision history and logical layout during frame relabeling.",
+      "classification": "First observed raw strings differ (cooked versus decoded/native); mapped decoded expressions are literal equal for every owner. No distribution, trace or physical/numeric substitution."
+    },
+    {
+      "stage": "graph numerator and projector",
+      "historical": "Prefactor times vertex and edge factors, separate external-state projector.",
+      "current": "Same formal local factors and prefactors under the exact injective symbol map; existing approved aggregate proofs retain their factorization.",
+      "classification": "Exact prior local/aggregate results and current token-level identity. Aggregate Atom equality cannot establish ordered interface equivalence."
+    },
+    {
+      "stage": "GroupingNone and naming",
+      "historical": "Singleton source groups and exact signed factors; NamingD.",
+      "current": "Same singleton groups/source factors within each mode; actual mode matching records D5/D3 transport for QED amplitude.",
+      "classification": "No GroupingIdentical/Auto grouped claim. Other9 None Row fields verified exactly, not presumed."
+    },
+    {
+      "stage": "public serialization",
+      "historical": "NumeratorInterface::export emits expression and omits metadata when re-admission recovers logical slots.",
+      "current": "SM whole payload differs by three source-defined symbols only. QED adds four vertex arrays per cell. QCD adds32 arrays per payload/mode (16 edges,16 vertices).",
+      "classification": "First differing exported payload boundary. Convention historical[i] == current[perm[i]]; QED [1,0,2], QCD edge [3,2,0,1], vertex [5,4,0,1,2,3]."
+    },
+    {
+      "stage": "public consumption",
+      "historical": "Historical inferred interfaces are historical logical values.",
+      "current": "from_serde calls NumeratorInterface::admit; arrays become ordered declared slots; same_value compares expression AND logical slots. Graph consumers use typed multiply; explicit plans/alignment can consume positions.",
+      "classification": "Source contract traced. SM no changed slot order is checked finitely. QED/QCD ordered consumer compatibility remains unproved and blocks their proposals."
+    },
+    {
+      "stage": "census/Row assertion",
+      "historical": "Historical None census reproduces unchanged ten-field literal.",
+      "current": "Current None census reproduces actual failed Summary; exact byte deltas yield only numerators. Auto has its own capture and derived Row, never an asserted native literal.",
+      "classification": "FNV/rational bookkeeping, original stderr and complete census companions independently recomputed here. Hash equality is not mathematics."
+    }
+  ],
+  "smallest_matrix": "3cases x historical/current x independent ClassesNone/Auto; GroupingNone,pool1. Native missing-boundary validation has6 mode cells.",
+  "proof_steps": [
+    "Finite hypotheses: exact frozen graph/model/request/mode and every formal owner expression match under only the approved injective whole-symbol map. Source-defined slot types and metric conventions are separately checked; native tag tolerance is not a definition proof.",
+    "For every owner, historical slot H[i] equals current C[p[i]] as the complete typed field, including representation, dimension, duality, hedge owner and lane. Port incidence is checked against the serialized half-edge/endpoint/particle/rule-slot geometry. Every free field is named, repeat-free, and the actual native declared admission validates scopes and multiplicities.",
+    "For arbitrary old local components a define current b by b[p[i]]=a[i]. This bijection assigns identical components to every identical typed name in the unchanged expression. The finite expression has the same ordered leaf arguments and scalar factors, internal binder/metric data and scoped contractions. Structural evaluation therefore gives identical local values at all corresponding component tuples, with arbitrary formal scalar data, without expansion, Dirac tracing or numerical substitution. This is a source-defined physical-field covariance proof, not a sampling claim.",
+    "The native owning permuted API changes only named layout and establishes exact same_value after this justified permutation. Untransported same_value is false for all80 changed owners and true for all320 unchanged owners. The complete native canonical-to-logical maps commute with the inverse permutation.",
+    "Actual product_plan maps typed canonical matches to logical positions. The old pair (i,j) transports to (p_left[i],p_right[j]); free named survivors have canonical field order. The744 native owner-pair plans agree by physical identities; stale raw positional reuse changes wiring in144 explicit witnesses and preserves it in600 holdouts.",
+    "Actual graph geometry selects the same factors in GraphExpressions. All244 stages of the full-selection/empty-exclusion typed fold and28 public numerator_of calls agree, with full free-axis maps. All28 derived fragment_numerator/multiply_many paths agree. Source merge_named uses exact type/dimension/index keys and retained occurrence records; logical position contributes only source diagnostics. No exhaustive subset execution is claimed.",
+    "Actual into_network lowering is exercised on both routes for all80 affected owners, checks the exact dangling typed fields and retains ordered layouts. No component arithmetic is executed. Unchanged projector/prefactor and other owner boundaries are separately verified; the named-product argument preserves their later typed combination."
+  ],
+  "validation": {
+    "owner_mode_entries": 400,
+    "affected": 80,
+    "unaffected": 320,
+    "whole_graph_pairs": 28,
+    "declared_roundtrip": "all400 owners including all80 affected explicit declarations",
+    "actual_component_lowerings": 160,
+    "component_arithmetic": false,
+    "native_physical_owner_pair_plans": 744,
+    "stale_wiring_semantic_witnesses": 144,
+    "stale_wiring_accepted_holdouts": 600,
+    "actual_fold_stages": 244,
+    "native_fragment_and_subgraph_paths": "28each",
+    "baseline_negative_controls": "80each duplicate/omitted/wrong-index/wrong-dimension typed admission errors; wrong-permutation checks; QED self-inverse16 accepted holdouts",
+    "focused_final_controls": {
+      "count": 20,
+      "actual_other_owner": 6,
+      "cofund_dual": 2,
+      "altered_metric_claim": 6,
+      "altered_composite_claim": 6,
+      "classification": "Exact intended semantic predicate matched; setup/parse errors excluded"
+    },
+    "prior_native_batches": {
+      "all72_hash_bindings_verified": true,
+      "in_scope": 40,
+      "SM_not_credited": 32,
+      "rerun": false,
+      "typed_admission_credit_from_old_batches": false
+    },
+    "native_executions_total": 43,
+    "explanation": "v1setup failure; v3baseline+20controls; final v4import-style-only baseline+same20controls. No old algebra suite repeated."
+  },
+  "helper": {
+    "one_diagnostic_program_versions_retained": true,
+    "final_source": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/interface_probe_v4.rs",
+      "sha256": "362a7fa3edce435e7957350e8f2b97da6e92a1bead4a1a450953ae6cb095afd4",
+      "bytes": 15720
+    },
+    "final_ELF": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/build-v4/raw_three_interface_probe",
+      "sha256": "f54f28b032308dbd040958945fb4895efde0ff4fe0a9fa276481a23267349ef6",
+      "bytes": 47764736
+    },
+    "qualified_units": 452,
+    "environment": "Pinned Nix-derived rustc/linker/native search against readonly qualified current8eb units. Diagnostic compile flags are distinct, no producer/profile/feature identity fabricated.",
+    "build_license_variables": "SYMBOLICA_LICENSE, SYMBOLICA_LICENSE_PATH, SYMBOLICA_LICENSE_SIGNED all absent",
+    "runtime": "Fresh empty-root no-network bwrap, exact program/input/runtime closure readonly, only new output writable. Existing license via memory/anonymous pipe/immediate native exec only. No value/hash/file snapshot of license.",
+    "Nix_invocations": 0,
+    "production_changes": false
+  },
+  "reused_reviews": [
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-small-qed-fresh8eb-math-opus-20261030T192901Z-3624403/review.json",
+      "sha256": "b5f46f1b682a5f5ed8191bcc591003d4d553173e105c26b88094ae7ba7660433",
+      "verdict": "APPROVE_SCOPE_B",
+      "scope": "Bounded preparation only: qed_ee4f_L0 (6 graphs/96 owners) and xs_qed_eeee_L1 (4 graphs/52 owners), Classes None and Auto independently, Grouping None, captured pool 1, fresh 5ea/community-8eb producer captures joined to frozen historical 2b1ef4/c78. Not an approval to change any literal, of the other 71/73 rows, pooled 8/32, FeynKit integration/WP3, CI, full docs/source/runtime or combined approval. Scope A (build/provenance) and the separate source Opus review remain pending and are not inferred.",
+      "grants_this_migration_approval": false
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-small-gauge-fresh8eb-math-opus-20261030T192536Z-3568994/review.json",
+      "sha256": "1591408caad7566439fcd54a1c76398691473bb4e41c59ddd3cb85a5e1337823",
+      "verdict": "REQUEST_CHANGES",
+      "scope": "B: mathematics/control review of two separate finite preparations; no migration, no combined FeynKit/WP3 approval",
+      "grants_this_migration_approval": false
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-raw-four-dispositions-opus-20261030T202304Z-196212/review.json",
+      "sha256": "6e4410dd16ef6c2366b08793af0e835c21e55526bf124a2d3581283c32f1a9a2",
+      "verdict": "APPROVE_CORRECTED_SCOPE_B_PREPARATIONS",
+      "scope": null,
+      "grants_this_migration_approval": false
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-feynkit-refresh-shared-provenance-opus-20261030T193404Z-3c0453ff/review.json",
+      "sha256": "565caeace0112a30fb9118f94b2bb759e4267d2b802395c314e485b89b4b2b70",
+      "verdict": "APPROVE_SHARED_SCOPE_A",
+      "scope": "Shared Scope A provenance/runtime/evidence only, serving the twelve-case pool1 characterization and the provenance of BOTH new raw certificate lanes (QED r3, gauge r3). NOT source reconciliation, mathematics/native-control, ScopeB lane, migration, combined or integration approval.",
+      "grants_this_migration_approval": false
+    }
+  ],
+  "semantic_bug_found": false,
+  "remaining_limits": [
+    "Root must assign NEW independent review of these three separate finite interface proofs; no migration/literal/expectation approval.",
+    "Historical raw/cooked/decoded association remains the original approved capture premise. New native execution is current8eb only, not a new c78 run.",
+    "No universal decoder/free-index/locality/hidden-history/future-collision theorem. Exact same_value does not certify arbitrary future cached facts.",
+    "Positional consumers must transport each operand or recompute its named plan. This proof explicitly rejects an unconditional positional-interchangeability claim.",
+    "Native component lowering is a real owner-boundary check, not a numerical component proof. Physical-field covariance follows from the source-defined arbitrary-component assignment argument.",
+    "Only the full-selection empty-exclusion graph fold was executed. Unchanged selection geometry and the finite named-factor argument explain other fixed selections; they were not exhaustively run.",
+    "No broader Auto, grouped/pooled/other-row/runtime/WP3/combined approval. Prior ten-field Row reconstruction is reused and no token was changed.",
+    "No Cargo/Clippy producer build for standalone diagnostics; pinned rustfmt, warning-free rustc, Ruff, Python syntax and Typst rendering pass."
+  ],
+  "artifacts": {
+    "matrix.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/matrix.json",
+      "sha256": "9c42111889f4d4cc4c6adf229f6dad2c70b91c57834073821b15c066f0769189",
+      "bytes": 11274
+    },
+    "owner-boundary-proof.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/owner-boundary-proof.json",
+      "sha256": "3a1842008e3538b006bcc9a5c86a17c9e70cf7e1ef496b83575dce39dad176d1",
+      "bytes": 1705491
+    },
+    "geometry-proof.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/geometry-proof.json",
+      "sha256": "723a6a32cf0b3944a34e892c60838e881c531e76fc7d6ad802f85ff478b1b2b2",
+      "bytes": 888075
+    },
+    "source-proof-boundaries.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/source-proof-boundaries.json",
+      "sha256": "1529f067fbe2e021a0d1fb751c0157ccc7408abf0b7b40bd779c806c37f6f74e",
+      "bytes": 10510
+    },
+    "representation-source-proof.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/representation-source-proof.json",
+      "sha256": "a2fb64a09a5e6fc8eb67ca7e503d35b3ed7c1f46aa5cf6e9ebb8ff69a068108d",
+      "bytes": 6102
+    },
+    "source-equivalence.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/source-equivalence.json",
+      "sha256": "f9e8999df8f5b2cfcc622042170ff4b693121c4f5452ef448655658f87c53b23",
+      "bytes": 91640
+    },
+    "source-inventory.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/source-inventory.json",
+      "sha256": "72ade449d445a0043f3e78971de91a93f1330dda85612eceff9ab56a3266f197",
+      "bytes": 180252
+    },
+    "native-reuse-verified.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/native-reuse-verified.json",
+      "sha256": "0d1bfa9794996fe6deb1a5edc8a5b868813cf0a7cb2c4410fd2ad0ee8a812fdd",
+      "bytes": 112045
+    },
+    "validation-summary.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/validation-summary.json",
+      "sha256": "fee4f7064d8e0c4013276ca4c8df5f96d8735c38ce98855a647fbc1656d66c8f",
+      "bytes": 2495
+    },
+    "semantic-controls.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/semantic-controls.json",
+      "sha256": "3aa09410ad76c3334a9558f87b172e25633417eeee7c126e05e8506f478a4583",
+      "bytes": 275654
+    },
+    "final-controls-predeclared-v4.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/final-controls-predeclared-v4.json",
+      "sha256": "271f370b9b1bf7acb180081de7cd3f2e16a20559ce4aba2932d5a6e0ec1d9e2e",
+      "bytes": 38620
+    },
+    "final-controls-results-v4.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/final-controls-results-v4.json",
+      "sha256": "95e82d2db4490956b4e46369e885a38caebf47daecb14e8c35970dd572c971bb",
+      "bytes": 9692
+    },
+    "precompile-design-manifest-v4.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/precompile-design-manifest-v4.json",
+      "sha256": "8331c470ea52b8a30d722e8fee2de45dfa2ee98eea8432c1eaf8849e3605c791",
+      "bytes": 222088
+    },
+    "build-command-start-v4.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/build-command-start-v4.json",
+      "sha256": "23a10798064bda29d76fd8c3cbc7546c74ad155fbf0083d1b6a5622959c1592d",
+      "bytes": 6069
+    },
+    "build-command-result-v4.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/build-command-result-v4.json",
+      "sha256": "f26dffcc8034cc6cfcb58ba54902d914f052aba279810b2b97b780ddcbc22cbf",
+      "bytes": 2514
+    },
+    "runtime-qualification-v4.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/runtime-qualification-v4.json",
+      "sha256": "c839a321ca4ac73d4450dabd4c0fecfe026bc9237c1b43889f7d30661b94588b",
+      "bytes": 9253
+    },
+    "runtime-v4/command-start.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/runtime-v4/command-start.json",
+      "sha256": "568940967990de931b37c6bac11e1d2b01c416c1c11287f343bcabdcb575774f",
+      "bytes": 6627
+    },
+    "runtime-v4/command-result.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/runtime-v4/command-result.json",
+      "sha256": "2a409be66538f324464e7eb91c830ffb9ffdac716f93190a43be129ee7a87a57",
+      "bytes": 3592
+    },
+    "runtime-v4/results.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/runtime-v4/results.json",
+      "sha256": "936641124bf3ef8a0949e2907bfec5d3236dbcb13412ec4eb373f113cab2d85d",
+      "bytes": 2224165
+    },
+    "helper-style-invariance.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/helper-style-invariance.json",
+      "sha256": "7cc71b8a0e1165bc64f0e6433181661b7ae1fa6aee198b268936fcb1ac1d7960",
+      "bytes": 556
+    },
+    "python-format-history.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/python-format-history.json",
+      "sha256": "f883b3a9f3a0dcdc3ad1176b8e964f06ed5d0505d367cc635f7f4a203455f830",
+      "bytes": 50901
+    },
+    "execution-source-resolution.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/execution-source-resolution.json",
+      "sha256": "5d8268ec53735bc22682bcb241d6c3e3407d587a2f51c984b8bd25f01d4adfec",
+      "bytes": 56631
+    },
+    "guard-start.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/guard-start.json",
+      "sha256": "4d9acb782553cb643cf3c1134f3b049e03cfe70e7fc59d0f8dc640c98d60f1de",
+      "bytes": 3444776
+    },
+    "guard-final.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/guard-final.json",
+      "sha256": "c5ab3bf0487347154df54488f7c3ed6aa2bff7c32ac817a53cad6a41b93bf2aa",
+      "bytes": 1105
+    },
+    "tool-validation.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/tool-validation.json",
+      "sha256": "4d4ef89c3d4dc1c750ba2cb87e69df9b43f98d8ab4f9c159b5a2330116f27547",
+      "bytes": 11875
+    },
+    "report.typ": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/report.typ",
+      "sha256": "681a6b2ed9b9c442ae9565ba69965f37783c4d7251a699825d43d27b75efe230",
+      "bytes": 11950
+    },
+    "report.pdf": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/report.pdf",
+      "sha256": "54aa7a802a5fd98870a7611168857a57944316f8d83e77cfdfdf2b9b752c2a8c",
+      "bytes": 60862
+    }
+  },
+  "retention": "Keep complete new ignored packet, exact executed source versions, successful/failed helper versions and outputs, frozen source copies, proofs and runtime/control records for root independent review. No background process remains. Existing workspace retained; no new workspace, delegation, named reference, index or JJ/source/expectation operation was issued."
+}

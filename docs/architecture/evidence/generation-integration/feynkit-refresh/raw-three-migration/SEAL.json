@@ -1,0 +1,19 @@
+{
+  "schema": "raw-three-migration-evidence-seal/1",
+  "status": "NEW_INDEPENDENT_INTEGRATION_REVIEW_REQUIRED",
+  "code_commit": "ffa76ec420642c03349ab756d2d7720ab93c0057",
+  "accepted_base": "5ea4c93b79dd33094072d7717e912aa4b05d6689",
+  "manifest_sha256": "71bdef125ae5cced156067119e5cc288e509c01be2554f587d1a62f286931e17",
+  "receipt_sha256": "4bcae2e48322715e4e274a3383afedad48b80d62ffcca08fb5fb1062bbc854ef",
+  "capture_joins_sha256": "3583f0a534a169e3e1ca0c533ad9466bcc8ddbd7fafd4d4730c5dda45a52caa2",
+  "canonical_note_sha256": "1fb023f01c57ecc3c659e9c4b38eec853a9beb7d7cd43b35e55aed63ee093bcb",
+  "files": 229,
+  "bytes": 22551765,
+  "actual_selected_executions": 36,
+  "selected_retries_or_skips": 0,
+  "new_self_or_combined_approval": false,
+  "exclusions": [
+    "SHA256SUMS (bound by this seal)",
+    "SEAL.json (external hash returned in committed-seal record)"
+  ]
+}

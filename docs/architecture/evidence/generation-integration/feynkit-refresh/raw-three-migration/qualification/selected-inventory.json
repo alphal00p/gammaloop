@@ -1,0 +1,116 @@
+{
+  "status": "READY_FOR_AUTHORIZED_RUNTIME",
+  "actual_compiled_selected": [
+    {
+      "binary_id": "feynkit-generator::generation_oracle",
+      "name": "ctorder_qcd_uugg_L1",
+      "kind": "test",
+      "ignored": false,
+      "filter-match": {
+        "status": "matches"
+      }
+    },
+    {
+      "binary_id": "feynkit-generator::generation_oracle",
+      "name": "qed_ee4f_L0",
+      "kind": "test",
+      "ignored": false,
+      "filter-match": {
+        "status": "matches"
+      }
+    },
+    {
+      "binary_id": "feynkit-generator::generation_oracle",
+      "name": "qed_eemm_L1",
+      "kind": "test",
+      "ignored": false,
+      "filter-match": {
+        "status": "matches"
+      }
+    },
+    {
+      "binary_id": "feynkit-generator::generation_oracle",
+      "name": "sm_eemm_L0",
+      "kind": "test",
+      "ignored": false,
+      "filter-match": {
+        "status": "matches"
+      }
+    },
+    {
+      "binary_id": "feynkit-generator::generation_oracle",
+      "name": "sm_eeww_L0",
+      "kind": "test",
+      "ignored": false,
+      "filter-match": {
+        "status": "matches"
+      }
+    },
+    {
+      "binary_id": "feynkit-generator::generation_oracle",
+      "name": "xs_qcd_gguu_1pi_L1",
+      "kind": "test",
+      "ignored": false,
+      "filter-match": {
+        "status": "matches"
+      }
+    },
+    {
+      "binary_id": "feynkit-generator::generation_oracle",
+      "name": "xs_qed_eedd_L1",
+      "kind": "test",
+      "ignored": false,
+      "filter-match": {
+        "status": "matches"
+      }
+    },
+    {
+      "binary_id": "feynkit-generator::generation_oracle",
+      "name": "xs_qed_eeee_1pi_L1",
+      "kind": "test",
+      "ignored": false,
+      "filter-match": {
+        "status": "matches"
+      }
+    },
+    {
+      "binary_id": "feynkit-generator::generation_oracle",
+      "name": "xs_qed_eeee_L1",
+      "kind": "test",
+      "ignored": false,
+      "filter-match": {
+        "status": "matches"
+      }
+    },
+    {
+      "binary_id": "feynkit-generator::generation_oracle",
+      "name": "xs_qed_eemm_L1",
+      "kind": "test",
+      "ignored": false,
+      "filter-match": {
+        "status": "matches"
+      }
+    },
+    {
+      "binary_id": "feynkit-generator::generation_oracle",
+      "name": "xs_qed_eemm_L2",
+      "kind": "test",
+      "ignored": false,
+      "filter-match": {
+        "status": "matches"
+      }
+    },
+    {
+      "binary_id": "feynkit-generator::generation_oracle",
+      "name": "ym_g6_L0",
+      "kind": "test",
+      "ignored": false,
+      "filter-match": {
+        "status": "matches"
+      }
+    }
+  ],
+  "count": 12,
+  "filter": "package(=feynkit-generator) and binary(=generation_oracle) and (test(=xs_qed_eemm_L1) or test(=xs_qed_eedd_L1) or test(=xs_qed_eeee_1pi_L1) or test(=qed_eemm_L1) or test(=ctorder_qcd_uugg_L1) or test(=sm_eemm_L0) or test(=ym_g6_L0) or test(=xs_qed_eemm_L2) or test(=sm_eeww_L0) or test(=qed_ee4f_L0) or test(=xs_qed_eeee_L1) or test(=xs_qcd_gguu_1pi_L1))",
+  "inventory_sha256": "f893c7cf39b61a1b3f7d699b36ec42a92ae6c930a5dfc6fb440c29786f6f789e"
+}

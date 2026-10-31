@@ -1,0 +1,36 @@
+{
+  "status": "NOT_APPLIED_READY_FOR_NEW_INDEPENDENT_REVIEW_AFTER_ROOT_CONSUMES_INTERFACE_VERDICT",
+  "approval": false,
+  "gates": [
+    "INTERFACE_REVIEW_PENDING",
+    "NEW_MIGRATION_REVIEW_REQUIRED"
+  ],
+  "acceptance_brief": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/acceptance-brief.json",
+    "sha256": "68d35af875eede4bb1db9cfc1dacfa7bd6108fbe4df85bb3b8a19b8d73f26b63"
+  },
+  "patch": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/proposed-not-applied.patch",
+    "sha256": "872261e0211f57960a1eb0544dbdb303934cd95e4c44b47c4e9cccd358d09fe6"
+  },
+  "before_blob": "e6af4ec644688e1333064c50e3b157ae631473ee",
+  "after_blob": "9ef9f1ba005f20149716b22346d45c5501b62e87",
+  "actual_SM_commit": "605178a65620b104805b012f1edc299710e8a176",
+  "scope": "Exactly three numerator tokens in one file; prior8+SM/all9 byte-preserved; no applied token or runtime claim.",
+  "next_action": "Root consumes actual interface review verdict, then assigns NEW independent migration review for this exact candidate.",
+  "remaining_premises": [
+    "Root must assign NEW independent review of these three separate finite interface proofs; no migration/literal/expectation approval.",
+    "Historical raw/cooked/decoded association remains the original approved capture premise. New native execution is current8eb only, not a new c78 run.",
+    "No universal decoder/free-index/locality/hidden-history/future-collision theorem. Exact same_value does not certify arbitrary future cached facts.",
+    "Positional consumers must transport each operand or recompute its named plan. This proof explicitly rejects an unconditional positional-interchangeability claim.",
+    "Native component lowering is a real owner-boundary check, not a numerical component proof. Physical-field covariance follows from the source-defined arbitrary-component assignment argument.",
+    "Only the full-selection empty-exclusion graph fold was executed. Unchanged selection geometry and the finite named-factor argument explain other fixed selections; they were not exhaustively run.",
+    "No broader Auto, grouped/pooled/other-row/runtime/WP3/combined approval. Prior ten-field Row reconstruction is reused and no token was changed.",
+    "No Cargo/Clippy producer build for standalone diagnostics; pinned rustfmt, warning-free rustc, Ruff, Python syntax and Typst rendering pass.",
+    "Historical raw/cooked/decoded association, observed ports and registration state remain finite capture premises.",
+    "Complete symbol definitions and exact source/qualified dependency/compiler/build/kernel chain remain reused premises with original historical command gaps.",
+    "Root must attach and consume the actual independent interface result. This preparation consumes no such verdict and closes no blocker by review.",
+    "A NEW independent three-row migration/literal decision remains required; no existing mathematical/source/SM review automatically authorizes these literals.",
+    "No post-patch producer qualification or actual full-Row runtime assertion exists for this candidate."
+  ]
+}

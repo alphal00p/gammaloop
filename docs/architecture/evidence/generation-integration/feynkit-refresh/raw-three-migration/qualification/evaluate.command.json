@@ -1,0 +1,20 @@
+{
+  "argv": [
+    "nix",
+    "eval",
+    "--json",
+    "--expr",
+    "let f=builtins.getFlake \"git+file:///shared/lcnbr/dev/gammaloop/main?rev=ffa76ec420642c03349ab756d2d7720ab93c0057&shallow=1&allRefs=1\"; in {source=f.outPath; drvPath=f.checks.x86_64-linux.gammaloop-nextest-binaries-feynkit.drvPath;}"
+  ],
+  "cwd": "/tmp",
+  "license_keys_removed": [
+    "SYMBOLICA_LICENSE",
+    "SYMBOLICA_LICENSE_PATH",
+    "SYMBOLICA_LICENSE_SIGNED"
+  ],
+  "start": "2026-10-31T01:03:17.100501+00:00",
+  "exit": 0,
+  "end": "2026-10-31T01:03:58.131148+00:00",
+  "stdout_sha256": "2522c9e961a0aababfba5464591d5273bc2733ff407a6b38ed440b4575005db0",
+  "stderr_sha256": "613228d48dd639e1d9f8b8151506f09d8e9b9b27166687df7ff4c947e219cb15"
+}

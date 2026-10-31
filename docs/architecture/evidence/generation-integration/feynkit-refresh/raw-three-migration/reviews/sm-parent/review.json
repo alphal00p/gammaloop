@@ -1,0 +1,317 @@
+{
+  "schema": "independent-bounded-sm-eeww-integration-review/1",
+  "reviewer": {
+    "model": "gpt-6-astra",
+    "role": "NEW independent bounded integration review",
+    "fallback": "User-authorized Astra fallback after Opus API rate limit; no Opus verdict inferred",
+    "independent_of_implementation": true,
+    "delegations": 0
+  },
+  "completed_utc": "2026-10-31T00:41:41.893385+00:00",
+  "verdict": "APPROVE_BOUNDED_SM_EEWW_INTEGRATION",
+  "verdict_scope": "Only the separately authorized sm_eeww_L0 numerator-token integration onto metadata48d0, its actual new605 package archive, nine complete Row tests at pools1/8/32, and the additive evidence/canonical-note/registry delta through5ea4. This is not global MAIN, whole FeynKit refresh, WP3, M-rebuild, original-physics, full371, installed-host, browser, full-docs or publication approval.",
+  "blocking_findings": [],
+  "candidate": {
+    "workspace": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh",
+    "base": "48d0b98b97b368b2a2f58abe67cb19dddec623df",
+    "code": "605178a65620b104805b012f1edc299710e8a176",
+    "initial_evidence_checkpoint": "f6392d89b019b14a41bd8abb82c98e742bce3909",
+    "complete_evidence": "70f48f684ec4e465907ff125fa462b55ee0d67ec",
+    "final_metadata_head": "5ea4c93b79dd33094072d7717e912aa4b05d6689",
+    "bookmark": "generation-sm-eeww-migration-candidate-20261031",
+    "registry_evidence_revision": "70f48f684ec4e465907ff125fa462b55ee0d67ec",
+    "receipt_sha256": "15a2e085e2edb1fdd8ee8060a3b51b0be909b05e9128579c8f5cb0cb3b52481f",
+    "seal_sha256": "789b66b6d67fed58a590158967b0f180b0a159ba56232816d8b5e4fbd8361389",
+    "manifest_sha256": "c1303e62af68ba2e8e43d1f145108cdb22b0a466c854b1f273bc1025dba77245"
+  },
+  "decision_basis": [
+    "Read the complete separate migration approval096128cb and compared its original/copy bytes and exact target before/after SHA256/Git blobs. It explicitly authorizes this one literal; earlier source, provenance, math and metadata reviews are not substituted for that permission.",
+    "605 is a child of48d0 changing only generation_oracle/main.rs, and complete-byte reversal of the one SM numerator token gives the original blob. Prior eight Rows and every other literal/source byte remain exact. No family-file transplant.",
+    "Final5ea4 is a metadata-only descendant of605. Initial f639 omits the8,320,370-byte producer-chain JSON; child70f adds exactly that file and head5ea4 changes only the registry evidence revision. All110 sealed files are present and exact at both70f and5ea4. The initial checkpoint is retained, not relabelled complete.",
+    "Actual archive4076ada2 and oracle ELFf68d94f2 bind to the new source605, actual terminal layerzcq6, compiler/profile/features/vendor and dependency fingerprints. Old producer identity is kept separate; old ELF was neither executed nor used as the new result.",
+    "Independently replayed the exact new archive in fresh private networkless capsules. Nine exact identities passed at each pool1/8/32, including every prior migration. Original27 records and fresh27 records each independently have zero retries/failures/skipped success credit.",
+    "All118 existing scope entries and anchors remain byte-identical and validate. The actual main.rs owner regions exclude SM; the new investigation note has no reviewed_at/review_ref pair and no fabricated source-scope approval. The final evidence pointer names the complete commit."
+  ],
+  "source_checks": {
+    "source_path": "crates/feynkit-generator/tests/generation_oracle/main.rs:308",
+    "before_blob": "d61a4beebfc1b0d650cd17b001a1fdc6433b60d5",
+    "after_blob": "e6af4ec644688e1333064c50e3b157ae631473ee",
+    "field": "sm_eeww_L0.numerators",
+    "old": "0xec3019645ae8d3e5",
+    "new": "0x0098a2a731e2a6fb",
+    "total_literal_Rows": 149,
+    "unchanged_other_literal_Rows": 148,
+    "other9_SM_fields_byte_exact": true,
+    "prior8_byte_exact": {
+      "qed_eemm_L1": "119c38d91fe1c67efcf00332f499d69f8ef3c5ccc2a15b49a77bbb6ba1afb5fe",
+      "ym_g6_L0": "3c9d8bbf7e322ba068647481dedf8daf8d8f40e9d4010386f04add3302df826b",
+      "sm_eemm_L0": "9d294fe8d3edd3512367aa95a3327b185f8db8d5a7460152ccee6667b73aca72",
+      "xs_qed_eemm_L1": "36649c9964023ca0345bbe10151270add9b698a253dca8800719cfe6c05cadf0",
+      "xs_qed_eemm_L2": "ae3f0ad4a9f756c27b24e621ea7c77183977987f415f94fda1bbde4f3bf4dcbf",
+      "xs_qed_eedd_L1": "5aa32b71f966a7912f08273d27a0b284ea92001531c1c8fac512e5493621337f",
+      "xs_qed_eeee_1pi_L1": "e1252b175e0abe5a77120d987e95644500fdfaa7ee35282244cd732f115b12b3",
+      "ctorder_qcd_uugg_L1": "bb0cbf498a8ea2ab3b3ef16d3df2c27ab7ce389edda681667eb1aa195d3ef1fb"
+    },
+    "count_clarification": "149 is the total fast/heavy literal Row count, including SM; it is148 other Rows. Candidate source-check/receipt correctly say149 source entries. No extra row or coverage credit.",
+    "family_physical_main": "Freshly confirmed3 pre-existing differing QED literals against the reviewed target; its SM Row matches the old target. Entire familymain was not copied.",
+    "policy": "One lowercase hexadecimal token only; no Rust policy departure. Existing pinned rustfmt record/tool/source binding verified; no new formatter/compiler/Clippy execution.",
+    "scope_bindings": 118,
+    "all_candidate_tracked_paths": 4738
+  },
+  "producer_checks": {
+    "actual_source": "605178a65620b104805b012f1edc299710e8a176",
+    "proof_source_carried": "5ba04864ca506e259d9eef4a54f65acdd8323fc2",
+    "old_built_source_carried": "5ea149ffd88ae3afc4072a38c0871c1329be8424",
+    "kernel": "8eb7c3729d6abefc916decc1bdf0c06536f8af80",
+    "archive_drv": "/nix/store/1cacz18cwvb635kfzxawcqg64lf94y74-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0.drv",
+    "archive": "/nix/store/nnj9ziyb72j965b1rw9vppkisy6skn0v-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0/gammaloop-nextest-feynkit-feynkit-generator.tar.zst",
+    "archive_sha256": "4076ada2455f2a8ad90ad271087d095b8aa2b38bde4169fce844ee221c91ebfe",
+    "executed_ELF_sha256": "f68d94f23c9c12696583f2902b6f949f29143d55864b017613c68d94b4da6538",
+    "executed_ELF_size": 61186320,
+    "terminal_layer_ELF_sha256": "b751a05fafe39d8e9652042d6fa6995feb1b8b2275788f3779c0a46d925484e9",
+    "new_terminal_layer": {
+      "path": "/nix/store/zcq6b3hja0mh763hva74gb44l93a9122-gammaloop-crate-test-binaries-feynkit-generator-b6f177b7bc15beb1-deps-0.1.0/target.tar.zst",
+      "sha256": "eafe0cf643d705b3c3a5801596d0bc74f453430cda9bb6d96e0bffac5caa4797"
+    },
+    "reused_dependency_layers": [
+      {
+        "path": "/nix/store/cx447jb5zb3gxcpslza3gkldr2vs7kah-gammaloop-crate-test-dependencies-b6f177b7bc15beb1-deps-0.1.0/target.tar.zst",
+        "sha256": "ee04a717e612ac9e599614998271fa420858c122ad9a247fa06cb49d5dfd7018"
+      },
+      {
+        "path": "/nix/store/kck3a2p03gvd9162cnkl6g96viy1bpp1-gammaloop-crate-test-dependencies-b6f177b7bc15beb1-inputs/target.tar.zst",
+        "sha256": "06efc2c933e9103e1b8ba5fe597834b2e8b1af355aa7444567fdb3ded778427f"
+      }
+    ],
+    "actual_root_fingerprint": "2afbf9d06166b7cc",
+    "actual_root_features": "[\"default\", \"native\"]",
+    "actual_root_profile_fingerprint": 16057468363761213068,
+    "retained_derivations": 145,
+    "shared_derivation_ids": 143,
+    "new_derivations": {
+      "/nix/store/1cacz18cwvb635kfzxawcqg64lf94y74-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0.drv": {
+        "out": {
+          "recorded": "/nix/store/nnj9ziyb72j965b1rw9vppkisy6skn0v-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0",
+          "recomputed": "/nix/store/nnj9ziyb72j965b1rw9vppkisy6skn0v-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0",
+          "ok": true
+        }
+      },
+      "/nix/store/2dzws1cgqxqr08wc12cgv7n5b78g3ca5-gammaloop-crate-test-binaries-feynkit-generator-b6f177b7bc15beb1-deps-0.1.0.drv": {
+        "incremental": {
+          "recorded": "/nix/store/r6kz4y4kz4qna9f23hbjgp67ay2jv1il-gammaloop-crate-test-binaries-feynkit-generator-b6f177b7bc15beb1-deps-0.1.0-incremental",
+          "recomputed": "/nix/store/r6kz4y4kz4qna9f23hbjgp67ay2jv1il-gammaloop-crate-test-binaries-feynkit-generator-b6f177b7bc15beb1-deps-0.1.0-incremental",
+          "ok": true
+        },
+        "out": {
+          "recorded": "/nix/store/zcq6b3hja0mh763hva74gb44l93a9122-gammaloop-crate-test-binaries-feynkit-generator-b6f177b7bc15beb1-deps-0.1.0",
+          "recomputed": "/nix/store/zcq6b3hja0mh763hva74gb44l93a9122-gammaloop-crate-test-binaries-feynkit-generator-b6f177b7bc15beb1-deps-0.1.0",
+          "ok": true
+        }
+      }
+    },
+    "source_paths": 4625,
+    "source_modes_and_symlinks": true,
+    "filtered_source_inputs": 47,
+    "filtered_source_file_entries_checked": 23131,
+    "selected_source_files": 670,
+    "selected_changed_paths": [
+      "crates/feynkit-generator/tests/generation_oracle/main.rs"
+    ],
+    "actual_dependency_units": 452,
+    "compiler": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8",
+    "compiler_binary_sha256": "6bb1c5b8a8034b62bcb3683f5969bb83a555a24128c2fdfcc9d20ea33bc0e1e5",
+    "profile": "ci-optim",
+    "vendor_dir": "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps",
+    "kernels_from_actual_archive_metadata": [
+      {
+        "name": "graphica",
+        "version": "3.0.1",
+        "source": "git+https://github.com/symbolica-dev/symbolica?branch=community#8eb7c3729d6abefc916decc1bdf0c06536f8af80"
+      },
+      {
+        "name": "numerica",
+        "version": "3.0.1",
+        "source": "git+https://github.com/symbolica-dev/symbolica?branch=community#8eb7c3729d6abefc916decc1bdf0c06536f8af80"
+      },
+      {
+        "name": "symbolica",
+        "version": "3.0.1",
+        "source": "git+https://github.com/symbolica-dev/symbolica?branch=community#8eb7c3729d6abefc916decc1bdf0c06536f8af80"
+      }
+    ],
+    "independent_method": "Read/self-authenticated all145 retained .drv files; lazy recursive output-path computation visited2999 derivations, with0 authentication failures, without Nix. Recomputed new terminal/archive output paths and actual archive-output NAR. Rehashed both unchanged dependency tarballs and new terminal layer; freshly streamed terminal fingerprint/ELF members and separately unpacked actual nextest archive into reviewer output.",
+    "unit_and_source_affinity": "Traversed452 unique actual fingerprints from the new root; all dependency keys resolve, compiler hash/RUSTFLAGS consistent, actual marker/JSON hashes match. Unchanged143 derivation IDs and all retained prior fields agree; the old env summaries are not falsely described as identical full JSON. Reused library content/source-MD5 affinity proof is carried only with exact prior398 reviewer artifacts,84 qualification bindings, identical dependency layer hashes and unchanged source inputs.",
+    "archive_vs_terminal_ELF": "Equal entry, decoded dynamic symbols, executable sections and all non-loader section bytes. Differences are only .dynsym/.dynstr/.dynamic; actual RUNPATH adds the nonexistent archive-own-output lib path. NEEDED/interpreter and remaining RUNPATH agree. Do not claim byte-identical ELFs or a copied/patched old ELF.",
+    "remaining_build_premises": "Ordinary daemon/compiler/build honesty and existing kernel/vendor qualification are retained. No independent kernel Git-tree reconstruction or new build was done."
+  },
+  "runtime_checks": {
+    "candidate_recorded_executions": 27,
+    "reviewer_fresh_executions": 27,
+    "fresh_passes": 27,
+    "fresh_failures": 0,
+    "fresh_retries": 0,
+    "skipped_success_credit": 0,
+    "pools": [
+      1,
+      8,
+      32
+    ],
+    "identities": [
+      "xs_qed_eemm_L1",
+      "xs_qed_eedd_L1",
+      "xs_qed_eeee_1pi_L1",
+      "qed_eemm_L1",
+      "ctorder_qcd_uugg_L1",
+      "sm_eemm_L0",
+      "ym_g6_L0",
+      "xs_qed_eemm_L2",
+      "sm_eeww_L0"
+    ],
+    "profile": "ci_gammaloop",
+    "timeout_seconds": 240,
+    "worker_cap": 16,
+    "existing_resource_groups": "Unchanged source configuration, with only the output-store directory appended; no filter, group, timeout or worker policy weakened.",
+    "selection": "Compiled inventory contains exactly9 selected package/binary/test identities. Each JUnit contains exactly these9 names; command/log/JUnit hashes and successful native summaries agree. Explicit --no-tests fail, --run-ignored all, --retries0; no record/update/dump flags. Filtered-out tests receive no pass credit.",
+    "actual_harness_contract": "main.rs check calls classes::check. That harness generates/counts and checks Named/Minimal plus physical/source equivalence independently for None and Auto. It returns the first particle/None census; only that return is compared against the full ten-field Row. No second Auto Row assertion is invented. Individual pool runs assert the same Row; no new algebra theorem across pools is inferred.",
+    "capsule": "Unlicensed preflight and loader --list passed before license access. Empty-root bwrap --unshare-all, distinct network namespace, exact source/archive/input/library packages read-only, fresh reviewer output only writable. No host root/home credentials/Nix socket/donor cache/outlib mounted. Reviewer command/stdout/stderr live outside the writable work mount.",
+    "license": "Inherited exported value preserved when supplied; otherwise current XDG_CONFIG_HOME (or user .config)/symbolica/license read only into memory after preflight. Anonymous stdin pipe to isolated immediate-native-exec child. No value in argv, files, receipt, hashes or Nix/pure-child environments. No secret-value inspection.",
+    "fresh_runtime_artifact": "fresh-runtime.json",
+    "original_command_audit": "records-audit.json",
+    "original_Nix_chronology": "All retained Nix command streams/records hash-match, each exit0/end precedes the explicit Nix-complete boundary, which precedes unlicensed preflight and licensed pool1. Exactly1 original selected build invocation; no recorded Nix calls after that boundary. Reviewer made0 Nix calls."
+  },
+  "findings": [
+    {
+      "id": "SMINT-N1",
+      "severity": "INFO",
+      "blocking": false,
+      "location": "docs/architecture/evidence/generation-integration/feynkit-refresh/sm-eeww-migration/qualification/runtime.py:bwrap/run; runtime/pool*/command.json",
+      "title": "Original output mount includes its execution records",
+      "detail": "The original capsule binds the entire per-run output root at /work, including command.json/stdout/stderr. This is the same qualified containment limitation noted previously: hashes and read-only input mounts do not establish tamper-resistant original logs against a hostile child. No evidence of tampering or changed outcomes was found. Fresh independent27 executions use a distinct writable work root with records outside that mount, and all pass. Nonblocking for these cooperative native tests; no retroactive original containment guarantee."
+    }
+  ],
+  "carried_mathematical_and_review_premises": {
+    "literal_authorization": "Separate review096128cbe5cabf7159c4c6039fd7bd693d19c1bad60ca2533c656bd2a9356335, fully read and verified verbatim. This bounded integration now discharges its actual-application, resulting-producer and selected SM pool-runtime gates only.",
+    "SM_finite_cell": "4 graphs,40 owners per mode; None/Auto independently, GroupingNone, math pool1. Whole-payload injective3-symbol map;0 explicit interface arrays; exact ordered logical ports. Prior local/factorized aggregate reasoning and complete definitions carried via unchanged inputs, not FNV or runtime success.",
+    "SM_native_history": "32 successful SM substages/1022 obligations within72 total/4110.8 SM baseline batches/230 obligations (115 per mode);24 successful control substages. No old algebra suite or capture rerun. Historical/c78 and old-current1A retain only their original meanings;8eb is the actual current kernel.",
+    "controls": "15 original implementation pure controls and8 original migration-review predicates remain distinct. This integration reviewer additionally ran8 different pure guard predicates (selection/skip, pool, record mode, retry, worker cap, old-code/old-ELF rejection). These are not new mathematical/native-control proofs.",
+    "prior_SM_notes": "SM-N1 physical family3-QED differences, SM-N2 genuinely failed concurrent global VCS guard, SM-N3 mislabeled inverse-QCD control plus additive same-rank controls/journal completion/archived helper versions, and SM-N4 duplicate four-graph model-binding block all preserved.",
+    "prior_eight": "Exact unchanged eight-row source and prior finite-application inputs only. Original F1-F7 qualifications retained: historical-kernel invariant reuse, live-None presentation, reviewer attribution, additive witness cancellation, owner-order adapter, original writable log root, inherited C-vs-B label. No new original-physics or interface-order theorem.",
+    "hash_binding_counts": {
+      "SM_prior_reviewer_evidence_inputs": 7407,
+      "prior_eight_reviewer_manifest_files": 1383,
+      "unique_files_checked_in_prior_probe": 8800,
+      "original_SM_preparation_packet": 447,
+      "shared_ScopeA_reviewer_artifacts": 398,
+      "shared_original_qualification_bindings": 84
+    },
+    "capture_limits": "Historical raw/cooked/decoded association, registration state, exact definition tables and captured logical ports remain finite accepted premises. Native subset-tag parsing is not tag/attribute identity evidence. No universal decoder/free-index/locality/ordered-consumer theorem.",
+    "reviews_kept_separate": {
+      ".local/review-refresh-aggregation-astra-20261030-independent/review.json": "567fba9cfa9287478d5c1531fd46eac49c79f4cd6fbcc878c50bd364cf279342",
+      ".local/review-feynkit-refresh-source-opus-round4-20261030T201146Z-697912d5/review.json": "5d9db6c6d385bd25ea9e276a2a1ebd2e95c0678171854e4ccb73a1362130e1af",
+      ".local/review-feynkit-refresh-shared-provenance-opus-20261030T193404Z-3c0453ff/review.json": "565caeace0112a30fb9118f94b2bb759e4267d2b802395c314e485b89b4b2b70",
+      ".local/review-prior-eight-fresh8eb-math-opus-20261030T202304Z-bf443319/review.json": "5a50135038065414bc667667244378677ff44ac4f632e733b8bbd0bba451cf8b"
+    }
+  },
+  "metadata_and_validation": {
+    "all118_scopes_and_anchors_unchanged": true,
+    "main_rs_owners_exclude_SM": true,
+    "new_note_classification": {
+      "id": "generation-sm-eeww-migration",
+      "title": "SM eeww one-token migration qualification",
+      "summary": "Separately authorized one-token SM migration with a new pure archive and 27 actual nine-row pool executions.",
+      "source": "docs/architecture/generation-sm-eeww-migration.typ",
+      "kind": "Execution record",
+      "status": "New independent integration-review candidate; no combined or whole-WP3 approval",
+      "lifecycle": "investigation",
+      "owner": "unassigned",
+      "evidence_revision": "70f48f684ec4e465907ff125fa462b55ee0d67ec",
+      "products": [
+        "feynkit",
+        "gammaloop"
+      ],
+      "topics": [
+        "generation",
+        "testing",
+        "provenance",
+        "integration"
+      ],
+      "review_triggers": [
+        "crates/feynkit-generator/tests/generation_oracle/**",
+        "docs/architecture/generation-sm-eeww-migration.typ",
+        "docs/architecture/evidence/generation-integration/feynkit-refresh/sm-eeww-migration/**"
+      ]
+    },
+    "preexisting_registry_notes_unchanged": true,
+    "final_head_qualification": "605 actual runtime producer plus proven metadata-only descendant5ea4; complete sealed evidence at70f. Final5ea4 itself was not rebuilt and is not mislabeled as the actual compiled source.",
+    "rustfmt": "Retained pinned check exit0; tool and affected source bound. Not rerun.",
+    "Typst": "Retained standalone final note render exit0, exact final source/tool/PDF hashes verified. Not rerendered.",
+    "Clippy_and_full_docs": "No additional Clippy or full documentation/site suite pass claimed. Existing Clarabel import/lifetime warnings remain.",
+    "original_setup_failures": "Premature qualification KeyError before build completion, loader walk libstd-before-libgcc, and python3 lookup127 retained. They delivered no native success credit."
+  },
+  "remaining_gates": [
+    "Coordinator disposition of this independent review; do not advance integration or declare combined approval automatically.",
+    "Other3 raw rows and their declared-interface/ordered-consumer/literal decisions remain separate. No conclusion about concurrently active independent reviews or implementations.",
+    "GroupedAuto, full371 lane, broader oracle/heavy/rebuilt-tip matrix, M-rebuild and whole FeynKit/WP3/MAIN approval remain open.",
+    "Installed-host, stubs, Chromium/WebKit/product rendering, full documentation/site, performance/memory, distribution and publication remain open.",
+    "CI readiness/upload/push/PR/label/publication sequence remains unperformed and unauthorized here. CI=false; integration jj bookmark remainsfdff. No20GiB policy adoption."
+  ],
+  "guards": {
+    "status": "PASS",
+    "time": "2026-10-31T00:37:44.840619+00:00",
+    "candidate": "5ea4c93b79dd33094072d7717e912aa4b05d6689",
+    "candidate_tracked_paths": 4738,
+    "all_candidate_blobs_unchanged": true,
+    "main_physical_paths": 2271,
+    "main_physical_unchanged": true,
+    "main_metadata": {
+      "HEAD": "ad9a6439c4eb1e0d10eb1541c40089e677f898fcbb440664e4922eed98a4721b",
+      "index": "36fca2996228d0adb018933745a106061d3febe8921980864b5cc50dbad4af5d",
+      "packed-refs": "0da18278197341776df580891f9a883e05b5e2dd5dd3082e251e02345619f5a3"
+    },
+    "initial_refs_unchanged": 4201,
+    "changed_initial_refs": {},
+    "new_external_refs": {},
+    "review_inputs_rehashed": 9501,
+    "all_qualified_source_modes_exact": true,
+    "family_literal_differences_from_target": [
+      "xs_qed_eemm_L1",
+      "xs_qed_eedd_L1",
+      "xs_qed_eeee_1pi_L1"
+    ],
+    "family_SM_row_exact_old_target": true,
+    "archive_inputs_libraries_rehashed": true,
+    "format_and_Typst_artifact_bindings_verified": true,
+    "generation_integration_jj": "fdff0d18953348b84a0f1b7e6ab5ef703a5090de",
+    "integration_git_ref_stale_unchanged": "863f506c5211afef007d975387af86d8052d646e",
+    "CI": false,
+    "owned_processes_remaining": [],
+    "writes": "Only the new ignored reviewer directory; candidate/main/prior evidence read-only. No snapshots, refs, index, Nix/compiler/build/network/algebra/recapture."
+  },
+  "process": {
+    "writes_only": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-sm-eeww-integration-astra-20261031-independent-r1",
+    "candidate_source_expectation_ref_index_snapshot_changes": 0,
+    "delegations": 0,
+    "Nix_calls": 0,
+    "builds_compiler_executions": 0,
+    "old_algebra_suite_runs": 0,
+    "captures_or_recaptures": 0,
+    "network_or_publication": 0,
+    "fresh_native_full_Row_executions": 27,
+    "license_value_recorded": false,
+    "owned_processes_remaining": [],
+    "review_errors": "probe-errors.json and producer_audit.v1..v4.py plus attempt stderr retain all meaningful failed setup/schema probes; no candidate change made to satisfy them."
+  },
+  "retention": "Retain this new ignored review directory for coordinator disposition and audit: source/evidence/provenance probes, errors, actual archive extraction and terminal-ELF comparison, isolated runtime inputs/results and hashes. All native/reviewer child processes exited. No contributor evidence, shared cache, host artifacts or workspace removed.",
+  "artifact_sha256": {
+    "source-evidence-audit.json": "bdd58bb6752cf4cb611e849ae1a99ba28f33451220d9037f16cb497629bd71cb",
+    "producer-audit.json": "3adbc4fa2cb3e720a58990c9023e52df7d30934fb27685539435ed4ed0da6c8f",
+    "records-audit.json": "73dcde562c3717fcdcd536e20544e44a4fa15455097645e19f8e4446716c8452",
+    "prior-input-rehash.json": "4f3cdf0effac957af4e6d607657b7c346782c9a063fde89a3ba2c7f75fac95b1",
+    "shared-provenance-carry.json": "25c7cdb3d9618bd73ea3847ea2a6174d3d2180c4e3b637f942de67f784fb942c",
+    "runtime-preparation.json": "5f4c069f178436d21459d5f7ac581d54c40f4ef2c9cf7dfd8470e0c3923fe609",
+    "fresh-inventory.json": "74ece9495811935d49efc73191c8a47d56872c40b8856a71baa989a12a4be568",
+    "fresh-runtime.json": "c5298cf30cc410b5b1f56c4f1ca118e4b5884d77fceca3b707594efffbdead55",
+    "final-guard.json": "a4e2429bf216f126fec9936b0f14c964fef814d3829c2cbc27dea6816f3a840e",
+    "probe-errors.json": "15f62f99d037ac87d2572de8d633984f14d2cd33d97d054a625a41e6d4ef773b"
+  }
+}

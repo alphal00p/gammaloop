@@ -1,0 +1,41 @@
+{
+  "records": [
+    {
+      "pool": 1,
+      "JUnit_selected": 12,
+      "unique_before_summary_PASS_records": 12,
+      "summary_selected_run": 12,
+      "summary_selected_pass": 12,
+      "selected_skips": 0,
+      "unselected_filtered_tests": 171,
+      "unselected_filtered_binaries": 3,
+      "final_output_repeats_not_new_executions": true
+    },
+    {
+      "pool": 8,
+      "JUnit_selected": 12,
+      "unique_before_summary_PASS_records": 12,
+      "summary_selected_run": 12,
+      "summary_selected_pass": 12,
+      "selected_skips": 0,
+      "unselected_filtered_tests": 171,
+      "unselected_filtered_binaries": 3,
+      "final_output_repeats_not_new_executions": true
+    },
+    {
+      "pool": 32,
+      "JUnit_selected": 12,
+      "unique_before_summary_PASS_records": 12,
+      "summary_selected_run": 12,
+      "summary_selected_pass": 12,
+      "selected_skips": 0,
+      "unselected_filtered_tests": 171,
+      "unselected_filtered_binaries": 3,
+      "final_output_repeats_not_new_executions": true
+    }
+  ],
+  "actual_selected_executions": 36,
+  "retries": 0,
+  "selected_skips": 0,
+  "filtered_skip_credit": 0
+}

@@ -1,0 +1,445 @@
+{
+  "schema": "raw-three-actual-production-capture-join/1",
+  "code": "ffa76ec420642c03349ab756d2d7720ab93c0057",
+  "archive_sha256": "8993e6c8346b84f6d91c7e65c4c4fc5ed83cf6d932e969bb7fc55cbdced20740",
+  "oracle_elf": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/raw-three-migration-20261031/archive-extracted/target/ci-optim/deps/generation_oracle-3892f55f31822180",
+    "sha256": "5d7275d26392474f2490963dd0503f4f46ccebc30572a4f31f7a66228303b30f",
+    "size": 61186320
+  },
+  "production_hook": {
+    "main_rs": "check/FEYNKIT_ORACLE_DUMP -> census text",
+    "classes_rs": "check_request/FEYNKIT_ORACLE_DUMP -> per-mode JSON and source companion",
+    "census_rs": "Census::write_exact_dump -> exact ordered payload schema",
+    "changed": false,
+    "new_observer_or_algebra_runs": 0
+  },
+  "files": [
+    {
+      "case": "qed_ee4f_L0",
+      "file": "qed_ee4f_L0.census",
+      "fresh": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/raw-three-migration-20261031/work/pool1/dumps/qed_ee4f_L0.census",
+      "copy": "captures/qed_ee4f_L0/qed_ee4f_L0.census",
+      "fresh_sha256": "567391c51101889748f8aec467b7d961ad0b070b983c037c06ada75c0705c789",
+      "approved_original": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/qed_ee4f_L0/dumps/qed_ee4f_L0.census",
+      "approved_observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/qed_ee4f_L0/dumps/qed_ee4f_L0.census",
+      "approved_sha256": "567391c51101889748f8aec467b7d961ad0b070b983c037c06ada75c0705c789",
+      "byte_equal": true,
+      "normalizations": []
+    },
+    {
+      "case": "qed_ee4f_L0",
+      "file": "qed_ee4f_L0.classes-None-t1.json",
+      "fresh": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/raw-three-migration-20261031/work/pool1/dumps/qed_ee4f_L0.classes-None-t1.json",
+      "copy": "captures/qed_ee4f_L0/qed_ee4f_L0.classes-None-t1.json",
+      "fresh_sha256": "1c12989d75e7f9e12513d0c726e3f700cba9e8088630ab9c43260b961e2a811e",
+      "approved_original": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/qed_ee4f_L0/dumps/qed_ee4f_L0.classes-None-t1.json",
+      "approved_observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/qed_ee4f_L0/dumps/qed_ee4f_L0.classes-None-t1.json",
+      "approved_sha256": "1c12989d75e7f9e12513d0c726e3f700cba9e8088630ab9c43260b961e2a811e",
+      "byte_equal": true,
+      "normalizations": []
+    },
+    {
+      "case": "qed_ee4f_L0",
+      "file": "qed_ee4f_L0.classes-None-t1.sources.json",
+      "fresh": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/raw-three-migration-20261031/work/pool1/dumps/qed_ee4f_L0.classes-None-t1.sources.json",
+      "copy": "captures/qed_ee4f_L0/qed_ee4f_L0.classes-None-t1.sources.json",
+      "fresh_sha256": "1c12989d75e7f9e12513d0c726e3f700cba9e8088630ab9c43260b961e2a811e",
+      "approved_original": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/qed_ee4f_L0/dumps/qed_ee4f_L0.classes-None-t1.sources.json",
+      "approved_observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/qed_ee4f_L0/dumps/qed_ee4f_L0.classes-None-t1.sources.json",
+      "approved_sha256": "1c12989d75e7f9e12513d0c726e3f700cba9e8088630ab9c43260b961e2a811e",
+      "byte_equal": true,
+      "normalizations": []
+    },
+    {
+      "case": "qed_ee4f_L0",
+      "file": "qed_ee4f_L0.classes-Auto-t1.json",
+      "fresh": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/raw-three-migration-20261031/work/pool1/dumps/qed_ee4f_L0.classes-Auto-t1.json",
+      "copy": "captures/qed_ee4f_L0/qed_ee4f_L0.classes-Auto-t1.json",
+      "fresh_sha256": "49f3993180875dbf3d06adf86b5714b888b3db7a3b109237b1a747769f2a4f34",
+      "approved_original": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/qed_ee4f_L0/dumps/qed_ee4f_L0.classes-Auto-t1.json",
+      "approved_observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/qed_ee4f_L0/dumps/qed_ee4f_L0.classes-Auto-t1.json",
+      "approved_sha256": "49f3993180875dbf3d06adf86b5714b888b3db7a3b109237b1a747769f2a4f34",
+      "byte_equal": true,
+      "normalizations": []
+    },
+    {
+      "case": "qed_ee4f_L0",
+      "file": "qed_ee4f_L0.classes-Auto-t1.sources.json",
+      "fresh": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/raw-three-migration-20261031/work/pool1/dumps/qed_ee4f_L0.classes-Auto-t1.sources.json",
+      "copy": "captures/qed_ee4f_L0/qed_ee4f_L0.classes-Auto-t1.sources.json",
+      "fresh_sha256": "49f3993180875dbf3d06adf86b5714b888b3db7a3b109237b1a747769f2a4f34",
+      "approved_original": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/qed_ee4f_L0/dumps/qed_ee4f_L0.classes-Auto-t1.sources.json",
+      "approved_observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/qed_ee4f_L0/dumps/qed_ee4f_L0.classes-Auto-t1.sources.json",
+      "approved_sha256": "49f3993180875dbf3d06adf86b5714b888b3db7a3b109237b1a747769f2a4f34",
+      "byte_equal": true,
+      "normalizations": []
+    },
+    {
+      "case": "xs_qed_eeee_L1",
+      "file": "xs_qed_eeee_L1.census",
+      "fresh": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/raw-three-migration-20261031/work/pool1/dumps/xs_qed_eeee_L1.census",
+      "copy": "captures/xs_qed_eeee_L1/xs_qed_eeee_L1.census",
+      "fresh_sha256": "07fb1b099af1b8fe7a9d09d6cab48119a7888b8d785c26f46a7460008fc52497",
+      "approved_original": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eeee_L1/dumps/xs_qed_eeee_L1.census",
+      "approved_observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qed_eeee_L1/dumps/xs_qed_eeee_L1.census",
+      "approved_sha256": "07fb1b099af1b8fe7a9d09d6cab48119a7888b8d785c26f46a7460008fc52497",
+      "byte_equal": true,
+      "normalizations": []
+    },
+    {
+      "case": "xs_qed_eeee_L1",
+      "file": "xs_qed_eeee_L1.classes-None-t1.json",
+      "fresh": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/raw-three-migration-20261031/work/pool1/dumps/xs_qed_eeee_L1.classes-None-t1.json",
+      "copy": "captures/xs_qed_eeee_L1/xs_qed_eeee_L1.classes-None-t1.json",
+      "fresh_sha256": "fb3fb55248f0eb4c0407db787f9c3753a251ed2357a623f60c88e484f89505b5",
+      "approved_original": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eeee_L1/dumps/xs_qed_eeee_L1.classes-None-t1.json",
+      "approved_observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qed_eeee_L1/dumps/xs_qed_eeee_L1.classes-None-t1.json",
+      "approved_sha256": "fb3fb55248f0eb4c0407db787f9c3753a251ed2357a623f60c88e484f89505b5",
+      "byte_equal": true,
+      "normalizations": []
+    },
+    {
+      "case": "xs_qed_eeee_L1",
+      "file": "xs_qed_eeee_L1.classes-None-t1.sources.json",
+      "fresh": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/raw-three-migration-20261031/work/pool1/dumps/xs_qed_eeee_L1.classes-None-t1.sources.json",
+      "copy": "captures/xs_qed_eeee_L1/xs_qed_eeee_L1.classes-None-t1.sources.json",
+      "fresh_sha256": "fb3fb55248f0eb4c0407db787f9c3753a251ed2357a623f60c88e484f89505b5",
+      "approved_original": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eeee_L1/dumps/xs_qed_eeee_L1.classes-None-t1.sources.json",
+      "approved_observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qed_eeee_L1/dumps/xs_qed_eeee_L1.classes-None-t1.sources.json",
+      "approved_sha256": "fb3fb55248f0eb4c0407db787f9c3753a251ed2357a623f60c88e484f89505b5",
+      "byte_equal": true,
+      "normalizations": []
+    },
+    {
+      "case": "xs_qed_eeee_L1",
+      "file": "xs_qed_eeee_L1.classes-Auto-t1.json",
+      "fresh": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/raw-three-migration-20261031/work/pool1/dumps/xs_qed_eeee_L1.classes-Auto-t1.json",
+      "copy": "captures/xs_qed_eeee_L1/xs_qed_eeee_L1.classes-Auto-t1.json",
+      "fresh_sha256": "fb3fb55248f0eb4c0407db787f9c3753a251ed2357a623f60c88e484f89505b5",
+      "approved_original": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eeee_L1/dumps/xs_qed_eeee_L1.classes-Auto-t1.json",
+      "approved_observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qed_eeee_L1/dumps/xs_qed_eeee_L1.classes-Auto-t1.json",
+      "approved_sha256": "fb3fb55248f0eb4c0407db787f9c3753a251ed2357a623f60c88e484f89505b5",
+      "byte_equal": true,
+      "normalizations": []
+    },
+    {
+      "case": "xs_qed_eeee_L1",
+      "file": "xs_qed_eeee_L1.classes-Auto-t1.sources.json",
+      "fresh": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/raw-three-migration-20261031/work/pool1/dumps/xs_qed_eeee_L1.classes-Auto-t1.sources.json",
+      "copy": "captures/xs_qed_eeee_L1/xs_qed_eeee_L1.classes-Auto-t1.sources.json",
+      "fresh_sha256": "fb3fb55248f0eb4c0407db787f9c3753a251ed2357a623f60c88e484f89505b5",
+      "approved_original": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qed_eeee_L1/dumps/xs_qed_eeee_L1.classes-Auto-t1.sources.json",
+      "approved_observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qed_eeee_L1/dumps/xs_qed_eeee_L1.classes-Auto-t1.sources.json",
+      "approved_sha256": "fb3fb55248f0eb4c0407db787f9c3753a251ed2357a623f60c88e484f89505b5",
+      "byte_equal": true,
+      "normalizations": []
+    },
+    {
+      "case": "xs_qcd_gguu_1pi_L1",
+      "file": "xs_qcd_gguu_1pi_L1.census",
+      "fresh": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/raw-three-migration-20261031/work/pool1/dumps/xs_qcd_gguu_1pi_L1.census",
+      "copy": "captures/xs_qcd_gguu_1pi_L1/xs_qcd_gguu_1pi_L1.census",
+      "fresh_sha256": "fbbcf106715b8952970e0d70abbd96fa582e851fc9f86064c031d10eeee5dec4",
+      "approved_original": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qcd_gguu_1pi_L1/dumps/xs_qcd_gguu_1pi_L1.census",
+      "approved_observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qcd_gguu_1pi_L1/dumps/xs_qcd_gguu_1pi_L1.census",
+      "approved_sha256": "fbbcf106715b8952970e0d70abbd96fa582e851fc9f86064c031d10eeee5dec4",
+      "byte_equal": true,
+      "normalizations": []
+    },
+    {
+      "case": "xs_qcd_gguu_1pi_L1",
+      "file": "xs_qcd_gguu_1pi_L1.classes-None-t1.json",
+      "fresh": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/raw-three-migration-20261031/work/pool1/dumps/xs_qcd_gguu_1pi_L1.classes-None-t1.json",
+      "copy": "captures/xs_qcd_gguu_1pi_L1/xs_qcd_gguu_1pi_L1.classes-None-t1.json",
+      "fresh_sha256": "d1d7a59c555387b6fadef81ed52aa2615f455aedcb14c416fabf61fe44b1ed15",
+      "approved_original": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qcd_gguu_1pi_L1/dumps/xs_qcd_gguu_1pi_L1.classes-None-t1.json",
+      "approved_observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qcd_gguu_1pi_L1/dumps/xs_qcd_gguu_1pi_L1.classes-None-t1.json",
+      "approved_sha256": "d1d7a59c555387b6fadef81ed52aa2615f455aedcb14c416fabf61fe44b1ed15",
+      "byte_equal": true,
+      "normalizations": []
+    },
+    {
+      "case": "xs_qcd_gguu_1pi_L1",
+      "file": "xs_qcd_gguu_1pi_L1.classes-None-t1.sources.json",
+      "fresh": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/raw-three-migration-20261031/work/pool1/dumps/xs_qcd_gguu_1pi_L1.classes-None-t1.sources.json",
+      "copy": "captures/xs_qcd_gguu_1pi_L1/xs_qcd_gguu_1pi_L1.classes-None-t1.sources.json",
+      "fresh_sha256": "d1d7a59c555387b6fadef81ed52aa2615f455aedcb14c416fabf61fe44b1ed15",
+      "approved_original": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qcd_gguu_1pi_L1/dumps/xs_qcd_gguu_1pi_L1.classes-None-t1.sources.json",
+      "approved_observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qcd_gguu_1pi_L1/dumps/xs_qcd_gguu_1pi_L1.classes-None-t1.sources.json",
+      "approved_sha256": "d1d7a59c555387b6fadef81ed52aa2615f455aedcb14c416fabf61fe44b1ed15",
+      "byte_equal": true,
+      "normalizations": []
+    },
+    {
+      "case": "xs_qcd_gguu_1pi_L1",
+      "file": "xs_qcd_gguu_1pi_L1.classes-Auto-t1.json",
+      "fresh": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/raw-three-migration-20261031/work/pool1/dumps/xs_qcd_gguu_1pi_L1.classes-Auto-t1.json",
+      "copy": "captures/xs_qcd_gguu_1pi_L1/xs_qcd_gguu_1pi_L1.classes-Auto-t1.json",
+      "fresh_sha256": "d1d7a59c555387b6fadef81ed52aa2615f455aedcb14c416fabf61fe44b1ed15",
+      "approved_original": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qcd_gguu_1pi_L1/dumps/xs_qcd_gguu_1pi_L1.classes-Auto-t1.json",
+      "approved_observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qcd_gguu_1pi_L1/dumps/xs_qcd_gguu_1pi_L1.classes-Auto-t1.json",
+      "approved_sha256": "d1d7a59c555387b6fadef81ed52aa2615f455aedcb14c416fabf61fe44b1ed15",
+      "byte_equal": true,
+      "normalizations": []
+    },
+    {
+      "case": "xs_qcd_gguu_1pi_L1",
+      "file": "xs_qcd_gguu_1pi_L1.classes-Auto-t1.sources.json",
+      "fresh": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/raw-three-migration-20261031/work/pool1/dumps/xs_qcd_gguu_1pi_L1.classes-Auto-t1.sources.json",
+      "copy": "captures/xs_qcd_gguu_1pi_L1/xs_qcd_gguu_1pi_L1.classes-Auto-t1.sources.json",
+      "fresh_sha256": "d1d7a59c555387b6fadef81ed52aa2615f455aedcb14c416fabf61fe44b1ed15",
+      "approved_original": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/pristine/xs_qcd_gguu_1pi_L1/dumps/xs_qcd_gguu_1pi_L1.classes-Auto-t1.sources.json",
+      "approved_observer": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/runtime12/observer/xs_qcd_gguu_1pi_L1/dumps/xs_qcd_gguu_1pi_L1.classes-Auto-t1.sources.json",
+      "approved_sha256": "d1d7a59c555387b6fadef81ed52aa2615f455aedcb14c416fabf61fe44b1ed15",
+      "byte_equal": true,
+      "normalizations": []
+    }
+  ],
+  "cells": [
+    {
+      "case": "qed_ee4f_L0",
+      "mode": "None",
+      "grouping": "None",
+      "pool": 1,
+      "physical_graphs": 6,
+      "owners": 96,
+      "explicit_affected_owners": 4,
+      "fresh_payload_sha256": "1c12989d75e7f9e12513d0c726e3f700cba9e8088630ab9c43260b961e2a811e",
+      "proof_input_sha256": "6f69c4d7ef3ebd9fe2260dd28ebc9fde1bf6428b86d11937aa68874cf654951c",
+      "all_payloads_full_keys_models_names_IDs_groups_sources_ordered_interfaces_byte_bound": true,
+      "Row": {
+        "diagrams": 6,
+        "topologies": 7,
+        "assignments": 6,
+        "inverse_symmetry": [
+          6,
+          1
+        ],
+        "weights": [
+          -6,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            6
+          ]
+        ],
+        "content": 7418213026047758212,
+        "numerators": 2094309210284571858,
+        "named": 9955192864026428413,
+        "ids": 15420108436151051566
+      },
+      "other_nine_fields_value_equal_to_approved_historical_mode": true,
+      "actual_native_full_Row_assertion": true,
+      "report_counter_origin": "fresh None census report",
+      "normalizations": []
+    },
+    {
+      "case": "qed_ee4f_L0",
+      "mode": "Auto",
+      "grouping": "None",
+      "pool": 1,
+      "physical_graphs": 6,
+      "owners": 96,
+      "explicit_affected_owners": 4,
+      "fresh_payload_sha256": "49f3993180875dbf3d06adf86b5714b888b3db7a3b109237b1a747769f2a4f34",
+      "proof_input_sha256": "6f69c4d7ef3ebd9fe2260dd28ebc9fde1bf6428b86d11937aa68874cf654951c",
+      "all_payloads_full_keys_models_names_IDs_groups_sources_ordered_interfaces_byte_bound": true,
+      "Row": {
+        "diagrams": 6,
+        "topologies": 42,
+        "assignments": 6,
+        "inverse_symmetry": [
+          6,
+          1
+        ],
+        "weights": [
+          -6,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            6
+          ]
+        ],
+        "content": 7418213026047758212,
+        "numerators": 2094309210284571858,
+        "named": 3630688608974482237,
+        "ids": 15420108436151051566
+      },
+      "other_nine_fields_value_equal_to_approved_historical_mode": true,
+      "actual_native_full_Row_assertion": false,
+      "report_counter_origin": "approved Auto report premise from original capture; public hook emits no Auto report",
+      "normalizations": []
+    },
+    {
+      "case": "xs_qed_eeee_L1",
+      "mode": "None",
+      "grouping": "None",
+      "pool": 1,
+      "physical_graphs": 4,
+      "owners": 52,
+      "explicit_affected_owners": 4,
+      "fresh_payload_sha256": "fb3fb55248f0eb4c0407db787f9c3753a251ed2357a623f60c88e484f89505b5",
+      "proof_input_sha256": "6f69c4d7ef3ebd9fe2260dd28ebc9fde1bf6428b86d11937aa68874cf654951c",
+      "all_payloads_full_keys_models_names_IDs_groups_sources_ordered_interfaces_byte_bound": true,
+      "Row": {
+        "diagrams": 4,
+        "topologies": 17,
+        "assignments": 34,
+        "inverse_symmetry": [
+          4,
+          1
+        ],
+        "weights": [
+          0,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            4
+          ]
+        ],
+        "content": 3022486068726070230,
+        "numerators": 8589669465914692809,
+        "named": 13426690394181497681,
+        "ids": 18306469787178189955
+      },
+      "other_nine_fields_value_equal_to_approved_historical_mode": true,
+      "actual_native_full_Row_assertion": true,
+      "report_counter_origin": "fresh None census report",
+      "normalizations": []
+    },
+    {
+      "case": "xs_qed_eeee_L1",
+      "mode": "Auto",
+      "grouping": "None",
+      "pool": 1,
+      "physical_graphs": 4,
+      "owners": 52,
+      "explicit_affected_owners": 4,
+      "fresh_payload_sha256": "fb3fb55248f0eb4c0407db787f9c3753a251ed2357a623f60c88e484f89505b5",
+      "proof_input_sha256": "6f69c4d7ef3ebd9fe2260dd28ebc9fde1bf6428b86d11937aa68874cf654951c",
+      "all_payloads_full_keys_models_names_IDs_groups_sources_ordered_interfaces_byte_bound": true,
+      "Row": {
+        "diagrams": 4,
+        "topologies": 17,
+        "assignments": 34,
+        "inverse_symmetry": [
+          4,
+          1
+        ],
+        "weights": [
+          0,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            4
+          ]
+        ],
+        "content": 3022486068726070230,
+        "numerators": 8589669465914692809,
+        "named": 13426690394181497681,
+        "ids": 18306469787178189955
+      },
+      "other_nine_fields_value_equal_to_approved_historical_mode": true,
+      "actual_native_full_Row_assertion": false,
+      "report_counter_origin": "approved Auto report premise from original capture; public hook emits no Auto report",
+      "normalizations": []
+    },
+    {
+      "case": "xs_qcd_gguu_1pi_L1",
+      "mode": "None",
+      "grouping": "None",
+      "pool": 1,
+      "physical_graphs": 4,
+      "owners": 52,
+      "explicit_affected_owners": 32,
+      "fresh_payload_sha256": "d1d7a59c555387b6fadef81ed52aa2615f455aedcb14c416fabf61fe44b1ed15",
+      "proof_input_sha256": "6f69c4d7ef3ebd9fe2260dd28ebc9fde1bf6428b86d11937aa68874cf654951c",
+      "all_payloads_full_keys_models_names_IDs_groups_sources_ordered_interfaces_byte_bound": true,
+      "Row": {
+        "diagrams": 4,
+        "topologies": 12,
+        "assignments": 54,
+        "inverse_symmetry": [
+          4,
+          1
+        ],
+        "weights": [
+          -4,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            4
+          ]
+        ],
+        "content": 13292509521889608637,
+        "numerators": 7142019012713190507,
+        "named": 15278292068172816218,
+        "ids": 9379374420500739387
+      },
+      "other_nine_fields_value_equal_to_approved_historical_mode": true,
+      "actual_native_full_Row_assertion": true,
+      "report_counter_origin": "fresh None census report",
+      "normalizations": []
+    },
+    {
+      "case": "xs_qcd_gguu_1pi_L1",
+      "mode": "Auto",
+      "grouping": "None",
+      "pool": 1,
+      "physical_graphs": 4,
+      "owners": 52,
+      "explicit_affected_owners": 32,
+      "fresh_payload_sha256": "d1d7a59c555387b6fadef81ed52aa2615f455aedcb14c416fabf61fe44b1ed15",
+      "proof_input_sha256": "6f69c4d7ef3ebd9fe2260dd28ebc9fde1bf6428b86d11937aa68874cf654951c",
+      "all_payloads_full_keys_models_names_IDs_groups_sources_ordered_interfaces_byte_bound": true,
+      "Row": {
+        "diagrams": 4,
+        "topologies": 12,
+        "assignments": 54,
+        "inverse_symmetry": [
+          4,
+          1
+        ],
+        "weights": [
+          -4,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            4
+          ]
+        ],
+        "content": 13292509521889608637,
+        "numerators": 7142019012713190507,
+        "named": 15278292068172816218,
+        "ids": 9379374420500739387
+      },
+      "other_nine_fields_value_equal_to_approved_historical_mode": true,
+      "actual_native_full_Row_assertion": false,
+      "report_counter_origin": "approved Auto report premise from original capture; public hook emits no Auto report",
+      "normalizations": []
+    }
+  ],
+  "same_physical_payloads": true,
+  "owners": 400,
+  "affected": 80,
+  "unaffected": 320,
+  "original_math_only_pool1": true,
+  "byte_normalizations": [],
+  "ee4f_mode_limits": "None literal Row topologies7/name order; independently fresh Auto payload with original report42 and actual mode name permutation. No duplicate Auto Row assertion.",
+  "new_native_proof_runs": 0,
+  "old_algebra_reuse": "40 successful batches/3088 obligations only; SM32 excluded",
+  "arbitrary_cached_positional_plans": "UNSAFE; recompute named plans or transport each operand AND preserve output-axis map."
+}

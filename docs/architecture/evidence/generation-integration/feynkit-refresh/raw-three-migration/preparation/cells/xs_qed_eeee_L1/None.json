@@ -1,0 +1,224 @@
+{
+  "case": "xs_qed_eeee_L1",
+  "mode": "None",
+  "original_cell": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-four-migration-preparation-20261030-r1/cells/xs_qed_eeee_L1/None.json",
+    "sha256": "ddfeaa6edd9f3fcb5219115a228b3b966ce71151177ae659db2f78d019492825",
+    "bytes": 63288
+  },
+  "historical_Row": {
+    "diagrams": 4,
+    "topologies": 17,
+    "assignments": 34,
+    "inverse_symmetry": [
+      4,
+      1
+    ],
+    "weights": [
+      0,
+      1
+    ],
+    "symmetry_factors": [
+      [
+        1,
+        4
+      ]
+    ],
+    "content": 3022486068726070230,
+    "numerators": 10282495408798671266,
+    "named": 13426690394181497681,
+    "ids": 18306469787178189955
+  },
+  "current_Row": {
+    "diagrams": 4,
+    "topologies": 17,
+    "assignments": 34,
+    "inverse_symmetry": [
+      4,
+      1
+    ],
+    "weights": [
+      0,
+      1
+    ],
+    "symmetry_factors": [
+      [
+        1,
+        4
+      ]
+    ],
+    "content": 3022486068726070230,
+    "numerators": 8589669465914692809,
+    "named": 13426690394181497681,
+    "ids": 18306469787178189955
+  },
+  "native_Row_assertion": true,
+  "graphs": 4,
+  "owners": 52,
+  "interfaces": [
+    {
+      "id": "ed03bfa8f6a6b6b8ff8bc1cb74ab5750",
+      "name": "D2",
+      "owner": "vertex:2",
+      "historical": [
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(10,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(4,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(8,1))"
+      ],
+      "current": [
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(4,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(10,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(8,1))"
+      ],
+      "permutation": [
+        1,
+        0,
+        2
+      ],
+      "explicit": true
+    },
+    {
+      "id": "ed03bfa8f6a6b6b8ff8bc1cb74ab5750",
+      "name": "D2",
+      "owner": "vertex:3",
+      "historical": [
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(11,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(7,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(9,1))"
+      ],
+      "current": [
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(7,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(11,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(9,1))"
+      ],
+      "permutation": [
+        1,
+        0,
+        2
+      ],
+      "explicit": true
+    },
+    {
+      "id": "19313a3947e130179589bbd41aa5957c",
+      "name": "D3",
+      "owner": "vertex:1",
+      "historical": [
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(10,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(3,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(6,1))"
+      ],
+      "current": [
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(3,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(10,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(6,1))"
+      ],
+      "permutation": [
+        1,
+        0,
+        2
+      ],
+      "explicit": true
+    },
+    {
+      "id": "19313a3947e130179589bbd41aa5957c",
+      "name": "D3",
+      "owner": "vertex:2",
+      "historical": [
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(11,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(9,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(7,1))"
+      ],
+      "current": [
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(9,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(11,1))",
+        "spenso::{spenso::representation,spenso::self_dual}::mink(4,gammalooprs::{spenso::index}::hedge(7,1))"
+      ],
+      "permutation": [
+        1,
+        0,
+        2
+      ],
+      "explicit": true
+    }
+  ],
+  "public_payload_decomposition": {
+    "spelling_only": {
+      "payload_equals_current": false,
+      "numerators": 16278274689675858743
+    },
+    "interfaces_only": {
+      "payload_equals_current": false,
+      "numerators": 2538055102806029425
+    },
+    "combined": {
+      "payload_equals_current": true,
+      "numerators": 8589669465914692809
+    }
+  },
+  "historical_diagram_digests": [
+    {
+      "id": "d9a1f4b74e7edcf37c2b095299a89854",
+      "name": "D0",
+      "key": 8487481900695112205,
+      "frame": 3132962280028489516,
+      "numerator": 3622703452180572360
+    },
+    {
+      "id": "8c07d98cdf34666feb5b87a516adeeab",
+      "name": "D1",
+      "key": 1677655490337777767,
+      "frame": 3148546918349191755,
+      "numerator": 14072272610197100974
+    },
+    {
+      "id": "ed03bfa8f6a6b6b8ff8bc1cb74ab5750",
+      "name": "D2",
+      "key": 16905266356204672752,
+      "frame": 2846277137429943641,
+      "numerator": 12185744539380369562
+    },
+    {
+      "id": "19313a3947e130179589bbd41aa5957c",
+      "name": "D3",
+      "key": 2667586980210386706,
+      "frame": 5029318442713100744,
+      "numerator": 6872876195598956712
+    }
+  ],
+  "current_diagram_digests": [
+    {
+      "id": "d9a1f4b74e7edcf37c2b095299a89854",
+      "name": "D0",
+      "key": 8487481900695112205,
+      "frame": 3132962280028489516,
+      "numerator": 1504861857372542566
+    },
+    {
+      "id": "8c07d98cdf34666feb5b87a516adeeab",
+      "name": "D1",
+      "key": 1677655490337777767,
+      "frame": 3148546918349191755,
+      "numerator": 7585233911597897816
+    },
+    {
+      "id": "ed03bfa8f6a6b6b8ff8bc1cb74ab5750",
+      "name": "D2",
+      "key": 16905266356204672752,
+      "frame": 2846277137429943641,
+      "numerator": 986042154781946929
+    },
+    {
+      "id": "19313a3947e130179589bbd41aa5957c",
+      "name": "D3",
+      "key": 2667586980210386706,
+      "frame": 5029318442713100744,
+      "numerator": 3840453860554286640
+    }
+  ],
+  "pure_checks": "Reused world/check_cell/derive/validate_cell implementations; no native execution.",
+  "unresolved_original_interface_obligations": [
+    "Ordered interface compatibility at actual downstream consumers after the displayed owner-specific permutations. same_value includes logical order; named multisets and Atom equality alone cannot discharge it.",
+    "Finite from_declared_parts admission/round-trip and consumer-layout correspondence for these exact captured arrays under reversible cooking. No universal free-index/locality/decoder theorem inferred."
+  ],
+  "new_evidence_status": "Finite typed proof supplied separately; INTERFACE_REVIEW_PENDING"
+}
