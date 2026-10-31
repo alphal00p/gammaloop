@@ -4581,10 +4581,12 @@ impl VakintExpression {
     pub fn split_integrals(input: AtomView) -> Result<Vec<VakintTerm>, VakintError> {
         let mut res = vec![];
 
+        // An ordered set keeps the term order independent of hash seeds, so
+        // repeated evaluations issue identically ordered native requests.
         let topo_variables = input
             .pattern_match(&vk_parse!("topo(props_)").unwrap().to_pattern(), None, None)
             .map(|m| function!(vk_symbol!("topo"), m.get(&vk_symbol!("props_")).unwrap()))
-            .collect::<HashSet<_>>();
+            .collect::<std::collections::BTreeSet<_>>();
 
         for (integral, numerator) in
             input.coefficient_list::<i8>(&topo_variables.iter().collect::<Vec<_>>())

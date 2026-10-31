@@ -652,7 +652,9 @@ anchor = "pub struct Vakint {"
 # witness selection decides admission from the exact grouped lowering support
 # (unchanged full keys for ties and other inputs) and may screen witnesses and
 # lower contributions on scoped workers with input-ordered results.
-digest = "7574da9f84af693df5782d200cdff6a9eac80fc0"
+# lower contributions on scoped workers with input-ordered results;
+# split_integrals orders its topo() variables, so term order is deterministic.
+digest = "c5a023ef8758534e10bc341c4c192d10510d6865"
 
 [[section.note.scope]]
 path = "crates/vakint/src/lorentz.rs"
