@@ -1,0 +1,608 @@
+{
+  "schema": "independent-full-generator-characterization-review/1",
+  "reviewer": {
+    "model": "Astra",
+    "independent_new_review": true,
+    "role": "review sub-agent",
+    "fallback": "User-authorized Astra fallback for rate-limited Opus",
+    "delegations": 0
+  },
+  "completed_utc": "2026-10-31T02:36:04.445942+00:00",
+  "decision": "approve",
+  "verdict": "APPROVE_EXACT_FULL_PACKAGE_POOL1_CHARACTERIZATION_AND_ASSERTED_SUMMARY_CLASSIFICATION",
+  "blocking_findings": [],
+  "scope": "Only the exact sealed full feynkit-generator package characterization at ffa76ec420642c03349ab756d2d7720ab93c0057:420 discovered identities,371 ordinary nonignored selected outer tests, explicit oracle loop pool1, unchanged ci_gammaloop policy, one retained actual package run, and classification of all69 failed asserted Summaries. Registration tests retain their own explicit pools. This is approval of characterization, not a green package or a new native run.",
+  "exact_inputs": {
+    "packet": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/full-generator-characterization-20261031-r1",
+    "code": "ffa76ec420642c03349ab756d2d7720ab93c0057",
+    "evidence": "d0fb4e906140a6a0fc8dd6401ca839cab0c2734d",
+    "kernel": "8eb7c3729d6abefc916decc1bdf0c06536f8af80",
+    "characterization_sha256": "27d2a759526fb0be9fdc29cb4666be5698e6f675715264e5243fcb1cbaad647d",
+    "SEAL_sha256": "f5a23e6157c9430bcea95a8f1c89c3ac0c79db40a8ed4d521b717723fb18ff55",
+    "SHA256SUMS_sha256": "fc1c85349336146d20f2a81c0d1b63722d8a86923d186ba3f60d53463f006cdd",
+    "report_sha256": "1d500edf9347b29bd0554a53c333fc8dc7e502b492ef4be318b7b688dd6c452a",
+    "sealed_files_verified": 79,
+    "archive": "/nix/store/qg5nc1vcxjbdb5zzjigilx3wngy8xyfd-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0/gammaloop-nextest-feynkit-feynkit-generator.tar.zst",
+    "archive_sha256": "8993e6c8346b84f6d91c7e65c4c4fc5ed83cf6d932e969bb7fc55cbdced20740",
+    "archive_members": 24,
+    "actual_binary_hashes": {
+      "feynkit-generator": "9d693abbc274a9d8231fb2b7b52206448e7b59df397b8be26865bd1b8a1972dc",
+      "feynkit-generator::amplitude": "93590ca3e173b729d24c9c0b5011da0964d4990d003f86f3336992d69e06614a",
+      "feynkit-generator::generation_oracle": "5d7275d26392474f2490963dd0503f4f46ccebc30572a4f31f7a66228303b30f",
+      "feynkit-generator::momentum_tensor": "44109380fb909827976fd8f2c6a645fbfa599a37376091e63415f68dcff937e5"
+    },
+    "reused_bounded12_review": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-raw-three-integration-astra-20261031-012811Z-323f4486/review.json",
+      "sha256": "535b792610c531b446d8beb1a9f300246e6d498e8126509b637189e8eb80a091",
+      "manifested_files_reverified": 209,
+      "scope": "Exact shared provenance and bounded12 decisions only; no inherited approval for complete package runtime"
+    }
+  },
+  "observed_results": {
+    "inventory": 420,
+    "selected_outer_tests": 371,
+    "passed": 302,
+    "failed": 69,
+    "ordinary_rust_ignored": 49,
+    "errors": 0,
+    "selected_skips": 0,
+    "retries": 0,
+    "native_exit": 100,
+    "by_binary": {
+      "feynkit-generator": {
+        "passed": 222
+      },
+      "feynkit-generator::amplitude": {
+        "passed": 9
+      },
+      "feynkit-generator::generation_oracle": {
+        "passed": 70,
+        "failed": 69
+      },
+      "feynkit-generator::momentum_tensor": {
+        "passed": 1
+      }
+    },
+    "actual_package_runs_in_candidate": 1,
+    "licensed_inventory_discoveries_in_candidate": 1,
+    "all12_previously_approved_rows_actually_passed": [
+      "xs_qed_eemm_L1",
+      "xs_qed_eedd_L1",
+      "xs_qed_eeee_1pi_L1",
+      "qed_eemm_L1",
+      "ctorder_qcd_uugg_L1",
+      "sm_eemm_L0",
+      "ym_g6_L0",
+      "xs_qed_eemm_L2",
+      "sm_eeww_L0",
+      "qed_ee4f_L0",
+      "xs_qed_eeee_L1",
+      "xs_qcd_gguu_1pi_L1"
+    ],
+    "historical": {
+      "code": "eae78e11e4d27df2539700fa4d4d71cdcb3a4804",
+      "kernel": "1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
+      "inventory": 420,
+      "selected": 371,
+      "passed": 298,
+      "failed": 73,
+      "ignored": 49,
+      "missing_new_removed_or_filter_ignore_changes": [],
+      "old_pass_to_pass": 298,
+      "old_fail_to_fail": 69,
+      "old_fail_to_pass": [
+        "qed_ee4f_L0",
+        "sm_eeww_L0",
+        "xs_qcd_gguu_1pi_L1",
+        "xs_qed_eeee_L1"
+      ],
+      "historical_command_oracle_variable": "unset; both immutable sources default to[1,8,32]"
+    },
+    "prior_narrow_filter_reconciliation": {
+      "original_listed_oracle_tests": 183,
+      "selected": 12,
+      "skipped_tests_within_oracle": 171,
+      "other_binaries_filtered_without_discovery": 3,
+      "complete_current_package_inventory": 420
+    },
+    "classification": {
+      "field_order": [
+        "diagrams",
+        "topologies",
+        "assignments",
+        "inverse_symmetry",
+        "weights",
+        "symmetry_factors",
+        "content",
+        "numerators",
+        "named",
+        "ids"
+      ],
+      "only_unequal_field": "numerators",
+      "failures": 69,
+      "all69_actual_and_expected_ten_field_pairs_equal_to_historical_parsed_values": true,
+      "grouping": {
+        "Grouping::Identical": 3,
+        "Grouping::UpToScalar": 3,
+        "Grouping::UpToSign": 3,
+        "Grouping::None": 60
+      },
+      "first_observed_assertion": "crates/feynkit-generator/tests/generation_oracle/main.rs:147:9",
+      "raw_error_stdout_stderr_preserved_for_each_failure": true,
+      "expected_values_independently_bound_to_immutable_Rows": true,
+      "physical_or_kernel_causality_proof": false
+    }
+  },
+  "qualification": {
+    "immutable_source": {
+      "paths": 4738,
+      "every_blob_compared_to_ffa_Git_tree": true,
+      "exact_source_path_set": true,
+      "main_implementation_untouched": true
+    },
+    "four_root_closures": {
+      "feynkit-generator": 451,
+      "feynkit-generator::amplitude": 452,
+      "feynkit-generator::generation_oracle": 452,
+      "feynkit-generator::momentum_tensor": 452
+    },
+    "unique_reachable_fingerprints": 455,
+    "terminal_fingerprints_bound_to_original_layer": 19,
+    "producer_reuse": {
+      "earlier_shared_bindings_rehashed": 482,
+      "retained_derivations_rehashed": 145,
+      "three_compiled_layer_hashes_reverified": true,
+      "source_producer_kernel_layer_tools_reused_only_under_exact_invariance": true,
+      "new_nonoracle_roots_reviewed_individually": true
+    },
+    "fresh_pure_archive_layer_comparison": {
+      "ci-optim/deps/generation_oracle-3892f55f31822180": {
+        "terminal_sha256": "e319eaf039845d9ac561c979a029f12a3087e59bc883a89f22cc84f34fb6e23a",
+        "archive_sha256": "5d7275d26392474f2490963dd0503f4f46ccebc30572a4f31f7a66228303b30f",
+        "changed_sections": [
+          ".dynsym",
+          ".dynstr",
+          ".dynamic"
+        ],
+        "relocated_loader_sections": [
+          ".gnu.version",
+          ".gnu.version_r",
+          ".rela.dyn",
+          ".rela.plt"
+        ],
+        "all_other_section_bytes_equal": true,
+        "dynamic_symbols_decoded_equal": true,
+        "dynamic_semantics_except_runpath_equal": true,
+        "terminal_loader": {
+          "interpreter": "/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84/lib/ld-linux-x86-64.so.2",
+          "needed": [
+            "libpython3.13.so.1.0",
+            "libgcc_s.so.1",
+            "libm.so.6",
+            "libc.so.6",
+            "ld-linux-x86-64.so.2"
+          ],
+          "runpath": [
+            "/nix/store/wj1f56qky4pmjc7l0r6b6l7whnnw7hp6-python3-3.13.15/lib",
+            "/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84/lib",
+            "/nix/store/604gsr59rj7dzd0nrhp143rpvf7gyiaz-gcc-15.3.0-lib/lib"
+          ]
+        },
+        "archive_loader": {
+          "interpreter": "/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84/lib/ld-linux-x86-64.so.2",
+          "needed": [
+            "libpython3.13.so.1.0",
+            "libgcc_s.so.1",
+            "libm.so.6",
+            "libc.so.6",
+            "ld-linux-x86-64.so.2"
+          ],
+          "runpath": [
+            "/nix/store/qg5nc1vcxjbdb5zzjigilx3wngy8xyfd-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0/lib",
+            "/nix/store/wj1f56qky4pmjc7l0r6b6l7whnnw7hp6-python3-3.13.15/lib",
+            "/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84/lib",
+            "/nix/store/604gsr59rj7dzd0nrhp143rpvf7gyiaz-gcc-15.3.0-lib/lib"
+          ]
+        }
+      },
+      "ci-optim/deps/momentum_tensor-43d9cde778a19275": {
+        "terminal_sha256": "a6d445c35cf69e214e18290d1f610377ab53f276bb809f526e607775a1b43edc",
+        "archive_sha256": "44109380fb909827976fd8f2c6a645fbfa599a37376091e63415f68dcff937e5",
+        "changed_sections": [
+          ".dynsym",
+          ".dynstr",
+          ".dynamic"
+        ],
+        "relocated_loader_sections": [
+          ".gnu.version",
+          ".gnu.version_r",
+          ".rela.dyn",
+          ".rela.plt"
+        ],
+        "all_other_section_bytes_equal": true,
+        "dynamic_symbols_decoded_equal": true,
+        "dynamic_semantics_except_runpath_equal": true,
+        "terminal_loader": {
+          "interpreter": "/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84/lib/ld-linux-x86-64.so.2",
+          "needed": [
+            "libpython3.13.so.1.0",
+            "libgcc_s.so.1",
+            "libm.so.6",
+            "libc.so.6",
+            "ld-linux-x86-64.so.2"
+          ],
+          "runpath": [
+            "/nix/store/wj1f56qky4pmjc7l0r6b6l7whnnw7hp6-python3-3.13.15/lib",
+            "/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84/lib",
+            "/nix/store/604gsr59rj7dzd0nrhp143rpvf7gyiaz-gcc-15.3.0-lib/lib"
+          ]
+        },
+        "archive_loader": {
+          "interpreter": "/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84/lib/ld-linux-x86-64.so.2",
+          "needed": [
+            "libpython3.13.so.1.0",
+            "libgcc_s.so.1",
+            "libm.so.6",
+            "libc.so.6",
+            "ld-linux-x86-64.so.2"
+          ],
+          "runpath": [
+            "/nix/store/qg5nc1vcxjbdb5zzjigilx3wngy8xyfd-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0/lib",
+            "/nix/store/wj1f56qky4pmjc7l0r6b6l7whnnw7hp6-python3-3.13.15/lib",
+            "/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84/lib",
+            "/nix/store/604gsr59rj7dzd0nrhp143rpvf7gyiaz-gcc-15.3.0-lib/lib"
+          ]
+        }
+      },
+      "ci-optim/deps/amplitude-0bcbb9273998b3e1": {
+        "terminal_sha256": "82606c312cf04e0619e99519db4a79aae8cbfd1df48fccb8ac46590f6cbe6d29",
+        "archive_sha256": "93590ca3e173b729d24c9c0b5011da0964d4990d003f86f3336992d69e06614a",
+        "changed_sections": [
+          ".dynsym",
+          ".dynstr",
+          ".dynamic"
+        ],
+        "relocated_loader_sections": [
+          ".gnu.version",
+          ".gnu.version_r",
+          ".rela.dyn",
+          ".rela.plt"
+        ],
+        "all_other_section_bytes_equal": true,
+        "dynamic_symbols_decoded_equal": true,
+        "dynamic_semantics_except_runpath_equal": true,
+        "terminal_loader": {
+          "interpreter": "/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84/lib/ld-linux-x86-64.so.2",
+          "needed": [
+            "libpython3.13.so.1.0",
+            "libgcc_s.so.1",
+            "libm.so.6",
+            "libc.so.6",
+            "ld-linux-x86-64.so.2"
+          ],
+          "runpath": [
+            "/nix/store/wj1f56qky4pmjc7l0r6b6l7whnnw7hp6-python3-3.13.15/lib",
+            "/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84/lib",
+            "/nix/store/604gsr59rj7dzd0nrhp143rpvf7gyiaz-gcc-15.3.0-lib/lib"
+          ]
+        },
+        "archive_loader": {
+          "interpreter": "/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84/lib/ld-linux-x86-64.so.2",
+          "needed": [
+            "libpython3.13.so.1.0",
+            "libgcc_s.so.1",
+            "libm.so.6",
+            "libc.so.6",
+            "ld-linux-x86-64.so.2"
+          ],
+          "runpath": [
+            "/nix/store/qg5nc1vcxjbdb5zzjigilx3wngy8xyfd-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0/lib",
+            "/nix/store/wj1f56qky4pmjc7l0r6b6l7whnnw7hp6-python3-3.13.15/lib",
+            "/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84/lib",
+            "/nix/store/604gsr59rj7dzd0nrhp143rpvf7gyiaz-gcc-15.3.0-lib/lib"
+          ]
+        }
+      },
+      "ci-optim/deps/feynkit_generator-9c81726e5f0078f8": {
+        "terminal_sha256": "746fde26b8b494d1cabcd234cbb87e8c455bdda8c547c9aed9dfc9b2104969c9",
+        "archive_sha256": "9d693abbc274a9d8231fb2b7b52206448e7b59df397b8be26865bd1b8a1972dc",
+        "changed_sections": [
+          ".dynsym",
+          ".dynstr",
+          ".dynamic"
+        ],
+        "relocated_loader_sections": [
+          ".gnu.version",
+          ".gnu.version_r",
+          ".rela.dyn",
+          ".rela.plt"
+        ],
+        "all_other_section_bytes_equal": true,
+        "dynamic_symbols_decoded_equal": true,
+        "dynamic_semantics_except_runpath_equal": true,
+        "terminal_loader": {
+          "interpreter": "/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84/lib/ld-linux-x86-64.so.2",
+          "needed": [
+            "libpython3.13.so.1.0",
+            "libgcc_s.so.1",
+            "libm.so.6",
+            "libc.so.6",
+            "ld-linux-x86-64.so.2"
+          ],
+          "runpath": [
+            "/nix/store/wj1f56qky4pmjc7l0r6b6l7whnnw7hp6-python3-3.13.15/lib",
+            "/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84/lib",
+            "/nix/store/604gsr59rj7dzd0nrhp143rpvf7gyiaz-gcc-15.3.0-lib/lib"
+          ]
+        },
+        "archive_loader": {
+          "interpreter": "/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84/lib/ld-linux-x86-64.so.2",
+          "needed": [
+            "libpython3.13.so.1.0",
+            "libgcc_s.so.1",
+            "libm.so.6",
+            "libc.so.6",
+            "ld-linux-x86-64.so.2"
+          ],
+          "runpath": [
+            "/nix/store/qg5nc1vcxjbdb5zzjigilx3wngy8xyfd-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0/lib",
+            "/nix/store/wj1f56qky4pmjc7l0r6b6l7whnnw7hp6-python3-3.13.15/lib",
+            "/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84/lib",
+            "/nix/store/604gsr59rj7dzd0nrhp143rpvf7gyiaz-gcc-15.3.0-lib/lib"
+          ]
+        }
+      }
+    },
+    "elf_and_runtime": {
+      "all13_archive_ELF_metadata_parsed_independently": true,
+      "runtime_file_mounts_rehashed": 19,
+      "stdlib_files_rehashed": 3150,
+      "all_four_original_loader_results_exit0": true,
+      "preflight_and_loaders_precede_discovery": true,
+      "reviewer_loader_executions": 0
+    },
+    "source_pipeline_comparison": {
+      "generator_model_assets_amplitude_case_census_classes_scope_exact": true,
+      "generator_exception": "Only four additional approved numerator literals",
+      "other_different_owners": [
+        "kernel1a1829b1\u21928eb7c372",
+        "crates/idenso/src/color/mod.rs",
+        "crates/spenso/src/network/tags/mathml.rs",
+        "crates/feynkit-graph/src/integrals.rs",
+        "crates/feynkit-graph/src/integrals/partial_fraction.rs"
+      ],
+      "whole_pipeline_identity": false,
+      "no_causal_attribution_from_source_diff": true
+    }
+  },
+  "resource_and_execution_policy": {
+    "canonical_nextest_sha256": "03e166fbe150d150450df98ebfa00e3b823b487cab5f6f9ff3d4cfb4bff4b09f",
+    "only_change": "Private output-store path appended; all profile/default-filter/group/threads-required settings identical",
+    "profile": "ci_gammaloop",
+    "timeout": "120s period, terminate-after2, on-timeout fail =240s",
+    "retries": 0,
+    "workers_cap": 16,
+    "actual_workers": 16,
+    "memory_intensive_slots": 2,
+    "all_other_groups_preserved": true,
+    "memory_cap": "none; no20GiB adoption",
+    "default_filter_override": false,
+    "run_ignored": false,
+    "empty_selection_fails": true,
+    "oracle_loop_pool": 1,
+    "registration_cells_own_pools": [
+      1,
+      8,
+      32
+    ],
+    "full_package_oracle_pool8_32_recertified": false,
+    "elapsed_seconds_contended": 443.379757886054,
+    "performance_or_memory_credit": false,
+    "capsule": "Retained argv and preflight show unshare-all, read-only exact source/archive/input/helpers/libraries, private writable work/tmp/home, no mounted host root/home/config/Nix socket/compiler/donor cache; records outside child-writable mounts.",
+    "licensed_commands_only": [
+      "inventory",
+      "package-run"
+    ],
+    "license_delivery": "Static launcher/controller inspection confirms anonymous-pipe delivery and immediate nextest exec; private value is neither reviewed nor retained here. No license/user-config/environment reads by reviewer.",
+    "original_setup_error_records": "errors.json retains missing /bin/bash, relative-path read error, and corrected historical-default pool attribution. These are retained narrative records; no new setup/native rerun or independent raw shell-session reconstruction is claimed."
+  },
+  "fresh_vs_reused": {
+    "reviewer_fresh_pure": [
+      "All79 candidate seals and209 prior-review seals",
+      "Full immutable4738-path source comparison",
+      "Four root recursive closure audits",
+      "Actual24-member archive hashes and all four terminal/archive ELF comparisons",
+      "Original current/historical inventory, JUnit and stderr parsing",
+      "All69 Summary/Row/grouping joins and historical equality checks",
+      "14 negative evidence-rejection controls and one passed-outer/internal-diagnostic holdout",
+      "Exact command, policy, cleanup and concurrent-movement audit"
+    ],
+    "reviewer_native_test_executions": 0,
+    "reviewer_licensed_discoveries": 0,
+    "reviewer_new_algebra_captures_or_decoders": 0,
+    "reviewer_builds_compilers_Nix_network": 0,
+    "candidate_fresh_retained_native": "Exactly one371-test package run and one discovery, never presented as reviewer execution",
+    "reused_native": "Earlier bounded12 pool1/8/32 runtime passes and15 capture joins, and earlier finite mathematics/interfaces, remain reused at their original seals. They add zero to371.",
+    "controls_scope": "Pure reviewer evidence-audit checks only; no general candidate harness approval"
+  },
+  "findings": [
+    {
+      "id": "FULLGEN-I1",
+      "severity": "INFO",
+      "blocking": false,
+      "title": "Pool scope remains deliberately narrower than historical full-pool coverage",
+      "location": [
+        "characterization.json:selection.pool_basis",
+        "report.typ:Exact lane and identities",
+        "runs/package-run/command-result.json"
+      ],
+      "impact": "Identity equality and302 passes do not recertify the complete package at oracle pools8/32 or reproduce historical timing. Registration tests with explicit pools are separate observations.",
+      "required_action": "Carry the existing disclosure with every downstream summary; no packet correction required."
+    },
+    {
+      "id": "FULLGEN-I2",
+      "severity": "INFO",
+      "blocking": false,
+      "title": "Archive and terminal executables are related by loader packaging, not whole-file equality",
+      "location": [
+        "independent-provenance.json:terminal_root_byte_bindings",
+        "compiled-qualification.json:closures"
+      ],
+      "impact": "Fresh pure comparison of all four binaries finds .dynsym/.dynstr/.dynamic differences and relocated version/relocation tables. Decoded symbols, needed libraries, dynamic semantics aside from runpath, and all nonloader section bytes agree. New three-root qualification does not borrow oracle-only runtime approval.",
+      "required_action": "Preserve this exact packaging qualification when reusing these binaries; do not claim whole-file archive/terminal equality."
+    },
+    {
+      "id": "FULLGEN-I3",
+      "severity": "INFO",
+      "blocking": false,
+      "title": "Deleted automatic physical dumps carry no mathematical or decoder credit",
+      "location": [
+        "cleanup.json",
+        "independent-reporting.json:dump_attribution",
+        "runs/package-run/junit.xml"
+      ],
+      "impact": "The69 deleted left.json inventories are individually associated with named failures by retained original stderr in this run. Their bytes are unavailable for fresh physical decoding. Passing negative tests can emit internal diagnostics in general; the reviewer explicitly accepts a passed-outer diagnostic holdout. All actual raw assertion errors remain in JUnit and stderr.",
+      "required_action": "Retain assertion-only classification and the existing deletion disclosure. New physical evidence must be independently qualified and retained if later migration work needs it."
+    },
+    {
+      "id": "FULLGEN-I4",
+      "severity": "INFO",
+      "blocking": false,
+      "title": "Numerator-only historical Summary equality is not a physics or migration certificate",
+      "location": [
+        "failure-matrix.json",
+        "independent-results.json",
+        "report.typ:Pipeline and first failure boundary"
+      ],
+      "impact": "The69 failures are inherited at asserted-summary granularity. Equal other fields neither establish full numerator equivalence nor identify a kernel cause. None literal assertions do not supply fresh Auto full-Row/search-counter capture or grouped Auto root aggregation.",
+      "required_action": "Keep each case/mode/grouping proof obligation and existing conditional grouped premises separate; no expectation migration is approved."
+    }
+  ],
+  "current_and_future_proof_needs": {
+    "current_characterization": "No blocking evidence gap remains for the exact pool1 characterization. The package remains red with69 failures.",
+    "for_any_ungrouped_expectation_migration": "Separately qualified historical/current factor-preserving full numerators for each case and None/Auto mode, with locality, signed routing, complete whole-symbol definitions, and operand/output-axis correspondence; independent correctness argument.",
+    "for_grouped_migration": "Exact source-group membership, weights, factorized numerators, signed routing, complete operand/output-axis transport and applicable samples/seed premises; equal counts/weights alone are insufficient. xs_qed_eemm_identical_L2 None acceptance and Auto conditional reviews are not aggregated here.",
+    "for_full_pool_coverage": "Separately qualified actual package oracle pool8/32 runs or exact applicable retained evidence; this review neither performs nor authorizes them.",
+    "for_broader_readiness": "Other packages, ignored/heavy tiers, host/API/browser/stub, core/evaluator/source46, full docs, memory/performance and WP3/M-rebuild/global integration/publication retain their owning gates."
+  },
+  "non_approvals": [
+    "expectation/literal migration",
+    "physical equivalence theorem",
+    "kernel causality",
+    "grouped Auto aggregation",
+    "general test-harness approval",
+    "installed host or RustRed/API/stub/browser",
+    "full package oracle pools8/32",
+    "ignored or heavy tests",
+    "other packages",
+    "WP9 completion",
+    "WP3/M-rebuild/global integration",
+    "source46/evaluator approval",
+    "full documentation",
+    "performance or memory limits",
+    "publication or distribution"
+  ],
+  "retention_and_process": {
+    "writes_only": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-full-generator-characterization-astra-20261031-022430Z-320628f7",
+    "source_expectation_VCS_ref_index_snapshot_changes": 0,
+    "new_workspace": false,
+    "delegations": 0,
+    "candidate_sealed_files_unchanged": 79,
+    "external_movement": {
+      "candidate": {},
+      "main": {},
+      "metadata": {},
+      "refs": {
+        "refs/jj/keep/49c2df9f8b6e75743cbf2c31df6ed0f66bdaef08": {
+          "before": null,
+          "after": "49c2df9f8b6e75743cbf2c31df6ed0f66bdaef08"
+        },
+        "refs/jj/keep/b6c3886feb702cbf120ec448356684ec5c9b7857": {
+          "before": null,
+          "after": "b6c3886feb702cbf120ec448356684ec5c9b7857"
+        },
+        "refs/jj/keep/457e361d7d39e0a3daae801651f8c1dfabbf47aa": {
+          "before": null,
+          "after": "457e361d7d39e0a3daae801651f8c1dfabbf47aa"
+        },
+        "refs/jj/keep/23729716cfb78775d0fca6e96080be870ad3680a": {
+          "before": null,
+          "after": "23729716cfb78775d0fca6e96080be870ad3680a"
+        },
+        "refs/jj/keep/dc5b4657b628fa725228624a79f45f11c19f8fbb": {
+          "before": null,
+          "after": "dc5b4657b628fa725228624a79f45f11c19f8fbb"
+        }
+      }
+    },
+    "movement_policy": "Recorded without restoration; immutable ffa remains the review authority.",
+    "consumed_external_inputs_final_rehash_count": 9298,
+    "owned_processes_remaining": [],
+    "retained": "This NEW ignored directory retains pure scripts/results, failed probes, input hashes, guards and sealed review for root disposition and continuation. No archive extraction, native process or temporary physical payload is retained by reviewer. Candidate and prior evidence remain untouched.",
+    "failed_review_probes": "Initial path/interpreter/Git layout/schema discovery errors plus parser handling corrections are retained. Whole-file ELF equality failed as expected for packaging; the follow-up proves the exact loader-only transformation. None of the failed attempts earns positive credit.",
+    "failed_probe_records": [
+      "controls-ERROR-023257.json",
+      "provenance-ERROR-022802.json",
+      "provenance-ERROR-022826.json",
+      "provenance-ERROR-022924.json",
+      "provenance-ERROR-023002.json",
+      "results-ERROR-022613.json",
+      "results-ERROR-022642.json",
+      "reviewer-probes.json"
+    ],
+    "failed_probe_source_snapshots": [
+      "audit-attempt1.py",
+      "audit-attempt2.py",
+      "audit-attempt3.py",
+      "audit-attempt4.py",
+      "audit-attempt5.py",
+      "audit-attempt6.py",
+      "audit-attempt7.py"
+    ]
+  },
+  "artifacts": {
+    "audit-attempt1.py": "09f83d6399e2990dd507942e126ea2bdd4d53620267f2e2ace1cf097643a1303",
+    "audit-attempt2.py": "47be193f43abdc9ac1da7327f40afbdb800b1493998aa5a7e81a918b8dcb5c77",
+    "audit-attempt3.py": "dae76e5a110065b548701f6e88dabbc0d970ac6b0dc6b11c0c8b615d65ea927c",
+    "audit-attempt4.py": "4fa84d76902a934d86d230d0c94080284a2011350972d5e23f462191a4d6c6c1",
+    "audit-attempt5.py": "4ba784c5460e7b9e5c135a7d28533b546b337f3cad997aac684228322cfa524c",
+    "audit-attempt6.py": "20829bfdbe947fcc508e32886a5df42f9bc6c17c7a118d0af98300611c29ddb3",
+    "audit-attempt7.py": "6d83d2cd5490e4c27e4f960a687412cef36b55c767949f2a7144a4f894caf541",
+    "audit.py": "be0301320de4f6915257b3196d8e886dc9a597d0461368cae8897883f4d5774e",
+    "candidate-seal-verification.json": "4814aa4b2bb0bcfbecdf45b2cac8f3f993530a693b6363bdc5942c589f4eb152",
+    "controls-ERROR-023257.json": "ae09945b4db7a37938a31f4813233a6011cdffc599773a3ee28e51d7802f1cd4",
+    "controls-commands.json": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+    "controls-reads.json": "c6505ccb77360a1005a4f7b3ecc6f1c6183ec8da43693fa32f767fa453ea5cd2",
+    "final-input-and-process-check.json": "49b3322a462e6335ae62097298ede9f5dd62498610a6aabbcf6fa70a040fd003",
+    "final_guard-commands.json": "9b1377ebc0955a10d7b32d2064c08cc7872cd964d4c1d29baf1f5a962ac0ebb7",
+    "final_guard-reads.json": "27e693744f24b6b3fb19e8ee510d74e2b172301ba561d86f38f637c349c34b39",
+    "fresh-pure-controls.json": "fdc60da985ec5a2e76459fd7832ac80fc07abbda330d1c87b40c8ad0ec3897bd",
+    "guard-final.json": "c7177256bdfcb6a5d7c53ac7f66a7e35e1749d87c1f151174f044253a406a09c",
+    "guard-start.json": "09e8c4fba44c7651c4eaf284749b4b91f7ddf4c6cb6f9861bf8aab10de527818",
+    "independent-kernel-locks.json": "858ffb476e541d4fb02d602ebaee66522f164e8dcfa061f6ddd75c3cc39ed36a",
+    "independent-policy.json": "296b1a5c877aedefce9c15aec096fb014a32dd880db2ff604fe423de8901a2c5",
+    "independent-provenance.json": "40a1a96ed7afb0e25d0bc8d9b7f83ceb9b4a5143e2a01b34347029ceb87ce1e5",
+    "independent-reporting.json": "b5e65cb9f5adfebe292c98027ac5dbd020547f0ec701471c984e9a3ddd783644",
+    "independent-results.json": "7a55fb40d3dcd3273b2d67b653539bfef6c96941f38f5f386e2849ab9c1e0198",
+    "policy-commands.json": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+    "policy-reads.json": "048a79ee53a0bfe751b1e1608d47138bb5a2ffa9d3af0cd2a43f1baa985be0b3",
+    "prior-inventory-schema.json": "f160d87a086d844c0f76ee34477b412ab9c3d28184df1bdf47024291092f8206",
+    "provenance-ERROR-022802.json": "b839743e9f4864f01cb9e65f8761eb07ae47918d308a05f8102db6125703fbcd",
+    "provenance-ERROR-022826.json": "c58f417512a53ef0cb16bb81843c0f0ce536143bd8c1345dbf15decfc67ffe79",
+    "provenance-ERROR-022924.json": "52c9e9b07a89c62c9add53e7f616b100d1209766f48eb485eeb2a8077b494352",
+    "provenance-ERROR-023002.json": "34ce35e5bf220c9f4b06df6e111c410c0c712c1f241cf0c9149dcbb3ed5c9a91",
+    "provenance-commands.json": "b82b948959e6dc3ca8fab33002e288f9edac1d4dc5fb7ec3c407ee9d11658e30",
+    "provenance-reads.json": "32bfd40b7b3003a9759634e86c14ace0c918101c0a232b4e2fad3552c19788f0",
+    "results-ERROR-022613.json": "367ef9ccf94631178e40243fc681089c5b77bbbe00341dfb19f31f61b5b44b57",
+    "results-ERROR-022642.json": "c91a890ea70d778e3f833888a0747888b078139b997b8f51f0a41d3ac73a484c",
+    "results-commands.json": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+    "results-reads.json": "eb4147886b0bc166a8ffc50e3aa7725d4621193c84960366cbef8a7d9eecab30",
+    "reviewer-probes.json": "f6eaef0f7970ea0191fd4de4f1f5d7150b31d53655e81c1cb7cf0354dc029c6f",
+    "source_reporting-commands.json": "aa4dae387ddccd312e46bef704cd1c71e6cd757376d85f918fd40c9e1b60cfbd",
+    "source_reporting-reads.json": "b9b0c3e0817c2d0503593ba778ff72b31745f404e133a9e01255271ff442579f",
+    "start-commands.json": "8659e5c22516f904e9dba75aaef5820614e23cb412b84a18bc41260cd864f118",
+    "start-reads.json": "cc0a758df99b90a34157529c75e288863010d58148e2bc352a7cd76287ad1e17",
+    "start.json": "2b52265448eff57ce27771507c3f6f952d0c6c4998bb94978bfafe8b5b81b26c",
+    "write_review.py": "1efb7638fa43f925ab4abca21b7c19c9054640db1d55c88a21e973f94fbe19d5"
+  }
+}

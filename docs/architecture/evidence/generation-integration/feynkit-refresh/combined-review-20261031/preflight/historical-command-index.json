@@ -1,0 +1,482 @@
+[
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/a-ddx-1.argv",
+    "sha256": "c429ba016272353050c61b1421431e5092d5aa56087f70e7cb8d979a9aad6ef2",
+    "argv_shell_record": "/nix/store/kwm3g9vh36d9zd171v0nz64fyan1hvfz-cargo-nextest-0.9.143/bin/cargo-nextest nextest run --archive-file /nix/store/l2kg4q1vmk7xpfj8n7ggsym81dnnk9rd-gammaloop-nextest-binaries-integration/gammaloop-nextest-integration-gammaloop-integration-tests.tar.zst --workspace-remap /shared/lcnbr/dev/gammaloop/generation-integration-plan --profile ci_gammaloop --test-threads=16 --ignore-default-filter -E test\\(=test_generate_sm_a_ddx\\) --no-tests=fail \n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/a-ddx-2.argv",
+    "sha256": "c429ba016272353050c61b1421431e5092d5aa56087f70e7cb8d979a9aad6ef2",
+    "argv_shell_record": "/nix/store/kwm3g9vh36d9zd171v0nz64fyan1hvfz-cargo-nextest-0.9.143/bin/cargo-nextest nextest run --archive-file /nix/store/l2kg4q1vmk7xpfj8n7ggsym81dnnk9rd-gammaloop-nextest-binaries-integration/gammaloop-nextest-integration-gammaloop-integration-tests.tar.zst --workspace-remap /shared/lcnbr/dev/gammaloop/generation-integration-plan --profile ci_gammaloop --test-threads=16 --ignore-default-filter -E test\\(=test_generate_sm_a_ddx\\) --no-tests=fail \n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/a-ddx-3.argv",
+    "sha256": "c429ba016272353050c61b1421431e5092d5aa56087f70e7cb8d979a9aad6ef2",
+    "argv_shell_record": "/nix/store/kwm3g9vh36d9zd171v0nz64fyan1hvfz-cargo-nextest-0.9.143/bin/cargo-nextest nextest run --archive-file /nix/store/l2kg4q1vmk7xpfj8n7ggsym81dnnk9rd-gammaloop-nextest-binaries-integration/gammaloop-nextest-integration-gammaloop-integration-tests.tar.zst --workspace-remap /shared/lcnbr/dev/gammaloop/generation-integration-plan --profile ci_gammaloop --test-threads=16 --ignore-default-filter -E test\\(=test_generate_sm_a_ddx\\) --no-tests=fail \n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/a-ddx-4.argv",
+    "sha256": "c429ba016272353050c61b1421431e5092d5aa56087f70e7cb8d979a9aad6ef2",
+    "argv_shell_record": "/nix/store/kwm3g9vh36d9zd171v0nz64fyan1hvfz-cargo-nextest-0.9.143/bin/cargo-nextest nextest run --archive-file /nix/store/l2kg4q1vmk7xpfj8n7ggsym81dnnk9rd-gammaloop-nextest-binaries-integration/gammaloop-nextest-integration-gammaloop-integration-tests.tar.zst --workspace-remap /shared/lcnbr/dev/gammaloop/generation-integration-plan --profile ci_gammaloop --test-threads=16 --ignore-default-filter -E test\\(=test_generate_sm_a_ddx\\) --no-tests=fail \n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/a-ddx-5.argv",
+    "sha256": "c429ba016272353050c61b1421431e5092d5aa56087f70e7cb8d979a9aad6ef2",
+    "argv_shell_record": "/nix/store/kwm3g9vh36d9zd171v0nz64fyan1hvfz-cargo-nextest-0.9.143/bin/cargo-nextest nextest run --archive-file /nix/store/l2kg4q1vmk7xpfj8n7ggsym81dnnk9rd-gammaloop-nextest-binaries-integration/gammaloop-nextest-integration-gammaloop-integration-tests.tar.zst --workspace-remap /shared/lcnbr/dev/gammaloop/generation-integration-plan --profile ci_gammaloop --test-threads=16 --ignore-default-filter -E test\\(=test_generate_sm_a_ddx\\) --no-tests=fail \n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/b2-bwrap.argv",
+    "sha256": "e29de12d71f21b6b86406cf191c1cd204ba323e55cacf4b39c13fbe1075e583c",
+    "argv_shell_record": "nix develop git+file:///shared/lcnbr/dev/gammaloop/main\\?rev=b9f788922341e7bde2e801a054423ae70ed7e9ae\\&shallow=1\\&allRefs=1 -c bwrap --ro-bind / / --bind /shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/bwrap-build.Y38plM /build --ro-bind /shared/lcnbr/dev/gammaloop/generation-integration-plan /build/source --proc /proc --dev-bind /dev /dev --chdir /shared/lcnbr/dev/gammaloop/generation-integration-plan /nix/store/kwm3g9vh36d9zd171v0nz64fyan1hvfz-cargo-nextest-0.9.143/bin/cargo-nextest nextest run --archive-file /nix/store/6qnfnwfw3gqanry38hvr0bb6dbz2197q-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0/gammaloop-nextest-feynkit-feynkit-generator.tar.zst --workspace-remap /shared/lcnbr/dev/gammaloop/generation-integration-plan --profile ci_gammaloop --test-threads=16 --run-ignored all -E test\\(=grouping::tests::vacuum_group28_original_pair_identity\\)\\ \\|\\ test\\(=grouping::tests::sampled_quotient_groups_physical_local_factors\\)\\ \\|\\ test\\(=grouping::tests::sampled_quotient_requires_scalar_interfaces_and_all_samples\\)\\ \\|\\ test\\(=grouping::tests::sampled_quotient_rejects_undefined_ratios\\)\\ \\|\\ test\\(=grouping::tests::sampled_quotient_does_not_group_nonfinite_operands\\)\\ \\|\\ test\\(=grouping::tests::sampled_quotient_checks_nonfinite_operands_in_every_sample\\) --no-fail-fast --no-tests=fail \n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/b2-bwrap2.argv",
+    "sha256": "6873d8bb27c3f8849f478e9efe5e1239683793bcb93551d796ad68280042e254",
+    "argv_shell_record": "nix develop git+file:///shared/lcnbr/dev/gammaloop/main\\?rev=b9f788922341e7bde2e801a054423ae70ed7e9ae\\&shallow=1\\&allRefs=1 -c bwrap --ro-bind / / --bind /shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/bwrap-build2.xVIFXF /build --ro-bind /shared/lcnbr/dev/gammaloop/generation-integration-plan /build/source --bind /shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/bwrap-tmp.bnhuzI /tmp --proc /proc --dev-bind /dev /dev --chdir /shared/lcnbr/dev/gammaloop/generation-integration-plan /nix/store/kwm3g9vh36d9zd171v0nz64fyan1hvfz-cargo-nextest-0.9.143/bin/cargo-nextest nextest run --archive-file /nix/store/6qnfnwfw3gqanry38hvr0bb6dbz2197q-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0/gammaloop-nextest-feynkit-feynkit-generator.tar.zst --workspace-remap /shared/lcnbr/dev/gammaloop/generation-integration-plan --profile ci_gammaloop --test-threads=16 --run-ignored all -E test\\(=grouping::tests::vacuum_group28_original_pair_identity\\)\\ \\|\\ test\\(=grouping::tests::sampled_quotient_groups_physical_local_factors\\)\\ \\|\\ test\\(=grouping::tests::sampled_quotient_requires_scalar_interfaces_and_all_samples\\)\\ \\|\\ test\\(=grouping::tests::sampled_quotient_rejects_undefined_ratios\\)\\ \\|\\ test\\(=grouping::tests::sampled_quotient_does_not_group_nonfinite_operands\\)\\ \\|\\ test\\(=grouping::tests::sampled_quotient_checks_nonfinite_operands_in_every_sample\\) --no-fail-fast --no-tests=fail \n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/b2-bwrap3.argv",
+    "sha256": "cd0706683be002b699f54fd8615c5bd0735f47b39155ccbc9b8b8ccef565392b",
+    "argv_shell_record": "nix develop git+file:///shared/lcnbr/dev/gammaloop/main\\?rev=b9f788922341e7bde2e801a054423ae70ed7e9ae\\&shallow=1\\&allRefs=1 -c bwrap --ro-bind / / --bind /shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/bwrap-build3.56ejf4 /build --ro-bind /shared/lcnbr/dev/gammaloop/generation-integration-plan /build/source --bind /shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/bwrap-tmp3.adMQbR /tmp --proc /proc --dev-bind /dev /dev --chdir /shared/lcnbr/dev/gammaloop/generation-integration-plan env TMPDIR=/tmp /nix/store/kwm3g9vh36d9zd171v0nz64fyan1hvfz-cargo-nextest-0.9.143/bin/cargo-nextest nextest run --archive-file /nix/store/6qnfnwfw3gqanry38hvr0bb6dbz2197q-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0/gammaloop-nextest-feynkit-feynkit-generator.tar.zst --workspace-remap /shared/lcnbr/dev/gammaloop/generation-integration-plan --profile ci_gammaloop --test-threads=16 --run-ignored all -E test\\(=grouping::tests::vacuum_group28_original_pair_identity\\)\\ \\|\\ test\\(=grouping::tests::sampled_quotient_groups_physical_local_factors\\)\\ \\|\\ test\\(=grouping::tests::sampled_quotient_requires_scalar_interfaces_and_all_samples\\)\\ \\|\\ test\\(=grouping::tests::sampled_quotient_rejects_undefined_ratios\\)\\ \\|\\ test\\(=grouping::tests::sampled_quotient_does_not_group_nonfinite_operands\\)\\ \\|\\ test\\(=grouping::tests::sampled_quotient_checks_nonfinite_operands_in_every_sample\\) --no-fail-fast --no-tests=fail \n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/b2-bwrap4.argv",
+    "sha256": "7c9c30b411baa469b235e2afa4bd7268fc45976e8184e8ffe58b358d1db9f2b0",
+    "argv_shell_record": "nix develop git+file:///shared/lcnbr/dev/gammaloop/main\\?rev=b9f788922341e7bde2e801a054423ae70ed7e9ae\\&shallow=1\\&allRefs=1 -c bwrap --ro-bind / / --bind /shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/bwrap-build4.4LMGaT /build --ro-bind /shared/lcnbr/dev/gammaloop/generation-integration-plan /build/source --bind /shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/bwrap-tmp4.WETUuJ /tmp --bind /shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/bwrap-junit4.HcCXBL /shared/lcnbr/dev/gammaloop/generation-integration-plan/target/nextest --proc /proc --dev-bind /dev /dev --chdir /shared/lcnbr/dev/gammaloop/generation-integration-plan env TMPDIR=/tmp /nix/store/kwm3g9vh36d9zd171v0nz64fyan1hvfz-cargo-nextest-0.9.143/bin/cargo-nextest nextest run --archive-file /nix/store/6qnfnwfw3gqanry38hvr0bb6dbz2197q-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0/gammaloop-nextest-feynkit-feynkit-generator.tar.zst --workspace-remap /shared/lcnbr/dev/gammaloop/generation-integration-plan --profile ci_gammaloop --test-threads=16 --run-ignored all -E test\\(=grouping::tests::vacuum_group28_original_pair_identity\\)\\ \\|\\ test\\(=grouping::tests::sampled_quotient_groups_physical_local_factors\\)\\ \\|\\ test\\(=grouping::tests::sampled_quotient_requires_scalar_interfaces_and_all_samples\\)\\ \\|\\ test\\(=grouping::tests::sampled_quotient_rejects_undefined_ratios\\)\\ \\|\\ test\\(=grouping::tests::sampled_quotient_does_not_group_nonfinite_operands\\)\\ \\|\\ test\\(=grouping::tests::sampled_quotient_checks_nonfinite_operands_in_every_sample\\) --no-fail-fast --no-tests=fail \n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/b2-nix.argv",
+    "sha256": "f6d9f93255e445d8cd5a3299f13738e29d1f3554563a0a9b367be4c464252326",
+    "argv_shell_record": "nix develop git+file:///shared/lcnbr/dev/gammaloop/main\\?rev=b9f788922341e7bde2e801a054423ae70ed7e9ae\\&shallow=1\\&allRefs=1 -c /nix/store/kwm3g9vh36d9zd171v0nz64fyan1hvfz-cargo-nextest-0.9.143/bin/cargo-nextest nextest run --archive-file /nix/store/6qnfnwfw3gqanry38hvr0bb6dbz2197q-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0/gammaloop-nextest-feynkit-feynkit-generator.tar.zst --workspace-remap /shared/lcnbr/dev/gammaloop/generation-integration-plan --profile ci_gammaloop --test-threads=16 --run-ignored all -E test\\(=grouping::tests::vacuum_group28_original_pair_identity\\)\\ \\|\\ test\\(=grouping::tests::sampled_quotient_groups_physical_local_factors\\)\\ \\|\\ test\\(=grouping::tests::sampled_quotient_requires_scalar_interfaces_and_all_samples\\)\\ \\|\\ test\\(=grouping::tests::sampled_quotient_rejects_undefined_ratios\\)\\ \\|\\ test\\(=grouping::tests::sampled_quotient_does_not_group_nonfinite_operands\\)\\ \\|\\ test\\(=grouping::tests::sampled_quotient_checks_nonfinite_operands_in_every_sample\\) --no-fail-fast --no-tests=fail \n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/b2.argv",
+    "sha256": "ddc559372e09d1516fb9a529a8b28c39a26064e5b37c8220bb8602f7349b036b",
+    "argv_shell_record": "/nix/store/kwm3g9vh36d9zd171v0nz64fyan1hvfz-cargo-nextest-0.9.143/bin/cargo-nextest nextest run --archive-file /nix/store/6qnfnwfw3gqanry38hvr0bb6dbz2197q-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0/gammaloop-nextest-feynkit-feynkit-generator.tar.zst --workspace-remap /shared/lcnbr/dev/gammaloop/generation-integration-plan --profile ci_gammaloop --test-threads=16 --run-ignored all -E test\\(=grouping::tests::vacuum_group28_original_pair_identity\\)\\ \\|\\ test\\(=grouping::tests::sampled_quotient_groups_physical_local_factors\\)\\ \\|\\ test\\(=grouping::tests::sampled_quotient_requires_scalar_interfaces_and_all_samples\\)\\ \\|\\ test\\(=grouping::tests::sampled_quotient_rejects_undefined_ratios\\)\\ \\|\\ test\\(=grouping::tests::sampled_quotient_does_not_group_nonfinite_operands\\)\\ \\|\\ test\\(=grouping::tests::sampled_quotient_checks_nonfinite_operands_in_every_sample\\) --no-fail-fast --no-tests=fail \n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/core-producer.argv",
+    "sha256": "ae775d5736cf1d794b2f197c87960af02ebcca30fd87690bfadd1989f8d87072",
+    "argv_shell_record": "nix build --no-link --print-out-paths git+file:///shared/lcnbr/dev/gammaloop/main?rev=b9f788922341e7bde2e801a054423ae70ed7e9ae&shallow=1&allRefs=1#checks.x86_64-linux.gammaloop-nextest-binaries-core\n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/feynkit-producer.argv",
+    "sha256": "19453e97b5ae9859c3d3c859739314efdf6654144cdf95534a380b36ce02d53c",
+    "argv_shell_record": "nix build --no-link --print-out-paths git+file:///shared/lcnbr/dev/gammaloop/main?rev=b9f788922341e7bde2e801a054423ae70ed7e9ae&shallow=1&allRefs=1#checks.x86_64-linux.gammaloop-nextest-binaries-feynkit\n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/four-loop-1.argv",
+    "sha256": "7d8a7c5b331897748c9877ab31cceba8a46f583ede67470642b27197c1ef620e",
+    "argv_shell_record": "target/dev-optim/examples/four_loop_numerator 1 - false \n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/four-loop-32.argv",
+    "sha256": "058e3158e15446d4996d5782ae764e61e5729485024accff31e0a25346373bb0",
+    "argv_shell_record": "target/dev-optim/examples/four_loop_numerator 32 - false \n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/four-loop-8.argv",
+    "sha256": "e2cd817785e6ee3d546782dd08f8cbca7aa0f174f1da8ecc5518d08e7558fb65",
+    "argv_shell_record": "target/dev-optim/examples/four_loop_numerator 8 - false \n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/four-loop-build.argv",
+    "sha256": "e0c3ebdb6215d68a0504ff71ba52aaded669fd770e50822a1bcf5a08652fa76f",
+    "argv_shell_record": "nix develop git+file:///shared/lcnbr/dev/gammaloop/main\\?rev=b9f788922341e7bde2e801a054423ae70ed7e9ae\\&shallow=1\\&allRefs=1 -c cargo build --locked -p feynkit-generator --example four_loop_numerator --profile dev-optim \n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/four-loop-filtered-1.argv",
+    "sha256": "e55370773987c238c72bf750a2b338666637b53053a3fb54b8a70b7c017ec495",
+    "argv_shell_record": "target/dev-optim/examples/four_loop_numerator 1 - true \n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/four-loop-filtered-32.argv",
+    "sha256": "2613e027d1ac0fd7ab1d24e88bd5fb7d0905ffa172c0311bf61b92a780dac643",
+    "argv_shell_record": "target/dev-optim/examples/four_loop_numerator 32 - true \n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/four-loop-filtered-8.argv",
+    "sha256": "1a6af28d14ed61c58c75dbced4cba5510596aa36100ff5531d583b19ac763bdb",
+    "argv_shell_record": "target/dev-optim/examples/four_loop_numerator 8 - true \n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/four-loop-perturbation.argv",
+    "sha256": "51b5b5c87fc665df4721a7dec6e331df0cb5cbdbc70f93363344ca139dfb4dd2",
+    "argv_shell_record": "/nix/store/kwm3g9vh36d9zd171v0nz64fyan1hvfz-cargo-nextest-0.9.143/bin/cargo-nextest nextest run --archive-file /nix/store/nyv36qsgs9cwrdv7md5pskfmxpc8n126-gammaloop-nextest-binaries-spenso-idenso-0.1.0/gammaloop-nextest-spenso-idenso.tar.zst --workspace-remap /shared/lcnbr/dev/gammaloop/generation-integration-plan --profile ci_gammaloop --test-threads=16 --ignore-default-filter -E test\\(=tensor::simplification::completion_tests::four_loop_color_zero_is_independent_of_spectators\\) --status-level all --no-tests=fail \n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/integration-producer.argv",
+    "sha256": "22fc85d587c4508e7b8a1481b9f7690fc14a442dc5e9066104b27985026a432c",
+    "argv_shell_record": "nix build --no-link --print-out-paths git+file:///shared/lcnbr/dev/gammaloop/main?rev=b9f788922341e7bde2e801a054423ae70ed7e9ae&shallow=1&allRefs=1#checks.x86_64-linux.gammaloop-nextest-binaries-integration\n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/nlo-coolqm-nix.argv",
+    "sha256": "be54aa1ce9a8987f0701be648404f24487cb669abf8645055b406f2f4529eb62",
+    "argv_shell_record": "nix develop git+file:///shared/lcnbr/dev/gammaloop/main\\?rev=b9f788922341e7bde2e801a054423ae70ed7e9ae\\&shallow=1\\&allRefs=1 -c /nix/store/kwm3g9vh36d9zd171v0nz64fyan1hvfz-cargo-nextest-0.9.143/bin/cargo-nextest nextest run --archive-file /nix/store/l2kg4q1vmk7xpfj8n7ggsym81dnnk9rd-gammaloop-nextest-binaries-integration/gammaloop-nextest-integration-gammaloop-integration-tests.tar.zst --workspace-remap /shared/lcnbr/dev/gammaloop/generation-integration-plan --profile ci_gammaloop --test-threads=16 --ignore-default-filter -E test\\(=epem_a_ddx::epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes\\)\\ \\|\\ test\\(=epem_a_ttx::epem_a_ttx_msbar_nlo_matches_the_published_inclusive_ratio_in_all_local_uv_routes\\)\\ \\|\\ test\\(=cool_qm_eos::cool_qm_eos_nlo_matches_example_target\\) --no-fail-fast --no-tests=fail \n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/nlo-coolqm.argv",
+    "sha256": "07fda662a59283939ce88ed9a560ef95e5a936c994bbd7bd1a4aac7e5cc4e18c",
+    "argv_shell_record": "/nix/store/kwm3g9vh36d9zd171v0nz64fyan1hvfz-cargo-nextest-0.9.143/bin/cargo-nextest nextest run --archive-file /nix/store/l2kg4q1vmk7xpfj8n7ggsym81dnnk9rd-gammaloop-nextest-binaries-integration/gammaloop-nextest-integration-gammaloop-integration-tests.tar.zst --workspace-remap /shared/lcnbr/dev/gammaloop/generation-integration-plan --profile ci_gammaloop --test-threads=16 --ignore-default-filter -E test\\(=epem_a_ddx::epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes\\)\\ \\|\\ test\\(=epem_a_ttx::epem_a_ttx_msbar_nlo_matches_the_published_inclusive_ratio_in_all_local_uv_routes\\)\\ \\|\\ test\\(=cool_qm_eos::cool_qm_eos_nlo_matches_example_target\\) --no-fail-fast --no-tests=fail \n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/oracle-fast-licensed.argv",
+    "sha256": "4cbc9471fdb0a1ad3fce101c2b85099205182ad7c80acb6c4ddc1c0c516310fe",
+    "argv_shell_record": "env -u INSTA_UPDATE -u INSTA_UPDATE_FAST -u INSTA_FORCE_PASS /nix/store/kwm3g9vh36d9zd171v0nz64fyan1hvfz-cargo-nextest-0.9.143/bin/cargo-nextest nextest run --archive-file /nix/store/6qnfnwfw3gqanry38hvr0bb6dbz2197q-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0/gammaloop-nextest-feynkit-feynkit-generator.tar.zst --workspace-remap /shared/lcnbr/dev/gammaloop/generation-integration-plan --profile ci_gammaloop --test-threads=16 --no-fail-fast --final-status-level fail --no-tests=fail \n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/oracle-fast.argv",
+    "sha256": "4cbc9471fdb0a1ad3fce101c2b85099205182ad7c80acb6c4ddc1c0c516310fe",
+    "argv_shell_record": "env -u INSTA_UPDATE -u INSTA_UPDATE_FAST -u INSTA_FORCE_PASS /nix/store/kwm3g9vh36d9zd171v0nz64fyan1hvfz-cargo-nextest-0.9.143/bin/cargo-nextest nextest run --archive-file /nix/store/6qnfnwfw3gqanry38hvr0bb6dbz2197q-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0/gammaloop-nextest-feynkit-feynkit-generator.tar.zst --workspace-remap /shared/lcnbr/dev/gammaloop/generation-integration-plan --profile ci_gammaloop --test-threads=16 --no-fail-fast --final-status-level fail --no-tests=fail \n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/oracle-focus.argv",
+    "sha256": "c5643a9191eca8e8d02045d5ec51ef2f300d0cff917d65b98b10b98f2aacac64",
+    "argv_shell_record": "nix develop git+file:///shared/lcnbr/dev/gammaloop/main\\?rev=b9f788922341e7bde2e801a054423ae70ed7e9ae\\&shallow=1\\&allRefs=1 -c bwrap --ro-bind / / --bind /shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/oracle-focus-build.zrRluW /build --ro-bind /shared/lcnbr/dev/gammaloop/generation-integration-plan /build/source --bind /shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/oracle-focus-tmp.M6QG9c /tmp --bind /shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/oracle-focus-junit.efNHdj /shared/lcnbr/dev/gammaloop/generation-integration-plan/target/nextest --proc /proc --dev-bind /dev /dev --chdir /shared/lcnbr/dev/gammaloop/generation-integration-plan env TMPDIR=/tmp /nix/store/kwm3g9vh36d9zd171v0nz64fyan1hvfz-cargo-nextest-0.9.143/bin/cargo-nextest nextest run --archive-file /nix/store/6qnfnwfw3gqanry38hvr0bb6dbz2197q-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0/gammaloop-nextest-feynkit-feynkit-generator.tar.zst --workspace-remap /shared/lcnbr/dev/gammaloop/generation-integration-plan --profile ci_gammaloop --test-threads=16 -E test\\(=ym_ggg_zero_color_L3\\)\\ \\|\\ test\\(=xs_qcdqed_addx_canonical_scalar_lr_L3\\)\\ \\|\\ test\\(/\\^frames::\\(comparison_frames_with_fermion_flow_reversals\\|representative_frames_with_fermion_flow_reversals\\|representative_frames_with_left_right_symmetrization\\)\\$/\\)\\ \\|\\ test\\(/\\^outputs_do_not_depend_on_index_registration_order_\\(generation\\|increasing\\|decreasing\\|shuffled\\)_\\(1\\|8\\|32\\)\\$/\\) --status-level all --final-status-level all --no-tests=fail \n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/sm3150.argv",
+    "sha256": "5e51c2ed22ba6a345001ee64a54fa3795162784565676e8696ef0b082c77b791",
+    "argv_shell_record": "/nix/store/kwm3g9vh36d9zd171v0nz64fyan1hvfz-cargo-nextest-0.9.143/bin/cargo-nextest nextest run --archive-file /nix/store/l2kg4q1vmk7xpfj8n7ggsym81dnnk9rd-gammaloop-nextest-binaries-integration/gammaloop-nextest-integration-gammaloop-integration-tests.tar.zst --workspace-remap /shared/lcnbr/dev/gammaloop/generation-integration-plan --profile ci_gammaloop --test-threads=16 --ignore-default-filter -E test\\(=test_vacuum_amplitude_generation_full_sm_three_loop_filtered\\) --no-tests=fail \n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-core-docs/ci-graph-corrected.argv",
+    "sha256": "56ab1aea12b71ab03d25fcab56cab78983aebf9c0e8dc38d4b6f6c0efea6a25a",
+    "argv_shell_record": "nix build --no-link --print-out-paths git+file:///shared/lcnbr/dev/gammaloop/main?rev=9b18f329e992ccc642c2cdaa62e934318f55fa76&shallow=1&allRefs=1#checks.x86_64-linux.gammaloop-guppy-workspace-graph\n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-core-docs/ci-graph.argv",
+    "sha256": "7cc2b6c84fcead3308b315283e723803ed47e5031dddc60140d6f06496924c9a",
+    "argv_shell_record": "nix build --no-link --print-out-paths git+file:///shared/lcnbr/dev/gammaloop/main?rev=9b18f329e992ccc642c2cdaa62e934318f55fa76&shallow=1&allRefs=1#checks.x86_64-linux.gammaloop-guppy-workspace-graph-check\n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-core-docs/core-fast.argv",
+    "sha256": "ba754385dd49d61eeec75388be953c05b3301185f8907dbaa5fe39b5f7686a0e",
+    "argv_shell_record": "nix build --impure --no-link --print-out-paths git+file:///shared/lcnbr/dev/gammaloop/main?rev=9b18f329e992ccc642c2cdaa62e934318f55fa76&shallow=1&allRefs=1#checks.x86_64-linux.gammaloop-nextest-core\n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-core-docs/docs-check-evidence-round2.argv",
+    "sha256": "1634e7fea78cf316077e7caca40781c99b30d1380104712325cb1c0955985be7",
+    "argv_shell_record": "nix develop git+file:///shared/lcnbr/dev/gammaloop/main?rev=8f874aa727f3a5e702d3a4b1c30f7798bb0d33d3&shallow=1&allRefs=1 -c cargo run --locked -p alphal00p-docs-builder -- check\n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-core-docs/docs-check-evidence.argv",
+    "sha256": "629459b25ef3e787f0c014cf5b30eef028e6380a4fcb9aaac77a379a67e6f58b",
+    "argv_shell_record": "nix develop git+file:///shared/lcnbr/dev/gammaloop/main?rev=3f14fbe02c3b91a59243f1a16abfed58235d465a&shallow=1&allRefs=1 -c cargo run --locked -p alphal00p-docs-builder -- check\n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-core-docs/docs-check.argv",
+    "sha256": "32ef63d838d2038a307ad8d066caf8a56609f545cf5a31e71048e3e781fc303d",
+    "argv_shell_record": "nix develop git+file:///shared/lcnbr/dev/gammaloop/main?rev=9b18f329e992ccc642c2cdaa62e934318f55fa76&shallow=1&allRefs=1 -c cargo run --locked -p alphal00p-docs-builder -- check\n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-core-docs/docs-clippy.argv",
+    "sha256": "bbc31c940493905e30a59c38598c8549f00e306b07de1dfb82e5b28b613c758a",
+    "argv_shell_record": "nix develop git+file:///shared/lcnbr/dev/gammaloop/main?rev=9b18f329e992ccc642c2cdaa62e934318f55fa76&shallow=1&allRefs=1 -c cargo clippy --locked -p alphal00p-docs-builder --all-targets -- -D warnings\n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-core-docs/docs-lib.argv",
+    "sha256": "3f47ce1f5f3cd97fd609a28ec1c03c142c62915df1d68a096b4523db1d0b9993",
+    "argv_shell_record": "nix develop git+file:///shared/lcnbr/dev/gammaloop/main?rev=9b18f329e992ccc642c2cdaa62e934318f55fa76&shallow=1&allRefs=1 -c cargo test --locked -p alphal00p-docs-builder --lib -- --test-threads=1\n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-core-docs/feature-isolation.argv",
+    "sha256": "aed74a55ffc9f20ea148fdbba588d1beac5a49849e4c40841953b1524161e062",
+    "argv_shell_record": "nix develop git+file:///shared/lcnbr/dev/gammaloop/main?rev=9b18f329e992ccc642c2cdaa62e934318f55fa76&shallow=1&allRefs=1 -c just check-symbolica-feature-isolation\n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-core-docs/fmt.argv",
+    "sha256": "bc2d0678b89b555f1310e5199c2f9d0e266ae7cbc96cab187ecf87e5f61ab3c1",
+    "argv_shell_record": "nix develop git+file:///shared/lcnbr/dev/gammaloop/main?rev=9b18f329e992ccc642c2cdaa62e934318f55fa76&shallow=1&allRefs=1 -c cargo fmt --all -- --check\n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-core-docs/hakari-generate.argv",
+    "sha256": "60b02ff47bb54ce4ea6b7625d12dd282a18afab5be9d70c8bd73fbbd8dc0e291",
+    "argv_shell_record": "nix develop git+file:///shared/lcnbr/dev/gammaloop/main?rev=9b18f329e992ccc642c2cdaa62e934318f55fa76&shallow=1&allRefs=1 -c cargo hakari generate --diff\n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-core-docs/hakari-verify.argv",
+    "sha256": "ad0b3f61442962b3a73e9a0ebdd934c29c3358c77e585e722becc9fcd68a9c4e",
+    "argv_shell_record": "nix develop git+file:///shared/lcnbr/dev/gammaloop/main?rev=9b18f329e992ccc642c2cdaa62e934318f55fa76&shallow=1&allRefs=1 -c cargo hakari verify\n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-core-docs/nixfmt.argv",
+    "sha256": "5d1e12e59c035e4ede36e6806fd45fb709720255b0a629d7335234f700cbdbea",
+    "argv_shell_record": "nix develop git+file:///shared/lcnbr/dev/gammaloop/main?rev=9b18f329e992ccc642c2cdaa62e934318f55fa76&shallow=1&allRefs=1 -c nixfmt --check nix/rust-workspace.nix\n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-core-docs/pages-gate-final-positive.argv",
+    "sha256": "b6b053336be61279f0d692a4a9ed7c639d96c0e3fdd0e145e3b668476252e162",
+    "argv_shell_record": "env -i PATH= /shared/lcnbr/dev/gammaloop/generation-rendered-evidence/.local/review-rendered-evidence-round4-opus-20261029T183451Z/probe/current-probe actual-gate /nix/store/rq2sf8iv7aknnpcc8lxhpssivs3wlyvv-source\n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-core-docs/pages-gate-negative.argv",
+    "sha256": "17a190cd845d246858d8bb4efbed1103600984ca09d3c6b4ed0235e7ab6bb924",
+    "argv_shell_record": "env -i PATH= /shared/lcnbr/dev/gammaloop/generation-rendered-evidence/.local/review-rendered-evidence-round4-opus-20261029T183451Z/probe/current-probe actual-gate <task-owned-copy-with-unauthorized-current.html>\n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-core-docs/pages-gate-positive.argv",
+    "sha256": "73c9a8c94b6cdb10f7e52ba161d6e458ce00e0adfaba86c7475bb0933a72a303",
+    "argv_shell_record": "env -i PATH= /shared/lcnbr/dev/gammaloop/generation-rendered-evidence/.local/review-rendered-evidence-round4-opus-20261029T183451Z/probe/current-probe actual-gate /nix/store/n3z69s8mgc59ndwg5nm2cdc2lc368jm9-source\n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-core-docs/producers.argv",
+    "sha256": "f9bf328fe60b6019ba5c60d187d7860dc3fd6937acd70cd45bcdeffe94c127b9",
+    "argv_shell_record": "nix build --no-link --print-out-paths git+file:///shared/lcnbr/dev/gammaloop/main?rev=9b18f329e992ccc642c2cdaa62e934318f55fa76&shallow=1&allRefs=1#checks.x86_64-linux.gammaloop-nextest-binaries-core git+file:///shared/lcnbr/dev/gammaloop/main?rev=9b18f329e992ccc642c2cdaa62e934318f55fa76&shallow=1&allRefs=1#checks.x86_64-linux.gammaloop-nextest-binaries-docs\n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-core-test-inference/combined-run/list.argv",
+    "sha256": "b93843f8a79a2c92e41d7a98f5ed33e270d0f73e2730776204e05a605575c939",
+    "argv_shell_record": "nix develop git+file:///shared/lcnbr/dev/gammaloop/main\\?rev=8bd39ede19825d73ec25e9e31dcb9267461b916e\\&shallow=1\\&allRefs=1 -c bwrap --ro-bind / / --dev-bind /dev /dev --proc /proc --bind /shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-core-test-inference/combined-run /build --bind /shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-core-test-inference/combined-run/tmp /tmp --chdir /build/source env TMPDIR=/tmp TESTS_GAMMALOOP_STATE_PATH=AUTO NEXTEST_TEST_THREADS=16 NEXTEST_RETRIES=0 RUST_BACKTRACE=1 /nix/store/kwm3g9vh36d9zd171v0nz64fyan1hvfz-cargo-nextest-0.9.143/bin/cargo-nextest nextest list --archive-file /nix/store/fji6xyj6pzjwbc88iss0jdai8nr80rxn-gammaloop-nextest-binaries-core-gammalooprs-0.1.0/gammaloop-nextest-core-gammalooprs.tar.zst --extract-to /build/source --extract-overwrite --workspace-remap /build/source --profile ci_gammaloop -E test\\(=integrands::process::tests::lmb_sampling_detects_only_oppositely_stored_parallel_edges\\)\\ \\|\\ test\\(=integrands::process::tests::graph_derived_two_loop_reflections_preserve_local_odd_numerator_and_partition\\)\\ \\|\\ test\\(=processes::cross_section::gauge_sewing_tests::massive_tau_covariant_cuts_satisfy_the_brst_quartet_identity\\) --message-format json \n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-core-test-inference/combined-run/run.argv",
+    "sha256": "9fe60e66582c5266ba6d6963be929cc867b4c574f6deedcfab94344fee598766",
+    "argv_shell_record": "nix develop git+file:///shared/lcnbr/dev/gammaloop/main\\?rev=8bd39ede19825d73ec25e9e31dcb9267461b916e\\&shallow=1\\&allRefs=1 -c bwrap --ro-bind / / --dev-bind /dev /dev --proc /proc --bind /shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-core-test-inference/combined-run /build --bind /shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-core-test-inference/combined-run/tmp /tmp --chdir /build/source env TMPDIR=/tmp TESTS_GAMMALOOP_STATE_PATH=AUTO NEXTEST_TEST_THREADS=16 NEXTEST_RETRIES=0 RUST_BACKTRACE=1 /nix/store/kwm3g9vh36d9zd171v0nz64fyan1hvfz-cargo-nextest-0.9.143/bin/cargo-nextest nextest run --archive-file /nix/store/fji6xyj6pzjwbc88iss0jdai8nr80rxn-gammaloop-nextest-binaries-core-gammalooprs-0.1.0/gammaloop-nextest-core-gammalooprs.tar.zst --extract-to /build/source --extract-overwrite --workspace-remap /build/source --profile ci_gammaloop --test-threads=16 -E test\\(=integrands::process::tests::lmb_sampling_detects_only_oppositely_stored_parallel_edges\\)\\ \\|\\ test\\(=integrands::process::tests::graph_derived_two_loop_reflections_preserve_local_odd_numerator_and_partition\\)\\ \\|\\ test\\(=processes::cross_section::gauge_sewing_tests::massive_tau_covariant_cuts_satisfy_the_brst_quartet_identity\\) --no-fail-fast --final-status-level all --status-level all --no-tests=fail \n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/affected-consumers.argv",
+    "sha256": "596616f9bd27cd742612a2263be45f285be431c138a3b706855148f2d4d98624",
+    "argv_shell_record": "nix develop --cores 2 --max-jobs 1 git+file:///shared/lcnbr/dev/gammaloop/main\\?rev=b9f788922341e7bde2e801a054423ae70ed7e9ae\\&shallow=1\\&allRefs=1 -c cargo test --locked -p feynkit-tensor -p spenso-hep-lib --features native --profile dev-optim -- --nocapture \n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/clippy.argv",
+    "sha256": "258698b019588c69138f08435dbac2fc58727d99529a5523ffee55bd152534d9",
+    "argv_shell_record": "nix develop --cores 2 --max-jobs 1 git+file:///shared/lcnbr/dev/gammaloop/main\\?rev=b9f788922341e7bde2e801a054423ae70ed7e9ae\\&shallow=1\\&allRefs=1 -c cargo clippy --locked -p feynkit-tensor --all-targets --features native --profile dev-optim -- -D warnings \n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/color-default-controls.argv",
+    "sha256": "85ac56586257b19112c2163bb1f921caf227484b2e7e956813e084104ad54cec",
+    "argv_shell_record": "/nix/store/kwm3g9vh36d9zd171v0nz64fyan1hvfz-cargo-nextest-0.9.143/bin/cargo-nextest nextest run --archive-file /nix/store/nyv36qsgs9cwrdv7md5pskfmxpc8n126-gammaloop-nextest-binaries-spenso-idenso-0.1.0/gammaloop-nextest-spenso-idenso.tar.zst --workspace-remap /shared/lcnbr/dev/gammaloop/generation-integration-plan --profile ci_gammaloop --test-threads=1 --ignore-default-filter -E test\\(=color::test::failing::test_color_matrix_element\\)\\ or\\ test\\(=color::test::failing::test_color_matrix_element_two\\) \n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/color-profile.argv",
+    "sha256": "b97f5a2e1592f21ae4f5999d80bd610d307d12c604f27a0658a45bde97658bd8",
+    "argv_shell_record": "/nix/store/kwm3g9vh36d9zd171v0nz64fyan1hvfz-cargo-nextest-0.9.143/bin/cargo-nextest nextest run --archive-file /nix/store/nyv36qsgs9cwrdv7md5pskfmxpc8n126-gammaloop-nextest-binaries-spenso-idenso-0.1.0/gammaloop-nextest-spenso-idenso.tar.zst --workspace-remap /shared/lcnbr/dev/gammaloop/generation-integration-plan --profile ci_gammaloop --test-threads=1 -E test\\(color::\\) \n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/exact-reduction__blocks__tests__loop_vector_sums_are_retained_under_a_rank_two_projector.argv",
+    "sha256": "cf7e485b36bfaeee5af62a3c74e489bd7f9c903d46089bdda6247af75baf3128",
+    "argv_shell_record": "/common/build-cache/lcnbr/4b/842977226ffc97/dev-optim/deps/feynkit_tensor-e162253ee5a17547 reduction::blocks::tests::loop_vector_sums_are_retained_under_a_rank_two_projector --exact --nocapture --test-threads=1 \n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/exact-reduction__blocks__tests__mixed_loop_and_fixed_sums_keep_the_fixed_rank_two_term.argv",
+    "sha256": "8623d51390959886cce5adc47b7acafe20ff9b423c2ce68f67281bb31957e517",
+    "argv_shell_record": "/common/build-cache/lcnbr/4b/842977226ffc97/dev-optim/deps/feynkit_tensor-e162253ee5a17547 reduction::blocks::tests::mixed_loop_and_fixed_sums_keep_the_fixed_rank_two_term --exact --nocapture --test-threads=1 \n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/exact-reduction__external__tests__one_external_direction_rank_one_and_mixed_rank_two.argv",
+    "sha256": "5e2d5890595b145807458730d10cdc064fd5556c4b066561ae14fb01f8f02c89",
+    "argv_shell_record": "/common/build-cache/lcnbr/4b/842977226ffc97/dev-optim/deps/feynkit_tensor-e162253ee5a17547 reduction::external::tests::one_external_direction_rank_one_and_mixed_rank_two --exact --nocapture --test-threads=1 \n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/exact-reduction__tests__graph_tensor_reduce_selects_internal_edges_and_promotes_lorentz_slots.argv",
+    "sha256": "0edf009d4ff027de52453eb939a5bf92fe9fdaeff7e206037c87935e37781738",
+    "argv_shell_record": "/common/build-cache/lcnbr/4b/842977226ffc97/dev-optim/deps/feynkit_tensor-e162253ee5a17547 reduction::tests::graph_tensor_reduce_selects_internal_edges_and_promotes_lorentz_slots --exact --nocapture --test-threads=1 \n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/exact-reduction__tests__reduction_keeps_declared_spectator_axes_and_zero_interfaces.argv",
+    "sha256": "cb9a14c2b41a8bfdb3d25f6cbed2d375d2a33a3289664c352f22f92b27830f96",
+    "argv_shell_record": "/common/build-cache/lcnbr/4b/842977226ffc97/dev-optim/deps/feynkit_tensor-e162253ee5a17547 reduction::tests::reduction_keeps_declared_spectator_axes_and_zero_interfaces --exact --nocapture --test-threads=1 \n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/exact-reduction__tests__reduction_materializes_positional_spectators_with_actual_witnesses.argv",
+    "sha256": "507c984ac0d37881e9dee8870210d041d205b7cfaf660b75e61001bdeadf01b0",
+    "argv_shell_record": "/common/build-cache/lcnbr/4b/842977226ffc97/dev-optim/deps/feynkit_tensor-e162253ee5a17547 reduction::tests::reduction_materializes_positional_spectators_with_actual_witnesses --exact --nocapture --test-threads=1 \n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/fmt.argv",
+    "sha256": "d48b3cdea3d8ee7d9c444e7a5b76502225e175cbb246ae6e1d9c02149d8d0a5d",
+    "argv_shell_record": "nix develop --cores 2 --max-jobs 1 git+file:///shared/lcnbr/dev/gammaloop/main\\?rev=b9f788922341e7bde2e801a054423ae70ed7e9ae\\&shallow=1\\&allRefs=1 -c cargo fmt --all -- --check \n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/idenso-controls.argv",
+    "sha256": "b952cc3a10c07c17e8b449bdae23d6f3fce8587878060a72b0ee04009d5af4ff",
+    "argv_shell_record": "/nix/store/kwm3g9vh36d9zd171v0nz64fyan1hvfz-cargo-nextest-0.9.143/bin/cargo-nextest nextest run --archive-file /nix/store/nyv36qsgs9cwrdv7md5pskfmxpc8n126-gammaloop-nextest-binaries-spenso-idenso-0.1.0/gammaloop-nextest-spenso-idenso.tar.zst --workspace-remap /shared/lcnbr/dev/gammaloop/generation-integration-plan --profile ci_gammaloop --test-threads=1 --ignore-default-filter -E test\\(=tensor::composition::tests::named_algebra_results_own_canonical_axes_without_reordering_leaf_arguments\\)\\ or\\ test\\(=tensor::inference::tests::checked_addition_owns_canonical_axes_and_typed_zero_without_reinference\\)\\ or\\ test\\(=tensor::inference::tests::checked_results_validate_scopes_once_and_preserve_logical_ports\\)\\ or\\ test\\(=tensor::inference::tests::checked_results_preserve_error_precedence_and_branch_validation\\)\\ or\\ test\\(=tensor::composition::tests::shared_products_reject_hidden_multiplicity_and_explicit_outer_contractions\\)\\ or\\ test\\(=tensor::composition::tests::admitted_cancellation_and_zero_preserve_hidden_collisions_without_observation\\)\\ or\\ test\\(=tensor::composition::tests::explicit_multiplicity_keeps_nested_sum_and_power_scopes\\)\\ or\\ test\\(=tensor::inference::tests::authoritative_metadata::additive_branches_keep_maximum_public_multiplicity_in_both_operand_orders\\)\\ or\\ test\\(=tensor::inference::tests::authoritative_metadata::intake_installs_hidden_history_before_zero_product_finishing\\)\\ or\\ test\\(=tensor::simplification::observation::tests::terminal_product_does_not_hide_new_connections_or_normalized_factors\\)\\ or\\ test\\(=tensor::simplification::observation::tests::scalar_certificate_excludes_work_without_fabricating_regional_inventory\\)\\ or\\ test\\(=tensor::simplification::observation::tests::external_incidence_proof_requires_admission_and_no_hidden_connections\\)\\ or\\ test\\(=tensor::inference::tests::rewritten_auto_ports_require_the_original_encoded_owner_and_axis\\)\\ or\\ test\\(=tensor::inference::tests::terminal_trace_interface_proof_rejects_unresolved_malformed_and_powered_words\\)\\ or\\ test\\(=tensor::simplification::completion_tests::expression_changes_invalidate_previously_completed_policies\\)\\ or\\ test\\(=tensor::inference::tests::certified_identity_does_not_certify_new_callback_heads\\) \n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/integration-plan-bundle.argv",
+    "sha256": "616b82b27ee8d4c6732a377d3c8067cb79c3aa90b1e46fc1ba3e2bb2dbf6971b",
+    "argv_shell_record": "/nix/store/wzpxqpc3v2xxah69rqifq5kac67hx36g-typst-0.15.1/bin/typst compile --root /shared/lcnbr/dev/gammaloop/generation-integration-plan --features html\\,bundle --format bundle --creation-timestamp 0 target/wp3-source44/generation-integration-plan-wrapper.typ target/wp3-tensor-layout/integration-plan-bundle \n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/integration-plan-pdf.argv",
+    "sha256": "b19355e22b66a158b3ad6b6857b88de935934ad86a2ba66aafa76a9228ee5294",
+    "argv_shell_record": "/nix/store/wzpxqpc3v2xxah69rqifq5kac67hx36g-typst-0.15.1/bin/typst compile --root /shared/lcnbr/dev/gammaloop/generation-integration-plan --creation-timestamp 0 docs/architecture/generation-integration-plan.typ target/wp3-tensor-layout/integration-plan.pdf \n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/probe-block-compile.argv",
+    "sha256": "10a1f18fec8b54f40e38792798ecee4a7ba10fb54c3f90a6a8e0675306c21b71",
+    "argv_shell_record": "env CARGO_CRATE_NAME=block_current /nix/store/c3bpv60f5wgp4pmgsifaykxk214h6463-rust-stable-with-components-2026-09-03/bin/rustc --edition=2024 --crate-name block_current --test /shared/lcnbr/dev/gammaloop/generation-tensor-reduction-layout/.local/review-tensor-reduction-layout-round3-astra-6quw2qdi/block-baseline.rs.txt -L dependency=/common/build-cache/lcnbr/4b/842977226ffc97/dev-optim/deps -C linker=/nix/store/z4c6k0mrlkwl3s4w9ysxc8vq1wylm3ms-gcc-wrapper-15.3.0/bin/gcc -o target/wp3-tensor-layout/probe-block-current --extern feynkit_tensor=/common/build-cache/lcnbr/4b/842977226ffc97/dev-optim/deps/libfeynkit_tensor-203dc450e8418a10.rlib --extern idenso=/common/build-cache/lcnbr/4b/842977226ffc97/dev-optim/deps/libidenso-6def80a0e74530aa.rlib --extern spenso=/common/build-cache/lcnbr/4b/842977226ffc97/dev-optim/deps/libspenso-a18c594b65aeba56.rlib --extern symbolica=/common/build-cache/lcnbr/4b/842977226ffc97/dev-optim/deps/libsymbolica-18d2c490e67d622b.rlib --extern feynkit_graph=/common/build-cache/lcnbr/4b/842977226ffc97/dev-optim/deps/libfeynkit_graph-e2db44bddced7093.rlib \n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/probe-block-run.argv",
+    "sha256": "5148d2197295ba8b96dd58b4ffd344d9b36ff886b3af8efd77f1ed358c1f71c3",
+    "argv_shell_record": "target/wp3-tensor-layout/probe-block-current --nocapture --test-threads=1 --exact repeated_positional_block_and_external_projection \n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/probe-followup-compile.argv",
+    "sha256": "41f0ba48ff206f70f232920c09758a688a824ebf0cad9656708466177f41d6e3",
+    "argv_shell_record": "env CARGO_CRATE_NAME=followup /nix/store/c3bpv60f5wgp4pmgsifaykxk214h6463-rust-stable-with-components-2026-09-03/bin/rustc --edition=2024 --crate-name followup --test /shared/lcnbr/dev/gammaloop/generation-tensor-reduction-layout/.local/review-tensor-reduction-layout-round3-astra-6quw2qdi/heldout-round3-followup.rs.txt -L dependency=/common/build-cache/lcnbr/4b/842977226ffc97/dev-optim/deps -C linker=/nix/store/z4c6k0mrlkwl3s4w9ysxc8vq1wylm3ms-gcc-wrapper-15.3.0/bin/gcc -o target/wp3-tensor-layout/probe-followup --extern feynkit_tensor=/common/build-cache/lcnbr/4b/842977226ffc97/dev-optim/deps/libfeynkit_tensor-203dc450e8418a10.rlib --extern idenso=/common/build-cache/lcnbr/4b/842977226ffc97/dev-optim/deps/libidenso-6def80a0e74530aa.rlib --extern spenso=/common/build-cache/lcnbr/4b/842977226ffc97/dev-optim/deps/libspenso-a18c594b65aeba56.rlib --extern symbolica=/common/build-cache/lcnbr/4b/842977226ffc97/dev-optim/deps/libsymbolica-18d2c490e67d622b.rlib --extern feynkit_graph=/common/build-cache/lcnbr/4b/842977226ffc97/dev-optim/deps/libfeynkit_graph-e2db44bddced7093.rlib \n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/probe-followup-run.argv",
+    "sha256": "dc66dac505843f3df4dbbfe62656baf1d4cd524b98e4004e6dbed506a4762fde",
+    "argv_shell_record": "target/wp3-tensor-layout/probe-followup --nocapture --test-threads=1 --skip repeated_positional_block_baseline_characterization \n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/probe-minimal-compile.argv",
+    "sha256": "91a2b04782be2987f1a6188f444ffe94614485b2f7e69b84c03493770dde8d93",
+    "argv_shell_record": "env CARGO_CRATE_NAME=minimal /nix/store/c3bpv60f5wgp4pmgsifaykxk214h6463-rust-stable-with-components-2026-09-03/bin/rustc --edition=2024 --crate-name minimal --test /shared/lcnbr/dev/gammaloop/generation-tensor-reduction-layout/.local/review-tensor-reduction-layout-round3-astra-6quw2qdi/minimal.rs.txt -L dependency=/common/build-cache/lcnbr/4b/842977226ffc97/dev-optim/deps -C linker=/nix/store/z4c6k0mrlkwl3s4w9ysxc8vq1wylm3ms-gcc-wrapper-15.3.0/bin/gcc -o target/wp3-tensor-layout/probe-minimal --extern feynkit_tensor=/common/build-cache/lcnbr/4b/842977226ffc97/dev-optim/deps/libfeynkit_tensor-203dc450e8418a10.rlib --extern idenso=/common/build-cache/lcnbr/4b/842977226ffc97/dev-optim/deps/libidenso-6def80a0e74530aa.rlib --extern spenso=/common/build-cache/lcnbr/4b/842977226ffc97/dev-optim/deps/libspenso-a18c594b65aeba56.rlib --extern symbolica=/common/build-cache/lcnbr/4b/842977226ffc97/dev-optim/deps/libsymbolica-18d2c490e67d622b.rlib --extern feynkit_graph=/common/build-cache/lcnbr/4b/842977226ffc97/dev-optim/deps/libfeynkit_graph-e2db44bddced7093.rlib \n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/probe-minimal-run.argv",
+    "sha256": "42177e14468acbd533dd6bd084232fcb704ddf789824db97bba2e0065cb16640",
+    "argv_shell_record": "target/wp3-tensor-layout/probe-minimal --nocapture --test-threads=1 \n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/probe-round2-compile.argv",
+    "sha256": "7f67251188b13e0f92cb5832e07c7bec643c1f2a1d455bb57ae13f7efdbe2f1e",
+    "argv_shell_record": "env CARGO_CRATE_NAME=round2 /nix/store/c3bpv60f5wgp4pmgsifaykxk214h6463-rust-stable-with-components-2026-09-03/bin/rustc --edition=2024 --crate-name round2 --test /shared/lcnbr/dev/gammaloop/generation-tensor-reduction-layout/.local/review-tensor-reduction-layout-round3-astra-6quw2qdi/heldout-round2.rs.txt -L dependency=/common/build-cache/lcnbr/4b/842977226ffc97/dev-optim/deps -C linker=/nix/store/z4c6k0mrlkwl3s4w9ysxc8vq1wylm3ms-gcc-wrapper-15.3.0/bin/gcc -o target/wp3-tensor-layout/probe-round2 --extern feynkit_tensor=/common/build-cache/lcnbr/4b/842977226ffc97/dev-optim/deps/libfeynkit_tensor-203dc450e8418a10.rlib --extern idenso=/common/build-cache/lcnbr/4b/842977226ffc97/dev-optim/deps/libidenso-6def80a0e74530aa.rlib --extern spenso=/common/build-cache/lcnbr/4b/842977226ffc97/dev-optim/deps/libspenso-a18c594b65aeba56.rlib --extern symbolica=/common/build-cache/lcnbr/4b/842977226ffc97/dev-optim/deps/libsymbolica-18d2c490e67d622b.rlib --extern feynkit_graph=/common/build-cache/lcnbr/4b/842977226ffc97/dev-optim/deps/libfeynkit_graph-e2db44bddced7093.rlib \n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/probe-round2-run.argv",
+    "sha256": "ef0688f63825abacd0fa3e4404f7aaeba0a7c9ecf7b7221157f77355ad099a63",
+    "argv_shell_record": "target/wp3-tensor-layout/probe-round2 --nocapture --test-threads=1 \n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/python-boundary.argv",
+    "sha256": "a72b4df255cb665e0b14694a9f9ae660114702dc7b924b17d6b8bb0aae8df6bc",
+    "argv_shell_record": "nix develop --cores 2 --max-jobs 1 git+file:///shared/lcnbr/dev/gammaloop/main\\?rev=b9f788922341e7bde2e801a054423ae70ed7e9ae\\&shallow=1\\&allRefs=1 -c cargo test --locked -p feynkit-py --test combined_community --profile dev-optim feynkit_and_spenso_share_one_symbolica_kernel_in_both_import_orders -- --exact --nocapture --test-threads=1 \n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/render-check.argv",
+    "sha256": "de6dd464394d7e6f5582ae48e0b8bf8d3d342f7a2a87870501df75493abbcd79",
+    "argv_shell_record": "node docs/architecture/evidence/generation-integration/wp3/tensor-layout/check-renders.mjs docs/architecture/generation-integration-tensor-layout.typ target/wp3-tensor-layout/tensor-layout-bundle/index.html docs/architecture/generation-integration-plan.typ target/wp3-tensor-layout/integration-plan-bundle/index.html docs/architecture/vakint-architecture.typ target/wp3-tensor-layout/vakint-architecture-bundle/index.html \n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/render-stale-negative.argv",
+    "sha256": "4411c6813c3321a03e971d4350314619a61923605fb529d2c4de41fe9ea7ae54",
+    "argv_shell_record": "node docs/architecture/evidence/generation-integration/wp3/tensor-layout/check-renders.mjs docs/architecture/generation-integration-tensor-layout.typ target/wp3-tensor-layout/tensor-layout-bundle/index.html docs/architecture/generation-integration-plan.typ target/wp3-source46-round4/generation-integration-plan-bundle/index.html docs/architecture/vakint-architecture.typ target/wp3-tensor-layout/vakint-architecture-bundle/index.html \n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/tensor-layout-bundle.argv",
+    "sha256": "5441583913bfecd640532285800c86109609a3cf3e9d38a95a2118fe3252ef25",
+    "argv_shell_record": "/nix/store/wzpxqpc3v2xxah69rqifq5kac67hx36g-typst-0.15.1/bin/typst compile --root /shared/lcnbr/dev/gammaloop/generation-integration-plan --features html\\,bundle --format bundle --creation-timestamp 0 target/wp3-tensor-layout/tensor-layout-wrapper.typ target/wp3-tensor-layout/tensor-layout-bundle \n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/tensor-layout-pdf.argv",
+    "sha256": "af47ae8e3e9883c63232bbe68d80b5d4131618ef07a3c976fc920f9133a74f34",
+    "argv_shell_record": "/nix/store/wzpxqpc3v2xxah69rqifq5kac67hx36g-typst-0.15.1/bin/typst compile --root /shared/lcnbr/dev/gammaloop/generation-integration-plan --creation-timestamp 0 docs/architecture/generation-integration-tensor-layout.typ target/wp3-tensor-layout/tensor-layout.pdf \n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/vakint-architecture-bundle.argv",
+    "sha256": "f4c6f7d003b3d9409fb1eebc71bde10e0e748d8b351d0b6ac40d74e1e4f090b6",
+    "argv_shell_record": "/nix/store/wzpxqpc3v2xxah69rqifq5kac67hx36g-typst-0.15.1/bin/typst compile --root /shared/lcnbr/dev/gammaloop/generation-integration-plan --features html\\,bundle --format bundle --creation-timestamp 0 target/wp3-tensor-layout/vakint-architecture-wrapper.typ target/wp3-tensor-layout/vakint-architecture-bundle \n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/vakint-architecture-pdf.argv",
+    "sha256": "dbff57b5bb4b550bd43c5a302695b639376475925c11d3b96ce1596dd7400465",
+    "argv_shell_record": "/nix/store/wzpxqpc3v2xxah69rqifq5kac67hx36g-typst-0.15.1/bin/typst compile --root /shared/lcnbr/dev/gammaloop/generation-integration-plan --creation-timestamp 0 docs/architecture/vakint-architecture.typ target/wp3-tensor-layout/vakint-architecture.pdf \n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/vakint-boundary.argv",
+    "sha256": "71c3cb9a50a053f45d6fd95fcdfd1929a93d1c79d232826bf9d3e842beff2611",
+    "argv_shell_record": "nix develop --cores 2 --max-jobs 1 git+file:///shared/lcnbr/dev/gammaloop/main\\?rev=b9f788922341e7bde2e801a054423ae70ed7e9ae\\&shallow=1\\&allRefs=1 -c cargo test --locked -p vakint --test tensor_reduction_mode_tests --profile dev-optim feynkit_mode_retargets_full_spenso_slots_without_nesting -- --exact --nocapture --test-threads=1 \n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/vakint-exact-feynkit_expanded_mode_restores_vakint_vectors_and_metrics.argv",
+    "sha256": "b8b13093ae66fe2ed6edfa1529c363e73dbb45377a00643dd785ce37b8c5a3d5",
+    "argv_shell_record": "/common/build-cache/lcnbr/4b/842977226ffc97/dev-optim/deps/tensor_reduction_mode_tests-2c14fdf222d82e0b feynkit_expanded_mode_restores_vakint_vectors_and_metrics --exact --nocapture --test-threads=1 \n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/vakint-exact-native_spenso_dots_with_loop_momenta_are_tensor_reduced.argv",
+    "sha256": "f3792b3a3af3a3f8fb5353f7e8b91b4110bb308e6e4c04b1c709b704e9f8537c",
+    "argv_shell_record": "/common/build-cache/lcnbr/4b/842977226ffc97/dev-optim/deps/tensor_reduction_mode_tests-2c14fdf222d82e0b native_spenso_dots_with_loop_momenta_are_tensor_reduced --exact --nocapture --test-threads=1 \n",
+    "execution": "historical only; not run by this task"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/vakint-exact-opaque_and_free_projector_legs_keep_full_spenso_slots.argv",
+    "sha256": "ecd4e3a4c0f602a7ef3e82f5656d5957c2abdfa64280301d0d82e1327ae99a1d",
+    "argv_shell_record": "/common/build-cache/lcnbr/4b/842977226ffc97/dev-optim/deps/tensor_reduction_mode_tests-2c14fdf222d82e0b opaque_and_free_projector_legs_keep_full_spenso_slots --exact --nocapture --test-threads=1 \n",
+    "execution": "historical only; not run by this task"
+  }
+]

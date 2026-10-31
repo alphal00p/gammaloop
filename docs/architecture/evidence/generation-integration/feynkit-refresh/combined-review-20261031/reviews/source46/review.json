@@ -1,0 +1,34 @@
+{
+  "schema": 1,
+  "reviewer": "Opus (new independent, MAIN46 round4 focused)",
+  "candidate": "79dfeaab77958064bf802bc88db23eb86ac2f8ce",
+  "candidate_change": "nouotqsxvrzvtxzlsrpryylmzssynpwk",
+  "built_code": "610b83fac3d4bfd7d0a92dd912191062d18a2fbe",
+  "verdict": "APPROVE",
+  "findings": [],
+  "prior_findings": {
+    "MAIN46-R3B1": "CLOSED. Fresh bundle render of plan source e1ff7645 (identical at e3c and 79df; 6aba was 26cc0313) with typst-0.15.1 --features html,bundle --format bundle --creation-timestamp 0 via wrapper 3a9deca5: exit 0, index.html 626f89df (byte equal to recorded). Checker abac31b0 passes on fresh and recorded output; fresh stdout byte-equal to recorded semantic-check.json ffe6e10b. Argv hashes ec9ec57c/eba075b5/063e9f80/98ae8c9c match. Stale fd5f11c5 retained; stale-as-current exit 1 log 7b58b6c6 matches. Expected paragraph equals the Typst source paragraph after markup removal (only backtick raw delimiters differ).",
+    "round3_A": "APPROVE retained (95e25e20 verified); parser/runtime inputs unchanged in round4.",
+    "round3_B_B1_B2_B4_P1": "Closures retained; no Nix/Rust/manifest/lock/config change e3c->79df or 610->79df."
+  },
+  "fresh_checks": [
+    "typst bundle render of plan -> 626f89df (match); source46 bundle -> 417295f6 (match)",
+    "checker current-fresh exit0, current-recorded exit0, stale-as-current exit1 (hash pin), swapped source/wrapper exit1",
+    "hash-relaxed probe copy (review dir only): legit PASS; stale-as-current rejected on paragraph text; 192->191 mutation rejected; duplicate paragraph rejected (2); missing paragraph rejected (0); stale==current rejected",
+    "stale vs current HTML differ in exactly one line (the source46 paragraph spacing)",
+    "inventory: 5 paths e3c->79df, 30 vs 217d; correction-inventory 8a3db573 and nonself 570c05cf match; 29 nonself hashes equal 79df blobs; round4-correction.json blob 477d75c7",
+    "610->79df: 12 paths, all docs/ (7 json, 2 mjs, 2 typ, docs/developers.toml); none in workspace build/test filesets (docs only via docs/api/python, docs/examples.toml, docs/products) -> selected runtime inputs unchanged by construction",
+    "final evidence source nxdxda8m: nix hash path = sha256-VBFl0ZOCCp+6guip+P8WFWNdpf6beGf3DLeNvsIpqVo=, main46 dir equals worktree; evaluated only, not built/executed",
+    "producer output nyv36qsg NAR sha256-DZrI9own..., 60485400 bytes, deriver 50zx8g0c; archive 484278ab unchanged",
+    "Cargo.lock/flake.lock/rust-workspace.nix/nix-ci.nix/vendor/crates/.config/.tangled/.github/flake.nix identical 610 vs 79df (217 for CI dirs); kernel 1a1829b1 present in Cargo.lock",
+    "refs before/after identical (359 lines), tree hash d3662860 unchanged, @ remains 79df, no owned processes"
+  ],
+  "reused": ["source46 PDF 5aa33158 at creation timestamp 315532800 (round3 B reproduction), plan PDF 078e16da (round3 B), 192+2 archive execution and accounting (round2/3 A), targets/features/depinfo/producer (round3 B)"],
+  "notes_nonblocking": [
+    "P4: checker stale rejection in the committed configuration is hash-based first; the semantic layer independently rejects when hashes relaxed (probe).",
+    "P4: round3-correction.json was edited in round4 to point at round4 artifacts; frozen e3c preserves the original round3 text."
+  ],
+  "gate": "MAIN46 cumulative gate clears with round3 A APPROVE plus this round4 approval closing the sole round3 B finding.",
+  "limits": ["No full WP3 claim; tensor repair 97269ac1 not imported and needs reconciliation plus fresh combined review and whole WP3 exit matrix.", "Tensor 200/1/3, consumer 23/1, source44 slow EXIT101, full-docs eight inherited failures, aggregate evaluated only: unchanged.", "No physics/performance/distribution claim."],
+  "artifacts": ".local/review-main46-round4-opus-rZyrnOS8 (fresh renders, checker outputs/argv, probe, refs/tree guards) retained"
+}

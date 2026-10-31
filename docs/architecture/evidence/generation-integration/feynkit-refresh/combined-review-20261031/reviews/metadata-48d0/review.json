@@ -1,0 +1,447 @@
+{
+  "schema": "independent-feynkit-refresh-focused-metadata-review/1",
+  "reviewer": {
+    "model": "gpt-6-astra",
+    "name": "Astra",
+    "reasoning_effort": "ultra",
+    "role": "NEW independent focused metadata review sub-agent",
+    "independent_of_implementation": true,
+    "delegation": false
+  },
+  "completed_utc": "2026-10-30T23:26:43.249623+00:00",
+  "provider_fallback": "User reports the preceding NEW Opus attempt reached the Claude API rate limit and produced no verdict/findings. This is a new independent Astra review of the full original brief and corrective response; no Opus approval is inferred.",
+  "verdict": "APPROVE_FOCUSED_METADATA_AGGREGATION",
+  "verdict_scope": "Only metadata delta cacd5182704082df929a066548e3501be22c9533..48d0b98b97b368b2a2f58abe67cb19dddec623df: retention and faithful attribution of six completed independent reviews, canonical note update, XS-1 paired-field repair, and additive prior-eight F1-F7 reporting disclosures. No combined/integration/WP3/M-rebuild, migration/literal/expectation, mathematical/runtime, product/browser or full-docs approval.",
+  "verdict_summary": "No new blocking or nonblocking defect found in the bounded metadata candidate. Exactly 17 additions plus the canonical note and registry change; all six full reviews and six listed original manifests/checksum sidecars are verbatim. All 118 scopes and covered source blobs are unchanged and valid. The note remains explicitly unreviewed in the submitted candidate, and the source-derived registry rule permits evidence_revision with neither review_ref nor reviewed_at. Each original verdict stays within its actual scope; the grouped provenance REQUEST_CHANGES and separate future gates remain open.",
+  "candidate": {
+    "commit": "48d0b98b97b368b2a2f58abe67cb19dddec623df",
+    "parent": "cacd5182704082df929a066548e3501be22c9533",
+    "tree": "8e96a356b1d4efef0358464b46c1fdadd7c5608d",
+    "parent_tree": "548845549f5f3086e55443d2f1a3c35e5d32811a",
+    "bookmark": "generation-feynkit-refresh-review-aggregation",
+    "workspace": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh",
+    "diff_sha256": "5af725e84cb725a280a1b0513a3e04f1075ca6a0b8065802f5519982cd212868",
+    "diff_bytes": 1403446,
+    "source_revision": "f47f27213a1c55291239c9bc0f334a7ea1cd1cc1",
+    "proof_revision": "5ba04864ca506e259d9eef4a54f65acdd8323fc2",
+    "built_revision": "5ea149ffd88ae3afc4072a38c0871c1329be8424",
+    "kernel": "8eb7c3729d6abefc916decc1bdf0c06536f8af80"
+  },
+  "input_sha256": {
+    "docs/architecture/evidence/generation-integration/feynkit-refresh/review-aggregation-20261030/SHA256SUMS": "b1f192281fe623f900664cb16eb16a6c619c4d31fba8d522cd157be6e091e31a",
+    "docs/architecture/evidence/generation-integration/feynkit-refresh/review-aggregation-20261030/receipt.json": "7eeb075125c0b249e1af3334b3167a6b053020326ec2f4a88775832effc7edb5",
+    "docs/architecture/evidence/generation-integration/feynkit-refresh/review-aggregation-20261030/receipt.typ": "82428e8f789226a796b12423aed7891e8932361c7bd63018c019b5a69c99c30f",
+    "docs/architecture/evidence/generation-integration/feynkit-refresh/review-aggregation-20261030/reviews/grouped-none-math/results/manifest.json": "8e5c2cb18896f9a89c3edbe0a9fcfa9aac9c0f86b867e0b57d02298980e5cb8a",
+    "docs/architecture/evidence/generation-integration/feynkit-refresh/review-aggregation-20261030/reviews/grouped-none-math/review.json": "b5e0f3d4fff0b43cd8fbc955140e6d62938be02c9cfc8d943206e1effcf5a01a",
+    "docs/architecture/evidence/generation-integration/feynkit-refresh/review-aggregation-20261030/reviews/grouped-none-provenance/MANIFEST.sha256": "27d165716965aeae38fd15f41951f1ee01e7de9a280457a2825a788b06e739c2",
+    "docs/architecture/evidence/generation-integration/feynkit-refresh/review-aggregation-20261030/reviews/grouped-none-provenance/review.json": "d5e93e0a03d1a5fd7a8e8b08e1ae9a4577917b1c03256d0d5b23607df0909387",
+    "docs/architecture/evidence/generation-integration/feynkit-refresh/review-aggregation-20261030/reviews/manifest.json": "bc4e669f3ea1ea8358c3fc02c575b4f36993d86ce703b4f1d7988049d3d14675",
+    "docs/architecture/evidence/generation-integration/feynkit-refresh/review-aggregation-20261030/reviews/prior-eight/manifest.json": "998a72d9ba2ee35dc5f4f721b23bf4379c5666c4031b98a58313e89c7966dbbc",
+    "docs/architecture/evidence/generation-integration/feynkit-refresh/review-aggregation-20261030/reviews/prior-eight/review.json": "5a50135038065414bc667667244378677ff44ac4f632e733b8bbd0bba451cf8b",
+    "docs/architecture/evidence/generation-integration/feynkit-refresh/review-aggregation-20261030/reviews/raw-four-dispositions/MANIFEST.sha256": "e3b2a6a0bb112c26c014e1a0b8c31c3a049daccfc0a16c6879dbcca214d9c5de",
+    "docs/architecture/evidence/generation-integration/feynkit-refresh/review-aggregation-20261030/reviews/raw-four-dispositions/review.json": "6e4410dd16ef6c2366b08793af0e835c21e55526bf124a2d3581283c32f1a9a2",
+    "docs/architecture/evidence/generation-integration/feynkit-refresh/review-aggregation-20261030/reviews/shared-scope-a/review.json": "565caeace0112a30fb9118f94b2bb759e4267d2b802395c314e485b89b4b2b70",
+    "docs/architecture/evidence/generation-integration/feynkit-refresh/review-aggregation-20261030/reviews/shared-scope-a/review.json.sha256": "1d0f84671fafe09ed11cda384230acd6f57d5624e19558697b3026e853d63f1a",
+    "docs/architecture/evidence/generation-integration/feynkit-refresh/review-aggregation-20261030/reviews/source-r4/SHA256SUMS": "a854f5ba735ff347aa86452cb4383d5f58d93a29e4ca67d2944b4a7c6f3a9a48",
+    "docs/architecture/evidence/generation-integration/feynkit-refresh/review-aggregation-20261030/reviews/source-r4/review.json": "5d9db6c6d385bd25ea9e276a2a1ebd2e95c0678171854e4ccb73a1362130e1af",
+    "docs/architecture/evidence/generation-integration/feynkit-refresh/review-aggregation-20261030/validation.json": "acbf9e53ee044c89f384a9692d839f1001d1b3172ece3479e04216196cf24e0b",
+    "docs/architecture/generation-feynkit-community-refresh.typ": "8f16edb8231c8f18c66c67091ec7c0fe91bf439aa8be460649c70ccd429e9f01",
+    "docs/developers.toml": "15dc386eb2a7d757986d67abea390f8bed462a4549e24d44006df1de93ce53bc"
+  },
+  "guidance": {
+    "read": [
+      "/shared/lcnbr/dev/gammaloop/main/AGENTS.md",
+      "/shared/lcnbr/dev/gammaloop/main/CONTRIBUTING.typ",
+      "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/AGENTS.md",
+      "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/CONTRIBUTING.typ",
+      "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/docs/architecture/generation-integration-plan.typ"
+    ],
+    "local_search": "Only root AGENTS.md and unrelated crates/vakint/AGENTS.md found outside ignored metadata; no narrower docs or builder AGENTS.md.",
+    "plan_sha256": "4489dc7383468cf2daf7f8c177d3ea87fe9cad45c99af1afc0f160b202ff06f6",
+    "application": "User's explicit read-only review constraints take precedence over ordinary implementation/build/workspace creation workflows. Existing selected workspace used; no new change created."
+  },
+  "findings": [],
+  "prior_finding_responses": [
+    {
+      "id": "XS-1",
+      "status": "CLOSED_FOR_METADATA_SOURCE_CONTRACT",
+      "locations": [
+        "docs/developers.toml:2196",
+        "crates/alphal00p-docs-builder/src/lib.rs:414",
+        "crates/alphal00p-docs-builder/src/lib.rs:894",
+        "crates/alphal00p-docs-builder/src/lib.rs:4459"
+      ],
+      "assessment": "DeveloperNote explicitly defines evidence_revision separately. check_with_catalogs requires reviewed_at.is_some()==review_ref.is_some() for every note. Before: this note alone unpaired. After: all95 paired; this investigation has neither review field and evidence_revision=cacd. Builder rendering code chooses 'No review record' when reviewed_at is absent. No fabricated review date, approval or builder execution; all other parsed registry data unchanged except this note summary/status/ref replacement."
+    },
+    {
+      "id": "F1",
+      "status": "REPORTING_CLOSED_ONLY",
+      "severity_from_prior_review": "low",
+      "location": "docs/architecture/evidence/generation-integration/feynkit-refresh/review-aggregation-20261030/receipt.json:prior_eight_reporting.dispositions",
+      "assessment": "Historical c78 leg explicitly carried by identical approved pair inputs; old1a superseded; fresh8eb attributed to the reviewed packet/reviewer, with no historical rerun."
+    },
+    {
+      "id": "F2",
+      "status": "REPORTING_CLOSED_ONLY",
+      "severity_from_prior_review": "low",
+      "location": "docs/architecture/evidence/generation-integration/feynkit-refresh/review-aggregation-20261030/receipt.json:prior_eight_reporting.dispositions",
+      "assessment": "L2 grouping constant None is explicitly a presentation map of asserted live none; built_len is the raw C built-list length. No timing evidence promotion."
+    },
+    {
+      "id": "F3",
+      "status": "REPORTING_CLOSED_ONLY",
+      "severity_from_prior_review": "low",
+      "location": "docs/architecture/evidence/generation-integration/feynkit-refresh/review-aggregation-20261030/receipt.json:prior_eight_reporting.dispositions",
+      "assessment": "Fresh QED None/Auto/old-current byte identity, companions and completed D0 census are explicitly reviewer findings. FNV equality is input identity. Unchanged outer validate.mjs still rejects the changed registry; no outer-validator pass claimed."
+    },
+    {
+      "id": "F4",
+      "status": "REPORTING_CLOSED_ONLY",
+      "severity_from_prior_review": "info",
+      "location": "docs/architecture/evidence/generation-integration/feynkit-refresh/review-aggregation-20261030/receipt.json:prior_eight_reporting.dispositions",
+      "assessment": "Additive witness can satisfy sign/coefficient/power alone. Parsed/canonical equality and additive cancellation carry the mathematical content; no five-independent-check claim."
+    },
+    {
+      "id": "F5",
+      "status": "REPORTING_CLOSED_ONLY",
+      "severity_from_prior_review": "info",
+      "location": "docs/architecture/evidence/generation-integration/feynkit-refresh/review-aggregation-20261030/receipt.json:prior_eight_reporting.dispositions",
+      "assessment": "Old-owner-order adapter disclosed; C-only fixed rotation and raw-C-order controls attributed to reviewer. No positional-consumer theorem inferred."
+    },
+    {
+      "id": "F6",
+      "status": "REPORTING_CLOSED_ONLY",
+      "severity_from_prior_review": "info",
+      "location": "docs/architecture/evidence/generation-integration/feynkit-refresh/review-aggregation-20261030/receipt.json:prior_eight_reporting.dispositions",
+      "assessment": "Original whole-runtime-root writable exposure, including command/stdout/stderr, retained. Independent reproduction supports results without retroactive containment repair."
+    },
+    {
+      "id": "F7",
+      "status": "REPORTING_CLOSED_ONLY",
+      "severity_from_prior_review": "info",
+      "location": "docs/architecture/evidence/generation-integration/feynkit-refresh/review-aggregation-20261030/receipt.json:prior_eight_reporting.dispositions",
+      "assessment": "Inherited anchor_self_comparisons label explicitly means C-vs-B. Receipt forbids execution credit for empty token-tree-equal native stages; original labels/results unchanged."
+    }
+  ],
+  "six_review_assessments": [
+    {
+      "id": "source-r4",
+      "result": "Faithful bounded attribution",
+      "assessment": "APPROVE_SOURCE_RECONCILIATION through f47f plus cacd evidence truthfulness, expressly excluding c344 metadata. The new metadata is not attributed to this approval. R4-N1..N5 remain; the Chromium153 48.9831 x 620.3672 pt tall residual was ACTUALLY EXECUTED with 1.67e-5 px excess beyond preserved 1/64. 21/300000 is model frequency only. DPR/control-order qualifications and static current-JS/SVG fixture limits do not become installed-host, product, pin-equality, WebKit or stub coverage.",
+      "locations": [
+        "docs/architecture/evidence/generation-integration/feynkit-refresh/review-aggregation-20261030/receipt.json:67",
+        "docs/architecture/generation-feynkit-community-refresh.typ:74",
+        "docs/architecture/evidence/generation-integration/feynkit-refresh/review-aggregation-20261030/reviews/source-r4/review.json:non_blocking_notes"
+      ]
+    },
+    {
+      "id": "shared-scope-a",
+      "result": "Faithful bounded attribution",
+      "assessment": "APPROVE_SHARED_SCOPE_A is twelve cases at generation pool1 (eight prior pass, four fail), shared producer/helper/runtime/evidence provenance only. Built5ea, proof5ba, kernel8eb and c344 metadata-not-runtime-built remain separate; 452 units do not establish whole-workspace compatibility. The six original nonblocker strings are preserved in the receipt, including shared-target/crates.io Graphica, QED input-version history and stale colocated Git ref.",
+      "locations": [
+        "docs/architecture/evidence/generation-integration/feynkit-refresh/review-aggregation-20261030/receipt.json:76",
+        "docs/architecture/generation-feynkit-community-refresh.typ:252"
+      ]
+    },
+    {
+      "id": "prior-eight",
+      "result": "Faithful finite application and reporting closure",
+      "assessment": "Sixteen cells are eight cases times independently captured None/Auto, GroupingNone, pool1. Approval is application/rebinding of existing certificates, not new original-physics review or migration. The sum of per-cell pair counts is 8208. F1-F7 disclosure matches the prior review. 428 reused pure rejects plus 194 excluded records equals 622; 115 QED controls remain invariant reuse. Fresh replays/heldouts belong to the prior independent Opus reviewer, not Sol's aggregation or this Astra review.",
+      "locations": [
+        "docs/architecture/evidence/generation-integration/feynkit-refresh/review-aggregation-20261030/receipt.json:88",
+        "docs/architecture/generation-feynkit-community-refresh.typ:287",
+        "docs/architecture/evidence/generation-integration/feynkit-refresh/review-aggregation-20261030/reviews/prior-eight/review.json:accounting"
+      ]
+    },
+    {
+      "id": "raw-four-dispositions",
+      "result": "Preparation-only boundary preserved",
+      "assessment": "APPROVE_CORRECTED_SCOPE_B_PREPARATIONS retains QED4-per-cell, QCD32-per-payload/mode and SM0 explicit-interface qualifications. Named interface/order handling remains capture-bound and requires separate representation/migration acceptance. No general common.run reuse or native-adapter approval is inferred. R1-R8 errata remain pending and attributed.",
+      "locations": [
+        "docs/architecture/evidence/generation-integration/feynkit-refresh/review-aggregation-20261030/receipt.json:137",
+        "docs/architecture/generation-feynkit-community-refresh.typ:263"
+      ]
+    },
+    {
+      "id": "grouped-none-provenance",
+      "result": "REQUEST_CHANGES remains open",
+      "assessment": "F1 lossy u128-to-f64 JSON identifiers, F2 observer I/O/panic/symbol-interning/dependency side effects, and F3 executable/manual validator coverage distinctions remain blockers for that separate qualification record. Shared ScopeA approval does not discharge them. F4-F9 and N1-N6 are retained in the full copied review. The in-progress correction has no inferred verdict.",
+      "locations": [
+        "docs/architecture/evidence/generation-integration/feynkit-refresh/review-aggregation-20261030/receipt.json:152",
+        "docs/architecture/generation-feynkit-community-refresh.typ:272",
+        "docs/architecture/evidence/generation-integration/feynkit-refresh/review-aggregation-20261030/reviews/grouped-none-provenance/review.json:findings"
+      ]
+    },
+    {
+      "id": "grouped-none-math",
+      "result": "Capture-premised None theorem boundary preserved",
+      "assessment": "APPROVE_CERTIFICATE_SCOPE_B_NONE remains decoded-numerator, ClassesNone/GroupingIdentical/NamingD/pool1 under the six exact captured option values. Raw11-to-final9 sewing, D22/D23 and observed30-to29 with total weight4 are attributed within those premises. Aggregate certification still requires grouped provenance approval and root aggregation. Auto, migration, historical-to-current grouped equivalence, full integrand/denominators, raw-cook admission and positional/free-index/locality claims remain excluded. S1-S7, especially S4 unsnapshotted helper durability, are not discharged.",
+      "locations": [
+        "docs/architecture/evidence/generation-integration/feynkit-refresh/review-aggregation-20261030/receipt.json:152",
+        "docs/architecture/generation-feynkit-community-refresh.typ:279",
+        "docs/architecture/evidence/generation-integration/feynkit-refresh/review-aggregation-20261030/reviews/grouped-none-math/review.json:findings"
+      ]
+    }
+  ],
+  "verbatim_and_manifest_assessment": {
+    "review_count": 6,
+    "copied_file_count": 12,
+    "all_copies_equal_original_paths_bytes_sizes_and_sha256": true,
+    "copy_bindings": [
+      {
+        "copy": "reviews/source-r4/review.json",
+        "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-feynkit-refresh-source-opus-round4-20261030T201146Z-697912d5/review.json",
+        "sha256": "5d9db6c6d385bd25ea9e276a2a1ebd2e95c0678171854e4ccb73a1362130e1af",
+        "bytes": 29924,
+        "equal": true
+      },
+      {
+        "copy": "reviews/source-r4/SHA256SUMS",
+        "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-feynkit-refresh-source-opus-round4-20261030T201146Z-697912d5/SHA256SUMS",
+        "sha256": "a854f5ba735ff347aa86452cb4383d5f58d93a29e4ca67d2944b4a7c6f3a9a48",
+        "bytes": 12068,
+        "equal": true
+      },
+      {
+        "copy": "reviews/shared-scope-a/review.json",
+        "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-feynkit-refresh-shared-provenance-opus-20261030T193404Z-3c0453ff/review.json",
+        "sha256": "565caeace0112a30fb9118f94b2bb759e4267d2b802395c314e485b89b4b2b70",
+        "bytes": 74728,
+        "equal": true
+      },
+      {
+        "copy": "reviews/shared-scope-a/review.json.sha256",
+        "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-feynkit-refresh-shared-provenance-opus-20261030T193404Z-3c0453ff/review.json.sha256",
+        "sha256": "1d0f84671fafe09ed11cda384230acd6f57d5624e19558697b3026e853d63f1a",
+        "bytes": 78,
+        "equal": true
+      },
+      {
+        "copy": "reviews/prior-eight/review.json",
+        "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-prior-eight-fresh8eb-math-opus-20261030T202304Z-bf443319/review.json",
+        "sha256": "5a50135038065414bc667667244378677ff44ac4f632e733b8bbd0bba451cf8b",
+        "bytes": 46366,
+        "equal": true
+      },
+      {
+        "copy": "reviews/prior-eight/manifest.json",
+        "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-prior-eight-fresh8eb-math-opus-20261030T202304Z-bf443319/manifest.json",
+        "sha256": "998a72d9ba2ee35dc5f4f721b23bf4379c5666c4031b98a58313e89c7966dbbc",
+        "bytes": 211876,
+        "equal": true
+      },
+      {
+        "copy": "reviews/raw-four-dispositions/review.json",
+        "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-raw-four-dispositions-opus-20261030T202304Z-196212/review.json",
+        "sha256": "6e4410dd16ef6c2366b08793af0e835c21e55526bf124a2d3581283c32f1a9a2",
+        "bytes": 29704,
+        "equal": true
+      },
+      {
+        "copy": "reviews/raw-four-dispositions/MANIFEST.sha256",
+        "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-raw-four-dispositions-opus-20261030T202304Z-196212/MANIFEST.sha256",
+        "sha256": "e3b2a6a0bb112c26c014e1a0b8c31c3a049daccfc0a16c6879dbcca214d9c5de",
+        "bytes": 6306,
+        "equal": true
+      },
+      {
+        "copy": "reviews/grouped-none-provenance/review.json",
+        "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-identical-grouped8eb-provenance-opus-20261030T194220Z-caaf7f95/review.json",
+        "sha256": "d5e93e0a03d1a5fd7a8e8b08e1ae9a4577917b1c03256d0d5b23607df0909387",
+        "bytes": 54596,
+        "equal": true
+      },
+      {
+        "copy": "reviews/grouped-none-provenance/MANIFEST.sha256",
+        "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-identical-grouped8eb-provenance-opus-20261030T194220Z-caaf7f95/MANIFEST.sha256",
+        "sha256": "27d165716965aeae38fd15f41951f1ee01e7de9a280457a2825a788b06e739c2",
+        "bytes": 765025,
+        "equal": true
+      },
+      {
+        "copy": "reviews/grouped-none-math/review.json",
+        "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-identical-none-fresh8eb-math-opus-20261030T202307Z-195933/review.json",
+        "sha256": "b5e0f3d4fff0b43cd8fbc955140e6d62938be02c9cfc8d943206e1effcf5a01a",
+        "bytes": 28959,
+        "equal": true
+      },
+      {
+        "copy": "reviews/grouped-none-math/results/manifest.json",
+        "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-identical-none-fresh8eb-math-opus-20261030T202307Z-195933/results/manifest.json",
+        "sha256": "8e5c2cb18896f9a89c3edbe0a9fcfa9aac9c0f86b867e0b57d02298980e5cb8a",
+        "bytes": 74358,
+        "equal": true
+      }
+    ],
+    "packet_SHA256SUMS_all16_entries_valid": true,
+    "embedded_shared_manifest_entries": 398,
+    "all_added_JSON_parsed_without_duplicate_keys": true,
+    "contextual_path_notice": [
+      "docs/architecture/evidence/generation-integration/feynkit-refresh/review-aggregation-20261030/reviews/manifest.json:path_semantics",
+      "docs/architecture/evidence/generation-integration/feynkit-refresh/review-aggregation-20261030/receipt.json:retention",
+      "docs/architecture/evidence/generation-integration/feynkit-refresh/review-aggregation-20261030/receipt.typ:6"
+    ],
+    "conclusion": "Original manifest relative paths explicitly retain their original review-directory context. Only the listed review/manifest files are vendored. No claim that copied manifests close over all original captures, native binaries, symlink targets, scripts or results. Those original trees remain dependencies; this review did not rehash every inner manifest target."
+  },
+  "fresh_checks": {
+    "execution_class": "Pinned Python3.13.12 -I -B standard library source/JSON/TOML analysis; read-only Git plumbing; jj --ignore-working-copy only.",
+    "diff": "Fresh full-index binary diff matches all1,403,446 supplied bytes and SHA256. Exactly17 added evidence files,2 modified metadata files,0 removed paths;4606/4608 parent paths unchanged.",
+    "whole_candidate_disk": "4625/4625 tracked bytes, symlink targets and executable modes equal candidate Git tree; rehashed unchanged at end.",
+    "historical_preservation": "All1231 pre-existing parent evidence paths unchanged; all1204 approved fdff evidence paths and243 oracle/test_feyngen paths unchanged.",
+    "reviews": "12 source/copy byte comparisons, six expected user-supplied review hashes, original verdict/receipt/manifest joins, full review semantic read, manifest syntax/JSON parsing and16 SHA256SUMS entries.",
+    "registry": "95 pairing checks and4 in-memory pairing truth-table heldouts; unique canonical source and one matching title; other parsed registry content unchanged.",
+    "scopes": "118 complete ordered scope records unchanged, covering89 source paths. Recomputed unique start/end-anchor regions using builder start-inclusive/end-exclusive rule or whole UTF-8 file without end_anchor; all Git-blob SHA1 digests match. All covered full source blobs also unchanged.",
+    "typst": "Unique top-level titles and8 local links across canonical note(6) and receipt.typ(2), resolved against candidate tree. Structural source checks only; no Typst parser/compiler/render.",
+    "controls": "Recounted16 cells/8 cases/8208 recorded pairs and428 pure reuse stage totals; verified622-428=194 historical-only exclusions against hash-bound original report. Rehashed5 retained prior-review result JSON files, inspected80 control records' retained problem summaries. These are fresh metadata checks of previous results, not new proof/control execution.",
+    "ref_index": "All4179 pre-implementation Git refs survive unchanged; only4 implementation jj keep refs added. Current all-remotes bookmark display equals implementer's final capture, with only the candidate bookmark added relative to prior capture. This review's4183 Git refs and its bookmark inventory unchanged; main index/HEAD/packed-refs unchanged. Authoritative jj integration remains fdff; stale @git remains863f."
+  },
+  "reused_not_executed_here": {
+    "source_browser": "All Chromium executions, model sweeps, source-reconciliation tests and source derivation findings are attributed to source-r4; no browser used here.",
+    "shared_runtime": "All producer/derivation/compiler/helper/ELF/runtime conclusions attributed to shared ScopeA and other originals; no build, Nix, native, producer, capture or licensed command executed.",
+    "mathematics": "All prior-eight, raw-four and grouped-None mathematical statements and native results remain prior reviewers' bounded findings; no independent theorem recertification here.",
+    "controls": "428 and115 invariant reuse;194 historical-only exclusions; prior reviewer8208-pair replay and heldouts. No fresh full-validator mutant suite or native suite claimed.",
+    "implementation": "Sol's validation.json and audit records are implementation evidence only. This review independently recomputed bounded metadata facts and grants only its explicitly named metadata verdict."
+  },
+  "remaining_gates": [
+    {
+      "id": "grouped-provenance-F1-F3",
+      "status": "REQUEST_CHANGES",
+      "severity_in_original": "major/blocking for grouped qualification",
+      "location": "docs/architecture/evidence/generation-integration/feynkit-refresh/review-aggregation-20261030/reviews/grouped-none-provenance/review.json:findings",
+      "requirement": "Separate corrective-packet review; no inferred closure from this metadata approval or shared ScopeA."
+    },
+    {
+      "id": "grouped-aggregate",
+      "status": "OPEN",
+      "location": "docs/architecture/evidence/generation-integration/feynkit-refresh/review-aggregation-20261030/receipt.json:grouped_none_pending.aggregate_gate",
+      "requirement": "Grouped-observation provenance approval plus root aggregation; this focused metadata review is not that aggregation."
+    },
+    {
+      "id": "raw-wrapper-R1-R8",
+      "status": "OPEN",
+      "location": "docs/architecture/evidence/generation-integration/feynkit-refresh/review-aggregation-20261030/receipt.json:raw_four_pending",
+      "requirement": "Separate wrapper errata review before common.run/general reuse; native adapter remains unexecuted."
+    },
+    {
+      "id": "grouped-S4",
+      "status": "OPEN_DURABILITY_GATE",
+      "severity_in_original": "info/nonblocking for original finite certificate",
+      "location": "docs/architecture/evidence/generation-integration/feynkit-refresh/review-aggregation-20261030/reviews/grouped-none-math/review.json:findings[S-4]",
+      "requirement": "Durably preserve referenced unsnapshotted helper sources before integration/migration. Copying review manifests does not vendor those helpers."
+    },
+    {
+      "id": "source-R4-N3",
+      "status": "RETAINED_NONBLOCKING_RESIDUAL",
+      "location": "docs/architecture/generation-feynkit-community-refresh.typ:96",
+      "requirement": "Executed rare tall Chromium residual remains disclosed; no test/tolerance change authorized here."
+    },
+    {
+      "id": "broader-gates",
+      "status": "OPEN",
+      "requirement": "Representation/migration approvals, Auto grouped theorem, other rows/pools, full371 lane, installed host/stub/product Chromium/WebKit/widget, canonical Typst/full-site, whole-workspace kernel/runtime, combined integration/WP3/M-rebuild/performance/budget gates."
+    }
+  ],
+  "guards": {
+    "all_4625_tracked_entries_unchanged_during_review": true,
+    "original_12_review_and_manifest_files_unchanged": true,
+    "supplied_diff_unchanged": true,
+    "git_refs": {
+      "count": 4183,
+      "before_after_equal": true,
+      "sha256": "cb02af4a07a74a07b37ea6daa47e3dfdeebe47906919c98c4dcb17271edcfd48"
+    },
+    "jj_bookmarks": {
+      "lines": 450,
+      "before_after_equal": true,
+      "sha256": "f66a4fecceca8b77863c43e49d9f6f21528fbd9211ad6eff33b49926feceaf3f"
+    },
+    "jj_op_head": {
+      "short_final_interval_only": true,
+      "before_after_equal": true,
+      "id": "14ef40145f759076237ace62d44e971c6222049087deef4be195ecbe72e9e5fd3d03327582c1da8664da79e0004074db49464c9d43f9b295f7d6c9bac62667c4",
+      "note": "First successful operation-head capture occurred after substantive checks; all jj calls in this review were --ignore-working-copy. No earlier operation-head baseline claimed."
+    },
+    "main_index_head_packed_refs": {
+      "/shared/lcnbr/dev/gammaloop/main/.git/index": {
+        "sha256": "36fca2996228d0adb018933745a106061d3febe8921980864b5cc50dbad4af5d",
+        "size": 284370
+      },
+      "/shared/lcnbr/dev/gammaloop/main/.git/HEAD": {
+        "sha256": "ad9a6439c4eb1e0d10eb1541c40089e677f898fcbb440664e4922eed98a4721b",
+        "size": 41
+      },
+      "/shared/lcnbr/dev/gammaloop/main/.git/packed-refs": {
+        "sha256": "0da18278197341776df580891f9a883e05b5e2dd5dd3082e251e02345619f5a3",
+        "size": 346648
+      }
+    },
+    "guidance_hashes": {
+      "../main/AGENTS.md": "8567f7ce8b5c575299d0800af34f66c9684e6b1b2617c615f5d8823df9a971fa",
+      "../main/CONTRIBUTING.typ": "c92c023af016d801889eea170203916c4f50bd6dce848ac18484e0b04667c2e1",
+      "AGENTS.md": "e1add0d8d63969c9218b31a8caa12539776b8e2db4b8d72ce5e2af6154082645",
+      "CONTRIBUTING.typ": "6c76d30d08b82527d9dfa3896bc7efbf860d4c33c54ce0adc613c501b7968544"
+    },
+    "review_output_root": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-refresh-aggregation-astra-20261030-independent",
+    "owned_live_processes": [],
+    "scope": "All writes restricted to this new ignored review directory; main/source/evidence/ref/index not mutated."
+  },
+  "preimplementation_ref_comparison": {
+    "implementation_baseline_sha256": "1f2428060da103fe052a5195c22587eba86d45f5d15b5bcb86be9e6eb3bc4bd1",
+    "implementation_final_sha256": "938fdfa283603ea20c17e35a90ee4f2c527251d1e83ec3a4b7bbe151d6184f71",
+    "baseline_refs_count": 4179,
+    "all_old_refs_unchanged": true,
+    "added_refs": [
+      "refs/jj/keep/0649dcaa82eee5a86f988fb1ec09a42924ba11ef",
+      "refs/jj/keep/0cfc20b6a91ed34dda9b0a46acc225409233bda8",
+      "refs/jj/keep/47f3bf766d0a653a44d9898e56cf39d99165c2be",
+      "refs/jj/keep/48d0b98b97b368b2a2f58abe67cb19dddec623df"
+    ],
+    "all_old_jj_bookmarks_unchanged": true,
+    "only_added_jj_bookmark": "generation-feynkit-refresh-review-aggregation",
+    "current_jj_display_equals_implementation_final": true,
+    "baseline_refs_inventory_sha256": "c75b979a0a53c48dc6db692f8a4571d5c898f572339e1168355fd927b9d2d0b8",
+    "interpretation": "Four jj keep refs belong to retained intermediate/final metadata commits from implementation. This review added no refs, bookmarks or jj operation."
+  },
+  "limitations": [
+    "Static review only: not a build, render, runtime qualification or independent re-proof of the underlying mathematics.",
+    "Original inner-manifest artifact closures were not all rehashed; copied manifests and original review bytes were verified, with selected retained result JSON checks.",
+    "Source-history identity and preservation checked through commit/tree objects, frozen ref inventories and current physical bytes; no historical execution reconstructed.",
+    "First op-head baseline was taken late in the review; final interval equality is recorded honestly. All jj commands used --ignore-working-copy and no modifying jj subcommand.",
+    "No approval arises from the unsuccessful Opus attempt, prior Sol implementation validation, or conjunction of scoped review verdicts."
+  ],
+  "process": {
+    "writes": "ONLY NEW files under /shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-refresh-aggregation-astra-20261030-independent",
+    "environment": "env -i allowlist; HOME=/nonexistent; no license variables; Python isolated mode. Git global/system config disabled, explicit main/.git, GIT_OPTIONAL_LOCKS=0. jj used fresh review-owned XDG_CONFIG_HOME plus JJ_CONFIG=/dev/null; it generated an empty per-repository secure config only under this directory. No license or user configuration contents read.",
+    "prohibited_operations_performed": [],
+    "delegation": false,
+    "owned_live_processes": [],
+    "errors_retained": "startup-error.txt, probe-errors.json, initial jj stderr, failed first check and full-index correction; historical-guards first used default bookmark display vs retained all-remotes display and failed only presentation comparison. Retried with --all-remotes, exact equality. Scripts/stdout/stderr and both display diffs retained.",
+    "cleanup": "No background processes started. All review-owned probes, failed attempts, empty configuration and outputs intentionally retained for audit/continuation; no shared or prior artifacts removed."
+  },
+  "artifact_sha256": {
+    "checks.json": "a47938fad3cf0a33f4c415c238b4c26a11745c1dc0c2d154cd71b31402a63683",
+    "scope-results.json": "a61a5a5cc339a4240784d4d8b828dc38f8f771e8b415e9f9b5f19adcc8e7d8df",
+    "control-accounting.json": "7b55b2710b96808e386b2e9a274904e1d57ee188e12cac10ca38ca0ad958e323",
+    "manifest-structure.json": "dacdc85f82f096d6bdbd668dd1f5c400bb1d6ffb3a6e5ab2314a8e854413ae79",
+    "prior-eight-readonly-probe-results.json": "ed3f08eb3d892d3e1d6b9a43c3e57430c1c4b7e09f0055da9199d24e6e6d035e",
+    "final-guards.json": "dbeef3efb5cc1e715c33f4e4f4461d7d50115995facbec1de793d2d2ef849482",
+    "historical-ref-guards.json": "740204389184ad25766762087d719dfbe1f41e7988eeb0a8ede83da0d5375c6b",
+    "git-read-commands.json": "cc50feaf610641a533caaaf6cabf9cb88aa1a6c63a6422766b7b1aeec47cd877",
+    "diff.full-index.patch": "5af725e84cb725a280a1b0513a3e04f1075ca6a0b8065802f5519982cd212868",
+    "probe-errors.json": "9a293423705071dbe69e2af1339969db1df85b7720564c5c086289ccc8b335a9",
+    "check.py": "4b3ff2bb4bc8d3a2a51c9b8486e3b3c8d63a11fb34e62a03cfd329d233c8adc3",
+    "check.stderr": "4ba7010a1203ca1db79cf24532f6a3462b034ed0344660283cab08c99b23b31d",
+    "check-v2.py": "4063462394122c21a667e12d53cf87d916b82488ddbbd7afdd68cac4e368f0cd",
+    "check-v2.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "historical-guards.py": "1abf25dfec3b304e5536172596e47b023abd3c20a1dbb9e55615b572502c44d8",
+    "historical-guards.stderr": "c3ed0e5c45b6c18f6c7012486b636ba636776bdd08af92371cc87d208239e3a6",
+    "historical-guards-v2.py": "6ec41ab83d92899dc1d733fe7ef3922c147f1e2e75fb4b93136a307adfcf7106",
+    "historical-guards-v2.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "retention": {
+    "review_directory": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-refresh-aggregation-astra-20261030-independent",
+    "purpose": "Independent focused metadata review, checks, failures and final guards retained for parent aggregation and review.",
+    "review_manifest": "SHA256SUMS (written after review.json; excludes itself)",
+    "review_checksum": "review.json.sha256 (external self-checksum)"
+  }
+}

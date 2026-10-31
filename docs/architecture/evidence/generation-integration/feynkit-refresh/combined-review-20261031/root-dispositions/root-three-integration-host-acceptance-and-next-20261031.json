@@ -1,0 +1,190 @@
+{
+  "schema": "generation-root-bounded-dispositions-and-dispatch/1",
+  "recorded_utc": "2026-10-31 02:06:32 UTC",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh",
+  "purpose": "Coordinator disposition and continuation record; not independent review or global integration approval.",
+  "accepted": [
+    {
+      "scope": "Three exact QED/QCD tokens applied on accepted SM base, completing twelve bounded migrated rows; new ffa archive and d0fb evidence",
+      "candidate": "d0fb4e906140a6a0fc8dd6401ca839cab0c2734d",
+      "code": "ffa76ec420642c03349ab756d2d7720ab93c0057",
+      "review": ".local/review-raw-three-integration-astra-20261031-012811Z-323f4486/review.json",
+      "review_sha256": "535b792610c531b446d8beb1a9f300246e6d498e8126509b637189e8eb80a091",
+      "seal_sha256": "85cddc01323e1c9f2bd2b18f264c278fde995259b5d8f6a84f7dda9b5ffa2e79",
+      "coordinator_verified_manifest_files": 209,
+      "reviewer_actual_passes": 36,
+      "pools": [
+        1,
+        8,
+        32
+      ],
+      "fresh_capture_joins": 15,
+      "restrictions": [
+        "Only None literal full-Row assertions; Auto physical payload fresh but search counters remain original-capture premises.",
+        "Operand AND output-axis maps mandatory; no historical positional identity or arbitrary stale-plan compatibility.",
+        "Reused dependency layers byte-identical; rebuilt terminal rlibs newly qualified at member level, not whole-file identical.",
+        "Existing finite proof, decoder, source, compiler and registration premises retained; no broader case or mode approval."
+      ]
+    },
+    {
+      "scope": "Exact f47 host provenance and enumerated passes, browser capsule correction, proposed generated notebook stub patch",
+      "review": ".local/review-host-browser-stub-astra-20261031-013106Z-5655cc61/review.json",
+      "review_sha256": "8bd31e92448a517479fb2f2ec5a12c9999c31752cea08502392f290c47e37627",
+      "seal_sha256": "6e104cabc93cb839a498c8b79ecb048a17693707704238288619ff41930759d6",
+      "coordinator_verified_manifest_files": 126,
+      "restrictions": [
+        "QCD still failed at missing native RustRed/IBPFamily; no overall host qualification.",
+        "Stub patch approved but unapplied at review; old wheel contains stale stub.",
+        "Fresh browser result four native drawings, Chromium and WebKit, two pages, zero skips; exact fonts/software EGL capsule inputs, fixed external metrics only.",
+        "Retain host symbol-metadata differences and historical formatter-cache correction disclosures."
+      ]
+    }
+  ],
+  "current_authorized_next_work": [
+    {
+      "key": "interfaceRunnerReview3",
+      "taskId": "node:delegated-task:command%3Amcp%3A4985cec9-8e94-44e4-b120-162e0b230921%3Adelegate-task%3Ageneration-interface-runner-r3-astra-review-20261031-r1",
+      "childThreadId": "thread:delegated-task:command%3Amcp%3A4985cec9-8e94-44e4-b120-162e0b230921%3Adelegate-task%3Ageneration-interface-runner-r3-astra-review-20261031-r1",
+      "childRunId": "run:thread:thread%3Adelegated-task%3Acommand%253Amcp%253A4985cec9-8e94-44e4-b120-162e0b230921%253Adelegate-task%253Ageneration-interface-runner-r3-astra-review-20261031-r1:ordinal:1",
+      "childNodeId": "node:delegated-task:command%3Amcp%3A4985cec9-8e94-44e4-b120-162e0b230921%3Adelegate-task%3Ageneration-interface-runner-r3-astra-review-20261031-r1",
+      "status": "running",
+      "workState": "working",
+      "hasPendingChildRuns": false,
+      "latestTerminalRunId": null,
+      "latestTerminalStatus": null,
+      "latestTerminalSummary": null,
+      "latestTerminalResultContextTransferId": null,
+      "providerInstanceId": "codex-account-3",
+      "model": "gpt-6-astra",
+      "options": [
+        {
+          "id": "reasoningEffort",
+          "value": "ultra"
+        },
+        {
+          "id": "serviceTier",
+          "value": "default"
+        }
+      ],
+      "summary": null,
+      "resultContextTransferId": null,
+      "hasPendingQuestion": false,
+      "pendingApproval": null,
+      "waitTimedOut": false
+    },
+    {
+      "key": "hostStubRustred",
+      "taskId": "node:delegated-task:command%3Amcp%3A4985cec9-8e94-44e4-b120-162e0b230921%3Adelegate-task%3Ageneration-host-stub-rustred-integration-sol61-20261031-r1",
+      "childThreadId": "thread:delegated-task:command%3Amcp%3A4985cec9-8e94-44e4-b120-162e0b230921%3Adelegate-task%3Ageneration-host-stub-rustred-integration-sol61-20261031-r1",
+      "childRunId": "run:thread:thread%3Adelegated-task%3Acommand%253Amcp%253A4985cec9-8e94-44e4-b120-162e0b230921%253Adelegate-task%253Ageneration-host-stub-rustred-integration-sol61-20261031-r1:ordinal:1",
+      "childNodeId": "node:delegated-task:command%3Amcp%3A4985cec9-8e94-44e4-b120-162e0b230921%3Adelegate-task%3Ageneration-host-stub-rustred-integration-sol61-20261031-r1",
+      "status": "running",
+      "workState": "working",
+      "hasPendingChildRuns": false,
+      "latestTerminalRunId": null,
+      "latestTerminalStatus": null,
+      "latestTerminalSummary": null,
+      "latestTerminalResultContextTransferId": null,
+      "providerInstanceId": "codex-account-3",
+      "model": "gpt-6.1-sol",
+      "options": [
+        {
+          "id": "reasoningEffort",
+          "value": "ultra"
+        },
+        {
+          "id": "serviceTier",
+          "value": "default"
+        }
+      ],
+      "summary": null,
+      "resultContextTransferId": null,
+      "hasPendingQuestion": false,
+      "pendingApproval": null,
+      "waitTimedOut": false
+    },
+    {
+      "key": "fullGenerator",
+      "taskId": "node:delegated-task:command%3Amcp%3A4985cec9-8e94-44e4-b120-162e0b230921%3Adelegate-task%3Ageneration-full-generator-characterization-sol61-20261031-r1",
+      "childThreadId": "thread:delegated-task:command%3Amcp%3A4985cec9-8e94-44e4-b120-162e0b230921%3Adelegate-task%3Ageneration-full-generator-characterization-sol61-20261031-r1",
+      "childRunId": "run:thread:thread%3Adelegated-task%3Acommand%253Amcp%253A4985cec9-8e94-44e4-b120-162e0b230921%253Adelegate-task%253Ageneration-full-generator-characterization-sol61-20261031-r1:ordinal:1",
+      "childNodeId": "node:delegated-task:command%3Amcp%3A4985cec9-8e94-44e4-b120-162e0b230921%3Adelegate-task%3Ageneration-full-generator-characterization-sol61-20261031-r1",
+      "status": "running",
+      "workState": "working",
+      "hasPendingChildRuns": false,
+      "latestTerminalRunId": null,
+      "latestTerminalStatus": null,
+      "latestTerminalSummary": null,
+      "latestTerminalResultContextTransferId": null,
+      "providerInstanceId": "codex-account-3",
+      "model": "gpt-6.1-sol",
+      "options": [
+        {
+          "id": "reasoningEffort",
+          "value": "ultra"
+        },
+        {
+          "id": "serviceTier",
+          "value": "default"
+        }
+      ],
+      "summary": null,
+      "resultContextTransferId": null,
+      "hasPendingQuestion": false,
+      "pendingApproval": null,
+      "waitTimedOut": false
+    },
+    {
+      "key": "autoAggregatePrep",
+      "taskId": "node:delegated-task:command%3Amcp%3A4985cec9-8e94-44e4-b120-162e0b230921%3Adelegate-task%3Ageneration-grouped-auto-aggregate-sol61-20261031-r1",
+      "childThreadId": "thread:delegated-task:command%3Amcp%3A4985cec9-8e94-44e4-b120-162e0b230921%3Adelegate-task%3Ageneration-grouped-auto-aggregate-sol61-20261031-r1",
+      "childRunId": "run:thread:thread%3Adelegated-task%3Acommand%253Amcp%253A4985cec9-8e94-44e4-b120-162e0b230921%253Adelegate-task%253Ageneration-grouped-auto-aggregate-sol61-20261031-r1:ordinal:1",
+      "childNodeId": "node:delegated-task:command%3Amcp%3A4985cec9-8e94-44e4-b120-162e0b230921%3Adelegate-task%3Ageneration-grouped-auto-aggregate-sol61-20261031-r1",
+      "status": "running",
+      "workState": "working",
+      "hasPendingChildRuns": false,
+      "latestTerminalRunId": null,
+      "latestTerminalStatus": null,
+      "latestTerminalSummary": null,
+      "latestTerminalResultContextTransferId": null,
+      "providerInstanceId": "codex-account-3",
+      "model": "gpt-6.1-sol",
+      "options": [
+        {
+          "id": "reasoningEffort",
+          "value": "ultra"
+        },
+        {
+          "id": "serviceTier",
+          "value": "default"
+        }
+      ],
+      "summary": null,
+      "resultContextTransferId": null,
+      "hasPendingQuestion": false,
+      "pendingApproval": null,
+      "waitTimedOut": false
+    }
+  ],
+  "next_work_limits": {
+    "host": "Apply only approved one-file generated stub on d0fb, freeze, corrected ordinary distribution and separate private RustRed7c1 validation superset, same8eb kernel. Build and qualify exact artifacts before unchanged QCD/coexistence tests. RustRed not a production dependency addition.",
+    "generator": "Recover historical371 selection and reconcile current archive inventory; one authorized nonignored current generator package characterization with existing qualified archive, no new producer or expectation changes. Never label partial archive coverage as historical full371.",
+    "runner": "New Astra review of r3 preflight/owner binding; no native execution or mathematical cross-credit.",
+    "auto": "New Sol aggregation of exact conditional Auto A/B premises, helper durability and strict factual schema guard, followed by new independent review."
+  },
+  "preserved": {
+    "generation_integration": "fdff0d18953348b84a0f1b7e6ab5ef703a5090de",
+    "CI_enabled": false,
+    "author": "Lucien Huber <im@lcnbr.ch>",
+    "publication_authorized": false
+  },
+  "open": [
+    "Auto aggregation independent review/root acceptance and any separate migration",
+    "RustRed native compatibility and QCD scientific checks",
+    "Applied stub/distribution integration review",
+    "Remaining generator identities, heavy/evaluator/source46 and full historical lane coverage",
+    "WP3/M-rebuild, performance/memory, full documentation and final packaging/publication"
+  ],
+  "root_runtime_credit": "None. Coordinator rehashed sealed review outputs and consumed independent reviews; native execution credit remains attributed to implementation and reviewer records.",
+  "retention": "Old packets and useful scratch retained for ongoing review. Active app-owned child tasks deliver completion notifications; root owns no shell background process."
+}

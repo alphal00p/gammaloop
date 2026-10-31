@@ -1,0 +1,23 @@
+{
+  "argv": [
+    "nix",
+    "--offline",
+    "--option",
+    "allow-import-from-derivation",
+    "false",
+    "derivation",
+    "show",
+    "/nix/store/5k4n31cldjvx64kzs6gijjz234g1m46c-gammaloop-nextest-binaries-integration.drv"
+  ],
+  "cwd": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh",
+  "exit_code": 0,
+  "stdout": "{\"derivations\":{\"5k4n31cldjvx64kzs6gijjz234g1m46c-gammaloop-nextest-binaries-integration.drv\":{\"args\":[\"-e\",\"/nix/store/l622p70vy8k5sh7y5wizi5f2mic6ynpg-source-stdenv.sh\",\"/nix/store/shkw4qm9qcw5sc5n1k5jznc83ny02r39-default-builder.sh\"],\"builder\":\"/nix/store/svx59425zxp552p2b8gm11qj5r09b56i-bash-5.3p15/bin/bash\",\"env\":{\"__structuredAttrs\":\"\",\"allowSubstitutes\":\"\",\"buildCommand\":\"mkdir -p $out\\ncd $out\\nmkdir -p -- \\\"$(dirname -- gammaloop-nextest-integration-gammaloop-integration-tests.tar.zst)\\\"\\nln -s -- /nix/store/mk42vxlz0jiism8dk87lyzn169lxvxzd-gammaloop-nextest-binaries-integration-gammaloop-integration-tests-0.1.0/gammaloop-nextest-integration-gammaloop-integration-tests.tar.zst gammaloop-nextest-integration-gammaloop-integration-tests.tar.zst\\n\\n\",\"buildInputs\":\"\",\"builder\":\"/nix/store/svx59425zxp552p2b8gm11qj5r09b56i-bash-5.3p15/bin/bash\",\"cmakeFlags\":\"\",\"configureFlags\":\"\",\"depsBuildBuild\":\"\",\"depsBuildBuildPropagated\":\"\",\"depsBuildTarget\":\"\",\"depsBuildTargetPropagated\":\"\",\"depsHostHost\":\"\",\"depsHostHostPropagated\":\"\",\"depsTargetTarget\":\"\",\"depsTargetTargetPropagated\":\"\",\"doCheck\":\"\",\"doInstallCheck\":\"\",\"enableParallelBuilding\":\"1\",\"enableParallelChecking\":\"1\",\"enableParallelInstalling\":\"1\",\"mesonFlags\":\"\",\"name\":\"gammaloop-nextest-binaries-integration\",\"nativeBuildInputs\":\"\",\"out\":\"/nix/store/akc0k7xwlfri9mc31hnis0p0wf63jcyd-gammaloop-nextest-binaries-integration\",\"outputs\":\"out\",\"passAsFile\":\"buildCommand\",\"patches\":\"\",\"preferLocalBuild\":\"1\",\"propagatedBuildInputs\":\"\",\"propagatedNativeBuildInputs\":\"\",\"stdenv\":\"/nix/store/c29a7xzhhv8nk62w1gls6f6jj8zihggv-stdenv-linux-no-cc\",\"strictDeps\":\"\",\"system\":\"x86_64-linux\"},\"inputs\":{\"drvs\":{\"ilqsr5azrzs0d025nrg2js00247pvsi3-gammaloop-nextest-binaries-integration-gammaloop-integration-tests-0.1.0.drv\":{\"dynamicOutputs\":{},\"outputs\":[\"out\"]},\"m64jd37862c5lmcg8y7s797vrnn266cl-stdenv-linux-no-cc.drv\":{\"dynamicOutputs\":{},\"outputs\":[\"out\"]},\"s3s5s80y5sq8fvxivxxz3bqfpyhx8cb4-bash-5.3p15.drv\":{\"dynamicOutputs\":{},\"outputs\":[\"out\"]}},\"srcs\":[\"l622p70vy8k5sh7y5wizi5f2mic6ynpg-source-stdenv.sh\",\"shkw4qm9qcw5sc5n1k5jznc83ny02r39-default-builder.sh\"]},\"name\":\"gammaloop-nextest-binaries-integration\",\"outputs\":{\"out\":{\"path\":\"akc0k7xwlfri9mc31hnis0p0wf63jcyd-gammaloop-nextest-binaries-integration\"}},\"system\":\"x86_64-linux\",\"version\":4}},\"version\":4}\n",
+  "stderr": "",
+  "elapsed_seconds": 0.05596303939819336,
+  "license_variables_omitted": [
+    "SYMBOLICA_LICENSE",
+    "SYMBOLICA_LICENSE_PATH",
+    "SYMBOLICA_LICENSE_SIGNED",
+    "SYMBOLICA_LICENSE_FILE"
+  ]
+}

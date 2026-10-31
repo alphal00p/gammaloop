@@ -1,0 +1,1971 @@
+{
+  "tracking_limit": 1048576,
+  "encoding": "identity or lossless gzip split into at most 512KiB parts; logical names are not tracking claims",
+  "bindings": [
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/SEAL.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/SEAL.json",
+      "sha256": "52f32a89c0a9e8e7c31a83cebfb1de9b8f60ba1e2a3857c129bc6543eff9e4f3",
+      "bytes": 536,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/SEAL.json",
+          "sha256": "52f32a89c0a9e8e7c31a83cebfb1de9b8f60ba1e2a3857c129bc6543eff9e4f3",
+          "bytes": 536
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/SHA256SUMS",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/SHA256SUMS",
+      "sha256": "7b2694e6fa2bcbd328cc3a86a1f3bab6aa5c871894010adb3ef482ad6eb8b696",
+      "bytes": 6293,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/SHA256SUMS",
+          "sha256": "7b2694e6fa2bcbd328cc3a86a1f3bab6aa5c871894010adb3ef482ad6eb8b696",
+          "bytes": 6293
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/accepted-local-output-path-info.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/accepted-local-output-path-info.json",
+      "sha256": "f4be9ab8fdfdd0f40467c50d80e192e7cbcbc116f6b3b78896b00eacb2d28e78",
+      "bytes": 4963,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/accepted-local-output-path-info.json",
+          "sha256": "f4be9ab8fdfdd0f40467c50d80e192e7cbcbc116f6b3b78896b00eacb2d28e78",
+          "bytes": 4963
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/candidate-code-delta.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/candidate-code-delta.json",
+      "sha256": "725851a954db6391f5afe61af318e78a5755bd7cd729ff7d104fd28a86189d9c",
+      "bytes": 46842,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/candidate-code-delta.json",
+          "sha256": "725851a954db6391f5afe61af318e78a5755bd7cd729ff7d104fd28a86189d9c",
+          "bytes": 46842
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/canonical-note-addition.NOT-APPLIED.typ",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/canonical-note-addition.NOT-APPLIED.typ",
+      "sha256": "8441410efc33abfb17e8620dc4a8d5bc19245b1ce3e8131c42fa6abf69910526",
+      "bytes": 3583,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/canonical-note-addition.NOT-APPLIED.typ",
+          "sha256": "8441410efc33abfb17e8620dc4a8d5bc19245b1ce3e8131c42fa6abf69910526",
+          "bytes": 3583
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/code-fdff-delta.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/code-fdff-delta.json",
+      "sha256": "06b3a958bbcae142b685f3500a41a7d60d5fd5a4ac8f9de126588f0e7a902dec",
+      "bytes": 52156,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/code-fdff-delta.json",
+          "sha256": "06b3a958bbcae142b685f3500a41a7d60d5fd5a4ac8f9de126588f0e7a902dec",
+          "bytes": 52156
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/code-ffa-delta.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/code-ffa-delta.json",
+      "sha256": "1c4e696f9b570fbdf4b1e739019afd78409b534b2e26459164afba98e3376103",
+      "bytes": 30557,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/code-ffa-delta.json",
+          "sha256": "1c4e696f9b570fbdf4b1e739019afd78409b534b2e26459164afba98e3376103",
+          "bytes": 30557
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/code2cf-core-only-eval.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/code2cf-core-only-eval.json",
+      "sha256": "96de0e615e744e6ad433bbe9809366b33934cd35a681a197a419b3ff71919167",
+      "bytes": 895,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/code2cf-core-only-eval.json",
+          "sha256": "96de0e615e744e6ad433bbe9809366b33934cd35a681a197a419b3ff71919167",
+          "bytes": 895
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/code2cf-scoped-groups-corrected-eval.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/code2cf-scoped-groups-corrected-eval.json",
+      "sha256": "bbd47f0f4c999de455aa399bd7ef6916d9b6e954a8394092a4350cb7b2621ce3",
+      "bytes": 1665,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/code2cf-scoped-groups-corrected-eval.json",
+          "sha256": "bbd47f0f4c999de455aa399bd7ef6916d9b6e954a8394092a4350cb7b2621ce3",
+          "bytes": 1665
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/code2cf-scoped-groups-eval.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/code2cf-scoped-groups-eval.json",
+      "sha256": "1cdfc65d8ef6dee0ba4c7a3437fe239e1dad8daedafffba63f0ef100ccd33a4a",
+      "bytes": 1123,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/code2cf-scoped-groups-eval.json",
+          "sha256": "1cdfc65d8ef6dee0ba4c7a3437fe239e1dad8daedafffba63f0ef100ccd33a4a",
+          "bytes": 1123
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/code2cf-store-parity.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/code2cf-store-parity.json",
+      "sha256": "50a30ae2553cc345d002c69dcd801fa11ef1d8fa89c8bf823b2053046438cdcc",
+      "bytes": 1315655,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "gzip-chunks",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/chunks/50a30ae2553cc345d002c69dcd801fa11ef1d8fa89c8bf823b2053046438cdcc.0000.part",
+          "sha256": "3c7eecf5ba97481246856c6211cf6dc7d25a493c1a05daca234a996114cba98e",
+          "bytes": 187133
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/code2cf-tree.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/code2cf-tree.json",
+      "sha256": "c191f8e71ba72033b3f009096f2c347be2e065d11ce5f5a62f2454d0e748ea49",
+      "bytes": 625155,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/code2cf-tree.json",
+          "sha256": "c191f8e71ba72033b3f009096f2c347be2e065d11ce5f5a62f2454d0e748ea49",
+          "bytes": 625155
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/commands.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/commands.json",
+      "sha256": "80cc867a02a72846b6ae2bba824db672af6fbf6ca0e729d0039b45f09e108246",
+      "bytes": 87013,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/commands.json",
+          "sha256": "80cc867a02a72846b6ae2bba824db672af6fbf6ca0e729d0039b45f09e108246",
+          "bytes": 87013
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/core-package-derivations.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/core-package-derivations.json",
+      "sha256": "1b7f7414699b1bb5a9b11b85d9227038957d8f09fce21084e9eb9bb2b5be014d",
+      "bytes": 234531,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/core-package-derivations.json",
+          "sha256": "1b7f7414699b1bb5a9b11b85d9227038957d8f09fce21084e9eb9bb2b5be014d",
+          "bytes": 234531
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/core-root-derivation.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/core-root-derivation.json",
+      "sha256": "d608a379a64838dd3e337a98bb8211e06a9f390aa9c61548b03e13d35e3514d0",
+      "bytes": 4792,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/core-root-derivation.json",
+          "sha256": "d608a379a64838dd3e337a98bb8211e06a9f390aa9c61548b03e13d35e3514d0",
+          "bytes": 4792
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/current2cf-eval.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/current2cf-eval.json",
+      "sha256": "b2805b09f8d9096ac36775be6656cd633ec8eda7e546f6f32e980b837d219405",
+      "bytes": 1174,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/current2cf-eval.json",
+          "sha256": "b2805b09f8d9096ac36775be6656cd633ec8eda7e546f6f32e980b837d219405",
+          "bytes": 1174
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/current457-eval.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/current457-eval.json",
+      "sha256": "7477ab88c49c6a66a2cda128b8b1cbe0b6cae54ae564d6a5a279df90b3c2a105",
+      "bytes": 1386,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/current457-eval.json",
+          "sha256": "7477ab88c49c6a66a2cda128b8b1cbe0b6cae54ae564d6a5a279df90b3c2a105",
+          "bytes": 1386
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/decision-index.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/decision-index.json",
+      "sha256": "754ba94261042c7276e603d12e3c385104e9cca8d63257a2866e4b00880f1f40",
+      "bytes": 16111,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/decision-index.json",
+          "sha256": "754ba94261042c7276e603d12e3c385104e9cca8d63257a2866e4b00880f1f40",
+          "bytes": 16111
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/demand-frontier.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/demand-frontier.json",
+      "sha256": "ab87af7b34f208e15cee0edd314c4d2e75715ce274fe681010a04f4c54eb96ab",
+      "bytes": 1043228,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/demand-frontier.json",
+          "sha256": "ab87af7b34f208e15cee0edd314c4d2e75715ce274fe681010a04f4c54eb96ab",
+          "bytes": 1043228
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/errors.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/errors.json",
+      "sha256": "dc256793c0f396390217652cd4ea45f50c2353efb7148749cc32d10fbdc1d84f",
+      "bytes": 8616,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/errors.json",
+          "sha256": "dc256793c0f396390217652cd4ea45f50c2353efb7148749cc32d10fbdc1d84f",
+          "bytes": 8616
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/evidence_io.py",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/evidence_io.py",
+      "sha256": "1cf34ecc5328fe3e4b5d55dabcdaec09b3f8d50b918fff590ba502d302dc88b5",
+      "bytes": 1451,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/evidence_io.py",
+          "sha256": "1cf34ecc5328fe3e4b5d55dabcdaec09b3f8d50b918fff590ba502d302dc88b5",
+          "bytes": 1451
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/execution-reconciliation.NOT-APPLIED.json-patch",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/execution-reconciliation.NOT-APPLIED.json-patch",
+      "sha256": "d850d789d8f2110d60697232de786e973da143e5da5a25023adce039d2db5b54",
+      "bytes": 14531,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/execution-reconciliation.NOT-APPLIED.json-patch",
+          "sha256": "d850d789d8f2110d60697232de786e973da143e5da5a25023adce039d2db5b54",
+          "bytes": 14531
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/execution.NOT-APPLIED.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/execution.NOT-APPLIED.json",
+      "sha256": "845b8f40e8300de8a0d5e7614da688149e94366c2eaaaa08ecd75f3eda66c7f7",
+      "bytes": 59053,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/execution.NOT-APPLIED.json",
+          "sha256": "845b8f40e8300de8a0d5e7614da688149e94366c2eaaaa08ecd75f3eda66c7f7",
+          "bytes": 59053
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/final-protected-bookmarks.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/final-protected-bookmarks.json",
+      "sha256": "f71dc9ceb1f848d8faa204f041491b31b66bce6e6a20e264a40444dc4cf76f8c",
+      "bytes": 887,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/final-protected-bookmarks.json",
+          "sha256": "f71dc9ceb1f848d8faa204f041491b31b66bce6e6a20e264a40444dc4cf76f8c",
+          "bytes": 887
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/finish_packet.py",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/finish_packet.py",
+      "sha256": "d4a5b197d092907f255162996104ea51a027b5e6c267333affd85adb599883cb",
+      "bytes": 22271,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/finish_packet.py",
+          "sha256": "d4a5b197d092907f255162996104ea51a027b5e6c267333affd85adb599883cb",
+          "bytes": 22271
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/frontier-demand-1.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/frontier-demand-1.json",
+      "sha256": "94022df3afd5feb2d2a7ae30246f4f9468f2f0c22645797b2739c56ea477302f",
+      "bytes": 530006,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/frontier-demand-1.json",
+          "sha256": "94022df3afd5feb2d2a7ae30246f4f9468f2f0c22645797b2739c56ea477302f",
+          "bytes": 530006
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/frontier-demand-10.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/frontier-demand-10.json",
+      "sha256": "b1aa1c9fe635bed6727b5795d5d70653b78d1050c81db322303213faca9e8add",
+      "bytes": 64333,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/frontier-demand-10.json",
+          "sha256": "b1aa1c9fe635bed6727b5795d5d70653b78d1050c81db322303213faca9e8add",
+          "bytes": 64333
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/frontier-demand-2.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/frontier-demand-2.json",
+      "sha256": "2582c6cb17e9fc884657fbe794caa360210a3dbe9a0463b2b85120391dd8b837",
+      "bytes": 776808,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/frontier-demand-2.json",
+          "sha256": "2582c6cb17e9fc884657fbe794caa360210a3dbe9a0463b2b85120391dd8b837",
+          "bytes": 776808
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/frontier-demand-3.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/frontier-demand-3.json",
+      "sha256": "87322361e67613f05aa51556e9d87bc5244ae46252d09cbc687c4a02b79a9d8a",
+      "bytes": 540144,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/frontier-demand-3.json",
+          "sha256": "87322361e67613f05aa51556e9d87bc5244ae46252d09cbc687c4a02b79a9d8a",
+          "bytes": 540144
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/frontier-demand-4.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/frontier-demand-4.json",
+      "sha256": "f499d432f769daec1108f4ad9971d0693fbc16fa3b53fcc889173632b007f664",
+      "bytes": 61938,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/frontier-demand-4.json",
+          "sha256": "f499d432f769daec1108f4ad9971d0693fbc16fa3b53fcc889173632b007f664",
+          "bytes": 61938
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/frontier-demand-5.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/frontier-demand-5.json",
+      "sha256": "af497bd8914f5dfbaf62bae68b0a56041bb3abc0b3672923b42ad44d9d08e310",
+      "bytes": 782033,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/frontier-demand-5.json",
+          "sha256": "af497bd8914f5dfbaf62bae68b0a56041bb3abc0b3672923b42ad44d9d08e310",
+          "bytes": 782033
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/frontier-demand-6.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/frontier-demand-6.json",
+      "sha256": "2995d4fd88ba5ae0a9195701efb2f9e4ec7965b5266eb51e7a352f3ac84420e4",
+      "bytes": 476971,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/frontier-demand-6.json",
+          "sha256": "2995d4fd88ba5ae0a9195701efb2f9e4ec7965b5266eb51e7a352f3ac84420e4",
+          "bytes": 476971
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/frontier-demand-7.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/frontier-demand-7.json",
+      "sha256": "88ca5849ffd37ef01c6735640b63ce827d574729849d37fda4af90f7f1fc270f",
+      "bytes": 2043274,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "gzip-chunks",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/chunks/88ca5849ffd37ef01c6735640b63ce827d574729849d37fda4af90f7f1fc270f.0000.part",
+          "sha256": "c56419077e5ac680d7d2158ada4fa2d555d8e6f7c13207e7366c6a2565c1e501",
+          "bytes": 224269
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/frontier-demand-8.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/frontier-demand-8.json",
+      "sha256": "2639fbdfe4993e4b24928d5114f621ec18013ecbfbe234a1db4e918a9b0a6894",
+      "bytes": 514112,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/frontier-demand-8.json",
+          "sha256": "2639fbdfe4993e4b24928d5114f621ec18013ecbfbe234a1db4e918a9b0a6894",
+          "bytes": 514112
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/frontier-demand-9.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/frontier-demand-9.json",
+      "sha256": "3fb2e21641c573292b4a0c73b2b21056eb97ba185b65a89add96b77bbe3aa0b8",
+      "bytes": 128269,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/frontier-demand-9.json",
+          "sha256": "3fb2e21641c573292b4a0c73b2b21056eb97ba185b65a89add96b77bbe3aa0b8",
+          "bytes": 128269
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/frontier-group-core.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/frontier-group-core.json",
+      "sha256": "6c9c244cdc8e65dc28cda1e1b11c65070e51e8d07393a1288072ca753017e48d",
+      "bytes": 4793,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/frontier-group-core.json",
+          "sha256": "6c9c244cdc8e65dc28cda1e1b11c65070e51e8d07393a1288072ca753017e48d",
+          "bytes": 4793
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/frontier-group-docs.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/frontier-group-docs.json",
+      "sha256": "ec9f5816d1d11eff3cc6d2c713db220015319bf671cdd911056d0f4e40b0e8fb",
+      "bytes": 5340,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/frontier-group-docs.json",
+          "sha256": "ec9f5816d1d11eff3cc6d2c713db220015319bf671cdd911056d0f4e40b0e8fb",
+          "bytes": 5340
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/frontier-group-feynkit.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/frontier-group-feynkit.json",
+      "sha256": "61a4236ee7fddd733d3bfc2c9be16d054fc15dbbaa81a7c715145dc7fc03afb0",
+      "bytes": 6871,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/frontier-group-feynkit.json",
+          "sha256": "61a4236ee7fddd733d3bfc2c9be16d054fc15dbbaa81a7c715145dc7fc03afb0",
+          "bytes": 6871
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/frontier-group-fmt.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/frontier-group-fmt.json",
+      "sha256": "017d4db90d52e62b5b0f6331654a768034e6d9b204d230ccfc5d137b65d90911",
+      "bytes": 4722,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/frontier-group-fmt.json",
+          "sha256": "017d4db90d52e62b5b0f6331654a768034e6d9b204d230ccfc5d137b65d90911",
+          "bytes": 4722
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/frontier-group-graph.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/frontier-group-graph.json",
+      "sha256": "3d2eb3c2c83fae9d508d2b9e16cd2ccff95266c756da6c136e56bf8bd1a57ed0",
+      "bytes": 3276,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/frontier-group-graph.json",
+          "sha256": "3d2eb3c2c83fae9d508d2b9e16cd2ccff95266c756da6c136e56bf8bd1a57ed0",
+          "bytes": 3276
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/frontier-group-integration.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/frontier-group-integration.json",
+      "sha256": "de092c3e6a76d88afaf5d57a41e520a55712d94be8fa4542bab7b0d8131af77c",
+      "bytes": 3092,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/frontier-group-integration.json",
+          "sha256": "de092c3e6a76d88afaf5d57a41e520a55712d94be8fa4542bab7b0d8131af77c",
+          "bytes": 3092
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/frontier-group-spenso.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/frontier-group-spenso.json",
+      "sha256": "8ca3a41f481e27f1ac94760064e026751582f147b0db1c33f8e401e657557305",
+      "bytes": 5900,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/frontier-group-spenso.json",
+          "sha256": "8ca3a41f481e27f1ac94760064e026751582f147b0db1c33f8e401e657557305",
+          "bytes": 5900
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/frontier-reused-path-info.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/frontier-reused-path-info.json",
+      "sha256": "a84eda6e344a08d2d3c8bc0cb3f6eaa5509ef6ad444aac3c560342c8d4681ed4",
+      "bytes": 104304,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/frontier-reused-path-info.json",
+          "sha256": "a84eda6e344a08d2d3c8bc0cb3f6eaa5509ef6ad444aac3c560342c8d4681ed4",
+          "bytes": 104304
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/guards-before.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/guards-before.json",
+      "sha256": "30ceda750dc03309b36cbb3eb9e199b6e4a6bf154ac4df4ae100e31e4b67b558",
+      "bytes": 1280099,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "gzip-chunks",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/chunks/30ceda750dc03309b36cbb3eb9e199b6e4a6bf154ac4df4ae100e31e4b67b558.0000.part",
+          "sha256": "b977f9d9b37ac0e6ba4338a0b0a237171ce1f0af3f54546b7f688c202fa2e88c",
+          "bytes": 353579
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/guards-final.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/guards-final.json",
+      "sha256": "ab573604c130597cfbe0577e41c68a416df102787d713942712104f5e6ec2073",
+      "bytes": 1959,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/guards-final.json",
+          "sha256": "ab573604c130597cfbe0577e41c68a416df102787d713942712104f5e6ec2073",
+          "bytes": 1959
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/historical-command-index.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/historical-command-index.json",
+      "sha256": "6c8174f93d444e011b7a94f1a70a3f7fb9f29c62f1489c605ade434453d3c680",
+      "bytes": 60362,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/historical-command-index.json",
+          "sha256": "6c8174f93d444e011b7a94f1a70a3f7fb9f29c62f1489c605ade434453d3c680",
+          "bytes": 60362
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/historical-six-review-attribution.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/historical-six-review-attribution.json",
+      "sha256": "1f2cbe71eb7b5290cd9a9477311808456de0b37b4561236f116ed4da514c4a2c",
+      "bytes": 6073,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/historical-six-review-attribution.json",
+          "sha256": "1f2cbe71eb7b5290cd9a9477311808456de0b37b4561236f116ed4da514c4a2c",
+          "bytes": 6073
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/immutable-source-input-hashes.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/immutable-source-input-hashes.json",
+      "sha256": "fae2f889304556835b542bdfaed6b0fa29d88cc0c59ea5452d209d2b16d92fd1",
+      "bytes": 1943,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/immutable-source-input-hashes.json",
+          "sha256": "fae2f889304556835b542bdfaed6b0fa29d88cc0c59ea5452d209d2b16d92fd1",
+          "bytes": 1943
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/immutable457-metadata-0.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/immutable457-metadata-0.json",
+      "sha256": "0bd69592de7d3f817731083947c6fc428d4fea3f28935bf71dc7ab733a1cbcfd",
+      "bytes": 50756,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/immutable457-metadata-0.json",
+          "sha256": "0bd69592de7d3f817731083947c6fc428d4fea3f28935bf71dc7ab733a1cbcfd",
+          "bytes": 50756
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/immutable457-metadata-1.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/immutable457-metadata-1.json",
+      "sha256": "d7a3dc90665bc7c0dd2c306f276c18cff113343b634dae1539817f2e9a696672",
+      "bytes": 21850,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/immutable457-metadata-1.json",
+          "sha256": "d7a3dc90665bc7c0dd2c306f276c18cff113343b634dae1539817f2e9a696672",
+          "bytes": 21850
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/immutable457-metadata-2.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/immutable457-metadata-2.json",
+      "sha256": "42b6d56156543f64a2b915c4a5d24a42fa26cccf12f098cdcab4eede0ef68fdb",
+      "bytes": 215521,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/immutable457-metadata-2.json",
+          "sha256": "42b6d56156543f64a2b915c4a5d24a42fa26cccf12f098cdcab4eede0ef68fdb",
+          "bytes": 215521
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/inspect_frontier.py",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/inspect_frontier.py",
+      "sha256": "4a65201c231d68e11e94ef95fd1aed4cd2ea78b461bddefd4cdda689628477ce",
+      "bytes": 5341,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/inspect_frontier.py",
+          "sha256": "4a65201c231d68e11e94ef95fd1aed4cd2ea78b461bddefd4cdda689628477ce",
+          "bytes": 5341
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/later-grouped-applicability.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/later-grouped-applicability.json",
+      "sha256": "54b36aa2f06268e9affc930b327592413b77046f69eb55715cfec9cbb31e72ce",
+      "bytes": 7297,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/later-grouped-applicability.json",
+          "sha256": "54b36aa2f06268e9affc930b327592413b77046f69eb55715cfec9cbb31e72ce",
+          "bytes": 7297
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/locked-store2cf-eval.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/locked-store2cf-eval.json",
+      "sha256": "ab5f319fa9a2fedbebdecf646319ed896ce89f1ca2aa413b64bfb7932666468f",
+      "bytes": 1071,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/locked-store2cf-eval.json",
+          "sha256": "ab5f319fa9a2fedbebdecf646319ed896ce89f1ca2aa413b64bfb7932666468f",
+          "bytes": 1071
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/main-index-guard.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/main-index-guard.json",
+      "sha256": "c0ee759af847c6141bc7d5e2ec34193dcd179d0aab5919ad7fbef78a276d4032",
+      "bytes": 239,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/main-index-guard.json",
+          "sha256": "c0ee759af847c6141bc7d5e2ec34193dcd179d0aab5919ad7fbef78a276d4032",
+          "bytes": 239
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/metadata-proposal-guards.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/metadata-proposal-guards.json",
+      "sha256": "2116f0181f75475db613ddcde9e24da49fd47fb0166e1c63d87522eadbe519c4",
+      "bytes": 1178,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/metadata-proposal-guards.json",
+          "sha256": "2116f0181f75475db613ddcde9e24da49fd47fb0166e1c63d87522eadbe519c4",
+          "bytes": 1178
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/metadata.NOT-APPLIED.patch",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/metadata.NOT-APPLIED.patch",
+      "sha256": "1d8d481db750dded9174e60779f812eb078bc92298a97aab08221c938e5568ef",
+      "bytes": 5648,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/metadata.NOT-APPLIED.patch",
+          "sha256": "1d8d481db750dded9174e60779f812eb078bc92298a97aab08221c938e5568ef",
+          "bytes": 5648
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/original-selection-records.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/original-selection-records.json",
+      "sha256": "c8c195c1aaed9694561f6cce7ade4f98d098e744521cd41220a7a423c58f285e",
+      "bytes": 16312,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/original-selection-records.json",
+          "sha256": "c8c195c1aaed9694561f6cce7ade4f98d098e744521cd41220a7a423c58f285e",
+          "bytes": 16312
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/packet-validation.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/packet-validation.json",
+      "sha256": "97377ee084db1a3d2822ac46174beb4434db84d2365ca48b9a4ba4c66b362b9f",
+      "bytes": 867,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/packet-validation.json",
+          "sha256": "97377ee084db1a3d2822ac46174beb4434db84d2365ca48b9a4ba4c66b362b9f",
+          "bytes": 867
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/preflight.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/preflight.json",
+      "sha256": "c588b60f8740cf9f7c03d09a71bf0680a3f8522549dffaeaec6f9bfdf88da731",
+      "bytes": 8243,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/preflight.json",
+          "sha256": "c588b60f8740cf9f7c03d09a71bf0680a3f8522549dffaeaec6f9bfdf88da731",
+          "bytes": 8243
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/preflight.typ",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/preflight.typ",
+      "sha256": "8474fc162576727fe19a851a15e05f122cf251fe2069211ef694c1867a8e589a",
+      "bytes": 6304,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/preflight.typ",
+          "sha256": "8474fc162576727fe19a851a15e05f122cf251fe2069211ef694c1867a8e589a",
+          "bytes": 6304
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/prepare_commands.py",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/prepare_commands.py",
+      "sha256": "3429b0fce97aee0657efce53b7c500b779886c62ddbe85a5d89af457e3aa0b85",
+      "bytes": 17847,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/prepare_commands.py",
+          "sha256": "3429b0fce97aee0657efce53b7c500b779886c62ddbe85a5d89af457e3aa0b85",
+          "bytes": 17847
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/prepare_packet.py",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/prepare_packet.py",
+      "sha256": "408506a59a001355fa9e5f1df344566dbfcde04471c96c52655e762a05a311e0",
+      "bytes": 20011,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/prepare_packet.py",
+          "sha256": "408506a59a001355fa9e5f1df344566dbfcde04471c96c52655e762a05a311e0",
+          "bytes": 20011
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/producer-roots.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/producer-roots.json",
+      "sha256": "21857c576cd4d08e2c92c3a6b10b44d118e8f3388d23522a6d9db4bb56edec46",
+      "bytes": 58854,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/producer-roots.json",
+          "sha256": "21857c576cd4d08e2c92c3a6b10b44d118e8f3388d23522a6d9db4bb56edec46",
+          "bytes": 58854
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/read-inventory.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/read-inventory.json",
+      "sha256": "057b48570afc608e1336af9d40cff22064979321b15e55295e65820dbd9bbbfd",
+      "bytes": 83512,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/read-inventory.json",
+          "sha256": "057b48570afc608e1336af9d40cff22064979321b15e55295e65820dbd9bbbfd",
+          "bytes": 83512
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/scope-bindings-before.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/scope-bindings-before.json",
+      "sha256": "dbc446d7d0992310ca5418ba03d9b96537c3a5111d3eb19f62681f10a4dbd12e",
+      "bytes": 44881,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/scope-bindings-before.json",
+          "sha256": "dbc446d7d0992310ca5418ba03d9b96537c3a5111d3eb19f62681f10a4dbd12e",
+          "bytes": 44881
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/selected-producer-invariance.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/selected-producer-invariance.json",
+      "sha256": "0a09c2512b6f7617f513b5677557ed785eeb63d9c4c2ac7639804a87c4af82cc",
+      "bytes": 928,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/selected-producer-invariance.json",
+          "sha256": "0a09c2512b6f7617f513b5677557ed785eeb63d9c4c2ac7639804a87c4af82cc",
+          "bytes": 928
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/source-filter-bindings.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/source-filter-bindings.json",
+      "sha256": "be3e4955b31598fd004904909a2a31a428ea1bc36f3e91f10d898bd34e6bf59e",
+      "bytes": 1664428,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "gzip-chunks",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/chunks/be3e4955b31598fd004904909a2a31a428ea1bc36f3e91f10d898bd34e6bf59e.0000.part",
+          "sha256": "b25a3ebcc3ad71b5cf46242f6c3d706074100be39c12ace49b153e33eb1c8f74",
+          "bytes": 411687
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/status-matrix.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/status-matrix.json",
+      "sha256": "81dd8e6544e0905c521998dccbc998ffbdc16ac8d2083814208575cfd7f7b404",
+      "bytes": 13363,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/status-matrix.json",
+          "sha256": "81dd8e6544e0905c521998dccbc998ffbdc16ac8d2083814208575cfd7f7b404",
+          "bytes": 13363
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/store2cf-core-eval.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/store2cf-core-eval.json",
+      "sha256": "a4322a53a67237b498aca08d72c729252ae0c162cebd10c74570b790997f4608",
+      "bytes": 1228,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/store2cf-core-eval.json",
+          "sha256": "a4322a53a67237b498aca08d72c729252ae0c162cebd10c74570b790997f4608",
+          "bytes": 1228
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/tool-hashes.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/tool-hashes.json",
+      "sha256": "f54eef4daa1c43878150d7413a21a52b4af078a24af802792f9a9f7464526a32",
+      "bytes": 2315,
+      "role": "verbatim prior preflight, NOT-APPLIED proposals remain historical",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/preflight/tool-hashes.json",
+          "sha256": "f54eef4daa1c43878150d7413a21a52b4af078a24af802792f9a9f7464526a32",
+          "bytes": 2315
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-host-stub-rustred-integration-astra-20261031-023354Z-777117b1/SEAL.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/host-integration/SEAL.json",
+      "sha256": "a325a993b718e82567e6b77e4060e2857cf7d8265b88e69541bd8978cfbf2624",
+      "bytes": 526,
+      "role": "verbatim independent review/seal; original path semantics retained",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/host-integration/SEAL.json",
+          "sha256": "a325a993b718e82567e6b77e4060e2857cf7d8265b88e69541bd8978cfbf2624",
+          "bytes": 526
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-host-stub-rustred-integration-astra-20261031-023354Z-777117b1/SHA256SUMS",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/host-integration/SHA256SUMS",
+      "sha256": "22b5ca5d654881d6e18a7b52642998536cd4d91a4913342d5094b2a7e91e6566",
+      "bytes": 28775,
+      "role": "verbatim independent review/seal; original path semantics retained",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/host-integration/SHA256SUMS",
+          "sha256": "22b5ca5d654881d6e18a7b52642998536cd4d91a4913342d5094b2a7e91e6566",
+          "bytes": 28775
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-host-stub-rustred-integration-astra-20261031-023354Z-777117b1/review.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/host-integration/review.json",
+      "sha256": "f472e199cf3805d9364ef9158c18628fbc5c7ee8d72317c56a6af787628e8a5c",
+      "bytes": 36627,
+      "role": "verbatim independent review/seal; original path semantics retained",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/host-integration/review.json",
+          "sha256": "f472e199cf3805d9364ef9158c18628fbc5c7ee8d72317c56a6af787628e8a5c",
+          "bytes": 36627
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-full-generator-characterization-astra-20261031-022430Z-320628f7/SEAL.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/full-pool1/SEAL.json",
+      "sha256": "5e4792d8c2a2e678b21f92b3e3e4f28348a9ca8e30d7b8b6edf4d751dc769776",
+      "bytes": 569,
+      "role": "verbatim independent review/seal; original path semantics retained",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/full-pool1/SEAL.json",
+          "sha256": "5e4792d8c2a2e678b21f92b3e3e4f28348a9ca8e30d7b8b6edf4d751dc769776",
+          "bytes": 569
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-full-generator-characterization-astra-20261031-022430Z-320628f7/SHA256SUMS",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/full-pool1/SHA256SUMS",
+      "sha256": "c0ac1726a9a9fca8892eb8177806fc5e76d6affeb1c882e74e356af5d340c192",
+      "bytes": 3898,
+      "role": "verbatim independent review/seal; original path semantics retained",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/full-pool1/SHA256SUMS",
+          "sha256": "c0ac1726a9a9fca8892eb8177806fc5e76d6affeb1c882e74e356af5d340c192",
+          "bytes": 3898
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-full-generator-characterization-astra-20261031-022430Z-320628f7/review.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/full-pool1/review.json",
+      "sha256": "fb688585bc7efd0b494fef7648df5abad398f88bfe8c439e8b42c0dd520eaa37",
+      "bytes": 30234,
+      "role": "verbatim independent review/seal; original path semantics retained",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/full-pool1/review.json",
+          "sha256": "fb688585bc7efd0b494fef7648df5abad398f88bfe8c439e8b42c0dd520eaa37",
+          "bytes": 30234
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-raw-three-integration-astra-20261031-012811Z-323f4486/SEAL.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/raw-three/SEAL.json",
+      "sha256": "85cddc01323e1c9f2bd2b18f264c278fde995259b5d8f6a84f7dda9b5ffa2e79",
+      "bytes": 686,
+      "role": "verbatim independent review/seal; original path semantics retained",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/raw-three/SEAL.json",
+          "sha256": "85cddc01323e1c9f2bd2b18f264c278fde995259b5d8f6a84f7dda9b5ffa2e79",
+          "bytes": 686
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-raw-three-integration-astra-20261031-012811Z-323f4486/SHA256SUMS",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/raw-three/SHA256SUMS",
+      "sha256": "6588fe962defe4fa12685a095a1571dfc9fd2240ee3c6a409545df9e16df490e",
+      "bytes": 21607,
+      "role": "verbatim independent review/seal; original path semantics retained",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/raw-three/SHA256SUMS",
+          "sha256": "6588fe962defe4fa12685a095a1571dfc9fd2240ee3c6a409545df9e16df490e",
+          "bytes": 21607
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-raw-three-integration-astra-20261031-012811Z-323f4486/review.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/raw-three/review.json",
+      "sha256": "535b792610c531b446d8beb1a9f300246e6d498e8126509b637189e8eb80a091",
+      "bytes": 40750,
+      "role": "verbatim independent review/seal; original path semantics retained",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/raw-three/review.json",
+          "sha256": "535b792610c531b446d8beb1a9f300246e6d498e8126509b637189e8eb80a091",
+          "bytes": 40750
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-raw-three-integration-astra-20261031-012811Z-323f4486/review.json.sha256",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/raw-three/review.json.sha256",
+      "sha256": "74a35faf6ba3acf5ae7e898a479b84425a6ae855416c368e4af8b4d5121caa31",
+      "bytes": 78,
+      "role": "verbatim independent review/seal; original path semantics retained",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/raw-three/review.json.sha256",
+          "sha256": "74a35faf6ba3acf5ae7e898a479b84425a6ae855416c368e4af8b4d5121caa31",
+          "bytes": 78
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-host-browser-stub-astra-20261031-013106Z-5655cc61/SEAL.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/host-prior/SEAL.json",
+      "sha256": "6e104cabc93cb839a498c8b79ecb048a17693707704238288619ff41930759d6",
+      "bytes": 319,
+      "role": "verbatim independent review/seal; original path semantics retained",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/host-prior/SEAL.json",
+          "sha256": "6e104cabc93cb839a498c8b79ecb048a17693707704238288619ff41930759d6",
+          "bytes": 319
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-host-browser-stub-astra-20261031-013106Z-5655cc61/SHA256SUMS",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/host-prior/SHA256SUMS",
+      "sha256": "9a80cef2b3c422c2826c598df2cfc2a186f640c2f700c248c3236c88eec6a12b",
+      "bytes": 12288,
+      "role": "verbatim independent review/seal; original path semantics retained",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/host-prior/SHA256SUMS",
+          "sha256": "9a80cef2b3c422c2826c598df2cfc2a186f640c2f700c248c3236c88eec6a12b",
+          "bytes": 12288
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-host-browser-stub-astra-20261031-013106Z-5655cc61/review.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/host-prior/review.json",
+      "sha256": "8bd31e92448a517479fb2f2ec5a12c9999c31752cea08502392f290c47e37627",
+      "bytes": 36733,
+      "role": "verbatim independent review/seal; original path semantics retained",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/host-prior/review.json",
+          "sha256": "8bd31e92448a517479fb2f2ec5a12c9999c31752cea08502392f290c47e37627",
+          "bytes": 36733
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-none-aggregation-astra-20261030-independent-b1/review.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/grouped-none/review.json",
+      "sha256": "45368ac2dc5783a6ba31daa9b7e8bd7f03a80746bf3b07b6d3e34cc909adcb81",
+      "bytes": 27229,
+      "role": "verbatim independent review/seal; original path semantics retained",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/grouped-none/review.json",
+          "sha256": "45368ac2dc5783a6ba31daa9b7e8bd7f03a80746bf3b07b6d3e34cc909adcb81",
+          "bytes": 27229
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-none-aggregation-astra-20261030-independent-b1/review.json.sha256",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/grouped-none/review.json.sha256",
+      "sha256": "80333f6855761fb3d82fb9b53c6c2922934395ff5eaed471844e25701f50b34d",
+      "bytes": 78,
+      "role": "verbatim independent review/seal; original path semantics retained",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/grouped-none/review.json.sha256",
+          "sha256": "80333f6855761fb3d82fb9b53c6c2922934395ff5eaed471844e25701f50b34d",
+          "bytes": 78
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-none-aggregation-astra-20261030-independent-b1/seal.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/grouped-none/seal.json",
+      "sha256": "abd2b7018207a7925c712d4b555b2910299619b3cb06408236a349ae4749cb90",
+      "bytes": 7961,
+      "role": "verbatim independent review/seal; original path semantics retained",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/grouped-none/seal.json",
+          "sha256": "abd2b7018207a7925c712d4b555b2910299619b3cb06408236a349ae4749cb90",
+          "bytes": 7961
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-none-aggregation-astra-20261030-independent-b1/seal.sha256",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/grouped-none/seal.sha256",
+      "sha256": "8114995924329877588e8377b74dffb1f787736578bc6c739eefaa8608cf91a0",
+      "bytes": 76,
+      "role": "verbatim independent review/seal; original path semantics retained",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/grouped-none/seal.sha256",
+          "sha256": "8114995924329877588e8377b74dffb1f787736578bc6c739eefaa8608cf91a0",
+          "bytes": 76
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-auto-aggregation-astra-20261031-independent-r1-1793413266607828149/review.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/grouped-auto/review.json",
+      "sha256": "e4ca45aff35c11bbd6397a32265502f79ff6b622141c1fe75214f17f830919db",
+      "bytes": 27199,
+      "role": "verbatim independent review/seal; original path semantics retained",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/grouped-auto/review.json",
+          "sha256": "e4ca45aff35c11bbd6397a32265502f79ff6b622141c1fe75214f17f830919db",
+          "bytes": 27199
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-auto-aggregation-astra-20261031-independent-r1-1793413266607828149/review.json.sha256",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/grouped-auto/review.json.sha256",
+      "sha256": "d5a710a59cce3ead8cd8f21d5e904b9fead52fa25a53360ec33dadcb9c6ccd21",
+      "bytes": 78,
+      "role": "verbatim independent review/seal; original path semantics retained",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/grouped-auto/review.json.sha256",
+          "sha256": "d5a710a59cce3ead8cd8f21d5e904b9fead52fa25a53360ec33dadcb9c6ccd21",
+          "bytes": 78
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-auto-aggregation-astra-20261031-independent-r1-1793413266607828149/seal.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/grouped-auto/seal.json",
+      "sha256": "fea4337d34fb0f22c71f6e80b33be456db9d1193d80be46fb68b5d2cb4eb5a9f",
+      "bytes": 19626,
+      "role": "verbatim independent review/seal; original path semantics retained",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/grouped-auto/seal.json",
+          "sha256": "fea4337d34fb0f22c71f6e80b33be456db9d1193d80be46fb68b5d2cb4eb5a9f",
+          "bytes": 19626
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-auto-aggregation-astra-20261031-independent-r1-1793413266607828149/seal.sha256",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/grouped-auto/seal.sha256",
+      "sha256": "91c374fd41586c88b7ff238c161f0d4cf42a871aa547558b2b6fd668af49fc2c",
+      "bytes": 76,
+      "role": "verbatim independent review/seal; original path semantics retained",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/grouped-auto/seal.sha256",
+          "sha256": "91c374fd41586c88b7ff238c161f0d4cf42a871aa547558b2b6fd668af49fc2c",
+          "bytes": 76
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-interface-runner-r3-astra-20261031-020333Z-4003b785/SEAL.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/finite-runner-r3/SEAL.json",
+      "sha256": "3be6b07a385d5529bf3ea1150aa30d9f0fa813cfc75c1198dd39f525fc7a272a",
+      "bytes": 1173,
+      "role": "verbatim independent review/seal; original path semantics retained",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/finite-runner-r3/SEAL.json",
+          "sha256": "3be6b07a385d5529bf3ea1150aa30d9f0fa813cfc75c1198dd39f525fc7a272a",
+          "bytes": 1173
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-interface-runner-r3-astra-20261031-020333Z-4003b785/SHA256SUMS",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/finite-runner-r3/SHA256SUMS",
+      "sha256": "bef4c004a195045c85d1efbc053e29b29b602d8736bbfcd5c70e2b1496b07c79",
+      "bytes": 31050,
+      "role": "verbatim independent review/seal; original path semantics retained",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/finite-runner-r3/SHA256SUMS",
+          "sha256": "bef4c004a195045c85d1efbc053e29b29b602d8736bbfcd5c70e2b1496b07c79",
+          "bytes": 31050
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-interface-runner-r3-astra-20261031-020333Z-4003b785/review.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/finite-runner-r3/review.json",
+      "sha256": "b370752781691d7286766047658ca518a4a898a463c76df26226f2f114d43a62",
+      "bytes": 22800,
+      "role": "verbatim independent review/seal; original path semantics retained",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/finite-runner-r3/review.json",
+          "sha256": "b370752781691d7286766047658ca518a4a898a463c76df26226f2f114d43a62",
+          "bytes": 22800
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-feynkit-refresh-source-opus-round4-20261030T201146Z-697912d5/SHA256SUMS",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/source-r4/SHA256SUMS",
+      "sha256": "a854f5ba735ff347aa86452cb4383d5f58d93a29e4ca67d2944b4a7c6f3a9a48",
+      "bytes": 12068,
+      "role": "verbatim independent review/seal; original path semantics retained",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/source-r4/SHA256SUMS",
+          "sha256": "a854f5ba735ff347aa86452cb4383d5f58d93a29e4ca67d2944b4a7c6f3a9a48",
+          "bytes": 12068
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-feynkit-refresh-source-opus-round4-20261030T201146Z-697912d5/review.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/source-r4/review.json",
+      "sha256": "5d9db6c6d385bd25ea9e276a2a1ebd2e95c0678171854e4ccb73a1362130e1af",
+      "bytes": 29924,
+      "role": "verbatim independent review/seal; original path semantics retained",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/source-r4/review.json",
+          "sha256": "5d9db6c6d385bd25ea9e276a2a1ebd2e95c0678171854e4ccb73a1362130e1af",
+          "bytes": 29924
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-feynkit-refresh-shared-provenance-opus-20261030T193404Z-3c0453ff/review.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/shared-scope-a/review.json",
+      "sha256": "565caeace0112a30fb9118f94b2bb759e4267d2b802395c314e485b89b4b2b70",
+      "bytes": 74728,
+      "role": "verbatim independent review/seal; original path semantics retained",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/shared-scope-a/review.json",
+          "sha256": "565caeace0112a30fb9118f94b2bb759e4267d2b802395c314e485b89b4b2b70",
+          "bytes": 74728
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-feynkit-refresh-shared-provenance-opus-20261030T193404Z-3c0453ff/review.json.sha256",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/shared-scope-a/review.json.sha256",
+      "sha256": "1d0f84671fafe09ed11cda384230acd6f57d5624e19558697b3026e853d63f1a",
+      "bytes": 78,
+      "role": "verbatim independent review/seal; original path semantics retained",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/shared-scope-a/review.json.sha256",
+          "sha256": "1d0f84671fafe09ed11cda384230acd6f57d5624e19558697b3026e853d63f1a",
+          "bytes": 78
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-refresh-aggregation-astra-20261030-independent/SHA256SUMS",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/metadata-48d0/SHA256SUMS",
+      "sha256": "69b17e4897e60f8d0e59900156616d5040eacfd74991757e09852e4ecabbe129",
+      "bytes": 5535,
+      "role": "verbatim independent review/seal; original path semantics retained",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/metadata-48d0/SHA256SUMS",
+          "sha256": "69b17e4897e60f8d0e59900156616d5040eacfd74991757e09852e4ecabbe129",
+          "bytes": 5535
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-refresh-aggregation-astra-20261030-independent/review.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/metadata-48d0/review.json",
+      "sha256": "567fba9cfa9287478d5c1531fd46eac49c79f4cd6fbcc878c50bd364cf279342",
+      "bytes": 35615,
+      "role": "verbatim independent review/seal; original path semantics retained",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/metadata-48d0/review.json",
+          "sha256": "567fba9cfa9287478d5c1531fd46eac49c79f4cd6fbcc878c50bd364cf279342",
+          "bytes": 35615
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-refresh-aggregation-astra-20261030-independent/review.json.sha256",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/metadata-48d0/review.json.sha256",
+      "sha256": "bccd4bb67dcb64a533f9addb1cb57967cf0c0587818924e77ed95e56fc3eb13c",
+      "bytes": 78,
+      "role": "verbatim independent review/seal; original path semantics retained",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/metadata-48d0/review.json.sha256",
+          "sha256": "bccd4bb67dcb64a533f9addb1cb57967cf0c0587818924e77ed95e56fc3eb13c",
+          "bytes": 78
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/.local/review-main46-round4-opus-rZyrnOS8/review.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/source46/review.json",
+      "sha256": "ee6e37ee207747d4f65c6a45b619412738af3248a65301b396768f27f5227e22",
+      "bytes": 3867,
+      "role": "verbatim independent review/seal; original path semantics retained",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/source46/review.json",
+          "sha256": "ee6e37ee207747d4f65c6a45b619412738af3248a65301b396768f27f5227e22",
+          "bytes": 3867
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/.local/review-xs-qed-l2-integration-a-opus-20261030T111536Z-1321089/review.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/xs-original-a/review.json",
+      "sha256": "0b5319a43da8e19100dd19a9c4647a03b95ffba1ac90a23749b0c348e95375a6",
+      "bytes": 40128,
+      "role": "verbatim independent review/seal; original path semantics retained",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/xs-original-a/review.json",
+          "sha256": "0b5319a43da8e19100dd19a9c4647a03b95ffba1ac90a23749b0c348e95375a6",
+          "bytes": 40128
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/.local/review-xs-qed-l2-integration-b-opus-20261030T111614Z-1341306/review.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/xs-original-b/review.json",
+      "sha256": "f94b819f13740dc7674991c7db8bcf33aa14088b60fa973114aadd805281f0c4",
+      "bytes": 64407,
+      "role": "verbatim independent review/seal; original path semantics retained",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/xs-original-b/review.json",
+          "sha256": "f94b819f13740dc7674991c7db8bcf33aa14088b60fa973114aadd805281f0c4",
+          "bytes": 64407
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-identical-migration-astra-20261031-024225Z-1469f5e4/review.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/grouped-preparation/review.json",
+      "sha256": "7d96505dcb700eeae42b5a4e87676551ba910cb660df586cafe34d6b90e944f1",
+      "bytes": 28681,
+      "role": "verbatim independent review/seal; original path semantics retained",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/grouped-preparation/review.json",
+          "sha256": "7d96505dcb700eeae42b5a4e87676551ba910cb660df586cafe34d6b90e944f1",
+          "bytes": 28681
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-identical-migration-astra-20261031-024225Z-1469f5e4/review.json.sha256",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/grouped-preparation/review.json.sha256",
+      "sha256": "5c7e7161b15a21a03fb06cd16fc8dbab0f175c41cb6039effbef0554c5b1e0ef",
+      "bytes": 78,
+      "role": "verbatim independent review/seal; original path semantics retained",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/grouped-preparation/review.json.sha256",
+          "sha256": "5c7e7161b15a21a03fb06cd16fc8dbab0f175c41cb6039effbef0554c5b1e0ef",
+          "bytes": 78
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-identical-migration-astra-20261031-024225Z-1469f5e4/seal.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/grouped-preparation/seal.json",
+      "sha256": "e4f574d2346fd4c32c27fbcfbe5b027acd1c8772185371d83bc701429218a26f",
+      "bytes": 6416,
+      "role": "verbatim independent review/seal; original path semantics retained",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/grouped-preparation/seal.json",
+          "sha256": "e4f574d2346fd4c32c27fbcfbe5b027acd1c8772185371d83bc701429218a26f",
+          "bytes": 6416
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-identical-migration-astra-20261031-024225Z-1469f5e4/seal.sha256",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/grouped-preparation/seal.sha256",
+      "sha256": "758a0d3b106e6757f90e6a8babbe0afd106c2ceec0e22d1f4e4db3aac61864f9",
+      "bytes": 76,
+      "role": "verbatim independent review/seal; original path semantics retained",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/grouped-preparation/seal.sha256",
+          "sha256": "758a0d3b106e6757f90e6a8babbe0afd106c2ceec0e22d1f4e4db3aac61864f9",
+          "bytes": 76
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-grouped-identical-B1-r3-astra-20261031-DSnqH402/SHA256SUMS",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/grouped-applied-r3/SHA256SUMS",
+      "sha256": "5434b6e9c63f918f98958e4d969190c37c10ae2cca84dcfd80f9ca7a0deb19b9",
+      "bytes": 1563,
+      "role": "verbatim independent review/seal; original path semantics retained",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/grouped-applied-r3/SHA256SUMS",
+          "sha256": "5434b6e9c63f918f98958e4d969190c37c10ae2cca84dcfd80f9ca7a0deb19b9",
+          "bytes": 1563
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-grouped-identical-B1-r3-astra-20261031-DSnqH402/review.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/grouped-applied-r3/review.json",
+      "sha256": "66db3d6dd9886e072fabdd78f3dab82d669b17408e5e05c10709f50e5eba9d7c",
+      "bytes": 68918,
+      "role": "verbatim independent review/seal; original path semantics retained",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/grouped-applied-r3/review.json",
+          "sha256": "66db3d6dd9886e072fabdd78f3dab82d669b17408e5e05c10709f50e5eba9d7c",
+          "bytes": 68918
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-grouped-identical-B1-r3-astra-20261031-DSnqH402/review.json.sha256",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/grouped-applied-r3/review.json.sha256",
+      "sha256": "27f68782741777b97bf6b88a620109dfbc7cf5d8d859311de387b6bd37b313ee",
+      "bytes": 78,
+      "role": "verbatim independent review/seal; original path semantics retained",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/grouped-applied-r3/review.json.sha256",
+          "sha256": "27f68782741777b97bf6b88a620109dfbc7cf5d8d859311de387b6bd37b313ee",
+          "bytes": 78
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-grouped-identical-B1-r3-astra-20261031-DSnqH402/seal.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/grouped-applied-r3/seal.json",
+      "sha256": "37c4e6d280ef75790ae4de1287ab6c4b3c42379c8e1e85e055c6720af1a00b04",
+      "bytes": 3100,
+      "role": "verbatim independent review/seal; original path semantics retained",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/grouped-applied-r3/seal.json",
+          "sha256": "37c4e6d280ef75790ae4de1287ab6c4b3c42379c8e1e85e055c6720af1a00b04",
+          "bytes": 3100
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-grouped-identical-B1-r3-astra-20261031-DSnqH402/seal.sha256",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/grouped-applied-r3/seal.sha256",
+      "sha256": "be09cb20b897ecb873741d552d8f5b71c795fef4e959cb923ad7ad579d16d759",
+      "bytes": 76,
+      "role": "verbatim independent review/seal; original path semantics retained",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/grouped-applied-r3/seal.sha256",
+          "sha256": "be09cb20b897ecb873741d552d8f5b71c795fef4e959cb923ad7ad579d16d759",
+          "bytes": 76
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-grouped-identical-integration-astra-20261031-033116Z-c0749b38/review.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/grouped-applied-original/review.json",
+      "sha256": "0f0851e068653202a7981e71b4d5ccf54316d1bf544caa0725f99cc1794066f4",
+      "bytes": 56941,
+      "role": "verbatim independent review/seal; original path semantics retained",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/grouped-applied-original/review.json",
+          "sha256": "0f0851e068653202a7981e71b4d5ccf54316d1bf544caa0725f99cc1794066f4",
+          "bytes": 56941
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-grouped-identical-integration-astra-20261031-033116Z-c0749b38/review.json.sha256",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/grouped-applied-original/review.json.sha256",
+      "sha256": "8c5b061992b5d81f512b33bde6bc99456529edc6e1b580ae3f51f93f6e55f1c0",
+      "bytes": 78,
+      "role": "verbatim independent review/seal; original path semantics retained",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/grouped-applied-original/review.json.sha256",
+          "sha256": "8c5b061992b5d81f512b33bde6bc99456529edc6e1b580ae3f51f93f6e55f1c0",
+          "bytes": 78
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-grouped-identical-integration-astra-20261031-033116Z-c0749b38/seal.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/grouped-applied-original/seal.json",
+      "sha256": "121a41e327b0c353b5fe24fae1582e239925b86024218719072dcbfd08e7d51a",
+      "bytes": 19498,
+      "role": "verbatim independent review/seal; original path semantics retained",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/grouped-applied-original/seal.json",
+          "sha256": "121a41e327b0c353b5fe24fae1582e239925b86024218719072dcbfd08e7d51a",
+          "bytes": 19498
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-grouped-identical-integration-astra-20261031-033116Z-c0749b38/seal.sha256",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/grouped-applied-original/seal.sha256",
+      "sha256": "cc3b058a51471ec76fa105fd44e6e1f29eb19fa9d2c270f48407fcb9f7e34193",
+      "bytes": 76,
+      "role": "verbatim independent review/seal; original path semantics retained",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/grouped-applied-original/seal.sha256",
+          "sha256": "cc3b058a51471ec76fa105fd44e6e1f29eb19fa9d2c270f48407fcb9f7e34193",
+          "bytes": 76
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-prior-eight-fresh8eb-math-opus-20261030T202304Z-bf443319/review.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/prior-eight/review.json",
+      "sha256": "5a50135038065414bc667667244378677ff44ac4f632e733b8bbd0bba451cf8b",
+      "bytes": 46366,
+      "role": "verbatim independent review/seal; original path semantics retained",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/prior-eight/review.json",
+          "sha256": "5a50135038065414bc667667244378677ff44ac4f632e733b8bbd0bba451cf8b",
+          "bytes": 46366
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-prior-eight-fresh8eb-math-opus-20261030T202304Z-bf443319/review.json.sha256",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/prior-eight/review.json.sha256",
+      "sha256": "7e7199a0bea9124f3a8ba02aa7eaae0d72db731e7e367e834513787640c584bf",
+      "bytes": 78,
+      "role": "verbatim independent review/seal; original path semantics retained",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/prior-eight/review.json.sha256",
+          "sha256": "7e7199a0bea9124f3a8ba02aa7eaae0d72db731e7e367e834513787640c584bf",
+          "bytes": 78
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/root-full-generator-pool1-acceptance-20261031.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/root-dispositions/root-full-generator-pool1-acceptance-20261031.json",
+      "sha256": "297b23048d86665efa8832b50848173a6ae7a08a5b45251ef8e9e15fb3377b87",
+      "bytes": 2637,
+      "role": "verbatim coordinator disposition, no new approval",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/root-dispositions/root-full-generator-pool1-acceptance-20261031.json",
+          "sha256": "297b23048d86665efa8832b50848173a6ae7a08a5b45251ef8e9e15fb3377b87",
+          "bytes": 2637
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/root-grouped-applied-integration-acceptance-20261031.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/root-dispositions/root-grouped-applied-integration-acceptance-20261031.json",
+      "sha256": "8319d5f119f70abcaad03a040924cc85f7f364b328dd588581ee19b5ba411a89",
+      "bytes": 2331,
+      "role": "verbatim coordinator disposition, no new approval",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/root-dispositions/root-grouped-applied-integration-acceptance-20261031.json",
+          "sha256": "8319d5f119f70abcaad03a040924cc85f7f364b328dd588581ee19b5ba411a89",
+          "bytes": 2331
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/root-grouped-auto-acceptance-20261031.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/root-dispositions/root-grouped-auto-acceptance-20261031.json",
+      "sha256": "e0a659e8798eba47179623e218340852c1d2fafe2ca09d03bc1b7e6a9ede86e4",
+      "bytes": 3047,
+      "role": "verbatim coordinator disposition, no new approval",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/root-dispositions/root-grouped-auto-acceptance-20261031.json",
+          "sha256": "e0a659e8798eba47179623e218340852c1d2fafe2ca09d03bc1b7e6a9ede86e4",
+          "bytes": 3047
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/root-grouped-identical-literal-acceptance-20261031.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/root-dispositions/root-grouped-identical-literal-acceptance-20261031.json",
+      "sha256": "215b12034b6dd590a82a4359a9aac64508005019ea14d3a4c2fa4c6fda6675c9",
+      "bytes": 2409,
+      "role": "verbatim coordinator disposition, no new approval",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/root-dispositions/root-grouped-identical-literal-acceptance-20261031.json",
+          "sha256": "215b12034b6dd590a82a4359a9aac64508005019ea14d3a4c2fa4c6fda6675c9",
+          "bytes": 2409
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/root-grouped-none-acceptance-20261031.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/root-dispositions/root-grouped-none-acceptance-20261031.json",
+      "sha256": "8141146a38484454c8fc65d72845f0f360c462bc16604349d67fb8fdf25d1224",
+      "bytes": 4399,
+      "role": "verbatim coordinator disposition, no new approval",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/root-dispositions/root-grouped-none-acceptance-20261031.json",
+          "sha256": "8141146a38484454c8fc65d72845f0f360c462bc16604349d67fb8fdf25d1224",
+          "bytes": 4399
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/root-host-stub-rustred-acceptance-20261031.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/root-dispositions/root-host-stub-rustred-acceptance-20261031.json",
+      "sha256": "7b15acc1161e02ef5d17889a000a3e3d9f93f53184d79550658684324c589f47",
+      "bytes": 3159,
+      "role": "verbatim coordinator disposition, no new approval",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/root-dispositions/root-host-stub-rustred-acceptance-20261031.json",
+          "sha256": "7b15acc1161e02ef5d17889a000a3e3d9f93f53184d79550658684324c589f47",
+          "bytes": 3159
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/root-interface-runner-r3-acceptance-20261031.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/root-dispositions/root-interface-runner-r3-acceptance-20261031.json",
+      "sha256": "66b51d8cd9593e905f204ddb542cedc469b68c5548ad5147853384a19de1b381",
+      "bytes": 2565,
+      "role": "verbatim coordinator disposition, no new approval",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/root-dispositions/root-interface-runner-r3-acceptance-20261031.json",
+          "sha256": "66b51d8cd9593e905f204ddb542cedc469b68c5548ad5147853384a19de1b381",
+          "bytes": 2565
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/root-three-integration-host-acceptance-and-next-20261031.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/root-dispositions/root-three-integration-host-acceptance-and-next-20261031.json",
+      "sha256": "b73517d53f083bbd99bd496a5938483902012198e815fb28583b37438d27c275",
+      "bytes": 10281,
+      "role": "verbatim coordinator disposition, no new approval",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/root-dispositions/root-three-integration-host-acceptance-and-next-20261031.json",
+          "sha256": "b73517d53f083bbd99bd496a5938483902012198e815fb28583b37438d27c275",
+          "bytes": 10281
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/docs/developers.toml",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/historical/7f03ab8f/docs__developers.toml.verbatim",
+      "sha256": "62b1d9d38754fac9602643c2b870c886c01dce5313cdf111b4e8b8881a2fa7f0",
+      "bytes": 207715,
+      "role": "exact pre-edit immutable evidence snapshot",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/historical/7f03ab8f/docs__developers.toml.verbatim",
+          "sha256": "62b1d9d38754fac9602643c2b870c886c01dce5313cdf111b4e8b8881a2fa7f0",
+          "bytes": 207715
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/docs/architecture/generation-feynkit-community-refresh.typ",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/historical/7f03ab8f/docs__architecture__generation-feynkit-community-refresh.typ.verbatim",
+      "sha256": "8f16edb8231c8f18c66c67091ec7c0fe91bf439aa8be460649c70ccd429e9f01",
+      "bytes": 20892,
+      "role": "exact pre-edit immutable evidence snapshot",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/historical/7f03ab8f/docs__architecture__generation-feynkit-community-refresh.typ.verbatim",
+          "sha256": "8f16edb8231c8f18c66c67091ec7c0fe91bf439aa8be460649c70ccd429e9f01",
+          "bytes": 20892
+        }
+      ]
+    },
+    {
+      "source": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/docs/architecture/evidence/generation-integration/execution.json",
+      "logical_copy": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/historical/7f03ab8f/docs__architecture__evidence__generation-integration__execution.json.verbatim",
+      "sha256": "8648d58d5ec131dbd1372f30eb558ed4c68a1d8f179e3d8da8caa5d9651bab3c",
+      "bytes": 47105,
+      "role": "exact pre-edit immutable evidence snapshot",
+      "encoding": "identity",
+      "parts": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/historical/7f03ab8f/docs__architecture__evidence__generation-integration__execution.json.verbatim",
+          "sha256": "8648d58d5ec131dbd1372f30eb558ed4c68a1d8f179e3d8da8caa5d9651bab3c",
+          "bytes": 47105
+        }
+      ]
+    }
+  ]
+}

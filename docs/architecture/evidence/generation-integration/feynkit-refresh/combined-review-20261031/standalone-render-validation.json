@@ -1,0 +1,42 @@
+{
+  "tool": "/nix/store/wzpxqpc3v2xxah69rqifq5kac67hx36g-typst-0.15.1/bin/typst",
+  "tool_sha256": "3c381d7d3e2259f81766ff77a1e6dec18ec4c7b7702b9c51ad34d56432b9633c",
+  "version": "typst 0.15.1 (9dfd3a08)",
+  "authority": "nix/documentation.nix typst015; existing immutable store executable only, no Nix or native/scientific/export/site execution",
+  "results": [
+    {
+      "source": "docs/architecture/generation-feynkit-community-refresh.typ",
+      "source_sha256": "acabddaf8d4a4a017091bd480a88b3435ae2f02129ff601179ca36a111436ce5",
+      "argv": [
+        "/nix/store/wzpxqpc3v2xxah69rqifq5kac67hx36g-typst-0.15.1/bin/typst",
+        "compile",
+        "--root",
+        "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh",
+        "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/docs/architecture/generation-feynkit-community-refresh.typ",
+        "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-candidate-20261031-r1/generation-feynkit-community-refresh.pdf"
+      ],
+      "exit_code": 0,
+      "stderr": "",
+      "pdf_retained_ignored": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-candidate-20261031-r1/generation-feynkit-community-refresh.pdf",
+      "pdf_sha256": "399d09a63ad23aacc1ac9390f37840ef50ed2a92ecb51e93e5f7b4eb6dd00fb7"
+    },
+    {
+      "source": "docs/architecture/generation-combined-refresh-review.typ",
+      "source_sha256": "e9b88e168e74e210b475a98e1107560f309b4210f944650c9d05f7a66ec98184",
+      "argv": [
+        "/nix/store/wzpxqpc3v2xxah69rqifq5kac67hx36g-typst-0.15.1/bin/typst",
+        "compile",
+        "--root",
+        "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh",
+        "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/docs/architecture/generation-combined-refresh-review.typ",
+        "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-candidate-20261031-r1/generation-combined-refresh-review.pdf"
+      ],
+      "exit_code": 0,
+      "stderr": "",
+      "pdf_retained_ignored": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-candidate-20261031-r1/generation-combined-refresh-review.pdf",
+      "pdf_sha256": "eacd4dbe7092bca1c2b0a703199630815028c8392dd20c8c2ff4af492b438b4c"
+    }
+  ],
+  "license_or_private_config_reads": 0,
+  "fullDocs_claim": false
+}

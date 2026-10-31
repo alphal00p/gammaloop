@@ -1,0 +1,50 @@
+{
+  "tracked_physical_guards": [
+    {
+      "root": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh",
+      "frozen_inventory": "457e361d7d39e0a3daae801651f8c1dfabbf47aa",
+      "files_checked": 5310,
+      "digest": "e64e5b277cf16fcb337bebc19b219735dc5cb6db037b67e677e9e11b9daa4d5d",
+      "unchanged": false,
+      "changes": [
+        {
+          "path": "crates/feynkit-generator/tests/generation_oracle/main.rs",
+          "before": "6dacf61baca9f13f3e4a6d719f89eaced429fb3cb14c7904dcb41fe4c86b66df",
+          "after": "66f01bcc855552ae888f1fb7c5bb158afbd448492b4e27a26e2bda40f09b07d2"
+        },
+        {
+          "path": "docs/developers.toml",
+          "before": "9e2ef1846586777d052bed6848d2d63dec7b9a8ebf4a5dca6059786d6f00b59f",
+          "after": "62b1d9d38754fac9602643c2b870c886c01dce5313cdf111b4e8b8881a2fa7f0"
+        }
+      ],
+      "interpretation": "Hash-only observation against initial457 inventory. Later grouped-writer source/ref/registry movement is expected, preserved and not analyzed/reverted by this task."
+    },
+    {
+      "root": "/shared/lcnbr/dev/gammaloop/main",
+      "frozen_inventory": "HEAD",
+      "files_checked": 2271,
+      "digest": "b674d7c789b93ce16442ddf27ac7073fa4aa6417f1d326593ae050ceaa98a0e6",
+      "unchanged": true,
+      "changes": [],
+      "interpretation": "Main physical tracked-file guard; no implementation writes here."
+    }
+  ],
+  "main_index_before": "36fca2996228d0adb018933745a106061d3febe8921980864b5cc50dbad4af5d",
+  "main_index_after": "36fca2996228d0adb018933745a106061d3febe8921980864b5cc50dbad4af5d",
+  "main_index_unchanged": true,
+  "immutable2cf_entries_rechecked": 4970,
+  "immutable2cf_mismatches": [],
+  "own_JJ_mutations": 0,
+  "read_only_JJ_flag_used": true,
+  "live_writer_changes_preserved": true,
+  "no_owned_build_runtime_or_background_process_started": true,
+  "completed_exec_sessions": [
+    76453,
+    10934,
+    70361,
+    30582,
+    8716,
+    85081
+  ]
+}

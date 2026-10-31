@@ -1,0 +1,238 @@
+[
+  {
+    "acceptance": ".local/feynkit-refresh/root-host-stub-rustred-acceptance-20261031.json",
+    "review": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-host-stub-rustred-integration-astra-20261031-023354Z-777117b1/review.json",
+    "expected_sha256": "f472e199cf3805d9364ef9158c18628fbc5c7ee8d72317c56a6af787628e8a5c",
+    "actual_sha256": "f472e199cf3805d9364ef9158c18628fbc5c7ee8d72317c56a6af787628e8a5c",
+    "hash_matches": true,
+    "verdict": "APPROVE_BOUNDED_APPLIED_STUB_DISTRIBUTIONS_AND_PRIVATE_RUSTRED_INTEGRATION",
+    "scope": {
+      "applied_source": "APPROVE exact independently approved one-file generated notebook stub on accepted twelve-row base",
+      "corrected_ordinary_distribution": "APPROVE exact wheel, complete installation, stub parity, native identity and qualified prior ordinary reuse; no ordinary QCD pass",
+      "private_source_composition_and_distribution": "APPROVE exact private three-host-file RustRed7c1/kernel8eb composition and new full wheel for this finite validation scope only",
+      "unchanged_private_QCD": "APPROVE original script/all23 assertions, two targets, depth2, residual[[1]], native RustRed and original completion marker",
+      "private_coexistence": "APPROVE fresh UFO36EW/3QCD/15linearity, squared display and exact two twelve-keyword sector signatures/three stub targets",
+      "private_browser": "APPROVE unchanged exact selected four-drawing product method in Chromium153.0.8010.36 and WebKit26.5/rev2311 at DPR1, zero skips/errors/failures",
+      "additive_evidence_and_docs_structure": "APPROVE declared committed/external integrity closure, preserved failures, one matching title, additive registry and all118 original scopes; no Typst/docs compile credit",
+      "global_integration_publication_production_RustRed": "NOT_REVIEWED_OR_APPROVED"
+    },
+    "root_decision": "ACCEPT_BOUNDED_APPLIED_STUB_DISTRIBUTIONS_AND_PRIVATE_RUSTRED_INTEGRATION"
+  },
+  {
+    "acceptance": ".local/feynkit-refresh/root-full-generator-pool1-acceptance-20261031.json",
+    "review": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-full-generator-characterization-astra-20261031-022430Z-320628f7/review.json",
+    "expected_sha256": "fb688585bc7efd0b494fef7648df5abad398f88bfe8c439e8b42c0dd520eaa37",
+    "actual_sha256": "fb688585bc7efd0b494fef7648df5abad398f88bfe8c439e8b42c0dd520eaa37",
+    "hash_matches": true,
+    "verdict": "APPROVE_EXACT_FULL_PACKAGE_POOL1_CHARACTERIZATION_AND_ASSERTED_SUMMARY_CLASSIFICATION",
+    "scope": "Only the exact sealed full feynkit-generator package characterization at ffa76ec420642c03349ab756d2d7720ab93c0057:420 discovered identities,371 ordinary nonignored selected outer tests, explicit oracle loop pool1, unchanged ci_gammaloop policy, one retained actual package run, and classification of all69 failed asserted Summaries. Registration tests retain their own explicit pools. This is approval of characterization, not a green package or a new native run.",
+    "root_decision": "ACCEPT_EXACT_FULL_PACKAGE_POOL1_CHARACTERIZATION_AND_ASSERTED_SUMMARY_CLASSIFICATION"
+  },
+  {
+    "acceptance": ".local/feynkit-refresh/root-three-integration-host-acceptance-and-next-20261031.json",
+    "review": ".local/review-raw-three-integration-astra-20261031-012811Z-323f4486/review.json",
+    "expected_sha256": "535b792610c531b446d8beb1a9f300246e6d498e8126509b637189e8eb80a091",
+    "actual_sha256": "535b792610c531b446d8beb1a9f300246e6d498e8126509b637189e8eb80a091",
+    "hash_matches": true,
+    "verdict": "APPROVE_BOUNDED_RAW_THREE_QED_QCD_INTEGRATION",
+    "scope": "Only the exact three separately approved numerator tokens on accepted SM base5ea4, actual new ffa76ec package archive and ELF, twelve selected full-Row tests at pools1/8/32, fresh pool1 public physical capture joins, and additive committed evidence/Typst/registry through d0fb4. Root disposition remains separate; no integration-bookmark advance or publication approval.",
+    "root_decision": null
+  },
+  {
+    "acceptance": ".local/feynkit-refresh/root-three-integration-host-acceptance-and-next-20261031.json",
+    "review": ".local/review-host-browser-stub-astra-20261031-013106Z-5655cc61/review.json",
+    "expected_sha256": "8bd31e92448a517479fb2f2ec5a12c9999c31752cea08502392f290c47e37627",
+    "actual_sha256": "8bd31e92448a517479fb2f2ec5a12c9999c31752cea08502392f290c47e37627",
+    "hash_matches": true,
+    "verdict": null,
+    "scope": "Approval is hash-bound to H/B/S and the exact f47 artifacts. It covers actual listed passes, not a fully qualified host. No source46, full Community, source/pin/bridge proposal, global integration/WP3, full docs/site/widget, performance, publication, migration, or new native-build approval.",
+    "root_decision": null
+  },
+  {
+    "acceptance": ".local/feynkit-refresh/root-grouped-none-acceptance-20261031.json",
+    "review": "../generation-oracle-numerator-families/.local/review-grouped-none-aggregation-astra-20261030-independent-b1/review.json",
+    "expected_sha256": "45368ac2dc5783a6ba31daa9b7e8bd7f03a80746bf3b07b6d3e34cc909adcb81",
+    "actual_sha256": "45368ac2dc5783a6ba31daa9b7e8bd7f03a80746bf3b07b6d3e34cc909adcb81",
+    "hash_matches": true,
+    "verdict": "APPROVE_PINNED_CONDITIONAL_NONE_AGGREGATE_AND_HELPER_DURABILITY",
+    "scope": {
+      "case": "xs_qed_eemm_identical_L2",
+      "classes": "None",
+      "grouping": "Identical",
+      "settings": {
+        "check_canonical_numerator": false,
+        "differentiate_particle_masses_only": true,
+        "fully_numerical_substitution": false,
+        "number_of_numerical_samples": 5,
+        "numerical_sample_seed": 3,
+        "symmetric_polarizations": false
+      },
+      "naming": "D",
+      "generation_pool": 1,
+      "code": "5ba04864ca506e259d9eef4a54f65acdd8323fc2",
+      "dependency_archive_code": "5ea149ffd88ae3afc4072a38c0871c1329be8424",
+      "kernel": "8eb7c3729d6abefc916decc1bdf0c06536f8af80"
+    },
+    "root_decision": "ROOT_ACCEPTS_PINNED_CONDITIONAL_NONE_AGGREGATE_FOR_CONTINUATION"
+  },
+  {
+    "acceptance": ".local/feynkit-refresh/root-grouped-auto-acceptance-20261031.json",
+    "review": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-auto-aggregation-astra-20261031-independent-r1-1793413266607828149/review.json",
+    "expected_sha256": "e4ca45aff35c11bbd6397a32265502f79ff6b622141c1fe75214f17f830919db",
+    "actual_sha256": "e4ca45aff35c11bbd6397a32265502f79ff6b622141c1fe75214f17f830919db",
+    "hash_matches": true,
+    "verdict": "APPROVE",
+    "scope": "PINNED_CONDITIONAL_AUTO_AGGREGATION_HELPER_DURABILITY_AND_NARROW_STRICT_GUARD",
+    "root_decision": "ACCEPT_PINNED_CONDITIONAL_AUTO_AGGREGATION_HELPER_DURABILITY_AND_NARROW_STRICT_GUARD"
+  },
+  {
+    "acceptance": ".local/feynkit-refresh/root-interface-runner-r3-acceptance-20261031.json",
+    "review": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-interface-runner-r3-astra-20261031-020333Z-4003b785/review.json",
+    "expected_sha256": "b370752781691d7286766047658ca518a4a898a463c76df26226f2f114d43a62",
+    "actual_sha256": "b370752781691d7286766047658ca518a4a898a463c76df26226f2f114d43a62",
+    "hash_matches": true,
+    "verdict": "APPROVE",
+    "scope": null,
+    "root_decision": "ACCEPT_EXACT_FINITE_R3_REPAIR"
+  },
+  {
+    "review": ".local/review-feynkit-refresh-source-opus-round4-20261030T201146Z-697912d5/review.json",
+    "expected_sha256": "5d9db6c6d385bd25ea9e276a2a1ebd2e95c0678171854e4ccb73a1362130e1af",
+    "actual_sha256": "5d9db6c6d385bd25ea9e276a2a1ebd2e95c0678171854e4ccb73a1362130e1af",
+    "hash_matches": true,
+    "verdict": "APPROVE_SOURCE_RECONCILIATION",
+    "scope": "SOURCE_RECONCILIATION only. Covers the reconciled source content through code f47f27213a1c55291239c9bc0f334a7ea1cd1cc1: the prior reviewed source (106-commit replay plus the f842/5ba0 repairs, carried by invariance) and the one-file R3-1 correction. Also covers the truthfulness of the additive cacd evidence. EXCLUDES the c3449988 shared metadata (docs/developers.toml note, docs/architecture/generation-feynkit-community-refresh.typ and qualification/*.json), which has its own active ScopeA review; see XS-1. Grants no installed-host, runtime, WebKit, product-rendering, proof, stub-parity, full-site, budget, migration, WP3 or combined approval.",
+    "candidate": null
+  },
+  {
+    "review": ".local/review-feynkit-refresh-shared-provenance-opus-20261030T193404Z-3c0453ff/review.json",
+    "expected_sha256": "565caeace0112a30fb9118f94b2bb759e4267d2b802395c314e485b89b4b2b70",
+    "actual_sha256": "565caeace0112a30fb9118f94b2bb759e4267d2b802395c314e485b89b4b2b70",
+    "hash_matches": true,
+    "verdict": "APPROVE_SHARED_SCOPE_A",
+    "scope": "Shared Scope A provenance/runtime/evidence only, serving the twelve-case pool1 characterization and the provenance of BOTH new raw certificate lanes (QED r3, gauge r3). NOT source reconciliation, mathematics/native-control, ScopeB lane, migration, combined or integration approval.",
+    "candidate": null
+  },
+  {
+    "review": ".local/review-refresh-aggregation-astra-20261030-independent/review.json",
+    "expected_sha256": "567fba9cfa9287478d5c1531fd46eac49c79f4cd6fbcc878c50bd364cf279342",
+    "actual_sha256": "567fba9cfa9287478d5c1531fd46eac49c79f4cd6fbcc878c50bd364cf279342",
+    "hash_matches": true,
+    "verdict": "APPROVE_FOCUSED_METADATA_AGGREGATION",
+    "scope": "Only metadata delta cacd5182704082df929a066548e3501be22c9533..48d0b98b97b368b2a2f58abe67cb19dddec623df: retention and faithful attribution of six completed independent reviews, canonical note update, XS-1 paired-field repair, and additive prior-eight F1-F7 reporting disclosures. No combined/integration/WP3/M-rebuild, migration/literal/expectation, mathematical/runtime, product/browser or full-docs approval.",
+    "candidate": {
+      "commit": "48d0b98b97b368b2a2f58abe67cb19dddec623df",
+      "parent": "cacd5182704082df929a066548e3501be22c9533",
+      "tree": "8e96a356b1d4efef0358464b46c1fdadd7c5608d",
+      "parent_tree": "548845549f5f3086e55443d2f1a3c35e5d32811a",
+      "bookmark": "generation-feynkit-refresh-review-aggregation",
+      "workspace": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh",
+      "diff_sha256": "5af725e84cb725a280a1b0513a3e04f1075ca6a0b8065802f5519982cd212868",
+      "diff_bytes": 1403446,
+      "source_revision": "f47f27213a1c55291239c9bc0f334a7ea1cd1cc1",
+      "proof_revision": "5ba04864ca506e259d9eef4a54f65acdd8323fc2",
+      "built_revision": "5ea149ffd88ae3afc4072a38c0871c1329be8424",
+      "kernel": "8eb7c3729d6abefc916decc1bdf0c06536f8af80"
+    }
+  },
+  {
+    "review": "../generation-integration-plan/.local/review-main46-round4-opus-rZyrnOS8/review.json",
+    "expected_sha256": "ee6e37ee207747d4f65c6a45b619412738af3248a65301b396768f27f5227e22",
+    "actual_sha256": "ee6e37ee207747d4f65c6a45b619412738af3248a65301b396768f27f5227e22",
+    "hash_matches": true,
+    "verdict": "APPROVE",
+    "scope": null,
+    "candidate": "79dfeaab77958064bf802bc88db23eb86ac2f8ce"
+  },
+  {
+    "review": "../generation-integration-plan/.local/review-xs-qed-l2-integration-a-opus-20261030T111536Z-1321089/review.json",
+    "expected_sha256": "0b5319a43da8e19100dd19a9c4647a03b95ffba1ac90a23749b0c348e95375a6",
+    "actual_sha256": "0b5319a43da8e19100dd19a9c4647a03b95ffba1ac90a23749b0c348e95375a6",
+    "hash_matches": true,
+    "verdict": "APPROVE_SCOPE_A_BOUNDED",
+    "scope": "A: producer, runtime, pool, Row/mode and remaining-failure evidence. Peer B owns finite proof/docs/registry/hash-closure replay.",
+    "candidate": {
+      "commit": "fdff0d18953348b84a0f1b7e6ab5ef703a5090de",
+      "change": "mssryyzyrolmwvuknmrlkzoozuuvlxuo",
+      "built_code": "eae78e11e4d27df2539700fa4d4d71cdcb3a4804",
+      "built_code_change": "xtupxvlkpotywlkloktqqqnzktwnlrpt",
+      "approved_base": "69fda047e378d4114f47ec9a10517e44adb57eaa",
+      "prior_built_code": "8dcebc2591ab04d10026fbd47a45e8d31f911ef3",
+      "bookmarks_verified": {
+        "generation-integration": "fdff0d18",
+        "generation-integration-xs-qed-l2": "fdff0d18",
+        "generation-integration-xs-qed-l2-evidence": "fdff0d18",
+        "generation-integration-xs-qed-l2-code": "eae78e11",
+        "generation-integration-xs-qed-l2-base": "69fda047"
+      },
+      "receipt": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/docs/architecture/evidence/generation-integration/wp3/xs-qed-l2/receipt.json",
+        "sha256": "f7646abc83d7ba6ca82f9658bbe910fb38732f8f1b3e047fe272afc30c1b64a8",
+        "bytes": 57239
+      },
+      "detached_supplement": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-xs-qed-l2-integration/final-supplement.json",
+        "sha256": "699483979926703d6cbbf1ed0fc8139be481c0a7344d4ffe6861b647ab422f16",
+        "bytes": 8936
+      },
+      "final_stage": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-xs-qed-l2-integration/final-stage.json",
+        "sha256": "6846b52ad5b862c87228375ec9caaa1cab6c45fc613abc209357909338993334",
+        "bytes": 3209
+      },
+      "working_copy_equals_candidate_tree": {
+        "tracked": 4572,
+        "ok": 4572,
+        "mismatch": 0,
+        "missing": 0
+      }
+    }
+  },
+  {
+    "review": "../generation-integration-plan/.local/review-xs-qed-l2-integration-b-opus-20261030T111614Z-1341306/review.json",
+    "expected_sha256": "f94b819f13740dc7674991c7db8bcf33aa14088b60fa973114aadd805281f0c4",
+    "actual_sha256": "f94b819f13740dc7674991c7db8bcf33aa14088b60fa973114aadd805281f0c4",
+    "hash_matches": true,
+    "verdict": "APPROVE_SCOPE_B_WITH_NONBLOCKING_FINDINGS",
+    "scope": "B: certificate closure/application, registry, documentation and final evidence (items 1-7 of the root brief). Producer provenance, 452-unit closure, fresh 24 tests/Rows and full-lane execution are peer A's; covered here only by cross-reference/consistency.",
+    "candidate": {
+      "commit": "fdff0d18953348b84a0f1b7e6ab5ef703a5090de",
+      "change": "mssryyzyrolmwvuknmrlkzoozuuvlxuo",
+      "tree": "9903a5fca6b03884d6c3a5543ddbad2cd69f1e45",
+      "built_code": "eae78e11e4d27df2539700fa4d4d71cdcb3a4804",
+      "base": "69fda047e378d4114f47ec9a10517e44adb57eaa",
+      "prior_built_code": "8dcebc2591ab04d10026fbd47a45e8d31f911ef3",
+      "certificate": "c95e7f6e77994779929115a156654cfce3bd1e53",
+      "migration": "19b516a43dda31a4403dd2a170f2e837934617ce",
+      "bookmarks_verified": {
+        "generation-integration": "fdff0d18",
+        "generation-integration-xs-qed-l2": "fdff0d18",
+        "generation-integration-xs-qed-l2-evidence": "fdff0d18",
+        "generation-integration-xs-qed-l2-code": "eae78e11",
+        "generation-integration-xs-qed-l2-base": "69fda047",
+        "generation-xs-qed-l2-candidate": "c95e7f6e",
+        "generation-xs-qed-l2-migration": "19b516a4"
+      },
+      "receipt": {
+        "path": "docs/architecture/evidence/generation-integration/wp3/xs-qed-l2/receipt.json",
+        "sha256": "f7646abc83d7ba6ca82f9658bbe910fb38732f8f1b3e047fe272afc30c1b64a8",
+        "bytes": 57239
+      },
+      "detached_supplement": {
+        "path": "target/wp3-xs-qed-l2-integration/final-supplement.json",
+        "sha256": "699483979926703d6cbbf1ed0fc8139be481c0a7344d4ffe6861b647ab422f16",
+        "bytes": 8936
+      }
+    }
+  },
+  {
+    "acceptance": ".local/feynkit-refresh/root-grouped-identical-literal-acceptance-20261031.json",
+    "review": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-identical-migration-astra-20261031-024225Z-1469f5e4/review.json",
+    "expected_sha256": "7d96505dcb700eeae42b5a4e87676551ba910cb660df586cafe34d6b90e944f1",
+    "actual_sha256": "7d96505dcb700eeae42b5a4e87676551ba910cb660df586cafe34d6b90e944f1",
+    "hash_matches": true,
+    "verdict": "APPROVE",
+    "scope": "Exact single-token migration PREPARATION under pinned None/Auto premises; not application/runtime/integration approval",
+    "seal_sha256": "e4f574d2346fd4c32c27fbcfbe5b027acd1c8772185371d83bc701429218a26f"
+  }
+]

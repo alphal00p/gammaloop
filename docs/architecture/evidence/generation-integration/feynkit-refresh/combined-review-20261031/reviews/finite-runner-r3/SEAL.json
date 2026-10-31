@@ -1,0 +1,21 @@
+{
+  "schema": "independent-interface-runner-r3-astra-seal/1",
+  "sealed_utc": "2026-10-31T02:09:32.994748+00:00",
+  "verdict": "APPROVE",
+  "scope": "Exact sealed r3 finite future-generator repair only: 8 focused plus 12 flag configurations, three named rows, None/Auto independently, Grouping None, pool 1; pure generation, semantic/input identity, routing and preflight. No native-execution authorization or general runner/API approval.",
+  "review_sha256": "b370752781691d7286766047658ca518a4a898a463c76df26226f2f114d43a62",
+  "manifest": "SHA256SUMS",
+  "manifest_sha256": "bef4c004a195045c85d1efbc053e29b29b602d8736bbfcd5c70e2b1496b07c79",
+  "files": 254,
+  "candidate_seal_sha256": "b18cf2ca208abdf7cba55a118eaf98626036ea7ab57ac70e9708b1f11545fbaa",
+  "candidate_disposition_sha256": "192e073713a95df28120374a3d6a355a2565c919916de3634e6ade66fab2ecbc",
+  "prior_review_sha256": "96b1bf07ebf7e5b537db9b234750247e4360120cbb211c9779eb63973e026710",
+  "supplied_tests": 17,
+  "fresh_independent_holdouts": 33,
+  "fresh_native_runs": 0,
+  "owned_processes_remaining": 0,
+  "excluded": [
+    "SHA256SUMS bound by this seal",
+    "SEAL.json digest returned externally"
+  ]
+}

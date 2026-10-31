@@ -1,0 +1,92 @@
+{
+  "schema": "independent-B1-r3-astra-review-seal/1",
+  "verdict": "APPROVE",
+  "candidate": "7f03ab8fd5834d7c78164429e2a44dab8d01ef74",
+  "review_sha256": "66db3d6dd9886e072fabdd78f3dab82d669b17408e5e05c10709f50e5eba9d7c",
+  "manifest_sha256": "5434b6e9c63f918f98958e4d969190c37c10ae2cca84dcfd80f9ca7a0deb19b9",
+  "file_count": 19,
+  "files": {
+    "audit.py": {
+      "sha256": "5e65c20710843e485227156cd9b4fc781bf9c2310ef1a5f24f628d75475cefe1",
+      "bytes": 15889
+    },
+    "closure-audit.json": {
+      "sha256": "0040d8e42b9a3aca6a4d9d73faa5597dbebedfde954566a1cfdaa37f5970616f",
+      "bytes": 915873
+    },
+    "closure.stderr": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "closure.stdout": {
+      "sha256": "de98d8d3859753fcd6564fb3a8bbed0ecf1cfdd6256fda2317c2cce9a4a68372",
+      "bytes": 178
+    },
+    "final-check.stderr": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "final-check.stdout": {
+      "sha256": "de817dbd51aee7af538bf5d017852be4210a0c59a5ca448a6fc106c7856b464f",
+      "bytes": 852
+    },
+    "final-guard.json": {
+      "sha256": "078d8c3f1dc7e2ebe5fba05bc3d182af2101832bdfff8508083c54d1ebada9ca",
+      "bytes": 920
+    },
+    "final_check.py": {
+      "sha256": "ca71090a06949ae97a81560090aa80ad00578b132092adcdca8ac7f8f7b3dde2",
+      "bytes": 3990
+    },
+    "guard-after.json": {
+      "sha256": "6d7876700a9e91aeb3b70922297bbf7396319b8dafb297c6209d68c946ef93ae",
+      "bytes": 2111374
+    },
+    "guard-before.json": {
+      "sha256": "6d7876700a9e91aeb3b70922297bbf7396319b8dafb297c6209d68c946ef93ae",
+      "bytes": 2111374
+    },
+    "immutable-trees.json": {
+      "sha256": "fe4afe709acdb18e23af1156c88257c11c31c1d075c47e4f867b6dfdcf75e1c9",
+      "bytes": 5350301
+    },
+    "rebind-audit.json": {
+      "sha256": "19d70256646bc54d66ebec8230a62f3e7a1902e9319133487ab1cd98ae98485a",
+      "bytes": 8017850
+    },
+    "rebind.py": {
+      "sha256": "7a0f9cec833a645eee566f4e601263e9550362d833f2b0a9cc7979df4c2ad808",
+      "bytes": 8287
+    },
+    "rebind.stderr": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "rebind.stdout": {
+      "sha256": "d4fd72050a2bf817a31698e2569f85f4d4e41ef95504a4f23569f8cba28ae991",
+      "bytes": 264
+    },
+    "review.json": {
+      "sha256": "66db3d6dd9886e072fabdd78f3dab82d669b17408e5e05c10709f50e5eba9d7c",
+      "bytes": 68918
+    },
+    "review.json.sha256": {
+      "sha256": "27f68782741777b97bf6b88a620109dfbc7cf5d8d859311de387b6bd37b313ee",
+      "bytes": 78
+    },
+    "reviewer-attempts.json": {
+      "sha256": "288ed83c70fbf5acb71de9dc4d859dc2a0800058196f69a8a99332f082509eec",
+      "bytes": 988
+    },
+    "seal_review.py": {
+      "sha256": "1c9593951788e457c7a81de97e46b41c44643032646139c7e671d0c1e59e430a",
+      "bytes": 17224
+    }
+  },
+  "excluded": [
+    "SHA256SUMS bound by this seal",
+    "seal.json bound by seal.sha256",
+    "seal.sha256 outer digest"
+  ],
+  "circular_self_hash": false
+}

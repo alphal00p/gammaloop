@@ -1,0 +1,16 @@
+{
+  "schema": "generation-combined-preflight-seal/1",
+  "frozen_code": "2cfb52b28d99f92305a9d571bbe3911cf04b8a19",
+  "frozen_evidence": "457e361d7d39e0a3daae801651f8c1dfabbf47aa",
+  "manifest": "SHA256SUMS",
+  "manifest_sha256": "7b2694e6fa2bcbd328cc3a86a1f3bab6aa5c871894010adb3ef482ad6eb8b696",
+  "files": 69,
+  "bytes": 13232254,
+  "approval": "NONE; bounded read-only/pure preflight data only",
+  "metadata_proposal_applied": false,
+  "processes_remaining": 0,
+  "files_manifest_excludes": [
+    "SHA256SUMS",
+    "SEAL.json"
+  ]
+}

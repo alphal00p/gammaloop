@@ -1,0 +1,16 @@
+{
+  "schema": "combined-refresh-candidate-seal/1",
+  "accepted_evidence_base": "7f03ab8fd5834d7c78164429e2a44dab8d01ef74",
+  "actual_grouped_source": "6f41807b064bcf2f579883134daef65c8ac279d3",
+  "manifest": "SHA256SUMS",
+  "manifest_sha256": "89aee8cbe126595aa40d41f60513e975d93b5b07b007ddd5922eb72fc1dd666c",
+  "files": 153,
+  "status": "NEW_INDEPENDENT_COMBINED_REVIEW_REQUIRED",
+  "scope": "New combined metadata/evidence files and four canonical files; original grouped manifests verify via immutable revision/snapshot bindings. External review/scientific/native premises explicitly retained, not claimed committed.",
+  "excludes": [
+    "SHA256SUMS",
+    "SEAL.json",
+    "future additive freeze audit packet"
+  ],
+  "new_build_native_runtime_delegation_license_config_network_or_publication": 0
+}

@@ -1,0 +1,660 @@
+{
+  "schema": "generation-host-stub-rustred-independent-review/1",
+  "reviewer": {
+    "model": "gpt-6-astra",
+    "reasoning_effort": "ultra",
+    "role": "independent review sub-agent",
+    "fallback": "User-authorized Astra fallback for unavailable Opus",
+    "delegation": false
+  },
+  "completed_utc": "2026-10-31T02:47:49.004329+00:00",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh",
+  "review_directory": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-host-stub-rustred-integration-astra-20261031-023354Z-777117b1",
+  "verdict": "APPROVE_BOUNDED_APPLIED_STUB_DISTRIBUTIONS_AND_PRIVATE_RUSTRED_INTEGRATION",
+  "blocking_findings": [],
+  "per_scope_verdicts": {
+    "applied_source": "APPROVE exact independently approved one-file generated notebook stub on accepted twelve-row base",
+    "corrected_ordinary_distribution": "APPROVE exact wheel, complete installation, stub parity, native identity and qualified prior ordinary reuse; no ordinary QCD pass",
+    "private_source_composition_and_distribution": "APPROVE exact private three-host-file RustRed7c1/kernel8eb composition and new full wheel for this finite validation scope only",
+    "unchanged_private_QCD": "APPROVE original script/all23 assertions, two targets, depth2, residual[[1]], native RustRed and original completion marker",
+    "private_coexistence": "APPROVE fresh UFO36EW/3QCD/15linearity, squared display and exact two twelve-keyword sector signatures/three stub targets",
+    "private_browser": "APPROVE unchanged exact selected four-drawing product method in Chromium153.0.8010.36 and WebKit26.5/rev2311 at DPR1, zero skips/errors/failures",
+    "additive_evidence_and_docs_structure": "APPROVE declared committed/external integrity closure, preserved failures, one matching title, additive registry and all118 original scopes; no Typst/docs compile credit",
+    "global_integration_publication_production_RustRed": "NOT_REVIEWED_OR_APPROVED"
+  },
+  "candidate": {
+    "base": "d0fb4e906140a6a0fc8dd6401ca839cab0c2734d",
+    "code": "2cfb52b28d99f92305a9d571bbe3911cf04b8a19",
+    "code_bookmark": "generation-host-stub-code-20261031",
+    "final_evidence": "457e361d7d39e0a3daae801651f8c1dfabbf47aa",
+    "final_bookmarks": [
+      "generation-host-stub-rustred-evidence-r2-20261031",
+      "generation-host-stub-rustred-candidate-r2-20261031"
+    ],
+    "partial_preserved": "b6c3886feb702cbf120ec448356684ec5c9b7857",
+    "receipt_sha256": "0bef8556e9ed27bc44cd391cbe6593eb0cc1baac39680767931a3cdab84a524c",
+    "seal_sha256": "3feb84e0c5c745a22a22cb18469dbdd506af00f19a08c8159915e94f7ec96016",
+    "manifest_sha256": "f01c681f0efac977c3daad7688e2f0aec0341d3a2a1353aa327fd1d05cc96e60",
+    "manifest_files": 337,
+    "Git_packet_files": 339
+  },
+  "source": {
+    "approved_patch_sha256": "0666eba15326649c0e1fb3dc035bfe0bc8cbc1238ec5fcec99622ecbf2d58e47",
+    "only_production_change": "examples/notebooks/symbolica-host/python/symbolica/community/hepkit/__init__.pyi",
+    "old_stub_sha256": "bf9d4ce3f4b5f3871c39164d3c11db248123eecd8a1939a845ad7569da4de92f",
+    "new_stub_sha256": "5e2dfa31a10d9c545d38f4257b006daa7b1b53bcf0d96aafb060ee71a68f77e5",
+    "all149_Rows_12_migrations_and_every_other_production_byte_invariant": true,
+    "old118_scopes_valid_and_ordered_invariant": true,
+    "exact_new_full_Git_source_files": 4970,
+    "selected_ordinary_Git_source_files": 829,
+    "private_changed_files": [
+      "examples/notebooks/symbolica-host/Cargo.lock",
+      "examples/notebooks/symbolica-host/Cargo.toml",
+      "examples/notebooks/symbolica-host/src/lib.rs"
+    ],
+    "RustRed_exact_Git_entries_verified": 2955,
+    "kernel": "8eb7c3729d6abefc916decc1bdf0c06536f8af80",
+    "RustRed": "7c1ed03722b8c05daf60c89ba4ecc79457ed2ada",
+    "community_alternative_pins_adopted": false
+  },
+  "producer_and_packaging": {
+    "new_producer_executions_by_reviewer": 0,
+    "Nix_compiler_build_network_commands_by_reviewer": 0,
+    "source_and_output_NARs_recomputed_in_pure_Python": 7,
+    "actual_ATerm_derivations_reparsed": 2,
+    "locked_metadata_gate_precedes_compilation": true,
+    "first_candidate_failure": "Private cargo metadata --locked exit101; overall first coordinated Nix build exit1, before private compilation; preserved separately from final success.",
+    "lock_correction": "Exactly rustred-app/rustred-python removed plus unused rustred-python dependency of rustred-feynkit; no package addition/version/source change. Resolver and final active graph/features equal.",
+    "final_candidate_build": "One coordinated two-output realization exit0, ordinary/private source and completed logs match exact outputs; no new exporter/archive/full-site build.",
+    "actual_provenance": "Read immutable output locked metadata, final host-selected fingerprint links, compiler identity, depfiles and source bytes. 935 ordinary/1901 private extant source paths rehashed; generated/build-only paths explicitly listed as not retained in compiled-depfile-audit.json. This is not a new full arbitrary-transitive-dependency audit.",
+    "private_bridge": "Only rustred_feynkit::register_hep_module adds genuine native IBP classes to the same registered FeynKit child module in core. Three RustRed nodes features[], single PyO3 0.28.3 and Symbolica/Numerica/Graphica3.0.1@8eb. Actual native compiled_runtime_arities()==[1].",
+    "wheel_validation": "Both full ZIP member inventories, unique/safe paths, complete RECORD hashes/sizes, METADATA/WHEEL and sole native member verified. Two new complete offline uv installations; all original payload members and RECORD rows exact, installer-added RECORD entries verified. No DSO transplant or shared environment modification.",
+    "artifacts": {
+      "ordinary": {
+        "drv": "/nix/store/5vvg7gyp1n3ma9rw57m37p81vn75h1ch-generation-refresh-corrected-stub-host-wheel-0.1.0.drv",
+        "output": "/nix/store/w5d0wdnv1c4iic9f6qlg6zv87zglb6f0-generation-refresh-corrected-stub-host-wheel-0.1.0",
+        "output_nar": "sha256-I7oT5R2H9CM18yJkanJCQHM5WqRAJmmqbU3pQ3Tz6i4=",
+        "wheel": {
+          "path": "/nix/store/w5d0wdnv1c4iic9f6qlg6zv87zglb6f0-generation-refresh-corrected-stub-host-wheel-0.1.0/dist/symbolica-3.0.1-cp310-abi3-linux_x86_64.whl",
+          "sha256": "edecffa95ae3d4318e83ac5e6af56e4cd504804b85165fd4766ed81167b5fd87",
+          "bytes": 49514067
+        },
+        "native_sha256": "d4cbe4e0fe79ebe128d8729b0d7081cb6eb2de1aee575d568fc533301098d957",
+        "stub_sha256": "5e2dfa31a10d9c545d38f4257b006daa7b1b53bcf0d96aafb060ee71a68f77e5"
+      },
+      "private": {
+        "drv": "/nix/store/x43msadi65xf8zr234lg5dbwgjzblcz6-generation-refresh-rustred-validation-host-wheel-0.1.0.drv",
+        "output": "/nix/store/cbvphdpy05pb8r414dmn5xfxxdqs3slx-generation-refresh-rustred-validation-host-wheel-0.1.0",
+        "output_nar": "sha256-byouUecKN+GjqpOrnC/h9QJc5T+7QWGVZ8NjBEFeuVw=",
+        "wheel": {
+          "path": "/nix/store/cbvphdpy05pb8r414dmn5xfxxdqs3slx-generation-refresh-rustred-validation-host-wheel-0.1.0/dist/symbolica-3.0.1-cp310-abi3-linux_x86_64.whl",
+          "sha256": "d2669a2abe40d8286d24f0c8a03a7624e73321bb9e0df7df8b89fcb29583703b",
+          "bytes": 51953714
+        },
+        "native_sha256": "4d4231b32962669db1ec4bc8efef586e93318b9200468235a78b25919dc98ecb",
+        "stub_sha256": "5e2dfa31a10d9c545d38f4257b006daa7b1b53bcf0d96aafb060ee71a68f77e5"
+      }
+    }
+  },
+  "fresh_review_execution_counts": {
+    "licensed_checks": 8,
+    "passes": 8,
+    "failures": 0,
+    "native_import_identity_checks": 2,
+    "canonical_exporter_check_processes": 1,
+    "canonical_stub_targets_checked": 3,
+    "private_QCD": 1,
+    "private_UFO": 1,
+    "private_squared_display": 1,
+    "private_sector_signature_check": 1,
+    "private_browser_product_method": 1,
+    "browser_engines_launches_pages_each": 2,
+    "drawings": 4,
+    "unlicensed_installer_commands": 4,
+    "whole_wheel_installations": 2,
+    "unlicensed_loader_probes": 2,
+    "unlicensed_containment_probes": 2,
+    "ordinary_QCD_runs": 0,
+    "Rust_embedding_runs": 0,
+    "new_exporter_builds": 0,
+    "old_algebra_or_control_helper_or_oracle_generator_runs": 0
+  },
+  "candidate_execution_counts_separate": {
+    "checks": 8,
+    "passes": 8,
+    "failures": 0,
+    "independently_reconciled_raw_command_exit_stdout_stderr_records": 8,
+    "evidence": "candidate-runtime-reconciliation.json"
+  },
+  "fresh_QCD": {
+    "targets": [
+      [
+        2
+      ],
+      [
+        3
+      ]
+    ],
+    "depth": 2,
+    "residuals": [
+      [
+        1
+      ]
+    ],
+    "trees": 2,
+    "loop_groups": 6,
+    "native_solution_type": true,
+    "compiled_arities": [
+      1
+    ],
+    "native_calls": [
+      {
+        "method": "reduce_laporta",
+        "native_owner": "IBPFamily"
+      },
+      {
+        "method": "reduce",
+        "native_owner": "IBPSolution"
+      },
+      {
+        "method": "reduce",
+        "native_owner": "IBPSolution"
+      },
+      {
+        "method": "reduce",
+        "native_owner": "IBPSolution"
+      },
+      {
+        "method": "reduce",
+        "native_owner": "IBPSolution"
+      },
+      {
+        "method": "reduce",
+        "native_owner": "IBPSolution"
+      },
+      {
+        "method": "reduce",
+        "native_owner": "IBPSolution"
+      },
+      {
+        "method": "reduce",
+        "native_owner": "IBPSolution"
+      },
+      {
+        "method": "reduce",
+        "native_owner": "IBPSolution"
+      },
+      {
+        "method": "reduce",
+        "native_owner": "IBPSolution"
+      },
+      {
+        "method": "reduce",
+        "native_owner": "IBPSolution"
+      },
+      {
+        "method": "reduce",
+        "native_owner": "IBPSolution"
+      },
+      {
+        "method": "reduce",
+        "native_owner": "IBPSolution"
+      }
+    ],
+    "stats": {
+      "exact_trace_rows": 0,
+      "rows": 6,
+      "sectors": 1,
+      "seeds": 6
+    },
+    "original_script_passed": true,
+    "assertion_sites": 23,
+    "source_sha256": "2622f4f8f53624e177e6ae059eb12953f1b16f6cf08ebe85b70ff6155423dfc6",
+    "observation": "sys.setprofile records actual C-call method names/owners; runpy executes the byte-exact script. No class/method monkeypatch, replacement, argument/result/assertion change or scientific skip. Observe-only profile removed in finally. Source call fixes max_depth=2; native solution.depth independently reads2. Native IBPFamily/IBPSolution identities match feynkit_native; reduction descriptor is native.",
+    "original_completion_marker_present": true,
+    "scope": "One-denominator finite script with its original analytic I(1) pole and gluon-counterterm reference inputs; no universal master-completeness or physics approval."
+  },
+  "fresh_browser": {
+    "complete": true,
+    "tests_run": 1,
+    "failures": 0,
+    "errors": 0,
+    "skips": 0,
+    "drawings": [
+      [
+        0,
+        2
+      ],
+      [
+        22,
+        2
+      ],
+      [
+        0,
+        42
+      ],
+      [
+        64,
+        2
+      ]
+    ],
+    "engines": [
+      {
+        "engine": "chromium",
+        "version": "153.0.8010.36",
+        "default_executable": "/nix/store/h8903h8s8x5zr3la0pnbgh24sbl5pf62-playwright-browsers/chromium-1228/chrome-linux64/chrome",
+        "requested_executable": "/nix/store/ds6wq0gzyimhl7c1kmzdvql0w4d2rcv4-chromium-153.0.8010.36/bin/chromium",
+        "private_variables_absent": true
+      },
+      {
+        "engine": "webkit",
+        "version": "26.5",
+        "default_executable": "/nix/store/h8903h8s8x5zr3la0pnbgh24sbl5pf62-playwright-browsers/webkit-2311/pw_run.sh",
+        "requested_executable": null,
+        "private_variables_absent": true
+      }
+    ],
+    "pages": [
+      {
+        "dpr": 1,
+        "viewport": {
+          "width": 1100,
+          "height": 1000
+        }
+      },
+      {
+        "dpr": 1,
+        "viewport": {
+          "width": 1100,
+          "height": 1000
+        }
+      }
+    ],
+    "subtests": [
+      {
+        "engine": "chromium",
+        "passed": true
+      },
+      {
+        "engine": "webkit",
+        "passed": true
+      }
+    ],
+    "driver_environment_calls": 1,
+    "source_sha256": "ee700e0629fad62358e1f0a778353757a9a305bdbc131f2ae2675b7b74d82c6c",
+    "installed_core_sha256": "4d4231b32962669db1ec4bc8efef586e93318b9200468235a78b25919dc98ecb",
+    "installed_core_path": "/work/venv/lib/python3.13/site-packages/symbolica/core.abi3.so",
+    "native_display_methods_present": true,
+    "wrappers_on_page_content_locator_reads_or_assertions": false,
+    "pin": "WebKit revision2311 from actual executable path; exact Chromium153.0.8010.36 recorded.",
+    "capsule": "Exact prior approved Fontconfig and software EGL files/aliases; no host driver tree, GPU, dbus socket or display server.",
+    "unchanged_method": true,
+    "fixed_external_metrics": "24x12, baseline9; no full font-measurement/widget/site coverage",
+    "wrapper_scope": "Only driver/browser environment filtering, launch metadata, blank-page DPR read and actual pinned-drawing result recording; no Page.set_content, Locator read, assertion, tolerance or readiness wrapper."
+  },
+  "reuse": {
+    "ordinary_prior_passes_not_fresh": [
+      "three exact Rust embedding tests",
+      "installed UFO crossing",
+      "squared display",
+      "two sector signatures",
+      "selected two-engine browser method"
+    ],
+    "basis": "Approved prior f47 artifact/review plus exact selected ordinary source invariance except stub, actual decoded loader qualification and all non-loader ELF payload invariance. No private-composition runtime transfer.",
+    "ordinary_QCD": "Fresh ordinary import again proves absence of IBPFamily in both wrapper and native child module. Historical missing-provider QCD failure remains; no ordinary QCD rerun or pass.",
+    "exporter": {
+      "sha256": "ea6b689912dd12eb1d40fc9f65f6e52ded87a33a755b94ceb42363a6f5480e9e",
+      "source_owners_byte_invariant": true,
+      "new_build": false,
+      "fresh_canonical_three_target_check_exit": 0,
+      "generation_or_expected_update": false
+    }
+  },
+  "findings": [
+    {
+      "id": "HOSTINT-N1",
+      "severity": "information",
+      "blocking": false,
+      "title": "Loader relocation details are narrower than whole-ELF equality",
+      "detail": "Old/new ordinary wheel native section payloads differ only in .dynamic and .dynstr. The new output RUNPATH is five bytes longer. Four byte-identical loader tables have shifted addresses: .gnu.version +6; .gnu.version_r, .rela.dyn and .rela.plt +8. Their dynamic pointer tags track those exact section addresses; DT_STRSZ grows by 5. The first read-only PT_LOAD file/memory sizes grow by 8 to the exact end of .rela.plt. ELF header, every other program header, all non-loader payloads, static symbol/string payloads and decoded dynamic symbols are equal. This qualifies the exact loader change; it is not whole-ELF identity.",
+      "evidence": [
+        "independent-ELF.json",
+        "ELF-attempt2-differences.json",
+        "ELF-attempt3-header-differences.json"
+      ]
+    },
+    {
+      "id": "HOSTINT-N2",
+      "severity": "information",
+      "blocking": false,
+      "title": "Private composition has an intentional extra kernel tracing feature",
+      "detail": "The private metadata adds symbolica/tracing_max_level_info through the unchanged RustRed manifest. All three RustRed resolved nodes and final selected library fingerprints have features []; app, standalone Python, reconstruction and campaign remain disabled. The lock reconciliation changes no feature, version or source relative to its own proposed private graph. It does not mean private and ordinary feature graphs are identical. Private checks were run fresh; ordinary passes are not transferred to the private composition.",
+      "evidence": [
+        "independent-metadata.json",
+        "resolver-active-graph.json",
+        "compiled-fingerprint-links.json"
+      ]
+    },
+    {
+      "id": "HOSTINT-N3",
+      "severity": "information",
+      "blocking": false,
+      "title": "Wheel member and separately fixed-up output library are distinct artifacts",
+      "detail": "Nix fixup acts on output/lib/symbolica/core.abi3.so after copying the wheel. That loose companion is not byte-identical to the member inside the wheel. This review binds and executes the actual full-wheel member, not the companion; both output NARs are independently recomputed. The candidate also correctly binds the extracted wheel member.",
+      "evidence": [
+        "independent-artifacts.json",
+        "independent-ELF.json",
+        "runtime/ordinary/installation.json",
+        "runtime/private/installation.json"
+      ]
+    },
+    {
+      "id": "HOSTINT-N4",
+      "severity": "mandatory scope",
+      "blocking": false,
+      "title": "The committed evidence index is complete for its declared closure, with external retention premises",
+      "detail": "The final Git tree contains the 337 manifest entries plus SHA256SUMS and SEAL.json (339 files). Every declared hash matches its committed blob. Two explicitly listed oversized JSONs remain at exact external paths/sizes/hashes under the unchanged tracking limit. Both are independently verified. The old partial b6c3886 commit/bookmarks and its earlier seal remain. Store outputs, large recursive graphs, complete installations, original review packets and scratch records are external retained inputs; there is no self-contained rebuild/replay claim. The additional original resolver stdout inspected here is explicitly bound by this review input-guards.json.",
+      "evidence": [
+        "packet-closure.json",
+        "large-bindings-verified.json",
+        "input-guards.json",
+        "final-bookmarks.txt"
+      ]
+    },
+    {
+      "id": "ASTRA-N1",
+      "severity": "carried historical distinction",
+      "blocking": false,
+      "detail": "Historical combined_community archive/layer .symtab/.strtab differences in four hidden LLVM symbol suffixes remain as described by the prior approved host review. The new ordinary wheel comparison is separate and does not retroactively assert whole-ELF equality for those artifacts."
+    },
+    {
+      "id": "ASTRA-N2",
+      "severity": "carried historical distinction",
+      "blocking": false,
+      "detail": "The prior formatter-cache incident, ownership check, cleanup and --no-cache correction remain disclosed and unchanged. No perfect historical no-outside-write claim is made."
+    }
+  ],
+  "mandatory_retained_premises": [
+    "Each of the three rows is a separate finite None/Auto proof, GroupingNone, math pool1. No extension to other rows, groupings or arbitrary data.",
+    "Historical raw/cooked/decoded association, observed ports, registration state and exact whole-symbol definitions remain load-bearing. Native subset-tag tolerance does not prove definition identity.",
+    "Preserve every operand map AND output-axis map;22 source-only differing survivor orders are not historicalc78 executions. No cached positional plan interchangeability or historical output-array identity.",
+    "Twelve flag controls are imported-owner claim binding. All400 observed is_metric/is_composite values remain false/true. No serialized-flag admission credit.",
+    "Exactly40 old successful native algebra batches/3088 obligations reused by command/pair/program/results hash, with32 SM batches excluded. No old algebra/helper/control-generator/historical-producer run.",
+    "744 typed plans,244 folds,160 lowerings,28 public numerator_of and28 fragment paths remain the prior bounded interface observations. Current8eb replay is not newc78 execution; no universal locality, decoder, hidden-history, subset/evaluator or component-physics theorem.",
+    "Post-format control-generator reuse bug and pending additive repair remain separate; neither generator was invoked and no general runner API approval is inferred.",
+    "Original historical command/build gaps, prior QED/gauge reporting dispositions, prior-eight F1-F7 and accepted SM restrictions retain their exact original scopes."
+  ],
+  "remaining_limits": [
+    "No full Community or campaign/reconstruction/multiple-denominator coverage.",
+    "No production RustRed dependency, registration or lock adoption; canonical production root/host lock/hakari/CI coordination remains separate.",
+    "No broad mathematical, generator, oracle, Auto full-Row/search-counter, historical-c78, arbitrary decoder/interface, stale-plan, source46 or evaluator proof.",
+    "No new full module, Clippy, Typst/documentation, site/widget or distribution/publication certification.",
+    "No WP3/M-rebuild, global integration bookmark advance, performance or memory-policy approval.",
+    "Prior R4-N3 rare tall-browser residual and all prior finite mathematical/interface/Auto premises remain; only the exact selected fixed-metric method passed here.",
+    "Store and retained local evidence availability remains a replay premise; final packet is not a standalone rebuild bundle."
+  ],
+  "review_analysis_setup_failures": [
+    {
+      "stage": "initial shell setup",
+      "exit_code": 127,
+      "detail": "python3 absent from PATH; used the already-existing pinned Python3.13.15. No experiment executed under the missing interpreter.",
+      "evidence": "setup-failures.json"
+    },
+    {
+      "stage": "inspection attempt1",
+      "exit_code": 1,
+      "detail": "Reviewer initially required equality between the wheel native member and separately fixed-up loose output companion. Corrected to verify/execute exact wheel bytes and retain separate companion ELF metadata. No candidate source or artifact changed.",
+      "evidence": [
+        "inspect-attempt1.py",
+        "inspect-attempt1.stderr"
+      ]
+    },
+    {
+      "stage": "inspection attempt2",
+      "exit_code": 1,
+      "detail": "Reviewer section comparison included addresses and caught loader-table relocation in addition to section payload changes. Payload equality and exact relocated dynamic pointers were then checked separately.",
+      "evidence": [
+        "inspect-attempt2.py",
+        "inspect-attempt2.stderr",
+        "ELF-attempt2-differences.json"
+      ]
+    },
+    {
+      "stage": "inspection attempt3",
+      "exit_code": 1,
+      "detail": "Reviewer initially required all program headers identical. The first read-only load segment grows eight bytes with the relocated table end; that exact bounded change is verified. Attempt4 passes.",
+      "evidence": [
+        "inspect-attempt3.py",
+        "inspect-attempt3.stderr",
+        "ELF-attempt3-header-differences.json",
+        "inspect-attempt4.stdout"
+      ]
+    },
+    {
+      "stage": "extended inspection attempt1",
+      "exit_code": 1,
+      "detail": "Original resolver stdout is a retained local input rather than a committed packet member. Read its actual retained path, hash-bound it explicitly, and verified equality with the final active dependency/feature graph. Attempt2 passes.",
+      "evidence": [
+        "prepare-audit-attempt1.py",
+        "prepare-audit-attempt1.stderr",
+        "prepare-audit-attempt2.stdout",
+        "input-guards.json"
+      ]
+    },
+    {
+      "stage": "read-only path probes",
+      "detail": "Initial .git/summary guesses and broad cat of premise directories were absent or directories. Correct object store, actual results files and individual sources were inspected. No test credit is assigned to those failed reads."
+    }
+  ],
+  "candidate_failures_preserved": {
+    "retained_attempts": [
+      {
+        "id": "guard-object-store-attempt1",
+        "exit_code": 1,
+        "error": "fatal: not a git repository (or any parent up to mount point /)\nStopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).",
+        "cause": "Feature workspace has JJ metadata without a Git worktree; ls-tree object reads corrected to main Git store read-only.",
+        "script": "prepare_inputs.attempt1.py",
+        "source_or_runtime_started": false
+      },
+      {
+        "id": "pure-graph-adapter-attempt1",
+        "error_log": "pure-stage.stderr",
+        "error": "KeyError for full /nix/store/...drv in Nix version4 derivations wrapper/basename-key mapping",
+        "script": "pure_stage.attempt1.py",
+        "correction": "finish_pure_stage.py adapter only; no producer input change."
+      },
+      {
+        "id": "private-locked-metadata-attempt1",
+        "exit_code": 101,
+        "logs": [
+          "build-completion.json",
+          "qualification/log-private/stdout"
+        ],
+        "correction": "lock-reconciliation.json; no version/source/feature/semantic change; final locked gates and both builds pass."
+      },
+      {
+        "id": "evidence-track-attempt1",
+        "partial_revision": "b6c3886feb702cbf120ec448356684ec5c9b7857",
+        "error": "JJ refused two >1MiB files; nothing changed in those two file tracking entries.",
+        "retained_files": [
+          {
+            "original_evidence_path": "qualification/initial-candidate-files.json",
+            "retained_path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/host-stub-rustred-integration-20261031-r1/initial-candidate-files.json",
+            "sha256": "7b8e644baf1f8af8f9fd45c6d632c78467d9f707619e133156d2a5779e612ba2",
+            "bytes": 1176320,
+            "purpose": "Exact guard/compiled-source provenance retained for independent review; omitted from Git under unchanged 1MiB new-file limit."
+          },
+          {
+            "original_evidence_path": "qualification/artifacts/ordinary/compiled-source-bindings.json",
+            "retained_path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/host-stub-rustred-integration-20261031-r1/artifacts/ordinary/compiled-source-bindings.json",
+            "sha256": "5d3797e28e7f38a643f794a869afee10a0454ffab1bef05c6f3cb2f02aef3c85",
+            "bytes": 1779878,
+            "purpose": "Exact guard/compiled-source provenance retained for independent review; omitted from Git under unchanged 1MiB new-file limit."
+          }
+        ],
+        "prior_seal": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/host-stub-rustred-integration-20261031-r1/evidence-seal-attempt1",
+        "correction": "Add exact local hash bindings; no tracking limit/budget/source/build/runtime change."
+      }
+    ],
+    "runtime_failures": 0,
+    "old_failures": "Exact prior packets and reviews retained unchanged; original ordinary QCD failure is not relabelled as a private-host result."
+  },
+  "containment_and_license": {
+    "write_scope": "Only this new ignored review directory. Main/candidate source, original inputs, Git index/refs and workspace JJ checkout/tree-state guards unchanged. No source edit, snapshot/ref/index mutation, native build, Nix, network, publication or delegation.",
+    "ordering": "All pure source/artifact/ELF/library/font/EGL/source/capsule preparation, complete installations and loader/containment probes precede licensed-start.json. No Nix/compiler invocation at any point.",
+    "capsules": "Fresh bwrap --unshare-all --die-with-parent --new-session; exact read-only source/tests/helpers/venv and approved store/file mounts; fresh writable /work and ephemeral /tmp. External command/stdout/stderr records never mounted writable in child. Distinct network namespace with only lo and no routes; no host root/config/credentials/compiler/Nix socket/GPU/dbus/display server.",
+    "license": "Preserve exported value if present, otherwise privately read current-user XDG configuration in controller memory; anonymous stdin pipe to restricted handoff followed by immediate native exec. No value, actual private path, hash, argv, file, log or environment dump. Pure children and browser/driver descendants omit all four private variable names; no redaction required.",
+    "resource_policy": "No new resource cap, timeout or retry; elapsed times are not performance evidence.",
+    "owned_processes_remaining": 0,
+    "cleanup": {
+      "removed": [
+        "extracted (duplicate exact wheel natives; hashes and ELF audit retained)",
+        "runtime/private/installed/home",
+        "runtime/private/installed/tmp",
+        "runtime/private/installed/runtime",
+        "runtime/private/installed/config",
+        "runtime/private/installed/state",
+        "runtime/private/installed/cache",
+        "runtime/private/work/browser/config",
+        "runtime/private/work/browser/venv",
+        "runtime/private/work/browser/home",
+        "runtime/private/work/browser/tmp",
+        "runtime/private/work/browser/runtime",
+        "runtime/private/work/browser/cache",
+        "runtime/private/work/browser/state",
+        "runtime/private/work/ufo/runtime",
+        "runtime/private/work/ufo/home",
+        "runtime/private/work/ufo/state",
+        "runtime/private/work/ufo/cache",
+        "runtime/private/work/ufo/config",
+        "runtime/private/work/ufo/venv",
+        "runtime/private/work/ufo/tmp",
+        "runtime/private/work/loader-list/venv",
+        "runtime/private/work/loader-list/config",
+        "runtime/private/work/loader-list/home",
+        "runtime/private/work/loader-list/runtime",
+        "runtime/private/work/loader-list/cache",
+        "runtime/private/work/loader-list/state",
+        "runtime/private/work/loader-list/tmp",
+        "runtime/private/work/sector/tmp",
+        "runtime/private/work/sector/home",
+        "runtime/private/work/sector/state",
+        "runtime/private/work/sector/cache",
+        "runtime/private/work/sector/venv",
+        "runtime/private/work/sector/config",
+        "runtime/private/work/sector/runtime",
+        "runtime/private/work/containment/state",
+        "runtime/private/work/containment/cache",
+        "runtime/private/work/containment/home",
+        "runtime/private/work/containment/config",
+        "runtime/private/work/containment/runtime",
+        "runtime/private/work/containment/venv",
+        "runtime/private/work/containment/tmp",
+        "runtime/private/work/squared/cache",
+        "runtime/private/work/squared/state",
+        "runtime/private/work/squared/runtime",
+        "runtime/private/work/squared/config",
+        "runtime/private/work/squared/tmp",
+        "runtime/private/work/squared/venv",
+        "runtime/private/work/squared/home",
+        "runtime/private/work/qcd/venv",
+        "runtime/private/work/qcd/home",
+        "runtime/private/work/qcd/config",
+        "runtime/private/work/qcd/state",
+        "runtime/private/work/qcd/cache",
+        "runtime/private/work/qcd/runtime",
+        "runtime/private/work/qcd/tmp",
+        "runtime/private/work/identity/tmp",
+        "runtime/private/work/identity/config",
+        "runtime/private/work/identity/state",
+        "runtime/private/work/identity/cache",
+        "runtime/private/work/identity/runtime",
+        "runtime/private/work/identity/home",
+        "runtime/private/work/identity/venv",
+        "runtime/ordinary/installed/cache",
+        "runtime/ordinary/installed/state",
+        "runtime/ordinary/installed/runtime",
+        "runtime/ordinary/installed/home",
+        "runtime/ordinary/installed/config",
+        "runtime/ordinary/installed/tmp",
+        "runtime/ordinary/work/containment/cache",
+        "runtime/ordinary/work/containment/home",
+        "runtime/ordinary/work/containment/state",
+        "runtime/ordinary/work/containment/venv",
+        "runtime/ordinary/work/containment/config",
+        "runtime/ordinary/work/containment/tmp",
+        "runtime/ordinary/work/containment/runtime",
+        "runtime/ordinary/work/stub-check/state",
+        "runtime/ordinary/work/stub-check/cache",
+        "runtime/ordinary/work/stub-check/runtime",
+        "runtime/ordinary/work/stub-check/config",
+        "runtime/ordinary/work/stub-check/venv",
+        "runtime/ordinary/work/stub-check/home",
+        "runtime/ordinary/work/stub-check/tmp",
+        "runtime/ordinary/work/loader-list/state",
+        "runtime/ordinary/work/loader-list/cache",
+        "runtime/ordinary/work/loader-list/runtime",
+        "runtime/ordinary/work/loader-list/home",
+        "runtime/ordinary/work/loader-list/venv",
+        "runtime/ordinary/work/loader-list/config",
+        "runtime/ordinary/work/loader-list/tmp",
+        "runtime/ordinary/work/identity/cache",
+        "runtime/ordinary/work/identity/state",
+        "runtime/ordinary/work/identity/venv",
+        "runtime/ordinary/work/identity/home",
+        "runtime/ordinary/work/identity/runtime",
+        "runtime/ordinary/work/identity/config",
+        "runtime/ordinary/work/identity/tmp"
+      ],
+      "retained": "Review scripts, failed analysis versions, exact whole-wheel installations, raw external receipts/stdout/stderr and small child result JSON retained for parent review/replay. Store outputs and other contributors preserved.",
+      "owned_launcher_processes_remaining": [],
+      "bwrap_children": "All completed under fresh PID namespaces; --die-with-parent and Popen.communicate reap each launcher. No background watcher or helper retained."
+    }
+  },
+  "guards": {
+    "changes": {
+      "main": [],
+      "candidate": [],
+      "main_git": [],
+      "git_refs": false,
+      "workspace_jj": []
+    },
+    "prior_input_changed": [],
+    "prior_input_count": 4704,
+    "readonly_git_commands": true,
+    "jj_read_only": "--ignore-working-copy log only; no snapshot/new/describe/bookmark update",
+    "no_own_ref_index_mutation": true
+  },
+  "retention": "Fresh whole-wheel environments and sealed small review records retained for parent review/replay; duplicate native extractions and disposable installer/browser state removed. Original candidate, prior packets and shared store untouched.",
+  "evidence_index": {
+    "ELF-attempt2-differences.json": "aea841f68bd8b5f7d76af8f14068c5e79cc96e41f709cff06d4accb68b710c02",
+    "ELF-attempt3-header-differences.json": "a79bec0d5b3e03295aaaf93b9fab16824efc4ccad936bfd9ea642a21c0c2e0c1",
+    "candidate-runtime-reconciliation.json": "5c36efc2ba589c75596d6f79bfb31f1d607ba4d6458a151fd6e654a90af43dfb",
+    "capsule-static-audit.json": "fd4dc4229a00c53af8ab568e9398b61ce667e67cccb4ec8ba626616226d501f1",
+    "cleanup.json": "95182e2cc9124a02172c4c0ff3104d06b29c8744084ce1aad0b5c2a420a21a9c",
+    "compiled-depfile-audit.json": "b65193ce134005b361d724937d17b86eb695568fe9d0134c6ccc3e259dd85f51",
+    "compiled-fingerprint-links.json": "d10337ac9b2ef4600635ce15610a7714fa9dd1b82c47875609ca2a626609e442",
+    "exporter-and-tests.json": "4dd8a5dfd1cc674d86e58a8bb2c5f75596897f44dfff6af5130502aa00f6e666",
+    "final-guards.json": "e4bffd046261db43ae6958e8d357a3da5de7c123a6cbc071fe52a8b311e6d321",
+    "fresh-command-reconciliation.json": "0c96ebbbd044c58324bb97281bca7db11c876d8bb29b03948137758319c8e7af",
+    "fresh-results.json": "c7fb6d41777b71fa2db57e252b7ce86a06ac870966215e56f7c8ec1f81191024",
+    "independent-ELF.json": "c4e8e6f5a0a7e5e700d1ac18b8f3ac31b6c6421a0ad7e079f828c6e7c180b754",
+    "independent-artifacts.json": "0957a4d8e8d64baeb1e8ce4f497c62e982769dcbbc31b003f240c859b964ff0e",
+    "independent-metadata.json": "d5e275e521291fe0af3204a4dc5902b16530190f47a12db7d2c3407c7e0bfe8b",
+    "independent-source.json": "a1344df4daad90b638be6ecf24507ee8d12bd036bc15f2a488fdfcb3f6471f0d",
+    "initial-guards.json": "cb9e94306536277e6cee977917bd8af52c5212deae90ab7318ae6218ad4763c0",
+    "input-guards.json": "302010c8341c502f57a0d3c2e0870aa481bad154a8069f4f3e486fd29ce24108",
+    "large-bindings-verified.json": "4d6ccf0fae22be99308504b8554c15c378212fc095253c149395607a7d668cba",
+    "licensed-start.json": "daa166b998271689ca12bac6a1d1679f8700ea51651b39452356ab1880122308",
+    "packet-closure.json": "c3ecd4b871134cd230e50be704b5008cb4e9aba3c54724e79a2196d672b696c5",
+    "prior-review-premises.json": "28aff5983c3d8729f455231ba40c3b5a3c48a4812005dd576dc5770488bbd880",
+    "prior-seal-verification.json": "aac21b5c71ed2bab4058d70f3f7ddb8aa238f429d23c7e0b747037378db2a83e",
+    "producer-ATerm-audit.json": "05fb5a4d2840c936568f1e39301ed5535f7e1450bd9081f7ac7822a0044ae5c9",
+    "pure-inspection-complete.json": "0b43241d672afcb35c5321fadeef11478541aaf2543871d575e1e6cee63668a3",
+    "registry-scope-audit.json": "6d0fc436df3c22b7e0ef934b7e7c42ec5147658c3bd2f248facb7c56d23903d6",
+    "resolver-active-graph.json": "89f6a8c1fd7d4a18c74937c4aad141d0dfbfef61edb93a1cd132c73f0ea44ac8",
+    "review-location.json": "f4c8e21ed497ea37cc80f92cc73f7ad73b1b4a9fc439104df256f740305f0286",
+    "runtime-prepared.json": "f8a9852130e32e3c850b3ac730e4585e4c28e9c417556ad5b121d5ec71f49500",
+    "setup-failures.json": "97ffcf2cb4e16d253ef4870174bb9e37f97c55393d2080496d8174cd0e44d31c"
+  }
+}

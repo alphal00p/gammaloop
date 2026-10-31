@@ -1,0 +1,11 @@
+{
+  "current_code": "2cfb52b28d99f92305a9d571bbe3911cf04b8a19",
+  "ffa_code": "ffa76ec420642c03349ab756d2d7720ab93c0057",
+  "current_feynkit_group": "/nix/store/hk3sccsqhpp3572d0bz6699rvid29a29-gammaloop-nextest-binaries-feynkit.drv",
+  "ffa_feynkit_group": "/nix/store/hk3sccsqhpp3572d0bz6699rvid29a29-gammaloop-nextest-binaries-feynkit.drv",
+  "current_generator_drv": "/nix/store/b3psgc7ywm8ccnq0kpsh2zswy82p0cfv-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0.drv",
+  "qualified_ffa_generator_drv": "/nix/store/b3psgc7ywm8ccnq0kpsh2zswy82p0cfv-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0.drv",
+  "non_doc_delta_from_ffa": "only approved generated notebook stub, not in selected generator inputs",
+  "evidence457_delta_from_code": "docs only; not claiming new whole-site/source runtime identity",
+  "conclusion": "Exact selected producer reusable; no repeat of12rows/full371 for metadata or stub"
+}

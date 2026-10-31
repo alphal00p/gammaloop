@@ -1,0 +1,961 @@
+{
+ "schema": 1,
+ "review_directory": ".local/review-xs-qed-l2-integration-a-opus-20261030T111536Z-1321089",
+ "reviewer": "Independent Opus (claude-opus-5-5) Scope A reviewer; no delegation, no implementation",
+ "date_utc": "2026-10-30T11:54:34.196515+00:00",
+ "workspace": "/shared/lcnbr/dev/gammaloop/generation-integration-plan",
+ "scope": "A: producer, runtime, pool, Row/mode and remaining-failure evidence. Peer B owns finite proof/docs/registry/hash-closure replay.",
+ "candidate": {
+  "commit": "fdff0d18953348b84a0f1b7e6ab5ef703a5090de",
+  "change": "mssryyzyrolmwvuknmrlkzoozuuvlxuo",
+  "built_code": "eae78e11e4d27df2539700fa4d4d71cdcb3a4804",
+  "built_code_change": "xtupxvlkpotywlkloktqqqnzktwnlrpt",
+  "approved_base": "69fda047e378d4114f47ec9a10517e44adb57eaa",
+  "prior_built_code": "8dcebc2591ab04d10026fbd47a45e8d31f911ef3",
+  "bookmarks_verified": {
+   "generation-integration": "fdff0d18",
+   "generation-integration-xs-qed-l2": "fdff0d18",
+   "generation-integration-xs-qed-l2-evidence": "fdff0d18",
+   "generation-integration-xs-qed-l2-code": "eae78e11",
+   "generation-integration-xs-qed-l2-base": "69fda047"
+  },
+  "receipt": {
+   "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/docs/architecture/evidence/generation-integration/wp3/xs-qed-l2/receipt.json",
+   "sha256": "f7646abc83d7ba6ca82f9658bbe910fb38732f8f1b3e047fe272afc30c1b64a8",
+   "bytes": 57239
+  },
+  "detached_supplement": {
+   "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-xs-qed-l2-integration/final-supplement.json",
+   "sha256": "699483979926703d6cbbf1ed0fc8139be481c0a7344d4ffe6861b647ab422f16",
+   "bytes": 8936
+  },
+  "final_stage": {
+   "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-xs-qed-l2-integration/final-stage.json",
+   "sha256": "6846b52ad5b862c87228375ec9caaa1cab6c45fc613abc209357909338993334",
+   "bytes": 3209
+  },
+  "working_copy_equals_candidate_tree": {
+   "tracked": 4572,
+   "ok": 4572,
+   "mismatch": 0,
+   "missing": 0
+  }
+ },
+ "prior_approvals_verified": {
+  "base_cumulative_gate": {
+   "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/.local/review-main-families-round2-opus-astra-20261030T094052Z-3607735/review.json",
+   "sha256": "10b3929c0b6bfcd62e80d5c693e5db689204ea7a719a23246de64e29ae4d8fec",
+   "bytes": 34475
+  },
+  "donor_migration": {
+   "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/review.json",
+   "sha256": "64f44489f4331b2ec2dfcdb2d48e4a8b2b06003c569823a351ff2e98b2e898a6",
+   "bytes": 111598
+  },
+  "certificate_A": {
+   "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-a-opus-20261030T063905Z/review.json",
+   "sha256": "f5173b1d86a44c18d11179b13a0542eb0282097cb303079d709ab75d2184c554",
+   "bytes": 46561
+  },
+  "certificate_B": {
+   "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-b-opus-20261030T063831Z/review.json",
+   "sha256": "5c97912c4b6fa9660c55b3bf03b785b37b36f2d3a042d677acd388f12ec8346b",
+   "bytes": 103490
+  },
+  "tracked_migration_review_copy_equal_donor": true,
+  "note": "Base round2 verdict APPROVE_CUMULATIVE_BOUNDED_MAIN_FAMILIES_ROUND2_EVIDENCE_CORRECTION with F1 RESOLVED; all four hashes equal the brief."
+ },
+ "verdict": "APPROVE_SCOPE_A_BOUNDED",
+ "verdict_summary": "Scope A approves only the producer, runtime, pool, Row/mode and remaining-failure evidence of candidate fdff0d18 (built code eae78e11). One-token delta, seven preserved rows, docs-only drift, exact source/NAR/drv/phase/postPatch/manifest/compiler/kernel/profile bindings, 452-unit/297-package closure, distinct dependency vs executed ELF, fresh sandboxed 8-row pools 1/8/32 (24 passes), zero-selection rejection, identical fresh listing, a fresh remaining-failure spot-check, fresh observer captures, independent full-Row/mode recomputation, and 298/73/49 accounting equal to prior74 minus xs_qed_eemm_L2 were independently verified. No blocking, high or medium finding. One Low safeguard-record gap (observer shadow-RUNPATH) and Info qualifications remain. This is not a combined approval; it requires aggregation with peer B.",
+ "combined_approval_claimed": false,
+ "findings": {
+  "blocking": [],
+  "high": [],
+  "medium": [],
+  "low": [
+   {
+    "id": "A-L1",
+    "title": "Integration observer runs record no shadow-RUNPATH absence safeguard",
+    "paths": [
+     "docs/architecture/evidence/generation-integration/wp3/xs-qed-l2/tool-sources/observer.py.txt:51",
+     "target/wp3-xs-qed-l2-integration/observer.py:51",
+     "docs/architecture/evidence/generation-integration/wp3/xs-qed-l2/receipt.json:452-478"
+    ],
+    "detail": "The retained donor observer ELF 9a479c8e... has RUNPATH entry /shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-l2-migration/source/outputs/out/lib first (inherited nix-develop $out/lib; donor note XA-N8). The integration observer sandbox ro-binds the whole host (--ro-bind / /), so that path would have been honoured if present. The donor migration recorded shadow_RUNPATH absence before/after every run; observer.py and observer-p*/command.json record no such check and the receipt/note are silent.",
+    "impact": "None observed: the path and its parents outputs/, outputs/out/ are absent now; my fresh observer runs in a sandbox exposing no /shared reproduced all eight capture files byte-identically at pools 1/8/32. Evidence/safeguard-record gap only; not a physics/runtime failure.",
+    "recommendation": "Record candidate-path absence before/after the observer runs (or qualify in the receipt), as the donor did."
+   }
+  ],
+  "info": [
+   {
+    "id": "A-I1",
+    "title": "Containment wording: host readable, evidence root writable to the active proof sandbox",
+    "paths": [
+     "docs/architecture/evidence/generation-integration/wp3/xs-qed-l2/tool-sources/runtime.py.txt:41",
+     "docs/architecture/evidence/generation-integration/wp3/xs-qed-l2/tool-sources/proof-sandbox-launch2.py.txt:20-21",
+     "docs/architecture/evidence/generation-integration/wp3/xs-qed-l2/receipt.json:501"
+    ],
+    "detail": "Runtime, observer and proof sandboxes use --ro-bind / / (whole host readable incl. ~/.config and sibling workspaces); runtime binds the whole runtime dir rw at /build (code.tar inside, hash-bound per run); proof launch1/2 bind the entire evidence root target/wp3-xs-qed-l2-integration rw, not only a private results dir. Receipt \"read-only host ... private cache/tmp\" is accurate for the host but not for that evidence-root bind.",
+    "impact": "mtime audit of the 10:58:50-10:59:56 proof window shows only proof-sandbox outputs and the attempts record changed; all receipt (47), supplement (35) and runtime-manifest (714) bindings verify; my stricter sandbox (only /nix/store ro, no host root) reproduced every runtime result. Proof containment substance is peer B scope."
+   },
+   {
+    "id": "A-I2",
+    "title": "Author runtime environment is not the CI runner environment",
+    "paths": [
+     "nix/rust-workspace.nix@eae78e11:2918-2938",
+     "nix/rust-workspace.nix@eae78e11:3011-3042",
+     "docs/architecture/evidence/generation-integration/wp3/xs-qed-l2/tool-sources/runtime.py.txt:37"
+    ],
+    "detail": "CI sets SYMBOLICA_DATA_DIRECTORY (feynkit runtimeRenderData), RUST_BACKTRACE, LD_LIBRARY_PATH, CC/CXX and uses --no-tests=pass; author runs omit those and use --no-tests=fail (stricter). Same profile ci_gammaloop, 16 workers, retries 0, 240s.",
+    "impact": "No CI-environment equivalence is claimed. All 232 non-oracle tests pass; all 73 failures are numerators-only Row mismatches equal to the approved prior set run under the same author environment."
+   },
+   {
+    "id": "A-I3",
+    "title": "Evidence-only wording precision (no blocker)",
+    "paths": [
+     "docs/architecture/evidence/generation-integration/wp3/xs-qed-l2/receipt.json:145",
+     "docs/architecture/generation-integration-xs-qed-l2.typ:45-47"
+    ],
+    "detail": "(a) wasm_units: [] means no unit has the exact feature \"wasm\"; reachable chrono-7115bd484e2a59e4 lib carries default wasmbind/wasm-bindgen/js-sys features (target-gated to wasm32, inert on x86_64) and native crates wasm-minimal-protocol and wasmtime-jit-icache-coherence are in the closure. (b) \"Every Nix command uses a validated nonempty immutable Git URI or exact derivation\": the three nix hash path NAR commands take regex-validated store paths (neither URI nor drv), with both license variables unset.",
+    "impact": "Wording only; underlying facts verified."
+   },
+   {
+    "id": "A-I4",
+    "title": "Executed ELF differs from dependency-layer ELF only in dynamic-link metadata (supporting, no defect)",
+    "paths": [
+     "docs/architecture/evidence/generation-integration/wp3/xs-qed-l2/receipt.json:196-210"
+    ],
+    "detail": "Section-by-section: all sections byte-identical except .dynamic/.dynstr/.dynsym; .dynstr +107 bytes = extra self-RUNPATH /nix/store/77gaayyav.../lib (absent directory), because NIX_NO_SELF_RPATH is set only in the dependency drv; .gnu.version/.gnu.version_r/.rela.dyn/.rela.plt identical content at shifted addresses. Receipt limit remains correct: final-phase own fingerprints are not retained; binding to the layered closure is by unit-id suffix plus identical code sections, not by ELF hash.",
+    "impact": "Strengthens, does not change, the receipt qualification."
+   }
+  ]
+ },
+ "evidence_only_wording_vs_physics_runtime": {
+  "evidence_only_wording": [
+   "A-L1 (safeguard record)",
+   "A-I1",
+   "A-I3"
+  ],
+  "physics_or_runtime_failures_found": [],
+  "remaining_unapproved_runtime_failures": "73 generation_oracle rows (numerators-only Row mismatch), unchanged from prior74 minus xs_qed_eemm_L2; no approval inferred."
+ },
+ "checks": {
+  "1_delta_and_producer": {
+   "token": {
+    "base_sha256": "c29a92c9d5614afaa756f36856e5804064403919fb28c16be9cb04c1c2f5c54b",
+    "new_sha256": "aedd07670ad16ae72ae1c96970668c80ea0ecd5d6d5992c736af71de7d00999b",
+    "differing_count": 15,
+    "changed_lines": [
+     332
+    ],
+    "field": "numerators",
+    "case": "xs_qed_eemm_L2",
+    "substitution_reproduces_new": true,
+    "old_token_count_base": 1,
+    "new_token_count_new": 1
+   },
+   "seven_rows": {
+    "xs_qed_eedd_L1": {
+     "numerators_matches_approved": true,
+     "row_text_equal_base": true,
+     "tier": "fast"
+    },
+    "xs_qed_eemm_L1": {
+     "numerators_matches_approved": true,
+     "row_text_equal_base": true,
+     "tier": "fast"
+    },
+    "xs_qed_eeee_1pi_L1": {
+     "numerators_matches_approved": true,
+     "row_text_equal_base": true,
+     "tier": "fast"
+    },
+    "qed_eemm_L1": {
+     "numerators_matches_approved": true,
+     "row_text_equal_base": true,
+     "tier": "fast"
+    },
+    "ctorder_qcd_uugg_L1": {
+     "numerators_matches_approved": true,
+     "row_text_equal_base": true,
+     "tier": "fast"
+    },
+    "sm_eemm_L0": {
+     "numerators_matches_approved": true,
+     "row_text_equal_base": true,
+     "tier": "fast"
+    },
+    "ym_g6_L0": {
+     "numerators_matches_approved": true,
+     "row_text_equal_base": true,
+     "tier": "fast"
+    },
+    "xs_qed_eemm_L2": {
+     "numerators_matches_approved": true,
+     "row_text_equal_base": false,
+     "tier": "fast"
+    }
+   },
+   "all_other_148_rows_text_equal_base": true,
+   "base_to_candidate_paths": {
+    "count": 55,
+    "added": 50,
+    "modified": 5,
+    "non_docs": [
+     "crates/feynkit-generator/tests/generation_oracle/main.rs"
+    ],
+    "mode_changes": 0,
+    "cargo_nix_config_vendor_touched": 0
+   },
+   "inventory_arithmetic": "29 code + 25 evidence - 1 overlap (docs/developers.toml) = 53 + 2 self-excluded indexes = 55",
+   "imports": "27/27 imported files byte-exact Git blobs from c95e7f6e or 19b516a4; donor main.rs/developers.toml not transplanted",
+   "sources": {
+    "fetched_1nqlw1qy_vs_code_tree": {
+     "files": 4549,
+     "content_mismatch": 0,
+     "not_in_code_tree": [],
+     "mode_mismatch": [],
+     "private_root_dirs": [],
+     "tracked_missing_from_fetched": []
+    },
+    "filtered_clb87pfj_files": 670,
+    "dependency_3c9va9xc_files": 669,
+    "filtered_vs_base_y9pg92ri": [
+     "crates/feynkit-generator/tests/generation_oracle/main.rs"
+    ],
+    "dependency_vs_base_gmqajram": [
+     "crates/feynkit-generator/tests/generation_oracle/main.rs"
+    ],
+    "filtered_vs_dependency": [
+     ".config/nextest.toml"
+    ],
+    "nars_pure_python": {
+     "nar_output": {
+      "path": "/nix/store/77gaayyavdbbg95j7lsf71v38r0xgqnf-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0",
+      "nar": "sha256-wU7XJiYmwbQIWh2jRaZxz5vQOT5l4De/jyImJJUlT+o=",
+      "claim": "sha256-wU7XJiYmwbQIWh2jRaZxz5vQOT5l4De/jyImJJUlT+o=",
+      "matches": true
+     },
+     "nar_fetched_source": {
+      "path": "/nix/store/1nqlw1qylyghp36igscw69qvjxgpyj78-source",
+      "nar": "sha256-+yIzPO1U8LRbzPqRCsGtPc4Ot9RpxZjamFDHu2/V/o4=",
+      "claim": "sha256-+yIzPO1U8LRbzPqRCsGtPc4Ot9RpxZjamFDHu2/V/o4=",
+      "matches": true
+     },
+     "nar_filtered_source": {
+      "path": "/nix/store/clb87pfjxsx68b1yykja0n3q77ikbyin-source",
+      "nar": "sha256-VBSrmwoc8h+aa7pqXaKJLX3zj5zrGMAOIzYkZ0jf+IU=",
+      "claim": "sha256-VBSrmwoc8h+aa7pqXaKJLX3zj5zrGMAOIzYkZ0jf+IU=",
+      "matches": true
+     },
+     "nar_dependency_source": {
+      "path": "/nix/store/3c9va9xcaw0cmdjfacqm5dxh889s58hk-source",
+      "nar": "sha256-rh/Y/axoYh0223pZPvgUSPiDRwKNUaABt7FB11gcCt4=",
+      "claim": "sha256-rh/Y/axoYh0223pZPvgUSPiDRwKNUaABt7FB11gcCt4=",
+      "matches": true
+     }
+    },
+    "archive": {
+     "sha256": "5bba3a551bc18edb360906349316ab49c060549411cbee6e91723075c8ec5ca1",
+     "bytes": 85487408,
+     "matches": true
+    }
+   },
+   "derivations_in_memory": {
+    "gen_out_is_77ga": true,
+    "gen_src_is_clb8": true,
+    "gen_cargoArtifacts_is_hfrw": true,
+    "gen_inputs_include_dep": true,
+    "dep_out_is_hfrw": true,
+    "dep_src_is_3c9v": true,
+    "dep_cargoArtifacts_is_56f4": true,
+    "gen_buildPhase_equals_receipt": true,
+    "dep_buildPhase_equals_receipt": true,
+    "gen_postPatch_equals_receipt": true,
+    "dep_postPatch_equals_gen_postPatch": false,
+    "gen_profile_ci_optim": true,
+    "dep_profile_ci_optim": true,
+    "agg_generator_inputs": [
+     "/nix/store/q34fx7cnjs8w0z7kk14npg33qvk33q8v-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0.drv"
+    ],
+    "gen_rust_inputs": [
+     "/nix/store/ypzbz0yifsk90xl610bd7kc6sxjz138l-rust-stable-with-components-2026-09-03.drv"
+    ],
+    "dep_rust_inputs": [
+     "/nix/store/ypzbz0yifsk90xl610bd7kc6sxjz138l-rust-stable-with-components-2026-09-03.drv"
+    ],
+    "nextest_inputs_gen": [
+     "/nix/store/glhl7h5ywjgw3hrnzcfn62hv3hk5d2i3-cargo-nextest-0.9.143.drv"
+    ],
+    "manifest gammaloop-ci-test-binary-dependencies-b6f177b7bc15beb1-Cargo.toml": {
+     "sha256_ok": true,
+     "bytes_ok": true,
+     "in_gen_postPatch": true,
+     "in_dep_postPatch": true
+    },
+    "manifest gammaloop-ci-test-binary-dependencies-b6f177b7bc15beb1-feynkit-generator-dev-dependency.toml": {
+     "sha256_ok": true,
+     "bytes_ok": true,
+     "in_gen_postPatch": true,
+     "in_dep_postPatch": true
+    },
+    "dependency_postPatch_extra": "workspace-hack touch -d @0/@1 lines only; both manifests in both hooks",
+    "generator_requests_dependency_outputs": [
+     "out"
+    ],
+    "NO_SYMBOLICA_OEM_LICENSE": "1 in both"
+   },
+   "layer_chain": "hfrw1z5m/target.tar.zst.prev -> 56f4pygl/target.tar.zst; 56f4pygl .prev -> y46x18dj/target.tar.zst",
+   "compiler": {
+    "drv": "ypzbz0yifsk90xl610bd7kc6sxjz138l-rust-stable-with-components-2026-09-03.drv",
+    "out": "/nix/store/c3bpv60f5wgp4pmgsifaykxk214h6463-rust-stable-with-components-2026-09-03",
+    "direct_rustc_Vv_equals_compiler_out": true,
+    "rustc_Vv_sha256": "778fbc643a806f0dd123c056e66201d7e8a56a61928ec0a33171be8d6c2d5a37",
+    "executed_elf_comment": [
+     "GCC: (GNU) 15.3.0",
+     "rustc version 1.98.1 (48a229cea 2026-09-01)"
+    ]
+   },
+   "kernel": "Cargo.lock bc359eca...; symbolica/numerica/graphica 3.0.1 @1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
+   "closure_independent": {
+    "json_records_total": 1053,
+    "closure_units": 452,
+    "closure_packages": 297,
+    "rustc_values": {
+     "1625334936438085654": 452
+    },
+    "layer_counts": {
+     "0": 14,
+     "1": 2,
+     "2": 436
+    },
+    "problems": [],
+    "root": "ci-optim/.fingerprint/feynkit-generator-6b0e7dc68fc70180/test-integration-test-generation_oracle.json",
+    "root_features": [
+     "default",
+     "native"
+    ],
+    "root_deps_count": 20,
+    "synthetic_dev_dependency_direct_root_dep": true,
+    "equals_author_actual_closure": true,
+    "unit_keys_and_features_equal_base_round2": true,
+    "records_changed_vs_base": 14,
+    "changed_fields": "deps (13), local (1: clarabel build-script run)",
+    "key_features_equal_receipt": true,
+    "exact_wasm_feature_units": 0,
+    "substring_wasm_units": [
+     "ci-optim/.fingerprint/chrono-7115bd484e2a59e4/lib-chrono.json"
+    ]
+   },
+   "elf": {
+    "archive_member": "target/ci-optim/deps/generation_oracle-6b0e7dc68fc70180",
+    "archive_sha256": "441b279b2ad5a8f373df5acdfb3892fa05280de862500c4c4d3433e68f14076d",
+    "archive_bytes": 60757576,
+    "layer0_member": "./ci-optim/deps/generation_oracle-6b0e7dc68fc70180",
+    "layer0_sha256": "3f1c4dc250aecbde0f649acdc6bec9693a9e916d7c6441bcd1274421e443ac63",
+    "layer0_bytes": 60757576,
+    "author_runtime_copy": {
+     "path": "target/wp3-xs-qed-l2-integration/runtime/source/target/ci-optim/deps/generation_oracle-6b0e7dc68fc70180",
+     "sha256": "441b279b2ad5a8f373df5acdfb3892fa05280de862500c4c4d3433e68f14076d",
+     "bytes": 60757576
+    },
+    "differing_bytes": 574958,
+    "differing_bytes_by_section": {
+     ".rela.dyn": 574007,
+     ".gnu.version_r": 353,
+     ".dynstr": 312,
+     ".gnu.version": 148,
+     ".rela.plt": 108,
+     "<outside-sections>": 18,
+     ".dynamic": 9,
+     ".dynsym": 3
+    },
+    "same_section_layout": false,
+    "sections_differing_content": [
+     ".dynamic",
+     ".dynstr",
+     ".dynsym"
+    ],
+    "sections_shifted": [
+     ".gnu.version",
+     ".gnu.version_r",
+     ".rela.dyn",
+     ".rela.plt"
+    ],
+    "fresh_extracted_elf_sha256": "441b279b2ad5a8f373df5acdfb3892fa05280de862500c4c4d3433e68f14076d"
+   },
+   "runpath": "archive 13 ELFs and layer0 8 ELFs: 0 non-store RUNPATH/RPATH entries; executed ELF RUNPATH = /nix/store/77ga.../lib (absent), python3.13.15, glibc-2.42-84, gcc-15.3.0-lib",
+   "aggregate_graph_fresh_eval": {
+    "code": "/nix/store/5jn552k6mpamrb39wwvxm0kqb3z5f07q-gammaloop-nextest-binaries-feynkit.drv",
+    "candidate": "/nix/store/5jn552k6mpamrb39wwvxm0kqb3z5f07q-gammaloop-nextest-binaries-feynkit.drv",
+    "equal": true,
+    "aggregate_generator_inputs": [
+     "/nix/store/q34fx7cnjs8w0z7kk14npg33qvk33q8v-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0.drv"
+    ]
+   }
+  },
+  "2_fresh_runtime": {
+   "sandbox": "bwrap: no net/pid/ipc/uts sharing; /nix/store ro; private source ro + target/tmp/home/cache/state/dump rw; no host root, no /shared",
+   "results": {
+    "pool-1": 0,
+    "pool-8": 0,
+    "pool-32": 0,
+    "zero-selection": 4,
+    "list": 0,
+    "spot-failure": 100
+   },
+   "observer_exits": [
+    0,
+    0,
+    0
+   ],
+   "pools": {
+    "pool-1": {
+     "exit": 0,
+     "junit_tests": "8",
+     "junit_failures": "0",
+     "names_equal_rows": true,
+     "all_generation_oracle": true,
+     "all_passed": true,
+     "record_lines_in_success_output": 0,
+     "starting_line": "Starting 8 tests across 4 binaries (412 tests skipped)",
+     "summary_line": "Summary [   0.914s] 8 tests run: 8 passed, 412 skipped",
+     "dump_thread_tags": [
+      "1"
+     ]
+    },
+    "pool-8": {
+     "exit": 0,
+     "junit_tests": "8",
+     "junit_failures": "0",
+     "names_equal_rows": true,
+     "all_generation_oracle": true,
+     "all_passed": true,
+     "record_lines_in_success_output": 0,
+     "starting_line": "Starting 8 tests across 4 binaries (412 tests skipped)",
+     "summary_line": "Summary [   0.821s] 8 tests run: 8 passed, 412 skipped",
+     "dump_thread_tags": [
+      "8"
+     ]
+    },
+    "pool-32": {
+     "exit": 0,
+     "junit_tests": "8",
+     "junit_failures": "0",
+     "names_equal_rows": true,
+     "all_generation_oracle": true,
+     "all_passed": true,
+     "record_lines_in_success_output": 0,
+     "starting_line": "Starting 8 tests across 4 binaries (412 tests skipped)",
+     "summary_line": "Summary [   0.803s] 8 tests run: 8 passed, 412 skipped",
+     "dump_thread_tags": [
+      "32"
+     ]
+    }
+   },
+   "outer_passes": 24,
+   "record_off": "FEYNKIT_ORACLE_RECORD absent from explicit env; 24 captured passing stdout sections contain 0 Row print lines and 1 libtest pass each",
+   "pool_delivery": "FEYNKIT_ORACLE_THREADS -> threads() -> Run::default().threads(count); dump tags t1/t8/t32 match; fresh observer capture.json Run { threads: Some(1|8|32) }",
+   "policy": "profile ci_gammaloop (inherits default: test-threads 16, retries 0, 120s x2 = 240s fail); memory-intensive group max-threads 2; no override matches the eight rows; --test-threads=16",
+   "zero_selection": {
+    "exit": 4,
+    "log_tail": [
+     "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
+     "     Summary [   0.005s] 0 tests run: 0 passed, 420 skipped",
+     "error: no tests to run"
+    ],
+    "junit": {
+     "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/.local/review-xs-qed-l2-integration-a-opus-20261030T111536Z-1321089/results/runtime/zero-selection-junit.xml",
+     "sha256": "4e9d3121803ee811c3318c2fecfbdb5d2a624b377b280d1af15511ccfdca9833",
+     "bytes": 230
+    }
+   },
+   "listing": {
+    "test_count": 420,
+    "equal_to_author_list_json": true,
+    "suites": {
+     "feynkit-generator": 227,
+     "feynkit-generator::amplitude": 9,
+     "feynkit-generator::generation_oracle": 183,
+     "feynkit-generator::momentum_tensor": 1
+    },
+    "selected": 371
+   },
+   "spot_failure": {
+    "exit": 100,
+    "junit_tests": "1",
+    "selected": [
+     [
+      "feynkit-generator::generation_oracle",
+      "xs_qed_eeee_L1",
+      "failed"
+     ]
+    ],
+    "left_right_equal_to_author_full_lane": true,
+    "left_right": [
+     "Summary { diagrams: 4, topologies: 17, assignments: 34, inverse_symmetry: Fraction { numerator: 4, denominator: 1 }, weights: Fraction { numerator: 0, denominator: 1 }, symmetry_factors: [(1, 4)], content: 3022486068726070230, numerators: 8589669465914692809, named: 13426690394181497681, ids: 18306469787178189955 }",
+     "Summary { diagrams: 4, topologies: 17, assignments: 34, inverse_symmetry: Fraction { numerator: 4, denominator: 1 }, weights: Fraction { numerator: 0, denominator: 1 }, symmetry_factors: [(1, 4)], content: 3022486068726070230, numerators: 10282495408798671266, named: 13426690394181497681, ids: 18306469787178189955 }"
+    ],
+    "panic_line": "thread 'xs_qed_eeee_L1' (780) panicked at crates/feynkit-generator/tests/generation_oracle/main.rs:147:9"
+   },
+   "source_unchanged_excluding_private_target": true,
+   "source_files": 4549,
+   "source_archive_sha256_equals_author": true,
+   "runpath_candidates_absent_before_after_every_run": true,
+   "license_leak_detected": false,
+   "linked_paths": [
+    "ci-optim/build/blake3-91385034c9e68003/out",
+    "ci-optim/build/gmp-mpfr-sys-1682cd3378d91a1a/out/lib"
+   ]
+  },
+  "3_rows_and_modes": {
+   "method": "From-scratch census.rs semantics: FNV-1a over compact serde_json bytes (sorted keys, preserved number tokens), Entry::digest_json, multiset digests, exact Fractions, evaluate_overall_factor heads; every per-diagram key/frame/numerator/S/name/id/factor cross-checked against the executed binary census text.",
+   "none_rows_all_fields_match_literal": {
+    "xs_qed_eemm_L2": true,
+    "xs_qed_eedd_L1": true,
+    "xs_qed_eemm_L1": true,
+    "xs_qed_eeee_1pi_L1": true,
+    "qed_eemm_L1": true,
+    "ctorder_qcd_uugg_L1": true,
+    "sm_eemm_L0": true,
+    "ym_g6_L0": true
+   },
+   "diagrams_cross_checked": {
+    "xs_qed_eemm_L2": 30,
+    "xs_qed_eedd_L1": 1,
+    "xs_qed_eemm_L1": 1,
+    "xs_qed_eeee_1pi_L1": 1,
+    "qed_eemm_L1": 17,
+    "ctorder_qcd_uugg_L1": 268,
+    "sm_eemm_L0": 4,
+    "ym_g6_L0": 220
+   },
+   "xs_qed_eemm_L2_mode_cycle": [
+    [
+     12,
+     13,
+     14,
+     15,
+     16,
+     17,
+     18,
+     19,
+     21,
+     12
+    ]
+   ],
+   "index20_fixed": true,
+   "fixed_positions": 21,
+   "per_diagram_identity_except_name": {
+    "xs_qed_eemm_L2": true,
+    "xs_qed_eedd_L1": true,
+    "xs_qed_eemm_L1": true,
+    "xs_qed_eeee_1pi_L1": true,
+    "qed_eemm_L1": true,
+    "ctorder_qcd_uugg_L1": true,
+    "sm_eemm_L0": true,
+    "ym_g6_L0": true
+   },
+   "auto_8_payload_fields_equal_none_except_named": {
+    "diagrams": true,
+    "inverse_symmetry": true,
+    "weights": true,
+    "symmetry_factors": true,
+    "content": true,
+    "numerators": true,
+    "named": false,
+    "ids": true
+   },
+   "xs_auto_full_summary_with_fresh_same_mode_counters": {
+    "summary": {
+     "diagrams": 30,
+     "topologies": 157,
+     "assignments": 714,
+     "inverse_symmetry": [
+      30,
+      1
+     ],
+     "weights": [
+      4,
+      1
+     ],
+     "symmetry_factors": [
+      [
+       1,
+       30
+      ]
+     ],
+     "content": "0x6fcfea2ac818e3eb",
+     "numerators": "0xf889b37c1fd93143",
+     "named": "0xcb8b2528001c3014",
+     "ids": "0xc6537de685c0ec01"
+    },
+    "counter_source": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/.local/review-xs-qed-l2-integration-a-opus-20261030T111536Z-1321089/runtime/observer-p1/captures/xs_qed_eemm_L2/classes-Auto-t1/built-report.txt",
+    "counter_sha256": "c9f4e7b088952414c1f2f7d5a8ab6062ae9321010ed1c2069954c0fe167d9393"
+   },
+   "typed_owners_equal_by_id": true,
+   "typed_owner_graphs": 30,
+   "pool_byte_identity": {
+    "xs_qed_eemm_L2": {
+     "None": true,
+     "Auto": true,
+     "census": true
+    },
+    "xs_qed_eedd_L1": {
+     "None": true,
+     "Auto": true,
+     "census": true
+    },
+    "xs_qed_eemm_L1": {
+     "None": true,
+     "Auto": true,
+     "census": true
+    },
+    "xs_qed_eeee_1pi_L1": {
+     "None": true,
+     "Auto": true,
+     "census": true
+    },
+    "qed_eemm_L1": {
+     "None": true,
+     "Auto": true,
+     "census": true
+    },
+    "ctorder_qcd_uugg_L1": {
+     "None": true,
+     "Auto": true,
+     "census": true
+    },
+    "sm_eemm_L0": {
+     "None": true,
+     "Auto": true,
+     "census": true
+    },
+    "ym_g6_L0": {
+     "None": true,
+     "Auto": true,
+     "census": true
+    }
+   },
+   "byte_joins_all_true": true,
+   "byte_joins": "fresh dumps == author dumps (all rows/pools/census/None/Auto/sources); xs_qed_eemm_L2 None/Auto == donor frozen t1 payload (bound in imported certificate receipt) == author observer == fresh observer; seven prior rows == prior family runtime dumps and census",
+   "observer_fresh_vs_author_and_frozen": "all eight capture files equal at pools 1/8/32 for both modes",
+   "other_row_mode_permutations": {
+    "ctorder_qcd_uugg_L1": [
+     [
+      109,
+      113,
+      115,
+      116,
+      112,
+      110,
+      109
+     ],
+     [
+      111,
+      114,
+      111
+     ]
+    ]
+   },
+   "not_globally_byte_identical": "None vs Auto dumps differ (order/names); named digest differs accordingly"
+  },
+  "4_full_lane_accounting": {
+   "current_test_count": 420,
+   "listed": 420,
+   "selected": 371,
+   "not_selected": 49,
+   "not_selected_reasons": {
+    "{\"status\": \"mismatch\", \"reason\": \"ignored\"}": 49
+   },
+   "not_selected_all_rust_ignored": true,
+   "inventory_names_equal_prior": true,
+   "selected_equal_prior": true,
+   "ignored_equal_prior": true,
+   "junit_cases_current": 371,
+   "junit_equals_selected": true,
+   "current_status_counts": {
+    "passed": 298,
+    "failed": 73
+   },
+   "prior_status_counts": {
+    "passed": 297,
+    "failed": 74
+   },
+   "prior_failed_contains_target": true,
+   "current_failed_equals_prior_minus_target": true,
+   "unexpected_failures": [],
+   "missing_expected_failures": [],
+   "newly_passing": [
+    [
+     "feynkit-generator::generation_oracle",
+     "xs_qed_eemm_L2"
+    ]
+   ],
+   "newly_failing": [],
+   "failed_by_binary": {
+    "feynkit-generator::generation_oracle": 73
+   },
+   "passed_by_binary": {
+    "feynkit-generator": 222,
+    "feynkit-generator::amplitude": 9,
+    "feynkit-generator::generation_oracle": 66,
+    "feynkit-generator::momentum_tensor": 1
+   },
+   "failure_classes": {
+    "row:numerators": 73
+   },
+   "log_summary": [
+    "371",
+    "298",
+    "73",
+    "49"
+   ],
+   "log_TIMEOUT_lines": 0,
+   "log_SLOW_lines": 0,
+   "log_libtest_child_result_lines": 146,
+   "current_exit": 100,
+   "prior_exit": 100,
+   "nested_child_summaries_not_counted": true,
+   "ignored_or_zero_no_pass_credit": true,
+   "sampled_quotient": "passed now (0.656s) and in prior (0.645s); no literal credit",
+   "prior_raw_bound_by_base_receipt": {
+    "fast-run-junit.xml": "d0c554bb...",
+    "fast-list.out": "1decc3a1...",
+    "accounting.json": "960daf37..."
+   }
+  },
+  "5_commands_chronology_containment": {
+   "chronology": "producer 10:22:53 (CODE frozen 10:22:25) -> unsandboxed historical proof 10:26 -> fmt/clippy + pools/full lane 10:27 -> closure 10:28 -> observer 10:32 (after failed guard attempt) -> comparison/accounting/audit/renders -> compiler 10:52 -> proof sandbox launch1 exit1 (git absent) 10:58 -> launch2 exit0 10:59 -> candidate frozen 11:03:19 -> final stage 11:04:21",
+   "nix_commands": "every nix flake/eval/build/develop has exactly one validated git+file full40hex shallow=1&allRefs=1 URI or exact drv, cwd /, both license vars removed; nix hash path on regex-validated store paths; fmt/clippy/docs cargo cwd is a bash cd after nix develop, not a flake input",
+   "observer_guard_failure": "pre-execution AssertionError on docs-only sha2 edge; corrected guard admits only crates/alphal00p-docs-builder/Cargo.toml after removing exactly sha2 = \"0.10\", requires the rest of the TOML equal and no observer closure unit from that crate; no observer dir existed before the corrected run",
+   "tool_sources_equal_executed_scripts": 16,
+   "runtime_records": "pool/list/run argv, env key names only, license by name only, archive/source/nextest/bwrap/launcher hashes; executed ELF = archive member 441b279b",
+   "lint_source": "fmt (rustfmt --check main.rs) and clippy (dev, --deny warnings) ran in the live working copy after CODE freeze; source-audit 10:41 asserts main.rs = base with the one token replaced; working copy now equals candidate tree",
+   "bindings_verified": {
+    "receipt.json": {
+     "bindings": 47,
+     "ok": 47
+    },
+    "final-supplement.json": {
+     "bindings": 35,
+     "ok": 35
+    },
+    "final-stage.json": {
+     "bindings": 5,
+     "ok": 5
+    },
+    "runtime-results.json": {
+     "bindings": 39,
+     "ok": 39
+    },
+    "producer-qualified.json": {
+     "bindings": 4,
+     "ok": 4
+    },
+    "accounting.json": {
+     "bindings": 8,
+     "ok": 8
+    },
+    "observer-results.json": {
+     "bindings": 606,
+     "ok": 606
+    },
+    "current-comparison.json": {
+     "bindings": 58,
+     "ok": 58
+    },
+    "approval-index.json": {
+     "bindings": 4,
+     "ok": 4
+    }
+   },
+   "runtime_manifest": "714 entries all hash/size match; byte sum matches"
+  }
+ },
+ "prior_findings_and_limits_status": {
+  "base_F1": "Not regressed: actual compiled closure 452 units/297 packages from layered target.tar.zst + synthetic direct dev-dependency; root features [default,native] distinct from dependency features (spenso python/python_stubgen, feynkit-graph svg, linnet drawing ...); working-copy cargo tree not used as closure.",
+  "QM_N1": "Holds: Auto counters (157/714) taken from fresh same-mode observer built-report; CI public payloads give eight Auto fields only.",
+  "QM_N2": "Peer B scope (renders); FONTCONFIG pin recorded in receipt line 527 not re-rendered here.",
+  "QM_N3": "Peer B scope; receipt keeps no identical-dictionary claim.",
+  "QM_N4": "Holds in receipt review_qualifications; failed helper/builds not credited.",
+  "observer_non_equivalence": "Holds: observer dev-optim 341 units, root profile 15396524706607348604 vs CI root profile 16057468363761213068; only payload/source joins transfer.",
+  "finite_proof_scope": "Not replayed (peer B). Scope wording in note/receipt unchanged: pool1, Grouping None, None/Auto, 30/540/1296/56, Q/edge only.",
+  "mode_cycle": "Independently re-derived: 12->13->14->15->16->17->18->19->21->12; 20 and 20 other positions fixed; not globally byte-identical.",
+  "outer_manifests": "No full-outer-pass credit claimed; not replayed (peer B).",
+  "no_expansion_or_extra_rows": "Only the eight named rows run; no grouped cases, no numerator expansion/trace/numeric substitution in Scope A checks."
+ },
+ "own_attempts_without_credit": [
+  {
+   "what": "git check-ignore in jj workspace",
+   "exit": 128,
+   "cause": "no .git in workspace (jj store in main/.git)",
+   "effect": "none; .gitignore line 151 .local/ confirmed"
+  },
+  {
+   "what": "wc_vs_tree.py first run",
+   "exit": 127,
+   "cause": "python3 not on PATH",
+   "effect": "rerun with pinned /nix/store/wj1f56qk.../python3 -I, exit 0"
+  },
+  {
+   "what": "closure_compare.py first run",
+   "exit": 1,
+   "cause": "wrong base closure path (families/ vs families/round2/)",
+   "effect": "rerun with tracked round2 record 08a9bf2d..., exit 0"
+  },
+  {
+   "what": "rows_check.py first run",
+   "exit": 1,
+   "cause": "TypeError in my own serializer for a Python int in my expected-group fixture (after the first Row cross-check had already passed)",
+   "effect": "serializer accepts int; full rerun exit 0"
+  }
+ ],
+ "commands": [
+  {
+   "cmd": "scripts/guard.sh before|after",
+   "exit": 0,
+   "kind": "jj --ignore-working-copy op/bookmark/workspace; git for-each-ref; sha/stat of wc/donor/author target/approvals"
+  },
+  {
+   "cmd": "git --git-dir=main/.git ls-tree/diff-tree/show/rev-parse/cat-file (read-only, GIT_OPTIONAL_LOCKS=0)",
+   "exit": 0
+  },
+  {
+   "cmd": "python3 -I token_delta.py / rows.py",
+   "exit": 0
+  },
+  {
+   "cmd": "python3 -I drv_fields.py / drv_postpatch_diff.py / compiler_out.py (in-memory ATerm, no raw env output)",
+   "exit": 0
+  },
+  {
+   "cmd": "python3 -I producer_verify.py (pure-Python NARs, tree-vs-Git, streamed ELFs)",
+   "exit": 0
+  },
+  {
+   "cmd": "python3 -I elf_dynamic.py / elf_sections.py",
+   "exit": 0
+  },
+  {
+   "cmd": "python3 -I closure_indep.py / closure_compare.py / layer0_record_diff.py",
+   "exit": 0
+  },
+  {
+   "cmd": "env -i c3bpv60f.../bin/rustc -Vv; binutils-2.46 readelf --string-dump=.comment",
+   "exit": 0
+  },
+  {
+   "cmd": "python3 -I accounting_indep.py",
+   "exit": 0
+  },
+  {
+   "cmd": "python3 -I fresh_runtime.py",
+   "exit": 0,
+   "selections": {
+    "pool-1": "8 run/8 passed/412 skipped exit0",
+    "pool-8": "8/8 exit0",
+    "pool-32": "8/8 exit0",
+    "zero-selection": "0 run exit4",
+    "list": "420 listed/371 match exit0",
+    "spot-failure": "xs_qed_eeee_L1 1 run/1 failed exit100",
+    "observer": "p1/p8/p32 exit0"
+   }
+  },
+  {
+   "cmd": "python3 -I fresh_audit.py / rows_check.py / chronology.py / wc_vs_tree.py / bindings_check.py",
+   "exit": 0
+  },
+  {
+   "cmd": "nix eval --offline --no-eval-cache --raw git+file:///shared/lcnbr/dev/gammaloop/main?rev={eae78e11...,fdff0d18...}&shallow=1&allRefs=1#checks.x86_64-linux.gammaloop-nextest-binaries-feynkit.drvPath (cwd /, both license vars unset)",
+   "exit": 0,
+   "outputs": [
+    "/nix/store/5jn552k6mpamrb39wwvxm0kqb3z5f07q-gammaloop-nextest-binaries-feynkit.drv",
+    "/nix/store/5jn552k6mpamrb39wwvxm0kqb3z5f07q-gammaloop-nextest-binaries-feynkit.drv"
+   ]
+  }
+ ],
+ "fresh_vs_reused": {
+  "fresh": [
+   "token/row/path deltas from Git objects",
+   "drv field reads",
+   "four NAR hashes",
+   "tree-vs-Git for fetched/filtered/dependency sources",
+   "ELF hashes, dynamic sections, section diff",
+   "fingerprint closure traversal",
+   "compiler -Vv",
+   "aggregate drvPath evals (offline, no eval cache)",
+   "sandboxed pools 1/8/32, zero-selection, listing, remaining-failure spot-check",
+   "retained-observer runs 1/8/32",
+   "full Row/mode recomputation",
+   "accounting derivation",
+   "binding and manifest verification",
+   "guards"
+  ],
+  "reused_raw_hash_bound": [
+   "author full 371-selection run (fast-run JUnit/log, exit 100) - audited, not rerun",
+   "prior family raw JUnit/listing/accounting (bound by base receipt)",
+   "donor frozen captures (bound by imported certificate receipt)",
+   "author observer captures (compared; also freshly reproduced)",
+   "prior family runtime dumps (compared)"
+  ],
+  "not_in_scope": [
+   "finite proof replay",
+   "docs/registry/render/hash-closure replay (peer B)"
+  ]
+ },
+ "hashes": {
+  "archive": "5bba3a551bc18edb360906349316ab49c060549411cbee6e91723075c8ec5ca1",
+  "executed_elf": "441b279b2ad5a8f373df5acdfb3892fa05280de862500c4c4d3433e68f14076d",
+  "dependency_layer_elf": "3f1c4dc250aecbde0f649acdc6bec9693a9e916d7c6441bcd1274421e443ac63",
+  "observer_elf": "9a479c8ebcdd38324019f6fcc0de0719e03c223507df9a3005463c260fb1a9d2",
+  "main_rs_base": "c29a92c9d5614afaa756f36856e5804064403919fb28c16be9cb04c1c2f5c54b",
+  "main_rs_new": "aedd07670ad16ae72ae1c96970668c80ea0ecd5d6d5992c736af71de7d00999b",
+  "nextest": "dc36190bff3f246f94c6280abdc133fd2ea8e571047acffe5d18690bdf2863c8",
+  "bwrap": "3f4227c0fbbcf400a236eb7dde1a63b3a2feaa22187cb6026054444c58f8c535",
+  "code_git_archive": "361e65b67ec23021ddf522cee0f7576b0407be7fdee7dc29bda9589964a767e7",
+  "actual_closure_record": "ebdde7f25eeb374b957d999cfb44cccc95947c2cf723ba5849b1e6782087ebf2",
+  "aggregate_drv": "/nix/store/5jn552k6mpamrb39wwvxm0kqb3z5f07q-gammaloop-nextest-binaries-feynkit.drv",
+  "generator_drv": "/nix/store/q34fx7cnjs8w0z7kk14npg33qvk33q8v-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0.drv"
+ },
+ "guards": {
+  "before": "guards/before",
+  "after": "guards/after",
+  "identical": [
+   "jj op head 7c23e728cab8a28d...",
+   "bookmarks generation-integration*/generation-oracle*/generation-xs*",
+   "workspaces",
+   "all git refs (3675)",
+   "candidate working-copy sha256+modes",
+   "donor working-copy sha256+modes",
+   "author target/wp3-xs-qed-l2-integration sha256+modes+mtimes (9950 files)",
+   "four approval review hashes"
+  ],
+  "donor_and_prior_target_files_rechecked": [
+   "observer ELF 9a479c8e",
+   "qualification-v2 ccecdfcb",
+   "frozen payloads 08ebf574/33a8a36d",
+   "prior fast-run JUnit d0c554bb",
+   "prior list 1decc3a1",
+   "prior accounting 960daf37"
+  ],
+  "mutations_by_reviewer": "none outside this review directory; no refs/bookmarks/snapshots/tracked edits/store GC/permissions/credentials/push/upload"
+ },
+ "limits": [
+  "Scope A only; no combined approval. Peer B owns finite proof, docs/registry/renders and full hash-closure replay.",
+  "Full 371-selection lane audited from raw JUnit/listing/log, not rerun; one remaining failure freshly spot-checked.",
+  "Layered fingerprints describe the dependency-layer build; final generator-phase own fingerprints are not retained. Binding = unit-id suffix + identical code sections, not ELF hash equality.",
+  "Pools 8/32 are runtime observations; row mathematics remains the certified pool1 scope.",
+  "Observer remains dev-optim/341-unit, not CI-equivalent; Run/model/request/options/ports/interfaces are capture facts.",
+  "Author and my runtime environments are not the CI runner environment (A-I2).",
+  "Shadow-RUNPATH absence for the author 10:32 observer runs cannot be verified retroactively (A-L1); verified only at review time and for my runs.",
+  "No license value, hash or derived digest recorded; leak scan of my outputs is boolean only."
+ ],
+ "retention": {
+  "kept": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/.local/review-xs-qed-l2-integration-a-opus-20261030T111536Z-1321089",
+  "size": "~207M (fresh source copy, extracted archive target, dumps, observer captures, logs, results, scripts)",
+  "reason": "parent aggregation and audit; no recursive deletion performed",
+  "temporary_files_outside_review_dir": "two /tmp files created early were removed; no others",
+  "surviving_processes": []
+ }
+}

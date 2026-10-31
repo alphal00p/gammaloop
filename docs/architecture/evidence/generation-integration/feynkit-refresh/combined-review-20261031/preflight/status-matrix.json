@@ -1,0 +1,213 @@
+[
+  {
+    "gate": "NEXT bounded combined refresh integration",
+    "status": "NEW combined review unresolved",
+    "accepted_requirement": "Each bounded step needs a NEW independent review; the new conjunction must be reviewed on an exact frozen candidate. Exit criteria are necessary, not sufficient; reviewers may add checks.",
+    "evidence": [
+      "docs/architecture/generation-integration-plan.typ:4-13",
+      "docs/architecture/generation-integration-plan.typ:137-140",
+      "docs/architecture/generation-feynkit-community-refresh.typ:247-251",
+      "decision-index.json"
+    ],
+    "limits": "Constituent APPROVEs do not approve their conjunction. No accepted text makes all 69 old numerator rows a prerequisite for every bounded refresh integration. The next review must state its bounded scope and retain production-core/evaluator, full WP3 and publication exclusions. No bookmark movement is proposed here."
+  },
+  {
+    "gate": "WP0",
+    "status": "accepted",
+    "accepted_requirement": "Surviving relevant evidence and refs durable; unavailable raw evidence classified rather than silently certified.",
+    "evidence": [
+      "docs/architecture/generation-integration-plan.typ:142-154",
+      "docs/architecture/evidence/generation-integration/execution.json:packages.WP0"
+    ],
+    "limits": "Archiving is not runtime or physics certification."
+  },
+  {
+    "gate": "WP1 / B2",
+    "status": "accepted finite original-pair theorem; R/F rerun obligation remains",
+    "accepted_requirement": "Original GL028/GL034 exact 4D SU(3) N28=(7/2)N34 certificate, zero-sample and sampled production controls; explicitly rerun ignored original-pair regression on rebuilt and final tips.",
+    "evidence": [
+      "docs/architecture/generation-integration-plan.typ:155-189",
+      "docs/architecture/evidence/generation-integration/wp3/exit-matrix/receipt.json:matrix.b2"
+    ],
+    "limits": "Old b9 six-pass replay is 1a, not a current8eb execution. Full generator pool1 does not execute the Rust-ignored original-pair test. No new mathematics or bisect warranted."
+  },
+  {
+    "gate": "WP2 / refresh dependency base",
+    "status": "accepted historical base; bounded refresh source accepted",
+    "accepted_requirement": "Exact base/dependency manifest reviewed; source replay and new kernel pinned explicitly.",
+    "evidence": [
+      "docs/architecture/generation-integration-plan.typ:191-206",
+      "docs/architecture/evidence/generation-integration/execution.json:packages.WP2",
+      "decision-index.json:source R4"
+    ],
+    "limits": "3f0df2a8 is historical accepted base. Refresh targets 9102f885722e856e30227ed46e685e5c465905f7, kernel8eb. R4 source approval is not whole-workspace runtime compatibility."
+  },
+  {
+    "gate": "WP3 / M-rebuild",
+    "status": "incomplete",
+    "accepted_requirement": "Conflict-free formatted chain, deny-warnings Clippy, green fast lane; all fast oracle rows at pools1/8/32, SM3150 at1/8, four-loop4664/306 plus perturbation at1/8/32, a_ddx5 fresh processes, BRST, epem NLO, CoolQM; R-stage validation matrix and milestone recording.",
+    "evidence": [
+      "docs/architecture/generation-integration-plan.typ:468-474",
+      "docs/architecture/generation-integration-plan.typ:620-646",
+      "docs/architecture/evidence/generation-integration/execution.json:active_wp3_exit_matrix"
+    ],
+    "limits": "Full current pool1 is 302pass69fail49ignored, not green. Twelve exact rows pass36 at1/8/32; this is not complete oracle coverage. No M-rebuild claimed. Full fast-green exit and WP9 failure classification must remain distinct from a bounded integration approval."
+  },
+  {
+    "gate": "source46 integration",
+    "status": "accepted cumulative at79dfeaab; stale pending wording",
+    "accepted_requirement": "Approved colour-cycle owner integrated; exact producer/profile and consumer limits separately bound.",
+    "evidence": [
+      "docs/architecture/evidence/generation-integration/execution.json:active_slice46",
+      "../generation-integration-plan/.local/review-main46-round4-opus-rZyrnOS8/review.json#sha256=ee6e37ee207747d4f65c6a45b619412738af3248a65301b396768f27f5227e22"
+    ],
+    "limits": "192 profile+2 default-filter controls,16 networks17484 permutations were old1a observations. The implementation need not be repeated. Host/full-generator review exclusions of source46 do not revoke its approval or supply fresh8eb standalone colour-test credit."
+  },
+  {
+    "gate": "tensor layout / core repairs / XS-QED original integration",
+    "status": "accepted bounded historical steps",
+    "accepted_requirement": "Preserve reviewed tensor restoration, BTreeSet inference fix, API compile-time fixture, generated-evidence owner and eight prior migrations.",
+    "evidence": [
+      "docs/architecture/evidence/generation-integration/execution.json:active_tensor_layout",
+      "docs/architecture/evidence/generation-integration/execution.json:active_core_test_inference",
+      "docs/architecture/evidence/generation-integration/execution.json:active_core_docs",
+      "decision-index.json:original XS scopes A/B"
+    ],
+    "limits": "Tensor202pass3ignore plus17doctests, core3exact and later2214fast, docs116 library tests are bound to old source/profile/kernel. Original b9 core failure remains immutable history. XS A and B each scoped; current globalfdff is the accepted original integration boundary, not approval of the8eb refresh."
+  },
+  {
+    "gate": "current12 rows / full generator",
+    "status": "accepted bounded current8eb evidence",
+    "accepted_requirement": "Reuse accepted ffa producer,36 exact passes and15 capture joins, full420inventory371selected302pass69fail49ignored at pool1.",
+    "evidence": [
+      ".local/feynkit-refresh/root-three-integration-host-acceptance-and-next-20261031.json",
+      ".local/feynkit-refresh/root-full-generator-pool1-acceptance-20261031.json",
+      "candidate-code-delta.json",
+      "code-ffa-delta.json"
+    ],
+    "limits": "None alone asserts literal full Row; Auto payload fresh but historical counter premises remain.69 matching ten-field Summary pairs classify assertion history only; no physical theorem or migration authorization. No repeat merely for metadata or host stub outside generator inputs."
+  },
+  {
+    "gate": "ordinary host / private RustRed",
+    "status": "accepted bounded current8eb composition",
+    "accepted_requirement": "Exact applied generated stub, corrected ordinary wheel installation/import/parity; separate private7c1 single-extension one-denominator validation host;8/8 fresh reviewer checks.",
+    "evidence": [
+      ".local/feynkit-refresh/root-host-stub-rustred-acceptance-20261031.json",
+      "decision-index.json:host review"
+    ],
+    "limits": "Ordinary host lacks IBPFamily: no ordinary QCD pass. Private RustRed adds symbolica/tracing_max_level_info, native runtime arities[1], genuine reduction targets[[2],[3]],depth2,residual[[1]],23 assertions. No production RustRed, full Community, campaign/reconstruction or multiple-denominator adoption; no full docs/widget/site claim. Wheel native bytes, loose fixed DSO and loader sections remain distinct."
+  },
+  {
+    "gate": "grouped None / Auto and finite runner",
+    "status": "accepted conditional aggregates/finite R3 AND single-token migration preparation; application integration review separate",
+    "accepted_requirement": "Preserve independently pinned None and Auto premises and exact finite runner maps.",
+    "evidence": [
+      ".local/feynkit-refresh/root-grouped-none-acceptance-20261031.json",
+      ".local/feynkit-refresh/root-grouped-auto-acceptance-20261031.json",
+      ".local/feynkit-refresh/root-interface-runner-r3-acceptance-20261031.json",
+      ".local/feynkit-refresh/root-grouped-identical-literal-acceptance-20261031.json"
+    ],
+    "limits": "At immutable457 the grouped literal is still old. The later token00fac78da0e0d159 -> a60df38a6b8079e3 is independently approved for the assigned writer, with NEW archive/39bounded passes/fresh grouped public joins and NEW integration review required. No postapplication result observed. None/Auto premises, operand AND output-axis maps and finite R3 restrictions remain. No need to wait for unrelated QCD proofs to review457."
+  },
+  {
+    "gate": "WP4 names",
+    "status": "later; no exit claimed",
+    "accepted_requirement": "Canonical GL names and name@id pins, drop Request classes/serde fallback, settled57/8 normalization; names stable across threads/modes/grouping and card selections/pin errors/cost validated.",
+    "evidence": [
+      "docs/architecture/generation-integration-plan.typ:476-490"
+    ],
+    "limits": "Do not add to the immediate bounded refresh checklist."
+  },
+  {
+    "gate": "WP5 route",
+    "status": "later; no exit claimed",
+    "accepted_requirement": "RoutedSet and numerator stage, select before numerators; build-equivalence oracle, routed peak/Ir, signed gammabench adapter.",
+    "evidence": [
+      "docs/architecture/generation-integration-plan.typ:492-499"
+    ],
+    "limits": "No exit established by the bounded host or row reviews."
+  },
+  {
+    "gate": "WP6 Classes::Auto",
+    "status": "later; no exit claimed",
+    "accepted_requirement": "Control hash variance; Auto/None <=1.005 Ir generation/full on named workloads; DHAT bytes<=+5%; heavy tier both modes.",
+    "evidence": [
+      "docs/architecture/generation-integration-plan.typ:501-513"
+    ],
+    "limits": "Default remains Auto. Gate failure calls for investigation or measured user decision, not weakening."
+  },
+  {
+    "gate": "WP7 performance",
+    "status": "later",
+    "accepted_requirement": "Same-output-contract stage table versus stage1/v4; measure serial sampling/pools/cache hosting; ablation justifies kept optimizations.",
+    "evidence": [
+      "docs/architecture/generation-integration-plan.typ:515-529"
+    ],
+    "limits": "No pre-agreed target ratio. Wall time needs spread; no isolated timing credit from shared characterization."
+  },
+  {
+    "gate": "WP8 memory",
+    "status": "later; measurement before limit",
+    "accepted_requirement": "Measure DHAT holders and peak ratios versus stage1 at tip, then propose justified limit.",
+    "evidence": [
+      "docs/architecture/generation-integration-plan.typ:531-543",
+      "docs/architecture/generation-integration-plan.typ:113-115"
+    ],
+    "limits": "No20GiB cap adopted and no preauthorized1.2x ceiling."
+  },
+  {
+    "gate": "WP9 correctness / snapshots / heavy",
+    "status": "unresolved later closure",
+    "accepted_requirement": "Every failure inherited/new/justified expectation change; recertification requires membership+weights or full expression equivalence plus independent correctness argument; heavy final tip.",
+    "evidence": [
+      "docs/architecture/generation-integration-plan.typ:545-563"
+    ],
+    "limits": "Equal counts/summed weights/Summary pairs are insufficient. Active threeQCD capture and grouped migration owners continue separately; no duplicate proof work."
+  },
+  {
+    "gate": "WP10 milestones / ablation",
+    "status": "later",
+    "accepted_requirement": "M-rebuild and decision-stage/M-final registrations; >=21 balanced rounds, paired spread/counters; keep/drop table and local performance script.",
+    "evidence": [
+      "docs/architecture/generation-integration-plan.typ:565-579"
+    ],
+    "limits": "No milestone or performance approval in this packet."
+  },
+  {
+    "gate": "WP11 notices / drawing",
+    "status": "notices accepted historically; shipping gate persists",
+    "accepted_requirement": "Keep Clarabel and required Clarabel/NetworkX notices in every shipped artifact; approved drawing layers only.",
+    "evidence": [
+      "docs/architecture/generation-integration-plan.typ:581-589",
+      "docs/architecture/evidence/generation-integration/execution.json:packages.WP11-notices"
+    ],
+    "limits": "Parallel lane does not block generation delivery; nothing ships without notices."
+  },
+  {
+    "gate": "WP12 cleanup",
+    "status": "later",
+    "accepted_requirement": "Bounded listed minors and repository-owned leftovers.",
+    "evidence": [
+      "docs/architecture/generation-integration-plan.typ:591-596"
+    ],
+    "limits": "No unrelated implementation authorized by this preflight."
+  },
+  {
+    "gate": "WP13 final",
+    "status": "later",
+    "accepted_requirement": "Final-tip full matrix, independent adversarial whole-stack review, just docs-check, crates.io release suitability check before dropping patch.",
+    "evidence": [
+      "docs/architecture/generation-integration-plan.typ:598-602"
+    ],
+    "limits": "Full site/WASM/SVG/wheels/Pyodide/publication packaging are not inferred from bounded installed-host checks. No network now."
+  },
+  {
+    "gate": "WP14 / publication / historical cleanup",
+    "status": "requires explicit user go",
+    "accepted_requirement": "No push/fetch/PR/label without user go; before push every commit conflict-free and authored Lucien Huber, B1/B2 closed, WP13 complete, notices; CI enable/validate/upload/push/final-review sequence. Cleanup selective and authorized.",
+    "evidence": [
+      "docs/architecture/generation-integration-plan.typ:665-680"
+    ],
+    "limits": "Lucien Huber <im@lcnbr.ch> already settled. No general publication authorization. Preserve sources/bookmarks/caches and do not touch /common/build-cache."
+  }
+]

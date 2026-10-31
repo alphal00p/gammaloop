@@ -1,0 +1,33 @@
+{
+  "schema": "root-corrected-grouped-applied-integration-acceptance/1",
+  "recorded_utc": "2026-10-31 04:11:14 UTC",
+  "decision": "ACCEPT_CORRECTED_BOUNDED_APPLIED_INTEGRATION",
+  "candidate": "7f03ab8fd5834d7c78164429e2a44dab8d01ef74",
+  "code": "6f41807b064bcf2f579883134daef65c8ac279d3",
+  "review": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-grouped-identical-B1-r3-astra-20261031-DSnqH402/review.json",
+  "review_sha256": "66db3d6dd9886e072fabdd78f3dab82d669b17408e5e05c10709f50e5eba9d7c",
+  "seal_sha256": "37c4e6d280ef75790ae4de1287ab6c4b3c42379c8e1e85e055c6720af1a00b04",
+  "coordinator_rehashed_review_files": 19,
+  "B1": "Resolved in exact7f:425oldmanifest entries and29newpacketentries plusmanifests/seals verified against actualimmutableGitblobs. Old7c412/425closureclaim remainsfalse, oldREQUEST_CHANGES preserved.",
+  "accepted_conjunction": "Exactone-tokenapplication onhost457; actual6f/newarchivequalification;39actualfullRowpasses13rows at1/8/32;5exactpublicfiles/2124ownerassociations; independent currentraw30 andseparateNone/Auto P1-P5/finitenamedconsumerproof; correctedcompletecommittedevidence.",
+  "runtime_credit": {
+    "prior_independent_actual_passes": 39,
+    "correction_reviewer_new_native_runs": 0,
+    "implementation39_not_added_again": true,
+    "public_files": 5,
+    "owner_associations": 2124
+  },
+  "limits": [
+    "OnlyNone literal; Auto searchcounters/implicitports/flags/model/options remainacceptedcapturedpremises; pools8/32runtimeonly.",
+    "Bothoperand/output-axis maps; no historicalpositionalidentity, nativegroupedlayout or universaldecoder/locality/fullintegrand proof.",
+    "Historicalgroupedproducer remainsunapproved; independentCURRENT correctnessroute retained.",
+    "Externalstore/review/proofinputs required; no selfcontainedclaim.",
+    "Oldfull302/69/49 remainspriorcharacterization; no new303/68/49actualrun.",
+    "Typstunrendered; fullDocs/Clippy/core/evaluator/WP3/M-rebuild/performance/globalintegration/publication remainoutside."
+  ],
+  "next": "Prepare truthful combined integration metadata candidate on7f and obtain NEW independentcombinedreview before anyglobalbookmarkadvance.",
+  "global_integration": "fdff0d18953348b84a0f1b7e6ab5ef703a5090de",
+  "CI": false,
+  "publication_authorized": false,
+  "root_owned_processes": 0
+}

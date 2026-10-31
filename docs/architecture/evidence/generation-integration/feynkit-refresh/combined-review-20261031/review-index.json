@@ -1,0 +1,225 @@
+{
+  "reviews": [
+    {
+      "id": "host-integration",
+      "original_review": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-host-stub-rustred-integration-astra-20261031-023354Z-777117b1/review.json",
+      "review": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/host-integration/review.json",
+      "sha256": "f472e199cf3805d9364ef9158c18628fbc5c7ee8d72317c56a6af787628e8a5c",
+      "verdict": "APPROVE_BOUNDED_APPLIED_STUB_DISTRIBUTIONS_AND_PRIVATE_RUSTRED_INTEGRATION",
+      "original_scope": null,
+      "sealed_external_entries": 246
+    },
+    {
+      "id": "full-pool1",
+      "original_review": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-full-generator-characterization-astra-20261031-022430Z-320628f7/review.json",
+      "review": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/full-pool1/review.json",
+      "sha256": "fb688585bc7efd0b494fef7648df5abad398f88bfe8c439e8b42c0dd520eaa37",
+      "verdict": "APPROVE_EXACT_FULL_PACKAGE_POOL1_CHARACTERIZATION_AND_ASSERTED_SUMMARY_CLASSIFICATION",
+      "original_scope": "Only the exact sealed full feynkit-generator package characterization at ffa76ec420642c03349ab756d2d7720ab93c0057:420 discovered identities,371 ordinary nonignored selected outer tests, explicit oracle loop pool1, unchanged ci_gammaloop policy, one retained actual package run, and classification of all69 failed asserted Summaries. Registration tests retain their own explicit pools. This is approval of characterization, not a green package or a new native run.",
+      "sealed_external_entries": 44
+    },
+    {
+      "id": "raw-three",
+      "original_review": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-raw-three-integration-astra-20261031-012811Z-323f4486/review.json",
+      "review": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/raw-three/review.json",
+      "sha256": "535b792610c531b446d8beb1a9f300246e6d498e8126509b637189e8eb80a091",
+      "verdict": "APPROVE_BOUNDED_RAW_THREE_QED_QCD_INTEGRATION",
+      "original_scope": "Only the exact three separately approved numerator tokens on accepted SM base5ea4, actual new ffa76ec package archive and ELF, twelve selected full-Row tests at pools1/8/32, fresh pool1 public physical capture joins, and additive committed evidence/Typst/registry through d0fb4. Root disposition remains separate; no integration-bookmark advance or publication approval.",
+      "sealed_external_entries": 209
+    },
+    {
+      "id": "host-prior",
+      "original_review": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-host-browser-stub-astra-20261031-013106Z-5655cc61/review.json",
+      "review": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/host-prior/review.json",
+      "sha256": "8bd31e92448a517479fb2f2ec5a12c9999c31752cea08502392f290c47e37627",
+      "verdict": null,
+      "original_scope": "Approval is hash-bound to H/B/S and the exact f47 artifacts. It covers actual listed passes, not a fully qualified host. No source46, full Community, source/pin/bridge proposal, global integration/WP3, full docs/site/widget, performance, publication, migration, or new native-build approval.",
+      "sealed_external_entries": 126
+    },
+    {
+      "id": "grouped-none",
+      "original_review": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-none-aggregation-astra-20261030-independent-b1/review.json",
+      "review": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/grouped-none/review.json",
+      "sha256": "45368ac2dc5783a6ba31daa9b7e8bd7f03a80746bf3b07b6d3e34cc909adcb81",
+      "verdict": "APPROVE_PINNED_CONDITIONAL_NONE_AGGREGATE_AND_HELPER_DURABILITY",
+      "original_scope": {
+        "case": "xs_qed_eemm_identical_L2",
+        "classes": "None",
+        "grouping": "Identical",
+        "settings": {
+          "check_canonical_numerator": false,
+          "differentiate_particle_masses_only": true,
+          "fully_numerical_substitution": false,
+          "number_of_numerical_samples": 5,
+          "numerical_sample_seed": 3,
+          "symmetric_polarizations": false
+        },
+        "naming": "D",
+        "generation_pool": 1,
+        "code": "5ba04864ca506e259d9eef4a54f65acdd8323fc2",
+        "dependency_archive_code": "5ea149ffd88ae3afc4072a38c0871c1329be8424",
+        "kernel": "8eb7c3729d6abefc916decc1bdf0c06536f8af80"
+      },
+      "sealed_external_entries": 54
+    },
+    {
+      "id": "grouped-auto",
+      "original_review": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-auto-aggregation-astra-20261031-independent-r1-1793413266607828149/review.json",
+      "review": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/grouped-auto/review.json",
+      "sha256": "e4ca45aff35c11bbd6397a32265502f79ff6b622141c1fe75214f17f830919db",
+      "verdict": "APPROVE",
+      "original_scope": null,
+      "sealed_external_entries": 41
+    },
+    {
+      "id": "finite-runner-r3",
+      "original_review": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-interface-runner-r3-astra-20261031-020333Z-4003b785/review.json",
+      "review": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/finite-runner-r3/review.json",
+      "sha256": "b370752781691d7286766047658ca518a4a898a463c76df26226f2f114d43a62",
+      "verdict": "APPROVE",
+      "original_scope": null,
+      "sealed_external_entries": 254
+    },
+    {
+      "id": "source-r4",
+      "original_review": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-feynkit-refresh-source-opus-round4-20261030T201146Z-697912d5/review.json",
+      "review": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/source-r4/review.json",
+      "sha256": "5d9db6c6d385bd25ea9e276a2a1ebd2e95c0678171854e4ccb73a1362130e1af",
+      "verdict": "APPROVE_SOURCE_RECONCILIATION",
+      "original_scope": null,
+      "sealed_external_entries": 115
+    },
+    {
+      "id": "shared-scope-a",
+      "original_review": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-feynkit-refresh-shared-provenance-opus-20261030T193404Z-3c0453ff/review.json",
+      "review": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/shared-scope-a/review.json",
+      "sha256": "565caeace0112a30fb9118f94b2bb759e4267d2b802395c314e485b89b4b2b70",
+      "verdict": "APPROVE_SHARED_SCOPE_A",
+      "original_scope": null,
+      "sealed_external_entries": 0
+    },
+    {
+      "id": "metadata-48d0",
+      "original_review": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-refresh-aggregation-astra-20261030-independent/review.json",
+      "review": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/metadata-48d0/review.json",
+      "sha256": "567fba9cfa9287478d5c1531fd46eac49c79f4cd6fbcc878c50bd364cf279342",
+      "verdict": "APPROVE_FOCUSED_METADATA_AGGREGATION",
+      "original_scope": null,
+      "sealed_external_entries": 63
+    },
+    {
+      "id": "source46",
+      "original_review": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/.local/review-main46-round4-opus-rZyrnOS8/review.json",
+      "review": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/source46/review.json",
+      "sha256": "ee6e37ee207747d4f65c6a45b619412738af3248a65301b396768f27f5227e22",
+      "verdict": "APPROVE",
+      "original_scope": null,
+      "sealed_external_entries": 0
+    },
+    {
+      "id": "xs-original-a",
+      "original_review": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/.local/review-xs-qed-l2-integration-a-opus-20261030T111536Z-1321089/review.json",
+      "review": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/xs-original-a/review.json",
+      "sha256": "0b5319a43da8e19100dd19a9c4647a03b95ffba1ac90a23749b0c348e95375a6",
+      "verdict": "APPROVE_SCOPE_A_BOUNDED",
+      "original_scope": "A: producer, runtime, pool, Row/mode and remaining-failure evidence. Peer B owns finite proof/docs/registry/hash-closure replay.",
+      "sealed_external_entries": 0
+    },
+    {
+      "id": "xs-original-b",
+      "original_review": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/.local/review-xs-qed-l2-integration-b-opus-20261030T111614Z-1341306/review.json",
+      "review": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/xs-original-b/review.json",
+      "sha256": "f94b819f13740dc7674991c7db8bcf33aa14088b60fa973114aadd805281f0c4",
+      "verdict": "APPROVE_SCOPE_B_WITH_NONBLOCKING_FINDINGS",
+      "original_scope": "B: certificate closure/application, registry, documentation and final evidence (items 1-7 of the root brief). Producer provenance, 452-unit closure, fresh 24 tests/Rows and full-lane execution are peer A's; covered here only by cross-reference/consistency.",
+      "sealed_external_entries": 0
+    },
+    {
+      "id": "grouped-preparation",
+      "original_review": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-identical-migration-astra-20261031-024225Z-1469f5e4/review.json",
+      "review": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/grouped-preparation/review.json",
+      "sha256": "7d96505dcb700eeae42b5a4e87676551ba910cb660df586cafe34d6b90e944f1",
+      "verdict": "APPROVE",
+      "original_scope": null,
+      "sealed_external_entries": 43
+    },
+    {
+      "id": "grouped-applied-r3",
+      "original_review": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-grouped-identical-B1-r3-astra-20261031-DSnqH402/review.json",
+      "review": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/grouped-applied-r3/review.json",
+      "sha256": "66db3d6dd9886e072fabdd78f3dab82d669b17408e5e05c10709f50e5eba9d7c",
+      "verdict": "APPROVE",
+      "original_scope": null,
+      "sealed_external_entries": 19
+    },
+    {
+      "id": "grouped-applied-original",
+      "original_review": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-grouped-identical-integration-astra-20261031-033116Z-c0749b38/review.json",
+      "review": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/grouped-applied-original/review.json",
+      "sha256": "0f0851e068653202a7981e71b4d5ccf54316d1bf544caa0725f99cc1794066f4",
+      "verdict": "REQUEST_CHANGES",
+      "original_scope": null,
+      "sealed_external_entries": 125
+    },
+    {
+      "id": "prior-eight",
+      "original_review": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-prior-eight-fresh8eb-math-opus-20261030T202304Z-bf443319/review.json",
+      "review": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/prior-eight/review.json",
+      "sha256": "5a50135038065414bc667667244378677ff44ac4f632e733b8bbd0bba451cf8b",
+      "verdict": "APPROVE_PRIOR_EIGHT_FINITE_APPLICATION",
+      "original_scope": null,
+      "sealed_external_entries": 0
+    }
+  ],
+  "manifest_verifications": [
+    {
+      "review": "host-integration",
+      "source_manifest": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-host-stub-rustred-integration-astra-20261031-023354Z-777117b1/SHA256SUMS",
+      "sha256": "22b5ca5d654881d6e18a7b52642998536cd4d91a4913342d5094b2a7e91e6566",
+      "entries": 246
+    },
+    {
+      "review": "full-pool1",
+      "source_manifest": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-full-generator-characterization-astra-20261031-022430Z-320628f7/SHA256SUMS",
+      "sha256": "c0ac1726a9a9fca8892eb8177806fc5e76d6affeb1c882e74e356af5d340c192",
+      "entries": 44
+    },
+    {
+      "review": "raw-three",
+      "source_manifest": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-raw-three-integration-astra-20261031-012811Z-323f4486/SHA256SUMS",
+      "sha256": "6588fe962defe4fa12685a095a1571dfc9fd2240ee3c6a409545df9e16df490e",
+      "entries": 209
+    },
+    {
+      "review": "host-prior",
+      "source_manifest": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-host-browser-stub-astra-20261031-013106Z-5655cc61/SHA256SUMS",
+      "sha256": "9a80cef2b3c422c2826c598df2cfc2a186f640c2f700c248c3236c88eec6a12b",
+      "entries": 126
+    },
+    {
+      "review": "finite-runner-r3",
+      "source_manifest": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-interface-runner-r3-astra-20261031-020333Z-4003b785/SHA256SUMS",
+      "sha256": "bef4c004a195045c85d1efbc053e29b29b602d8736bbfcd5c70e2b1496b07c79",
+      "entries": 254
+    },
+    {
+      "review": "source-r4",
+      "source_manifest": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-feynkit-refresh-source-opus-round4-20261030T201146Z-697912d5/SHA256SUMS",
+      "sha256": "a854f5ba735ff347aa86452cb4383d5f58d93a29e4ca67d2944b4a7c6f3a9a48",
+      "entries": 115
+    },
+    {
+      "review": "metadata-48d0",
+      "source_manifest": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-refresh-aggregation-astra-20261030-independent/SHA256SUMS",
+      "sha256": "69b17e4897e60f8d0e59900156616d5040eacfd74991757e09852e4ecabbe129",
+      "entries": 63
+    },
+    {
+      "review": "grouped-applied-r3",
+      "source_manifest": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-grouped-identical-B1-r3-astra-20261031-DSnqH402/SHA256SUMS",
+      "sha256": "5434b6e9c63f918f98958e4d969190c37c10ae2cca84dcfd80f9ca7a0deb19b9",
+      "entries": 19
+    }
+  ],
+  "current_combined_review": "NEW_INDEPENDENT_COMBINED_REVIEW_REQUIRED"
+}

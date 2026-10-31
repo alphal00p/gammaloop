@@ -1,0 +1,13 @@
+{
+  "schema": "generation-independent-review-seal/1",
+  "completed_utc": "2026-10-31T02:47:49.321864+00:00",
+  "candidate": "457e361d7d39e0a3daae801651f8c1dfabbf47aa",
+  "code": "2cfb52b28d99f92305a9d571bbe3911cf04b8a19",
+  "review_sha256": "f472e199cf3805d9364ef9158c18628fbc5c7ee8d72317c56a6af787628e8a5c",
+  "manifest_sha256": "22b5ca5d654881d6e18a7b52642998536cd4d91a4913342d5094b2a7e91e6566",
+  "files": 246,
+  "symlinks_recorded": 8,
+  "fresh_licensed_checks": 8,
+  "fresh_passes": 8,
+  "owned_processes_remaining": 0
+}

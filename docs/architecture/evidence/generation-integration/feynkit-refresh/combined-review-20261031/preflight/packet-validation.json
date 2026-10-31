@@ -1,0 +1,18 @@
+{
+  "classification": "PURE_PACKET_DATA_CONSISTENCY_ONLY",
+  "json_files_parsed": 59,
+  "Nix_metadata_probes_checked": 28,
+  "proposal_json_patch_matches_proposed_execution": true,
+  "all118_scope_records_valid": true,
+  "all14_current_transition_review_hashes_match": true,
+  "historical_six_review_hashes_match": true,
+  "all13_filtered_source_manifests_match_code2cf": true,
+  "later_literal_omitted_from_all13_required_compile_source_graphs": true,
+  "main_and_index_unchanged": true,
+  "immutable2cf4970_entries_unchanged": true,
+  "selected_live_writer_changes": "expected; preserved; not reverted or used to change immutable base",
+  "matching_owned_evaluator_processes_remaining": [],
+  "compiler_test_build_runtime_runs": 0,
+  "no_selfapproval": true,
+  "retention": "Packet and exact scripts retained for audit/continuation; no owned background process."
+}

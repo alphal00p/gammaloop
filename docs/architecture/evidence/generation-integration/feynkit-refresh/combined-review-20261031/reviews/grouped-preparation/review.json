@@ -1,0 +1,273 @@
+{
+  "schema": "independent-grouped-identical-WP9-migration-review/1",
+  "verdict": "APPROVE",
+  "decision": "APPROVE_EXACT_SINGLE_TOKEN_MIGRATION_UNDER_RETAINED_PINNED_PREMISES",
+  "summary": "The exact None token is reconstructed from the pristine final physical payload. Independently correct current raw30 inputs compose with separately accepted None and Auto grouped certificates and complete membership/source-factor bindings. The material current named-consumer boundary is discharged here by an explicit source/layout-inverse argument plus fresh finite contraction and operand/output-axis commutation checks for these owners. This is a NEW migration review, not a consequence of aggregate verdict strings or unrelated-row interface approval. No patch is applied and no runtime pass is claimed.",
+  "reviewer": {
+    "role": "NEW independent Astra migration review sub-agent",
+    "model": "gpt-6-astra",
+    "fallback": "User-authorized Astra fallback for rate-limited Opus",
+    "candidate_participation": false,
+    "delegation": false
+  },
+  "completed_utc": "2026-10-31T03:00:01.516325+00:00",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families",
+  "review_directory": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-identical-migration-astra-20261031-024225Z-1469f5e4",
+  "candidate": {
+    "packet": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-identical-migration-preparation-20261031-r1",
+    "handoff": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-identical-migration-preparation-20261031-r1/handoff.json",
+      "sha256": "6279084309a00acfadede1c160cee1a2715f5b45a2e16e82dfba3470194b099c",
+      "bytes": 4625
+    },
+    "seal": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-identical-migration-preparation-20261031-r1/seal.json",
+      "sha256": "49bfcf3c5b9bf9dd67552b5811498f2c3a80d12c1813c9aba973497ad0635b42",
+      "bytes": 914
+    },
+    "manifest": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-identical-migration-preparation-20261031-r1/manifest.json",
+      "sha256": "2b767c3244605ab814c5dce3eab09fbe846bd10cc3b74b58b1dae7e45b5fe1f4",
+      "bytes": 11078
+    },
+    "SHA256SUMS": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-identical-migration-preparation-20261031-r1/SHA256SUMS",
+      "sha256": "c91611445713af77e9bd8acd0c5de60f0a93318048fc88086761119dcee3c065",
+      "bytes": 7038
+    },
+    "ordinary_files_verified": 71,
+    "immutable_base": "d0fb4e906140a6a0fc8dd6401ca839cab0c2734d",
+    "producer_applicability": "ffa76ec420642c03349ab756d2d7720ab93c0057",
+    "path": "crates/feynkit-generator/tests/generation_oracle/main.rs",
+    "case": "xs_qed_eemm_identical_L2",
+    "field": "numerators",
+    "old": "0x00fac78da0e0d159",
+    "new": "0xa60df38a6b8079e3",
+    "new_decimal": 11965487560827894243,
+    "patch": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-identical-migration-preparation-20261031-r1/proposed-NOT-APPLIED.patch",
+      "sha256": "2450f56adfe23ea3b157b4d687c4ad6edd39866ff841f6ba8e85fa6f6d864fb7",
+      "bytes": 2562
+    },
+    "patch_sha256": "2450f56adfe23ea3b157b4d687c4ad6edd39866ff841f6ba8e85fa6f6d864fb7",
+    "before_blob": "9ef9f1ba005f20149716b22346d45c5501b62e87",
+    "after_unwritten_blob": "7283198bf0152c82c1cd5f0173703cddfa7f5c0f",
+    "before_sha256": "6dacf61baca9f13f3e4a6d719f89eaced429fb3cb14c7904dcb41fe4c86b66df",
+    "after_sha256": "66f01bcc855552ae888f1fb7c5bb158afbd448492b4e27a26e2bda40f09b07d2",
+    "all149Rows_prior12_other9fields_and_every_other_byte_preserved": true,
+    "applied": false,
+    "immutable_identity_basis": "User supplied immutable commit/blob pins, independently rederived blob hashes, sealed preparation source comparison and fresh content comparison; no ref/index or Git/JJ process operations performed."
+  },
+  "domain": {
+    "literal_mode": "None only",
+    "separately_certified_mode": "Auto physical/source equivalence, not a separately asserted Auto literal",
+    "grouping": "Identical",
+    "samples": 5,
+    "seed": 3,
+    "check_canonical_numerator": false,
+    "differentiate_particle_masses_only": true,
+    "fully_numerical_substitution": false,
+    "symmetric_polarizations": false,
+    "Naming": "D",
+    "pool": 1,
+    "actual_original_source": "5ba04864ca506e259d9eef4a54f65acdd8323fc2",
+    "dependency_archive": "5ea149ffd88ae3afc4072a38c0871c1329be8424",
+    "kernel": "8eb7c3729d6abefc916decc1bdf0c06536f8af80"
+  },
+  "blocking_findings": [],
+  "WP9_rationale": {
+    "rule": "Membership AND weights, or full expression equivalence, PLUS independent correctness. Counts, total4 and regenerating a digest do not establish correctness.",
+    "pipeline_boundary": "Approved ungrouped raw30 and grouped input share model, exact per-mode Request/options/Run, complete source payloads and all540 raw/decoded/ordered-port/flag owners. Raw Grouping::None versus requested Grouping::Identical is the intentional first differing stage; no blanket grouping-options identity is asserted.",
+    "raw_correctness": "Exact None bridge to approved current raw30 c95 and separate Auto bridge to the approved prior-eight/current Auto input were freshly reproduced. Original kernel/program roles remain attached to those approvals; they are not relabelled8eb.",
+    "grouped_relation": "Accepted finite current theorems supply all60 source-induced11-to-9 quotients,9edges18attachedhalfedges6vertices/four absent placeholders, commuting unimodular4D charts,1080 owner covariances and119 unexpanded aggregates per mode. The sole merged pair is selected by complete physical keys/exact IDs02957fc4e974ffa2c5b5785e8683a949 and5b4c349a74178fbed0bf4321725f53a3. The accepted source Weyl proof closes eight bispinor ports, four vertex signs multiply to+1, ratio1, representative chart diag(-1,-1,1,1) with fixed external shifts. This review reuses those qualified equalities rather than rerunning native algebra.",
+    "membership_and_weights": "Fresh complete joins use every raw source exactly once. Each member retains its full source factor and string1 ratio. Group weights are independently evaluated from the actual bookkeeping factor trees before summing:17(+1),11(-1),1(-2), versus raw17(+1),13(-1). Both total4 follows. No graph numerator expansion/normalization is used.",
+    "physical_descent": "Freshly reconstructed all58 cut/threshold unions in each mode, representative routing/descent and522 final owners. Auto independently matches its own raw inputs and60 comparison/representative physical graphs; all29 Auto final physical payloads match None by full key. Final decoded numerator times factor equals its actual member raw sum under certified charts/maps.",
+    "independent_current_basis": "This is a correctness proof for the actual CURRENT result. Historical grouped producer provenance remains unapproved and is not a premise. No old/new historical grouped equality is claimed or required to justify replacing the obsolete literal with an independently correct current value.",
+    "digest": "Fresh independent FNV-1a implementation follows source Digest::json/number/text and Entry::digest_json, retains source field order, full canonical keys and sorted keyed-numerator multiset. It produces0xa60df38a6b8079e3 from sealed PRISTINE None payload. Sealed report supplies only the search counters. Native printed hash is corroboration only; neither29 nor4 is the token input."
+  },
+  "interface_disposition": {
+    "verdict": "DISCHARGED_FOR_THIS_FINITE_CURRENT_NAMED_SYMBOLIC_CONSUMER_BOUNDARY",
+    "not_ports_alone": "Matching captured port arrays establishes only association. The new finite check additionally reconstructs all cross-owner compatible contractions, actual survivors, the scalar-prefactor step and projector pairings; checks both operand and output-axis commutation; and connects that logical reconstruction to actual canonical-layout source operations.",
+    "finite_data": "For each mode independently:119 raw/comparison/representative/final graphs and2142 owners. Every public port is an explicit repeat-free bis/mink selfdual4 or cof/dual-cof3 with full tagged identity and exact dimension. Ordinary hedge/edge labels contain no open marker. Across local owners each key occurs once or in one compatible cross-owner pair; no ambiguous public matching. Every local product has exactly the four captured numerator survivors; prefactor is scalar1 with no ports; projector has four corresponding ports and closes each once. All54 final declarations equal their actual logical owner arrays. Actual decoded expressions/flags remain bound under P3/P4.",
+    "source_proof": [
+      "Spenso CanonicalLayout validates forward/inverse permutations and equal orders. For representation permutation R and index permutation I, logical-to-canonical p=I.map o R.map, canonical-to-logical p^-1=R.inv o I.inv. PartialStructure::logical_slots returns C[p(i)], while from_logical_slots constructs the canonical carrier retaining that inverse. Thus these operations are coordinate changes, not an assumption that source strings already have native canonical order.",
+      "NumeratorInterface::admit explicitly parses these full named slot declarations and passes their order through from_logical_slots/from_declared_parts. Inference validates compatible tensor interfaces. export computes logical ports with the layout inverse; absent declarations mean its source re-admission check recovered that logical list, and present declarations carry the actual list. canonical_ports orders decoded source notation through an explicit permutation. No equality between native sort order, decoded lexical order and historical left/right survivor order is assumed.",
+      "Current interface_is_named checks explicit indices and absence of internal open-port markers. index_has_open_port treats these ordinary function-valued hedge/edge labels as named; complete tags and reversible-payload association remain the accepted exact P3 premise. Representation::matches requires exact dimensions, selfdual equality or opposite cof duality. The finite parser checks precisely this domain, not arbitrary index notation.",
+      "compatible_pairs visits canonical slots but returns p_left^-1(a),p_right^-1(b). Substituting L[i]=C[p(i)] shows that its returned relation is exactly matching named logical keys. ProductPlan::named rejects ambiguous partners. free_interface removes those logical endpoints via the same inverse and canonically orders survivors. The actual native canonical permutation need not be guessed: it appears together with its inverse before any logical pair is consumed.",
+      "fragment_numerator uses multiply_many. Its merge_named groups exact base representation/dimension/index keys, retains orientation, rejects excess/ambiguous occurrences, removes only compatible different-factor pairs and records canonical survivors. The fresh finite local-pair and survivor reconstruction checks all119 actual graphs. The already accepted119 unexpanded aggregate identities remain the expression-value proof; this layout argument does not infer tensor equality merely from interfaces.",
+      "Grouping forms numerator.multiply(prefactor).multiply(projector). The scalar-one operation may change the four-axis carrier to native canonical order. The next call recomputes a named plan from that current carrier: its inverse layout cancels that reorder before selecting the four projector pairs. Both normalized and general contract_ports paths use the same selected logical pairs/free_interface; explicit operands do not enter unresolved positional reindexing. Complete output has rank0. No historical cached positional plan or external component array is used in this precise symbolic path.",
+      "For each source-to-phase map, pi_o is the explicit supplied logical permutation for owner o. The required canonical map, if expressed in native coordinates, is p_target o pi_o o p_source^-1, not pi_o alone and not identity. The independent finite check transports every local pair through pi_operand and proves its target pair, transports every survivor through pi_numerator and proves its target output position, and proves the projector pairing square through BOTH pi_numerator and pi_projector. All60 squares pass;57 supplied owner permutations are nonidentity. Final representative descent binds the actual29 outputs and54 declarations.",
+      "The same finite domain was checked on Auto actual owners after its own approved-input rebind. Exact full physical phase/final correspondence supplies the per-mode application of the same source lemma. This does not use None aggregation as Auto correctness approval."
+    ],
+    "fresh_order_control": "Swapping two numerator OUTPUT-map entries only leaves payloads, ports, flags, counts, weights and Census entirely unchanged but fails the projector contraction square. A consistent corresponding operand/output permutation is a positive named-axis control. The six independent physical/input controls also reject at their intended bindings. This exceeds the candidate order-only captured-port-versus-declaration check.",
+    "why_no_native_layout_run_needed_for_this_decision": "The source proof eliminates the arbitrary actual canonical permutations algebraically with their validated inverses; the finite checks bind the remaining observable logical pair and output maps. The claim concerns these captured symbolic named consumers, with actual expression equalities already independently certified. It does not depend on assuming a particular native sort, observed historical order or a materialized component storage layout. There is no remaining finite consumer-layout witness required for this bounded migration decision.",
+    "direct_native_grouped_layout_import_results": false,
+    "R1": "Historical left/right survivor order can differ from current canonical order. Both operand AND output maps remain mandatory, including currently identity maps. No old/new positional identity.",
+    "R2": "Actual-owner flag equality is a captured-record binding. Serialized source does not carry an independent is_metric/is_composite admission certificate; this review does not claim fresh whole-import success, flag serialization or universal decoder correctness.",
+    "borrowed_three_QED_QCD80_interface_approval": false,
+    "limits": "No arbitrary positional/unresolved tensors, dense-storage reorder theorem, general serialization/import theorem, free-index/locality theorem or arbitrary consumer certification. Only the exact finite current symbolic boundary needed above is discharged."
+  },
+  "accepted_premises": {
+    "full_reviews_read": [
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-identical-migration-preparation-20261031-r1/accepted-None-review-copy.json",
+        "sha256": "45368ac2dc5783a6ba31daa9b7e8bd7f03a80746bf3b07b6d3e34cc909adcb81",
+        "bytes": 27229
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-identical-migration-preparation-20261031-r1/consumed-Auto-independent-review-copy.json",
+        "sha256": "e4ca45aff35c11bbd6397a32265502f79ff6b622141c1fe75214f17f830919db",
+        "bytes": 27199
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-identical-migration-preparation-20261031-r1/consumed-full-characterization-review-copy.json",
+        "sha256": "fb688585bc7efd0b494fef7648df5abad398f88bfe8c439e8b42c0dd520eaa37",
+        "bytes": 30234
+      }
+    ],
+    "None_candidate": "ad7ccbe7cee2373ed54fe16d17971491eb581e80",
+    "Auto_candidate": "113608b3917d903d0fcc730aa3760f114fbc3f04",
+    "P1": "Exact captured ledger/FinalFrames and producer associations, source5ba/archive5ea/kernel8eb, qualified observer/build profiles. Finite public equality does not remove allocation/serialization/I/O/panic/interner/cache effects.",
+    "P2": "Exact source-owned phase maps and quotient/whole-frame associations. Exact hex IDs and full physical keys are identity authority; rounded json.id remains redundant in older full-record comparisons.",
+    "P3": "Actual raw/cooked/decoded associations and whole-symbol definitions are retained conditional premises. Native tag-subset tolerance is not complete identity; exact definition gates remain load-bearing. No universal uncook/decoder theorem is inserted.",
+    "P4": "Captured ordered owners/interfaces and actual flags remain the observation premise. This review adds the finite current source/logical consumer proof above; it does not turn P4 into a universal positional, free-index or physical-locality theorem.",
+    "P5": "Separately approved exact raw30 domain in each mode, freshly rebound here. Historical kernel/program roles retained.",
+    "strict_facts": "Each mode independently has30 actual int5 sample counts,60 actual boolfalse zero flags,29 actual boolfalse cancellation flags,210 nonnull string1 member occurrences and3 comparison ratios(two null,one string1). No generalized schema approval.",
+    "AUTO_AGG_N1": "Candidate count6 hash fixture was not strict-guard-valid. Its hash rejection remains weaker valid evidence; the guard-valid key-order negative belongs solely to the accepted Auto reviewer. No stronger credit reassigned here.",
+    "source_profile": "No build/ELF/kernel/source relabel. Historical/dev-optim and current qualified diagnostic profiles remain separate; inherited build/store honesty and observer qualifications survive."
+  },
+  "source_applicability": {
+    "fresh_content_checks": "Reconstructed the uninstrumented original source IN MEMORY using exact sealed final observation patch5de3e290...; no file was patched.407 relevant original producer/assets/manifest files equal current refresh files; only oracle main.rs differs, solely by prior authorized numerator tokens.15 detailed current source owners including CanonicalLayout/inference/representation/cook are bound in supplementary-v3.json.",
+    "original_instrumented_tree_retained": true,
+    "actual_original_producer_not_relabelled_ffa": true,
+    "future_application": "Bind exact before blob/token and patch SHA on d0fb4e9. If root applies after notebook-stub2cfb or any later head, independently verify the target before bytes and complete relevant producer/source invariance and preserve all149Rows/prior12. This approval is not silently attached to currentHEAD; no source change is accepted merely because unrelated host work was described as notebook-only."
+  },
+  "fresh_vs_reused": {
+    "fresh_pure": "15899 input hashes before/final,71 candidate files and noncircular seals,114 None/100 Auto/4676 producer sealed files,44 characterization-review files; complete independent None Census and exact one-token patch/old/new blob reconstruction; exact per-mode raw bridges;1080 axis maps;58 partition unions per mode;119 named consumer graphs per mode and60 contraction/output squares; six targeted physical negatives plus output-only-map negative and positive axis control; source content and final guards.",
+    "native_reused": "Accepted None native/grammar/source-matrix/covariance/aggregate evidence; accepted Auto2624 obligations(1080 covariance+119 aggregate+325 grammar+1024 matrix+76 faithfulness) in their complete original ordered batches. Prior full protected CLI and162 Auto reviewer typed negatives are reused accepted evidence, not rerun or counted as fresh here. No registration-order or historical/None portions are credited as new Auto mathematics.",
+    "native_executions": 0,
+    "Nix_build_compiler_network_executions": 0,
+    "application_or_native_library_imports": 0,
+    "new_source_argument": "Finite named symbolic interface source argument and exact logical contraction/map reconstruction, as detailed above; no newly executed tensor kernel or expanded-numerator proof."
+  },
+  "characterization": {
+    "accepted_review_sha256": "fb688585bc7efd0b494fef7648df5abad398f88bfe8c439e8b42c0dd520eaa37",
+    "pool": 1,
+    "passed": 302,
+    "failed": 69,
+    "ignored": 49,
+    "this_row_actual": 11965487560827894243,
+    "this_row_expected": 70588155281068377,
+    "only_unequal_field": "numerators",
+    "original_grouped_test_exit_codes": [
+      101,
+      101
+    ],
+    "limits": "Accepted asserted-summary classification only. Deleted automatic physical dumps supply no fresh payload proof. No passing-after-patch, complete Auto Row, pool8/32 or whole-package success credit."
+  },
+  "remaining_obligations": [
+    "Root may separately assign application of this exact reviewed patch; this review performs no application.",
+    "Application must preserve the exact base/token and source invariance conditions above and follow required runtime validation. No after-patch test has run in this review; WP9 commit-only-passing/readiness gates remain with the application owner.",
+    "Retain both modes P1-P5, actual source/archive/kernel roles, source-profile and observer qualifications in the migration record. Retain both operand/output maps and this new finite interface argument.",
+    "All other rows/groupings, pools8/32, full integrand/denominator/locality, globalWP3/WP9 completion, integration and publication remain outside this decision."
+  ],
+  "failed_attempts_retained": [
+    {
+      "attempt": "initial guidance reads",
+      "detail": "Large cat outputs were truncated, followed by targeted reads; cat .git failed because this is a JJ workspace. python3 was absent from PATH, exit127 before execution. No proof credit."
+    },
+    {
+      "attempt": "integrity.py",
+      "record": "integrity-before.log",
+      "detail": "Overbroad guard treated repository copyright LICENSE as private licensing credentials; stopped before hashing. Corrected guard distinguishes inert repository files and forbids private paths/environment files."
+    },
+    {
+      "attempt": "integrity-v2.py",
+      "record": "integrity-v2-before.log",
+      "detail": "Reviewer expected SHA256SUMS to contain only71 ordinary entries; it additionally binds manifest.json. Corrected exact72-entry check in v3; both original source and failure retained."
+    },
+    {
+      "attempt": "supplementary.py",
+      "record": "supplementary-error.json",
+      "detail": "Reviewer initially compared instrumented source classes.rs directly to pristine source. Exact sealed overlay accounts for the difference. No candidate finding or failure credit."
+    },
+    {
+      "attempt": "supplementary-v2.py",
+      "record": "supplementary-v2-error.json",
+      "detail": "Reviewer initially used earlier source-manifest overlay hash7e55 rather than final receipt/current-patch hash5de3. Both records remain; v3 binds the exact final sealed patch and reconstructs original bytes in memory."
+    },
+    {
+      "attempt": "all candidate/prior errors",
+      "detail": "All original evidence, setup/schema/label failures, original six controls and AUTO-AGG-N1 qualification preserved. None of these setup failures is counted as a meaningful semantic negative."
+    }
+  ],
+  "immutability_and_retention": {
+    "guard": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-identical-migration-astra-20261031-024225Z-1469f5e4/final-guard.json",
+      "sha256": "21dddc53e45b9ed3830cda194d0aef9647be01b59e2f756a9b1973bcdf67508d",
+      "bytes": 1118
+    },
+    "writes_only": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-identical-migration-astra-20261031-024225Z-1469f5e4",
+    "ignored_by": ".gitignore .local/ rule",
+    "source_or_tracked_edits": 0,
+    "JJ_snapshots_ref_index_operations": 0,
+    "VCS_processes": 0,
+    "patch_applications": 0,
+    "delegations": 0,
+    "new_workspace": false,
+    "external_movement": "Preparation disclosed external ref digest movement and refresh docs/developers.toml movement; retained verbatim in final-guard.json. Fresh registry hashes compared before/final. No ref/index operation was performed and no fresh global ref-invariance claim is made; nothing external was restored.",
+    "environment": "After initial read-only default-login bootstrap, pure scripts use env -i and existing Python3.13.12 -I -S -B, login=false. Standard library and our own analysis function definitions only; no candidate helper execution. Inert sealed repository configuration/copyright bytes are hashed, never sourced. No private license/config or environment-value reads; initial shell startup was not syscall-audited.",
+    "owned_processes_remaining": [],
+    "retained": "Entire new ignored review directory, including original failed scripts/logs, fresh finite checks, source/input bindings and sealed review, retained for root adjudication/continuation. No durable ref created because ref operations were forbidden. All pre-existing artifacts unchanged."
+  },
+  "evidence": {
+    "census-and-patch.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-identical-migration-astra-20261031-024225Z-1469f5e4/census-and-patch.json",
+      "sha256": "1b2a832d7f71230754aaafebc7b39a802d04dd32a8be44598b7bdcc8b056b332",
+      "bytes": 12348
+    },
+    "independent-bindings.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-identical-migration-astra-20261031-024225Z-1469f5e4/independent-bindings.json",
+      "sha256": "d27894328a4a6c6687f0bfeb1511b4609f1bc77efcb0bc6d236cd8accaa4fade",
+      "bytes": 1240
+    },
+    "finite-named-consumer.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-identical-migration-astra-20261031-024225Z-1469f5e4/finite-named-consumer.json",
+      "sha256": "bea0f5d660f5a77995dcd231c2396ab1cc5993e73922a1c7b32336bc58de1fa2",
+      "bytes": 959426
+    },
+    "supplementary-v3.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-identical-migration-astra-20261031-024225Z-1469f5e4/supplementary-v3.json",
+      "sha256": "9923f76de08e1b241aba8920f6177d7251088f642d30d1e4aa2eb8b883dc37cc",
+      "bytes": 961719
+    },
+    "fresh-controls.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-identical-migration-astra-20261031-024225Z-1469f5e4/fresh-controls.json",
+      "sha256": "cd480a5eaa130fe430e1620a8c0de73b7afb43b61c1052eca3e28d970362a108",
+      "bytes": 1227
+    },
+    "integrity-validated-before.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-identical-migration-astra-20261031-024225Z-1469f5e4/integrity-validated-before.json",
+      "sha256": "a4ccedc90872059aac21ae7dd5b2d27b423bc52317d1b32a8363414de435a6a0",
+      "bytes": 2568
+    },
+    "integrity-final.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-identical-migration-astra-20261031-024225Z-1469f5e4/integrity-final.json",
+      "sha256": "b1503d42d0abef6d12782ccd78ffa6428113f17887d4fac6c59316bcc75c7c31",
+      "bytes": 2568
+    },
+    "final-guard.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-identical-migration-astra-20261031-024225Z-1469f5e4/final-guard.json",
+      "sha256": "21dddc53e45b9ed3830cda194d0aef9647be01b59e2f756a9b1973bcdf67508d",
+      "bytes": 1118
+    }
+  },
+  "guidance": {
+    "/shared/lcnbr/dev/gammaloop/main/AGENTS.md": "8567f7ce8b5c575299d0800af34f66c9684e6b1b2617c615f5d8823df9a971fa",
+    "/shared/lcnbr/dev/gammaloop/main/CONTRIBUTING.typ": "c92c023af016d801889eea170203916c4f50bd6dce848ac18484e0b04667c2e1",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/AGENTS.md": "e1add0d8d63969c9218b31a8caa12539776b8e2db4b8d72ce5e2af6154082645",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/CONTRIBUTING.typ": "109a7a0caaf9d654291f1ea62cd72dde21ea81b40048c9c7089f89e154a8f9fa",
+    "/shared/lcnbr/dev/gammaloop/generation-integration-plan/docs/architecture/generation-integration-plan.typ": "4489dc7383468cf2daf7f8c177d3ea87fe9cad45c99af1afc0f160b202ff06f6"
+  },
+  "hash_binding": "review.json.sha256 binds this exact review. seal.json binds every retained regular review output except seal.json and seal.sha256; seal.sha256 binds seal.json. No circular self-hash."
+}

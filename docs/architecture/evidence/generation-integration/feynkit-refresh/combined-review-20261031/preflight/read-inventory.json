@@ -1,0 +1,1816 @@
+[
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/AGENTS.md",
+    "sha256": "e1add0d8d63969c9218b31a8caa12539776b8e2db4b8d72ce5e2af6154082645",
+    "size": 3411
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/CONTRIBUTING.typ",
+    "sha256": "6c76d30d08b82527d9dfa3896bc7efbf860d4c33c54ce0adc613c501b7968544",
+    "size": 67146
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/main/AGENTS.md",
+    "sha256": "8567f7ce8b5c575299d0800af34f66c9684e6b1b2617c615f5d8823df9a971fa",
+    "size": 2599
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/main/CONTRIBUTING.typ",
+    "sha256": "c92c023af016d801889eea170203916c4f50bd6dce848ac18484e0b04667c2e1",
+    "size": 58184
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/docs/AGENTS.md",
+    "exists": false
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/docs/architecture/AGENTS.md",
+    "exists": false
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/docs/architecture/evidence/AGENTS.md",
+    "exists": false
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/docs/architecture/evidence/generation-integration/AGENTS.md",
+    "exists": false
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/AGENTS.md",
+    "exists": false
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/AGENTS.md",
+    "exists": false
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/docs/architecture/generation-integration-plan.typ",
+    "sha256": "4489dc7383468cf2daf7f8c177d3ea87fe9cad45c99af1afc0f160b202ff06f6",
+    "size": 42856
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/root-host-stub-rustred-acceptance-20261031.json",
+    "sha256": "7b15acc1161e02ef5d17889a000a3e3d9f93f53184d79550658684324c589f47",
+    "size": 3159
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/root-full-generator-pool1-acceptance-20261031.json",
+    "sha256": "297b23048d86665efa8832b50848173a6ae7a08a5b45251ef8e9e15fb3377b87",
+    "size": 2637
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/root-three-integration-host-acceptance-and-next-20261031.json",
+    "sha256": "b73517d53f083bbd99bd496a5938483902012198e815fb28583b37438d27c275",
+    "size": 10281
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/root-grouped-none-acceptance-20261031.json",
+    "sha256": "8141146a38484454c8fc65d72845f0f360c462bc16604349d67fb8fdf25d1224",
+    "size": 4399
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/root-grouped-auto-acceptance-20261031.json",
+    "sha256": "e0a659e8798eba47179623e218340852c1d2fafe2ca09d03bc1b7e6a9ede86e4",
+    "size": 3047
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/root-interface-runner-r3-acceptance-20261031.json",
+    "sha256": "66b51d8cd9593e905f204ddb542cedc469b68c5548ad5147853384a19de1b381",
+    "size": 2565
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/root-next-qcd-captures-and-combined-preflight-20261031.json",
+    "sha256": "0d4cd7dd272040ce2387dc4aae518789c920b829560c63c74a6b8a45c23142d2",
+    "size": 5142
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/docs/architecture/evidence/generation-integration/execution.json",
+    "sha256": "8648d58d5ec131dbd1372f30eb558ed4c68a1d8f179e3d8da8caa5d9651bab3c",
+    "size": 47105
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/root-grouped-auto-acceptance-20261031.json",
+    "sha256": "e0a659e8798eba47179623e218340852c1d2fafe2ca09d03bc1b7e6a9ede86e4",
+    "size": 3047
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/root-interface-runner-r3-acceptance-20261031.json",
+    "sha256": "66b51d8cd9593e905f204ddb542cedc469b68c5548ad5147853384a19de1b381",
+    "size": 2565
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/root-next-qcd-captures-and-combined-preflight-20261031.json",
+    "sha256": "0d4cd7dd272040ce2387dc4aae518789c920b829560c63c74a6b8a45c23142d2",
+    "size": 5142
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/docs/architecture/evidence/generation-integration/execution.json",
+    "sha256": "8648d58d5ec131dbd1372f30eb558ed4c68a1d8f179e3d8da8caa5d9651bab3c",
+    "size": 47105
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/docs/architecture/evidence/generation-integration/wp3/exit-matrix/receipt.json",
+    "sha256": "ea209a6c00cb06d8040c46b2ee5b68ceff22a28f80f18a222238ef1db6076f0f",
+    "size": 13925
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/docs/architecture/evidence/generation-integration/wp3/core-docs/receipt.json",
+    "sha256": "fdd9b2eb44e5234a8098c0bc3de900cb7b4225b81a4dfd93b6a1ee5cd2c9ea3e",
+    "size": 13475
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/docs/architecture/evidence/generation-integration/wp3/main46/receipt.json",
+    "sha256": "9a2c73f4af43e3c73f7cb3b541fdec730e534654226d389adf603a887a841e8f",
+    "size": 17490
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/docs/architecture/evidence/generation-integration/feynkit-refresh/static-checks.json",
+    "sha256": "2a077b3d483130bf955b352ef9a098b75f88e1ac22068cf7bc458b838c7c0c42",
+    "size": 818
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/docs/architecture/evidence/generation-integration/feynkit-refresh/history-and-parity.json",
+    "sha256": "8cf73f50e2cc28461aef0ddc5e483cfc414eb8c3511d8cf44e850c4feb627692",
+    "size": 1579
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/nix/rust-workspace.nix",
+    "sha256": "dc123de5ae0ad443ba2993cb3765d7fb228582697ba702c0f40ca41876409038",
+    "size": 135260
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/nix/documentation.nix",
+    "sha256": "5df7a263aa19d939e384a7dddb1ab4564fe8192ac91d0d47694a7f1b29fc0b34",
+    "size": 32467
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/flake.nix",
+    "sha256": "6f65898a247619abb520544f457107671e90bc5212b589e57b3464497f2f5406",
+    "size": 10544
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/nix/ci.nix",
+    "sha256": "1504cf315f1b3878d16b7b08a1bbbfdc5446af6a71028a09c8b706eac5a02193",
+    "size": 23314
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/just/tests.just",
+    "sha256": "8ed28e82cd48fbb4a09bb03230c6b579daddc1685e2fc65f0ccaf5f8d06ca923",
+    "size": 8634
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/docs/architecture/evidence/generation-integration/wp3/exit-matrix/receipt.json",
+    "sha256": "ea209a6c00cb06d8040c46b2ee5b68ceff22a28f80f18a222238ef1db6076f0f",
+    "size": 13925
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/docs/architecture/evidence/generation-integration/wp3/tensor-layout/receipt.json",
+    "sha256": "9a5e8b2e3490ae1febcc1f37ad0a9390fad3c2dbcf9ecdf26f8ac2d87722d4bf",
+    "size": 13216
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/nix/rust-workspace.nix",
+    "sha256": "dc123de5ae0ad443ba2993cb3765d7fb228582697ba702c0f40ca41876409038",
+    "size": 135260
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-feynkit-refresh-source-opus-round4-20261030T201146Z-697912d5/review.json",
+    "sha256": "5d9db6c6d385bd25ea9e276a2a1ebd2e95c0678171854e4ccb73a1362130e1af",
+    "size": 29924
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-refresh-aggregation-astra-20261030-independent/review.json",
+    "sha256": "567fba9cfa9287478d5c1531fd46eac49c79f4cd6fbcc878c50bd364cf279342",
+    "size": 35615
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/nix/ci.nix",
+    "sha256": "1504cf315f1b3878d16b7b08a1bbbfdc5446af6a71028a09c8b706eac5a02193",
+    "size": 23314
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/just/tests.just",
+    "sha256": "8ed28e82cd48fbb4a09bb03230c6b579daddc1685e2fc65f0ccaf5f8d06ca923",
+    "size": 8634
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/docs/architecture/generation-integration-core-docs.typ",
+    "sha256": "6633ed76de4b8f2d5c80822137f0268d15e998d31d27ffa26afe332eeadf22ad",
+    "size": 2607
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/docs/architecture/generation-integration-source46.typ",
+    "sha256": "6466c78fa37b45253fc745527c29554a87acda2c8f4fd417a72fed41507ff370",
+    "size": 1463
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-host-stub-rustred-integration-astra-20261031-023354Z-777117b1/review.json",
+    "sha256": "f472e199cf3805d9364ef9158c18628fbc5c7ee8d72317c56a6af787628e8a5c",
+    "size": 36627
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-core-docs/ci-graph-corrected.argv",
+    "sha256": "56ab1aea12b71ab03d25fcab56cab78983aebf9c0e8dc38d4b6f6c0efea6a25a",
+    "size": 199
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-core-docs/ci-graph.argv",
+    "sha256": "7cc2b6c84fcead3308b315283e723803ed47e5031dddc60140d6f06496924c9a",
+    "size": 205
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-core-docs/core-fast.argv",
+    "sha256": "ba754385dd49d61eeec75388be953c05b3301185f8907dbaa5fe39b5f7686a0e",
+    "size": 199
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-core-docs/docs-check-evidence-round2.argv",
+    "sha256": "1634e7fea78cf316077e7caca40781c99b30d1380104712325cb1c0955985be7",
+    "size": 178
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-core-docs/docs-check-evidence.argv",
+    "sha256": "629459b25ef3e787f0c014cf5b30eef028e6380a4fcb9aaac77a379a67e6f58b",
+    "size": 178
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-core-docs/docs-check.argv",
+    "sha256": "32ef63d838d2038a307ad8d066caf8a56609f545cf5a31e71048e3e781fc303d",
+    "size": 178
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-core-docs/docs-clippy.argv",
+    "sha256": "bbc31c940493905e30a59c38598c8549f00e306b07de1dfb82e5b28b613c758a",
+    "size": 201
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-core-docs/docs-lib.argv",
+    "sha256": "3f47ce1f5f3cd97fd609a28ec1c03c142c62915df1d68a096b4523db1d0b9993",
+    "size": 196
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-core-docs/feature-isolation.argv",
+    "sha256": "aed74a55ffc9f20ea148fdbba588d1beac5a49849e4c40841953b1524161e062",
+    "size": 163
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-core-docs/fmt.argv",
+    "sha256": "bc2d0678b89b555f1310e5199c2f9d0e266ae7cbc96cab187ecf87e5f61ab3c1",
+    "size": 151
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-core-docs/hakari-generate.argv",
+    "sha256": "60b02ff47bb54ce4ea6b7625d12dd282a18afab5be9d70c8bd73fbbd8dc0e291",
+    "size": 153
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-core-docs/hakari-verify.argv",
+    "sha256": "ad0b3f61442962b3a73e9a0ebdd934c29c3358c77e585e722becc9fcd68a9c4e",
+    "size": 144
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-core-docs/nixfmt.argv",
+    "sha256": "5d1e12e59c035e4ede36e6806fd45fb709720255b0a629d7335234f700cbdbea",
+    "size": 162
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-core-docs/pages-gate-final-positive.argv",
+    "sha256": "b6b053336be61279f0d692a4a9ed7c639d96c0e3fdd0e145e3b668476252e162",
+    "size": 214
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-core-docs/pages-gate-negative.argv",
+    "sha256": "17a190cd845d246858d8bb4efbed1103600984ca09d3c6b4ed0235e7ab6bb924",
+    "size": 212
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-core-docs/pages-gate-positive.argv",
+    "sha256": "73c9a8c94b6cdb10f7e52ba161d6e458ce00e0adfaba86c7475bb0933a72a303",
+    "size": 214
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-core-docs/producers.argv",
+    "sha256": "f9bf328fe60b6019ba5c60d187d7860dc3fd6937acd70cd45bcdeffe94c127b9",
+    "size": 360
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/a-ddx-1.argv",
+    "sha256": "c429ba016272353050c61b1421431e5092d5aa56087f70e7cb8d979a9aad6ef2",
+    "size": 451
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/a-ddx-2.argv",
+    "sha256": "c429ba016272353050c61b1421431e5092d5aa56087f70e7cb8d979a9aad6ef2",
+    "size": 451
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/a-ddx-3.argv",
+    "sha256": "c429ba016272353050c61b1421431e5092d5aa56087f70e7cb8d979a9aad6ef2",
+    "size": 451
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/a-ddx-4.argv",
+    "sha256": "c429ba016272353050c61b1421431e5092d5aa56087f70e7cb8d979a9aad6ef2",
+    "size": 451
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/a-ddx-5.argv",
+    "sha256": "c429ba016272353050c61b1421431e5092d5aa56087f70e7cb8d979a9aad6ef2",
+    "size": 451
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/b2-bwrap.argv",
+    "sha256": "e29de12d71f21b6b86406cf191c1cd204ba323e55cacf4b39c13fbe1075e583c",
+    "size": 1349
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/b2-bwrap2.argv",
+    "sha256": "6873d8bb27c3f8849f478e9efe5e1239683793bcb93551d796ad68280042e254",
+    "size": 1458
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/b2-bwrap3.argv",
+    "sha256": "cd0706683be002b699f54fd8615c5bd0735f47b39155ccbc9b8b8ccef565392b",
+    "size": 1475
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/b2-bwrap4.argv",
+    "sha256": "7c9c30b411baa469b235e2afa4bd7268fc45976e8184e8ffe58b358d1db9f2b0",
+    "size": 1652
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/b2-nix.argv",
+    "sha256": "f6d9f93255e445d8cd5a3299f13738e29d1f3554563a0a9b367be4c464252326",
+    "size": 1039
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/b2.argv",
+    "sha256": "ddc559372e09d1516fb9a529a8b28c39a26064e5b37c8220bb8602f7349b036b",
+    "size": 912
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/core-producer.argv",
+    "sha256": "ae775d5736cf1d794b2f197c87960af02ebcca30fd87690bfadd1989f8d87072",
+    "size": 199
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/feynkit-producer.argv",
+    "sha256": "19453e97b5ae9859c3d3c859739314efdf6654144cdf95534a380b36ce02d53c",
+    "size": 202
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/four-loop-1.argv",
+    "sha256": "7d8a7c5b331897748c9877ab31cceba8a46f583ede67470642b27197c1ef620e",
+    "size": 57
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/four-loop-32.argv",
+    "sha256": "058e3158e15446d4996d5782ae764e61e5729485024accff31e0a25346373bb0",
+    "size": 58
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/four-loop-8.argv",
+    "sha256": "e2cd817785e6ee3d546782dd08f8cbca7aa0f174f1da8ecc5518d08e7558fb65",
+    "size": 57
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/four-loop-build.argv",
+    "sha256": "e0c3ebdb6215d68a0504ff71ba52aaded669fd770e50822a1bcf5a08652fa76f",
+    "size": 220
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/four-loop-filtered-1.argv",
+    "sha256": "e55370773987c238c72bf750a2b338666637b53053a3fb54b8a70b7c017ec495",
+    "size": 56
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/four-loop-filtered-32.argv",
+    "sha256": "2613e027d1ac0fd7ab1d24e88bd5fb7d0905ffa172c0311bf61b92a780dac643",
+    "size": 57
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/four-loop-filtered-8.argv",
+    "sha256": "1a6af28d14ed61c58c75dbced4cba5510596aa36100ff5531d583b19ac763bdb",
+    "size": 56
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/four-loop-perturbation.argv",
+    "sha256": "51b5b5c87fc665df4721a7dec6e331df0cb5cbdbc70f93363344ca139dfb4dd2",
+    "size": 521
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/integration-producer.argv",
+    "sha256": "22fc85d587c4508e7b8a1481b9f7690fc14a442dc5e9066104b27985026a432c",
+    "size": 206
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/nlo-coolqm-nix.argv",
+    "sha256": "be54aa1ce9a8987f0701be648404f24487cb669abf8645055b406f2f4529eb62",
+    "size": 822
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/nlo-coolqm.argv",
+    "sha256": "07fda662a59283939ce88ed9a560ef95e5a936c994bbd7bd1a4aac7e5cc4e18c",
+    "size": 695
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/oracle-fast-licensed.argv",
+    "sha256": "4cbc9471fdb0a1ad3fce101c2b85099205182ad7c80acb6c4ddc1c0c516310fe",
+    "size": 500
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/oracle-fast.argv",
+    "sha256": "4cbc9471fdb0a1ad3fce101c2b85099205182ad7c80acb6c4ddc1c0c516310fe",
+    "size": 500
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/oracle-focus.argv",
+    "sha256": "c5643a9191eca8e8d02045d5ec51ef2f300d0cff917d65b98b10b98f2aacac64",
+    "size": 1598
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/sm3150.argv",
+    "sha256": "5e51c2ed22ba6a345001ee64a54fa3795162784565676e8696ef0b082c77b791",
+    "size": 489
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/tests/tests/test_feyngen.rs",
+    "sha256": "1032e4f82370ea44532dbd0390483f70c81f55f3b8cdb2af300e7f897db4ca8d",
+    "size": 1177487
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/gammalooprs/src/processes/cross_section/gauge_sewing_tests.rs",
+    "sha256": "8d31183f04b0a7bf115dbe8009be528604a8651556c8266b6f0d0cac787fa165",
+    "size": 35690
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/host-stub-rustred-integration-20261031-r1/source-bindings-r2.json",
+    "sha256": "f98560b7b31e49ca5b8ba45c428134061a93809d90d8d5765bae98b39925e83a",
+    "size": 3136
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/raw-three-migration-20261031/flake.json",
+    "sha256": "45cdd1eea201dde78e9665315b335554da95fec9c1711b593d987293db8f62e8",
+    "size": 342
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/host-stub-rustred-integration-20261031-r1/ordinary-vs-f47-source-delta.json",
+    "sha256": "a482799e5b4eade0e850ca75865ce3051fe286f3ccc5ed8669299053f18656b2",
+    "size": 473
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/docs/architecture/evidence/generation-integration/wp3/units27-29/validation.json",
+    "sha256": "d57f95f997bc4b948836cf5280f2420b9aa35f6162af6f76194f3b3cb73cf87b",
+    "size": 7601
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/docs/architecture/evidence/generation-integration/wp3/staged-combined-corrections.json",
+    "sha256": "2258df8beb03654fccdfe1b23c11d7b74325c378321d28696b935ae761a33095",
+    "size": 57048
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/docs/architecture/evidence/generation-integration/wp3/prerequisites08-14.json",
+    "sha256": "04faf621f59a2a602c508fe8f3b0290666519764b67631cf077beac9ec261d61",
+    "size": 86466
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/docs/architecture/evidence/generation-integration/wp3/main39-43/receipt.json",
+    "sha256": "522b1b8f3221f21c0201b1ad4342d1c19406e8d09627da5cc9ddff1140a19f71",
+    "size": 46690
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/docs/architecture/evidence/generation-integration/wp3/tensor-layout/receipt.json",
+    "sha256": "9a5e8b2e3490ae1febcc1f37ad0a9390fad3c2dbcf9ecdf26f8ac2d87722d4bf",
+    "size": 13216
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/docs/architecture/evidence/generation-integration/wp3/prerequisites08-14.json",
+    "sha256": "04faf621f59a2a602c508fe8f3b0290666519764b67631cf077beac9ec261d61",
+    "size": 86466
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/installed-host-preflight-20261030-r1/preflight.json",
+    "sha256": "c3fc39abc09797128fcb1a165f3ecde4f76ae27b471535df1a07f914eb241b93",
+    "size": 48039
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/installed-host-qualification-20261030-r1/runtime/rust-execution-reconciliation.json",
+    "sha256": "ce06b545314197a9df7bd396faa14599774fe2dcfe0a41aba6d15da8147ec59c",
+    "size": 1265
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/full-generator-characterization-20261031-r1/compiled-qualification.json",
+    "sha256": "4465c9c11f37014f2067e7fdd32cd5b2d60b89475971141f9b8693016624ef40",
+    "size": 3220004
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/full-generator-characterization-20261031-r1/input-invariance.json",
+    "sha256": "e5b43abf2f0f9f9ad8e60be95b2ff820ad0564b8a6da0d2a81fc122bf3736c1b",
+    "size": 207
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/docs/architecture/evidence/generation-integration/wp3/prerequisites08-14.json",
+    "sha256": "04faf621f59a2a602c508fe8f3b0290666519764b67631cf077beac9ec261d61",
+    "size": 86466
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/installed-host-qualification-20261030-r1/runtime/rust-execution-reconciliation.json",
+    "sha256": "ce06b545314197a9df7bd396faa14599774fe2dcfe0a41aba6d15da8147ec59c",
+    "size": 1265
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/host-stub-rustred-integration-20261031-r1/exporter-reuse-source-proof.json",
+    "sha256": "f41a6960c68aef20a4c5e96c3809e365ef3ba9a5acc4da176a191ec0e2d30c39",
+    "size": 41439
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/host-stub-rustred-integration-20261031-r1/compiler-binding.json",
+    "sha256": "b4ebe271a07194f06b044d8aacbcbd053871d88d2d6bfe493185f30ba1162434",
+    "size": 513
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/nix/documentation.nix",
+    "sha256": "5df7a263aa19d939e384a7dddb1ab4564fe8192ac91d0d47694a7f1b29fc0b34",
+    "size": 32467
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/justfile",
+    "sha256": "4fedff480aa2aea1e5e8080a2c7cd473b0903b921381a09f7d124877de1e8e38",
+    "size": 18088
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/just/ci.just",
+    "sha256": "48e4228c9854bfb9b9001431523822db59569ff74fb48a056a3d7bf56245c039",
+    "size": 4895
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.config/nextest.toml",
+    "sha256": "03e166fbe150d150450df98ebfa00e3b823b487cab5f6f9ff3d4cfb4bff4b09f",
+    "size": 20893
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/installed-host-preflight-20261030-r1/preflight.json",
+    "sha256": "c3fc39abc09797128fcb1a165f3ecde4f76ae27b471535df1a07f914eb241b93",
+    "size": 48039
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/docs/architecture/evidence/generation-integration/wp3/main46/approval-index.json",
+    "sha256": "fd3492720cfa10542dada3b7b83ae8259bbe9a226c3199bfd9384fdb5bebf6b6",
+    "size": 2840
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/docs/developers.toml",
+    "sha256": "9e2ef1846586777d052bed6848d2d63dec7b9a8ebf4a5dca6059786d6f00b59f",
+    "size": 206708
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/linnet/src/half_edge/canon.rs",
+    "sha256": "6eb7d696db966d365d6f9d6327e813e0f9f30e309285a915aacc8d608b2bbeb8",
+    "size": 29799
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/feynkit-py/src/generation/execution.rs",
+    "sha256": "0a396e901e57ee71d0e5f7fe954e14e19bfaa136ef0797403c344ec523061bac",
+    "size": 27775
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/tests/tests/test_feyngen.rs",
+    "sha256": "1032e4f82370ea44532dbd0390483f70c81f55f3b8cdb2af300e7f897db4ca8d",
+    "size": 1177487
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/kurvst/src/marks.rs",
+    "sha256": "fb945d5e0f4c97a30622b9a5e7d870e0fde4b6d4c5d0daf5a63d3b05ff83c064",
+    "size": 147747
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/vendor/kurbo/src/stroke.rs",
+    "sha256": "4523a0e08fe3ce324986450a83e16a654520951f17c1f132f30f802f0d6768d7",
+    "size": 46795
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/tests/packaging/test_drawing_notices.py",
+    "sha256": "4c72e78911120164b3370924a62b44435c8d9fd865562a78105798a96ad9d386",
+    "size": 15013
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/pyproject.toml",
+    "sha256": "892a8aa7244834f03ebef6c16bd146c10e000d06c09eddfd5c68219846649b4e",
+    "size": 3159
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/nix/rust-workspace.nix",
+    "sha256": "dc123de5ae0ad443ba2993cb3765d7fb228582697ba702c0f40ca41876409038",
+    "size": 135260
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/nix/rust-workspace.nix",
+    "sha256": "dc123de5ae0ad443ba2993cb3765d7fb228582697ba702c0f40ca41876409038",
+    "size": 135260
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/gammalooprs/src/integrands/process/mod.rs",
+    "sha256": "2fdacba25abf4f60b41340247a5aaefc155f8177e8314d184e518e576f38af85",
+    "size": 394297
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/gammalooprs/src/integrands/process/sampling/maps.rs",
+    "sha256": "d89d63d90297439f5727e01974f5d7ea343166889b445e9388279712e11f7570",
+    "size": 221803
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/gammalooprs/src/integrands/process/sampling/maps.rs",
+    "sha256": "d89d63d90297439f5727e01974f5d7ea343166889b445e9388279712e11f7570",
+    "size": 221803
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/gammalooprs/src/integrands/process/sampling/selection.rs",
+    "sha256": "893de80db39b8cd04834b6d364e2bac54d742d2a9273d6b733a0bf2d02c59c8a",
+    "size": 298389
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/gammalooprs/src/integrands/process/mod.rs",
+    "sha256": "2fdacba25abf4f60b41340247a5aaefc155f8177e8314d184e518e576f38af85",
+    "size": 394297
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/tests/tests/test_nlo_acceptance/cool_qm_eos.rs",
+    "sha256": "ba0ebab13a1e4e18933aebea9d82da3cdea8c622d7c114a2c1f432d390389223",
+    "size": 5928
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/feynkit-graph/src/compact_dot.rs",
+    "sha256": "def149fa48db4f9d065e9e94372a7f175c316da6e71b90c74d021d550e2912f3",
+    "size": 38168
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/gammalooprs/src/numerator/aind.rs",
+    "sha256": "497d895bd587d6cb3fc1c54f9044e8e111b2c0d7f309d1090ce52a3a28f5a959",
+    "size": 20809
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/gammaloop-api/src/commands/generate.rs",
+    "sha256": "6d235282c6c1af55201e9d5e2f3696916f0c8f1d8217176a94592dbe9db76aa2",
+    "size": 79596
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/tests/tests/test_runs/test_integrated_uv_cts.rs",
+    "sha256": "7a2fd75e203a88659b3ea9c292d1f7779dcecaa19af2a0cf04032bb6e9439fa9",
+    "size": 27759
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/gammalooprs/src/graph/parse/tests.rs",
+    "sha256": "c7ea8b858882362d133208dcb7f3722402817d99f20a0bd64468045af13414c8",
+    "size": 80683
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/tests/resources/graphs/qqx_aaa_subtracted.dot",
+    "sha256": "eaf807e0a016e3b3c3904084c15465126278b12929f2962d1827813b77f68edf",
+    "size": 75582
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/tests/resources/graphs/uv_tests/rqft_ghG_3l.dot",
+    "sha256": "fd3a6ccef3e69562b73c045c42ef3a4b4393c9d19be40edc5793ab3adfef8f53",
+    "size": 44743
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/feynkit-generator/src/grouping.rs",
+    "sha256": "ee0e666ae2c7b8d13c14741d03d49adc41de50ace966034561f9d39d20191c00",
+    "size": 227293
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/feynkit-generator/tests/generation_oracle/census.rs",
+    "sha256": "b46641d3c13dd70304a457ad4f884cedd486f188ce86dd92c73328a6b1da05d3",
+    "size": 66236
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/feynkit-generator/tests/generation_oracle/main.rs",
+    "sha256": "6dacf61baca9f13f3e4a6d719f89eaced429fb3cb14c7904dcb41fe4c86b66df",
+    "size": 77616
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.config/nextest.toml",
+    "sha256": "03e166fbe150d150450df98ebfa00e3b823b487cab5f6f9ff3d4cfb4bff4b09f",
+    "size": 20893
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/feynkit-graph/src/finalization.rs",
+    "sha256": "7f537b6608fd6f82402675fc28f2e0907d3916a0df5fae8c03412ad1273da221",
+    "size": 79700
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/linnest/build_assets.rs",
+    "sha256": "563cb2fe49034d946366cdd723f1f7fa779ec6494de9a898717c4a01cccd3936",
+    "size": 3188
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/feynkit-generator/src/generation/staged.rs",
+    "sha256": "6c8ebb4abd42e875742bb1fdfdfa5c6fc0ecff4e9c0c4adff8f49306b4110b21",
+    "size": 80778
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/feynkit-generator/src/generation.rs",
+    "sha256": "0e6f4a83632be8fc13633a66a7fc3ba68819b49e78fcbf26363dd0f5469c4042",
+    "size": 455743
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/feynkit-generator/src/grouping.rs",
+    "sha256": "ee0e666ae2c7b8d13c14741d03d49adc41de50ace966034561f9d39d20191c00",
+    "size": 227293
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/gammaloop-api/src/state.rs",
+    "sha256": "b7a39b0ddc7b746ca4ef15ebacde5b1f82645a0976a30e29266e321bb65a20d1",
+    "size": 239841
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/gammaloop-api/src/commands/integrate.rs",
+    "sha256": "6d094fc25be9a3c238e0a4bd63d1eb49d616c968f9f416c170ba797bb942fabe",
+    "size": 100544
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/gammalooprs/src/integrands/evaluation.rs",
+    "sha256": "cdac7e487888870326d7d1c37cf43efc78f1cf904bac884c03f1534a10f76b78",
+    "size": 75927
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/gammalooprs/src/integrands/process/mod.rs",
+    "sha256": "2fdacba25abf4f60b41340247a5aaefc155f8177e8314d184e518e576f38af85",
+    "size": 394297
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/gammalooprs/src/observables/events.rs",
+    "sha256": "91ee2154aaa0be6e8ec6a09ba8785078000ea4d715d6773c8cba52c3d33dff93",
+    "size": 45674
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/gammalooprs/src/observables/mod.rs",
+    "sha256": "ad355b42380bb6cc6dcfd9c648a180ebd024a2f604d8c1e69cad4c0492537417",
+    "size": 178173
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/gammaloop-api/src/python.rs",
+    "sha256": "ed3684989501059bbc617c659f772e1ca683938881a0936baa1629bfcd64a6bf",
+    "size": 189829
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/gammalooprs/src/lib.rs",
+    "sha256": "8e98061b60754cdcdef5ece6f08a069a102f5323df1f9433d46d08e87580d1a2",
+    "size": 3607
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/feynkit-generator/src/generation.rs",
+    "sha256": "0e6f4a83632be8fc13633a66a7fc3ba68819b49e78fcbf26363dd0f5469c4042",
+    "size": 455743
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/feynkit-model/src/model.rs",
+    "sha256": "4434c92cf4698f318a7b6ad360a6b6a48ff91b0e6cc329cc52b594430ade13f1",
+    "size": 127777
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/feynkit-graph/src/lib.rs",
+    "sha256": "5cb3612abc2f45eb9e2317d476ad5b9c29469c8a6f6d30cef9b4578d99ce2848",
+    "size": 241884
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/feynkit-tensor/src/lib.rs",
+    "sha256": "a48634e31434cab8812da5f65adb3ab20b0c288fa5c2d447bd3dd312a35a3b05",
+    "size": 1144
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/gammalooprs/src/graph/parse/from_dot.rs",
+    "sha256": "e1f6220b809ffc60ed7662d03ecaac4ebb3d7fc27817dde1795623217b45065b",
+    "size": 22082
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/feynkit-generator/src/generation/staged.rs",
+    "sha256": "6c8ebb4abd42e875742bb1fdfdfa5c6fc0ecff4e9c0c4adff8f49306b4110b21",
+    "size": 80778
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/gammaloop-api/src/commands/integrate.rs",
+    "sha256": "6d094fc25be9a3c238e0a4bd63d1eb49d616c968f9f416c170ba797bb942fabe",
+    "size": 100544
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/gammalooprs/src/integrate/render_ratatui.rs",
+    "sha256": "ac8bbd62b76470bd86b961d8d353433f01b0a0cb944605efaa5164453bb29e9b",
+    "size": 112724
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/gammalooprs/src/integrate/mod.rs",
+    "sha256": "425a2b07ec3b66b885be34e3d34caea312b1fdd0964dc65a50abfdd2f69d1737",
+    "size": 264045
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/gammalooprs/src/uv/orchestrator.rs",
+    "sha256": "d233b990042e5df532038a543a95ae33138de0f6d2eb08aebd57b8efbd8e4d48",
+    "size": 35194
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/gammalooprs/src/uv/approx/integrated.rs",
+    "sha256": "ec0cb5f13025e7b42dd5a0089117292a576019938ac5d5c8d7f3ec01da1bd316",
+    "size": 207331
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/gammalooprs/src/uv/approx/integrated.rs",
+    "sha256": "ec0cb5f13025e7b42dd5a0089117292a576019938ac5d5c8d7f3ec01da1bd316",
+    "size": 207331
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/vakint/src/lib.rs",
+    "sha256": "f5adcc0ee3d3b782c1a8da36aae75416e9a325a9b787ea8c78c526d84d4a501a",
+    "size": 298434
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/vakint/src/lib.rs",
+    "sha256": "f5adcc0ee3d3b782c1a8da36aae75416e9a325a9b787ea8c78c526d84d4a501a",
+    "size": 298434
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/gammalooprs/src/numerator/symbolica_ext.rs",
+    "sha256": "81c654ca742672b1a7c22e009f150daad6e00d5655be0fc3164d448369babd20",
+    "size": 95893
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/gammalooprs/src/uv/overlap_numerators.rs",
+    "sha256": "e80f0f38e6238888b91ad07ec4122ce9ab94bff9a95998b8f6882c21f5c7132a",
+    "size": 42510
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/gammalooprs/src/uv/approx/local_3d/integrated_localizer.rs",
+    "sha256": "a43cb80bcb430001fde1cec1ff2f8b4664e9e50cca9d58035313b0d1ff012c1d",
+    "size": 5660
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/spenso/src/network/parsing/mod.rs",
+    "sha256": "cd1e384a05a1a37f3ba8a21cd1c3dec509bca501eaf0da122b8cdb8d7029063b",
+    "size": 71855
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/idenso/src/shorthands/schoonschip/api.rs",
+    "sha256": "45d09856254b14b590b65293f4e1c58550aca84ff514441e3ef4609485ba1e82",
+    "size": 1911
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/gammaloop-api/src/templates.rs",
+    "sha256": "3c2ab4a1971e16631fe0c36eb4d4882f6e680d460b8a4a9f24f5e5b2c264993a",
+    "size": 10932
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/linnest/typst/src/lib.typ",
+    "sha256": "5247fce31a688f7685bc63ce4706fab324def42ebcb46e4046d750b03e2ed4ed",
+    "size": 254
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/idenso/src/lib.rs",
+    "sha256": "86972e9057461009dbb5c218ad5ace21d970325ee2aeb3c3a2afd672fef85a95",
+    "size": 52057
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/symbolica-notation/src/registry.rs",
+    "sha256": "47dec008c2e27bcf7efd83e082d6f21ea9db769455e4c2317c72dd2ab44b3b63",
+    "size": 17148
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/spenso/src/structure.rs",
+    "sha256": "141f671ca9a0395f0e5e7371540836a1c09e1db603ac5b6b4a995073b1641f17",
+    "size": 36033
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/spenso/src/tensors/data.rs",
+    "sha256": "95fa593082f9946e5849aadbf5e5e9460f4dfadff8bd31ea11791cdb8032bcca",
+    "size": 25739
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/spenso/src/contraction.rs",
+    "sha256": "2151ac82454d9db83783004492ce8b5a96a22171293b0085e37d0062048efacc",
+    "size": 10824
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/spenso/src/network/mod.rs",
+    "sha256": "e03e784c5310362545ba0ecd87ebbb0b6f938b98911237a73b2a87955c3d73f4",
+    "size": 228326
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/spenso/src/network/parsing/mod.rs",
+    "sha256": "cd1e384a05a1a37f3ba8a21cd1c3dec509bca501eaf0da122b8cdb8d7029063b",
+    "size": 71855
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/spenso/src/symbolic_parallelism.rs",
+    "sha256": "e09a3f35abbf52d1980726ca89e441b78e77402d98fb48a7ad441972d8e6c65b",
+    "size": 8874
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/idenso/src/representations.rs",
+    "sha256": "cb3cdb5d88f0a259116e28aaec04069d11ddf01bdd4e07b9a31b00a96a2275fd",
+    "size": 4205
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/idenso/src/lib.rs",
+    "sha256": "86972e9057461009dbb5c218ad5ace21d970325ee2aeb3c3a2afd672fef85a95",
+    "size": 52057
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/idenso/src/cook.rs",
+    "sha256": "6bf40b5bc5f015c1982967c3a610f0d70d67c8e0242ba1bd0628d18c8de16436",
+    "size": 59778
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/idenso/src/tensor/mod.rs",
+    "sha256": "b3d939b8adfc3a0134b2dbf5df5bc977d48b903d97ed0cafdb64172a701b32a6",
+    "size": 44649
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/idenso/src/tensor/indexed.rs",
+    "sha256": "6aad034870beca4ec1012506cc4fef6280192bb08578a75cc0441a37ad0875d8",
+    "size": 45819
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/idenso/src/tensor/inference.rs",
+    "sha256": "e8ee6b861580c65f116e462906980f2d3f0cf8781ea55fcc4dfefbdc9dfd730a",
+    "size": 353390
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/idenso/src/tensor/contract.rs",
+    "sha256": "2a15e7fb3f0c946def2f3a925cb8ee0bb9abc90fcb59fb0bb2005c6719d0987a",
+    "size": 71815
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/idenso/src/tensor/simplification.rs",
+    "sha256": "e78750998cff62ed35390d0dad3ec060153b0104bda77d9883d3af51a49173d8",
+    "size": 53964
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/idenso/src/tensor/simplification/observation.rs",
+    "sha256": "a5bf348675c9ec801790c5caa6d6b0483c8423f65b19272f06de011269a5abfe",
+    "size": 84675
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/idenso/src/dirac/simplify.rs",
+    "sha256": "9815ceaf0ef921ef3b8e0664b838c8eadf6fb7e3df640a73b5ac07b994af7110",
+    "size": 231142
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/idenso/src/color/simplify.rs",
+    "sha256": "73a0b05b405d7ec72adb43e9aeb21e094963f4b4c3a50c77a4750752e6e00144",
+    "size": 258739
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/idenso/src/tensor/collection/collected.rs",
+    "sha256": "b5f3e6fe365923e461036460ae4bd639bf59e1639ecf41ce02e43e6f40e6146f",
+    "size": 23704
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/idenso/src/tensor/collection.rs",
+    "sha256": "6eeb0ed9981e280541e74b6e43a9865ed59c5cf50d81dffc30058136db70d3de",
+    "size": 139490
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/linnet/src/half_edge.rs",
+    "sha256": "f06a578ae290b0fda63b1fbba2892bccc63f3f8455e65bbcf8bd08ef060cbd13",
+    "size": 119848
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/linnet/src/half_edge/involution.rs",
+    "sha256": "31a13433b312f0c25becda435126dd23ce641e013ce4deadb73576fdb0587fe9",
+    "size": 82943
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/linnet/src/half_edge/subgraph.rs",
+    "sha256": "6c73a4887a782cf659954e184fb07d09473038e041139052c906b12026783d65",
+    "size": 19275
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/linnet/src/parser/mod.rs",
+    "sha256": "a5c9a9d474328da90cc309e03ee4ad01438979eb561691cae68024c751164a9f",
+    "size": 46392
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/vakint/src/lib.rs",
+    "sha256": "f5adcc0ee3d3b782c1a8da36aae75416e9a325a9b787ea8c78c526d84d4a501a",
+    "size": 298434
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/vakint/src/topologies.rs",
+    "sha256": "afacc0456d3085117d1668186f94a4606094cc49c49df5c736a7ef4d628e4cae",
+    "size": 34828
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/vakint/src/graph.rs",
+    "sha256": "e1d7e69f760f26800cd446191ce2b33249d83eacb853846d9307076149a42dc3",
+    "size": 13483
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/vakint/src/symbolica_community_module/mod.rs",
+    "sha256": "1674f2b11d944c9aca88ea1779c305203a2da1e544635d1b4cf69f8202bee328",
+    "size": 42021
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/vakint/src/lorentz.rs",
+    "sha256": "3293c180d885d0354cda7562609b012935e0e98ff614e3f6da373a37b1b9b3d7",
+    "size": 32297
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/vakint/src/projection.rs",
+    "sha256": "1d67751c4ebff65a6a5bd0b294862fb8acad40f0548fdd662617a8824ade1a3a",
+    "size": 56376
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/feynkit-cff/src/generation.rs",
+    "sha256": "d818bbb9f5cac0ef471335947a60b85f7bb275e813dc38f8f24223f9d57b1325",
+    "size": 57377
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/feynkit-cff/src/expression.rs",
+    "sha256": "bcbe60458e43c725000ae4c76859224debfac679391d4f5756618eeaa30d9ac9",
+    "size": 10657
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/feynkit-cff/src/surface.rs",
+    "sha256": "e6a8c6eada514aaeda5a9633e6c844931b175227fac0ce3a2ab9e8f4a3150273",
+    "size": 17846
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/symbolica-data/src/lib.rs",
+    "sha256": "c9a5c55204a8cf9528e76462d926be118975399cf208634c4a6d63e0e3167168",
+    "size": 12165
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/feynkit-generator/tests/generation_oracle/main.rs",
+    "sha256": "6dacf61baca9f13f3e4a6d719f89eaced429fb3cb14c7904dcb41fe4c86b66df",
+    "size": 77616
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/feynkit-generator/tests/generation_oracle/main.rs",
+    "sha256": "6dacf61baca9f13f3e4a6d719f89eaced429fb3cb14c7904dcb41fe4c86b66df",
+    "size": 77616
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/feynkit-generator/tests/generation_oracle/main.rs",
+    "sha256": "6dacf61baca9f13f3e4a6d719f89eaced429fb3cb14c7904dcb41fe4c86b66df",
+    "size": 77616
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/feynkit-generator/tests/generation_oracle/main.rs",
+    "sha256": "6dacf61baca9f13f3e4a6d719f89eaced429fb3cb14c7904dcb41fe4c86b66df",
+    "size": 77616
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/feynkit-generator/tests/generation_oracle/main.rs",
+    "sha256": "6dacf61baca9f13f3e4a6d719f89eaced429fb3cb14c7904dcb41fe4c86b66df",
+    "size": 77616
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/feynkit-generator/tests/generation_oracle/main.rs",
+    "sha256": "6dacf61baca9f13f3e4a6d719f89eaced429fb3cb14c7904dcb41fe4c86b66df",
+    "size": 77616
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/feynkit-generator/tests/generation_oracle/main.rs",
+    "sha256": "6dacf61baca9f13f3e4a6d719f89eaced429fb3cb14c7904dcb41fe4c86b66df",
+    "size": 77616
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/feynkit-generator/tests/generation_oracle/main.rs",
+    "sha256": "6dacf61baca9f13f3e4a6d719f89eaced429fb3cb14c7904dcb41fe4c86b66df",
+    "size": 77616
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/just/ci.just",
+    "sha256": "48e4228c9854bfb9b9001431523822db59569ff74fb48a056a3d7bf56245c039",
+    "size": 4895
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/gammalooprs/src/integrands/process/evaluators.rs",
+    "sha256": "b08527ae9a8235d0637bc11da69e9d6b1608d9b319ce73642f889087a04cec1e",
+    "size": 329756
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/idenso/src/tensor/simplification/observation.rs",
+    "sha256": "a5bf348675c9ec801790c5caa6d6b0483c8423f65b19272f06de011269a5abfe",
+    "size": 84675
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/feynkit-generator/src/grouping.rs",
+    "sha256": "ee0e666ae2c7b8d13c14741d03d49adc41de50ace966034561f9d39d20191c00",
+    "size": 227293
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/nix/documentation.nix",
+    "sha256": "5df7a263aa19d939e384a7dddb1ab4564fe8192ac91d0d47694a7f1b29fc0b34",
+    "size": 32467
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/nix/documentation.nix",
+    "sha256": "5df7a263aa19d939e384a7dddb1ab4564fe8192ac91d0d47694a7f1b29fc0b34",
+    "size": 32467
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/nix/rust-workspace.nix",
+    "sha256": "dc123de5ae0ad443ba2993cb3765d7fb228582697ba702c0f40ca41876409038",
+    "size": 135260
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/nix/rust-workspace.nix",
+    "sha256": "dc123de5ae0ad443ba2993cb3765d7fb228582697ba702c0f40ca41876409038",
+    "size": 135260
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/nix/documentation.nix",
+    "sha256": "5df7a263aa19d939e384a7dddb1ab4564fe8192ac91d0d47694a7f1b29fc0b34",
+    "size": 32467
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/nix/rust-workspace.nix",
+    "sha256": "dc123de5ae0ad443ba2993cb3765d7fb228582697ba702c0f40ca41876409038",
+    "size": 135260
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/nix/rust-workspace.nix",
+    "sha256": "dc123de5ae0ad443ba2993cb3765d7fb228582697ba702c0f40ca41876409038",
+    "size": 135260
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/alphal00p-docs-builder/src/typst_render.rs",
+    "sha256": "67df54a74e06b17cfca1b719a0812e5c159bd67bccf8985ff5f845ff4b52f89f",
+    "size": 21439
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/alphal00p-docs-builder/src/watch.rs",
+    "sha256": "2cf72cfca00c3308d701e49c122a0e0ba6c6424ac700869196c1ad7340498d70",
+    "size": 53448
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/nix/ci.nix",
+    "sha256": "1504cf315f1b3878d16b7b08a1bbbfdc5446af6a71028a09c8b706eac5a02193",
+    "size": 23314
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/crates/alphal00p-docs-builder/src/lib.rs",
+    "sha256": "03390cea5d36d25d06912d7208619ff17adcd7ef450fde7c391b1728fd0c828b",
+    "size": 550882
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/.local/review-main46-round4-opus-rZyrnOS8/review.json",
+    "sha256": "ee6e37ee207747d4f65c6a45b619412738af3248a65301b396768f27f5227e22",
+    "size": 3867
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/.local/review-xs-qed-l2-integration-a-opus-20261030T111536Z-1321089/review.json",
+    "sha256": "0b5319a43da8e19100dd19a9c4647a03b95ffba1ac90a23749b0c348e95375a6",
+    "size": 40128
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/.local/review-xs-qed-l2-integration-b-opus-20261030T111614Z-1341306/review.json",
+    "sha256": "f94b819f13740dc7674991c7db8bcf33aa14088b60fa973114aadd805281f0c4",
+    "size": 64407
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/raw-three-migration-20261031/archive-qualification.json",
+    "sha256": "029d18e24d4b09da2586be4623e45d35804f0cf0dcd662a661e41ef6c834a635",
+    "size": 796293
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/compiler.json",
+    "sha256": "122199dc5dc4565cbd7627473d90f4e46101974e177a1c6cc14f655081e07cfa",
+    "size": 719
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/root-host-stub-rustred-acceptance-20261031.json",
+    "sha256": "7b15acc1161e02ef5d17889a000a3e3d9f93f53184d79550658684324c589f47",
+    "size": 3159
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-host-stub-rustred-integration-astra-20261031-023354Z-777117b1/review.json",
+    "sha256": "f472e199cf3805d9364ef9158c18628fbc5c7ee8d72317c56a6af787628e8a5c",
+    "size": 36627
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/root-full-generator-pool1-acceptance-20261031.json",
+    "sha256": "297b23048d86665efa8832b50848173a6ae7a08a5b45251ef8e9e15fb3377b87",
+    "size": 2637
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-full-generator-characterization-astra-20261031-022430Z-320628f7/review.json",
+    "sha256": "fb688585bc7efd0b494fef7648df5abad398f88bfe8c439e8b42c0dd520eaa37",
+    "size": 30234
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/root-three-integration-host-acceptance-and-next-20261031.json",
+    "sha256": "b73517d53f083bbd99bd496a5938483902012198e815fb28583b37438d27c275",
+    "size": 10281
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-raw-three-integration-astra-20261031-012811Z-323f4486/review.json",
+    "sha256": "535b792610c531b446d8beb1a9f300246e6d498e8126509b637189e8eb80a091",
+    "size": 40750
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-host-browser-stub-astra-20261031-013106Z-5655cc61/review.json",
+    "sha256": "8bd31e92448a517479fb2f2ec5a12c9999c31752cea08502392f290c47e37627",
+    "size": 36733
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/root-grouped-none-acceptance-20261031.json",
+    "sha256": "8141146a38484454c8fc65d72845f0f360c462bc16604349d67fb8fdf25d1224",
+    "size": 4399
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/../generation-oracle-numerator-families/.local/review-grouped-none-aggregation-astra-20261030-independent-b1/review.json",
+    "sha256": "45368ac2dc5783a6ba31daa9b7e8bd7f03a80746bf3b07b6d3e34cc909adcb81",
+    "size": 27229
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/root-grouped-auto-acceptance-20261031.json",
+    "sha256": "e0a659e8798eba47179623e218340852c1d2fafe2ca09d03bc1b7e6a9ede86e4",
+    "size": 3047
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-auto-aggregation-astra-20261031-independent-r1-1793413266607828149/review.json",
+    "sha256": "e4ca45aff35c11bbd6397a32265502f79ff6b622141c1fe75214f17f830919db",
+    "size": 27199
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/root-interface-runner-r3-acceptance-20261031.json",
+    "sha256": "66b51d8cd9593e905f204ddb542cedc469b68c5548ad5147853384a19de1b381",
+    "size": 2565
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-interface-runner-r3-astra-20261031-020333Z-4003b785/review.json",
+    "sha256": "b370752781691d7286766047658ca518a4a898a463c76df26226f2f114d43a62",
+    "size": 22800
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-feynkit-refresh-source-opus-round4-20261030T201146Z-697912d5/review.json",
+    "sha256": "5d9db6c6d385bd25ea9e276a2a1ebd2e95c0678171854e4ccb73a1362130e1af",
+    "size": 29924
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-feynkit-refresh-shared-provenance-opus-20261030T193404Z-3c0453ff/review.json",
+    "sha256": "565caeace0112a30fb9118f94b2bb759e4267d2b802395c314e485b89b4b2b70",
+    "size": 74728
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-refresh-aggregation-astra-20261030-independent/review.json",
+    "sha256": "567fba9cfa9287478d5c1531fd46eac49c79f4cd6fbcc878c50bd364cf279342",
+    "size": 35615
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/../generation-integration-plan/.local/review-main46-round4-opus-rZyrnOS8/review.json",
+    "sha256": "ee6e37ee207747d4f65c6a45b619412738af3248a65301b396768f27f5227e22",
+    "size": 3867
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/../generation-integration-plan/.local/review-xs-qed-l2-integration-a-opus-20261030T111536Z-1321089/review.json",
+    "sha256": "0b5319a43da8e19100dd19a9c4647a03b95ffba1ac90a23749b0c348e95375a6",
+    "size": 40128
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/../generation-integration-plan/.local/review-xs-qed-l2-integration-b-opus-20261030T111614Z-1341306/review.json",
+    "sha256": "f94b819f13740dc7674991c7db8bcf33aa14088b60fa973114aadd805281f0c4",
+    "size": 64407
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/docs/architecture/generation-integration-plan.typ",
+    "sha256": "4489dc7383468cf2daf7f8c177d3ea87fe9cad45c99af1afc0f160b202ff06f6",
+    "size": 42856
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/docs/architecture/evidence/generation-integration/wp3/core-test-inference/receipt.json",
+    "sha256": "a41b550279647aa9ad4f126a63f5ae94c21012f9bc476b5333783d8e6368a2b1",
+    "size": 13736
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/docs/architecture/evidence/generation-integration/wp3/main46/round4-correction.json",
+    "sha256": "477d75c7cc48ffc7abb0eda235c6c998eb49dc942b2bc8d70dcc1ed10fde5560",
+    "size": 4643
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/tests/tests/test_evaluation_api.rs",
+    "sha256": "a558c9332988b26883abc1df4480005a1fb304b04fde52406281ae5d38bf1a47",
+    "size": 75492
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-host-stub-rustred-integration-astra-20261031-023354Z-777117b1/review.json",
+    "sha256": "f472e199cf3805d9364ef9158c18628fbc5c7ee8d72317c56a6af787628e8a5c",
+    "size": 36627
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/a-ddx-1.argv",
+    "sha256": "c429ba016272353050c61b1421431e5092d5aa56087f70e7cb8d979a9aad6ef2",
+    "size": 451
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/a-ddx-2.argv",
+    "sha256": "c429ba016272353050c61b1421431e5092d5aa56087f70e7cb8d979a9aad6ef2",
+    "size": 451
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/a-ddx-3.argv",
+    "sha256": "c429ba016272353050c61b1421431e5092d5aa56087f70e7cb8d979a9aad6ef2",
+    "size": 451
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/a-ddx-4.argv",
+    "sha256": "c429ba016272353050c61b1421431e5092d5aa56087f70e7cb8d979a9aad6ef2",
+    "size": 451
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/a-ddx-5.argv",
+    "sha256": "c429ba016272353050c61b1421431e5092d5aa56087f70e7cb8d979a9aad6ef2",
+    "size": 451
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/b2-bwrap.argv",
+    "sha256": "e29de12d71f21b6b86406cf191c1cd204ba323e55cacf4b39c13fbe1075e583c",
+    "size": 1349
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/b2-bwrap2.argv",
+    "sha256": "6873d8bb27c3f8849f478e9efe5e1239683793bcb93551d796ad68280042e254",
+    "size": 1458
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/b2-bwrap3.argv",
+    "sha256": "cd0706683be002b699f54fd8615c5bd0735f47b39155ccbc9b8b8ccef565392b",
+    "size": 1475
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/b2-bwrap4.argv",
+    "sha256": "7c9c30b411baa469b235e2afa4bd7268fc45976e8184e8ffe58b358d1db9f2b0",
+    "size": 1652
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/b2-nix.argv",
+    "sha256": "f6d9f93255e445d8cd5a3299f13738e29d1f3554563a0a9b367be4c464252326",
+    "size": 1039
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/b2.argv",
+    "sha256": "ddc559372e09d1516fb9a529a8b28c39a26064e5b37c8220bb8602f7349b036b",
+    "size": 912
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/core-producer.argv",
+    "sha256": "ae775d5736cf1d794b2f197c87960af02ebcca30fd87690bfadd1989f8d87072",
+    "size": 199
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/feynkit-producer.argv",
+    "sha256": "19453e97b5ae9859c3d3c859739314efdf6654144cdf95534a380b36ce02d53c",
+    "size": 202
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/four-loop-1.argv",
+    "sha256": "7d8a7c5b331897748c9877ab31cceba8a46f583ede67470642b27197c1ef620e",
+    "size": 57
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/four-loop-32.argv",
+    "sha256": "058e3158e15446d4996d5782ae764e61e5729485024accff31e0a25346373bb0",
+    "size": 58
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/four-loop-8.argv",
+    "sha256": "e2cd817785e6ee3d546782dd08f8cbca7aa0f174f1da8ecc5518d08e7558fb65",
+    "size": 57
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/four-loop-build.argv",
+    "sha256": "e0c3ebdb6215d68a0504ff71ba52aaded669fd770e50822a1bcf5a08652fa76f",
+    "size": 220
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/four-loop-filtered-1.argv",
+    "sha256": "e55370773987c238c72bf750a2b338666637b53053a3fb54b8a70b7c017ec495",
+    "size": 56
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/four-loop-filtered-32.argv",
+    "sha256": "2613e027d1ac0fd7ab1d24e88bd5fb7d0905ffa172c0311bf61b92a780dac643",
+    "size": 57
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/four-loop-filtered-8.argv",
+    "sha256": "1a6af28d14ed61c58c75dbced4cba5510596aa36100ff5531d583b19ac763bdb",
+    "size": 56
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/four-loop-perturbation.argv",
+    "sha256": "51b5b5c87fc665df4721a7dec6e331df0cb5cbdbc70f93363344ca139dfb4dd2",
+    "size": 521
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/integration-producer.argv",
+    "sha256": "22fc85d587c4508e7b8a1481b9f7690fc14a442dc5e9066104b27985026a432c",
+    "size": 206
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/nlo-coolqm-nix.argv",
+    "sha256": "be54aa1ce9a8987f0701be648404f24487cb669abf8645055b406f2f4529eb62",
+    "size": 822
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/nlo-coolqm.argv",
+    "sha256": "07fda662a59283939ce88ed9a560ef95e5a936c994bbd7bd1a4aac7e5cc4e18c",
+    "size": 695
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/oracle-fast-licensed.argv",
+    "sha256": "4cbc9471fdb0a1ad3fce101c2b85099205182ad7c80acb6c4ddc1c0c516310fe",
+    "size": 500
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/oracle-fast.argv",
+    "sha256": "4cbc9471fdb0a1ad3fce101c2b85099205182ad7c80acb6c4ddc1c0c516310fe",
+    "size": 500
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/oracle-focus.argv",
+    "sha256": "c5643a9191eca8e8d02045d5ec51ef2f300d0cff917d65b98b10b98f2aacac64",
+    "size": 1598
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-exit-matrix/sm3150.argv",
+    "sha256": "5e51c2ed22ba6a345001ee64a54fa3795162784565676e8696ef0b082c77b791",
+    "size": 489
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-core-docs/ci-graph-corrected.argv",
+    "sha256": "56ab1aea12b71ab03d25fcab56cab78983aebf9c0e8dc38d4b6f6c0efea6a25a",
+    "size": 199
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-core-docs/ci-graph.argv",
+    "sha256": "7cc2b6c84fcead3308b315283e723803ed47e5031dddc60140d6f06496924c9a",
+    "size": 205
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-core-docs/core-fast.argv",
+    "sha256": "ba754385dd49d61eeec75388be953c05b3301185f8907dbaa5fe39b5f7686a0e",
+    "size": 199
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-core-docs/docs-check-evidence-round2.argv",
+    "sha256": "1634e7fea78cf316077e7caca40781c99b30d1380104712325cb1c0955985be7",
+    "size": 178
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-core-docs/docs-check-evidence.argv",
+    "sha256": "629459b25ef3e787f0c014cf5b30eef028e6380a4fcb9aaac77a379a67e6f58b",
+    "size": 178
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-core-docs/docs-check.argv",
+    "sha256": "32ef63d838d2038a307ad8d066caf8a56609f545cf5a31e71048e3e781fc303d",
+    "size": 178
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-core-docs/docs-clippy.argv",
+    "sha256": "bbc31c940493905e30a59c38598c8549f00e306b07de1dfb82e5b28b613c758a",
+    "size": 201
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-core-docs/docs-lib.argv",
+    "sha256": "3f47ce1f5f3cd97fd609a28ec1c03c142c62915df1d68a096b4523db1d0b9993",
+    "size": 196
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-core-docs/feature-isolation.argv",
+    "sha256": "aed74a55ffc9f20ea148fdbba588d1beac5a49849e4c40841953b1524161e062",
+    "size": 163
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-core-docs/fmt.argv",
+    "sha256": "bc2d0678b89b555f1310e5199c2f9d0e266ae7cbc96cab187ecf87e5f61ab3c1",
+    "size": 151
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-core-docs/hakari-generate.argv",
+    "sha256": "60b02ff47bb54ce4ea6b7625d12dd282a18afab5be9d70c8bd73fbbd8dc0e291",
+    "size": 153
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-core-docs/hakari-verify.argv",
+    "sha256": "ad0b3f61442962b3a73e9a0ebdd934c29c3358c77e585e722becc9fcd68a9c4e",
+    "size": 144
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-core-docs/nixfmt.argv",
+    "sha256": "5d1e12e59c035e4ede36e6806fd45fb709720255b0a629d7335234f700cbdbea",
+    "size": 162
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-core-docs/pages-gate-final-positive.argv",
+    "sha256": "b6b053336be61279f0d692a4a9ed7c639d96c0e3fdd0e145e3b668476252e162",
+    "size": 214
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-core-docs/pages-gate-negative.argv",
+    "sha256": "17a190cd845d246858d8bb4efbed1103600984ca09d3c6b4ed0235e7ab6bb924",
+    "size": 212
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-core-docs/pages-gate-positive.argv",
+    "sha256": "73c9a8c94b6cdb10f7e52ba161d6e458ce00e0adfaba86c7475bb0933a72a303",
+    "size": 214
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-core-docs/producers.argv",
+    "sha256": "f9bf328fe60b6019ba5c60d187d7860dc3fd6937acd70cd45bcdeffe94c127b9",
+    "size": 360
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-core-test-inference/combined-run/list.argv",
+    "sha256": "b93843f8a79a2c92e41d7a98f5ed33e270d0f73e2730776204e05a605575c939",
+    "size": 1254
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-core-test-inference/combined-run/run.argv",
+    "sha256": "9fe60e66582c5266ba6d6963be929cc867b4c574f6deedcfab94344fee598766",
+    "size": 1324
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/affected-consumers.argv",
+    "sha256": "596616f9bd27cd742612a2263be45f285be431c138a3b706855148f2d4d98624",
+    "size": 260
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/clippy.argv",
+    "sha256": "258698b019588c69138f08435dbac2fc58727d99529a5523ffee55bd152534d9",
+    "size": 258
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/color-default-controls.argv",
+    "sha256": "85ac56586257b19112c2163bb1f921caf227484b2e7e956813e084104ad54cec",
+    "size": 507
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/color-profile.argv",
+    "sha256": "b97f5a2e1592f21ae4f5999d80bd610d307d12c604f27a0658a45bde97658bd8",
+    "size": 376
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/exact-reduction__blocks__tests__loop_vector_sums_are_retained_under_a_rank_two_projector.argv",
+    "sha256": "cf7e485b36bfaeee5af62a3c74e489bd7f9c903d46089bdda6247af75baf3128",
+    "size": 212
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/exact-reduction__blocks__tests__mixed_loop_and_fixed_sums_keep_the_fixed_rank_two_term.argv",
+    "sha256": "8623d51390959886cce5adc47b7acafe20ff9b423c2ce68f67281bb31957e517",
+    "size": 210
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/exact-reduction__external__tests__one_external_direction_rank_one_and_mixed_rank_two.argv",
+    "sha256": "5e2d5890595b145807458730d10cdc064fd5556c4b066561ae14fb01f8f02c89",
+    "size": 208
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/exact-reduction__tests__graph_tensor_reduce_selects_internal_edges_and_promotes_lorentz_slots.argv",
+    "sha256": "0edf009d4ff027de52453eb939a5bf92fe9fdaeff7e206037c87935e37781738",
+    "size": 217
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/exact-reduction__tests__reduction_keeps_declared_spectator_axes_and_zero_interfaces.argv",
+    "sha256": "cb9a14c2b41a8bfdb3d25f6cbed2d375d2a33a3289664c352f22f92b27830f96",
+    "size": 207
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/exact-reduction__tests__reduction_materializes_positional_spectators_with_actual_witnesses.argv",
+    "sha256": "507c984ac0d37881e9dee8870210d041d205b7cfaf660b75e61001bdeadf01b0",
+    "size": 214
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/fmt.argv",
+    "sha256": "d48b3cdea3d8ee7d9c444e7a5b76502225e175cbb246ae6e1d9c02149d8d0a5d",
+    "size": 178
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/idenso-controls.argv",
+    "sha256": "b952cc3a10c07c17e8b449bdae23d6f3fce8587878060a72b0ee04009d5af4ff",
+    "size": 2233
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/integration-plan-bundle.argv",
+    "sha256": "616b82b27ee8d4c6732a377d3c8067cb79c3aa90b1e46fc1ba3e2bb2dbf6971b",
+    "size": 311
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/integration-plan-pdf.argv",
+    "sha256": "b19355e22b66a158b3ad6b6857b88de935934ad86a2ba66aafa76a9228ee5294",
+    "size": 258
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/probe-block-compile.argv",
+    "sha256": "10a1f18fec8b54f40e38792798ecee4a7ba10fb54c3f90a6a8e0675306c21b71",
+    "size": 1096
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/probe-block-run.argv",
+    "sha256": "5148d2197295ba8b96dd58b4ffd344d9b36ff886b3af8efd77f1ed358c1f71c3",
+    "size": 133
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/probe-followup-compile.argv",
+    "sha256": "41f0ba48ff206f70f232920c09758a688a824ebf0cad9656708466177f41d6e3",
+    "size": 1090
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/probe-followup-run.argv",
+    "sha256": "dc66dac505843f3df4dbbfe62656baf1d4cd524b98e4004e6dbed506a4762fde",
+    "size": 129
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/probe-minimal-compile.argv",
+    "sha256": "91a2b04782be2987f1a6188f444ffe94614485b2f7e69b84c03493770dde8d93",
+    "size": 1071
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/probe-minimal-run.argv",
+    "sha256": "42177e14468acbd533dd6bd084232fcb704ddf789824db97bba2e0065cb16640",
+    "size": 69
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/probe-round2-compile.argv",
+    "sha256": "7f67251188b13e0f92cb5832e07c7bec643c1f2a1d455bb57ae13f7efdbe2f1e",
+    "size": 1075
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/probe-round2-run.argv",
+    "sha256": "ef0688f63825abacd0fa3e4404f7aaeba0a7c9ecf7b7221157f77355ad099a63",
+    "size": 68
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/python-boundary.argv",
+    "sha256": "a72b4df255cb665e0b14694a9f9ae660114702dc7b924b17d6b8bb0aae8df6bc",
+    "size": 339
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/render-check.argv",
+    "sha256": "de6dd464394d7e6f5582ae48e0b8bf8d3d342f7a2a87870501df75493abbcd79",
+    "size": 423
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/render-stale-negative.argv",
+    "sha256": "4411c6813c3321a03e971d4350314619a61923605fb529d2c4de41fe9ea7ae54",
+    "size": 436
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/tensor-layout-bundle.argv",
+    "sha256": "5441583913bfecd640532285800c86109609a3cf3e9d38a95a2118fe3252ef25",
+    "size": 299
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/tensor-layout-pdf.argv",
+    "sha256": "af47ae8e3e9883c63232bbe68d80b5d4131618ef07a3c976fc920f9133a74f34",
+    "size": 264
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/vakint-architecture-bundle.argv",
+    "sha256": "f4c6f7d003b3d9409fb1eebc71bde10e0e748d8b351d0b6ac40d74e1e4f090b6",
+    "size": 311
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/vakint-architecture-pdf.argv",
+    "sha256": "dbff57b5bb4b550bd43c5a302695b639376475925c11d3b96ce1596dd7400465",
+    "size": 253
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/vakint-boundary.argv",
+    "sha256": "71c3cb9a50a053f45d6fd95fcdfd1929a93d1c79d232826bf9d3e842beff2611",
+    "size": 333
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/vakint-exact-feynkit_expanded_mode_restores_vakint_vectors_and_metrics.argv",
+    "sha256": "b8b13093ae66fe2ed6edfa1529c363e73dbb45377a00643dd785ce37b8c5a3d5",
+    "size": 200
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/vakint-exact-native_spenso_dots_with_loop_momenta_are_tensor_reduced.argv",
+    "sha256": "f3792b3a3af3a3f8fb5353f7e8b91b4110bb308e6e4c04b1c709b704e9f8537c",
+    "size": 198
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-tensor-layout/vakint-exact-opaque_and_free_projector_legs_keep_full_spenso_slots.argv",
+    "sha256": "ecd4e3a4c0f602a7ef3e82f5656d5957c2abdfa64280301d0d82e1327ae99a1d",
+    "size": 196
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/docs/architecture/evidence/generation-integration/wp3/main46/receipt.json",
+    "sha256": "9a2c73f4af43e3c73f7cb3b541fdec730e534654226d389adf603a887a841e8f",
+    "size": 17490
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1/decision-index.json",
+    "sha256": "2f693febe43aa01e7460acce4067f923510d411637985f151c11b8277775f4e6",
+    "size": 15381
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/docs/architecture/evidence/generation-integration/wp3/prerequisites08-14.json",
+    "sha256": "04faf621f59a2a602c508fe8f3b0290666519764b67631cf077beac9ec261d61",
+    "size": 86466
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/docs/architecture/evidence/generation-integration/wp3/units27-29/validation.json",
+    "sha256": "d57f95f997bc4b948836cf5280f2420b9aa35f6162af6f76194f3b3cb73cf87b",
+    "size": 7601
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/docs/architecture/evidence/generation-integration/wp3/staged-combined-corrections.json",
+    "sha256": "2258df8beb03654fccdfe1b23c11d7b74325c378321d28696b935ae761a33095",
+    "size": 57048
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/docs/architecture/evidence/generation-integration/execution.json",
+    "sha256": "8648d58d5ec131dbd1372f30eb558ed4c68a1d8f179e3d8da8caa5d9651bab3c",
+    "size": 47105
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/docs/architecture/generation-feynkit-community-refresh.typ",
+    "sha256": "8f16edb8231c8f18c66c67091ec7c0fe91bf439aa8be460649c70ccd429e9f01",
+    "size": 20892
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/docs/developers.toml",
+    "sha256": "9e2ef1846586777d052bed6848d2d63dec7b9a8ebf4a5dca6059786d6f00b59f",
+    "size": 206708
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/docs/architecture/evidence/generation-integration/execution.json",
+    "sha256": "8648d58d5ec131dbd1372f30eb558ed4c68a1d8f179e3d8da8caa5d9651bab3c",
+    "size": 47105
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/docs/architecture/generation-feynkit-community-refresh.typ",
+    "sha256": "8f16edb8231c8f18c66c67091ec7c0fe91bf439aa8be460649c70ccd429e9f01",
+    "size": 20892
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/docs/developers.toml",
+    "sha256": "9e2ef1846586777d052bed6848d2d63dec7b9a8ebf4a5dca6059786d6f00b59f",
+    "size": 206708
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/raw-three-migration-20261031/flake.json",
+    "sha256": "45cdd1eea201dde78e9665315b335554da95fec9c1711b593d987293db8f62e8",
+    "size": 342
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/root-grouped-identical-literal-acceptance-20261031.json",
+    "sha256": "215b12034b6dd590a82a4359a9aac64508005019ea14d3a4c2fa4c6fda6675c9",
+    "size": 2409
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-identical-migration-astra-20261031-024225Z-1469f5e4/review.json",
+    "sha256": "7d96505dcb700eeae42b5a4e87676551ba910cb660df586cafe34d6b90e944f1",
+    "size": 28681
+  },
+  {
+    "path": "/nix/store/3sj3nw06s3vhl3j12wfp5gc3r1h6f0k3-source/docs/architecture/evidence/generation-integration/feynkit-refresh/review-aggregation-20261030/receipt.json",
+    "sha256": "7eeb075125c0b249e1af3334b3167a6b053020326ec2f4a88775832effc7edb5",
+    "size": 16337
+  },
+  {
+    "path": "/nix/store/3sj3nw06s3vhl3j12wfp5gc3r1h6f0k3-source/docs/architecture/evidence/generation-integration/feynkit-refresh/review-aggregation-20261030/receipt.json",
+    "sha256": "7eeb075125c0b249e1af3334b3167a6b053020326ec2f4a88775832effc7edb5",
+    "size": 16337
+  },
+  {
+    "path": "/nix/store/3sj3nw06s3vhl3j12wfp5gc3r1h6f0k3-source/docs/architecture/evidence/generation-integration/feynkit-refresh/review-aggregation-20261030/receipt.json",
+    "sha256": "7eeb075125c0b249e1af3334b3167a6b053020326ec2f4a88775832effc7edb5",
+    "size": 16337
+  },
+  {
+    "path": "/nix/store/3sj3nw06s3vhl3j12wfp5gc3r1h6f0k3-source/docs/architecture/evidence/generation-integration/feynkit-refresh/review-aggregation-20261030/reviews/source-r4/review.json",
+    "sha256": "5d9db6c6d385bd25ea9e276a2a1ebd2e95c0678171854e4ccb73a1362130e1af",
+    "size": 29924
+  },
+  {
+    "path": "/nix/store/3sj3nw06s3vhl3j12wfp5gc3r1h6f0k3-source/docs/architecture/evidence/generation-integration/feynkit-refresh/review-aggregation-20261030/reviews/shared-scope-a/review.json",
+    "sha256": "565caeace0112a30fb9118f94b2bb759e4267d2b802395c314e485b89b4b2b70",
+    "size": 74728
+  },
+  {
+    "path": "/nix/store/3sj3nw06s3vhl3j12wfp5gc3r1h6f0k3-source/docs/architecture/evidence/generation-integration/feynkit-refresh/review-aggregation-20261030/reviews/prior-eight/review.json",
+    "sha256": "5a50135038065414bc667667244378677ff44ac4f632e733b8bbd0bba451cf8b",
+    "size": 46366
+  },
+  {
+    "path": "/nix/store/3sj3nw06s3vhl3j12wfp5gc3r1h6f0k3-source/docs/architecture/evidence/generation-integration/feynkit-refresh/review-aggregation-20261030/reviews/raw-four-dispositions/review.json",
+    "sha256": "6e4410dd16ef6c2366b08793af0e835c21e55526bf124a2d3581283c32f1a9a2",
+    "size": 29704
+  },
+  {
+    "path": "/nix/store/3sj3nw06s3vhl3j12wfp5gc3r1h6f0k3-source/docs/architecture/evidence/generation-integration/feynkit-refresh/review-aggregation-20261030/reviews/grouped-none-provenance/review.json",
+    "sha256": "d5e93e0a03d1a5fd7a8e8b08e1ae9a4577917b1c03256d0d5b23607df0909387",
+    "size": 54596
+  },
+  {
+    "path": "/nix/store/3sj3nw06s3vhl3j12wfp5gc3r1h6f0k3-source/docs/architecture/evidence/generation-integration/feynkit-refresh/review-aggregation-20261030/reviews/grouped-none-math/review.json",
+    "sha256": "b5e0f3d4fff0b43cd8fbc955140e6d62938be02c9cfc8d943206e1effcf5a01a",
+    "size": 28959
+  }
+]

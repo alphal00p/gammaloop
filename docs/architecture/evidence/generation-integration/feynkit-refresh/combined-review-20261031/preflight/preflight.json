@@ -1,0 +1,96 @@
+{
+  "schema": "generation-combined-integration-preflight/1",
+  "status": "READ_ONLY_RECONCILIATION_AND_PURE_PREFLIGHT_COMPLETE; NO_APPROVAL",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh",
+  "packet": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/combined-integration-preflight-20261031-r1",
+  "frozen_code": "2cfb52b28d99f92305a9d571bbe3911cf04b8a19",
+  "frozen_evidence": "457e361d7d39e0a3daae801651f8c1dfabbf47aa",
+  "global_integration": "fdff0d18953348b84a0f1b7e6ab5ef703a5090de",
+  "kernel": "8eb7c3729d6abefc916decc1bdf0c06536f8af80",
+  "source_scope": "Immutable457/2cf only; later grouped preparation additive applicability, no live-source chase.",
+  "main_findings": [
+    "Accepted plan requires NEW independent review of each bounded conjunction, not a prior migration of every outstanding numerator row.",
+    "Constituent acceptances cannot supply combined approval. Globalfdff has not moved in this task.",
+    "Source46 cumulative approval79dfeaab is real; old pending phrases and exclusions do not require repeating implementation.",
+    "Exact2cf FeynKit group and package-specific generator derivations equal qualifiedffa inputs;12-row/full371 reruns or host rebuilds are unnecessary for metadata/stub alone.",
+    "Current8eb production core/API/evaluator and selected library/docs test outputs are absent in the canonical local store. Their old1a executions cannot become current runtime credit.",
+    "No additional generator/host artifact is missing for the already accepted bounded457 scopes. There ARE missing artifacts for extending the review to current production-core/evaluator qualification.",
+    "Later grouped preparation accepted separately; no postapplication outcome claimed.13 non-generator compile source graphs omit its testfile; exact future derivation/runtime inputs must still be re-attested.",
+    "All118 current frozen scope bindings validate, and proposed reconciliation preserves every ordered binding. Metadata proposal is NOT APPLIED."
+  ],
+  "minimum_new_combined_review_input_set": [
+    "Exact frozen source/evidence and current truthful metadata delta with14 rehashed independent review identities; no selfapproval.",
+    "SourceR4 + sharedScopeA + metadata48d0 within their own scopes; prior-eight restrictions and independent finite representation/migration approvals retained.",
+    "Accepted twelve-row integration36passes15joins, full pool1 characterization420/371/302/69/49, applied-stub/ordinary/private-host acceptance8/8 with exact feature/loader/wheel limits.",
+    "Separate None/Auto aggregate and finite R3 dispositions; operand AND output-axis maps, historical/cook/definition/observer/counter premises, no generic runner claim.",
+    "Explicit unresolved current production-core/evaluator, full fast/oracle8/32 and WP3/M-rebuild/later gates. If reviewer scope includes fresh core claims, qualify the six-producer/core-evaluator menu first; those claims are currently unsupported.",
+    "If reviewing later grouped application instead of457, use assigned writer frozen source, new archive39passes/joins and new integration review; retain this packet as conditional non-generator input qualification."
+  ],
+  "strict_gate_interpretation": "The accepted plan does not enumerate a standalone refresh-core/API/evaluator/library checklist before any bounded bookmark advance. Original R/F exit and historical bounded selections are recovered exactly in original-selection-records and historical-command-index; commands marks proposed impact selections separately. Only a NEW combined review/root disposition can decide the actual bounded advance. No new all69 or fullsite prerequisite is invented.",
+  "resource_frontier": {
+    "core_evaluator": {
+      "roots": 6,
+      "missing_required_outputs": 58,
+      "reused_frontier_outputs": 133,
+      "examined_derivations": 188
+    },
+    "all_recovered_consumers": {
+      "roots": 13,
+      "missing_required_outputs": 86,
+      "reused_frontier_outputs": 159,
+      "examined_derivations": 242
+    },
+    "qualified_generator_host_reuse": "accepted-local-output-path-info.json; selected-producer-invariance.json",
+    "all_selected_outputs_missing": 13,
+    "unknown_output_paths": 0,
+    "network_cache_queried": false,
+    "measured_time_memory_disk": false,
+    "builds_run": 0
+  },
+  "gaps": [
+    "No current production-core/evaluator native executions or actual discovery counts. Source-derived17 evaluator names are a future discovery assertion, not a pass.",
+    "Broad current library/source46 colour qualification remains old-kernel/source-bound where no fresh exact run is recorded; code approval stays accepted.",
+    "Docs builder runtime executable/catalog/exporter closure and final metadata inputs need resolution before strict licensed full docs execution; final site/WASM/SVG/packaging belongs later gates.",
+    "Remote cache availability unqueried. Local demand counts are not compile-unit/time/memory estimates; offline build may expose further unavailable source outputs.",
+    "Later grouped candidate commit and application results intentionally unknown. Do not transfer generator result credit across its changed test source.",
+    "Preflight evidence depends on retained store/local packets; not a standalone publication bundle."
+  ],
+  "root_next_steps": [
+    "Verify SHA256SUMS/SEAL and consume this packet as preflight data only.",
+    "Coordinate at most one selected producer union if extending qualification: six core/evaluator roots or thirteen recovered consumer roots, never overlapping independent builds. Preserve current normal pinned owners/features/source filters.",
+    "After pure artifact/loader/closure qualification, perform exact native discovery and only selected missing tests in the existing private no-network runtime boundary. Reuse accepted input-invariant row/host outputs; do not duplicate QCD capture/proofs.",
+    "Have the metadata/source owner reconcile the NOT-APPLIED proposal on a separately frozen candidate; preserve expected grouped-writer changes and all118 scope records.",
+    "Obtain NEW independent combined review and root scoped disposition before any refreshed integration bookmark advance. Keep WP3/M-rebuild and publication gates open."
+  ],
+  "files": {
+    "status": "status-matrix.json",
+    "decisions": "decision-index.json",
+    "commands": "commands.json",
+    "roots": "producer-roots.json",
+    "frontier": "demand-frontier.json",
+    "filtered_sources": "source-filter-bindings.json",
+    "later_grouped": "later-grouped-applicability.json",
+    "metadata_patch": "metadata.NOT-APPLIED.patch",
+    "execution_patch": "execution-reconciliation.NOT-APPLIED.json-patch",
+    "proposal_guards": "metadata-proposal-guards.json",
+    "source_guards": "code2cf-store-parity.json",
+    "reads": "read-inventory.json",
+    "tools": "tool-hashes.json",
+    "errors": "errors.json",
+    "historical_six": "historical-six-review-attribution.json"
+  },
+  "runtime_credit": 0,
+  "compiler_executions": 0,
+  "test_discovery_executions": 0,
+  "delegation": 0,
+  "tracked_edits": 0,
+  "JJ_snapshot_ref_index_mutation": 0,
+  "retention": "Ignored packet, exact generation/probe scripts and source/store metadata retained for root continuation and review. No owned background process remains after final audit.",
+  "explicit_private_license_or_user_config_reads": 0,
+  "repository_source_configs_read": "Source-only Cargo/Nix/Hakari/nextest policy files were inspected for exact inputs and limits; no private user license/config file was opened.",
+  "network_remote_fetch_upload_publication": 0,
+  "permitted_Nix_metadata_effects": "Pure evaluation may register .drv/source/store-cache metadata; no output realization. Authored task files only in this new ignored packet.",
+  "guards": "guards-final.json",
+  "global_reference_observed_after": "457e361d7d39e0a3daae801651f8c1dfabbf47aa generation-host-stub-rustred-candidate-r2-20261031 generation-host-stub-rustred-evidence-r2-20261031\nfdff0d18953348b84a0f1b7e6ab5ef703a5090de generation-feynkit-refresh-base generation-integration* generation-integration-xs-qed-l2 generation-integration-xs-qed-l2-evidence\n",
+  "main_and_source_guards_pass": true
+}

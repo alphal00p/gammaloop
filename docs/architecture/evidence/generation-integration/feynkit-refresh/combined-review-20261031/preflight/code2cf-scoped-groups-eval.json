@@ -1,0 +1,27 @@
+{
+  "argv": [
+    "nix",
+    "--offline",
+    "--option",
+    "allow-import-from-derivation",
+    "false",
+    "--option",
+    "accept-flake-config",
+    "false",
+    "eval",
+    "--json",
+    "--expr",
+    "let f=builtins.getFlake \"git+file:///shared/lcnbr/dev/gammaloop/main?rev=2cfb52b28d99f92305a9d571bbe3911cf04b8a19&shallow=1&allRefs=1\";c=f.checks.x86_64-linux;in builtins.mapAttrs (_:d:d.drvPath) {integration=c.gammaloop-nextest-binaries-integration;feynkit=c.gammaloop-nextest-binaries-feynkit;spenso=c.gammaloop-nextest-binaries-spenso;docs=c.gammaloop-nextest-binaries-docs;fmt=c.gammaloop-fmt;graph=c.gammaloop-guppy-workspace-graph;}"
+  ],
+  "cwd": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh",
+  "exit_code": 1,
+  "stdout": "",
+  "stderr": "error:\n       \u2026 while evaluating attribute 'docs'\n\n       error: attempt to call something which is not a function but a string: \"d:d.drvPath\"\n",
+  "elapsed_seconds": 0.03978395462036133,
+  "license_variables_omitted": [
+    "SYMBOLICA_LICENSE",
+    "SYMBOLICA_LICENSE_PATH",
+    "SYMBOLICA_LICENSE_SIGNED",
+    "SYMBOLICA_LICENSE_FILE"
+  ]
+}

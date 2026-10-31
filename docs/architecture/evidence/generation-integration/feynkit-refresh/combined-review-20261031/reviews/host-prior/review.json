@@ -1,0 +1,563 @@
+{
+  "schema_version": 1,
+  "review_kind": "NEW independent Astra review of frozen f47 installed-host artifacts, private browser capsule correction, and proposed generated notebook-host stub patch",
+  "reviewer": "GPT-6 Astra review sub-agent (authorized Astra fallback; not Opus)",
+  "completed_utc": "2026-10-31T01:46:55.932709+00:00",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh",
+  "review_directory": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-host-browser-stub-astra-20261031-013106Z-5655cc61",
+  "verdicts": {
+    "host_artifact_provenance_and_actual_bounded_passes": "APPROVE_BOUNDED_ARTIFACT_PROVENANCE_AND_ENUMERATED_PASSES",
+    "capsule_correction_and_unchanged_product_test": "APPROVE_CAPSULE_CORRECTION_AND_EXACT_TWO_ENGINE_PRODUCT_RESULT",
+    "proposed_generated_stub_patch": "APPROVE_GENERATED_NOTEBOOK_HOST_STUB_PATCH",
+    "overall_host_QCD_qualification": "INCOMPLETE: QCD native provider remains absent; source integration and corrected-stub distribution are still outstanding"
+  },
+  "new_blocking_findings": [],
+  "scope": "Approval is hash-bound to H/B/S and the exact f47 artifacts. It covers actual listed passes, not a fully qualified host. No source46, full Community, source/pin/bridge proposal, global integration/WP3, full docs/site/widget, performance, publication, migration, or new native-build approval.",
+  "input_packets": {
+    "installed-host-qualification-20261030-r1": {
+      "report_sha256": "e601f60b827bb4c8bdeba3a0e11002e18e84d5b633ddd46b6798f07e7e277ae1",
+      "manifest_sha256": "b2f5362bab892210549931dad7c6a5584425f0f62f11636f2228255c7f8ef0eb",
+      "entries_verified": 10908,
+      "final_entries_verified": 10908,
+      "unchanged": true
+    },
+    "host-browser-correction-20261031-r1": {
+      "report_sha256": "3b77c19c44d889fd52e5d64be1d6decaf4e6abf11ab336dd384d8f23cbd6ee90",
+      "manifest_sha256": "176aabf3e58c423773a78f88bd819cb9d7715232d476e47cb6a5b051b4a66e96",
+      "entries_verified": 100,
+      "final_entries_verified": 100,
+      "unchanged": true
+    },
+    "host-api-stub-correction-20261031-r1": {
+      "report_sha256": "00e67bf18836c436cdeca07919bb33017fd6cb20fe83319abf3648476421cf96",
+      "manifest_sha256": "06d2ff8dfedf4866ee94e9d215d161c4d109c259eb0848b92f9997110bfce010",
+      "entries_verified": 70,
+      "final_entries_verified": 70,
+      "unchanged": true
+    }
+  },
+  "identities": {
+    "source": {
+      "selected_code": "f47f27213a1c55291239c9bc0f334a7ea1cd1cc1",
+      "selected_evidence": "cacd5182704082df929a066548e3501be22c9533",
+      "kernel": "8eb7c3729d6abefc916decc1bdf0c06536f8af80",
+      "immutable_uri": "git+file:///shared/lcnbr/dev/gammaloop/main?rev=f47f27213a1c55291239c9bc0f334a7ea1cd1cc1&shallow=1&allRefs=1",
+      "fetched_source": "/nix/store/0vsa28jjcrwyrna4iflavxm0gc8msqxm-source",
+      "full_source_binding": {
+        "commit": "f47f27213a1c55291239c9bc0f334a7ea1cd1cc1",
+        "tree": "501fc63d84c6c937f1e83ff206bc79c2edf3fd6e",
+        "source": "/nix/store/0vsa28jjcrwyrna4iflavxm0gc8msqxm-source",
+        "files": 4602,
+        "modes": {
+          "100644": 4567,
+          "100755": 24,
+          "120000": 11
+        },
+        "mismatches": [],
+        "missing": [],
+        "extra": []
+      }
+    },
+    "kernel": "8eb7c3729d6abefc916decc1bdf0c06536f8af80",
+    "artifacts": {
+      "outputs": {
+        "/nix/store/9ias2v2xlw2q7zxvfw4znwp3j9hwnsss-gammaloop-nextest-binaries-feynkit-feynkit-py-0.1.0.drv": "/nix/store/fgzh62fj2ydz2sb5kydh5adjhaz1psc2-gammaloop-nextest-binaries-feynkit-feynkit-py-0.1.0",
+        "/nix/store/3nc8dfhjxb7v9l2h1n0qd5536rdq99x0-generation-refresh-installed-host-wheel-0.1.0.drv": "/nix/store/yg65yzb4ckljb4bg5w673j8ap56yrxfb-generation-refresh-installed-host-wheel-0.1.0",
+        "/nix/store/f86dlazi7lzi5inshqhrcf0ym0z17wvc-generation-refresh-feynkit-stub-exporter-0.1.0.drv": "/nix/store/mn3vzg4c35q658jgg078hahj3hcic2f4-generation-refresh-feynkit-stub-exporter-0.1.0"
+      },
+      "archive": {
+        "path": "/nix/store/fgzh62fj2ydz2sb5kydh5adjhaz1psc2-gammaloop-nextest-binaries-feynkit-feynkit-py-0.1.0/gammaloop-nextest-feynkit-feynkit-py.tar.zst",
+        "sha256": "349770b6e47489ee434259d193483c2340b1009416961c45860b2e4801a72e92",
+        "bytes": 274937042
+      },
+      "wheel": {
+        "path": "/nix/store/yg65yzb4ckljb4bg5w673j8ap56yrxfb-generation-refresh-installed-host-wheel-0.1.0/dist/symbolica-3.0.1-cp310-abi3-linux_x86_64.whl",
+        "sha256": "3fc32efb7c073800da74e37dcf55deb95910d6168c0d3840aaf14cab3e3af318",
+        "bytes": 49513628
+      },
+      "exporter": {
+        "path": "/nix/store/mn3vzg4c35q658jgg078hahj3hcic2f4-generation-refresh-feynkit-stub-exporter-0.1.0/bin/alphal00p-docs-python-exporter",
+        "sha256": "ea6b689912dd12eb1d40fc9f65f6e52ded87a33a755b94ceb42363a6f5480e9e",
+        "bytes": 140159312
+      }
+    },
+    "installed_core_sha256": "53c5efb6344b233dfba09612835c33940f4daf64b215462f4292335067c420a2",
+    "test_sha256": "ee700e0629fad62358e1f0a778353757a9a305bdbc131f2ae2675b7b74d82c6c",
+    "candidate_patch_sha256": "0666eba15326649c0e1fb3dc035bfe0bc8cbc1238ec5fcec99622ecbf2d58e47"
+  },
+  "prior_review_premises": {
+    "source_R4": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-feynkit-refresh-source-opus-round4-20261030T201146Z-697912d5/review.json",
+      "sha256": "5d9db6c6d385bd25ea9e276a2a1ebd2e95c0678171854e4ccb73a1362130e1af",
+      "read": "Source reconciliation through f47, exact Option A test/tolerance and historical invariance premises, rare R4-N3 residual, and explicit lack of installed-host/WebKit qualification."
+    },
+    "shared_provenance": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-feynkit-refresh-shared-provenance-opus-20261030T193404Z-3c0453ff/review.json",
+      "sha256": "565caeace0112a30fb9118f94b2bb759e4267d2b802395c314e485b89b4b2b70",
+      "read": "Shared Scope A generator provenance is for a different package-specific 5ea archive; it does not qualify the three selected host/test/exporter producers. No prior host credit inherited."
+    },
+    "accepted_plan": "Read selected-workspace canonical guidance, generation-feynkit-community-refresh.typ, H preflight.typ/JSON and bounded-producers.nix, and the explicit bounded review brief. No new workspace, native build, delegation or source patch."
+  },
+  "host_artifact_review": {
+    "fresh_independent_verification": "All 4602 f47 Git blobs/modes/symlinks match immutable source; no missing/extra entry. All three source filters independently match f47 (822/801/829). All 3145 live derivation ATerms reparsed against recorded builder, args, environment/structured attrs and input edges. Exact three outputs and 490 source/compiler/layer/runtime NAR contents/lengths recomputed with a pure Python serializer; no Nix command.",
+    "compiler": "Selected toolchain and rustc bytes bound by source/compiler NARs and producer record; retained -Vv gives rustc 1.98.1, 48a229ceaefd4985c50990b14116b6d856af0985, LLVM 22.1.8. Native ELF .comment independently contains rustc 1.98.1 (48a229cea 2026-09-01). No compiler executed by this review.",
+    "kernel": "Root, Tydenso and notebook-host locks resolve all three kernel crates to community8eb7. Vendor replacement maps the Community URL to the actual vendor directory, whose symlinks resolve to full-8eb source. Actual layer source metadata and host/exporter compilation logs bind that source; lock equality alone is not the proof.",
+    "layers": "Read/hash all regular members in three native-test layers (8366/344/366) and one native-normal layer (6983), matching current layered index hashes. Independently traverse the actual two selected fingerprint roots: 558 and 557 units, no unresolved or unequal ambiguous edges. Read all 26 archive members; fresh nextest extraction matches all 26.",
+    "source_content": {
+      "rmeta_units_checked": 11,
+      "embedded_source_MD5_matches": 470,
+      "unreferenced_source_count": 2,
+      "record": "inspection/compiled-source-content.json",
+      "qualification": "470 source-content matches across 11 actual rmeta units, including 28/28 FeynKit Python sources and real kernel/vendor sources. Two Spenso depfile sources are unreferenced in metadata and get no embedded-source credit. This is not a claim of retained final wheel/exporter fingerprints."
+    },
+    "features": "Native tests use default/native/ufo/python_stubgen plus the recorded synthetic dev-dependency feature unification (PyO3 auto-initialize/abi3, no extension-module). Notebook host uses native/ufo/linnet-python with PyO3 abi3-py310 + extension-module. Exporter selects only feynkit and uses embedding/stubgen dependencies. Final host/exporter feature-context compilation occurs in their own pure logs; no final-unit identity is inferred from inherited layers or locks.",
+    "profiles": "Both label the profile ci-optim; root inherits dev-optim, notebook host declares its own profile inheriting dev. Their full definitions and exact commands are retained; not treated as identical final Cargo units.",
+    "native_chain": "Independently parse 15 native ELF files and rehash 42 NEEDED edges. Wheel core bytes equal installed venv core. Producer extracted-lib copy has separate fixup hash; code/rodata match. Archive vs layer executable code/rodata, all other allocated non-loader sections and decoded dynamic symbols agree; distinct file hashes are retained.",
+    "build_scope": "Exactly the selected feynkit-py archive, standalone notebook wheel, and feynkit-only exporter, no all-package archive or full documentation producer. Pure build records exclude all three private variables. Old c78 wheels and later SM/QED token commits are not substituted.",
+    "original_actual_passes": [
+      "Three exact Rust tests, finally discovered and executed once with unchanged ci_gammaloop settings",
+      "Installed UFO ghost crossing with completion marker",
+      "Installed squared-amplitude display with completion marker",
+      "Both installed sector signatures and differing powers annotations"
+    ],
+    "original_failures_preserved": [
+      "Four Rust discovery/setup failures (96 missing extraction destination; 96 read-only nextest store; 2 incompatible target-dir-remap; 96 existing extraction target) are not test failures or passes. Final source view lists exactly three and JUnit records three passes.",
+      "QCD AttributeError at line191 remains failed.",
+      "Original exporter parity fails on stale notebook-host stub.",
+      "Original browser attempts retain crashpad-state error, empty rendered Chromium label, and induced WebKit TargetClosedErrors after explicit stalled-process cleanup; neither WebKit interruption is an assertion pass."
+    ],
+    "rust_policy": "Original and fresh nextest exact filter/profile retained: 240-second slow-timeout policy, zero retries, existing worker policy, no record/update or empty-selection allowance. No Rust source edit, compiler, rustfmt or Clippy was required or run."
+  },
+  "browser_review": {
+    "verdict_basis": "Exact f47 test imported unmodified. Independent successful run has no wrapper on Page.set_content, Locator reads/evaluations, or assertions, and adds no post-content synchronization. Only draw counting, launch identity, blank-page DPR and private-variable exclusion are observed.",
+    "first_divergence": "Compared R4 static fixtures with installed pipeline: shared test/JS/CSS, different native fixture production and runtime filesystem/discovery. Camera state and DOM text initialize before the Chromium failure. The first proved difference is font discovery/text layout, not physics or camera formulas.",
+    "chromium_causality": "Independently reconcile both worker replay starts and full input HTML. Only environment difference is FONTCONFIG_FILE. Exact helper and captured input bytes match; camera/outer geometry unchanged. Baseline textContent/value 100%, innerText empty, zero output box persist through fonts.ready/rAF. Fontconfig points to already verified DejaVu and yields 100%/positive box. Repository runtimeBrowser owns an explicit FONTCONFIG_FILE at nix/rust-workspace.nix:2952. No expected-value substitution or readiness fix in product method.",
+    "webkit_causality": "Original diagnostic creates context then target crashes with WPE EGL display error; 25-second watchdog termination is preserved as interruption. Exact libglvnd binary contains absent /run,/etc,/usr vendor search paths. Explicit vendor/driver paths plus existing Mesa26.2.1 software runtime produce a normal about:blank page. No browser pin changed. Original 479 mounts preserved; 71 native/data files or aliases, 72 extra mounts including drirc. Independently parse 39 added ELFs, 124 NEEDED edges, hashes/symlink identities and all 26 drirc files.",
+    "runtime_prerequisite": "Additional Mesa/software-EGL support and explicit font discovery are qualified inputs for this capsule, not universally inherited prerequisites or authorization for arbitrary host driver directories. Reuse these exact identities or independently qualify an equivalent in the final runtime owner.",
+    "worker_counts": "Seven attempts preserved, including the interrupted WebKit baseline. Four diagnostic native drawings plus four final native drawings = eight in B. Static HTML replay diagnoses font behavior only; the final run is actual native product rendering.",
+    "fresh_result": {
+      "complete": true,
+      "tests_run": 1,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0,
+      "drawings": [
+        [
+          0,
+          2
+        ],
+        [
+          22,
+          2
+        ],
+        [
+          0,
+          42
+        ],
+        [
+          64,
+          2
+        ]
+      ],
+      "engines": [
+        {
+          "engine": "chromium",
+          "version": "153.0.8010.36",
+          "default_executable": "/nix/store/h8903h8s8x5zr3la0pnbgh24sbl5pf62-playwright-browsers/chromium-1228/chrome-linux64/chrome",
+          "requested_executable": "/nix/store/ds6wq0gzyimhl7c1kmzdvql0w4d2rcv4-chromium-153.0.8010.36/bin/chromium",
+          "private_variables_absent": true
+        },
+        {
+          "engine": "webkit",
+          "version": "26.5",
+          "default_executable": "/nix/store/h8903h8s8x5zr3la0pnbgh24sbl5pf62-playwright-browsers/webkit-2311/pw_run.sh",
+          "requested_executable": null,
+          "private_variables_absent": true
+        }
+      ],
+      "pages": [
+        {
+          "dpr": 1,
+          "viewport": {
+            "width": 1100,
+            "height": 1000
+          }
+        },
+        {
+          "dpr": 1,
+          "viewport": {
+            "width": 1100,
+            "height": 1000
+          }
+        }
+      ],
+      "subtests": [
+        {
+          "engine": "chromium",
+          "passed": true
+        },
+        {
+          "engine": "webkit",
+          "passed": true
+        }
+      ],
+      "driver_environment_calls": 1,
+      "source_sha256": "ee700e0629fad62358e1f0a778353757a9a305bdbc131f2ae2675b7b74d82c6c",
+      "installed_core_sha256": "53c5efb6344b233dfba09612835c33940f4daf64b215462f4292335067c420a2",
+      "installed_core_path": "/work/venv/lib/python3.13/site-packages/symbolica/core.abi3.so",
+      "native_display_methods_present": true,
+      "wrappers_on_page_content_locator_reads_or_assertions": false
+    },
+    "preservation": "Initial scale/crop/relational label checks, plus, resize 520->300, outer-scale reread, 105% and reset100%, delta1e-4, places2, binary32 containment1e-6, tall1/64, formulas, regime guards, fixtures and locators are all inside the unchanged SHA-bound method.",
+    "limits": "Fixed external 24x12-point metrics (baseline9), not browser font measurement, full widget/site or full test module. R4-N3 rare synthetic tall residual remains outside this exact four-drawing result; no tolerance was widened. Capsule patch is a review proposal, not applied to sealed H; executed B capsule and helper versions were read."
+  },
+  "stub_patch_review": {
+    "candidate": {
+      "candidate_patch_sha256": "0666eba15326649c0e1fb3dc035bfe0bc8cbc1238ec5fcec99622ecbf2d58e47",
+      "scope": [
+        "examples/notebooks/symbolica-host/python/symbolica/community/hepkit/__init__.pyi"
+      ],
+      "hunks_exact_in_memory": 4,
+      "source_patch_applied": false,
+      "fresh_exporter_bytes_equal_candidate": true,
+      "targets": [
+        {
+          "path": "docs/api/python/feynkit-community.pyi",
+          "old_sha256": "5e2dfa31a10d9c545d38f4257b006daa7b1b53bcf0d96aafb060ee71a68f77e5",
+          "generated_sha256": "5e2dfa31a10d9c545d38f4257b006daa7b1b53bcf0d96aafb060ee71a68f77e5",
+          "old_callables": 850,
+          "generated_callables": 850,
+          "added": [],
+          "sector_methods_entire_ast_unchanged": true,
+          "powers_annotations": {
+            "FeynmanDiagram": "typing.Optional[typing.Dict[int, int]]",
+            "IntegralFamily": "typing.Optional[typing.Sequence[int]]"
+          }
+        },
+        {
+          "path": "crates/feynkit-py/python/symbolica/community/hepkit/__init__.pyi",
+          "old_sha256": "5e2dfa31a10d9c545d38f4257b006daa7b1b53bcf0d96aafb060ee71a68f77e5",
+          "generated_sha256": "5e2dfa31a10d9c545d38f4257b006daa7b1b53bcf0d96aafb060ee71a68f77e5",
+          "old_callables": 850,
+          "generated_callables": 850,
+          "added": [],
+          "sector_methods_entire_ast_unchanged": true,
+          "powers_annotations": {
+            "FeynmanDiagram": "typing.Optional[typing.Dict[int, int]]",
+            "IntegralFamily": "typing.Optional[typing.Sequence[int]]"
+          }
+        },
+        {
+          "path": "examples/notebooks/symbolica-host/python/symbolica/community/hepkit/__init__.pyi",
+          "old_sha256": "bf9d4ce3f4b5f3871c39164d3c11db248123eecd8a1939a845ad7569da4de92f",
+          "generated_sha256": "5e2dfa31a10d9c545d38f4257b006daa7b1b53bcf0d96aafb060ee71a68f77e5",
+          "old_callables": 847,
+          "generated_callables": 850,
+          "added": [
+            "SquaredAmplitude.paged",
+            "SquaredAmplitude._display_",
+            "SquaredAmplitude._repr_mimebundle_"
+          ],
+          "sector_methods_entire_ast_unchanged": true,
+          "powers_annotations": {
+            "FeynmanDiagram": "typing.Optional[typing.Dict[int, int]]",
+            "IntegralFamily": "typing.Optional[typing.Sequence[int]]"
+          }
+        }
+      ]
+    },
+    "fresh_generation": "Exact exporter ea6b... generated all3 on private writable file targets. Subsequent --check read only the generated overrides and returned0. Four patch hunks checked in memory with exact context/line counts, no fuzz; reconstructed bytes equal fresh generated result. No source patch applied.",
+    "ownership": "Existing Rust SquaredAmplitude methods and source-owned model-label/error prose generate this delta; generator validates the native/stub surface. Native display methods also exist on the installed wrapper and feynkit_native class. Existing sector native forwarding owner and both complete stub method ASTs remain unchanged.",
+    "source_followup": "Apply only the approved generated notebook-host __init__.pyi change to the intended final source and rerun canonical three-target parity against that integrated view.",
+    "distribution_followup": "Old wheel3fc32... and installed venv still package notebook stub bf9d4...; private corrected-source parity does not retroactively repair them. Produce/repackage the final distribution with stub5e2d... and inspect its contents/install identity. Stub-only regeneration requires no new Rust implementation or fresh native algebra credit; any later RustRed host build is a separately reviewed native change."
+  },
+  "QCD_unresolved": {
+    "status": "FAILED_NATIVE_PROVIDER_ABSENT; no current QCD pass or RustRed approval",
+    "boundary": "At unchanged installed_feyncalc_qcd_ghost_vertex.py:191, both hepkit wrapper and feynkit_native lack IBPFamily. Host registers GraphModule/FeynkitModule/SpensoModule only; exact selected sources and locks omit rustred-feynkit. Full Community documentation at f47 feyncalc-coverage.typ:1149 assigns IBPFamily to the separate RustRed bridge. The wrapper is not hiding an existing native method, and no obsolete Python alias correction is established.",
+    "preserved": "Exact script SHA2622f4..., 23 assertion sites, targets[[2],[3]], two actual tree expressions, six loop groups. Assertion sites after reduction remain unqualified; no analytical substitute, skip or fabricated completion.",
+    "next_work": "The separately assigned immutable source/pin/private validation-host proposal is outside this review and provides no QCD pass or RustRed approval here. Validate a reviewed native host composition later against the unchanged QCD script, same kernel/fixtures/assertions, then qualify that exact new artifact.",
+    "rerun": "Not repeated by this review; retained actual H/S failure and traceback observer source were checked."
+  },
+  "fresh_capsule_commands": [
+    {
+      "mode": "preflight",
+      "product_argv": null,
+      "licensed": false,
+      "completion": "probes/preflight/completion.json",
+      "exit_code": 0,
+      "elapsed_s": 0.9590762120205909,
+      "process_reaped": true,
+      "owned_tree_remaining": [],
+      "secret_redaction_required": false,
+      "stdout_sha256": "999fa3aee859d92f49fa5c101c2bcb828291c50291eb00bfa35591793e5a072a",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "mode": "product",
+      "product_argv": [
+        "/work/venv/bin/python",
+        "-B",
+        "/proposal/product.py"
+      ],
+      "licensed": true,
+      "completion": "probes/product/completion.json",
+      "exit_code": 1,
+      "elapsed_s": 1.4514808938838542,
+      "process_reaped": true,
+      "owned_tree_remaining": [],
+      "secret_redaction_required": false,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "4119b4e4c9861ecb4b1db522d0f6196784e1d69540d882a582403e627434446b"
+    },
+    {
+      "mode": "product-r2",
+      "product_argv": [
+        "/work/venv/bin/python",
+        "-B",
+        "/proposal/product.py"
+      ],
+      "licensed": true,
+      "completion": "probes/product-r2/completion.json",
+      "exit_code": 0,
+      "elapsed_s": 5.8356534380000085,
+      "process_reaped": true,
+      "owned_tree_remaining": [],
+      "secret_redaction_required": false,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "4bf8419d7a1606ba46b910d68c9833bae573efce8a5edefd28db6bc7376f68ef"
+    },
+    {
+      "mode": "rust-list",
+      "product_argv": [
+        "/nix/store/kwm3g9vh36d9zd171v0nz64fyan1hvfz-cargo-nextest-0.9.143/bin/cargo-nextest",
+        "nextest",
+        "list",
+        "--archive-file",
+        "/nix/store/fgzh62fj2ydz2sb5kydh5adjhaz1psc2-gammaloop-nextest-binaries-feynkit-feynkit-py-0.1.0/gammaloop-nextest-feynkit-feynkit-py.tar.zst",
+        "--extract-to",
+        "/work/nextest",
+        "--workspace-remap",
+        "/build/source",
+        "--ignore-default-filter",
+        "-E",
+        "package(=feynkit-py) and ((binary(=combined_community) and test(=squared_amplitude_tensor_pager)) or (binary(=feynkit_py) and (test(=sector_decomposition::tests::forwards_existing_owner_and_keyword_identities_and_exceptions) or test(=tests::generated_stub_covers_every_registered_native_class))))",
+        "--message-format",
+        "json"
+      ],
+      "licensed": true,
+      "completion": "probes/rust-list/completion.json",
+      "exit_code": 0,
+      "elapsed_s": 5.410158475860953,
+      "process_reaped": true,
+      "owned_tree_remaining": [],
+      "secret_redaction_required": false,
+      "stdout_sha256": "170595311f6717ca857096318f2665b5cc55d27bb551c96e24f42e24eb9d6521",
+      "stderr_sha256": "be273526975ca70ce3b59fea7e736fd837427be8dcbf43b057ab92f3bcfd59a7"
+    },
+    {
+      "mode": "rust-run",
+      "product_argv": [
+        "/nix/store/kwm3g9vh36d9zd171v0nz64fyan1hvfz-cargo-nextest-0.9.143/bin/cargo-nextest",
+        "nextest",
+        "run",
+        "--archive-file",
+        "/nix/store/fgzh62fj2ydz2sb5kydh5adjhaz1psc2-gammaloop-nextest-binaries-feynkit-feynkit-py-0.1.0/gammaloop-nextest-feynkit-feynkit-py.tar.zst",
+        "--extract-to",
+        "/work/nextest",
+        "--workspace-remap",
+        "/build/source",
+        "--profile",
+        "ci_gammaloop",
+        "--ignore-default-filter",
+        "-E",
+        "package(=feynkit-py) and ((binary(=combined_community) and test(=squared_amplitude_tensor_pager)) or (binary(=feynkit_py) and (test(=sector_decomposition::tests::forwards_existing_owner_and_keyword_identities_and_exceptions) or test(=tests::generated_stub_covers_every_registered_native_class))))",
+        "--no-tests=fail",
+        "--no-fail-fast",
+        "--final-status-level",
+        "all"
+      ],
+      "licensed": true,
+      "completion": "probes/rust-run/completion.json",
+      "exit_code": 0,
+      "elapsed_s": 6.594065187033266,
+      "process_reaped": true,
+      "owned_tree_remaining": [],
+      "secret_redaction_required": false,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "8ca06d3787ab6adfda5be160ea4070eec23e42c401c947d842be78e07f03e9df"
+    },
+    {
+      "mode": "sector",
+      "product_argv": [
+        "/work/venv/bin/python",
+        "-B",
+        "/proposal/installed_sector_signature.py",
+        "/work/sector.json"
+      ],
+      "licensed": true,
+      "completion": "probes/sector/completion.json",
+      "exit_code": 0,
+      "elapsed_s": 1.5838442470412701,
+      "process_reaped": true,
+      "owned_tree_remaining": [],
+      "secret_redaction_required": false,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "mode": "squared",
+      "product_argv": [
+        "/work/venv/bin/python",
+        "-B",
+        "/build/source/crates/feynkit-py/tests/installed_squared_amplitude_display.py"
+      ],
+      "licensed": true,
+      "completion": "probes/squared/completion.json",
+      "exit_code": 0,
+      "elapsed_s": 1.4665804340038449,
+      "process_reaped": true,
+      "owned_tree_remaining": [],
+      "secret_redaction_required": false,
+      "stdout_sha256": "c0ef11a8d4a47d73a98f60fc2c64f4cf68a59ad7bd2132d4147a920cf2659061",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "mode": "stub-check",
+      "product_argv": [
+        "/nix/store/mn3vzg4c35q658jgg078hahj3hcic2f4-generation-refresh-feynkit-stub-exporter-0.1.0/bin/alphal00p-docs-python-exporter",
+        "feynkit-community",
+        "/build/source/docs/api/python/feynkit-community.pyi",
+        "--check"
+      ],
+      "licensed": true,
+      "completion": "probes/stub-check/completion.json",
+      "exit_code": 0,
+      "elapsed_s": 1.090699526015669,
+      "process_reaped": true,
+      "owned_tree_remaining": [],
+      "secret_redaction_required": false,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "mode": "stub-generate",
+      "product_argv": [
+        "/nix/store/mn3vzg4c35q658jgg078hahj3hcic2f4-generation-refresh-feynkit-stub-exporter-0.1.0/bin/alphal00p-docs-python-exporter",
+        "feynkit-community",
+        "/build/source/docs/api/python/feynkit-community.pyi"
+      ],
+      "licensed": true,
+      "completion": "probes/stub-generate/completion.json",
+      "exit_code": 0,
+      "elapsed_s": 1.4873957680538297,
+      "process_reaped": true,
+      "owned_tree_remaining": [],
+      "secret_redaction_required": false,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "mode": "ufo",
+      "product_argv": [
+        "/work/venv/bin/python",
+        "-B",
+        "/build/source/crates/feynkit-py/tests/installed_ufo_ghost_crossing.py"
+      ],
+      "licensed": true,
+      "completion": "probes/ufo/completion.json",
+      "exit_code": 0,
+      "elapsed_s": 6.414877278031781,
+      "process_reaped": true,
+      "owned_tree_remaining": [],
+      "secret_redaction_required": false,
+      "stdout_sha256": "8f552ba4853a690f31a3dae3a5e7228fd45c7009c3a1b74d5f5d8ceab8d455c1",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "fresh_native_test_reconciliation": {
+    "test_count": 3,
+    "failed": 0,
+    "errors": 0,
+    "skips": 0,
+    "cases": [
+      {
+        "name": "sector_decomposition::tests::forwards_existing_owner_and_keyword_identities_and_exceptions",
+        "classname": "feynkit-py",
+        "timestamp": "2026-10-31T01:36:06.716+00:00",
+        "time": "0.118"
+      },
+      {
+        "name": "tests::generated_stub_covers_every_registered_native_class",
+        "classname": "feynkit-py",
+        "timestamp": "2026-10-31T01:36:06.716+00:00",
+        "time": "0.264"
+      },
+      {
+        "name": "squared_amplitude_tensor_pager",
+        "classname": "feynkit-py::combined_community",
+        "timestamp": "2026-10-31T01:36:06.716+00:00",
+        "time": "0.491"
+      }
+    ],
+    "junit_sha256": "09481cba1972271cfb3e103fbbb53e3d83ebd500e55401ae62aaa2bfb7806ae0"
+  },
+  "nonblocking_details": [
+    {
+      "id": "ASTRA-N1",
+      "detail": "combined_community archive/layer also differ in non-allocated .symtab/.strtab: four hidden LLVM anonymous-symbol suffixes differ, with equal values/sizes/section identities. All allocated non-loader content and decoded dynamic symbols agree. Do not generalize the generator-review loader-only ELF delta to this artifact.",
+      "evidence": "inspection/combined-static-symbol-difference.json"
+    },
+    {
+      "id": "ASTRA-N2",
+      "detail": "S discloses an accidental workspace-root .ruff_cache write, ownership check, relocation/removal and successful --no-cache rerun. The disclosure is accurate and retained; this is not a perfect historical no-outside-write claim. No tracked-source write is indicated.",
+      "evidence": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/host-api-stub-correction-20261031-r1/inspection/formatter-cache-correction.json"
+    }
+  ],
+  "review_setup_failures_retained": [
+    "PATH python3 absent before scratch initialization (exit127); exact existing qualified Python used afterward. No experiment ran under missing interpreter.",
+    "Analysis-only JSON-shape probe assumed producer-phase-audit was a mapping; it is a list. Read failure only; corrected probe.",
+    "Read-only rg probed nonexistent nix/runtime.nix; actual font owner found in exact nix/rust-workspace.nix. cat of not-yet-created product result also failed after setup ImportError.",
+    "Own first product helper imported hepkit_native; real owner is feynkit_native. ImportError before test selection/native drawings, exit1. Initial helper/command map retained, corrected import rerun passed with unchanged test.",
+    "Static audit attempt1 required env equality before separating ATerm __json structured attrs; attempt2 incorrectly expected a full revision literal in vendor config instead of following its replacement directory/symlink; attempt3 assumed every ELF delta was loader-only. Exact stderr and source versions1-3 retained. Corrected independent r4 audit passed with all actual distinctions recorded."
+  ],
+  "containment": {
+    "write_scope": "Only this new ignored review directory; no sealed candidate/source/index/ref/JJ or main changes. No network, Nix, native compiler/new producer, delegation or source patch application.",
+    "capsules": "Fresh bwrap --unshare-all/--die-with-parent/--new-session. Source, helper, venv, library/font/EGL inputs read-only. Fresh /work plus ephemeral /tmp writable; generation-only private target-file binds. Evidence remains outside all child mounts. No host root/credentials/Git/Nix socket/compiler/GPU/dbus/display server or broad driver tree mounted.",
+    "license": "Exported SYMBOLICA_LICENSE preserved if present; otherwise current-user XDG config read privately in controller memory. Anonymous pipe -> restricted immediate product exec. No value in argv, Nix, file, log, hash or receipt. Pure analysis/preflight/zstd children unlicensed. All3 private variables stripped from Playwright driver/browser descendants. No redaction required.",
+    "state": "No owned process remains; original H/B/S seals and tracked baseline/index are unchanged. Duplicate extractions and browser state removed after retaining fresh JUnit/metadata and hash comparisons."
+  },
+  "retained": "Review JSON, independent scripts and exact failed versions, probes, source/compiler/layer/NAR/ELF/stub checks, generated bytes and small execution receipts are retained for review/continuation. Existing task workspace and all original packets remain.",
+  "evidence_index": {
+    "inspection/archive-and-layers-streams.json": "907333f7077dfe78fd7e4eefd3342d6c69ee4abaf4948c156104782d9d4907f5",
+    "inspection/artifacts-installation.json": "734a5dc7c87c26364349d4d950b981987a1cf27251d28875fe16a15ecd47d2af",
+    "inspection/browser-causality.json": "4dd9d00f85e7a1038517de52f7510a17d8fe434e329706d6e949dc10fabef007",
+    "inspection/cleanup.json": "d594d38b1b16d445931cd3ce5b93ad0a609a77b157caeedb14f662b9f4377c8b",
+    "inspection/combined-static-symbol-difference.json": "779bd1b974671be73f04e837e3723c9af8609b9cb4fa143478f6c287ed0b08e1",
+    "inspection/commands-v1.json": "842f67ddb6e43a24b951d0d0d56fdcaf11e781598e7f3ff38d391efff6ed6f08",
+    "inspection/compiled-source-content.json": "fd1f21bf6054e176807c78a1bb7cfd35d00e717268776ba38363fcef4cbb278e",
+    "inspection/derivations-reparsed.json": "b7063d7e72e240ecc537456bed392e45aedc671e26face9979bfd2f8dc13f1cb",
+    "inspection/elf-initial-difference.json": "87599dee231145575a1ddf9a3e6c3411d8b1889bbf1da49520b64cbc15151184",
+    "inspection/f47-git-source-binding.json": "fefe8a284c843304db983f14138e5a7e18f85c560ef24be706f704e413866817",
+    "inspection/fresh-rust-junit.json": "2a58e8b8c97c5db9d602b0ccb3915c7535c75ccdde0d2f7df272ce839c5829b1",
+    "inspection/helper-syntax.json": "ab842659c4f016050055b284b19ba4aa14450c548a927074d6467483ba692f4d",
+    "inspection/independent-egl-elf-chain.json": "33e01c00cd5c0f6334d631c4013b97cda797ee75aa6f911eb923423ec0d423fe",
+    "inspection/independent-elf-chain.json": "35dd8972f27976ebe68d03077be627ab13878adcfefa84be8e7894d7fba931ee",
+    "inspection/independent-fingerprint-closures.json": "2e67d11dda91c955aaa5d86930dfc3e85d3e56f652dd635003dd3159554504cf",
+    "inspection/independent-stub-patch.json": "cba6f901c556acdd17c36bf1014cfe42af81782a1d829d46d66e267ddf1d3148",
+    "inspection/kernel-source-vendor.json": "e8d2b9e9544f86ccca711dbd3a274fd320243fcf08ccea152ea84867fe7c4e71",
+    "inspection/nar-verification.json": "e820aec50b585a61e15945e2bf892df2515bdc6dce2b245b0cabcf2d62119a2e",
+    "inspection/original-attempts-reconciled.json": "6da6d342988b420146a3e2d72ebb68cd62906f61ff997d39d570602b2b432ff0",
+    "inspection/product-setup-correction.json": "88c07bc657a69d10fd7e37e2799d1975a283b5bad657b705d9c06cee44b790e2",
+    "inspection/product-v1.py": "d833daae8557f638eea141c4f0990db63b7035e479d5a98430b28d8c1f1a6a61",
+    "inspection/qcd-preserved-boundary.json": "4575f47235876f8d5764fc4c0ce22c169c92ac65cf4024fb3696216959111e37",
+    "inspection/runtime-ownership.json": "50d2d39a589b3ceaa55468c3cd9033d4e60ffde84c7b7942ca35037b67d6bad7",
+    "inspection/rust-selection.json": "1d1467fd65874ec1eb90b0eaae277f82fe8c30190e2b6db310dbeecdd08b9b4d",
+    "inspection/seals-after.json": "3aa26e2d2e0a83f9883623519607b525ab2415975aa31c6101c31bc13eac6129",
+    "inspection/seals-before.json": "d22b1c4e1f89554880ad8bb44a6ece56f5f53f635e2f2fce0b76505ab73ede95",
+    "inspection/source-filters.json": "a1efdd7f2c369e2a4223f822296e83083be9bb044536a098f313a63d2db4ffe8",
+    "inspection/static-audit-v1.py": "5ace50aeca506f8879cc8c0663c84dd2f8753ae4ad3c870d187c62e59f803463",
+    "inspection/static-audit-v2.py": "da3d23ae6450108347ff003ef8b27918c9d07e1db23b094ce0e8f8da7fade66f",
+    "inspection/static-audit-v3.py": "c73e9b531732625a3b20f6ab0328f3a8081e71311cda5462f22b9c027be7b623",
+    "inspection/verified-inputs.json": "8b0b6c84722a0e6dbc513b2bbbd38a220d0041c659557da6d10874d7399f707f"
+  }
+}

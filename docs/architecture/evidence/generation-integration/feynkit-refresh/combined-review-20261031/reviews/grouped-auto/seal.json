@@ -1,0 +1,361 @@
+{
+  "schema": "independent-Auto-aggregation-review-seal/1",
+  "files": {
+    "adapter-audit.json": {
+      "sha256": "cfa51175f9c2fb178d24b6a730bd3f3d577df790563114b6227fe2c2fb404de1",
+      "bytes": 1474
+    },
+    "after-integrity.json": {
+      "sha256": "5eb8fa378581b427e8d305133e71dd5d9dcec5cb01be3391cc8aac0e076c0b1c",
+      "bytes": 2437
+    },
+    "after-integrity.stderr": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "after-integrity.stdout": {
+      "sha256": "defb9a07a5860a1bacfd9e7ee6e167c9d27463e9cbe4c18a1f8542c8ad87e82a",
+      "bytes": 2526
+    },
+    "after-refs.json": {
+      "sha256": "8063919c11dd98c223a0e845163ffc5ce7a7d656cc98ffacc8f0d3c708dc8689",
+      "bytes": 1433
+    },
+    "after-source-bindings.json": {
+      "sha256": "5c6a5e16c146a542eb043387692e30f05692d86969fd851de8b36f7c6401b556",
+      "bytes": 95055
+    },
+    "after-tracked.json": {
+      "sha256": "275cb8f749cce1ac1556c669ad4444a635b90d8ec8965e0da9ba5d7bc96ea7dc",
+      "bytes": 622896
+    },
+    "before-integrity.json": {
+      "sha256": "ca384cb06e74bb853e93bc3896e8db12a04242dbc851b2a8dcbaba5f8e168529",
+      "bytes": 2437
+    },
+    "before-refs.json": {
+      "sha256": "8063919c11dd98c223a0e845163ffc5ce7a7d656cc98ffacc8f0d3c708dc8689",
+      "bytes": 1433
+    },
+    "before-source-bindings.json": {
+      "sha256": "5c6a5e16c146a542eb043387692e30f05692d86969fd851de8b36f7c6401b556",
+      "bytes": 95055
+    },
+    "before-tracked.json": {
+      "sha256": "275cb8f749cce1ac1556c669ad4444a635b90d8ec8965e0da9ba5d7bc96ea7dc",
+      "bytes": 622896
+    },
+    "cli-completion.json": {
+      "sha256": "d83cc87dfd6ad4295ba0c64d94704f6c902a20c8159a221fe73d9443c412087f",
+      "bytes": 834
+    },
+    "cli-start.json": {
+      "sha256": "62dcb300babe9f52610e27335abf41f6e54f82bd3a4e9f58b058b0a2ec0f1161",
+      "bytes": 604
+    },
+    "cli.stderr": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "cli.stdout": {
+      "sha256": "9d409d15fac7f0d194443b44ffa1c57eff79eaecae08e20b9b4a278328af9987",
+      "bytes": 509
+    },
+    "closure-audit.json": {
+      "sha256": "28023effbde7b64972301e27e1594aae836330115b0e3ffd1198afd332f15187",
+      "bytes": 919
+    },
+    "controls-after.json": {
+      "sha256": "00e175240c13a1a8606116f9d42b143f509be210d8e39e1e41abe72a5dad3201",
+      "bytes": 100
+    },
+    "controls-before.json": {
+      "sha256": "00e175240c13a1a8606116f9d42b143f509be210d8e39e1e41abe72a5dad3201",
+      "bytes": 100
+    },
+    "controls-declarations.json": {
+      "sha256": "afafdff98be73030648972ee2deeb16af7a15fa9a0d76dbc8fc3966567b50397",
+      "bytes": 33154
+    },
+    "controls-result.json": {
+      "sha256": "8998763ffbd352c98a67524f3bdc0257478ae0d1661cb2514f428ce62a0df53c",
+      "bytes": 26826
+    },
+    "controls.py": {
+      "sha256": "9ce996711b3069c5eea766be9ff234062beac7dea62995deae249210a1a955a6",
+      "bytes": 7912
+    },
+    "controls.stderr": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "controls.stdout": {
+      "sha256": "cec20e5fe1487ea5b09be581dfa09c5e9ac538bbf990f0892c9f51469ec58768",
+      "bytes": 105
+    },
+    "guard-valid-private-ledger.jsonl": {
+      "sha256": "607a7ecb1c3f192e3435d32fdce553cf54563b2a9eda89aec4c6deec7ae6c803",
+      "bytes": 26363490
+    },
+    "hash-control-after.json": {
+      "sha256": "00e175240c13a1a8606116f9d42b143f509be210d8e39e1e41abe72a5dad3201",
+      "bytes": 100
+    },
+    "hash-control-before.json": {
+      "sha256": "00e175240c13a1a8606116f9d42b143f509be210d8e39e1e41abe72a5dad3201",
+      "bytes": 100
+    },
+    "hash-control-result.json": {
+      "sha256": "03fa482d811c00e8f5a3774487362eef25541456658125ad7918a5cc71b85f1f",
+      "bytes": 626
+    },
+    "hash-control.stderr": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "hash-control.stdout": {
+      "sha256": "8b541a7f30895632b2a64b749b5648a7d86e53ac8a21e8bc671433cb5ac01947",
+      "bytes": 69
+    },
+    "hash_control.py": {
+      "sha256": "01871153e379e66476927c7afe4ca225200ce91ef632c84da9c459ed9779ed8b",
+      "bytes": 2011
+    },
+    "integrity.py": {
+      "sha256": "6a66e45e625529693be1e09e59f43672b40c79c4370b12c526963d40806e4eed",
+      "bytes": 8234
+    },
+    "joins-after.json": {
+      "sha256": "00e175240c13a1a8606116f9d42b143f509be210d8e39e1e41abe72a5dad3201",
+      "bytes": 100
+    },
+    "joins-before.json": {
+      "sha256": "00e175240c13a1a8606116f9d42b143f509be210d8e39e1e41abe72a5dad3201",
+      "bytes": 100
+    },
+    "joins-result.json": {
+      "sha256": "98fa30ac4d232de0cb21dc635ebfa7aab2802623db7b07e0f22bd359cd549ac0",
+      "bytes": 15658
+    },
+    "joins.py": {
+      "sha256": "0c227efa5c73a571a6335b56ebae4f284661b6007f7b04a7aed65ab23336f87d",
+      "bytes": 8161
+    },
+    "joins.stderr": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "joins.stdout": {
+      "sha256": "1608eb8ddc7546587c28b4d1a50d10febb7aada99dfe7e2a8418de584b61ace0",
+      "bytes": 25
+    },
+    "review.json": {
+      "sha256": "e4ca45aff35c11bbd6397a32265502f79ff6b622141c1fe75214f17f830919db",
+      "bytes": 27199
+    },
+    "review.json.sha256": {
+      "sha256": "d5a710a59cce3ead8cd8f21d5e904b9fead52fa25a53360ec33dadcb9c6ccd21",
+      "bytes": 78
+    },
+    "setup-errors.json": {
+      "sha256": "a08fe8046565c1a424fd9fbf0bf8c07da926fa22c336717d81900f3404ddfa2d",
+      "bytes": 405
+    },
+    "write_review.py": {
+      "sha256": "4c6384f3199cf34b5d79e87490d1031084f35660312efe342b6ca1367bf161a3",
+      "bytes": 19808
+    }
+  },
+  "fresh_protected_CLI_output_files": {
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-aggregation-20261031-r1/review-astra-1793413266607828149/after.json": {
+      "sha256": "00e175240c13a1a8606116f9d42b143f509be210d8e39e1e41abe72a5dad3201",
+      "bytes": 100
+    },
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-aggregation-20261031-r1/review-astra-1793413266607828149/before.json": {
+      "sha256": "00e175240c13a1a8606116f9d42b143f509be210d8e39e1e41abe72a5dad3201",
+      "bytes": 100
+    },
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-aggregation-20261031-r1/review-astra-1793413266607828149/composition.json": {
+      "sha256": "cf49c3574bcf5a5bad9023524a386a792ff979a78bb980103eb0263076bf0218",
+      "bytes": 13587
+    },
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-aggregation-20261031-r1/review-astra-1793413266607828149/dynamic-imports.json": {
+      "sha256": "f196d05335bc05b67e0fc89d31d98446d775d263871e90322ff224c1d7631908",
+      "bytes": 5166
+    },
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-aggregation-20261031-r1/review-astra-1793413266607828149/factual-guard.json": {
+      "sha256": "b6246f18ae8d59af4f278d4054b915697a45b06b6473babb63c568c61426edca",
+      "bytes": 321
+    },
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-aggregation-20261031-r1/review-astra-1793413266607828149/heldouts/declarations.json": {
+      "sha256": "83f281dc8f8c135e520c2dec5899d7559ed542d7739ed26a6466d6d286daa053",
+      "bytes": 9708
+    },
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-aggregation-20261031-r1/review-astra-1793413266607828149/heldouts/private-ledger.jsonl": {
+      "sha256": "2c3fce17cfe62fed13614ced2122560b7b8b1e87340d57f15f4d64aaa92456a6",
+      "bytes": 26363490
+    },
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-aggregation-20261031-r1/review-astra-1793413266607828149/heldouts/progress.json": {
+      "sha256": "e61cd46196a6c4be88917b63e00da44ecc85c3755453987ef7a7876c2e96e308",
+      "bytes": 9360
+    },
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-aggregation-20261031-r1/review-astra-1793413266607828149/heldouts/result.json": {
+      "sha256": "9b58c90a1ed157a31ba957a002df014656edf4520ddab7037a60593ee59b263e",
+      "bytes": 11233
+    },
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-aggregation-20261031-r1/review-astra-1793413266607828149/native-binding.json": {
+      "sha256": "e41dd3408992b60ce17a77913ad41348d269e7f5e9bb89aa95cc1799009412a4",
+      "bytes": 5029
+    },
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-aggregation-20261031-r1/review-astra-1793413266607828149/read-inputs.json": {
+      "sha256": "da5f5c9b88434bcc8e6b49fd7638e5ded567336bc722c72b78527b87b1184bf7",
+      "bytes": 3789332
+    },
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-aggregation-20261031-r1/review-astra-1793413266607828149/reproduced/Auto-None-correspondence.json": {
+      "sha256": "56770ebc8bd32a0834334db31fc3801a0c6c9389eda4a7cbf87cedad33293b06",
+      "bytes": 159987
+    },
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-aggregation-20261031-r1/review-astra-1793413266607828149/reproduced/aggregate/index.json": {
+      "sha256": "a48ddfecb89af07ffbd919ecf800f5a708d7295d123716acdce4633ddd74f75f",
+      "bytes": 25330
+    },
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-aggregation-20261031-r1/review-astra-1793413266607828149/reproduced/aggregate/pairs.json": {
+      "sha256": "ef078ecddf0e0737ee300c25d365b3b54470e123da4831f19e0636138e280278",
+      "bytes": 1575781
+    },
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-aggregation-20261031-r1/review-astra-1793413266607828149/reproduced/capture-guard.json": {
+      "sha256": "370e8775f5ed59a21bbb1954c7c4760e77299f3c597d500a24d541c48c13bf40",
+      "bytes": 471957
+    },
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-aggregation-20261031-r1/review-astra-1793413266607828149/reproduced/definitions.json": {
+      "sha256": "42148382f8f04c9598df92e2627f2e1a5810f77be7d71d1fbc24a040e8b83cfd",
+      "bytes": 1625
+    },
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-aggregation-20261031-r1/review-astra-1793413266607828149/reproduced/final-chain.json": {
+      "sha256": "baa8fb0f01243fe3f3c118a7607a88b928b29cb7d38993c56d7ba30dc28a852b",
+      "bytes": 2633
+    },
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-aggregation-20261031-r1/review-astra-1793413266607828149/reproduced/grammar-texts.json": {
+      "sha256": "973a1739dde89394ca24f26f20f9e8f68874ea5634a69c5690f60bfabc7b4222",
+      "bytes": 2345371
+    },
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-aggregation-20261031-r1/review-astra-1793413266607828149/reproduced/maps.json": {
+      "sha256": "9d809742d2c763f9eaaeae9d4e19a2b95eddd2b7154b0457e8145b82d52d8c62",
+      "bytes": 60326
+    },
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-aggregation-20261031-r1/review-astra-1793413266607828149/reproduced/mechanical.json": {
+      "sha256": "f34ab38090b1d6a5d20967d93ce939d08613f8b0170a824e46e8c91fe123fbf1",
+      "bytes": 431
+    },
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-aggregation-20261031-r1/review-astra-1793413266607828149/reproduced/native-reuse.json": {
+      "sha256": "46653f73c5e8e1b15c78b4377eda8b844f094defe961e224a4d7100df95ad1e6",
+      "bytes": 21333
+    },
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-aggregation-20261031-r1/review-astra-1793413266607828149/reproduced/reuse-batches/aggregate/pairs.json": {
+      "sha256": "0031a0a6c7b7faef5f1d22b7d4436006e9e302af71bfa7497f9e988f9fb69803",
+      "bytes": 3166791
+    },
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-aggregation-20261031-r1/review-astra-1793413266607828149/reproduced/reuse-batches/grammar/pairs.json": {
+      "sha256": "21cc445ab8540dad75b7ec6046e5442e072d8f6b5778b71ca2591d9fff9926c3",
+      "bytes": 2033237
+    },
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-aggregation-20261031-r1/review-astra-1793413266607828149/reproduced/reuse-batches/transport/pairs.json": {
+      "sha256": "18290ea415f32da659a627806968106cedd3e3be715b1a204d441f49855bfa90",
+      "bytes": 3637779
+    },
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-aggregation-20261031-r1/review-astra-1793413266607828149/reproduced/spinor/faithfulness-pairs.json": {
+      "sha256": "671718d57d53d0c313190d3891f872f7ef06aac0e6763ac2376d855cd18b6358",
+      "bytes": 319363
+    },
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-aggregation-20261031-r1/review-astra-1793413266607828149/reproduced/spinor/local-pairs.json": {
+      "sha256": "0be0680b0e620d6f9c4a2cb8d3bec6ecca1f576e05859758ee63c5aae5eb5ebc",
+      "bytes": 331203
+    },
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-aggregation-20261031-r1/review-astra-1793413266607828149/reproduced/spinor/native-reuse.json": {
+      "sha256": "839f8130d6f4cc4daa360142ea616bf7e4d7c47938d3ed298dd4c49abf26e201",
+      "bytes": 1222
+    },
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-aggregation-20261031-r1/review-astra-1793413266607828149/reproduced/spinor/source-matrix.json": {
+      "sha256": "4366b835b255992c7804dc5b8cb04abdfb4289dc0b809a5a2c371d824a769c03",
+      "bytes": 38636
+    },
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-aggregation-20261031-r1/review-astra-1793413266607828149/reproduced/spinor/triangle.json": {
+      "sha256": "104d5f92436c93586185f4098dc3ba81342e3443b4296e5809d84ea094d873ed",
+      "bytes": 30505
+    },
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-aggregation-20261031-r1/review-astra-1793413266607828149/reproduced/transport/index.json": {
+      "sha256": "650956fcbf61c6c4d7a3d7cecfc86faf95fde306d8bd5d2c3376ad0a0673382d",
+      "bytes": 229098
+    },
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-aggregation-20261031-r1/review-astra-1793413266607828149/reproduced/transport/pairs.json": {
+      "sha256": "adf0648341f28dfc097ae3e201aed9113e7ac449b22ea9058f522e53948472d3",
+      "bytes": 1811211
+    },
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-aggregation-20261031-r1/review-astra-1793413266607828149/reproduced/transport/routing.json": {
+      "sha256": "de07258028704944fcf3942703638a29f4bc0488e2dd7edb977afe85db9e54b9",
+      "bytes": 23079
+    },
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-aggregation-20261031-r1/review-astra-1793413266607828149/reviewer-replay/independent-aggregate-pairs.json": {
+      "sha256": "ef078ecddf0e0737ee300c25d365b3b54470e123da4831f19e0636138e280278",
+      "bytes": 1575781
+    },
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-aggregation-20261031-r1/review-astra-1793413266607828149/reviewer-replay/independent-charts.json": {
+      "sha256": "f104e54909b0e8644fcdfc919780e481080bf6742a0a6265c00131ce8b65421c",
+      "bytes": 20499
+    },
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-aggregation-20261031-r1/review-astra-1793413266607828149/reviewer-replay/independent-maps.json": {
+      "sha256": "9d809742d2c763f9eaaeae9d4e19a2b95eddd2b7154b0457e8145b82d52d8c62",
+      "bytes": 60326
+    },
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-aggregation-20261031-r1/review-astra-1793413266607828149/reviewer-replay/independent-obligations-result.json": {
+      "sha256": "fee829fa52b83749d42cf0f26cac0becf6d61e9d594736f55bad6c757c4e5710",
+      "bytes": 219
+    },
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-aggregation-20261031-r1/review-astra-1793413266607828149/reviewer-replay/independent-partition.json": {
+      "sha256": "04c99d9ba0ac48ca7ccf62b92bbf8d0a0b8ac24f01c7bcbdb00fc9ad5b1e23fc",
+      "bytes": 1057
+    },
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-aggregation-20261031-r1/review-astra-1793413266607828149/reviewer-replay/independent-result.json": {
+      "sha256": "886f9631e8324a8376cdccaef2f32d2ebf9f29a3616bc606a8c4154e00510ec5",
+      "bytes": 2170
+    },
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-aggregation-20261031-r1/review-astra-1793413266607828149/reviewer-replay/independent-spinor.json": {
+      "sha256": "5a398cc2b7f3f787ba5b0e799f51e346e9a6bc4341f22c774d8d0e2f073ea098",
+      "bytes": 21822
+    },
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-aggregation-20261031-r1/review-astra-1793413266607828149/reviewer-replay/independent-transport-index.json": {
+      "sha256": "650956fcbf61c6c4d7a3d7cecfc86faf95fde306d8bd5d2c3376ad0a0673382d",
+      "bytes": 229098
+    },
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-aggregation-20261031-r1/review-astra-1793413266607828149/reviewer-replay/independent-transport-pairs.json": {
+      "sha256": "adf0648341f28dfc097ae3e201aed9113e7ac449b22ea9058f522e53948472d3",
+      "bytes": 1811211
+    },
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-aggregation-20261031-r1/review-astra-1793413266607828149/reviewer-replay/independent-triangle.json": {
+      "sha256": "8870c8c819f73b923a12cb25f9ee02de04fc72e38292b94c13731b0e2add8554",
+      "bytes": 1814
+    },
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-aggregation-20261031-r1/review-astra-1793413266607828149/reviewer-replay/pipeline-matrix.json": {
+      "sha256": "d9477c50d5e894e3895f8b80f19f61155fb134843a40253182800aed476a4394",
+      "bytes": 156907
+    },
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-aggregation-20261031-r1/review-astra-1793413266607828149/reviewer-replay/raw-bridge-result.json": {
+      "sha256": "9c8d56dccdc85d9edd86e94c2783695f4ef76a8d72d426c0e6292fbd0e2bbbf9",
+      "bytes": 48145
+    },
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-aggregation-20261031-r1/review-astra-1793413266607828149/reviewer-replay/registry-result.json": {
+      "sha256": "4973f56eb14333a04f6ac30ac0873ccb5609329d48339fd59c89045422d517a0",
+      "bytes": 8307
+    },
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-auto-aggregation-20261031-r1/review-astra-1793413266607828149/validation.json": {
+      "sha256": "badab6b8102bf607fb36891835c868e75ed3de6024508cd431998f245a8df51c",
+      "bytes": 165
+    }
+  },
+  "self_exclusions": [
+    "seal.json",
+    "seal.sha256"
+  ],
+  "candidate_commit": "113608b3917d903d0fcc730aa3760f114fbc3f04",
+  "candidate_seal_sha256": "a2446a215715c2e4757dd08b6f4cccdcc953b2543932671e3c91cd1e8283fb3c"
+}

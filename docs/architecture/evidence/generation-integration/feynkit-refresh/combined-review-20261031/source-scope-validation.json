@@ -1,0 +1,1003 @@
+{
+  "canonical_owner": "crates/alphal00p-docs-builder/src/lib.rs: DeveloperScope extraction; unique start/end anchors, Git blob digest of exact range or full file",
+  "ordered_scopes": [
+    {
+      "note": "generation-integration-units39-43",
+      "path": "crates/linnet/src/half_edge/canon.rs",
+      "symbol": "native compact canonical labelling and physical node frames",
+      "anchor": "pub struct CanonicalForm<",
+      "digest": "f5196064803f370751b1afc6a5869eed70de2fbc",
+      "actual_digest": "f5196064803f370751b1afc6a5869eed70de2fbc"
+    },
+    {
+      "note": "generation-integration-units39-43",
+      "path": "crates/feynkit-py/src/generation/execution.rs",
+      "symbol": "caller-thread coalescing, one execution-wide cancellation and worker lifecycle",
+      "anchor": "const PROGRESS_INTERVAL:",
+      "digest": "90aa937d1161c8fb8db294e10af8d468fb260e73",
+      "actual_digest": "90aa937d1161c8fb8db294e10af8d468fb260e73"
+    },
+    {
+      "note": "generation-integration-units39-43",
+      "path": "tests/tests/test_feyngen.rs",
+      "symbol": "named certified QCD2 row and current physical CLI controls",
+      "anchor": "fn feyngen_str(",
+      "digest": "35431963b1bc751b00a7a1bb1e834faa815c0f50",
+      "actual_digest": "35431963b1bc751b00a7a1bb1e834faa815c0f50"
+    },
+    {
+      "note": "generation-mark-geometry",
+      "path": "crates/kurvst/src/marks.rs",
+      "symbol": "MarkSpec local geometry and existing transport/carrier owners",
+      "anchor": "impl MarkSpec {",
+      "digest": "fd8561f45d257ecadfcb8e0fa1ed0e48696ef733",
+      "actual_digest": "fd8561f45d257ecadfcb8e0fa1ed0e48696ef733"
+    },
+    {
+      "note": "generation-mark-geometry",
+      "path": "vendor/kurbo/src/stroke.rs",
+      "symbol": "Kurbo authoritative stroke join evaluation",
+      "anchor": "    fn do_join(",
+      "digest": "8c50e774ab4464366a23681a0b3129c3249f76e6",
+      "actual_digest": "8c50e774ab4464366a23681a0b3129c3249f76e6"
+    },
+    {
+      "note": "generation-mark-geometry",
+      "path": "tests/packaging/test_drawing_notices.py",
+      "symbol": "Drawing sdist complete patched-source regression",
+      "anchor": "class DrawingNotices",
+      "digest": "96b8f399d4a259e5a832cbb3d837a63276059f22",
+      "actual_digest": "96b8f399d4a259e5a832cbb3d837a63276059f22"
+    },
+    {
+      "note": "generation-mark-geometry",
+      "path": "pyproject.toml",
+      "symbol": "Maturin drawing source distribution closure",
+      "anchor": "[tool.maturin]",
+      "end_anchor": "[tool.mypy]",
+      "digest": "406bd3acc6261b911adc5547a81ca3befc05ac75",
+      "actual_digest": "406bd3acc6261b911adc5547a81ca3befc05ac75"
+    },
+    {
+      "note": "generation-test-source-closure",
+      "path": "nix/rust-workspace.nix",
+      "symbol": "generation compile-time test source owners",
+      "anchor": "  workspacePackageExtraSourceRoots.compileTimeTest = {",
+      "end_anchor": "  workspacePackageExtraSourceRoots.runtimeTest = {",
+      "digest": "a6b344e5a569991441e6b3677616855df98d32a2",
+      "actual_digest": "a6b344e5a569991441e6b3677616855df98d32a2"
+    },
+    {
+      "note": "generation-test-source-closure",
+      "path": "nix/rust-workspace.nix",
+      "symbol": "declared local Cargo patch source ownership",
+      "anchor": "  workspaceCargoPatches =",
+      "end_anchor": "  localCargoPatchSources =",
+      "digest": "b8ef6794d3fb70d911b1e39e8ee3b4a98d03f227",
+      "actual_digest": "b8ef6794d3fb70d911b1e39e8ee3b4a98d03f227"
+    },
+    {
+      "note": "generation-sampling-staged",
+      "path": "crates/gammalooprs/src/integrands/process/mod.rs",
+      "symbol": "bundle incidence",
+      "anchor": "    fn antiparallel_edges(&self)",
+      "end_anchor": "    /// Compile channels after preparing",
+      "digest": "fa84abc99317adbeae2c80083e8a6eeffce546ab",
+      "actual_digest": "fa84abc99317adbeae2c80083e8a6eeffce546ab"
+    },
+    {
+      "note": "generation-sampling-staged",
+      "path": "crates/gammalooprs/src/integrands/process/sampling/maps.rs",
+      "symbol": "signed affine input blocks",
+      "anchor": "    pub(super) fn identity(",
+      "end_anchor": "    pub fn dimension(&self) -> usize {\n        self.dimension\n    }\n\n    pub fn determinant(",
+      "digest": "c914fffdc29bc975430dc87ee68bda2e11c2fc5c",
+      "actual_digest": "c914fffdc29bc975430dc87ee68bda2e11c2fc5c"
+    },
+    {
+      "note": "generation-sampling-staged",
+      "path": "crates/gammalooprs/src/integrands/process/sampling/maps.rs",
+      "symbol": "exact zero affine coefficients",
+      "anchor": "    fn apply(&self, matrix:",
+      "end_anchor": "    fn validate_dimension(",
+      "digest": "08c5ff1dc2daf0f7e601b640de95ccd36a3a8b15",
+      "actual_digest": "08c5ff1dc2daf0f7e601b640de95ccd36a3a8b15"
+    },
+    {
+      "note": "generation-sampling-staged",
+      "path": "crates/gammalooprs/src/integrands/process/sampling/selection.rs",
+      "symbol": "shared signed LMB frame",
+      "anchor": "fn compile_lmb_map<",
+      "end_anchor": "impl SamplingChannelCatalogue {",
+      "digest": "cb0a19bd463a7c4f03905dff4e66f8c37e38b69b",
+      "actual_digest": "cb0a19bd463a7c4f03905dff4e66f8c37e38b69b"
+    },
+    {
+      "note": "generation-sampling-staged",
+      "path": "crates/gammalooprs/src/integrands/process/mod.rs",
+      "symbol": "graph-derived reflection controls",
+      "anchor": "    fn lmb_sampling_detects_only_oppositely_stored_parallel_edges()",
+      "end_anchor": "    fn canonical_lmb_density_partition_matches_inverse_jacobians()",
+      "digest": "a5d00202b935534a9afd09dd37a5d7484ccbfea9",
+      "actual_digest": "a5d00202b935534a9afd09dd37a5d7484ccbfea9"
+    },
+    {
+      "note": "generation-sampling-staged",
+      "path": "tests/tests/test_nlo_acceptance/cool_qm_eos.rs",
+      "symbol": "fixed seed CoolQM gate",
+      "anchor": "fn cool_qm_eos_nlo_matches_example_target()",
+      "digest": "fd8f5ff00a6b7b7cf3b3b5299f61624dcd7cbc79",
+      "actual_digest": "fd8f5ff00a6b7b7cf3b3b5299f61624dcd7cbc79"
+    },
+    {
+      "note": "generation-projector-flow-staged",
+      "path": "crates/feynkit-graph/src/compact_dot.rs",
+      "symbol": "from_compact_dot",
+      "anchor": "    pub fn from_compact_dot(",
+      "end_anchor": "        let attributes = &parsed.global_data.statements;",
+      "digest": "26ba8e5f2daf3a874648e3b3fcf1004768aad4c9",
+      "actual_digest": "26ba8e5f2daf3a874648e3b3fcf1004768aad4c9"
+    },
+    {
+      "note": "generation-projector-flow-staged",
+      "path": "crates/gammalooprs/src/numerator/aind.rs",
+      "symbol": "Aind model and compact chart boundaries",
+      "anchor": "impl Aind {",
+      "end_anchor": "impl AbsInd for Aind {}",
+      "digest": "ccec241e109087f9cc811c8383e408b29b0d1654",
+      "actual_digest": "ccec241e109087f9cc811c8383e408b29b0d1654"
+    },
+    {
+      "note": "generation-projector-flow-staged",
+      "path": "crates/gammaloop-api/src/commands/generate.rs",
+      "symbol": "parse_spec_with_model",
+      "anchor": "pub fn parse_spec_with_model(",
+      "end_anchor": "fn build_grouping_option(args: &SpecArgs)",
+      "digest": "fc0db7043824aa9891ebe63120eaafc6780f7ab4",
+      "actual_digest": "fc0db7043824aa9891ebe63120eaafc6780f7ab4"
+    },
+    {
+      "note": "generation-projector-flow-staged",
+      "path": "tests/tests/test_runs/test_integrated_uv_cts.rs",
+      "symbol": "BubbleFlow",
+      "anchor": "enum BubbleFlow {",
+      "end_anchor": "fn bubble_local_inspect_target<T>",
+      "digest": "258dabf85c220b309bc208975dd0c9fa04062111",
+      "actual_digest": "258dabf85c220b309bc208975dd0c9fa04062111"
+    },
+    {
+      "note": "generation-projector-flow-staged",
+      "path": "crates/gammalooprs/src/graph/parse/tests.rs",
+      "symbol": "rqft_ghost_explicit_bases_preserve_signed_native_routing",
+      "anchor": "fn rqft_ghost_explicit_bases_preserve_signed_native_routing() {",
+      "end_anchor": "fn legacy_dot_names_the_explicit_conversion() {",
+      "digest": "c76aede2cef891292162665f8a9bebb1b31d18a0",
+      "actual_digest": "c76aede2cef891292162665f8a9bebb1b31d18a0"
+    },
+    {
+      "note": "generation-projector-flow-staged",
+      "path": "tests/resources/graphs/qqx_aaa_subtracted.dot",
+      "symbol": "nineteen variance-corrected graphs",
+      "anchor": "digraph qqx_aaa_pentagon {",
+      "digest": "f26103ab3a89d5992e4fe866b0538ab618136b97",
+      "actual_digest": "f26103ab3a89d5992e4fe866b0538ab618136b97"
+    },
+    {
+      "note": "generation-projector-flow-staged",
+      "path": "tests/resources/graphs/uv_tests/rqft_ghG_3l.dot",
+      "symbol": "seven explicit directed ghost bases",
+      "anchor": "digraph d1 {",
+      "digest": "61aacc598cee73c26bfecff47c17908ad9ff6484",
+      "actual_digest": "61aacc598cee73c26bfecff47c17908ad9ff6484"
+    },
+    {
+      "note": "generation-integration-wp3-grouping",
+      "path": "crates/feynkit-generator/src/grouping.rs",
+      "symbol": "finite quotient comparison",
+      "anchor": "fn compare(\n",
+      "end_anchor": "fn expressions_equal(\n    left: &SymbolicTensor<PartialStructure>,",
+      "digest": "1fde7e75dd6e13b44fafe38ee5dd3b9debb2babf",
+      "actual_digest": "1fde7e75dd6e13b44fafe38ee5dd3b9debb2babf"
+    },
+    {
+      "note": "generation-integration-wp3-grouping",
+      "path": "crates/feynkit-generator/tests/generation_oracle/census.rs",
+      "symbol": "strict diagnostic weights",
+      "anchor": "    fn weight(factor: &Atom)",
+      "end_anchor": "    /// The encoded payload",
+      "digest": "fb41124fcb8c821236295e02eee59a1ec4fdcb3d",
+      "actual_digest": "fb41124fcb8c821236295e02eee59a1ec4fdcb3d"
+    },
+    {
+      "note": "generation-integration-wp3-grouping",
+      "path": "crates/feynkit-generator/tests/generation_oracle/main.rs",
+      "symbol": "actual registration and pool controls",
+      "anchor": "fn register_indices(",
+      "end_anchor": "/// A user filter",
+      "digest": "0d638c2b0b4d89183621d6d202a8e551fb5e3f34",
+      "actual_digest": "0d638c2b0b4d89183621d6d202a8e551fb5e3f34"
+    },
+    {
+      "note": "generation-integration-wp3-grouping",
+      "path": ".config/nextest.toml",
+      "symbol": "source19 normal-run resource reservation",
+      "anchor": "# Source19 full-payload oracle children use actual 1/8/32-thread Run pools.",
+      "end_anchor": "\n[profile.ci_gammaloop]",
+      "digest": "6f601f9f2e0ecb0d421aa50724834cb7fee18117",
+      "actual_digest": "6f601f9f2e0ecb0d421aa50724834cb7fee18117"
+    },
+    {
+      "note": "generation-staged-transport-fix",
+      "path": "crates/feynkit-graph/src/finalization.rs",
+      "symbol": "generated admitted tensor transport",
+      "anchor": "        // Admitted tensors may retain contracted indices even in a scalar\n",
+      "end_anchor": "        for (_, _, vertex) in graph.iter_nodes_mut() {",
+      "digest": "ccbf0871fd75826f2cfaf68ba676bbbb7f85db78",
+      "actual_digest": "ccbf0871fd75826f2cfaf68ba676bbbb7f85db78"
+    },
+    {
+      "note": "generation-drawing-notices",
+      "path": "crates/linnest/build_assets.rs",
+      "symbol": "embed_typst_packages",
+      "anchor": "pub fn embed_typst_packages(",
+      "digest": "6cec3a4971faa783e0497c89ed9f614443f1117b",
+      "actual_digest": "6cec3a4971faa783e0497c89ed9f614443f1117b"
+    },
+    {
+      "note": "generation-integration-wp3-staged",
+      "path": "crates/feynkit-generator/src/generation/staged.rs",
+      "symbol": "staged Request / DiagramSet / BuiltDiagramSet",
+      "anchor": "pub struct LoopCounts {",
+      "end_anchor": "#[cfg(test)]\nmod tests {",
+      "digest": "f13870d5c7d318468a8a1b83ae9b039bb7419826",
+      "actual_digest": "f13870d5c7d318468a8a1b83ae9b039bb7419826"
+    },
+    {
+      "note": "generation-integration-wp3-staged",
+      "path": "crates/feynkit-generator/src/generation.rs",
+      "symbol": "admitted interaction templates and checked conservation rewrite",
+      "anchor": "    fn interaction_numerator(",
+      "end_anchor": "    fn edge_numerator(",
+      "digest": "584e7d14e34cf83605500b892943ea2ca3043569",
+      "actual_digest": "584e7d14e34cf83605500b892943ea2ca3043569"
+    },
+    {
+      "note": "generation-integration-wp3-staged",
+      "path": "crates/feynkit-generator/src/grouping.rs",
+      "symbol": "original-pair B2 certificate and current colour completion",
+      "anchor": "    fn vacuum_group28_original_pair_identity()",
+      "digest": "66cc3fe8280694c72b213d71dee37fb40a1ad997",
+      "actual_digest": "66cc3fe8280694c72b213d71dee37fb40a1ad997"
+    },
+    {
+      "note": "gammaloop-architecture",
+      "path": "crates/gammaloop-api/src/state.rs",
+      "symbol": "gammaloop_api::state::State::load",
+      "anchor": "load_state_manifest(&save_path)?",
+      "digest": "3598dbe299f9a32da1ed8d034706a82959d84abb",
+      "actual_digest": "3598dbe299f9a32da1ed8d034706a82959d84abb"
+    },
+    {
+      "note": "gammaloop-architecture",
+      "path": "crates/gammaloop-api/src/commands/integrate.rs",
+      "symbol": "gammaloop_api::commands::integrate::Integrate::default_workspace_path",
+      "anchor": "fn default_workspace_path(&self",
+      "digest": "bcce3d43713b42fe428e3b5d89784e18c8d47fa7",
+      "actual_digest": "bcce3d43713b42fe428e3b5d89784e18c8d47fa7"
+    },
+    {
+      "note": "gammaloop-architecture",
+      "path": "crates/gammalooprs/src/integrands/evaluation.rs",
+      "symbol": "gammalooprs::integrands::evaluation::EvaluationResult",
+      "anchor": "pub struct EvaluationResult {",
+      "digest": "707cd302e3ed6b9c792c4263fb24e0b1b04e86f1",
+      "actual_digest": "707cd302e3ed6b9c792c4263fb24e0b1b04e86f1"
+    },
+    {
+      "note": "gammaloop-architecture",
+      "path": "crates/gammalooprs/src/integrands/process/mod.rs",
+      "symbol": "gammalooprs::integrands::process::ProcessIntegrand::warm_up",
+      "anchor": "pub fn warm_up(&mut self, model",
+      "digest": "2f6aea58d34fcb798c742d41feac8240dfc5ae55",
+      "actual_digest": "2f6aea58d34fcb798c742d41feac8240dfc5ae55"
+    },
+    {
+      "note": "gammaloop-architecture",
+      "path": "crates/gammalooprs/src/observables/events.rs",
+      "symbol": "gammalooprs::observables::events::GenericEvent",
+      "anchor": "pub struct GenericEvent<T: FloatLike> {",
+      "digest": "6450148360cff16688c3e37986180c678682606e",
+      "actual_digest": "6450148360cff16688c3e37986180c678682606e"
+    },
+    {
+      "note": "gammaloop-architecture",
+      "path": "crates/gammalooprs/src/observables/mod.rs",
+      "symbol": "gammalooprs::observables::EventProcessingRuntime",
+      "anchor": "pub struct EventProcessingRuntime {",
+      "digest": "b672f52f6674d08d11b6cc68ef0621c399386926",
+      "actual_digest": "b672f52f6674d08d11b6cc68ef0621c399386926"
+    },
+    {
+      "note": "gammaloop-architecture",
+      "path": "crates/gammaloop-api/src/python.rs",
+      "symbol": "gammaloop_api::python::GammaLoopAPI",
+      "anchor": "struct GammaLoopAPI {",
+      "digest": "872d2b855d14a4aded443e18df435f899c2bf42a",
+      "actual_digest": "872d2b855d14a4aded443e18df435f899c2bf42a"
+    },
+    {
+      "note": "gammaloop-architecture",
+      "path": "crates/gammalooprs/src/lib.rs",
+      "symbol": "gammalooprs module topology",
+      "anchor": "pub mod cff;",
+      "digest": "41d3e5da3e5b11fbfb34c30432192c7d3ed53e16",
+      "actual_digest": "41d3e5da3e5b11fbfb34c30432192c7d3ed53e16"
+    },
+    {
+      "note": "gammaloop-architecture",
+      "path": "crates/feynkit-generator/src/generation.rs",
+      "symbol": "feynkit_generator::generation::coordination",
+      "anchor": "pub enum GenerationError {",
+      "digest": "5ba73ee8f0b70a9dc5b500e0e84caad9819eb377",
+      "actual_digest": "5ba73ee8f0b70a9dc5b500e0e84caad9819eb377"
+    },
+    {
+      "note": "gammaloop-architecture",
+      "path": "crates/feynkit-model/src/model.rs",
+      "symbol": "feynkit_model::Model",
+      "anchor": "pub struct Model {",
+      "digest": "b04029827b0ecb3c8f23289bf0937e1ea422e176",
+      "actual_digest": "b04029827b0ecb3c8f23289bf0937e1ea422e176"
+    },
+    {
+      "note": "gammaloop-architecture",
+      "path": "crates/feynkit-graph/src/lib.rs",
+      "symbol": "feynkit_graph::FeynmanDiagram",
+      "anchor": "pub struct FeynmanDiagram {",
+      "digest": "03fa811b133f5816415a2b445445ea5a2d87365d",
+      "actual_digest": "03fa811b133f5816415a2b445445ea5a2d87365d"
+    },
+    {
+      "note": "gammaloop-architecture",
+      "path": "crates/feynkit-tensor/src/lib.rs",
+      "symbol": "feynkit_tensor public reduction API",
+      "anchor": "mod orbit_projector;",
+      "digest": "f424864aa88eaacddbfe2c220aacef0a3af2f98d",
+      "actual_digest": "f424864aa88eaacddbfe2c220aacef0a3af2f98d"
+    },
+    {
+      "note": "gammaloop-architecture",
+      "path": "crates/gammalooprs/src/graph/parse/from_dot.rs",
+      "symbol": "gammalooprs::graph::Graph DOT import boundary",
+      "anchor": "    pub fn from_dot(input: &str, model: &Model) -> Result<Vec<Self>> {",
+      "end_anchor": "/// Build GammaLoop graphs from DOT text, as in tests and inline fixtures.",
+      "digest": "2f016e5378c09ffe996a4f74870845364df7d09c",
+      "actual_digest": "2f016e5378c09ffe996a4f74870845364df7d09c"
+    },
+    {
+      "note": "gammaloop-architecture",
+      "path": "crates/feynkit-generator/src/generation/staged.rs",
+      "symbol": "Request / DiagramSet / BuiltDiagramSet staged ownership",
+      "anchor": "impl Request {",
+      "digest": "4c1ca2bb58010add5d33dd84657f74d99b00e6fc",
+      "actual_digest": "4c1ca2bb58010add5d33dd84657f74d99b00e6fc"
+    },
+    {
+      "note": "integration-dashboard",
+      "path": "crates/gammaloop-api/src/commands/integrate.rs",
+      "symbol": "gammaloop_api::commands::integrate::dashboard_event_loop",
+      "anchor": "fn dashboard_event_loop(receiver",
+      "digest": "bcce3d43713b42fe428e3b5d89784e18c8d47fa7",
+      "actual_digest": "bcce3d43713b42fe428e3b5d89784e18c8d47fa7"
+    },
+    {
+      "note": "integration-dashboard",
+      "path": "crates/gammalooprs/src/integrate/render_ratatui.rs",
+      "symbol": "gammalooprs::integrate::RatatuiDashboardState",
+      "anchor": "pub struct RatatuiDashboardState {",
+      "digest": "566f096dcc09bbb2f96582a90fe5dd9aadf41f8d",
+      "actual_digest": "566f096dcc09bbb2f96582a90fe5dd9aadf41f8d"
+    },
+    {
+      "note": "integration-dashboard",
+      "path": "crates/gammalooprs/src/integrate/mod.rs",
+      "symbol": "gammalooprs::integrate",
+      "anchor": "mod render_ratatui;",
+      "digest": "2cbbafcb254b4b7ac042b6ca8dab6682f9a0ce21",
+      "actual_digest": "2cbbafcb254b4b7ac042b6ca8dab6682f9a0ce21"
+    },
+    {
+      "note": "uv-renormalization",
+      "path": "crates/gammalooprs/src/uv/orchestrator.rs",
+      "symbol": "gammalooprs::uv::UVOrchestrator",
+      "anchor": "impl UVOrchestrator {",
+      "digest": "4acc87a62891dbff0b3ca2cef2e8ab505c1de6d5",
+      "actual_digest": "4acc87a62891dbff0b3ca2cef2e8ab505c1de6d5"
+    },
+    {
+      "note": "uv-renormalization",
+      "path": "crates/gammalooprs/src/uv/approx/integrated.rs",
+      "symbol": "gammalooprs::uv::approx::Integrated analytic phase ordering",
+      "anchor": "                integrand_vakint.canonicalize(",
+      "end_anchor": "                coefficient = Atom::from(integrand_vakint).replace_multiple(",
+      "digest": "46b735343d9c8be6b69c1bf738fda6a0733a2f4c",
+      "actual_digest": "46b735343d9c8be6b69c1bf738fda6a0733a2f4c"
+    },
+    {
+      "note": "uv-renormalization",
+      "path": "crates/gammalooprs/src/uv/approx/integrated.rs",
+      "symbol": "gammalooprs::uv::approx::Integrated projected numerator interface",
+      "anchor": "    fn simplify_projected_numerator(",
+      "end_anchor": "\n#[debug_instrument]\npub(crate) fn to_vakint_integrand<",
+      "digest": "52239c3b024703396d4e60480fd22ecf04761d32",
+      "actual_digest": "52239c3b024703396d4e60480fd22ecf04761d32"
+    },
+    {
+      "note": "uv-renormalization",
+      "path": "crates/vakint/src/lib.rs",
+      "symbol": "vakint::VakintSettings tensor and scalar policy fields",
+      "anchor": "    /// Ordered analytic and numerical backends considered for each integral.",
+      "end_anchor": "    /// Optional parent directory for uniquely named external-backend work directories.",
+      "digest": "70d8d2815a16186713fb2b25f84643e27554481e",
+      "actual_digest": "70d8d2815a16186713fb2b25f84643e27554481e"
+    },
+    {
+      "note": "uv-renormalization",
+      "path": "crates/vakint/src/lib.rs",
+      "symbol": "vakint::VakintTerm tensor backend dispatch",
+      "anchor": "    fn project_numerator(",
+      "end_anchor": "    fn tensor_reduce_form(",
+      "digest": "22a7663f68fb673976a0dcf4d701abed6134db8a",
+      "actual_digest": "22a7663f68fb673976a0dcf4d701abed6134db8a"
+    },
+    {
+      "note": "uv-renormalization",
+      "path": "crates/gammalooprs/src/numerator/symbolica_ext.rs",
+      "symbol": "gammalooprs::numerator::NumeratorAtomExt scalar factor collection",
+      "anchor": "impl NumeratorAtomExt for AtomView<'_> {",
+      "end_anchor": "    fn series_preserving_factors(\n        &self,\n        variable: Symbol,\n        expansion_point: AtomView<'_>,\n        depth: i64,\n        numerator_family_keys: &[Atom],\n    ) -> color_eyre::Result<Atom> {\n        for (index, key) in numerator_family_keys.iter().enumerate() {",
+      "digest": "786808befbd6d68f493db1aeb4ee7e1e8f92b710",
+      "actual_digest": "786808befbd6d68f493db1aeb4ee7e1e8f92b710"
+    },
+    {
+      "note": "uv-renormalization",
+      "path": "crates/gammalooprs/src/uv/overlap_numerators.rs",
+      "symbol": "gammalooprs::uv::overlap_numerators::NumeratorJetCache exact finite coefficients",
+      "anchor": "impl NumeratorJetCache {",
+      "end_anchor": "\n#[cfg(test)]",
+      "digest": "5422656f0c564e911f364e3c37da799493d519fc",
+      "actual_digest": "5422656f0c564e911f364e3c37da799493d519fc"
+    },
+    {
+      "note": "uv-renormalization",
+      "path": "crates/gammalooprs/src/uv/approx/local_3d/integrated_localizer.rs",
+      "symbol": "gammalooprs::uv::approx::Localizer integrated tensor coefficient ownership",
+      "anchor": "impl Localizer<'_> {",
+      "digest": "c4660d75be3e086dfc9d4e65b0c060fabb9def95",
+      "actual_digest": "c4660d75be3e086dfc9d4e65b0c060fabb9def95"
+    },
+    {
+      "note": "spenso-parsing-flow",
+      "path": "crates/spenso/src/network/parsing/mod.rs",
+      "symbol": "spenso::network::parsing::ShorthandParsing",
+      "anchor": "pub enum ShorthandParsing {",
+      "digest": "583f0514c0418a75d13870024bb02a8b42f3ba02",
+      "actual_digest": "583f0514c0418a75d13870024bb02a8b42f3ba02"
+    },
+    {
+      "note": "schoonschip-network",
+      "path": "crates/idenso/src/shorthands/schoonschip/api.rs",
+      "symbol": "idenso::shorthands::schoonschip::Schoonschip",
+      "anchor": "pub(crate) trait Schoonschip {",
+      "digest": "3d4e374d18d8e9d69be971e943712b6246a6f362",
+      "actual_digest": "3d4e374d18d8e9d69be971e943712b6246a6f362"
+    },
+    {
+      "note": "gammaloop-draw-style-migration",
+      "path": "crates/gammaloop-api/src/templates.rs",
+      "symbol": "gammaloop_api::templates::Assets::extract_templates",
+      "anchor": "pub fn extract_templates<P: AsRef<Path>>",
+      "digest": "7fe2b4f32ea4277a6aa32f08395f48a2ce097b7e",
+      "actual_digest": "7fe2b4f32ea4277a6aa32f08395f48a2ce097b7e"
+    },
+    {
+      "note": "gammaloop-drawing-architecture",
+      "path": "crates/linnest/typst/src/lib.typ",
+      "symbol": "linnest::typst::layout-sequence",
+      "anchor": "#let layout-sequence = layouts.sequence",
+      "digest": "df4d9c7e162b3d67227e4d3fcd660b19a1bca0e0",
+      "actual_digest": "df4d9c7e162b3d67227e4d3fcd660b19a1bca0e0"
+    },
+    {
+      "note": "spenso-symbolica-syntax-and-rewrites",
+      "path": "crates/idenso/src/lib.rs",
+      "symbol": "idenso::IndexTooling",
+      "anchor": "pub trait IndexTooling {",
+      "digest": "820fbf610c4bb06867a7013d0b8631e57704ff7d",
+      "actual_digest": "820fbf610c4bb06867a7013d0b8631e57704ff7d"
+    },
+    {
+      "note": "spenso-architecture",
+      "path": "crates/symbolica-notation/src/registry.rs",
+      "symbol": "symbolica_notation::Notation",
+      "anchor": "pub struct Notation {",
+      "digest": "309685ed7ca70f43704fb12d8922f69751cadd47",
+      "actual_digest": "309685ed7ca70f43704fb12d8922f69751cadd47"
+    },
+    {
+      "note": "spenso-architecture",
+      "path": "crates/spenso/src/structure.rs",
+      "symbol": "spenso::structure::TensorStructure",
+      "anchor": "pub trait TensorStructure {",
+      "digest": "811c525ab9896dcd834ad30f27e14b84e65ec08a",
+      "actual_digest": "811c525ab9896dcd834ad30f27e14b84e65ec08a"
+    },
+    {
+      "note": "spenso-architecture",
+      "path": "crates/spenso/src/tensors/data.rs",
+      "symbol": "spenso::tensors::data::DataTensor",
+      "anchor": "pub enum DataTensor<T, I = OrderedStructure> {",
+      "digest": "f0e8de6af46e1464919245b04739bb6c8fb20eb2",
+      "actual_digest": "f0e8de6af46e1464919245b04739bb6c8fb20eb2"
+    },
+    {
+      "note": "spenso-architecture",
+      "path": "crates/spenso/src/contraction.rs",
+      "symbol": "spenso::contraction::Contract blanket implementation",
+      "anchor": "impl<T, U, O> Contract<T> for U",
+      "digest": "1a6c276ef07e2ee5b1270f4b0302ba6540295894",
+      "actual_digest": "1a6c276ef07e2ee5b1270f4b0302ba6540295894"
+    },
+    {
+      "note": "spenso-architecture",
+      "path": "crates/spenso/src/network/mod.rs",
+      "symbol": "spenso::network::Network",
+      "anchor": "pub struct Network<S, LibKey, FunKey, Aind = AbstractIndex> {",
+      "digest": "14f66a4d6e62a4fd878c2f52f0bc6ab336cf7f24",
+      "actual_digest": "14f66a4d6e62a4fd878c2f52f0bc6ab336cf7f24"
+    },
+    {
+      "note": "spenso-architecture",
+      "path": "crates/spenso/src/network/parsing/mod.rs",
+      "symbol": "spenso::network::parsing::ParseSettings",
+      "anchor": "pub struct ParseSettings {",
+      "digest": "583f0514c0418a75d13870024bb02a8b42f3ba02",
+      "actual_digest": "583f0514c0418a75d13870024bb02a8b42f3ba02"
+    },
+    {
+      "note": "spenso-architecture",
+      "path": "crates/spenso/src/symbolic_parallelism.rs",
+      "symbol": "spenso::symbolic_parallelism::SymbolicParallelism",
+      "anchor": "pub enum SymbolicParallelism {",
+      "digest": "f52c9ac14265f983c86c9affc9713970e6b28561",
+      "actual_digest": "f52c9ac14265f983c86c9affc9713970e6b28561"
+    },
+    {
+      "note": "idenso-architecture",
+      "path": "crates/idenso/src/representations.rs",
+      "symbol": "idenso::representations::initialize",
+      "anchor": "pub fn initialize() {",
+      "digest": "08709ccab3fc16aefd7a2dde044d4ee4e1455b23",
+      "actual_digest": "08709ccab3fc16aefd7a2dde044d4ee4e1455b23"
+    },
+    {
+      "note": "idenso-architecture",
+      "path": "crates/idenso/src/lib.rs",
+      "symbol": "idenso::IndexTooling",
+      "anchor": "pub trait IndexTooling {",
+      "digest": "820fbf610c4bb06867a7013d0b8631e57704ff7d",
+      "actual_digest": "820fbf610c4bb06867a7013d0b8631e57704ff7d"
+    },
+    {
+      "note": "idenso-architecture",
+      "path": "crates/idenso/src/cook.rs",
+      "symbol": "idenso::CookSettings",
+      "anchor": "pub struct CookSettings {",
+      "digest": "b7327c174d55a96e27a015c5f74ddc0b4061b1b5",
+      "actual_digest": "b7327c174d55a96e27a015c5f74ddc0b4061b1b5"
+    },
+    {
+      "note": "idenso-architecture",
+      "path": "crates/idenso/src/tensor/mod.rs",
+      "symbol": "idenso::tensor::SymbolicTensor",
+      "anchor": "pub struct SymbolicTensor<S = OrderedStructure<LibraryRep, AbstractIndex>, E = Atom> {",
+      "digest": "b95ee5f1852b22a03b1fe79bfe4342d3c42e831e",
+      "actual_digest": "b95ee5f1852b22a03b1fe79bfe4342d3c42e831e"
+    },
+    {
+      "note": "idenso-architecture",
+      "path": "crates/idenso/src/tensor/indexed.rs",
+      "symbol": "idenso::tensor::SymbolicTensor<IndexedStructure>::multiply",
+      "anchor": "    pub fn multiply(",
+      "end_anchor": "    pub fn reindex_interface_ports(",
+      "digest": "a4c365bd57958f94f9070df4562bc957bc1d425c",
+      "actual_digest": "a4c365bd57958f94f9070df4562bc957bc1d425c"
+    },
+    {
+      "note": "idenso-architecture",
+      "path": "crates/idenso/src/tensor/inference.rs",
+      "symbol": "idenso::tensor::SymbolicTensor::map_representation_dimensions",
+      "anchor": "    pub fn map_representation_dimensions(",
+      "end_anchor": "    /// Scope explicit indices",
+      "digest": "602ecc787c95ff01a067ed58736127940627a9cb",
+      "actual_digest": "602ecc787c95ff01a067ed58736127940627a9cb"
+    },
+    {
+      "note": "idenso-architecture",
+      "path": "crates/idenso/src/tensor/contract.rs",
+      "symbol": "idenso::tensor::ContractSettings",
+      "anchor": "pub struct ContractSettings<'a> {",
+      "digest": "442fe89c0ec2fc603e7eeb88b73e69ad9e1b7e60",
+      "actual_digest": "442fe89c0ec2fc603e7eeb88b73e69ad9e1b7e60"
+    },
+    {
+      "note": "idenso-architecture",
+      "path": "crates/idenso/src/tensor/simplification.rs",
+      "symbol": "idenso::tensor::AlgebraSettings",
+      "anchor": "pub struct AlgebraSettings {",
+      "digest": "49ae6d4398bf4decc931f01d09ef49e69f64996f",
+      "actual_digest": "49ae6d4398bf4decc931f01d09ef49e69f64996f"
+    },
+    {
+      "note": "idenso-architecture",
+      "path": "crates/idenso/src/tensor/simplification/observation.rs",
+      "symbol": "idenso::tensor::simplification::observation::DomainObservations",
+      "anchor": "pub(crate) struct DomainObservations {",
+      "digest": "93939c57f0d943d4f7cedb9e0dcabf1f6cce848c",
+      "actual_digest": "93939c57f0d943d4f7cedb9e0dcabf1f6cce848c"
+    },
+    {
+      "note": "idenso-architecture",
+      "path": "crates/idenso/src/dirac/simplify.rs",
+      "symbol": "idenso::dirac::DiracSimplifier::simplify_trace_node",
+      "anchor": "    fn simplify_trace_node(",
+      "end_anchor": "    /// Adjacent pairs remain cheapest.",
+      "digest": "95ebfc105ffb0f9e506105642a6e1629b0e28ae8",
+      "actual_digest": "95ebfc105ffb0f9e506105642a6e1629b0e28ae8"
+    },
+    {
+      "note": "idenso-architecture",
+      "path": "crates/idenso/src/color/simplify.rs",
+      "symbol": "idenso::color::simplify::ColorAlgebraSimplifier::simplify_product",
+      "anchor": "    fn simplify_product(",
+      "digest": "59f13bd0337c64cf8260f9876988919c0571849e",
+      "actual_digest": "59f13bd0337c64cf8260f9876988919c0571849e"
+    },
+    {
+      "note": "idenso-architecture",
+      "path": "crates/idenso/src/tensor/collection/collected.rs",
+      "symbol": "idenso::tensor::CollectedOutput",
+      "anchor": "pub(crate) struct CollectedOutput",
+      "digest": "ca8c5cb4f9dd9ee5152cbb94df6c8d919e098c35",
+      "actual_digest": "ca8c5cb4f9dd9ee5152cbb94df6c8d919e098c35"
+    },
+    {
+      "note": "idenso-architecture",
+      "path": "crates/idenso/src/tensor/collection.rs",
+      "symbol": "idenso::tensor::SymbolicTensor::collect_with_map",
+      "anchor": "    pub(crate) fn collect_with_map(",
+      "end_anchor": "    fn collection_observations(",
+      "digest": "8f078f8c9d4f7fd1fea495180aa1185894b5cfa3",
+      "actual_digest": "8f078f8c9d4f7fd1fea495180aa1185894b5cfa3"
+    },
+    {
+      "note": "linnet-architecture",
+      "path": "crates/linnet/src/half_edge.rs",
+      "symbol": "linnet::half_edge::HedgeGraph",
+      "anchor": "pub struct HedgeGraph<E, V, H = NoData, N: Topology = NodeForest> {",
+      "digest": "cf395f5b3af0a5aa69450792745aa7f568ccd2e3",
+      "actual_digest": "cf395f5b3af0a5aa69450792745aa7f568ccd2e3"
+    },
+    {
+      "note": "linnet-architecture",
+      "path": "crates/linnet/src/half_edge/involution.rs",
+      "symbol": "linnet::half_edge::involution::Involution",
+      "anchor": "pub struct Involution<E = EdgeIndex> {",
+      "digest": "2a5162885ac2e05dc8a1ec79d5fec555a9f6ed36",
+      "actual_digest": "2a5162885ac2e05dc8a1ec79d5fec555a9f6ed36"
+    },
+    {
+      "note": "linnet-architecture",
+      "path": "crates/linnet/src/half_edge/subgraph.rs",
+      "symbol": "linnet::half_edge::subgraph::SubGraphLike",
+      "anchor": "pub trait SubGraphLike: SubSetLike<Hedge> + Inclusion<HedgePair> {",
+      "digest": "929ee2f716f95ba3a0bf7a9afdb8f8bf2a458765",
+      "actual_digest": "929ee2f716f95ba3a0bf7a9afdb8f8bf2a458765"
+    },
+    {
+      "note": "linnet-architecture",
+      "path": "crates/linnet/src/parser/mod.rs",
+      "symbol": "linnet::parser::DotGraph",
+      "anchor": "pub struct DotGraph<N: Topology = NodeForest> {",
+      "digest": "6667c3527c7ae3fa85946116341b8ee78c0e87a8",
+      "actual_digest": "6667c3527c7ae3fa85946116341b8ee78c0e87a8"
+    },
+    {
+      "note": "vakint-architecture",
+      "path": "crates/vakint/src/lib.rs",
+      "symbol": "vakint::Vakint",
+      "anchor": "pub struct Vakint {",
+      "digest": "c2e489a41ac7a123e652811ebe421f3e0852fd1c",
+      "actual_digest": "c2e489a41ac7a123e652811ebe421f3e0852fd1c"
+    },
+    {
+      "note": "vakint-architecture",
+      "path": "crates/vakint/src/topologies.rs",
+      "symbol": "vakint::topologies::Topologies::match_topologies_to_user_input",
+      "anchor": "pub fn match_topologies_to_user_input(",
+      "digest": "f4efb1593e4f4ca2c4290f913a3629e5f8512a94",
+      "actual_digest": "f4efb1593e4f4ca2c4290f913a3629e5f8512a94"
+    },
+    {
+      "note": "vakint-architecture",
+      "path": "crates/vakint/src/graph.rs",
+      "symbol": "vakint::graph::Graph::new_from_atom",
+      "anchor": "pub fn new_from_atom(",
+      "digest": "39e48cf8f2a5f368b6eac525e5b2e19ebe41854e",
+      "actual_digest": "39e48cf8f2a5f368b6eac525e5b2e19ebe41854e"
+    },
+    {
+      "note": "vakint-architecture",
+      "path": "crates/vakint/src/symbolica_community_module/mod.rs",
+      "symbol": "vakint::symbolica_community_module::VakintWrapper",
+      "anchor": "pub struct VakintWrapper {",
+      "digest": "42363386100fcecf85037b215b2f6e187eefdb2d",
+      "actual_digest": "42363386100fcecf85037b215b2f6e187eefdb2d"
+    },
+    {
+      "note": "vakint-architecture",
+      "path": "crates/vakint/src/lorentz.rs",
+      "symbol": "vakint::lorentz::LorentzTensor native incidence",
+      "anchor": "impl LorentzTensor {",
+      "end_anchor": "#[cfg(test)]",
+      "digest": "8375e68bc00affeb538695d1c5f460271cf2d4f6",
+      "actual_digest": "8375e68bc00affeb538695d1c5f460271cf2d4f6"
+    },
+    {
+      "note": "vakint-architecture",
+      "path": "crates/vakint/src/projection.rs",
+      "symbol": "vakint::projection::ScalarTerms analytic coefficient boundary",
+      "anchor": "impl ScalarTerms {",
+      "end_anchor": "    /// Every coefficient is evaluated at the supplied point before one",
+      "digest": "faee7fa232d9dd355e96826a5a49f66db9de802c",
+      "actual_digest": "faee7fa232d9dd355e96826a5a49f66db9de802c"
+    },
+    {
+      "note": "cff-surface-cache-ownership",
+      "path": "crates/feynkit-cff/src/generation.rs",
+      "symbol": "feynkit_cff::CffGenerator::generate_into",
+      "anchor": "pub fn generate_into(",
+      "digest": "47ea515ff9c91e24d6f6b501da289996a06dfe9a",
+      "actual_digest": "47ea515ff9c91e24d6f6b501da289996a06dfe9a"
+    },
+    {
+      "note": "cff-surface-cache-ownership",
+      "path": "crates/feynkit-cff/src/expression.rs",
+      "symbol": "feynkit_cff::CffExpression",
+      "anchor": "pub struct CffExpression {",
+      "digest": "22fbe168db1fc1e94241cd87507cd182e76f39a4",
+      "actual_digest": "22fbe168db1fc1e94241cd87507cd182e76f39a4"
+    },
+    {
+      "note": "cff-surface-cache-ownership",
+      "path": "crates/feynkit-cff/src/surface.rs",
+      "symbol": "feynkit_cff::SurfaceCache",
+      "anchor": "pub struct SurfaceCache {",
+      "digest": "cf07dd60f15885153560f050d552600cfb19034a",
+      "actual_digest": "cf07dd60f15885153560f050d552600cfb19034a"
+    },
+    {
+      "note": "generation-asset-diagnostics-staged",
+      "path": "crates/symbolica-data/src/lib.rs",
+      "symbol": "Asset and Data resource owner",
+      "anchor": "//! External assets belong to the host; consumers retain the expected hashes.",
+      "digest": "be8392d004f1369bfc2cab83a01bb79c0d606acf",
+      "actual_digest": "be8392d004f1369bfc2cab83a01bb79c0d606acf"
+    },
+    {
+      "note": "generation-xs-qed-l2-migration",
+      "path": "crates/feynkit-generator/tests/generation_oracle/main.rs",
+      "symbol": "xs_qed_eemm_L2 certified numerator row",
+      "anchor": "    fast xs_qed_eemm_L2:",
+      "end_anchor": "    fast xs_qed_eemm_L3:",
+      "digest": "17d09cf70892eedf0eee7c33051559cd2a4f10ef",
+      "actual_digest": "17d09cf70892eedf0eee7c33051559cd2a4f10ef"
+    },
+    {
+      "note": "generation-oracle-family-migration",
+      "path": "crates/feynkit-generator/tests/generation_oracle/main.rs",
+      "symbol": "qed_eemm_L1 certified numerator row",
+      "anchor": "    fast qed_eemm_L1:",
+      "end_anchor": "    fast qed_eemm_L2:",
+      "digest": "b486d48307d14f2df3438907461d0ab93db8c6ee",
+      "actual_digest": "b486d48307d14f2df3438907461d0ab93db8c6ee"
+    },
+    {
+      "note": "generation-oracle-family-migration",
+      "path": "crates/feynkit-generator/tests/generation_oracle/main.rs",
+      "symbol": "ctorder_qcd_uugg_L1 certified numerator row",
+      "anchor": "    fast ctorder_qcd_uugg_L1:",
+      "end_anchor": "    fast ctorder_qcd_vac_L3:",
+      "digest": "f64cddee976a2fa0d22c7e7805982875fb09022d",
+      "actual_digest": "f64cddee976a2fa0d22c7e7805982875fb09022d"
+    },
+    {
+      "note": "generation-oracle-family-migration",
+      "path": "crates/feynkit-generator/tests/generation_oracle/main.rs",
+      "symbol": "sm_eemm_L0 certified numerator row",
+      "anchor": "    fast sm_eemm_L0:",
+      "end_anchor": "    fast sm_eemm_L1:",
+      "digest": "3ee0c943abdad923436d37cce999d994d70957fd",
+      "actual_digest": "3ee0c943abdad923436d37cce999d994d70957fd"
+    },
+    {
+      "note": "generation-oracle-family-migration",
+      "path": "crates/feynkit-generator/tests/generation_oracle/main.rs",
+      "symbol": "ym_g6_L0 certified numerator row",
+      "anchor": "    fast ym_g6_L0:",
+      "end_anchor": "    heavy ym_g7_L0:",
+      "digest": "27f3e85eb4b1c5d9cdb4e4e2a562d53d173d3e2c",
+      "actual_digest": "27f3e85eb4b1c5d9cdb4e4e2a562d53d173d3e2c"
+    },
+    {
+      "note": "generation-oracle-numerator-migration",
+      "path": "crates/feynkit-generator/tests/generation_oracle/main.rs",
+      "symbol": "xs_qed_eemm_L1 recorded row",
+      "anchor": "    fast xs_qed_eemm_L1:",
+      "end_anchor": "    fast xs_qed_eemm_L2:",
+      "digest": "4b488f655db1d4b1263d43071718f14d52f9a001",
+      "actual_digest": "4b488f655db1d4b1263d43071718f14d52f9a001"
+    },
+    {
+      "note": "generation-oracle-numerator-migration",
+      "path": "crates/feynkit-generator/tests/generation_oracle/main.rs",
+      "symbol": "xs_qed_eedd_L1 recorded row",
+      "anchor": "    fast xs_qed_eedd_L1:",
+      "end_anchor": "    fast xs_qed_eedd_L2:",
+      "digest": "ee1fea52075f15b3b23fa44a98f957909a6c681e",
+      "actual_digest": "ee1fea52075f15b3b23fa44a98f957909a6c681e"
+    },
+    {
+      "note": "generation-oracle-numerator-migration",
+      "path": "crates/feynkit-generator/tests/generation_oracle/main.rs",
+      "symbol": "xs_qed_eeee_1pi_L1 recorded row",
+      "anchor": "    fast xs_qed_eeee_1pi_L1:",
+      "end_anchor": "    fast xs_qed_eeee_1pi_L2:",
+      "digest": "fb0a84a24354a8881a5515eb2f33fc7db1ea1b99",
+      "actual_digest": "fb0a84a24354a8881a5515eb2f33fc7db1ea1b99"
+    },
+    {
+      "note": "ci",
+      "path": "just/ci.just",
+      "symbol": "CI checks, uploads and reporting commands",
+      "anchor": "ci-checks-and-upload:",
+      "digest": "0f8a76ea61d80a7847d9e8d16756e9914e245ae2",
+      "actual_digest": "0f8a76ea61d80a7847d9e8d16756e9914e245ae2"
+    },
+    {
+      "note": "feynkit-merge-readiness",
+      "path": "crates/gammalooprs/src/integrands/process/evaluators.rs",
+      "symbol": "EvaluatorStack::preprocess_numerator_families",
+      "anchor": "fn preprocess_numerator_families<A: AtomCore>(",
+      "digest": "3b507cbf49922826dc7426ae7fcfa75e95c43aed",
+      "actual_digest": "3b507cbf49922826dc7426ae7fcfa75e95c43aed"
+    },
+    {
+      "note": "feynkit-merge-readiness",
+      "path": "crates/idenso/src/tensor/simplification/observation.rs",
+      "symbol": "DomainObservations::finish_observation",
+      "anchor": "fn finish_observation(",
+      "digest": "93939c57f0d943d4f7cedb9e0dcabf1f6cce848c",
+      "actual_digest": "93939c57f0d943d4f7cedb9e0dcabf1f6cce848c"
+    },
+    {
+      "note": "feynkit-merge-readiness",
+      "path": "crates/feynkit-generator/src/grouping.rs",
+      "symbol": "group_diagrams",
+      "anchor": "pub(crate) fn group_diagrams(",
+      "digest": "66cc3fe8280694c72b213d71dee37fb40a1ad997",
+      "actual_digest": "66cc3fe8280694c72b213d71dee37fb40a1ad997"
+    },
+    {
+      "note": "nix-crane-cache-reuse",
+      "path": "nix/documentation.nix",
+      "symbol": "documentationRegistry and alphal00pDocsCargoArtifacts",
+      "anchor": "documentationRegistry = builtins.fromTOML",
+      "end_anchor": "# Exercise the embedded Typst watcher",
+      "digest": "a6e8d348f30ef64d9c936604c62dcb59ca635d1a",
+      "actual_digest": "a6e8d348f30ef64d9c936604c62dcb59ca635d1a"
+    },
+    {
+      "note": "nix-crane-cache-reuse",
+      "path": "nix/documentation.nix",
+      "symbol": "documentation source ownership",
+      "anchor": "repositoryDocumentationSources =",
+      "end_anchor": "documentationRegistry = builtins.fromTOML",
+      "digest": "bfafb920e4cc1fc0511aa12ad4c1f86272bb8e75",
+      "actual_digest": "bfafb920e4cc1fc0511aa12ad4c1f86272bb8e75"
+    },
+    {
+      "note": "nix-crane-cache-reuse",
+      "path": "nix/rust-workspace.nix",
+      "symbol": "workspace manifest inputs; documentation source inputs are scoped separately",
+      "anchor": "workspaceDependencyManifestFiles =",
+      "end_anchor": "cargoGraphGenerationSrc =",
+      "digest": "6ae7769a5fab0c19db4004118a07e14882b6f4af",
+      "actual_digest": "6ae7769a5fab0c19db4004118a07e14882b6f4af"
+    },
+    {
+      "note": "nix-crane-cache-reuse",
+      "path": "nix/rust-workspace.nix",
+      "symbol": "workspace package source ownership",
+      "anchor": "documentationCatalogAnnotatedItemSourcePaths =",
+      "end_anchor": "workspacePackageExtraSourceRootsForSourcePackages =",
+      "digest": "7105f205fa57a2e8ca470614d15176310d8787dc",
+      "actual_digest": "7105f205fa57a2e8ca470614d15176310d8787dc"
+    },
+    {
+      "note": "nix-crane-cache-reuse",
+      "path": "nix/documentation.nix",
+      "symbol": "alphal00pDocsDerivationArgs and terminal documentation consumers",
+      "anchor": "alphal00pDocsDerivationArgs =",
+      "end_anchor": "\nin\n{\n  inherit",
+      "digest": "a36c6354ece22a926dc6efb1ac634895402cf522",
+      "actual_digest": "a36c6354ece22a926dc6efb1ac634895402cf522"
+    },
+    {
+      "note": "nix-crane-cache-reuse",
+      "path": "nix/rust-workspace.nix",
+      "symbol": "nextestPackageGroups documentation runtime tools",
+      "anchor": "nextestPackageGroups =",
+      "end_anchor": "sortedUnique =",
+      "digest": "311d8dbf20da058cf60c74c651491629d7eb6ce6",
+      "actual_digest": "311d8dbf20da058cf60c74c651491629d7eb6ce6"
+    },
+    {
+      "note": "nix-crane-cache-reuse",
+      "path": "nix/rust-workspace.nix",
+      "symbol": "nextestRuntimeSrcFor",
+      "anchor": "nextestRuntimeSrcFor =",
+      "end_anchor": "nextestFeatureArgsFor =",
+      "digest": "e70efccc2a78b7ab7b002facfefa375418e590f0",
+      "actual_digest": "e70efccc2a78b7ab7b002facfefa375418e590f0"
+    },
+    {
+      "note": "nix-crane-cache-reuse",
+      "path": "crates/alphal00p-docs-builder/src/typst_render.rs",
+      "symbol": "alphal00p_docs_builder::typst_render::PersistentTypstRenderer",
+      "anchor": "pub(crate) struct PersistentTypstRenderer {",
+      "end_anchor": "    #[cfg(test)]\n    mod tests {",
+      "digest": "61fa327720910af549fc9613c757c2a534b975f2",
+      "actual_digest": "61fa327720910af549fc9613c757c2a534b975f2"
+    },
+    {
+      "note": "nix-crane-cache-reuse",
+      "path": "crates/alphal00p-docs-builder/src/watch.rs",
+      "symbol": "alphal00p_docs_builder::SiteBuilder::build_generation",
+      "anchor": "fn build_generation(",
+      "end_anchor": "fn refresh_initial_api(",
+      "digest": "424eac149bd4dbf3be82b19f746d6f003829cf61",
+      "actual_digest": "424eac149bd4dbf3be82b19f746d6f003829cf61"
+    },
+    {
+      "note": "nix-crane-cache-reuse",
+      "path": "nix/ci.nix",
+      "symbol": "documentation test group coverage",
+      "anchor": "name = \"docs\";",
+      "end_anchor": "name = \"integration\";",
+      "digest": "6f841f176b4d76719aaaaf4f1a0e32c0ff7eb405",
+      "actual_digest": "6f841f176b4d76719aaaaf4f1a0e32c0ff7eb405"
+    },
+    {
+      "note": "architecture-notes",
+      "path": "crates/alphal00p-docs-builder/src/lib.rs",
+      "symbol": "alphal00p_docs_builder::SiteBuilder::check_with_catalogs (developer registry validation)",
+      "anchor": "self.developers.schema == DEVELOPER_SCHEMA_VERSION,",
+      "end_anchor": "!self.portal.title.trim().is_empty()",
+      "digest": "63e44b7c2e03ae63fbf549882c9ba0cdcb7439e9",
+      "actual_digest": "63e44b7c2e03ae63fbf549882c9ba0cdcb7439e9"
+    }
+  ],
+  "count": 118,
+  "project_code_executed": false
+}

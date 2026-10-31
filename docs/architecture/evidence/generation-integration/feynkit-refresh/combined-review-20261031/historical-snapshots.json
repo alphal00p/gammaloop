@@ -1,0 +1,32 @@
+{
+  "snapshots": [
+    {
+      "original_path": "docs/developers.toml",
+      "immutable_evidence_revision": "7f03ab8fd5834d7c78164429e2a44dab8d01ef74",
+      "git_blob": "5f275b70bcb9c10d57bcd6873d7b0afcdd183e60",
+      "sha256": "62b1d9d38754fac9602643c2b870c886c01dce5313cdf111b4e8b8881a2fa7f0",
+      "bytes": 207715,
+      "durable_snapshot": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/historical/7f03ab8f/docs__developers.toml.verbatim",
+      "meaning": "pre-edit evidence metadata, not compiled/runtime source attribution"
+    },
+    {
+      "original_path": "docs/architecture/generation-feynkit-community-refresh.typ",
+      "immutable_evidence_revision": "7f03ab8fd5834d7c78164429e2a44dab8d01ef74",
+      "git_blob": "b55e241024d9b763703a3c6b385c42e4ac2815de",
+      "sha256": "8f16edb8231c8f18c66c67091ec7c0fe91bf439aa8be460649c70ccd429e9f01",
+      "bytes": 20892,
+      "durable_snapshot": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/historical/7f03ab8f/docs__architecture__generation-feynkit-community-refresh.typ.verbatim",
+      "meaning": "pre-edit evidence metadata, not compiled/runtime source attribution"
+    },
+    {
+      "original_path": "docs/architecture/evidence/generation-integration/execution.json",
+      "immutable_evidence_revision": "7f03ab8fd5834d7c78164429e2a44dab8d01ef74",
+      "git_blob": "56dde2e8073db2330c61e9fc487a9e96100c9c61",
+      "sha256": "8648d58d5ec131dbd1372f30eb558ed4c68a1d8f179e3d8da8caa5d9651bab3c",
+      "bytes": 47105,
+      "durable_snapshot": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/historical/7f03ab8f/docs__architecture__evidence__generation-integration__execution.json.verbatim",
+      "meaning": "pre-edit evidence metadata, not compiled/runtime source attribution"
+    }
+  ],
+  "rule": "Historical SHA checks use the original immutable evidence revision or exact retained snapshot; current canonical metadata is a new revision. Never rewrite old seals or reviews."
+}

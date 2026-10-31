@@ -1,0 +1,11 @@
+{
+  "schema": "sha256-manifest-seal/1",
+  "created_utc": "2026-10-31T02:36:04.515851+00:00",
+  "verdict": "APPROVE_EXACT_FULL_PACKAGE_POOL1_CHARACTERIZATION_AND_ASSERTED_SUMMARY_CLASSIFICATION",
+  "review_sha256": "fb688585bc7efd0b494fef7648df5abad398f88bfe8c439e8b42c0dd520eaa37",
+  "manifest_sha256": "c0ac1726a9a9fca8892eb8177806fc5e76d6affeb1c882e74e356af5d340c192",
+  "files": 44,
+  "candidate_characterization_sha256": "27d2a759526fb0be9fdc29cb4666be5698e6f675715264e5243fcb1cbaad647d",
+  "reviewer_native_test_executions": 0,
+  "owned_processes_remaining": []
+}

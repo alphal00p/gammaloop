@@ -12,9 +12,9 @@ and bounded qualification record, not integration approval.
 
 The account originally added at #raw("c3449988839d9ad3389dd9fd4c4b8bb9ec447055")
 is preserved in that commit. The additive review aggregation below updates its
-pending-review language only within each reviewer's actual scope. This updated
-note and receipt remain an unreviewed metadata candidate. The registry uses
-#raw("evidence_revision") at #raw("cacd5182704082df929a066548e3501be22c9533"),
+pending-review language only within each reviewer's actual scope. That attribution was independently accepted at metadata48d0; the new
+combined candidate below still requires independent review. The historical
+registry used #raw("evidence_revision") at #raw("cacd5182704082df929a066548e3501be22c9533"),
 without #raw("review_ref") or #raw("reviewed_at"): XS-1's paired-field defect is
 repaired without inventing approval of the new note.
 
@@ -235,10 +235,11 @@ copies, failed preparation/selection attempts, build logs and qualification
 outputs remain available for review. No shared cache or other contributor's
 work is removed. The physical main index guard remains unchanged, the approved
 integration reference stays at fdff, and top-level NixCI enable remains false.
-This record and its registry note are a separate unreviewed evidence candidate.
+The following review accounts describe their original bounded state; current
+dispositions are reconciled below without rewriting the sealed originals.
 A new combined review remains necessary before integration approval.
 
-== Separately bounded review dispositions
+== Historical separately bounded review dispositions
 
 The
 #link("evidence/generation-integration/feynkit-refresh/review-aggregation-20261030/receipt.json")[review receipt]
@@ -324,3 +325,57 @@ claims no fresh full-validator mutant suite. All decoded/capture, definition,
 ordered-interface and old QED Request/Run source-constructor limitations remain.
 No full documentation, runtime, installed-host, browser, migration, combined,
 WP3 or integration gate is closed by this metadata aggregation.
+
+
+== Current combined review candidate, 2026-10-31
+
+#strong[NEW_INDEPENDENT_COMBINED_REVIEW_REQUIRED.] The
+#link("generation-combined-refresh-review.typ")[combined candidate record]
+and #link("evidence/generation-integration/feynkit-refresh/combined-review-20261031/receipt.json")[machine-readable receipt]
+reconcile the exact accepted evidence base
+`7f03ab8fd5834d7c78164429e2a44dab8d01ef74`, actual grouped source
+`6f41807b064bcf2f579883134daef65c8ac279d3`, and current metadata.
+Metadata48d0 acceptance concerns its original attribution only. SourceR4,
+shared Scope A, the SM/prior-eight and raw-three prerequisites, separate
+None/Auto aggregates, finite runner r3, host distributions and the entire
+corrected bounded applied grouped conjunction retain their own scopes.
+
+The latest grouped review66db3d6d accepts the whole bounded conjunction at7f:
+13 migrated Rows,39 actual passes at1/8/32,5 public files and2124 owner
+associations under the retained finite premises. Its correction reuses the
+original independent39 checks and adds zero native runs. Old7c remains
+412/425 with13 absent logs and review0f0851e remains REQUEST_CHANGES.
+Exact7f closes425/425 plus29 subordinate entries. Both operand AND output maps,
+whole definitions and observer premises remain mandatory in each mode; no
+historical grouped-producer or universal layout/decoder/locality theorem follows.
+
+The full pool1 run remains PRIOR ffa evidence:420 inventory,371 selected,
+302 passes,69 failures,49 ignored. One failed identity now has an accepted
+grouped migration;68 other identities remain pending case proof/disposition.
+This derived worklist is not a fresh303/68/49 result. Only None asserts the
+literal full Row; physical Auto and captured counter premises remain separate.
+Ordinary corrected host still lacks IBPFamily. Private RustRed7c1/8eb arity1
+and tracing_max_level_info differ from ordinary; loader, wheel/loose-companion
+and external closure limits remain. No production RustRed/full Community.
+
+Source46 cumulative79dfeaab approval stands within its original source/profile;
+8eb consumer qualification is separate. Exact finite runner r3 F1/F2 guards
+are accepted, despite old verbatim pending phrases. The six-producer2cf sibling
+and source-filter transition qualification remain active with no supplied
+completion/runtime results and zero positive runtime credit here. Next-three
+QCD captures are accepted only as captures; preparation62dade90 requested
+PREP1 fold-endpoint and PREP2 live-case/mode repairs, now active. No math,
+interface, native21 or migration approval is inferred.
+
+Constituent approvals do not approve this conjunction. Outstanding numerator
+migrations are not a blanket prerequisite for each bounded refresh review.
+WP3/M-rebuild, full fast/oracle1/8/32,3150/4664/306, fresh a_ddx/BRST/NLO/CoolQM,
+R/F, fullDocs/Clippy, correctness/performance/memory and later plan stages stay
+open as indexed. No20GiB or1.2x cap was adopted. A proposed local
+generation-integration advance fromfdff requires NEW combined review and root
+disposition; it is distinct from publication, which requires explicit user go.
+Neither advance nor CI enable/publication is performed here.
+
+Historical shared metadata is retained at exact revision-aware snapshots;
+old seals continue to verify their original evidence revisions, never today's
+new registry/note bytes. All118 ordered source bindings remain unchanged.

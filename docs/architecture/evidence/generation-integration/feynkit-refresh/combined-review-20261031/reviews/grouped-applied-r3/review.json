@@ -1,0 +1,895 @@
+{
+  "schema": "independent-grouped-identical-B1-r3-applied-integration-rereview/1",
+  "verdict": "APPROVE",
+  "decision": "APPROVE_CORRECTED_BOUNDED_APPLIED_INTEGRATION_AT_EXACT_FINAL_CANDIDATE",
+  "summary": "B1 is resolved at immutable7f03ab8f. Every one of the original425 workspace-relative manifest entries is present and matches actual Git blob bytes. Exactly13 missing logs were added, then only the31-file subordinate correction packet. The entire original bounded applied-integration conjunction is approved under its retained premises by combining fresh independent durability/source/invariance checks with exactly rebound prior positive producer/runtime/scientific findings. This is not merely a durability approval and is not retrospective approval of old7c.",
+  "reviewer": {
+    "role": "NEW independent focused review sub-agent",
+    "model": "gpt-6-astra",
+    "Astra_fallback": "user authorized",
+    "candidate_implementation_participation": false,
+    "delegation": false,
+    "old_review_modified": false
+  },
+  "completed_utc": "2026-10-31T04:06:46.143608+00:00",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh",
+  "review_directory": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-grouped-identical-B1-r3-astra-20261031-DSnqH402",
+  "candidate": {
+    "final": "7f03ab8fd5834d7c78164429e2a44dab8d01ef74",
+    "final_tree": "17aba42c647a675df61f0113310679404902220d",
+    "log_repair": "ed669e2beeb39f36b3e5753ab9c746770ba7653d",
+    "old_applied_candidate": "7c0e13a08786416a9f24b3bec6df8a50e4592346",
+    "source": "6f41807b064bcf2f579883134daef65c8ac279d3",
+    "accepted_host_base": "457e361d7d39e0a3daae801651f8c1dfabbf47aa",
+    "bookmarks": {
+      "generation-grouped-identical-migration-code-20261031": "6f41807b064bcf2f579883134daef65c8ac279d3",
+      "generation-grouped-identical-migration-candidate-r2-20261031": "7c0e13a08786416a9f24b3bec6df8a50e4592346",
+      "generation-grouped-identical-migration-candidate-20261031": "a9e974f2addaed4f6ab51a6e7a397968573e3a5c",
+      "generation-grouped-identical-migration-preflight-snapshot-20261031": "4b621f0ab9f3908fbd52f9b2a57037fcda241937",
+      "generation-integration": "fdff0d18953348b84a0f1b7e6ab5ef703a5090de",
+      "generation-grouped-identical-b1-log-repair-20261031": "ed669e2beeb39f36b3e5753ab9c746770ba7653d",
+      "generation-grouped-identical-migration-candidate-r3-20261031": "7f03ab8fd5834d7c78164429e2a44dab8d01ef74",
+      "generation-grouped-identical-migration-evidence-r3-20261031": "7f03ab8fd5834d7c78164429e2a44dab8d01ef74"
+    }
+  },
+  "original_integration_brief_and_final_disposition": {
+    "required_conjunction": "Exact approved grouped numerator change on accepted host457; immutable source/new producer qualification;39 actual full-Row checks for13 rows at pools1/8/32; five exact public files and2124 raw/final owner associations; retained independent current raw30 plus separate None/Auto P1-P5 and finite named-consumer proof; faithful complete committed evidence. No broader/global approval.",
+    "all_required_components_satisfied_for_exact_7f": true,
+    "durability_only_approval": false,
+    "unresolved_within_this_bounded_conjunction": [],
+    "components": [
+      {
+        "component": "Exact source application",
+        "status": "PASS",
+        "basis": "Fresh complete BASE->CODE tree comparison and unchanged CODE->OLD->MID->FINAL production bindings. Exactly xs_qed_eemm_identical_L2.numerators0x00fac78da0e0d159->0xa60df38a6b8079e3. All149 Rows/prior12/other9 fields/correctedstub5e2d/every other production byte and118 registry source bindings preserved."
+      },
+      {
+        "component": "Immutable source and new producer qualification",
+        "status": "PASS_REUSED_WITH_FRESH_EXACT_INPUT_REBIND",
+        "basis": "5310 actual source paths equal source6f Git blobs,47 filtered roots and145 derivations match retained records,452 fingerprints and compiled-layer bytes rebound, actual archiveba02 and executedELF7f0017 rehashed. The prior qualified143 unchanged derivations,24 dependency artifacts and12 rlib name-only bijections remain their original positive findings; no new producer execution."
+      },
+      {
+        "component": "39 actual full-Row runtime checks",
+        "status": "PASS_REUSED",
+        "basis": "Prior independent reviewer actual1+12+13+13 JUnit identities, hashes and absence of failures/errors/selected skips rechecked.13 rows at pools1/8/32; zero new executions. These39 are not counted again or added to implementation39."
+      },
+      {
+        "component": "Five exact public captures and2124 owner associations",
+        "status": "PASS_REUSED_WITH_EXACT_ARTIFACT_REBIND",
+        "basis": "All five reviewer/implementation/approved physical capture copies remain byte-identical. Sealed complete joins rehashed;1062 owners per mode,540 raw plus522 final, and full returned None Row retained. No new Row mathematics or helper execution."
+      },
+      {
+        "component": "Current raw30 correctness and separate None/Auto finite proof",
+        "status": "PASS_REUSED_UNDER_ALL_ORIGINAL_PREMISES",
+        "basis": "Exact accepted migration review7d96505d and complete43-file seal reconstructed from final Git blobs;5074 external proof inputs rehashed. The119graphs/2142owners per mode,60 operand/output squares,54 final declarations,57 nonidentity permutations and validated p/p-inverse current named-consumer source argument retain exactly their original scope."
+      },
+      {
+        "component": "Faithful complete committed evidence",
+        "status": "PASS_FRESH",
+        "basis": "Actual final-tree path/mode/blob enumeration and independent SHA256 of every425 oldmanifest and29 newmanifest blob, plus both manifests/seals.417 bindings/43 copied review files/72 preparation entries reconstruct. All preexisting bytes/history remain, old7c explicitly incomplete, no omitted chunks or unexpected scoped paths."
+      }
+    ]
+  },
+  "B1": {
+    "original_priority": "P1",
+    "disposition": "RESOLVED_AT_7f03ab8fd5834d7c78164429e2a44dab8d01ef74",
+    "prior_review": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-grouped-identical-integration-astra-20261031-033116Z-c0749b38/review.json",
+      "sha256": "0f0851e068653202a7981e71b4d5ccf54316d1bf544caa0725f99cc1794066f4",
+      "bytes": 56941
+    },
+    "prior_lowercase_seal": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-grouped-identical-integration-astra-20261031-033116Z-c0749b38/seal.json",
+      "sha256": "121a41e327b0c353b5fe24fae1582e239925b86024218719072dcbfd08e7d51a",
+      "bytes": 19498
+    },
+    "prior_verdict_remains": "REQUEST_CHANGES on old7c. Specific positive findings are reused after invariance verification; that verdict is not relabelled full prior approval.",
+    "historical_fact": "Old7c has412/425 manifest entries. Exactly13 .log files listed in B1 were absent despite local matches and durable-copy claims. The old closure claim remains false.",
+    "repair": "ed669 adds exactly those13 original files at the same paths, hashes, sizes and100644 mode. Final7f adds only29 sealed subordinate entries plus SHA256SUMS andseal.json.5723 old paths are preserved in ed669;5736 preexisting paths are preserved in7f.",
+    "final_manifest": "All425 actual final Git blobs independently SHA256-verified, including canonical note and docs/developers.toml. No filesystem or git-ls-files membership inference.",
+    "history": "Original425 manifest f9a8dec1, receipt1f504859, seal5a1d9886, canonical note, registry and exact old review/seal remain unchanged. Former r2 durable_reference text remains historical; correction explicitly binds the repaired successor, never calls old7c complete.",
+    "final_vector_sha256": "e5e815f410e7749e45885ac09888ffcd3901f573a64506dc50700f4990d30fc9",
+    "supplied_final_audit_sha256": "7ff239ef750b2fb50ad153b5cc609ab71033fdf469ed2aea9922408907bb6fe0",
+    "matches_supplied_committed_and_external_audit_vectors": true,
+    "missing_final": [],
+    "changed_final": [],
+    "unexpected_scoped_paths": [],
+    "blocking_findings_remaining": []
+  },
+  "blocking_findings": [],
+  "new_review_checks": {
+    "method": "Pure standard-library evidence/hash/JSON/gzip/XML/TOML inspection and read-only Git/JJ. Independent audit implementation; no old helper imported or run. Exact actual Git objects, not root local hash assertion, determine closure.",
+    "immutable_trees": "Complete path/mode/type/blob vectors of acceptedbase457, source6f, old7c, repaireded669 andfinal7f retained in immutable-trees.json.",
+    "tree_transitions": [
+      {
+        "before": "7c0e13a08786416a9f24b3bec6df8a50e4592346",
+        "after": "ed669e2beeb39f36b3e5753ab9c746770ba7653d",
+        "added": [
+          "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration/preparation/chain-controls-failed-attempts.log",
+          "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration/preparation/evidence-failed-attempts.log",
+          "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration/reviews/migration/controls.log",
+          "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration/reviews/migration/final-guard.log",
+          "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration/reviews/migration/finite-named.log",
+          "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration/reviews/migration/integrity-before.log",
+          "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration/reviews/migration/integrity-final.log",
+          "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration/reviews/migration/integrity-v2-before.log",
+          "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration/reviews/migration/integrity-v3-before.log",
+          "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration/reviews/migration/reconstruction.log",
+          "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration/reviews/migration/supplementary-v2.log",
+          "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration/reviews/migration/supplementary-v3.log",
+          "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration/reviews/migration/supplementary.log"
+        ],
+        "removed": [],
+        "changed": [],
+        "preserved_paths": 5723
+      },
+      {
+        "before": "ed669e2beeb39f36b3e5753ab9c746770ba7653d",
+        "after": "7f03ab8fd5834d7c78164429e2a44dab8d01ef74",
+        "added": [
+          "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration-b1-r3/SHA256SUMS",
+          "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration-b1-r3/audit-before-snapshot.py",
+          "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration-b1-r3/audit.py",
+          "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration-b1-r3/build_correction.py",
+          "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration-b1-r3/historical-7c-audit.json",
+          "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration-b1-r3/manifest-audit.json",
+          "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration-b1-r3/missing-logs.json",
+          "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration-b1-r3/receipt.json",
+          "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration-b1-r3/record.typ",
+          "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration-b1-r3/review/external-artifacts.json",
+          "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration-b1-r3/review/git-manifest-missing.json",
+          "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration-b1-r3/review/review.json",
+          "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration-b1-r3/review/seal.json",
+          "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration-b1-r3/seal.json",
+          "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration-b1-r3/seal_correction.py",
+          "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration-b1-r3/tracking/errors-and-source-versions.json",
+          "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration-b1-r3/tracking/historical-audit.stderr",
+          "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration-b1-r3/tracking/historical-audit.stdout",
+          "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration-b1-r3/tracking/initial.json",
+          "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration-b1-r3/tracking/jj-track-help.command.json",
+          "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration-b1-r3/tracking/jj-track-help.stderr",
+          "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration-b1-r3/tracking/jj-track-help.stdout",
+          "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration-b1-r3/tracking/pre-snapshot-audit.stderr",
+          "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration-b1-r3/tracking/repaired-audit.stderr",
+          "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration-b1-r3/tracking/repaired-audit.stdout",
+          "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration-b1-r3/tracking/track-exact13.command.json",
+          "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration-b1-r3/tracking/track-exact13.stderr",
+          "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration-b1-r3/tracking/track-exact13.stdout",
+          "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration-b1-r3/tracking/track-packet.command.json",
+          "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration-b1-r3/tracking/track-packet.stderr",
+          "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration-b1-r3/tracking/track-packet.stdout"
+        ],
+        "removed": [],
+        "changed": [],
+        "preserved_paths": 5736
+      }
+    ],
+    "old_manifest_entries": 425,
+    "new_manifest_entries": 29,
+    "new_packet_total_paths": 31,
+    "lossless_bindings_from_final_blobs": 417,
+    "copied_migration_review_files": 43,
+    "preparation_manifest_entries": 72,
+    "chunk_paths_verified": [
+      "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration/qualification/producer-chain.json.gz.part000",
+      "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration/qualification/producer-chain.json.gz.part001",
+      "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration/qualification/producer-chain.json.gz.part002"
+    ],
+    "old_seal_files_rehashed": 125,
+    "proof_input_files_rehashed": 5074,
+    "total_unique_external_inputs_rebound_and_rechecked_at_return": 34264,
+    "registry_source_bindings_recomputed": 118,
+    "tracking_limit_bytes": 1048576,
+    "largest_manifest_scoped_file_bytes": 1029805,
+    "tracking": "Actual retained jj file track --include-ignored arguments select exactly the13 missing logs. Before/after audit source bytes equal; pre-snapshot failure remains retained. No ignore/configuration/index change is performed by this reviewer; unchanged Git .gitignore and recorded1MiB policy verified without private configuration reads.",
+    "heldouts": [
+      {
+        "name": "missing manifest entry from immutable input map",
+        "detected": {
+          "missing": [
+            "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration/preparation/chain-controls-failed-attempts.log"
+          ],
+          "changed": [],
+          "unexpected": []
+        }
+      },
+      {
+        "name": "changed blob bytes",
+        "detected": {
+          "missing": [],
+          "changed": [
+            "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration/preparation/chain-controls-failed-attempts.log"
+          ],
+          "unexpected": []
+        }
+      },
+      {
+        "name": "unexpected scoped ignored extension",
+        "detected": {
+          "missing": [],
+          "changed": [],
+          "unexpected": [
+            "docs/architecture/evidence/generation-integration/feynkit-refresh/grouped-identical-migration/unexpected-heldout.log"
+          ]
+        }
+      }
+    ],
+    "heldout_limits": "Three fresh in-memory durability controls only: missing entry, changed blob and unexpected scoped .log path. No native/scientific/decoder evidence credit.",
+    "exact_external_archive_sha256": "ba02f91fc47a35b03cc9d51dded39836a7635bdf423c6025ab6e4775c504fc35",
+    "exact_executed_ELF": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-grouped-identical-integration-astra-20261031-033116Z-c0749b38/archive/target/ci-optim/deps/generation_oracle-3892f55f31822180",
+      "sha256": "7f00172ace12f04ef53d51a70e6ac4a12248e05e3d61edbde42e5e02079f5c81",
+      "bytes": 61186320
+    },
+    "runtime_reinspection": [
+      {
+        "step": "pool1-grouped",
+        "pool": 1,
+        "names": [
+          "xs_qed_eemm_identical_L2"
+        ],
+        "reused_passes": 1,
+        "junit_sha256": "5c8fe523ad872ae69d062285c5945d8b85a48060792cce3f40ccc090ac55d810"
+      },
+      {
+        "step": "pool1-prior12",
+        "pool": 1,
+        "names": [
+          "xs_qed_eeee_1pi_L1",
+          "xs_qed_eedd_L1",
+          "xs_qed_eemm_L1",
+          "xs_qcd_gguu_1pi_L1",
+          "sm_eeww_L0",
+          "sm_eemm_L0",
+          "qed_ee4f_L0",
+          "xs_qed_eeee_L1",
+          "qed_eemm_L1",
+          "xs_qed_eemm_L2",
+          "ctorder_qcd_uugg_L1",
+          "ym_g6_L0"
+        ],
+        "reused_passes": 12,
+        "junit_sha256": "db347a3a14930d3e2a9d5dda5bc69dc6ab380b9d2166ca7c153adde3e9efd52f"
+      },
+      {
+        "step": "pool8",
+        "pool": 8,
+        "names": [
+          "sm_eemm_L0",
+          "sm_eeww_L0",
+          "xs_qed_eedd_L1",
+          "qed_ee4f_L0",
+          "xs_qed_eeee_1pi_L1",
+          "xs_qed_eeee_L1",
+          "qed_eemm_L1",
+          "xs_qed_eemm_L1",
+          "xs_qcd_gguu_1pi_L1",
+          "xs_qed_eemm_L2",
+          "ym_g6_L0",
+          "ctorder_qcd_uugg_L1",
+          "xs_qed_eemm_identical_L2"
+        ],
+        "reused_passes": 13,
+        "junit_sha256": "fe08177f1eae4d2bfe616e5eeb969b9b010052101fb9a98c62be7bd8967d2810"
+      },
+      {
+        "step": "pool32",
+        "pool": 32,
+        "names": [
+          "xs_qed_eeee_L1",
+          "sm_eeww_L0",
+          "xs_qed_eedd_L1",
+          "xs_qed_eemm_L1",
+          "qed_ee4f_L0",
+          "xs_qed_eeee_1pi_L1",
+          "xs_qcd_gguu_1pi_L1",
+          "qed_eemm_L1",
+          "sm_eemm_L0",
+          "xs_qed_eemm_L2",
+          "ym_g6_L0",
+          "ctorder_qcd_uugg_L1",
+          "xs_qed_eemm_identical_L2"
+        ],
+        "reused_passes": 13,
+        "junit_sha256": "197b62d114cbf3e420e3c675ff293fde2e7dd2fac8de30d559b24aee1d634621"
+      }
+    ]
+  },
+  "prior_positive_findings_reused": {
+    "provenance": "The following original positive findings are quoted verbatim from the SHA-bound prior review. Any word fresh/here/review in these quoted fields refers to that completed prior round, not to this B1 round. The current round approves their applicability only after exact source, Git, artifact and complete proof/runtime evidence rebind.",
+    "source_application": {
+      "status": "PASS",
+      "exact_diff": {
+        "base": "457e361d7d39e0a3daae801651f8c1dfabbf47aa",
+        "code": "6f41807b064bcf2f579883134daef65c8ac279d3",
+        "evidence": "7c0e13a08786416a9f24b3bec6df8a50e4592346",
+        "changed_production_paths": [
+          "crates/feynkit-generator/tests/generation_oracle/main.rs"
+        ],
+        "all149_rows_preserved_except_one_token": true,
+        "prior12": [
+          "xs_qed_eeee_1pi_L1",
+          "xs_qed_eemm_L1",
+          "xs_qed_eedd_L1",
+          "xs_qcd_gguu_1pi_L1",
+          "sm_eemm_L0",
+          "qed_ee4f_L0",
+          "sm_eeww_L0",
+          "qed_eemm_L1",
+          "xs_qed_eeee_L1",
+          "xs_qed_eemm_L2",
+          "ym_g6_L0",
+          "ctorder_qcd_uugg_L1"
+        ],
+        "candidate_file_count": 5723
+      },
+      "before_blob": "9ef9f1ba005f20149716b22346d45c5501b62e87",
+      "after_blob": "7283198bf0152c82c1cd5f0173703cddfa7f5c0f",
+      "only_change": "xs_qed_eemm_identical_L2.numerators 0x00fac78da0e0d159 ->0xa60df38a6b8079e3",
+      "all149_Rows_prior12_other9fields_and_every_other_production_byte_preserved": true,
+      "host_vs_d0fb_ffa": "Compared complete path/mode/blob unions, not descriptions. Shared paths differ only in additive registry and corrected notebook stub; added/removed paths are documentation. Every relevant manifest/lock/filter/production byte is invariant.",
+      "original_producer_binding": "Exact5de3e290 observational overlay reversed in memory only. Rehashed all408 original producer/assets/manifest paths.407 are exact; oracle main differs only in prior independently accepted numerator literals before the new one-token application. Original5ba source/archive5ea/kernel8eb roles are retained.",
+      "detailed_owner_source_bindings": 15,
+      "corrected_stub_sha256": "5e2dfa31a10d9c545d38f4257b006daa7b1b53bcf0d96aafb060ee71a68f77e5",
+      "registry": "All118 scope bindings recomputed against immutable candidate source. Removing exactly the new registry entry restores complete base registry semantics; existing titles/reviews/source scope fields preserved.",
+      "Rust_policy": "One lowercase hexadecimal expectation token; no implementation/design-policy departure. No new rustfmt/Clippy/compiler execution; implementation pinned-format evidence is retained."
+    },
+    "producer": {
+      "status": "PASS_WITH_EXPLICIT_TERMINAL_VS_ARCHIVE_DISTINCTION",
+      "archive": "/nix/store/m6jl5zp0l1fkv26yrhm2ylbpbvfabamm-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0/gammaloop-nextest-feynkit-feynkit-generator.tar.zst",
+      "archive_sha256": "ba02f91fc47a35b03cc9d51dded39836a7635bdf423c6025ab6e4775c504fc35",
+      "executed_ELF": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-grouped-identical-integration-astra-20261031-033116Z-c0749b38/archive/target/ci-optim/deps/generation_oracle-3892f55f31822180",
+        "sha256": "7f00172ace12f04ef53d51a70e6ac4a12248e05e3d61edbde42e5e02079f5c81",
+        "bytes": 61186320
+      },
+      "source_files": 5310,
+      "selected_source_files": 670,
+      "filtered_source_roots": 47,
+      "derivations": 145,
+      "unchanged_derivation_ids": 143,
+      "new_derivation_ids": [
+        "/nix/store/jvw70zjg24y39fksnw8x11fjyff1aw6n-gammaloop-crate-test-binaries-feynkit-generator-b6f177b7bc15beb1-deps-0.1.0.drv",
+        "/nix/store/kgs8cx1wxnjfaf31achyg5033ll4mxhc-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0.drv"
+      ],
+      "fingerprint_units": 452,
+      "method": "Direct immutable Git/source byte comparisons; direct on-disk ATerm derivation parsing and complete recorded env/input/output checks; source-filter inventory checks; streamed actual artifact archives; fresh actual NAR hashing. No Nix, compiler, build or network command was executed by this review.",
+      "compiler": "rustc1.98.1/default+native/ci-optim; exact existing compiler binary rehashed, retained -vV/build outputs and actual derivation/tool bindings consumed. Compiler not re-executed.",
+      "kernel": "8eb7c3729d6abefc916decc1bdf0c06536f8af80 for Symbolica/Numerica/Graphica in actual new archive metadata",
+      "terminal_artifacts": {
+        "count": 24,
+        "whole_dependency_layers": "Exact unchanged compressed layer bytes",
+        "rebuilt_rlibs": "All object payloads, symbol indexes and lib.rmeta equal;12 non-identical rlibs have complete bijective compiler-session member-name changes only in ar long-name/link metadata. All special metadata bytes independently checked after exactly that name substitution. No whole-rlib identity or capture normalization claimed."
+      },
+      "terminal_archive_behavior": {
+        "terminal_elf_sha256": "7802bec17c1884a4515d3e390b429d5b878e2efb6f4cb671f77ecc501bb5d2b1",
+        "archive_elf_sha256": "7f00172ace12f04ef53d51a70e6ac4a12248e05e3d61edbde42e5e02079f5c81",
+        "same": false,
+        "changed_sections": {
+          ".dynamic": {
+            "terminal": {
+              "sha256": "8f01127d2324e7d3016e40250e8377d157b86b21a9fa10fed77196ac7e4f92ce",
+              "size": 592,
+              "flags": 3
+            },
+            "archive": {
+              "sha256": "2fefc7f438acb67555efeab16f1fda6867e6a8b5c7e2007ef3f42cad05dcf093",
+              "size": 592,
+              "flags": 3
+            }
+          },
+          ".dynstr": {
+            "terminal": {
+              "sha256": "b4a9d7a8ff1e9b931552d8f7da9d514bb1b70d192eebc54cb47967aa6aad870b",
+              "size": 2483,
+              "flags": 2
+            },
+            "archive": {
+              "sha256": "48e2f56853d868837d1c16329263be6917d8e73ff4cd351f0ec75e5c321aa1d4",
+              "size": 2590,
+              "flags": 2
+            }
+          },
+          ".dynsym": {
+            "terminal": {
+              "sha256": "325b912ea13b162f472c60ecced597cb690a8766df2d46bc3ad122079e0e7f51",
+              "size": 4224,
+              "flags": 2
+            },
+            "archive": {
+              "sha256": "52cc9ee9865cbcd90046ce81641ad4cc42e65429cc8a01e007f551711a5d8890",
+              "size": 4224,
+              "flags": 2
+            }
+          }
+        },
+        "build_behavior": "Archive build log records cargo nextest archive recompiling dependencies and test binary from exact actual archive source; terminal ELF equality is not assumed."
+      },
+      "terminal_archive_interpretation": "The archive derivation runs cargo nextest archive and its retained build log records recompilation. Final ELF is separately bound to its source/archive/build graph, exact new expected token and actual fresh execution. Terminal and archive ELFs have equal every section except .dynamic/.dynstr/.dynsym, including all code/data sections; no terminal-ELF byte-equality or donor transplant assumption.",
+      "compiled_new_token_occurrences": 1,
+      "old_token_occurrences": 0,
+      "actual_NARs_rehashed": {
+        "/nix/store/m6jl5zp0l1fkv26yrhm2ylbpbvfabamm-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0": {
+          "narHash": "sha256-gsTyuyWtk1GCZbAPAgOh8Cl7RRhswO2kezDLEONDnvo=",
+          "narSize": 86344928
+        },
+        "/nix/store/8c82yf8vscm7gvj2nn09wbwan3qis7d2-gammaloop-crate-test-binaries-feynkit-generator-b6f177b7bc15beb1-deps-0.1.0": {
+          "narHash": "sha256-dFieazu2cMSQxay2Kle75iWaHJKsEu4bHRiEeSAHUCs=",
+          "narSize": 159125032
+        }
+      },
+      "inherited_limits": "Source/build/store honesty and original qualified profile/kernel/observer premises remain. Reused prior provenance applies only to invariant actual inputs."
+    },
+    "runtime": {
+      "status": "PASS",
+      "actual_executions": 39,
+      "passes": 39,
+      "failures": 0,
+      "retries": 0,
+      "selected_skips": 0,
+      "empty_selections": 0,
+      "matrix": [
+        {
+          "step": "pool1-grouped",
+          "pool": 1,
+          "exact_names": [
+            "xs_qed_eemm_identical_L2"
+          ],
+          "passes": 1,
+          "JUnit_sha256": "5c8fe523ad872ae69d062285c5945d8b85a48060792cce3f40ccc090ac55d810",
+          "public_dump": true
+        },
+        {
+          "step": "pool1-prior12",
+          "pool": 1,
+          "exact_names": [
+            "xs_qed_eeee_1pi_L1",
+            "xs_qed_eedd_L1",
+            "xs_qed_eemm_L1",
+            "xs_qcd_gguu_1pi_L1",
+            "sm_eeww_L0",
+            "sm_eemm_L0",
+            "qed_ee4f_L0",
+            "xs_qed_eeee_L1",
+            "qed_eemm_L1",
+            "xs_qed_eemm_L2",
+            "ctorder_qcd_uugg_L1",
+            "ym_g6_L0"
+          ],
+          "passes": 12,
+          "JUnit_sha256": "db347a3a14930d3e2a9d5dda5bc69dc6ab380b9d2166ca7c153adde3e9efd52f",
+          "public_dump": false
+        },
+        {
+          "step": "pool8",
+          "pool": 8,
+          "exact_names": [
+            "sm_eemm_L0",
+            "sm_eeww_L0",
+            "xs_qed_eedd_L1",
+            "qed_ee4f_L0",
+            "xs_qed_eeee_1pi_L1",
+            "xs_qed_eeee_L1",
+            "qed_eemm_L1",
+            "xs_qed_eemm_L1",
+            "xs_qcd_gguu_1pi_L1",
+            "xs_qed_eemm_L2",
+            "ym_g6_L0",
+            "ctorder_qcd_uugg_L1",
+            "xs_qed_eemm_identical_L2"
+          ],
+          "passes": 13,
+          "JUnit_sha256": "fe08177f1eae4d2bfe616e5eeb969b9b010052101fb9a98c62be7bd8967d2810",
+          "public_dump": false
+        },
+        {
+          "step": "pool32",
+          "pool": 32,
+          "exact_names": [
+            "xs_qed_eeee_L1",
+            "sm_eeww_L0",
+            "xs_qed_eedd_L1",
+            "xs_qed_eemm_L1",
+            "qed_ee4f_L0",
+            "xs_qed_eeee_1pi_L1",
+            "xs_qcd_gguu_1pi_L1",
+            "qed_eemm_L1",
+            "sm_eemm_L0",
+            "xs_qed_eemm_L2",
+            "ym_g6_L0",
+            "ctorder_qcd_uugg_L1",
+            "xs_qed_eemm_identical_L2"
+          ],
+          "passes": 13,
+          "JUnit_sha256": "197b62d114cbf3e420e3c675ff293fde2e7dd2fac8de30d559b24aee1d634621",
+          "public_dump": false
+        }
+      ],
+      "policy": "Unchanged ci_gammaloop240s per test,0 retries,16 maximum workers and all inherited resource groups. Exact package/binary/test-name filter and --no-tests fail; heavy ignored cases explicitly included with --run-ignored all.",
+      "actual_inventory_and_counts": "Fresh compiled inventory selected exactly13 identities. Four actual JUnit files enumerate1+12+13+13 distinct selected executions and report0 skipped/errors/failures. Native summaries independently agree. Unselected tests reported SKIP by nextest are explicitly not selected skips or pass credit.",
+      "harness": "Unchanged classes::check runs separate None and Auto with the existing Named/Minimal behavior. Only its returned None reference is compared with the literal Row. Pool8/32 results provide runtime evidence only; no new Auto literal/search-counter assertion.",
+      "containment": "Fresh empty-root bwrap --unshare-all namespace; actual source/archive/helper, exact ELF libraries and Python stdlib read-only; only fresh work writable; command/stdout/stderr/JUnit copies outside child-writable mounts. Pure loader/network/mount/inventory preparation completed before license access. Host roots, credentials/config, Nix socket, compiler and donor caches absent.",
+      "license": "Controller preserves exported license, otherwise current-user XDG source privately in memory; anonymous pipe to isolated launcher followed by immediate native exec. No value/path/hash/file/argv/environment dump retained. Four private variables absent from pure child environments. Retained runtime output checked for private-value absence before writing.",
+      "all_processes_reaped": true,
+      "Nix_compiler_after_licensed_start": 0
+    },
+    "public_capture_and_owner_join": {
+      "status": "PASS_UNDER_RETAINED_P1_P5",
+      "public_files": [
+        {
+          "name": "xs_qed_eemm_identical_L2.census",
+          "bytes": 33649,
+          "sha256": "e1700d6086607a59c2d456776615e18b1d536112edd6406b8fe0971f4ad22ba4",
+          "fresh_path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-grouped-identical-integration-astra-20261031-033116Z-c0749b38/work/pool1-grouped/dumps/xs_qed_eemm_identical_L2.census",
+          "approved_path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/grouped-none-qualification-20261030T191919/pristine-runtime/dumps/xs_qed_eemm_identical_L2.census",
+          "implementation_path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/grouped-identical-migration-20261031/work/pool1-grouped/dumps/xs_qed_eemm_identical_L2.census"
+        },
+        {
+          "name": "xs_qed_eemm_identical_L2.classes-None-t1.json",
+          "bytes": 650612,
+          "sha256": "76cfbff1d77a677da7653bfd46616ce2e2166e5b68e279b56aff377fc81998c1",
+          "fresh_path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-grouped-identical-integration-astra-20261031-033116Z-c0749b38/work/pool1-grouped/dumps/xs_qed_eemm_identical_L2.classes-None-t1.json",
+          "approved_path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/grouped-none-qualification-20261030T191919/pristine-runtime/dumps/xs_qed_eemm_identical_L2.classes-None-t1.json",
+          "implementation_path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/grouped-identical-migration-20261031/work/pool1-grouped/dumps/xs_qed_eemm_identical_L2.classes-None-t1.json"
+        },
+        {
+          "name": "xs_qed_eemm_identical_L2.classes-None-t1.sources.json",
+          "bytes": 672113,
+          "sha256": "08ebf574d98a7d953fa7ed582d2c61b5b7091515866cadd5b378b0c79916af93",
+          "fresh_path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-grouped-identical-integration-astra-20261031-033116Z-c0749b38/work/pool1-grouped/dumps/xs_qed_eemm_identical_L2.classes-None-t1.sources.json",
+          "approved_path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/grouped-none-qualification-20261030T191919/pristine-runtime/dumps/xs_qed_eemm_identical_L2.classes-None-t1.sources.json",
+          "implementation_path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/grouped-identical-migration-20261031/work/pool1-grouped/dumps/xs_qed_eemm_identical_L2.classes-None-t1.sources.json"
+        },
+        {
+          "name": "xs_qed_eemm_identical_L2.classes-Auto-t1.json",
+          "bytes": 650612,
+          "sha256": "a6195d31c7964a662fffda0b07351964131365f115fcf0da6dfb4f979faa136c",
+          "fresh_path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-grouped-identical-integration-astra-20261031-033116Z-c0749b38/work/pool1-grouped/dumps/xs_qed_eemm_identical_L2.classes-Auto-t1.json",
+          "approved_path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/grouped-none-qualification-20261030T191919/pristine-runtime/dumps/xs_qed_eemm_identical_L2.classes-Auto-t1.json",
+          "implementation_path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/grouped-identical-migration-20261031/work/pool1-grouped/dumps/xs_qed_eemm_identical_L2.classes-Auto-t1.json"
+        },
+        {
+          "name": "xs_qed_eemm_identical_L2.classes-Auto-t1.sources.json",
+          "bytes": 672113,
+          "sha256": "33a8a36d030a7362c9c3984c86354722a54266596d35d486fb66511f47ecfcbf",
+          "fresh_path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-grouped-identical-integration-astra-20261031-033116Z-c0749b38/work/pool1-grouped/dumps/xs_qed_eemm_identical_L2.classes-Auto-t1.sources.json",
+          "approved_path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/grouped-none-qualification-20261030T191919/pristine-runtime/dumps/xs_qed_eemm_identical_L2.classes-Auto-t1.sources.json",
+          "implementation_path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/grouped-identical-migration-20261031/work/pool1-grouped/dumps/xs_qed_eemm_identical_L2.classes-Auto-t1.sources.json"
+        }
+      ],
+      "file_count": 5,
+      "mode_cells": 2,
+      "byte_equality": "Fresh review == implementation == exact separately reviewed pristine physical bytes, without normalization. None/Auto final29 files, raw30 source companions and returned None census are five files, not five native mathematical obligations.",
+      "owner_associations": 2124,
+      "per_mode": 1062,
+      "raw_per_mode": 540,
+      "final_per_mode": 522,
+      "bindings": "Complete Census, exact physical keys/native IDs/names/models, whole source factors, every member identity and ordered declared interfaces matched to the separate accepted mode ledgers. Every raw source occurs once; group weights17(+1),11(-1),1(-2), raw17(+1),13(-1); total4 follows only after all member weights.",
+      "None_full_Row": {
+        "diagrams": 29,
+        "topologies": 157,
+        "assignments": 714,
+        "inverse_symmetry": [
+          29,
+          1
+        ],
+        "weights": [
+          4,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            29
+          ]
+        ],
+        "content": "0xc6e7d902ad8d316f",
+        "numerators": "0xa60df38a6b8079e3",
+        "named": "0x3d72c09c50112e41",
+        "ids": "0xcd1abf37940d48cf"
+      },
+      "digest_method": "New review implementation of exact source Digest/Entry/Summary encoding, FNV-1a, full keyed numerator multiset and all10 Row fields. Numerator factors never expanded/normalized; only scalar bookkeeping heads evaluated. Returned None census supplies its actual search counters.",
+      "unobserved_public_inputs": "Implicit ports, flags, model/Request/options/Run remain accepted per-mode captured premises, bound through exact source/artifact input invariance and ledger identities. They are not freshly emitted by the public hook. Auto search counters/literal not freshly asserted.",
+      "native_algebra_observer_decoder_layout_helper_reruns": 0,
+      "static_controls": {
+        "baseline": "PASS",
+        "fresh_negatives": [
+          {
+            "name": "wrong model despite same final Census",
+            "predicate": "accepted-mode-model",
+            "rejected": true
+          },
+          {
+            "name": "wrong exact member identity",
+            "predicate": "raw-member-id",
+            "rejected": true
+          },
+          {
+            "name": "wrong non-numerator Row field",
+            "predicate": "complete-Row",
+            "rejected": true
+          },
+          {
+            "name": "wrong proof binding with APPROVE unchanged",
+            "predicate": "exact-proof-binding",
+            "rejected": true
+          }
+        ],
+        "positive": "dictionary field order does not change Row semantic comparison; physical capture equality still uses exact bytes",
+        "native_runs": 0,
+        "scope": "Finite static binding checks only; no new mathematical/mapper/decoder/layout validity claim"
+      }
+    },
+    "scientific_proof_and_all_limits": {
+      "migration_review_sha256": "7d96505dcb700eeae42b5a4e87676551ba910cb660df586cafe34d6b90e944f1",
+      "independent_current_correctness": "CURRENT raw30 correctness plus separate Nonead7/Auto113 grouped membership/source factors and factorized relation. Historical grouped producer provenance is unapproved; no historical old/new grouped theorem.",
+      "domain": {
+        "literal_mode": "None only",
+        "separately_certified_mode": "Auto physical/source equivalence, not a separately asserted Auto literal",
+        "grouping": "Identical",
+        "samples": 5,
+        "seed": 3,
+        "check_canonical_numerator": false,
+        "differentiate_particle_masses_only": true,
+        "fully_numerical_substitution": false,
+        "symmetric_polarizations": false,
+        "Naming": "D",
+        "pool": 1,
+        "actual_original_source": "5ba04864ca506e259d9eef4a54f65acdd8323fc2",
+        "dependency_archive": "5ea149ffd88ae3afc4072a38c0871c1329be8424",
+        "kernel": "8eb7c3729d6abefc916decc1bdf0c06536f8af80"
+      },
+      "WP9_rationale": {
+        "rule": "Membership AND weights, or full expression equivalence, PLUS independent correctness. Counts, total4 and regenerating a digest do not establish correctness.",
+        "pipeline_boundary": "Approved ungrouped raw30 and grouped input share model, exact per-mode Request/options/Run, complete source payloads and all540 raw/decoded/ordered-port/flag owners. Raw Grouping::None versus requested Grouping::Identical is the intentional first differing stage; no blanket grouping-options identity is asserted.",
+        "raw_correctness": "Exact None bridge to approved current raw30 c95 and separate Auto bridge to the approved prior-eight/current Auto input were freshly reproduced. Original kernel/program roles remain attached to those approvals; they are not relabelled8eb.",
+        "grouped_relation": "Accepted finite current theorems supply all60 source-induced11-to-9 quotients,9edges18attachedhalfedges6vertices/four absent placeholders, commuting unimodular4D charts,1080 owner covariances and119 unexpanded aggregates per mode. The sole merged pair is selected by complete physical keys/exact IDs02957fc4e974ffa2c5b5785e8683a949 and5b4c349a74178fbed0bf4321725f53a3. The accepted source Weyl proof closes eight bispinor ports, four vertex signs multiply to+1, ratio1, representative chart diag(-1,-1,1,1) with fixed external shifts. This review reuses those qualified equalities rather than rerunning native algebra.",
+        "membership_and_weights": "Fresh complete joins use every raw source exactly once. Each member retains its full source factor and string1 ratio. Group weights are independently evaluated from the actual bookkeeping factor trees before summing:17(+1),11(-1),1(-2), versus raw17(+1),13(-1). Both total4 follows. No graph numerator expansion/normalization is used.",
+        "physical_descent": "Freshly reconstructed all58 cut/threshold unions in each mode, representative routing/descent and522 final owners. Auto independently matches its own raw inputs and60 comparison/representative physical graphs; all29 Auto final physical payloads match None by full key. Final decoded numerator times factor equals its actual member raw sum under certified charts/maps.",
+        "independent_current_basis": "This is a correctness proof for the actual CURRENT result. Historical grouped producer provenance remains unapproved and is not a premise. No old/new historical grouped equality is claimed or required to justify replacing the obsolete literal with an independently correct current value.",
+        "digest": "Fresh independent FNV-1a implementation follows source Digest::json/number/text and Entry::digest_json, retains source field order, full canonical keys and sorted keyed-numerator multiset. It produces0xa60df38a6b8079e3 from sealed PRISTINE None payload. Sealed report supplies only the search counters. Native printed hash is corroboration only; neither29 nor4 is the token input."
+      },
+      "finite_current_named_consumer_argument": {
+        "verdict": "DISCHARGED_FOR_THIS_FINITE_CURRENT_NAMED_SYMBOLIC_CONSUMER_BOUNDARY",
+        "not_ports_alone": "Matching captured port arrays establishes only association. The new finite check additionally reconstructs all cross-owner compatible contractions, actual survivors, the scalar-prefactor step and projector pairings; checks both operand and output-axis commutation; and connects that logical reconstruction to actual canonical-layout source operations.",
+        "finite_data": "For each mode independently:119 raw/comparison/representative/final graphs and2142 owners. Every public port is an explicit repeat-free bis/mink selfdual4 or cof/dual-cof3 with full tagged identity and exact dimension. Ordinary hedge/edge labels contain no open marker. Across local owners each key occurs once or in one compatible cross-owner pair; no ambiguous public matching. Every local product has exactly the four captured numerator survivors; prefactor is scalar1 with no ports; projector has four corresponding ports and closes each once. All54 final declarations equal their actual logical owner arrays. Actual decoded expressions/flags remain bound under P3/P4.",
+        "source_proof": [
+          "Spenso CanonicalLayout validates forward/inverse permutations and equal orders. For representation permutation R and index permutation I, logical-to-canonical p=I.map o R.map, canonical-to-logical p^-1=R.inv o I.inv. PartialStructure::logical_slots returns C[p(i)], while from_logical_slots constructs the canonical carrier retaining that inverse. Thus these operations are coordinate changes, not an assumption that source strings already have native canonical order.",
+          "NumeratorInterface::admit explicitly parses these full named slot declarations and passes their order through from_logical_slots/from_declared_parts. Inference validates compatible tensor interfaces. export computes logical ports with the layout inverse; absent declarations mean its source re-admission check recovered that logical list, and present declarations carry the actual list. canonical_ports orders decoded source notation through an explicit permutation. No equality between native sort order, decoded lexical order and historical left/right survivor order is assumed.",
+          "Current interface_is_named checks explicit indices and absence of internal open-port markers. index_has_open_port treats these ordinary function-valued hedge/edge labels as named; complete tags and reversible-payload association remain the accepted exact P3 premise. Representation::matches requires exact dimensions, selfdual equality or opposite cof duality. The finite parser checks precisely this domain, not arbitrary index notation.",
+          "compatible_pairs visits canonical slots but returns p_left^-1(a),p_right^-1(b). Substituting L[i]=C[p(i)] shows that its returned relation is exactly matching named logical keys. ProductPlan::named rejects ambiguous partners. free_interface removes those logical endpoints via the same inverse and canonically orders survivors. The actual native canonical permutation need not be guessed: it appears together with its inverse before any logical pair is consumed.",
+          "fragment_numerator uses multiply_many. Its merge_named groups exact base representation/dimension/index keys, retains orientation, rejects excess/ambiguous occurrences, removes only compatible different-factor pairs and records canonical survivors. The fresh finite local-pair and survivor reconstruction checks all119 actual graphs. The already accepted119 unexpanded aggregate identities remain the expression-value proof; this layout argument does not infer tensor equality merely from interfaces.",
+          "Grouping forms numerator.multiply(prefactor).multiply(projector). The scalar-one operation may change the four-axis carrier to native canonical order. The next call recomputes a named plan from that current carrier: its inverse layout cancels that reorder before selecting the four projector pairs. Both normalized and general contract_ports paths use the same selected logical pairs/free_interface; explicit operands do not enter unresolved positional reindexing. Complete output has rank0. No historical cached positional plan or external component array is used in this precise symbolic path.",
+          "For each source-to-phase map, pi_o is the explicit supplied logical permutation for owner o. The required canonical map, if expressed in native coordinates, is p_target o pi_o o p_source^-1, not pi_o alone and not identity. The independent finite check transports every local pair through pi_operand and proves its target pair, transports every survivor through pi_numerator and proves its target output position, and proves the projector pairing square through BOTH pi_numerator and pi_projector. All60 squares pass;57 supplied owner permutations are nonidentity. Final representative descent binds the actual29 outputs and54 declarations.",
+          "The same finite domain was checked on Auto actual owners after its own approved-input rebind. Exact full physical phase/final correspondence supplies the per-mode application of the same source lemma. This does not use None aggregation as Auto correctness approval."
+        ],
+        "fresh_order_control": "Swapping two numerator OUTPUT-map entries only leaves payloads, ports, flags, counts, weights and Census entirely unchanged but fails the projector contraction square. A consistent corresponding operand/output permutation is a positive named-axis control. The six independent physical/input controls also reject at their intended bindings. This exceeds the candidate order-only captured-port-versus-declaration check.",
+        "why_no_native_layout_run_needed_for_this_decision": "The source proof eliminates the arbitrary actual canonical permutations algebraically with their validated inverses; the finite checks bind the remaining observable logical pair and output maps. The claim concerns these captured symbolic named consumers, with actual expression equalities already independently certified. It does not depend on assuming a particular native sort, observed historical order or a materialized component storage layout. There is no remaining finite consumer-layout witness required for this bounded migration decision.",
+        "direct_native_grouped_layout_import_results": false,
+        "R1": "Historical left/right survivor order can differ from current canonical order. Both operand AND output maps remain mandatory, including currently identity maps. No old/new positional identity.",
+        "R2": "Actual-owner flag equality is a captured-record binding. Serialized source does not carry an independent is_metric/is_composite admission certificate; this review does not claim fresh whole-import success, flag serialization or universal decoder correctness.",
+        "borrowed_three_QED_QCD80_interface_approval": false,
+        "limits": "No arbitrary positional/unresolved tensors, dense-storage reorder theorem, general serialization/import theorem, free-index/locality theorem or arbitrary consumer certification. Only the exact finite current symbolic boundary needed above is discharged."
+      },
+      "retained_finite_evidence": {
+        "None_graphs": 119,
+        "Auto_graphs": 119,
+        "owners_per_mode": 2142,
+        "commutation_squares": 60,
+        "declared_interfaces": 54,
+        "negative": {
+          "mutation": "swap first two numerator output-map entries only; all payloads, declarations, flags, counts, weights and census bytes unchanged",
+          "native_execution": false,
+          "predicate": "prefactor/projector named pair square",
+          "rejected": true
+        },
+        "positive": "Simultaneous corresponding operand/output axis permutation preserves named contraction",
+        "native_layout_materialized": false
+      },
+      "P1_P5": {
+        "full_reviews_read": [
+          {
+            "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-identical-migration-preparation-20261031-r1/accepted-None-review-copy.json",
+            "sha256": "45368ac2dc5783a6ba31daa9b7e8bd7f03a80746bf3b07b6d3e34cc909adcb81",
+            "bytes": 27229
+          },
+          {
+            "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-identical-migration-preparation-20261031-r1/consumed-Auto-independent-review-copy.json",
+            "sha256": "e4ca45aff35c11bbd6397a32265502f79ff6b622141c1fe75214f17f830919db",
+            "bytes": 27199
+          },
+          {
+            "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-identical-migration-preparation-20261031-r1/consumed-full-characterization-review-copy.json",
+            "sha256": "fb688585bc7efd0b494fef7648df5abad398f88bfe8c439e8b42c0dd520eaa37",
+            "bytes": 30234
+          }
+        ],
+        "None_candidate": "ad7ccbe7cee2373ed54fe16d17971491eb581e80",
+        "Auto_candidate": "113608b3917d903d0fcc730aa3760f114fbc3f04",
+        "P1": "Exact captured ledger/FinalFrames and producer associations, source5ba/archive5ea/kernel8eb, qualified observer/build profiles. Finite public equality does not remove allocation/serialization/I/O/panic/interner/cache effects.",
+        "P2": "Exact source-owned phase maps and quotient/whole-frame associations. Exact hex IDs and full physical keys are identity authority; rounded json.id remains redundant in older full-record comparisons.",
+        "P3": "Actual raw/cooked/decoded associations and whole-symbol definitions are retained conditional premises. Native tag-subset tolerance is not complete identity; exact definition gates remain load-bearing. No universal uncook/decoder theorem is inserted.",
+        "P4": "Captured ordered owners/interfaces and actual flags remain the observation premise. This review adds the finite current source/logical consumer proof above; it does not turn P4 into a universal positional, free-index or physical-locality theorem.",
+        "P5": "Separately approved exact raw30 domain in each mode, freshly rebound here. Historical kernel/program roles retained.",
+        "strict_facts": "Each mode independently has30 actual int5 sample counts,60 actual boolfalse zero flags,29 actual boolfalse cancellation flags,210 nonnull string1 member occurrences and3 comparison ratios(two null,one string1). No generalized schema approval.",
+        "AUTO_AGG_N1": "Candidate count6 hash fixture was not strict-guard-valid. Its hash rejection remains weaker valid evidence; the guard-valid key-order negative belongs solely to the accepted Auto reviewer. No stronger credit reassigned here.",
+        "source_profile": "No build/ELF/kernel/source relabel. Historical/dev-optim and current qualified diagnostic profiles remain separate; inherited build/store honesty and observer qualifications survive."
+      },
+      "source_argument_summary": "119 graphs/2142 owners per mode,60 contraction/output squares,54 declarations,57 nonidentity owner permutations. Actual source constructors and named logical consumers preserve CanonicalLayout p and p-inverse, cancel canonical permutations before pair selection. Scalar prefactor1 and four projector ports close to rank0. Logical pi induces p_target o pi o p_source^-1. BOTH operand AND output maps are mandatory. Reused output-only map mutation fails projector square despite unchanged payload/Census; consistent simultaneous permutation is positive.",
+      "limits": "No guessed native canonical order; no native whole-import/dense-storage/unresolved/positional/free-index/locality/general-decoder theorem; no borrowed separate80-owner QED/QCD proof. Whole-definition equality remains load-bearing despite native tag-subset tolerance. All observer allocation/serialization/I/O/panic/interner/cache limitations persist in BOTH modes.",
+      "AUTO_AGG_N1": "Original count6 hash fixture invalid strict guard; weaker frozen-hash rejection remains valid. Stronger guard-valid key-order negative belongs to the separate Auto reviewer only.",
+      "prior_scopes_unchanged": {
+        "prior12_review": "535b792610c531b446d8beb1a9f300246e6d498e8126509b637189e8eb80a091",
+        "host_review": "f472e199cf3805d9364ef9158c18628fbc5c7ee8d72317c56a6af787628e8a5c",
+        "host": "Separate private RustRed arity1/tracing-feature and ordinary absenceIBPFamily; no host rerun.",
+        "prior_full_pool1_review": "fb688585bc7efd0b494fef7648df5abad398f88bfe8c439e8b42c0dd520eaa37",
+        "prior_full_lane": {
+          "passed": 302,
+          "failed": 69,
+          "ignored": 49,
+          "fresh": false,
+          "new303_68_49_claim": false
+        }
+      }
+    }
+  },
+  "fresh_vs_reused": {
+    "fresh": "Final immutable closure, all path/mode/blob invariance, lossless committed reconstruction, exact source/registry rebind, archive/ELF/input hashes, retained JUnit record inspection, three pure durability heldouts and final guards.",
+    "reused_runtime_passes": 39,
+    "new_native_runtime_passes": 0,
+    "implementation39_and_prior_independent39_not_summed": true,
+    "reused_public_capture_count": 5,
+    "reused_owner_associations": 2124,
+    "new_public_captures": 0,
+    "new_native_math_obligations": 0,
+    "new_helper_observer_decoder_layout_runs": 0,
+    "new_host_runs": 0,
+    "new_full371_runs": 0,
+    "prior_full_lane": {
+      "passed": 302,
+      "failed": 69,
+      "ignored": 49,
+      "new303_68_49_claim": false
+    },
+    "native_mathematical_counts": "Original per-mode1080 covariance and119 unexpanded aggregate identities remain prior evidence; Auto2624 retains1080+119+325+1024+76. No added mathematical credit from39 Rows or5 public files."
+  },
+  "remaining_limits": [
+    "Approval only for the exact bounded applied integration at7f under the accepted finite premises. Source5ba/archive5ea/kernel8eb retain original roles; the newly qualified archiveba02/ELF7f0017 retain their own build/runtime roles.",
+    "Only returned None literal asserted. Auto physical/source captures remain separately approved; Auto search counters/literal, implicit ports/flags/model/Request/options/Run retain per-mode captured premises. Pools8/32 are runtime evidence only.",
+    "Both operand AND output-axis maps remain mandatory. Validated canonical p/p-inverse cancels coordinate permutations for these named symbolic consumers; no historical positional identity, guessed native canonical order, native grouped-layout/import run or universal decoder/import/dense-storage theorem.",
+    "Independent correctness applies to current raw30 and finite grouped result. Historical grouped producer provenance remains unapproved. No historical old/new grouped theorem, maximality or non-relation theorem from sampled non-merges.",
+    "P1 observer allocation/serialization/I/O/panic/interner/cache effects, P2 exact whole frames/physical keys/native IDs, P3 reversible raw/cooked/decoded association and exact complete definitions despite tag-subset tolerance, P4 captured ordered owners/flags, and P5 separate approved raw30 inputs remain explicit in both modes.",
+    "No free-index, physical-locality or full-integrand proof; no borrowed80-owner QED/QCD interface approval. AUTO_AGG_N1 count6 fixture remains strict-guard-invalid; only its weaker frozen-hash rejection is retained, with stronger key-order negative solely attributed to the separate Auto reviewer.",
+    "External Nix store artifacts, local reviews, runtime and proof inputs remain retained premises with exact bindings. The committed evidence is complete within its declared scope; it is not a self-contained native-runtime/proof archive.",
+    "Terminal/archive ELF inequality remains qualified: changed.dynamic/.dynstr/.dynsym and actual archive recompilation; all other section identities and rlib member-name bijections retain prior qualification. No whole-ELF or whole-rlib identity claim.",
+    "New correction Typst and old canonical note remain UNRENDERED. No fullDocs/site, Clippy, performance, core/evaluator/host, WP3/WP9 completion, M-rebuild, global integration or publication approval."
+  ],
+  "history_and_failed_probes": {
+    "prior_candidate": "All9 disclosed setup failures and original partial commits retained unchanged; no native/build failure or semantic-control success credit invented. Initial registry-only partial and failed pretracking verifier remain distinct from final candidate. Full record at receipt.retained_failures.",
+    "prior_reviewer_all_failures": [
+      "Initial Python PATH lookup failed127; retried existing pinned interpreter. Initial git check-ignore lacked explicit main/.git in JJ workspace; corrected read-only command verified .local rule. No tracked write.",
+      "First exact Git-manifest verification failed on missing chain-controls-failed-attempts.log: genuine candidate finding B1; all13 independently enumerated.",
+      "Git refs/heads assumption failed because these are unexported JJ bookmarks. Corrected --ignore-working-copy JJ read verified exact IDs; no ref/index/snapshot mutation.",
+      "ATerm verification initially omitted structured __json attributes, then compared an old review annotation as derivation content. Corrected schema-aware checks preserve every actual recorded builder/env/input/output field; original errors retained.",
+      "An extra whole-terminal/archive-ELF equality assertion failed. Actual archive recompilation and section comparison were inspected; no unsupported equality is claimed.",
+      "Pure reinspection attempted to rewrite an already extracted read-only stdlib member; corrected to exact byte comparison and preserved failure. No candidate/store file touched.",
+      "Proof-output schema count was initially treated as a list (final_declarations54); corrected scalar check. No native rerun or semantic rejection credit."
+    ],
+    "repair": "Absent optional filename and audit-before-snapshot failure are recorded in committed tracking/errors-and-source-versions.json. Audit code was unchanged, not weakened; exact snapshot repair gives425. Old receipt/note/reviews/partials preserved verbatim.",
+    "this_round": [
+      {
+        "attempt": "python3 on initial shell PATH",
+        "result": "exit127: python3 command not found",
+        "resolution": "Used existing /nix/store/0r6k8xa2kgqyp3r4v2w7yrb80ma2iawm-python3-3.13.12/bin/python3 with -I -S; no Nix or installation."
+      },
+      {
+        "attempt": "Optional correction error-record filename guesses",
+        "result": "Read-only cats of tracking/errors-and-tracking.json and tracking/errors.json found no such files. Optional script probe was guarded by is_file().",
+        "resolution": "Enumerated packet files and read actual tracking/errors-and-source-versions.json; it was already included in the successful immutable manifest audit."
+      },
+      {
+        "attempt": "Large initial combined read outputs",
+        "result": "Some tool output displays truncated.",
+        "resolution": "Read the complete original review and canonical record in bounded sections; parsed full audit JSON and rehashed its complete input inventories. No omitted input or partial hash accepted."
+      }
+    ],
+    "no_setup_failure_relabelled_as_semantic_control": true
+  },
+  "immutability_and_cleanup": {
+    "guard_before_after_equal": true,
+    "main_tracked_files": 2271,
+    "candidate_tracked_files": 5767,
+    "metadata_files": 557,
+    "all_current_candidate_bytes_match_final_git": true,
+    "external_inputs_unchanged_at_return": 34264,
+    "commit_parent_chain": {
+      "ed669e2beeb39f36b3e5753ab9c746770ba7653d": [
+        "7c0e13a08786416a9f24b3bec6df8a50e4592346"
+      ],
+      "7f03ab8fd5834d7c78164429e2a44dab8d01ef74": [
+        "ed669e2beeb39f36b3e5753ab9c746770ba7653d"
+      ]
+    },
+    "ignored_output_rule": ".gitignore:151:.local/\t.local/review-grouped-identical-B1-r3-astra-20261031-DSnqH402\n",
+    "tracking_exact_13_verified": true,
+    "audit_source_before_after_identical": true,
+    "both_manifest_totals_verified": true,
+    "retained_archive_copy_sha256": "ba02f91fc47a35b03cc9d51dded39836a7635bdf423c6025ab6e4775c504fc35",
+    "private_config_and_license_reads": 0,
+    "new_native_runs": 0,
+    "owned_background_processes": []
+  },
+  "constraints": {
+    "writes_only": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-grouped-identical-B1-r3-astra-20261031-DSnqH402",
+    "main_candidate_old_packets_read_only": true,
+    "Git": "Explicit /shared/lcnbr/dev/gammaloop/main/.git, GIT_OPTIONAL_LOCKS=0",
+    "JJ": "--ignore-working-copy read-only log only",
+    "tracked_ref_index_snapshot_mutation": 0,
+    "build_Nix_compiler_native_licensed_runs": 0,
+    "project_or_native_library_imports": 0,
+    "license_private_config_reads": 0,
+    "network_publication": 0,
+    "delegation": 0,
+    "global_integration_advance": false,
+    "owned_live_processes": []
+  },
+  "remaining_gates_outside_approved_conjunction": [
+    "All other rows/groupings and remaining full-lane physical-proof failures; no new full371 characterization.",
+    "Broader core/evaluator/host/global integration, WP3/WP9 completion and M-rebuild.",
+    "Full documentation/Typst/site/Clippy validation, performance and memory policy, distribution/publication."
+  ],
+  "evidence": {
+    "audit.py": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-grouped-identical-B1-r3-astra-20261031-DSnqH402/audit.py",
+      "sha256": "5e65c20710843e485227156cd9b4fc781bf9c2310ef1a5f24f628d75475cefe1",
+      "bytes": 15889
+    },
+    "rebind.py": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-grouped-identical-B1-r3-astra-20261031-DSnqH402/rebind.py",
+      "sha256": "7a0f9cec833a645eee566f4e601263e9550362d833f2b0a9cc7979df4c2ad808",
+      "bytes": 8287
+    },
+    "final_check.py": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-grouped-identical-B1-r3-astra-20261031-DSnqH402/final_check.py",
+      "sha256": "ca71090a06949ae97a81560090aa80ad00578b132092adcdca8ac7f8f7b3dde2",
+      "bytes": 3990
+    },
+    "closure-audit.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-grouped-identical-B1-r3-astra-20261031-DSnqH402/closure-audit.json",
+      "sha256": "0040d8e42b9a3aca6a4d9d73faa5597dbebedfde954566a1cfdaa37f5970616f",
+      "bytes": 915873
+    },
+    "immutable-trees.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-grouped-identical-B1-r3-astra-20261031-DSnqH402/immutable-trees.json",
+      "sha256": "fe4afe709acdb18e23af1156c88257c11c31c1d075c47e4f867b6dfdcf75e1c9",
+      "bytes": 5350301
+    },
+    "rebind-audit.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-grouped-identical-B1-r3-astra-20261031-DSnqH402/rebind-audit.json",
+      "sha256": "19d70256646bc54d66ebec8230a62f3e7a1902e9319133487ab1cd98ae98485a",
+      "bytes": 8017850
+    },
+    "guard-before.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-grouped-identical-B1-r3-astra-20261031-DSnqH402/guard-before.json",
+      "sha256": "6d7876700a9e91aeb3b70922297bbf7396319b8dafb297c6209d68c946ef93ae",
+      "bytes": 2111374
+    },
+    "guard-after.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-grouped-identical-B1-r3-astra-20261031-DSnqH402/guard-after.json",
+      "sha256": "6d7876700a9e91aeb3b70922297bbf7396319b8dafb297c6209d68c946ef93ae",
+      "bytes": 2111374
+    },
+    "final-guard.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-grouped-identical-B1-r3-astra-20261031-DSnqH402/final-guard.json",
+      "sha256": "078d8c3f1dc7e2ebe5fba05bc3d182af2101832bdfff8508083c54d1ebada9ca",
+      "bytes": 920
+    },
+    "reviewer-attempts.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-grouped-identical-B1-r3-astra-20261031-DSnqH402/reviewer-attempts.json",
+      "sha256": "288ed83c70fbf5acb71de9dc4d859dc2a0800058196f69a8a99332f082509eec",
+      "bytes": 988
+    }
+  },
+  "retention": "Entire new ignored packet retained for parent adjudication and continuation, including independent audit sources, complete immutable vectors, hash bindings, heldouts and guards. No temporary extraction/workspace, abandoned implementation edit or owned background process remains. No old artifacts or durable references removed or mutated.",
+  "seal_protocol": "review.json.sha256 binds review.json; SHA256SUMS binds every retained regular file other than itself/seal.json/seal.sha256; seal.json binds that manifest and every listed file; seal.sha256 binds seal.json. No circular self-hash."
+}

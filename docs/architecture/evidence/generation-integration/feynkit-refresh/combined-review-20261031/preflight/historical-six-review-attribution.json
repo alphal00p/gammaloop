@@ -1,0 +1,62 @@
+[
+  {
+    "id": "source-r4",
+    "verdict": "APPROVE_SOURCE_RECONCILIATION",
+    "review_sha256": "5d9db6c6d385bd25ea9e276a2a1ebd2e95c0678171854e4ccb73a1362130e1af",
+    "actual_scope": "Source reconciliation through f47f27213a1c55291239c9bc0f334a7ea1cd1cc1 plus truthfulness of cacd5182704082df929a066548e3501be22c9533 evidence; c344 metadata expressly excluded.",
+    "limits": "No installed-host/product/WebKit/stub/full-site, mathematics, migration, combined, WP3 or integration approval.",
+    "immutable_verbatim_path": "/nix/store/3sj3nw06s3vhl3j12wfp5gc3r1h6f0k3-source/docs/architecture/evidence/generation-integration/feynkit-refresh/review-aggregation-20261030/reviews/source-r4/review.json",
+    "sha256_reverified": "5d9db6c6d385bd25ea9e276a2a1ebd2e95c0678171854e4ccb73a1362130e1af",
+    "historical_pending_text": "Retained verbatim; current later dispositions in status-matrix/decision-index override only within their actual scope."
+  },
+  {
+    "id": "shared-scope-a",
+    "verdict": "APPROVE_SHARED_SCOPE_A",
+    "review_sha256": "565caeace0112a30fb9118f94b2bb759e4267d2b802395c314e485b89b4b2b70",
+    "actual_scope": "Twelve-case pool1 provenance/runtime/evidence and shared provenance of both raw certificate lanes.",
+    "limits": "No source reconciliation, mathematics/native-control, Scope B, migration, combined or integration approval; metadata was not rendered.",
+    "immutable_verbatim_path": "/nix/store/3sj3nw06s3vhl3j12wfp5gc3r1h6f0k3-source/docs/architecture/evidence/generation-integration/feynkit-refresh/review-aggregation-20261030/reviews/shared-scope-a/review.json",
+    "sha256_reverified": "565caeace0112a30fb9118f94b2bb759e4267d2b802395c314e485b89b4b2b70",
+    "historical_pending_text": "Retained verbatim; current later dispositions in status-matrix/decision-index override only within their actual scope."
+  },
+  {
+    "id": "prior-eight",
+    "verdict": "APPROVE_PRIOR_EIGHT_FINITE_APPLICATION",
+    "review_sha256": "5a50135038065414bc667667244378677ff44ac4f632e733b8bbd0bba451cf8b",
+    "actual_scope": "Finite application of three already-approved certificates to eight fresh8eb GroupingNone pool1 rows, Classes None and Auto independently (16 cells), proof source 5ba / built 5ea / helper 5141d8 / kernel 8eb.",
+    "limits": "No new review of original physics, four new rows, new migration/literals, grouped modes, pools8/32, full371, source/shared-scope approval or combined/WP3 approval.",
+    "immutable_verbatim_path": "/nix/store/3sj3nw06s3vhl3j12wfp5gc3r1h6f0k3-source/docs/architecture/evidence/generation-integration/feynkit-refresh/review-aggregation-20261030/reviews/prior-eight/review.json",
+    "sha256_reverified": "5a50135038065414bc667667244378677ff44ac4f632e733b8bbd0bba451cf8b",
+    "historical_pending_text": "Retained verbatim; current later dispositions in status-matrix/decision-index override only within their actual scope."
+  },
+  {
+    "id": "raw-four-dispositions",
+    "verdict": "APPROVE_CORRECTED_SCOPE_B_PREPARATIONS",
+    "review_sha256": "6e4410dd16ef6c2366b08793af0e835c21e55526bf124a2d3581283c32f1a9a2",
+    "actual_scope": "Corrected Scope B preparations/reporting only for qed_ee4f_L0, xs_qed_eeee_L1, sm_eeww_L0, xs_qcd_gguu_1pi_L1; None/Auto, GroupingNone, pool1.",
+    "limits": "No Row/literal migration or adoption of explicit-interface/order policy. r4 pure wrappers approved only as bounded license-free validation wrappers for that packet; common.run reuse is blocked and native adapter unexecuted.",
+    "immutable_verbatim_path": "/nix/store/3sj3nw06s3vhl3j12wfp5gc3r1h6f0k3-source/docs/architecture/evidence/generation-integration/feynkit-refresh/review-aggregation-20261030/reviews/raw-four-dispositions/review.json",
+    "sha256_reverified": "6e4410dd16ef6c2366b08793af0e835c21e55526bf124a2d3581283c32f1a9a2",
+    "historical_pending_text": "Retained verbatim; current later dispositions in status-matrix/decision-index override only within their actual scope."
+  },
+  {
+    "id": "grouped-none-provenance",
+    "verdict": "REQUEST_CHANGES",
+    "review_sha256": "d5e93e0a03d1a5fd7a8e8b08e1ae9a4577917b1c03256d0d5b23607df0909387",
+    "actual_scope": "No approval: REQUEST_CHANGES remains active for the grouped-None observational qualification record.",
+    "limits": "F1 lossy u128-to-f64 JSON DiagramIds, F2 observer side effects and F3 validator coverage remain pending additive disposition; F4-F9 and N1-N6 remain disclosed.",
+    "immutable_verbatim_path": "/nix/store/3sj3nw06s3vhl3j12wfp5gc3r1h6f0k3-source/docs/architecture/evidence/generation-integration/feynkit-refresh/review-aggregation-20261030/reviews/grouped-none-provenance/review.json",
+    "sha256_reverified": "d5e93e0a03d1a5fd7a8e8b08e1ae9a4577917b1c03256d0d5b23607df0909387",
+    "historical_pending_text": "Retained verbatim; current later dispositions in status-matrix/decision-index override only within their actual scope."
+  },
+  {
+    "id": "grouped-none-math",
+    "verdict": "APPROVE_CERTIFICATE_SCOPE_B_NONE",
+    "review_sha256": "b5e0f3d4fff0b43cd8fbc955140e6d62938be02c9cfc8d943206e1effcf5a01a",
+    "actual_scope": "Finite capture-premised decoded-numerator Scope B certificate for xs_qed_eemm_identical_L2, Classes None, GroupingIdentical, NamingD, pool1, proof5ba / dependency5ea / kernel8eb.",
+    "limits": "Aggregate certificate requires separate grouped-observation provenance approval and root aggregation. No Auto/Sign/Scalar, migration, historical-to-current grouped equivalence, denominators/full integrand, raw-cook/decoded identity, positional/free-index/locality theorem, source/docs/combined/WP3 approval.",
+    "immutable_verbatim_path": "/nix/store/3sj3nw06s3vhl3j12wfp5gc3r1h6f0k3-source/docs/architecture/evidence/generation-integration/feynkit-refresh/review-aggregation-20261030/reviews/grouped-none-math/review.json",
+    "sha256_reverified": "b5e0f3d4fff0b43cd8fbc955140e6d62938be02c9cfc8d943206e1effcf5a01a",
+    "historical_pending_text": "Retained verbatim; current later dispositions in status-matrix/decision-index override only within their actual scope."
+  }
+]

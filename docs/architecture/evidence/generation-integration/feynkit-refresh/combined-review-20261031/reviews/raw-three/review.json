@@ -1,0 +1,605 @@
+{
+  "schema": "independent-raw-three-QED-QCD-integration-review/1",
+  "reviewer": {
+    "model": "Astra",
+    "independent_of_implementation": true,
+    "user_authorized_fallback_for_rate_limited_Opus": true,
+    "delegations": 0
+  },
+  "completed_utc": "2026-10-31T01:42:58.871175+00:00",
+  "verdict": "APPROVE_BOUNDED_RAW_THREE_QED_QCD_INTEGRATION",
+  "blocking_findings": [],
+  "scope": "Only the exact three separately approved numerator tokens on accepted SM base5ea4, actual new ffa76ec package archive and ELF, twelve selected full-Row tests at pools1/8/32, fresh pool1 public physical capture joins, and additive committed evidence/Typst/registry through d0fb4. Root disposition remains separate; no integration-bookmark advance or publication approval.",
+  "candidate": {
+    "workspace": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh",
+    "base": "5ea4c93b79dd33094072d7717e912aa4b05d6689",
+    "actual_built_code": "ffa76ec420642c03349ab756d2d7720ab93c0057",
+    "complete_evidence_head": "d0fb4e906140a6a0fc8dd6401ca839cab0c2734d",
+    "bookmark": "generation-raw-three-migration-candidate-20261031",
+    "main_before_blob": "e6af4ec644688e1333064c50e3b157ae631473ee",
+    "main_after_blob": "9ef9f1ba005f20149716b22346d45c5501b62e87",
+    "receipt_sha256": "4bcae2e48322715e4e274a3383afedad48b80d62ffcca08fb5fb1062bbc854ef",
+    "SEAL_sha256": "0e8cd7c5d247c17e76a220bb29fb184f9c4f8622df90e8ad2afef1b9544ef067",
+    "manifest_sha256": "71bdef125ae5cced156067119e5cc288e509c01be2554f587d1a62f286931e17",
+    "capture_joins_sha256": "3583f0a534a169e3e1ca0c533ad9466bcc8ddbd7fafd4d4730c5dda45a52caa2",
+    "committed_seal_sha256": "838e13e2bcc16c458eba9cf231072b6ff982486cbf6185a3d49fe6eb125dacbe"
+  },
+  "per_row": [
+    {
+      "case": "qed_ee4f_L0",
+      "location": "crates/feynkit-generator/tests/generation_oracle/main.rs:245",
+      "old": "0x7f2a34ae141a6f7c",
+      "new": "0x1d107b2170d73cd2",
+      "verdict": "APPROVE",
+      "literal_assertion": "None only; six-cell None/Auto mathematics reused within its separate finite scope"
+    },
+    {
+      "case": "xs_qed_eeee_L1",
+      "location": "crates/feynkit-generator/tests/generation_oracle/main.rs:345",
+      "old": "0x8eb2c3186607a1a2",
+      "new": "0x7734a2de85dd54c9",
+      "verdict": "APPROVE",
+      "literal_assertion": "None only; six-cell None/Auto mathematics reused within its separate finite scope"
+    },
+    {
+      "case": "xs_qcd_gguu_1pi_L1",
+      "location": "crates/feynkit-generator/tests/generation_oracle/main.rs:358",
+      "old": "0x75fbcf2f108240fb",
+      "new": "0x631d8c73b7db146b",
+      "verdict": "APPROVE",
+      "literal_assertion": "None only; six-cell None/Auto mathematics reused within its separate finite scope"
+    }
+  ],
+  "source_and_metadata": {
+    "exact_three_tokens_and_every_other_main_byte_preserved": true,
+    "literal_Row_inventory": 149,
+    "fields_each": 10,
+    "prior_nine_complete_Rows": {
+      "xs_qed_eemm_L1": "25b964b968545f8d85783d23ae70ad09e529290cd63ddc7804b44905d5ba9129",
+      "xs_qed_eedd_L1": "fdb64a1d535ec319b16fa9cb956636fff09c9a8d1c6634a8bc08e8493b70d891",
+      "xs_qed_eeee_1pi_L1": "edfb50abaf3ef5955d917c8705c3ed1f705e45cca221e6131dec94ef55f336bc",
+      "qed_eemm_L1": "13360392d6a7852c1e04869aa123b1c788228a0daa246328985f758784095e89",
+      "ctorder_qcd_uugg_L1": "99e2a0316bf4ae745df84e9ef72049ce7949d1c596b7c6a49cb7353a031244d2",
+      "sm_eemm_L0": "db4c8b1c6f8099a8744708a3c10ea7f79e942e225361bed519886e413c09d27c",
+      "ym_g6_L0": "9a62b02e11caee7bcd084cddbaec6740fb0abda40cc540da2f3f2163dd7f8881",
+      "xs_qed_eemm_L2": "aae7e01c752e73202a39e9f905e017b910c54c9e20c09db46993cce4735ce50f",
+      "sm_eeww_L0": "b4ac9f5b9ac8f6c3d11c358be866ecee68f45be0d29b06a9ef5a1dc319e18b0b"
+    },
+    "non_token_production_host_API_browser_dependencies_features_policy_files_invariant_from_accepted_base": true,
+    "source_proof_322_file_inventories": {
+      "historical": {
+        "revision": "2b1ef4f07a44bc061bcc97c378bbdd9c41cb0e94",
+        "files": 310,
+        "different_from_actual_source": [
+          "Cargo.lock",
+          "Cargo.toml",
+          "crates/feynkit-generator/examples/four_loop_numerator.rs",
+          "crates/feynkit-generator/examples/generation_workloads.rs",
+          "crates/feynkit-generator/src/generation.rs",
+          "crates/feynkit-generator/src/generation/enumeration.rs",
+          "crates/feynkit-generator/src/generation/graph.rs",
+          "crates/feynkit-generator/src/generation/interaction_stars.rs",
+          "crates/feynkit-generator/src/generation/projector_equivalence.rs",
+          "crates/feynkit-generator/src/generation/search_census.rs",
+          "crates/feynkit-generator/src/generation/staged.rs",
+          "crates/feynkit-generator/src/grouping.rs",
+          "crates/feynkit-generator/src/options.rs",
+          "crates/feynkit-generator/src/parser.rs",
+          "crates/feynkit-generator/src/process.rs",
+          "crates/feynkit-generator/tests/amplitude.rs",
+          "crates/feynkit-generator/tests/fixtures/sewn_top_self_energy_cc_left.atom",
+          "crates/feynkit-generator/tests/fixtures/sewn_top_self_energy_cc_right.atom",
+          "crates/feynkit-generator/tests/generation_oracle/cases.rs",
+          "crates/feynkit-generator/tests/generation_oracle/census.rs",
+          "crates/feynkit-generator/tests/generation_oracle/classes.rs",
+          "crates/feynkit-generator/tests/generation_oracle/frames.rs",
+          "crates/feynkit-generator/tests/generation_oracle/main.rs",
+          "crates/feynkit-graph/Cargo.toml",
+          "crates/feynkit-graph/src/canonical_form.rs",
+          "crates/feynkit-graph/src/compact_dot.rs",
+          "crates/feynkit-graph/src/display.rs",
+          "crates/feynkit-graph/src/dot.rs",
+          "crates/feynkit-graph/src/expressions.rs",
+          "crates/feynkit-graph/src/finalization.rs",
+          "crates/feynkit-graph/src/integrals.rs",
+          "crates/feynkit-graph/src/integrals/partial_fraction.rs",
+          "crates/feynkit-graph/src/lazy_tests.rs",
+          "crates/feynkit-graph/src/lib.rs",
+          "crates/feynkit-graph/src/numerator_interface.rs",
+          "crates/feynkit-graph/src/partition_check.rs",
+          "crates/feynkit-graph/src/routing.rs",
+          "crates/feynkit-graph/src/routing/cache.rs",
+          "crates/feynkit-graph/src/scene.rs",
+          "crates/feynkit-graph/src/subgraph.rs",
+          "crates/feynkit-graph/src/symbols.rs",
+          "crates/feynkit-graph/src/thresholds.rs",
+          "crates/feynkit-model/src/model.rs",
+          "crates/idenso/Cargo.toml",
+          "crates/idenso/src/color/mod.rs",
+          "crates/idenso/src/color/simplify.rs",
+          "crates/idenso/src/color/simplify/states.rs",
+          "crates/idenso/src/color/simplify/trace.rs",
+          "crates/idenso/src/color/test/mod.rs",
+          "crates/idenso/src/cook.rs",
+          "crates/idenso/src/dirac/simplify.rs",
+          "crates/idenso/src/dirac/simplify/tests/collected_trace.rs",
+          "crates/idenso/src/dirac/simplify/trace_kernel.rs",
+          "crates/idenso/src/dirac/simplify/trace_kernel/collected.rs",
+          "crates/idenso/src/dirac/test/fixed_frame_regressions.rs",
+          "crates/idenso/src/lib.rs",
+          "crates/idenso/src/reference_cases/timing.rs",
+          "crates/idenso/src/representations.rs",
+          "crates/idenso/src/shorthands/metric.rs",
+          "crates/idenso/src/shorthands/mod.rs",
+          "crates/idenso/src/shorthands/schoonschip/slot_contraction.rs",
+          "crates/idenso/src/shorthands/schoonschip/slot_contraction/components.rs",
+          "crates/idenso/src/shorthands/schoonschip/slot_contraction/components/factorized.rs",
+          "crates/idenso/src/tensor/canonicalize.rs",
+          "crates/idenso/src/tensor/collection.rs",
+          "crates/idenso/src/tensor/composition.rs",
+          "crates/idenso/src/tensor/composition/chain.rs",
+          "crates/idenso/src/tensor/contract.rs",
+          "crates/idenso/src/tensor/contract/factorized_tests.rs",
+          "crates/idenso/src/tensor/contract/network_tests.rs",
+          "crates/idenso/src/tensor/indexed.rs",
+          "crates/idenso/src/tensor/inference.rs",
+          "crates/idenso/src/tensor/inference/observation.rs",
+          "crates/idenso/src/tensor/inference/tests/auto_axis.rs",
+          "crates/idenso/src/tensor/inference/tests/scalar_admission.rs",
+          "crates/idenso/src/tensor/mod.rs",
+          "crates/idenso/src/tensor/network.rs",
+          "crates/idenso/src/tensor/persistence.rs",
+          "crates/idenso/src/tensor/replacement.rs",
+          "crates/idenso/src/tensor/simplification.rs",
+          "crates/idenso/src/tensor/simplification/completion_tests.rs",
+          "crates/idenso/src/tensor/simplification/observation.rs",
+          "crates/idenso/src/tensor/simplification/planner_tests.rs",
+          "crates/idenso/src/tensor/tests/parsing.rs",
+          "crates/idenso/src/test_support.rs",
+          "crates/idenso/tests/fixtures/d11_contracted_temporal_chain.sym",
+          "crates/spenso/Cargo.toml",
+          "crates/spenso/src/network/contract.rs",
+          "crates/spenso/src/network/graph.rs",
+          "crates/spenso/src/network/library/symbolic.rs",
+          "crates/spenso/src/network/mod.rs",
+          "crates/spenso/src/network/parsing/construction.rs",
+          "crates/spenso/src/network/parsing/test.rs",
+          "crates/spenso/src/network/tags.rs",
+          "crates/spenso/src/network/tests.rs",
+          "crates/spenso/src/portable_payload.rs",
+          "crates/spenso/src/shadowing/symbolica_utils.rs",
+          "crates/spenso/src/structure/abstract_index.rs",
+          "crates/spenso/src/structure/dimension.rs",
+          "crates/spenso/src/structure/indexless.rs",
+          "crates/spenso/src/structure/ordered.rs",
+          "crates/spenso/src/structure/partial.rs",
+          "crates/spenso/src/structure/permuted.rs",
+          "crates/spenso/src/structure/representation.rs",
+          "crates/spenso/src/structure/slot.rs"
+        ]
+      },
+      "target": {
+        "revision": "f47f27213a1c55291239c9bc0f334a7ea1cd1cc1",
+        "files": 322,
+        "different_from_actual_source": [
+          "crates/feynkit-generator/tests/generation_oracle/main.rs"
+        ]
+      },
+      "proof": {
+        "revision": "5ba04864ca506e259d9eef4a54f65acdd8323fc2",
+        "files": 322,
+        "different_from_actual_source": [
+          "crates/feynkit-generator/tests/generation_oracle/main.rs"
+        ]
+      },
+      "built": {
+        "revision": "5ea149ffd88ae3afc4072a38c0871c1329be8424",
+        "files": 322,
+        "different_from_actual_source": [
+          "crates/feynkit-generator/tests/generation_oracle/main.rs"
+        ]
+      }
+    },
+    "current_vs_proof_only_SM_and_three_literals": true,
+    "family_physical_file_not_transplant_source": true,
+    "scope_bindings": 118,
+    "scope_anchors_and_all_prior_registry_notes_preserved": true,
+    "matching_Typst_title": true,
+    "new_investigation_note_no_fabricated_paired_review_metadata": {
+      "id": "generation-raw-three-migration",
+      "title": "Three-token numerator migration qualification",
+      "summary": "Three separately authorized numerator tokens with a new pure archive, 36 actual full-Row executions and exact pool1 production-capture joins.",
+      "source": "docs/architecture/generation-raw-three-migration.typ",
+      "kind": "Execution record",
+      "status": "New independent integration-review candidate; bounded three-token application only",
+      "lifecycle": "investigation",
+      "owner": "unassigned",
+      "products": [
+        "feynkit",
+        "gammaloop"
+      ],
+      "topics": [
+        "generation",
+        "testing",
+        "provenance",
+        "integration"
+      ],
+      "review_triggers": [
+        "crates/feynkit-generator/tests/generation_oracle/**",
+        "docs/architecture/generation-raw-three-migration.typ",
+        "docs/architecture/evidence/generation-integration/feynkit-refresh/raw-three-migration/**"
+      ]
+    },
+    "evidence_manifest_files": 229,
+    "actual_complete_committed_evidence_paths": 231,
+    "manifest_meaning": "229 file entries plus SHA256SUMS and SEAL.json, every one exact in d0fb4. Nested preparation/review manifests are frozen historical manifests; their omitted subordinate files resolve to the separately retained original packets, freshly verified.",
+    "candidate_paths_guarded": 4970,
+    "actual_compiled_source_not_evidence_head": true
+  },
+  "producer": {
+    "new_archive_sha256": "8993e6c8346b84f6d91c7e65c4c4fc5ed83cf6d932e969bb7fc55cbdced20740",
+    "executed_ELF_sha256": "5d7275d26392474f2490963dd0503f4f46ccebc30572a4f31f7a66228303b30f",
+    "executed_ELF_size": 61186320,
+    "terminal_ELF_sha256": "e319eaf039845d9ac561c979a029f12a3087e59bc883a89f22cc84f34fb6e23a",
+    "actual_source": "ffa76ec420642c03349ab756d2d7720ab93c0057",
+    "proof_source": "5ba04864ca506e259d9eef4a54f65acdd8323fc2",
+    "original_built_source": "5ea149ffd88ae3afc4072a38c0871c1329be8424",
+    "kernel": "8eb7c3729d6abefc916decc1bdf0c06536f8af80",
+    "compiler": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8",
+    "compiler_binary_sha256": "6bb1c5b8a8034b62bcb3683f5969bb83a555a24128c2fdfcc9d20ea33bc0e1e5",
+    "profile": "ci-optim",
+    "root_features": [
+      "default",
+      "native"
+    ],
+    "root_fingerprint": "6491f340a9c81379",
+    "per_unit_feature_profile_records_verified": 452,
+    "retained_derivations": 145,
+    "shared_derivation_IDs": 143,
+    "new_derivations_and_recomputed_outputs": {
+      "/nix/store/76z959ir9cn1x8a3dn7w9qk59n5wp4y7-gammaloop-crate-test-binaries-feynkit-generator-b6f177b7bc15beb1-deps-0.1.0.drv": {
+        "incremental": {
+          "recorded": "/nix/store/9hdg5krik1f9mscyqz3i1383axmlrg3w-gammaloop-crate-test-binaries-feynkit-generator-b6f177b7bc15beb1-deps-0.1.0-incremental",
+          "recomputed": "/nix/store/9hdg5krik1f9mscyqz3i1383axmlrg3w-gammaloop-crate-test-binaries-feynkit-generator-b6f177b7bc15beb1-deps-0.1.0-incremental",
+          "ok": true
+        },
+        "out": {
+          "recorded": "/nix/store/rdjfjq9i5dap927sylh6984zj54xra2z-gammaloop-crate-test-binaries-feynkit-generator-b6f177b7bc15beb1-deps-0.1.0",
+          "recomputed": "/nix/store/rdjfjq9i5dap927sylh6984zj54xra2z-gammaloop-crate-test-binaries-feynkit-generator-b6f177b7bc15beb1-deps-0.1.0",
+          "ok": true
+        }
+      },
+      "/nix/store/b3psgc7ywm8ccnq0kpsh2zswy82p0cfv-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0.drv": {
+        "out": {
+          "recorded": "/nix/store/qg5nc1vcxjbdb5zzjigilx3wngy8xyfd-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0",
+          "recomputed": "/nix/store/qg5nc1vcxjbdb5zzjigilx3wngy8xyfd-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0",
+          "ok": true
+        }
+      }
+    },
+    "recursive_authenticated_derivations": 2999,
+    "source_paths": 4738,
+    "selected_source_files": 670,
+    "selected_source_delta": [
+      "crates/feynkit-generator/tests/generation_oracle/main.rs"
+    ],
+    "filtered_source_inputs": 47,
+    "filtered_file_entries": 23131,
+    "two_byte_identical_dependency_layers": [
+      {
+        "path": "/nix/store/cx447jb5zb3gxcpslza3gkldr2vs7kah-gammaloop-crate-test-dependencies-b6f177b7bc15beb1-deps-0.1.0/target.tar.zst",
+        "sha256": "ee04a717e612ac9e599614998271fa420858c122ad9a247fa06cb49d5dfd7018"
+      },
+      {
+        "path": "/nix/store/kck3a2p03gvd9162cnkl6g96viy1bpp1-gammaloop-crate-test-dependencies-b6f177b7bc15beb1-inputs/target.tar.zst",
+        "sha256": "06efc2c933e9103e1b8ba5fe597834b2e8b1af355aa7444567fdb3ded778427f"
+      }
+    ],
+    "new_terminal_library_member_qualification": "dependency-invariance-probes.json (R3INT-N1; raw rlibs not asserted identical)",
+    "new_terminal_to_archive_ELF": "All executable and other nonloader sections, entry and decoded dynamic symbols equal. Only .dynsym/.dynstr/.dynamic differ, with archive self RUNPATH addition; no old ELF patch/transplant.",
+    "terminal_logs": "Actual package cargo test --no-run and archive cargo nextest archive both compile the generator at ci-optim, finish successfully and archive24 members. One selected Nix build invocation. Original failure before completion retained without success credit.",
+    "reused_provenance": "Shared ScopeA review565caeac, 398 reviewer artifacts and84 original qualification bindings rehashed; reused only with exact source/layer/fingerprint/member invariance.",
+    "build_trust_limit": "Usual daemon/compiler/build honesty; original8eb vendor provenance and historical kernel/capture limitations retained. No new kernel Git-tree proof or build here."
+  },
+  "runtime": {
+    "candidate_actual_executions": 36,
+    "reviewer_fresh_executions": 36,
+    "reviewer_passes": 36,
+    "reviewer_failures": 0,
+    "retries": 0,
+    "selected_skips": 0,
+    "pools": [
+      1,
+      8,
+      32
+    ],
+    "test_names": [
+      "ctorder_qcd_uugg_L1",
+      "qed_ee4f_L0",
+      "qed_eemm_L1",
+      "sm_eemm_L0",
+      "sm_eeww_L0",
+      "xs_qcd_gguu_1pi_L1",
+      "xs_qed_eedd_L1",
+      "xs_qed_eeee_1pi_L1",
+      "xs_qed_eeee_L1",
+      "xs_qed_eemm_L1",
+      "xs_qed_eemm_L2",
+      "ym_g6_L0"
+    ],
+    "profile": "ci_gammaloop",
+    "timeout_seconds": 240,
+    "worker_cap": 16,
+    "resource_groups_unchanged": true,
+    "no_20_GiB_adoption": true,
+    "selection": "Exact package/binary/test filter,12 compiled identities,12 JUnit cases per pool,12 distinct PASS lines before summary.171 filtered tests/3 filtered binaries receive no execution credit; repeated final PASS output is not another execution.",
+    "capsule": "Fresh minimal bwrap --unshare-all; unlicensed ELF NEEDED/RUNPATH, loader and network/read-only preflight; source/archive/input/exact ELF libraries and launcher stdlib read-only. Only fresh work writable. No host root, credentials, Nix socket, compiler or mutable donor cache/outlib. Candidate and reviewer command/stdout/stderr records outside child writable mounts. Historical SM writable-record caveat is not rewritten.",
+    "license": "Exported value preserved or privately read from current-user XDG Symbolica configuration into memory; anonymous pipe to isolated immediate native exec. No value in argv, logs, hash, file, receipt, Nix or environment dump. Pure stages unlicensed.",
+    "actual_contract": "The source harness generates/counts and checks Named/Minimal and physical/source equivalence for both None and Auto. Only the returned None census is compared with the ten-field literal Row. Pool8/32 runs are runtime evidence, not new finite mathematics."
+  },
+  "capture_evidence": {
+    "fresh_byte_exact_joins": 15,
+    "mode_cells": 6,
+    "owners": 400,
+    "affected": 80,
+    "unaffected": 320,
+    "normalizations": [],
+    "binding": "Fresh reviewer dumps == candidate original dumps == committed captures == independently approved pristine and observer originals, for census and None/Auto JSON plus source companions. Full graph keys, exact hex IDs, names/order, model, all physical payloads, source owner IDs/indexes/factors and ordered interfaces bound. Six independently reconstructed Rows preserve other9 fields.",
+    "auto_counter_origin": "Approved original-capture premise only; freshly generated Auto physical JSON/source independently joined. No fresh Auto topology/assignment observation or full-Row assertion.",
+    "ee4f": "None7 versus original Auto42 topologies and D-name permutation retained.",
+    "six_fresh_pure_model_controls": "Mirrored wrong-model payloads leave all Row digests unchanged but fail exact physical binding; demonstrates why Row passes alone are insufficient.",
+    "fresh_integration_record_controls": 6
+  },
+  "prior_decisions": [
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-raw-three-migration-astra-20261031-004323Z-a3d128ed/review.json",
+      "sha256": "c0692180c797034f923ae4bcf0a91712816a67bcf726d088787914c9a4d211e6",
+      "verdict": "APPROVE_THREE_BOUNDED_LITERAL_MIGRATIONS_WITH_EXPLICIT_REPRESENTATION_AND_RUNTIME_LIMITS"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-raw-three-interface-astra-20261031-002103Z-8a5d8001/review.json",
+      "sha256": "d9303d91d922c994f87b07e10cce895b44dba96e294d64be231a3ecdf921b14c",
+      "verdict": "APPROVE_THREE_FINITE_PROOFS_AND_NEW_HELPER_PROVENANCE_WITH_EXPLICIT_SCOPE"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-sm-eeww-integration-astra-20261031-independent-r1/review.json",
+      "sha256": "5564bed2f642ba72a9208858d86292f8b9326fb1c55f24ef23a07d027a93624b",
+      "verdict": "APPROVE_BOUNDED_SM_EEWW_INTEGRATION"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-small-qed-fresh8eb-math-opus-20261030T192901Z-3624403/review.json",
+      "sha256": "b5f46f1b682a5f5ed8191bcc591003d4d553173e105c26b88094ae7ba7660433",
+      "verdict": "APPROVE_SCOPE_B",
+      "scope": "Bounded preparation only: qed_ee4f_L0 (6 graphs/96 owners) and xs_qed_eeee_L1 (4 graphs/52 owners), Classes None and Auto independently, Grouping None, captured pool 1, fresh 5ea/community-8eb producer captures joined to frozen historical 2b1ef4/c78. Not an approval to change any literal, of the other 71/73 rows, pooled 8/32, FeynKit integration/WP3, CI, full docs/source/runtime or combined approval. Scope A (build/provenance) and the separate source Opus review remain pending and are not inferred."
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-small-gauge-fresh8eb-math-opus-20261030T192536Z-3568994/review.json",
+      "sha256": "1591408caad7566439fcd54a1c76398691473bb4e41c59ddd3cb85a5e1337823",
+      "verdict": "REQUEST_CHANGES",
+      "scope": "B: mathematics/control review of two separate finite preparations; no migration, no combined FeynKit/WP3 approval"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-raw-four-dispositions-opus-20261030T202304Z-196212/review.json",
+      "sha256": "6e4410dd16ef6c2366b08793af0e835c21e55526bf124a2d3581283c32f1a9a2",
+      "verdict": "APPROVE_CORRECTED_SCOPE_B_PREPARATIONS",
+      "scope": null
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-raw-four-wrapper-r5-astra-20261030-231903Z/review.json",
+      "sha256": "84b98b9711e498cc88c6e901a09ce9d37b8a514a1d860cba3f3c157554f69093",
+      "verdict": "APPROVE_R5_SCOPED_WRAPPER_REPORTING_ERRATA",
+      "scope": "Approve the additive R1-R8 reporting corrections and the exact r5 copies for bounded cooperative pure-Python execution under the conditions below. Preserve only the existing four DISTINCT finite Scope B preparation approvals by verified evidence invariance. No new mathematics, native, literal/expectation, migration, interface-order, general-runner, source-integration or combined approval."
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-feynkit-refresh-shared-provenance-opus-20261030T193404Z-3c0453ff/review.json",
+      "sha256": "565caeace0112a30fb9118f94b2bb759e4267d2b802395c314e485b89b4b2b70",
+      "verdict": "APPROVE_SHARED_SCOPE_A",
+      "scope": "Shared Scope A provenance/runtime/evidence only, serving the twelve-case pool1 characterization and the provenance of BOTH new raw certificate lanes (QED r3, gauge r3). NOT source reconciliation, mathematics/native-control, ScopeB lane, migration, combined or integration approval."
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-feynkit-refresh-source-opus-round4-20261030T201146Z-697912d5/review.json",
+      "sha256": "5d9db6c6d385bd25ea9e276a2a1ebd2e95c0678171854e4ccb73a1362130e1af",
+      "verdict": "APPROVE_SOURCE_RECONCILIATION",
+      "scope": "SOURCE_RECONCILIATION only. Covers the reconciled source content through code f47f27213a1c55291239c9bc0f334a7ea1cd1cc1: the prior reviewed source (106-commit replay plus the f842/5ba0 repairs, carried by invariance) and the one-file R3-1 correction. Also covers the truthfulness of the additive cacd evidence. EXCLUDES the c3449988 shared metadata (docs/developers.toml note, docs/architecture/generation-feynkit-community-refresh.typ and qualification/*.json), which has its own active ScopeA review; see XS-1. Grants no installed-host, runtime, WebKit, product-rendering, proof, stub-parity, full-site, budget, migration, WP3 or combined approval."
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-refresh-aggregation-astra-20261030-independent/review.json",
+      "sha256": "567fba9cfa9287478d5c1531fd46eac49c79f4cd6fbcc878c50bd364cf279342",
+      "verdict": "APPROVE_FOCUSED_METADATA_AGGREGATION",
+      "scope": "Only metadata delta cacd5182704082df929a066548e3501be22c9533..48d0b98b97b368b2a2f58abe67cb19dddec623df: retention and faithful attribution of six completed independent reviews, canonical note update, XS-1 paired-field repair, and additive prior-eight F1-F7 reporting disclosures. No combined/integration/WP3/M-rebuild, migration/literal/expectation, mathematical/runtime, product/browser or full-docs approval."
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-sm-eeww-migration-astra-20261030-independent-r1/review.json",
+      "sha256": "096128cbe5cabf7159c4c6039fd7bd693d19c1bad60ca2533c656bd2a9356335",
+      "verdict": "APPROVE_BOUNDED_SM_ONE_TOKEN_MIGRATION",
+      "scope": {
+        "graphs": 4,
+        "owners_per_mode": 40,
+        "classes": [
+          "None",
+          "Auto"
+        ],
+        "independent_mode_checks": true,
+        "grouping": "None",
+        "generation_pool": 1,
+        "literal_assertion": "Only the particle-only None reference is compared to Row by main.rs/check; actual Auto captured and derived independently.",
+        "integration_plan": "WP9 finite standard: full expression/group-source equivalence plus previously independently reviewed correctness argument; no authorization from equal counts, weights or FNV alone."
+      }
+    }
+  ],
+  "findings": [
+    {
+      "id": "R3INT-N1",
+      "severity": "INFO",
+      "blocking": false,
+      "location": [
+        "docs/architecture/evidence/generation-integration/feynkit-refresh/raw-three-migration/qualification/qualify.py:66",
+        "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-raw-three-integration-astra-20261031-012811Z-323f4486/dependency-invariance-probes.json"
+      ],
+      "title": "Distinguish byte-identical reused layers from newly rebuilt terminal library containers",
+      "detail": "The two reused dependency tar layers are exactly byte-identical. Twelve rebuilt terminal rlib containers differ from both the accepted SM and original qualified 8eb terminal rlibs: compiler-session rcgu object-member names differ in the GNU ar long-name table and lib.rmeta-link nonallocated .rmeta-link linker metadata. New independent member comparison of all 24 terminal rlib/rmeta artifacts proves byte-exact object payloads, symbol indexes and lib.rmeta; explicit bijections account for every name-table/link-metadata byte. No executable or allocated linker-metadata section differs. New terminal artifacts are newly qualified, not asserted whole-file identical or treated as a transplanted old cache.",
+      "required_action": "Carry this precision with producer reuse; no candidate correction required."
+    },
+    {
+      "id": "R3INT-N2",
+      "severity": "INFO / mandatory scope",
+      "blocking": false,
+      "location": [
+        "docs/architecture/generation-raw-three-migration.typ:67",
+        "crates/feynkit-generator/tests/generation_oracle/main.rs:117",
+        "crates/feynkit-generator/tests/generation_oracle/classes.rs:194"
+      ],
+      "title": "Auto physical payload is fresh; Auto search counters remain historical premises",
+      "detail": "Only the returned None report is emitted by the public census hook and compared against the literal ten-field Row. Auto JSON and source companions are separately generated and freshly joined in both candidate and reviewer runs. Its topology/assignment counters are reused explicitly from the approved original capture, not observed by the fresh hook. ee4f None7 versus original Auto42 topology counts and actual D-name permutation remain distinct.",
+      "required_action": "Do not report fresh Auto full-Row assertions or fresh Auto search-counter observations."
+    },
+    {
+      "id": "R3INT-N3",
+      "severity": "INFO / mandatory carried restrictions",
+      "blocking": false,
+      "location": [
+        "docs/architecture/generation-raw-three-migration.typ:74",
+        "docs/architecture/evidence/generation-integration/feynkit-refresh/raw-three-migration/reviews/interface/review.json"
+      ],
+      "title": "Finite interface proof does not provide historical positional compatibility",
+      "detail": "Retain the 22 source-only differing final output orders, historical left-then-right versus current canonical survivor order, and complete operand AND output-axis maps. For H[i]=C[p[i]], assign b[p[i]]=a[i]; recompute named plans or transport every operand. The twelve metric/composite controls bind claims to actual imported owners, not independently serialized flags. The reviewed control-generator reuse bug remains separate; no generator was run here.",
+      "required_action": "No stale cached ProductPlan compatibility, old/new positional identity or new c78 execution claim."
+    }
+  ],
+  "mandatory_retained_premises": [
+    "Each of the three rows is a separate finite None/Auto proof, GroupingNone, math pool1. No extension to other rows, groupings or arbitrary data.",
+    "Historical raw/cooked/decoded association, observed ports, registration state and exact whole-symbol definitions remain load-bearing. Native subset-tag tolerance does not prove definition identity.",
+    "Preserve every operand map AND output-axis map;22 source-only differing survivor orders are not historicalc78 executions. No cached positional plan interchangeability or historical output-array identity.",
+    "Twelve flag controls are imported-owner claim binding. All400 observed is_metric/is_composite values remain false/true. No serialized-flag admission credit.",
+    "Exactly40 old successful native algebra batches/3088 obligations reused by command/pair/program/results hash, with32 SM batches excluded. No old algebra/helper/control-generator/historical-producer run.",
+    "744 typed plans,244 folds,160 lowerings,28 public numerator_of and28 fragment paths remain the prior bounded interface observations. Current8eb replay is not newc78 execution; no universal locality, decoder, hidden-history, subset/evaluator or component-physics theorem.",
+    "Post-format control-generator reuse bug and pending additive repair remain separate; neither generator was invoked and no general runner API approval is inferred.",
+    "Original historical command/build gaps, prior QED/gauge reporting dispositions, prior-eight F1-F7 and accepted SM restrictions retain their exact original scopes."
+  ],
+  "validation_limits": {
+    "formatting": "Retained pinned rustfmt result and actual tool/source hashes verified; no new compiler/formatter execution.",
+    "documentation": "Canonical note/registry structure checked; retained standalone Typst tool/source/PDF hashes verified. No full documentation/site or new Clippy result. Existing Clarabel warnings remain.",
+    "remaining_non_approvals": [
+      "full371, other/heavy rows",
+      "grouped Auto mathematics/root aggregation",
+      "installed host/RustRed/API/stub/browser qualification",
+      "source46/evaluator work",
+      "WP3/M-rebuild/global FeynKit/MAIN integration",
+      "performance/memory/full docs/distribution/publication"
+    ]
+  },
+  "guards_and_cleanup": {
+    "status": "PASS",
+    "time": "2026-10-31T01:41:09.026907+00:00",
+    "candidate_paths": 4970,
+    "main_paths": 2271,
+    "all_candidate_and_main_physical_bytes_unchanged": true,
+    "main_metadata": {
+      "HEAD": "ad9a6439c4eb1e0d10eb1541c40089e677f898fcbb440664e4922eed98a4721b",
+      "index": "36fca2996228d0adb018933745a106061d3febe8921980864b5cc50dbad4af5d",
+      "packed-refs": "0da18278197341776df580891f9a883e05b5e2dd5dd3082e251e02345619f5a3"
+    },
+    "protected_initial_refs_unchanged": true,
+    "unrelated_initial_ref_changes": {},
+    "new_external_refs": {},
+    "no_global_VCS_invariance_claim": true,
+    "jj": {
+      "@": "d0fb4e906140a6a0fc8dd6401ca839cab0c2734d",
+      "generation-integration": "fdff0d18953348b84a0f1b7e6ab5ef703a5090de",
+      "generation-raw-three-migration-candidate-20261031": "d0fb4e906140a6a0fc8dd6401ca839cab0c2734d"
+    },
+    "external_consumed_files_rehashed": 6009,
+    "all_fetched_source_paths_rechecked": 4738,
+    "archive_inputs_and_runtime_libraries_rechecked": true,
+    "all_committed_JSON_parsed": 108,
+    "removed_own_empty_directories": [],
+    "owned_processes_remaining": [],
+    "CI": false,
+    "writes_only": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-raw-three-integration-astra-20261031-012811Z-323f4486",
+    "note": "Main index and frozen refs preserved. No VCS mutation, snapshot, new workspace, delegation, Nix, compiler, network or old producer."
+  },
+  "review_probe_errors": [
+    {
+      "stage": "initial shell discovery",
+      "detail": "python3 was absent from the shell PATH; no review file or child test was produced. Subsequent commands use the already-qualified absolute Python path."
+    },
+    {
+      "stage": "capture audit attempt1",
+      "artifact": "capture-attempt1-ERROR.json",
+      "detail": "Reviewer incorrectly compared historical expression spelling directly to current spelling. Corrected to apply the already-approved injective whole-symbol definition map to the historical expression only. All fresh/public payload comparisons remain exact, with zero normalization. Candidate and proof inputs untouched."
+    },
+    {
+      "stage": "records audit attempt1",
+      "artifact": "records-attempt1-ERROR.json",
+      "detail": "Reviewer incorrectly required the explicitly historical canonical_ports source anchor to equal the current implementation. Corrected to bind historical source to its immutable historical Git blob and current anchors to current source. Preserves the accepted representation difference."
+    },
+    {
+      "stage": "dependency invariance attempt1",
+      "artifact": "dependency-invariance-attempt1-ERROR.json",
+      "detail": "Old archive qualification uses source rather than path for its terminal-layer record; corrected the reviewer schema adapter."
+    },
+    {
+      "stage": "dependency invariance attempt2",
+      "artifact": "dependency-invariance-attempt2-ERROR.json",
+      "detail": "Additional reviewer check correctly rejected whole-rlib byte equality. Follow-up newly qualified every rebuilt terminal object and metadata member; differences are only compiler-session member names, as detailed in R3INT-N1. No failed attempt earns positive validation credit."
+    }
+  ],
+  "process": {
+    "writes_only": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-raw-three-integration-astra-20261031-012811Z-323f4486",
+    "new_workspace": false,
+    "delegations": 0,
+    "source_expectation_ref_index_snapshot_changes": 0,
+    "Nix_build_compiler_network_calls": 0,
+    "old_native_math_runs": 0,
+    "new_producer": false,
+    "fresh_qualified_native_test_executions": 36,
+    "candidate_unchanged": true,
+    "owned_processes_remaining": []
+  },
+  "retention": "Keep this ignored review directory for root disposition and audit: exact scripts and failed attempts, all probe records, independently extracted archive and terminal ELF, fresh captures, inventory/JUnit/stdout/stderr, guards, review and seal. Empty private runtime directories removed. No shared cache, prior evidence or contributor workspace deleted.",
+  "artifacts": {
+    "capture-attempt1-ERROR.json": "9398db1a19091fec112d513e01f9e3035081bca66bda1d2c72aa412cedd1af4f",
+    "capture-attempt1-reads.json": "9d832a4e231703f61d3d0f9d61a4471dd9868dc5bb820833ca486adfb64d9d5b",
+    "capture-probes.json": "123f3a51870081fa89bd3ddec3d75ad4fe7ad6f1dbed14f32c025899072c7ffa",
+    "capture-reads.json": "2efc50dc53ee68a0cd81743645b0b1af41b47a2e1a18b714ff6daf3997b86aeb",
+    "dependency-invariance-attempt1-ERROR.json": "b0d0548310ffaae77c032a6b7d38acba0579bd9a9393f5c188aa5c49cc5364e0",
+    "dependency-invariance-attempt1-reads.json": "dbeb0561d5d020b593b6d4ecc2039b6b2e3ee186c98bf61404566e4ed09c8964",
+    "dependency-invariance-attempt2-ERROR.json": "c67cea52d93f06039ff1b4eaaf4e463e2796be0847053a279ea8d79be1ec688c",
+    "dependency-invariance-attempt2-reads.json": "7af12ab36d2e3fcabff40ec36788274c7601935c46beaeea3bbd820e9e5bb91b",
+    "dependency-invariance-probes.json": "1b01fd7bbf2edc3e97fcda367fbc12b484e618be70f85442f6e4da377dd00d22",
+    "dependency-invariance-reads.json": "7af12ab36d2e3fcabff40ec36788274c7601935c46beaeea3bbd820e9e5bb91b",
+    "final-commands.json": "4530ec5e20b0f0ab84f95357a91b7033f566407aba16a6db6749a8cfa3493911",
+    "final-guard-probes.json": "4c56cdc058399f0537475687c90593ab9aa59c22ddfbcffa5af6d3fce8a5b483",
+    "final-reads.json": "5e218bb1c7c77bac84044c0c164012bd0f608ec81a9210077727c870799b5731",
+    "fresh-inventory.json": "f160d87a086d844c0f76ee34477b412ab9c3d28184df1bdf47024291092f8206",
+    "fresh-runtime.json": "db4d52534abc13ea86c7aece7821ea286ee63e40e00f78e807da88f1590b8081",
+    "guard-start.json": "4cfbfdc0bf11e8bf1da32a2bf786106ded71247be21b9bcabd1e1082291f77ad",
+    "pre-additional-final-commands.json": "4530ec5e20b0f0ab84f95357a91b7033f566407aba16a6db6749a8cfa3493911",
+    "pre-additional-final-guard-probes.json": "9eba3ff1292d1130542ce1717d14f3342cba55f6570605c00ada772e0119bcce",
+    "pre-additional-final-reads.json": "dd09dc0a25e170fff6cb8fd9e23c1661510c2b33e2033c3e77e6e9916bbaf23b",
+    "prior-invariance-commands.json": "8f9f57dc540d738a9ba2674d448580a3f2e763032ba942cf0af18629c258f8cd",
+    "prior-invariance-probes.json": "0ea1a5190bb15a90b08cda2baa43e4a754e71dbffc93ce9f3a4ff0d4daa2081b",
+    "prior-invariance-reads.json": "56b77846041257d7447a3c554853ff9e258db7a69a97d56eaa112a8441ac3613",
+    "probe-errors.json": "f69940e4122c4c2b9b9042436a3c190c4edddfdf51bbe3dc138be31ec3a4a083",
+    "producer-audit.json": "6adc076e9809d95560f180062518cb553e5155f2eb7ef2dd5230d40523bab4f3",
+    "producer-reads.json": "192a2796311ff89baf4f3ed5dc816d7f0eda440aad064d378ebe3e3d6b07bfac",
+    "records-attempt1-ERROR.json": "3eaf5277fc55793f5800d921169f9e243a5cecff4a617feabf553d7035179177",
+    "records-attempt1-commands.json": "958a6a744df4b2c4715a63c4c49726133ab532f8bf2da25d469d27624931404a",
+    "records-attempt1-reads.json": "657f8ce3925efc31b70d057c986d3a2cae7f95faa917169802c987d7512f1e57",
+    "records-commands.json": "8d57dd04bf2eddee9913b33610961fb081c1934d99f08293c052a4ea2527a675",
+    "records-probes.json": "8d3317be114b9c2f08d648f262a338b2aab31fb563a8fb5ec1f5076a8198f7a7",
+    "records-reads.json": "c5d7d0061a36eb770859821c175a2429e2461c7fe0f4a51c039746c84f9c69c1",
+    "reused-review-tools.json": "494005d2bfcca3fd66d1357e83658e22985e00b79aab2904119a041d8fccffa2",
+    "rlib-initial-probes.json": "552ef168ea48291ce50e806727d277a03fca01175829b0173c0c44d61ad7ba37",
+    "runtime-native-reads.json": "b27322a90e2c1676f081f70aab91aaaf8615b0658ef6cfae443a8430fa2de495",
+    "runtime-preparation.json": "a054148b3a6db17bbc6297044d79d7a63603c0732ef386e3156e165db49e3ad9",
+    "runtime-prepare-reads.json": "0422d65be23328e7a73ee6dc05296270c24edd15413aee7287b9216175133002",
+    "shared-provenance-carry.json": "25c7cdb3d9618bd73ea3847ea2a6174d3d2180c4e3b637f942de67f784fb942c",
+    "source-commands.json": "6446e9eebda1d543f1afae9c3167e70d2c3e412e126b439e9044c5e1fcbb53a5",
+    "source-probes.json": "3a0b3337e17baff09c089f16437fcd1baf951eb194b69e9a004aa10ee690fbc3",
+    "source-reads.json": "24625f7516f2593bcb9b77357f9650c2a8cabe4f7380f2f954e08e4502ecfb03",
+    "start-commands.json": "b58081fac2f957c6d2cca788277f12d4b59d3f1dec05a77c0efacc03165f2c84",
+    "start-probes.json": "a134f14087ace10b575e23b5e190142b29603961b94bf29066ab59c82fd3408c",
+    "start-reads.json": "38b7db16fbffe3d1eb29c586ce552e83daa5e869458845fdca4d56f21065e31b"
+  }
+}

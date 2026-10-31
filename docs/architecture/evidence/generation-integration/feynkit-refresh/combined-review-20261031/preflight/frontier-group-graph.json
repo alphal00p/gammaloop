@@ -1,0 +1,23 @@
+{
+  "argv": [
+    "nix",
+    "--offline",
+    "--option",
+    "allow-import-from-derivation",
+    "false",
+    "derivation",
+    "show",
+    "/nix/store/wiz998vywsw61d5si2bz8snpmgd9gds9-gammaloop-guppy-workspace-graph-check.drv"
+  ],
+  "cwd": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh",
+  "exit_code": 0,
+  "stdout": "{\"derivations\":{\"wiz998vywsw61d5si2bz8snpmgd9gds9-gammaloop-guppy-workspace-graph-check.drv\":{\"args\":[\"-e\",\"/nix/store/l622p70vy8k5sh7y5wizi5f2mic6ynpg-source-stdenv.sh\",\"/nix/store/shkw4qm9qcw5sc5n1k5jznc83ny02r39-default-builder.sh\"],\"builder\":\"/nix/store/svx59425zxp552p2b8gm11qj5r09b56i-bash-5.3p15/bin/bash\",\"env\":{\"__structuredAttrs\":\"\",\"buildCommand\":\"diff -u /nix/store/im83w88klndxak2n27kayw1fh2carprk-ci-workspace-graph.json /nix/store/k6l284rainlmgvijvl5n02w7nmg9p749-gammaloop-guppy-workspace-graph.json\\ndiff -u /nix/store/aipb4q1nsm8hgx1hcgzdrmasac7g42g6-nix-ci.nix /nix/store/iassi33wr7d5946hgq1a12yaz4zf0l7q-nix-ci.nix\\nmkdir -p \\\"$out\\\"\\n\",\"buildInputs\":\"\",\"builder\":\"/nix/store/svx59425zxp552p2b8gm11qj5r09b56i-bash-5.3p15/bin/bash\",\"cmakeFlags\":\"\",\"configureFlags\":\"\",\"depsBuildBuild\":\"\",\"depsBuildBuildPropagated\":\"\",\"depsBuildTarget\":\"\",\"depsBuildTargetPropagated\":\"\",\"depsHostHost\":\"\",\"depsHostHostPropagated\":\"\",\"depsTargetTarget\":\"\",\"depsTargetTargetPropagated\":\"\",\"doCheck\":\"\",\"doInstallCheck\":\"\",\"enableParallelBuilding\":\"1\",\"enableParallelChecking\":\"1\",\"enableParallelInstalling\":\"1\",\"mesonFlags\":\"\",\"name\":\"gammaloop-guppy-workspace-graph-check\",\"nativeBuildInputs\":\"/nix/store/gv181gfnpncirgxv2394nbwk0sas4j2h-diffutils-3.12\",\"out\":\"/nix/store/ls0lzpkks9wc8hqn85qy748adg3whpqd-gammaloop-guppy-workspace-graph-check\",\"outputs\":\"out\",\"passAsFile\":\"buildCommand\",\"patches\":\"\",\"propagatedBuildInputs\":\"\",\"propagatedNativeBuildInputs\":\"\",\"stdenv\":\"/nix/store/c29a7xzhhv8nk62w1gls6f6jj8zihggv-stdenv-linux-no-cc\",\"strictDeps\":\"\",\"system\":\"x86_64-linux\"},\"inputs\":{\"drvs\":{\"m64jd37862c5lmcg8y7s797vrnn266cl-stdenv-linux-no-cc.drv\":{\"dynamicOutputs\":{},\"outputs\":[\"out\"]},\"qmwlwzzzdgryfyp707jg367kdw9rq25a-diffutils-3.12.drv\":{\"dynamicOutputs\":{},\"outputs\":[\"out\"]},\"s3s5s80y5sq8fvxivxxz3bqfpyhx8cb4-bash-5.3p15.drv\":{\"dynamicOutputs\":{},\"outputs\":[\"out\"]},\"smnkvjsl1nlzywzy9x6pzx859ji45sqf-nix-ci.nix.drv\":{\"dynamicOutputs\":{},\"outputs\":[\"out\"]},\"zda1445llzwy4rb5wb6aicrhhv2ggpjm-gammaloop-guppy-workspace-graph.json.drv\":{\"dynamicOutputs\":{},\"outputs\":[\"out\"]}},\"srcs\":[\"aipb4q1nsm8hgx1hcgzdrmasac7g42g6-nix-ci.nix\",\"im83w88klndxak2n27kayw1fh2carprk-ci-workspace-graph.json\",\"l622p70vy8k5sh7y5wizi5f2mic6ynpg-source-stdenv.sh\",\"shkw4qm9qcw5sc5n1k5jznc83ny02r39-default-builder.sh\"]},\"name\":\"gammaloop-guppy-workspace-graph-check\",\"outputs\":{\"out\":{\"path\":\"ls0lzpkks9wc8hqn85qy748adg3whpqd-gammaloop-guppy-workspace-graph-check\"}},\"system\":\"x86_64-linux\",\"version\":4}},\"version\":4}\n",
+  "stderr": "",
+  "elapsed_seconds": 0.05658388137817383,
+  "license_variables_omitted": [
+    "SYMBOLICA_LICENSE",
+    "SYMBOLICA_LICENSE_PATH",
+    "SYMBOLICA_LICENSE_SIGNED",
+    "SYMBOLICA_LICENSE_FILE"
+  ]
+}

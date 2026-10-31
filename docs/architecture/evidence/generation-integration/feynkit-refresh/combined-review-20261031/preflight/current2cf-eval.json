@@ -1,0 +1,26 @@
+{
+  "argv": [
+    "nix",
+    "--offline",
+    "--option",
+    "allow-import-from-derivation",
+    "false",
+    "--option",
+    "accept-flake-config",
+    "false",
+    "eval",
+    "--json",
+    "--expr",
+    "let f=builtins.getFlake \"git+file:///shared/lcnbr/dev/gammaloop/main?rev=2cfb52b28d99f92305a9d571bbe3911cf04b8a19&shallow=1&allRefs=1\"; c=f.checks.x86_64-linux; in { source=f.outPath; selected=builtins.mapAttrs (_:d: {drvPath=d.drvPath;outPath=d.outPath;}) {core=c.gammaloop-nextest-binaries-core; integration=c.gammaloop-nextest-binaries-integration; spenso=c.gammaloop-nextest-binaries-spenso; feynkit=c.gammaloop-nextest-binaries-feynkit; docs=c.gammaloop-nextest-binaries-docs; fmt=c.gammaloop-fmt; clippy=c.gammaloop-clippy; graph=c.gammaloop-guppy-workspace-graph;};}"
+  ],
+  "cwd": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh",
+  "error": "timeout",
+  "stdout": "None",
+  "stderr": "b\"warning: could not read HEAD ref from repo at '/shared/lcnbr/dev/gammaloop/main', using 'master'\\n\"",
+  "license_variables_omitted": [
+    "SYMBOLICA_LICENSE",
+    "SYMBOLICA_LICENSE_PATH",
+    "SYMBOLICA_LICENSE_SIGNED",
+    "SYMBOLICA_LICENSE_FILE"
+  ]
+}

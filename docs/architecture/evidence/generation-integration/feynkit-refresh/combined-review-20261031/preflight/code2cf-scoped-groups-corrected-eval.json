@@ -1,0 +1,27 @@
+{
+  "argv": [
+    "nix",
+    "--offline",
+    "--option",
+    "allow-import-from-derivation",
+    "false",
+    "--option",
+    "accept-flake-config",
+    "false",
+    "eval",
+    "--json",
+    "--expr",
+    "let f=builtins.getFlake \"git+file:///shared/lcnbr/dev/gammaloop/main?rev=2cfb52b28d99f92305a9d571bbe3911cf04b8a19&shallow=1&allRefs=1\"; c=f.checks.x86_64-linux; in builtins.mapAttrs (_: d: d.drvPath) { integration=c.gammaloop-nextest-binaries-integration; feynkit=c.gammaloop-nextest-binaries-feynkit; spenso=c.gammaloop-nextest-binaries-spenso; docs=c.gammaloop-nextest-binaries-docs; fmt=c.gammaloop-fmt; graph=c.gammaloop-guppy-workspace-graph; }"
+  ],
+  "cwd": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh",
+  "exit_code": 0,
+  "stdout": "{\"docs\":\"/nix/store/q5y7a31d12099p08azjvjsfrwmx9zcwb-gammaloop-nextest-binaries-docs.drv\",\"feynkit\":\"/nix/store/hk3sccsqhpp3572d0bz6699rvid29a29-gammaloop-nextest-binaries-feynkit.drv\",\"fmt\":\"/nix/store/ch8v518rg40kzfla7gv3vmrs1bjljhh4-gammaloop-workspace-fmt-0.1.0.drv\",\"graph\":\"/nix/store/wiz998vywsw61d5si2bz8snpmgd9gds9-gammaloop-guppy-workspace-graph-check.drv\",\"integration\":\"/nix/store/5k4n31cldjvx64kzs6gijjz234g1m46c-gammaloop-nextest-binaries-integration.drv\",\"spenso\":\"/nix/store/3q6lyyn9kzs1y20gy753phmvfg8pndka-gammaloop-nextest-binaries-spenso.drv\"}\n",
+  "stderr": "warning: could not read HEAD ref from repo at '/shared/lcnbr/dev/gammaloop/main', using 'master'\n",
+  "elapsed_seconds": 65.44487643241882,
+  "license_variables_omitted": [
+    "SYMBOLICA_LICENSE",
+    "SYMBOLICA_LICENSE_PATH",
+    "SYMBOLICA_LICENSE_SIGNED",
+    "SYMBOLICA_LICENSE_FILE"
+  ]
+}

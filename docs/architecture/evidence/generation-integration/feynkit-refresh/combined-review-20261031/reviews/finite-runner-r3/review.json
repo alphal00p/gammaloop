@@ -1,0 +1,297 @@
+{
+  "schema": "independent-interface-runner-r3-astra-review/1",
+  "reviewer": "Independent Astra focused review, new r3 round; user-authorized fallback for rate-limited Opus; no delegation",
+  "completed_utc": "2026-10-31T02:09:32.924050+00:00",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families",
+  "review_directory": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-interface-runner-r3-astra-20261031-020333Z-4003b785",
+  "verdict": "APPROVE",
+  "approval_scope": "Exact sealed r3 finite future-generator repair only: 8 focused plus 12 flag configurations, three named rows, None/Auto independently, Grouping None, pool 1; pure generation, semantic/input identity, routing and preflight. No native-execution authorization or general runner/API approval.",
+  "LOW_R3_finite_generator_repair_closed": true,
+  "must_fix_findings": [],
+  "original_finding_dispositions": [
+    {
+      "id": "R3-F1",
+      "disposition": "CLOSED_IN_COOPERATIVE_FILESYSTEM_SCOPE",
+      "reason": "plan_job builds input/qualification/driver bytes in memory. finish validates the full requested finite set, including retained input hashes and semantic witness bindings, then all artifact/manifest/runtime routes and existence, before any exclusive write. The same owned-root/symlink check applies throughout.",
+      "exact_reproducers": "Fresh private stale-first-focused-input binding and first escaping qualification symlink both reject with zero writes, secret reaches or child launches. The former no longer leaves 24 artifacts; the latter no longer leaves the first input.",
+      "fresh_extensions": "Both groups; true final generator-order controls (QCD Auto wrong-cofund-dual / altered-is_composite), stale hashes, late internal/external/dangling symlinks, existing late driver and manifest directory. Supplied tests additionally cover stale inputs/base qualification/frozen witness and each destination class.",
+      "limitation": "Preflight of each preparer invocation on a cooperative filesystem. No cross-invocation transaction, rollback, power-loss/crash atomicity, arbitrary I/O failure or adversarial concurrent mutation guarantee."
+    },
+    {
+      "id": "R3-F2",
+      "disposition": "CLOSED_FOR_EXACT_SEALED_V4_WITNESS_AND_INPUTS",
+      "reason": "frozen_control reads the hash-bound predeclared v4 witness, selects exactly one matching record and ties it to its retained input path/hash. validate_semantics compares case, mode, graph, owner, kind, before/after, expected exit/error/stage and witness/flag using JSON encodings that preserve type distinctions. qualification.additional_control must equal that validated metadata without extra fields. Flag predicates no longer derive their truth solely from a mutable job owner.",
+      "exact_reproducers": "Focused owner=vertex:999999 alone, and coherent flag owner/error mutation in manifest plus qualification with updated real qualification digest and unchanged input, both reject at wrong frozen owner before any write/secret/process.",
+      "fresh_extensions": "Coherent final-control owner/error and null stage, boolean/float exit substitutions, integer-for-boolean before/after, integer-for-boolean duality witness and float axis, plus wrong final other-set driver AST with its actual hash. Selecting a valid first focused job still rejects the invalid final flag job.",
+      "trust_boundary": "The exact sealed source-bindings.json and original witness/input bytes are trust anchors, not arbitrary user-editable metadata. No claim against replacement of the trusted sealed packet itself."
+    },
+    {
+      "id": "R3",
+      "disposition": "CLOSED_FOR_THE_REPAIRED_FINITE_GENERATORS",
+      "reason": "Explicit group/control_id/driver_path parameters replace stale quote-sensitive source rewriting. All 20 regenerated inputs are byte-identical to actual v4 inputs, all metadata matches the frozen witnesses, the actual candidate artifacts match regeneration modulo private paths/qualification hashes, and all 20 pure command plans pass. Fixed populated packet CLI relocation remains unqualified; exclusive existing-output rejection is intentional."
+    },
+    {
+      "id": "R1",
+      "disposition": "MANDATORY_SCOPE_RESTRICTION_PRESERVED",
+      "reason": "Always preserve explicit operand AND output-axis maps. The 22 of 28 source-only final-order differences remain; no historical positional identity, new c78 execution or universal cached-plan interchangeability. Credit stays with the actual current named consumers and semantic field covariance."
+    },
+    {
+      "id": "R2",
+      "disposition": "MANDATORY_CONTROL_INTERPRETATION_PRESERVED",
+      "reason": "The 12 flag controls bind claims to actual imported owner flags, not serialized-flag admission. The recorded 400 owners remain is_metric=false/is_composite=true. Negated baseline booleans add no independent negative-domain credit."
+    }
+  ],
+  "candidate": {
+    "disposition.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-runner-fix-20261031-r3/disposition.json",
+      "sha256": "192e073713a95df28120374a3d6a355a2565c919916de3634e6ade66fab2ecbc",
+      "bytes": 12377
+    },
+    "SEAL.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-runner-fix-20261031-r3/SEAL.json",
+      "sha256": "b18cf2ca208abdf7cba55a118eaf98626036ea7ab57ac70e9708b1f11545fbaa",
+      "bytes": 2039
+    },
+    "SHA256SUMS": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-runner-fix-20261031-r3/SHA256SUMS",
+      "sha256": "ae202e53fe56d9e28ddde3dfade71e0dc8d85f93bc324d837c256847b5ba9d08",
+      "bytes": 43910
+    },
+    "validation.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-runner-fix-20261031-r3/validation.json",
+      "sha256": "5a8c0a2835ef0ed6f82529c1592ab7e488bd5fafbc736d19433239f366def869",
+      "bytes": 9305
+    },
+    "source.patch": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-runner-fix-20261031-r3/source.patch",
+      "sha256": "31cdecb7a0485006de48d1091e9e027bab57df9fec1054e3d35aa978b81d73fd",
+      "bytes": 34254
+    },
+    "control_common.py": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-runner-fix-20261031-r3/control_common.py",
+      "sha256": "ece0e5ab65ab12e63c9e9d45c071b61c23a18e46bf0406e0f98058658ef8c46e",
+      "bytes": 11901
+    },
+    "run_native.py": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-runner-fix-20261031-r3/run_native.py",
+      "sha256": "632e7da39e76a61a92235ef132f3529cb0597fd2f2f864f2541ecbe362553b02",
+      "bytes": 6081
+    },
+    "prepare_focused_controls.py": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-runner-fix-20261031-r3/prepare_focused_controls.py",
+      "sha256": "a9851306020ffe72e430fda534e5f800b7ab06fee349583037b42fd41c3d3ffd",
+      "bytes": 3165
+    },
+    "prepare_flag_controls.py": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-runner-fix-20261031-r3/prepare_flag_controls.py",
+      "sha256": "9c6ffadca8d7531ce5fb28b650aee303485148591fe79695378d22e1f270a796",
+      "bytes": 1761
+    },
+    "test_pure.py": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-runner-fix-20261031-r3/test_pure.py",
+      "sha256": "be2fd15f1c9136b8235d014f29fff818bb22d62d840e9b50c176f277b5d82562",
+      "bytes": 30790
+    },
+    "source-bindings.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-runner-fix-20261031-r3/source-bindings.json",
+      "sha256": "3c0d1fba007859934e9dd480dfa4931f0de85829292ff7e06878cdb9e13ae0a2",
+      "bytes": 354259
+    }
+  },
+  "prior_reviews": {
+    "original": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-raw-three-interface-astra-20261031-002103Z-8a5d8001/review.json",
+      "sha256": "d9303d91d922c994f87b07e10cce895b44dba96e294d64be231a3ecdf921b14c",
+      "bytes": 43579
+    },
+    "r2_request_changes": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-interface-runner-fix-astra-20261031-010407Z-c674f6a6/review.json",
+      "sha256": "96b1bf07ebf7e5b537db9b234750247e4360120cbb211c9779eb63973e026710",
+      "bytes": 24102
+    },
+    "r2_review_seal": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-interface-runner-fix-astra-20261031-010407Z-c674f6a6/SEAL.json",
+      "sha256": "5c537d36ca98d18735ef80771f00410eacc78dba7a9c83dc7ff534505f07aae6",
+      "bytes": 702
+    }
+  },
+  "frozen_evidence": {
+    "SEAL.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/SEAL.json",
+      "sha256": "b504c7c0a49df349a9fe667ffe1e516dad98375152a41321f692428a33e9ebed",
+      "bytes": 775
+    },
+    "SHA256SUMS": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/SHA256SUMS",
+      "sha256": "7867c621c9e595dfe21cb0fb71e606b942f749564812295d69d76043a2e86f6a",
+      "bytes": 148537
+    },
+    "final-controls-predeclared-v4.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/final-controls-predeclared-v4.json",
+      "sha256": "271f370b9b1bf7acb180081de7cd3f2e16a20559ce4aba2932d5a6e0ec1d9e2e",
+      "bytes": 38620
+    },
+    "final-controls-results-v4.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/final-controls-results-v4.json",
+      "sha256": "95e82d2db4490956b4e46369e885a38caebf47daecb14e8c35970dd572c971bb",
+      "bytes": 9692
+    },
+    "runtime-qualification-v4.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/runtime-qualification-v4.json",
+      "sha256": "c839a321ca4ac73d4450dabd4c0fecfe026bc9237c1b43889f7d30661b94588b",
+      "bytes": 9253
+    },
+    "interface_probe_v4.rs": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/interface_probe_v4.rs",
+      "sha256": "362a7fa3edce435e7957350e8f2b97da6e92a1bead4a1a450953ae6cb095afd4",
+      "bytes": 15720
+    },
+    "exec_child.py": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/exec_child.py",
+      "sha256": "45cbc4e3444a1eb08597b68eb9b8c0fb5f73e52b5fd82e9775ec43fcb6a84a02",
+      "bytes": 715
+    }
+  },
+  "pipeline_comparison": "Source input cells, first explicit graph/owner selection, finite mutations and frozen v4 native helper/results are shared. The initial defect was at driver/routing construction. The r2-to-r3 first changed boundary is preparation artifact planning followed by full validation before emission; the second is semantic binding to the frozen per-control witness. No algebra, component calculation, migration or concurrent grouped Auto evidence was investigated.",
+  "fresh_evidence": {
+    "provenance": "All three packet manifests and both prior review manifests verified; 1827 distinct files hashed at start/end; 1216 source bindings reverified; 1501 of 1502 implementer old-guard entries reconciled. The remaining entry is tracked nix-ci.nix, outside immutable review scope and deliberately not read. Exact r2-based patch reconstructed; precisely four files differ; run_native.py is identical; nine supplied test class ASTs remain identical.",
+    "source_execution": "Hash-checked copies of the five Python sources loaded in memory with original logical __file__ so the location assertion remains intact. Only PACKET output bindings were changed for preparation/testing; SOURCE and candidate validators remain unchanged. No generated driver, exec_child.py or native helper was executed.",
+    "routing": "20 unique configuration IDs, input/qualification/driver/runtime paths and digests checked. All 20 inputs equal retained v4 bytes. Each differs from its selected baseline graph at exactly one semantic leaf. All semantic metadata matches the frozen record, and candidate artifacts match private regeneration.",
+    "plans": "20 pure plans freshly checked against full original v4 argv/environment constructors. Exact helper/source/child and runtime ELF/tool hashes verified as data. Each mounts its own control input and uses v4; no positive baseline input or v3 runtime route. Public environment contains no license.",
+    "supplied_tests": {
+      "passed": 17,
+      "new_regression_rejections": 75,
+      "generated_writes_on_rejection": 0,
+      "secret_reaches": 0,
+      "child_launches": 0
+    },
+    "independent_holdouts": {
+      "passed": 33,
+      "preparation_rejections": 18,
+      "runtime_rejections": 15,
+      "generated_writes_on_rejection": 0,
+      "secret_reaches": 0,
+      "child_launches": 0,
+      "unchanged_private_files_on_every_rejection": true
+    },
+    "formatter": "Retained variants rechecked by AST only; no fresh formatter execution. Literal source replacements are absent from the finite generators.",
+    "error_results": "All 20 frozen native result exit/error classifications rechecked as data against exact witnesses. Setup errors, missing/malformed outputs and process failures receive no semantic credit. run_native.py retains command-start/result records, post-execution input hash checks and optional results digest. It records native exit rather than asserting expected error itself; driver exit zero is not semantic success. Native boundary/result adjudication remains outside this pure repair approval."
+  },
+  "reused_evidence": {
+    "native": "All native/math/interface/capture results are reused exact prior evidence; zero fresh native runs.",
+    "prior_41_runtime_probes": "Full prior findings/probes and the final implementer replay source/results inspected and hash-bound. The 41-case replay is reused implementer evidence, not represented as 41 fresh independent probes. Fresh work is the 17-test suite and 33 targeted holdouts above.",
+    "formatter": "Pinned Ruff runs, 25 formatter variants and 20 variant command-plan runs are retained implementer evidence; no native/compiler/Nix/formatter subprocess run here.",
+    "migrations": "Three migrations and existing finite proofs remain independently approved per user; this review neither reruns, expands, revokes nor substitutes for those approvals."
+  },
+  "remaining_limits": [
+    "Cooperative filesystem only, with exclusive writes and preservation of prior partial outputs. Fixed populated packet reuse rejects by design; no general CLI relocation/API guarantee.",
+    "Approval is bound to these exact source bytes, witness, retained inputs and finite configurations; no arbitrary new controls or extension to other rows/modes/pools/grouping.",
+    "No generic runner, native, math, literal/token/migration, adapter, combined integration, evaluator/TensorReduction, CI, performance or grouped Auto approval.",
+    "No full new native result-handling or resource/process lifecycle qualification; native run() was reached only with invalid inputs and stopped during preflight.",
+    "Trusted packet identity and cooperative source immutability remain premises; no adversarial concurrent mutation or trusted manifest replacement claim.",
+    "R1 operand/output maps and R2 actual-owner flag interpretation remain mandatory."
+  ],
+  "operations": {
+    "jj_git_snapshot_ref_index_operations": 0,
+    "tracked_edits": 0,
+    "main_writes": 0,
+    "old_packet_or_review_writes": 0,
+    "native_executions": 0,
+    "licensed_executions": 0,
+    "Nix_build_compiler_network_executions": 0,
+    "license_config_reads": 0,
+    "delegations": 0,
+    "owned_background_processes_remaining": 0,
+    "new_workspaces": 0
+  },
+  "external_movement": "Not monitored: no jj/git/ref/index reads or operations. No claim of workspace-wide invariance. Review identity uses exact sealed files, independently of the concurrent Sol task. No external movement observed in the guarded evidence; nothing reverted.",
+  "failed_attempts": "Initial non-login python3 lookup returned 127 before any script execution. An existing standalone Python 3.13.16 interpreter was then used directly with -I -S -B. All review probes passed. The first finalizer stopped with KeyError before writing a report/seal because the implementer guard also contains tracked nix-ci.nix outside this review guard. The failed finalizer source/receipt are retained; the report now explicitly distinguishes 1501 reconciled immutable entries from that unread tracked configuration. No Nix command or dependency installation.",
+  "cleanup": {
+    "retained": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-interface-runner-r3-astra-20261031-020333Z-4003b785",
+    "reason": "Sealed review, immutable source copies, successful pure test/probe receipts, regenerated inputs, rejected private fixture states and initial command failure retained for reproduction and review. Owned test symlinks removed with target records preserved. Supplied test temporary directories cleaned by their context managers. No native output/process, cache or abandoned workspace.",
+    "owned_symlinks_remaining": 0,
+    "owned_processes_remaining": 0
+  },
+  "evidence": {
+    "provenance-checks.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-interface-runner-r3-astra-20261031-020333Z-4003b785/provenance-checks.json",
+      "sha256": "f4aed934425b19fe80de4cce6912d9d8e87470f53d55f40a80f2886a981114c0",
+      "bytes": 1452
+    },
+    "generation-checks.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-interface-runner-r3-astra-20261031-020333Z-4003b785/generation-checks.json",
+      "sha256": "4a1f1f0aba1830b1384f5599e6785468bb797747ef360590939a39f7050f583e",
+      "bytes": 12671
+    },
+    "supplied-tests.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-interface-runner-r3-astra-20261031-020333Z-4003b785/supplied-tests.json",
+      "sha256": "23e8b5f9758ab886ce45449a4cc6180481dbcc74d3b16f27f99c4b4b00d7d424",
+      "bytes": 16884
+    },
+    "supplied-tests.log": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-interface-runner-r3-astra-20261031-020333Z-4003b785/supplied-tests.log",
+      "sha256": "83bd2b2724401df7c13672ff8fa119aa76989babee45c9a7dc6af3a98c93af30",
+      "bytes": 2538
+    },
+    "private-command-plans.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-interface-runner-r3-astra-20261031-020333Z-4003b785/private-command-plans.json",
+      "sha256": "3fa5c42495eeae958ac69334337c1f94de07b092c77ddedf71a53c5ec53c9841",
+      "bytes": 226715
+    },
+    "holdouts.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-interface-runner-r3-astra-20261031-020333Z-4003b785/holdouts.json",
+      "sha256": "d77c1ce8950c28e4302c71ba8ead8c4e38c8ee3c88405199a9950e34146e311b",
+      "bytes": 7563
+    },
+    "pure-summary.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-interface-runner-r3-astra-20261031-020333Z-4003b785/pure-summary.json",
+      "sha256": "f26861fedb8b80c67769dd3a28a247a0d203c69c0e8f57f19dd2fe0ffea59054",
+      "bytes": 486
+    },
+    "retained-format-AST-checks.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-interface-runner-r3-astra-20261031-020333Z-4003b785/retained-format-AST-checks.json",
+      "sha256": "9ddf1a1638110ac1f0a2c3741abf04a1e18909e76575f6523f3ec0914dacb2ec",
+      "bytes": 17914
+    },
+    "guard-start.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-interface-runner-r3-astra-20261031-020333Z-4003b785/guard-start.json",
+      "sha256": "4b60fae3e061bb0cd37025ec94fc2f27c5c2650a0d6366947a0e8ce59d5c1d85",
+      "bytes": 672017
+    },
+    "guard-final.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-interface-runner-r3-astra-20261031-020333Z-4003b785/guard-final.json",
+      "sha256": "e185b887b89889e0e2edb9eed19decf5062503524aad3e28ded06be55e893ab9",
+      "bytes": 2075
+    },
+    "probe.py": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-interface-runner-r3-astra-20261031-020333Z-4003b785/probe.py",
+      "sha256": "fe4da7031325623ca68875841789f0351d05ee077f4adf78dc48d68de9673fda",
+      "bytes": 13321
+    },
+    "probe.stdout": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-interface-runner-r3-astra-20261031-020333Z-4003b785/probe.stdout",
+      "sha256": "c0c3d6677d7b3a0b41c1c430ea3472d198d8b5c639419de45c1df246b2231711",
+      "bytes": 95
+    },
+    "probe.stderr": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-interface-runner-r3-astra-20261031-020333Z-4003b785/probe.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "initial-command-failure.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-interface-runner-r3-astra-20261031-020333Z-4003b785/initial-command-failure.json",
+      "sha256": "3dc6189051054c7985bcd9121e0a6cc9987432adb90630248316078eac0ab6be",
+      "bytes": 214
+    },
+    "finalize-attempt1.py": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-interface-runner-r3-astra-20261031-020333Z-4003b785/finalize-attempt1.py",
+      "sha256": "b71cab5e2a290137007b4952d4d7033770673a1be47e39cae981cc73f6a89c70",
+      "bytes": 15993
+    },
+    "finalize-attempt1-failure.json": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-interface-runner-r3-astra-20261031-020333Z-4003b785/finalize-attempt1-failure.json",
+      "sha256": "6ebb2c6ee59f3e0b94512e2accc3715af0d9193dcbd2d1627e31e17e63e48bc1",
+      "bytes": 443
+    }
+  }
+}

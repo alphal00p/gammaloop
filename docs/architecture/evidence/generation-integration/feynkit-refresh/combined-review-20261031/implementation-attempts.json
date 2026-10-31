@@ -1,0 +1,31 @@
+{
+  "schema": "implementation-retained-attempts/1",
+  "attempts": [
+    {
+      "attempt": "initial guard script supplied /usr/bin:/bin to Git subprocess",
+      "result": "FileNotFoundError git; no guards written or repository operation performed",
+      "resolution": "retained shell PATH; subsequent Git uses no user/system config and optional locks disabled"
+    },
+    {
+      "attempt": "combined long reads",
+      "result": "some tool displays truncated; full source-filter and JSON data parsed/rehashed with stdlib; reviewer original content retained verbatim",
+      "resolution": "focused reads plus complete programmatic hash and source membership verification"
+    },
+    {
+      "attempt": "optional filename guesses, guidance relative path, and nix/docs glob",
+      "result": "read-only missing-path errors",
+      "resolution": "used actual packet inventory and ../main guidance; pinned Typst authority located in nix/documentation.nix"
+    },
+    {
+      "attempt": "sed of an executable wrapper assumed text",
+      "result": "raw immutable wrapper bytes printed; no project or wrapper execution",
+      "resolution": "used exact existing Typst executable with a minimal environment"
+    },
+    {
+      "attempt": "verify.py variable collision found during static inspection",
+      "result": "fixed copied_records name before first execution; no false validation claim"
+    }
+  ],
+  "all_errors_preserved_without_runtime_or_semantic_credit": true,
+  "owned_processes": []
+}

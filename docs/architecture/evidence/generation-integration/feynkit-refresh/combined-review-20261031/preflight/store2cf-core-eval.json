@@ -1,0 +1,27 @@
+{
+  "argv": [
+    "nix",
+    "--offline",
+    "--option",
+    "allow-import-from-derivation",
+    "false",
+    "--option",
+    "accept-flake-config",
+    "false",
+    "eval",
+    "--json",
+    "--expr",
+    "let f=builtins.getFlake \"/nix/store/3sj3nw06s3vhl3j12wfp5gc3r1h6f0k3-source\"; d=f.checks.x86_64-linux.gammaloop-nextest-binaries-core; in {source=f.outPath;drvPath=d.drvPath;outPath=d.outPath;}"
+  ],
+  "cwd": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh",
+  "exit_code": 1,
+  "stdout": "",
+  "stderr": "error:\n       \u2026 while calling the 'getFlake' builtin\n         at \u00abstring\u00bb:1:7:\n            1| let f=builtins.getFlake \"/nix/store/3sj3nw06s3vhl3j12wfp5gc3r1h6f0k3-source\"; d=f.checks.x86_64-linux.gammaloop-nextest-binaries-core; in {source=f.outPath;drvPath=d.drvPath;outPath=d.outPath;}\n             |       ^\n\n       error: cannot call 'getFlake' on unlocked flake reference '/nix/store/3sj3nw06s3vhl3j12wfp5gc3r1h6f0k3-source', at \u00abnone\u00bb:0 (use --impure to override)\n",
+  "elapsed_seconds": 0.10300326347351074,
+  "license_variables_omitted": [
+    "SYMBOLICA_LICENSE",
+    "SYMBOLICA_LICENSE_PATH",
+    "SYMBOLICA_LICENSE_SIGNED",
+    "SYMBOLICA_LICENSE_FILE"
+  ]
+}

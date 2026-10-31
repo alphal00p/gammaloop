@@ -1,0 +1,198 @@
+[
+  {
+    "op": "test",
+    "path": "/packages/WP3/status",
+    "value": "Source30 combined closure/actual producers and five focused runtime consumers validated; STOP for NEW independent Astra review before31. WP3 incomplete."
+  },
+  {
+    "op": "replace",
+    "path": "/packages/WP3/status",
+    "value": "Sources through46 and original tensor/core/docs/XS integration accepted in their recorded old-kernel scopes; bounded8eb refresh constituents separately accepted. NEW combined refresh review required; WP3/M-rebuild incomplete."
+  },
+  {
+    "op": "test",
+    "path": "/packages/WP3/current_slice_review",
+    "value": "Source30 combined closure/actual producers and five focused runtime consumers validated; STOP for NEW independent Astra review before31. WP3 incomplete."
+  },
+  {
+    "op": "replace",
+    "path": "/packages/WP3/current_slice_review",
+    "value": "Historical source30 pending description superseded by recorded later bounded approvals. Current frozen refresh457/code2cf awaits NEW independent combined review."
+  },
+  {
+    "op": "test",
+    "path": "/packages/WP3/review",
+    "value": "Fixed-case physical/interface equivalence certificates and scoped P2 input approved; NEW combined migration/resource review pending"
+  },
+  {
+    "op": "replace",
+    "path": "/packages/WP3/review",
+    "value": "See current_status_reconciliation_20261031 for exact bounded attributions; original receipts remain immutable. No current8eb whole-WP3 approval."
+  },
+  {
+    "op": "test",
+    "path": "/packages/WP3/parallel_lanes/color46/status",
+    "value": "Astra APPROVED standalone cumulative input for LATER integration after source45; not replayed in this slice"
+  },
+  {
+    "op": "replace",
+    "path": "/packages/WP3/parallel_lanes/color46/status",
+    "value": "Original source46 cumulatively APPROVED at79dfeaab by final independent Opus round4; no repeat implementation required. Current8eb standalone colour/evaluator qualification remains distinct."
+  },
+  {
+    "op": "test",
+    "path": "/active_xs_qed_l2/status",
+    "value": "One-token combined candidate awaits NEW independent review. Actual scoped lane 298/73/49; all 73 remaining failures and broader WP3 gates stay open."
+  },
+  {
+    "op": "replace",
+    "path": "/active_xs_qed_l2/status",
+    "value": "Original fdff/eae bounded integration approved through independent scopes A/B and accepted globalfdff boundary;298/73/49 remains old1a history. Current8eb ffa pool1 is302/69/49; no whole-WP3 approval."
+  },
+  {
+    "op": "add",
+    "path": "/current_status_reconciliation_20261031",
+    "value": {
+      "schema": "generation-refresh-current-status-proposal/1",
+      "status": "CONSTITUENT_BOUNDED_ACCEPTANCES; NEW_COMBINED_REVIEW_REQUIRED",
+      "original_approved_global_integration": "fdff0d18953348b84a0f1b7e6ab5ef703a5090de",
+      "frozen_bounded_refresh_code": "2cfb52b28d99f92305a9d571bbe3911cf04b8a19",
+      "frozen_bounded_refresh_evidence": "457e361d7d39e0a3daae801651f8c1dfabbf47aa",
+      "source_upstream": "9102f885722e856e30227ed46e685e5c465905f7",
+      "kernel": "8eb7c3729d6abefc916decc1bdf0c06536f8af80",
+      "author": "Lucien Huber <im@lcnbr.ch>",
+      "CI_enabled": false,
+      "publication_authorized": false,
+      "accepted_reviews": [
+        {
+          "review": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-host-stub-rustred-integration-astra-20261031-023354Z-777117b1/review.json",
+          "sha256": "f472e199cf3805d9364ef9158c18628fbc5c7ee8d72317c56a6af787628e8a5c",
+          "scope": {
+            "applied_source": "APPROVE exact independently approved one-file generated notebook stub on accepted twelve-row base",
+            "corrected_ordinary_distribution": "APPROVE exact wheel, complete installation, stub parity, native identity and qualified prior ordinary reuse; no ordinary QCD pass",
+            "private_source_composition_and_distribution": "APPROVE exact private three-host-file RustRed7c1/kernel8eb composition and new full wheel for this finite validation scope only",
+            "unchanged_private_QCD": "APPROVE original script/all23 assertions, two targets, depth2, residual[[1]], native RustRed and original completion marker",
+            "private_coexistence": "APPROVE fresh UFO36EW/3QCD/15linearity, squared display and exact two twelve-keyword sector signatures/three stub targets",
+            "private_browser": "APPROVE unchanged exact selected four-drawing product method in Chromium153.0.8010.36 and WebKit26.5/rev2311 at DPR1, zero skips/errors/failures",
+            "additive_evidence_and_docs_structure": "APPROVE declared committed/external integrity closure, preserved failures, one matching title, additive registry and all118 original scopes; no Typst/docs compile credit",
+            "global_integration_publication_production_RustRed": "NOT_REVIEWED_OR_APPROVED"
+          },
+          "verdict": "APPROVE_BOUNDED_APPLIED_STUB_DISTRIBUTIONS_AND_PRIVATE_RUSTRED_INTEGRATION"
+        },
+        {
+          "review": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-full-generator-characterization-astra-20261031-022430Z-320628f7/review.json",
+          "sha256": "fb688585bc7efd0b494fef7648df5abad398f88bfe8c439e8b42c0dd520eaa37",
+          "scope": "Only the exact sealed full feynkit-generator package characterization at ffa76ec420642c03349ab756d2d7720ab93c0057:420 discovered identities,371 ordinary nonignored selected outer tests, explicit oracle loop pool1, unchanged ci_gammaloop policy, one retained actual package run, and classification of all69 failed asserted Summaries. Registration tests retain their own explicit pools. This is approval of characterization, not a green package or a new native run.",
+          "verdict": "APPROVE_EXACT_FULL_PACKAGE_POOL1_CHARACTERIZATION_AND_ASSERTED_SUMMARY_CLASSIFICATION"
+        },
+        {
+          "review": ".local/review-raw-three-integration-astra-20261031-012811Z-323f4486/review.json",
+          "sha256": "535b792610c531b446d8beb1a9f300246e6d498e8126509b637189e8eb80a091",
+          "scope": "Only the exact three separately approved numerator tokens on accepted SM base5ea4, actual new ffa76ec package archive and ELF, twelve selected full-Row tests at pools1/8/32, fresh pool1 public physical capture joins, and additive committed evidence/Typst/registry through d0fb4. Root disposition remains separate; no integration-bookmark advance or publication approval.",
+          "verdict": "APPROVE_BOUNDED_RAW_THREE_QED_QCD_INTEGRATION"
+        },
+        {
+          "review": ".local/review-host-browser-stub-astra-20261031-013106Z-5655cc61/review.json",
+          "sha256": "8bd31e92448a517479fb2f2ec5a12c9999c31752cea08502392f290c47e37627",
+          "scope": "Approval is hash-bound to H/B/S and the exact f47 artifacts. It covers actual listed passes, not a fully qualified host. No source46, full Community, source/pin/bridge proposal, global integration/WP3, full docs/site/widget, performance, publication, migration, or new native-build approval.",
+          "verdict": null
+        },
+        {
+          "review": "../generation-oracle-numerator-families/.local/review-grouped-none-aggregation-astra-20261030-independent-b1/review.json",
+          "sha256": "45368ac2dc5783a6ba31daa9b7e8bd7f03a80746bf3b07b6d3e34cc909adcb81",
+          "scope": {
+            "case": "xs_qed_eemm_identical_L2",
+            "classes": "None",
+            "grouping": "Identical",
+            "settings": {
+              "check_canonical_numerator": false,
+              "differentiate_particle_masses_only": true,
+              "fully_numerical_substitution": false,
+              "number_of_numerical_samples": 5,
+              "numerical_sample_seed": 3,
+              "symmetric_polarizations": false
+            },
+            "naming": "D",
+            "generation_pool": 1,
+            "code": "5ba04864ca506e259d9eef4a54f65acdd8323fc2",
+            "dependency_archive_code": "5ea149ffd88ae3afc4072a38c0871c1329be8424",
+            "kernel": "8eb7c3729d6abefc916decc1bdf0c06536f8af80"
+          },
+          "verdict": "APPROVE_PINNED_CONDITIONAL_NONE_AGGREGATE_AND_HELPER_DURABILITY"
+        },
+        {
+          "review": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-auto-aggregation-astra-20261031-independent-r1-1793413266607828149/review.json",
+          "sha256": "e4ca45aff35c11bbd6397a32265502f79ff6b622141c1fe75214f17f830919db",
+          "scope": "PINNED_CONDITIONAL_AUTO_AGGREGATION_HELPER_DURABILITY_AND_NARROW_STRICT_GUARD",
+          "verdict": "APPROVE"
+        },
+        {
+          "review": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-interface-runner-r3-astra-20261031-020333Z-4003b785/review.json",
+          "sha256": "b370752781691d7286766047658ca518a4a898a463c76df26226f2f114d43a62",
+          "scope": null,
+          "verdict": "APPROVE"
+        },
+        {
+          "review": ".local/review-feynkit-refresh-source-opus-round4-20261030T201146Z-697912d5/review.json",
+          "sha256": "5d9db6c6d385bd25ea9e276a2a1ebd2e95c0678171854e4ccb73a1362130e1af",
+          "scope": "SOURCE_RECONCILIATION only. Covers the reconciled source content through code f47f27213a1c55291239c9bc0f334a7ea1cd1cc1: the prior reviewed source (106-commit replay plus the f842/5ba0 repairs, carried by invariance) and the one-file R3-1 correction. Also covers the truthfulness of the additive cacd evidence. EXCLUDES the c3449988 shared metadata (docs/developers.toml note, docs/architecture/generation-feynkit-community-refresh.typ and qualification/*.json), which has its own active ScopeA review; see XS-1. Grants no installed-host, runtime, WebKit, product-rendering, proof, stub-parity, full-site, budget, migration, WP3 or combined approval.",
+          "verdict": "APPROVE_SOURCE_RECONCILIATION"
+        },
+        {
+          "review": ".local/review-feynkit-refresh-shared-provenance-opus-20261030T193404Z-3c0453ff/review.json",
+          "sha256": "565caeace0112a30fb9118f94b2bb759e4267d2b802395c314e485b89b4b2b70",
+          "scope": "Shared Scope A provenance/runtime/evidence only, serving the twelve-case pool1 characterization and the provenance of BOTH new raw certificate lanes (QED r3, gauge r3). NOT source reconciliation, mathematics/native-control, ScopeB lane, migration, combined or integration approval.",
+          "verdict": "APPROVE_SHARED_SCOPE_A"
+        },
+        {
+          "review": ".local/review-refresh-aggregation-astra-20261030-independent/review.json",
+          "sha256": "567fba9cfa9287478d5c1531fd46eac49c79f4cd6fbcc878c50bd364cf279342",
+          "scope": "Only metadata delta cacd5182704082df929a066548e3501be22c9533..48d0b98b97b368b2a2f58abe67cb19dddec623df: retention and faithful attribution of six completed independent reviews, canonical note update, XS-1 paired-field repair, and additive prior-eight F1-F7 reporting disclosures. No combined/integration/WP3/M-rebuild, migration/literal/expectation, mathematical/runtime, product/browser or full-docs approval.",
+          "verdict": "APPROVE_FOCUSED_METADATA_AGGREGATION"
+        },
+        {
+          "review": "../generation-integration-plan/.local/review-main46-round4-opus-rZyrnOS8/review.json",
+          "sha256": "ee6e37ee207747d4f65c6a45b619412738af3248a65301b396768f27f5227e22",
+          "scope": null,
+          "verdict": "APPROVE"
+        },
+        {
+          "review": "../generation-integration-plan/.local/review-xs-qed-l2-integration-a-opus-20261030T111536Z-1321089/review.json",
+          "sha256": "0b5319a43da8e19100dd19a9c4647a03b95ffba1ac90a23749b0c348e95375a6",
+          "scope": "A: producer, runtime, pool, Row/mode and remaining-failure evidence. Peer B owns finite proof/docs/registry/hash-closure replay.",
+          "verdict": "APPROVE_SCOPE_A_BOUNDED"
+        },
+        {
+          "review": "../generation-integration-plan/.local/review-xs-qed-l2-integration-b-opus-20261030T111614Z-1341306/review.json",
+          "sha256": "f94b819f13740dc7674991c7db8bcf33aa14088b60fa973114aadd805281f0c4",
+          "scope": "B: certificate closure/application, registry, documentation and final evidence (items 1-7 of the root brief). Producer provenance, 452-unit closure, fresh 24 tests/Rows and full-lane execution are peer A's; covered here only by cross-reference/consistency.",
+          "verdict": "APPROVE_SCOPE_B_WITH_NONBLOCKING_FINDINGS"
+        },
+        {
+          "review": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-identical-migration-astra-20261031-024225Z-1469f5e4/review.json",
+          "sha256": "7d96505dcb700eeae42b5a4e87676551ba910cb660df586cafe34d6b90e944f1",
+          "scope": "Exact single-token migration PREPARATION under pinned None/Auto premises; not application/runtime/integration approval",
+          "verdict": "APPROVE"
+        }
+      ],
+      "full_generator_pool1": {
+        "inventory": 420,
+        "selected": 371,
+        "passed": 302,
+        "failed": 69,
+        "ignored": 49,
+        "classification": "numerator-only asserted Summary history; not physics approval"
+      },
+      "row_scope": "12 literal None rows;36 exact passes at1/8/32;15 fresh capture joins; Auto physical/counter premises retained separately",
+      "grouped_scope": "Frozen457 retains old literal. Subsequent single-token preparation approved under7d96505d; assigned writer owns application, newarchive/39passes/joins and NEW integration review. No postapplication pass claimed.",
+      "host_scope": "ordinary corrected wheel plus private RustRed7c1/kernel8eb one-denominator validation host; no production RustRed/full Community",
+      "finite_runner": "Exact r3 accepted separately; no general runner/native/math cross-credit",
+      "current8eb_production_core_evaluator_status": "not yet runtime-qualified by the accepted evidence read here; exact core archive outputs absent in local store",
+      "WP3": "incomplete",
+      "M_rebuild": "not claimed",
+      "scope_bindings_preserved": 118,
+      "historical_records": "Verbatim reviews and original receipts remain unchanged, including their then-pending language; current attribution is additive outside them.",
+      "later_applicability": "Single test-literal delta conditionally preserves13 inspected non-generator compile source graphs; re-attest exact drv identities and runtime-input invariance on the writer frozen commit. Metadata/full-docs runtime closure treated separately."
+    }
+  }
+]

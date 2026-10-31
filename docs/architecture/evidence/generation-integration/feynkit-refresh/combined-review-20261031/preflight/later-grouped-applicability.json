@@ -1,0 +1,128 @@
+{
+  "immutable_base_unchanged": "457e361d7d39e0a3daae801651f8c1dfabbf47aa",
+  "approval_record": ".local/feynkit-refresh/root-grouped-identical-literal-acceptance-20261031.json",
+  "review": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-identical-migration-astra-20261031-024225Z-1469f5e4/review.json",
+  "review_sha256": "7d96505dcb700eeae42b5a4e87676551ba910cb660df586cafe34d6b90e944f1",
+  "review_seal_sha256": "e4f574d2346fd4c32c27fbcfbe5b027acd1c8772185371d83bc701429218a26f",
+  "old_token": "0x00fac78da0e0d159",
+  "new_token": "0xa60df38a6b8079e3",
+  "changed_test_source": "crates/feynkit-generator/tests/generation_oracle/main.rs",
+  "source_writer": "separate sole writer assigned by root; not this task",
+  "authorization": "apply token to457, new generator archive,39 bounded row passes and fresh grouped public joins, then NEW integration review",
+  "post_application_results": "NOT OBSERVED OR CLAIMED",
+  "expected_live_movement": "source/ref/registry movement by writer must not be reverted",
+  "source_filter_impact": "derive membership against immutable source-filter-bindings; do not infer all outputs invalid",
+  "non_generator_compile_filters": [
+    {
+      "producer": "core/gammaloop-api",
+      "compile_src_contains_changed_file": false,
+      "required_graph_directory_source_hits": [],
+      "unknown_pruned_nodes": [],
+      "conditional_invariance": true,
+      "condition": "Sole one-token test-file delta only; unchanged Nix/lock/features/profile and all other files. Any added docs/registry evidence separately affects docs runtime inputs."
+    },
+    {
+      "producer": "core/gammalooprs",
+      "compile_src_contains_changed_file": false,
+      "required_graph_directory_source_hits": [],
+      "unknown_pruned_nodes": [],
+      "conditional_invariance": true,
+      "condition": "Sole one-token test-file delta only; unchanged Nix/lock/features/profile and all other files. Any added docs/registry evidence separately affects docs runtime inputs."
+    },
+    {
+      "producer": "core/gammaloop-tracing-filter",
+      "compile_src_contains_changed_file": false,
+      "required_graph_directory_source_hits": [],
+      "unknown_pruned_nodes": [],
+      "conditional_invariance": true,
+      "condition": "Sole one-token test-file delta only; unchanged Nix/lock/features/profile and all other files. Any added docs/registry evidence separately affects docs runtime inputs."
+    },
+    {
+      "producer": "core/gammaloop-tracing-filter-macros",
+      "compile_src_contains_changed_file": false,
+      "required_graph_directory_source_hits": [],
+      "unknown_pruned_nodes": [],
+      "conditional_invariance": true,
+      "condition": "Sole one-token test-file delta only; unchanged Nix/lock/features/profile and all other files. Any added docs/registry evidence separately affects docs runtime inputs."
+    },
+    {
+      "producer": "core/three-dimensional-reps",
+      "compile_src_contains_changed_file": false,
+      "required_graph_directory_source_hits": [],
+      "unknown_pruned_nodes": [],
+      "conditional_invariance": true,
+      "condition": "Sole one-token test-file delta only; unchanged Nix/lock/features/profile and all other files. Any added docs/registry evidence separately affects docs runtime inputs."
+    },
+    {
+      "producer": "integration/gammaloop-integration-tests",
+      "compile_src_contains_changed_file": false,
+      "required_graph_directory_source_hits": [],
+      "unknown_pruned_nodes": [],
+      "conditional_invariance": true,
+      "condition": "Sole one-token test-file delta only; unchanged Nix/lock/features/profile and all other files. Any added docs/registry evidence separately affects docs runtime inputs."
+    },
+    {
+      "producer": "feynkit/feynkit-graph",
+      "compile_src_contains_changed_file": false,
+      "required_graph_directory_source_hits": [],
+      "unknown_pruned_nodes": [],
+      "conditional_invariance": true,
+      "condition": "Sole one-token test-file delta only; unchanged Nix/lock/features/profile and all other files. Any added docs/registry evidence separately affects docs runtime inputs."
+    },
+    {
+      "producer": "feynkit/feynkit-model",
+      "compile_src_contains_changed_file": false,
+      "required_graph_directory_source_hits": [],
+      "unknown_pruned_nodes": [],
+      "conditional_invariance": true,
+      "condition": "Sole one-token test-file delta only; unchanged Nix/lock/features/profile and all other files. Any added docs/registry evidence separately affects docs runtime inputs."
+    },
+    {
+      "producer": "feynkit/feynkit-tensor",
+      "compile_src_contains_changed_file": false,
+      "required_graph_directory_source_hits": [],
+      "unknown_pruned_nodes": [],
+      "conditional_invariance": true,
+      "condition": "Sole one-token test-file delta only; unchanged Nix/lock/features/profile and all other files. Any added docs/registry evidence separately affects docs runtime inputs."
+    },
+    {
+      "producer": "spenso/idenso",
+      "compile_src_contains_changed_file": false,
+      "required_graph_directory_source_hits": [],
+      "unknown_pruned_nodes": [],
+      "conditional_invariance": true,
+      "condition": "Sole one-token test-file delta only; unchanged Nix/lock/features/profile and all other files. Any added docs/registry evidence separately affects docs runtime inputs."
+    },
+    {
+      "producer": "spenso/spenso",
+      "compile_src_contains_changed_file": false,
+      "required_graph_directory_source_hits": [],
+      "unknown_pruned_nodes": [],
+      "conditional_invariance": true,
+      "condition": "Sole one-token test-file delta only; unchanged Nix/lock/features/profile and all other files. Any added docs/registry evidence separately affects docs runtime inputs."
+    },
+    {
+      "producer": "spenso/spenso-hep-lib",
+      "compile_src_contains_changed_file": false,
+      "required_graph_directory_source_hits": [],
+      "unknown_pruned_nodes": [],
+      "conditional_invariance": true,
+      "condition": "Sole one-token test-file delta only; unchanged Nix/lock/features/profile and all other files. Any added docs/registry evidence separately affects docs runtime inputs."
+    },
+    {
+      "producer": "docs/alphal00p-docs-builder",
+      "compile_src_contains_changed_file": false,
+      "required_graph_directory_source_hits": [],
+      "unknown_pruned_nodes": [],
+      "conditional_invariance": true,
+      "condition": "Sole one-token test-file delta only; unchanged Nix/lock/features/profile and all other files. Any added docs/registry evidence separately affects docs runtime inputs."
+    }
+  ],
+  "transitive_source_inspection": {
+    "unique_input_sources_examined": 140,
+    "directories_containing_target": [],
+    "limitation": "Pruned cached artifact leaves are reused at exact paths, not regenerated; later Nix evaluation must re-attest identities on the writer frozen commit."
+  },
+  "generator": "main.rs is a selected generator own test source; new archive and new39 row executions/joins required by authorized writer",
+  "static_and_docs": "Fmt includes Rust test file; documentation source/registry scopes and full docs/site input closures must be requalified after metadata changes. Do not transfer old complete docs result."
+}

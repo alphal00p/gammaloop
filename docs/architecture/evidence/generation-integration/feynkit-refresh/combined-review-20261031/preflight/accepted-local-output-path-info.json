@@ -1,0 +1,28 @@
+{
+  "argv": [
+    "nix",
+    "--offline",
+    "--option",
+    "allow-import-from-derivation",
+    "false",
+    "path-info",
+    "--json",
+    "/nix/store/qg5nc1vcxjbdb5zzjigilx3wngy8xyfd-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0",
+    "/nix/store/rdjfjq9i5dap927sylh6984zj54xra2z-gammaloop-crate-test-binaries-feynkit-generator-b6f177b7bc15beb1-deps-0.1.0",
+    "/nix/store/w5d0wdnv1c4iic9f6qlg6zv87zglb6f0-generation-refresh-corrected-stub-host-wheel-0.1.0",
+    "/nix/store/cbvphdpy05pb8r414dmn5xfxxdqs3slx-generation-refresh-rustred-validation-host-wheel-0.1.0",
+    "/nix/store/mn3vzg4c35q658jgg078hahj3hcic2f4-generation-refresh-feynkit-stub-exporter-0.1.0",
+    "/nix/store/3sj3nw06s3vhl3j12wfp5gc3r1h6f0k3-source"
+  ],
+  "cwd": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh",
+  "exit_code": 0,
+  "stdout": "{\"/nix/store/3sj3nw06s3vhl3j12wfp5gc3r1h6f0k3-source\":{\"ca\":\"fixed:r:sha256:0sa6gcg7iyslcd35rnbxixpr7rcxsx01a6vkw9d8r1ibf7naj8a4\",\"deriver\":null,\"narHash\":\"sha256-RCGp7HErhoxa4nMbFUDXneWTb4992VxGY1T7eB57Rmk=\",\"narSize\":160728656,\"references\":[],\"registrationTime\":1793412454,\"signatures\":[],\"storeDir\":\"/nix/store\",\"ultimate\":false,\"version\":1},\"/nix/store/cbvphdpy05pb8r414dmn5xfxxdqs3slx-generation-refresh-rustred-validation-host-wheel-0.1.0\":{\"ca\":null,\"deriver\":\"/nix/store/x43msadi65xf8zr234lg5dbwgjzblcz6-generation-refresh-rustred-validation-host-wheel-0.1.0.drv\",\"narHash\":\"sha256-byouUecKN+GjqpOrnC/h9QJc5T+7QWGVZ8NjBEFeuVw=\",\"narSize\":201643880,\"references\":[\"/nix/store/5hr22rycs6dpj77afgq0maqd8qbipk6a-rustred-source-7c1ed037\",\"/nix/store/604gsr59rj7dzd0nrhp143rpvf7gyiaz-gcc-15.3.0-lib\",\"/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84\",\"/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps\",\"/nix/store/wj1f56qky4pmjc7l0r6b6l7whnnw7hp6-python3-3.13.15\",\"/nix/store/z4c6k0mrlkwl3s4w9ysxc8vq1wylm3ms-gcc-wrapper-15.3.0\"],\"registrationTime\":1793413104,\"signatures\":[],\"storeDir\":\"/nix/store\",\"ultimate\":true,\"version\":1},\"/nix/store/mn3vzg4c35q658jgg078hahj3hcic2f4-generation-refresh-feynkit-stub-exporter-0.1.0\":{\"ca\":null,\"deriver\":\"/nix/store/f86dlazi7lzi5inshqhrcf0ym0z17wvc-generation-refresh-feynkit-stub-exporter-0.1.0.drv\",\"narHash\":\"sha256-NEOENAU9/s8iHCwaRnOACsUSnww0Yh+IyJkKdF4aaME=\",\"narSize\":140159816,\"references\":[\"/nix/store/604gsr59rj7dzd0nrhp143rpvf7gyiaz-gcc-15.3.0-lib\",\"/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84\",\"/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps\",\"/nix/store/wj1f56qky4pmjc7l0r6b6l7whnnw7hp6-python3-3.13.15\"],\"registrationTime\":1793405343,\"signatures\":[],\"storeDir\":\"/nix/store\",\"ultimate\":true,\"version\":1},\"/nix/store/qg5nc1vcxjbdb5zzjigilx3wngy8xyfd-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0\":{\"ca\":null,\"deriver\":\"/nix/store/b3psgc7ywm8ccnq0kpsh2zswy82p0cfv-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0.drv\",\"narHash\":\"sha256-vfdjM+8gw5Zsge6DAo15oMkmxUFV5gB2ICUi06vYgPA=\",\"narSize\":86344448,\"references\":[],\"registrationTime\":1793408889,\"signatures\":[],\"storeDir\":\"/nix/store\",\"ultimate\":true,\"version\":1},\"/nix/store/rdjfjq9i5dap927sylh6984zj54xra2z-gammaloop-crate-test-binaries-feynkit-generator-b6f177b7bc15beb1-deps-0.1.0\":{\"ca\":null,\"deriver\":\"/nix/store/76z959ir9cn1x8a3dn7w9qk59n5wp4y7-gammaloop-crate-test-binaries-feynkit-generator-b6f177b7bc15beb1-deps-0.1.0.drv\",\"narHash\":\"sha256-sZlWJNAChrdQbFH9a2KCLLNhz1A7qAmVcY4dUTCA9OU=\",\"narSize\":159541664,\"references\":[\"/nix/store/cx447jb5zb3gxcpslza3gkldr2vs7kah-gammaloop-crate-test-dependencies-b6f177b7bc15beb1-deps-0.1.0\"],\"registrationTime\":1793408780,\"signatures\":[],\"storeDir\":\"/nix/store\",\"ultimate\":true,\"version\":1},\"/nix/store/w5d0wdnv1c4iic9f6qlg6zv87zglb6f0-generation-refresh-corrected-stub-host-wheel-0.1.0\":{\"ca\":null,\"deriver\":\"/nix/store/5vvg7gyp1n3ma9rw57m37p81vn75h1ch-generation-refresh-corrected-stub-host-wheel-0.1.0.drv\",\"narHash\":\"sha256-I7oT5R2H9CM18yJkanJCQHM5WqRAJmmqbU3pQ3Tz6i4=\",\"narSize\":192155456,\"references\":[\"/nix/store/604gsr59rj7dzd0nrhp143rpvf7gyiaz-gcc-15.3.0-lib\",\"/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84\",\"/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps\",\"/nix/store/wj1f56qky4pmjc7l0r6b6l7whnnw7hp6-python3-3.13.15\",\"/nix/store/z4c6k0mrlkwl3s4w9ysxc8vq1wylm3ms-gcc-wrapper-15.3.0\"],\"registrationTime\":1793413109,\"signatures\":[],\"storeDir\":\"/nix/store\",\"ultimate\":true,\"version\":1}}\n",
+  "stderr": "warning: '--json' without '--json-format' is deprecated; please specify '--json-format 1' or '--json-format 2'. This will become an error in a future release.\n",
+  "elapsed_seconds": 0.0993964672088623,
+  "license_variables_omitted": [
+    "SYMBOLICA_LICENSE",
+    "SYMBOLICA_LICENSE_PATH",
+    "SYMBOLICA_LICENSE_SIGNED",
+    "SYMBOLICA_LICENSE_FILE"
+  ]
+}

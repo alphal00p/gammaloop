@@ -1,0 +1,20 @@
+{
+  "NOT_APPLIED": true,
+  "base_evidence": "457e361d7d39e0a3daae801651f8c1dfabbf47aa",
+  "base_file_sha256": {
+    "docs/architecture/evidence/generation-integration/execution.json": "8648d58d5ec131dbd1372f30eb558ed4c68a1d8f179e3d8da8caa5d9651bab3c",
+    "docs/architecture/generation-feynkit-community-refresh.typ": "8f16edb8231c8f18c66c67091ec7c0fe91bf439aa8be460649c70ccd429e9f01",
+    "docs/developers.toml": "9e2ef1846586777d052bed6848d2d63dec7b9a8ebf4a5dca6059786d6f00b59f"
+  },
+  "scope_bindings_before": 118,
+  "scope_bindings_after": 118,
+  "scope_records_order_and_values_identical": true,
+  "no_new_approval_fields": true,
+  "no_combined_approval_claim": true,
+  "publication_gate_unchanged": true,
+  "apply_only_after_coordinator_freezes_separate_metadata_candidate": true,
+  "rebase_if_concurrent_state_changes": true,
+  "base_inputs_reverified_from_immutable_git_objects": true,
+  "later_grouped_preparation": "7d96505dcb700eeae42b5a4e87676551ba910cb660df586cafe34d6b90e944f1",
+  "live_writer_movement": "Expected. Never apply this patch blindly to a later source/registry head; reconcile on a separately frozen metadata candidate and preserve writer changes."
+}

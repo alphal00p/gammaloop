@@ -1,0 +1,1583 @@
+{
+ "schema": 1,
+ "title": "NEW independent review B: xs_qed_eemm_L2 FeynKit integration candidate - certificate closure/application, registry, documentation and final evidence",
+ "reviewer": "Claude Opus 5.5 (review sub-agent, scope B); no delegation",
+ "date_utc": "2026-10-30",
+ "review_window_utc": {
+  "start": "2026-10-30T11:16:14Z",
+  "end": "2026-10-30T12:00Z"
+ },
+ "review_directory": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/.local/review-xs-qed-l2-integration-b-opus-20261030T111614Z-1341306",
+ "workspace": "/shared/lcnbr/dev/gammaloop/generation-integration-plan (read-only: jj --ignore-working-copy, GIT_OPTIONAL_LOCKS=0, git object reads via --git-dir; no git status in physical main)",
+ "guidance_read": [
+  "main/AGENTS.md",
+  "main/CONTRIBUTING.typ",
+  "generation-integration-plan/AGENTS.md",
+  "generation-integration-plan/CONTRIBUTING.typ (sections: principles, tests, docs/source format, agent workspaces/cleanup, jj)"
+ ],
+ "scope": "B: certificate closure/application, registry, documentation and final evidence (items 1-7 of the root brief). Producer provenance, 452-unit closure, fresh 24 tests/Rows and full-lane execution are peer A's; covered here only by cross-reference/consistency.",
+ "candidate": {
+  "commit": "fdff0d18953348b84a0f1b7e6ab5ef703a5090de",
+  "change": "mssryyzyrolmwvuknmrlkzoozuuvlxuo",
+  "tree": "9903a5fca6b03884d6c3a5543ddbad2cd69f1e45",
+  "built_code": "eae78e11e4d27df2539700fa4d4d71cdcb3a4804",
+  "base": "69fda047e378d4114f47ec9a10517e44adb57eaa",
+  "prior_built_code": "8dcebc2591ab04d10026fbd47a45e8d31f911ef3",
+  "certificate": "c95e7f6e77994779929115a156654cfce3bd1e53",
+  "migration": "19b516a43dda31a4403dd2a170f2e837934617ce",
+  "bookmarks_verified": {
+   "generation-integration": "fdff0d18",
+   "generation-integration-xs-qed-l2": "fdff0d18",
+   "generation-integration-xs-qed-l2-evidence": "fdff0d18",
+   "generation-integration-xs-qed-l2-code": "eae78e11",
+   "generation-integration-xs-qed-l2-base": "69fda047",
+   "generation-xs-qed-l2-candidate": "c95e7f6e",
+   "generation-xs-qed-l2-migration": "19b516a4"
+  },
+  "receipt": {
+   "path": "docs/architecture/evidence/generation-integration/wp3/xs-qed-l2/receipt.json",
+   "sha256": "f7646abc83d7ba6ca82f9658bbe910fb38732f8f1b3e047fe272afc30c1b64a8",
+   "bytes": 57239
+  },
+  "detached_supplement": {
+   "path": "target/wp3-xs-qed-l2-integration/final-supplement.json",
+   "sha256": "699483979926703d6cbbf1ed0fc8139be481c0a7344d4ffe6861b647ab422f16",
+   "bytes": 8936
+  }
+ },
+ "verdict": "APPROVE_SCOPE_B_WITH_NONBLOCKING_FINDINGS",
+ "combined_approval_claimed": false,
+ "verdict_summary": "Scope B approves the certificate/migration import, its one-token application, the registry, the canonical documentation and the final evidence bindings of candidate fdff0d18 (built code eae78e11). Independently verified: base->code 29, code->final 27, base->final 55 paths exactly as inventoried; 27 imported files byte+mode identical to frozen donor blobs and absent at base, with no ancestry, main.rs or registry transplant; borrowed helper trees identical at base/candidate/certificate/migration; exactly one 15-nibble token change at main.rs:332 with the seven prior migrated rows byte-identical; all active receipt/runtime/supplement/stage bindings rehash with zero drift and all imported mismatches are classified (22 retained historical helper variants, 3 historical-route source records, frozen 23-pin outer inventory still rejecting only docs/developers.toml); fresh pinned no-network minimal-bind replay of both finite modes reproduces 30 graphs/540 owners/1296 axes/56 transports and byte-identical pair files; fresh valid/corrupt/missing controls exit 0/2/3 with native equality failures bound to pair files at oracle_family_exact.rs:44:9; four held-outs reject at semantic stages; independent ci-optim payload join at pools 1/8/32 (byte-exact to certified captures, None Row = candidate Row f889b37c1fd93143, 9-position cycle with 20 fixed); registry 91->94 notes, 117->118 scopes recomputed with the authoritative algorithm; retained builder check passes on an exact private copy and rejects the canonical negative and row-scope mutations; four PDFs and four HTML bundles reproduce byte-for-byte. No blocking, high or medium finding; three Low documentation/record-precision items and six informational items. Combined approval requires root aggregation with peer A.",
+ "findings": {
+  "blocking": [],
+  "high": [],
+  "medium": [],
+  "low": [
+   {
+    "id": "B-L1",
+    "title": "Integration finite-proof launches record no non-store RUNPATH (shadow-library) absence safeguard",
+    "paths": [
+     "target/wp3-xs-qed-l2-integration/proof-sandbox-launch2.py:20-22 (--ro-bind / /)",
+     "docs/architecture/evidence/generation-integration/wp3/xs-qed-l2/tool-sources/proof-sandbox-launch2.py.txt",
+     "docs/architecture/evidence/generation-integration/wp3/xs-qed-l2/receipt.json:501"
+    ],
+    "detail": "Both locked native engines (historical 1ae86dce..., current 41c68004...) have RUNPATH beginning with a non-store <workspace>/outputs/out/lib (inherited XA-N8); the retained docs builder/catalogs ELFs begin with /outputs/out/lib. The author's active proof sandbox ro-binds the whole host, so such paths would have been honoured if present; neither the historical (10:26) nor the active (10:59) proof records check their absence, unlike the donor migration review. Analog of peer A-L1 for the proof engines (raised after root relayed A-L1, verified independently).",
+    "independent_check": "All non-store candidates are absent now (generation-oracle-family-historical/outputs, generation-oracle-numerator-families/outputs, generation-integration-plan/outputs, author final-source/outputs, /outputs). In my replay the historical workspace was not mounted at all, the donor workspace was mounted read-only and my before/after guards show zero files outside .jj/.local/target there, and /outputs did not exist in the sandbox tmpfs root; my replay reproduced byte-identical outputs. Absence cannot be verified retroactively for the author's 10:26/10:59 runs.",
+    "blocking": false,
+    "repair": "Future proof launches should bind only required paths or record RUNPATH-candidate absence before/after."
+   },
+   {
+    "id": "B-L2",
+    "title": "Integration note frozen before the proof-containment correction; two sentences overstate Nix/licence containment uniformity",
+    "paths": [
+     "docs/architecture/generation-integration-xs-qed-l2.typ:45-49"
+    ],
+    "detail": "The note was rendered at 10:43 (render inputs hash-equal to the final note) and not updated after the 10:59 containment correction. 'Every Nix command uses a validated nonempty immutable Git URI or exact derivation' is literally inaccurate for the three `nix hash path /nix/store/...` commands (store-path operands; harmless, no evaluation or private copy; also noted by peer A). 'Licensed tests run only as direct private children under pinned no-network bubblewrap' is accurate for nextest archive and observer runs, but the original finite-proof replay injected the licence into native checker children outside bwrap; the note omits that history and the failed sandbox launch 1. The receipt failed_attempts, finite_proof.containment, approval/supplement classifications and validation.json record it accurately, so no evidence is misbound.",
+    "blocking": false,
+    "repair": "Optional one-line qualification in a later documentation edit; do not amend this frozen candidate."
+   },
+   {
+    "id": "B-L3",
+    "title": "Plan sentence 'not donor dev-optim binaries' is imprecise about observer evidence",
+    "paths": [
+     "docs/architecture/generation-integration-plan.typ:446-447"
+    ],
+    "detail": "'Fresh combined checks are bound to code eae78e11, not donor dev-optim binaries' is true for archive/pool/full-lane assertions, but the fresh observer captures and the Auto topology/assignment counters come from fresh runs of the retained donor dev-optim observer ELF 9a479c8e (341 units), as the note and receipt correctly state.",
+    "blocking": false,
+    "repair": "Optional wording fix in a later edit."
+   }
+  ],
+  "informational": [
+   {
+    "id": "B-I1",
+    "title": "Active proof sandbox write-bind and host exposure broader than necessary (overlaps peer A-I1)",
+    "detail": "Launch2 bind-mounts the whole target/wp3-xs-qed-l2-integration evidence root writable and ro-binds the host root including the full ~/.config; inputs were read-only. Independently, only proof-sandbox outputs and sandbox-proof-* records were written in the 10:59:28-10:59:54 window (proof-sandbox.py predates launch1; the containment qualification was written afterwards), all bound in runtime-manifest. My minimal-bind replay (single licence file at a private config path) reproduced identical outcomes."
+   },
+   {
+    "id": "B-I2",
+    "title": "Canonical builder check does not enforce title contract, imported-report bytes or base-note contracts",
+    "detail": "Focused mutations on an exact private copy: title drift (M3), imported report byte edit (M5) and base-note status edit (M6) all pass `check`; these rest on the author's audit.py/inventory/receipt hash bindings (integrity, not semantics) and on my independent registry/title checks, which pass. Not a candidate defect."
+   },
+   {
+    "id": "B-I3",
+    "title": "'ports/interfaces remain capture-bound' is conservative",
+    "detail": "The public CI payload carries 56 num_interface records (32 vertex, 24 edge) that are byte-joined; only typed ordered ports, model/request/options/grouping, prepared/built reports and Run metadata are observer-only. Understatement, no change required. Path docs/architecture/generation-integration-xs-qed-l2.typ:21."
+   },
+   {
+    "id": "B-I4",
+    "title": "Post-supplement whitespace record is unbound",
+    "detail": "whitespace.command.json (git diff --check base..final, exit 0, 11:11:48) postdates final-supplement.json (11:10:56) and is in no manifest; reproduced exit 0 for base..final and code..final with --git-dir reads."
+   },
+   {
+    "id": "B-I5",
+    "title": "Catalog exporter ELF used by the canonical docs check is not hash-bound",
+    "detail": "final-stage/supplement bind the builder ELF 09e7c789... but not final-source/target/debug/alphal00p-docs-catalogs 9e2da468..., which `check` executes via cargo run; its dep-info lists only final-source paths. Recorded here."
+   },
+   {
+    "id": "B-I6",
+    "title": "Approved base integration notes keep pending registry statuses by design",
+    "detail": "generation-integration-oracle-families and generation-integration-qed retain review-required statuses because all 91 base contracts are preserved; the approvals are recorded in approval-index.json and execution.json/replay.json (families status updated there)."
+   }
+  ]
+ },
+ "checks": {
+  "item1_closure_application_hashes": {
+   "path_sets": {
+    "base_to_code": 29,
+    "code_to_final": 27,
+    "base_to_final": 55,
+    "code_to_final_non_docs": [],
+    "inventory_claim": "29 code + 25 evidence - 1 overlap (docs/developers.toml) + 2 indexes = 55; all 53 nonself paths rehash"
+   },
+   "imports": {
+    "files": 27,
+    "blob_and_mode_equal_migration_19b516a4": 27,
+    "also_equal_certificate_c95e7f6e": 22,
+    "migration_only": [
+     "generation-xs-qed-l2-migration/{common,handoff,migrate}.py",
+     "generation-xs-qed-l2-migration/receipt.json",
+     "generation-xs-qed-l2-migration.typ"
+    ],
+    "absent_at_base": 27,
+    "certificate_or_migration_ancestor_of_candidate": false,
+    "main_rs_blobs": {
+     "base": "668c5c1b",
+     "certificate": "11b0a25c",
+     "migration": "25c5c42d",
+     "candidate": "d61a4bee"
+    },
+    "donor_main_rs_differs_from_code_in": [
+     "xs_qed_eemm_L1",
+     "xs_qed_eedd_L1",
+     "xs_qed_eeee_1pi_L1"
+    ],
+    "developers_toml_blobs": {
+     "migration": "d78192f8",
+     "candidate": "0c296a3c"
+    }
+   },
+   "borrowed_modules": {
+    "generation-oracle-family-diagnosis": "tree d953ce09 (33 files) identical at base/candidate/certificate/migration",
+    "generation-oracle-family-migration": "tree 88013033 (19 files) identical at base/candidate/certificate/migration",
+    "transitive_imports": "stay within these two trees",
+    "frozen_design_pins": "9 pins x {donor, candidate} = 18/18 equal"
+   },
+   "token": {
+    "base_sha256": "c29a92c9d5614afaa756f36856e5804064403919fb28c16be9cb04c1c2f5c54b",
+    "candidate_sha256": "aedd07670ad16ae72ae1c96970668c80ea0ecd5d6d5992c736af71de7d00999b",
+    "bytes": 77616,
+    "differing_bytes": 15,
+    "line": 332,
+    "old": "f36c3111407873cc",
+    "new": "f889b37c1fd93143",
+    "same_as_certificate_to_migration_change": true,
+    "working_copy_equals_candidate_blob": true,
+    "seven_prior_rows_byte_identical": {
+     "qed_eemm_L1": "0x3866ebfda57f6fb8",
+     "ym_g6_L0": "0xc742a6c3a2526c64",
+     "sm_eemm_L0": "0xc030c29958e57000",
+     "ctorder_qcd_uugg_L1": "0x3a743bf033456b6f",
+     "xs_qed_eemm_L1": "0x414e2a7a954beae8",
+     "xs_qed_eedd_L1": "0xd3ad2f3a0802b6ab",
+     "xs_qed_eeee_1pi_L1": "0x1fa84d9ad4fdf0b0"
+    }
+   },
+   "approvals": {
+    "base_gate": {
+     "path": ".local/review-main-families-round2-opus-astra-20261030T094052Z-3607735/review.json",
+     "sha256": "10b3929c0b6bfcd62e80d5c693e5db689204ea7a719a23246de64e29ae4d8fec",
+     "verdict": "APPROVE_CUMULATIVE_BOUNDED_MAIN_FAMILIES_ROUND2_EVIDENCE_CORRECTION"
+    },
+    "migration": {
+     "path": "~/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/review.json",
+     "sha256": "64f44489f4331b2ec2dfcdb2d48e4a8b2b06003c569823a351ff2e98b2e898a6",
+     "verdict": "APPROVED_MIGRATION_PREPARATION_WITH_NONBLOCKING_QUALIFICATIONS",
+     "in_tree_copy_byte_identical": true
+    },
+    "certificate_A": {
+     "sha256": "f5173b1d86a44c18d11179b13a0542eb0282097cb303079d709ab75d2184c554",
+     "verdict": "APPROVED_SCOPE_A_WITH_NONBLOCKING_NOTES"
+    },
+    "certificate_B": {
+     "sha256": "5c97912c4b6fa9660c55b3bf03b785b37b36f2d3a042d677acd388f12ec8346b",
+     "verdict": "APPROVED_SCOPE_B_WITH_NONBLOCKING_FINDINGS"
+    }
+   },
+   "rehash_active": {
+    "documents": 63,
+    "bindings_matched": 3349,
+    "mismatch_documents": {
+     "target/wp3-xs-qed-l2-integration/runtime-results.json": 4
+    },
+    "runtime_results_resolution": "the 4 runtime-results 'mismatches' are CODE-relative paths; against runtime/source all 4548 recorded files equal both disk and eae78e11 blobs (only the tree symlink unrecorded)",
+    "unexplained_drift": 0
+   },
+   "rehash_imported": {
+    "documents": {
+     "~/generation-integration-plan/.local/review-main-families-round2-opus-astra-20261030T094052Z-3607735/review.json": {
+      "match": 37,
+      "mismatch": 0
+     },
+     "~/generation-oracle-numerator-families/.local/review-xs-qed-l2-a-opus-20261030T063905Z/review.json": {
+      "match": 6,
+      "mismatch": 0
+     },
+     "~/generation-oracle-numerator-families/.local/review-xs-qed-l2-b-opus-20261030T063831Z/review.json": {
+      "match": 13,
+      "mismatch": 0
+     },
+     "~/generation-oracle-numerator-families/.local/review-xs-qed-l2-migration-opus-astra-20261030T094105Z/review.json": {
+      "match": 36,
+      "mismatch": 8
+     },
+     "docs/architecture/evidence/generation-xs-qed-l2-migration/receipt.json": {
+      "match": 158,
+      "mismatch": 3
+     },
+     "docs/architecture/evidence/generation-xs-qed-l2/receipt.json": {
+      "match": 68,
+      "mismatch": 15
+     }
+    },
+    "classification": "22 distinct historical helper-variant hashes (26 occurrences) all retained byte-exact under donor target/xs-qed-l2{,-migration}/helper-versions (QM-N3/N4); 3 historical-route source records equal 2b1ef4f0 blobs; 0 unexplained drift",
+    "outer_frozen_inventory": {
+     "pins": 23,
+     "donor_mismatch": [
+      "docs/developers.toml"
+     ],
+     "candidate_mismatch": [
+      "docs/developers.toml"
+     ],
+     "disposition": "expected registry-insert rejection preserved; no pass credit, no guard disabled"
+    }
+   },
+   "elfs_archives": {
+    "native_historical": "1ae86dcea5b15ff04274a91557a28dcf75d57154ee0882ed51d5c86c53be81b6",
+    "native_current": "41c68004f03d25e4a47c58cc5d2bb75e04af39cebe525313fab67873127108ae",
+    "observer": "9a479c8ebcdd38324019f6fcc0de0719e03c223507df9a3005463c260fb1a9d2",
+    "ci_archive": "5bba3a551bc18edb360906349316ab49c060549411cbee6e91723075c8ec5ca1",
+    "docs_builder": "09e7c78901433d1c4e1805c9070fb6cbadc00b7fcf5d408ac1bf71baf6f3d1ec",
+    "docs_catalogs_unbound": "9e2da4682c464e7d1ffda362774c5f3361206f5f74d449f4065e1867bfcbaf00",
+    "closure_record_consistency": "actual-compiled-closure.json: 452 closure units, 297 packages (peer A owns derivation)"
+   }
+  },
+  "item2_fresh_finite_replay_and_ci_join": {
+   "sandbox": {
+    "launcher": "scripts/sandbox_launch.py",
+    "bwrap": "/nix/store/v24sx9l1jmvvia3z8iznrd7jwhvc8kcf-bubblewrap-0.11.2/bin/bwrap",
+    "flags": "--unshare-net/pid/ipc/uts/cgroup-try --die-with-parent --new-session; tmpfs root",
+    "binds": "ro /nix/store, ro donor workspace, ro historical native ELF file only, ro candidate workspace, rw my run dir only, tmpfs /tmp, ro licence file at /run/review-config/symbolica/license",
+    "environment_keys": [
+     "HOME",
+     "LANG",
+     "PATH",
+     "PWD",
+     "PYTHONDONTWRITEBYTECODE",
+     "TMPDIR",
+     "XDG_CACHE_HOME",
+     "XDG_CONFIG_HOME"
+    ],
+    "probe": "network OSError errno 101; donor target and integration target EROFS (30)",
+    "licence": "configured private file bound read-only for the approved native mechanism (round3 common.run injects into native children only); no value, hash or copy recorded; neither licence variable present",
+    "frozen_inputs_unchanged": true,
+    "frozen_input_files": {
+     "historical": 18,
+     "current": 18
+    }
+   },
+   "baselines": {
+    "None": {
+     "verdict": {
+      "disposition": "accept",
+      "stage": "complete",
+      "exit": 0,
+      "mode": "None",
+      "case": "xs_qed_eemm_L2"
+     },
+     "summary": {
+      "graphs": 30,
+      "owners": 540,
+      "nontrivial_cross_permutations": 56,
+      "distinct_native_texts": 168,
+      "anchor_self_comparisons": 1080,
+      "nonliteral_cross": 0
+     },
+     "independent_counts": {
+      "graphs": 30,
+      "owners": 540,
+      "axes": 1296,
+      "nontrivial_cross_permutations": 56,
+      "cross_ports_records": 540
+     },
+     "outputs_sha256": {
+      "aggregate-pairs.json": "1b2c003e4c7b0956e0e964a8ee35307ca3e1c4bb0c3421fbc7efc437d03c78b8",
+      "anchor-pairs.json": "b9705422b6f354ba91d3f6ccbbfefbd321f43ee3b2d31b47028e0dbb90ec461b",
+      "cross-pairs.json": "da61804e2ad174efe21b6b156fdb4866f1afe70b039f478cfd68a3913d93f119",
+      "cross-ports.json": "37b987739d66376137bcb9abea199f68ac9ff2106e5da4ae794be0bb01103a8b",
+      "definitions.json": "b40189dc8dad125bfbb99d1e4deac4fca4d44b7256833a2b13d81a68eed1b482",
+      "faithfulness.json": "70544721950327f2ca8731e645cba4b5b23bbd767542770b0993182fbe68c00e",
+      "summary.json": "5854dd9b1b0fd52851f0ba86218256957018d2bdd5a50b782d72403641f879db"
+     },
+     "native_records": 6,
+     "native_all_pair_bound_elf_expected_result_bound": true
+    },
+    "Auto": {
+     "verdict": {
+      "disposition": "accept",
+      "stage": "complete",
+      "exit": 0,
+      "mode": "Auto",
+      "case": "xs_qed_eemm_L2"
+     },
+     "summary": {
+      "graphs": 30,
+      "owners": 540,
+      "nontrivial_cross_permutations": 56,
+      "distinct_native_texts": 168,
+      "anchor_self_comparisons": 1080,
+      "nonliteral_cross": 0
+     },
+     "independent_counts": {
+      "graphs": 30,
+      "owners": 540,
+      "axes": 1296,
+      "nontrivial_cross_permutations": 56,
+      "cross_ports_records": 540
+     },
+     "outputs_sha256": {
+      "aggregate-pairs.json": "bbabd17f73de09c4f99048e6d743f218eb4319849bc33e50edb69998ef3b50e6",
+      "anchor-pairs.json": "3465d3421c421bf721f51362a94c37a27228d19086dbfdd226819447ac2a1328",
+      "cross-pairs.json": "123efa5bde5c0dcd74ba3e77ee9f41350ccdf1afe24564171cb08f36851ffb8b",
+      "cross-ports.json": "cec65c02fe76af71fd271669979b07a29139e63c5d574a7a43d9bea41377ec31",
+      "definitions.json": "b40189dc8dad125bfbb99d1e4deac4fca4d44b7256833a2b13d81a68eed1b482",
+      "faithfulness.json": "e4e0b9e274cda301a87efc126ddd13b617bbe401380179a46c0ba7dcb7c4c64f",
+      "summary.json": "c7006d8f7c95cf491e0c578f599727f4f336294ac7e6c1b1f86f695d8f7473fe"
+     },
+     "native_records": 6,
+     "native_all_pair_bound_elf_expected_result_bound": true
+    }
+   },
+   "determinism": "All six outputs per mode (aggregate/anchor/cross pairs, cross-ports, definitions, faithfulness) equal the migration review's fresh baselines; the three pair files equal the author's sandboxed run.",
+   "ci_ci_optim_join": {
+    "pools": {
+     "1": {
+      "byte_joins": {
+       "None": {
+        "ci_sha256": "08ebf574d98a7d953fa7ed582d2c61b5b7091515866cadd5b378b0c79916af93",
+        "ci==sources": true,
+        "ci==observer_payload": true,
+        "ci==frozen_certified_payload": true
+       },
+       "Auto": {
+        "ci_sha256": "33a8a36d030a7362c9c3984c86354722a54266596d35d486fb66511f47ecfcbf",
+        "ci==sources": true,
+        "ci==observer_payload": true,
+        "ci==frozen_certified_payload": true
+       }
+      },
+      "observer_only_files_equal_frozen": {
+       "None": true,
+       "Auto": true
+      },
+      "observer_run": {
+       "None": "Run { threads: Some(1), parallel: true, check_heredity: false, cancelled: false }",
+       "Auto": "Run { threads: Some(1), parallel: true, check_heredity: false, cancelled: false }"
+      },
+      "none_row_equals_candidate_row": true,
+      "candidate_row_numerators": "0xf889b37c1fd93143",
+      "census_counters": {
+       "topologies": 157,
+       "assignments": 714
+      },
+      "auto_counters_same_mode_observer": {
+       "topologies": 157,
+       "assignments": 714
+      },
+      "auto_vs_none_payload_fields_differing": [
+       "named"
+      ],
+      "mode_map": {
+       "moved": [
+        [
+         12,
+         13
+        ],
+        [
+         13,
+         14
+        ],
+        [
+         14,
+         15
+        ],
+        [
+         15,
+         16
+        ],
+        [
+         16,
+         17
+        ],
+        [
+         17,
+         18
+        ],
+        [
+         18,
+         19
+        ],
+        [
+         19,
+         21
+        ],
+        [
+         21,
+         12
+        ]
+       ],
+       "cycle": [
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        21,
+        12
+       ],
+       "fixed_20": true,
+       "id_map_equals_key_map": true,
+       "keys_unique": true,
+       "same_key_multiset": true
+      },
+      "physical_equal_except_name": true,
+      "observer_typed_owners_equal_by_id": true,
+      "ci_payload_interface_fields": [
+       "num_interface"
+      ]
+     },
+     "8": {
+      "byte_joins": {
+       "None": {
+        "ci_sha256": "08ebf574d98a7d953fa7ed582d2c61b5b7091515866cadd5b378b0c79916af93",
+        "ci==sources": true,
+        "ci==observer_payload": true,
+        "ci==frozen_certified_payload": true
+       },
+       "Auto": {
+        "ci_sha256": "33a8a36d030a7362c9c3984c86354722a54266596d35d486fb66511f47ecfcbf",
+        "ci==sources": true,
+        "ci==observer_payload": true,
+        "ci==frozen_certified_payload": true
+       }
+      },
+      "observer_only_files_equal_frozen": {
+       "None": true,
+       "Auto": true
+      },
+      "observer_run": {
+       "None": "Run { threads: Some(8), parallel: true, check_heredity: false, cancelled: false }",
+       "Auto": "Run { threads: Some(8), parallel: true, check_heredity: false, cancelled: false }"
+      },
+      "none_row_equals_candidate_row": true,
+      "candidate_row_numerators": "0xf889b37c1fd93143",
+      "census_counters": {
+       "topologies": 157,
+       "assignments": 714
+      },
+      "auto_counters_same_mode_observer": {
+       "topologies": 157,
+       "assignments": 714
+      },
+      "auto_vs_none_payload_fields_differing": [
+       "named"
+      ],
+      "mode_map": {
+       "moved": [
+        [
+         12,
+         13
+        ],
+        [
+         13,
+         14
+        ],
+        [
+         14,
+         15
+        ],
+        [
+         15,
+         16
+        ],
+        [
+         16,
+         17
+        ],
+        [
+         17,
+         18
+        ],
+        [
+         18,
+         19
+        ],
+        [
+         19,
+         21
+        ],
+        [
+         21,
+         12
+        ]
+       ],
+       "cycle": [
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        21,
+        12
+       ],
+       "fixed_20": true,
+       "id_map_equals_key_map": true,
+       "keys_unique": true,
+       "same_key_multiset": true
+      },
+      "physical_equal_except_name": true,
+      "observer_typed_owners_equal_by_id": true,
+      "ci_payload_interface_fields": [
+       "num_interface"
+      ]
+     },
+     "32": {
+      "byte_joins": {
+       "None": {
+        "ci_sha256": "08ebf574d98a7d953fa7ed582d2c61b5b7091515866cadd5b378b0c79916af93",
+        "ci==sources": true,
+        "ci==observer_payload": true,
+        "ci==frozen_certified_payload": true
+       },
+       "Auto": {
+        "ci_sha256": "33a8a36d030a7362c9c3984c86354722a54266596d35d486fb66511f47ecfcbf",
+        "ci==sources": true,
+        "ci==observer_payload": true,
+        "ci==frozen_certified_payload": true
+       }
+      },
+      "observer_only_files_equal_frozen": {
+       "None": true,
+       "Auto": true
+      },
+      "observer_run": {
+       "None": "Run { threads: Some(32), parallel: true, check_heredity: false, cancelled: false }",
+       "Auto": "Run { threads: Some(32), parallel: true, check_heredity: false, cancelled: false }"
+      },
+      "none_row_equals_candidate_row": true,
+      "candidate_row_numerators": "0xf889b37c1fd93143",
+      "census_counters": {
+       "topologies": 157,
+       "assignments": 714
+      },
+      "auto_counters_same_mode_observer": {
+       "topologies": 157,
+       "assignments": 714
+      },
+      "auto_vs_none_payload_fields_differing": [
+       "named"
+      ],
+      "mode_map": {
+       "moved": [
+        [
+         12,
+         13
+        ],
+        [
+         13,
+         14
+        ],
+        [
+         14,
+         15
+        ],
+        [
+         15,
+         16
+        ],
+        [
+         16,
+         17
+        ],
+        [
+         17,
+         18
+        ],
+        [
+         18,
+         19
+        ],
+        [
+         19,
+         21
+        ],
+        [
+         21,
+         12
+        ]
+       ],
+       "cycle": [
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        21,
+        12
+       ],
+       "fixed_20": true,
+       "id_map_equals_key_map": true,
+       "keys_unique": true,
+       "same_key_multiset": true
+      },
+      "physical_equal_except_name": true,
+      "observer_typed_owners_equal_by_id": true,
+      "ci_payload_interface_fields": [
+       "num_interface"
+      ]
+     }
+    },
+    "prior_seven_rows": {
+     "records": 21,
+     "bytes_equal_prior_approved_run": true,
+     "none_summary_equals_candidate_row": true,
+     "rows_unchanged_from_base": true
+    },
+    "digest_owner": "approved derive.summary/row with the certificate's strict bind_runtime.weight substituted, exactly as the approved migration tooling"
+   },
+   "transfer_basis": {
+    "observer": "retained donor dev-optim ELF 9a479c8e, 341 units, source_base c95e7f6e; includes tests/generation_oracle/{cases,census}.rs, not main.rs",
+    "ci": "ci-optim archive 5bba3a55 from code eae78e11 (452 units per peer A)",
+    "donor_to_code_build_input_differences": [
+     "Cargo.lock: only alphal00p-docs-builder gains sha2 (no package version change)",
+     "crates/alphal00p-docs-builder/* (outside observer closure; only Cargo.toml in the filtered generator source)",
+     "crates/feynkit-generator/tests/generation_oracle/main.rs (three QED rows; not compiled into the observer)",
+     "crates/gammalooprs/src/integrands/process/mod.rs (not in either closure)",
+     "nix/rust-workspace.nix (CI recipe)"
+    ],
+    "joined_public_fields": "complete payload.json bytes (diagrams/groups incl. 56 num_interface records), sources companion, None census GenerationReport",
+    "capture_only": "typed ordered ports (typed-owners.json), model/request/options/grouping, prepared/built reports, Run metadata, Auto topology/assignment counters; no feature/profile or in-memory equivalence inferred"
+   }
+  },
+  "item3_controls_and_heldouts": {
+   "fresh": {
+    "C-valid": {
+     "mode": "None",
+     "mutation": null,
+     "expected_exit": 0,
+     "actual_exit": 0,
+     "stage": "complete",
+     "native_failures": []
+    },
+    "C-corrupt-sign-current-only": {
+     "mode": "None",
+     "mutation": {
+      "graph": "b5d34ea002cedb51ea90626597d8365d",
+      "owner": "edge:8",
+      "payload": true,
+      "typed": true,
+      "old_prefix": "(-1*gammalooprs::{spenso::rank1,spenso::tensor,spenso::compo"
+     },
+     "expected_exit": 2,
+     "actual_exit": 2,
+     "stage": "cross-equality",
+     "native_failures": [
+      {
+       "kernel_elf_sha256": "1ae86dcea5b15ff04274a91557a28dcf75d57154ee0882ed51d5c86c53be81b6",
+       "reason": "inequality",
+       "labels": [
+        "cross/b5d34ea002cedb51ea90626597d8365d/edge:8"
+       ],
+       "pair_file_bound": true,
+       "panic_location": [
+        "crates/feynkit-generator/examples/oracle_family_exact.rs:44:9"
+       ],
+       "equality_assertion_text": true,
+       "parse_location_35_36": false
+      },
+      {
+       "kernel_elf_sha256": "41c68004f03d25e4a47c58cc5d2bb75e04af39cebe525313fab67873127108ae",
+       "reason": "inequality",
+       "labels": [
+        "cross/b5d34ea002cedb51ea90626597d8365d/edge:8"
+       ],
+       "pair_file_bound": true,
+       "panic_location": [
+        "crates/feynkit-generator/examples/oracle_family_exact.rs:44:9"
+       ],
+       "equality_assertion_text": true,
+       "parse_location_35_36": false
+      }
+     ]
+    },
+    "C-missing-typed-owners": {
+     "mode": "None",
+     "mutation": "typed-owners.json relocated in private copy",
+     "expected_exit": 3,
+     "actual_exit": 3,
+     "stage": "infrastructure",
+     "native_failures": []
+    },
+    "H-auto-corrupt-sign-current-only": {
+     "mode": "Auto",
+     "mutation": {
+      "graph": "b5d34ea002cedb51ea90626597d8365d",
+      "owner": "edge:8",
+      "payload": true,
+      "typed": true,
+      "old_prefix": "(-1*gammalooprs::{spenso::rank1,spenso::tensor,spenso::compo"
+     },
+     "expected_exit": 2,
+     "actual_exit": 2,
+     "stage": "cross-equality",
+     "native_failures": [
+      {
+       "kernel_elf_sha256": "1ae86dcea5b15ff04274a91557a28dcf75d57154ee0882ed51d5c86c53be81b6",
+       "reason": "inequality",
+       "labels": [
+        "cross/b5d34ea002cedb51ea90626597d8365d/edge:8"
+       ],
+       "pair_file_bound": true,
+       "panic_location": [
+        "crates/feynkit-generator/examples/oracle_family_exact.rs:44:9"
+       ],
+       "equality_assertion_text": true,
+       "parse_location_35_36": false
+      },
+      {
+       "kernel_elf_sha256": "41c68004f03d25e4a47c58cc5d2bb75e04af39cebe525313fab67873127108ae",
+       "reason": "inequality",
+       "labels": [
+        "cross/b5d34ea002cedb51ea90626597d8365d/edge:8"
+       ],
+       "pair_file_bound": true,
+       "panic_location": [
+        "crates/feynkit-generator/examples/oracle_family_exact.rs:44:9"
+       ],
+       "equality_assertion_text": true,
+       "parse_location_35_36": false
+      }
+     ]
+    },
+    "H-payload-only-sign": {
+     "mode": "None",
+     "mutation": {
+      "graph": "b5d34ea002cedb51ea90626597d8365d",
+      "owner": "edge:8",
+      "payload": true,
+      "typed": false,
+      "old_prefix": "(-1*gammalooprs::{spenso::rank1,spenso::tensor,spenso::compo"
+     },
+     "expected_exit": 2,
+     "actual_exit": 2,
+     "stage": "payload-live-link",
+     "native_failures": []
+    },
+    "H-typed-only-sign": {
+     "mode": "None",
+     "mutation": {
+      "graph": "b5d34ea002cedb51ea90626597d8365d",
+      "owner": "edge:8",
+      "payload": false,
+      "typed": true,
+      "old_prefix": "(-1*gammalooprs::{spenso::rank1,spenso::tensor,spenso::compo"
+     },
+     "expected_exit": 2,
+     "actual_exit": 2,
+     "stage": "payload-live-link",
+     "native_failures": []
+    },
+    "H-port-order-swap": {
+     "mode": "None",
+     "mutation": {
+      "graph": "b5d34ea002cedb51ea90626597d8365d",
+      "owner": "edge:8",
+      "ordered_ports": "reversed"
+     },
+     "expected_exit": 2,
+     "actual_exit": 2,
+     "stage": "capture-port-order",
+     "native_failures": []
+    }
+   },
+   "ci_join_heldouts": {
+    "H-old-token-row": {
+     "expect": "mismatch",
+     "equal": false,
+     "old_numerators_hex": "0xf36c3111407873cc"
+    },
+    "H-one-nibble-token": {
+     "expect": "mismatch",
+     "equal": false
+    },
+    "H-ci-payload-sign": {
+     "expect": "mismatch",
+     "equal": false,
+     "numerators_digest_changed": true
+    },
+    "H-mode-swap": {
+     "expect": "mismatch",
+     "equal": false,
+     "differing": [
+      "named"
+     ]
+    },
+    "H-auto-counter-borrow": {
+     "note": "Auto summary computed with None census vs same-mode observer report",
+     "census_counters_equal_observer_auto_counters": true
+    }
+   },
+   "reused_after_binding": {
+    "controls": {
+     "records": 164,
+     "execution_intact": 164,
+     "closure_equal": 164,
+     "elf_expected": 164,
+     "anchor_inputs_checked": 288,
+     "anchor_inputs_equal_current": 288,
+     "dispositions": {
+      "accept": 4,
+      "reject": 78
+     }
+    },
+    "supplements": {
+     "records": 36,
+     "execution_intact": 36,
+     "closure_equal": 36,
+     "elf_expected": 36,
+     "dispositions": {
+      "harness-error": 4,
+      "reject": 14
+     }
+    },
+    "auxiliary_source_differences": [
+     "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-xs-qed-l2/native_controls.py",
+     "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-xs-qed-l2/qualify.py",
+     "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-xs-qed-l2/supplements.py"
+    ],
+    "native_parser_probes": {
+     "records": 4,
+     "command_intact": 4,
+     "elf_expected": 4
+    },
+    "B_heldouts": {
+     "expected_sha256": "79791f15956a48a10de8821075ede8d6b638fdc4476191746a0b5b3ca8941ca9",
+     "rows_claimed": 104,
+     "located": [
+      "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-xs-qed-l2-b-opus-20261030T063831Z/heldouts/results-final.json"
+     ],
+     "rows_found": 104,
+     "top_keys": null
+    },
+    "statement": "Reused, not rerun: approved 82 controls (164 candidate/B execution records) + 18 supplements (36 records) = 96 semantic/capture + 4 infrastructure, 4 direct native parser probes, and certificate-B 104 held-outs (heldouts/results-final.json 79791f15...). Every raw record rehashes, executed-closure sources and ELF hashes equal today's, 288 frozen anchor input hashes equal current captures; only the three QM-N3 auxiliary helpers differ."
+   },
+   "outer_registry_guard": "Frozen 23-pin outer inventory rejects at docs/developers.toml for both donor and candidate; every other pin matches; no guard disabled, no full-outer pass credited."
+  },
+  "item4_proof_history_and_validators": {
+   "historical_unsandboxed": {
+    "record": "target/wp3-xs-qed-l2-integration/proof-results.json 8dba6696...",
+    "classification": "retained, source-bound, no active containment credit (licence injected into native children outside bwrap)"
+   },
+   "failed_launch1": {
+    "record": "proof-sandbox-launch.command.json 42e8e1c4...",
+    "exit": 1,
+    "cause": "git absent from sandbox PATH before any proof execution",
+    "script_sha256": "e57e9e42bcc292b9... (same as launch2)",
+    "credit": "none"
+   },
+   "active_launch2": {
+    "record": "proof-sandbox-launch2.command.json 20e08aa9...",
+    "exit": 0,
+    "window": "10:59:28-10:59:54Z",
+    "results": "proof-sandbox/proof-results.json a58dd01a...",
+    "sandbox_records_inside_window": 5,
+    "bound_by": [
+     "receipt.results.finite_proof.record",
+     "validation.json.active_proof_launch",
+     "final-supplement classifications",
+     "runtime-manifest (174 proof-sandbox entries incl. native-cross command/stderr/pair files)"
+    ],
+    "native_corrupt_evidence": "both kernels reason inequality at oracle_family_exact.rs:44:9, label cross/b4a65f23.../edge:0, pair file bound, ELFs expected",
+    "collateral_writes_in_window": "none (see B-I1)"
+   },
+   "validator_enforcement": "Finite validator: 7 focused mutations reject at the expected semantic stage or infrastructure. Builder check: rejects row-scope digest drift, missing note source and unauthorized HTML; does not enforce titles, imported-report bytes or base-note contracts (B-I2). Author validate.py/audit.py/final.py enforce hash/record bindings and count assertions (integrity), not mathematics; validate.py checks only control stage/exit, the native location binding is in hash-bound raw records and was verified here."
+  },
+  "item5_registry": {
+   "counts": {
+    "base": [
+     91,
+     117
+    ],
+    "code": [
+     93,
+     118
+    ],
+    "candidate": [
+     94,
+     118
+    ]
+   },
+   "base_notes_changed": [],
+   "base_order_preserved": true,
+   "non_note_structure_identical": true,
+   "sections": [
+    "implemented",
+    "proposals",
+    "investigations",
+    "build-system",
+    "documentation"
+   ],
+   "scope_validation_authoritative_algorithm": {
+    "base": {
+     "checked": 117,
+     "mismatch": 0,
+     "whole_file": 66
+    },
+    "cand": {
+     "checked": 118,
+     "mismatch": 0,
+     "whole_file": 66
+    },
+    "code": {
+     "checked": 118,
+     "mismatch": 0,
+     "whole_file": 66
+    }
+   },
+   "base_scopes_missing_in_candidate": 0,
+   "new_scope": {
+    "anchor": "    fast xs_qed_eemm_L2:",
+    "digest": "17d09cf70892eedf0eee7c33051559cd2a4f10ef",
+    "end_anchor": "    fast xs_qed_eemm_L3:",
+    "path": "crates/feynkit-generator/tests/generation_oracle/main.rs",
+    "symbol": "xs_qed_eemm_L2 certified numerator row",
+    "note": "generation-xs-qed-l2-migration",
+    "covers": "exactly main.rs line 332 up to the xs_qed_eemm_L3 row anchor",
+    "digest_at_base": "72f2c1bb3319d491f0ce389081b396f928373360"
+   },
+   "added_notes": {
+    "generation-integration-xs-qed-l2": {
+     "section": "investigations",
+     "status": "Combined candidate; NEW independent review required",
+     "evidence_revision": "eae78e11e4d27df2539700fa4d4d71cdcb3a4804",
+     "reviewed_at": null,
+     "review_ref": null,
+     "captured_at": "2026-10-30"
+    },
+    "generation-xs-qed-l2": {
+     "section": "investigations",
+     "status": "Approved preparation; separate MAIN combined review pending",
+     "evidence_revision": "c95e7f6e77994779929115a156654cfce3bd1e53",
+     "reviewed_at": "2026-10-30",
+     "review_ref": "f5173b1d86a44c18d11179b13a0542eb0282097cb303079d709ab75d2184c554;5c97912c4b6fa9660c55b3bf03b785b37b36f2d3a042d677acd388f12ec8346b",
+     "captured_at": null
+    },
+    "generation-xs-qed-l2-migration": {
+     "section": "investigations",
+     "status": "Approved preparation; separate MAIN combined review pending",
+     "evidence_revision": "19b516a43dda31a4403dd2a170f2e837934617ce",
+     "reviewed_at": "2026-10-30",
+     "review_ref": "64f44489f4331b2ec2dfcdb2d48e4a8b2b06003c569823a351ff2e98b2e898a6",
+     "captured_at": null
+    }
+   },
+   "donor_vs_candidate_added_note_fields": {
+    "generation-xs-qed-l2": {
+     "evidence_revision": [
+      "3432ac3f36890ae2664d8571085f05e1dd41f27f",
+      "c95e7f6e77994779929115a156654cfce3bd1e53"
+     ],
+     "review_ref": [
+      "pending",
+      "f5173b1d86a44c18d11179b13a0542eb0282097cb303079d709ab75d2184c554;5c97912c4b6fa9660c55b3bf03b785b37b36f2d3a042d677acd388f12ec8346b"
+     ],
+     "status": [
+      "Certificate candidate · NEW independent root-commissioned review required",
+      "Approved preparation; separate MAIN combined review pending"
+     ]
+    },
+    "generation-xs-qed-l2-migration": {
+     "evidence_revision": [
+      "c95e7f6e77994779929115a156654cfce3bd1e53",
+      "19b516a43dda31a4403dd2a170f2e837934617ce"
+     ],
+     "review_ref": [
+      "pending",
+      "64f44489f4331b2ec2dfcdb2d48e4a8b2b06003c569823a351ff2e98b2e898a6"
+     ],
+     "scope": [
+      null,
+      [
+       {
+        "anchor": "    fast xs_qed_eemm_L2:",
+        "digest": "17d09cf70892eedf0eee7c33051559cd2a4f10ef",
+        "end_anchor": "    fast xs_qed_eemm_L3:",
+        "path": "crates/feynkit-generator/tests/generation_oracle/main.rs",
+        "symbol": "xs_qed_eemm_L2 certified numerator row"
+       }
+      ]
+     ],
+     "status": [
+      "Candidate · NEW independent migration/test review required",
+      "Approved preparation; separate MAIN combined review pending"
+     ]
+    }
+   },
+   "no_whole_donor_import": "donor registry has a different arrangement; candidate keeps every base note field-identical and adds only these entries",
+   "duplicates": {
+    "ids": [],
+    "sources": [],
+    "titles": 0
+   },
+   "title_contract": "94/94 sources have exactly one '= Title' equal to the registry title",
+   "unclassified_architecture_typ": 0,
+   "generated_rendered_evidence": {
+    "artifacts": 8,
+    "distinct_binding_files": 22,
+    "byte_identical_to_base": 22,
+    "registry_toml_unchanged": true
+   }
+  },
+  "item6_final_source_docs_renders": {
+   "private_copy": {
+    "archive_sha256": "81d37a3a1976aef45aefa16e45af697aa87460726843c6d3212ef4b3474e0766",
+    "equals_author_final_source_tar": true,
+    "tree_entries": 4572,
+    "symlinks": 11,
+    "mismatch": 0,
+    "extra": 0,
+    "author_final_source_minus_target_identical": true,
+    "regular_files": 4561,
+    "code_to_final": {
+     "count": 27,
+     "non_docs": [],
+     "status_counts": {
+      "A": 23,
+      "M": 4
+     }
+    }
+   },
+   "builder_check": {
+    "method": "retained builder ELF 09e7c789 run under pinned no-network bwrap with my exact copy bound over its compile-time root (author final-source path) in a private mount namespace; CARGO = strict shim verifying `run --locked --quiet -p alphal00p-docs-catalogs --bin alphal00p-docs-catalogs --` and exec'ing the retained catalogs ELF; no toolchain, compile or Nix",
+    "runs": [
+     {
+      "label": "pristine",
+      "exit": 0,
+      "error": "",
+      "catalog_shim_calls": 23,
+      "shim_rejections": 0,
+      "warnings": 133,
+      "mutation": null,
+      "restored": null
+     },
+     {
+      "label": "negative-unauthorized-html",
+      "exit": 1,
+      "error": "Error: Markdown/HTML sources differ from the shrinking legacy inventory; new: [\"docs/unauthorized-review-b.html\"]; migrated or removed: []",
+      "catalog_shim_calls": 0,
+      "shim_rejections": 0,
+      "warnings": 0,
+      "mutation": null,
+      "restored": null
+     },
+     {
+      "label": "M1-l2-token-nibble",
+      "exit": 1,
+      "error": "Error: developer note generation-xs-qed-l2-migration verified scope crates/feynkit-generator/tests/generation_oracle/main.rs changed (expected 17d09cf70892eedf0eee7c33051559cd2a4f10ef, found 6df07993b521aa5a387a2d6f3586436b24827f06); owner review or an explici",
+      "catalog_shim_calls": 0,
+      "shim_rejections": 0,
+      "warnings": 0,
+      "mutation": {
+       "path": "crates/feynkit-generator/tests/generation_oracle/main.rs",
+       "old": "0xf889b37c1fd93143",
+       "new": "0xf889b37c1fd93142"
+      },
+      "restored": true
+     },
+     {
+      "label": "M2-prior-row-qed_eemm_L1-nibble",
+      "exit": 1,
+      "error": "Error: developer note generation-oracle-family-migration verified scope crates/feynkit-generator/tests/generation_oracle/main.rs changed (expected b486d48307d14f2df3438907461d0ab93db8c6ee, found 217c8112d2cb6870138e6939007cfbc5ea1c3560); owner review or an exp",
+      "catalog_shim_calls": 0,
+      "shim_rejections": 0,
+      "warnings": 0,
+      "mutation": {
+       "path": "crates/feynkit-generator/tests/generation_oracle/main.rs",
+       "old": "0x3866ebfda57f6fb8",
+       "new": "0x3866ebfda57f6fb9"
+      },
+      "restored": true
+     },
+     {
+      "label": "M3-integration-title-drift",
+      "exit": 0,
+      "error": "",
+      "catalog_shim_calls": 23,
+      "shim_rejections": 0,
+      "warnings": 133,
+      "mutation": {
+       "path": "docs/architecture/generation-integration-xs-qed-l2.typ",
+       "old": "= Two-loop QED cross-section MAIN integration",
+       "new": "= Two-loop QED cross-section MAIN integration (edited)"
+      },
+      "restored": true
+     },
+     {
+      "label": "M4-registry-integration-source-missing",
+      "exit": 1,
+      "error": "Error: required documentation source is missing: /shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-xs-qed-l2-integration/final-source/docs/architecture/generation-integration-xs-qed-l2-missing.typ",
+      "catalog_shim_calls": 0,
+      "shim_rejections": 0,
+      "warnings": 0,
+      "mutation": {
+       "path": "docs/developers.toml",
+       "old": "source = \"docs/architecture/generation-integration-xs-qed-l2.typ\"",
+       "new": "source = \"docs/architecture/generation-integration-xs-qed-l2-missing.typ\""
+      },
+      "restored": true
+     },
+     {
+      "label": "M5-imported-report-byte-edit",
+      "exit": 0,
+      "error": "",
+      "catalog_shim_calls": 23,
+      "shim_rejections": 0,
+      "warnings": 133,
+      "mutation": {
+       "path": "docs/architecture/generation-xs-qed-l2.typ",
+       "old": "56 nontrivial",
+       "new": "57 nontrivial"
+      },
+      "restored": true
+     },
+     {
+      "label": "M6-base-note-status-edit",
+      "exit": 0,
+      "error": "",
+      "catalog_shim_calls": 23,
+      "shim_rejections": 0,
+      "warnings": 133,
+      "mutation": {
+       "path": "docs/developers.toml",
+       "old": "status = \"Round-two evidence correction · NEW focused independent review required\"",
+       "new": "status = \"Approved round-two evidence correction\""
+      },
+      "restored": true
+     },
+     {
+      "label": "pristine-after",
+      "exit": 0,
+      "error": "",
+      "catalog_shim_calls": 23,
+      "shim_rejections": 0,
+      "warnings": 133,
+      "mutation": null,
+      "restored": null
+     }
+    ],
+    "copy_tracked_unchanged": true,
+    "elfs_stable": true,
+    "warnings_vs_author": "133 content warnings identical to the author's final-docs-check.log; only two compile warnings of the author's build differ"
+   },
+   "renders": {
+    "tool": {
+     "path": "/nix/store/wzpxqpc3v2xxah69rqifq5kac67hx36g-typst-0.15.1/bin/typst",
+     "sha256": "3c381d7d3e2259f81766ff77a1e6dec18ec4c7b7702b9c51ad34d56432b9633c"
+    },
+    "fontconfig": {
+     "path": "/nix/store/4vmi16yyb241hpsx3mrssvlylc8gl4yh-fonts.conf",
+     "sha256": "7edb7e12d8ad94bd8b35f1d372356469c6e3ba4fb7c6e9431b0a5e2c2c9b7d91"
+    },
+    "environment": "PATH coreutils, private HOME/XDG, FONTCONFIG_FILE pinned, LANG/LC_ALL C.UTF-8, TZ UTC, SOURCE_DATE_EPOCH 0, --creation-timestamp 0, no network",
+    "docs": {
+     "generation-integration-xs-qed-l2": {
+      "pdf_equals_author": true,
+      "html_equals_author": true,
+      "pdf_equals_donor_retained": null
+     },
+     "generation-integration-plan": {
+      "pdf_equals_author": true,
+      "html_equals_author": true,
+      "pdf_equals_donor_retained": null
+     },
+     "generation-xs-qed-l2": {
+      "pdf_equals_author": true,
+      "html_equals_author": true,
+      "pdf_equals_donor_retained": true
+     },
+     "generation-xs-qed-l2-migration": {
+      "pdf_equals_author": true,
+      "html_equals_author": true,
+      "pdf_equals_donor_retained": true
+     }
+    },
+    "semantic_current": {
+     "claims_present": {
+      "This migration changes exactly one numerator digest.": true,
+      "f36c3111407873cc": true,
+      "f889b37c1fd93143": true,
+      "30-graph, 540-owner, 1296-axis captured domain with 56 named transports": true,
+      "12→13→14→15→16→17→18→19→21→12, with 20 and all other positions fixed": true,
+      "All 91 preceding note contracts and 117 digests are preserved": true,
+      "The retained dev-optim observer is not feature/profile-equivalent to the CI assertion producer": true,
+      "This candidate requires NEW independent combined review": true
+     },
+     "active_content": [],
+     "accepted": true
+    },
+    "semantic_altered": {
+     "claims_present": {
+      "This migration changes exactly one numerator digest.": true,
+      "f36c3111407873cc": true,
+      "f889b37c1fd93143": false,
+      "30-graph, 540-owner, 1296-axis captured domain with 56 named transports": true,
+      "12→13→14→15→16→17→18→19→21→12, with 20 and all other positions fixed": false,
+      "All 91 preceding note contracts and 117 digests are preserved": true,
+      "The retained dev-optim observer is not feature/profile-equivalent to the CI assertion producer": true,
+      "This candidate requires NEW independent combined review": true
+     },
+     "html_differs": true,
+     "accepted": false
+    },
+    "output_location": "outside both private roots; wrappers/altered .typ only under my render-root review-b-render/"
+   }
+  },
+  "item7_report_accuracy": {
+   "receipt_status": "COMBINED_CANDIDATE_AWAITING_NEW_INDEPENDENT_REVIEW",
+   "counts": "Raw JUnit: 371 selected = 298 passed + 73 failed; 420 listed, 49 Rust-ignored; failed set equals the prior approved run's 74 minus xs_qed_eemm_L2 (none added); prior 297/74/49 kept historical; pools 1/8/32 each pass the same 8 rows (24).",
+   "distinctions_present": [
+    "pool-1 finite theorem vs pool 8/32 runtime observations",
+    "final evidence-only evaluation vs runtime code eae78e11",
+    "observer dev-optim 341 vs CI 452 units, capture-only metadata",
+    "all 73 remaining failures and WP3 open",
+    "integration pending NEW combined review",
+    "no license-boundary, full-site, M-rebuild or WP3 completion claim"
+   ],
+   "tracker_updates": "execution.json and wp3/replay.json: current implementation commit/change -> eae78e11/xtupxvlk, families marked approved at 69fda047 by 10b3929c, new active_xs_qed_l2 pending entry; consistent with approval-index",
+   "plan_changes": "two hunks only: status-quote reviewer-process wording and the new dated section (B-L3)",
+   "precision_items": [
+    "B-L2",
+    "B-L3",
+    "B-I3"
+   ]
+  }
+ },
+ "prior_findings_and_limits_status": {
+  "base_F1": "receipt/note keep actual compiled closure 452 units/297 packages and state the working-copy cargo tree is not executed-closure evidence; closure record consistent",
+  "QM_N1": "Auto counters from same-mode observer reports (157/714 at pools 1/8/32); numerically equal to None census here, provenance now correct",
+  "QM_N2": "pinned FONTCONFIG_FILE 7edb7e12... reproduces PDFs/HTML byte-exactly, including donor retained report PDFs",
+  "QM_N3": "exactly native_controls.py, qualify.py, supplements.py differ in reused records; no identical-dictionary claim made",
+  "QM_N4": "22 earlier helper variants retained byte-exact; failed helpers/builds remain uncredited",
+  "observer_vs_ci": "kept: dev-optim 341 units, not profile/feature-equivalent; transfer only through public payload/source joins",
+  "finite_scope": "pool1, Grouping None, None/Auto independently, 30/540/1296/56 reproduced; only Q/edge mappings exercised",
+  "mode_cycle": "12->13->14->15->16->17->18->19->21->12, 20 fixed, others fixed; no global byte identity (None 08ebf574 vs Auto 33a8a36d)",
+  "outer_manifests": "rejection preserved",
+  "no_expansion": "validator uses literal token trees and native parse/canonical equality via the additive marker; no expansion, traces, numerics or parameter-at-one",
+  "author_failed_attempts": "observer scope failure (exact single sha2 key, path-pinned, closure-absence check), unsandboxed proof, launch1 all retained and correctly uncredited"
+ },
+ "peer_A_cross_reference": {
+  "review": {
+   "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/.local/review-xs-qed-l2-integration-a-opus-20261030T111536Z-1321089/review.json",
+   "sha256": "0b5319a43da8e19100dd19a9c4647a03b95ffba1ac90a23749b0c348e95375a6",
+   "verdict": "APPROVE_SCOPE_A_BOUNDED"
+  },
+  "independence": "All my checks except B-L1 were completed before reading A's review; B-L1 was prompted by root's relay of A-L1 and verified independently for the proof and docs ELFs.",
+  "overlaps": {
+   "A-I1": "concur; substance in B-I1 (no collateral writes, minimal-bind replay identical)",
+   "A-L1": "analog B-L1 for proof/docs ELFs",
+   "nix_hash_path_info": "concur; folded into B-L2 note wording"
+  },
+  "combined": "No combined approval claimed; root aggregates A and B."
+ },
+ "fresh_vs_reused": {
+  "fresh": [
+   "registry/scope recomputation (base/code/candidate)",
+   "import/token/borrowed-module/approval identity checks",
+   "full rehash of active and imported bindings with classification",
+   "sandboxed None/Auto finite replay",
+   "3 controls + 4 held-outs",
+   "independent ci-optim payload join at pools 1/8/32 + 4 boundary held-outs",
+   "exact private source copies",
+   "retained-builder canonical check + negative + 6 mutations",
+   "4 PDF + 4 HTML renders + semantic accept/reject",
+   "raw JUnit/listing consistency",
+   "outer inventory evaluation",
+   "git diff --check reproduction",
+   "RUNPATH candidate absence"
+  ],
+  "reused_with_binding": [
+   "approved 96+4 controls/supplements, 4 native parser probes, certificate-B 104 held-outs",
+   "author CI archive runtime outputs (dump payloads, census, JUnit) and observer captures, not regenerated",
+   "retained builder and catalogs ELFs"
+  ],
+  "not_done_here": [
+   "no Nix invocation",
+   "no test/archive/observer rerun (peer A)",
+   "no rebuild",
+   "no older four-family/QED certificate rerun"
+  ]
+ },
+ "commands": [
+  {
+   "step": "guards before/after/final",
+   "argv": "python3 -I -B scripts/guard.py guards/{before,after,final}",
+   "cwd": "/tmp",
+   "exit": 0
+  },
+  {
+   "step": "path/import/token checks",
+   "argv": "git --git-dir=main/.git diff --raw/ls-tree/cat-file/rev-parse (read-only)",
+   "exit": 0
+  },
+  {
+   "step": "registry",
+   "argv": "python3 -I -B scripts/registry.py results/registry.json",
+   "cwd": "/tmp",
+   "exit": 0
+  },
+  {
+   "step": "rehash active",
+   "argv": "python3 -I -B scripts/rehash.py results/rehash-active.json <root>=<doc> x 62",
+   "exit": 0
+  },
+  {
+   "step": "runtime source",
+   "argv": "python3 -I -B scripts/runtime_source_check.py",
+   "exit": 0
+  },
+  {
+   "step": "rehash imported",
+   "argv": "python3 -I -B scripts/rehash.py results/rehash-imported{,-candroot}.json ...",
+   "exit": 0
+  },
+  {
+   "step": "sandbox run1 (failed, no credit)",
+   "argv": "python3 -I -B scripts/sandbox_launch.py",
+   "launcher_exit": 0,
+   "driver_exit": 1
+  },
+  {
+   "step": "sandbox run2",
+   "argv": "python3 -I -B scripts/sandbox_launch.py sandbox-run2",
+   "launcher_exit": 0,
+   "probe_exit": 0,
+   "driver_exit": 0
+  },
+  {
+   "step": "private copies",
+   "argv": "python3 -I -B scripts/source_copy.py {final-source-b,render-root-b}",
+   "exit": 0
+  },
+  {
+   "step": "docs check run1 (failed, no credit)",
+   "argv": "python3 -I -B scripts/docs_check.py",
+   "exit": 0,
+   "builder_exits": "all 1 (root path)"
+  },
+  {
+   "step": "docs check run2",
+   "argv": "python3 -I -B scripts/docs_check.py docs-check-run2",
+   "exit": 0,
+   "builder_exits": {
+    "pristine": 0,
+    "negative-unauthorized-html": 1,
+    "M1-l2-token-nibble": 1,
+    "M2-prior-row-qed_eemm_L1-nibble": 1,
+    "M3-integration-title-drift": 0,
+    "M4-registry-integration-source-missing": 1,
+    "M5-imported-report-byte-edit": 0,
+    "M6-base-note-status-edit": 0,
+    "pristine-after": 0
+   }
+  },
+  {
+   "step": "renders",
+   "argv": "python3 -I -B scripts/render_check.py",
+   "exit": 0
+  },
+  {
+   "step": "reuse bindings",
+   "argv": "python3 -I -B scripts/reuse_check.py results/reuse-check.json",
+   "exit": 0
+  },
+  {
+   "step": "whitespace",
+   "argv": "git --git-dir=main/.git diff --check 69fda047 fdff0d18 ; eae78e11 fdff0d18",
+   "exit": [
+    0,
+    0
+   ]
+  },
+  {
+   "step": "inline read-only python/readelf/grep checks (outer inventory, design pins, ELFs, titles, generated evidence, JUnit, helper variants, RUNPATH)",
+   "exit": 0
+  }
+ ],
+ "hashes": {
+  "scripts": {
+   "docs_check.py": "c37a16d5eb2193887986b2c28fb290c22c335bdd8244ba987580f5a4b16f7057",
+   "guard.py": "0bd33491424f87a176892919d7dbbaddfbd8cbde4bcb1dba562e33018be121de",
+   "registry.py": "83f70c3525db29efa4798ba1dcf20feee4b66a32c6dcf1b8967a7ef043bbd7eb",
+   "rehash.py": "342ce0b77fd9accc63ef0714f53e0dac1b8545c2763991f61302fd5444dbd6a8",
+   "render_check.py": "a4e4f00333971243f3585594cafe7ad8759eb9d44740eb43e53098033edab08d",
+   "reuse_check.py": "d53ceefc3098da1a3470a28d81409f9a71032ee81f534a22013e28e6e3782619",
+   "runtime_source_check.py": "0c40d7c6021596dc4b38808f3c2c30139d22d1c313e16fd98cdf4b73ada8cf1f",
+   "sandbox_driver.py": "7e6d490dad14e6d72e8e203d68d4abf34040906656c4ba79afb564cea71766e9",
+   "sandbox_launch.py": "e51be999b0f95b344ddaf0d0de07514b36e3e3089050796ac729dc6445b2c99c",
+   "source_copy.py": "7ade62881534000820c2b18d387827f7493a635bef1081d2835f5d9463e16b70",
+   "write_review.py": "69d5e9d3bde55ebb589e6259bb6a8270d992aa2851d5367afa015f1d04c76f7a"
+  },
+  "results": {
+   "results/registry.json": "4f047e4b434c0263afb2045201220fc246505adc04e32d0a2511acb0ffd6d46f",
+   "results/rehash-active.json": "842f361ae425ddf31bc0c38ec4ce8fe0d220b572718d2250c0093a4a11be9b6a",
+   "results/rehash-imported.json": "d4038ccace3dbb5408ddf3db6f247372920a714b5b645e0cb7dc3585339dbb80",
+   "results/reuse-check.json": "7b28665643427799241b58c143e019441b20bf58d60fc394ab5c561fda2b1ff4",
+   "results/sandbox-run2/results.json": "87b4ff11254aca3fc94ecee7afa5f9969d57d12c7dfdf7e4cfb314f9917a4f32",
+   "results/sandbox-run2/launch.command.json": "0c42b89f8d9e279729392525c6b7e46a78a1e382eee2c566c1e8443c449b4a76",
+   "results/docs-check-run2/results.json": "f85fb9eb848e2fa123b41e4b743c73e0ee7b0c31c306729bdb425ec030a412e0",
+   "results/docs-check-run2/cargo-shim": "b6b31336ce8372117722c347cedbcc6c9f90d9ac3eea9147c7f93ae9c24a244f",
+   "results/renders-b/results.json": "473793a49a810a4686a9b82fcf393671e2abdc09efe1519eded9351f3e7e8b28",
+   "results/final-source-b.verify.json": "71fe9e06e63ccf3ac618dea3892cc516399621276ffabe7077603221848b8540",
+   "results/render-root-b.verify.json": "b2096771e945d4431171d5a4ee4c5349918b05f842b44e845f6adaa761118fb8",
+   "results/outer-inventory-check.json": "8a52b96df1efa90e959fc5803673f5cb5db14635f9959c153d07101b13e06e73",
+   "results/generated-evidence-check.json": "777bedd6c01daa3a2081baf6b14484c20523a4692f745139efe2be60dda22ea9",
+   "results/helper-variant-attribution.json": "dd775ebf33e3a556bf9335b3f970688fe375d826d48deb36ad38973b74835449",
+   "results/runtime-source-check.json": "e08c5ddf43ea6e5a18cf5e350f0c27f0b884b5911ba2782943e886af5c6d9578"
+  }
+ },
+ "own_attempts_without_credit": [
+  {
+   "attempt": "sandbox run1",
+   "record": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/.local/review-xs-qed-l2-integration-b-opus-20261030T111614Z-1341306/results/attempt-run1-failure.json",
+    "sha256": "27a234919c5eac1bbcee4079933dc57677c15f5ed7ab5b8004af90ea4ac79607",
+    "bytes": 521
+   },
+   "cause": "my CI-join used the four-family derive.weight (rejects AntiFermionSpinSumSign) instead of the approved strict bind_runtime.weight; results.json never written",
+   "retained": "results/sandbox"
+  },
+  {
+   "attempt": "docs check run1",
+   "record": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/.local/review-xs-qed-l2-integration-b-opus-20261030T111614Z-1341306/results/attempt-docs-check-run1-failure.json",
+    "sha256": "f9908192c1a523b599f6ca585e5fdc843049ecc1cbe9433f4bf9bb79a89d2de5",
+    "bytes": 345
+   },
+   "cause": "retained builder resolves its root from compile-time CARGO_MANIFEST_DIR; nine runs failed reading the registry before validation",
+   "retained": "results/docs-check"
+  }
+ ],
+ "guards": {
+  "snapshot_sha256_before_after_final": "1b79f9c00820378f4870ffeee8e0dd2f282294ca1e44bb758ce120f6d40213fb (identical x3)",
+  "jj_op_head": "7c23e728cab8a28d392e008c855377fce982a741591365a98a043f48e95f4afe4fc998fc6d68d182737142a7c85b2369c35b4af92632860d1938da0f709dbd6d",
+  "bookmarks_sha256": "891049329112869be6c2db81a4cf1f902dd889e379d1b248dbed18d3e148b203",
+  "trees": {
+   "19b516a43dda31a4403dd2a170f2e837934617ce": "b0a3c8026b5de8ba302cee0b6a3dafc75bbf4966",
+   "69fda047e378d4114f47ec9a10517e44adb57eaa": "74684f199270060387b4f2b2597011bdf282cbd1",
+   "8dcebc2591ab04d10026fbd47a45e8d31f911ef3": "273843d0f16a34055325f7383c8e09b84cfa2c8c",
+   "c95e7f6e77994779929115a156654cfce3bd1e53": "4f15ff63cfb4447575743063b162403705d8058e",
+   "eae78e11e4d27df2539700fa4d4d71cdcb3a4804": "b1d37d876f0792d4477d63832080ae7288ffbc69",
+   "fdff0d18953348b84a0f1b7e6ab5ef703a5090de": "9903a5fca6b03884d6c3a5543ddbad2cd69f1e45"
+  },
+  "candidate_working_copy": {
+   "content_mismatch": 0,
+   "extra_files_outside_skipped_tops": 284,
+   "missing": 0,
+   "mode_mismatch": 0,
+   "rev": "fdff0d18953348b84a0f1b7e6ab5ef703a5090de",
+   "symlink_mismatch": 0,
+   "tracked_blobs": 4572,
+   "unignored_extra": 0
+  },
+  "donor_working_copy": {
+   "content_mismatch": 0,
+   "extra_files_outside_skipped_tops": 0,
+   "missing": 0,
+   "mode_mismatch": 0,
+   "rev": "19b516a43dda31a4403dd2a170f2e837934617ce",
+   "symlink_mismatch": 0,
+   "tracked_blobs": 4322,
+   "unignored_extra": 0
+  },
+  "manifests": {
+   "manifest_cand_base_review": {
+    "absent": null,
+    "digest": "266e1f88de43bc5f48d29a59414bd2114b4bf4474206b98907cb2ef33f0c422c",
+    "entries": 10539
+   },
+   "manifest_cand_family_accounting": {
+    "absent": null,
+    "digest": "5cbf5c65df97cc8b22c6f7ca507bd15b3c97faf4b78a4eeda80d1b879efe5df3",
+    "entries": 25543
+   },
+   "manifest_cand_integration_target": {
+    "absent": null,
+    "digest": "2add621f79ee7ad269b5932f7a6559e9c7a39055872afbd4753eb77c6a7f0fe5",
+    "entries": 11611
+   },
+   "manifest_cand_preflight": {
+    "absent": null,
+    "digest": "ae1b621d488f89fa3b8406d118c1e26f90684c6383be037a2ef7382ba22f19fc",
+    "entries": 5
+   },
+   "manifest_donor_local": {
+    "absent": null,
+    "digest": "dec16bfe0c3d633bee9b8050d0a639e1cfa340d05b6e2ed6d90a5d6a1cb51216",
+    "entries": 54860
+   },
+   "manifest_donor_xs_qed_l2": {
+    "absent": null,
+    "digest": "33146992a778f1a37a34a190f96420c7f8dae1134cb4025edbacc375868a4a05",
+    "entries": 14023
+   },
+   "manifest_donor_xs_qed_l2_migration": {
+    "absent": null,
+    "digest": "8080afbaadfa3c2ea74e06e8754196f49ab4e2ac834764359feafc513adc3154",
+    "entries": 7411
+   }
+  },
+  "refs_or_tracked_changes": "none; no push/fetch/upload/CI/store GC/permission/credential action; no physical main mutation",
+  "processes": "none of mine survive"
+ },
+ "limits": [
+  "Scope B only; no combined approval.",
+  "No Nix; docs check used retained builder/catalogs ELFs via a strict shim, not a fresh cargo build.",
+  "Finite replay re-verifies the certified pool-1 domain on frozen captures; transfer to the CI producer is by byte-exact public payloads only.",
+  "Accounting and closure figures cross-checked from retained raw records, not re-executed (peer A).",
+  "Shadow-RUNPATH absence verified now and for my runs, not retroactively (B-L1).",
+  "Semantic HTML checks cover listed claims only; not a full-site or page realization claim.",
+  "No license value, hash or derived digest recorded."
+ ],
+ "retention": {
+  "directory": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/.local/review-xs-qed-l2-integration-b-opus-20261030T111614Z-1341306",
+  "kept": [
+   "scripts/ (all review tools)",
+   "guards/{before,after,final} snapshots and manifests",
+   "results/sandbox (failed run1) and results/sandbox-run2 (fixtures, proof outputs, native records)",
+   "results/docs-check (failed run1) and results/docs-check-run2 (shim, logs, relocated negative fixture .txt)",
+   "results/final-source-b(.tar) and render-root-b(.tar) exact private copies",
+   "results/renders-b (PDF/HTML outputs outside source roots)",
+   "logs/"
+  ],
+  "why": "parent aggregation and audit; no cleanup or deletion performed",
+  "author_and_sibling_artifacts": "untouched; no regeneration"
+ }
+}

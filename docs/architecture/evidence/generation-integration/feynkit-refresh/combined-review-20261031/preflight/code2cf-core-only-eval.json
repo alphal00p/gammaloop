@@ -1,0 +1,27 @@
+{
+  "argv": [
+    "nix",
+    "--offline",
+    "--option",
+    "allow-import-from-derivation",
+    "false",
+    "--option",
+    "accept-flake-config",
+    "false",
+    "eval",
+    "--raw",
+    "--expr",
+    "(builtins.getFlake \"git+file:///shared/lcnbr/dev/gammaloop/main?rev=2cfb52b28d99f92305a9d571bbe3911cf04b8a19&shallow=1&allRefs=1\").checks.x86_64-linux.gammaloop-nextest-binaries-core.drvPath"
+  ],
+  "cwd": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh",
+  "exit_code": 0,
+  "stdout": "/nix/store/xni7sz4fwnw21wddmrrxj2ycyb0skady-gammaloop-nextest-binaries-core.drv",
+  "stderr": "warning: could not read HEAD ref from repo at '/shared/lcnbr/dev/gammaloop/main', using 'master'\n",
+  "elapsed_seconds": 34.64607644081116,
+  "license_variables_omitted": [
+    "SYMBOLICA_LICENSE",
+    "SYMBOLICA_LICENSE_PATH",
+    "SYMBOLICA_LICENSE_SIGNED",
+    "SYMBOLICA_LICENSE_FILE"
+  ]
+}

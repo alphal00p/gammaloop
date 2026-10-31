@@ -1,0 +1,24 @@
+{
+  "argv": [
+    "jj",
+    "--ignore-working-copy",
+    "--no-pager",
+    "log",
+    "--no-graph",
+    "-r",
+    "generation-integration | generation-host-stub-rustred-candidate-r2-20261031",
+    "-T",
+    "commit_id ++ \" \" ++ bookmarks ++ \"\\n\""
+  ],
+  "cwd": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh",
+  "exit_code": 0,
+  "stdout": "457e361d7d39e0a3daae801651f8c1dfabbf47aa generation-host-stub-rustred-candidate-r2-20261031 generation-host-stub-rustred-evidence-r2-20261031\nfdff0d18953348b84a0f1b7e6ab5ef703a5090de generation-feynkit-refresh-base generation-integration* generation-integration-xs-qed-l2 generation-integration-xs-qed-l2-evidence\n",
+  "stderr": "",
+  "elapsed_seconds": 0.05322766304016113,
+  "license_variables_omitted": [
+    "SYMBOLICA_LICENSE",
+    "SYMBOLICA_LICENSE_PATH",
+    "SYMBOLICA_LICENSE_SIGNED",
+    "SYMBOLICA_LICENSE_FILE"
+  ]
+}

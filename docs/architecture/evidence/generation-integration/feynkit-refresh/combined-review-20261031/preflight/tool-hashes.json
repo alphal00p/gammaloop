@@ -1,0 +1,47 @@
+{
+  "nix": {
+    "path": "/run/current-system/sw/bin/nix",
+    "resolved": "/nix/store/sa0q1vdxapsdjk3b0y6h1b4jg46ym3l9-nix-2.34.8/bin/nix",
+    "sha256": "3be244d065b251b12f4ec1b547ee6bfa6895e8191bde88367fb4e229186c141f"
+  },
+  "git": {
+    "path": "/home/lcnbr/.nix-profile/bin/git",
+    "resolved": "/nix/store/8yjpgadavqdwphcd2kw4dfvxmgdp5sb3-git-2.55.0/bin/git",
+    "sha256": "f2974f36e62edcf527b9b34784517f05a20fd93f6c41f2f20abcdbebd44f6a5f"
+  },
+  "jj": {
+    "path": "/home/lcnbr/.nix-profile/bin/jj",
+    "resolved": "/nix/store/hwifmhfi50y1595lhwiqsn7acppa7zdm-jujutsu-0.45.1/bin/jj",
+    "sha256": "36ae39f44d171a7ffa9f439010a50dff36425ce680c97049f3be4ab84e31ebed"
+  },
+  "jq": {
+    "path": "/run/current-system/sw/bin/jq",
+    "resolved": "/nix/store/25pcd19xk5ff8ybjslsips4g7yv06fxl-jq-1.8.2-bin/bin/jq",
+    "sha256": "7713daa107925827b822a676e22147343d90632a9c43a3cdab1aed5e7e82a0c3"
+  },
+  "bash": {
+    "path": "/home/lcnbr/.nix-profile/bin/bash",
+    "resolved": "/nix/store/7a60q5dgnv6z96c279rc1nalyiw4mgqn-bash-interactive-5.3p15/bin/bash",
+    "sha256": "4e8ad350dcb1c859cb4c7f0d694a90f7a5734465b1027bab14497e1d717adc59"
+  },
+  "rg": {
+    "path": "/home/lcnbr/.nix-profile/bin/rg",
+    "resolved": "/nix/store/zc6fy62c341aibk36p4ywff7rf9wn4wx-ripgrep-15.2.0/bin/rg",
+    "sha256": "ec6b7f28ad296b05011f7d61a9b0c197dba8b80c27d949b9fa6ce5db2a495434"
+  },
+  "analysis_python": {
+    "path": "/nix/store/3gzjs8czrk47y7cpmr44jc568vqpb2p5-python3-3.13.15/bin/python3",
+    "resolved": "/nix/store/3gzjs8czrk47y7cpmr44jc568vqpb2p5-python3-3.13.15/bin/python3.13",
+    "sha256": "643cb4d28b0e31ce03e6a463865eadcde559729849edab7e25ab213a37d0f066"
+  },
+  "nextest": {
+    "path": "/nix/store/kwm3g9vh36d9zd171v0nz64fyan1hvfz-cargo-nextest-0.9.143/bin/cargo-nextest",
+    "resolved": "/nix/store/kwm3g9vh36d9zd171v0nz64fyan1hvfz-cargo-nextest-0.9.143/bin/cargo-nextest",
+    "sha256": "dc36190bff3f246f94c6280abdc133fd2ea8e571047acffe5d18690bdf2863c8"
+  },
+  "proposed_compiler_not_executed": {
+    "path": "/nix/store/c3bpv60f5wgp4pmgsifaykxk214h6463-rust-stable-with-components-2026-09-03/bin/rustc",
+    "resolved": "/nix/store/c3bpv60f5wgp4pmgsifaykxk214h6463-rust-stable-with-components-2026-09-03/bin/rustc",
+    "sha256": "6bb1c5b8a8034b62bcb3683f5969bb83a555a24128c2fdfcc9d20ea33bc0e1e5"
+  }
+}

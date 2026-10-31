@@ -1,0 +1,135 @@
+{
+  "schema": "pure-compiled-input-invariance/1",
+  "source_roles": {
+    "prior_core_source": "2cfb52b28d99f92305a9d571bbe3911cf04b8a19",
+    "actual_grouped_source": "6f41807b064bcf2f579883134daef65c8ac279d3",
+    "accepted_evidence_base": "7f03ab8fd5834d7c78164429e2a44dab8d01ef74"
+  },
+  "filters": [
+    {
+      "producer": "core/gammaloop-api",
+      "filtered_source": "/nix/store/nay0i243jqn2xi2rf592yhy6r9bpbdvz-source",
+      "files": 1220,
+      "all_recorded_compile_file_hashes_equal_2cf_6f_7f_and_candidate": true,
+      "manifest_sha256": "8d29d2856280d11636afcc9fc1d641ddf9c49a1768b67768a8955e7c67ff09f1",
+      "source_owner": "nix/rust-workspace.nix:764-818,2753-2860",
+      "phase_inputs": "demand-frontier.json:graph; not a native qualification"
+    },
+    {
+      "producer": "core/gammalooprs",
+      "filtered_source": "/nix/store/zq0axfxa6d40pvwbjsyiyxahkp5kan25-source",
+      "files": 1118,
+      "all_recorded_compile_file_hashes_equal_2cf_6f_7f_and_candidate": true,
+      "manifest_sha256": "54c94c35f53f85631b16d9d6e52488f45c58d1537bf1c2a7289550fee21e19aa",
+      "source_owner": "nix/rust-workspace.nix:764-818,2753-2860",
+      "phase_inputs": "demand-frontier.json:graph; not a native qualification"
+    },
+    {
+      "producer": "core/gammaloop-tracing-filter",
+      "filtered_source": "/nix/store/x1bhakf483r2vj1c6j508vnyxygk5q67-source",
+      "files": 497,
+      "all_recorded_compile_file_hashes_equal_2cf_6f_7f_and_candidate": true,
+      "manifest_sha256": "b05dee1885da58f7e31e8a99798df2f8bd67bbae93495b39fd61a1edd11a15bb",
+      "source_owner": "nix/rust-workspace.nix:764-818,2753-2860",
+      "phase_inputs": "demand-frontier.json:graph; not a native qualification"
+    },
+    {
+      "producer": "core/gammaloop-tracing-filter-macros",
+      "filtered_source": "/nix/store/fbynxa7h8wx3rm37zxgnq2sgradk5ahl-source",
+      "files": 316,
+      "all_recorded_compile_file_hashes_equal_2cf_6f_7f_and_candidate": true,
+      "manifest_sha256": "18fb96df9ec9412c5f4c13ddc95a492d79ff27a95c2a5b92af87a85af44d070c",
+      "source_owner": "nix/rust-workspace.nix:764-818,2753-2860",
+      "phase_inputs": "demand-frontier.json:graph; not a native qualification"
+    },
+    {
+      "producer": "core/three-dimensional-reps",
+      "filtered_source": "/nix/store/czfhry2wahjbhg7dq69hnrn5451rnwcc-source",
+      "files": 406,
+      "all_recorded_compile_file_hashes_equal_2cf_6f_7f_and_candidate": true,
+      "manifest_sha256": "7b904a1f9fd834523da69d1a52c15b60756dbe4098a488757a6963db69b950ae",
+      "source_owner": "nix/rust-workspace.nix:764-818,2753-2860",
+      "phase_inputs": "demand-frontier.json:graph; not a native qualification"
+    },
+    {
+      "producer": "integration/gammaloop-integration-tests",
+      "filtered_source": "/nix/store/8cxw51d6zj2j0f468xadx85cfj0a57s6-source",
+      "files": 1083,
+      "all_recorded_compile_file_hashes_equal_2cf_6f_7f_and_candidate": true,
+      "manifest_sha256": "6423dfc087c935cddce3e8de017751d3734bd98c2a8e3371577ed36e83d3fc36",
+      "source_owner": "nix/rust-workspace.nix:764-818,2753-2860",
+      "phase_inputs": "demand-frontier.json:graph; not a native qualification"
+    },
+    {
+      "producer": "feynkit/feynkit-graph",
+      "filtered_source": "/nix/store/ffjgrqsdw2fp1jx50sdvk4hrf1bxdrl1-source",
+      "files": 631,
+      "all_recorded_compile_file_hashes_equal_2cf_6f_7f_and_candidate": true,
+      "manifest_sha256": "f7a2c373ea745067d97dd7c553e9f7741048041815d0476621160b7bf83566c2",
+      "source_owner": "nix/rust-workspace.nix:764-818,2753-2860",
+      "phase_inputs": "demand-frontier.json:graph; not a native qualification"
+    },
+    {
+      "producer": "feynkit/feynkit-model",
+      "filtered_source": "/nix/store/1rvwy0yspmfaz39d35kag6krp61ygq9l-source",
+      "files": 403,
+      "all_recorded_compile_file_hashes_equal_2cf_6f_7f_and_candidate": true,
+      "manifest_sha256": "9de06983a185359ade9c7caa019e591882c8339b39cbbfcabe080bc3a63b1b12",
+      "source_owner": "nix/rust-workspace.nix:764-818,2753-2860",
+      "phase_inputs": "demand-frontier.json:graph; not a native qualification"
+    },
+    {
+      "producer": "feynkit/feynkit-tensor",
+      "filtered_source": "/nix/store/2wd5kdzy6aw56vyi8xg0ylpwaras213r-source",
+      "files": 638,
+      "all_recorded_compile_file_hashes_equal_2cf_6f_7f_and_candidate": true,
+      "manifest_sha256": "12277af518ff6727de6ab033c96afcff529a5d568d9b9639fdba2fbdf78e3d6a",
+      "source_owner": "nix/rust-workspace.nix:764-818,2753-2860",
+      "phase_inputs": "demand-frontier.json:graph; not a native qualification"
+    },
+    {
+      "producer": "spenso/idenso",
+      "filtered_source": "/nix/store/v10gkgnaqqrs5k9npy2f3m5891nag31l-source",
+      "files": 587,
+      "all_recorded_compile_file_hashes_equal_2cf_6f_7f_and_candidate": true,
+      "manifest_sha256": "c0a931e1160764706d3be21082aff915aadfe267f24f658a694adda4114d9dbb",
+      "source_owner": "nix/rust-workspace.nix:764-818,2753-2860",
+      "phase_inputs": "demand-frontier.json:graph; not a native qualification"
+    },
+    {
+      "producer": "spenso/spenso",
+      "filtered_source": "/nix/store/gbrfc9qcrrpdz719i12jqiy14hyibyi0-source",
+      "files": 508,
+      "all_recorded_compile_file_hashes_equal_2cf_6f_7f_and_candidate": true,
+      "manifest_sha256": "b3a8173908c17cd1d5314cea6d17740f0b2d93da7eb51d1e405ae0b18e138852",
+      "source_owner": "nix/rust-workspace.nix:764-818,2753-2860",
+      "phase_inputs": "demand-frontier.json:graph; not a native qualification"
+    },
+    {
+      "producer": "spenso/spenso-hep-lib",
+      "filtered_source": "/nix/store/sy7708dni67snnad25xd1f17bvphsp90-source",
+      "files": 566,
+      "all_recorded_compile_file_hashes_equal_2cf_6f_7f_and_candidate": true,
+      "manifest_sha256": "968742abba3034229ce01ece3dccc2b5c87c5ef1a19538c4c865c695f41ec1ac",
+      "source_owner": "nix/rust-workspace.nix:764-818,2753-2860",
+      "phase_inputs": "demand-frontier.json:graph; not a native qualification"
+    },
+    {
+      "producer": "docs/alphal00p-docs-builder",
+      "filtered_source": "/nix/store/a2f21c8yj671pv7zcn82pbqihhi42hh2-source",
+      "files": 424,
+      "all_recorded_compile_file_hashes_equal_2cf_6f_7f_and_candidate": true,
+      "manifest_sha256": "5b9f268d2d53551e64ab79c13add8993c494ddaa353e2409efbdffd8b56d4124",
+      "source_owner": "nix/rust-workspace.nix:764-818,2753-2860",
+      "phase_inputs": "demand-frontier.json:graph; not a native qualification"
+    }
+  ],
+  "unique_files": 1360,
+  "non_documentation_delta_2cf_to6f": [
+    "M\tcrates/feynkit-generator/tests/generation_oracle/main.rs"
+  ],
+  "only_generator_literal_outside_13_filters": true,
+  "candidate_production_delta_from7f": [],
+  "new_Nix_evaluation_build_runtime_or_native_runs": 0,
+  "scope": "Exact recorded compile source membership and bytes only. Does not re-evaluate derivations, compiler synthetic manifests, runtime discovery/tool closure or docs runtime catalogs. Producer sibling ACTIVE; zero positive runtime credit."
+}

@@ -1,0 +1,574 @@
+[
+  {
+    "source": "docs/architecture/evidence/generation-integration/wp3/prerequisites08-14.json",
+    "json_pointer": "/checks/2/command",
+    "value": "target/wp3-units03-07/run cargo clippy --locked --profile ci-optim --all-targets -p idenso -p feynkit-graph -p feynkit-model -p feynkit-generator -p gammalooprs -p alphal00p-docs-python-exporter --features idenso/reference-cases,feynkit-model/native,alphal00p-docs-python-exporter/spenso -- --deny warnings"
+  },
+  {
+    "source": "docs/architecture/evidence/generation-integration/wp3/prerequisites08-14.json",
+    "json_pointer": "/checks/3/command",
+    "value": "target/wp3-units03-07/run just fmt --check"
+  },
+  {
+    "source": "docs/architecture/evidence/generation-integration/wp3/prerequisites08-14.json",
+    "json_pointer": "/checks/4/command",
+    "value": "target/wp3-units03-07/run just check-symbolica-feature-isolation"
+  },
+  {
+    "source": "docs/architecture/evidence/generation-integration/wp3/prerequisites08-14.json",
+    "json_pointer": "/commands",
+    "value": {
+      "combined_run": [
+        "cargo",
+        "nextest",
+        "run",
+        "--locked",
+        "--cargo-profile",
+        "ci-optim",
+        "--lib",
+        "-p",
+        "idenso",
+        "-p",
+        "feynkit-graph",
+        "-p",
+        "feynkit-model",
+        "-p",
+        "feynkit-generator",
+        "-p",
+        "gammalooprs",
+        "--features",
+        "idenso/reference-cases,feynkit-model/native",
+        "-E",
+        "package(feynkit-graph) | package(feynkit-model) | test(tensor::inference::tests) | test(slot_contraction) | test(factorized_tests) | test(color::simplify::tests) | test(tensor::simplification) | test(utils::tests::) | test(momentum::tests::rotations) | test(printed_numerators_and_overall_factors_do_not_depend_on_generation_order) | test(interaction_momentum_reduction_) | test(template) | test(callback_rules_are_constructed_in_the_actual_owner_frame) | test(compact_rule_powers_allocate_independent_dummies_for_each_owner) | test(bundled_rule_ports_preserve_actual_owner_rejection) | test(opaque_scalar_metadata_with_nonindex_slot_payload_keeps_checked_construction) | test(gauge_sewing_tests) | test(generated_sm_charged_ward_follows_the_action)",
+        "--profile",
+        "ci_gammaloop",
+        "--retries",
+        "0",
+        "--test-threads",
+        "2"
+      ],
+      "combined_inventory": [
+        "cargo",
+        "nextest",
+        "list",
+        "--locked",
+        "--cargo-profile",
+        "ci-optim",
+        "--lib",
+        "-p",
+        "idenso",
+        "-p",
+        "feynkit-graph",
+        "-p",
+        "feynkit-model",
+        "-p",
+        "feynkit-generator",
+        "-p",
+        "gammalooprs",
+        "--features",
+        "idenso/reference-cases,feynkit-model/native",
+        "-E",
+        "package(feynkit-graph) | package(feynkit-model) | test(tensor::inference::tests) | test(slot_contraction) | test(factorized_tests) | test(color::simplify::tests) | test(tensor::simplification) | test(utils::tests::) | test(momentum::tests::rotations) | test(printed_numerators_and_overall_factors_do_not_depend_on_generation_order) | test(interaction_momentum_reduction_) | test(template) | test(callback_rules_are_constructed_in_the_actual_owner_frame) | test(compact_rule_powers_allocate_independent_dummies_for_each_owner) | test(bundled_rule_ports_preserve_actual_owner_rejection) | test(opaque_scalar_metadata_with_nonindex_slot_payload_keeps_checked_construction) | test(gauge_sewing_tests) | test(generated_sm_charged_ward_follows_the_action)",
+        "--message-format",
+        "json"
+      ],
+      "exporter_inventory": [
+        "cargo",
+        "nextest",
+        "list",
+        "--locked",
+        "--cargo-profile",
+        "ci-optim",
+        "-p",
+        "alphal00p-docs-python-exporter",
+        "--features",
+        "spenso",
+        "-E",
+        "test(spenso_stub_preserves_)",
+        "--message-format",
+        "json"
+      ]
+    }
+  },
+  {
+    "source": "docs/architecture/evidence/generation-integration/wp3/units27-29/validation.json",
+    "json_pointer": "/0/command",
+    "value": [
+      "cargo",
+      "nextest",
+      "run",
+      "--locked",
+      "--cargo-profile",
+      "ci-optim",
+      "--profile",
+      "ci_gammaloop",
+      "--test-threads",
+      "2",
+      "--status-level",
+      "pass",
+      "--retries",
+      "0",
+      "-p",
+      "gammalooprs",
+      "--lib",
+      "-E",
+      "test(integrands::process::sampling) or test(lmb_sampling_detects) or test(canonical_lmb_density) or test(lmb_frame) or test(signed) or test(graph_derived_two_loop_reflections)"
+    ]
+  },
+  {
+    "source": "docs/architecture/evidence/generation-integration/wp3/units27-29/validation.json",
+    "json_pointer": "/1/command",
+    "value": [
+      "cargo",
+      "nextest",
+      "run",
+      "--locked",
+      "--cargo-profile",
+      "ci-optim",
+      "--profile",
+      "ci_gammaloop",
+      "--test-threads",
+      "2",
+      "--status-level",
+      "pass",
+      "--retries",
+      "0",
+      "-p",
+      "gammalooprs",
+      "--lib",
+      "-E",
+      "test(utils::tests::) or test(momentum::tests::rotations)"
+    ]
+  },
+  {
+    "source": "docs/architecture/evidence/generation-integration/wp3/units27-29/validation.json",
+    "json_pointer": "/2/command",
+    "value": [
+      "cargo",
+      "nextest",
+      "run",
+      "--locked",
+      "--cargo-profile",
+      "ci-optim",
+      "--profile",
+      "ci_gammaloop",
+      "--status-level",
+      "pass",
+      "--retries",
+      "0",
+      "-p",
+      "gammaloop-integration-tests",
+      "--test",
+      "test_nlo_acceptance",
+      "--test-threads",
+      "1",
+      "-E",
+      "test(cool_qm_eos_nlo_matches_example_target) or test(epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes)",
+      "--success-output",
+      "immediate"
+    ]
+  },
+  {
+    "source": "docs/architecture/evidence/generation-integration/wp3/units27-29/validation.json",
+    "json_pointer": "/3/command",
+    "value": [
+      "cargo",
+      "nextest",
+      "run",
+      "--locked",
+      "--cargo-profile",
+      "ci-optim",
+      "--profile",
+      "ci_gammaloop",
+      "--test-threads",
+      "2",
+      "--status-level",
+      "pass",
+      "--retries",
+      "0",
+      "-p",
+      "feynkit-generator",
+      "--lib",
+      "-E",
+      "test(/sampled_quotient|completed_samples_contract_closed_color_metric_coefficients|completed_samples_can_certify_a_factorized_scalar_zero|interaction_momentum_reduction_|templates?_|callback_rules_are_constructed|bundled_rule_ports_preserve|cancelled_alias_templates_keep|compact_rule_powers_allocate|opaque_scalar_metadata/)"
+    ]
+  },
+  {
+    "source": "docs/architecture/evidence/generation-integration/wp3/units27-29/validation.json",
+    "json_pointer": "/4/command",
+    "value": [
+      "cargo",
+      "test",
+      "--locked",
+      "--profile",
+      "ci-optim",
+      "-p",
+      "feynkit-generator",
+      "--lib",
+      "grouping::tests::vacuum_group28_original_pair_identity",
+      "--",
+      "--exact",
+      "--ignored",
+      "--test-threads=2"
+    ]
+  },
+  {
+    "source": "docs/architecture/evidence/generation-integration/wp3/units27-29/validation.json",
+    "json_pointer": "/5/command",
+    "value": [
+      "cargo",
+      "nextest",
+      "run",
+      "--locked",
+      "--cargo-profile",
+      "ci-optim",
+      "--profile",
+      "ci_gammaloop",
+      "--test-threads",
+      "2",
+      "--status-level",
+      "pass",
+      "--retries",
+      "0",
+      "-p",
+      "feynkit-graph",
+      "--lib",
+      "-E",
+      "test(finalization::tests::) or test(numerator_interface::tests::)"
+    ]
+  },
+  {
+    "source": "docs/architecture/evidence/generation-integration/wp3/units27-29/validation.json",
+    "json_pointer": "/6/command",
+    "value": [
+      "cargo",
+      "nextest",
+      "run",
+      "--locked",
+      "--cargo-profile",
+      "ci-optim",
+      "--profile",
+      "ci_gammaloop",
+      "--test-threads",
+      "2",
+      "--status-level",
+      "pass",
+      "--retries",
+      "0",
+      "-p",
+      "gammalooprs",
+      "--lib",
+      "-E",
+      "test(numerator::aind::) or test(/native_qqx_aaa_projectors_close|compact_sewn_projector_uses|rqft_ghost_explicit_bases|finalized_graph_matches_gammaloop_reference|native_runtime_conversion_|legacy_dot_names/)"
+    ]
+  },
+  {
+    "source": "docs/architecture/evidence/generation-integration/wp3/units27-29/validation.json",
+    "json_pointer": "/7/command",
+    "value": [
+      "cargo",
+      "clippy",
+      "--locked",
+      "--profile",
+      "ci-optim",
+      "-p",
+      "gammalooprs",
+      "-p",
+      "gammaloop-integration-tests",
+      "--all-targets",
+      "--",
+      "-D",
+      "warnings"
+    ]
+  },
+  {
+    "source": "docs/architecture/evidence/generation-integration/wp3/units27-29/validation.json",
+    "json_pointer": "/8/command",
+    "value": [
+      "just",
+      "fmt",
+      "--check"
+    ]
+  },
+  {
+    "source": "docs/architecture/evidence/generation-integration/wp3/units27-29/validation.json",
+    "json_pointer": "/9/command",
+    "value": [
+      "just",
+      "check-symbolica-feature-isolation"
+    ]
+  },
+  {
+    "source": "docs/architecture/evidence/generation-integration/wp3/staged-combined-corrections.json",
+    "json_pointer": "/checks/supported_exporter_features_and_contracts/0/command",
+    "value": [
+      "cargo",
+      "test",
+      "--locked",
+      "--profile",
+      "ci-optim",
+      "-p",
+      "feynkit-py",
+      "--lib",
+      "--features",
+      "python_stubgen,pyo3/auto-initialize,linnet-py/default",
+      "--no-run",
+      "--message-format=json"
+    ]
+  },
+  {
+    "source": "docs/architecture/evidence/generation-integration/wp3/staged-combined-corrections.json",
+    "json_pointer": "/checks/supported_exporter_features_and_contracts/1/command",
+    "value": [
+      "cargo",
+      "check",
+      "--locked",
+      "--profile",
+      "ci-optim",
+      "-p",
+      "alphal00p-docs-python-exporter",
+      "--features",
+      "linnet",
+      "--tests"
+    ]
+  },
+  {
+    "source": "docs/architecture/evidence/generation-integration/wp3/staged-combined-corrections.json",
+    "json_pointer": "/checks/supported_exporter_features_and_contracts/2/command",
+    "value": [
+      "cargo",
+      "test",
+      "--locked",
+      "--profile",
+      "ci-optim",
+      "-p",
+      "alphal00p-docs-python-exporter",
+      "--features",
+      "linnet",
+      "--",
+      "tests::linnet_",
+      "--test-threads=1"
+    ]
+  },
+  {
+    "source": "docs/architecture/evidence/generation-integration/wp3/staged-combined-corrections.json",
+    "json_pointer": "/checks/supported_exporter_features_and_contracts/3/command",
+    "value": [
+      "cargo",
+      "check",
+      "--locked",
+      "--profile",
+      "ci-optim",
+      "-p",
+      "alphal00p-docs-python-exporter",
+      "--features",
+      "gammaloop",
+      "--tests"
+    ]
+  },
+  {
+    "source": "docs/architecture/evidence/generation-integration/wp3/staged-combined-corrections.json",
+    "json_pointer": "/checks/supported_exporter_features_and_contracts/4/command",
+    "value": [
+      "cargo",
+      "test",
+      "--locked",
+      "--profile",
+      "ci-optim",
+      "-p",
+      "alphal00p-docs-python-exporter",
+      "--features",
+      "gammaloop",
+      "--",
+      "tests::gammaloop_",
+      "--test-threads=1"
+    ]
+  },
+  {
+    "source": "docs/architecture/evidence/generation-integration/wp3/staged-combined-corrections.json",
+    "json_pointer": "/checks/supported_exporter_features_and_contracts/5/command",
+    "value": [
+      "cargo",
+      "check",
+      "--locked",
+      "--profile",
+      "ci-optim",
+      "-p",
+      "linnet-py",
+      "--no-default-features",
+      "--features",
+      "native,python_stubgen"
+    ]
+  },
+  {
+    "source": "docs/architecture/evidence/generation-integration/wp3/staged-combined-corrections.json",
+    "json_pointer": "/checks/supported_exporter_features_and_contracts/6/command",
+    "value": [
+      "cargo",
+      "test",
+      "--locked",
+      "--profile",
+      "ci-optim",
+      "-p",
+      "alphal00p-docs-python-exporter",
+      "--features",
+      "linnet,feynkit",
+      "--",
+      "tests::feynkit_runtime_surface_uses_canonical_shared_reexports",
+      "--exact",
+      "--test-threads=1"
+    ]
+  },
+  {
+    "source": "docs/architecture/evidence/generation-integration/wp3/staged-combined-corrections.json",
+    "json_pointer": "/checks/supported_exporter_features_and_contracts/7/command",
+    "value": [
+      "cargo",
+      "run",
+      "--locked",
+      "--profile",
+      "ci-optim",
+      "-p",
+      "alphal00p-docs-python-exporter",
+      "--features",
+      "linnet,feynkit",
+      "--",
+      "linnet-graph",
+      "docs/api/python/linnet-graph.pyi",
+      "--check"
+    ]
+  },
+  {
+    "source": "docs/architecture/evidence/generation-integration/wp3/staged-combined-corrections.json",
+    "json_pointer": "/checks/supported_exporter_features_and_contracts/8/command",
+    "value": [
+      "cargo",
+      "run",
+      "--locked",
+      "--profile",
+      "ci-optim",
+      "-p",
+      "alphal00p-docs-python-exporter",
+      "--features",
+      "linnet,feynkit",
+      "--",
+      "feynkit-community",
+      "docs/api/python/feynkit-community.pyi",
+      "--check"
+    ]
+  },
+  {
+    "source": "docs/architecture/evidence/generation-integration/wp3/staged-combined-corrections.json",
+    "json_pointer": "/checks/six_canonical_stub_checks/0/command",
+    "value": [
+      "cargo",
+      "run",
+      "--locked",
+      "--profile",
+      "ci-optim",
+      "-p",
+      "alphal00p-docs-python-exporter",
+      "--features",
+      "linnet,feynkit",
+      "--",
+      "linnet-graph",
+      "docs/api/python/linnet-graph.pyi",
+      "--check"
+    ]
+  },
+  {
+    "source": "docs/architecture/evidence/generation-integration/wp3/staged-combined-corrections.json",
+    "json_pointer": "/checks/six_canonical_stub_checks/1/command",
+    "value": [
+      "cargo",
+      "run",
+      "--locked",
+      "--profile",
+      "ci-optim",
+      "-p",
+      "alphal00p-docs-python-exporter",
+      "--features",
+      "linnet,feynkit",
+      "--",
+      "linnet-graph",
+      "crates/linnet-py/python/symbolica/community/graph/__init__.pyi",
+      "--check"
+    ]
+  },
+  {
+    "source": "docs/architecture/evidence/generation-integration/wp3/staged-combined-corrections.json",
+    "json_pointer": "/checks/six_canonical_stub_checks/2/command",
+    "value": [
+      "cargo",
+      "run",
+      "--locked",
+      "--profile",
+      "ci-optim",
+      "-p",
+      "alphal00p-docs-python-exporter",
+      "--features",
+      "linnet,feynkit",
+      "--",
+      "linnet-graph",
+      "examples/notebooks/symbolica-host/python/symbolica/community/graph/__init__.pyi",
+      "--check"
+    ]
+  },
+  {
+    "source": "docs/architecture/evidence/generation-integration/wp3/staged-combined-corrections.json",
+    "json_pointer": "/checks/six_canonical_stub_checks/3/command",
+    "value": [
+      "cargo",
+      "run",
+      "--locked",
+      "--profile",
+      "ci-optim",
+      "-p",
+      "alphal00p-docs-python-exporter",
+      "--features",
+      "linnet,feynkit",
+      "--",
+      "feynkit-community",
+      "docs/api/python/feynkit-community.pyi",
+      "--check"
+    ]
+  },
+  {
+    "source": "docs/architecture/evidence/generation-integration/wp3/staged-combined-corrections.json",
+    "json_pointer": "/checks/six_canonical_stub_checks/4/command",
+    "value": [
+      "cargo",
+      "run",
+      "--locked",
+      "--profile",
+      "ci-optim",
+      "-p",
+      "alphal00p-docs-python-exporter",
+      "--features",
+      "linnet,feynkit",
+      "--",
+      "feynkit-community",
+      "crates/feynkit-py/python/symbolica/community/hepkit/__init__.pyi",
+      "--check"
+    ]
+  },
+  {
+    "source": "docs/architecture/evidence/generation-integration/wp3/staged-combined-corrections.json",
+    "json_pointer": "/checks/six_canonical_stub_checks/5/command",
+    "value": [
+      "cargo",
+      "run",
+      "--locked",
+      "--profile",
+      "ci-optim",
+      "-p",
+      "alphal00p-docs-python-exporter",
+      "--features",
+      "linnet,feynkit",
+      "--",
+      "feynkit-community",
+      "examples/notebooks/symbolica-host/python/symbolica/community/hepkit/__init__.pyi",
+      "--check"
+    ]
+  }
+]

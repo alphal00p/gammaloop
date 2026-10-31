@@ -1,0 +1,57 @@
+{
+  "source": "/nix/store/3sj3nw06s3vhl3j12wfp5gc3r1h6f0k3-source",
+  "code": "2cfb52b28d99f92305a9d571bbe3911cf04b8a19",
+  "inputs": {
+    "Cargo.toml": {
+      "exists": true,
+      "sha256": "fbc0408bac3bdf1ed16eb9276d1db34923280b23300801555ca97afee6511478"
+    },
+    "Cargo.lock": {
+      "exists": true,
+      "sha256": "e111296686b2573ac88b9274cac2bf1e10aad07669f8fc6d243ac5b47d985ae0"
+    },
+    "flake.nix": {
+      "exists": true,
+      "sha256": "6f65898a247619abb520544f457107671e90bc5212b589e57b3464497f2f5406"
+    },
+    "flake.lock": {
+      "exists": true,
+      "sha256": "e10c5893b513d4c7120d841b47fbfddffb3ac4f1f5cb46a18c0f7542cbde8534"
+    },
+    "nix/rust-workspace.nix": {
+      "exists": true,
+      "sha256": "dc123de5ae0ad443ba2993cb3765d7fb228582697ba702c0f40ca41876409038"
+    },
+    "nix/ci.nix": {
+      "exists": true,
+      "sha256": "1504cf315f1b3878d16b7b08a1bbbfdc5446af6a71028a09c8b706eac5a02193"
+    },
+    "nix/documentation.nix": {
+      "exists": true,
+      "sha256": "5df7a263aa19d939e384a7dddb1ab4564fe8192ac91d0d47694a7f1b29fc0b34"
+    },
+    ".config/nextest.toml": {
+      "exists": true,
+      "sha256": "03e166fbe150d150450df98ebfa00e3b823b487cab5f6f9ff3d4cfb4bff4b09f"
+    },
+    ".config/hakari.toml": {
+      "exists": true,
+      "sha256": "575284085d45a8e14cffcebfce259757c5c848ae6af5b50c3c20da25d56e7f4d"
+    },
+    "just/tests.just": {
+      "exists": true,
+      "sha256": "8ed28e82cd48fbb4a09bb03230c6b579daddc1685e2fc65f0ccaf5f8d06ca923"
+    },
+    "examples/notebooks/symbolica-host/Cargo.lock": {
+      "exists": true,
+      "sha256": "66b1e72f65164de8e7b80b80e592fce1f96cc8c21520f549054b915532019ed9"
+    },
+    "crates/tydenso/Cargo.lock": {
+      "exists": false,
+      "sha256": null
+    }
+  },
+  "compiled_unit_features_and_phase_inputs": "producer-roots.json and demand-frontier.json",
+  "compiler_hashes": "tool-hashes.json",
+  "actual_native_qualification_this_task": false
+}

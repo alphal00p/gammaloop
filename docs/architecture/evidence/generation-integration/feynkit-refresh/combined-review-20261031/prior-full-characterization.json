@@ -1,0 +1,183 @@
+{
+  "schema": "feynkit-refresh-package-characterization/1",
+  "status": "OBSERVED_FAILING_PACKAGE_AWAITING_NEW_ROOT_INDEPENDENT_REVIEW",
+  "completed_utc": "2026-10-31T02:19:09.469428+00:00",
+  "code": "ffa76ec420642c03349ab756d2d7720ab93c0057",
+  "evidence": "d0fb4e906140a6a0fc8dd6401ca839cab0c2734d",
+  "kernel": "8eb7c3729d6abefc916decc1bdf0c06536f8af80",
+  "counts": {
+    "inventory": 420,
+    "selected": 371,
+    "passed": 302,
+    "failed": 69,
+    "excluded": 49,
+    "ignored": 49,
+    "command_exit": 100,
+    "seconds_contended": 443.379757886054,
+    "by_binary": {
+      "feynkit-generator": {
+        "passed": 222
+      },
+      "feynkit-generator::amplitude": {
+        "passed": 9
+      },
+      "feynkit-generator::generation_oracle": {
+        "passed": 70,
+        "failed": 69
+      },
+      "feynkit-generator::momentum_tensor": {
+        "passed": 1
+      }
+    },
+    "smallest_field_counts": {
+      "numerators": 69
+    },
+    "grouping_failure_counts": {
+      "Grouping::None": 60,
+      "Grouping::UpToScalar": 3,
+      "Grouping::Identical": 3,
+      "Grouping::UpToSign": 3
+    },
+    "remaining_failures_with_identical_historical_actual_and_expected_summary": 69,
+    "junit_root": {
+      "name": "nextest-run",
+      "tests": "371",
+      "skipped": "0",
+      "failures": "69",
+      "errors": "0",
+      "uuid": "3f188ca7-b8ca-4aca-8a21-1c45e5b5f2b5",
+      "timestamp": "2026-10-31T02:09:41.204+00:00",
+      "time": "443.110"
+    }
+  },
+  "selection": {
+    "historical_recovered": true,
+    "profile": "ci_gammaloop",
+    "filter": "package(=feynkit-generator) and (binary(=feynkit_generator) or binary(=amplitude) or binary(=generation_oracle) or binary(=momentum_tensor))",
+    "ignore": "ordinary default; no --run-ignored",
+    "override_default_filter": false,
+    "pool": 1,
+    "pool_basis": "Explicit captured pool1 as in reviewed current qualification. Historical full command left the variable unset: historical AND current source default to [1,8,32]. This characterization fixes oracle loop pool1 and does not recertify historical internal pool8/32 passes; registration tests retain their explicit own 1/8/32 pools. No timing/performance comparison.",
+    "workers_max": 16,
+    "source_config_sha256": "03e166fbe150d150450df98ebfa00e3b823b487cab5f6f9ff3d4cfb4bff4b09f",
+    "groups": {
+      "integration": {
+        "max-threads": 2
+      },
+      "memory-intensive": {
+        "max-threads": 2
+      },
+      "flaky": {
+        "max-threads": 1
+      },
+      "symbolica-singleton": {
+        "max-threads": 1
+      },
+      "gammalooprs-diagnostics": {
+        "max-threads": 1
+      },
+      "soft-ct-serial": {
+        "max-threads": 1
+      },
+      "scalar-lu-serial": {
+        "max-threads": 1
+      },
+      "feyngen-serial": {
+        "max-threads": 1
+      }
+    },
+    "expected_binary_ids": [
+      "feynkit-generator",
+      "feynkit-generator::amplitude",
+      "feynkit-generator::generation_oracle",
+      "feynkit-generator::momentum_tensor"
+    ]
+  },
+  "historical_identity_delta": {
+    "historical_missing_from_current_archive": [],
+    "new_in_current_archive": [],
+    "filter_or_ignore_changed": []
+  },
+  "all_four_current_binary_hashes": {
+    "feynkit-generator": {
+      "metadata": {
+        "binary-id": "feynkit-generator",
+        "binary-name": "feynkit_generator",
+        "package-id": "path+file:///build/source/crates/feynkit-generator#0.1.0",
+        "kind": "lib",
+        "binary-path": "/build/source/target/ci-optim/deps/feynkit_generator-9c81726e5f0078f8",
+        "build-platform": "target"
+      },
+      "sha256": "9d693abbc274a9d8231fb2b7b52206448e7b59df397b8be26865bd1b8a1972dc",
+      "bytes": 72020120
+    },
+    "feynkit-generator::amplitude": {
+      "metadata": {
+        "binary-id": "feynkit-generator::amplitude",
+        "binary-name": "amplitude",
+        "package-id": "path+file:///build/source/crates/feynkit-generator#0.1.0",
+        "kind": "test",
+        "binary-path": "/build/source/target/ci-optim/deps/amplitude-0bcbb9273998b3e1",
+        "build-platform": "target"
+      },
+      "sha256": "93590ca3e173b729d24c9c0b5011da0964d4990d003f86f3336992d69e06614a",
+      "bytes": 62964800
+    },
+    "feynkit-generator::generation_oracle": {
+      "metadata": {
+        "binary-id": "feynkit-generator::generation_oracle",
+        "binary-name": "generation_oracle",
+        "package-id": "path+file:///build/source/crates/feynkit-generator#0.1.0",
+        "kind": "test",
+        "binary-path": "/build/source/target/ci-optim/deps/generation_oracle-3892f55f31822180",
+        "build-platform": "target"
+      },
+      "sha256": "5d7275d26392474f2490963dd0503f4f46ccebc30572a4f31f7a66228303b30f",
+      "bytes": 61186320
+    },
+    "feynkit-generator::momentum_tensor": {
+      "metadata": {
+        "binary-id": "feynkit-generator::momentum_tensor",
+        "binary-name": "momentum_tensor",
+        "package-id": "path+file:///build/source/crates/feynkit-generator#0.1.0",
+        "kind": "test",
+        "binary-path": "/build/source/target/ci-optim/deps/momentum_tensor-43d9cde778a19275",
+        "build-platform": "target"
+      },
+      "sha256": "44109380fb909827976fd8f2c6a645fbfa599a37376091e63415f68dcff937e5",
+      "bytes": 32083560
+    }
+  },
+  "approved12_actual_passes": [
+    "xs_qed_eemm_L1",
+    "xs_qed_eedd_L1",
+    "xs_qed_eeee_1pi_L1",
+    "qed_eemm_L1",
+    "ctorder_qcd_uugg_L1",
+    "sm_eemm_L0",
+    "ym_g6_L0",
+    "xs_qed_eemm_L2",
+    "sm_eeww_L0",
+    "qed_ee4f_L0",
+    "xs_qed_eeee_L1",
+    "xs_qcd_gguu_1pi_L1"
+  ],
+  "failure_matrix": "failure-matrix.json",
+  "normal_logs": "runs/package-run",
+  "report": "report.typ",
+  "actual_credit": {
+    "native_nextest_package_runs": 1,
+    "outer_test_body_executions": 371,
+    "licensed_inventory_discoveries": 1,
+    "new_capture_observers": 0,
+    "new_native_algebra_runs": 0,
+    "new_builds_compilers_Nix_publications": 0
+  },
+  "reused_credit": "Exact retained qualified source/layer/tool provenance and independently reviewed bounded12 finite certificates; earlier36passes/15joins remain prior evidence.",
+  "resource_failures": [],
+  "self_approval": false,
+  "independent_root_review_required": true,
+  "remaining_required_producer_needs": "Per-case/mode factor-preserving physical numerator/group/routing/interface certificates; full other-package/heavy/evaluator/host/WP3/performance gates remain separate.",
+  "cleanup": "cleanup.json",
+  "concurrent_changes": "concurrent-changes.json"
+}

@@ -73,11 +73,11 @@
       "scope": "Four packaging and two Clinnet tests; Nix WASM and license output; 49 hashes; byte-exact notices; not final wheel certification or all WP11"
     },
     "WP3": {
-      "status": "Source30 combined closure/actual producers and five focused runtime consumers validated; STOP for NEW independent Astra review before31. WP3 incomplete.",
+      "status": "Sources through46 and original tensor/core/docs/XS integration accepted in their recorded old-kernel scopes; bounded8eb refresh constituents separately accepted. NEW combined refresh review required; WP3/M-rebuild incomplete.",
       "pre_rebuild_ref": "generation-integration-pre-rebuild",
       "pre_rebuild_commit": "5226894ee1af61797e6b819d7e801a22bf17bace",
       "ancestry": "Reviewed planning/evidence chain descends from fixed target 3f0df2a8 and is retained as non-code base.",
-      "review": "Fixed-case physical/interface equivalence certificates and scoped P2 input approved; NEW combined migration/resource review pending",
+      "review": "See current_status_reconciliation_20261031 for exact bounded attributions; original receipts remain immutable. No current8eb whole-WP3 approval.",
       "slice_receipt": "wp3/row-recertification.json",
       "approved_prefix": "74cebf6c8f673f5849b26afe55fa98035d5eba1d",
       "parallel_lanes": {
@@ -130,7 +130,7 @@
           "source25_integration": "wp3/units22-26/receipt.json"
         },
         "color46": {
-          "status": "Astra APPROVED standalone cumulative input for LATER integration after source45; not replayed in this slice",
+          "status": "Original source46 cumulatively APPROVED at79dfeaab by final independent Opus round4; no repeat implementation required. Current8eb standalone colour/evaluator qualification remains distinct.",
           "commit": "2a6ee257165cc1cbd2beb923729d09bab21ecdd3",
           "implementation_commit": "e29f66dd44bf52454dc91cf8ec917946f5ed6f94",
           "base": "438b61500da4b32841c64211103e5da6fc4c4a72",
@@ -204,7 +204,7 @@
       "pre_staged_commit": "438b61500da4b32841c64211103e5da6fc4c4a72",
       "implementation_change": "rsnwxksqkumlppzknlkkqvkrvpyrrzrt",
       "staged_code_commit": "f264028690d117b4b99c320b61b7f2d5d89222d0",
-      "current_slice_review": "Source30 combined closure/actual producers and five focused runtime consumers validated; STOP for NEW independent Astra review before31. WP3 incomplete.",
+      "current_slice_review": "Source/evidence frozen on accepted grouped7f/source6f for NEW independent combined refresh review. Constituent acceptances retained; no combined approval or WP3/M-rebuild closure.",
       "active_slice22_26": {
         "status": "APPROVED at a517; source27 gate cleared",
         "source_orders": [
@@ -683,7 +683,10 @@
   },
   "active_slice44_45": {
     "base": "158f4e1f8cdbea4d13b55f7c1fa828f75ab566f9",
-    "source_order": [44, 45],
+    "source_order": [
+      44,
+      45
+    ],
     "source44": "087bda82ce5a14dab092776ea470e66278dda12d",
     "source45": "dfe6387606e44a96f110c1ce03f52d92824dbdb1",
     "code_commit": "8c6d8aff7e7b3da312e30d3daa403b5b90c8cede",
@@ -777,6 +780,259 @@
     "evidence_change": "mssryyzyrolmwvuknmrlkzoozuuvlxuo",
     "receipt": "docs/architecture/evidence/generation-integration/wp3/xs-qed-l2/receipt.json",
     "bookmark": "generation-integration-xs-qed-l2",
-    "status": "One-token combined candidate awaits NEW independent review. Actual scoped lane 298/73/49; all 73 remaining failures and broader WP3 gates stay open."
+    "status": "Original fdff/eae bounded integration accepted through independent scopes A/B;298/73/49 remains old1a history. PRIOR8eb ffa full-pool1 characterization is302/69/49. Later accepted grouped migration leaves68 other failure identities pending case proof/disposition; no fresh303/68/49 run."
+  },
+  "current_status_reconciliation_20261031": {
+    "schema": "generation-combined-refresh-candidate/1",
+    "status": "NEW_INDEPENDENT_COMBINED_REVIEW_REQUIRED",
+    "accepted_evidence_base": "7f03ab8fd5834d7c78164429e2a44dab8d01ef74",
+    "actual_grouped_source": "6f41807b064bcf2f579883134daef65c8ac279d3",
+    "earlier_host_source": "2cfb52b28d99f92305a9d571bbe3911cf04b8a19",
+    "earlier_host_evidence": "457e361d7d39e0a3daae801651f8c1dfabbf47aa",
+    "original_approved_global_integration": "fdff0d18953348b84a0f1b7e6ab5ef703a5090de",
+    "source_upstream": "9102f885722e856e30227ed46e685e5c465905f7",
+    "kernel": "8eb7c3729d6abefc916decc1bdf0c06536f8af80",
+    "author": "Lucien Huber <im@lcnbr.ch>",
+    "CI_enabled": false,
+    "publication_authorized": false,
+    "global_advance_performed": false,
+    "accepted_reviews": [
+      {
+        "id": "host-integration",
+        "original_review": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-host-stub-rustred-integration-astra-20261031-023354Z-777117b1/review.json",
+        "review": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/host-integration/review.json",
+        "sha256": "f472e199cf3805d9364ef9158c18628fbc5c7ee8d72317c56a6af787628e8a5c",
+        "verdict": "APPROVE_BOUNDED_APPLIED_STUB_DISTRIBUTIONS_AND_PRIVATE_RUSTRED_INTEGRATION",
+        "original_scope": null,
+        "sealed_external_entries": 246
+      },
+      {
+        "id": "full-pool1",
+        "original_review": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-full-generator-characterization-astra-20261031-022430Z-320628f7/review.json",
+        "review": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/full-pool1/review.json",
+        "sha256": "fb688585bc7efd0b494fef7648df5abad398f88bfe8c439e8b42c0dd520eaa37",
+        "verdict": "APPROVE_EXACT_FULL_PACKAGE_POOL1_CHARACTERIZATION_AND_ASSERTED_SUMMARY_CLASSIFICATION",
+        "original_scope": "Only the exact sealed full feynkit-generator package characterization at ffa76ec420642c03349ab756d2d7720ab93c0057:420 discovered identities,371 ordinary nonignored selected outer tests, explicit oracle loop pool1, unchanged ci_gammaloop policy, one retained actual package run, and classification of all69 failed asserted Summaries. Registration tests retain their own explicit pools. This is approval of characterization, not a green package or a new native run.",
+        "sealed_external_entries": 44
+      },
+      {
+        "id": "raw-three",
+        "original_review": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-raw-three-integration-astra-20261031-012811Z-323f4486/review.json",
+        "review": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/raw-three/review.json",
+        "sha256": "535b792610c531b446d8beb1a9f300246e6d498e8126509b637189e8eb80a091",
+        "verdict": "APPROVE_BOUNDED_RAW_THREE_QED_QCD_INTEGRATION",
+        "original_scope": "Only the exact three separately approved numerator tokens on accepted SM base5ea4, actual new ffa76ec package archive and ELF, twelve selected full-Row tests at pools1/8/32, fresh pool1 public physical capture joins, and additive committed evidence/Typst/registry through d0fb4. Root disposition remains separate; no integration-bookmark advance or publication approval.",
+        "sealed_external_entries": 209
+      },
+      {
+        "id": "host-prior",
+        "original_review": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-host-browser-stub-astra-20261031-013106Z-5655cc61/review.json",
+        "review": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/host-prior/review.json",
+        "sha256": "8bd31e92448a517479fb2f2ec5a12c9999c31752cea08502392f290c47e37627",
+        "verdict": null,
+        "original_scope": "Approval is hash-bound to H/B/S and the exact f47 artifacts. It covers actual listed passes, not a fully qualified host. No source46, full Community, source/pin/bridge proposal, global integration/WP3, full docs/site/widget, performance, publication, migration, or new native-build approval.",
+        "sealed_external_entries": 126
+      },
+      {
+        "id": "grouped-none",
+        "original_review": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-none-aggregation-astra-20261030-independent-b1/review.json",
+        "review": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/grouped-none/review.json",
+        "sha256": "45368ac2dc5783a6ba31daa9b7e8bd7f03a80746bf3b07b6d3e34cc909adcb81",
+        "verdict": "APPROVE_PINNED_CONDITIONAL_NONE_AGGREGATE_AND_HELPER_DURABILITY",
+        "original_scope": {
+          "case": "xs_qed_eemm_identical_L2",
+          "classes": "None",
+          "grouping": "Identical",
+          "settings": {
+            "check_canonical_numerator": false,
+            "differentiate_particle_masses_only": true,
+            "fully_numerical_substitution": false,
+            "number_of_numerical_samples": 5,
+            "numerical_sample_seed": 3,
+            "symmetric_polarizations": false
+          },
+          "naming": "D",
+          "generation_pool": 1,
+          "code": "5ba04864ca506e259d9eef4a54f65acdd8323fc2",
+          "dependency_archive_code": "5ea149ffd88ae3afc4072a38c0871c1329be8424",
+          "kernel": "8eb7c3729d6abefc916decc1bdf0c06536f8af80"
+        },
+        "sealed_external_entries": 54
+      },
+      {
+        "id": "grouped-auto",
+        "original_review": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-auto-aggregation-astra-20261031-independent-r1-1793413266607828149/review.json",
+        "review": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/grouped-auto/review.json",
+        "sha256": "e4ca45aff35c11bbd6397a32265502f79ff6b622141c1fe75214f17f830919db",
+        "verdict": "APPROVE",
+        "original_scope": null,
+        "sealed_external_entries": 41
+      },
+      {
+        "id": "finite-runner-r3",
+        "original_review": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-interface-runner-r3-astra-20261031-020333Z-4003b785/review.json",
+        "review": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/finite-runner-r3/review.json",
+        "sha256": "b370752781691d7286766047658ca518a4a898a463c76df26226f2f114d43a62",
+        "verdict": "APPROVE",
+        "original_scope": null,
+        "sealed_external_entries": 254
+      },
+      {
+        "id": "source-r4",
+        "original_review": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-feynkit-refresh-source-opus-round4-20261030T201146Z-697912d5/review.json",
+        "review": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/source-r4/review.json",
+        "sha256": "5d9db6c6d385bd25ea9e276a2a1ebd2e95c0678171854e4ccb73a1362130e1af",
+        "verdict": "APPROVE_SOURCE_RECONCILIATION",
+        "original_scope": null,
+        "sealed_external_entries": 115
+      },
+      {
+        "id": "shared-scope-a",
+        "original_review": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-feynkit-refresh-shared-provenance-opus-20261030T193404Z-3c0453ff/review.json",
+        "review": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/shared-scope-a/review.json",
+        "sha256": "565caeace0112a30fb9118f94b2bb759e4267d2b802395c314e485b89b4b2b70",
+        "verdict": "APPROVE_SHARED_SCOPE_A",
+        "original_scope": null,
+        "sealed_external_entries": 0
+      },
+      {
+        "id": "metadata-48d0",
+        "original_review": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-refresh-aggregation-astra-20261030-independent/review.json",
+        "review": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/metadata-48d0/review.json",
+        "sha256": "567fba9cfa9287478d5c1531fd46eac49c79f4cd6fbcc878c50bd364cf279342",
+        "verdict": "APPROVE_FOCUSED_METADATA_AGGREGATION",
+        "original_scope": null,
+        "sealed_external_entries": 63
+      },
+      {
+        "id": "source46",
+        "original_review": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/.local/review-main46-round4-opus-rZyrnOS8/review.json",
+        "review": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/source46/review.json",
+        "sha256": "ee6e37ee207747d4f65c6a45b619412738af3248a65301b396768f27f5227e22",
+        "verdict": "APPROVE",
+        "original_scope": null,
+        "sealed_external_entries": 0
+      },
+      {
+        "id": "xs-original-a",
+        "original_review": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/.local/review-xs-qed-l2-integration-a-opus-20261030T111536Z-1321089/review.json",
+        "review": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/xs-original-a/review.json",
+        "sha256": "0b5319a43da8e19100dd19a9c4647a03b95ffba1ac90a23749b0c348e95375a6",
+        "verdict": "APPROVE_SCOPE_A_BOUNDED",
+        "original_scope": "A: producer, runtime, pool, Row/mode and remaining-failure evidence. Peer B owns finite proof/docs/registry/hash-closure replay.",
+        "sealed_external_entries": 0
+      },
+      {
+        "id": "xs-original-b",
+        "original_review": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/.local/review-xs-qed-l2-integration-b-opus-20261030T111614Z-1341306/review.json",
+        "review": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/xs-original-b/review.json",
+        "sha256": "f94b819f13740dc7674991c7db8bcf33aa14088b60fa973114aadd805281f0c4",
+        "verdict": "APPROVE_SCOPE_B_WITH_NONBLOCKING_FINDINGS",
+        "original_scope": "B: certificate closure/application, registry, documentation and final evidence (items 1-7 of the root brief). Producer provenance, 452-unit closure, fresh 24 tests/Rows and full-lane execution are peer A's; covered here only by cross-reference/consistency.",
+        "sealed_external_entries": 0
+      },
+      {
+        "id": "grouped-preparation",
+        "original_review": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-identical-migration-astra-20261031-024225Z-1469f5e4/review.json",
+        "review": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/grouped-preparation/review.json",
+        "sha256": "7d96505dcb700eeae42b5a4e87676551ba910cb660df586cafe34d6b90e944f1",
+        "verdict": "APPROVE",
+        "original_scope": null,
+        "sealed_external_entries": 43
+      },
+      {
+        "id": "grouped-applied-r3",
+        "original_review": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-grouped-identical-B1-r3-astra-20261031-DSnqH402/review.json",
+        "review": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/grouped-applied-r3/review.json",
+        "sha256": "66db3d6dd9886e072fabdd78f3dab82d669b17408e5e05c10709f50e5eba9d7c",
+        "verdict": "APPROVE",
+        "original_scope": null,
+        "sealed_external_entries": 19
+      },
+      {
+        "id": "grouped-applied-original",
+        "original_review": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-grouped-identical-integration-astra-20261031-033116Z-c0749b38/review.json",
+        "review": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/grouped-applied-original/review.json",
+        "sha256": "0f0851e068653202a7981e71b4d5ccf54316d1bf544caa0725f99cc1794066f4",
+        "verdict": "REQUEST_CHANGES",
+        "original_scope": null,
+        "sealed_external_entries": 125
+      },
+      {
+        "id": "prior-eight",
+        "original_review": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-prior-eight-fresh8eb-math-opus-20261030T202304Z-bf443319/review.json",
+        "review": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/reviews/prior-eight/review.json",
+        "sha256": "5a50135038065414bc667667244378677ff44ac4f632e733b8bbd0bba451cf8b",
+        "verdict": "APPROVE_PRIOR_EIGHT_FINITE_APPLICATION",
+        "original_scope": null,
+        "sealed_external_entries": 0
+      }
+    ],
+    "combined_review": "Unassigned: root must obtain a NEW independent review of this exact conjunction; constituent approvals alone do not approve it.",
+    "bounded_grouped": {
+      "root_disposition": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/root-dispositions/root-grouped-applied-integration-acceptance-20261031.json",
+      "scope": "ENTIRE corrected bounded applied grouped conjunction at7f, not durability alone",
+      "archive_sha256": "ba02f91fc47a35b03cc9d51dded39836a7635bdf423c6025ab6e4775c504fc35",
+      "oracle_elf_sha256": "7f00172ace12f04ef53d51a70e6ac4a12248e05e3d61edbde42e5e02079f5c81",
+      "migrated_rows": 13,
+      "actual_runtime_passes": 39,
+      "pools": [
+        1,
+        8,
+        32
+      ],
+      "public_files": 5,
+      "owner_associations": 2124,
+      "full_Row": "Only literal Classes::None; Auto physical captures and captured search-counter premises separately retained. Pools8/32 are runtime evidence only.",
+      "proof": "Independent current raw30 plus separate None/Auto P1-P5. Both operand AND output-axis maps; finite current named logical consumers with validated canonical p/p-inverse. No historical grouped producer upgrade, dense/positional/general decoder/import/locality/full-integrand theorem.",
+      "historical_B1": "Old7c review0f0851e remains REQUEST_CHANGES:412/425 closure and13 missing logs. Repaired7f425/425 plus29 subordinate entries accepted by66db3d6d. Prior positive39freshchecks reused by correction; zero additional native runs."
+    },
+    "prior_full_generator_pool1": {
+      "source": "ffa76ec420642c03349ab756d2d7720ab93c0057",
+      "inventory": 420,
+      "selected": 371,
+      "passed": 302,
+      "failed": 69,
+      "ignored": 49,
+      "fresh": false,
+      "meaning": "Actual prior characterization; numerator-only asserted Summary pairs are not physical proof.",
+      "derived_pending_other_identities": 68,
+      "derivation": "One of prior69 failure identities now has an accepted bounded grouped migration. This is a worklist subtraction, never a newly executed303/68/49 result.",
+      "complete_pool8_or32": false
+    },
+    "prior_twelve_rows": "Accepted raw-three integration535b7926 on SM/prior-eight prerequisites:36 actual full-Row None checks at1/8/32 and15 pool1 physical joins; mode-specific physical Auto and observer/whole-definition/complete operand-output maps retained.",
+    "host_scope": "Accepted applied stub2cf, corrected ordinary wheel and separate private RustRed7c1/kernel8eb host with8fresh independent passes. Ordinary lacksIBPFamily. Private arity1 only; tracing_max_level_info differs ordinary. Loader, wheel-vs-loose-companion and external closure qualifications retained. No production RustRed/fullCommunity.",
+    "finite_runner": "Exact finite r3 F1/F2 guards accepted under b370752/root disposition. Old verbatim pending wording does not reopen them. No generic runner/adapter/native/math approval.",
+    "source46": "Cumulative79dfeaab approval is real and source/profile/kernel-bound. No repeat implementation. New8eb consumer qualification is separate.",
+    "production_core_API_evaluator": {
+      "status": "ACTIVE_SIBLING_NO_COMPLETION_OR_RUNTIME_RESULTS_SUPPLIED",
+      "source": "2cfb52b28d99f92305a9d571bbe3911cf04b8a19",
+      "producer_roots": 6,
+      "source_filter_transition": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/compiled-input-invariance.json",
+      "positive_runtime_credit_here": 0,
+      "limits": "No producer completion, current native discovery counts or runtime passes inferred. Source/filter byte comparison does not replace exact derivation or runtime qualification."
+    },
+    "next_three_QCD": {
+      "capture_review_sha256": "7ccf8f133bff073e5f428d1fabc0ebd6552aa1e04a8b7edd149f526b37330aa7",
+      "capture_scope": "12invocations;6oldpass/6current101;24worlds only",
+      "preparation_review_sha256": "62dade9062105a077ae6089d7e261742d57d63d9d07737b020c9b3098a71db95",
+      "preparation_status": "REQUEST_CHANGES: PREP1 fold endpoints; PREP2 live case/mode. r2 repair/supervisor ACTIVE, no completion supplied.",
+      "math_interface_native21_migration_approval": false
+    },
+    "remaining_gates": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/current-status-matrix.json",
+    "WP3": "incomplete",
+    "M_rebuild": "not claimed",
+    "all_numerator_migrations_blanket_prerequisite": false,
+    "proposed_local_bookmark_advance": {
+      "bookmark": "generation-integration",
+      "from": "fdff0d18953348b84a0f1b7e6ab5ef703a5090de",
+      "to": "this exact frozen combined candidate, only after NEW independent combined review and root scoped disposition",
+      "performed": false,
+      "publication": "separate explicit user-go gate; no push/fetch/PR/upload/CI enable"
+    },
+    "historical_metadata": "docs/architecture/evidence/generation-integration/feynkit-refresh/combined-review-20261031/historical-snapshots.json",
+    "scope_bindings_preserved": 118,
+    "new_runtime_build_or_native_executions": 0,
+    "no_self_contained_native_proof_archive_claim": true
   }
 }

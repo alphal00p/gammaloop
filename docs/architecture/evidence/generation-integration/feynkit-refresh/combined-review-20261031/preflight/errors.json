@@ -1,0 +1,184 @@
+[
+  {
+    "stage": "bootstrap",
+    "exit_code": 127,
+    "error": "python3: command not found",
+    "effect": "no script ran"
+  },
+  {
+    "stage": "bootstrap ignore guard",
+    "exit_code": 128,
+    "error": "not a git repository; no .git in jj feature workspace",
+    "effect": "packet not created; corrected to explicit read-only main git-dir and selected work-tree"
+  },
+  {
+    "stage": "guidance search",
+    "exit_code": 1,
+    "error": "no local AGENTS.md matches under docs",
+    "effect": "ancestor paths checked individually"
+  },
+  {
+    "stage": "read presentation",
+    "error": "initial main/selected CONTRIBUTING and plan output truncated",
+    "effect": "task-relevant sections reread in bounded ranges"
+  },
+  {
+    "stage": "metadata inspection",
+    "error": "ls .git: No such file or directory",
+    "effect": "jj workspace uses ../../main/.jj/repo; no mutation"
+  },
+  {
+    "stage": "shell path inspection",
+    "error": "nix/checks.nix not present; source owners are nix/rust-workspace.nix, nix/ci.nix, nix/documentation.nix",
+    "exit_code": 2
+  },
+  {
+    "stage": "historical path search",
+    "error": "review-refresh-aggregation-opus-20261030-T231457Z-0945d088/review.json absent; actual completed review is Astra567fba9c and was read/rehashed",
+    "exit_code": 2
+  },
+  {
+    "stage": "raw evidence location",
+    "error": "target/wp3-exit-matrix and target/wp3-core-docs absent in selected refresh workspace; located preserved historical evidence in sibling generation-integration-plan/target",
+    "exit_code": 2
+  },
+  {
+    "stage": "source owner search",
+    "error": "crates/gammalooprs/src/evaluators/mod.rs does not exist; existing test_evaluation_api.rs/test_evaluation_command.rs and core-owned evaluator tests retained",
+    "exit_code": 2
+  },
+  {
+    "stage": "tensor source search",
+    "error": "crates/feynkit-tensor/src/reduction/mod.rs does not exist; owner is reduction.rs",
+    "exit_code": 2
+  },
+  {
+    "stage": "bootstrap timeout reporting",
+    "error": "KeyError: exit_code after first timed-out probe; full timeout command/result was already retained in current457-eval.json",
+    "effect": "No probe data lost; fixed output access for subsequent calls"
+  },
+  {
+    "stage": "presentation",
+    "error": "Some earlier read outputs were truncated by the tool display; exact selected sources/receipts were subsequently read as data and task-relevant excerpts reread. Immutable content bindings and historical argv are retained."
+  },
+  {
+    "record": "locked-store2cf-eval.json",
+    "argv": [
+      "nix",
+      "--offline",
+      "--option",
+      "allow-import-from-derivation",
+      "false",
+      "--option",
+      "accept-flake-config",
+      "false",
+      "eval",
+      "--json",
+      "--expr",
+      "let f=builtins.getFlake \"path:/nix/store/3sj3nw06s3vhl3j12wfp5gc3r1h6f0k3-source?narHash=sha256-RCGp7HErhoxa4nMbFUDXneWTb4992VxGY1T7eB57Rmk=\"; c=f.checks.x86_64-linux; in {source=f.outPath;selected=builtins.mapAttrs (_:d:{drvPath=d.drvPath;outPath=d.outPath;}) {core=c.gammaloop-nextest-binaries-core;integration=c.gammaloop-nextest-binaries-integration;feynkit=c.gammaloop-nextest-binaries-feynkit;spenso=c.gammaloop-nextest-binaries-spenso;docs=c.gammaloop-nextest-binaries-docs;fmt=c.gammaloop-fmt;clippy=c.gammaloop-clippy;graph=c.gammaloop-guppy-workspace-graph;};}"
+    ],
+    "exit_code": null,
+    "error": "timeout",
+    "stderr": "None",
+    "phase": "pure read/evaluation; no native qualification credit"
+  },
+  {
+    "record": "current2cf-eval.json",
+    "argv": [
+      "nix",
+      "--offline",
+      "--option",
+      "allow-import-from-derivation",
+      "false",
+      "--option",
+      "accept-flake-config",
+      "false",
+      "eval",
+      "--json",
+      "--expr",
+      "let f=builtins.getFlake \"git+file:///shared/lcnbr/dev/gammaloop/main?rev=2cfb52b28d99f92305a9d571bbe3911cf04b8a19&shallow=1&allRefs=1\"; c=f.checks.x86_64-linux; in { source=f.outPath; selected=builtins.mapAttrs (_:d: {drvPath=d.drvPath;outPath=d.outPath;}) {core=c.gammaloop-nextest-binaries-core; integration=c.gammaloop-nextest-binaries-integration; spenso=c.gammaloop-nextest-binaries-spenso; feynkit=c.gammaloop-nextest-binaries-feynkit; docs=c.gammaloop-nextest-binaries-docs; fmt=c.gammaloop-fmt; clippy=c.gammaloop-clippy; graph=c.gammaloop-guppy-workspace-graph;};}"
+    ],
+    "exit_code": null,
+    "error": "timeout",
+    "stderr": "b\"warning: could not read HEAD ref from repo at '/shared/lcnbr/dev/gammaloop/main', using 'master'\\n\"",
+    "phase": "pure read/evaluation; no native qualification credit"
+  },
+  {
+    "record": "store2cf-core-eval.json",
+    "argv": [
+      "nix",
+      "--offline",
+      "--option",
+      "allow-import-from-derivation",
+      "false",
+      "--option",
+      "accept-flake-config",
+      "false",
+      "eval",
+      "--json",
+      "--expr",
+      "let f=builtins.getFlake \"/nix/store/3sj3nw06s3vhl3j12wfp5gc3r1h6f0k3-source\"; d=f.checks.x86_64-linux.gammaloop-nextest-binaries-core; in {source=f.outPath;drvPath=d.drvPath;outPath=d.outPath;}"
+    ],
+    "exit_code": 1,
+    "error": null,
+    "stderr": "error:\n       \u2026 while calling the 'getFlake' builtin\n         at \u00abstring\u00bb:1:7:\n            1| let f=builtins.getFlake \"/nix/store/3sj3nw06s3vhl3j12wfp5gc3r1h6f0k3-source\"; d=f.checks.x86_64-linux.gammaloop-nextest-binaries-core; in {source=f.outPath;drvPath=d.drvPath;outPath=d.outPath;}\n             |       ^\n\n       error: cannot call 'getFlake' on unlocked flake reference '/nix/store/3sj3nw06s3vhl3j12wfp5gc3r1h6f0k3-source', at \u00abnone\u00bb:0 (use --impure to override)\n",
+    "phase": "pure read/evaluation; no native qualification credit"
+  },
+  {
+    "record": "code2cf-scoped-groups-eval.json",
+    "argv": [
+      "nix",
+      "--offline",
+      "--option",
+      "allow-import-from-derivation",
+      "false",
+      "--option",
+      "accept-flake-config",
+      "false",
+      "eval",
+      "--json",
+      "--expr",
+      "let f=builtins.getFlake \"git+file:///shared/lcnbr/dev/gammaloop/main?rev=2cfb52b28d99f92305a9d571bbe3911cf04b8a19&shallow=1&allRefs=1\";c=f.checks.x86_64-linux;in builtins.mapAttrs (_:d:d.drvPath) {integration=c.gammaloop-nextest-binaries-integration;feynkit=c.gammaloop-nextest-binaries-feynkit;spenso=c.gammaloop-nextest-binaries-spenso;docs=c.gammaloop-nextest-binaries-docs;fmt=c.gammaloop-fmt;graph=c.gammaloop-guppy-workspace-graph;}"
+    ],
+    "exit_code": 1,
+    "error": null,
+    "stderr": "error:\n       \u2026 while evaluating attribute 'docs'\n\n       error: attempt to call something which is not a function but a string: \"d:d.drvPath\"\n",
+    "phase": "pure read/evaluation; no native qualification credit"
+  },
+  {
+    "record": "current457-eval.json",
+    "argv": [
+      "nix",
+      "--offline",
+      "--option",
+      "allow-import-from-derivation",
+      "false",
+      "--option",
+      "accept-flake-config",
+      "false",
+      "eval",
+      "--json",
+      "--expr",
+      "let f=builtins.getFlake \"git+file:///shared/lcnbr/dev/gammaloop/main?rev=457e361d7d39e0a3daae801651f8c1dfabbf47aa&shallow=1&allRefs=1\"; p=f.packages.x86_64-linux; c=f.checks.x86_64-linux; in { source=f.outPath; checks=builtins.attrNames c; packages=builtins.filter (n: builtins.match \".*(core|test-binaries|feynkit-tensor|docs|clippy|hakari|feature|graph).*\" n != null) (builtins.attrNames p); selected=builtins.mapAttrs (_:d: {drvPath=d.drvPath;outPath=d.outPath;}) {core=c.gammaloop-nextest-binaries-core; integration=c.gammaloop-nextest-binaries-integration; spenso=c.gammaloop-nextest-binaries-spenso; feynkit=c.gammaloop-nextest-binaries-feynkit; docs=c.gammaloop-nextest-binaries-docs; fmt=c.gammaloop-fmt; clippy=c.gammaloop-clippy; graph=c.gammaloop-guppy-workspace-graph;};}"
+    ],
+    "exit_code": null,
+    "error": "timeout",
+    "stderr": "b\"warning: could not read HEAD ref from repo at '/shared/lcnbr/dev/gammaloop/main', using 'master'\\n\"",
+    "phase": "pure read/evaluation; no native qualification credit"
+  },
+  {
+    "stage": "exploratory source lookups",
+    "classification": "absence, not a project/test failure",
+    "paths": [
+      "tests/tests/test_evaluators.rs",
+      "tests/tests/test_libraries.rs",
+      "docs/AGENTS.md",
+      "docs/architecture/AGENTS.md",
+      "docs/architecture/evidence/AGENTS.md",
+      "docs/architecture/evidence/generation-integration/AGENTS.md",
+      ".local/AGENTS.md",
+      ".local/feynkit-refresh/AGENTS.md"
+    ],
+    "resolution": "Actual source owners and applicable selected root guidance read; no files created at these paths."
+  }
+]
