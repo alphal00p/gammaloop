@@ -1,0 +1,21 @@
+{
+  "id": "xs_qcd_gguu_L1--Auto--composite-owner-claim--typed8eb",
+  "status": "EXPECTED_SEMANTIC_REJECTION",
+  "validated_predicate": true,
+  "authenticated_execution": true,
+  "semantic_negative_credit": true,
+  "full_semantic_audit": {
+    "predicate": "owner vertex:0: composite owner binding",
+    "result_policy": "complete_expected_error_envelope"
+  },
+  "receipt_sha256": "ac4f369ec64e27e455b978716fbf8f411011a6fad4e6dcebf124d9596d5acfe9",
+  "outcome_sha256": "ac4f369ec64e27e455b978716fbf8f411011a6fad4e6dcebf124d9596d5acfe9",
+  "artifact_hashes": {
+    "command.json": "2fd07acd41333f11dfee956707772e42178173e6818ece833174c9bc92494d45",
+    "stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stderr": "238f4183dffee6ab39e803c42de53f2b524b24bbc1d7237fd7dea85b52b2f568",
+    "results.json": "d0c5367f3e57f833c297c13592e523e746b1c13cc695330901997b2ce8c9aa93"
+  },
+  "process_reaped": true,
+  "runtime_private_pipe_observation": "Native process reached declared source predicate through unchanged reviewed anonymous-pipe bridge; source premise, no inner PID/secret attestation."
+}

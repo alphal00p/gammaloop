@@ -1,0 +1,155 @@
+[
+  {
+    "argv": [
+      "jj",
+      "--config",
+      "user.name=\"Lucien Huber\"",
+      "--config",
+      "user.email=\"im@lcnbr.ch\"",
+      "log",
+      "--no-graph",
+      "-r",
+      "@",
+      "-T",
+      "commit_id"
+    ],
+    "exit": 0,
+    "stdout": "bd2642ac1a5cfd9d9bae35f5ada68360b62a2535",
+    "stderr": ""
+  },
+  {
+    "argv": [
+      "jj",
+      "--config",
+      "user.name=\"Lucien Huber\"",
+      "--config",
+      "user.email=\"im@lcnbr.ch\"",
+      "bookmark",
+      "create",
+      "generation-next-qcd-migration-start-20261031",
+      "-r",
+      "@"
+    ],
+    "exit": 0,
+    "stdout": "",
+    "stderr": "Created 1 bookmarks pointing to upwtumur bd2642ac generation-next-qcd-migration-start-20261031 | (empty) await independent combined refresh review\n"
+  },
+  {
+    "argv": [
+      "jj",
+      "--config",
+      "user.name=\"Lucien Huber\"",
+      "--config",
+      "user.email=\"im@lcnbr.ch\"",
+      "metaedit",
+      "--author",
+      "Lucien Huber <im@lcnbr.ch>",
+      "-m",
+      "migrate three approved QCD numerator expectations"
+    ],
+    "exit": 0,
+    "stdout": "",
+    "stderr": "Modified 1 commits:\n  upwtumur 432b6544 generation-next-qcd-migration-start-20261031 | migrate three approved QCD numerator expectations\nWorking copy  (@) now at: upwtumur 432b6544 generation-next-qcd-migration-start-20261031 | migrate three approved QCD numerator expectations\nParent commit (@-)      : vvnnxpqn 83276dc0 generation-combined-refresh-candidate-20261031 generation-combined-refresh-evidence-20261031 generation-integration* | freeze combined refresh evidence and historical review attribution\n"
+  },
+  {
+    "argv": [
+      "jj",
+      "--config",
+      "user.name=\"Lucien Huber\"",
+      "--config",
+      "user.email=\"im@lcnbr.ch\"",
+      "log",
+      "--no-graph",
+      "-r",
+      "@",
+      "-T",
+      "commit_id"
+    ],
+    "exit": 0,
+    "stdout": "432b6544f3d2d884f6efffb8be104ae5820183b0",
+    "stderr": ""
+  },
+  {
+    "argv": [
+      "jj",
+      "--config",
+      "user.name=\"Lucien Huber\"",
+      "--config",
+      "user.email=\"im@lcnbr.ch\"",
+      "diff",
+      "--from",
+      "83276dc0",
+      "--to",
+      "432b6544f3d2d884f6efffb8be104ae5820183b0",
+      "--name-only"
+    ],
+    "exit": 0,
+    "stdout": "crates/feynkit-generator/tests/generation_oracle/main.rs\n",
+    "stderr": ""
+  },
+  {
+    "argv": [
+      "jj",
+      "--config",
+      "user.name=\"Lucien Huber\"",
+      "--config",
+      "user.email=\"im@lcnbr.ch\"",
+      "log",
+      "--no-graph",
+      "-r",
+      "432b6544f3d2d884f6efffb8be104ae5820183b0",
+      "-T",
+      "author.name() ++ \" <\" ++ author.email() ++ \">\""
+    ],
+    "exit": 0,
+    "stdout": "Lucien Huber <im@lcnbr.ch>",
+    "stderr": ""
+  },
+  {
+    "argv": [
+      "jj",
+      "--config",
+      "user.name=\"Lucien Huber\"",
+      "--config",
+      "user.email=\"im@lcnbr.ch\"",
+      "bookmark",
+      "create",
+      "generation-next-qcd-migration-code-20261031",
+      "-r",
+      "432b6544f3d2d884f6efffb8be104ae5820183b0"
+    ],
+    "exit": 0,
+    "stdout": "",
+    "stderr": "Created 1 bookmarks pointing to upwtumur 432b6544 generation-next-qcd-migration-code-20261031 generation-next-qcd-migration-start-20261031 | migrate three approved QCD numerator expectations\n"
+  },
+  {
+    "argv": [
+      "jj",
+      "--config",
+      "user.name=\"Lucien Huber\"",
+      "--config",
+      "user.email=\"im@lcnbr.ch\"",
+      "new",
+      "-m",
+      "qualify postapplication QCD migration evidence"
+    ],
+    "exit": 0,
+    "stdout": "",
+    "stderr": "Working copy  (@) now at: pxnlslqm a8ed0dcc (empty) qualify postapplication QCD migration evidence\nParent commit (@-)      : upwtumur 432b6544 generation-next-qcd-migration-code-20261031 generation-next-qcd-migration-start-20261031 | migrate three approved QCD numerator expectations\n"
+  },
+  {
+    "argv": [
+      "jj",
+      "--config",
+      "user.name=\"Lucien Huber\"",
+      "--config",
+      "user.email=\"im@lcnbr.ch\"",
+      "metaedit",
+      "--author",
+      "Lucien Huber <im@lcnbr.ch>"
+    ],
+    "exit": 0,
+    "stdout": "",
+    "stderr": "Nothing changed.\n"
+  }
+]

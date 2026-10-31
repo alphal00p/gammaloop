@@ -1,0 +1,19 @@
+{
+  "completed": "2026-10-31T07:32:12.466842+00:00",
+  "source": "432b6544f3d2d884f6efffb8be104ae5820183b0",
+  "selected_archive": "/nix/store/w2y0rfjpbxnnr5cw05hxzl7rbz549hs1-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0.drv",
+  "all_nix_queries_complete": true,
+  "all_closure_and_compiler_profile_queries_complete": true,
+  "no_nix_or_Rust_compiler_in_licensed_phase": true,
+  "license_keys_removed": [
+    "SYMBOLICA_LICENSE",
+    "SYMBOLICA_LICENSE_PATH",
+    "SYMBOLICA_LICENSE_SIGNED",
+    "SYMBOLICA_LICENSE_FILE"
+  ],
+  "one_selected_build_invocation": true,
+  "actual_closure_units": 452,
+  "Nix_commands": 30,
+  "qualification_complete_before_licensed_phase": true,
+  "static_Typst_after_runtime": "Separate unlicensed phase only; no Rust compiler or broader docs build"
+}

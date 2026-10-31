@@ -1,0 +1,21 @@
+{
+  "id": "xs_qcd_gggg_L1--None--metric-owner-claim--typed8eb",
+  "status": "EXPECTED_SEMANTIC_REJECTION",
+  "validated_predicate": true,
+  "authenticated_execution": true,
+  "semantic_negative_credit": true,
+  "full_semantic_audit": {
+    "predicate": "owner vertex:3: metric owner binding",
+    "result_policy": "complete_expected_error_envelope"
+  },
+  "receipt_sha256": "c85301d06f7f9caa6ef8fbbd7e67eee276b8e82e077a1b9b81268af0f3b72717",
+  "outcome_sha256": "c85301d06f7f9caa6ef8fbbd7e67eee276b8e82e077a1b9b81268af0f3b72717",
+  "artifact_hashes": {
+    "command.json": "cd8b5eb8be5577428a6641fb95676853484f475ac40bbba5489677bfd99ef503",
+    "stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stderr": "86a85388503d05c0eff11abf9d21c6a15e814f3ee75f2df9b33e5a263391adbe",
+    "results.json": "720056848d462bd0c4386d85330cb7bee2ef1b484881d970d85e6760fc3462f5"
+  },
+  "process_reaped": true,
+  "runtime_private_pipe_observation": "Native process reached declared source predicate through unchanged reviewed anonymous-pipe bridge; source premise, no inner PID/secret attestation."
+}

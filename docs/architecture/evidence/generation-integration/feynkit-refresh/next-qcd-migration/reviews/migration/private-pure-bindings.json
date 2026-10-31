@@ -1,0 +1,16 @@
+[
+  {
+    "original": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/pure_parser.py",
+    "private_copy": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-next-qcd-migration-astra-20261031-efvezb1p/pure/pure_parser.py",
+    "sha256": "c1f3913881382cdd2444d66fecc482df82ee09e1b11266ad9c1449626a9c9a57",
+    "bytes": 6371,
+    "audited_imports": "stdlib and private pure_parser only; no runtime wrappers"
+  },
+  {
+    "original": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/strict_owners.py",
+    "private_copy": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-next-qcd-migration-astra-20261031-efvezb1p/pure/strict_owners.py",
+    "sha256": "f7cd8c3a40ea090234c7b702999c318e7db1008e39359cf563db12472118e4d6",
+    "bytes": 5154,
+    "audited_imports": "stdlib and private pure_parser only; no runtime wrappers"
+  }
+]

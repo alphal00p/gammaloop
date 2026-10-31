@@ -1,0 +1,19 @@
+{
+  "schema": "next-qcd-not-applied-migration-preparation-seal/1",
+  "status": "NOT_APPLIED_PREPARATORY_CANDIDATE_READY_FOR_ROOT_JOIN_AFTER_SCIENTIFIC_VERDICT",
+  "gates": [
+    "SCIENTIFIC_INTERFACE_REVIEW_PENDING",
+    "NEW_MIGRATION_REVIEW_REQUIRED"
+  ],
+  "manifest_sha256": "7c8c48341828a16d00b4f692f6ce3941d35b5679e73eac2fd4176f139942b503",
+  "files": 122,
+  "handoff_sha256": "1b69607db0184093de3b16d32541d6f7a5a3f00968b85694685a6d17fb1506b3",
+  "patch_sha256": "1df84cbea910df5ff092203ff6050e785bccf0027bd627b91a601d1f7b98cf84",
+  "before_blob": "7283198bf0152c82c1cd5f0173703cddfa7f5c0f",
+  "after_blob": "cc4505a6c4f6fc1687c075ed79e154a8e19f05a6",
+  "external_input_manifest_sha256": "600ced69f0172b82a4043aa3d2a255e270c9782a79726f4d745ab93d3cc40e6e",
+  "self_contained": false,
+  "applied": false,
+  "approval": false,
+  "owned_processes": 0
+}

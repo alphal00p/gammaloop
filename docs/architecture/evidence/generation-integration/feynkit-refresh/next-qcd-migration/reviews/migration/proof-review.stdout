@@ -1,0 +1,1 @@
+PASS complete scientific join:600 exact owners,96 full factor products,166/118 native partitions and4268 references, both operand/output axes; actual integer plans/folds checked.

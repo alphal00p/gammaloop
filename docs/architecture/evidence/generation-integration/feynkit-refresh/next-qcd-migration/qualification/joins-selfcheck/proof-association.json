@@ -1,0 +1,9539 @@
+{
+  "status": "EXACT_FRESH_PUBLIC_SOURCE_AND_PRIOR_PROOF_ASSOCIATIONS_VERIFIED",
+  "approval": false,
+  "new_native_or_math_credit": 0,
+  "actual_native_report": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-native-execution-20261031-r1/report.json",
+    "sha256": "3baf87d1d031f790b753bb944d2a4c180f0620297b7808ad348dfa7ea65c76f0",
+    "bytes": 5053
+  },
+  "counts": {
+    "changed_owner_lowerings": 210,
+    "owners": 600,
+    "unchanged_conditional_inputs": 390,
+    "selected_pairs": 1890,
+    "fold_steps": 456
+  },
+  "graphs": [
+    {
+      "case": "xs_qcd_gguu_sym_L1",
+      "mode": "None",
+      "id": "6170f31e6eb07c29aac54d0c6cc14371",
+      "full_key": {
+        "edges": [
+          {
+            "diagram": {
+              "external": null,
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 0,
+                "index": 0,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 1,
+                "index": 1,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": null,
+              "is_dummy": false,
+              "particle": 3
+            }
+          },
+          "cut_pair",
+          "cut_membership"
+        ],
+        "half_edges": [
+          null,
+          0,
+          1,
+          2
+        ],
+        "vertices": [
+          {
+            "diagram": {
+              "interaction": 1
+            }
+          },
+          {
+            "diagram": {
+              "interaction": 6
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "left"
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "right"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "left"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "right"
+            }
+          }
+        ],
+        "words": [
+          8,
+          28,
+          0,
+          0,
+          1,
+          1,
+          2,
+          3,
+          4,
+          5,
+          4,
+          6,
+          2,
+          18,
+          36,
+          1,
+          36,
+          66,
+          1,
+          66,
+          120,
+          5,
+          120,
+          4,
+          6,
+          3,
+          18,
+          36,
+          0,
+          36,
+          66,
+          0,
+          66,
+          120,
+          4,
+          120,
+          5,
+          18,
+          0,
+          6,
+          79,
+          3,
+          86,
+          86,
+          3,
+          79,
+          120,
+          5,
+          120,
+          120,
+          7,
+          120,
+          5,
+          18,
+          1,
+          6,
+          79,
+          2,
+          86,
+          86,
+          2,
+          79,
+          120,
+          4,
+          120,
+          120,
+          6,
+          120,
+          3,
+          96,
+          5,
+          96,
+          120,
+          1,
+          120,
+          120,
+          3,
+          120,
+          3,
+          96,
+          4,
+          96,
+          120,
+          0,
+          120,
+          120,
+          2,
+          120,
+          2,
+          96,
+          7,
+          96,
+          120,
+          3,
+          120,
+          2,
+          96,
+          6,
+          96,
+          120,
+          2,
+          120
+        ]
+      },
+      "owners": 13,
+      "actual_output_map_required": true
+    },
+    {
+      "case": "xs_qcd_gguu_sym_L1",
+      "mode": "None",
+      "id": "4ec3077f4f3e6e2fd1fbdbfbf5ba04c0",
+      "full_key": {
+        "edges": [
+          {
+            "diagram": {
+              "external": null,
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 0,
+                "index": 0,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 1,
+                "index": 1,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": null,
+              "is_dummy": false,
+              "particle": 3
+            }
+          },
+          "cut_pair",
+          "cut_membership"
+        ],
+        "half_edges": [
+          null,
+          0,
+          1,
+          2
+        ],
+        "vertices": [
+          {
+            "diagram": {
+              "interaction": 1
+            }
+          },
+          {
+            "diagram": {
+              "interaction": 6
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "left"
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "right"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "left"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "right"
+            }
+          }
+        ],
+        "words": [
+          8,
+          30,
+          0,
+          1,
+          1,
+          1,
+          2,
+          3,
+          4,
+          5,
+          4,
+          6,
+          1,
+          18,
+          36,
+          3,
+          42,
+          66,
+          2,
+          66,
+          120,
+          5,
+          120,
+          5,
+          18,
+          0,
+          6,
+          79,
+          3,
+          86,
+          86,
+          2,
+          79,
+          120,
+          5,
+          120,
+          120,
+          7,
+          120,
+          5,
+          66,
+          0,
+          66,
+          79,
+          1,
+          86,
+          86,
+          3,
+          79,
+          120,
+          4,
+          120,
+          120,
+          6,
+          120,
+          5,
+          42,
+          0,
+          36,
+          79,
+          2,
+          86,
+          86,
+          1,
+          79,
+          120,
+          4,
+          120,
+          120,
+          6,
+          120,
+          3,
+          96,
+          5,
+          96,
+          120,
+          2,
+          120,
+          120,
+          3,
+          120,
+          3,
+          96,
+          4,
+          96,
+          120,
+          0,
+          120,
+          120,
+          1,
+          120,
+          3,
+          96,
+          7,
+          96,
+          120,
+          2,
+          120,
+          120,
+          3,
+          120,
+          2,
+          96,
+          6,
+          96,
+          120,
+          1,
+          120
+        ]
+      },
+      "owners": 13,
+      "actual_output_map_required": true
+    },
+    {
+      "case": "xs_qcd_gguu_sym_L1",
+      "mode": "None",
+      "id": "fc350794b8b5d4b2a61350028cb5b539",
+      "full_key": {
+        "edges": [
+          {
+            "diagram": {
+              "external": null,
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 0,
+                "index": 0,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 1,
+                "index": 1,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": null,
+              "is_dummy": false,
+              "particle": 3
+            }
+          },
+          "cut_pair",
+          "cut_membership"
+        ],
+        "half_edges": [
+          null,
+          0,
+          1,
+          2
+        ],
+        "vertices": [
+          {
+            "diagram": {
+              "interaction": 1
+            }
+          },
+          {
+            "diagram": {
+              "interaction": 6
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "left"
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "right"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "left"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "right"
+            }
+          }
+        ],
+        "words": [
+          8,
+          30,
+          0,
+          1,
+          1,
+          1,
+          2,
+          3,
+          4,
+          5,
+          4,
+          6,
+          1,
+          18,
+          36,
+          3,
+          42,
+          66,
+          2,
+          66,
+          120,
+          4,
+          120,
+          5,
+          18,
+          0,
+          6,
+          79,
+          2,
+          86,
+          86,
+          3,
+          79,
+          120,
+          4,
+          120,
+          120,
+          6,
+          120,
+          5,
+          66,
+          0,
+          66,
+          79,
+          3,
+          86,
+          86,
+          1,
+          79,
+          120,
+          5,
+          120,
+          120,
+          7,
+          120,
+          5,
+          42,
+          0,
+          36,
+          79,
+          1,
+          86,
+          86,
+          2,
+          79,
+          120,
+          5,
+          120,
+          120,
+          7,
+          120,
+          3,
+          96,
+          5,
+          96,
+          120,
+          0,
+          120,
+          120,
+          1,
+          120,
+          3,
+          96,
+          4,
+          96,
+          120,
+          2,
+          120,
+          120,
+          3,
+          120,
+          2,
+          96,
+          7,
+          96,
+          120,
+          1,
+          120,
+          3,
+          96,
+          6,
+          96,
+          120,
+          2,
+          120,
+          120,
+          3,
+          120
+        ]
+      },
+      "owners": 13,
+      "actual_output_map_required": true
+    },
+    {
+      "case": "xs_qcd_gguu_sym_L1",
+      "mode": "None",
+      "id": "31d0890641674e5ee9afceaff1e22206",
+      "full_key": {
+        "edges": [
+          {
+            "diagram": {
+              "external": {
+                "connection": 0,
+                "index": 0,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 1,
+                "index": 1,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": null,
+              "is_dummy": false,
+              "particle": 3
+            }
+          },
+          "cut_pair",
+          "cut_membership"
+        ],
+        "half_edges": [
+          null,
+          0,
+          1,
+          2
+        ],
+        "vertices": [
+          {
+            "diagram": {
+              "interaction": 6
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "left"
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "right"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "left"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "right"
+            }
+          }
+        ],
+        "words": [
+          8,
+          32,
+          0,
+          0,
+          0,
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          18,
+          1,
+          18,
+          55,
+          3,
+          62,
+          62,
+          2,
+          55,
+          96,
+          5,
+          96,
+          96,
+          7,
+          96,
+          5,
+          18,
+          0,
+          18,
+          55,
+          2,
+          62,
+          62,
+          3,
+          55,
+          96,
+          4,
+          96,
+          96,
+          6,
+          96,
+          5,
+          42,
+          3,
+          42,
+          55,
+          0,
+          62,
+          62,
+          1,
+          55,
+          96,
+          5,
+          96,
+          96,
+          7,
+          96,
+          5,
+          42,
+          2,
+          42,
+          55,
+          1,
+          62,
+          62,
+          0,
+          55,
+          96,
+          4,
+          96,
+          96,
+          6,
+          96,
+          3,
+          72,
+          5,
+          72,
+          96,
+          1,
+          96,
+          96,
+          3,
+          96,
+          3,
+          72,
+          4,
+          72,
+          96,
+          0,
+          96,
+          96,
+          2,
+          96,
+          3,
+          72,
+          7,
+          72,
+          96,
+          1,
+          96,
+          96,
+          3,
+          96,
+          3,
+          72,
+          6,
+          72,
+          96,
+          0,
+          96,
+          96,
+          2,
+          96
+        ]
+      },
+      "owners": 13,
+      "actual_output_map_required": true
+    },
+    {
+      "case": "xs_qcd_gguu_sym_L1",
+      "mode": "None",
+      "id": "14ac74bf7c503631cbbf625890f7ea67",
+      "full_key": {
+        "edges": [
+          {
+            "diagram": {
+              "external": {
+                "connection": 0,
+                "index": 0,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 1,
+                "index": 1,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": null,
+              "is_dummy": false,
+              "particle": 3
+            }
+          },
+          "cut_pair",
+          "cut_membership"
+        ],
+        "half_edges": [
+          null,
+          0,
+          1,
+          2
+        ],
+        "vertices": [
+          {
+            "diagram": {
+              "interaction": 6
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "left"
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "right"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "left"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "right"
+            }
+          }
+        ],
+        "words": [
+          8,
+          32,
+          0,
+          0,
+          0,
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          18,
+          1,
+          18,
+          55,
+          2,
+          62,
+          62,
+          1,
+          55,
+          96,
+          4,
+          96,
+          96,
+          6,
+          96,
+          5,
+          18,
+          0,
+          18,
+          55,
+          0,
+          62,
+          62,
+          3,
+          55,
+          96,
+          5,
+          96,
+          96,
+          7,
+          96,
+          5,
+          42,
+          3,
+          42,
+          55,
+          3,
+          62,
+          62,
+          0,
+          55,
+          96,
+          4,
+          96,
+          96,
+          6,
+          96,
+          5,
+          42,
+          2,
+          42,
+          55,
+          1,
+          62,
+          62,
+          2,
+          55,
+          96,
+          5,
+          96,
+          96,
+          7,
+          96,
+          3,
+          72,
+          5,
+          72,
+          96,
+          0,
+          96,
+          96,
+          2,
+          96,
+          3,
+          72,
+          4,
+          72,
+          96,
+          1,
+          96,
+          96,
+          3,
+          96,
+          3,
+          72,
+          7,
+          72,
+          96,
+          0,
+          96,
+          96,
+          2,
+          96,
+          3,
+          72,
+          6,
+          72,
+          96,
+          1,
+          96,
+          96,
+          3,
+          96
+        ]
+      },
+      "owners": 13,
+      "actual_output_map_required": true
+    },
+    {
+      "case": "xs_qcd_gguu_sym_L1",
+      "mode": "Auto",
+      "id": "6170f31e6eb07c29aac54d0c6cc14371",
+      "full_key": {
+        "edges": [
+          {
+            "diagram": {
+              "external": null,
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 0,
+                "index": 0,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 1,
+                "index": 1,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": null,
+              "is_dummy": false,
+              "particle": 3
+            }
+          },
+          "cut_pair",
+          "cut_membership"
+        ],
+        "half_edges": [
+          null,
+          0,
+          1,
+          2
+        ],
+        "vertices": [
+          {
+            "diagram": {
+              "interaction": 1
+            }
+          },
+          {
+            "diagram": {
+              "interaction": 6
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "left"
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "right"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "left"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "right"
+            }
+          }
+        ],
+        "words": [
+          8,
+          28,
+          0,
+          0,
+          1,
+          1,
+          2,
+          3,
+          4,
+          5,
+          4,
+          6,
+          2,
+          18,
+          36,
+          1,
+          36,
+          66,
+          1,
+          66,
+          120,
+          5,
+          120,
+          4,
+          6,
+          3,
+          18,
+          36,
+          0,
+          36,
+          66,
+          0,
+          66,
+          120,
+          4,
+          120,
+          5,
+          18,
+          0,
+          6,
+          79,
+          3,
+          86,
+          86,
+          3,
+          79,
+          120,
+          5,
+          120,
+          120,
+          7,
+          120,
+          5,
+          18,
+          1,
+          6,
+          79,
+          2,
+          86,
+          86,
+          2,
+          79,
+          120,
+          4,
+          120,
+          120,
+          6,
+          120,
+          3,
+          96,
+          5,
+          96,
+          120,
+          1,
+          120,
+          120,
+          3,
+          120,
+          3,
+          96,
+          4,
+          96,
+          120,
+          0,
+          120,
+          120,
+          2,
+          120,
+          2,
+          96,
+          7,
+          96,
+          120,
+          3,
+          120,
+          2,
+          96,
+          6,
+          96,
+          120,
+          2,
+          120
+        ]
+      },
+      "owners": 13,
+      "actual_output_map_required": true
+    },
+    {
+      "case": "xs_qcd_gguu_sym_L1",
+      "mode": "Auto",
+      "id": "4ec3077f4f3e6e2fd1fbdbfbf5ba04c0",
+      "full_key": {
+        "edges": [
+          {
+            "diagram": {
+              "external": null,
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 0,
+                "index": 0,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 1,
+                "index": 1,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": null,
+              "is_dummy": false,
+              "particle": 3
+            }
+          },
+          "cut_pair",
+          "cut_membership"
+        ],
+        "half_edges": [
+          null,
+          0,
+          1,
+          2
+        ],
+        "vertices": [
+          {
+            "diagram": {
+              "interaction": 1
+            }
+          },
+          {
+            "diagram": {
+              "interaction": 6
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "left"
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "right"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "left"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "right"
+            }
+          }
+        ],
+        "words": [
+          8,
+          30,
+          0,
+          1,
+          1,
+          1,
+          2,
+          3,
+          4,
+          5,
+          4,
+          6,
+          1,
+          18,
+          36,
+          3,
+          42,
+          66,
+          2,
+          66,
+          120,
+          5,
+          120,
+          5,
+          18,
+          0,
+          6,
+          79,
+          3,
+          86,
+          86,
+          2,
+          79,
+          120,
+          5,
+          120,
+          120,
+          7,
+          120,
+          5,
+          66,
+          0,
+          66,
+          79,
+          1,
+          86,
+          86,
+          3,
+          79,
+          120,
+          4,
+          120,
+          120,
+          6,
+          120,
+          5,
+          42,
+          0,
+          36,
+          79,
+          2,
+          86,
+          86,
+          1,
+          79,
+          120,
+          4,
+          120,
+          120,
+          6,
+          120,
+          3,
+          96,
+          5,
+          96,
+          120,
+          2,
+          120,
+          120,
+          3,
+          120,
+          3,
+          96,
+          4,
+          96,
+          120,
+          0,
+          120,
+          120,
+          1,
+          120,
+          3,
+          96,
+          7,
+          96,
+          120,
+          2,
+          120,
+          120,
+          3,
+          120,
+          2,
+          96,
+          6,
+          96,
+          120,
+          1,
+          120
+        ]
+      },
+      "owners": 13,
+      "actual_output_map_required": true
+    },
+    {
+      "case": "xs_qcd_gguu_sym_L1",
+      "mode": "Auto",
+      "id": "fc350794b8b5d4b2a61350028cb5b539",
+      "full_key": {
+        "edges": [
+          {
+            "diagram": {
+              "external": null,
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 0,
+                "index": 0,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 1,
+                "index": 1,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": null,
+              "is_dummy": false,
+              "particle": 3
+            }
+          },
+          "cut_pair",
+          "cut_membership"
+        ],
+        "half_edges": [
+          null,
+          0,
+          1,
+          2
+        ],
+        "vertices": [
+          {
+            "diagram": {
+              "interaction": 1
+            }
+          },
+          {
+            "diagram": {
+              "interaction": 6
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "left"
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "right"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "left"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "right"
+            }
+          }
+        ],
+        "words": [
+          8,
+          30,
+          0,
+          1,
+          1,
+          1,
+          2,
+          3,
+          4,
+          5,
+          4,
+          6,
+          1,
+          18,
+          36,
+          3,
+          42,
+          66,
+          2,
+          66,
+          120,
+          4,
+          120,
+          5,
+          18,
+          0,
+          6,
+          79,
+          2,
+          86,
+          86,
+          3,
+          79,
+          120,
+          4,
+          120,
+          120,
+          6,
+          120,
+          5,
+          66,
+          0,
+          66,
+          79,
+          3,
+          86,
+          86,
+          1,
+          79,
+          120,
+          5,
+          120,
+          120,
+          7,
+          120,
+          5,
+          42,
+          0,
+          36,
+          79,
+          1,
+          86,
+          86,
+          2,
+          79,
+          120,
+          5,
+          120,
+          120,
+          7,
+          120,
+          3,
+          96,
+          5,
+          96,
+          120,
+          0,
+          120,
+          120,
+          1,
+          120,
+          3,
+          96,
+          4,
+          96,
+          120,
+          2,
+          120,
+          120,
+          3,
+          120,
+          2,
+          96,
+          7,
+          96,
+          120,
+          1,
+          120,
+          3,
+          96,
+          6,
+          96,
+          120,
+          2,
+          120,
+          120,
+          3,
+          120
+        ]
+      },
+      "owners": 13,
+      "actual_output_map_required": true
+    },
+    {
+      "case": "xs_qcd_gguu_sym_L1",
+      "mode": "Auto",
+      "id": "31d0890641674e5ee9afceaff1e22206",
+      "full_key": {
+        "edges": [
+          {
+            "diagram": {
+              "external": {
+                "connection": 0,
+                "index": 0,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 1,
+                "index": 1,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": null,
+              "is_dummy": false,
+              "particle": 3
+            }
+          },
+          "cut_pair",
+          "cut_membership"
+        ],
+        "half_edges": [
+          null,
+          0,
+          1,
+          2
+        ],
+        "vertices": [
+          {
+            "diagram": {
+              "interaction": 6
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "left"
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "right"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "left"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "right"
+            }
+          }
+        ],
+        "words": [
+          8,
+          32,
+          0,
+          0,
+          0,
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          18,
+          1,
+          18,
+          55,
+          3,
+          62,
+          62,
+          2,
+          55,
+          96,
+          5,
+          96,
+          96,
+          7,
+          96,
+          5,
+          18,
+          0,
+          18,
+          55,
+          2,
+          62,
+          62,
+          3,
+          55,
+          96,
+          4,
+          96,
+          96,
+          6,
+          96,
+          5,
+          42,
+          3,
+          42,
+          55,
+          0,
+          62,
+          62,
+          1,
+          55,
+          96,
+          5,
+          96,
+          96,
+          7,
+          96,
+          5,
+          42,
+          2,
+          42,
+          55,
+          1,
+          62,
+          62,
+          0,
+          55,
+          96,
+          4,
+          96,
+          96,
+          6,
+          96,
+          3,
+          72,
+          5,
+          72,
+          96,
+          1,
+          96,
+          96,
+          3,
+          96,
+          3,
+          72,
+          4,
+          72,
+          96,
+          0,
+          96,
+          96,
+          2,
+          96,
+          3,
+          72,
+          7,
+          72,
+          96,
+          1,
+          96,
+          96,
+          3,
+          96,
+          3,
+          72,
+          6,
+          72,
+          96,
+          0,
+          96,
+          96,
+          2,
+          96
+        ]
+      },
+      "owners": 13,
+      "actual_output_map_required": true
+    },
+    {
+      "case": "xs_qcd_gguu_sym_L1",
+      "mode": "Auto",
+      "id": "14ac74bf7c503631cbbf625890f7ea67",
+      "full_key": {
+        "edges": [
+          {
+            "diagram": {
+              "external": {
+                "connection": 0,
+                "index": 0,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 1,
+                "index": 1,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": null,
+              "is_dummy": false,
+              "particle": 3
+            }
+          },
+          "cut_pair",
+          "cut_membership"
+        ],
+        "half_edges": [
+          null,
+          0,
+          1,
+          2
+        ],
+        "vertices": [
+          {
+            "diagram": {
+              "interaction": 6
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "left"
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "right"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "left"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "right"
+            }
+          }
+        ],
+        "words": [
+          8,
+          32,
+          0,
+          0,
+          0,
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          18,
+          1,
+          18,
+          55,
+          2,
+          62,
+          62,
+          1,
+          55,
+          96,
+          4,
+          96,
+          96,
+          6,
+          96,
+          5,
+          18,
+          0,
+          18,
+          55,
+          0,
+          62,
+          62,
+          3,
+          55,
+          96,
+          5,
+          96,
+          96,
+          7,
+          96,
+          5,
+          42,
+          3,
+          42,
+          55,
+          3,
+          62,
+          62,
+          0,
+          55,
+          96,
+          4,
+          96,
+          96,
+          6,
+          96,
+          5,
+          42,
+          2,
+          42,
+          55,
+          1,
+          62,
+          62,
+          2,
+          55,
+          96,
+          5,
+          96,
+          96,
+          7,
+          96,
+          3,
+          72,
+          5,
+          72,
+          96,
+          0,
+          96,
+          96,
+          2,
+          96,
+          3,
+          72,
+          4,
+          72,
+          96,
+          1,
+          96,
+          96,
+          3,
+          96,
+          3,
+          72,
+          7,
+          72,
+          96,
+          0,
+          96,
+          96,
+          2,
+          96,
+          3,
+          72,
+          6,
+          72,
+          96,
+          1,
+          96,
+          96,
+          3,
+          96
+        ]
+      },
+      "owners": 13,
+      "actual_output_map_required": true
+    },
+    {
+      "case": "xs_qcd_gguu_L1",
+      "mode": "None",
+      "id": "6170f31e6eb07c29aac54d0c6cc14371",
+      "full_key": {
+        "edges": [
+          {
+            "diagram": {
+              "external": null,
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 0,
+                "index": 0,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 1,
+                "index": 1,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": null,
+              "is_dummy": false,
+              "particle": 3
+            }
+          },
+          "cut_pair",
+          "cut_membership"
+        ],
+        "half_edges": [
+          null,
+          0,
+          1,
+          2
+        ],
+        "vertices": [
+          {
+            "diagram": {
+              "interaction": 1
+            }
+          },
+          {
+            "diagram": {
+              "interaction": 6
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "left"
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "right"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "left"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "right"
+            }
+          }
+        ],
+        "words": [
+          8,
+          28,
+          0,
+          0,
+          1,
+          1,
+          2,
+          3,
+          4,
+          5,
+          4,
+          6,
+          2,
+          18,
+          36,
+          1,
+          36,
+          66,
+          1,
+          66,
+          120,
+          5,
+          120,
+          4,
+          6,
+          3,
+          18,
+          36,
+          0,
+          36,
+          66,
+          0,
+          66,
+          120,
+          4,
+          120,
+          5,
+          18,
+          0,
+          6,
+          79,
+          3,
+          86,
+          86,
+          3,
+          79,
+          120,
+          5,
+          120,
+          120,
+          7,
+          120,
+          5,
+          18,
+          1,
+          6,
+          79,
+          2,
+          86,
+          86,
+          2,
+          79,
+          120,
+          4,
+          120,
+          120,
+          6,
+          120,
+          3,
+          96,
+          5,
+          96,
+          120,
+          1,
+          120,
+          120,
+          3,
+          120,
+          3,
+          96,
+          4,
+          96,
+          120,
+          0,
+          120,
+          120,
+          2,
+          120,
+          2,
+          96,
+          7,
+          96,
+          120,
+          3,
+          120,
+          2,
+          96,
+          6,
+          96,
+          120,
+          2,
+          120
+        ]
+      },
+      "owners": 13,
+      "actual_output_map_required": true
+    },
+    {
+      "case": "xs_qcd_gguu_L1",
+      "mode": "None",
+      "id": "4ec3077f4f3e6e2fd1fbdbfbf5ba04c0",
+      "full_key": {
+        "edges": [
+          {
+            "diagram": {
+              "external": null,
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 0,
+                "index": 0,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 1,
+                "index": 1,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": null,
+              "is_dummy": false,
+              "particle": 3
+            }
+          },
+          "cut_pair",
+          "cut_membership"
+        ],
+        "half_edges": [
+          null,
+          0,
+          1,
+          2
+        ],
+        "vertices": [
+          {
+            "diagram": {
+              "interaction": 1
+            }
+          },
+          {
+            "diagram": {
+              "interaction": 6
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "left"
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "right"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "left"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "right"
+            }
+          }
+        ],
+        "words": [
+          8,
+          30,
+          0,
+          1,
+          1,
+          1,
+          2,
+          3,
+          4,
+          5,
+          4,
+          6,
+          1,
+          18,
+          36,
+          3,
+          42,
+          66,
+          2,
+          66,
+          120,
+          5,
+          120,
+          5,
+          18,
+          0,
+          6,
+          79,
+          3,
+          86,
+          86,
+          2,
+          79,
+          120,
+          5,
+          120,
+          120,
+          7,
+          120,
+          5,
+          66,
+          0,
+          66,
+          79,
+          1,
+          86,
+          86,
+          3,
+          79,
+          120,
+          4,
+          120,
+          120,
+          6,
+          120,
+          5,
+          42,
+          0,
+          36,
+          79,
+          2,
+          86,
+          86,
+          1,
+          79,
+          120,
+          4,
+          120,
+          120,
+          6,
+          120,
+          3,
+          96,
+          5,
+          96,
+          120,
+          2,
+          120,
+          120,
+          3,
+          120,
+          3,
+          96,
+          4,
+          96,
+          120,
+          0,
+          120,
+          120,
+          1,
+          120,
+          3,
+          96,
+          7,
+          96,
+          120,
+          2,
+          120,
+          120,
+          3,
+          120,
+          2,
+          96,
+          6,
+          96,
+          120,
+          1,
+          120
+        ]
+      },
+      "owners": 13,
+      "actual_output_map_required": true
+    },
+    {
+      "case": "xs_qcd_gguu_L1",
+      "mode": "None",
+      "id": "ae57dde2bc65dc277a5257d49ccc59fe",
+      "full_key": {
+        "edges": [
+          {
+            "diagram": {
+              "external": null,
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 0,
+                "index": 0,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 1,
+                "index": 1,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": null,
+              "is_dummy": false,
+              "particle": 3
+            }
+          },
+          "cut_pair",
+          "cut_membership"
+        ],
+        "half_edges": [
+          null,
+          0,
+          1,
+          2
+        ],
+        "vertices": [
+          {
+            "diagram": {
+              "interaction": 1
+            }
+          },
+          {
+            "diagram": {
+              "interaction": 6
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "left"
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "right"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "left"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "right"
+            }
+          }
+        ],
+        "words": [
+          8,
+          30,
+          0,
+          1,
+          1,
+          1,
+          2,
+          3,
+          4,
+          5,
+          4,
+          6,
+          1,
+          18,
+          36,
+          3,
+          42,
+          66,
+          2,
+          66,
+          120,
+          5,
+          120,
+          5,
+          18,
+          0,
+          6,
+          79,
+          2,
+          86,
+          86,
+          3,
+          79,
+          120,
+          5,
+          120,
+          120,
+          7,
+          120,
+          5,
+          66,
+          0,
+          66,
+          79,
+          3,
+          86,
+          86,
+          1,
+          79,
+          120,
+          4,
+          120,
+          120,
+          6,
+          120,
+          5,
+          42,
+          0,
+          36,
+          79,
+          1,
+          86,
+          86,
+          2,
+          79,
+          120,
+          4,
+          120,
+          120,
+          6,
+          120,
+          3,
+          96,
+          5,
+          96,
+          120,
+          2,
+          120,
+          120,
+          3,
+          120,
+          3,
+          96,
+          4,
+          96,
+          120,
+          0,
+          120,
+          120,
+          1,
+          120,
+          3,
+          96,
+          7,
+          96,
+          120,
+          2,
+          120,
+          120,
+          3,
+          120,
+          2,
+          96,
+          6,
+          96,
+          120,
+          1,
+          120
+        ]
+      },
+      "owners": 13,
+      "actual_output_map_required": true
+    },
+    {
+      "case": "xs_qcd_gguu_L1",
+      "mode": "None",
+      "id": "7ce5089571bbba80ae6bc324a1c58721",
+      "full_key": {
+        "edges": [
+          {
+            "diagram": {
+              "external": null,
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 0,
+                "index": 0,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 1,
+                "index": 1,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": null,
+              "is_dummy": false,
+              "particle": 3
+            }
+          },
+          "cut_pair",
+          "cut_membership"
+        ],
+        "half_edges": [
+          null,
+          0,
+          1,
+          2
+        ],
+        "vertices": [
+          {
+            "diagram": {
+              "interaction": 1
+            }
+          },
+          {
+            "diagram": {
+              "interaction": 6
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "left"
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "right"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "left"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "right"
+            }
+          }
+        ],
+        "words": [
+          8,
+          30,
+          0,
+          1,
+          1,
+          1,
+          2,
+          3,
+          4,
+          5,
+          4,
+          6,
+          1,
+          18,
+          36,
+          3,
+          42,
+          66,
+          2,
+          66,
+          120,
+          4,
+          120,
+          5,
+          18,
+          0,
+          6,
+          79,
+          3,
+          86,
+          86,
+          2,
+          79,
+          120,
+          4,
+          120,
+          120,
+          6,
+          120,
+          5,
+          66,
+          0,
+          66,
+          79,
+          1,
+          86,
+          86,
+          3,
+          79,
+          120,
+          5,
+          120,
+          120,
+          7,
+          120,
+          5,
+          42,
+          0,
+          36,
+          79,
+          2,
+          86,
+          86,
+          1,
+          79,
+          120,
+          5,
+          120,
+          120,
+          7,
+          120,
+          3,
+          96,
+          5,
+          96,
+          120,
+          0,
+          120,
+          120,
+          1,
+          120,
+          3,
+          96,
+          4,
+          96,
+          120,
+          2,
+          120,
+          120,
+          3,
+          120,
+          2,
+          96,
+          7,
+          96,
+          120,
+          1,
+          120,
+          3,
+          96,
+          6,
+          96,
+          120,
+          2,
+          120,
+          120,
+          3,
+          120
+        ]
+      },
+      "owners": 13,
+      "actual_output_map_required": true
+    },
+    {
+      "case": "xs_qcd_gguu_L1",
+      "mode": "None",
+      "id": "fc350794b8b5d4b2a61350028cb5b539",
+      "full_key": {
+        "edges": [
+          {
+            "diagram": {
+              "external": null,
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 0,
+                "index": 0,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 1,
+                "index": 1,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": null,
+              "is_dummy": false,
+              "particle": 3
+            }
+          },
+          "cut_pair",
+          "cut_membership"
+        ],
+        "half_edges": [
+          null,
+          0,
+          1,
+          2
+        ],
+        "vertices": [
+          {
+            "diagram": {
+              "interaction": 1
+            }
+          },
+          {
+            "diagram": {
+              "interaction": 6
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "left"
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "right"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "left"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "right"
+            }
+          }
+        ],
+        "words": [
+          8,
+          30,
+          0,
+          1,
+          1,
+          1,
+          2,
+          3,
+          4,
+          5,
+          4,
+          6,
+          1,
+          18,
+          36,
+          3,
+          42,
+          66,
+          2,
+          66,
+          120,
+          4,
+          120,
+          5,
+          18,
+          0,
+          6,
+          79,
+          2,
+          86,
+          86,
+          3,
+          79,
+          120,
+          4,
+          120,
+          120,
+          6,
+          120,
+          5,
+          66,
+          0,
+          66,
+          79,
+          3,
+          86,
+          86,
+          1,
+          79,
+          120,
+          5,
+          120,
+          120,
+          7,
+          120,
+          5,
+          42,
+          0,
+          36,
+          79,
+          1,
+          86,
+          86,
+          2,
+          79,
+          120,
+          5,
+          120,
+          120,
+          7,
+          120,
+          3,
+          96,
+          5,
+          96,
+          120,
+          0,
+          120,
+          120,
+          1,
+          120,
+          3,
+          96,
+          4,
+          96,
+          120,
+          2,
+          120,
+          120,
+          3,
+          120,
+          2,
+          96,
+          7,
+          96,
+          120,
+          1,
+          120,
+          3,
+          96,
+          6,
+          96,
+          120,
+          2,
+          120,
+          120,
+          3,
+          120
+        ]
+      },
+      "owners": 13,
+      "actual_output_map_required": true
+    },
+    {
+      "case": "xs_qcd_gguu_L1",
+      "mode": "None",
+      "id": "ad0818e3abc13783bfcc2695b849034d",
+      "full_key": {
+        "edges": [
+          {
+            "diagram": {
+              "external": {
+                "connection": 0,
+                "index": 0,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 1,
+                "index": 1,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": null,
+              "is_dummy": false,
+              "particle": 3
+            }
+          },
+          "cut_pair",
+          "cut_membership"
+        ],
+        "half_edges": [
+          null,
+          0,
+          1,
+          2
+        ],
+        "vertices": [
+          {
+            "diagram": {
+              "interaction": 6
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "left"
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "right"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "left"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "right"
+            }
+          }
+        ],
+        "words": [
+          8,
+          32,
+          0,
+          0,
+          0,
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          18,
+          1,
+          18,
+          55,
+          2,
+          62,
+          62,
+          3,
+          55,
+          96,
+          5,
+          96,
+          96,
+          7,
+          96,
+          5,
+          18,
+          0,
+          18,
+          55,
+          3,
+          62,
+          62,
+          2,
+          55,
+          96,
+          4,
+          96,
+          96,
+          6,
+          96,
+          5,
+          42,
+          3,
+          42,
+          55,
+          1,
+          62,
+          62,
+          0,
+          55,
+          96,
+          5,
+          96,
+          96,
+          7,
+          96,
+          5,
+          42,
+          2,
+          42,
+          55,
+          0,
+          62,
+          62,
+          1,
+          55,
+          96,
+          4,
+          96,
+          96,
+          6,
+          96,
+          3,
+          72,
+          5,
+          72,
+          96,
+          1,
+          96,
+          96,
+          3,
+          96,
+          3,
+          72,
+          4,
+          72,
+          96,
+          0,
+          96,
+          96,
+          2,
+          96,
+          3,
+          72,
+          7,
+          72,
+          96,
+          1,
+          96,
+          96,
+          3,
+          96,
+          3,
+          72,
+          6,
+          72,
+          96,
+          0,
+          96,
+          96,
+          2,
+          96
+        ]
+      },
+      "owners": 13,
+      "actual_output_map_required": true
+    },
+    {
+      "case": "xs_qcd_gguu_L1",
+      "mode": "None",
+      "id": "31d0890641674e5ee9afceaff1e22206",
+      "full_key": {
+        "edges": [
+          {
+            "diagram": {
+              "external": {
+                "connection": 0,
+                "index": 0,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 1,
+                "index": 1,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": null,
+              "is_dummy": false,
+              "particle": 3
+            }
+          },
+          "cut_pair",
+          "cut_membership"
+        ],
+        "half_edges": [
+          null,
+          0,
+          1,
+          2
+        ],
+        "vertices": [
+          {
+            "diagram": {
+              "interaction": 6
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "left"
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "right"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "left"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "right"
+            }
+          }
+        ],
+        "words": [
+          8,
+          32,
+          0,
+          0,
+          0,
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          18,
+          1,
+          18,
+          55,
+          3,
+          62,
+          62,
+          2,
+          55,
+          96,
+          5,
+          96,
+          96,
+          7,
+          96,
+          5,
+          18,
+          0,
+          18,
+          55,
+          2,
+          62,
+          62,
+          3,
+          55,
+          96,
+          4,
+          96,
+          96,
+          6,
+          96,
+          5,
+          42,
+          3,
+          42,
+          55,
+          0,
+          62,
+          62,
+          1,
+          55,
+          96,
+          5,
+          96,
+          96,
+          7,
+          96,
+          5,
+          42,
+          2,
+          42,
+          55,
+          1,
+          62,
+          62,
+          0,
+          55,
+          96,
+          4,
+          96,
+          96,
+          6,
+          96,
+          3,
+          72,
+          5,
+          72,
+          96,
+          1,
+          96,
+          96,
+          3,
+          96,
+          3,
+          72,
+          4,
+          72,
+          96,
+          0,
+          96,
+          96,
+          2,
+          96,
+          3,
+          72,
+          7,
+          72,
+          96,
+          1,
+          96,
+          96,
+          3,
+          96,
+          3,
+          72,
+          6,
+          72,
+          96,
+          0,
+          96,
+          96,
+          2,
+          96
+        ]
+      },
+      "owners": 13,
+      "actual_output_map_required": true
+    },
+    {
+      "case": "xs_qcd_gguu_L1",
+      "mode": "None",
+      "id": "14ac74bf7c503631cbbf625890f7ea67",
+      "full_key": {
+        "edges": [
+          {
+            "diagram": {
+              "external": {
+                "connection": 0,
+                "index": 0,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 1,
+                "index": 1,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": null,
+              "is_dummy": false,
+              "particle": 3
+            }
+          },
+          "cut_pair",
+          "cut_membership"
+        ],
+        "half_edges": [
+          null,
+          0,
+          1,
+          2
+        ],
+        "vertices": [
+          {
+            "diagram": {
+              "interaction": 6
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "left"
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "right"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "left"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "right"
+            }
+          }
+        ],
+        "words": [
+          8,
+          32,
+          0,
+          0,
+          0,
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          18,
+          1,
+          18,
+          55,
+          2,
+          62,
+          62,
+          1,
+          55,
+          96,
+          4,
+          96,
+          96,
+          6,
+          96,
+          5,
+          18,
+          0,
+          18,
+          55,
+          0,
+          62,
+          62,
+          3,
+          55,
+          96,
+          5,
+          96,
+          96,
+          7,
+          96,
+          5,
+          42,
+          3,
+          42,
+          55,
+          3,
+          62,
+          62,
+          0,
+          55,
+          96,
+          4,
+          96,
+          96,
+          6,
+          96,
+          5,
+          42,
+          2,
+          42,
+          55,
+          1,
+          62,
+          62,
+          2,
+          55,
+          96,
+          5,
+          96,
+          96,
+          7,
+          96,
+          3,
+          72,
+          5,
+          72,
+          96,
+          0,
+          96,
+          96,
+          2,
+          96,
+          3,
+          72,
+          4,
+          72,
+          96,
+          1,
+          96,
+          96,
+          3,
+          96,
+          3,
+          72,
+          7,
+          72,
+          96,
+          0,
+          96,
+          96,
+          2,
+          96,
+          3,
+          72,
+          6,
+          72,
+          96,
+          1,
+          96,
+          96,
+          3,
+          96
+        ]
+      },
+      "owners": 13,
+      "actual_output_map_required": true
+    },
+    {
+      "case": "xs_qcd_gguu_L1",
+      "mode": "None",
+      "id": "c490e590d90aa4c6acda54e116e788a7",
+      "full_key": {
+        "edges": [
+          {
+            "diagram": {
+              "external": {
+                "connection": 0,
+                "index": 0,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 1,
+                "index": 1,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": null,
+              "is_dummy": false,
+              "particle": 3
+            }
+          },
+          "cut_pair",
+          "cut_membership"
+        ],
+        "half_edges": [
+          null,
+          0,
+          1,
+          2
+        ],
+        "vertices": [
+          {
+            "diagram": {
+              "interaction": 6
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "left"
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "right"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "left"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "right"
+            }
+          }
+        ],
+        "words": [
+          8,
+          32,
+          0,
+          0,
+          0,
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          18,
+          1,
+          18,
+          55,
+          2,
+          62,
+          62,
+          1,
+          55,
+          96,
+          5,
+          96,
+          96,
+          7,
+          96,
+          5,
+          18,
+          0,
+          18,
+          55,
+          0,
+          62,
+          62,
+          3,
+          55,
+          96,
+          4,
+          96,
+          96,
+          6,
+          96,
+          5,
+          42,
+          3,
+          42,
+          55,
+          3,
+          62,
+          62,
+          0,
+          55,
+          96,
+          5,
+          96,
+          96,
+          7,
+          96,
+          5,
+          42,
+          2,
+          42,
+          55,
+          1,
+          62,
+          62,
+          2,
+          55,
+          96,
+          4,
+          96,
+          96,
+          6,
+          96,
+          3,
+          72,
+          5,
+          72,
+          96,
+          1,
+          96,
+          96,
+          3,
+          96,
+          3,
+          72,
+          4,
+          72,
+          96,
+          0,
+          96,
+          96,
+          2,
+          96,
+          3,
+          72,
+          7,
+          72,
+          96,
+          1,
+          96,
+          96,
+          3,
+          96,
+          3,
+          72,
+          6,
+          72,
+          96,
+          0,
+          96,
+          96,
+          2,
+          96
+        ]
+      },
+      "owners": 13,
+      "actual_output_map_required": true
+    },
+    {
+      "case": "xs_qcd_gguu_L1",
+      "mode": "Auto",
+      "id": "6170f31e6eb07c29aac54d0c6cc14371",
+      "full_key": {
+        "edges": [
+          {
+            "diagram": {
+              "external": null,
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 0,
+                "index": 0,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 1,
+                "index": 1,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": null,
+              "is_dummy": false,
+              "particle": 3
+            }
+          },
+          "cut_pair",
+          "cut_membership"
+        ],
+        "half_edges": [
+          null,
+          0,
+          1,
+          2
+        ],
+        "vertices": [
+          {
+            "diagram": {
+              "interaction": 1
+            }
+          },
+          {
+            "diagram": {
+              "interaction": 6
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "left"
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "right"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "left"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "right"
+            }
+          }
+        ],
+        "words": [
+          8,
+          28,
+          0,
+          0,
+          1,
+          1,
+          2,
+          3,
+          4,
+          5,
+          4,
+          6,
+          2,
+          18,
+          36,
+          1,
+          36,
+          66,
+          1,
+          66,
+          120,
+          5,
+          120,
+          4,
+          6,
+          3,
+          18,
+          36,
+          0,
+          36,
+          66,
+          0,
+          66,
+          120,
+          4,
+          120,
+          5,
+          18,
+          0,
+          6,
+          79,
+          3,
+          86,
+          86,
+          3,
+          79,
+          120,
+          5,
+          120,
+          120,
+          7,
+          120,
+          5,
+          18,
+          1,
+          6,
+          79,
+          2,
+          86,
+          86,
+          2,
+          79,
+          120,
+          4,
+          120,
+          120,
+          6,
+          120,
+          3,
+          96,
+          5,
+          96,
+          120,
+          1,
+          120,
+          120,
+          3,
+          120,
+          3,
+          96,
+          4,
+          96,
+          120,
+          0,
+          120,
+          120,
+          2,
+          120,
+          2,
+          96,
+          7,
+          96,
+          120,
+          3,
+          120,
+          2,
+          96,
+          6,
+          96,
+          120,
+          2,
+          120
+        ]
+      },
+      "owners": 13,
+      "actual_output_map_required": true
+    },
+    {
+      "case": "xs_qcd_gguu_L1",
+      "mode": "Auto",
+      "id": "4ec3077f4f3e6e2fd1fbdbfbf5ba04c0",
+      "full_key": {
+        "edges": [
+          {
+            "diagram": {
+              "external": null,
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 0,
+                "index": 0,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 1,
+                "index": 1,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": null,
+              "is_dummy": false,
+              "particle": 3
+            }
+          },
+          "cut_pair",
+          "cut_membership"
+        ],
+        "half_edges": [
+          null,
+          0,
+          1,
+          2
+        ],
+        "vertices": [
+          {
+            "diagram": {
+              "interaction": 1
+            }
+          },
+          {
+            "diagram": {
+              "interaction": 6
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "left"
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "right"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "left"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "right"
+            }
+          }
+        ],
+        "words": [
+          8,
+          30,
+          0,
+          1,
+          1,
+          1,
+          2,
+          3,
+          4,
+          5,
+          4,
+          6,
+          1,
+          18,
+          36,
+          3,
+          42,
+          66,
+          2,
+          66,
+          120,
+          5,
+          120,
+          5,
+          18,
+          0,
+          6,
+          79,
+          3,
+          86,
+          86,
+          2,
+          79,
+          120,
+          5,
+          120,
+          120,
+          7,
+          120,
+          5,
+          66,
+          0,
+          66,
+          79,
+          1,
+          86,
+          86,
+          3,
+          79,
+          120,
+          4,
+          120,
+          120,
+          6,
+          120,
+          5,
+          42,
+          0,
+          36,
+          79,
+          2,
+          86,
+          86,
+          1,
+          79,
+          120,
+          4,
+          120,
+          120,
+          6,
+          120,
+          3,
+          96,
+          5,
+          96,
+          120,
+          2,
+          120,
+          120,
+          3,
+          120,
+          3,
+          96,
+          4,
+          96,
+          120,
+          0,
+          120,
+          120,
+          1,
+          120,
+          3,
+          96,
+          7,
+          96,
+          120,
+          2,
+          120,
+          120,
+          3,
+          120,
+          2,
+          96,
+          6,
+          96,
+          120,
+          1,
+          120
+        ]
+      },
+      "owners": 13,
+      "actual_output_map_required": true
+    },
+    {
+      "case": "xs_qcd_gguu_L1",
+      "mode": "Auto",
+      "id": "ae57dde2bc65dc277a5257d49ccc59fe",
+      "full_key": {
+        "edges": [
+          {
+            "diagram": {
+              "external": null,
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 0,
+                "index": 0,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 1,
+                "index": 1,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": null,
+              "is_dummy": false,
+              "particle": 3
+            }
+          },
+          "cut_pair",
+          "cut_membership"
+        ],
+        "half_edges": [
+          null,
+          0,
+          1,
+          2
+        ],
+        "vertices": [
+          {
+            "diagram": {
+              "interaction": 1
+            }
+          },
+          {
+            "diagram": {
+              "interaction": 6
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "left"
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "right"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "left"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "right"
+            }
+          }
+        ],
+        "words": [
+          8,
+          30,
+          0,
+          1,
+          1,
+          1,
+          2,
+          3,
+          4,
+          5,
+          4,
+          6,
+          1,
+          18,
+          36,
+          3,
+          42,
+          66,
+          2,
+          66,
+          120,
+          5,
+          120,
+          5,
+          18,
+          0,
+          6,
+          79,
+          2,
+          86,
+          86,
+          3,
+          79,
+          120,
+          5,
+          120,
+          120,
+          7,
+          120,
+          5,
+          66,
+          0,
+          66,
+          79,
+          3,
+          86,
+          86,
+          1,
+          79,
+          120,
+          4,
+          120,
+          120,
+          6,
+          120,
+          5,
+          42,
+          0,
+          36,
+          79,
+          1,
+          86,
+          86,
+          2,
+          79,
+          120,
+          4,
+          120,
+          120,
+          6,
+          120,
+          3,
+          96,
+          5,
+          96,
+          120,
+          2,
+          120,
+          120,
+          3,
+          120,
+          3,
+          96,
+          4,
+          96,
+          120,
+          0,
+          120,
+          120,
+          1,
+          120,
+          3,
+          96,
+          7,
+          96,
+          120,
+          2,
+          120,
+          120,
+          3,
+          120,
+          2,
+          96,
+          6,
+          96,
+          120,
+          1,
+          120
+        ]
+      },
+      "owners": 13,
+      "actual_output_map_required": true
+    },
+    {
+      "case": "xs_qcd_gguu_L1",
+      "mode": "Auto",
+      "id": "7ce5089571bbba80ae6bc324a1c58721",
+      "full_key": {
+        "edges": [
+          {
+            "diagram": {
+              "external": null,
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 0,
+                "index": 0,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 1,
+                "index": 1,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": null,
+              "is_dummy": false,
+              "particle": 3
+            }
+          },
+          "cut_pair",
+          "cut_membership"
+        ],
+        "half_edges": [
+          null,
+          0,
+          1,
+          2
+        ],
+        "vertices": [
+          {
+            "diagram": {
+              "interaction": 1
+            }
+          },
+          {
+            "diagram": {
+              "interaction": 6
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "left"
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "right"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "left"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "right"
+            }
+          }
+        ],
+        "words": [
+          8,
+          30,
+          0,
+          1,
+          1,
+          1,
+          2,
+          3,
+          4,
+          5,
+          4,
+          6,
+          1,
+          18,
+          36,
+          3,
+          42,
+          66,
+          2,
+          66,
+          120,
+          4,
+          120,
+          5,
+          18,
+          0,
+          6,
+          79,
+          3,
+          86,
+          86,
+          2,
+          79,
+          120,
+          4,
+          120,
+          120,
+          6,
+          120,
+          5,
+          66,
+          0,
+          66,
+          79,
+          1,
+          86,
+          86,
+          3,
+          79,
+          120,
+          5,
+          120,
+          120,
+          7,
+          120,
+          5,
+          42,
+          0,
+          36,
+          79,
+          2,
+          86,
+          86,
+          1,
+          79,
+          120,
+          5,
+          120,
+          120,
+          7,
+          120,
+          3,
+          96,
+          5,
+          96,
+          120,
+          0,
+          120,
+          120,
+          1,
+          120,
+          3,
+          96,
+          4,
+          96,
+          120,
+          2,
+          120,
+          120,
+          3,
+          120,
+          2,
+          96,
+          7,
+          96,
+          120,
+          1,
+          120,
+          3,
+          96,
+          6,
+          96,
+          120,
+          2,
+          120,
+          120,
+          3,
+          120
+        ]
+      },
+      "owners": 13,
+      "actual_output_map_required": true
+    },
+    {
+      "case": "xs_qcd_gguu_L1",
+      "mode": "Auto",
+      "id": "fc350794b8b5d4b2a61350028cb5b539",
+      "full_key": {
+        "edges": [
+          {
+            "diagram": {
+              "external": null,
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 0,
+                "index": 0,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 1,
+                "index": 1,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": null,
+              "is_dummy": false,
+              "particle": 3
+            }
+          },
+          "cut_pair",
+          "cut_membership"
+        ],
+        "half_edges": [
+          null,
+          0,
+          1,
+          2
+        ],
+        "vertices": [
+          {
+            "diagram": {
+              "interaction": 1
+            }
+          },
+          {
+            "diagram": {
+              "interaction": 6
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "left"
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "right"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "left"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "right"
+            }
+          }
+        ],
+        "words": [
+          8,
+          30,
+          0,
+          1,
+          1,
+          1,
+          2,
+          3,
+          4,
+          5,
+          4,
+          6,
+          1,
+          18,
+          36,
+          3,
+          42,
+          66,
+          2,
+          66,
+          120,
+          4,
+          120,
+          5,
+          18,
+          0,
+          6,
+          79,
+          2,
+          86,
+          86,
+          3,
+          79,
+          120,
+          4,
+          120,
+          120,
+          6,
+          120,
+          5,
+          66,
+          0,
+          66,
+          79,
+          3,
+          86,
+          86,
+          1,
+          79,
+          120,
+          5,
+          120,
+          120,
+          7,
+          120,
+          5,
+          42,
+          0,
+          36,
+          79,
+          1,
+          86,
+          86,
+          2,
+          79,
+          120,
+          5,
+          120,
+          120,
+          7,
+          120,
+          3,
+          96,
+          5,
+          96,
+          120,
+          0,
+          120,
+          120,
+          1,
+          120,
+          3,
+          96,
+          4,
+          96,
+          120,
+          2,
+          120,
+          120,
+          3,
+          120,
+          2,
+          96,
+          7,
+          96,
+          120,
+          1,
+          120,
+          3,
+          96,
+          6,
+          96,
+          120,
+          2,
+          120,
+          120,
+          3,
+          120
+        ]
+      },
+      "owners": 13,
+      "actual_output_map_required": true
+    },
+    {
+      "case": "xs_qcd_gguu_L1",
+      "mode": "Auto",
+      "id": "ad0818e3abc13783bfcc2695b849034d",
+      "full_key": {
+        "edges": [
+          {
+            "diagram": {
+              "external": {
+                "connection": 0,
+                "index": 0,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 1,
+                "index": 1,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": null,
+              "is_dummy": false,
+              "particle": 3
+            }
+          },
+          "cut_pair",
+          "cut_membership"
+        ],
+        "half_edges": [
+          null,
+          0,
+          1,
+          2
+        ],
+        "vertices": [
+          {
+            "diagram": {
+              "interaction": 6
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "left"
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "right"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "left"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "right"
+            }
+          }
+        ],
+        "words": [
+          8,
+          32,
+          0,
+          0,
+          0,
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          18,
+          1,
+          18,
+          55,
+          2,
+          62,
+          62,
+          3,
+          55,
+          96,
+          5,
+          96,
+          96,
+          7,
+          96,
+          5,
+          18,
+          0,
+          18,
+          55,
+          3,
+          62,
+          62,
+          2,
+          55,
+          96,
+          4,
+          96,
+          96,
+          6,
+          96,
+          5,
+          42,
+          3,
+          42,
+          55,
+          1,
+          62,
+          62,
+          0,
+          55,
+          96,
+          5,
+          96,
+          96,
+          7,
+          96,
+          5,
+          42,
+          2,
+          42,
+          55,
+          0,
+          62,
+          62,
+          1,
+          55,
+          96,
+          4,
+          96,
+          96,
+          6,
+          96,
+          3,
+          72,
+          5,
+          72,
+          96,
+          1,
+          96,
+          96,
+          3,
+          96,
+          3,
+          72,
+          4,
+          72,
+          96,
+          0,
+          96,
+          96,
+          2,
+          96,
+          3,
+          72,
+          7,
+          72,
+          96,
+          1,
+          96,
+          96,
+          3,
+          96,
+          3,
+          72,
+          6,
+          72,
+          96,
+          0,
+          96,
+          96,
+          2,
+          96
+        ]
+      },
+      "owners": 13,
+      "actual_output_map_required": true
+    },
+    {
+      "case": "xs_qcd_gguu_L1",
+      "mode": "Auto",
+      "id": "31d0890641674e5ee9afceaff1e22206",
+      "full_key": {
+        "edges": [
+          {
+            "diagram": {
+              "external": {
+                "connection": 0,
+                "index": 0,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 1,
+                "index": 1,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": null,
+              "is_dummy": false,
+              "particle": 3
+            }
+          },
+          "cut_pair",
+          "cut_membership"
+        ],
+        "half_edges": [
+          null,
+          0,
+          1,
+          2
+        ],
+        "vertices": [
+          {
+            "diagram": {
+              "interaction": 6
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "left"
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "right"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "left"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "right"
+            }
+          }
+        ],
+        "words": [
+          8,
+          32,
+          0,
+          0,
+          0,
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          18,
+          1,
+          18,
+          55,
+          3,
+          62,
+          62,
+          2,
+          55,
+          96,
+          5,
+          96,
+          96,
+          7,
+          96,
+          5,
+          18,
+          0,
+          18,
+          55,
+          2,
+          62,
+          62,
+          3,
+          55,
+          96,
+          4,
+          96,
+          96,
+          6,
+          96,
+          5,
+          42,
+          3,
+          42,
+          55,
+          0,
+          62,
+          62,
+          1,
+          55,
+          96,
+          5,
+          96,
+          96,
+          7,
+          96,
+          5,
+          42,
+          2,
+          42,
+          55,
+          1,
+          62,
+          62,
+          0,
+          55,
+          96,
+          4,
+          96,
+          96,
+          6,
+          96,
+          3,
+          72,
+          5,
+          72,
+          96,
+          1,
+          96,
+          96,
+          3,
+          96,
+          3,
+          72,
+          4,
+          72,
+          96,
+          0,
+          96,
+          96,
+          2,
+          96,
+          3,
+          72,
+          7,
+          72,
+          96,
+          1,
+          96,
+          96,
+          3,
+          96,
+          3,
+          72,
+          6,
+          72,
+          96,
+          0,
+          96,
+          96,
+          2,
+          96
+        ]
+      },
+      "owners": 13,
+      "actual_output_map_required": true
+    },
+    {
+      "case": "xs_qcd_gguu_L1",
+      "mode": "Auto",
+      "id": "14ac74bf7c503631cbbf625890f7ea67",
+      "full_key": {
+        "edges": [
+          {
+            "diagram": {
+              "external": {
+                "connection": 0,
+                "index": 0,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 1,
+                "index": 1,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": null,
+              "is_dummy": false,
+              "particle": 3
+            }
+          },
+          "cut_pair",
+          "cut_membership"
+        ],
+        "half_edges": [
+          null,
+          0,
+          1,
+          2
+        ],
+        "vertices": [
+          {
+            "diagram": {
+              "interaction": 6
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "left"
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "right"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "left"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "right"
+            }
+          }
+        ],
+        "words": [
+          8,
+          32,
+          0,
+          0,
+          0,
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          18,
+          1,
+          18,
+          55,
+          2,
+          62,
+          62,
+          1,
+          55,
+          96,
+          4,
+          96,
+          96,
+          6,
+          96,
+          5,
+          18,
+          0,
+          18,
+          55,
+          0,
+          62,
+          62,
+          3,
+          55,
+          96,
+          5,
+          96,
+          96,
+          7,
+          96,
+          5,
+          42,
+          3,
+          42,
+          55,
+          3,
+          62,
+          62,
+          0,
+          55,
+          96,
+          4,
+          96,
+          96,
+          6,
+          96,
+          5,
+          42,
+          2,
+          42,
+          55,
+          1,
+          62,
+          62,
+          2,
+          55,
+          96,
+          5,
+          96,
+          96,
+          7,
+          96,
+          3,
+          72,
+          5,
+          72,
+          96,
+          0,
+          96,
+          96,
+          2,
+          96,
+          3,
+          72,
+          4,
+          72,
+          96,
+          1,
+          96,
+          96,
+          3,
+          96,
+          3,
+          72,
+          7,
+          72,
+          96,
+          0,
+          96,
+          96,
+          2,
+          96,
+          3,
+          72,
+          6,
+          72,
+          96,
+          1,
+          96,
+          96,
+          3,
+          96
+        ]
+      },
+      "owners": 13,
+      "actual_output_map_required": true
+    },
+    {
+      "case": "xs_qcd_gguu_L1",
+      "mode": "Auto",
+      "id": "c490e590d90aa4c6acda54e116e788a7",
+      "full_key": {
+        "edges": [
+          {
+            "diagram": {
+              "external": {
+                "connection": 0,
+                "index": 0,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 1,
+                "index": 1,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": null,
+              "is_dummy": false,
+              "particle": 3
+            }
+          },
+          "cut_pair",
+          "cut_membership"
+        ],
+        "half_edges": [
+          null,
+          0,
+          1,
+          2
+        ],
+        "vertices": [
+          {
+            "diagram": {
+              "interaction": 6
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "left"
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "right"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "left"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "right"
+            }
+          }
+        ],
+        "words": [
+          8,
+          32,
+          0,
+          0,
+          0,
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          18,
+          1,
+          18,
+          55,
+          2,
+          62,
+          62,
+          1,
+          55,
+          96,
+          5,
+          96,
+          96,
+          7,
+          96,
+          5,
+          18,
+          0,
+          18,
+          55,
+          0,
+          62,
+          62,
+          3,
+          55,
+          96,
+          4,
+          96,
+          96,
+          6,
+          96,
+          5,
+          42,
+          3,
+          42,
+          55,
+          3,
+          62,
+          62,
+          0,
+          55,
+          96,
+          5,
+          96,
+          96,
+          7,
+          96,
+          5,
+          42,
+          2,
+          42,
+          55,
+          1,
+          62,
+          62,
+          2,
+          55,
+          96,
+          4,
+          96,
+          96,
+          6,
+          96,
+          3,
+          72,
+          5,
+          72,
+          96,
+          1,
+          96,
+          96,
+          3,
+          96,
+          3,
+          72,
+          4,
+          72,
+          96,
+          0,
+          96,
+          96,
+          2,
+          96,
+          3,
+          72,
+          7,
+          72,
+          96,
+          1,
+          96,
+          96,
+          3,
+          96,
+          3,
+          72,
+          6,
+          72,
+          96,
+          0,
+          96,
+          96,
+          2,
+          96
+        ]
+      },
+      "owners": 13,
+      "actual_output_map_required": true
+    },
+    {
+      "case": "xs_qcd_gggg_L1",
+      "mode": "None",
+      "id": "60777b11dd5b7f48966632644fd7be49",
+      "full_key": {
+        "edges": [
+          {
+            "diagram": {
+              "external": null,
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 0,
+                "index": 0,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 1,
+                "index": 1,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          "cut_pair",
+          "cut_membership"
+        ],
+        "half_edges": [
+          null,
+          0,
+          1,
+          2
+        ],
+        "vertices": [
+          {
+            "diagram": {
+              "interaction": 1
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "left"
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "right"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "left"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "right"
+            }
+          }
+        ],
+        "words": [
+          8,
+          28,
+          0,
+          0,
+          0,
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          1,
+          12,
+          12,
+          1,
+          18,
+          18,
+          3,
+          6,
+          96,
+          5,
+          96,
+          96,
+          7,
+          96,
+          5,
+          6,
+          2,
+          6,
+          12,
+          0,
+          6,
+          18,
+          0,
+          12,
+          96,
+          4,
+          96,
+          96,
+          6,
+          96,
+          4,
+          6,
+          1,
+          6,
+          36,
+          3,
+          36,
+          66,
+          3,
+          66,
+          96,
+          4,
+          96,
+          4,
+          6,
+          0,
+          18,
+          36,
+          2,
+          36,
+          66,
+          2,
+          66,
+          96,
+          5,
+          96,
+          3,
+          72,
+          5,
+          72,
+          96,
+          1,
+          96,
+          96,
+          2,
+          96,
+          3,
+          72,
+          4,
+          72,
+          96,
+          0,
+          96,
+          96,
+          3,
+          96,
+          2,
+          72,
+          7,
+          72,
+          96,
+          1,
+          96,
+          2,
+          72,
+          6,
+          72,
+          96,
+          0,
+          96
+        ]
+      },
+      "owners": 13,
+      "actual_output_map_required": true
+    },
+    {
+      "case": "xs_qcd_gggg_L1",
+      "mode": "None",
+      "id": "34498cfddfa1715e5f37b81f08a3a5d1",
+      "full_key": {
+        "edges": [
+          {
+            "diagram": {
+              "external": null,
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 0,
+                "index": 0,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 1,
+                "index": 1,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          "cut_pair",
+          "cut_membership"
+        ],
+        "half_edges": [
+          null,
+          0,
+          1,
+          2
+        ],
+        "vertices": [
+          {
+            "diagram": {
+              "interaction": 1
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "left"
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "right"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "left"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "right"
+            }
+          }
+        ],
+        "words": [
+          8,
+          30,
+          0,
+          0,
+          0,
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          1,
+          6,
+          12,
+          2,
+          6,
+          66,
+          3,
+          66,
+          96,
+          4,
+          96,
+          96,
+          6,
+          96,
+          5,
+          6,
+          0,
+          6,
+          12,
+          2,
+          12,
+          42,
+          3,
+          36,
+          96,
+          4,
+          96,
+          96,
+          6,
+          96,
+          5,
+          6,
+          0,
+          12,
+          12,
+          1,
+          12,
+          18,
+          3,
+          6,
+          96,
+          5,
+          96,
+          96,
+          7,
+          96,
+          4,
+          6,
+          2,
+          18,
+          36,
+          1,
+          42,
+          66,
+          0,
+          66,
+          96,
+          5,
+          96,
+          3,
+          72,
+          5,
+          72,
+          96,
+          0,
+          96,
+          96,
+          1,
+          96,
+          3,
+          72,
+          4,
+          72,
+          96,
+          2,
+          96,
+          96,
+          3,
+          96,
+          3,
+          72,
+          7,
+          72,
+          96,
+          0,
+          96,
+          96,
+          1,
+          96,
+          2,
+          72,
+          6,
+          72,
+          96,
+          2,
+          96
+        ]
+      },
+      "owners": 13,
+      "actual_output_map_required": true
+    },
+    {
+      "case": "xs_qcd_gggg_L1",
+      "mode": "None",
+      "id": "0af4380c341efde7ecff7cbb6f5f4f19",
+      "full_key": {
+        "edges": [
+          {
+            "diagram": {
+              "external": null,
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 0,
+                "index": 0,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 1,
+                "index": 1,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          "cut_pair",
+          "cut_membership"
+        ],
+        "half_edges": [
+          null,
+          0,
+          1,
+          2
+        ],
+        "vertices": [
+          {
+            "diagram": {
+              "interaction": 1
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "left"
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "right"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "left"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "right"
+            }
+          }
+        ],
+        "words": [
+          8,
+          30,
+          0,
+          0,
+          0,
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          3,
+          6,
+          12,
+          2,
+          6,
+          18,
+          1,
+          12,
+          96,
+          4,
+          96,
+          96,
+          6,
+          96,
+          5,
+          6,
+          2,
+          12,
+          12,
+          0,
+          18,
+          66,
+          3,
+          66,
+          96,
+          5,
+          96,
+          96,
+          7,
+          96,
+          5,
+          6,
+          0,
+          12,
+          12,
+          1,
+          6,
+          42,
+          3,
+          36,
+          96,
+          5,
+          96,
+          96,
+          7,
+          96,
+          4,
+          6,
+          0,
+          6,
+          36,
+          2,
+          42,
+          66,
+          1,
+          66,
+          96,
+          4,
+          96,
+          3,
+          72,
+          5,
+          72,
+          96,
+          0,
+          96,
+          96,
+          3,
+          96,
+          3,
+          72,
+          4,
+          72,
+          96,
+          1,
+          96,
+          96,
+          2,
+          96,
+          2,
+          72,
+          7,
+          72,
+          96,
+          0,
+          96,
+          3,
+          72,
+          6,
+          72,
+          96,
+          1,
+          96,
+          96,
+          2,
+          96
+        ]
+      },
+      "owners": 13,
+      "actual_output_map_required": true
+    },
+    {
+      "case": "xs_qcd_gggg_L1",
+      "mode": "None",
+      "id": "18b13eeeb65c9709e4c5c21ec7a7a98f",
+      "full_key": {
+        "edges": [
+          {
+            "diagram": {
+              "external": null,
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 0,
+                "index": 0,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 1,
+                "index": 1,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          "cut_pair",
+          "cut_membership"
+        ],
+        "half_edges": [
+          null,
+          0,
+          1,
+          2,
+          3
+        ],
+        "vertices": [
+          {
+            "diagram": {
+              "interaction": 1
+            }
+          },
+          {
+            "diagram": {
+              "interaction": 2
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "left"
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "right"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "left"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "right"
+            }
+          }
+        ],
+        "words": [
+          7,
+          24,
+          0,
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          4,
+          6,
+          1,
+          6,
+          42,
+          2,
+          48,
+          78,
+          2,
+          84,
+          120,
+          3,
+          120,
+          5,
+          6,
+          0,
+          6,
+          12,
+          2,
+          6,
+          18,
+          2,
+          12,
+          120,
+          3,
+          120,
+          120,
+          5,
+          120,
+          6,
+          6,
+          1,
+          12,
+          12,
+          1,
+          18,
+          48,
+          0,
+          42,
+          84,
+          0,
+          78,
+          120,
+          4,
+          120,
+          120,
+          6,
+          120,
+          3,
+          90,
+          4,
+          90,
+          120,
+          0,
+          120,
+          120,
+          1,
+          120,
+          2,
+          90,
+          3,
+          90,
+          120,
+          2,
+          120,
+          2,
+          90,
+          6,
+          90,
+          120,
+          1,
+          120,
+          2,
+          90,
+          5,
+          90,
+          120,
+          2,
+          120
+        ]
+      },
+      "owners": 11,
+      "actual_output_map_required": true
+    },
+    {
+      "case": "xs_qcd_gggg_L1",
+      "mode": "None",
+      "id": "b99217732e97b6d10d4d62ca187ba691",
+      "full_key": {
+        "edges": [
+          {
+            "diagram": {
+              "external": null,
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 0,
+                "index": 0,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 1,
+                "index": 1,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          "cut_pair",
+          "cut_membership"
+        ],
+        "half_edges": [
+          null,
+          0,
+          1,
+          2,
+          3
+        ],
+        "vertices": [
+          {
+            "diagram": {
+              "interaction": 1
+            }
+          },
+          {
+            "diagram": {
+              "interaction": 2
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "left"
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "right"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "left"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "right"
+            }
+          }
+        ],
+        "words": [
+          7,
+          24,
+          0,
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          4,
+          6,
+          1,
+          6,
+          42,
+          2,
+          48,
+          78,
+          2,
+          84,
+          120,
+          4,
+          120,
+          5,
+          6,
+          0,
+          6,
+          12,
+          2,
+          6,
+          18,
+          2,
+          12,
+          120,
+          4,
+          120,
+          120,
+          6,
+          120,
+          6,
+          6,
+          1,
+          12,
+          12,
+          1,
+          18,
+          48,
+          0,
+          42,
+          84,
+          0,
+          78,
+          120,
+          3,
+          120,
+          120,
+          5,
+          120,
+          2,
+          90,
+          4,
+          90,
+          120,
+          2,
+          120,
+          3,
+          90,
+          3,
+          90,
+          120,
+          0,
+          120,
+          120,
+          1,
+          120,
+          2,
+          90,
+          6,
+          90,
+          120,
+          2,
+          120,
+          2,
+          90,
+          5,
+          90,
+          120,
+          1,
+          120
+        ]
+      },
+      "owners": 11,
+      "actual_output_map_required": true
+    },
+    {
+      "case": "xs_qcd_gggg_L1",
+      "mode": "None",
+      "id": "bb1e565a95ca61262d0c798add6934e6",
+      "full_key": {
+        "edges": [
+          {
+            "diagram": {
+              "external": null,
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 0,
+                "index": 0,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 1,
+                "index": 1,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          "cut_pair",
+          "cut_membership"
+        ],
+        "half_edges": [
+          null,
+          0,
+          1,
+          2
+        ],
+        "vertices": [
+          {
+            "diagram": {
+              "interaction": 1
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "left"
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "right"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "left"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "right"
+            }
+          }
+        ],
+        "words": [
+          8,
+          32,
+          0,
+          0,
+          0,
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          2,
+          6,
+          12,
+          3,
+          6,
+          66,
+          1,
+          66,
+          96,
+          4,
+          96,
+          96,
+          6,
+          96,
+          5,
+          6,
+          2,
+          12,
+          12,
+          3,
+          12,
+          66,
+          0,
+          66,
+          96,
+          5,
+          96,
+          96,
+          7,
+          96,
+          5,
+          6,
+          0,
+          6,
+          12,
+          1,
+          6,
+          42,
+          3,
+          42,
+          96,
+          5,
+          96,
+          96,
+          7,
+          96,
+          5,
+          6,
+          0,
+          12,
+          12,
+          1,
+          12,
+          42,
+          2,
+          42,
+          96,
+          4,
+          96,
+          96,
+          6,
+          96,
+          3,
+          72,
+          5,
+          72,
+          96,
+          0,
+          96,
+          96,
+          3,
+          96,
+          3,
+          72,
+          4,
+          72,
+          96,
+          1,
+          96,
+          96,
+          2,
+          96,
+          3,
+          72,
+          7,
+          72,
+          96,
+          0,
+          96,
+          96,
+          3,
+          96,
+          3,
+          72,
+          6,
+          72,
+          96,
+          1,
+          96,
+          96,
+          2,
+          96
+        ]
+      },
+      "owners": 13,
+      "actual_output_map_required": true
+    },
+    {
+      "case": "xs_qcd_gggg_L1",
+      "mode": "None",
+      "id": "c43b096f49ae40345818f7590fef86a4",
+      "full_key": {
+        "edges": [
+          {
+            "diagram": {
+              "external": null,
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 0,
+                "index": 0,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 1,
+                "index": 1,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          "cut_pair",
+          "cut_membership"
+        ],
+        "half_edges": [
+          null,
+          0,
+          1,
+          2
+        ],
+        "vertices": [
+          {
+            "diagram": {
+              "interaction": 1
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "left"
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "right"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "left"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "right"
+            }
+          }
+        ],
+        "words": [
+          8,
+          32,
+          0,
+          0,
+          0,
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          2,
+          6,
+          12,
+          1,
+          6,
+          66,
+          1,
+          66,
+          96,
+          4,
+          96,
+          96,
+          6,
+          96,
+          5,
+          6,
+          0,
+          12,
+          12,
+          3,
+          12,
+          66,
+          0,
+          66,
+          96,
+          5,
+          96,
+          96,
+          7,
+          96,
+          5,
+          6,
+          0,
+          6,
+          12,
+          3,
+          6,
+          42,
+          3,
+          42,
+          96,
+          4,
+          96,
+          96,
+          6,
+          96,
+          5,
+          6,
+          2,
+          12,
+          12,
+          1,
+          12,
+          42,
+          2,
+          42,
+          96,
+          5,
+          96,
+          96,
+          7,
+          96,
+          3,
+          72,
+          5,
+          72,
+          96,
+          0,
+          96,
+          96,
+          2,
+          96,
+          3,
+          72,
+          4,
+          72,
+          96,
+          1,
+          96,
+          96,
+          3,
+          96,
+          3,
+          72,
+          7,
+          72,
+          96,
+          0,
+          96,
+          96,
+          2,
+          96,
+          3,
+          72,
+          6,
+          72,
+          96,
+          1,
+          96,
+          96,
+          3,
+          96
+        ]
+      },
+      "owners": 13,
+      "actual_output_map_required": true
+    },
+    {
+      "case": "xs_qcd_gggg_L1",
+      "mode": "None",
+      "id": "721a6dc992be505389b72c6184f56e95",
+      "full_key": {
+        "edges": [
+          {
+            "diagram": {
+              "external": null,
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 0,
+                "index": 0,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 1,
+                "index": 1,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          "cut_pair",
+          "cut_membership"
+        ],
+        "half_edges": [
+          null,
+          0,
+          1,
+          2,
+          3
+        ],
+        "vertices": [
+          {
+            "diagram": {
+              "interaction": 1
+            }
+          },
+          {
+            "diagram": {
+              "interaction": 2
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "left"
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "right"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "left"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "right"
+            }
+          }
+        ],
+        "words": [
+          7,
+          26,
+          0,
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          5,
+          6,
+          1,
+          6,
+          12,
+          2,
+          6,
+          78,
+          2,
+          84,
+          120,
+          3,
+          120,
+          120,
+          5,
+          120,
+          5,
+          6,
+          0,
+          6,
+          12,
+          2,
+          12,
+          48,
+          2,
+          48,
+          120,
+          3,
+          120,
+          120,
+          5,
+          120,
+          6,
+          6,
+          0,
+          12,
+          12,
+          1,
+          12,
+          48,
+          1,
+          48,
+          84,
+          0,
+          78,
+          120,
+          4,
+          120,
+          120,
+          6,
+          120,
+          3,
+          90,
+          4,
+          90,
+          120,
+          0,
+          120,
+          120,
+          1,
+          120,
+          2,
+          90,
+          3,
+          90,
+          120,
+          2,
+          120,
+          3,
+          90,
+          6,
+          90,
+          120,
+          0,
+          120,
+          120,
+          1,
+          120,
+          2,
+          90,
+          5,
+          90,
+          120,
+          2,
+          120
+        ]
+      },
+      "owners": 11,
+      "actual_output_map_required": true
+    },
+    {
+      "case": "xs_qcd_gggg_L1",
+      "mode": "None",
+      "id": "765da42d85f911f16f4e3816abe7c485",
+      "full_key": {
+        "edges": [
+          {
+            "diagram": {
+              "external": null,
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 0,
+                "index": 0,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 1,
+                "index": 1,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          "cut_pair",
+          "cut_membership"
+        ],
+        "half_edges": [
+          null,
+          0,
+          1,
+          2,
+          3
+        ],
+        "vertices": [
+          {
+            "diagram": {
+              "interaction": 1
+            }
+          },
+          {
+            "diagram": {
+              "interaction": 2
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "left"
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "right"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "left"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "right"
+            }
+          }
+        ],
+        "words": [
+          7,
+          26,
+          0,
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          5,
+          6,
+          1,
+          6,
+          12,
+          2,
+          6,
+          48,
+          2,
+          48,
+          120,
+          4,
+          120,
+          120,
+          6,
+          120,
+          5,
+          6,
+          0,
+          6,
+          12,
+          2,
+          12,
+          78,
+          2,
+          84,
+          120,
+          4,
+          120,
+          120,
+          6,
+          120,
+          6,
+          6,
+          0,
+          12,
+          12,
+          1,
+          12,
+          48,
+          0,
+          48,
+          84,
+          1,
+          78,
+          120,
+          3,
+          120,
+          120,
+          5,
+          120,
+          2,
+          90,
+          4,
+          90,
+          120,
+          2,
+          120,
+          3,
+          90,
+          3,
+          90,
+          120,
+          0,
+          120,
+          120,
+          1,
+          120,
+          2,
+          90,
+          6,
+          90,
+          120,
+          2,
+          120,
+          3,
+          90,
+          5,
+          90,
+          120,
+          0,
+          120,
+          120,
+          1,
+          120
+        ]
+      },
+      "owners": 11,
+      "actual_output_map_required": true
+    },
+    {
+      "case": "xs_qcd_gggg_L1",
+      "mode": "None",
+      "id": "1a1f4e1d3f1a08cf35ba1945be3d97c9",
+      "full_key": {
+        "edges": [
+          {
+            "diagram": {
+              "external": null,
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 0,
+                "index": 0,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 1,
+                "index": 1,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          "cut_pair",
+          "cut_membership"
+        ],
+        "half_edges": [
+          null,
+          0,
+          1,
+          2,
+          3
+        ],
+        "vertices": [
+          {
+            "diagram": {
+              "interaction": 2
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "left"
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "right"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "left"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "right"
+            }
+          }
+        ],
+        "words": [
+          6,
+          20,
+          0,
+          0,
+          1,
+          2,
+          3,
+          4,
+          6,
+          6,
+          1,
+          6,
+          12,
+          1,
+          12,
+          48,
+          1,
+          48,
+          84,
+          1,
+          84,
+          120,
+          3,
+          120,
+          120,
+          5,
+          120,
+          6,
+          6,
+          0,
+          6,
+          12,
+          0,
+          12,
+          48,
+          0,
+          48,
+          84,
+          0,
+          84,
+          120,
+          2,
+          120,
+          120,
+          4,
+          120,
+          2,
+          90,
+          3,
+          90,
+          120,
+          1,
+          120,
+          2,
+          90,
+          2,
+          90,
+          120,
+          0,
+          120,
+          2,
+          90,
+          5,
+          90,
+          120,
+          1,
+          120,
+          2,
+          90,
+          4,
+          90,
+          120,
+          0,
+          120
+        ]
+      },
+      "owners": 9,
+      "actual_output_map_required": true
+    },
+    {
+      "case": "xs_qcd_gggg_L1",
+      "mode": "Auto",
+      "id": "60777b11dd5b7f48966632644fd7be49",
+      "full_key": {
+        "edges": [
+          {
+            "diagram": {
+              "external": null,
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 0,
+                "index": 0,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 1,
+                "index": 1,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          "cut_pair",
+          "cut_membership"
+        ],
+        "half_edges": [
+          null,
+          0,
+          1,
+          2
+        ],
+        "vertices": [
+          {
+            "diagram": {
+              "interaction": 1
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "left"
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "right"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "left"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "right"
+            }
+          }
+        ],
+        "words": [
+          8,
+          28,
+          0,
+          0,
+          0,
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          1,
+          12,
+          12,
+          1,
+          18,
+          18,
+          3,
+          6,
+          96,
+          5,
+          96,
+          96,
+          7,
+          96,
+          5,
+          6,
+          2,
+          6,
+          12,
+          0,
+          6,
+          18,
+          0,
+          12,
+          96,
+          4,
+          96,
+          96,
+          6,
+          96,
+          4,
+          6,
+          1,
+          6,
+          36,
+          3,
+          36,
+          66,
+          3,
+          66,
+          96,
+          4,
+          96,
+          4,
+          6,
+          0,
+          18,
+          36,
+          2,
+          36,
+          66,
+          2,
+          66,
+          96,
+          5,
+          96,
+          3,
+          72,
+          5,
+          72,
+          96,
+          1,
+          96,
+          96,
+          2,
+          96,
+          3,
+          72,
+          4,
+          72,
+          96,
+          0,
+          96,
+          96,
+          3,
+          96,
+          2,
+          72,
+          7,
+          72,
+          96,
+          1,
+          96,
+          2,
+          72,
+          6,
+          72,
+          96,
+          0,
+          96
+        ]
+      },
+      "owners": 13,
+      "actual_output_map_required": true
+    },
+    {
+      "case": "xs_qcd_gggg_L1",
+      "mode": "Auto",
+      "id": "34498cfddfa1715e5f37b81f08a3a5d1",
+      "full_key": {
+        "edges": [
+          {
+            "diagram": {
+              "external": null,
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 0,
+                "index": 0,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 1,
+                "index": 1,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          "cut_pair",
+          "cut_membership"
+        ],
+        "half_edges": [
+          null,
+          0,
+          1,
+          2
+        ],
+        "vertices": [
+          {
+            "diagram": {
+              "interaction": 1
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "left"
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "right"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "left"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "right"
+            }
+          }
+        ],
+        "words": [
+          8,
+          30,
+          0,
+          0,
+          0,
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          1,
+          6,
+          12,
+          2,
+          6,
+          66,
+          3,
+          66,
+          96,
+          4,
+          96,
+          96,
+          6,
+          96,
+          5,
+          6,
+          0,
+          6,
+          12,
+          2,
+          12,
+          42,
+          3,
+          36,
+          96,
+          4,
+          96,
+          96,
+          6,
+          96,
+          5,
+          6,
+          0,
+          12,
+          12,
+          1,
+          12,
+          18,
+          3,
+          6,
+          96,
+          5,
+          96,
+          96,
+          7,
+          96,
+          4,
+          6,
+          2,
+          18,
+          36,
+          1,
+          42,
+          66,
+          0,
+          66,
+          96,
+          5,
+          96,
+          3,
+          72,
+          5,
+          72,
+          96,
+          0,
+          96,
+          96,
+          1,
+          96,
+          3,
+          72,
+          4,
+          72,
+          96,
+          2,
+          96,
+          96,
+          3,
+          96,
+          3,
+          72,
+          7,
+          72,
+          96,
+          0,
+          96,
+          96,
+          1,
+          96,
+          2,
+          72,
+          6,
+          72,
+          96,
+          2,
+          96
+        ]
+      },
+      "owners": 13,
+      "actual_output_map_required": true
+    },
+    {
+      "case": "xs_qcd_gggg_L1",
+      "mode": "Auto",
+      "id": "0af4380c341efde7ecff7cbb6f5f4f19",
+      "full_key": {
+        "edges": [
+          {
+            "diagram": {
+              "external": null,
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 0,
+                "index": 0,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 1,
+                "index": 1,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          "cut_pair",
+          "cut_membership"
+        ],
+        "half_edges": [
+          null,
+          0,
+          1,
+          2
+        ],
+        "vertices": [
+          {
+            "diagram": {
+              "interaction": 1
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "left"
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "right"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "left"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "right"
+            }
+          }
+        ],
+        "words": [
+          8,
+          30,
+          0,
+          0,
+          0,
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          3,
+          6,
+          12,
+          2,
+          6,
+          18,
+          1,
+          12,
+          96,
+          4,
+          96,
+          96,
+          6,
+          96,
+          5,
+          6,
+          2,
+          12,
+          12,
+          0,
+          18,
+          66,
+          3,
+          66,
+          96,
+          5,
+          96,
+          96,
+          7,
+          96,
+          5,
+          6,
+          0,
+          12,
+          12,
+          1,
+          6,
+          42,
+          3,
+          36,
+          96,
+          5,
+          96,
+          96,
+          7,
+          96,
+          4,
+          6,
+          0,
+          6,
+          36,
+          2,
+          42,
+          66,
+          1,
+          66,
+          96,
+          4,
+          96,
+          3,
+          72,
+          5,
+          72,
+          96,
+          0,
+          96,
+          96,
+          3,
+          96,
+          3,
+          72,
+          4,
+          72,
+          96,
+          1,
+          96,
+          96,
+          2,
+          96,
+          2,
+          72,
+          7,
+          72,
+          96,
+          0,
+          96,
+          3,
+          72,
+          6,
+          72,
+          96,
+          1,
+          96,
+          96,
+          2,
+          96
+        ]
+      },
+      "owners": 13,
+      "actual_output_map_required": true
+    },
+    {
+      "case": "xs_qcd_gggg_L1",
+      "mode": "Auto",
+      "id": "18b13eeeb65c9709e4c5c21ec7a7a98f",
+      "full_key": {
+        "edges": [
+          {
+            "diagram": {
+              "external": null,
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 0,
+                "index": 0,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 1,
+                "index": 1,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          "cut_pair",
+          "cut_membership"
+        ],
+        "half_edges": [
+          null,
+          0,
+          1,
+          2,
+          3
+        ],
+        "vertices": [
+          {
+            "diagram": {
+              "interaction": 1
+            }
+          },
+          {
+            "diagram": {
+              "interaction": 2
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "left"
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "right"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "left"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "right"
+            }
+          }
+        ],
+        "words": [
+          7,
+          24,
+          0,
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          4,
+          6,
+          1,
+          6,
+          42,
+          2,
+          48,
+          78,
+          2,
+          84,
+          120,
+          3,
+          120,
+          5,
+          6,
+          0,
+          6,
+          12,
+          2,
+          6,
+          18,
+          2,
+          12,
+          120,
+          3,
+          120,
+          120,
+          5,
+          120,
+          6,
+          6,
+          1,
+          12,
+          12,
+          1,
+          18,
+          48,
+          0,
+          42,
+          84,
+          0,
+          78,
+          120,
+          4,
+          120,
+          120,
+          6,
+          120,
+          3,
+          90,
+          4,
+          90,
+          120,
+          0,
+          120,
+          120,
+          1,
+          120,
+          2,
+          90,
+          3,
+          90,
+          120,
+          2,
+          120,
+          2,
+          90,
+          6,
+          90,
+          120,
+          1,
+          120,
+          2,
+          90,
+          5,
+          90,
+          120,
+          2,
+          120
+        ]
+      },
+      "owners": 11,
+      "actual_output_map_required": true
+    },
+    {
+      "case": "xs_qcd_gggg_L1",
+      "mode": "Auto",
+      "id": "b99217732e97b6d10d4d62ca187ba691",
+      "full_key": {
+        "edges": [
+          {
+            "diagram": {
+              "external": null,
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 0,
+                "index": 0,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 1,
+                "index": 1,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          "cut_pair",
+          "cut_membership"
+        ],
+        "half_edges": [
+          null,
+          0,
+          1,
+          2,
+          3
+        ],
+        "vertices": [
+          {
+            "diagram": {
+              "interaction": 1
+            }
+          },
+          {
+            "diagram": {
+              "interaction": 2
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "left"
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "right"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "left"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "right"
+            }
+          }
+        ],
+        "words": [
+          7,
+          24,
+          0,
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          4,
+          6,
+          1,
+          6,
+          42,
+          2,
+          48,
+          78,
+          2,
+          84,
+          120,
+          4,
+          120,
+          5,
+          6,
+          0,
+          6,
+          12,
+          2,
+          6,
+          18,
+          2,
+          12,
+          120,
+          4,
+          120,
+          120,
+          6,
+          120,
+          6,
+          6,
+          1,
+          12,
+          12,
+          1,
+          18,
+          48,
+          0,
+          42,
+          84,
+          0,
+          78,
+          120,
+          3,
+          120,
+          120,
+          5,
+          120,
+          2,
+          90,
+          4,
+          90,
+          120,
+          2,
+          120,
+          3,
+          90,
+          3,
+          90,
+          120,
+          0,
+          120,
+          120,
+          1,
+          120,
+          2,
+          90,
+          6,
+          90,
+          120,
+          2,
+          120,
+          2,
+          90,
+          5,
+          90,
+          120,
+          1,
+          120
+        ]
+      },
+      "owners": 11,
+      "actual_output_map_required": true
+    },
+    {
+      "case": "xs_qcd_gggg_L1",
+      "mode": "Auto",
+      "id": "bb1e565a95ca61262d0c798add6934e6",
+      "full_key": {
+        "edges": [
+          {
+            "diagram": {
+              "external": null,
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 0,
+                "index": 0,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 1,
+                "index": 1,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          "cut_pair",
+          "cut_membership"
+        ],
+        "half_edges": [
+          null,
+          0,
+          1,
+          2
+        ],
+        "vertices": [
+          {
+            "diagram": {
+              "interaction": 1
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "left"
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "right"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "left"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "right"
+            }
+          }
+        ],
+        "words": [
+          8,
+          32,
+          0,
+          0,
+          0,
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          2,
+          6,
+          12,
+          3,
+          6,
+          66,
+          1,
+          66,
+          96,
+          4,
+          96,
+          96,
+          6,
+          96,
+          5,
+          6,
+          2,
+          12,
+          12,
+          3,
+          12,
+          66,
+          0,
+          66,
+          96,
+          5,
+          96,
+          96,
+          7,
+          96,
+          5,
+          6,
+          0,
+          6,
+          12,
+          1,
+          6,
+          42,
+          3,
+          42,
+          96,
+          5,
+          96,
+          96,
+          7,
+          96,
+          5,
+          6,
+          0,
+          12,
+          12,
+          1,
+          12,
+          42,
+          2,
+          42,
+          96,
+          4,
+          96,
+          96,
+          6,
+          96,
+          3,
+          72,
+          5,
+          72,
+          96,
+          0,
+          96,
+          96,
+          3,
+          96,
+          3,
+          72,
+          4,
+          72,
+          96,
+          1,
+          96,
+          96,
+          2,
+          96,
+          3,
+          72,
+          7,
+          72,
+          96,
+          0,
+          96,
+          96,
+          3,
+          96,
+          3,
+          72,
+          6,
+          72,
+          96,
+          1,
+          96,
+          96,
+          2,
+          96
+        ]
+      },
+      "owners": 13,
+      "actual_output_map_required": true
+    },
+    {
+      "case": "xs_qcd_gggg_L1",
+      "mode": "Auto",
+      "id": "c43b096f49ae40345818f7590fef86a4",
+      "full_key": {
+        "edges": [
+          {
+            "diagram": {
+              "external": null,
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 0,
+                "index": 0,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 1,
+                "index": 1,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          "cut_pair",
+          "cut_membership"
+        ],
+        "half_edges": [
+          null,
+          0,
+          1,
+          2
+        ],
+        "vertices": [
+          {
+            "diagram": {
+              "interaction": 1
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "left"
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "right"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "left"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "right"
+            }
+          }
+        ],
+        "words": [
+          8,
+          32,
+          0,
+          0,
+          0,
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          2,
+          6,
+          12,
+          1,
+          6,
+          66,
+          1,
+          66,
+          96,
+          4,
+          96,
+          96,
+          6,
+          96,
+          5,
+          6,
+          0,
+          12,
+          12,
+          3,
+          12,
+          66,
+          0,
+          66,
+          96,
+          5,
+          96,
+          96,
+          7,
+          96,
+          5,
+          6,
+          0,
+          6,
+          12,
+          3,
+          6,
+          42,
+          3,
+          42,
+          96,
+          4,
+          96,
+          96,
+          6,
+          96,
+          5,
+          6,
+          2,
+          12,
+          12,
+          1,
+          12,
+          42,
+          2,
+          42,
+          96,
+          5,
+          96,
+          96,
+          7,
+          96,
+          3,
+          72,
+          5,
+          72,
+          96,
+          0,
+          96,
+          96,
+          2,
+          96,
+          3,
+          72,
+          4,
+          72,
+          96,
+          1,
+          96,
+          96,
+          3,
+          96,
+          3,
+          72,
+          7,
+          72,
+          96,
+          0,
+          96,
+          96,
+          2,
+          96,
+          3,
+          72,
+          6,
+          72,
+          96,
+          1,
+          96,
+          96,
+          3,
+          96
+        ]
+      },
+      "owners": 13,
+      "actual_output_map_required": true
+    },
+    {
+      "case": "xs_qcd_gggg_L1",
+      "mode": "Auto",
+      "id": "721a6dc992be505389b72c6184f56e95",
+      "full_key": {
+        "edges": [
+          {
+            "diagram": {
+              "external": null,
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 0,
+                "index": 0,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 1,
+                "index": 1,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          "cut_pair",
+          "cut_membership"
+        ],
+        "half_edges": [
+          null,
+          0,
+          1,
+          2,
+          3
+        ],
+        "vertices": [
+          {
+            "diagram": {
+              "interaction": 1
+            }
+          },
+          {
+            "diagram": {
+              "interaction": 2
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "left"
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "right"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "left"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "right"
+            }
+          }
+        ],
+        "words": [
+          7,
+          26,
+          0,
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          5,
+          6,
+          1,
+          6,
+          12,
+          2,
+          6,
+          78,
+          2,
+          84,
+          120,
+          3,
+          120,
+          120,
+          5,
+          120,
+          5,
+          6,
+          0,
+          6,
+          12,
+          2,
+          12,
+          48,
+          2,
+          48,
+          120,
+          3,
+          120,
+          120,
+          5,
+          120,
+          6,
+          6,
+          0,
+          12,
+          12,
+          1,
+          12,
+          48,
+          1,
+          48,
+          84,
+          0,
+          78,
+          120,
+          4,
+          120,
+          120,
+          6,
+          120,
+          3,
+          90,
+          4,
+          90,
+          120,
+          0,
+          120,
+          120,
+          1,
+          120,
+          2,
+          90,
+          3,
+          90,
+          120,
+          2,
+          120,
+          3,
+          90,
+          6,
+          90,
+          120,
+          0,
+          120,
+          120,
+          1,
+          120,
+          2,
+          90,
+          5,
+          90,
+          120,
+          2,
+          120
+        ]
+      },
+      "owners": 11,
+      "actual_output_map_required": true
+    },
+    {
+      "case": "xs_qcd_gggg_L1",
+      "mode": "Auto",
+      "id": "765da42d85f911f16f4e3816abe7c485",
+      "full_key": {
+        "edges": [
+          {
+            "diagram": {
+              "external": null,
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 0,
+                "index": 0,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 1,
+                "index": 1,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          "cut_pair",
+          "cut_membership"
+        ],
+        "half_edges": [
+          null,
+          0,
+          1,
+          2,
+          3
+        ],
+        "vertices": [
+          {
+            "diagram": {
+              "interaction": 1
+            }
+          },
+          {
+            "diagram": {
+              "interaction": 2
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "left"
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "right"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "left"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "right"
+            }
+          }
+        ],
+        "words": [
+          7,
+          26,
+          0,
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          5,
+          6,
+          1,
+          6,
+          12,
+          2,
+          6,
+          48,
+          2,
+          48,
+          120,
+          4,
+          120,
+          120,
+          6,
+          120,
+          5,
+          6,
+          0,
+          6,
+          12,
+          2,
+          12,
+          78,
+          2,
+          84,
+          120,
+          4,
+          120,
+          120,
+          6,
+          120,
+          6,
+          6,
+          0,
+          12,
+          12,
+          1,
+          12,
+          48,
+          0,
+          48,
+          84,
+          1,
+          78,
+          120,
+          3,
+          120,
+          120,
+          5,
+          120,
+          2,
+          90,
+          4,
+          90,
+          120,
+          2,
+          120,
+          3,
+          90,
+          3,
+          90,
+          120,
+          0,
+          120,
+          120,
+          1,
+          120,
+          2,
+          90,
+          6,
+          90,
+          120,
+          2,
+          120,
+          3,
+          90,
+          5,
+          90,
+          120,
+          0,
+          120,
+          120,
+          1,
+          120
+        ]
+      },
+      "owners": 11,
+      "actual_output_map_required": true
+    },
+    {
+      "case": "xs_qcd_gggg_L1",
+      "mode": "Auto",
+      "id": "1a1f4e1d3f1a08cf35ba1945be3d97c9",
+      "full_key": {
+        "edges": [
+          {
+            "diagram": {
+              "external": null,
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 0,
+                "index": 0,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          {
+            "diagram": {
+              "external": {
+                "connection": 1,
+                "index": 1,
+                "name": "",
+                "state": "incoming"
+              },
+              "is_dummy": false,
+              "particle": 0
+            }
+          },
+          "cut_pair",
+          "cut_membership"
+        ],
+        "half_edges": [
+          null,
+          0,
+          1,
+          2,
+          3
+        ],
+        "vertices": [
+          {
+            "diagram": {
+              "interaction": 2
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "left"
+            }
+          },
+          {
+            "cut_side": {
+              "coupling_orders": {
+                "QCD": 2
+              },
+              "loop_count": 0,
+              "side": "right"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "left"
+            }
+          },
+          {
+            "topology_threshold_side": {
+              "side": "right"
+            }
+          }
+        ],
+        "words": [
+          6,
+          20,
+          0,
+          0,
+          1,
+          2,
+          3,
+          4,
+          6,
+          6,
+          1,
+          6,
+          12,
+          1,
+          12,
+          48,
+          1,
+          48,
+          84,
+          1,
+          84,
+          120,
+          3,
+          120,
+          120,
+          5,
+          120,
+          6,
+          6,
+          0,
+          6,
+          12,
+          0,
+          12,
+          48,
+          0,
+          48,
+          84,
+          0,
+          84,
+          120,
+          2,
+          120,
+          120,
+          4,
+          120,
+          2,
+          90,
+          3,
+          90,
+          120,
+          1,
+          120,
+          2,
+          90,
+          2,
+          90,
+          120,
+          0,
+          120,
+          2,
+          90,
+          5,
+          90,
+          120,
+          1,
+          120,
+          2,
+          90,
+          4,
+          90,
+          120,
+          0,
+          120
+        ]
+      },
+      "owners": 9,
+      "actual_output_map_required": true
+    }
+  ],
+  "math_member_associations": 4268,
+  "unique_pair_partition_sizes": [
+    {
+      "batch": "faithfulness-historical",
+      "kernel": "c78",
+      "rows": 166
+    },
+    {
+      "batch": "faithfulness-historical",
+      "kernel": "8eb",
+      "rows": 166
+    },
+    {
+      "batch": "current-faithfulness-and-equivalence",
+      "kernel": "c78",
+      "rows": 118
+    },
+    {
+      "batch": "current-faithfulness-and-equivalence",
+      "kernel": "8eb",
+      "rows": 118
+    }
+  ],
+  "full_math_members": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-native-execution-20261031-r1/math-member-to-native-row.json",
+    "sha256": "93e123fe36d5c7f2996050a3717d540da7435b66a9c23455e178e7bd5ad676d4",
+    "bytes": 7232583
+  },
+  "actual_typed_members": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-native-execution-20261031-r1/typed-native-associations.json",
+    "sha256": "ca34797160d06ffca7a1ef59613315f7f445b040cbdb45f0a61fcee393ea2aaf",
+    "bytes": 420573
+  },
+  "preparation_inputs": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-native-execution-20261031-r1/prepared-data-associations.json",
+    "sha256": "723b8d533519e5989b0f6f07de910c6c33a3b653ad8d966c789cf2bf5e13c886",
+    "bytes": 3154
+  },
+  "all21_actual_outcomes": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-native-execution-20261031-r1/outcome-index.json",
+    "sha256": "37493284754014bede69a99e4972681aebb4a92440569faefb4bcb248470e374",
+    "bytes": 19960
+  },
+  "whole_definitions_and_order": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r3/ordered-input-bindings.json",
+    "sha256": "0f8617172dcb1daa5fb8b4f2e448b0b25eb85199050c4c44646f7e39fa2450a2",
+    "bytes": 8094
+  },
+  "scope": "Reassociation of completed retained native outputs only; no new proof execution, no scientific acceptance, no historical c78 typed consumer. Operand AND output-axis maps checked. All finite relation/count claims remain individually bound in source records.",
+  "native_report_unresolved_obligations": [
+    "NEW independent scientific/finite-interface review is required; this execution packet supplies no final approval or migration permission.",
+    "Exactly three QCD cases; None/Auto separately; GroupingNone; captured pool1. OnlyNone historical Row assertion; Auto has own inputs. Factor2 remains4of5 sym diagrams.",
+    "600relations=578literal+22even-f-cycle/144rewrites;96unexpandedproducts;48cells;1890ownerpairinputs;912finite-locality records are finite premises, not a general decoder/locality/UV/fullintegrand/component-physics theorem.",
+    "166/118 unique-pair whole-definition/ordered-side partitions per c78/8eb kernel. Repeated definitions and literal identities are not fresh scientific obligations. No old onePI cross-credit.",
+    "Typed8eb imports historical/current data; no new c78 consumer execution. Both operand AND output-axis maps remain. Rank8num+rank4projector leaves FOURcoad8 outputs; no groupedrank-zero transfer.",
+    "210 changed-owner lowerings require actual output;390 unchanged cases remain conditional identical-input deterministic-source arguments.26built-inbis no-op controls get zero rejection credit.",
+    "Historical2b/c78Symbolica/Numerica+registryGraphica3.0.1; currentpristineffa/archive8993/kernel8eb; observerbuilt5ea+overlay differs from proofsource5ba. Dev/CI/profile/observer/callbackuserdata gaps retain identity. Raw/cooked/decoded association remains a captured premise.",
+    "Authentication is exact cooperative native supervisor/receipt consistency, not cryptographic/hostile attestation. Outer PID is bwrap launcher; immediate bridge/native private delivery has source and reached-native evidence, no secret or inner PID dump.",
+    "No source/expectation/metadata/ref/index changes, generator/capture/full371/host/old-batch tests, Nix/build/compiler/network-host calls, publication or delegation. Globalintegration832 and all old evidence remain untouched."
+  ],
+  "scientific_review_reused": "6d892bd9263a7c093bba5fd372fb4663a5a4e81dfaad4bfc709bbba052b96d21",
+  "general_audit_native_approval": false
+}

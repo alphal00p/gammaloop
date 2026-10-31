@@ -1,0 +1,11 @@
+Traceback (most recent call last):
+  File "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-migration-preparation-20261031-r1/reconstruct.py", line 214, in <module>
+    if __name__=='__main__': main()
+                             ~~~~^^
+  File "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-migration-preparation-20261031-r1/reconstruct.py", line 155, in main
+    h,hr,hd=world(case,mode,'historical');c,cr,cd=world(case,mode,'current')
+            ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-migration-preparation-20261031-r1/reconstruct.py", line 100, in world
+    C.need(live['grouping']=='none' and live['threads']==1 and 'threads: Some(1)' in live['Run'],'mode-pool-grouping')
+                                        ~~~~^^^^^^^^^^^
+KeyError: 'threads'

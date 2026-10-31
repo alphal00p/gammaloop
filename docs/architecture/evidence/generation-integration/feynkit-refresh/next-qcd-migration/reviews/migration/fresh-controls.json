@@ -1,0 +1,160 @@
+{
+  "controls": [
+    {
+      "name": "exact immutable patch applies without fuzz or offset",
+      "result": "ACCEPT",
+      "credit": "pure-review-only"
+    },
+    {
+      "name": "independent full Rows and complete byte scope",
+      "result": "ACCEPT",
+      "credit": "pure-review-only"
+    },
+    {
+      "name": "different source before",
+      "result": "REJECT",
+      "predicate": "immutable-before-blob",
+      "credit": "pure-review-only"
+    },
+    {
+      "name": "same-old-hash sibling migration",
+      "result": "REJECT",
+      "predicate": "exact-three-token-byte-scope",
+      "credit": "pure-review-only"
+    },
+    {
+      "name": "one extra source byte",
+      "result": "REJECT",
+      "predicate": "exact-three-token-byte-scope",
+      "credit": "pure-review-only"
+    },
+    {
+      "name": "wrong reconstructed numerator xs_qcd_gguu_sym_L1",
+      "result": "REJECT",
+      "predicate": "fresh-complete-Row-xs_qcd_gguu_sym_L1",
+      "credit": "pure-review-only"
+    },
+    {
+      "name": "wrong reconstructed numerator xs_qcd_gguu_L1",
+      "result": "REJECT",
+      "predicate": "fresh-complete-Row-xs_qcd_gguu_L1",
+      "credit": "pure-review-only"
+    },
+    {
+      "name": "wrong reconstructed numerator xs_qcd_gggg_L1",
+      "result": "REJECT",
+      "predicate": "fresh-complete-Row-xs_qcd_gggg_L1",
+      "credit": "pure-review-only"
+    },
+    {
+      "name": "selected nonnumerator field",
+      "result": "REJECT",
+      "predicate": "fresh-complete-Row-xs_qcd_gguu_sym_L1",
+      "credit": "pure-review-only"
+    },
+    {
+      "name": "prior migrated full Row changed",
+      "result": "REJECT",
+      "predicate": "exact-three-token-byte-scope",
+      "credit": "pure-review-only"
+    },
+    {
+      "name": "wrong patch path",
+      "result": "REJECT",
+      "predicate": "exact-patch-header",
+      "credit": "pure-review-only"
+    },
+    {
+      "name": "fuzzy source context",
+      "result": "REJECT",
+      "predicate": "zero-fuzz-context",
+      "credit": "pure-review-only"
+    },
+    {
+      "name": "exact captured model/request/Run cell",
+      "result": "ACCEPT",
+      "credit": "pure-review-only"
+    },
+    {
+      "name": "wrong scientific case",
+      "result": "REJECT",
+      "predicate": "world-identity",
+      "credit": "pure-review-only"
+    },
+    {
+      "name": "wrong scientific mode",
+      "result": "REJECT",
+      "predicate": "world-identity",
+      "credit": "pure-review-only"
+    },
+    {
+      "name": "wrong model with otherwise identical selected inputs",
+      "result": "REJECT",
+      "predicate": "proof-model",
+      "credit": "pure-review-only"
+    },
+    {
+      "name": "wrong current live case",
+      "result": "REJECT",
+      "predicate": "live-case",
+      "credit": "pure-review-only"
+    },
+    {
+      "name": "wrong current live mode",
+      "result": "REJECT",
+      "predicate": "live-mode",
+      "credit": "pure-review-only"
+    },
+    {
+      "name": "actual owner with complete operand and output maps",
+      "result": "ACCEPT",
+      "credit": "pure-review-only"
+    },
+    {
+      "name": "wrong actual owner",
+      "result": "REJECT",
+      "predicate": "native-owner",
+      "credit": "pure-review-only"
+    },
+    {
+      "name": "replace nontrivial operand map with identity",
+      "result": "REJECT",
+      "predicate": "native-operand-map",
+      "credit": "pure-review-only"
+    },
+    {
+      "name": "valid bijection but wrong surviving output map",
+      "result": "REJECT",
+      "predicate": "output-axis-map",
+      "credit": "pure-review-only"
+    },
+    {
+      "name": "same gamma head with changed full definition",
+      "result": "REJECT",
+      "predicate": "owner-expression",
+      "credit": "pure-review-only"
+    },
+    {
+      "name": "wrong original result source hash",
+      "result": "REJECT",
+      "predicate": "exact-reference-hash",
+      "credit": "pure-review-only"
+    },
+    {
+      "name": "corrupt actual integer plan despite valid named endpoints",
+      "result": "REJECT",
+      "predicate": "integer-debug-plan",
+      "credit": "pure-review-only"
+    },
+    {
+      "name": "corrupt named fold endpoint despite unchanged output count",
+      "result": "REJECT",
+      "predicate": "named-endpoint-map",
+      "credit": "pure-review-only"
+    }
+  ],
+  "total": 26,
+  "accepted": 4,
+  "rejected": 22,
+  "native_or_scientific_negative_credit": 0
+}

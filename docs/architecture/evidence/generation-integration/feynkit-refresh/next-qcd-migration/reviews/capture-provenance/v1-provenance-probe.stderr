@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-next-qcd-captures-astra-20261031-IYGt5Jrv/provenance_probe.py", line 140, in <module>
+    need(cell['pool']==1 and cell['grouping']=='None' and cell['historical_None_Row_native_pass'] and not cell['Auto_literal_asserted'] and not cell['current_native_pass'],'honest cell native credit')
+    ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-next-qcd-captures-astra-20261031-IYGt5Jrv/provenance_probe.py", line 23, in need
+    if not ok:raise ValueError(text)
+              ^^^^^^^^^^^^^^^^^^^^^^
+ValueError: honest cell native credit

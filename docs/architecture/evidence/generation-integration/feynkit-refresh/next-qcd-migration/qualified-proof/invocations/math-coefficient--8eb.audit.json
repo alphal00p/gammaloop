@@ -1,0 +1,20 @@
+{
+  "id": "math-coefficient--8eb",
+  "status": "EXPECTED_SEMANTIC_REJECTION",
+  "validated_predicate": true,
+  "authenticated_execution": true,
+  "semantic_negative_credit": true,
+  "full_semantic_audit": {
+    "predicate": "assertion failed: row.parsed_equal && row.canonical_equal",
+    "result_policy": "absent_by_source_before_final_write"
+  },
+  "receipt_sha256": "7a8d93da786d83c3e3ff5076e176dca1362f3f858988f56a9751288ffcd3f1e9",
+  "outcome_sha256": "7a8d93da786d83c3e3ff5076e176dca1362f3f858988f56a9751288ffcd3f1e9",
+  "artifact_hashes": {
+    "command.json": "4eb758f49964142532ff067c723c2374a3706f516b78f9f36f4b67ef3405b128",
+    "stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stderr": "f1ae0247453af240494b909c5e48d40ada76ef4994127995c9942b5af1828471"
+  },
+  "process_reaped": true,
+  "runtime_private_pipe_observation": "Native process reached declared source predicate through unchanged reviewed anonymous-pipe bridge; source premise, no inner PID/secret attestation."
+}

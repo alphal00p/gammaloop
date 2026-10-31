@@ -1,0 +1,21 @@
+{
+  "id": "current-faithfulness-and-equivalence--8eb",
+  "status": "BASELINE_PASS",
+  "validated_predicate": true,
+  "authenticated_execution": true,
+  "semantic_negative_credit": false,
+  "full_semantic_audit": {
+    "checked_math_rows": 118,
+    "native_execution_evidence": "parent command/exit/source/program/input/definition-order/streams and before-after guards MUST be independently bound; this pure audit cannot supply that evidence"
+  },
+  "receipt_sha256": "0522c02476de94ec7656c236efccb053a3e4a45d7f05ff3d01d569961273a9b9",
+  "outcome_sha256": "0522c02476de94ec7656c236efccb053a3e4a45d7f05ff3d01d569961273a9b9",
+  "artifact_hashes": {
+    "command.json": "ef3adc530496436c4ccc3f3631f9399e972041d7eb376b0c44d17bf7e8d4912f",
+    "stdout": "0ba507674f64111cfd2d61841c02f03a9422085dfc4c03b048485158fcdec848",
+    "stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "results.json": "40709d196550ed090feafaab3aaf53e345c650b8f418ae2c66541218effbbfc6"
+  },
+  "process_reaped": true,
+  "runtime_private_pipe_observation": "Native process reached declared source predicate through unchanged reviewed anonymous-pipe bridge; source premise, no inner PID/secret attestation."
+}

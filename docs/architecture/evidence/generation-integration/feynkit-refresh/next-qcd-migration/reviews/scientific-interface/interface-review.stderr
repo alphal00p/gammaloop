@@ -1,0 +1,4 @@
+  File "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-next-qcd-scientific-interface-astra-20261031-5a3KbP5x/interface_review.py", line 60
+    noop=c[0].replace('::bis(4,','::bis(5,',1))==c[0];assert controls['wrong_type']['accepted']is noop
+                                              ^
+SyntaxError: unmatched ')'

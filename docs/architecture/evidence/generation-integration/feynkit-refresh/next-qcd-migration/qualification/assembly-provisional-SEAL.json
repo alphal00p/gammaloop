@@ -1,0 +1,16 @@
+{
+  "schema": "next-QCD-postapplication-evidence-seal/1",
+  "status": "NEW_INDEPENDENT_INTEGRATION_REVIEW_REQUIRED",
+  "manifest_sha256": "0afd8150c3e06a8927514170cafa1db401fe58333170a37a0509a32a0c1aa06c",
+  "receipt_sha256": "b2c65b0e3c7329a06f6c317c7302a4383bfb6acd7df6331fd1fee1c3dfd1bcce",
+  "files": 1270,
+  "bytes": 51334707,
+  "code": "432b6544f3d2d884f6efffb8be104ae5820183b0",
+  "after_blob": "cc4505a6c4f6fc1687c075ed79e154a8e19f05a6",
+  "external_dependencies_required": true,
+  "allowed_nonmanifest_roots": [
+    "SHA256SUMS",
+    "SEAL.json"
+  ],
+  "immutable_closure_requirement": "Verify all entries and lossless copies from immutable Git blobs; ignored logs must be explicitly tracked. No working-file-only closure claim."
+}

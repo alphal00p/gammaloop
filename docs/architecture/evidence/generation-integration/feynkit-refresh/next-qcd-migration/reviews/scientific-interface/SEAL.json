@@ -1,0 +1,14 @@
+{
+  "schema": "independent-next-qcd-scientific-finite-interface-review-seal/1",
+  "created_utc": "2026-10-31T06:48:03.503790+00:00",
+  "decision": "APPROVE",
+  "accepted_scope": "FINITE_PHYSICAL_VALUE_MATHEMATICS_AND_FINITE_NAMED_CONSUMER_COMPATIBILITY_FOR_THE_EXACT_SIX_CELLS",
+  "manifest_sha256": "4b2206bbc442a01d99acafc68d8bae2abad78012c663e991727f016eaf3a2609",
+  "bound_files": 57,
+  "review_sha256": "6d892bd9263a7c093bba5fd372fb4663a5a4e81dfaad4bfc709bbba052b96d21",
+  "candidate_complete_seal_sha256": "22b11020019c4b9f8e058a2951de177f5a6f111fbb4f6976932f98ef0c399626",
+  "original_input_integrity_final_sha256": "900c94e4fec94a220afed2bd00587f9d4030697655380f795ea3ebbe779da9ca",
+  "no_new_native_execution": true,
+  "no_migration_or_runtime_application_approval": true,
+  "owned_background_processes_remaining": 0
+}

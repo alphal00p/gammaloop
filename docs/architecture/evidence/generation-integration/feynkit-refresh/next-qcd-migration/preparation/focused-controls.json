@@ -1,0 +1,212 @@
+{
+  "total": 34,
+  "accepted": 2,
+  "rejected": 32,
+  "tests": [
+    {
+      "name": "exact complete candidate",
+      "outcome": "ACCEPT",
+      "kind": "positive private byte fence"
+    },
+    {
+      "name": "wrong literal xs_qcd_gguu_sym_L1",
+      "outcome": "REJECT",
+      "predicate": "exact-three-token-byte-scope",
+      "kind": "Fresh pure in-memory structural control; zero native/scientific-negative credit."
+    },
+    {
+      "name": "forged reconstructed expectation xs_qcd_gguu_sym_L1",
+      "outcome": "REJECT",
+      "predicate": "reconstructed-None-literal",
+      "kind": "Fresh pure in-memory structural control; zero native/scientific-negative credit."
+    },
+    {
+      "name": "wrong literal xs_qcd_gguu_L1",
+      "outcome": "REJECT",
+      "predicate": "exact-three-token-byte-scope",
+      "kind": "Fresh pure in-memory structural control; zero native/scientific-negative credit."
+    },
+    {
+      "name": "forged reconstructed expectation xs_qcd_gguu_L1",
+      "outcome": "REJECT",
+      "predicate": "reconstructed-None-literal",
+      "kind": "Fresh pure in-memory structural control; zero native/scientific-negative credit."
+    },
+    {
+      "name": "wrong literal xs_qcd_gggg_L1",
+      "outcome": "REJECT",
+      "predicate": "exact-three-token-byte-scope",
+      "kind": "Fresh pure in-memory structural control; zero native/scientific-negative credit."
+    },
+    {
+      "name": "forged reconstructed expectation xs_qcd_gggg_L1",
+      "outcome": "REJECT",
+      "predicate": "reconstructed-None-literal",
+      "kind": "Fresh pure in-memory structural control; zero native/scientific-negative credit."
+    },
+    {
+      "name": "wrong case in candidate",
+      "outcome": "REJECT",
+      "predicate": "exact-three-case-domain",
+      "kind": "Fresh pure in-memory structural control; zero native/scientific-negative credit."
+    },
+    {
+      "name": "wrong immutable source byte",
+      "outcome": "REJECT",
+      "predicate": "exact832-before",
+      "kind": "Fresh pure in-memory structural control; zero native/scientific-negative credit."
+    },
+    {
+      "name": "extra selected nonnumerator field",
+      "outcome": "REJECT",
+      "predicate": "exact-three-token-byte-scope",
+      "kind": "Fresh pure in-memory structural control; zero native/scientific-negative credit."
+    },
+    {
+      "name": "trailing unrelated source byte",
+      "outcome": "REJECT",
+      "predicate": "exact-three-token-byte-scope",
+      "kind": "Fresh pure in-memory structural control; zero native/scientific-negative credit."
+    },
+    {
+      "name": "change prior full Row xs_qed_eemm_L1",
+      "outcome": "REJECT",
+      "predicate": "prior13-full-Rows",
+      "kind": "Fresh pure in-memory structural control; zero native/scientific-negative credit."
+    },
+    {
+      "name": "change prior full Row xs_qed_eedd_L1",
+      "outcome": "REJECT",
+      "predicate": "prior13-full-Rows",
+      "kind": "Fresh pure in-memory structural control; zero native/scientific-negative credit."
+    },
+    {
+      "name": "change prior full Row xs_qed_eeee_1pi_L1",
+      "outcome": "REJECT",
+      "predicate": "prior13-full-Rows",
+      "kind": "Fresh pure in-memory structural control; zero native/scientific-negative credit."
+    },
+    {
+      "name": "change prior full Row qed_eemm_L1",
+      "outcome": "REJECT",
+      "predicate": "prior13-full-Rows",
+      "kind": "Fresh pure in-memory structural control; zero native/scientific-negative credit."
+    },
+    {
+      "name": "change prior full Row ctorder_qcd_uugg_L1",
+      "outcome": "REJECT",
+      "predicate": "prior13-full-Rows",
+      "kind": "Fresh pure in-memory structural control; zero native/scientific-negative credit."
+    },
+    {
+      "name": "change prior full Row sm_eemm_L0",
+      "outcome": "REJECT",
+      "predicate": "prior13-full-Rows",
+      "kind": "Fresh pure in-memory structural control; zero native/scientific-negative credit."
+    },
+    {
+      "name": "change prior full Row ym_g6_L0",
+      "outcome": "REJECT",
+      "predicate": "prior13-full-Rows",
+      "kind": "Fresh pure in-memory structural control; zero native/scientific-negative credit."
+    },
+    {
+      "name": "change prior full Row xs_qed_eemm_L2",
+      "outcome": "REJECT",
+      "predicate": "prior13-full-Rows",
+      "kind": "Fresh pure in-memory structural control; zero native/scientific-negative credit."
+    },
+    {
+      "name": "change prior full Row sm_eeww_L0",
+      "outcome": "REJECT",
+      "predicate": "prior13-full-Rows",
+      "kind": "Fresh pure in-memory structural control; zero native/scientific-negative credit."
+    },
+    {
+      "name": "change prior full Row qed_ee4f_L0",
+      "outcome": "REJECT",
+      "predicate": "prior13-full-Rows",
+      "kind": "Fresh pure in-memory structural control; zero native/scientific-negative credit."
+    },
+    {
+      "name": "change prior full Row xs_qed_eeee_L1",
+      "outcome": "REJECT",
+      "predicate": "prior13-full-Rows",
+      "kind": "Fresh pure in-memory structural control; zero native/scientific-negative credit."
+    },
+    {
+      "name": "change prior full Row xs_qcd_gguu_1pi_L1",
+      "outcome": "REJECT",
+      "predicate": "prior13-full-Rows",
+      "kind": "Fresh pure in-memory structural control; zero native/scientific-negative credit."
+    },
+    {
+      "name": "change prior full Row xs_qed_eemm_identical_L2",
+      "outcome": "REJECT",
+      "predicate": "prior13-full-Rows",
+      "kind": "Fresh pure in-memory structural control; zero native/scientific-negative credit."
+    },
+    {
+      "name": "wrong native case",
+      "outcome": "REJECT",
+      "predicate": "proof-case",
+      "kind": "Fresh pure in-memory structural control; zero native/scientific-negative credit."
+    },
+    {
+      "name": "wrong native mode",
+      "outcome": "REJECT",
+      "predicate": "proof-mode",
+      "kind": "Fresh pure in-memory structural control; zero native/scientific-negative credit."
+    },
+    {
+      "name": "actual owner with both operand and output maps",
+      "outcome": "ACCEPT",
+      "kind": "positive retained-output association only"
+    },
+    {
+      "name": "wrong native owner",
+      "outcome": "REJECT",
+      "predicate": "actual-owner",
+      "kind": "Fresh pure in-memory structural control; zero native/scientific-negative credit."
+    },
+    {
+      "name": "inverse substituted for operand map",
+      "outcome": "REJECT",
+      "predicate": "actual-operand-map",
+      "kind": "Fresh pure in-memory structural control; zero native/scientific-negative credit."
+    },
+    {
+      "name": "valid bijection with wrong output axes",
+      "outcome": "REJECT",
+      "predicate": "actual-output-axis-map",
+      "kind": "Fresh pure in-memory structural control; zero native/scientific-negative credit."
+    },
+    {
+      "name": "wrong whole symbol definition",
+      "outcome": "REJECT",
+      "predicate": "whole-symbol-definitions",
+      "kind": "Fresh pure in-memory structural control; zero native/scientific-negative credit."
+    },
+    {
+      "name": "wrong retained native source hash",
+      "outcome": "REJECT",
+      "predicate": "proof-source-binding",
+      "kind": "Fresh pure in-memory structural control; zero native/scientific-negative credit."
+    },
+    {
+      "name": "wrong named contraction endpoint",
+      "outcome": "REJECT",
+      "predicate": "actual-plan-endpoints",
+      "kind": "Fresh pure in-memory structural control; zero native/scientific-negative credit."
+    },
+    {
+      "name": "wrong unified patch path",
+      "outcome": "REJECT",
+      "predicate": "patch-path",
+      "kind": "Fresh pure in-memory structural control; zero native/scientific-negative credit."
+    }
+  ],
+  "native_execution": 0,
+  "scientific_negative_credit": 0,
+  "scope": "Controls test pure candidate fences against actual retained data; no fixture may authenticate native execution or confer proof credit."
+}

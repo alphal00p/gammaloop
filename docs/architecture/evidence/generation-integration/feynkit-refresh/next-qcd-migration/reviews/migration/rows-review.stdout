@@ -1,0 +1,7 @@
+PASS12 full Rows derived independently from exact pristine serialized bytes; all ten fields match candidate. OnlyNone literal scope.
+xs_qcd_gguu_sym_L1 historical 0xb9fdc23ed056fa0c
+xs_qcd_gguu_sym_L1 current 0xe4b209849953f1fa
+xs_qcd_gguu_L1 historical 0x5edf8e5f7a11eeb3
+xs_qcd_gguu_L1 current 0x665e13a4c88da679
+xs_qcd_gggg_L1 historical 0x2628c62dc373ac91
+xs_qcd_gggg_L1 current 0x96e5abcebda25959

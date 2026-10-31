@@ -1,0 +1,14 @@
+{
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-migration-preparation-20261031-r1/source-blobs/actual-pristine/crates/feynkit-generator/tests/generation_oracle/main.rs": {
+    "sha256": "6dacf61baca9f13f3e4a6d719f89eaced429fb3cb14c7904dcb41fe4c86b66df",
+    "bytes": 77616
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-migration-preparation-20261031-r1/source-blobs/target/crates/feynkit-generator/tests/generation_oracle/main.rs": {
+    "sha256": "66f01bcc855552ae888f1fb7c5bb158afbd448492b4e27a26e2bda40f09b07d2",
+    "bytes": 77616
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-captures-20261031-r1/producer-source-bindings.json": {
+    "sha256": "70fa9c8de3d3ae2cb91e6d612b4cfbb600df6f2f4810e9e6df5daa5ea0b495f8",
+    "bytes": 225769
+  }
+}

@@ -1,0 +1,72 @@
+Running phase: unpackPhase
+@nix { "action": "setPhase", "phase": "unpackPhase" }
+unpacking source archive /nix/store/ynnb4iz406bds753h2gl8dc4d977s1vj-source
+source root is source
+Running phase: patchPhase
+@nix { "action": "setPhase", "phase": "patchPhase" }
+Executing configureCargoCommonVars
+decompressing cargo artifacts from /nix/store/kck3a2p03gvd9162cnkl6g96viy1bpp1-gammaloop-crate-test-dependencies-b6f177b7bc15beb1-inputs/target.tar.zst to target
+decompressing cargo artifacts from /nix/store/cx447jb5zb3gxcpslza3gkldr2vs7kah-gammaloop-crate-test-dependencies-b6f177b7bc15beb1-deps-0.1.0/target.tar.zst to target
+decompressing cargo artifacts from /nix/store/y5wgi2lkmpz0ccb9bkarqfd6qcz5489h-gammaloop-crate-test-binaries-feynkit-generator-b6f177b7bc15beb1-deps-0.1.0/target.tar.zst to target
+Running phase: updateAutotoolsGnuConfigScriptsPhase
+@nix { "action": "setPhase", "phase": "updateAutotoolsGnuConfigScriptsPhase" }
+Running phase: configurePhase
+@nix { "action": "setPhase", "phase": "configurePhase" }
+will append /build/source/.cargo-home/config.toml with contents of /nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/config.toml
+default configurePhase, nothing to do
+Running phase: buildPhase
+@nix { "action": "setPhase", "phase": "buildPhase" }
++++ command cargo --version
+cargo 1.98.1 (797e8a9bc 2026-08-05)
++++ command cargo nextest --version
+cargo-nextest 0.9.143
+release: 0.9.143
+host: x86_64-unknown-linux-gnu
++++ command cargo nextest archive --cargo-profile ci-optim --offline -p feynkit-generator -E 'package(feynkit-generator)' --profile ci_gammaloop --archive-file /nix/store/nida72z77301xcflxivfhapq1qrywy05-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0/gammaloop-nextest-feynkit-feynkit-generator.tar.zst
+[1m[92m   Compiling[0m clarabel v0.11.1 (/build/source/vendor/clarabel)
+[1m[33mwarning[0m[1m: unused import: `super::super::traits::*`[0m
+   [1m[94m--> [0mvendor/clarabel/src/solver/core/solver.rs:470:9
+    [1m[94m|[0m
+[1m[94m470[0m [1m[94m|[0m     use super::super::traits::*;
+    [1m[94m|[0m         [1m[33m^^^^^^^^^^^^^^^^^^^^^^^[0m
+    [1m[94m|[0m
+    [1m[94m= [0m[1mnote[0m: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+[1m[33mwarning[0m[1m: hiding a lifetime that's elided elsewhere is confusing[0m
+  [1m[94m--> [0mvendor/clarabel/src/solver/core/kktsolvers/direct/quasidef/datamaps.rs:26:39
+   [1m[94m|[0m
+[1m[94m26[0m [1m[94m|[0m     pub(crate) fn to_sparse_expansion(&self) -> Option<SparseExpansionCone<T>> {
+   [1m[94m|[0m                                       [1m[33m^^^^^[0m            [1m[33m^^^^^^^^^^^^^^^^^^^^^^[0m [1m[33mthe same lifetime is hidden here[0m
+   [1m[94m|[0m                                       [1m[33m|[0m
+   [1m[94m|[0m                                       [1m[33mthe lifetime is elided here[0m
+   [1m[94m|[0m
+   [1m[94m= [0m[1mhelp[0m: the same lifetime is referred to in inconsistent ways, making the signature confusing
+   [1m[94m= [0m[1mnote[0m: `#[warn(mismatched_lifetime_syntaxes)]` on by default
+[1m[96mhelp[0m: use `'_` for type paths
+   [1m[94m|[0m
+[1m[94m26[0m [1m[94m| [0m    pub(crate) fn to_sparse_expansion(&self) -> Option<SparseExpansionCone<[92m'_, [0mT>> {
+   [1m[94m|[0m                                                                            [92m+++[0m
+
+[1m[33mwarning[0m: `clarabel` (lib) generated 2 warnings (run `cargo fix --lib -p clarabel` to apply 2 suggestions)
+[1m[92m   Compiling[0m linnet v0.17.0 (/build/source/crates/linnet)
+[1m[92m   Compiling[0m spenso v0.6.0 (/build/source/crates/spenso)
+[1m[92m   Compiling[0m idenso v0.3.0 (/build/source/crates/idenso)
+[1m[92m   Compiling[0m linnest v0.1.0 (/build/source/crates/linnest)
+[1m[92m   Compiling[0m feynkit-kinematics v0.1.0 (/build/source/crates/feynkit-kinematics)
+[1m[92m   Compiling[0m feynkit-model v0.1.0 (/build/source/crates/feynkit-model)
+[1m[92m   Compiling[0m feynkit-graph v0.1.0 (/build/source/crates/feynkit-graph)
+[1m[92m   Compiling[0m feynkit-amplitude v0.1.0 (/build/source/crates/feynkit-amplitude)
+[1m[92m   Compiling[0m spenso-hep-lib v0.1.7 (/build/source/crates/spenso-hep-lib)
+[1m[92m   Compiling[0m gammaloop-ci-test-binary-dependencies-b6f177b7bc15beb1 v0.1.0 (/build/source/crates/gammaloop-ci-test-binary-dependencies-b6f177b7bc15beb1)
+[1m[92m   Compiling[0m feynkit-generator v0.1.0 (/build/source/crates/feynkit-generator)
+[1m[92m    Finished[0m `ci-optim` profile [optimized] target(s) in 8m 34s
+[32;1m   Archiving[0m [1m7[0m binaries (including [1m3[0m non-test binaries), [1m2[0m linked paths, and [1m1[0m standard library to [1m/nix/store/nida72z77301xcflxivfhapq1qrywy05-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0/gammaloop-nextest-feynkit-feynkit-generator.tar.zst[0m
+[32;1m    Archived[0m [1m24[0m files to [1m/nix/store/nida72z77301xcflxivfhapq1qrywy05-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0/gammaloop-nextest-feynkit-feynkit-generator.tar.zst[0m in 1.44s
+buildPhase completed in 8 minutes 38 seconds
+Running phase: installPhase
+@nix { "action": "setPhase", "phase": "installPhase" }
+Running phase: fixupPhase
+@nix { "action": "setPhase", "phase": "fixupPhase" }
+shrinking RPATHs of ELF executables and libraries in /nix/store/nida72z77301xcflxivfhapq1qrywy05-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0
+checking for references to /build/ in /nix/store/nida72z77301xcflxivfhapq1qrywy05-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0...
+patching script interpreter paths in /nix/store/nida72z77301xcflxivfhapq1qrywy05-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0

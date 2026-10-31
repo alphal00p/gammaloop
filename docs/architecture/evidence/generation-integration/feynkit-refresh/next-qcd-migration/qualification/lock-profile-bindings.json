@@ -1,0 +1,196 @@
+{
+  "lock_sha256": "e111296686b2573ac88b9274cac2bf1e10aad07669f8fc6d243ac5b47d985ae0",
+  "manifest_sha256": "fbc0408bac3bdf1ed16eb9276d1db34923280b23300801555ca97afee6511478",
+  "flake_lock_sha256": "e10c5893b513d4c7120d841b47fbfddffb3ac4f1f5cb46a18c0f7542cbde8534",
+  "nextest_config_sha256": "03e166fbe150d150450df98ebfa00e3b823b487cab5f6f9ff3d4cfb4bff4b09f",
+  "producer": "/nix/store/w2y0rfjpbxnnr5cw05hxzl7rbz549hs1-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0.drv",
+  "actual_root_fingerprint": {
+    "unit": "feynkit-generator-3892f55f31822180",
+    "kind": "test-integration-test-generation_oracle",
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/new-fingerprints/ci-optim/.fingerprint/feynkit-generator-3892f55f31822180/test-integration-test-generation_oracle.json",
+    "sha256": "78a8a16e914b403e6ea856f0cc20992a4bbff9be46d0e1102259a492bf453a1c",
+    "stored_fingerprint": "5a61a96e7461acd8",
+    "data": {
+      "rustc": 1625334936438085654,
+      "features": "[\"default\", \"native\"]",
+      "declared_features": "[\"default\", \"native\", \"wasm\"]",
+      "target": 11526694154387375423,
+      "profile": 16057468363761213068,
+      "path": 15726402853306774164,
+      "deps": [
+        [
+          824141387789191317,
+          "feynkit_amplitude",
+          false,
+          7519181757809723393
+        ],
+        [
+          2448563160050429386,
+          "thiserror",
+          false,
+          8019520362216416025
+        ],
+        [
+          2819946551904607991,
+          "num_rational",
+          false,
+          2913073195146597074
+        ],
+        [
+          2878135982285137535,
+          "linnet",
+          false,
+          9844451759723403564
+        ],
+        [
+          4479790829530052811,
+          "spenso",
+          false,
+          9628441351436889623
+        ],
+        [
+          4796842932013701455,
+          "spenso_hep_lib",
+          false,
+          15977754132253444010
+        ],
+        [
+          5156925218712681703,
+          "feynkit_generator",
+          false,
+          17053848716133265874
+        ],
+        [
+          7497922256016908689,
+          "feynkit_model",
+          false,
+          8906438852564711183
+        ],
+        [
+          9723370144619655183,
+          "tempfile",
+          false,
+          16876693854882113829
+        ],
+        [
+          9917544417685332479,
+          "idenso",
+          false,
+          7976959366355746746
+        ],
+        [
+          11862723254873017773,
+          "bincode",
+          false,
+          12025675163425707939
+        ],
+        [
+          11910974697091955563,
+          "rayon",
+          false,
+          7127050247782661200
+        ],
+        [
+          12405394076909343869,
+          "bincode_trait_derive",
+          false,
+          16688621338624518158
+        ],
+        [
+          12528732512569713347,
+          "num_bigint",
+          false,
+          8054893253489706379
+        ],
+        [
+          13548984313718623784,
+          "serde",
+          false,
+          10536416393539824496
+        ],
+        [
+          13795362694956882968,
+          "serde_json",
+          false,
+          1220147813903593688
+        ],
+        [
+          15115587472993760548,
+          "gammaloop_ci_test_binary_dependencies_b6f177b7bc15beb1",
+          false,
+          5168019764688101402
+        ],
+        [
+          17020882691900786901,
+          "symbolica",
+          false,
+          10965849249385673509
+        ],
+        [
+          17109794424245468765,
+          "regex",
+          false,
+          5030923632659425269
+        ],
+        [
+          17283853990992084357,
+          "feynkit_graph",
+          false,
+          10864370868311707648
+        ]
+      ],
+      "local": [
+        {
+          "CheckDepInfo": {
+            "dep_info": "ci-optim/.fingerprint/feynkit-generator-3892f55f31822180/dep-test-integration-test-generation_oracle",
+            "checksum": false
+          }
+        }
+      ],
+      "rustflags": [
+        "-C",
+        "linker=/nix/store/z4c6k0mrlkwl3s4w9ysxc8vq1wylm3ms-gcc-wrapper-15.3.0/bin/gcc"
+      ],
+      "config": 1282902399306750302,
+      "compile_kind": 0
+    },
+    "source_layer": "/nix/store/y5wgi2lkmpz0ccb9bkarqfd6qcz5489h-gammaloop-crate-test-binaries-feynkit-generator-b6f177b7bc15beb1-deps-0.1.0/target.tar.zst"
+  },
+  "terminal_derivation": "/nix/store/ialr5c6d4kq9c3qrz1bkgfyrngcm2568-gammaloop-crate-test-binaries-feynkit-generator-b6f177b7bc15beb1-deps-0.1.0.drv",
+  "RUSTFLAGS": "-C linker=/nix/store/z4c6k0mrlkwl3s4w9ysxc8vq1wylm3ms-gcc-wrapper-15.3.0/bin/gcc",
+  "cargoExtraArgs": "--locked --workspace --features feynkit-graph/svg,feynkit-py/python_stubgen,gammaloop-api/cli,gammaloop-api/python_stubgen,gammaloop-api/ufo_support,gammaloop-integration-tests/python-api-tests,gammaloop-tracing-filter/clap,gammaloop-tracing-filter/python,gammaloop-tracing-filter/symbolica,gammalooprs/python_stubgen,idenso/bincode,idenso/native,idenso/reference-cases,linnest/svg,linnet-py/python_stubgen,linnet/bincode,linnet/drawing,linnet/rayon,linnet/rkyv,linnet/serde,linnet/symbolica,pyo3-stub-gen/infer_signature,pyo3-stub-gen/numpy,pyo3/anyhow,pyo3/auto-initialize,pyo3/eyre,pyo3/macros,pyo3/multiple-pymethods,spenso-hep-lib/native,spenso/native,spenso/native-code-generation,spenso/portable-payload,spenso/python,spenso/python_stubgen,spenso/shadowing,spynso3/python_stubgen,symbolica-utils/native,symbolica/tracing_max_level_info,three-dimensional-reps/display,three-dimensional-reps/eval,three-dimensional-reps/json_schema,vakint/python_stubgen,vakint/symbolica_community_module",
+  "kernels": [
+    {
+      "name": "graphica",
+      "version": "3.0.1",
+      "source": "git+https://github.com/symbolica-dev/symbolica?branch=community#8eb7c3729d6abefc916decc1bdf0c06536f8af80",
+      "manifest_path": "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/graphica-3.0.1/Cargo.toml"
+    },
+    {
+      "name": "numerica",
+      "version": "3.0.1",
+      "source": "git+https://github.com/symbolica-dev/symbolica?branch=community#8eb7c3729d6abefc916decc1bdf0c06536f8af80",
+      "manifest_path": "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/Cargo.toml"
+    },
+    {
+      "name": "symbolica",
+      "version": "3.0.1",
+      "source": "git+https://github.com/symbolica-dev/symbolica?branch=community#8eb7c3729d6abefc916decc1bdf0c06536f8af80",
+      "manifest_path": "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/symbolica-3.0.1/Cargo.toml"
+    }
+  ],
+  "compiler": {
+    "rustc": {
+      "path": "/nix/store/c3bpv60f5wgp4pmgsifaykxk214h6463-rust-stable-with-components-2026-09-03/bin/rustc",
+      "version": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8"
+    },
+    "cargo": {
+      "path": "/nix/store/c3bpv60f5wgp4pmgsifaykxk214h6463-rust-stable-with-components-2026-09-03/bin/cargo",
+      "version": "cargo 1.98.1 (797e8a9bc 2026-08-05)"
+    },
+    "rustfmt": {
+      "path": "/nix/store/c3bpv60f5wgp4pmgsifaykxk214h6463-rust-stable-with-components-2026-09-03/bin/rustfmt",
+      "version": "rustfmt 1.9.0-stable (48a229ceae 2026-09-01)"
+    }
+  }
+}

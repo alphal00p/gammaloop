@@ -1,0 +1,21 @@
+{
+  "argv": [
+    "/nix/store/c3bpv60f5wgp4pmgsifaykxk214h6463-rust-stable-with-components-2026-09-03/bin/rustfmt",
+    "--check",
+    "--edition",
+    "2024",
+    "crates/feynkit-generator/tests/generation_oracle/main.rs"
+  ],
+  "cwd": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh",
+  "license_keys_removed": [
+    "SYMBOLICA_LICENSE",
+    "SYMBOLICA_LICENSE_PATH",
+    "SYMBOLICA_LICENSE_SIGNED",
+    "SYMBOLICA_LICENSE_FILE"
+  ],
+  "start": "2026-10-31T07:18:10.466912+00:00",
+  "exit": 0,
+  "end": "2026-10-31T07:18:10.569523+00:00",
+  "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+}

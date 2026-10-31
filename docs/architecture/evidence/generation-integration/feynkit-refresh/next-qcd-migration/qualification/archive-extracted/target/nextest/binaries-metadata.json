@@ -1,0 +1,112 @@
+{
+  "rust-build-meta": {
+    "target-directory": "/build/source/target",
+    "base-output-directories": [
+      "ci-optim"
+    ],
+    "non-test-binaries": {
+      "path+file:///build/source/crates/kurvst#0.1.0": [
+        {
+          "name": "kurvst",
+          "kind": "dylib",
+          "path": "ci-optim/deps/libkurvst.rlib",
+          "build-platform": "target"
+        },
+        {
+          "name": "kurvst",
+          "kind": "dylib",
+          "path": "ci-optim/deps/libkurvst.so",
+          "build-platform": "target"
+        }
+      ],
+      "path+file:///build/source/crates/linnest#0.1.0": [
+        {
+          "name": "linnest",
+          "kind": "dylib",
+          "path": "ci-optim/deps/liblinnest.rlib",
+          "build-platform": "target"
+        },
+        {
+          "name": "linnest",
+          "kind": "dylib",
+          "path": "ci-optim/deps/liblinnest.so",
+          "build-platform": "target"
+        }
+      ],
+      "path+file:///build/source/vendor/clarabel#0.11.1": [
+        {
+          "name": "clarabel",
+          "kind": "dylib",
+          "path": "ci-optim/deps/libclarabel.rlib",
+          "build-platform": "target"
+        },
+        {
+          "name": "clarabel",
+          "kind": "dylib",
+          "path": "ci-optim/deps/libclarabel.so",
+          "build-platform": "target"
+        }
+      ]
+    },
+    "build-script-out-dirs": {},
+    "build-script-info": {},
+    "linked-paths": [
+      "ci-optim/build/blake3-91385034c9e68003/out",
+      "ci-optim/build/gmp-mpfr-sys-1682cd3378d91a1a/out/lib"
+    ],
+    "platforms": {
+      "host": {
+        "platform": {
+          "triple": "x86_64-unknown-linux-gnu",
+          "target-features": "unknown"
+        },
+        "libdir": {
+          "status": "available",
+          "path": "/nix/store/c3bpv60f5wgp4pmgsifaykxk214h6463-rust-stable-with-components-2026-09-03/lib/rustlib/x86_64-unknown-linux-gnu/lib"
+        }
+      },
+      "targets": []
+    },
+    "target-platforms": [
+      {
+        "triple": "x86_64-unknown-linux-gnu",
+        "target-features": "unknown"
+      }
+    ],
+    "target-platform": null
+  },
+  "rust-binaries": {
+    "feynkit-generator": {
+      "binary-id": "feynkit-generator",
+      "binary-name": "feynkit_generator",
+      "package-id": "path+file:///build/source/crates/feynkit-generator#0.1.0",
+      "kind": "lib",
+      "binary-path": "/build/source/target/ci-optim/deps/feynkit_generator-9c81726e5f0078f8",
+      "build-platform": "target"
+    },
+    "feynkit-generator::amplitude": {
+      "binary-id": "feynkit-generator::amplitude",
+      "binary-name": "amplitude",
+      "package-id": "path+file:///build/source/crates/feynkit-generator#0.1.0",
+      "kind": "test",
+      "binary-path": "/build/source/target/ci-optim/deps/amplitude-0bcbb9273998b3e1",
+      "build-platform": "target"
+    },
+    "feynkit-generator::generation_oracle": {
+      "binary-id": "feynkit-generator::generation_oracle",
+      "binary-name": "generation_oracle",
+      "package-id": "path+file:///build/source/crates/feynkit-generator#0.1.0",
+      "kind": "test",
+      "binary-path": "/build/source/target/ci-optim/deps/generation_oracle-3892f55f31822180",
+      "build-platform": "target"
+    },
+    "feynkit-generator::momentum_tensor": {
+      "binary-id": "feynkit-generator::momentum_tensor",
+      "binary-name": "momentum_tensor",
+      "package-id": "path+file:///build/source/crates/feynkit-generator#0.1.0",
+      "kind": "test",
+      "binary-path": "/build/source/target/ci-optim/deps/momentum_tensor-43d9cde778a19275",
+      "build-platform": "target"
+    }
+  }
+}

@@ -1,0 +1,300 @@
+{
+  "status": "PASS",
+  "149_Rows": 149,
+  "unchanged_Rows": 146,
+  "prior13": [
+    "xs_qed_eemm_L1",
+    "xs_qed_eedd_L1",
+    "xs_qed_eeee_1pi_L1",
+    "qed_eemm_L1",
+    "ctorder_qcd_uugg_L1",
+    "sm_eemm_L0",
+    "ym_g6_L0",
+    "xs_qed_eemm_L2",
+    "sm_eeww_L0",
+    "qed_ee4f_L0",
+    "xs_qed_eeee_L1",
+    "xs_qcd_gguu_1pi_L1",
+    "xs_qed_eemm_identical_L2"
+  ],
+  "exact_three_approved_deltas": {
+    "xs_qcd_gguu_sym_L1": {
+      "old": "0xb9fdc23ed056fa0c",
+      "new": "0xe4b209849953f1fa",
+      "before_Row": {
+        "diagrams": 5,
+        "topologies": 55,
+        "assignments": 314,
+        "inverse_symmetry": [
+          5,
+          1
+        ],
+        "weights": [
+          -9,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            5
+          ]
+        ],
+        "content": 712537782630059826,
+        "numerators": 13402081641163586060,
+        "named": 11632919173438081337,
+        "ids": 16028865599310850548
+      },
+      "after_Row": {
+        "diagrams": 5,
+        "topologies": 55,
+        "assignments": 314,
+        "inverse_symmetry": [
+          5,
+          1
+        ],
+        "weights": [
+          -9,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            5
+          ]
+        ],
+        "content": 712537782630059826,
+        "numerators": 16479244451614814714,
+        "named": 11632919173438081337,
+        "ids": 16028865599310850548
+      }
+    },
+    "xs_qcd_gguu_L1": {
+      "old": "0x5edf8e5f7a11eeb3",
+      "new": "0x665e13a4c88da679",
+      "before_Row": {
+        "diagrams": 9,
+        "topologies": 55,
+        "assignments": 314,
+        "inverse_symmetry": [
+          9,
+          1
+        ],
+        "weights": [
+          -9,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            9
+          ]
+        ],
+        "content": 14314625976713108301,
+        "numerators": 6836339300092735155,
+        "named": 16923202097874588873,
+        "ids": 3305438741699831416
+      },
+      "after_Row": {
+        "diagrams": 9,
+        "topologies": 55,
+        "assignments": 314,
+        "inverse_symmetry": [
+          9,
+          1
+        ],
+        "weights": [
+          -9,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            9
+          ]
+        ],
+        "content": 14314625976713108301,
+        "numerators": 7376354838139741817,
+        "named": 16923202097874588873,
+        "ids": 3305438741699831416
+      }
+    },
+    "xs_qcd_gggg_L1": {
+      "old": "0x2628c62dc373ac91",
+      "new": "0x96e5abcebda25959",
+      "before_Row": {
+        "diagrams": 10,
+        "topologies": 55,
+        "assignments": 314,
+        "inverse_symmetry": [
+          8,
+          1
+        ],
+        "weights": [
+          8,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            6
+          ],
+          [
+            2,
+            4
+          ]
+        ],
+        "content": 2830695040470270924,
+        "numerators": 2749665472364653713,
+        "named": 4421028482057233418,
+        "ids": 16350038670819282211
+      },
+      "after_Row": {
+        "diagrams": 10,
+        "topologies": 55,
+        "assignments": 314,
+        "inverse_symmetry": [
+          8,
+          1
+        ],
+        "weights": [
+          8,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            6
+          ],
+          [
+            2,
+            4
+          ]
+        ],
+        "content": 2830695040470270924,
+        "numerators": 10873285779789076825,
+        "named": 4421028482057233418,
+        "ids": 16350038670819282211
+      }
+    }
+  },
+  "excluded_sibling_preserved": true,
+  "all118_ordered_actual_source_bindings_verified": true,
+  "unchanged_source_config_stub_CI_files": [
+    "Cargo.toml",
+    "Cargo.lock",
+    "flake.nix",
+    "flake.lock",
+    "nix-ci.nix",
+    ".config/nextest.toml",
+    "examples/notebooks/symbolica-host/python/symbolica/community/hepkit/__init__.pyi"
+  ],
+  "Python_AST": [
+    "write_docs.py",
+    "dependency_invariance.py",
+    "setup_pure.py",
+    "pure_static.py",
+    "old_manifest_check.py",
+    "apply_freeze.py",
+    "qualify_completed_build.py",
+    "archive_inputs.py",
+    "elf_helpers.py",
+    "runtime_prepare.py",
+    "setup_runtime.py",
+    "finish_pure.py",
+    "bounded_final_checks.py",
+    "capture_join.py",
+    "run_native.py",
+    "assemble_packet.py",
+    "freeze_candidate.py",
+    "runtime_common.py",
+    "guard.py",
+    "verify_committed.py",
+    "capture_join.before-context-completion.py",
+    "pure.py",
+    "realize_when_ready.py",
+    "qualify.py",
+    "preserve_plan.py"
+  ],
+  "new_top_level_JSON": [
+    "code-diff-check.command.json",
+    "archive-extract.command.json",
+    "lock-profile-bindings.json",
+    "archive-list.command.json",
+    "chain-123.command.json",
+    "typst-pinned-environment.command.json",
+    "compiler.command.json",
+    "producer-chain.json",
+    "runtime-tool-path-info.command.json",
+    "archive-path-info.command.json",
+    "typst-resolution.command.json",
+    "chain-127.command.json",
+    "compiled-expected-tokens.json",
+    "source-NAR-info.command.json",
+    "terminal-derivation.json",
+    "source-commands.json",
+    "retained-artifacts.json",
+    "prior-manifest-revision-aware.json",
+    "evaluate.command.json",
+    "archive-build-log.command.json",
+    "package-build-log.command.json",
+    "build-resource-sample.json",
+    "nix-complete.json",
+    "runtime-log-audit.json",
+    "selected-source-delta.json",
+    "selected-inventory.json",
+    "direct-derivations.command.json",
+    "typst-tools.json",
+    "flake.json",
+    "git-source-tree.command.json",
+    "typst-native-tools.json",
+    "producer-delta.json",
+    "chain-20.command.json",
+    "archive-qualification.json",
+    "documentation-checks.json",
+    "artifact-path-info.command.json",
+    "chain-72.command.json",
+    "setup-errors.json",
+    "dependency-invariance-probes.json",
+    "artifact-layer-list.command.json",
+    "chain-142.command.json",
+    "build-worker-resource-sample.json",
+    "rustfmt.command.json",
+    "in-progress-generator-build-log.command.json",
+    "input-verification.json",
+    "chain-141.command.json",
+    "chain-9.command.json",
+    "group-derivation.command.json",
+    "network-preflight.json",
+    "discovery-scope.json",
+    "code.json",
+    "chain-37.command.json",
+    "immediate-producer-source-delta.json",
+    "licensed-phase-begin.json",
+    "runtime-preparation.json",
+    "chain-92.command.json",
+    "runtime-results.json",
+    "source-invariance.json",
+    "fetched-tree-check.json",
+    "start.json",
+    "source-NAR-bindings.json",
+    "input-copy-bindings.json",
+    "chain-6.command.json",
+    "in-progress-archive-build-log.command.json",
+    "archive-derivation.json",
+    "chain-7.command.json",
+    "typst-render.json",
+    "terminal-derivation.command.json",
+    "typst-version.command.json",
+    "artifact-fingerprints.command.json",
+    "chain-12.command.json",
+    "chain-1.command.json",
+    "artifact-path-deriver.command.json",
+    "build.command.json",
+    "chain-0.command.json"
+  ],
+  "TOML": "registry,nextest,Cargo manifests/lock parsed",
+  "authored_note_registry_whitespace": "PASS",
+  "pure_Nix_before_licensed_phase_only": true,
+  "broader_checks_or_credit": false,
+  "Rust_policy": "Only three preapproved lowercase hexadecimal literals; pinned rustfmt passes; no design-policy departure"
+}

@@ -1,0 +1,28 @@
+{
+  "schema": "next-qcd-native-complete-packet-verification/1",
+  "utc": "2026-10-31T06:21:58.580065+00:00",
+  "status": "PASS",
+  "planned_actual_invocations_exact": 21,
+  "baselines_before_negatives": true,
+  "baseline_passes": 5,
+  "specific_rejections": 16,
+  "infrastructure_or_unvalidated": 0,
+  "retries": 0,
+  "preserved_input_files": 3465,
+  "all_preserved_input_bytes_unchanged": true,
+  "elf_files_final_rehashed": 16,
+  "native_execution_files": 135,
+  "math_member_inverse_references": 4268,
+  "unique_pair_rows_per_kernel": {
+    "c78": 284,
+    "8eb": 284
+  },
+  "typed_graph_associations": 48,
+  "typed_owner_associations": 600,
+  "R3_seal_unchanged": "a7e3a1e8e4e8e6d979d8cf92f8a9de5878e88d6ac1f105bf19a86611e4381cc1",
+  "owned_processes_remaining": 0,
+  "synthetic_fixture_receipts_in_actual_execution": 0,
+  "initial_analysis_tool_errors_retained": 1,
+  "independent_scientific_interface_review_required": true,
+  "review_scope": "This is execution evidence assembly, not final scientific approval. All source/profile/observer/callback/userdata and mathematical/interface premises in report.json remain."
+}

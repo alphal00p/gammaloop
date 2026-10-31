@@ -1,0 +1,13 @@
+{
+  "schema": "independent-next-qcd-capture-provenance-review-seal/1",
+  "decision": "approve",
+  "verdict": "APPROVE_EXACT_NEXT_THREE_QCD_CAPTURE_PROVENANCE_ASSOCIATION_AND_NARROW_CONTROLLER_REPAIR",
+  "files": 25,
+  "review_sha256": "7ccf8f133bff073e5f428d1fabc0ebd6552aa1e04a8b7edd149f526b37330aa7",
+  "manifest_sha256": "b41e81a4980733c2074b8536f29b5bae76116bd73787305f26cf261ad4af8b5f",
+  "candidate_r2_handoff_sha256": "9da40bc2d34381c7c6b67fa81a6d91032ff699222349f6910f9787a18cc7e660",
+  "candidate_r2_SEAL_sha256": "166dd40ee056d9bf67da1a84eef200dc5bc9ff0fea55e15a88e9feb8f4e98d4b",
+  "candidate_r2_manifest_sha256": "6a34871a549ccadd8c5f8344f7ed039823a33b118df29700b83971d9ffcd009a",
+  "native_invocations": 0,
+  "owned_processes_remaining": 0
+}

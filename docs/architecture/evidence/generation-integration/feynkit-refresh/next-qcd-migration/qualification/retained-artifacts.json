@@ -1,0 +1,11 @@
+{
+  "actual_archive": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/retained-actual-archive.tar.zst",
+    "sha256": "1271edb103b212c5ef503075b6cccd48cc96c74ca41839b28127e9614aeeef35",
+    "bytes": 86345019,
+    "original_store": "/nix/store/nida72z77301xcflxivfhapq1qrywy05-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0/gammaloop-nextest-feynkit-feynkit-generator.tar.zst"
+  },
+  "terminal_layer": "/nix/store/y5wgi2lkmpz0ccb9bkarqfd6qcz5489h-gammaloop-crate-test-binaries-feynkit-generator-b6f177b7bc15beb1-deps-0.1.0/target.tar.zst",
+  "code_bookmark": "generation-next-qcd-migration-code-20261031",
+  "retention": "Actual archive/ELF/fingerprints retained pending independent integration review; no extra realization and no GC root claimed"
+}

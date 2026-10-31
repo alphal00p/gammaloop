@@ -1,0 +1,10 @@
+Traceback (most recent call last):
+  File "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-migration-preparation-20261031-r1/bootstrap.py", line 92, in <module>
+    main()
+    ~~~~^^
+  File "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-migration-preparation-20261031-r1/bootstrap.py", line 77, in main
+    C.need(len(sources)==118, 'all118-ordered-source-bindings',len(sources))
+    ~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-migration-preparation-20261031-r1/context.py", line 34, in need
+    raise Reject(predicate, detail)
+context.Reject: all118-ordered-source-bindings: 100

@@ -1,0 +1,1603 @@
+{
+  "schema": "next-three-QCD-postapplication-integration-candidate/1",
+  "status": "NEW_INDEPENDENT_INTEGRATION_REVIEW_REQUIRED",
+  "utc": "2026-10-31T07:34:45.189679+00:00",
+  "author": "Lucien Huber <im@lcnbr.ch>",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh",
+  "base": "83276dc047815d1dcc7f003aeb512c204b26758e",
+  "code": "432b6544f3d2d884f6efffb8be104ae5820183b0",
+  "code_bookmark": "generation-next-qcd-migration-code-20261031",
+  "evidence_bookmark": "generation-next-qcd-migration-evidence-20261031",
+  "candidate_bookmark": "generation-next-qcd-migration-candidate-20261031",
+  "source_scope": {
+    "path": "crates/feynkit-generator/tests/generation_oracle/main.rs",
+    "after_blob": "cc4505a6c4f6fc1687c075ed79e154a8e19f05a6",
+    "before_blob": "7283198bf0152c82c1cd5f0173703cddfa7f5c0f",
+    "approved_patch_sha256": "1df84cbea910df5ff092203ff6050e785bccf0027bd627b91a601d1f7b98cf84",
+    "changes": {
+      "xs_qcd_gguu_sym_L1": {
+        "old": "0xb9fdc23ed056fa0c",
+        "new": "0xe4b209849953f1fa",
+        "before_Row": {
+          "diagrams": 5,
+          "topologies": 55,
+          "assignments": 314,
+          "inverse_symmetry": [
+            5,
+            1
+          ],
+          "weights": [
+            -9,
+            1
+          ],
+          "symmetry_factors": [
+            [
+              1,
+              5
+            ]
+          ],
+          "content": 712537782630059826,
+          "numerators": 13402081641163586060,
+          "named": 11632919173438081337,
+          "ids": 16028865599310850548
+        },
+        "after_Row": {
+          "diagrams": 5,
+          "topologies": 55,
+          "assignments": 314,
+          "inverse_symmetry": [
+            5,
+            1
+          ],
+          "weights": [
+            -9,
+            1
+          ],
+          "symmetry_factors": [
+            [
+              1,
+              5
+            ]
+          ],
+          "content": 712537782630059826,
+          "numerators": 16479244451614814714,
+          "named": 11632919173438081337,
+          "ids": 16028865599310850548
+        }
+      },
+      "xs_qcd_gguu_L1": {
+        "old": "0x5edf8e5f7a11eeb3",
+        "new": "0x665e13a4c88da679",
+        "before_Row": {
+          "diagrams": 9,
+          "topologies": 55,
+          "assignments": 314,
+          "inverse_symmetry": [
+            9,
+            1
+          ],
+          "weights": [
+            -9,
+            1
+          ],
+          "symmetry_factors": [
+            [
+              1,
+              9
+            ]
+          ],
+          "content": 14314625976713108301,
+          "numerators": 6836339300092735155,
+          "named": 16923202097874588873,
+          "ids": 3305438741699831416
+        },
+        "after_Row": {
+          "diagrams": 9,
+          "topologies": 55,
+          "assignments": 314,
+          "inverse_symmetry": [
+            9,
+            1
+          ],
+          "weights": [
+            -9,
+            1
+          ],
+          "symmetry_factors": [
+            [
+              1,
+              9
+            ]
+          ],
+          "content": 14314625976713108301,
+          "numerators": 7376354838139741817,
+          "named": 16923202097874588873,
+          "ids": 3305438741699831416
+        }
+      },
+      "xs_qcd_gggg_L1": {
+        "old": "0x2628c62dc373ac91",
+        "new": "0x96e5abcebda25959",
+        "before_Row": {
+          "diagrams": 10,
+          "topologies": 55,
+          "assignments": 314,
+          "inverse_symmetry": [
+            8,
+            1
+          ],
+          "weights": [
+            8,
+            1
+          ],
+          "symmetry_factors": [
+            [
+              1,
+              6
+            ],
+            [
+              2,
+              4
+            ]
+          ],
+          "content": 2830695040470270924,
+          "numerators": 2749665472364653713,
+          "named": 4421028482057233418,
+          "ids": 16350038670819282211
+        },
+        "after_Row": {
+          "diagrams": 10,
+          "topologies": 55,
+          "assignments": 314,
+          "inverse_symmetry": [
+            8,
+            1
+          ],
+          "weights": [
+            8,
+            1
+          ],
+          "symmetry_factors": [
+            [
+              1,
+              6
+            ],
+            [
+              2,
+              4
+            ]
+          ],
+          "content": 2830695040470270924,
+          "numerators": 10873285779789076825,
+          "named": 4421028482057233418,
+          "ids": 16350038670819282211
+        }
+      }
+    },
+    "Rows": 149,
+    "unchanged_full_Rows": 146,
+    "prior13": [
+      "xs_qed_eemm_L1",
+      "xs_qed_eedd_L1",
+      "xs_qed_eeee_1pi_L1",
+      "qed_eemm_L1",
+      "ctorder_qcd_uugg_L1",
+      "sm_eemm_L0",
+      "ym_g6_L0",
+      "xs_qed_eemm_L2",
+      "sm_eeww_L0",
+      "qed_ee4f_L0",
+      "xs_qed_eeee_L1",
+      "xs_qcd_gguu_1pi_L1",
+      "xs_qed_eemm_identical_L2"
+    ],
+    "all118_ordered_bindings_preserved": true,
+    "same_hash_sibling_preserved": true,
+    "every_other_source_byte_preserved": true
+  },
+  "actual_producer": {
+    "code": "432b6544f3d2d884f6efffb8be104ae5820183b0",
+    "source": "/nix/store/wp125rj96wsjjqlbk8vrk7xd4mxjshl9-source",
+    "selected_source": "/nix/store/ynnb4iz406bds753h2gl8dc4d977s1vj-source",
+    "source_paths": 5928,
+    "archive_drv": "/nix/store/w2y0rfjpbxnnr5cw05hxzl7rbz549hs1-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0.drv",
+    "archive": "/nix/store/nida72z77301xcflxivfhapq1qrywy05-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0/gammaloop-nextest-feynkit-feynkit-generator.tar.zst",
+    "archive_store": "/nix/store/nida72z77301xcflxivfhapq1qrywy05-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0",
+    "archive_sha256": "1271edb103b212c5ef503075b6cccd48cc96c74ca41839b28127e9614aeeef35",
+    "archive_nar": {
+      "/nix/store/nida72z77301xcflxivfhapq1qrywy05-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0": {
+        "ca": null,
+        "deriver": "/nix/store/w2y0rfjpbxnnr5cw05hxzl7rbz549hs1-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0.drv",
+        "narHash": "sha256-t8mldozrl7rRBAzCaTPdwLOAQW4eduaLYPjGLzBupx4=",
+        "narSize": 86345352,
+        "references": [],
+        "registrationTime": 1793431910,
+        "signatures": [],
+        "storeDir": "/nix/store",
+        "ultimate": true,
+        "version": 1
+      }
+    },
+    "artifact_nar": {
+      "/nix/store/y5wgi2lkmpz0ccb9bkarqfd6qcz5489h-gammaloop-crate-test-binaries-feynkit-generator-b6f177b7bc15beb1-deps-0.1.0": {
+        "ca": null,
+        "deriver": "/nix/store/ialr5c6d4kq9c3qrz1bkgfyrngcm2568-gammaloop-crate-test-binaries-feynkit-generator-b6f177b7bc15beb1-deps-0.1.0.drv",
+        "narHash": "sha256-NPBy2Q0b+P/nUMjO06wg1nN6g9rb1CQdtcc00fMdkv4=",
+        "narSize": 159615448,
+        "references": [
+          "/nix/store/604gsr59rj7dzd0nrhp143rpvf7gyiaz-gcc-15.3.0-lib",
+          "/nix/store/cx447jb5zb3gxcpslza3gkldr2vs7kah-gammaloop-crate-test-dependencies-b6f177b7bc15beb1-deps-0.1.0",
+          "/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84"
+        ],
+        "registrationTime": 1793431379,
+        "signatures": [],
+        "storeDir": "/nix/store",
+        "ultimate": true,
+        "version": 1
+      }
+    },
+    "oracle_elf": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/archive-extracted/target/ci-optim/deps/generation_oracle-3892f55f31822180",
+      "sha256": "212adc0f2f091ecb9899d5da751184a96a65a0efb8baa850e4d6d31bb8e296d4",
+      "size": 61186320
+    },
+    "profile": "ci-optim",
+    "closure_units": 452,
+    "actual_root_fingerprint": {
+      "unit": "feynkit-generator-3892f55f31822180",
+      "kind": "test-integration-test-generation_oracle",
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/new-fingerprints/ci-optim/.fingerprint/feynkit-generator-3892f55f31822180/test-integration-test-generation_oracle.json",
+      "sha256": "78a8a16e914b403e6ea856f0cc20992a4bbff9be46d0e1102259a492bf453a1c",
+      "stored_fingerprint": "5a61a96e7461acd8",
+      "data": {
+        "rustc": 1625334936438085654,
+        "features": "[\"default\", \"native\"]",
+        "declared_features": "[\"default\", \"native\", \"wasm\"]",
+        "target": 11526694154387375423,
+        "profile": 16057468363761213068,
+        "path": 15726402853306774164,
+        "deps": [
+          [
+            824141387789191317,
+            "feynkit_amplitude",
+            false,
+            7519181757809723393
+          ],
+          [
+            2448563160050429386,
+            "thiserror",
+            false,
+            8019520362216416025
+          ],
+          [
+            2819946551904607991,
+            "num_rational",
+            false,
+            2913073195146597074
+          ],
+          [
+            2878135982285137535,
+            "linnet",
+            false,
+            9844451759723403564
+          ],
+          [
+            4479790829530052811,
+            "spenso",
+            false,
+            9628441351436889623
+          ],
+          [
+            4796842932013701455,
+            "spenso_hep_lib",
+            false,
+            15977754132253444010
+          ],
+          [
+            5156925218712681703,
+            "feynkit_generator",
+            false,
+            17053848716133265874
+          ],
+          [
+            7497922256016908689,
+            "feynkit_model",
+            false,
+            8906438852564711183
+          ],
+          [
+            9723370144619655183,
+            "tempfile",
+            false,
+            16876693854882113829
+          ],
+          [
+            9917544417685332479,
+            "idenso",
+            false,
+            7976959366355746746
+          ],
+          [
+            11862723254873017773,
+            "bincode",
+            false,
+            12025675163425707939
+          ],
+          [
+            11910974697091955563,
+            "rayon",
+            false,
+            7127050247782661200
+          ],
+          [
+            12405394076909343869,
+            "bincode_trait_derive",
+            false,
+            16688621338624518158
+          ],
+          [
+            12528732512569713347,
+            "num_bigint",
+            false,
+            8054893253489706379
+          ],
+          [
+            13548984313718623784,
+            "serde",
+            false,
+            10536416393539824496
+          ],
+          [
+            13795362694956882968,
+            "serde_json",
+            false,
+            1220147813903593688
+          ],
+          [
+            15115587472993760548,
+            "gammaloop_ci_test_binary_dependencies_b6f177b7bc15beb1",
+            false,
+            5168019764688101402
+          ],
+          [
+            17020882691900786901,
+            "symbolica",
+            false,
+            10965849249385673509
+          ],
+          [
+            17109794424245468765,
+            "regex",
+            false,
+            5030923632659425269
+          ],
+          [
+            17283853990992084357,
+            "feynkit_graph",
+            false,
+            10864370868311707648
+          ]
+        ],
+        "local": [
+          {
+            "CheckDepInfo": {
+              "dep_info": "ci-optim/.fingerprint/feynkit-generator-3892f55f31822180/dep-test-integration-test-generation_oracle",
+              "checksum": false
+            }
+          }
+        ],
+        "rustflags": [
+          "-C",
+          "linker=/nix/store/z4c6k0mrlkwl3s4w9ysxc8vq1wylm3ms-gcc-wrapper-15.3.0/bin/gcc"
+        ],
+        "config": 1282902399306750302,
+        "compile_kind": 0
+      },
+      "source_layer": "/nix/store/y5wgi2lkmpz0ccb9bkarqfd6qcz5489h-gammaloop-crate-test-binaries-feynkit-generator-b6f177b7bc15beb1-deps-0.1.0/target.tar.zst"
+    },
+    "kernels": [
+      {
+        "name": "graphica",
+        "version": "3.0.1",
+        "source": "git+https://github.com/symbolica-dev/symbolica?branch=community#8eb7c3729d6abefc916decc1bdf0c06536f8af80",
+        "manifest_path": "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/graphica-3.0.1/Cargo.toml"
+      },
+      {
+        "name": "numerica",
+        "version": "3.0.1",
+        "source": "git+https://github.com/symbolica-dev/symbolica?branch=community#8eb7c3729d6abefc916decc1bdf0c06536f8af80",
+        "manifest_path": "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/numerica-3.0.1/Cargo.toml"
+      },
+      {
+        "name": "symbolica",
+        "version": "3.0.1",
+        "source": "git+https://github.com/symbolica-dev/symbolica?branch=community#8eb7c3729d6abefc916decc1bdf0c06536f8af80",
+        "manifest_path": "/nix/store/m0kqy74hq5qsbmhx1zcgs7y21was4k8m-vendor-cargo-deps/8a741bcc7b1552c1ec4cea40e34f11c51b8b3704b8011fc477c4cf8772246a50/symbolica-3.0.1/Cargo.toml"
+      }
+    ],
+    "compiler": {
+      "rustc": {
+        "path": "/nix/store/c3bpv60f5wgp4pmgsifaykxk214h6463-rust-stable-with-components-2026-09-03/bin/rustc",
+        "version": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8"
+      },
+      "cargo": {
+        "path": "/nix/store/c3bpv60f5wgp4pmgsifaykxk214h6463-rust-stable-with-components-2026-09-03/bin/cargo",
+        "version": "cargo 1.98.1 (797e8a9bc 2026-08-05)"
+      },
+      "rustfmt": {
+        "path": "/nix/store/c3bpv60f5wgp4pmgsifaykxk214h6463-rust-stable-with-components-2026-09-03/bin/rustfmt",
+        "version": "rustfmt 1.9.0-stable (48a229ceae 2026-09-01)"
+      }
+    },
+    "runtime_tools": {
+      "nextest": "/nix/store/kwm3g9vh36d9zd171v0nz64fyan1hvfz-cargo-nextest-0.9.143/bin/cargo-nextest",
+      "python": "/nix/store/4168xqs4l5jbfc7xyi9zrhdhszx0pnlb-python3-3.13.16/bin/python3",
+      "bwrap": "/nix/store/dk9qhjgg469lv6mriys7v4c59igarmvx-bubblewrap-0.11.1/bin/bwrap"
+    }
+  },
+  "full_qualification": {
+    "original": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/archive-qualification.json",
+    "sha256": "95b099f4ca2579fe2e5f0d6ed2ea230d36d5a3b556650c4453325802b4d80681",
+    "logical_copy": "qualification/archive-qualification.json; consult qualification-copy-bindings.json for exact lossless storage"
+  },
+  "producer_scope": "One new exact pure archive at actual432b source, not oldba02. Exact-source/filtered-source/NAR/derivation/lock/profile/kernel/compiler/Cargo fingerprint/ELF and required-library bindings retained. Matching dependency stores reused.",
+  "build_calls": 1,
+  "build_command": {
+    "argv": [
+      "nix",
+      "--option",
+      "allow-import-from-derivation",
+      "false",
+      "build",
+      "--max-jobs",
+      "1",
+      "--cores",
+      "2",
+      "--no-link",
+      "--json",
+      "/nix/store/w2y0rfjpbxnnr5cw05hxzl7rbz549hs1-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0.drv^out"
+    ],
+    "cwd": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh",
+    "license_keys_removed": [
+      "SYMBOLICA_LICENSE",
+      "SYMBOLICA_LICENSE_PATH",
+      "SYMBOLICA_LICENSE_SIGNED",
+      "SYMBOLICA_LICENSE_FILE"
+    ],
+    "start": "2026-10-31T07:13:14.289407+00:00",
+    "exit": 0,
+    "end": "2026-10-31T07:31:51.876165+00:00",
+    "stdout_sha256": "4cd15b7a7890ca54a4c54d10f3aba84f11dfeca01a50c3fceffacd79a2155158",
+    "stderr_sha256": "0ab670aab9f5aadd050837a2dc57a3f577ef4d3ad33a96da381302be791fc2a9"
+  },
+  "runtime": {
+    "code": "432b6544f3d2d884f6efffb8be104ae5820183b0",
+    "archive_sha256": "1271edb103b212c5ef503075b6cccd48cc96c74ca41839b28127e9614aeeef35",
+    "oracle_elf": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/archive-extracted/target/ci-optim/deps/generation_oracle-3892f55f31822180",
+      "sha256": "212adc0f2f091ecb9899d5da751184a96a65a0efb8baa850e4d6d31bb8e296d4",
+      "size": 61186320
+    },
+    "results": [
+      {
+        "step": "pool1-xs_qcd_gguu_sym_L1",
+        "pool": 1,
+        "exact_selection": "xs_qcd_gguu_sym_L1",
+        "exit": 0,
+        "outcomes": [
+          {
+            "case": "xs_qcd_gguu_sym_L1",
+            "status": "passed",
+            "time": "0.501"
+          }
+        ],
+        "actual_executions": 1,
+        "junit_sha256": "721ae4873485f74c30c135f6494632f4c25b9305b72120737d33cb60225f3b7f",
+        "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool1-xs_qcd_gguu_sym_L1/command.json",
+        "public_dump_hook_enabled": true,
+        "dump_files": {
+          "dumps/xs_qcd_gguu_sym_L1.census": {
+            "sha256": "06744ed2e64563b3d02bfba1eee5da9cf9c509626fe5b607dd48e5cfb7d7f63f",
+            "bytes": 5983
+          },
+          "dumps/xs_qcd_gguu_sym_L1.classes-Auto-t1.json": {
+            "sha256": "4c90d66ad4414a8de08c56362a83bbdcfc988f089809f79dd84d6ad638bc90c8",
+            "bytes": 136190
+          },
+          "dumps/xs_qcd_gguu_sym_L1.classes-Auto-t1.sources.json": {
+            "sha256": "4c90d66ad4414a8de08c56362a83bbdcfc988f089809f79dd84d6ad638bc90c8",
+            "bytes": 136190
+          },
+          "dumps/xs_qcd_gguu_sym_L1.classes-None-t1.json": {
+            "sha256": "4c90d66ad4414a8de08c56362a83bbdcfc988f089809f79dd84d6ad638bc90c8",
+            "bytes": 136190
+          },
+          "dumps/xs_qcd_gguu_sym_L1.classes-None-t1.sources.json": {
+            "sha256": "4c90d66ad4414a8de08c56362a83bbdcfc988f089809f79dd84d6ad638bc90c8",
+            "bytes": 136190
+          }
+        }
+      },
+      {
+        "step": "pool1-xs_qcd_gguu_L1",
+        "pool": 1,
+        "exact_selection": "xs_qcd_gguu_L1",
+        "exit": 0,
+        "outcomes": [
+          {
+            "case": "xs_qcd_gguu_L1",
+            "status": "passed",
+            "time": "0.336"
+          }
+        ],
+        "actual_executions": 1,
+        "junit_sha256": "ef72605467b24ae6f6bc5b1ec71180d03c5bdac7858f4b8116a24796e5785ce3",
+        "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool1-xs_qcd_gguu_L1/command.json",
+        "public_dump_hook_enabled": true,
+        "dump_files": {
+          "dumps/xs_qcd_gguu_L1.census": {
+            "sha256": "4bf1af646b517ad9790d9b815a5f471a371fca0d5058ed674fa2f90dd7e1df56",
+            "bytes": 9667
+          },
+          "dumps/xs_qcd_gguu_L1.classes-Auto-t1.json": {
+            "sha256": "25e7d966ca60263d142d23fa98f6e68d209d2c5b7ba731c3ce216737ca62b797",
+            "bytes": 240542
+          },
+          "dumps/xs_qcd_gguu_L1.classes-Auto-t1.sources.json": {
+            "sha256": "25e7d966ca60263d142d23fa98f6e68d209d2c5b7ba731c3ce216737ca62b797",
+            "bytes": 240542
+          },
+          "dumps/xs_qcd_gguu_L1.classes-None-t1.json": {
+            "sha256": "25e7d966ca60263d142d23fa98f6e68d209d2c5b7ba731c3ce216737ca62b797",
+            "bytes": 240542
+          },
+          "dumps/xs_qcd_gguu_L1.classes-None-t1.sources.json": {
+            "sha256": "25e7d966ca60263d142d23fa98f6e68d209d2c5b7ba731c3ce216737ca62b797",
+            "bytes": 240542
+          }
+        }
+      },
+      {
+        "step": "pool1-xs_qcd_gggg_L1",
+        "pool": 1,
+        "exact_selection": "xs_qcd_gggg_L1",
+        "exit": 0,
+        "outcomes": [
+          {
+            "case": "xs_qcd_gggg_L1",
+            "status": "passed",
+            "time": "0.336"
+          }
+        ],
+        "actual_executions": 1,
+        "junit_sha256": "216502e47c011989e53c5f608438591dcd68370bc185fbba0a089c490ae98688",
+        "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool1-xs_qcd_gggg_L1/command.json",
+        "public_dump_hook_enabled": true,
+        "dump_files": {
+          "dumps/xs_qcd_gggg_L1.census": {
+            "sha256": "137c381a3e6259f9bbe05e6be8ac88171b5c1721c5dbf1a04e0c118cfeff5ee7",
+            "bytes": 9347
+          },
+          "dumps/xs_qcd_gggg_L1.classes-Auto-t1.json": {
+            "sha256": "b4be2d37bc4a72cd96ecbc192f97b9ffdc194c3c72245bfa4c5d0c6737e7d6c7",
+            "bytes": 326465
+          },
+          "dumps/xs_qcd_gggg_L1.classes-Auto-t1.sources.json": {
+            "sha256": "b4be2d37bc4a72cd96ecbc192f97b9ffdc194c3c72245bfa4c5d0c6737e7d6c7",
+            "bytes": 326465
+          },
+          "dumps/xs_qcd_gggg_L1.classes-None-t1.json": {
+            "sha256": "b4be2d37bc4a72cd96ecbc192f97b9ffdc194c3c72245bfa4c5d0c6737e7d6c7",
+            "bytes": 326465
+          },
+          "dumps/xs_qcd_gggg_L1.classes-None-t1.sources.json": {
+            "sha256": "b4be2d37bc4a72cd96ecbc192f97b9ffdc194c3c72245bfa4c5d0c6737e7d6c7",
+            "bytes": 326465
+          }
+        }
+      },
+      {
+        "step": "pool1-xs_qed_eemm_L1",
+        "pool": 1,
+        "exact_selection": "xs_qed_eemm_L1",
+        "exit": 0,
+        "outcomes": [
+          {
+            "case": "xs_qed_eemm_L1",
+            "status": "passed",
+            "time": "0.071"
+          }
+        ],
+        "actual_executions": 1,
+        "junit_sha256": "9e389604c6fb4dc986c9e67c13565410f5d0bcd9d24c95efde0f2a8219d96c40",
+        "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool1-xs_qed_eemm_L1/command.json",
+        "public_dump_hook_enabled": false,
+        "dump_files": {}
+      },
+      {
+        "step": "pool1-xs_qed_eedd_L1",
+        "pool": 1,
+        "exact_selection": "xs_qed_eedd_L1",
+        "exit": 0,
+        "outcomes": [
+          {
+            "case": "xs_qed_eedd_L1",
+            "status": "passed",
+            "time": "0.093"
+          }
+        ],
+        "actual_executions": 1,
+        "junit_sha256": "e09a3095323d003db27d6b380578e1c7ab0e92d81fbbddfe466e7ce6e35bc525",
+        "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool1-xs_qed_eedd_L1/command.json",
+        "public_dump_hook_enabled": false,
+        "dump_files": {}
+      },
+      {
+        "step": "pool1-xs_qed_eeee_1pi_L1",
+        "pool": 1,
+        "exact_selection": "xs_qed_eeee_1pi_L1",
+        "exit": 0,
+        "outcomes": [
+          {
+            "case": "xs_qed_eeee_1pi_L1",
+            "status": "passed",
+            "time": "0.094"
+          }
+        ],
+        "actual_executions": 1,
+        "junit_sha256": "5be71115a55235e703d44f4cc1f0cc662f0622e0b8c6e61eb5600c69a1dcfc0b",
+        "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool1-xs_qed_eeee_1pi_L1/command.json",
+        "public_dump_hook_enabled": false,
+        "dump_files": {}
+      },
+      {
+        "step": "pool1-qed_eemm_L1",
+        "pool": 1,
+        "exact_selection": "qed_eemm_L1",
+        "exit": 0,
+        "outcomes": [
+          {
+            "case": "qed_eemm_L1",
+            "status": "passed",
+            "time": "0.120"
+          }
+        ],
+        "actual_executions": 1,
+        "junit_sha256": "89419502ef7b7ff8bb0e9af4ae0b675c4d736e3f2ee4f952fc5e46f8a7985c66",
+        "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool1-qed_eemm_L1/command.json",
+        "public_dump_hook_enabled": false,
+        "dump_files": {}
+      },
+      {
+        "step": "pool1-ctorder_qcd_uugg_L1",
+        "pool": 1,
+        "exact_selection": "ctorder_qcd_uugg_L1",
+        "exit": 0,
+        "outcomes": [
+          {
+            "case": "ctorder_qcd_uugg_L1",
+            "status": "passed",
+            "time": "0.710"
+          }
+        ],
+        "actual_executions": 1,
+        "junit_sha256": "94339c5d0bc5b18de56b7b7e8dfad3211c75d76812ea1a4fd304adf413085a91",
+        "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool1-ctorder_qcd_uugg_L1/command.json",
+        "public_dump_hook_enabled": false,
+        "dump_files": {}
+      },
+      {
+        "step": "pool1-sm_eemm_L0",
+        "pool": 1,
+        "exact_selection": "sm_eemm_L0",
+        "exit": 0,
+        "outcomes": [
+          {
+            "case": "sm_eemm_L0",
+            "status": "passed",
+            "time": "0.100"
+          }
+        ],
+        "actual_executions": 1,
+        "junit_sha256": "24cd8156c777f33ebeed9f36bdd902eacff05071be07ee0617e37cfa32024781",
+        "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool1-sm_eemm_L0/command.json",
+        "public_dump_hook_enabled": false,
+        "dump_files": {}
+      },
+      {
+        "step": "pool1-ym_g6_L0",
+        "pool": 1,
+        "exact_selection": "ym_g6_L0",
+        "exit": 0,
+        "outcomes": [
+          {
+            "case": "ym_g6_L0",
+            "status": "passed",
+            "time": "0.673"
+          }
+        ],
+        "actual_executions": 1,
+        "junit_sha256": "8b3914a4c7e068ea6e011fcb957ba315129a8cd9f493aef3bd49cb70c5c62f32",
+        "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool1-ym_g6_L0/command.json",
+        "public_dump_hook_enabled": false,
+        "dump_files": {}
+      },
+      {
+        "step": "pool1-xs_qed_eemm_L2",
+        "pool": 1,
+        "exact_selection": "xs_qed_eemm_L2",
+        "exit": 0,
+        "outcomes": [
+          {
+            "case": "xs_qed_eemm_L2",
+            "status": "passed",
+            "time": "0.288"
+          }
+        ],
+        "actual_executions": 1,
+        "junit_sha256": "2123144931b4637177d7ebd374a509c3149cebc85d2556e08bb590042250442d",
+        "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool1-xs_qed_eemm_L2/command.json",
+        "public_dump_hook_enabled": false,
+        "dump_files": {}
+      },
+      {
+        "step": "pool1-sm_eeww_L0",
+        "pool": 1,
+        "exact_selection": "sm_eeww_L0",
+        "exit": 0,
+        "outcomes": [
+          {
+            "case": "sm_eeww_L0",
+            "status": "passed",
+            "time": "0.082"
+          }
+        ],
+        "actual_executions": 1,
+        "junit_sha256": "ecff0ead9972a968217006a00703f7c9d1758d1e05bdfa38521546d6a16ae73f",
+        "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool1-sm_eeww_L0/command.json",
+        "public_dump_hook_enabled": false,
+        "dump_files": {}
+      },
+      {
+        "step": "pool1-qed_ee4f_L0",
+        "pool": 1,
+        "exact_selection": "qed_ee4f_L0",
+        "exit": 0,
+        "outcomes": [
+          {
+            "case": "qed_ee4f_L0",
+            "status": "passed",
+            "time": "0.088"
+          }
+        ],
+        "actual_executions": 1,
+        "junit_sha256": "972138b695c76a57e7b84c7fb4592e48910e4d8f1ef8d142b76b0ee696b85002",
+        "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool1-qed_ee4f_L0/command.json",
+        "public_dump_hook_enabled": false,
+        "dump_files": {}
+      },
+      {
+        "step": "pool1-xs_qed_eeee_L1",
+        "pool": 1,
+        "exact_selection": "xs_qed_eeee_L1",
+        "exit": 0,
+        "outcomes": [
+          {
+            "case": "xs_qed_eeee_L1",
+            "status": "passed",
+            "time": "0.082"
+          }
+        ],
+        "actual_executions": 1,
+        "junit_sha256": "a0fc3fc48631e37dd3bfda478fd24df0d9435ae50e93e7a9aad0dd17e1ba5c40",
+        "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool1-xs_qed_eeee_L1/command.json",
+        "public_dump_hook_enabled": false,
+        "dump_files": {}
+      },
+      {
+        "step": "pool1-xs_qcd_gguu_1pi_L1",
+        "pool": 1,
+        "exact_selection": "xs_qcd_gguu_1pi_L1",
+        "exit": 0,
+        "outcomes": [
+          {
+            "case": "xs_qcd_gguu_1pi_L1",
+            "status": "passed",
+            "time": "0.098"
+          }
+        ],
+        "actual_executions": 1,
+        "junit_sha256": "b4e222ca91975f88eba4631182b8212d7e5e5ec69b7db10fbdaf135d5dc860fd",
+        "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool1-xs_qcd_gguu_1pi_L1/command.json",
+        "public_dump_hook_enabled": false,
+        "dump_files": {}
+      },
+      {
+        "step": "pool1-xs_qed_eemm_identical_L2",
+        "pool": 1,
+        "exact_selection": "xs_qed_eemm_identical_L2",
+        "exit": 0,
+        "outcomes": [
+          {
+            "case": "xs_qed_eemm_identical_L2",
+            "status": "passed",
+            "time": "4.893"
+          }
+        ],
+        "actual_executions": 1,
+        "junit_sha256": "beac4bb2524dcdd10ad861c1c086f555936323b80ed23bf806736633895d7b61",
+        "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool1-xs_qed_eemm_identical_L2/command.json",
+        "public_dump_hook_enabled": false,
+        "dump_files": {}
+      },
+      {
+        "step": "pool8-xs_qcd_gguu_sym_L1",
+        "pool": 8,
+        "exact_selection": "xs_qcd_gguu_sym_L1",
+        "exit": 0,
+        "outcomes": [
+          {
+            "case": "xs_qcd_gguu_sym_L1",
+            "status": "passed",
+            "time": "0.129"
+          }
+        ],
+        "actual_executions": 1,
+        "junit_sha256": "4601775ec03d3ae5ec25c3be6a086138b3f494df8e7dcbc5c5bd884695077e6c",
+        "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool8-xs_qcd_gguu_sym_L1/command.json",
+        "public_dump_hook_enabled": false,
+        "dump_files": {}
+      },
+      {
+        "step": "pool8-xs_qcd_gguu_L1",
+        "pool": 8,
+        "exact_selection": "xs_qcd_gguu_L1",
+        "exit": 0,
+        "outcomes": [
+          {
+            "case": "xs_qcd_gguu_L1",
+            "status": "passed",
+            "time": "0.126"
+          }
+        ],
+        "actual_executions": 1,
+        "junit_sha256": "1bb535d6e74184c1a9281359546b21b95d412690af88690d58e4204d600b8a71",
+        "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool8-xs_qcd_gguu_L1/command.json",
+        "public_dump_hook_enabled": false,
+        "dump_files": {}
+      },
+      {
+        "step": "pool8-xs_qcd_gggg_L1",
+        "pool": 8,
+        "exact_selection": "xs_qcd_gggg_L1",
+        "exit": 0,
+        "outcomes": [
+          {
+            "case": "xs_qcd_gggg_L1",
+            "status": "passed",
+            "time": "0.161"
+          }
+        ],
+        "actual_executions": 1,
+        "junit_sha256": "294d4655381c10ca6cd4e1918b0c63facb65fb44854b8e9de25791083345215e",
+        "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool8-xs_qcd_gggg_L1/command.json",
+        "public_dump_hook_enabled": false,
+        "dump_files": {}
+      },
+      {
+        "step": "pool8-xs_qed_eemm_L1",
+        "pool": 8,
+        "exact_selection": "xs_qed_eemm_L1",
+        "exit": 0,
+        "outcomes": [
+          {
+            "case": "xs_qed_eemm_L1",
+            "status": "passed",
+            "time": "0.090"
+          }
+        ],
+        "actual_executions": 1,
+        "junit_sha256": "89e3a209880daa68662e217efba6e9335d614b984853e1c413189318b7c379c9",
+        "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool8-xs_qed_eemm_L1/command.json",
+        "public_dump_hook_enabled": false,
+        "dump_files": {}
+      },
+      {
+        "step": "pool8-xs_qed_eedd_L1",
+        "pool": 8,
+        "exact_selection": "xs_qed_eedd_L1",
+        "exit": 0,
+        "outcomes": [
+          {
+            "case": "xs_qed_eedd_L1",
+            "status": "passed",
+            "time": "0.113"
+          }
+        ],
+        "actual_executions": 1,
+        "junit_sha256": "c1498483bf83895a5039c16323e7920d1f0c0ab3ba67c689d42f1927cbeb109e",
+        "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool8-xs_qed_eedd_L1/command.json",
+        "public_dump_hook_enabled": false,
+        "dump_files": {}
+      },
+      {
+        "step": "pool8-xs_qed_eeee_1pi_L1",
+        "pool": 8,
+        "exact_selection": "xs_qed_eeee_1pi_L1",
+        "exit": 0,
+        "outcomes": [
+          {
+            "case": "xs_qed_eeee_1pi_L1",
+            "status": "passed",
+            "time": "0.080"
+          }
+        ],
+        "actual_executions": 1,
+        "junit_sha256": "67a03c98c0e7765b4099117158c217d8e7c67b73e4e3b84d5b5846fb40808530",
+        "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool8-xs_qed_eeee_1pi_L1/command.json",
+        "public_dump_hook_enabled": false,
+        "dump_files": {}
+      },
+      {
+        "step": "pool8-qed_eemm_L1",
+        "pool": 8,
+        "exact_selection": "qed_eemm_L1",
+        "exit": 0,
+        "outcomes": [
+          {
+            "case": "qed_eemm_L1",
+            "status": "passed",
+            "time": "0.102"
+          }
+        ],
+        "actual_executions": 1,
+        "junit_sha256": "448c8ba8f731d06a7965d1bce48ccd81e2345b9920c343e022d7f22c7edca3d1",
+        "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool8-qed_eemm_L1/command.json",
+        "public_dump_hook_enabled": false,
+        "dump_files": {}
+      },
+      {
+        "step": "pool8-ctorder_qcd_uugg_L1",
+        "pool": 8,
+        "exact_selection": "ctorder_qcd_uugg_L1",
+        "exit": 0,
+        "outcomes": [
+          {
+            "case": "ctorder_qcd_uugg_L1",
+            "status": "passed",
+            "time": "0.565"
+          }
+        ],
+        "actual_executions": 1,
+        "junit_sha256": "ec2dc58af1369208f2dbbfc3b9d95a0975773e6aaea2d38cf1e1f5bd0139d3ac",
+        "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool8-ctorder_qcd_uugg_L1/command.json",
+        "public_dump_hook_enabled": false,
+        "dump_files": {}
+      },
+      {
+        "step": "pool8-sm_eemm_L0",
+        "pool": 8,
+        "exact_selection": "sm_eemm_L0",
+        "exit": 0,
+        "outcomes": [
+          {
+            "case": "sm_eemm_L0",
+            "status": "passed",
+            "time": "0.094"
+          }
+        ],
+        "actual_executions": 1,
+        "junit_sha256": "d7c29bd347f7a326f716f992ee59361fc5a706e926b7d2891c4265a18d9a5ef1",
+        "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool8-sm_eemm_L0/command.json",
+        "public_dump_hook_enabled": false,
+        "dump_files": {}
+      },
+      {
+        "step": "pool8-ym_g6_L0",
+        "pool": 8,
+        "exact_selection": "ym_g6_L0",
+        "exit": 0,
+        "outcomes": [
+          {
+            "case": "ym_g6_L0",
+            "status": "passed",
+            "time": "0.619"
+          }
+        ],
+        "actual_executions": 1,
+        "junit_sha256": "db2fdb7d8ca2f886d2148082677b624138cb9a256fd2a43791965dcbba42fe90",
+        "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool8-ym_g6_L0/command.json",
+        "public_dump_hook_enabled": false,
+        "dump_files": {}
+      },
+      {
+        "step": "pool8-xs_qed_eemm_L2",
+        "pool": 8,
+        "exact_selection": "xs_qed_eemm_L2",
+        "exit": 0,
+        "outcomes": [
+          {
+            "case": "xs_qed_eemm_L2",
+            "status": "passed",
+            "time": "0.218"
+          }
+        ],
+        "actual_executions": 1,
+        "junit_sha256": "bfd5d3c7c214bdc7bb3cc7b888de0f67165ff4200400e7586becca729126c385",
+        "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool8-xs_qed_eemm_L2/command.json",
+        "public_dump_hook_enabled": false,
+        "dump_files": {}
+      },
+      {
+        "step": "pool8-sm_eeww_L0",
+        "pool": 8,
+        "exact_selection": "sm_eeww_L0",
+        "exit": 0,
+        "outcomes": [
+          {
+            "case": "sm_eeww_L0",
+            "status": "passed",
+            "time": "0.101"
+          }
+        ],
+        "actual_executions": 1,
+        "junit_sha256": "47bfc3aa5a07cfb46727e1ec500565c85dc700b837eabd1ba43fc62aab46c98b",
+        "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool8-sm_eeww_L0/command.json",
+        "public_dump_hook_enabled": false,
+        "dump_files": {}
+      },
+      {
+        "step": "pool8-qed_ee4f_L0",
+        "pool": 8,
+        "exact_selection": "qed_ee4f_L0",
+        "exit": 0,
+        "outcomes": [
+          {
+            "case": "qed_ee4f_L0",
+            "status": "passed",
+            "time": "0.101"
+          }
+        ],
+        "actual_executions": 1,
+        "junit_sha256": "ae58df83a9874f5c2cebf7ad9c95867cc41bdb6c9a37531530a4334fbfd1ecd3",
+        "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool8-qed_ee4f_L0/command.json",
+        "public_dump_hook_enabled": false,
+        "dump_files": {}
+      },
+      {
+        "step": "pool8-xs_qed_eeee_L1",
+        "pool": 8,
+        "exact_selection": "xs_qed_eeee_L1",
+        "exit": 0,
+        "outcomes": [
+          {
+            "case": "xs_qed_eeee_L1",
+            "status": "passed",
+            "time": "0.086"
+          }
+        ],
+        "actual_executions": 1,
+        "junit_sha256": "8cd448c510296a0bce10a6e0a6f522142985e78d25445e7b014bbf62f4ebd689",
+        "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool8-xs_qed_eeee_L1/command.json",
+        "public_dump_hook_enabled": false,
+        "dump_files": {}
+      },
+      {
+        "step": "pool8-xs_qcd_gguu_1pi_L1",
+        "pool": 8,
+        "exact_selection": "xs_qcd_gguu_1pi_L1",
+        "exit": 0,
+        "outcomes": [
+          {
+            "case": "xs_qcd_gguu_1pi_L1",
+            "status": "passed",
+            "time": "0.082"
+          }
+        ],
+        "actual_executions": 1,
+        "junit_sha256": "e1fa0678eef532a353ea4df3e05a0957a1d148af03ac2bdeef306a03f062df88",
+        "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool8-xs_qcd_gguu_1pi_L1/command.json",
+        "public_dump_hook_enabled": false,
+        "dump_files": {}
+      },
+      {
+        "step": "pool8-xs_qed_eemm_identical_L2",
+        "pool": 8,
+        "exact_selection": "xs_qed_eemm_identical_L2",
+        "exit": 0,
+        "outcomes": [
+          {
+            "case": "xs_qed_eemm_identical_L2",
+            "status": "passed",
+            "time": "3.615"
+          }
+        ],
+        "actual_executions": 1,
+        "junit_sha256": "28c608540d462a9b5a7b5acf79a2546b0cd2a3c83eab0d9cbd6f079259055a9c",
+        "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool8-xs_qed_eemm_identical_L2/command.json",
+        "public_dump_hook_enabled": false,
+        "dump_files": {}
+      },
+      {
+        "step": "pool32-xs_qcd_gguu_sym_L1",
+        "pool": 32,
+        "exact_selection": "xs_qcd_gguu_sym_L1",
+        "exit": 0,
+        "outcomes": [
+          {
+            "case": "xs_qcd_gguu_sym_L1",
+            "status": "passed",
+            "time": "0.123"
+          }
+        ],
+        "actual_executions": 1,
+        "junit_sha256": "ddd5419b209bf8e38f3300731c887a8cc49be4aad04f168a73710a43a473543a",
+        "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool32-xs_qcd_gguu_sym_L1/command.json",
+        "public_dump_hook_enabled": false,
+        "dump_files": {}
+      },
+      {
+        "step": "pool32-xs_qcd_gguu_L1",
+        "pool": 32,
+        "exact_selection": "xs_qcd_gguu_L1",
+        "exit": 0,
+        "outcomes": [
+          {
+            "case": "xs_qcd_gguu_L1",
+            "status": "passed",
+            "time": "0.161"
+          }
+        ],
+        "actual_executions": 1,
+        "junit_sha256": "c203db570acde0717fd5f24d0d30d89ce4b5e3af48c15c5489214116fa8f9ee8",
+        "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool32-xs_qcd_gguu_L1/command.json",
+        "public_dump_hook_enabled": false,
+        "dump_files": {}
+      },
+      {
+        "step": "pool32-xs_qcd_gggg_L1",
+        "pool": 32,
+        "exact_selection": "xs_qcd_gggg_L1",
+        "exit": 0,
+        "outcomes": [
+          {
+            "case": "xs_qcd_gggg_L1",
+            "status": "passed",
+            "time": "0.162"
+          }
+        ],
+        "actual_executions": 1,
+        "junit_sha256": "c68b36f59d79ff23b4530848a598d8608664c05da4f0b7d861327ab0001492a2",
+        "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool32-xs_qcd_gggg_L1/command.json",
+        "public_dump_hook_enabled": false,
+        "dump_files": {}
+      },
+      {
+        "step": "pool32-xs_qed_eemm_L1",
+        "pool": 32,
+        "exact_selection": "xs_qed_eemm_L1",
+        "exit": 0,
+        "outcomes": [
+          {
+            "case": "xs_qed_eemm_L1",
+            "status": "passed",
+            "time": "0.128"
+          }
+        ],
+        "actual_executions": 1,
+        "junit_sha256": "181f7433e5041ce33171090bcc20b1dc6d75e29bfd284556976df05630f25ed3",
+        "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool32-xs_qed_eemm_L1/command.json",
+        "public_dump_hook_enabled": false,
+        "dump_files": {}
+      },
+      {
+        "step": "pool32-xs_qed_eedd_L1",
+        "pool": 32,
+        "exact_selection": "xs_qed_eedd_L1",
+        "exit": 0,
+        "outcomes": [
+          {
+            "case": "xs_qed_eedd_L1",
+            "status": "passed",
+            "time": "0.126"
+          }
+        ],
+        "actual_executions": 1,
+        "junit_sha256": "61d6c42f38ce0a87f0be2acea6ba644e79b12e279981afdc00fe3dd6e8c522c4",
+        "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool32-xs_qed_eedd_L1/command.json",
+        "public_dump_hook_enabled": false,
+        "dump_files": {}
+      },
+      {
+        "step": "pool32-xs_qed_eeee_1pi_L1",
+        "pool": 32,
+        "exact_selection": "xs_qed_eeee_1pi_L1",
+        "exit": 0,
+        "outcomes": [
+          {
+            "case": "xs_qed_eeee_1pi_L1",
+            "status": "passed",
+            "time": "0.127"
+          }
+        ],
+        "actual_executions": 1,
+        "junit_sha256": "76a2aa927830339d5e3e02197bfc66ec34e9d1659c4f47af42cebf6a6d857288",
+        "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool32-xs_qed_eeee_1pi_L1/command.json",
+        "public_dump_hook_enabled": false,
+        "dump_files": {}
+      },
+      {
+        "step": "pool32-qed_eemm_L1",
+        "pool": 32,
+        "exact_selection": "qed_eemm_L1",
+        "exit": 0,
+        "outcomes": [
+          {
+            "case": "qed_eemm_L1",
+            "status": "passed",
+            "time": "0.178"
+          }
+        ],
+        "actual_executions": 1,
+        "junit_sha256": "e0945ab00253aa96a7804c10ab8c5e442bfd316e68c27b99de3493a8effa9c33",
+        "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool32-qed_eemm_L1/command.json",
+        "public_dump_hook_enabled": false,
+        "dump_files": {}
+      },
+      {
+        "step": "pool32-ctorder_qcd_uugg_L1",
+        "pool": 32,
+        "exact_selection": "ctorder_qcd_uugg_L1",
+        "exit": 0,
+        "outcomes": [
+          {
+            "case": "ctorder_qcd_uugg_L1",
+            "status": "passed",
+            "time": "0.623"
+          }
+        ],
+        "actual_executions": 1,
+        "junit_sha256": "78d12619fe2637e292523b01c3454803c10da78971a2bfe581ebd876dab35599",
+        "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool32-ctorder_qcd_uugg_L1/command.json",
+        "public_dump_hook_enabled": false,
+        "dump_files": {}
+      },
+      {
+        "step": "pool32-sm_eemm_L0",
+        "pool": 32,
+        "exact_selection": "sm_eemm_L0",
+        "exit": 0,
+        "outcomes": [
+          {
+            "case": "sm_eemm_L0",
+            "status": "passed",
+            "time": "0.106"
+          }
+        ],
+        "actual_executions": 1,
+        "junit_sha256": "276a36926d566e6975f05e5070e56575f9311c47fb6171cc6baf67387e3e08e9",
+        "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool32-sm_eemm_L0/command.json",
+        "public_dump_hook_enabled": false,
+        "dump_files": {}
+      },
+      {
+        "step": "pool32-ym_g6_L0",
+        "pool": 32,
+        "exact_selection": "ym_g6_L0",
+        "exit": 0,
+        "outcomes": [
+          {
+            "case": "ym_g6_L0",
+            "status": "passed",
+            "time": "0.703"
+          }
+        ],
+        "actual_executions": 1,
+        "junit_sha256": "5cce51ca04eac06b6d88b33cc0de7c78bc19c3544f7722babec0eca976401605",
+        "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool32-ym_g6_L0/command.json",
+        "public_dump_hook_enabled": false,
+        "dump_files": {}
+      },
+      {
+        "step": "pool32-xs_qed_eemm_L2",
+        "pool": 32,
+        "exact_selection": "xs_qed_eemm_L2",
+        "exit": 0,
+        "outcomes": [
+          {
+            "case": "xs_qed_eemm_L2",
+            "status": "passed",
+            "time": "0.185"
+          }
+        ],
+        "actual_executions": 1,
+        "junit_sha256": "4296c9e21b127d8f61ac6d64700db3a8fd62b94e7dd90b3388836dff34ed9490",
+        "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool32-xs_qed_eemm_L2/command.json",
+        "public_dump_hook_enabled": false,
+        "dump_files": {}
+      },
+      {
+        "step": "pool32-sm_eeww_L0",
+        "pool": 32,
+        "exact_selection": "sm_eeww_L0",
+        "exit": 0,
+        "outcomes": [
+          {
+            "case": "sm_eeww_L0",
+            "status": "passed",
+            "time": "0.099"
+          }
+        ],
+        "actual_executions": 1,
+        "junit_sha256": "79d92a764217c1ddfd87fc664523b8661315c5b4e3511218cb71e6e79e36c626",
+        "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool32-sm_eeww_L0/command.json",
+        "public_dump_hook_enabled": false,
+        "dump_files": {}
+      },
+      {
+        "step": "pool32-qed_ee4f_L0",
+        "pool": 32,
+        "exact_selection": "qed_ee4f_L0",
+        "exit": 0,
+        "outcomes": [
+          {
+            "case": "qed_ee4f_L0",
+            "status": "passed",
+            "time": "0.105"
+          }
+        ],
+        "actual_executions": 1,
+        "junit_sha256": "6ccf9f031fafb8012dd8dcb92375bb5b6e3826ba30a733bdd732f5293c285b68",
+        "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool32-qed_ee4f_L0/command.json",
+        "public_dump_hook_enabled": false,
+        "dump_files": {}
+      },
+      {
+        "step": "pool32-xs_qed_eeee_L1",
+        "pool": 32,
+        "exact_selection": "xs_qed_eeee_L1",
+        "exit": 0,
+        "outcomes": [
+          {
+            "case": "xs_qed_eeee_L1",
+            "status": "passed",
+            "time": "0.110"
+          }
+        ],
+        "actual_executions": 1,
+        "junit_sha256": "8b2511dc1e8ec11716bccc775d69dcced838257a97a78ab78f549345fcdd99a1",
+        "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool32-xs_qed_eeee_L1/command.json",
+        "public_dump_hook_enabled": false,
+        "dump_files": {}
+      },
+      {
+        "step": "pool32-xs_qcd_gguu_1pi_L1",
+        "pool": 32,
+        "exact_selection": "xs_qcd_gguu_1pi_L1",
+        "exit": 0,
+        "outcomes": [
+          {
+            "case": "xs_qcd_gguu_1pi_L1",
+            "status": "passed",
+            "time": "0.107"
+          }
+        ],
+        "actual_executions": 1,
+        "junit_sha256": "a6122e362be4c1dc2cdd52a5e41b296be35e89122915fde78d7b7c59b5f28f74",
+        "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool32-xs_qcd_gguu_1pi_L1/command.json",
+        "public_dump_hook_enabled": false,
+        "dump_files": {}
+      },
+      {
+        "step": "pool32-xs_qed_eemm_identical_L2",
+        "pool": 32,
+        "exact_selection": "xs_qed_eemm_identical_L2",
+        "exit": 0,
+        "outcomes": [
+          {
+            "case": "xs_qed_eemm_identical_L2",
+            "status": "passed",
+            "time": "4.133"
+          }
+        ],
+        "actual_executions": 1,
+        "junit_sha256": "92bffef60489777eb0e77abb7dc46ead4235c81cb4097e8c1f1bc381346d98de",
+        "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool32-xs_qed_eemm_identical_L2/command.json",
+        "public_dump_hook_enabled": false,
+        "dump_files": {}
+      }
+    ],
+    "expected_selected_executions": 48,
+    "actual_executions": 48,
+    "passes": 48,
+    "failures": 0,
+    "retries": 0,
+    "skipped_credit": 0,
+    "finite_math_scope": "Accepted prior pool1 None/Auto finite proofs; pools8/32 runtime only. No new proof-native calls."
+  },
+  "capture_joins": {
+    "report": "qualification/joins/capture-joins.json",
+    "actual_complete_files": 15,
+    "cells": 6,
+    "current_owner_associations": 600,
+    "paired_relations": 600,
+    "counts_per_case_per_mode": [
+      65,
+      117,
+      118
+    ],
+    "normalizations": [],
+    "only_None_literal_asserted": true,
+    "Auto_counters": "Fresh public success/payload equality, historical mode report/search counters remain separate captured premises",
+    "new_observer_runs": 0,
+    "new_proof_native_runs": 0
+  },
+  "accepted_inputs": {
+    "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/root-next-qcd-migration-acceptance-and-application-authorization-20261031.json": "91b7937ed1bc94e55f56195656f7b26865b6bc508cb82e8d7047e01e3abb1ed1",
+    "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/root-next-qcd-scientific-interface-acceptance-20261031.json": "225b2c244ba02f16ca3ee73a59d23df3fff12204deef44f3aa405397247a0ea7",
+    "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/root-next-qcd-migration-preparation-receipt-20261031.json": "4c66d289489823726da2bf9355c43a937830a970e0e1e53e18f34e4a530f8804",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-migration-preparation-20261031-r1/SEAL.json": "b4e75df006b68563219947ecbdef5cb8fd289f9b4c7ba840d79c0ce599377324",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-migration-preparation-20261031-r1/handoff.json": "1b69607db0184093de3b16d32541d6f7a5a3f00968b85694685a6d17fb1506b3",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-migration-preparation-20261031-r1/proposed-not-applied.patch": "1df84cbea910df5ff092203ff6050e785bccf0027bd627b91a601d1f7b98cf84",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-next-qcd-migration-astra-20261031-efvezb1p/review.json": "132a73c7a6711a7d4f74bbe47b0427e5e8fc2ddcb58079ec4f686b78bfc39f74",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-next-qcd-migration-astra-20261031-efvezb1p/SEAL.json": "c66f4a1039b9c9fad744633c99d99d05f3b57c30db82a3e101f7fc04b9ee8e25",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-next-qcd-scientific-interface-astra-20261031-5a3KbP5x/review.json": "6d892bd9263a7c093bba5fd372fb4663a5a4e81dfaad4bfc709bbba052b96d21",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-next-qcd-scientific-interface-astra-20261031-5a3KbP5x/SEAL.json": "888b82c478697e917cb243587653cc16d09a484f299a671c5ffd8981e58c1d99",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-native-execution-20261031-r1/report.json": "3baf87d1d031f790b753bb944d2a4c180f0620297b7808ad348dfa7ea65c76f0",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-native-execution-20261031-r1/COMPLETE-SEAL.json": "22b11020019c4b9f8e058a2951de177f5a6f111fbb4f6976932f98ef0c399626",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-captures-20261031-r2/handoff.json": "9da40bc2d34381c7c6b67fa81a6d91032ff699222349f6910f9787a18cc7e660",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-captures-20261031-r2/SEAL.json": "166dd40ee056d9bf67da1a84eef200dc5bc9ff0fea55e15a88e9feb8f4e98d4b",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-next-qcd-captures-astra-20261031-IYGt5Jrv/review.json": "7ccf8f133bff073e5f428d1fabc0ebd6552aa1e04a8b7edd149f526b37330aa7",
+    "/shared/lcnbr/dev/gammaloop/generation-integration-plan/docs/architecture/generation-integration-plan.typ": "4489dc7383468cf2daf7f8c177d3ea87fe9cad45c99af1afc0f160b202ff06f6"
+  },
+  "migration_conditions_verbatim": [
+    "Only the three named numerators tokens in the exact832 source blob and exact proposed patch are approved. All149 Rows,13 prior full migrated Rows,118 ordered source scopes and every other byte must remain exact. xs_qcd_gggg_sym_L1 is excluded despite its shared old hash.",
+    "The accepted scientific premise is finite: the six separately captured case/None-or-Auto cells, GroupingNone, pool1. OnlyNone receives the original literal Row assertion. Auto remains independently captured/reconstructed and supplies no separate literal assertion.",
+    "Full exact model, request, options, Run, graph128-bit string IDs and full canonical keys, group source indices/members/ratios, source factors, cuts, signs, routing, incidence/half-edge slots, particle/mass/rule/coupling ownership remain bound. NumeratorIndependentSymmetryGrouping(2) applies to exactly4of5 sym gguu diagrams, not the entire case.",
+    "Both entering-operand and surviving-output maps are essential. The current typed8eb consumer imports both eras; this is not new c78 typed execution. Historical interface absence is not an empty interface. No historical positional identity or stale cached-plan interchangeability is authorized.",
+    "All600 full owner relations,96 unexpanded products, complete166/118 native pair partitions per kernel and exact definition/side orders remain dependencies.4268 inverse references are associations, not new obligations. Native568 pair-result rows and5baseline/16specific-negative evidence remain historical retained execution, never rerun here.",
+    "For210 changed owners retain both actual lowerings and the accepted420 layout audits;390 unchanged owners use exact imported expression/ports/flags plus the qualified deterministic source. Actual flags belong to reconstructed owners, not serialized-flag admission. Rank8 numerator plus rank4 projector leaves FOURcoad8 outputs. No scalar closure or component evaluation is inferred.",
+    "Historical2b1ef4f07a44bc061bcc97c378bbdd9c41cb0e94 uses Symbolica/Numerica c78cffc20f318df1fce50539a587cbe8ffc717c0 and registryGraphica3.0.1. Current pristine actualffa76ec420642c03349ab756d2d7720ab93c0057/archive8993e6c8346b84f6d91c7e65c4c4fc5ed83cf6d932e969bb7fc55cbdced20740/kernel8eb7c3729d6abefc916decc1bdf0c06536f8af80 is distinct from observerbuilt5ea149ffd88ae3afc4072a38c0871c1329be8424+qualified overlay and proofsource5ba04864ca506e259d9eef4a54f65acdd8323fc2. No producer is relabelled832/6f.",
+    "Whole symbol spellings/tags/attributes, uncaptured callback/userdata semantics, constructors/model/module initialization, original profile/compiler/kernel/store honesty and qualified observer/raw-cooked-decoded provenance remain explicit premises. Historicaldev-optim/currentCI/direct-rustc qualifications are not declared equivalent. eae/1a remains a failing baseline, never the original reference.",
+    "Finite locality912 records/1096momentum calls certify their exact dependencies only.41088visited factor subsets are finite pure enumeration, not native runs;456actual folds/720endpoint pairs are the actual retained typed observations. No general decoder/locality/UV/full-integrand/denominator-evenness/trace/component/evaluator/cross-section theorem is approved.",
+    "Cooperative protected-record/source/command/input/result consistency is the execution premise; no hostile or cryptographic attestation, new global interner observation or inner-PID/private-value evidence is invented.",
+    "INFO-1 remains nonblocking solely because the accepted independent scientific audit checked the exact actual integer plans, dispatch kinds and420lowering layouts. This migration review additionally checks all actual selected and fold integer plans and output maps. No general audit_native validator reuse is approved.26builtin bis no-ops earn zero rejection credit.",
+    "All unnamed rows, grouped modes, new sources/models/options/definitions, pool8/32, full371/WP3/M-rebuild/main/publication/global integration remain outside this approval. Metadata acceptance at832 is not a fullWP3 pass. Latest actual full-package result remains302passed/69failed/49ignored; no subtraction-based updated count is claimed.",
+    "External capture, source, helper, proof, actual execution and review dependencies remain required at their recorded paths/hashes; this review packet is not self-contained."
+  ],
+  "scientific_conditions_verbatim": [
+    "Historical source2b1ef4f07a44bc061bcc97c378bbdd9c41cb0e94 uses Symbolica/Numerica gitc78cffc20f318df1fce50539a587cbe8ffc717c0 and Graphica registry3.0.1. Original dev-optim, actual direct-rustc diagnostics and current CI profiles remain distinct; no all-git-c78 or profile equivalence claim.",
+    "Current pristine actualffa76ec420642c03349ab756d2d7720ab93c0057/archive8993e6c8346b84f6d91c7e65c4c4fc5ed83cf6d932e969bb7fc55cbdced20740/kernel8eb7c3729d6abefc916decc1bdf0c06536f8af80; observer actualbuilt5ea149ffd88ae3afc4072a38c0871c1329be8424 plus qualified overlay remains distinct from proofsource5ba and evidencec344. Existing qualified source invariance supplies only its recorded finite boundaries.",
+    "eae/1a is the failing baseline, never the original reference. Old historical grouped/source gaps are not repaired or upgraded by this review.",
+    "Accepted capture provenance remains an explicit dependency:12 invocations=3 preservedr1+9r2;6 historical passes and6 current numerator-only exit101 failures;24 public worlds,12 complete observer worlds,1200 raw-owner records and600 paired relations. Only historicalNone asserts the literal Row; Auto has its own world/request association.",
+    "Exact IDs are strings with full keys, not rounded f64 diagnostic IDs or ordinal-only joins. Raw/cooked/decoded/public/observer association and pristine-observer equivalence are reused only through the accepted exact capture/source bindings.",
+    "The original nested-Fraction controller failure and missing original afterrecord are retained, with separate additive exact revalidation. No retroactive historical success or original receipt field is invented.",
+    "Captured symbol tables contain full spellings/tags/attributes. Uncaptured callback/userdata semantics, source constructors, model/module initialization and qualified compiler/kernel/store behavior remain explicit premises. The48 reconstructed typed schedules include2372 explicit parse events; they do not claim newly observed global interner order.",
+    "Missing historical interface metadata means infer through its actual source owner, never an empty interface. Original physical factorization, signed routes, sources and factor2 on4of5 sym diagrams are essential premises."
+  ],
+  "scientific_restrictions_verbatim": [
+    "Exactly xs_qcd_gguu_sym_L1, xs_qcd_gguu_L1 and xs_qcd_gggg_L1; None andAuto separately; GroupingNone; capturedpool1.",
+    "No migration/literal application, expectation edit, postapplication runtime, other60 rows, grouped/fullpool8/32, full371, global integration, publication or general runner approval.",
+    "No new historical full-integrand or old grouped theorem; no universal decoder, callback/userdata, locality/UV, denominator-evenness, trace/component execution, evaluator or physical cross-section validation claim.",
+    "Both operand and output-axis maps mandatory. Same-value/port compatibility does not authorize positional or cached-plan interchangeability. Historical profile/source/observer/raw-cooked-decoded premises remain in force.",
+    "This closes the requested finite scientific/interface review only. Any later migration and runtime validation remain separate tasks."
+  ],
+  "authorization_join": "Original no-application/PENDING text remains immutable; root91b7 authorizes this separately bounded phase. New runtime does not expand the finite proof.",
+  "exact_plan_and_layout_audits": "Complete independent scientific interface-independent.json and its helpers retained; actual native results unchanged. Both operand/output maps mandatory. INFO1 general audit_native limits excluded.",
+  "source_distinctions": {
+    "historical": "2b1ef4f07a44bc061bcc97c378bbdd9c41cb0e94; Symbolica/Numerica c78; registry Graphica3.0.1",
+    "current_pristine": "ffa76ec420642c03349ab756d2d7720ab93c0057; archive8993e6c8346b84f6d91c7e65c4c4fc5ed83cf6d932e969bb7fc55cbdced20740",
+    "observer": "actual built5ea149ffd88ae3afc4072a38c0871c1329be8424 + qualified overlay",
+    "proof_source": "5ba04864ca506e259d9eef4a54f65acdd8323fc2",
+    "new_actual_source": "432b6544f3d2d884f6efffb8be104ae5820183b0",
+    "no_relabelling": true
+  },
+  "validation": {
+    "rustfmt": 0,
+    "exact_code_diff_check": 0,
+    "documentation": {
+      "title": "Next three QCD numerator migration qualification",
+      "single_matching_title": true,
+      "registry_additive_only": true,
+      "all118_ordered_scopes_preserved": true,
+      "before_registry_revision": "83276dc047815d1dcc7f003aeb512c204b26758e",
+      "broader_docs_Clippy_credit": false
+    },
+    "Typst": {
+      "compiler": {
+        "fontPaths": "/nix/store/idpfl7br0zvh7aah3dmpwkg0xwbasff0-roboto-3.015/share/fonts/truetype",
+        "packageCache": "/nix/store/vnjry04dnavpyvl41mz607ir21pjb2hp-typst-0.15.1-env/lib/typst/packages",
+        "compiler": "/nix/store/vnjry04dnavpyvl41mz607ir21pjb2hp-typst-0.15.1-env/bin/typst",
+        "existing": true
+      },
+      "available": true,
+      "compiled": true,
+      "standalone_only": true,
+      "license_absent": true,
+      "argv": [
+        "/nix/store/vnjry04dnavpyvl41mz607ir21pjb2hp-typst-0.15.1-env/bin/typst",
+        "compile",
+        "--root",
+        "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh",
+        "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/docs/architecture/generation-next-qcd-migration.typ",
+        "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/migration-note.pdf"
+      ],
+      "exit": 0,
+      "PDF_external": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/migration-note.pdf",
+        "sha256": "928031031746cfa8e444c32245ce5f014ecea3dc04167fa56682e02fb3ae51ef",
+        "bytes": 44313
+      }
+    },
+    "broader_Docs_Clippy_core_host_WP3_credit": false
+  },
+  "historical_manifest": {
+    "report": "qualification/prior-manifest-revision-aware.json",
+    "source": "7f03ab8fd5834d7c78164429e2a44dab8d01ef74",
+    "matched": 425,
+    "false7c_closure_preserved": true,
+    "new_registry_is_additive": "qualification/registry-before-832.toml records exact before bytes; original accepted7f manifest checked at7f without fallback"
+  },
+  "latest_actual_full_package_result": {
+    "passed": 302,
+    "failed": 69,
+    "ignored": 49,
+    "fresh_here": false,
+    "no_inferred_updated_count": true
+  },
+  "retained_setup_errors": [
+    {
+      "step": "bare python3 lookup",
+      "effect": "shell python3 unavailable; reused already qualified pinned Python; no task script executed"
+    },
+    {
+      "step": "initial producer invocation",
+      "error": "selected-drv.txt absent because evaluation was still active",
+      "artifact": "realization-before-evaluation-finished.stderr",
+      "effect": "No Nix build invocation or runtime. Existing evaluation reused; wait until it fully completes."
+    },
+    {
+      "step": "capture pure selfcheck1",
+      "error": "AST helper context lacked sha/unique; no native call or input mutation",
+      "artifacts": [
+        "capture_join.before-context-completion.py",
+        "capture-selfcheck-attempt1.stderr"
+      ],
+      "fix": "Supply exact stdlib hash and duplicate-key helpers in the task-local context"
+    }
+  ],
+  "retention": {
+    "local": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031",
+    "committed_input_records": 681,
+    "committed_qualification_records": 586,
+    "large_artifacts": "large-external-artifacts.json",
+    "self_contained": false,
+    "external_original_files": "qualification/input-verification.json exact original public paths and hashes remain load-bearing; useful original captures/native records/source/store dependencies preserved",
+    "core_union": "Separate active owner/process/files untouched; no partial core result adopted",
+    "own_native_processes_remaining": 0
+  },
+  "CI": false,
+  "stub_changed": false,
+  "resource_policy_changed": false,
+  "memory_ceiling_or_1_2x_policy_adopted": false,
+  "global_integration": "83276dc047815d1dcc7f003aeb512c204b26758e",
+  "global_advance": false,
+  "publication": false,
+  "delegation": 0,
+  "self_approval": false,
+  "remaining_gates": [
+    "NEW independent integration review and root disposition",
+    "Other rows/full package and broader modes",
+    "Core/API/evaluator/host checks under their separate authorization",
+    "Full Docs/Clippy, WP3/WP9/M-rebuild and later accepted plan gates",
+    "Performance/memory measurements and policy decisions",
+    "Explicit publication authorization"
+  ],
+  "assembly_stream_closure": {
+    "status": "Closed complete assembler streams rebound before immutable freeze",
+    "provisional_seal": "qualification/assembly-provisional-SEAL.json",
+    "provisional_manifest": "qualification/assembly-provisional-SHA256SUMS",
+    "provisional_scope": "In-progress assembly snapshot only; not used as complete closure or an immutable candidate",
+    "finalizer_streams": "Closed complete finalizer stdout/stderr are committed in qualification/close_packet.{stdout,stderr}; last sealing helper is silent"
+  }
+}

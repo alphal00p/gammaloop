@@ -1,0 +1,92 @@
+[
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/retained-actual-archive.tar.zst",
+    "sha256": "1271edb103b212c5ef503075b6cccd48cc96c74ca41839b28127e9614aeeef35",
+    "bytes": 86345019,
+    "reason": "Large actual producer/render artifact retained outsideGit and named in qualification; no self-contained claim"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/migration-note.pdf",
+    "sha256": "928031031746cfa8e444c32245ce5f014ecea3dc04167fa56682e02fb3ae51ef",
+    "bytes": 44313,
+    "reason": "Large actual producer/render artifact retained outsideGit and named in qualification; no self-contained claim"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/archive-extracted/target/ci-optim/deps/libclarabel.so",
+    "sha256": "ad894b1f4fe682b577665f8dffa2c1bec85357f945185edadd30876d89bd311b",
+    "bytes": 18840,
+    "reason": "Large actual producer/render artifact retained outsideGit and named in qualification; no self-contained claim"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/archive-extracted/target/ci-optim/deps/liblinnest.so",
+    "sha256": "ff118529c78ebb2b9b48a46eb80ea509a5caba1fefbb04896ded83a26cc505f1",
+    "bytes": 29103456,
+    "reason": "Large actual producer/render artifact retained outsideGit and named in qualification; no self-contained claim"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/archive-extracted/target/ci-optim/deps/momentum_tensor-43d9cde778a19275",
+    "sha256": "2cb2011b24018f32595dbd5ce5585eaa70283c37ab29a2056effce5f90d5dbb4",
+    "bytes": 32083560,
+    "reason": "Large actual producer/render artifact retained outsideGit and named in qualification; no self-contained claim"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/archive-extracted/target/ci-optim/deps/feynkit_generator-9c81726e5f0078f8",
+    "sha256": "c6c3949b846bf0a046ac7910f17c6e5362e700090c2ed438eaf68421bc2aff52",
+    "bytes": 72020120,
+    "reason": "Large actual producer/render artifact retained outsideGit and named in qualification; no self-contained claim"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/archive-extracted/target/ci-optim/deps/amplitude-0bcbb9273998b3e1",
+    "sha256": "47fffa34040c03e4ba3a2dd5f75bfccd875a3407c11a55188163678646bd1ef0",
+    "bytes": 62964800,
+    "reason": "Large actual producer/render artifact retained outsideGit and named in qualification; no self-contained claim"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/archive-extracted/target/ci-optim/deps/libkurvst.so",
+    "sha256": "df77480d5abfb61d5c2cb0f7a6fc8bda58e8ddac350678437554899d7a15dcfd",
+    "bytes": 21696,
+    "reason": "Large actual producer/render artifact retained outsideGit and named in qualification; no self-contained claim"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/archive-extracted/target/ci-optim/deps/generation_oracle-3892f55f31822180",
+    "sha256": "212adc0f2f091ecb9899d5da751184a96a65a0efb8baa850e4d6d31bb8e296d4",
+    "bytes": 61186320,
+    "reason": "Large actual producer/render artifact retained outsideGit and named in qualification; no self-contained claim"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/archive-extracted/target/ci-optim/build/blake3-91385034c9e68003/out/b8423798394d5395-blake3_sse2_x86-64_unix.o",
+    "sha256": "c5a67c2934ab0979d1c516d7bb1206aa06336f855c85edcfccb608fdab27aa29",
+    "bytes": 14584,
+    "reason": "Large actual producer/render artifact retained outsideGit and named in qualification; no self-contained claim"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/archive-extracted/target/ci-optim/build/blake3-91385034c9e68003/out/b8423798394d5395-blake3_sse41_x86-64_unix.o",
+    "sha256": "89dd793e718bbda10a7f03417662b593c994328429b4bcfbbfe290de68b391c4",
+    "bytes": 13632,
+    "reason": "Large actual producer/render artifact retained outsideGit and named in qualification; no self-contained claim"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/archive-extracted/target/ci-optim/build/blake3-91385034c9e68003/out/flag_check",
+    "sha256": "e0fb34da1ddf191337ddae56b05739eede02c10139786096a32a05b7a74682f5",
+    "bytes": 1296,
+    "reason": "Large actual producer/render artifact retained outsideGit and named in qualification; no self-contained claim"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/archive-extracted/target/ci-optim/build/blake3-91385034c9e68003/out/b8423798394d5395-blake3_avx512_x86-64_unix.o",
+    "sha256": "b53bffd519a9db1128eb1e0aa5a1ca24cef326e092859ae132d1d5f3fb7de9b5",
+    "bytes": 31320,
+    "reason": "Large actual producer/render artifact retained outsideGit and named in qualification; no self-contained claim"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/archive-extracted/target/ci-optim/build/blake3-91385034c9e68003/out/b8423798394d5395-blake3_avx2_x86-64_unix.o",
+    "sha256": "29260c9094a41a973387648b46d65f3a0740e602ab5b8f084a4e49cb370176f3",
+    "bytes": 12592,
+    "reason": "Large actual producer/render artifact retained outsideGit and named in qualification; no self-contained claim"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/archive-extracted/target/nextest/libdirs/host/libstd-64f5f36fb0927694.so",
+    "sha256": "31e2604ef969d9beaa9aafe41c59f78e4912d1bc2f9aac99dbfa9d42f15b8e25",
+    "bytes": 3017568,
+    "reason": "Large actual producer/render artifact retained outsideGit and named in qualification; no self-contained claim"
+  }
+]

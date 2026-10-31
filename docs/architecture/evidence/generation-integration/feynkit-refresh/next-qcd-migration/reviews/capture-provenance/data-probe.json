@@ -1,0 +1,530 @@
+{
+  "status": "PASS",
+  "public_mode_world_copies": 24,
+  "complete_observer_worlds": 12,
+  "case_mode_cells": 6,
+  "complete_owner_records_checked": 1200,
+  "complete_pairs_checked": 600,
+  "worlds": [
+    {
+      "case": "xs_qcd_gguu_sym_L1",
+      "era": "historical",
+      "mode": "None",
+      "diagrams": 5,
+      "counts": {
+        "owners": 65,
+        "public_interface_present": 0,
+        "public_interface_absent": 65,
+        "is_metric_present": 65,
+        "is_metric_absent": 0,
+        "is_metric_true": 0,
+        "is_composite_present": 65,
+        "is_composite_absent": 0,
+        "is_composite_true": 65,
+        "raw_ports": 260
+      },
+      "symbol_definitions": 38,
+      "symmetry2_diagrams": 4
+    },
+    {
+      "case": "xs_qcd_gguu_sym_L1",
+      "era": "historical",
+      "mode": "Auto",
+      "diagrams": 5,
+      "counts": {
+        "owners": 65,
+        "public_interface_present": 0,
+        "public_interface_absent": 65,
+        "is_metric_present": 65,
+        "is_metric_absent": 0,
+        "is_metric_true": 0,
+        "is_composite_present": 65,
+        "is_composite_absent": 0,
+        "is_composite_true": 65,
+        "raw_ports": 260
+      },
+      "symbol_definitions": 38,
+      "symmetry2_diagrams": 4
+    },
+    {
+      "case": "xs_qcd_gguu_sym_L1",
+      "era": "current",
+      "mode": "None",
+      "diagrams": 5,
+      "counts": {
+        "owners": 65,
+        "public_interface_present": 34,
+        "public_interface_absent": 31,
+        "is_metric_present": 65,
+        "is_metric_absent": 0,
+        "is_metric_true": 0,
+        "is_composite_present": 65,
+        "is_composite_absent": 0,
+        "is_composite_true": 65,
+        "raw_ports": 260
+      },
+      "symbol_definitions": 22,
+      "symmetry2_diagrams": 4
+    },
+    {
+      "case": "xs_qcd_gguu_sym_L1",
+      "era": "current",
+      "mode": "Auto",
+      "diagrams": 5,
+      "counts": {
+        "owners": 65,
+        "public_interface_present": 34,
+        "public_interface_absent": 31,
+        "is_metric_present": 65,
+        "is_metric_absent": 0,
+        "is_metric_true": 0,
+        "is_composite_present": 65,
+        "is_composite_absent": 0,
+        "is_composite_true": 65,
+        "raw_ports": 260
+      },
+      "symbol_definitions": 22,
+      "symmetry2_diagrams": 4
+    },
+    {
+      "case": "xs_qcd_gguu_L1",
+      "era": "historical",
+      "mode": "None",
+      "diagrams": 9,
+      "counts": {
+        "owners": 117,
+        "public_interface_present": 0,
+        "public_interface_absent": 117,
+        "is_metric_present": 117,
+        "is_metric_absent": 0,
+        "is_metric_true": 0,
+        "is_composite_present": 117,
+        "is_composite_absent": 0,
+        "is_composite_true": 117,
+        "raw_ports": 468
+      },
+      "symbol_definitions": 37,
+      "symmetry2_diagrams": 0
+    },
+    {
+      "case": "xs_qcd_gguu_L1",
+      "era": "historical",
+      "mode": "Auto",
+      "diagrams": 9,
+      "counts": {
+        "owners": 117,
+        "public_interface_present": 0,
+        "public_interface_absent": 117,
+        "is_metric_present": 117,
+        "is_metric_absent": 0,
+        "is_metric_true": 0,
+        "is_composite_present": 117,
+        "is_composite_absent": 0,
+        "is_composite_true": 117,
+        "raw_ports": 468
+      },
+      "symbol_definitions": 37,
+      "symmetry2_diagrams": 0
+    },
+    {
+      "case": "xs_qcd_gguu_L1",
+      "era": "current",
+      "mode": "None",
+      "diagrams": 9,
+      "counts": {
+        "owners": 117,
+        "public_interface_present": 63,
+        "public_interface_absent": 54,
+        "is_metric_present": 117,
+        "is_metric_absent": 0,
+        "is_metric_true": 0,
+        "is_composite_present": 117,
+        "is_composite_absent": 0,
+        "is_composite_true": 117,
+        "raw_ports": 468
+      },
+      "symbol_definitions": 21,
+      "symmetry2_diagrams": 0
+    },
+    {
+      "case": "xs_qcd_gguu_L1",
+      "era": "current",
+      "mode": "Auto",
+      "diagrams": 9,
+      "counts": {
+        "owners": 117,
+        "public_interface_present": 63,
+        "public_interface_absent": 54,
+        "is_metric_present": 117,
+        "is_metric_absent": 0,
+        "is_metric_true": 0,
+        "is_composite_present": 117,
+        "is_composite_absent": 0,
+        "is_composite_true": 117,
+        "raw_ports": 468
+      },
+      "symbol_definitions": 21,
+      "symmetry2_diagrams": 0
+    },
+    {
+      "case": "xs_qcd_gggg_L1",
+      "era": "historical",
+      "mode": "None",
+      "diagrams": 10,
+      "counts": {
+        "owners": 118,
+        "public_interface_present": 0,
+        "public_interface_absent": 118,
+        "is_metric_present": 118,
+        "is_metric_absent": 0,
+        "is_metric_true": 0,
+        "is_composite_present": 118,
+        "is_composite_absent": 0,
+        "is_composite_true": 118,
+        "raw_ports": 472
+      },
+      "symbol_definitions": 29,
+      "symmetry2_diagrams": 0
+    },
+    {
+      "case": "xs_qcd_gggg_L1",
+      "era": "historical",
+      "mode": "Auto",
+      "diagrams": 10,
+      "counts": {
+        "owners": 118,
+        "public_interface_present": 0,
+        "public_interface_absent": 118,
+        "is_metric_present": 118,
+        "is_metric_absent": 0,
+        "is_metric_true": 0,
+        "is_composite_present": 118,
+        "is_composite_absent": 0,
+        "is_composite_true": 118,
+        "raw_ports": 472
+      },
+      "symbol_definitions": 29,
+      "symmetry2_diagrams": 0
+    },
+    {
+      "case": "xs_qcd_gggg_L1",
+      "era": "current",
+      "mode": "None",
+      "diagrams": 10,
+      "counts": {
+        "owners": 118,
+        "public_interface_present": 8,
+        "public_interface_absent": 110,
+        "is_metric_present": 118,
+        "is_metric_absent": 0,
+        "is_metric_true": 0,
+        "is_composite_present": 118,
+        "is_composite_absent": 0,
+        "is_composite_true": 118,
+        "raw_ports": 472
+      },
+      "symbol_definitions": 14,
+      "symmetry2_diagrams": 0
+    },
+    {
+      "case": "xs_qcd_gggg_L1",
+      "era": "current",
+      "mode": "Auto",
+      "diagrams": 10,
+      "counts": {
+        "owners": 118,
+        "public_interface_present": 8,
+        "public_interface_absent": 110,
+        "is_metric_present": 118,
+        "is_metric_absent": 0,
+        "is_metric_true": 0,
+        "is_composite_present": 118,
+        "is_composite_absent": 0,
+        "is_composite_true": 118,
+        "raw_ports": 472
+      },
+      "symbol_definitions": 14,
+      "symmetry2_diagrams": 0
+    }
+  ],
+  "ledgers": [
+    {
+      "case": "xs_qcd_gguu_sym_L1",
+      "era": "historical",
+      "events": 14,
+      "stages": {
+        "small-gauge-live": 2,
+        "into-representative": 10,
+        "small-gauge-raw": 2
+      }
+    },
+    {
+      "case": "xs_qcd_gguu_sym_L1",
+      "era": "current",
+      "events": 6,
+      "stages": {
+        "batch-live-inputs": 2,
+        "batch-raw-diagrams": 2,
+        "batch-raw-census": 2
+      }
+    },
+    {
+      "case": "xs_qcd_gguu_L1",
+      "era": "historical",
+      "events": 22,
+      "stages": {
+        "small-gauge-live": 2,
+        "into-representative": 18,
+        "small-gauge-raw": 2
+      }
+    },
+    {
+      "case": "xs_qcd_gguu_L1",
+      "era": "current",
+      "events": 6,
+      "stages": {
+        "batch-live-inputs": 2,
+        "batch-raw-diagrams": 2,
+        "batch-raw-census": 2
+      }
+    },
+    {
+      "case": "xs_qcd_gggg_L1",
+      "era": "historical",
+      "events": 24,
+      "stages": {
+        "small-gauge-live": 2,
+        "into-representative": 20,
+        "small-gauge-raw": 2
+      }
+    },
+    {
+      "case": "xs_qcd_gggg_L1",
+      "era": "current",
+      "events": 6,
+      "stages": {
+        "batch-live-inputs": 2,
+        "batch-raw-diagrams": 2,
+        "batch-raw-census": 2
+      }
+    }
+  ],
+  "pipeline": [
+    {
+      "case": "xs_qcd_gguu_sym_L1",
+      "mode": "None",
+      "observations": {
+        "owners": 65,
+        "raw_bytes_equal_after_five_source_maps": 15,
+        "decoded_syntax_equal_after_five_source_maps": 65,
+        "public_interface_presence_differences": 34
+      },
+      "first_raw": {
+        "id": "6170f31e6eb07c29aac54d0c6cc14371",
+        "owner": "vertex:0"
+      },
+      "first_decoded": null,
+      "first_interface": {
+        "id": "6170f31e6eb07c29aac54d0c6cc14371",
+        "owner": "vertex:0"
+      }
+    },
+    {
+      "case": "xs_qcd_gguu_sym_L1",
+      "mode": "Auto",
+      "observations": {
+        "owners": 65,
+        "raw_bytes_equal_after_five_source_maps": 15,
+        "decoded_syntax_equal_after_five_source_maps": 65,
+        "public_interface_presence_differences": 34
+      },
+      "first_raw": {
+        "id": "6170f31e6eb07c29aac54d0c6cc14371",
+        "owner": "vertex:0"
+      },
+      "first_decoded": null,
+      "first_interface": {
+        "id": "6170f31e6eb07c29aac54d0c6cc14371",
+        "owner": "vertex:0"
+      }
+    },
+    {
+      "case": "xs_qcd_gguu_L1",
+      "mode": "None",
+      "observations": {
+        "owners": 117,
+        "raw_bytes_equal_after_five_source_maps": 27,
+        "decoded_syntax_equal_after_five_source_maps": 117,
+        "public_interface_presence_differences": 63
+      },
+      "first_raw": {
+        "id": "6170f31e6eb07c29aac54d0c6cc14371",
+        "owner": "vertex:0"
+      },
+      "first_decoded": null,
+      "first_interface": {
+        "id": "6170f31e6eb07c29aac54d0c6cc14371",
+        "owner": "vertex:0"
+      }
+    },
+    {
+      "case": "xs_qcd_gguu_L1",
+      "mode": "Auto",
+      "observations": {
+        "owners": 117,
+        "raw_bytes_equal_after_five_source_maps": 27,
+        "decoded_syntax_equal_after_five_source_maps": 117,
+        "public_interface_presence_differences": 63
+      },
+      "first_raw": {
+        "id": "6170f31e6eb07c29aac54d0c6cc14371",
+        "owner": "vertex:0"
+      },
+      "first_decoded": null,
+      "first_interface": {
+        "id": "6170f31e6eb07c29aac54d0c6cc14371",
+        "owner": "vertex:0"
+      }
+    },
+    {
+      "case": "xs_qcd_gggg_L1",
+      "mode": "None",
+      "observations": {
+        "owners": 118,
+        "raw_bytes_equal_after_five_source_maps": 30,
+        "decoded_syntax_equal_after_five_source_maps": 107,
+        "public_interface_presence_differences": 8
+      },
+      "first_raw": {
+        "id": "60777b11dd5b7f48966632644fd7be49",
+        "owner": "vertex:0"
+      },
+      "first_decoded": {
+        "id": "18b13eeeb65c9709e4c5c21ec7a7a98f",
+        "owner": "vertex:2"
+      },
+      "first_interface": {
+        "id": "60777b11dd5b7f48966632644fd7be49",
+        "owner": "vertex:3"
+      }
+    },
+    {
+      "case": "xs_qcd_gggg_L1",
+      "mode": "Auto",
+      "observations": {
+        "owners": 118,
+        "raw_bytes_equal_after_five_source_maps": 30,
+        "decoded_syntax_equal_after_five_source_maps": 107,
+        "public_interface_presence_differences": 8
+      },
+      "first_raw": {
+        "id": "60777b11dd5b7f48966632644fd7be49",
+        "owner": "vertex:0"
+      },
+      "first_decoded": {
+        "id": "18b13eeeb65c9709e4c5c21ec7a7a98f",
+        "owner": "vertex:2"
+      },
+      "first_interface": {
+        "id": "60777b11dd5b7f48966632644fd7be49",
+        "owner": "vertex:3"
+      }
+    }
+  ],
+  "negative_controls": [
+    {
+      "name": "wrong-mode",
+      "rejected_by": "world identity",
+      "credit": "pure capture association only"
+    },
+    {
+      "name": "wrong-request-mode",
+      "rejected_by": "requested Classes",
+      "credit": "pure capture association only"
+    },
+    {
+      "name": "wrong-event-case",
+      "rejected_by": "event identity",
+      "credit": "pure capture association only"
+    },
+    {
+      "name": "duplicate-public-ID",
+      "rejected_by": "duplicate public ID",
+      "credit": "pure capture association only"
+    },
+    {
+      "name": "duplicate-full-key",
+      "rejected_by": "duplicate full key",
+      "credit": "pure capture association only"
+    },
+    {
+      "name": "missing-raw-graph",
+      "rejected_by": "complete graph domain",
+      "credit": "pure capture association only"
+    },
+    {
+      "name": "duplicate-raw-graph",
+      "rejected_by": "duplicate raw ID",
+      "credit": "pure capture association only"
+    },
+    {
+      "name": "rounded-ID-substitution",
+      "rejected_by": "complete graph domain",
+      "credit": "pure capture association only"
+    },
+    {
+      "name": "source-factor-change",
+      "rejected_by": "source factor",
+      "credit": "pure capture association only"
+    },
+    {
+      "name": "wrong-group-ratio",
+      "rejected_by": "exact group ratio source factor",
+      "credit": "pure capture association only"
+    },
+    {
+      "name": "wrong-source-index",
+      "rejected_by": "exact group ratio source factor",
+      "credit": "pure capture association only"
+    },
+    {
+      "name": "missing-owner",
+      "rejected_by": "complete owner domain",
+      "credit": "pure capture association only"
+    },
+    {
+      "name": "duplicate-owner",
+      "rejected_by": "duplicate native owner",
+      "credit": "pure capture association only"
+    },
+    {
+      "name": "raw-sign-change",
+      "rejected_by": "verbatim tensor flags ports raw association",
+      "credit": "pure capture association only"
+    },
+    {
+      "name": "decoded-owner-change",
+      "rejected_by": "raw-to-public decoded owner",
+      "credit": "pure capture association only"
+    },
+    {
+      "name": "ordered-port-change",
+      "rejected_by": "verbatim tensor flags ports raw association",
+      "credit": "pure capture association only"
+    },
+    {
+      "name": "flag-omission",
+      "rejected_by": "verbatim tensor flags ports raw association",
+      "credit": "pure capture association only"
+    },
+    {
+      "name": "flag-change",
+      "rejected_by": "verbatim tensor flags ports raw association",
+      "credit": "pure capture association only"
+    }
+  ],
+  "negative_control_count": 18,
+  "native_invocations": 0,
+  "library_imports": 0,
+  "scope": "Exact bytes, native string IDs/full keys, request/mode/phase, raw/decoded/ports/flags/factors and syntax only. No physical, algebra, locality or interface acceptance."
+}

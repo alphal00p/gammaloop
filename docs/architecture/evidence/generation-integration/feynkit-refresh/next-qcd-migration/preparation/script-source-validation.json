@@ -1,0 +1,82 @@
+[
+  {
+    "path": "applicability.attempt1.py",
+    "sha256": "c8b565c470a77d4faaf0feb966d7cabfbf84fc052444aa2008b4d758d41f0f3d",
+    "parse": "PASS; pure AST parse, no compiler/native helper"
+  },
+  {
+    "path": "applicability.py",
+    "sha256": "322063798693190fda5fa6911e6afd8ef07a0d03b44d9dcc5500a802be8ef6b7",
+    "parse": "PASS; pure AST parse, no compiler/native helper"
+  },
+  {
+    "path": "associate.attempt1.py",
+    "sha256": "120566827f5f294e3511730e2aceb5aa9f8eec3ef2ad1ff1d1fe4a850d462016",
+    "parse": "PASS; pure AST parse, no compiler/native helper"
+  },
+  {
+    "path": "associate.attempt2.py",
+    "sha256": "7d9eb08c326f72b2991b6f1cef99f505f674b1296686c1a86aaedf81f9d585e2",
+    "parse": "PASS; pure AST parse, no compiler/native helper"
+  },
+  {
+    "path": "associate.before-owner-chain.py",
+    "sha256": "15d30d025e34f8702ccfb8a0d90a63b0ef1a4ee35fc92a6576e747d91ead9609",
+    "parse": "PASS; pure AST parse, no compiler/native helper"
+  },
+  {
+    "path": "associate.py",
+    "sha256": "947ee08d04ace8008f79faa75c7656305d374714df715936bf4071d1db319c6d",
+    "parse": "PASS; pure AST parse, no compiler/native helper"
+  },
+  {
+    "path": "bootstrap.attempt1.py",
+    "sha256": "2e1ead2ac9c570e12f5789296ecf3495249ddf19497a4adc85b398afcc1f7ad5",
+    "parse": "PASS; pure AST parse, no compiler/native helper"
+  },
+  {
+    "path": "bootstrap.py",
+    "sha256": "2886513a12b29e83dab19f188e2e5038c26369a98e24ab5be3930438418bea9b",
+    "parse": "PASS; pure AST parse, no compiler/native helper"
+  },
+  {
+    "path": "context.py",
+    "sha256": "b71d5c8a5d0f7261d90acca687ca0a2b1b4aaac0bde4b63d01b90559c585effb",
+    "parse": "PASS; pure AST parse, no compiler/native helper"
+  },
+  {
+    "path": "controls.before-cleanup.py",
+    "sha256": "99ef900a8d5320cc6fd1335523a87b088ed7dbc0a166eeb79f60e94e1a63ff5b",
+    "parse": "PASS; pure AST parse, no compiler/native helper"
+  },
+  {
+    "path": "controls.py",
+    "sha256": "1eb5b59dfd1c62cefab402f48035dfad17d2b2aa0692893e07d34b092757081e",
+    "parse": "PASS; pure AST parse, no compiler/native helper"
+  },
+  {
+    "path": "finish.py",
+    "sha256": "c84b981e05bb5e159df8a234a80377b69cfe0858c10ee2f66e9f2ed90106c65b",
+    "parse": "PASS; pure AST parse, no compiler/native helper"
+  },
+  {
+    "path": "reconstruct.attempt1.py",
+    "sha256": "9528c40036e1e2808703d3c0ad06f14cafcacd6043b4c1fd02c971732e7ad985",
+    "parse": "PASS; pure AST parse, no compiler/native helper"
+  },
+  {
+    "path": "reconstruct.py",
+    "sha256": "05db37365dc981409c58aed685bbb4b085e96ba8ecc19bfb27ffe864df670a5c",
+    "parse": "PASS; pure AST parse, no compiler/native helper"
+  },
+  {
+    "path": "scripts/pure_parser.py",
+    "sha256": "c1f3913881382cdd2444d66fecc482df82ee09e1b11266ad9c1449626a9c9a57",
+    "parse": "PASS; pure AST parse, no compiler/native helper"
+  },
+  {
+    "path": "scripts/strict_owners.py",
+    "sha256": "f7cd8c3a40ea090234c7b702999c318e7db1008e39359cf563db12472118e4d6",
+    "parse": "PASS; pure AST parse, no compiler/native helper"
+  }
+]

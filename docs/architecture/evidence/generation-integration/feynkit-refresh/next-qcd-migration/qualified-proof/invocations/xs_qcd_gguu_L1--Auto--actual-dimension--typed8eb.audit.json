@@ -1,0 +1,21 @@
+{
+  "id": "xs_qcd_gguu_L1--Auto--actual-dimension--typed8eb",
+  "status": "EXPECTED_SEMANTIC_REJECTION",
+  "validated_predicate": true,
+  "authenticated_execution": true,
+  "semantic_negative_credit": true,
+  "full_semantic_audit": {
+    "predicate": "invalid diagram tensor: transformed expression does not preserve a compatible tensor interface",
+    "result_policy": "complete_expected_error_envelope"
+  },
+  "receipt_sha256": "06cbfd72b0065b699fe5c18a4562251d831235cec82aeadca64fea352c8e38af",
+  "outcome_sha256": "06cbfd72b0065b699fe5c18a4562251d831235cec82aeadca64fea352c8e38af",
+  "artifact_hashes": {
+    "command.json": "bf9b64c5c16a9bc11f25b8e990a1644baade764f0648f16bc69f1aec1eb3b4e1",
+    "stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stderr": "20b297749a35b68c212d89bf09fb17335294043edecc308e5156789a645753e4",
+    "results.json": "efb276a690c0d2993ad02296354c206f465e0b3c071488a30544df90e01c4ecb"
+  },
+  "process_reaped": true,
+  "runtime_private_pipe_observation": "Native process reached declared source predicate through unchanged reviewed anonymous-pipe bridge; source premise, no inner PID/secret attestation."
+}

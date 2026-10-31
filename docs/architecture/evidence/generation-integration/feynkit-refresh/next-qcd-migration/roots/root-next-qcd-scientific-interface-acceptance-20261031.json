@@ -1,0 +1,62 @@
+{
+  "schema": "root-next-qcd-scientific-interface-acceptance/1",
+  "utc": "2026-10-31 06:49:27 UTC",
+  "decision": "ACCEPT_EXACT_FINITE_SCIENTIFIC_AND_NAMED_INTERFACE_APPROVAL",
+  "review": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-next-qcd-scientific-interface-astra-20261031-5a3KbP5x/review.json",
+    "sha256": "6d892bd9263a7c093bba5fd372fb4663a5a4e81dfaad4bfc709bbba052b96d21",
+    "seal_sha256": "888b82c478697e917cb243587653cc16d09a484f299a671c5ffd8981e58c1d99",
+    "verified_manifest_files": 57
+  },
+  "native_complete_seal_sha256": "22b11020019c4b9f8e058a2951de177f5a6f111fbb4f6976932f98ef0c399626",
+  "cases": [
+    "xs_qcd_gguu_sym_L1",
+    "xs_qcd_gguu_L1",
+    "xs_qcd_gggg_L1"
+  ],
+  "modes": [
+    "None",
+    "Auto"
+  ],
+  "grouping": "None",
+  "captured_pool": 1,
+  "root_verification": {
+    "review_sha256": "6d892bd9263a7c093bba5fd372fb4663a5a4e81dfaad4bfc709bbba052b96d21",
+    "seal_sha256": "888b82c478697e917cb243587653cc16d09a484f299a671c5ffd8981e58c1d99",
+    "review_files_verified": 57,
+    "six_cells_approved": true,
+    "candidate_pins_verified": 6,
+    "migration_seal_unchanged": true,
+    "nonblocking_validator_limit": [
+      {
+        "id": "INFO-1",
+        "detail": "audit_native checks named plans but ignores current_plan/historical_plan debug strings; its no-pair selected-plan branch also accepts either Scalar or Outer, and it does not parse lowering-layout debug text. These are general validator limits, not an actual fixed-corpus mismatch.",
+        "fresh_evidence": "A private actual-result copy with a corrupted debug plan string is accepted by the packet auditor. This review independently parses all actual integer plans, exact dispatch kinds and420 lower-layout permutations and finds them correct.",
+        "action": "No change or new native run required for this fixed sealed corpus. Future reuse would need its own exact data audit or stronger validator; no general validator approval is given."
+      }
+    ],
+    "restrictions": [
+      "Exactly xs_qcd_gguu_sym_L1, xs_qcd_gguu_L1 and xs_qcd_gggg_L1; None andAuto separately; GroupingNone; capturedpool1.",
+      "No migration/literal application, expectation edit, postapplication runtime, other60 rows, grouped/fullpool8/32, full371, global integration, publication or general runner approval.",
+      "No new historical full-integrand or old grouped theorem; no universal decoder, callback/userdata, locality/UV, denominator-evenness, trace/component execution, evaluator or physical cross-section validation claim.",
+      "Both operand and output-axis maps mandatory. Same-value/port compatibility does not authorize positional or cached-plan interchangeability. Historical profile/source/observer/raw-cooked-decoded premises remain in force.",
+      "This closes the requested finite scientific/interface review only. Any later migration and runtime validation remain separate tasks."
+    ]
+  },
+  "scope_disposition": "Accept the exact six-cell finite physical-value and finite named-consumer argument, preserving every source/profile/capture/full-definition/raw-cooked-decoded premise and both operand/output-axis transport requirements. WP9 finite proof sufficiency is accepted for this scope; no literal application or runtime upgrade follows automatically.",
+  "validator_INFO_1": "No blocker for the fixed corpus: reviewer independently parsed all actual integer plans, exact kinds and 420 lowering-layout permutations. Do not reuse packet audit_native as a generally qualified validator without independent exact data audit or repair.",
+  "inventory_note": "The review restriction phrase 'other60 rows' is not adopted as a remaining-failure count. Latest actual full package result remains the earlier 302 passed / 69 failed / 49 ignored; no new full-package result exists. All cases outside the named three remain excluded regardless of count.",
+  "joined_migration_preparation": {
+    "receipt": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/root-next-qcd-migration-preparation-receipt-20261031.json",
+    "seal_sha256": "b4e75df006b68563219947ecbdef5cb8fd289f9b4c7ba840d79c0ce599377324",
+    "patch_sha256": "1df84cbea910df5ff092203ff6050e785bccf0027bd627b91a601d1f7b98cf84",
+    "target": "83276dc047815d1dcc7f003aeb512c204b26758e",
+    "status": "PREPARATORY_PENDING_TEXT_REMAINS_HISTORICAL; completed verdict joined through this additive root record"
+  },
+  "next": "New independent migration review for the exact three-token patch.",
+  "no_new_native_execution": true,
+  "no_expectation_application": true,
+  "no_ref_mutation": true,
+  "no_publication": true,
+  "retention": "Review, native execution and preparation packets retained unchanged; original pending statements and prior rejected preparations remain historical."
+}

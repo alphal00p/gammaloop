@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-native-execution-20261031-r1/qualification.py", line 176, in <module>
+    main()
+    ~~~~^^
+  File "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-native-execution-20261031-r1/qualification.py", line 164, in main
+    assert not any(c['missing'] for c in configs), 'exact mounted ELF dependency boundary; no native/private phase allowed'
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: exact mounted ELF dependency boundary; no native/private phase allowed

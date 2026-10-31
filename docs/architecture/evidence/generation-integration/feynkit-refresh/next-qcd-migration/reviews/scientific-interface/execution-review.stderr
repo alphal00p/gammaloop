@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-next-qcd-scientific-interface-astra-20261031-5a3KbP5x/execution_review.py", line 27, in <module>
+    assert receipt['deadline_seconds']==240 and receipt['retries']==0 and not receipt['error']
+                                                                              ~~~~~~~^^^^^^^^^
+KeyError: 'error'

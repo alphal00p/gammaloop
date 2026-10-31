@@ -1,0 +1,10 @@
+Traceback (most recent call last):
+  File "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/capture_join.py", line 72, in <module>
+    exec(compile(ast.Module(body=defs,type_ignores=[]),str(P/'associate.py'),'exec'),ans);ans['main']()
+                                                                                          ~~~~~~~~~~~^^
+  File "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-migration-preparation-20261031-r1/associate.py", line 163, in main
+    result=resolve(m['result']);ob=resolve(m['obligation']);resolve(m['definition_order'])
+  File "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-migration-preparation-20261031-r1/associate.py", line 14, in resolve
+    b=C.read(p);cache[p]=(C.sha(b),len(b),json.loads(b,object_pairs_hook=C.unique))
+                          ^^^^^
+AttributeError: 'types.SimpleNamespace' object has no attribute 'sha'

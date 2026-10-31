@@ -1,0 +1,14 @@
+{
+  "host_netns": "net:[4026531833]",
+  "child": {
+    "netns": "net:[4026538860]",
+    "readonly": [
+      "/source",
+      "/archive",
+      "/input"
+    ],
+    "host_roots_credentials_nix_socket_absent": true,
+    "license_absent": true
+  },
+  "distinct_network_namespace": true
+}

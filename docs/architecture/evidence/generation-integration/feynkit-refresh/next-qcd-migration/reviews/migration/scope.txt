@@ -1,0 +1,1 @@
+NEW independent exact-three-token migration review. All writes confined here. No native/scientific imports, private configuration/license reads, builds, network, delegation, VCS mutations, or application outside private copies. Source/test/build configuration inspection is authorized. Author Lucien Huber <im@lcnbr.ch>.

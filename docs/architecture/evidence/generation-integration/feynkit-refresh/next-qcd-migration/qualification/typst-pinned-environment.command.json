@@ -1,0 +1,25 @@
+{
+  "argv": [
+    "nix",
+    "--offline",
+    "--option",
+    "allow-import-from-derivation",
+    "false",
+    "eval",
+    "--json",
+    "--expr",
+    "let f=builtins.getFlake \"git+file:///shared/lcnbr/dev/gammaloop/main?rev=432b6544f3d2d884f6efffb8be104ae5820183b0&shallow=1&allRefs=1\"; s=f.devShells.x86_64-linux.default; in { packageCache=s.TYPST_PACKAGE_CACHE_PATH; fontPaths=s.TYPST_FONT_PATHS; }"
+  ],
+  "cwd": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh",
+  "license_keys_removed": [
+    "SYMBOLICA_LICENSE",
+    "SYMBOLICA_LICENSE_PATH",
+    "SYMBOLICA_LICENSE_SIGNED",
+    "SYMBOLICA_LICENSE_FILE"
+  ],
+  "start": "2026-10-31T07:32:09.391641+00:00",
+  "exit": 0,
+  "end": "2026-10-31T07:32:12.351756+00:00",
+  "stdout_sha256": "deeb318cdc5179c32148f045ad1ad4569e826cbddb1e28a8ff546575aa8f65fd",
+  "stderr_sha256": "613228d48dd639e1d9f8b8151506f09d8e9b9b27166687df7ff4c947e219cb15"
+}

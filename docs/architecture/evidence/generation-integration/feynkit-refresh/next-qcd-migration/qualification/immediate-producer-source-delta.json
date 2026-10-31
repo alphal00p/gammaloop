@@ -1,0 +1,10 @@
+{
+  "accepted_grouped_code": "6f41807b064bcf2f579883134daef65c8ac279d3",
+  "old": "/nix/store/7wsbbpdr065vcmfif925zcz75jlhgdsb-source",
+  "new": "/nix/store/ynnb4iz406bds753h2gl8dc4d977s1vj-source",
+  "paths": 670,
+  "changed_paths": [
+    "crates/feynkit-generator/tests/generation_oracle/main.rs"
+  ],
+  "exact_approved_after_bytes": true
+}

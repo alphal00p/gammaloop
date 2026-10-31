@@ -1,0 +1,306 @@
+[
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r3/strict_owners.py",
+    "sha256": "f7cd8c3a40ea090234c7b702999c318e7db1008e39359cf563db12472118e4d6"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/sources/original/proof.py",
+    "sha256": "686d2130a9294b7f405054b1ea7d2ab241e48bb02ab4e0105945e19cb86a0190"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r3/pure_parser.py",
+    "sha256": "c1f3913881382cdd2444d66fecc482df82ee09e1b11266ad9c1449626a9c9a57"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/sources/original/approved-family-parser.py",
+    "sha256": "b468b3a4e394424c8b8add875d3e682ac80f9be9895c82bcc232fee7ac5e9fcb"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r3/prepare.py",
+    "sha256": "bfdfd95ed910cea4b56b430ba55a49844a5bc7979ab3863a84f51fe9a853b165"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r2/prepare.py",
+    "sha256": "bfdfd95ed910cea4b56b430ba55a49844a5bc7979ab3863a84f51fe9a853b165"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r3/fold_plan.py",
+    "sha256": "684429362460f647212bda2ea2f27e948dce36d732a6678a751fe9922cb6fe33"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r2/fold_plan.py",
+    "sha256": "684429362460f647212bda2ea2f27e948dce36d732a6678a751fe9922cb6fe33"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r3/audit_native.py",
+    "sha256": "dd33585868e096bdd79fd7aeec66df713858e8c6617843c51c3026db79958158"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r2/audit_native.py",
+    "sha256": "dd33585868e096bdd79fd7aeec66df713858e8c6617843c51c3026db79958158"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r3/unchanged-r1-prepared-data.json",
+    "sha256": "8cbc318a464fb9bb7b0a624aaf10c05771eddd5ebc6002dbef88779c501e51d0"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/source-anchor-revalidation.json",
+    "sha256": "54640c5907beb0fee4c4bf7b9d6545d45ee7cfbafd3d2e7de85ce2bf9be1de59"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/capsule/source/current/crates/feynkit-graph/src/numerator_interface.rs",
+    "sha256": "596a58fda9f2f182ba19a3da2457b3ed45e73b554d1dd67092cc42a4c2f68ed8"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/sources/qualified-source/current/crates/feynkit-graph/src/numerator_interface.rs",
+    "sha256": "596a58fda9f2f182ba19a3da2457b3ed45e73b554d1dd67092cc42a4c2f68ed8"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/capsule/source/original_reference/crates/feynkit-graph/src/numerator_interface.rs",
+    "sha256": "436093f48d817627895fb68286971f90e116c2f2999239f2b1afe17a531d2d0e"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/sources/qualified-source/original_reference/crates/feynkit-graph/src/numerator_interface.rs",
+    "sha256": "436093f48d817627895fb68286971f90e116c2f2999239f2b1afe17a531d2d0e"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/capsule/source/current/crates/feynkit-generator/src/generation.rs",
+    "sha256": "0e6f4a83632be8fc13633a66a7fc3ba68819b49e78fcbf26363dd0f5469c4042"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/sources/qualified-source/current/crates/feynkit-generator/src/generation.rs",
+    "sha256": "0e6f4a83632be8fc13633a66a7fc3ba68819b49e78fcbf26363dd0f5469c4042"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/capsule/source/current/crates/feynkit-graph/src/finalization.rs",
+    "sha256": "7f537b6608fd6f82402675fc28f2e0907d3916a0df5fae8c03412ad1273da221"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/sources/qualified-source/current/crates/feynkit-graph/src/finalization.rs",
+    "sha256": "7f537b6608fd6f82402675fc28f2e0907d3916a0df5fae8c03412ad1273da221"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/capsule/source/current/crates/feynkit-graph/src/lib.rs",
+    "sha256": "5cb3612abc2f45eb9e2317d476ad5b9c29469c8a6f6d30cef9b4578d99ce2848"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/sources/qualified-source/current/crates/feynkit-graph/src/lib.rs",
+    "sha256": "5cb3612abc2f45eb9e2317d476ad5b9c29469c8a6f6d30cef9b4578d99ce2848"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/capsule/source/current/crates/idenso/src/tensor/inference.rs",
+    "sha256": "e8ee6b861580c65f116e462906980f2d3f0cf8781ea55fcc4dfefbdc9dfd730a"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/sources/qualified-source/current/crates/idenso/src/tensor/inference.rs",
+    "sha256": "e8ee6b861580c65f116e462906980f2d3f0cf8781ea55fcc4dfefbdc9dfd730a"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/capsule/source/current/crates/idenso/src/tensor/composition.rs",
+    "sha256": "b81e984ae44962ce16da32b63dba41d1fbbe02ed0297446d6aee2555379951ad"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/sources/qualified-source/current/crates/idenso/src/tensor/composition.rs",
+    "sha256": "b81e984ae44962ce16da32b63dba41d1fbbe02ed0297446d6aee2555379951ad"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/capsule/source/current/crates/idenso/src/tensor/composition/product.rs",
+    "sha256": "446af47385609650a55b87d85e37afed79fcfd9ff9021d4b1f24c2b294791dac"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/sources/qualified-source/current/crates/idenso/src/tensor/composition/product.rs",
+    "sha256": "446af47385609650a55b87d85e37afed79fcfd9ff9021d4b1f24c2b294791dac"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/capsule/source/current/crates/feynkit-graph/src/expressions.rs",
+    "sha256": "6cac6b79f31f4090fc960eb18100cfc7759fb9171422a67532020dba3e8ab948"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/sources/qualified-source/current/crates/feynkit-graph/src/expressions.rs",
+    "sha256": "6cac6b79f31f4090fc960eb18100cfc7759fb9171422a67532020dba3e8ab948"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/capsule/source/current/crates/idenso/src/tensor/network.rs",
+    "sha256": "7ee42dec38f5379b006376508d854f344d6e9688969ad04b8a90624cc62c2732"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/sources/qualified-source/current/crates/idenso/src/tensor/network.rs",
+    "sha256": "7ee42dec38f5379b006376508d854f344d6e9688969ad04b8a90624cc62c2732"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/capsule/source/current/crates/spenso/src/structure/permuted.rs",
+    "sha256": "ab5e96b4513a4d184abe37e861aff165964fd2d0027296fc2c947b0b6202241c"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/sources/qualified-source/current/crates/spenso/src/structure/permuted.rs",
+    "sha256": "ab5e96b4513a4d184abe37e861aff165964fd2d0027296fc2c947b0b6202241c"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/capsule/source/current/crates/feynkit-generator/src/grouping.rs",
+    "sha256": "ee0e666ae2c7b8d13c14741d03d49adc41de50ace966034561f9d39d20191c00"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/sources/qualified-source/current/crates/feynkit-generator/src/grouping.rs",
+    "sha256": "ee0e666ae2c7b8d13c14741d03d49adc41de50ace966034561f9d39d20191c00"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/capsule/source/original_reference/crates/idenso/src/color/mod.rs",
+    "sha256": "c092f620a2549e44d0081d0ddf1903f4c034d0f08ca83481d36cc5e0ffe330ca"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/capsule/source/original_reference/crates/feynkit-graph/src/symbols.rs",
+    "sha256": "0a13fee39574d1f8a819cdac3ecc0c9607a266b765907fcae0eaaaf146da174b"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/capsule/source/original_reference/crates/idenso/src/tensor/inference.rs",
+    "sha256": "182a5841f02371b0df143843eec573124217bb98557b7bc36dd029fdcbd91b6f"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/capsule/source/original_reference/crates/idenso/src/tensor/mod.rs",
+    "sha256": "ebb6dd31991a7c4a007d4e2e8b0048b151ca8c2bd1de1f1af5021a59298c42eb"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/capsule/source/current/crates/idenso/src/color/mod.rs",
+    "sha256": "3dd7faafc32b22dca492f688f42cda2060f65d1a356a5efcfe79197e99296c98"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/capsule/source/current/crates/feynkit-graph/src/symbols.rs",
+    "sha256": "b580b7c70db4f11bf79fd02f8109a715c01b74d63a560a54d49868b8e5c4aa9d"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/capsule/source/current/crates/idenso/src/tensor/mod.rs",
+    "sha256": "b3d939b8adfc3a0134b2dbf5df5bc977d48b903d97ed0cafdb64172a701b32a6"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/capsule/helpers/interface/3-runtime-qualification-v4.json",
+    "sha256": "c839a321ca4ac73d4450dabd4c0fecfe026bc9237c1b43889f7d30661b94588b"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/sources/original/interface-0-interface_probe_v4.rs",
+    "sha256": "362a7fa3edce435e7957350e8f2b97da6e92a1bead4a1a450953ae6cb095afd4"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/capsule/helpers/c78-exact/oracle_family_exact.rs",
+    "sha256": "ebf20ee5fd6520c319f4f7f904ca2de13f083cb09f978a190833d800c143d969"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/sources/current8eb-exact-helper.rs",
+    "sha256": "ebf20ee5fd6520c319f4f7f904ca2de13f083cb09f978a190833d800c143d969"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/native-tool-and-closure-bindings.json",
+    "sha256": "5eca566a042c8bd2f88fcc4e9f929597a1d17bdb339d47ece2e5a1755d96783b"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/helper-build/oracle_family_exact/qualification.json",
+    "sha256": "8e817df3d4c78f44607635899f7170828cf56c457187df0e50dc42fd42a04d68"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/prepared/interface-inputs.json",
+    "sha256": "a1100378ffa6fad823978233ffa430c565537b4a7a96f57689c3e8d28d35d89d"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/prepared/interface-definition-order.json",
+    "sha256": "2bc2f62842c2f24bba992bf79ea1d6c8cba0727b83a81450ff8f1d793ecf002e"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r3/execution/records/all-six-cells--typed8eb/results.json",
+    "sha256": "89fbba69736333b71f0d2f82758e0794ace65c4a9b5196c901b3243deb90191e"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-native-execution-20261031-r1/qualification.py",
+    "sha256": "1e3acae83628cc44d205fc043329312ac3d0902d78ee9b295411ef1d09861692"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-native-execution-20261031-r1/elf-qualification-corrected.json",
+    "sha256": "6e96f2137ed14a413db039aea9abc1ec84f64aa1e34524563fb4f3dedc02a02f"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r3/native-commands.json",
+    "sha256": "be357450a079e4986779351f6279bc483bb4cea000ae17454b1bd35f5cd0d7f0"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-native-execution-20261031-r1/preflight/faithfulness-historical--c78/work/probe.json",
+    "sha256": "bf2fcd603a26d57c6a797582d357e5a90f4a7beb3bf7c82c4c1395fe6834cc23"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-native-execution-20261031-r1/preflight/faithfulness-historical--c78/loader-verify.lifecycle.json",
+    "sha256": "a69b0f3013fec19cffba6281fa7cc8750a61793f4c9dd42b7cd787000e6e6996"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-native-execution-20261031-r1/preflight/faithfulness-historical--c78/loader-verify.command.json",
+    "sha256": "eb653453231008a22d9241032b425b45677aadbd3103f46c371d7740ea753477"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-native-execution-20261031-r1/preflight/faithfulness-historical--c78/stdlib-containment.lifecycle.json",
+    "sha256": "eeceeb1292d4867a831d49e1403bb8f0ae61c3df3b91f8edb437d0ccbe0dc929"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-native-execution-20261031-r1/preflight/faithfulness-historical--c78/stdlib-containment.command.json",
+    "sha256": "7ffc3aa562754067363526091439c44589fae5714f45a0b28c90aabb3f3edbdb"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-native-execution-20261031-r1/preflight/faithfulness-historical--8eb/work/probe.json",
+    "sha256": "2b69071b97c600090e1e77ff3ff7e3e0c45206a0496910cee1857b08b3d9572b"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-native-execution-20261031-r1/preflight/faithfulness-historical--8eb/loader-verify.lifecycle.json",
+    "sha256": "9488ab11950efdd6f6ad6eebd20ec1736e995f880a172ff9dfa4f3c63838b4cb"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-native-execution-20261031-r1/preflight/faithfulness-historical--8eb/loader-verify.command.json",
+    "sha256": "f8da6a668c97e3dd6d7ab4298862af723861c009e28f40382d66b77711f924a7"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-native-execution-20261031-r1/preflight/faithfulness-historical--8eb/stdlib-containment.lifecycle.json",
+    "sha256": "80701297a0c5249ef595ab6fdf16b5839c4d22157619add6cb8c0a66b5416cc8"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-native-execution-20261031-r1/preflight/faithfulness-historical--8eb/stdlib-containment.command.json",
+    "sha256": "214141dc75493c31bf556e94da39f70bca706647a6f4c1635edeb9ccbcb93597"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-native-execution-20261031-r1/preflight/all-six-cells--typed8eb/work/probe.json",
+    "sha256": "4fc9297a7975e35815850c8c00161511b924ac693f304e1fb14949c0f0f5b31c"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-native-execution-20261031-r1/preflight/all-six-cells--typed8eb/loader-verify.lifecycle.json",
+    "sha256": "ee740b6c8d0cb878322d69a774b06120d55e3d9d9be96b32486ffdc32d1d5f00"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-native-execution-20261031-r1/preflight/all-six-cells--typed8eb/loader-verify.command.json",
+    "sha256": "decd22196b2124bf458655131e2808d817365337e77282492809650442e7c3b3"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-native-execution-20261031-r1/preflight/all-six-cells--typed8eb/stdlib-containment.lifecycle.json",
+    "sha256": "05b9cc46be412457053966af1b82ab7ae539f7fe020accda918187c5dbbdd618"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-native-execution-20261031-r1/preflight/all-six-cells--typed8eb/stdlib-containment.command.json",
+    "sha256": "aaadc3f7428c6424e4eb9d2c2b4ae4d3fc02e536f3bafe597d7600d6adb7cd06"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-native-execution-20261031-r1/elf-qualification.json",
+    "sha256": "3cf54532e980608e983161b992d8a336cb84a1accc9aa740e9f4718532ea7ccb"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-native-execution-20261031-r1/elf-resolution.stderr",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-native-execution-20261031-r1/source-and-setup-errors.json",
+    "sha256": "c3ac40325ebe430e62447163be19f674234377fa42d7a8fa4aa29800d5c85dee"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/sources/original/syntax.py",
+    "sha256": "8cee5302b6b5b9a600882001eecf057449d7df46685cae22b100a94219a601a8"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/sources/original/approved-family-parser.py",
+    "sha256": "b468b3a4e394424c8b8add875d3e682ac80f9be9895c82bcc232fee7ac5e9fcb"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r3/pure_parser.py",
+    "sha256": "c1f3913881382cdd2444d66fecc482df82ee09e1b11266ad9c1449626a9c9a57"
+  }
+]

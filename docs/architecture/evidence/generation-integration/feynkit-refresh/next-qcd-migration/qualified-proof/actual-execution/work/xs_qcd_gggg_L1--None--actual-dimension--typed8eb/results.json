@@ -1,0 +1,15 @@
+{
+  "cells": [
+    {
+      "case": "xs_qcd_gggg_L1",
+      "error": {
+        "classification": "probe failure; inspect stage, not automatically semantic rejection",
+        "error": "invalid diagram tensor: transformed expression does not preserve a compatible tensor interface",
+        "graph": "60777b11dd5b7f48966632644fd7be49"
+      },
+      "graphs": [],
+      "mode": "None"
+    }
+  ],
+  "schema": "raw-three-native-interface/1"
+}

@@ -1,0 +1,19 @@
+{
+  "utc": "2026-10-31T07:23:45.443733+00:00",
+  "processes": [
+    {
+      "role": "selected Nix client only; daemon/builder peak not measured",
+      "pid": 4010925,
+      "status": {
+        "Name": "nix",
+        "Pid": "4010925",
+        "PPid": "4010889",
+        "VmHWM": "27068 kB",
+        "VmRSS": "27068 kB",
+        "Threads": "17"
+      }
+    }
+  ],
+  "limits": "Point-in-time process measurements only; no total build peak or memory policy inferred",
+  "one_job_two_core_build": true
+}

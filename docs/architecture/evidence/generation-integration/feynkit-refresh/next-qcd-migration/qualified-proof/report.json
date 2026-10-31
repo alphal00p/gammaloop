@@ -1,0 +1,77 @@
+{
+  "schema": "next-qcd-exact21-native-execution-candidate/1",
+  "status": "READY_FOR_NEW_INDEPENDENT_SCIENTIFIC_FINITE_INTERFACE_REVIEW",
+  "utc": "2026-10-31T06:20:48.480851+00:00",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families",
+  "packet": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-native-execution-20261031-r1",
+  "root_assignment": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/root-next-qcd-proof-native-execution-assignment-20261031-r3.json",
+    "sha256": "650f597bb727c64e53898d676f2884ee2125a5e73be8a8c0f0edf28376ba1382",
+    "bytes": 44651
+  },
+  "root_acceptance": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/root-next-qcd-r3-supervisor-acceptance-20261031.json",
+    "sha256": "c15b22f76b592acf16b130785446b79fc7e7f2cbd61f01c8bbe45b11f176a02d",
+    "bytes": 1809
+  },
+  "R3_seal": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r3/SEAL.json",
+    "sha256": "a7e3a1e8e4e8e6d979d8cf92f8a9de5878e88d6ac1f105bf19a86611e4381cc1",
+    "bytes": 737
+  },
+  "independent_R3_review": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-next-qcd-supervisor-r3-astra-20261031-22d61lkb/review.json",
+    "sha256": "6ad6242a78d52d0b371fb39d3942e66ed32bbbafec8878a91e6a72d5e3a9208b",
+    "bytes": 17044
+  },
+  "counts": {
+    "planned": 21,
+    "attempted_controller_commands": 21,
+    "native_launches": 21,
+    "authenticated_executions": 21,
+    "baseline_passes": 5,
+    "expected_semantic_rejections": 16,
+    "infrastructure_or_unvalidated_outcomes": 0,
+    "unattempted": 0,
+    "retries": 0,
+    "analysis_tool_errors_before_native": 1
+  },
+  "completion": {
+    "status": "EXACT_21_EXECUTED_AND_REAUDITED",
+    "attempted": 21,
+    "remaining_unattempted": [],
+    "retry": false
+  },
+  "all_preserved_input_bytes_unchanged": true,
+  "input_files": 3465,
+  "execution_artifact_files": 135,
+  "genuine_preflight": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-native-execution-20261031-r1/runtime-qualification.json",
+    "sha256": "2d921d91c2752d174b9ac3a4f5a54487dda52e2c3d88284250823791decb9685",
+    "bytes": 3563
+  },
+  "actual_outcomes": "outcome-index.json",
+  "actual_invocations": "actual-invocations.json",
+  "full_execution_artifacts": "execution-artifacts.json",
+  "full_math_inverse_references": "math-member-to-native-row.json",
+  "full_typed_associations": "typed-native-associations.json",
+  "prepared_associations": "prepared-data-associations.json",
+  "full_before_after": [
+    "inputs-before.json",
+    "inputs-after.json"
+  ],
+  "errors": "source-and-setup-errors.json",
+  "unresolved_obligations": [
+    "NEW independent scientific/finite-interface review is required; this execution packet supplies no final approval or migration permission.",
+    "Exactly three QCD cases; None/Auto separately; GroupingNone; captured pool1. OnlyNone historical Row assertion; Auto has own inputs. Factor2 remains4of5 sym diagrams.",
+    "600relations=578literal+22even-f-cycle/144rewrites;96unexpandedproducts;48cells;1890ownerpairinputs;912finite-locality records are finite premises, not a general decoder/locality/UV/fullintegrand/component-physics theorem.",
+    "166/118 unique-pair whole-definition/ordered-side partitions per c78/8eb kernel. Repeated definitions and literal identities are not fresh scientific obligations. No old onePI cross-credit.",
+    "Typed8eb imports historical/current data; no new c78 consumer execution. Both operand AND output-axis maps remain. Rank8num+rank4projector leaves FOURcoad8 outputs; no groupedrank-zero transfer.",
+    "210 changed-owner lowerings require actual output;390 unchanged cases remain conditional identical-input deterministic-source arguments.26built-inbis no-op controls get zero rejection credit.",
+    "Historical2b/c78Symbolica/Numerica+registryGraphica3.0.1; currentpristineffa/archive8993/kernel8eb; observerbuilt5ea+overlay differs from proofsource5ba. Dev/CI/profile/observer/callbackuserdata gaps retain identity. Raw/cooked/decoded association remains a captured premise.",
+    "Authentication is exact cooperative native supervisor/receipt consistency, not cryptographic/hostile attestation. Outer PID is bwrap launcher; immediate bridge/native private delivery has source and reached-native evidence, no secret or inner PID dump.",
+    "No source/expectation/metadata/ref/index changes, generator/capture/full371/host/old-batch tests, Nix/build/compiler/network-host calls, publication or delegation. Globalintegration832 and all old evidence remain untouched."
+  ],
+  "final_scientific_approval": false,
+  "retention": "Retain NEW ignored native execution packet and actual R3 execution trees at their actual locations for independent review/root continuation. No owned background process retained."
+}

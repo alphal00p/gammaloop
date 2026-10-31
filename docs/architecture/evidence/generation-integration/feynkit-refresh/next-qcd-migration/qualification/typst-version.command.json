@@ -1,0 +1,18 @@
+{
+  "argv": [
+    "/nix/store/vnjry04dnavpyvl41mz607ir21pjb2hp-typst-0.15.1-env/bin/typst",
+    "--version"
+  ],
+  "cwd": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh",
+  "license_keys_removed": [
+    "SYMBOLICA_LICENSE",
+    "SYMBOLICA_LICENSE_PATH",
+    "SYMBOLICA_LICENSE_SIGNED",
+    "SYMBOLICA_LICENSE_FILE"
+  ],
+  "start": "2026-10-31T07:32:12.353415+00:00",
+  "exit": 0,
+  "end": "2026-10-31T07:32:12.422550+00:00",
+  "stdout_sha256": "20ad20e86d85d168643624dc3e3388e7cbcc5a8384d17835db3a0ab04c496fba",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+}

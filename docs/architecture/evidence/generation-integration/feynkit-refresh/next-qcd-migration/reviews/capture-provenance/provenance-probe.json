@@ -1,0 +1,174 @@
+{
+  "status": "PASS",
+  "runtime_plans": [
+    {
+      "id": "xs_qcd_gguu_sym_L1--historical-pristine",
+      "exact_plan_and_environment": true,
+      "four_private_names_absent": true,
+      "readonly_mounts": 11,
+      "writable_binds": 2,
+      "runtime_ELF_objects": 12
+    },
+    {
+      "id": "xs_qcd_gguu_sym_L1--historical-observer",
+      "exact_plan_and_environment": true,
+      "four_private_names_absent": true,
+      "readonly_mounts": 11,
+      "writable_binds": 2,
+      "runtime_ELF_objects": 12
+    },
+    {
+      "id": "xs_qcd_gguu_sym_L1--current-pristine",
+      "exact_plan_and_environment": true,
+      "four_private_names_absent": true,
+      "readonly_mounts": 12,
+      "writable_binds": 2,
+      "runtime_ELF_objects": 14
+    },
+    {
+      "id": "xs_qcd_gguu_sym_L1--current-observer",
+      "exact_plan_and_environment": true,
+      "four_private_names_absent": true,
+      "readonly_mounts": 12,
+      "writable_binds": 2,
+      "runtime_ELF_objects": 14
+    },
+    {
+      "id": "xs_qcd_gguu_L1--historical-pristine",
+      "exact_plan_and_environment": true,
+      "four_private_names_absent": true,
+      "readonly_mounts": 11,
+      "writable_binds": 2,
+      "runtime_ELF_objects": 12
+    },
+    {
+      "id": "xs_qcd_gguu_L1--historical-observer",
+      "exact_plan_and_environment": true,
+      "four_private_names_absent": true,
+      "readonly_mounts": 11,
+      "writable_binds": 2,
+      "runtime_ELF_objects": 12
+    },
+    {
+      "id": "xs_qcd_gguu_L1--current-pristine",
+      "exact_plan_and_environment": true,
+      "four_private_names_absent": true,
+      "readonly_mounts": 12,
+      "writable_binds": 2,
+      "runtime_ELF_objects": 14
+    },
+    {
+      "id": "xs_qcd_gguu_L1--current-observer",
+      "exact_plan_and_environment": true,
+      "four_private_names_absent": true,
+      "readonly_mounts": 12,
+      "writable_binds": 2,
+      "runtime_ELF_objects": 14
+    },
+    {
+      "id": "xs_qcd_gggg_L1--historical-pristine",
+      "exact_plan_and_environment": true,
+      "four_private_names_absent": true,
+      "readonly_mounts": 11,
+      "writable_binds": 2,
+      "runtime_ELF_objects": 12
+    },
+    {
+      "id": "xs_qcd_gggg_L1--historical-observer",
+      "exact_plan_and_environment": true,
+      "four_private_names_absent": true,
+      "readonly_mounts": 11,
+      "writable_binds": 2,
+      "runtime_ELF_objects": 12
+    },
+    {
+      "id": "xs_qcd_gggg_L1--current-pristine",
+      "exact_plan_and_environment": true,
+      "four_private_names_absent": true,
+      "readonly_mounts": 12,
+      "writable_binds": 2,
+      "runtime_ELF_objects": 14
+    },
+    {
+      "id": "xs_qcd_gggg_L1--current-observer",
+      "exact_plan_and_environment": true,
+      "four_private_names_absent": true,
+      "readonly_mounts": 12,
+      "writable_binds": 2,
+      "runtime_ELF_objects": 14
+    }
+  ],
+  "r1_original_control_groups": 18,
+  "r1_original_reexecuted_negative_controls": 23,
+  "r1_final_source_simulated_errors": 3,
+  "original_unlicensed_mount_probes": 4,
+  "original_unlicensed_loader_probes": 4,
+  "r2_candidate_repair_controls": {
+    "positive": 4,
+    "negative": 31
+  },
+  "source_snapshot_blobs_verified": 759,
+  "historical_observer_actual_source_files_rehashed": 3551,
+  "historical_observer_actual_generator_artifact_sha256": "8a448cb3d4f3d7eabbd3ba20a269267aed35f5c940ad84b9d8287484bd19f88a",
+  "historical_observer_actual_tensor_source_sha256": "cdfbfddff5deeb3875f54596a0216e94776da3920f6e6bd15c863a152484ae4b",
+  "producer_qualification_joins": {
+    "historical-pristine": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-eemm-identical/bin/historical/generation_oracle-pristine",
+      "sha256": "8fc54ea4a2a84824847314c367e2aa5f3fdc02b0c9a330183346d44b2ad9ebae",
+      "code": "2b1ef4f07a44bc061bcc97c378bbdd9c41cb0e94",
+      "kernel": "c78cffc20f318df1fce50539a587cbe8ffc717c0",
+      "qualification": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-eemm-identical/build/historical/qualification.json",
+      "selected_case_runtime_credit": "None from this preflight; fresh selected-case pristine/observer qualification required"
+    },
+    "historical-observer": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/small-gauge-raw-parallel-20261030-sol-01/adapter-build/historical/artifacts/generation_oracle-ded84c41ff366641",
+      "sha256": "6a2225dcb4853b6eafebaabb02060e1d03ac02533c630c6c0c60177be58001b2",
+      "code": "2b1ef4f07a44bc061bcc97c378bbdd9c41cb0e94",
+      "kernel": "c78cffc20f318df1fce50539a587cbe8ffc717c0",
+      "qualification": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/small-gauge-raw-parallel-20261030-sol-01/adapter-build/historical/qualification.json",
+      "selected_case_runtime_credit": "None from this preflight; fresh selected-case pristine/observer qualification required"
+    },
+    "current-pristine": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-raw-three-integration-astra-20261031-012811Z-323f4486/archive/target/ci-optim/deps/generation_oracle-3892f55f31822180",
+      "sha256": "5d7275d26392474f2490963dd0503f4f46ccebc30572a4f31f7a66228303b30f",
+      "code": "ffa76ec420642c03349ab756d2d7720ab93c0057",
+      "kernel": "8eb7c3729d6abefc916decc1bdf0c06536f8af80",
+      "qualification": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/full-generator-characterization-20261031-r1/compiled-qualification.json",
+      "selected_case_runtime_credit": "None from this preflight; fresh selected-case pristine/observer qualification required"
+    },
+    "current-observer": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/helper-build/generation_oracle/generation_oracle-68d1b7f3e1ca788b",
+      "sha256": "30eaae032dc0c0c5d789eda9f75c3cca7a7dafd4368fb31f81e1c01f3de5a527",
+      "code": "5ea149ffd88ae3afc4072a38c0871c1329be8424",
+      "kernel": "8eb7c3729d6abefc916decc1bdf0c06536f8af80",
+      "qualification": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/helper-build/generation_oracle/qualification.json",
+      "selected_case_runtime_credit": "None from this preflight; fresh selected-case pristine/observer qualification required"
+    }
+  },
+  "actual_physical_manifest_files": 120,
+  "complete_world_manifest_files": 15,
+  "prior_reviews_hash_bound": {
+    "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-feynkit-refresh-shared-provenance-opus-20261030T193404Z-3c0453ff/review.json": "565caeace0112a30fb9118f94b2bb759e4267d2b802395c314e485b89b4b2b70",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-raw-four-dispositions-opus-20261030T202304Z-196212/review.json": "6e4410dd16ef6c2366b08793af0e835c21e55526bf124a2d3581283c32f1a9a2",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/capsule/qualification/reviews/review-interface-runner-r3-astra-20261031-020333Z-4003b785.json": "b370752781691d7286766047658ca518a4a898a463c76df26226f2f114d43a62",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/capsule/qualification/reviews/review-small-gauge-fresh8eb-math-opus-20261030T192536Z-3568994.json": "1591408caad7566439fcd54a1c76398691473bb4e41c59ddd3cb85a5e1337823",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/capsule/qualification/reviews/review-raw-three-interface-astra-20261031-002103Z-8a5d8001.json": "d9303d91d922c994f87b07e10cce895b44dba96e294d64be231a3ecdf921b14c",
+    "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-raw-three-integration-astra-20261031-012811Z-323f4486/review.json": "535b792610c531b446d8beb1a9f300246e6d498e8126509b637189e8eb80a091",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/capsule/qualification/accepted-characterization-review.json": "fb688585bc7efd0b494fef7648df5abad398f88bfe8c439e8b42c0dd520eaa37"
+  },
+  "source_invariance": {
+    "paths_inspected": 412,
+    "different_paths": 1,
+    "different_unrelated_Row_literals": 4
+  },
+  "archive_probe": {
+    "command": "tar --zstd -xOf ARCHIVE target/ci-optim/deps/generation_oracle-3892f55f31822180 | sha256sum",
+    "observed_member_sha256": "5d7275d26392474f2490963dd0503f4f46ccebc30572a4f31f7a66228303b30f",
+    "extracted_files": 0
+  },
+  "reused_qualification_limits": "Source/ELF/compiled closure facts accepted only for the exact retained artifacts and reviewed records. Prior Nix/store/build honesty assumptions remain. No rebuilt compiler/kernel theorem, no profile equivalence, and no repair of unrecorded historical grouped provenance.",
+  "new_native_invocations": 0,
+  "new_loader_probes": 0,
+  "new_license_fixture_runs": 0,
+  "candidate_library_imports": 0
+}

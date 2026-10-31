@@ -1,0 +1,30 @@
+{
+  "oracle_elf": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/archive-extracted/target/ci-optim/deps/generation_oracle-3892f55f31822180",
+    "sha256": "212adc0f2f091ecb9899d5da751184a96a65a0efb8baa850e4d6d31bb8e296d4",
+    "size": 61186320
+  },
+  "counts": {
+    "xs_qcd_gguu_sym_L1": {
+      "old": "0xb9fdc23ed056fa0c",
+      "new": "0xe4b209849953f1fa",
+      "new_le_occurrences": 1,
+      "old_le_occurrences": 0
+    },
+    "xs_qcd_gguu_L1": {
+      "old": "0x5edf8e5f7a11eeb3",
+      "new": "0x665e13a4c88da679",
+      "new_le_occurrences": 1,
+      "old_le_occurrences": 0
+    },
+    "xs_qcd_gggg_L1": {
+      "old": "0x2628c62dc373ac91",
+      "new": "0x96e5abcebda25959",
+      "new_le_occurrences": 1,
+      "old_le_occurrences": 1
+    }
+  },
+  "approved_source_sha256": "17e0abe46c76c6b6922e5b33782925020e1412e1a6ed8cd8dc7e23de438d4aa2",
+  "sibling_old_token_preserved": true,
+  "scope": "Source/derivation/ELF corroboration; exact upcoming native assertions remain separate"
+}

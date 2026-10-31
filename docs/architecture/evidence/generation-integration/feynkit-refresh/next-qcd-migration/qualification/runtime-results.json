@@ -1,0 +1,945 @@
+{
+  "code": "432b6544f3d2d884f6efffb8be104ae5820183b0",
+  "archive_sha256": "1271edb103b212c5ef503075b6cccd48cc96c74ca41839b28127e9614aeeef35",
+  "oracle_elf": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/archive-extracted/target/ci-optim/deps/generation_oracle-3892f55f31822180",
+    "sha256": "212adc0f2f091ecb9899d5da751184a96a65a0efb8baa850e4d6d31bb8e296d4",
+    "size": 61186320
+  },
+  "results": [
+    {
+      "step": "pool1-xs_qcd_gguu_sym_L1",
+      "pool": 1,
+      "exact_selection": "xs_qcd_gguu_sym_L1",
+      "exit": 0,
+      "outcomes": [
+        {
+          "case": "xs_qcd_gguu_sym_L1",
+          "status": "passed",
+          "time": "0.501"
+        }
+      ],
+      "actual_executions": 1,
+      "junit_sha256": "721ae4873485f74c30c135f6494632f4c25b9305b72120737d33cb60225f3b7f",
+      "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool1-xs_qcd_gguu_sym_L1/command.json",
+      "public_dump_hook_enabled": true,
+      "dump_files": {
+        "dumps/xs_qcd_gguu_sym_L1.census": {
+          "sha256": "06744ed2e64563b3d02bfba1eee5da9cf9c509626fe5b607dd48e5cfb7d7f63f",
+          "bytes": 5983
+        },
+        "dumps/xs_qcd_gguu_sym_L1.classes-Auto-t1.json": {
+          "sha256": "4c90d66ad4414a8de08c56362a83bbdcfc988f089809f79dd84d6ad638bc90c8",
+          "bytes": 136190
+        },
+        "dumps/xs_qcd_gguu_sym_L1.classes-Auto-t1.sources.json": {
+          "sha256": "4c90d66ad4414a8de08c56362a83bbdcfc988f089809f79dd84d6ad638bc90c8",
+          "bytes": 136190
+        },
+        "dumps/xs_qcd_gguu_sym_L1.classes-None-t1.json": {
+          "sha256": "4c90d66ad4414a8de08c56362a83bbdcfc988f089809f79dd84d6ad638bc90c8",
+          "bytes": 136190
+        },
+        "dumps/xs_qcd_gguu_sym_L1.classes-None-t1.sources.json": {
+          "sha256": "4c90d66ad4414a8de08c56362a83bbdcfc988f089809f79dd84d6ad638bc90c8",
+          "bytes": 136190
+        }
+      }
+    },
+    {
+      "step": "pool1-xs_qcd_gguu_L1",
+      "pool": 1,
+      "exact_selection": "xs_qcd_gguu_L1",
+      "exit": 0,
+      "outcomes": [
+        {
+          "case": "xs_qcd_gguu_L1",
+          "status": "passed",
+          "time": "0.336"
+        }
+      ],
+      "actual_executions": 1,
+      "junit_sha256": "ef72605467b24ae6f6bc5b1ec71180d03c5bdac7858f4b8116a24796e5785ce3",
+      "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool1-xs_qcd_gguu_L1/command.json",
+      "public_dump_hook_enabled": true,
+      "dump_files": {
+        "dumps/xs_qcd_gguu_L1.census": {
+          "sha256": "4bf1af646b517ad9790d9b815a5f471a371fca0d5058ed674fa2f90dd7e1df56",
+          "bytes": 9667
+        },
+        "dumps/xs_qcd_gguu_L1.classes-Auto-t1.json": {
+          "sha256": "25e7d966ca60263d142d23fa98f6e68d209d2c5b7ba731c3ce216737ca62b797",
+          "bytes": 240542
+        },
+        "dumps/xs_qcd_gguu_L1.classes-Auto-t1.sources.json": {
+          "sha256": "25e7d966ca60263d142d23fa98f6e68d209d2c5b7ba731c3ce216737ca62b797",
+          "bytes": 240542
+        },
+        "dumps/xs_qcd_gguu_L1.classes-None-t1.json": {
+          "sha256": "25e7d966ca60263d142d23fa98f6e68d209d2c5b7ba731c3ce216737ca62b797",
+          "bytes": 240542
+        },
+        "dumps/xs_qcd_gguu_L1.classes-None-t1.sources.json": {
+          "sha256": "25e7d966ca60263d142d23fa98f6e68d209d2c5b7ba731c3ce216737ca62b797",
+          "bytes": 240542
+        }
+      }
+    },
+    {
+      "step": "pool1-xs_qcd_gggg_L1",
+      "pool": 1,
+      "exact_selection": "xs_qcd_gggg_L1",
+      "exit": 0,
+      "outcomes": [
+        {
+          "case": "xs_qcd_gggg_L1",
+          "status": "passed",
+          "time": "0.336"
+        }
+      ],
+      "actual_executions": 1,
+      "junit_sha256": "216502e47c011989e53c5f608438591dcd68370bc185fbba0a089c490ae98688",
+      "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool1-xs_qcd_gggg_L1/command.json",
+      "public_dump_hook_enabled": true,
+      "dump_files": {
+        "dumps/xs_qcd_gggg_L1.census": {
+          "sha256": "137c381a3e6259f9bbe05e6be8ac88171b5c1721c5dbf1a04e0c118cfeff5ee7",
+          "bytes": 9347
+        },
+        "dumps/xs_qcd_gggg_L1.classes-Auto-t1.json": {
+          "sha256": "b4be2d37bc4a72cd96ecbc192f97b9ffdc194c3c72245bfa4c5d0c6737e7d6c7",
+          "bytes": 326465
+        },
+        "dumps/xs_qcd_gggg_L1.classes-Auto-t1.sources.json": {
+          "sha256": "b4be2d37bc4a72cd96ecbc192f97b9ffdc194c3c72245bfa4c5d0c6737e7d6c7",
+          "bytes": 326465
+        },
+        "dumps/xs_qcd_gggg_L1.classes-None-t1.json": {
+          "sha256": "b4be2d37bc4a72cd96ecbc192f97b9ffdc194c3c72245bfa4c5d0c6737e7d6c7",
+          "bytes": 326465
+        },
+        "dumps/xs_qcd_gggg_L1.classes-None-t1.sources.json": {
+          "sha256": "b4be2d37bc4a72cd96ecbc192f97b9ffdc194c3c72245bfa4c5d0c6737e7d6c7",
+          "bytes": 326465
+        }
+      }
+    },
+    {
+      "step": "pool1-xs_qed_eemm_L1",
+      "pool": 1,
+      "exact_selection": "xs_qed_eemm_L1",
+      "exit": 0,
+      "outcomes": [
+        {
+          "case": "xs_qed_eemm_L1",
+          "status": "passed",
+          "time": "0.071"
+        }
+      ],
+      "actual_executions": 1,
+      "junit_sha256": "9e389604c6fb4dc986c9e67c13565410f5d0bcd9d24c95efde0f2a8219d96c40",
+      "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool1-xs_qed_eemm_L1/command.json",
+      "public_dump_hook_enabled": false,
+      "dump_files": {}
+    },
+    {
+      "step": "pool1-xs_qed_eedd_L1",
+      "pool": 1,
+      "exact_selection": "xs_qed_eedd_L1",
+      "exit": 0,
+      "outcomes": [
+        {
+          "case": "xs_qed_eedd_L1",
+          "status": "passed",
+          "time": "0.093"
+        }
+      ],
+      "actual_executions": 1,
+      "junit_sha256": "e09a3095323d003db27d6b380578e1c7ab0e92d81fbbddfe466e7ce6e35bc525",
+      "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool1-xs_qed_eedd_L1/command.json",
+      "public_dump_hook_enabled": false,
+      "dump_files": {}
+    },
+    {
+      "step": "pool1-xs_qed_eeee_1pi_L1",
+      "pool": 1,
+      "exact_selection": "xs_qed_eeee_1pi_L1",
+      "exit": 0,
+      "outcomes": [
+        {
+          "case": "xs_qed_eeee_1pi_L1",
+          "status": "passed",
+          "time": "0.094"
+        }
+      ],
+      "actual_executions": 1,
+      "junit_sha256": "5be71115a55235e703d44f4cc1f0cc662f0622e0b8c6e61eb5600c69a1dcfc0b",
+      "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool1-xs_qed_eeee_1pi_L1/command.json",
+      "public_dump_hook_enabled": false,
+      "dump_files": {}
+    },
+    {
+      "step": "pool1-qed_eemm_L1",
+      "pool": 1,
+      "exact_selection": "qed_eemm_L1",
+      "exit": 0,
+      "outcomes": [
+        {
+          "case": "qed_eemm_L1",
+          "status": "passed",
+          "time": "0.120"
+        }
+      ],
+      "actual_executions": 1,
+      "junit_sha256": "89419502ef7b7ff8bb0e9af4ae0b675c4d736e3f2ee4f952fc5e46f8a7985c66",
+      "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool1-qed_eemm_L1/command.json",
+      "public_dump_hook_enabled": false,
+      "dump_files": {}
+    },
+    {
+      "step": "pool1-ctorder_qcd_uugg_L1",
+      "pool": 1,
+      "exact_selection": "ctorder_qcd_uugg_L1",
+      "exit": 0,
+      "outcomes": [
+        {
+          "case": "ctorder_qcd_uugg_L1",
+          "status": "passed",
+          "time": "0.710"
+        }
+      ],
+      "actual_executions": 1,
+      "junit_sha256": "94339c5d0bc5b18de56b7b7e8dfad3211c75d76812ea1a4fd304adf413085a91",
+      "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool1-ctorder_qcd_uugg_L1/command.json",
+      "public_dump_hook_enabled": false,
+      "dump_files": {}
+    },
+    {
+      "step": "pool1-sm_eemm_L0",
+      "pool": 1,
+      "exact_selection": "sm_eemm_L0",
+      "exit": 0,
+      "outcomes": [
+        {
+          "case": "sm_eemm_L0",
+          "status": "passed",
+          "time": "0.100"
+        }
+      ],
+      "actual_executions": 1,
+      "junit_sha256": "24cd8156c777f33ebeed9f36bdd902eacff05071be07ee0617e37cfa32024781",
+      "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool1-sm_eemm_L0/command.json",
+      "public_dump_hook_enabled": false,
+      "dump_files": {}
+    },
+    {
+      "step": "pool1-ym_g6_L0",
+      "pool": 1,
+      "exact_selection": "ym_g6_L0",
+      "exit": 0,
+      "outcomes": [
+        {
+          "case": "ym_g6_L0",
+          "status": "passed",
+          "time": "0.673"
+        }
+      ],
+      "actual_executions": 1,
+      "junit_sha256": "8b3914a4c7e068ea6e011fcb957ba315129a8cd9f493aef3bd49cb70c5c62f32",
+      "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool1-ym_g6_L0/command.json",
+      "public_dump_hook_enabled": false,
+      "dump_files": {}
+    },
+    {
+      "step": "pool1-xs_qed_eemm_L2",
+      "pool": 1,
+      "exact_selection": "xs_qed_eemm_L2",
+      "exit": 0,
+      "outcomes": [
+        {
+          "case": "xs_qed_eemm_L2",
+          "status": "passed",
+          "time": "0.288"
+        }
+      ],
+      "actual_executions": 1,
+      "junit_sha256": "2123144931b4637177d7ebd374a509c3149cebc85d2556e08bb590042250442d",
+      "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool1-xs_qed_eemm_L2/command.json",
+      "public_dump_hook_enabled": false,
+      "dump_files": {}
+    },
+    {
+      "step": "pool1-sm_eeww_L0",
+      "pool": 1,
+      "exact_selection": "sm_eeww_L0",
+      "exit": 0,
+      "outcomes": [
+        {
+          "case": "sm_eeww_L0",
+          "status": "passed",
+          "time": "0.082"
+        }
+      ],
+      "actual_executions": 1,
+      "junit_sha256": "ecff0ead9972a968217006a00703f7c9d1758d1e05bdfa38521546d6a16ae73f",
+      "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool1-sm_eeww_L0/command.json",
+      "public_dump_hook_enabled": false,
+      "dump_files": {}
+    },
+    {
+      "step": "pool1-qed_ee4f_L0",
+      "pool": 1,
+      "exact_selection": "qed_ee4f_L0",
+      "exit": 0,
+      "outcomes": [
+        {
+          "case": "qed_ee4f_L0",
+          "status": "passed",
+          "time": "0.088"
+        }
+      ],
+      "actual_executions": 1,
+      "junit_sha256": "972138b695c76a57e7b84c7fb4592e48910e4d8f1ef8d142b76b0ee696b85002",
+      "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool1-qed_ee4f_L0/command.json",
+      "public_dump_hook_enabled": false,
+      "dump_files": {}
+    },
+    {
+      "step": "pool1-xs_qed_eeee_L1",
+      "pool": 1,
+      "exact_selection": "xs_qed_eeee_L1",
+      "exit": 0,
+      "outcomes": [
+        {
+          "case": "xs_qed_eeee_L1",
+          "status": "passed",
+          "time": "0.082"
+        }
+      ],
+      "actual_executions": 1,
+      "junit_sha256": "a0fc3fc48631e37dd3bfda478fd24df0d9435ae50e93e7a9aad0dd17e1ba5c40",
+      "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool1-xs_qed_eeee_L1/command.json",
+      "public_dump_hook_enabled": false,
+      "dump_files": {}
+    },
+    {
+      "step": "pool1-xs_qcd_gguu_1pi_L1",
+      "pool": 1,
+      "exact_selection": "xs_qcd_gguu_1pi_L1",
+      "exit": 0,
+      "outcomes": [
+        {
+          "case": "xs_qcd_gguu_1pi_L1",
+          "status": "passed",
+          "time": "0.098"
+        }
+      ],
+      "actual_executions": 1,
+      "junit_sha256": "b4e222ca91975f88eba4631182b8212d7e5e5ec69b7db10fbdaf135d5dc860fd",
+      "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool1-xs_qcd_gguu_1pi_L1/command.json",
+      "public_dump_hook_enabled": false,
+      "dump_files": {}
+    },
+    {
+      "step": "pool1-xs_qed_eemm_identical_L2",
+      "pool": 1,
+      "exact_selection": "xs_qed_eemm_identical_L2",
+      "exit": 0,
+      "outcomes": [
+        {
+          "case": "xs_qed_eemm_identical_L2",
+          "status": "passed",
+          "time": "4.893"
+        }
+      ],
+      "actual_executions": 1,
+      "junit_sha256": "beac4bb2524dcdd10ad861c1c086f555936323b80ed23bf806736633895d7b61",
+      "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool1-xs_qed_eemm_identical_L2/command.json",
+      "public_dump_hook_enabled": false,
+      "dump_files": {}
+    },
+    {
+      "step": "pool8-xs_qcd_gguu_sym_L1",
+      "pool": 8,
+      "exact_selection": "xs_qcd_gguu_sym_L1",
+      "exit": 0,
+      "outcomes": [
+        {
+          "case": "xs_qcd_gguu_sym_L1",
+          "status": "passed",
+          "time": "0.129"
+        }
+      ],
+      "actual_executions": 1,
+      "junit_sha256": "4601775ec03d3ae5ec25c3be6a086138b3f494df8e7dcbc5c5bd884695077e6c",
+      "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool8-xs_qcd_gguu_sym_L1/command.json",
+      "public_dump_hook_enabled": false,
+      "dump_files": {}
+    },
+    {
+      "step": "pool8-xs_qcd_gguu_L1",
+      "pool": 8,
+      "exact_selection": "xs_qcd_gguu_L1",
+      "exit": 0,
+      "outcomes": [
+        {
+          "case": "xs_qcd_gguu_L1",
+          "status": "passed",
+          "time": "0.126"
+        }
+      ],
+      "actual_executions": 1,
+      "junit_sha256": "1bb535d6e74184c1a9281359546b21b95d412690af88690d58e4204d600b8a71",
+      "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool8-xs_qcd_gguu_L1/command.json",
+      "public_dump_hook_enabled": false,
+      "dump_files": {}
+    },
+    {
+      "step": "pool8-xs_qcd_gggg_L1",
+      "pool": 8,
+      "exact_selection": "xs_qcd_gggg_L1",
+      "exit": 0,
+      "outcomes": [
+        {
+          "case": "xs_qcd_gggg_L1",
+          "status": "passed",
+          "time": "0.161"
+        }
+      ],
+      "actual_executions": 1,
+      "junit_sha256": "294d4655381c10ca6cd4e1918b0c63facb65fb44854b8e9de25791083345215e",
+      "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool8-xs_qcd_gggg_L1/command.json",
+      "public_dump_hook_enabled": false,
+      "dump_files": {}
+    },
+    {
+      "step": "pool8-xs_qed_eemm_L1",
+      "pool": 8,
+      "exact_selection": "xs_qed_eemm_L1",
+      "exit": 0,
+      "outcomes": [
+        {
+          "case": "xs_qed_eemm_L1",
+          "status": "passed",
+          "time": "0.090"
+        }
+      ],
+      "actual_executions": 1,
+      "junit_sha256": "89e3a209880daa68662e217efba6e9335d614b984853e1c413189318b7c379c9",
+      "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool8-xs_qed_eemm_L1/command.json",
+      "public_dump_hook_enabled": false,
+      "dump_files": {}
+    },
+    {
+      "step": "pool8-xs_qed_eedd_L1",
+      "pool": 8,
+      "exact_selection": "xs_qed_eedd_L1",
+      "exit": 0,
+      "outcomes": [
+        {
+          "case": "xs_qed_eedd_L1",
+          "status": "passed",
+          "time": "0.113"
+        }
+      ],
+      "actual_executions": 1,
+      "junit_sha256": "c1498483bf83895a5039c16323e7920d1f0c0ab3ba67c689d42f1927cbeb109e",
+      "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool8-xs_qed_eedd_L1/command.json",
+      "public_dump_hook_enabled": false,
+      "dump_files": {}
+    },
+    {
+      "step": "pool8-xs_qed_eeee_1pi_L1",
+      "pool": 8,
+      "exact_selection": "xs_qed_eeee_1pi_L1",
+      "exit": 0,
+      "outcomes": [
+        {
+          "case": "xs_qed_eeee_1pi_L1",
+          "status": "passed",
+          "time": "0.080"
+        }
+      ],
+      "actual_executions": 1,
+      "junit_sha256": "67a03c98c0e7765b4099117158c217d8e7c67b73e4e3b84d5b5846fb40808530",
+      "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool8-xs_qed_eeee_1pi_L1/command.json",
+      "public_dump_hook_enabled": false,
+      "dump_files": {}
+    },
+    {
+      "step": "pool8-qed_eemm_L1",
+      "pool": 8,
+      "exact_selection": "qed_eemm_L1",
+      "exit": 0,
+      "outcomes": [
+        {
+          "case": "qed_eemm_L1",
+          "status": "passed",
+          "time": "0.102"
+        }
+      ],
+      "actual_executions": 1,
+      "junit_sha256": "448c8ba8f731d06a7965d1bce48ccd81e2345b9920c343e022d7f22c7edca3d1",
+      "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool8-qed_eemm_L1/command.json",
+      "public_dump_hook_enabled": false,
+      "dump_files": {}
+    },
+    {
+      "step": "pool8-ctorder_qcd_uugg_L1",
+      "pool": 8,
+      "exact_selection": "ctorder_qcd_uugg_L1",
+      "exit": 0,
+      "outcomes": [
+        {
+          "case": "ctorder_qcd_uugg_L1",
+          "status": "passed",
+          "time": "0.565"
+        }
+      ],
+      "actual_executions": 1,
+      "junit_sha256": "ec2dc58af1369208f2dbbfc3b9d95a0975773e6aaea2d38cf1e1f5bd0139d3ac",
+      "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool8-ctorder_qcd_uugg_L1/command.json",
+      "public_dump_hook_enabled": false,
+      "dump_files": {}
+    },
+    {
+      "step": "pool8-sm_eemm_L0",
+      "pool": 8,
+      "exact_selection": "sm_eemm_L0",
+      "exit": 0,
+      "outcomes": [
+        {
+          "case": "sm_eemm_L0",
+          "status": "passed",
+          "time": "0.094"
+        }
+      ],
+      "actual_executions": 1,
+      "junit_sha256": "d7c29bd347f7a326f716f992ee59361fc5a706e926b7d2891c4265a18d9a5ef1",
+      "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool8-sm_eemm_L0/command.json",
+      "public_dump_hook_enabled": false,
+      "dump_files": {}
+    },
+    {
+      "step": "pool8-ym_g6_L0",
+      "pool": 8,
+      "exact_selection": "ym_g6_L0",
+      "exit": 0,
+      "outcomes": [
+        {
+          "case": "ym_g6_L0",
+          "status": "passed",
+          "time": "0.619"
+        }
+      ],
+      "actual_executions": 1,
+      "junit_sha256": "db2fdb7d8ca2f886d2148082677b624138cb9a256fd2a43791965dcbba42fe90",
+      "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool8-ym_g6_L0/command.json",
+      "public_dump_hook_enabled": false,
+      "dump_files": {}
+    },
+    {
+      "step": "pool8-xs_qed_eemm_L2",
+      "pool": 8,
+      "exact_selection": "xs_qed_eemm_L2",
+      "exit": 0,
+      "outcomes": [
+        {
+          "case": "xs_qed_eemm_L2",
+          "status": "passed",
+          "time": "0.218"
+        }
+      ],
+      "actual_executions": 1,
+      "junit_sha256": "bfd5d3c7c214bdc7bb3cc7b888de0f67165ff4200400e7586becca729126c385",
+      "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool8-xs_qed_eemm_L2/command.json",
+      "public_dump_hook_enabled": false,
+      "dump_files": {}
+    },
+    {
+      "step": "pool8-sm_eeww_L0",
+      "pool": 8,
+      "exact_selection": "sm_eeww_L0",
+      "exit": 0,
+      "outcomes": [
+        {
+          "case": "sm_eeww_L0",
+          "status": "passed",
+          "time": "0.101"
+        }
+      ],
+      "actual_executions": 1,
+      "junit_sha256": "47bfc3aa5a07cfb46727e1ec500565c85dc700b837eabd1ba43fc62aab46c98b",
+      "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool8-sm_eeww_L0/command.json",
+      "public_dump_hook_enabled": false,
+      "dump_files": {}
+    },
+    {
+      "step": "pool8-qed_ee4f_L0",
+      "pool": 8,
+      "exact_selection": "qed_ee4f_L0",
+      "exit": 0,
+      "outcomes": [
+        {
+          "case": "qed_ee4f_L0",
+          "status": "passed",
+          "time": "0.101"
+        }
+      ],
+      "actual_executions": 1,
+      "junit_sha256": "ae58df83a9874f5c2cebf7ad9c95867cc41bdb6c9a37531530a4334fbfd1ecd3",
+      "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool8-qed_ee4f_L0/command.json",
+      "public_dump_hook_enabled": false,
+      "dump_files": {}
+    },
+    {
+      "step": "pool8-xs_qed_eeee_L1",
+      "pool": 8,
+      "exact_selection": "xs_qed_eeee_L1",
+      "exit": 0,
+      "outcomes": [
+        {
+          "case": "xs_qed_eeee_L1",
+          "status": "passed",
+          "time": "0.086"
+        }
+      ],
+      "actual_executions": 1,
+      "junit_sha256": "8cd448c510296a0bce10a6e0a6f522142985e78d25445e7b014bbf62f4ebd689",
+      "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool8-xs_qed_eeee_L1/command.json",
+      "public_dump_hook_enabled": false,
+      "dump_files": {}
+    },
+    {
+      "step": "pool8-xs_qcd_gguu_1pi_L1",
+      "pool": 8,
+      "exact_selection": "xs_qcd_gguu_1pi_L1",
+      "exit": 0,
+      "outcomes": [
+        {
+          "case": "xs_qcd_gguu_1pi_L1",
+          "status": "passed",
+          "time": "0.082"
+        }
+      ],
+      "actual_executions": 1,
+      "junit_sha256": "e1fa0678eef532a353ea4df3e05a0957a1d148af03ac2bdeef306a03f062df88",
+      "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool8-xs_qcd_gguu_1pi_L1/command.json",
+      "public_dump_hook_enabled": false,
+      "dump_files": {}
+    },
+    {
+      "step": "pool8-xs_qed_eemm_identical_L2",
+      "pool": 8,
+      "exact_selection": "xs_qed_eemm_identical_L2",
+      "exit": 0,
+      "outcomes": [
+        {
+          "case": "xs_qed_eemm_identical_L2",
+          "status": "passed",
+          "time": "3.615"
+        }
+      ],
+      "actual_executions": 1,
+      "junit_sha256": "28c608540d462a9b5a7b5acf79a2546b0cd2a3c83eab0d9cbd6f079259055a9c",
+      "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool8-xs_qed_eemm_identical_L2/command.json",
+      "public_dump_hook_enabled": false,
+      "dump_files": {}
+    },
+    {
+      "step": "pool32-xs_qcd_gguu_sym_L1",
+      "pool": 32,
+      "exact_selection": "xs_qcd_gguu_sym_L1",
+      "exit": 0,
+      "outcomes": [
+        {
+          "case": "xs_qcd_gguu_sym_L1",
+          "status": "passed",
+          "time": "0.123"
+        }
+      ],
+      "actual_executions": 1,
+      "junit_sha256": "ddd5419b209bf8e38f3300731c887a8cc49be4aad04f168a73710a43a473543a",
+      "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool32-xs_qcd_gguu_sym_L1/command.json",
+      "public_dump_hook_enabled": false,
+      "dump_files": {}
+    },
+    {
+      "step": "pool32-xs_qcd_gguu_L1",
+      "pool": 32,
+      "exact_selection": "xs_qcd_gguu_L1",
+      "exit": 0,
+      "outcomes": [
+        {
+          "case": "xs_qcd_gguu_L1",
+          "status": "passed",
+          "time": "0.161"
+        }
+      ],
+      "actual_executions": 1,
+      "junit_sha256": "c203db570acde0717fd5f24d0d30d89ce4b5e3af48c15c5489214116fa8f9ee8",
+      "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool32-xs_qcd_gguu_L1/command.json",
+      "public_dump_hook_enabled": false,
+      "dump_files": {}
+    },
+    {
+      "step": "pool32-xs_qcd_gggg_L1",
+      "pool": 32,
+      "exact_selection": "xs_qcd_gggg_L1",
+      "exit": 0,
+      "outcomes": [
+        {
+          "case": "xs_qcd_gggg_L1",
+          "status": "passed",
+          "time": "0.162"
+        }
+      ],
+      "actual_executions": 1,
+      "junit_sha256": "c68b36f59d79ff23b4530848a598d8608664c05da4f0b7d861327ab0001492a2",
+      "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool32-xs_qcd_gggg_L1/command.json",
+      "public_dump_hook_enabled": false,
+      "dump_files": {}
+    },
+    {
+      "step": "pool32-xs_qed_eemm_L1",
+      "pool": 32,
+      "exact_selection": "xs_qed_eemm_L1",
+      "exit": 0,
+      "outcomes": [
+        {
+          "case": "xs_qed_eemm_L1",
+          "status": "passed",
+          "time": "0.128"
+        }
+      ],
+      "actual_executions": 1,
+      "junit_sha256": "181f7433e5041ce33171090bcc20b1dc6d75e29bfd284556976df05630f25ed3",
+      "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool32-xs_qed_eemm_L1/command.json",
+      "public_dump_hook_enabled": false,
+      "dump_files": {}
+    },
+    {
+      "step": "pool32-xs_qed_eedd_L1",
+      "pool": 32,
+      "exact_selection": "xs_qed_eedd_L1",
+      "exit": 0,
+      "outcomes": [
+        {
+          "case": "xs_qed_eedd_L1",
+          "status": "passed",
+          "time": "0.126"
+        }
+      ],
+      "actual_executions": 1,
+      "junit_sha256": "61d6c42f38ce0a87f0be2acea6ba644e79b12e279981afdc00fe3dd6e8c522c4",
+      "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool32-xs_qed_eedd_L1/command.json",
+      "public_dump_hook_enabled": false,
+      "dump_files": {}
+    },
+    {
+      "step": "pool32-xs_qed_eeee_1pi_L1",
+      "pool": 32,
+      "exact_selection": "xs_qed_eeee_1pi_L1",
+      "exit": 0,
+      "outcomes": [
+        {
+          "case": "xs_qed_eeee_1pi_L1",
+          "status": "passed",
+          "time": "0.127"
+        }
+      ],
+      "actual_executions": 1,
+      "junit_sha256": "76a2aa927830339d5e3e02197bfc66ec34e9d1659c4f47af42cebf6a6d857288",
+      "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool32-xs_qed_eeee_1pi_L1/command.json",
+      "public_dump_hook_enabled": false,
+      "dump_files": {}
+    },
+    {
+      "step": "pool32-qed_eemm_L1",
+      "pool": 32,
+      "exact_selection": "qed_eemm_L1",
+      "exit": 0,
+      "outcomes": [
+        {
+          "case": "qed_eemm_L1",
+          "status": "passed",
+          "time": "0.178"
+        }
+      ],
+      "actual_executions": 1,
+      "junit_sha256": "e0945ab00253aa96a7804c10ab8c5e442bfd316e68c27b99de3493a8effa9c33",
+      "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool32-qed_eemm_L1/command.json",
+      "public_dump_hook_enabled": false,
+      "dump_files": {}
+    },
+    {
+      "step": "pool32-ctorder_qcd_uugg_L1",
+      "pool": 32,
+      "exact_selection": "ctorder_qcd_uugg_L1",
+      "exit": 0,
+      "outcomes": [
+        {
+          "case": "ctorder_qcd_uugg_L1",
+          "status": "passed",
+          "time": "0.623"
+        }
+      ],
+      "actual_executions": 1,
+      "junit_sha256": "78d12619fe2637e292523b01c3454803c10da78971a2bfe581ebd876dab35599",
+      "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool32-ctorder_qcd_uugg_L1/command.json",
+      "public_dump_hook_enabled": false,
+      "dump_files": {}
+    },
+    {
+      "step": "pool32-sm_eemm_L0",
+      "pool": 32,
+      "exact_selection": "sm_eemm_L0",
+      "exit": 0,
+      "outcomes": [
+        {
+          "case": "sm_eemm_L0",
+          "status": "passed",
+          "time": "0.106"
+        }
+      ],
+      "actual_executions": 1,
+      "junit_sha256": "276a36926d566e6975f05e5070e56575f9311c47fb6171cc6baf67387e3e08e9",
+      "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool32-sm_eemm_L0/command.json",
+      "public_dump_hook_enabled": false,
+      "dump_files": {}
+    },
+    {
+      "step": "pool32-ym_g6_L0",
+      "pool": 32,
+      "exact_selection": "ym_g6_L0",
+      "exit": 0,
+      "outcomes": [
+        {
+          "case": "ym_g6_L0",
+          "status": "passed",
+          "time": "0.703"
+        }
+      ],
+      "actual_executions": 1,
+      "junit_sha256": "5cce51ca04eac06b6d88b33cc0de7c78bc19c3544f7722babec0eca976401605",
+      "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool32-ym_g6_L0/command.json",
+      "public_dump_hook_enabled": false,
+      "dump_files": {}
+    },
+    {
+      "step": "pool32-xs_qed_eemm_L2",
+      "pool": 32,
+      "exact_selection": "xs_qed_eemm_L2",
+      "exit": 0,
+      "outcomes": [
+        {
+          "case": "xs_qed_eemm_L2",
+          "status": "passed",
+          "time": "0.185"
+        }
+      ],
+      "actual_executions": 1,
+      "junit_sha256": "4296c9e21b127d8f61ac6d64700db3a8fd62b94e7dd90b3388836dff34ed9490",
+      "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool32-xs_qed_eemm_L2/command.json",
+      "public_dump_hook_enabled": false,
+      "dump_files": {}
+    },
+    {
+      "step": "pool32-sm_eeww_L0",
+      "pool": 32,
+      "exact_selection": "sm_eeww_L0",
+      "exit": 0,
+      "outcomes": [
+        {
+          "case": "sm_eeww_L0",
+          "status": "passed",
+          "time": "0.099"
+        }
+      ],
+      "actual_executions": 1,
+      "junit_sha256": "79d92a764217c1ddfd87fc664523b8661315c5b4e3511218cb71e6e79e36c626",
+      "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool32-sm_eeww_L0/command.json",
+      "public_dump_hook_enabled": false,
+      "dump_files": {}
+    },
+    {
+      "step": "pool32-qed_ee4f_L0",
+      "pool": 32,
+      "exact_selection": "qed_ee4f_L0",
+      "exit": 0,
+      "outcomes": [
+        {
+          "case": "qed_ee4f_L0",
+          "status": "passed",
+          "time": "0.105"
+        }
+      ],
+      "actual_executions": 1,
+      "junit_sha256": "6ccf9f031fafb8012dd8dcb92375bb5b6e3826ba30a733bdd732f5293c285b68",
+      "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool32-qed_ee4f_L0/command.json",
+      "public_dump_hook_enabled": false,
+      "dump_files": {}
+    },
+    {
+      "step": "pool32-xs_qed_eeee_L1",
+      "pool": 32,
+      "exact_selection": "xs_qed_eeee_L1",
+      "exit": 0,
+      "outcomes": [
+        {
+          "case": "xs_qed_eeee_L1",
+          "status": "passed",
+          "time": "0.110"
+        }
+      ],
+      "actual_executions": 1,
+      "junit_sha256": "8b2511dc1e8ec11716bccc775d69dcced838257a97a78ab78f549345fcdd99a1",
+      "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool32-xs_qed_eeee_L1/command.json",
+      "public_dump_hook_enabled": false,
+      "dump_files": {}
+    },
+    {
+      "step": "pool32-xs_qcd_gguu_1pi_L1",
+      "pool": 32,
+      "exact_selection": "xs_qcd_gguu_1pi_L1",
+      "exit": 0,
+      "outcomes": [
+        {
+          "case": "xs_qcd_gguu_1pi_L1",
+          "status": "passed",
+          "time": "0.107"
+        }
+      ],
+      "actual_executions": 1,
+      "junit_sha256": "a6122e362be4c1dc2cdd52a5e41b296be35e89122915fde78d7b7c59b5f28f74",
+      "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool32-xs_qcd_gguu_1pi_L1/command.json",
+      "public_dump_hook_enabled": false,
+      "dump_files": {}
+    },
+    {
+      "step": "pool32-xs_qed_eemm_identical_L2",
+      "pool": 32,
+      "exact_selection": "xs_qed_eemm_identical_L2",
+      "exit": 0,
+      "outcomes": [
+        {
+          "case": "xs_qed_eemm_identical_L2",
+          "status": "passed",
+          "time": "4.133"
+        }
+      ],
+      "actual_executions": 1,
+      "junit_sha256": "92bffef60489777eb0e77abb7dc46ead4235c81cb4097e8c1f1bc381346d98de",
+      "command": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/runs/pool32-xs_qed_eemm_identical_L2/command.json",
+      "public_dump_hook_enabled": false,
+      "dump_files": {}
+    }
+  ],
+  "expected_selected_executions": 48,
+  "actual_executions": 48,
+  "passes": 48,
+  "failures": 0,
+  "retries": 0,
+  "skipped_credit": 0,
+  "finite_math_scope": "Accepted prior pool1 None/Auto finite proofs; pools8/32 runtime only. No new proof-native calls."
+}

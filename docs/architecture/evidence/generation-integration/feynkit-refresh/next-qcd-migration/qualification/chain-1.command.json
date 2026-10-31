@@ -1,0 +1,28 @@
+{
+  "argv": [
+    "nix",
+    "--offline",
+    "--option",
+    "allow-import-from-derivation",
+    "false",
+    "derivation",
+    "show",
+    "/nix/store/1aa6igagmxzp43zlm5g9wjp4bfb9p0gg-gammaloop-ci-test-binary-dependencies-b6f177b7bc15beb1-Cargo.toml.drv",
+    "/nix/store/g7k7lrq5mzhw7haf9f90crcla19680fk-gammaloop-ci-test-binary-dependencies-b6f177b7bc15beb1-feynkit-generator-dev-dependency.toml.drv",
+    "/nix/store/ialr5c6d4kq9c3qrz1bkgfyrngcm2568-gammaloop-crate-test-binaries-feynkit-generator-b6f177b7bc15beb1-deps-0.1.0.drv",
+    "/nix/store/ykcl6183z96gdzybq285p9qcnb8l082a-vendor-cargo-deps.drv",
+    "/nix/store/ypzbz0yifsk90xl610bd7kc6sxjz138l-rust-stable-with-components-2026-09-03.drv"
+  ],
+  "cwd": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh",
+  "license_keys_removed": [
+    "SYMBOLICA_LICENSE",
+    "SYMBOLICA_LICENSE_PATH",
+    "SYMBOLICA_LICENSE_SIGNED",
+    "SYMBOLICA_LICENSE_FILE"
+  ],
+  "start": "2026-10-31T07:31:52.563898+00:00",
+  "exit": 0,
+  "end": "2026-10-31T07:31:52.623679+00:00",
+  "stdout_sha256": "2de710538a4f273175ec9aeccdfff85cacba10b2516dc33bc018f2eb2886ab5a",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+}

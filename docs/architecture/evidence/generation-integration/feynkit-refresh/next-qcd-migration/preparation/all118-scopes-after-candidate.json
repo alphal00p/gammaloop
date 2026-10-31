@@ -1,0 +1,952 @@
+{
+  "count": 118,
+  "all_preserved": true,
+  "ordered_bindings": [
+    {
+      "position": 0,
+      "note": "generation-integration-units39-43",
+      "path": "crates/linnet/src/half_edge/canon.rs",
+      "before_digest": "f5196064803f370751b1afc6a5869eed70de2fbc",
+      "after_digest": "f5196064803f370751b1afc6a5869eed70de2fbc",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 1,
+      "note": "generation-integration-units39-43",
+      "path": "crates/feynkit-py/src/generation/execution.rs",
+      "before_digest": "90aa937d1161c8fb8db294e10af8d468fb260e73",
+      "after_digest": "90aa937d1161c8fb8db294e10af8d468fb260e73",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 2,
+      "note": "generation-integration-units39-43",
+      "path": "tests/tests/test_feyngen.rs",
+      "before_digest": "35431963b1bc751b00a7a1bb1e834faa815c0f50",
+      "after_digest": "35431963b1bc751b00a7a1bb1e834faa815c0f50",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 3,
+      "note": "generation-mark-geometry",
+      "path": "crates/kurvst/src/marks.rs",
+      "before_digest": "fd8561f45d257ecadfcb8e0fa1ed0e48696ef733",
+      "after_digest": "fd8561f45d257ecadfcb8e0fa1ed0e48696ef733",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 4,
+      "note": "generation-mark-geometry",
+      "path": "vendor/kurbo/src/stroke.rs",
+      "before_digest": "8c50e774ab4464366a23681a0b3129c3249f76e6",
+      "after_digest": "8c50e774ab4464366a23681a0b3129c3249f76e6",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 5,
+      "note": "generation-mark-geometry",
+      "path": "tests/packaging/test_drawing_notices.py",
+      "before_digest": "96b8f399d4a259e5a832cbb3d837a63276059f22",
+      "after_digest": "96b8f399d4a259e5a832cbb3d837a63276059f22",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 6,
+      "note": "generation-mark-geometry",
+      "path": "pyproject.toml",
+      "before_digest": "406bd3acc6261b911adc5547a81ca3befc05ac75",
+      "after_digest": "406bd3acc6261b911adc5547a81ca3befc05ac75",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 7,
+      "note": "generation-test-source-closure",
+      "path": "nix/rust-workspace.nix",
+      "before_digest": "a6b344e5a569991441e6b3677616855df98d32a2",
+      "after_digest": "a6b344e5a569991441e6b3677616855df98d32a2",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 8,
+      "note": "generation-test-source-closure",
+      "path": "nix/rust-workspace.nix",
+      "before_digest": "b8ef6794d3fb70d911b1e39e8ee3b4a98d03f227",
+      "after_digest": "b8ef6794d3fb70d911b1e39e8ee3b4a98d03f227",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 9,
+      "note": "generation-sampling-staged",
+      "path": "crates/gammalooprs/src/integrands/process/mod.rs",
+      "before_digest": "fa84abc99317adbeae2c80083e8a6eeffce546ab",
+      "after_digest": "fa84abc99317adbeae2c80083e8a6eeffce546ab",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 10,
+      "note": "generation-sampling-staged",
+      "path": "crates/gammalooprs/src/integrands/process/sampling/maps.rs",
+      "before_digest": "c914fffdc29bc975430dc87ee68bda2e11c2fc5c",
+      "after_digest": "c914fffdc29bc975430dc87ee68bda2e11c2fc5c",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 11,
+      "note": "generation-sampling-staged",
+      "path": "crates/gammalooprs/src/integrands/process/sampling/maps.rs",
+      "before_digest": "08c5ff1dc2daf0f7e601b640de95ccd36a3a8b15",
+      "after_digest": "08c5ff1dc2daf0f7e601b640de95ccd36a3a8b15",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 12,
+      "note": "generation-sampling-staged",
+      "path": "crates/gammalooprs/src/integrands/process/sampling/selection.rs",
+      "before_digest": "cb0a19bd463a7c4f03905dff4e66f8c37e38b69b",
+      "after_digest": "cb0a19bd463a7c4f03905dff4e66f8c37e38b69b",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 13,
+      "note": "generation-sampling-staged",
+      "path": "crates/gammalooprs/src/integrands/process/mod.rs",
+      "before_digest": "a5d00202b935534a9afd09dd37a5d7484ccbfea9",
+      "after_digest": "a5d00202b935534a9afd09dd37a5d7484ccbfea9",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 14,
+      "note": "generation-sampling-staged",
+      "path": "tests/tests/test_nlo_acceptance/cool_qm_eos.rs",
+      "before_digest": "fd8f5ff00a6b7b7cf3b3b5299f61624dcd7cbc79",
+      "after_digest": "fd8f5ff00a6b7b7cf3b3b5299f61624dcd7cbc79",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 15,
+      "note": "generation-projector-flow-staged",
+      "path": "crates/feynkit-graph/src/compact_dot.rs",
+      "before_digest": "26ba8e5f2daf3a874648e3b3fcf1004768aad4c9",
+      "after_digest": "26ba8e5f2daf3a874648e3b3fcf1004768aad4c9",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 16,
+      "note": "generation-projector-flow-staged",
+      "path": "crates/gammalooprs/src/numerator/aind.rs",
+      "before_digest": "ccec241e109087f9cc811c8383e408b29b0d1654",
+      "after_digest": "ccec241e109087f9cc811c8383e408b29b0d1654",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 17,
+      "note": "generation-projector-flow-staged",
+      "path": "crates/gammaloop-api/src/commands/generate.rs",
+      "before_digest": "fc0db7043824aa9891ebe63120eaafc6780f7ab4",
+      "after_digest": "fc0db7043824aa9891ebe63120eaafc6780f7ab4",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 18,
+      "note": "generation-projector-flow-staged",
+      "path": "tests/tests/test_runs/test_integrated_uv_cts.rs",
+      "before_digest": "258dabf85c220b309bc208975dd0c9fa04062111",
+      "after_digest": "258dabf85c220b309bc208975dd0c9fa04062111",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 19,
+      "note": "generation-projector-flow-staged",
+      "path": "crates/gammalooprs/src/graph/parse/tests.rs",
+      "before_digest": "c76aede2cef891292162665f8a9bebb1b31d18a0",
+      "after_digest": "c76aede2cef891292162665f8a9bebb1b31d18a0",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 20,
+      "note": "generation-projector-flow-staged",
+      "path": "tests/resources/graphs/qqx_aaa_subtracted.dot",
+      "before_digest": "f26103ab3a89d5992e4fe866b0538ab618136b97",
+      "after_digest": "f26103ab3a89d5992e4fe866b0538ab618136b97",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 21,
+      "note": "generation-projector-flow-staged",
+      "path": "tests/resources/graphs/uv_tests/rqft_ghG_3l.dot",
+      "before_digest": "61aacc598cee73c26bfecff47c17908ad9ff6484",
+      "after_digest": "61aacc598cee73c26bfecff47c17908ad9ff6484",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 22,
+      "note": "generation-integration-wp3-grouping",
+      "path": "crates/feynkit-generator/src/grouping.rs",
+      "before_digest": "1fde7e75dd6e13b44fafe38ee5dd3b9debb2babf",
+      "after_digest": "1fde7e75dd6e13b44fafe38ee5dd3b9debb2babf",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 23,
+      "note": "generation-integration-wp3-grouping",
+      "path": "crates/feynkit-generator/tests/generation_oracle/census.rs",
+      "before_digest": "fb41124fcb8c821236295e02eee59a1ec4fdcb3d",
+      "after_digest": "fb41124fcb8c821236295e02eee59a1ec4fdcb3d",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 24,
+      "note": "generation-integration-wp3-grouping",
+      "path": "crates/feynkit-generator/tests/generation_oracle/main.rs",
+      "before_digest": "0d638c2b0b4d89183621d6d202a8e551fb5e3f34",
+      "after_digest": "0d638c2b0b4d89183621d6d202a8e551fb5e3f34",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 25,
+      "note": "generation-integration-wp3-grouping",
+      "path": ".config/nextest.toml",
+      "before_digest": "6f601f9f2e0ecb0d421aa50724834cb7fee18117",
+      "after_digest": "6f601f9f2e0ecb0d421aa50724834cb7fee18117",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 26,
+      "note": "generation-staged-transport-fix",
+      "path": "crates/feynkit-graph/src/finalization.rs",
+      "before_digest": "ccbf0871fd75826f2cfaf68ba676bbbb7f85db78",
+      "after_digest": "ccbf0871fd75826f2cfaf68ba676bbbb7f85db78",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 27,
+      "note": "generation-drawing-notices",
+      "path": "crates/linnest/build_assets.rs",
+      "before_digest": "6cec3a4971faa783e0497c89ed9f614443f1117b",
+      "after_digest": "6cec3a4971faa783e0497c89ed9f614443f1117b",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 28,
+      "note": "generation-integration-wp3-staged",
+      "path": "crates/feynkit-generator/src/generation/staged.rs",
+      "before_digest": "f13870d5c7d318468a8a1b83ae9b039bb7419826",
+      "after_digest": "f13870d5c7d318468a8a1b83ae9b039bb7419826",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 29,
+      "note": "generation-integration-wp3-staged",
+      "path": "crates/feynkit-generator/src/generation.rs",
+      "before_digest": "584e7d14e34cf83605500b892943ea2ca3043569",
+      "after_digest": "584e7d14e34cf83605500b892943ea2ca3043569",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 30,
+      "note": "generation-integration-wp3-staged",
+      "path": "crates/feynkit-generator/src/grouping.rs",
+      "before_digest": "66cc3fe8280694c72b213d71dee37fb40a1ad997",
+      "after_digest": "66cc3fe8280694c72b213d71dee37fb40a1ad997",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 31,
+      "note": "gammaloop-architecture",
+      "path": "crates/gammaloop-api/src/state.rs",
+      "before_digest": "3598dbe299f9a32da1ed8d034706a82959d84abb",
+      "after_digest": "3598dbe299f9a32da1ed8d034706a82959d84abb",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 32,
+      "note": "gammaloop-architecture",
+      "path": "crates/gammaloop-api/src/commands/integrate.rs",
+      "before_digest": "bcce3d43713b42fe428e3b5d89784e18c8d47fa7",
+      "after_digest": "bcce3d43713b42fe428e3b5d89784e18c8d47fa7",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 33,
+      "note": "gammaloop-architecture",
+      "path": "crates/gammalooprs/src/integrands/evaluation.rs",
+      "before_digest": "707cd302e3ed6b9c792c4263fb24e0b1b04e86f1",
+      "after_digest": "707cd302e3ed6b9c792c4263fb24e0b1b04e86f1",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 34,
+      "note": "gammaloop-architecture",
+      "path": "crates/gammalooprs/src/integrands/process/mod.rs",
+      "before_digest": "2f6aea58d34fcb798c742d41feac8240dfc5ae55",
+      "after_digest": "2f6aea58d34fcb798c742d41feac8240dfc5ae55",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 35,
+      "note": "gammaloop-architecture",
+      "path": "crates/gammalooprs/src/observables/events.rs",
+      "before_digest": "6450148360cff16688c3e37986180c678682606e",
+      "after_digest": "6450148360cff16688c3e37986180c678682606e",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 36,
+      "note": "gammaloop-architecture",
+      "path": "crates/gammalooprs/src/observables/mod.rs",
+      "before_digest": "b672f52f6674d08d11b6cc68ef0621c399386926",
+      "after_digest": "b672f52f6674d08d11b6cc68ef0621c399386926",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 37,
+      "note": "gammaloop-architecture",
+      "path": "crates/gammaloop-api/src/python.rs",
+      "before_digest": "872d2b855d14a4aded443e18df435f899c2bf42a",
+      "after_digest": "872d2b855d14a4aded443e18df435f899c2bf42a",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 38,
+      "note": "gammaloop-architecture",
+      "path": "crates/gammalooprs/src/lib.rs",
+      "before_digest": "41d3e5da3e5b11fbfb34c30432192c7d3ed53e16",
+      "after_digest": "41d3e5da3e5b11fbfb34c30432192c7d3ed53e16",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 39,
+      "note": "gammaloop-architecture",
+      "path": "crates/feynkit-generator/src/generation.rs",
+      "before_digest": "5ba73ee8f0b70a9dc5b500e0e84caad9819eb377",
+      "after_digest": "5ba73ee8f0b70a9dc5b500e0e84caad9819eb377",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 40,
+      "note": "gammaloop-architecture",
+      "path": "crates/feynkit-model/src/model.rs",
+      "before_digest": "b04029827b0ecb3c8f23289bf0937e1ea422e176",
+      "after_digest": "b04029827b0ecb3c8f23289bf0937e1ea422e176",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 41,
+      "note": "gammaloop-architecture",
+      "path": "crates/feynkit-graph/src/lib.rs",
+      "before_digest": "03fa811b133f5816415a2b445445ea5a2d87365d",
+      "after_digest": "03fa811b133f5816415a2b445445ea5a2d87365d",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 42,
+      "note": "gammaloop-architecture",
+      "path": "crates/feynkit-tensor/src/lib.rs",
+      "before_digest": "f424864aa88eaacddbfe2c220aacef0a3af2f98d",
+      "after_digest": "f424864aa88eaacddbfe2c220aacef0a3af2f98d",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 43,
+      "note": "gammaloop-architecture",
+      "path": "crates/gammalooprs/src/graph/parse/from_dot.rs",
+      "before_digest": "2f016e5378c09ffe996a4f74870845364df7d09c",
+      "after_digest": "2f016e5378c09ffe996a4f74870845364df7d09c",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 44,
+      "note": "gammaloop-architecture",
+      "path": "crates/feynkit-generator/src/generation/staged.rs",
+      "before_digest": "4c1ca2bb58010add5d33dd84657f74d99b00e6fc",
+      "after_digest": "4c1ca2bb58010add5d33dd84657f74d99b00e6fc",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 45,
+      "note": "integration-dashboard",
+      "path": "crates/gammaloop-api/src/commands/integrate.rs",
+      "before_digest": "bcce3d43713b42fe428e3b5d89784e18c8d47fa7",
+      "after_digest": "bcce3d43713b42fe428e3b5d89784e18c8d47fa7",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 46,
+      "note": "integration-dashboard",
+      "path": "crates/gammalooprs/src/integrate/render_ratatui.rs",
+      "before_digest": "566f096dcc09bbb2f96582a90fe5dd9aadf41f8d",
+      "after_digest": "566f096dcc09bbb2f96582a90fe5dd9aadf41f8d",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 47,
+      "note": "integration-dashboard",
+      "path": "crates/gammalooprs/src/integrate/mod.rs",
+      "before_digest": "2cbbafcb254b4b7ac042b6ca8dab6682f9a0ce21",
+      "after_digest": "2cbbafcb254b4b7ac042b6ca8dab6682f9a0ce21",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 48,
+      "note": "uv-renormalization",
+      "path": "crates/gammalooprs/src/uv/orchestrator.rs",
+      "before_digest": "4acc87a62891dbff0b3ca2cef2e8ab505c1de6d5",
+      "after_digest": "4acc87a62891dbff0b3ca2cef2e8ab505c1de6d5",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 49,
+      "note": "uv-renormalization",
+      "path": "crates/gammalooprs/src/uv/approx/integrated.rs",
+      "before_digest": "46b735343d9c8be6b69c1bf738fda6a0733a2f4c",
+      "after_digest": "46b735343d9c8be6b69c1bf738fda6a0733a2f4c",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 50,
+      "note": "uv-renormalization",
+      "path": "crates/gammalooprs/src/uv/approx/integrated.rs",
+      "before_digest": "52239c3b024703396d4e60480fd22ecf04761d32",
+      "after_digest": "52239c3b024703396d4e60480fd22ecf04761d32",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 51,
+      "note": "uv-renormalization",
+      "path": "crates/vakint/src/lib.rs",
+      "before_digest": "70d8d2815a16186713fb2b25f84643e27554481e",
+      "after_digest": "70d8d2815a16186713fb2b25f84643e27554481e",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 52,
+      "note": "uv-renormalization",
+      "path": "crates/vakint/src/lib.rs",
+      "before_digest": "22a7663f68fb673976a0dcf4d701abed6134db8a",
+      "after_digest": "22a7663f68fb673976a0dcf4d701abed6134db8a",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 53,
+      "note": "uv-renormalization",
+      "path": "crates/gammalooprs/src/numerator/symbolica_ext.rs",
+      "before_digest": "786808befbd6d68f493db1aeb4ee7e1e8f92b710",
+      "after_digest": "786808befbd6d68f493db1aeb4ee7e1e8f92b710",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 54,
+      "note": "uv-renormalization",
+      "path": "crates/gammalooprs/src/uv/overlap_numerators.rs",
+      "before_digest": "5422656f0c564e911f364e3c37da799493d519fc",
+      "after_digest": "5422656f0c564e911f364e3c37da799493d519fc",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 55,
+      "note": "uv-renormalization",
+      "path": "crates/gammalooprs/src/uv/approx/local_3d/integrated_localizer.rs",
+      "before_digest": "c4660d75be3e086dfc9d4e65b0c060fabb9def95",
+      "after_digest": "c4660d75be3e086dfc9d4e65b0c060fabb9def95",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 56,
+      "note": "spenso-parsing-flow",
+      "path": "crates/spenso/src/network/parsing/mod.rs",
+      "before_digest": "583f0514c0418a75d13870024bb02a8b42f3ba02",
+      "after_digest": "583f0514c0418a75d13870024bb02a8b42f3ba02",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 57,
+      "note": "schoonschip-network",
+      "path": "crates/idenso/src/shorthands/schoonschip/api.rs",
+      "before_digest": "3d4e374d18d8e9d69be971e943712b6246a6f362",
+      "after_digest": "3d4e374d18d8e9d69be971e943712b6246a6f362",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 58,
+      "note": "gammaloop-draw-style-migration",
+      "path": "crates/gammaloop-api/src/templates.rs",
+      "before_digest": "7fe2b4f32ea4277a6aa32f08395f48a2ce097b7e",
+      "after_digest": "7fe2b4f32ea4277a6aa32f08395f48a2ce097b7e",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 59,
+      "note": "gammaloop-drawing-architecture",
+      "path": "crates/linnest/typst/src/lib.typ",
+      "before_digest": "df4d9c7e162b3d67227e4d3fcd660b19a1bca0e0",
+      "after_digest": "df4d9c7e162b3d67227e4d3fcd660b19a1bca0e0",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 60,
+      "note": "spenso-symbolica-syntax-and-rewrites",
+      "path": "crates/idenso/src/lib.rs",
+      "before_digest": "820fbf610c4bb06867a7013d0b8631e57704ff7d",
+      "after_digest": "820fbf610c4bb06867a7013d0b8631e57704ff7d",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 61,
+      "note": "spenso-architecture",
+      "path": "crates/symbolica-notation/src/registry.rs",
+      "before_digest": "309685ed7ca70f43704fb12d8922f69751cadd47",
+      "after_digest": "309685ed7ca70f43704fb12d8922f69751cadd47",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 62,
+      "note": "spenso-architecture",
+      "path": "crates/spenso/src/structure.rs",
+      "before_digest": "811c525ab9896dcd834ad30f27e14b84e65ec08a",
+      "after_digest": "811c525ab9896dcd834ad30f27e14b84e65ec08a",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 63,
+      "note": "spenso-architecture",
+      "path": "crates/spenso/src/tensors/data.rs",
+      "before_digest": "f0e8de6af46e1464919245b04739bb6c8fb20eb2",
+      "after_digest": "f0e8de6af46e1464919245b04739bb6c8fb20eb2",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 64,
+      "note": "spenso-architecture",
+      "path": "crates/spenso/src/contraction.rs",
+      "before_digest": "1a6c276ef07e2ee5b1270f4b0302ba6540295894",
+      "after_digest": "1a6c276ef07e2ee5b1270f4b0302ba6540295894",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 65,
+      "note": "spenso-architecture",
+      "path": "crates/spenso/src/network/mod.rs",
+      "before_digest": "14f66a4d6e62a4fd878c2f52f0bc6ab336cf7f24",
+      "after_digest": "14f66a4d6e62a4fd878c2f52f0bc6ab336cf7f24",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 66,
+      "note": "spenso-architecture",
+      "path": "crates/spenso/src/network/parsing/mod.rs",
+      "before_digest": "583f0514c0418a75d13870024bb02a8b42f3ba02",
+      "after_digest": "583f0514c0418a75d13870024bb02a8b42f3ba02",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 67,
+      "note": "spenso-architecture",
+      "path": "crates/spenso/src/symbolic_parallelism.rs",
+      "before_digest": "f52c9ac14265f983c86c9affc9713970e6b28561",
+      "after_digest": "f52c9ac14265f983c86c9affc9713970e6b28561",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 68,
+      "note": "idenso-architecture",
+      "path": "crates/idenso/src/representations.rs",
+      "before_digest": "08709ccab3fc16aefd7a2dde044d4ee4e1455b23",
+      "after_digest": "08709ccab3fc16aefd7a2dde044d4ee4e1455b23",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 69,
+      "note": "idenso-architecture",
+      "path": "crates/idenso/src/lib.rs",
+      "before_digest": "820fbf610c4bb06867a7013d0b8631e57704ff7d",
+      "after_digest": "820fbf610c4bb06867a7013d0b8631e57704ff7d",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 70,
+      "note": "idenso-architecture",
+      "path": "crates/idenso/src/cook.rs",
+      "before_digest": "b7327c174d55a96e27a015c5f74ddc0b4061b1b5",
+      "after_digest": "b7327c174d55a96e27a015c5f74ddc0b4061b1b5",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 71,
+      "note": "idenso-architecture",
+      "path": "crates/idenso/src/tensor/mod.rs",
+      "before_digest": "b95ee5f1852b22a03b1fe79bfe4342d3c42e831e",
+      "after_digest": "b95ee5f1852b22a03b1fe79bfe4342d3c42e831e",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 72,
+      "note": "idenso-architecture",
+      "path": "crates/idenso/src/tensor/indexed.rs",
+      "before_digest": "a4c365bd57958f94f9070df4562bc957bc1d425c",
+      "after_digest": "a4c365bd57958f94f9070df4562bc957bc1d425c",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 73,
+      "note": "idenso-architecture",
+      "path": "crates/idenso/src/tensor/inference.rs",
+      "before_digest": "602ecc787c95ff01a067ed58736127940627a9cb",
+      "after_digest": "602ecc787c95ff01a067ed58736127940627a9cb",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 74,
+      "note": "idenso-architecture",
+      "path": "crates/idenso/src/tensor/contract.rs",
+      "before_digest": "442fe89c0ec2fc603e7eeb88b73e69ad9e1b7e60",
+      "after_digest": "442fe89c0ec2fc603e7eeb88b73e69ad9e1b7e60",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 75,
+      "note": "idenso-architecture",
+      "path": "crates/idenso/src/tensor/simplification.rs",
+      "before_digest": "49ae6d4398bf4decc931f01d09ef49e69f64996f",
+      "after_digest": "49ae6d4398bf4decc931f01d09ef49e69f64996f",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 76,
+      "note": "idenso-architecture",
+      "path": "crates/idenso/src/tensor/simplification/observation.rs",
+      "before_digest": "93939c57f0d943d4f7cedb9e0dcabf1f6cce848c",
+      "after_digest": "93939c57f0d943d4f7cedb9e0dcabf1f6cce848c",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 77,
+      "note": "idenso-architecture",
+      "path": "crates/idenso/src/dirac/simplify.rs",
+      "before_digest": "95ebfc105ffb0f9e506105642a6e1629b0e28ae8",
+      "after_digest": "95ebfc105ffb0f9e506105642a6e1629b0e28ae8",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 78,
+      "note": "idenso-architecture",
+      "path": "crates/idenso/src/color/simplify.rs",
+      "before_digest": "59f13bd0337c64cf8260f9876988919c0571849e",
+      "after_digest": "59f13bd0337c64cf8260f9876988919c0571849e",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 79,
+      "note": "idenso-architecture",
+      "path": "crates/idenso/src/tensor/collection/collected.rs",
+      "before_digest": "ca8c5cb4f9dd9ee5152cbb94df6c8d919e098c35",
+      "after_digest": "ca8c5cb4f9dd9ee5152cbb94df6c8d919e098c35",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 80,
+      "note": "idenso-architecture",
+      "path": "crates/idenso/src/tensor/collection.rs",
+      "before_digest": "8f078f8c9d4f7fd1fea495180aa1185894b5cfa3",
+      "after_digest": "8f078f8c9d4f7fd1fea495180aa1185894b5cfa3",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 81,
+      "note": "linnet-architecture",
+      "path": "crates/linnet/src/half_edge.rs",
+      "before_digest": "cf395f5b3af0a5aa69450792745aa7f568ccd2e3",
+      "after_digest": "cf395f5b3af0a5aa69450792745aa7f568ccd2e3",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 82,
+      "note": "linnet-architecture",
+      "path": "crates/linnet/src/half_edge/involution.rs",
+      "before_digest": "2a5162885ac2e05dc8a1ec79d5fec555a9f6ed36",
+      "after_digest": "2a5162885ac2e05dc8a1ec79d5fec555a9f6ed36",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 83,
+      "note": "linnet-architecture",
+      "path": "crates/linnet/src/half_edge/subgraph.rs",
+      "before_digest": "929ee2f716f95ba3a0bf7a9afdb8f8bf2a458765",
+      "after_digest": "929ee2f716f95ba3a0bf7a9afdb8f8bf2a458765",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 84,
+      "note": "linnet-architecture",
+      "path": "crates/linnet/src/parser/mod.rs",
+      "before_digest": "6667c3527c7ae3fa85946116341b8ee78c0e87a8",
+      "after_digest": "6667c3527c7ae3fa85946116341b8ee78c0e87a8",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 85,
+      "note": "vakint-architecture",
+      "path": "crates/vakint/src/lib.rs",
+      "before_digest": "c2e489a41ac7a123e652811ebe421f3e0852fd1c",
+      "after_digest": "c2e489a41ac7a123e652811ebe421f3e0852fd1c",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 86,
+      "note": "vakint-architecture",
+      "path": "crates/vakint/src/topologies.rs",
+      "before_digest": "f4efb1593e4f4ca2c4290f913a3629e5f8512a94",
+      "after_digest": "f4efb1593e4f4ca2c4290f913a3629e5f8512a94",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 87,
+      "note": "vakint-architecture",
+      "path": "crates/vakint/src/graph.rs",
+      "before_digest": "39e48cf8f2a5f368b6eac525e5b2e19ebe41854e",
+      "after_digest": "39e48cf8f2a5f368b6eac525e5b2e19ebe41854e",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 88,
+      "note": "vakint-architecture",
+      "path": "crates/vakint/src/symbolica_community_module/mod.rs",
+      "before_digest": "42363386100fcecf85037b215b2f6e187eefdb2d",
+      "after_digest": "42363386100fcecf85037b215b2f6e187eefdb2d",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 89,
+      "note": "vakint-architecture",
+      "path": "crates/vakint/src/lorentz.rs",
+      "before_digest": "8375e68bc00affeb538695d1c5f460271cf2d4f6",
+      "after_digest": "8375e68bc00affeb538695d1c5f460271cf2d4f6",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 90,
+      "note": "vakint-architecture",
+      "path": "crates/vakint/src/projection.rs",
+      "before_digest": "faee7fa232d9dd355e96826a5a49f66db9de802c",
+      "after_digest": "faee7fa232d9dd355e96826a5a49f66db9de802c",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 91,
+      "note": "cff-surface-cache-ownership",
+      "path": "crates/feynkit-cff/src/generation.rs",
+      "before_digest": "47ea515ff9c91e24d6f6b501da289996a06dfe9a",
+      "after_digest": "47ea515ff9c91e24d6f6b501da289996a06dfe9a",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 92,
+      "note": "cff-surface-cache-ownership",
+      "path": "crates/feynkit-cff/src/expression.rs",
+      "before_digest": "22fbe168db1fc1e94241cd87507cd182e76f39a4",
+      "after_digest": "22fbe168db1fc1e94241cd87507cd182e76f39a4",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 93,
+      "note": "cff-surface-cache-ownership",
+      "path": "crates/feynkit-cff/src/surface.rs",
+      "before_digest": "cf07dd60f15885153560f050d552600cfb19034a",
+      "after_digest": "cf07dd60f15885153560f050d552600cfb19034a",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 94,
+      "note": "generation-asset-diagnostics-staged",
+      "path": "crates/symbolica-data/src/lib.rs",
+      "before_digest": "be8392d004f1369bfc2cab83a01bb79c0d606acf",
+      "after_digest": "be8392d004f1369bfc2cab83a01bb79c0d606acf",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 95,
+      "note": "generation-xs-qed-l2-migration",
+      "path": "crates/feynkit-generator/tests/generation_oracle/main.rs",
+      "before_digest": "17d09cf70892eedf0eee7c33051559cd2a4f10ef",
+      "after_digest": "17d09cf70892eedf0eee7c33051559cd2a4f10ef",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 96,
+      "note": "generation-oracle-family-migration",
+      "path": "crates/feynkit-generator/tests/generation_oracle/main.rs",
+      "before_digest": "b486d48307d14f2df3438907461d0ab93db8c6ee",
+      "after_digest": "b486d48307d14f2df3438907461d0ab93db8c6ee",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 97,
+      "note": "generation-oracle-family-migration",
+      "path": "crates/feynkit-generator/tests/generation_oracle/main.rs",
+      "before_digest": "f64cddee976a2fa0d22c7e7805982875fb09022d",
+      "after_digest": "f64cddee976a2fa0d22c7e7805982875fb09022d",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 98,
+      "note": "generation-oracle-family-migration",
+      "path": "crates/feynkit-generator/tests/generation_oracle/main.rs",
+      "before_digest": "3ee0c943abdad923436d37cce999d994d70957fd",
+      "after_digest": "3ee0c943abdad923436d37cce999d994d70957fd",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 99,
+      "note": "generation-oracle-family-migration",
+      "path": "crates/feynkit-generator/tests/generation_oracle/main.rs",
+      "before_digest": "27f3e85eb4b1c5d9cdb4e4e2a562d53d173d3e2c",
+      "after_digest": "27f3e85eb4b1c5d9cdb4e4e2a562d53d173d3e2c",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 100,
+      "note": "generation-oracle-numerator-migration",
+      "path": "crates/feynkit-generator/tests/generation_oracle/main.rs",
+      "before_digest": "4b488f655db1d4b1263d43071718f14d52f9a001",
+      "after_digest": "4b488f655db1d4b1263d43071718f14d52f9a001",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 101,
+      "note": "generation-oracle-numerator-migration",
+      "path": "crates/feynkit-generator/tests/generation_oracle/main.rs",
+      "before_digest": "ee1fea52075f15b3b23fa44a98f957909a6c681e",
+      "after_digest": "ee1fea52075f15b3b23fa44a98f957909a6c681e",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 102,
+      "note": "generation-oracle-numerator-migration",
+      "path": "crates/feynkit-generator/tests/generation_oracle/main.rs",
+      "before_digest": "fb0a84a24354a8881a5515eb2f33fc7db1ea1b99",
+      "after_digest": "fb0a84a24354a8881a5515eb2f33fc7db1ea1b99",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 103,
+      "note": "ci",
+      "path": "just/ci.just",
+      "before_digest": "0f8a76ea61d80a7847d9e8d16756e9914e245ae2",
+      "after_digest": "0f8a76ea61d80a7847d9e8d16756e9914e245ae2",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 104,
+      "note": "feynkit-merge-readiness",
+      "path": "crates/gammalooprs/src/integrands/process/evaluators.rs",
+      "before_digest": "3b507cbf49922826dc7426ae7fcfa75e95c43aed",
+      "after_digest": "3b507cbf49922826dc7426ae7fcfa75e95c43aed",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 105,
+      "note": "feynkit-merge-readiness",
+      "path": "crates/idenso/src/tensor/simplification/observation.rs",
+      "before_digest": "93939c57f0d943d4f7cedb9e0dcabf1f6cce848c",
+      "after_digest": "93939c57f0d943d4f7cedb9e0dcabf1f6cce848c",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 106,
+      "note": "feynkit-merge-readiness",
+      "path": "crates/feynkit-generator/src/grouping.rs",
+      "before_digest": "66cc3fe8280694c72b213d71dee37fb40a1ad997",
+      "after_digest": "66cc3fe8280694c72b213d71dee37fb40a1ad997",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 107,
+      "note": "nix-crane-cache-reuse",
+      "path": "nix/documentation.nix",
+      "before_digest": "a6e8d348f30ef64d9c936604c62dcb59ca635d1a",
+      "after_digest": "a6e8d348f30ef64d9c936604c62dcb59ca635d1a",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 108,
+      "note": "nix-crane-cache-reuse",
+      "path": "nix/documentation.nix",
+      "before_digest": "bfafb920e4cc1fc0511aa12ad4c1f86272bb8e75",
+      "after_digest": "bfafb920e4cc1fc0511aa12ad4c1f86272bb8e75",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 109,
+      "note": "nix-crane-cache-reuse",
+      "path": "nix/rust-workspace.nix",
+      "before_digest": "6ae7769a5fab0c19db4004118a07e14882b6f4af",
+      "after_digest": "6ae7769a5fab0c19db4004118a07e14882b6f4af",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 110,
+      "note": "nix-crane-cache-reuse",
+      "path": "nix/rust-workspace.nix",
+      "before_digest": "7105f205fa57a2e8ca470614d15176310d8787dc",
+      "after_digest": "7105f205fa57a2e8ca470614d15176310d8787dc",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 111,
+      "note": "nix-crane-cache-reuse",
+      "path": "nix/documentation.nix",
+      "before_digest": "a36c6354ece22a926dc6efb1ac634895402cf522",
+      "after_digest": "a36c6354ece22a926dc6efb1ac634895402cf522",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 112,
+      "note": "nix-crane-cache-reuse",
+      "path": "nix/rust-workspace.nix",
+      "before_digest": "311d8dbf20da058cf60c74c651491629d7eb6ce6",
+      "after_digest": "311d8dbf20da058cf60c74c651491629d7eb6ce6",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 113,
+      "note": "nix-crane-cache-reuse",
+      "path": "nix/rust-workspace.nix",
+      "before_digest": "e70efccc2a78b7ab7b002facfefa375418e590f0",
+      "after_digest": "e70efccc2a78b7ab7b002facfefa375418e590f0",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 114,
+      "note": "nix-crane-cache-reuse",
+      "path": "crates/alphal00p-docs-builder/src/typst_render.rs",
+      "before_digest": "61fa327720910af549fc9613c757c2a534b975f2",
+      "after_digest": "61fa327720910af549fc9613c757c2a534b975f2",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 115,
+      "note": "nix-crane-cache-reuse",
+      "path": "crates/alphal00p-docs-builder/src/watch.rs",
+      "before_digest": "424eac149bd4dbf3be82b19f746d6f003829cf61",
+      "after_digest": "424eac149bd4dbf3be82b19f746d6f003829cf61",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 116,
+      "note": "nix-crane-cache-reuse",
+      "path": "nix/ci.nix",
+      "before_digest": "6f841f176b4d76719aaaaf4f1a0e32c0ff7eb405",
+      "after_digest": "6f841f176b4d76719aaaaf4f1a0e32c0ff7eb405",
+      "byte_scope_preserved": true
+    },
+    {
+      "position": 117,
+      "note": "architecture-notes",
+      "path": "crates/alphal00p-docs-builder/src/lib.rs",
+      "before_digest": "63e44b7c2e03ae63fbf549882c9ba0cdcb7439e9",
+      "after_digest": "63e44b7c2e03ae63fbf549882c9ba0cdcb7439e9",
+      "byte_scope_preserved": true
+    }
+  ],
+  "registry_edited": false,
+  "docs_rendered": false
+}

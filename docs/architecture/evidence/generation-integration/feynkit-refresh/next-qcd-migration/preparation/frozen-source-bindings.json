@@ -1,0 +1,136 @@
+{
+  "target": "83276dc047815d1dcc7f003aeb512c204b26758e",
+  "tree": "c9de5c3fd962bd5d7c9375ab1f86f75699e8a69b",
+  "relevant_code": "6f41807b064bcf2f579883134daef65c8ac279d3",
+  "path_discovery_ls_tree": "100644 blob e0c3235eb25c007886e3b1ec6d4dede4c14d0b2a\tcrates/feynkit-generator/tests/generation_oracle/cases.rs\n100644 blob 9c9f8833a274e9e42ab6abd58e46d4315b5990f5\tcrates/feynkit-generator/tests/generation_oracle/census.rs\n100644 blob 533273bf1a8c1f7a0e992a775a4f638d6ed8fca2\tcrates/feynkit-generator/tests/generation_oracle/classes.rs\n100644 blob 160c4aec0cc20b158ce39dbd43d22d11c57b260a\tcrates/feynkit-generator/tests/generation_oracle/frame_certificate.rs\n100644 blob 84c159216b9bacf950aeb6574a1cabfc2f374db2\tcrates/feynkit-generator/tests/generation_oracle/frames.rs\n100644 blob 7283198bf0152c82c1cd5f0173703cddfa7f5c0f\tcrates/feynkit-generator/tests/generation_oracle/main.rs\n",
+  "files": [
+    {
+      "revision": "83276dc047815d1dcc7f003aeb512c204b26758e",
+      "path": "crates/feynkit-generator/tests/generation_oracle/main.rs",
+      "packet_path": "source-blobs/target/crates/feynkit-generator/tests/generation_oracle/main.rs",
+      "git_blob": "7283198bf0152c82c1cd5f0173703cddfa7f5c0f",
+      "sha256": "66f01bcc855552ae888f1fb7c5bb158afbd448492b4e27a26e2bda40f09b07d2",
+      "bytes": 77616
+    },
+    {
+      "revision": "83276dc047815d1dcc7f003aeb512c204b26758e",
+      "path": "crates/feynkit-generator/tests/generation_oracle/census.rs",
+      "packet_path": "source-blobs/target/crates/feynkit-generator/tests/generation_oracle/census.rs",
+      "git_blob": "9c9f8833a274e9e42ab6abd58e46d4315b5990f5",
+      "sha256": "b46641d3c13dd70304a457ad4f884cedd486f188ce86dd92c73328a6b1da05d3",
+      "bytes": 66236
+    },
+    {
+      "revision": "83276dc047815d1dcc7f003aeb512c204b26758e",
+      "path": "crates/feynkit-generator/tests/generation_oracle/cases.rs",
+      "packet_path": "source-blobs/target/crates/feynkit-generator/tests/generation_oracle/cases.rs",
+      "git_blob": "e0c3235eb25c007886e3b1ec6d4dede4c14d0b2a",
+      "sha256": "e3ef8ec52578364ef24cf278965eaba2ec967f1f626c707bb7667c2834e319a2",
+      "bytes": 30265
+    },
+    {
+      "revision": "83276dc047815d1dcc7f003aeb512c204b26758e",
+      "path": "crates/feynkit-generator/tests/generation_oracle/classes.rs",
+      "packet_path": "source-blobs/target/crates/feynkit-generator/tests/generation_oracle/classes.rs",
+      "git_blob": "533273bf1a8c1f7a0e992a775a4f638d6ed8fca2",
+      "sha256": "f605e4436ff0a2225155840fdad2065d50e74fd88b34979faaa97f7153a3e4fe",
+      "bytes": 13314
+    },
+    {
+      "revision": "6f41807b064bcf2f579883134daef65c8ac279d3",
+      "path": "crates/feynkit-generator/tests/generation_oracle/main.rs",
+      "packet_path": "source-blobs/code/crates/feynkit-generator/tests/generation_oracle/main.rs",
+      "git_blob": "7283198bf0152c82c1cd5f0173703cddfa7f5c0f",
+      "sha256": "66f01bcc855552ae888f1fb7c5bb158afbd448492b4e27a26e2bda40f09b07d2",
+      "bytes": 77616
+    },
+    {
+      "revision": "6f41807b064bcf2f579883134daef65c8ac279d3",
+      "path": "crates/feynkit-generator/tests/generation_oracle/census.rs",
+      "packet_path": "source-blobs/code/crates/feynkit-generator/tests/generation_oracle/census.rs",
+      "git_blob": "9c9f8833a274e9e42ab6abd58e46d4315b5990f5",
+      "sha256": "b46641d3c13dd70304a457ad4f884cedd486f188ce86dd92c73328a6b1da05d3",
+      "bytes": 66236
+    },
+    {
+      "revision": "6f41807b064bcf2f579883134daef65c8ac279d3",
+      "path": "crates/feynkit-generator/tests/generation_oracle/cases.rs",
+      "packet_path": "source-blobs/code/crates/feynkit-generator/tests/generation_oracle/cases.rs",
+      "git_blob": "e0c3235eb25c007886e3b1ec6d4dede4c14d0b2a",
+      "sha256": "e3ef8ec52578364ef24cf278965eaba2ec967f1f626c707bb7667c2834e319a2",
+      "bytes": 30265
+    },
+    {
+      "revision": "6f41807b064bcf2f579883134daef65c8ac279d3",
+      "path": "crates/feynkit-generator/tests/generation_oracle/classes.rs",
+      "packet_path": "source-blobs/code/crates/feynkit-generator/tests/generation_oracle/classes.rs",
+      "git_blob": "533273bf1a8c1f7a0e992a775a4f638d6ed8fca2",
+      "sha256": "f605e4436ff0a2225155840fdad2065d50e74fd88b34979faaa97f7153a3e4fe",
+      "bytes": 13314
+    },
+    {
+      "revision": "ffa76ec420642c03349ab756d2d7720ab93c0057",
+      "path": "crates/feynkit-generator/tests/generation_oracle/main.rs",
+      "packet_path": "source-blobs/actual-pristine/crates/feynkit-generator/tests/generation_oracle/main.rs",
+      "git_blob": "9ef9f1ba005f20149716b22346d45c5501b62e87",
+      "sha256": "6dacf61baca9f13f3e4a6d719f89eaced429fb3cb14c7904dcb41fe4c86b66df",
+      "bytes": 77616
+    },
+    {
+      "revision": "ffa76ec420642c03349ab756d2d7720ab93c0057",
+      "path": "crates/feynkit-generator/tests/generation_oracle/census.rs",
+      "packet_path": "source-blobs/actual-pristine/crates/feynkit-generator/tests/generation_oracle/census.rs",
+      "git_blob": "9c9f8833a274e9e42ab6abd58e46d4315b5990f5",
+      "sha256": "b46641d3c13dd70304a457ad4f884cedd486f188ce86dd92c73328a6b1da05d3",
+      "bytes": 66236
+    },
+    {
+      "revision": "ffa76ec420642c03349ab756d2d7720ab93c0057",
+      "path": "crates/feynkit-generator/tests/generation_oracle/cases.rs",
+      "packet_path": "source-blobs/actual-pristine/crates/feynkit-generator/tests/generation_oracle/cases.rs",
+      "git_blob": "e0c3235eb25c007886e3b1ec6d4dede4c14d0b2a",
+      "sha256": "e3ef8ec52578364ef24cf278965eaba2ec967f1f626c707bb7667c2834e319a2",
+      "bytes": 30265
+    },
+    {
+      "revision": "ffa76ec420642c03349ab756d2d7720ab93c0057",
+      "path": "crates/feynkit-generator/tests/generation_oracle/classes.rs",
+      "packet_path": "source-blobs/actual-pristine/crates/feynkit-generator/tests/generation_oracle/classes.rs",
+      "git_blob": "533273bf1a8c1f7a0e992a775a4f638d6ed8fca2",
+      "sha256": "f605e4436ff0a2225155840fdad2065d50e74fd88b34979faaa97f7153a3e4fe",
+      "bytes": 13314
+    },
+    {
+      "revision": "2b1ef4f07a44bc061bcc97c378bbdd9c41cb0e94",
+      "path": "crates/feynkit-generator/tests/generation_oracle/main.rs",
+      "packet_path": "source-blobs/historical/crates/feynkit-generator/tests/generation_oracle/main.rs",
+      "git_blob": "2a1f0bf3c5aa3c4427500fbf4a4bbf507ef7b865",
+      "sha256": "a7d59e30a76bcb73f16f91221835ff1e076d00c78a6d40f266182f395ff7e16d",
+      "bytes": 63174
+    },
+    {
+      "revision": "2b1ef4f07a44bc061bcc97c378bbdd9c41cb0e94",
+      "path": "crates/feynkit-generator/tests/generation_oracle/census.rs",
+      "packet_path": "source-blobs/historical/crates/feynkit-generator/tests/generation_oracle/census.rs",
+      "git_blob": "a71760e5af3695183d77a976236e98a001499405",
+      "sha256": "9820eeaae584966add033d5e934c30cf660e6821ef4c318a52cd22b5be7782c9",
+      "bytes": 63801
+    },
+    {
+      "revision": "2b1ef4f07a44bc061bcc97c378bbdd9c41cb0e94",
+      "path": "crates/feynkit-generator/tests/generation_oracle/cases.rs",
+      "packet_path": "source-blobs/historical/crates/feynkit-generator/tests/generation_oracle/cases.rs",
+      "git_blob": "c6956718fc0fc3c18cf4ddd811b0dc9e09b3a853",
+      "sha256": "f9b7e9f80c7d0102c2d2c3b8c319edab7a1c4883109da4e231c6f1189bca00a8",
+      "bytes": 27799
+    },
+    {
+      "revision": "2b1ef4f07a44bc061bcc97c378bbdd9c41cb0e94",
+      "path": "crates/feynkit-generator/tests/generation_oracle/classes.rs",
+      "packet_path": "source-blobs/historical/crates/feynkit-generator/tests/generation_oracle/classes.rs",
+      "git_blob": "11d9ede1b02248fcbdbcc3ff9578cabc22add2e4",
+      "sha256": "49f6c1cbac7e775a9dc534ef4aac7edd1fb102a96a765b78f831b1a729840edb",
+      "bytes": 12731
+    }
+  ]
+}

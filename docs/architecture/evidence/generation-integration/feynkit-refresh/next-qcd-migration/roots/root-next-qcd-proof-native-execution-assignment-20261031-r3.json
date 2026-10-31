@@ -1,0 +1,766 @@
+{
+  "schema": "root-next-qcd-proof-r3-native-execution-assignment/1",
+  "decision": "AUTHORIZE_EXACT_21_NATIVE_EXECUTION",
+  "packet": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r3",
+  "packet_seal_sha256": "a7e3a1e8e4e8e6d979d8cf92f8a9de5878e88d6ac1f105bf19a86611e4381cc1",
+  "command_ids": [
+    "faithfulness-historical--c78",
+    "faithfulness-historical--8eb",
+    "current-faithfulness-and-equivalence--c78",
+    "current-faithfulness-and-equivalence--8eb",
+    "all-six-cells--typed8eb",
+    "xs_qcd_gguu_sym_L1--None--actual-dimension--typed8eb",
+    "xs_qcd_gguu_sym_L1--Auto--actual-dimension--typed8eb",
+    "xs_qcd_gguu_L1--None--actual-dimension--typed8eb",
+    "xs_qcd_gguu_L1--Auto--actual-dimension--typed8eb",
+    "xs_qcd_gggg_L1--None--actual-dimension--typed8eb",
+    "xs_qcd_gggg_L1--Auto--actual-dimension--typed8eb",
+    "xs_qcd_gguu_L1--None--wrong-owner--typed8eb",
+    "xs_qcd_gguu_sym_L1--None--wrong-duality--typed8eb",
+    "xs_qcd_gggg_L1--None--metric-owner-claim--typed8eb",
+    "xs_qcd_gguu_L1--Auto--composite-owner-claim--typed8eb",
+    "math-sign--c78",
+    "math-sign--8eb",
+    "math-coefficient--c78",
+    "math-coefficient--8eb",
+    "math-power--c78",
+    "math-power--8eb"
+  ],
+  "approved_preparation": {
+    "seal_sha256": "f97aaf00c938d08940f22a8315358b3656b9b914eb8b968c95543fc356964ac3",
+    "review_sha256": "64e9bf551fc949878e0c6647238fad4daf9eb69d82e0622939c89b138ca8d1d3"
+  },
+  "supervisor_review": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-next-qcd-supervisor-r3-astra-20261031-22d61lkb/review.json",
+    "sha256": "6ad6242a78d52d0b371fb39d3942e66ed32bbbafec8878a91e6a72d5e3a9208b",
+    "accepted_scope": "EXACT_R3_FINITE_SUPERVISOR_ONLY"
+  },
+  "root_recorded_utc": "2026-10-31 06:05:54 UTC",
+  "root_supervisor_acceptance": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/root-next-qcd-r3-supervisor-acceptance-20261031.json",
+  "supervisor_review_seal_sha256": "1f772f50d05187e59bd0132d91dcb888f1b75a311de9db9989190e7325d04ef4",
+  "supervisor_source_sha256": "d48f86d1b622c413bdd76922218e02eac252edf7a91b137f55e43010d078f9bc",
+  "supervisor_guard_sha256": "c8c564212ec0a93a974a0d1a8cee36e592548ed06c7ea29f0cff27f62a1b8f2d",
+  "native_commands_sha256": "be357450a079e4986779351f6279bc483bb4cea000ae17454b1bd35f5cd0d7f0",
+  "result_contracts_sha256": "283aaca7d27339a6835f1e49a7412c7e240ad554f429f62d51349b4b32187b66",
+  "ordered_input_bindings_sha256": "0f8617172dcb1daa5fb8b4f2e448b0b25eb85199050c4c44646f7e39fa2450a2",
+  "program_input_order_result_bindings": [
+    {
+      "id": "faithfulness-historical--c78",
+      "program": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-eemm-identical/bin/historical/oracle_identical_exact",
+        "sha256": "d5f41949153560d3ff9eda7367ff26fc6dadfcaabf846b6dcf17c25cdfd6b996"
+      },
+      "input": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/prepared/math/faithfulness-historical/portable-pairs.json",
+        "sha256": "77eac1d40fa6c0c1f8ef135d83bde82b342c9976fbbc28bb17e401910f8d5b85"
+      },
+      "card_sha256": "b342ef6907fbed09fdef5db7ae378d99fe4829f0d2dea8bb0907bbafaa9549d5",
+      "ordered_input_binding": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/prepared/math/faithfulness-historical/definition-order.json",
+        "sha256": "90d8745238333af8e97af9b2052a8ddab6071d0beab9a1bad5e391eb31531b74",
+        "kind": "unchanged_r1_math_definition_order"
+      },
+      "result_contract": {
+        "classification": "math-baseline",
+        "exit": 0,
+        "results": "complete_exact_rows",
+        "rows": 166,
+        "auditor": "audit_native.audit_math",
+        "dependencies": []
+      }
+    },
+    {
+      "id": "faithfulness-historical--8eb",
+      "program": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/helper-build/oracle_family_exact/oracle_family_exact-350edf2766083f3f",
+        "sha256": "5141d8fddacf40a81f5452e212cd788daa15c3cb3e6d2290fbfc6b65f76c48e1"
+      },
+      "input": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/prepared/math/faithfulness-historical/portable-pairs.json",
+        "sha256": "77eac1d40fa6c0c1f8ef135d83bde82b342c9976fbbc28bb17e401910f8d5b85"
+      },
+      "card_sha256": "6ab6d08fb2c4c54e86dfd40257851cc05669af21632eab5cb6669904057237e3",
+      "ordered_input_binding": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/prepared/math/faithfulness-historical/definition-order.json",
+        "sha256": "90d8745238333af8e97af9b2052a8ddab6071d0beab9a1bad5e391eb31531b74",
+        "kind": "unchanged_r1_math_definition_order"
+      },
+      "result_contract": {
+        "classification": "math-baseline",
+        "exit": 0,
+        "results": "complete_exact_rows",
+        "rows": 166,
+        "auditor": "audit_native.audit_math",
+        "dependencies": []
+      }
+    },
+    {
+      "id": "current-faithfulness-and-equivalence--c78",
+      "program": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-eemm-identical/bin/historical/oracle_identical_exact",
+        "sha256": "d5f41949153560d3ff9eda7367ff26fc6dadfcaabf846b6dcf17c25cdfd6b996"
+      },
+      "input": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/prepared/math/current-faithfulness-and-equivalence/portable-pairs.json",
+        "sha256": "c886c293f5c6eb0e94f17f5b77896d37f5f06787d20465f380db7c38e55bc936"
+      },
+      "card_sha256": "ceb9bf745bd7ab3e2a10f976966fab8a44a6ccc25a2042788e6af72ec74b9bcd",
+      "ordered_input_binding": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/prepared/math/current-faithfulness-and-equivalence/definition-order.json",
+        "sha256": "f3645d64255c3620edfe767790a49740437485132d34495ab3c0163ccffe63fb",
+        "kind": "unchanged_r1_math_definition_order"
+      },
+      "result_contract": {
+        "classification": "math-baseline",
+        "exit": 0,
+        "results": "complete_exact_rows",
+        "rows": 118,
+        "auditor": "audit_native.audit_math",
+        "dependencies": []
+      }
+    },
+    {
+      "id": "current-faithfulness-and-equivalence--8eb",
+      "program": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/helper-build/oracle_family_exact/oracle_family_exact-350edf2766083f3f",
+        "sha256": "5141d8fddacf40a81f5452e212cd788daa15c3cb3e6d2290fbfc6b65f76c48e1"
+      },
+      "input": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/prepared/math/current-faithfulness-and-equivalence/portable-pairs.json",
+        "sha256": "c886c293f5c6eb0e94f17f5b77896d37f5f06787d20465f380db7c38e55bc936"
+      },
+      "card_sha256": "df83397d83faeef08edec48c1c8ba436138695d3140dc48227f32184a9198ba1",
+      "ordered_input_binding": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/prepared/math/current-faithfulness-and-equivalence/definition-order.json",
+        "sha256": "f3645d64255c3620edfe767790a49740437485132d34495ab3c0163ccffe63fb",
+        "kind": "unchanged_r1_math_definition_order"
+      },
+      "result_contract": {
+        "classification": "math-baseline",
+        "exit": 0,
+        "results": "complete_exact_rows",
+        "rows": 118,
+        "auditor": "audit_native.audit_math",
+        "dependencies": []
+      }
+    },
+    {
+      "id": "all-six-cells--typed8eb",
+      "program": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/build-v4/raw_three_interface_probe",
+        "sha256": "f54f28b032308dbd040958945fb4895efde0ff4fe0a9fa276481a23267349ef6"
+      },
+      "input": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/prepared/interface-inputs.json",
+        "sha256": "a1100378ffa6fad823978233ffa430c565537b4a7a96f57689c3e8d28d35d89d"
+      },
+      "card_sha256": "3b846f79d5a6e8a2d8ae246fcc6671d7dd9d1df1df3a9cf7c66bf451c7c0291b",
+      "ordered_input_binding": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/prepared/interface-definition-order.json",
+        "sha256": "2bc2f62842c2f24bba992bf79ea1d6c8cba0727b83a81450ff8f1d793ecf002e",
+        "kind": "unchanged_r1_typed_parse_schedule"
+      },
+      "result_contract": {
+        "classification": "typed-baseline",
+        "exit": 0,
+        "results": "complete_all_six_cells",
+        "auditor": "audit_native.audit_typed with PREP-1",
+        "dependencies": []
+      }
+    },
+    {
+      "id": "xs_qcd_gguu_sym_L1--None--actual-dimension--typed8eb",
+      "program": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/build-v4/raw_three_interface_probe",
+        "sha256": "f54f28b032308dbd040958945fb4895efde0ff4fe0a9fa276481a23267349ef6"
+      },
+      "input": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/prepared/native-controls/xs_qcd_gguu_sym_L1--None--actual-dimension.json",
+        "sha256": "26b2b7996aad41af155eb2778775c86545686e41fbd5659e70ff3aa738fdc616"
+      },
+      "card_sha256": "eb55f1de049edbf71432afce5f07e14d558770b01fa2cc81ed912af93db11ec9",
+      "ordered_input_binding": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r2/order-bindings/xs_qcd_gguu_sym_L1--None--actual-dimension--typed8eb.json",
+        "sha256": "478e41b62107e09da1d1de8bea260873a9b3b8c5ad5f68147d124fc0fe71d1f1",
+        "kind": "new_explicit_order_metadata_for_unchanged_negative_input"
+      },
+      "result_contract": {
+        "classification": "typed-negative",
+        "exit": 1,
+        "results": "complete_expected_error_envelope",
+        "case": "xs_qcd_gguu_sym_L1",
+        "mode": "None",
+        "graph": "6170f31e6eb07c29aac54d0c6cc14371",
+        "error": "invalid diagram tensor: transformed expression does not preserve a compatible tensor interface",
+        "error_classification": "probe failure; inspect stage, not automatically semantic rejection",
+        "dependencies": [
+          "faithfulness-historical--c78",
+          "faithfulness-historical--8eb",
+          "current-faithfulness-and-equivalence--c78",
+          "current-faithfulness-and-equivalence--8eb",
+          "all-six-cells--typed8eb"
+        ],
+        "meaning": "Exact complete source-emitted error envelope for this one-graph heldout, after authenticated positive baselines. Generic parser/model/import/setup errors, incomplete success output, timeout, signal or missing/malformed file give no semantic rejection credit."
+      }
+    },
+    {
+      "id": "xs_qcd_gguu_sym_L1--Auto--actual-dimension--typed8eb",
+      "program": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/build-v4/raw_three_interface_probe",
+        "sha256": "f54f28b032308dbd040958945fb4895efde0ff4fe0a9fa276481a23267349ef6"
+      },
+      "input": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/prepared/native-controls/xs_qcd_gguu_sym_L1--Auto--actual-dimension.json",
+        "sha256": "230020779cfbba20540e80d003b75422fdd18bb89cc15acd277303f4875dd2c5"
+      },
+      "card_sha256": "83b8253be76b39b3d418a6d1d76819120df78c92ed70054b12ffd45a91e2038f",
+      "ordered_input_binding": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r2/order-bindings/xs_qcd_gguu_sym_L1--Auto--actual-dimension--typed8eb.json",
+        "sha256": "cdd1e693008536c3580cd06b1fe225b9913ebae14570383aa91f7ca0b9d788df",
+        "kind": "new_explicit_order_metadata_for_unchanged_negative_input"
+      },
+      "result_contract": {
+        "classification": "typed-negative",
+        "exit": 1,
+        "results": "complete_expected_error_envelope",
+        "case": "xs_qcd_gguu_sym_L1",
+        "mode": "Auto",
+        "graph": "6170f31e6eb07c29aac54d0c6cc14371",
+        "error": "invalid diagram tensor: transformed expression does not preserve a compatible tensor interface",
+        "error_classification": "probe failure; inspect stage, not automatically semantic rejection",
+        "dependencies": [
+          "faithfulness-historical--c78",
+          "faithfulness-historical--8eb",
+          "current-faithfulness-and-equivalence--c78",
+          "current-faithfulness-and-equivalence--8eb",
+          "all-six-cells--typed8eb"
+        ],
+        "meaning": "Exact complete source-emitted error envelope for this one-graph heldout, after authenticated positive baselines. Generic parser/model/import/setup errors, incomplete success output, timeout, signal or missing/malformed file give no semantic rejection credit."
+      }
+    },
+    {
+      "id": "xs_qcd_gguu_L1--None--actual-dimension--typed8eb",
+      "program": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/build-v4/raw_three_interface_probe",
+        "sha256": "f54f28b032308dbd040958945fb4895efde0ff4fe0a9fa276481a23267349ef6"
+      },
+      "input": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/prepared/native-controls/xs_qcd_gguu_L1--None--actual-dimension.json",
+        "sha256": "f66ae69e179837c3a0952d34d9cb55985309edc30131a3e3f11b782d9fcdfe2f"
+      },
+      "card_sha256": "c904030085eb0700bbf7015052313655d1532065ee1d214998495e05db41dfed",
+      "ordered_input_binding": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r2/order-bindings/xs_qcd_gguu_L1--None--actual-dimension--typed8eb.json",
+        "sha256": "d97c87ab3f7e2a88b88270b564242997f1e43eb663602c64b7b96162347a788d",
+        "kind": "new_explicit_order_metadata_for_unchanged_negative_input"
+      },
+      "result_contract": {
+        "classification": "typed-negative",
+        "exit": 1,
+        "results": "complete_expected_error_envelope",
+        "case": "xs_qcd_gguu_L1",
+        "mode": "None",
+        "graph": "6170f31e6eb07c29aac54d0c6cc14371",
+        "error": "invalid diagram tensor: transformed expression does not preserve a compatible tensor interface",
+        "error_classification": "probe failure; inspect stage, not automatically semantic rejection",
+        "dependencies": [
+          "faithfulness-historical--c78",
+          "faithfulness-historical--8eb",
+          "current-faithfulness-and-equivalence--c78",
+          "current-faithfulness-and-equivalence--8eb",
+          "all-six-cells--typed8eb"
+        ],
+        "meaning": "Exact complete source-emitted error envelope for this one-graph heldout, after authenticated positive baselines. Generic parser/model/import/setup errors, incomplete success output, timeout, signal or missing/malformed file give no semantic rejection credit."
+      }
+    },
+    {
+      "id": "xs_qcd_gguu_L1--Auto--actual-dimension--typed8eb",
+      "program": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/build-v4/raw_three_interface_probe",
+        "sha256": "f54f28b032308dbd040958945fb4895efde0ff4fe0a9fa276481a23267349ef6"
+      },
+      "input": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/prepared/native-controls/xs_qcd_gguu_L1--Auto--actual-dimension.json",
+        "sha256": "0b350a887564512bad0296ce441e98fd011c48f6032a573725f03a7892c219f2"
+      },
+      "card_sha256": "d312e8fc2b03b89c501e9abcefac1f7cbf4c6669f7fadbae99401e7297b55e46",
+      "ordered_input_binding": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r2/order-bindings/xs_qcd_gguu_L1--Auto--actual-dimension--typed8eb.json",
+        "sha256": "5d9b94e4e16bc896a870af7c6bb5b1622f8192edfd4f9f505642e06d97307ee8",
+        "kind": "new_explicit_order_metadata_for_unchanged_negative_input"
+      },
+      "result_contract": {
+        "classification": "typed-negative",
+        "exit": 1,
+        "results": "complete_expected_error_envelope",
+        "case": "xs_qcd_gguu_L1",
+        "mode": "Auto",
+        "graph": "6170f31e6eb07c29aac54d0c6cc14371",
+        "error": "invalid diagram tensor: transformed expression does not preserve a compatible tensor interface",
+        "error_classification": "probe failure; inspect stage, not automatically semantic rejection",
+        "dependencies": [
+          "faithfulness-historical--c78",
+          "faithfulness-historical--8eb",
+          "current-faithfulness-and-equivalence--c78",
+          "current-faithfulness-and-equivalence--8eb",
+          "all-six-cells--typed8eb"
+        ],
+        "meaning": "Exact complete source-emitted error envelope for this one-graph heldout, after authenticated positive baselines. Generic parser/model/import/setup errors, incomplete success output, timeout, signal or missing/malformed file give no semantic rejection credit."
+      }
+    },
+    {
+      "id": "xs_qcd_gggg_L1--None--actual-dimension--typed8eb",
+      "program": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/build-v4/raw_three_interface_probe",
+        "sha256": "f54f28b032308dbd040958945fb4895efde0ff4fe0a9fa276481a23267349ef6"
+      },
+      "input": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/prepared/native-controls/xs_qcd_gggg_L1--None--actual-dimension.json",
+        "sha256": "4698578ce7080a8cf337c61f382d9e2f68494cf329cb8fbb625b86340be422f8"
+      },
+      "card_sha256": "dd7d4293a7b1b1fd313baf24a3cdb9c42f3fbdaed7ffe0841e8e73bb6c28f5d0",
+      "ordered_input_binding": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r2/order-bindings/xs_qcd_gggg_L1--None--actual-dimension--typed8eb.json",
+        "sha256": "6b974c6aa7eeae127a534554d50c72fa0722573c1d594b42402ab731f2aafa67",
+        "kind": "new_explicit_order_metadata_for_unchanged_negative_input"
+      },
+      "result_contract": {
+        "classification": "typed-negative",
+        "exit": 1,
+        "results": "complete_expected_error_envelope",
+        "case": "xs_qcd_gggg_L1",
+        "mode": "None",
+        "graph": "60777b11dd5b7f48966632644fd7be49",
+        "error": "invalid diagram tensor: transformed expression does not preserve a compatible tensor interface",
+        "error_classification": "probe failure; inspect stage, not automatically semantic rejection",
+        "dependencies": [
+          "faithfulness-historical--c78",
+          "faithfulness-historical--8eb",
+          "current-faithfulness-and-equivalence--c78",
+          "current-faithfulness-and-equivalence--8eb",
+          "all-six-cells--typed8eb"
+        ],
+        "meaning": "Exact complete source-emitted error envelope for this one-graph heldout, after authenticated positive baselines. Generic parser/model/import/setup errors, incomplete success output, timeout, signal or missing/malformed file give no semantic rejection credit."
+      }
+    },
+    {
+      "id": "xs_qcd_gggg_L1--Auto--actual-dimension--typed8eb",
+      "program": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/build-v4/raw_three_interface_probe",
+        "sha256": "f54f28b032308dbd040958945fb4895efde0ff4fe0a9fa276481a23267349ef6"
+      },
+      "input": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/prepared/native-controls/xs_qcd_gggg_L1--Auto--actual-dimension.json",
+        "sha256": "5ab90e7f1f4fdc445708d7a78528c2eac78008e410fc95ac410422fb4656b266"
+      },
+      "card_sha256": "deff2b901e05da5708d3f0f1b68d2f8c4a158a5c3a76f9f966724d3a0fb4cd98",
+      "ordered_input_binding": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r2/order-bindings/xs_qcd_gggg_L1--Auto--actual-dimension--typed8eb.json",
+        "sha256": "05ba8d5f733fce846792eb6638aa6b24346f1bc6f7ce90f7d095aac2618f3539",
+        "kind": "new_explicit_order_metadata_for_unchanged_negative_input"
+      },
+      "result_contract": {
+        "classification": "typed-negative",
+        "exit": 1,
+        "results": "complete_expected_error_envelope",
+        "case": "xs_qcd_gggg_L1",
+        "mode": "Auto",
+        "graph": "60777b11dd5b7f48966632644fd7be49",
+        "error": "invalid diagram tensor: transformed expression does not preserve a compatible tensor interface",
+        "error_classification": "probe failure; inspect stage, not automatically semantic rejection",
+        "dependencies": [
+          "faithfulness-historical--c78",
+          "faithfulness-historical--8eb",
+          "current-faithfulness-and-equivalence--c78",
+          "current-faithfulness-and-equivalence--8eb",
+          "all-six-cells--typed8eb"
+        ],
+        "meaning": "Exact complete source-emitted error envelope for this one-graph heldout, after authenticated positive baselines. Generic parser/model/import/setup errors, incomplete success output, timeout, signal or missing/malformed file give no semantic rejection credit."
+      }
+    },
+    {
+      "id": "xs_qcd_gguu_L1--None--wrong-owner--typed8eb",
+      "program": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/build-v4/raw_three_interface_probe",
+        "sha256": "f54f28b032308dbd040958945fb4895efde0ff4fe0a9fa276481a23267349ef6"
+      },
+      "input": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/prepared/native-controls/xs_qcd_gguu_L1--None--wrong-owner.json",
+        "sha256": "e68df0aa03796a7d7ce9d8a4d407b418a5f646e5a2165b7aaec6bfecb4eaec30"
+      },
+      "card_sha256": "10e26815897acec7f2b228637fb4f67b2cb943c35aa43c85db2f3e638359fdc2",
+      "ordered_input_binding": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r2/order-bindings/xs_qcd_gguu_L1--None--wrong-owner--typed8eb.json",
+        "sha256": "41c6eeda9df429dde9f44171863e0fcc32e1dd133d369febf30ea481d862aa14",
+        "kind": "new_explicit_order_metadata_for_unchanged_negative_input"
+      },
+      "result_contract": {
+        "classification": "typed-negative",
+        "exit": 1,
+        "results": "complete_expected_error_envelope",
+        "case": "xs_qcd_gguu_L1",
+        "mode": "None",
+        "graph": "6170f31e6eb07c29aac54d0c6cc14371",
+        "error": "invalid diagram tensor: transformed expression does not preserve a compatible tensor interface",
+        "error_classification": "probe failure; inspect stage, not automatically semantic rejection",
+        "dependencies": [
+          "faithfulness-historical--c78",
+          "faithfulness-historical--8eb",
+          "current-faithfulness-and-equivalence--c78",
+          "current-faithfulness-and-equivalence--8eb",
+          "all-six-cells--typed8eb"
+        ],
+        "meaning": "Exact complete source-emitted error envelope for this one-graph heldout, after authenticated positive baselines. Generic parser/model/import/setup errors, incomplete success output, timeout, signal or missing/malformed file give no semantic rejection credit."
+      }
+    },
+    {
+      "id": "xs_qcd_gguu_sym_L1--None--wrong-duality--typed8eb",
+      "program": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/build-v4/raw_three_interface_probe",
+        "sha256": "f54f28b032308dbd040958945fb4895efde0ff4fe0a9fa276481a23267349ef6"
+      },
+      "input": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/prepared/native-controls/xs_qcd_gguu_sym_L1--None--wrong-duality.json",
+        "sha256": "ac24802cc8e5ea5d06b27f2a97f9b8f4a611d037ceef09bcfd5e63775401b31f"
+      },
+      "card_sha256": "ee0913a03e1bea7774a5c38b2e0f24fec8540dcab7b9771743211c57186efb62",
+      "ordered_input_binding": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r2/order-bindings/xs_qcd_gguu_sym_L1--None--wrong-duality--typed8eb.json",
+        "sha256": "287371bcc1506a3006d17553e7c857c5f23e935e88b39552cecf18c76ddcace6",
+        "kind": "new_explicit_order_metadata_for_unchanged_negative_input"
+      },
+      "result_contract": {
+        "classification": "typed-negative",
+        "exit": 1,
+        "results": "complete_expected_error_envelope",
+        "case": "xs_qcd_gguu_sym_L1",
+        "mode": "None",
+        "graph": "6170f31e6eb07c29aac54d0c6cc14371",
+        "error": "invalid diagram tensor: transformed expression does not preserve a compatible tensor interface",
+        "error_classification": "probe failure; inspect stage, not automatically semantic rejection",
+        "dependencies": [
+          "faithfulness-historical--c78",
+          "faithfulness-historical--8eb",
+          "current-faithfulness-and-equivalence--c78",
+          "current-faithfulness-and-equivalence--8eb",
+          "all-six-cells--typed8eb"
+        ],
+        "meaning": "Exact complete source-emitted error envelope for this one-graph heldout, after authenticated positive baselines. Generic parser/model/import/setup errors, incomplete success output, timeout, signal or missing/malformed file give no semantic rejection credit."
+      }
+    },
+    {
+      "id": "xs_qcd_gggg_L1--None--metric-owner-claim--typed8eb",
+      "program": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/build-v4/raw_three_interface_probe",
+        "sha256": "f54f28b032308dbd040958945fb4895efde0ff4fe0a9fa276481a23267349ef6"
+      },
+      "input": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/prepared/native-controls/xs_qcd_gggg_L1--None--metric-owner-claim.json",
+        "sha256": "f546e1cc1ce8dfa396e1120be9109ddb8b1a9c87c00e0afe7dfc50132b66ea47"
+      },
+      "card_sha256": "91177b60983809eb61e59f1951f9ab26e8fe1c27e8d01b0ddf9d23652886007a",
+      "ordered_input_binding": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r2/order-bindings/xs_qcd_gggg_L1--None--metric-owner-claim--typed8eb.json",
+        "sha256": "1e55b906765693febdcfa6712d28f1ce056ff1f5b42d601e88aceefa23692532",
+        "kind": "new_explicit_order_metadata_for_unchanged_negative_input"
+      },
+      "result_contract": {
+        "classification": "typed-negative",
+        "exit": 1,
+        "results": "complete_expected_error_envelope",
+        "case": "xs_qcd_gggg_L1",
+        "mode": "None",
+        "graph": "60777b11dd5b7f48966632644fd7be49",
+        "error": "owner vertex:3: metric owner binding",
+        "error_classification": "probe failure; inspect stage, not automatically semantic rejection",
+        "dependencies": [
+          "faithfulness-historical--c78",
+          "faithfulness-historical--8eb",
+          "current-faithfulness-and-equivalence--c78",
+          "current-faithfulness-and-equivalence--8eb",
+          "all-six-cells--typed8eb"
+        ],
+        "meaning": "Exact complete source-emitted error envelope for this one-graph heldout, after authenticated positive baselines. Generic parser/model/import/setup errors, incomplete success output, timeout, signal or missing/malformed file give no semantic rejection credit."
+      }
+    },
+    {
+      "id": "xs_qcd_gguu_L1--Auto--composite-owner-claim--typed8eb",
+      "program": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/build-v4/raw_three_interface_probe",
+        "sha256": "f54f28b032308dbd040958945fb4895efde0ff4fe0a9fa276481a23267349ef6"
+      },
+      "input": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/prepared/native-controls/xs_qcd_gguu_L1--Auto--composite-owner-claim.json",
+        "sha256": "e5abb34c74bf293246d39854f89ddafc426a7dedb95d24f4230a9a0043c99ce6"
+      },
+      "card_sha256": "d52b750759066754d9f3c2b2a6f09aba15c64bf32f2f6691023b41f06d8d81fe",
+      "ordered_input_binding": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r2/order-bindings/xs_qcd_gguu_L1--Auto--composite-owner-claim--typed8eb.json",
+        "sha256": "0872890ea775d8c4469dee622baf562d0ef20f9288b31ca544e9ff5c915231aa",
+        "kind": "new_explicit_order_metadata_for_unchanged_negative_input"
+      },
+      "result_contract": {
+        "classification": "typed-negative",
+        "exit": 1,
+        "results": "complete_expected_error_envelope",
+        "case": "xs_qcd_gguu_L1",
+        "mode": "Auto",
+        "graph": "6170f31e6eb07c29aac54d0c6cc14371",
+        "error": "owner vertex:0: composite owner binding",
+        "error_classification": "probe failure; inspect stage, not automatically semantic rejection",
+        "dependencies": [
+          "faithfulness-historical--c78",
+          "faithfulness-historical--8eb",
+          "current-faithfulness-and-equivalence--c78",
+          "current-faithfulness-and-equivalence--8eb",
+          "all-six-cells--typed8eb"
+        ],
+        "meaning": "Exact complete source-emitted error envelope for this one-graph heldout, after authenticated positive baselines. Generic parser/model/import/setup errors, incomplete success output, timeout, signal or missing/malformed file give no semantic rejection credit."
+      }
+    },
+    {
+      "id": "math-sign--c78",
+      "program": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-eemm-identical/bin/historical/oracle_identical_exact",
+        "sha256": "d5f41949153560d3ff9eda7367ff26fc6dadfcaabf846b6dcf17c25cdfd6b996"
+      },
+      "input": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/prepared/native-controls/math-sign.json",
+        "sha256": "4ce6448b86bffbfcfb605fa56f41b05217774f8509313edc71bc0c2e90ec804c"
+      },
+      "card_sha256": "c31c081364f435f01ea872c45b76b77be9baafef958f66af356075404b92b81e",
+      "ordered_input_binding": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r2/order-bindings/math-sign--c78.json",
+        "sha256": "5488c6f7c9a7d8b108e96fd1a896a4f88c8e640f25a288e9674a18a43390dc05",
+        "kind": "new_explicit_order_metadata_for_unchanged_negative_input"
+      },
+      "result_contract": {
+        "classification": "math-negative",
+        "exit": 101,
+        "results": "absent_by_source_before_final_write",
+        "stderr_required": "assertion failed: row.parsed_equal && row.canonical_equal",
+        "stderr_forbidden": [
+          "called `Result::unwrap()`",
+          "unlicensed",
+          "license not",
+          "invalid license",
+          "license expired"
+        ],
+        "dependencies": [
+          "faithfulness-historical--c78",
+          "faithfulness-historical--8eb",
+          "current-faithfulness-and-equivalence--c78",
+          "current-faithfulness-and-equivalence--8eb",
+          "all-six-cells--typed8eb"
+        ],
+        "meaning": "Negative credit requires this exact source-owned equality assertion after successful parsing, unchanged program/input/order and successful authenticated baselines. Absence alone never gives negative credit."
+      }
+    },
+    {
+      "id": "math-sign--8eb",
+      "program": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/helper-build/oracle_family_exact/oracle_family_exact-350edf2766083f3f",
+        "sha256": "5141d8fddacf40a81f5452e212cd788daa15c3cb3e6d2290fbfc6b65f76c48e1"
+      },
+      "input": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/prepared/native-controls/math-sign.json",
+        "sha256": "4ce6448b86bffbfcfb605fa56f41b05217774f8509313edc71bc0c2e90ec804c"
+      },
+      "card_sha256": "cf787c3534a40d4086f21fbb35fac72f48be3ddc72dd60585190dae09313d174",
+      "ordered_input_binding": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r2/order-bindings/math-sign--8eb.json",
+        "sha256": "5488c6f7c9a7d8b108e96fd1a896a4f88c8e640f25a288e9674a18a43390dc05",
+        "kind": "new_explicit_order_metadata_for_unchanged_negative_input"
+      },
+      "result_contract": {
+        "classification": "math-negative",
+        "exit": 101,
+        "results": "absent_by_source_before_final_write",
+        "stderr_required": "assertion failed: row.parsed_equal && row.canonical_equal",
+        "stderr_forbidden": [
+          "called `Result::unwrap()`",
+          "unlicensed",
+          "license not",
+          "invalid license",
+          "license expired"
+        ],
+        "dependencies": [
+          "faithfulness-historical--c78",
+          "faithfulness-historical--8eb",
+          "current-faithfulness-and-equivalence--c78",
+          "current-faithfulness-and-equivalence--8eb",
+          "all-six-cells--typed8eb"
+        ],
+        "meaning": "Negative credit requires this exact source-owned equality assertion after successful parsing, unchanged program/input/order and successful authenticated baselines. Absence alone never gives negative credit."
+      }
+    },
+    {
+      "id": "math-coefficient--c78",
+      "program": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-eemm-identical/bin/historical/oracle_identical_exact",
+        "sha256": "d5f41949153560d3ff9eda7367ff26fc6dadfcaabf846b6dcf17c25cdfd6b996"
+      },
+      "input": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/prepared/native-controls/math-coefficient.json",
+        "sha256": "57344ba47119b5f7a5a8061422a3cfaeb49c4a1e41b271619b30c4754218ba8a"
+      },
+      "card_sha256": "87801cad7fde4f7218526ba1a9f4bf4add0edea748f49857845bcbbc604dce0a",
+      "ordered_input_binding": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r2/order-bindings/math-coefficient--c78.json",
+        "sha256": "35cad3dc5626f2fa28256941738eec3d4a3098e0155f51b6eb72b6f21b879d13",
+        "kind": "new_explicit_order_metadata_for_unchanged_negative_input"
+      },
+      "result_contract": {
+        "classification": "math-negative",
+        "exit": 101,
+        "results": "absent_by_source_before_final_write",
+        "stderr_required": "assertion failed: row.parsed_equal && row.canonical_equal",
+        "stderr_forbidden": [
+          "called `Result::unwrap()`",
+          "unlicensed",
+          "license not",
+          "invalid license",
+          "license expired"
+        ],
+        "dependencies": [
+          "faithfulness-historical--c78",
+          "faithfulness-historical--8eb",
+          "current-faithfulness-and-equivalence--c78",
+          "current-faithfulness-and-equivalence--8eb",
+          "all-six-cells--typed8eb"
+        ],
+        "meaning": "Negative credit requires this exact source-owned equality assertion after successful parsing, unchanged program/input/order and successful authenticated baselines. Absence alone never gives negative credit."
+      }
+    },
+    {
+      "id": "math-coefficient--8eb",
+      "program": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/helper-build/oracle_family_exact/oracle_family_exact-350edf2766083f3f",
+        "sha256": "5141d8fddacf40a81f5452e212cd788daa15c3cb3e6d2290fbfc6b65f76c48e1"
+      },
+      "input": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/prepared/native-controls/math-coefficient.json",
+        "sha256": "57344ba47119b5f7a5a8061422a3cfaeb49c4a1e41b271619b30c4754218ba8a"
+      },
+      "card_sha256": "8815fd215e392652f08d36847b8c6f8dd59d0d686a055a534aa42984533072a8",
+      "ordered_input_binding": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r2/order-bindings/math-coefficient--8eb.json",
+        "sha256": "35cad3dc5626f2fa28256941738eec3d4a3098e0155f51b6eb72b6f21b879d13",
+        "kind": "new_explicit_order_metadata_for_unchanged_negative_input"
+      },
+      "result_contract": {
+        "classification": "math-negative",
+        "exit": 101,
+        "results": "absent_by_source_before_final_write",
+        "stderr_required": "assertion failed: row.parsed_equal && row.canonical_equal",
+        "stderr_forbidden": [
+          "called `Result::unwrap()`",
+          "unlicensed",
+          "license not",
+          "invalid license",
+          "license expired"
+        ],
+        "dependencies": [
+          "faithfulness-historical--c78",
+          "faithfulness-historical--8eb",
+          "current-faithfulness-and-equivalence--c78",
+          "current-faithfulness-and-equivalence--8eb",
+          "all-six-cells--typed8eb"
+        ],
+        "meaning": "Negative credit requires this exact source-owned equality assertion after successful parsing, unchanged program/input/order and successful authenticated baselines. Absence alone never gives negative credit."
+      }
+    },
+    {
+      "id": "math-power--c78",
+      "program": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-eemm-identical/bin/historical/oracle_identical_exact",
+        "sha256": "d5f41949153560d3ff9eda7367ff26fc6dadfcaabf846b6dcf17c25cdfd6b996"
+      },
+      "input": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/prepared/native-controls/math-power.json",
+        "sha256": "91cd46454c67304c1cd5c7267455fd96484a23a59395aa93a86080c5c8f9dca4"
+      },
+      "card_sha256": "2d94151a17100455135c3b278d9cbcb2a6d4a3c295cde52b7a1ef72f55047136",
+      "ordered_input_binding": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r2/order-bindings/math-power--c78.json",
+        "sha256": "4d54eb0287d4ff59fb523dd3b23c3516e91012f63cecb0e5ddbf58d0665c6b04",
+        "kind": "new_explicit_order_metadata_for_unchanged_negative_input"
+      },
+      "result_contract": {
+        "classification": "math-negative",
+        "exit": 101,
+        "results": "absent_by_source_before_final_write",
+        "stderr_required": "assertion failed: row.parsed_equal && row.canonical_equal",
+        "stderr_forbidden": [
+          "called `Result::unwrap()`",
+          "unlicensed",
+          "license not",
+          "invalid license",
+          "license expired"
+        ],
+        "dependencies": [
+          "faithfulness-historical--c78",
+          "faithfulness-historical--8eb",
+          "current-faithfulness-and-equivalence--c78",
+          "current-faithfulness-and-equivalence--8eb",
+          "all-six-cells--typed8eb"
+        ],
+        "meaning": "Negative credit requires this exact source-owned equality assertion after successful parsing, unchanged program/input/order and successful authenticated baselines. Absence alone never gives negative credit."
+      }
+    },
+    {
+      "id": "math-power--8eb",
+      "program": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/helper-build/oracle_family_exact/oracle_family_exact-350edf2766083f3f",
+        "sha256": "5141d8fddacf40a81f5452e212cd788daa15c3cb3e6d2290fbfc6b65f76c48e1"
+      },
+      "input": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/prepared/native-controls/math-power.json",
+        "sha256": "91cd46454c67304c1cd5c7267455fd96484a23a59395aa93a86080c5c8f9dca4"
+      },
+      "card_sha256": "34d81ab8cfd4158c1c264030613430ea0ca4717d6f802b39af63b72ea953e1d4",
+      "ordered_input_binding": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r2/order-bindings/math-power--8eb.json",
+        "sha256": "4d54eb0287d4ff59fb523dd3b23c3516e91012f63cecb0e5ddbf58d0665c6b04",
+        "kind": "new_explicit_order_metadata_for_unchanged_negative_input"
+      },
+      "result_contract": {
+        "classification": "math-negative",
+        "exit": 101,
+        "results": "absent_by_source_before_final_write",
+        "stderr_required": "assertion failed: row.parsed_equal && row.canonical_equal",
+        "stderr_forbidden": [
+          "called `Result::unwrap()`",
+          "unlicensed",
+          "license not",
+          "invalid license",
+          "license expired"
+        ],
+        "dependencies": [
+          "faithfulness-historical--c78",
+          "faithfulness-historical--8eb",
+          "current-faithfulness-and-equivalence--c78",
+          "current-faithfulness-and-equivalence--8eb",
+          "all-six-cells--typed8eb"
+        ],
+        "meaning": "Negative credit requires this exact source-owned equality assertion after successful parsing, unchanged program/input/order and successful authenticated baselines. Absence alone never gives negative credit."
+      }
+    }
+  ],
+  "authorization_basis": "User-authorized accepted generation integration plan; root accepts exact independent R3 supervisor and carried preparation approvals, and separately authorizes this fixed21-card phase.",
+  "phase_conditions": [
+    "Pure exact input/ELF/loader/read-only mounts/network/record-path qualification before real private acquisition or application launch.",
+    "Execute exactly listed IDs in listed order, each once. All5 authenticated baselines must pass before16 dependent negatives.",
+    "Use exact reviewed supervisor/guard/lifecycle/bridge/cards without edits. Stop whole phase on first unexpected, infrastructure or unvalidated outcome; preserve receipts and do not retry, alter inputs or weaken predicates.",
+    "Preserve exported license else current-user XDG source privately; anonymouspipe to immediate nativeexec only. No value/path/hash/file/log/envdump, Nix/compiler/network or unrelatednative activity.",
+    "Keep240s percard/zero retries/protectedrecords/complete before-after hashes and reaping; no20GiB or runtimepolicychange.",
+    "Allnativeoutputs require NEW independent scientific/interface review before separate migration. No expectation/token/ref/globalintegration/publication change authorized."
+  ],
+  "expected_counts": {
+    "baselines": 5,
+    "negatives": 16,
+    "total": 21
+  },
+  "state_at_assignment": "AUTHORIZED_NOT_EXECUTED",
+  "license_value_present": false
+}

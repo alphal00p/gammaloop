@@ -1,0 +1,7 @@
+[
+  {
+    "phase": "pre_native_static_analysis_tool",
+    "type": "false missing dependency scan",
+    "detail": "Initial depth-first scan omitted already loaded library reuse; original source/stdout/stderr/FAIL report preserved. Corrected separate-exec breadth-first scan and actual unlicensed probes provide qualification; no card/supervisor or mounts were changed."
+  }
+]

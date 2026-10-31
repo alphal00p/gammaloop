@@ -1,0 +1,53 @@
+{
+  "analysis_and_preparation_only": [
+    {
+      "stage": "read-only discovery",
+      "error": "Guessed capture meta/handoff.json and capsule current_pristine paths did not exist. Correct actual paths used; no data changed.",
+      "evidence": "Original terminal output; no output files created by those reads."
+    },
+    {
+      "stage": "interpreter discovery",
+      "error": "python3 was absent from shell PATH. Existing stdlib-only Python3.13.12 executable selected directly; no Nix/build/install command.",
+      "evidence": "Original terminal output."
+    },
+    {
+      "stage": "read-only schema inspection",
+      "error": "Prepared capture world has no model_bindings key. Exact owner/model predicates reconstruct that field separately; original schema unchanged.",
+      "evidence": "Original terminal KeyError."
+    },
+    {
+      "stage": "bootstrap attempt1",
+      "error": "Mistook100 architecture notes for the118 ordered code-scope bindings. Corrected to nested note.scope owner algorithm; all118 original and candidate digests pass.",
+      "evidence": "bootstrap.attempt1.py + bootstrap.attempt1.stderr"
+    },
+    {
+      "stage": "reconstruction attempt1",
+      "error": "Historical live capture omits threads. Preserved omission; actual captured Run(threads Some1) binds pool. No absent-to-empty inference.",
+      "evidence": "reconstruct.attempt1.py + reconstruct.attempt1.stderr"
+    },
+    {
+      "stage": "applicability attempt1",
+      "error": "Assumed four prior tokens differed from actualffa. Immutable comparison proves exactlyONE prior grouped token fromffa to832. Four-token observer/proof source qualification remains separately attributed. Corrected exact one-token fence passes.",
+      "evidence": "applicability.attempt1.py + applicability.attempt1.stderr"
+    },
+    {
+      "stage": "association attempt1",
+      "error": "Unexpanded aggregate obligations use direct case/mode/graph identity and memberNone, unlike local owner lists. Added exact branch; all4268 retained member associations now bind.",
+      "evidence": "associate.attempt1.py + associate.attempt1.stderr"
+    },
+    {
+      "stage": "association expansion attempt2",
+      "error": "All new owner-chain checks passed; exclusive existing consumed-input output refused a changed dependency inventory. Original inventory retained, new complete-chain inventory written under a distinct name.",
+      "evidence": "associate.attempt2.py + associate.attempt2.stderr"
+    }
+  ],
+  "native_or_scientific_library_runs": 0,
+  "scientific_negative_credit": 0,
+  "scope_mismatch_in_final_candidate": false,
+  "original_capture_controller_error": "Original nested Fraction controller error retained in original records; additive invocation3 revalidation stays separate. Neither rewritten nor upgraded to native pass.",
+  "external_native_setup_errors": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-native-execution-20261031-r1/source-and-setup-errors.json",
+    "sha256": "c3ac40325ebe430e62447163be19f674234377fa42d7a8fa4aa29800d5c85dee",
+    "bytes": 375
+  }
+}

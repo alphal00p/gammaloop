@@ -1,0 +1,11 @@
+Traceback (most recent call last):
+  File "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-next-qcd-scientific-interface-astra-20261031-5a3KbP5x/integrity.py", line 20, in <module>
+    seal=json.loads((d/'SEAL.json').read_text());check(d/'SHA256SUMS',seal['manifest_sha256'],'historical seal manifest');manifest(d/'SHA256SUMS',d.name)
+                                                                                                                          ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-next-qcd-scientific-interface-astra-20261031-5a3KbP5x/integrity.py", line 15, in manifest
+    h,name=line.split('  ',1);check(p.parent/name,h,kind)
+                              ~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-next-qcd-scientific-interface-astra-20261031-5a3KbP5x/integrity.py", line 6, in check
+    p=pathlib.Path(p); assert not any(x in str(p) for x in ['/.config/','/license','/.netrc']),str(p)
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: /shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/observer-src/.config/nextest.toml

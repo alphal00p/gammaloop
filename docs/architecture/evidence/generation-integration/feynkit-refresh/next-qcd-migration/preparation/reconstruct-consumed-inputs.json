@@ -1,0 +1,322 @@
+{
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-migration-preparation-20261031-r1/source-blobs/target/crates/feynkit-generator/tests/generation_oracle/main.rs": {
+    "sha256": "66f01bcc855552ae888f1fb7c5bb158afbd448492b4e27a26e2bda40f09b07d2",
+    "bytes": 77616
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-captures-20261031-r2/prepared/captured/xs_qcd_gguu_sym_L1/historical-None.json": {
+    "sha256": "e1146aaafda42eb80b2016384e9b2e89ef10ba04ab36b4d3a86c00259f7cdd6f",
+    "bytes": 622718
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gguu_sym_L1--historical-pristine/dumps/xs_qcd_gguu_sym_L1.classes-None-t1.json": {
+    "sha256": "fc59162c0dd188825300515eb45e05e3f6548b0b3f93a3d1757814a2095c788e",
+    "bytes": 120162
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gguu_sym_L1--historical-pristine/dumps/xs_qcd_gguu_sym_L1.classes-None-t1.sources.json": {
+    "sha256": "fc59162c0dd188825300515eb45e05e3f6548b0b3f93a3d1757814a2095c788e",
+    "bytes": 120162
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gguu_sym_L1--historical-pristine/dumps/xs_qcd_gguu_sym_L1.census": {
+    "sha256": "f6aeec97db2f0b130d580cf15ff6643d248efa645f5f4759f09ce0ab86a96a37",
+    "bytes": 5983
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gguu_sym_L1--historical-observer/dumps/xs_qcd_gguu_sym_L1.classes-None-t1.json": {
+    "sha256": "fc59162c0dd188825300515eb45e05e3f6548b0b3f93a3d1757814a2095c788e",
+    "bytes": 120162
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gguu_sym_L1--historical-observer/dumps/xs_qcd_gguu_sym_L1.classes-None-t1.sources.json": {
+    "sha256": "fc59162c0dd188825300515eb45e05e3f6548b0b3f93a3d1757814a2095c788e",
+    "bytes": 120162
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gguu_sym_L1--historical-observer/dumps/xs_qcd_gguu_sym_L1.census": {
+    "sha256": "f6aeec97db2f0b130d580cf15ff6643d248efa645f5f4759f09ce0ab86a96a37",
+    "bytes": 5983
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gguu_sym_L1--historical-observer/ledger.jsonl": {
+    "sha256": "4cf46c7167e0cabb6b6f1a770b3c5961096c79cbfec442b0470ec141a08a6b65",
+    "bytes": 1418814
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-captures-20261031-r2/prepared/captured/xs_qcd_gguu_sym_L1/current-None.json": {
+    "sha256": "c7575aaafe82dc067b93828a4cb09e75750ccd41bf108a95ee63dc210665b5ca",
+    "bytes": 645965
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gguu_sym_L1--current-pristine/dumps/xs_qcd_gguu_sym_L1.classes-None-t1.json": {
+    "sha256": "4c90d66ad4414a8de08c56362a83bbdcfc988f089809f79dd84d6ad638bc90c8",
+    "bytes": 136190
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gguu_sym_L1--current-pristine/dumps/xs_qcd_gguu_sym_L1.classes-None-t1.sources.json": {
+    "sha256": "4c90d66ad4414a8de08c56362a83bbdcfc988f089809f79dd84d6ad638bc90c8",
+    "bytes": 136190
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gguu_sym_L1--current-pristine/dumps/xs_qcd_gguu_sym_L1.census": {
+    "sha256": "06744ed2e64563b3d02bfba1eee5da9cf9c509626fe5b607dd48e5cfb7d7f63f",
+    "bytes": 5983
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gguu_sym_L1--current-observer/dumps/xs_qcd_gguu_sym_L1.classes-None-t1.json": {
+    "sha256": "4c90d66ad4414a8de08c56362a83bbdcfc988f089809f79dd84d6ad638bc90c8",
+    "bytes": 136190
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gguu_sym_L1--current-observer/dumps/xs_qcd_gguu_sym_L1.classes-None-t1.sources.json": {
+    "sha256": "4c90d66ad4414a8de08c56362a83bbdcfc988f089809f79dd84d6ad638bc90c8",
+    "bytes": 136190
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gguu_sym_L1--current-observer/dumps/xs_qcd_gguu_sym_L1.census": {
+    "sha256": "06744ed2e64563b3d02bfba1eee5da9cf9c509626fe5b607dd48e5cfb7d7f63f",
+    "bytes": 5983
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gguu_sym_L1--current-observer/ledger.jsonl": {
+    "sha256": "f195c7c7f7fd2dc4e085ac900a011f25cd5e9adaa33be9e540f370e26315b252",
+    "bytes": 1009556
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-captures-20261031-r2/prepared/captured/xs_qcd_gguu_sym_L1/historical-Auto.json": {
+    "sha256": "b4aeebf7fcdfe0f88a7e94ccd0e792a84fd9abc14a99657b3293385407468c90",
+    "bytes": 622718
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gguu_sym_L1--historical-pristine/dumps/xs_qcd_gguu_sym_L1.classes-Auto-t1.json": {
+    "sha256": "fc59162c0dd188825300515eb45e05e3f6548b0b3f93a3d1757814a2095c788e",
+    "bytes": 120162
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gguu_sym_L1--historical-pristine/dumps/xs_qcd_gguu_sym_L1.classes-Auto-t1.sources.json": {
+    "sha256": "fc59162c0dd188825300515eb45e05e3f6548b0b3f93a3d1757814a2095c788e",
+    "bytes": 120162
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gguu_sym_L1--historical-observer/dumps/xs_qcd_gguu_sym_L1.classes-Auto-t1.json": {
+    "sha256": "fc59162c0dd188825300515eb45e05e3f6548b0b3f93a3d1757814a2095c788e",
+    "bytes": 120162
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gguu_sym_L1--historical-observer/dumps/xs_qcd_gguu_sym_L1.classes-Auto-t1.sources.json": {
+    "sha256": "fc59162c0dd188825300515eb45e05e3f6548b0b3f93a3d1757814a2095c788e",
+    "bytes": 120162
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-captures-20261031-r2/prepared/captured/xs_qcd_gguu_sym_L1/current-Auto.json": {
+    "sha256": "f3e50ffd78bf42feb4afcb8ced536c1894989b97cc8e3bad4756da56bbc93056",
+    "bytes": 645965
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gguu_sym_L1--current-pristine/dumps/xs_qcd_gguu_sym_L1.classes-Auto-t1.json": {
+    "sha256": "4c90d66ad4414a8de08c56362a83bbdcfc988f089809f79dd84d6ad638bc90c8",
+    "bytes": 136190
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gguu_sym_L1--current-pristine/dumps/xs_qcd_gguu_sym_L1.classes-Auto-t1.sources.json": {
+    "sha256": "4c90d66ad4414a8de08c56362a83bbdcfc988f089809f79dd84d6ad638bc90c8",
+    "bytes": 136190
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gguu_sym_L1--current-observer/dumps/xs_qcd_gguu_sym_L1.classes-Auto-t1.json": {
+    "sha256": "4c90d66ad4414a8de08c56362a83bbdcfc988f089809f79dd84d6ad638bc90c8",
+    "bytes": 136190
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gguu_sym_L1--current-observer/dumps/xs_qcd_gguu_sym_L1.classes-Auto-t1.sources.json": {
+    "sha256": "4c90d66ad4414a8de08c56362a83bbdcfc988f089809f79dd84d6ad638bc90c8",
+    "bytes": 136190
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-captures-20261031-r2/prepared/captured/xs_qcd_gguu_L1/historical-None.json": {
+    "sha256": "9c2d127df8cfffe471643ea8e887445487181df101ce3694e19141f0f059b698",
+    "bytes": 1055698
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gguu_L1--historical-pristine/dumps/xs_qcd_gguu_L1.classes-None-t1.json": {
+    "sha256": "2f17128588b6e4d9a7550041902cc9c096f366163265c42944f4db07cd749788",
+    "bytes": 210554
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gguu_L1--historical-pristine/dumps/xs_qcd_gguu_L1.classes-None-t1.sources.json": {
+    "sha256": "2f17128588b6e4d9a7550041902cc9c096f366163265c42944f4db07cd749788",
+    "bytes": 210554
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gguu_L1--historical-pristine/dumps/xs_qcd_gguu_L1.census": {
+    "sha256": "1a95069f96d45a5082a26742c19fee54c4e35dc4c6bfb2fc2f605bcdb8b461f9",
+    "bytes": 9667
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gguu_L1--historical-observer/dumps/xs_qcd_gguu_L1.classes-None-t1.json": {
+    "sha256": "2f17128588b6e4d9a7550041902cc9c096f366163265c42944f4db07cd749788",
+    "bytes": 210554
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gguu_L1--historical-observer/dumps/xs_qcd_gguu_L1.classes-None-t1.sources.json": {
+    "sha256": "2f17128588b6e4d9a7550041902cc9c096f366163265c42944f4db07cd749788",
+    "bytes": 210554
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gguu_L1--historical-observer/dumps/xs_qcd_gguu_L1.census": {
+    "sha256": "1a95069f96d45a5082a26742c19fee54c4e35dc4c6bfb2fc2f605bcdb8b461f9",
+    "bytes": 9667
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gguu_L1--historical-observer/ledger.jsonl": {
+    "sha256": "0beeaae34b26ad3a98489b3add8e56f90a5b245abcf256283340c7cd4b1a86d3",
+    "bytes": 2450820
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-captures-20261031-r2/prepared/captured/xs_qcd_gguu_L1/current-None.json": {
+    "sha256": "280e45e0745b2340f4f2ec1d4099dfa646e1b0a7b233d33a2fc7e5118db478a1",
+    "bytes": 1100983
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gguu_L1--current-pristine/dumps/xs_qcd_gguu_L1.classes-None-t1.json": {
+    "sha256": "25e7d966ca60263d142d23fa98f6e68d209d2c5b7ba731c3ce216737ca62b797",
+    "bytes": 240542
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gguu_L1--current-pristine/dumps/xs_qcd_gguu_L1.classes-None-t1.sources.json": {
+    "sha256": "25e7d966ca60263d142d23fa98f6e68d209d2c5b7ba731c3ce216737ca62b797",
+    "bytes": 240542
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gguu_L1--current-pristine/dumps/xs_qcd_gguu_L1.census": {
+    "sha256": "4bf1af646b517ad9790d9b815a5f471a371fca0d5058ed674fa2f90dd7e1df56",
+    "bytes": 9667
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gguu_L1--current-observer/dumps/xs_qcd_gguu_L1.classes-None-t1.json": {
+    "sha256": "25e7d966ca60263d142d23fa98f6e68d209d2c5b7ba731c3ce216737ca62b797",
+    "bytes": 240542
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gguu_L1--current-observer/dumps/xs_qcd_gguu_L1.classes-None-t1.sources.json": {
+    "sha256": "25e7d966ca60263d142d23fa98f6e68d209d2c5b7ba731c3ce216737ca62b797",
+    "bytes": 240542
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gguu_L1--current-observer/dumps/xs_qcd_gguu_L1.census": {
+    "sha256": "4bf1af646b517ad9790d9b815a5f471a371fca0d5058ed674fa2f90dd7e1df56",
+    "bytes": 9667
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gguu_L1--current-observer/ledger.jsonl": {
+    "sha256": "77d0ae7708d1d2232ff27d5023ae4ed8668c60d3873f430af17d89890cfaa850",
+    "bytes": 1735868
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-captures-20261031-r2/prepared/captured/xs_qcd_gguu_L1/historical-Auto.json": {
+    "sha256": "b0d96ffd4099fadfb5137c7e52100f09bde0c3369f97088376f94e392995500a",
+    "bytes": 1055698
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gguu_L1--historical-pristine/dumps/xs_qcd_gguu_L1.classes-Auto-t1.json": {
+    "sha256": "2f17128588b6e4d9a7550041902cc9c096f366163265c42944f4db07cd749788",
+    "bytes": 210554
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gguu_L1--historical-pristine/dumps/xs_qcd_gguu_L1.classes-Auto-t1.sources.json": {
+    "sha256": "2f17128588b6e4d9a7550041902cc9c096f366163265c42944f4db07cd749788",
+    "bytes": 210554
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gguu_L1--historical-observer/dumps/xs_qcd_gguu_L1.classes-Auto-t1.json": {
+    "sha256": "2f17128588b6e4d9a7550041902cc9c096f366163265c42944f4db07cd749788",
+    "bytes": 210554
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gguu_L1--historical-observer/dumps/xs_qcd_gguu_L1.classes-Auto-t1.sources.json": {
+    "sha256": "2f17128588b6e4d9a7550041902cc9c096f366163265c42944f4db07cd749788",
+    "bytes": 210554
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-captures-20261031-r2/prepared/captured/xs_qcd_gguu_L1/current-Auto.json": {
+    "sha256": "1670a25d673c803b937d36e939785adb4ed23d4e564714b12e3db0d430b7b39c",
+    "bytes": 1100983
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gguu_L1--current-pristine/dumps/xs_qcd_gguu_L1.classes-Auto-t1.json": {
+    "sha256": "25e7d966ca60263d142d23fa98f6e68d209d2c5b7ba731c3ce216737ca62b797",
+    "bytes": 240542
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gguu_L1--current-pristine/dumps/xs_qcd_gguu_L1.classes-Auto-t1.sources.json": {
+    "sha256": "25e7d966ca60263d142d23fa98f6e68d209d2c5b7ba731c3ce216737ca62b797",
+    "bytes": 240542
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gguu_L1--current-observer/dumps/xs_qcd_gguu_L1.classes-Auto-t1.json": {
+    "sha256": "25e7d966ca60263d142d23fa98f6e68d209d2c5b7ba731c3ce216737ca62b797",
+    "bytes": 240542
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gguu_L1--current-observer/dumps/xs_qcd_gguu_L1.classes-Auto-t1.sources.json": {
+    "sha256": "25e7d966ca60263d142d23fa98f6e68d209d2c5b7ba731c3ce216737ca62b797",
+    "bytes": 240542
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-captures-20261031-r2/prepared/captured/xs_qcd_gggg_L1/historical-None.json": {
+    "sha256": "3127d34d41770f1239d71e71280156db4d32314a748665e1d8cd0fb7ee004449",
+    "bytes": 1551841
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gggg_L1--historical-pristine/dumps/xs_qcd_gggg_L1.classes-None-t1.json": {
+    "sha256": "249991b343de33d3af0782a0f86e8506802d7cc17ecfc7e385b382745de3f522",
+    "bytes": 330669
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gggg_L1--historical-pristine/dumps/xs_qcd_gggg_L1.classes-None-t1.sources.json": {
+    "sha256": "249991b343de33d3af0782a0f86e8506802d7cc17ecfc7e385b382745de3f522",
+    "bytes": 330669
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gggg_L1--historical-pristine/dumps/xs_qcd_gggg_L1.census": {
+    "sha256": "0093a738721c9ae85dffdcb27d50f2283a45857f6db8358c0b3eedd1ee9733bd",
+    "bytes": 9347
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gggg_L1--historical-observer/dumps/xs_qcd_gggg_L1.classes-None-t1.json": {
+    "sha256": "249991b343de33d3af0782a0f86e8506802d7cc17ecfc7e385b382745de3f522",
+    "bytes": 330669
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gggg_L1--historical-observer/dumps/xs_qcd_gggg_L1.classes-None-t1.sources.json": {
+    "sha256": "249991b343de33d3af0782a0f86e8506802d7cc17ecfc7e385b382745de3f522",
+    "bytes": 330669
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gggg_L1--historical-observer/dumps/xs_qcd_gggg_L1.census": {
+    "sha256": "0093a738721c9ae85dffdcb27d50f2283a45857f6db8358c0b3eedd1ee9733bd",
+    "bytes": 9347
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gggg_L1--historical-observer/ledger.jsonl": {
+    "sha256": "2d72ccc87701a5c37b39b24cbd3212b44ff4dedc48a554e98b1a6ebd6b371e94",
+    "bytes": 3937852
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-captures-20261031-r2/prepared/captured/xs_qcd_gggg_L1/current-None.json": {
+    "sha256": "878768b0b64c5e54a85a6f24c4fc369f98ecdc8d89ef27c7ee24444b5db06024",
+    "bytes": 1495156
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gggg_L1--current-pristine/dumps/xs_qcd_gggg_L1.classes-None-t1.json": {
+    "sha256": "b4be2d37bc4a72cd96ecbc192f97b9ffdc194c3c72245bfa4c5d0c6737e7d6c7",
+    "bytes": 326465
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gggg_L1--current-pristine/dumps/xs_qcd_gggg_L1.classes-None-t1.sources.json": {
+    "sha256": "b4be2d37bc4a72cd96ecbc192f97b9ffdc194c3c72245bfa4c5d0c6737e7d6c7",
+    "bytes": 326465
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gggg_L1--current-pristine/dumps/xs_qcd_gggg_L1.census": {
+    "sha256": "137c381a3e6259f9bbe05e6be8ac88171b5c1721c5dbf1a04e0c118cfeff5ee7",
+    "bytes": 9347
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gggg_L1--current-observer/dumps/xs_qcd_gggg_L1.classes-None-t1.json": {
+    "sha256": "b4be2d37bc4a72cd96ecbc192f97b9ffdc194c3c72245bfa4c5d0c6737e7d6c7",
+    "bytes": 326465
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gggg_L1--current-observer/dumps/xs_qcd_gggg_L1.classes-None-t1.sources.json": {
+    "sha256": "b4be2d37bc4a72cd96ecbc192f97b9ffdc194c3c72245bfa4c5d0c6737e7d6c7",
+    "bytes": 326465
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gggg_L1--current-observer/dumps/xs_qcd_gggg_L1.census": {
+    "sha256": "137c381a3e6259f9bbe05e6be8ac88171b5c1721c5dbf1a04e0c118cfeff5ee7",
+    "bytes": 9347
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gggg_L1--current-observer/ledger.jsonl": {
+    "sha256": "2a819adeaef2fbbcab4d8a66dd536f27163b67085dbc03b3b6cf6c83f7bd9597",
+    "bytes": 2542210
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-captures-20261031-r2/prepared/captured/xs_qcd_gggg_L1/historical-Auto.json": {
+    "sha256": "88318b64004f49ebbd46dae6e3591bb9c7960ad66a786b8acbeb6ecc647fcbb1",
+    "bytes": 1551841
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gggg_L1--historical-pristine/dumps/xs_qcd_gggg_L1.classes-Auto-t1.json": {
+    "sha256": "249991b343de33d3af0782a0f86e8506802d7cc17ecfc7e385b382745de3f522",
+    "bytes": 330669
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gggg_L1--historical-pristine/dumps/xs_qcd_gggg_L1.classes-Auto-t1.sources.json": {
+    "sha256": "249991b343de33d3af0782a0f86e8506802d7cc17ecfc7e385b382745de3f522",
+    "bytes": 330669
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gggg_L1--historical-observer/dumps/xs_qcd_gggg_L1.classes-Auto-t1.json": {
+    "sha256": "249991b343de33d3af0782a0f86e8506802d7cc17ecfc7e385b382745de3f522",
+    "bytes": 330669
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gggg_L1--historical-observer/dumps/xs_qcd_gggg_L1.classes-Auto-t1.sources.json": {
+    "sha256": "249991b343de33d3af0782a0f86e8506802d7cc17ecfc7e385b382745de3f522",
+    "bytes": 330669
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-captures-20261031-r2/prepared/captured/xs_qcd_gggg_L1/current-Auto.json": {
+    "sha256": "1aa50c1730df89cd262c3657f75c175aa43511f03922625e60fa823fdfc07f48",
+    "bytes": 1495156
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gggg_L1--current-pristine/dumps/xs_qcd_gggg_L1.classes-Auto-t1.json": {
+    "sha256": "b4be2d37bc4a72cd96ecbc192f97b9ffdc194c3c72245bfa4c5d0c6737e7d6c7",
+    "bytes": 326465
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gggg_L1--current-pristine/dumps/xs_qcd_gggg_L1.classes-Auto-t1.sources.json": {
+    "sha256": "b4be2d37bc4a72cd96ecbc192f97b9ffdc194c3c72245bfa4c5d0c6737e7d6c7",
+    "bytes": 326465
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gggg_L1--current-observer/dumps/xs_qcd_gggg_L1.classes-Auto-t1.json": {
+    "sha256": "b4be2d37bc4a72cd96ecbc192f97b9ffdc194c3c72245bfa4c5d0c6737e7d6c7",
+    "bytes": 326465
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/work/xs_qcd_gggg_L1--current-observer/dumps/xs_qcd_gggg_L1.classes-Auto-t1.sources.json": {
+    "sha256": "b4be2d37bc4a72cd96ecbc192f97b9ffdc194c3c72245bfa4c5d0c6737e7d6c7",
+    "bytes": 326465
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-identical-migration-preparation-20261031-r1/preserved-prior12-Rows.json": {
+    "sha256": "73f1df95ed686450766b54dbe129409130652ef8b4286c07e26bdfbacde507e6",
+    "bytes": 4991
+  }
+}

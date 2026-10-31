@@ -1,0 +1,12 @@
+{
+  "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/observer-src/.config/nextest.toml": {
+    "recorded_sha256": "03e166fbe150d150450df98ebfa00e3b823b487cab5f6f9ff3d4cfb4bff4b09f",
+    "fresh_read": false,
+    "reason": "Explicit no config/license read boundary; external recorded source-config dependency only."
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/observer-src/vendor/clarabel/.cargo/config.toml": {
+    "recorded_sha256": "018961be865676c88eadccae53a8386aa016a7c37ebfefe198872299c4e121cd",
+    "fresh_read": false,
+    "reason": "Explicit no config/license read boundary; external recorded source-config dependency only."
+  }
+}

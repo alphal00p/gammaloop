@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="nextest-run" tests="1" skipped="0" failures="0" errors="0" uuid="6378c330-2b0b-480d-92ed-4fda2f994c0f" timestamp="2026-10-31T07:32:53.886+00:00" time="0.125">
+    <testsuite name="feynkit-generator::generation_oracle" tests="1" skipped="0" errors="0" failures="0">
+        <testcase name="qed_eemm_L1" classname="feynkit-generator::generation_oracle" timestamp="2026-10-31T07:32:53.891+00:00" time="0.120"/>
+    </testsuite>
+</testsuites>

@@ -1,0 +1,4 @@
+
+thread 'main' (2) panicked at /shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/observer-src/crates/feynkit-generator/examples/oracle_family_exact.rs:44:9:
+assertion failed: row.parsed_equal && row.canonical_equal
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace

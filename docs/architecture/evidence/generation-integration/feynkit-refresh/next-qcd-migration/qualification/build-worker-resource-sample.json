@@ -1,0 +1,79 @@
+{
+  "utc": "2026-10-31T07:28:10.671149+00:00",
+  "association": "Selected Nix daemon worker4010994, observed under the new generator client4010925; separate core daemon worker1422895 excluded",
+  "processes": [
+    {
+      "pid": 178608,
+      "status": {
+        "Name": "cargo-nextest",
+        "Pid": "178608",
+        "PPid": "175262",
+        "VmHWM": "26820 kB",
+        "VmRSS": "26820 kB",
+        "Threads": "1",
+        "public_build_argv": [
+          "/nix/store/kwm3g9vh36d9zd171v0nz64fyan1hvfz-cargo-nextest-0.9.143/bin/cargo-nextest",
+          "nextest",
+          "archive",
+          "--cargo-profile",
+          "ci-optim",
+          "--offline",
+          "-p",
+          "feynkit-generator",
+          "-E",
+          "package(feynkit-generator)",
+          "--profile",
+          "ci_gammaloop",
+          "--archive-file",
+          "/nix/store/nida72z77301xcflxivfhapq1qrywy05-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0/gammaloop-nextest-feynkit-feynkit-generator.tar.zst"
+        ]
+      }
+    },
+    {
+      "pid": 178933,
+      "status": {
+        "Name": "cargo",
+        "Pid": "178933",
+        "PPid": "178608",
+        "VmHWM": "105124 kB",
+        "VmRSS": "105124 kB",
+        "Threads": "5"
+      }
+    },
+    {
+      "pid": 294366,
+      "status": {
+        "Name": "rustc",
+        "Pid": "294366",
+        "PPid": "178933",
+        "VmHWM": "817644 kB",
+        "VmRSS": "577236 kB",
+        "Threads": "7"
+      }
+    },
+    {
+      "pid": 322577,
+      "status": {
+        "Name": "rustc",
+        "Pid": "322577",
+        "PPid": "178933",
+        "VmHWM": "435808 kB",
+        "VmRSS": "435808 kB",
+        "Threads": "4"
+      }
+    },
+    {
+      "pid": 4010994,
+      "status": {
+        "Name": "nix-daemon",
+        "Pid": "4010994",
+        "PPid": "2856673",
+        "VmHWM": "22152 kB",
+        "VmRSS": "22152 kB",
+        "Threads": "3"
+      }
+    }
+  ],
+  "point_in_time_sum_RSS_KiB": 1167140,
+  "measurement_limits": "RSS sum can double-count shared pages; not aggregate peak or a memory limit. Build argv contains no private environment."
+}

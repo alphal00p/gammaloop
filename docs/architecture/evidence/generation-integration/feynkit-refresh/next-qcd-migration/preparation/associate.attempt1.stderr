@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-migration-preparation-20261031-r1/associate.py", line 147, in <module>
+    if __name__=='__main__': main()
+                             ~~~~^^
+  File "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-migration-preparation-20261031-r1/associate.py", line 132, in main
+    C.need(m['member'] in ob['owners'] and m['obligation_kind']==ob['obligation'],'exact-math-owner-association')
+                          ~~^^^^^^^^^^
+KeyError: 'owners'

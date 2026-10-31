@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-next-qcd-scientific-interface-astra-20261031-5a3KbP5x/source_runtime_review.py", line 14, in <module>
+    for n in ['render','definitions','cyclic','owners','permutation','Reject','require']:assert ast.dump(node(R/'pure_parser.py',n),include_attributes=False)==ast.dump(node(P/'sources/original/syntax.py',n),include_attributes=False)
+                                                                                                                                                                        ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-next-qcd-scientific-interface-astra-20261031-5a3KbP5x/source_runtime_review.py", line 11, in node
+    def node(p,name):return next(n for n in ast.parse(read(p)).body if isinstance(n,(ast.FunctionDef,ast.ClassDef))and n.name==name)
+                            ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+StopIteration

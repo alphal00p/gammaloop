@@ -1,0 +1,447 @@
+{
+  "schema": "unlicensed-trusted-runtime-containment/1",
+  "status": "PASS",
+  "id": "all-six-cells--typed8eb",
+  "readonly_mounts": [
+    "/input",
+    "/input/program",
+    "/data",
+    "/nix/store/0d8g8n0a11v6f5m2h416ajyxmnkwc3md-glibc-2.42-67",
+    "/nix/store/3n4qphl9s728sz8frmpqqrv9b1m87g68-python3-3.14.7",
+    "/nix/store/3sj8msrsym648f35mk3gb3pp385hhk8r-gcc-16.2.0-libgcc",
+    "/nix/store/4168xqs4l5jbfc7xyi9zrhdhszx0pnlb-python3-3.13.16",
+    "/nix/store/604gsr59rj7dzd0nrhp143rpvf7gyiaz-gcc-15.3.0-lib",
+    "/nix/store/7a2cjhcgzyym5zaz6m4fksw47qvm150w-gcc-16.2.0-lib",
+    "/nix/store/cjgm8gv32xdrjgzbgc0zk2fypiys9ylf-gcc-15.3.0-libgcc",
+    "/nix/store/l9l9l807yqwlpqislciy2mcgjbahrm6r-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0",
+    "/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84",
+    "/nix/store/pqyiidz5mi73wv5f91d48s9plcqyj5bz-glibc-2.44-57",
+    "/nix/store/r48746qznwqxxl9qzd8f08ny8mg1dg2y-gcc-15.3.0-lib",
+    "/nix/store/wj1f56qky4pmjc7l0r6b6l7whnnw7hp6-python3-3.13.15",
+    "/nix/store/wkiqjb44n5k0fwhmc523dvflspd47q3b-gcc-15.3.0-libgcc"
+  ],
+  "bytes": [
+    {
+      "path": "/input/program",
+      "sha256": "f54f28b032308dbd040958945fb4895efde0ff4fe0a9fa276481a23267349ef6"
+    },
+    {
+      "path": "/data/all-aggregate-relations.json",
+      "sha256": "fc956a4140ae6da304f3d8a333b5d30e3242840a34c541e4577eb0939bc12e79"
+    },
+    {
+      "path": "/data/all-layout-cells.json",
+      "sha256": "6215a602b8c9045af23d817e2447adcafe7b3dc5ac8a6ef9f9505f2885244257"
+    },
+    {
+      "path": "/data/all-local-relations.json",
+      "sha256": "50e917d99fc95a6e9d909d06419500cd92b0343d8560b17ef8d72f63d2109c93"
+    },
+    {
+      "path": "/data/complete-key-multiplicity-domains.json",
+      "sha256": "83960496aacad7adaa82c8ff1a99d9fd5723c1c28c48f826eb6670a0d0d78814"
+    },
+    {
+      "path": "/data/consumer-obligations.json",
+      "sha256": "708ae85744a6a6055f3b0704a7cf02e7d614064824d37e7404df77fbef2c9f75"
+    },
+    {
+      "path": "/data/finite-locality-and-mass-inputs.json",
+      "sha256": "ee49067ee926a1aa3ae67871ca55c0f939425b3c750fb46918a559c4ac47dd76"
+    },
+    {
+      "path": "/data/gggg-even-cycle-witnesses.json",
+      "sha256": "24e86581ad3f4d6c679939dc57f39b6440d980c11f9d85ea5d7b471cbe54a9c8"
+    },
+    {
+      "path": "/data/interface-definition-order.json",
+      "sha256": "2bc2f62842c2f24bba992bf79ea1d6c8cba0727b83a81450ff8f1d793ecf002e"
+    },
+    {
+      "path": "/data/interface-inputs.json",
+      "sha256": "a1100378ffa6fad823978233ffa430c565537b4a7a96f57689c3e8d28d35d89d"
+    },
+    {
+      "path": "/data/math/current-faithfulness-and-equivalence/definition-order.json",
+      "sha256": "f3645d64255c3620edfe767790a49740437485132d34495ab3c0163ccffe63fb"
+    },
+    {
+      "path": "/data/math/current-faithfulness-and-equivalence/obligations.json",
+      "sha256": "182e4c459c5d9b6f49577ce89cf04c6be19c03ca0ff73fc6214ecc0c726bd449"
+    },
+    {
+      "path": "/data/math/current-faithfulness-and-equivalence/portable-pairs.json",
+      "sha256": "c886c293f5c6eb0e94f17f5b77896d37f5f06787d20465f380db7c38e55bc936"
+    },
+    {
+      "path": "/data/math/faithfulness-current/definition-order.json",
+      "sha256": "2a2267853611de68eeb18d437f734928e7f77ffdd7e91fcf537c3f0cd4ba0930"
+    },
+    {
+      "path": "/data/math/faithfulness-current/obligations.json",
+      "sha256": "e309f3e2371d63f9cc6794c3852bf9a216b635233d510cf23bd930b457d36030"
+    },
+    {
+      "path": "/data/math/faithfulness-current/portable-pairs.json",
+      "sha256": "d8514e96c85fc85d232a2973aff1fd93a75a6ee07e51751e470a441df57f18e4"
+    },
+    {
+      "path": "/data/math/faithfulness-historical/definition-order.json",
+      "sha256": "90d8745238333af8e97af9b2052a8ddab6071d0beab9a1bad5e391eb31531b74"
+    },
+    {
+      "path": "/data/math/faithfulness-historical/obligations.json",
+      "sha256": "9f4e306bd32d3b825a74d76830c7b94bc54430d01722975712dba1fccb761b3d"
+    },
+    {
+      "path": "/data/math/faithfulness-historical/portable-pairs.json",
+      "sha256": "77eac1d40fa6c0c1f8ef135d83bde82b342c9976fbbc28bb17e401910f8d5b85"
+    },
+    {
+      "path": "/data/math/nonliteral-cross-and-aggregate/definition-order.json",
+      "sha256": "4deb3c0b9103af0bf80cc353eb2d3f22fce4b1c4bef7ea04b4c7a09aac8b8f02"
+    },
+    {
+      "path": "/data/math/nonliteral-cross-and-aggregate/obligations.json",
+      "sha256": "5cbaab911fe2fbf606e3d531e8f0cb14cc7069316b0bc2fdd79538f641a0d1ab"
+    },
+    {
+      "path": "/data/math/nonliteral-cross-and-aggregate/portable-pairs.json",
+      "sha256": "b4cf11b44179dbd74c8ad345dc1bae1ca71bab9d7174b34d0b3be97408398e74"
+    },
+    {
+      "path": "/data/native-controls/math-coefficient.json",
+      "sha256": "57344ba47119b5f7a5a8061422a3cfaeb49c4a1e41b271619b30c4754218ba8a"
+    },
+    {
+      "path": "/data/native-controls/math-power.json",
+      "sha256": "91cd46454c67304c1cd5c7267455fd96484a23a59395aa93a86080c5c8f9dca4"
+    },
+    {
+      "path": "/data/native-controls/math-sign.json",
+      "sha256": "4ce6448b86bffbfcfb605fa56f41b05217774f8509313edc71bc0c2e90ec804c"
+    },
+    {
+      "path": "/data/native-controls/xs_qcd_gggg_L1--Auto--actual-dimension.json",
+      "sha256": "5ab90e7f1f4fdc445708d7a78528c2eac78008e410fc95ac410422fb4656b266"
+    },
+    {
+      "path": "/data/native-controls/xs_qcd_gggg_L1--None--actual-dimension.json",
+      "sha256": "4698578ce7080a8cf337c61f382d9e2f68494cf329cb8fbb625b86340be422f8"
+    },
+    {
+      "path": "/data/native-controls/xs_qcd_gggg_L1--None--metric-owner-claim.json",
+      "sha256": "f546e1cc1ce8dfa396e1120be9109ddb8b1a9c87c00e0afe7dfc50132b66ea47"
+    },
+    {
+      "path": "/data/native-controls/xs_qcd_gguu_L1--Auto--actual-dimension.json",
+      "sha256": "0b350a887564512bad0296ce441e98fd011c48f6032a573725f03a7892c219f2"
+    },
+    {
+      "path": "/data/native-controls/xs_qcd_gguu_L1--Auto--composite-owner-claim.json",
+      "sha256": "e5abb34c74bf293246d39854f89ddafc426a7dedb95d24f4230a9a0043c99ce6"
+    },
+    {
+      "path": "/data/native-controls/xs_qcd_gguu_L1--None--actual-dimension.json",
+      "sha256": "f66ae69e179837c3a0952d34d9cb55985309edc30131a3e3f11b782d9fcdfe2f"
+    },
+    {
+      "path": "/data/native-controls/xs_qcd_gguu_L1--None--wrong-owner.json",
+      "sha256": "e68df0aa03796a7d7ce9d8a4d407b418a5f646e5a2165b7aaec6bfecb4eaec30"
+    },
+    {
+      "path": "/data/native-controls/xs_qcd_gguu_sym_L1--Auto--actual-dimension.json",
+      "sha256": "230020779cfbba20540e80d003b75422fdd18bb89cc15acd277303f4875dd2c5"
+    },
+    {
+      "path": "/data/native-controls/xs_qcd_gguu_sym_L1--None--actual-dimension.json",
+      "sha256": "26b2b7996aad41af155eb2778775c86545686e41fbd5659e70ff3aa738fdc616"
+    },
+    {
+      "path": "/data/native-controls/xs_qcd_gguu_sym_L1--None--wrong-duality.json",
+      "sha256": "ac24802cc8e5ea5d06b27f2a97f9b8f4a611d037ceef09bcfd5e63775401b31f"
+    },
+    {
+      "path": "/data/native-controls.json",
+      "sha256": "87fb9a45ca0325b98d1b1bbe8d72fceb701b42a28a7713f9fb35eb7d4392be75"
+    },
+    {
+      "path": "/data/native-math-batches.json",
+      "sha256": "8d10d49ab5411a6a5b23f275b69d17e97e7ccc4160be592821ec6c5f612a160e"
+    },
+    {
+      "path": "/data/pristine-observer-census-associations.json",
+      "sha256": "756ebe4994f375f69e32028e2ff03bbef5db827ea07d647f56429f7156753db7"
+    },
+    {
+      "path": "/data/runtime-input/exec.py",
+      "sha256": "230b4df51f4a9b15a71d2c7b6793b2b9557d656e3befa4c853d8e239bdc9f315"
+    },
+    {
+      "path": "/data/runtime-input/program",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/data/xs_qcd_gggg_L1/Auto/aggregate-relations.json",
+      "sha256": "938977de9c232cf7b75d7adbbb659fd39e2e0cfa3624d6f7b1c3682036238e5a"
+    },
+    {
+      "path": "/data/xs_qcd_gggg_L1/Auto/boundary.json",
+      "sha256": "7bfe2045f073a9ed737a3abfa2a418a8513aabac8e20735c17db4dcef7b8c18f"
+    },
+    {
+      "path": "/data/xs_qcd_gggg_L1/Auto/definitions.json",
+      "sha256": "ac74f3928c7f1bb059a29b43eb63730755b356e3edfb96dbf0b7af4ae271814d"
+    },
+    {
+      "path": "/data/xs_qcd_gggg_L1/Auto/interface-inputs.json",
+      "sha256": "5e3c52cce165ac9b10a941067ce065fc5381767f98c71d1bd509116163fa59d0"
+    },
+    {
+      "path": "/data/xs_qcd_gggg_L1/Auto/layout-cells.json",
+      "sha256": "284a3f03ce53ca655879559b43de9bdda9a757ce580dc425304bd0858fd3a173"
+    },
+    {
+      "path": "/data/xs_qcd_gggg_L1/Auto/model-bindings.json",
+      "sha256": "a24cb856ae2d6212ff2ca529e610a38b0b21dc574921f827a3a319e9a611b3ac"
+    },
+    {
+      "path": "/data/xs_qcd_gggg_L1/Auto/owner-relations.json",
+      "sha256": "5a2a95f595070f914a3a70ef7da2d47e46fc9c33f2ba0707727150f620ba5109"
+    },
+    {
+      "path": "/data/xs_qcd_gggg_L1/Auto/physical-domain.json",
+      "sha256": "3d27ff3da26a1843793a91d24f28bf7386007e59efdd173f82c03a5980e52169"
+    },
+    {
+      "path": "/data/xs_qcd_gggg_L1/None/aggregate-relations.json",
+      "sha256": "99ec0b9412724cf5c3c0d1617b673b2b6955438747296f39677839787956459b"
+    },
+    {
+      "path": "/data/xs_qcd_gggg_L1/None/boundary.json",
+      "sha256": "3a4b2b59e0b4323fe5e60be86b25b98f977754450ccf1cf0195a34ad375ea71d"
+    },
+    {
+      "path": "/data/xs_qcd_gggg_L1/None/definitions.json",
+      "sha256": "ac74f3928c7f1bb059a29b43eb63730755b356e3edfb96dbf0b7af4ae271814d"
+    },
+    {
+      "path": "/data/xs_qcd_gggg_L1/None/interface-inputs.json",
+      "sha256": "d68771225ea7e9371fdbd406439a0ac08606d9bc059c1dbcd2f5dd921acef359"
+    },
+    {
+      "path": "/data/xs_qcd_gggg_L1/None/layout-cells.json",
+      "sha256": "284a3f03ce53ca655879559b43de9bdda9a757ce580dc425304bd0858fd3a173"
+    },
+    {
+      "path": "/data/xs_qcd_gggg_L1/None/model-bindings.json",
+      "sha256": "a24cb856ae2d6212ff2ca529e610a38b0b21dc574921f827a3a319e9a611b3ac"
+    },
+    {
+      "path": "/data/xs_qcd_gggg_L1/None/owner-relations.json",
+      "sha256": "6be8a8fa15d1829d65b3497208bbc59d2b2b67553ca24045f34b199748bafc56"
+    },
+    {
+      "path": "/data/xs_qcd_gggg_L1/None/physical-domain.json",
+      "sha256": "3d27ff3da26a1843793a91d24f28bf7386007e59efdd173f82c03a5980e52169"
+    },
+    {
+      "path": "/data/xs_qcd_gguu_L1/Auto/aggregate-relations.json",
+      "sha256": "937a2c0ce5d4fd6474759ef4577d2f14ed77848989cecfa69301e154dd137f22"
+    },
+    {
+      "path": "/data/xs_qcd_gguu_L1/Auto/boundary.json",
+      "sha256": "e6a72a802efb9e21d5849d35e38c47eac4454d719985ff0a9989c1de44c72d96"
+    },
+    {
+      "path": "/data/xs_qcd_gguu_L1/Auto/definitions.json",
+      "sha256": "a92b20f34f9bf475022718f7bb3c25da60859c7e9826e02135743a81aaef595e"
+    },
+    {
+      "path": "/data/xs_qcd_gguu_L1/Auto/interface-inputs.json",
+      "sha256": "2a22185499f0ac1aa4e579404511a68578e119148832d1be4b2a231e1889d02c"
+    },
+    {
+      "path": "/data/xs_qcd_gguu_L1/Auto/layout-cells.json",
+      "sha256": "deb5ffd1e7fb940e3bf33484ccb3c46cacffda88d545797085c8cd2647140e04"
+    },
+    {
+      "path": "/data/xs_qcd_gguu_L1/Auto/model-bindings.json",
+      "sha256": "a0dd440fd4602e724d7648c394b83245dd1700dcc050740329ed36f272f3d76d"
+    },
+    {
+      "path": "/data/xs_qcd_gguu_L1/Auto/owner-relations.json",
+      "sha256": "c955537601f522ffab457d260b2db9ca6e39465c215b4aa2d7856e6434744593"
+    },
+    {
+      "path": "/data/xs_qcd_gguu_L1/Auto/physical-domain.json",
+      "sha256": "1c95ecda9f47ad88b206cf91bc22211a98571ca08894fb36f260e8290030dbb7"
+    },
+    {
+      "path": "/data/xs_qcd_gguu_L1/None/aggregate-relations.json",
+      "sha256": "fe106377d62061f698b5dc24e22981621e8607699b3b5e6560ea1dcd67d01392"
+    },
+    {
+      "path": "/data/xs_qcd_gguu_L1/None/boundary.json",
+      "sha256": "ea7d558f8926b9c5f1bfda8f36eef8f63eaae40ea59bc4be023a70f7e9b812c4"
+    },
+    {
+      "path": "/data/xs_qcd_gguu_L1/None/definitions.json",
+      "sha256": "a92b20f34f9bf475022718f7bb3c25da60859c7e9826e02135743a81aaef595e"
+    },
+    {
+      "path": "/data/xs_qcd_gguu_L1/None/interface-inputs.json",
+      "sha256": "50ee2beb84756910ab8a25a280a56a71385736afca3a2ee321fe51c042898f0b"
+    },
+    {
+      "path": "/data/xs_qcd_gguu_L1/None/layout-cells.json",
+      "sha256": "deb5ffd1e7fb940e3bf33484ccb3c46cacffda88d545797085c8cd2647140e04"
+    },
+    {
+      "path": "/data/xs_qcd_gguu_L1/None/model-bindings.json",
+      "sha256": "a0dd440fd4602e724d7648c394b83245dd1700dcc050740329ed36f272f3d76d"
+    },
+    {
+      "path": "/data/xs_qcd_gguu_L1/None/owner-relations.json",
+      "sha256": "79721712684a5f7f7534a10ae6ac52225abb46bbd7b4b07792af6b40f1bed340"
+    },
+    {
+      "path": "/data/xs_qcd_gguu_L1/None/physical-domain.json",
+      "sha256": "1c95ecda9f47ad88b206cf91bc22211a98571ca08894fb36f260e8290030dbb7"
+    },
+    {
+      "path": "/data/xs_qcd_gguu_sym_L1/Auto/aggregate-relations.json",
+      "sha256": "22057db5ad87aa50822871721f3782dc6a3f8087e4445471f4d35c87a53a31cf"
+    },
+    {
+      "path": "/data/xs_qcd_gguu_sym_L1/Auto/boundary.json",
+      "sha256": "1abc0779c4ae8c5ee990f38fd11df9cb7db895ef09b6cc8b18a7d1bfedb788ca"
+    },
+    {
+      "path": "/data/xs_qcd_gguu_sym_L1/Auto/definitions.json",
+      "sha256": "a491530aa11897f6dce37b82f7e008efa0989836e2c11eb7cfa18ae029e34e62"
+    },
+    {
+      "path": "/data/xs_qcd_gguu_sym_L1/Auto/interface-inputs.json",
+      "sha256": "0d82bfc0e93f30bf5e9e4c7736d5edcd0e93bde0cd7e2c7645c1970758af0639"
+    },
+    {
+      "path": "/data/xs_qcd_gguu_sym_L1/Auto/layout-cells.json",
+      "sha256": "c889603ea412e4bcf22002f51318e117ad234051fc360fd70af69e30ce6e667e"
+    },
+    {
+      "path": "/data/xs_qcd_gguu_sym_L1/Auto/model-bindings.json",
+      "sha256": "e251574f8f3db3b88309f9db85a2073bb541979f391fb41328f976f24f58f97c"
+    },
+    {
+      "path": "/data/xs_qcd_gguu_sym_L1/Auto/owner-relations.json",
+      "sha256": "ffc4d41134b8e47b9dfdf99b12ce17236f5189500edc444a9cfcb8093a5919de"
+    },
+    {
+      "path": "/data/xs_qcd_gguu_sym_L1/Auto/physical-domain.json",
+      "sha256": "9ea252c38e0c1a47c431ce84687d474820c08bad94aa5a1b957a8917e40df318"
+    },
+    {
+      "path": "/data/xs_qcd_gguu_sym_L1/None/aggregate-relations.json",
+      "sha256": "f942803f65ceede7713418c0356c07ee31be9373ab4ffc4fa983a0c64968fba6"
+    },
+    {
+      "path": "/data/xs_qcd_gguu_sym_L1/None/boundary.json",
+      "sha256": "2336b1eff97443b0a62f7f256e6e99de4a5e41b6b68c0113a0d146203820e460"
+    },
+    {
+      "path": "/data/xs_qcd_gguu_sym_L1/None/definitions.json",
+      "sha256": "a491530aa11897f6dce37b82f7e008efa0989836e2c11eb7cfa18ae029e34e62"
+    },
+    {
+      "path": "/data/xs_qcd_gguu_sym_L1/None/interface-inputs.json",
+      "sha256": "cc1305161fa2a8d2578049c30f24762032f75cb88435b36458b0a42d486d5bfd"
+    },
+    {
+      "path": "/data/xs_qcd_gguu_sym_L1/None/layout-cells.json",
+      "sha256": "c889603ea412e4bcf22002f51318e117ad234051fc360fd70af69e30ce6e667e"
+    },
+    {
+      "path": "/data/xs_qcd_gguu_sym_L1/None/model-bindings.json",
+      "sha256": "e251574f8f3db3b88309f9db85a2073bb541979f391fb41328f976f24f58f97c"
+    },
+    {
+      "path": "/data/xs_qcd_gguu_sym_L1/None/owner-relations.json",
+      "sha256": "584aac7f52d4ec9ee378c3d5321912475ad0b05967abb1f06dd67c2053567c28"
+    },
+    {
+      "path": "/data/xs_qcd_gguu_sym_L1/None/physical-domain.json",
+      "sha256": "9ea252c38e0c1a47c431ce84687d474820c08bad94aa5a1b957a8917e40df318"
+    },
+    {
+      "path": "/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84/lib/ld-linux-x86-64.so.2",
+      "sha256": "05657061620b22dbeb881cd13630ef66d39916d3b9c2a8efeb9ec6244367051f"
+    },
+    {
+      "path": "/nix/store/wj1f56qky4pmjc7l0r6b6l7whnnw7hp6-python3-3.13.15/lib/libpython3.13.so.1.0",
+      "sha256": "145bc8e096d66e2f729bfa0cec51323cfd3a8a783ba65da718e101f2a891515e"
+    },
+    {
+      "path": "/nix/store/604gsr59rj7dzd0nrhp143rpvf7gyiaz-gcc-15.3.0-lib/lib/libgcc_s.so.1",
+      "sha256": "5e9e168007e3c97615d5891495e6ae4e5a07b9f3debfc5786aee94524bfcf5cb"
+    },
+    {
+      "path": "/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84/lib/libm.so.6",
+      "sha256": "864704dfd98b7025f21dd1dcc8f8f1f6388ecb44aa984b075f0188c253d4ab53"
+    },
+    {
+      "path": "/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84/lib/libc.so.6",
+      "sha256": "b8cb091b34bdd88f6902eebff8761f9ea306e6789b4ac4d06d4470c0d568c80c"
+    },
+    {
+      "path": "/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84/lib/libdl.so.2",
+      "sha256": "cdc7cf03d3b7db61930406eb336c74ba71c0347b77f2dc1ff03ebe6519442f1b"
+    },
+    {
+      "path": "/nix/store/4168xqs4l5jbfc7xyi9zrhdhszx0pnlb-python3-3.13.16/bin/python3",
+      "sha256": "b50993d6ad6707265ea80ed3f0372f1c8ed30228a43958d1ba72528d88d824ba"
+    },
+    {
+      "path": "/nix/store/pqyiidz5mi73wv5f91d48s9plcqyj5bz-glibc-2.44-57/lib/ld-linux-x86-64.so.2",
+      "sha256": "d2fbe26249c12dd8ac1cfb618c705fe37d625d5a4dd4035b27869766480c1244"
+    },
+    {
+      "path": "/nix/store/4168xqs4l5jbfc7xyi9zrhdhszx0pnlb-python3-3.13.16/lib/libpython3.13.so.1.0",
+      "sha256": "bd5481e5a166d7324e668c8ea0c8847d81597fd41db0df8055dda34ee6048e17"
+    },
+    {
+      "path": "/nix/store/pqyiidz5mi73wv5f91d48s9plcqyj5bz-glibc-2.44-57/lib/libdl.so.2",
+      "sha256": "e0447a849c6f53e87b190ef66e8d850e44a675d88cc73203bfcfabec8ed5aa6a"
+    },
+    {
+      "path": "/nix/store/pqyiidz5mi73wv5f91d48s9plcqyj5bz-glibc-2.44-57/lib/libm.so.6",
+      "sha256": "1dcff2bf21bcc45bc903ba1cfe8743503b0008d7afa79ddb1df90788d62bfff3"
+    },
+    {
+      "path": "/nix/store/7a2cjhcgzyym5zaz6m4fksw47qvm150w-gcc-16.2.0-lib/lib/libgcc_s.so.1",
+      "sha256": "e80a9d87e1a0b8249700f459767b257b01969c79bee3c8fb15e35e1e9c4da055"
+    },
+    {
+      "path": "/nix/store/pqyiidz5mi73wv5f91d48s9plcqyj5bz-glibc-2.44-57/lib/libc.so.6",
+      "sha256": "caaa4691f54660960a577c5397dc38a7fef9c5c617bb4e248f00bd3c9acd3726"
+    },
+    {
+      "path": "/input/exec.py",
+      "sha256": "230b4df51f4a9b15a71d2c7b6793b2b9557d656e3befa4c853d8e239bdc9f315"
+    }
+  ],
+  "all_four_private_names_absent": true,
+  "hostroot_config_credentials_socket_compiler_cache_absent": true,
+  "owned_output_roots": [
+    "/work",
+    "/home/runtime",
+    "/work/tmp",
+    "/work/cache"
+  ],
+  "network_interfaces": [
+    "lo"
+  ],
+  "network_probe_errno": 101,
+  "scientific_helper_executed": false,
+  "private_handoff_qualified": false
+}

@@ -1,0 +1,559 @@
+{
+  "schema": "independent-next-three-raw-qcd-numerator-migration-review/1",
+  "decision": "APPROVE",
+  "accepted_scope": "EXACT_THREE_NUMERATOR_LITERAL_MIGRATIONS_ONLY_PREAPPLICATION_WP9_DECISION",
+  "summary": "APPROVE all three exact numerator replacements. Full pristine ten-field Row reconstruction, exact proof-to-digest-owner bindings and immutable target applicability close the preapplication WP9 justification. No blocker or additional native proof requirement. This is not application, postapplication runtime or broader integration approval.",
+  "reviewer": {
+    "role": "NEW independent migration review sub-agent",
+    "model": "Astra",
+    "fallback": "User-authorized after Opus rate limits",
+    "candidate_author": false,
+    "delegated": false,
+    "distinct_from_scientific_and_prior_row_reviews": true
+  },
+  "completed_utc": "2026-10-31T07:03:54.551485+00:00",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families",
+  "review_directory": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-next-qcd-migration-astra-20261031-efvezb1p",
+  "author_identity_already_settled": "Lucien Huber <im@lcnbr.ch>; no VCS identity/change operation",
+  "per_row_verdicts": [
+    {
+      "case": "xs_qcd_gguu_sym_L1",
+      "field": "numerators",
+      "decision": "APPROVE",
+      "old": "0xb9fdc23ed056fa0c",
+      "new": "0xe4b209849953f1fa",
+      "before_Row": {
+        "diagrams": 5,
+        "topologies": 55,
+        "assignments": 314,
+        "inverse_symmetry": [
+          5,
+          1
+        ],
+        "weights": [
+          -9,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            5
+          ]
+        ],
+        "content": 712537782630059826,
+        "numerators": 13402081641163586060,
+        "named": 11632919173438081337,
+        "ids": 16028865599310850548
+      },
+      "after_Row": {
+        "diagrams": 5,
+        "topologies": 55,
+        "assignments": 314,
+        "inverse_symmetry": [
+          5,
+          1
+        ],
+        "weights": [
+          -9,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            5
+          ]
+        ],
+        "content": 712537782630059826,
+        "numerators": 16479244451614814714,
+        "named": 11632919173438081337,
+        "ids": 16028865599310850548
+      },
+      "Classes": "None",
+      "Grouping": "None",
+      "captured_pool": 1,
+      "physical_argument": {
+        "complete_owners": 65,
+        "whole_tree_identities": 65,
+        "even_f_cycle_relations": 0,
+        "changed_owner_lowerings": 34,
+        "unchanged_imported_input_source_arguments": 31,
+        "basis": "Accepted independent full factorized expression correctness and named-axis transport attached to exact pristine serialized digest owners, with full physical inputs, source factors, memberships, definitions and raw/cooked/decoded capture premises. All other nine fields independently reconstructed unchanged."
+      },
+      "remaining_preapplication_gap": null,
+      "postapplication_test_status": "NOT_RUN; future separately authorized owner required"
+    },
+    {
+      "case": "xs_qcd_gguu_L1",
+      "field": "numerators",
+      "decision": "APPROVE",
+      "old": "0x5edf8e5f7a11eeb3",
+      "new": "0x665e13a4c88da679",
+      "before_Row": {
+        "diagrams": 9,
+        "topologies": 55,
+        "assignments": 314,
+        "inverse_symmetry": [
+          9,
+          1
+        ],
+        "weights": [
+          -9,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            9
+          ]
+        ],
+        "content": 14314625976713108301,
+        "numerators": 6836339300092735155,
+        "named": 16923202097874588873,
+        "ids": 3305438741699831416
+      },
+      "after_Row": {
+        "diagrams": 9,
+        "topologies": 55,
+        "assignments": 314,
+        "inverse_symmetry": [
+          9,
+          1
+        ],
+        "weights": [
+          -9,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            9
+          ]
+        ],
+        "content": 14314625976713108301,
+        "numerators": 7376354838139741817,
+        "named": 16923202097874588873,
+        "ids": 3305438741699831416
+      },
+      "Classes": "None",
+      "Grouping": "None",
+      "captured_pool": 1,
+      "physical_argument": {
+        "complete_owners": 117,
+        "whole_tree_identities": 117,
+        "even_f_cycle_relations": 0,
+        "changed_owner_lowerings": 63,
+        "unchanged_imported_input_source_arguments": 54,
+        "basis": "Accepted independent full factorized expression correctness and named-axis transport attached to exact pristine serialized digest owners, with full physical inputs, source factors, memberships, definitions and raw/cooked/decoded capture premises. All other nine fields independently reconstructed unchanged."
+      },
+      "remaining_preapplication_gap": null,
+      "postapplication_test_status": "NOT_RUN; future separately authorized owner required"
+    },
+    {
+      "case": "xs_qcd_gggg_L1",
+      "field": "numerators",
+      "decision": "APPROVE",
+      "old": "0x2628c62dc373ac91",
+      "new": "0x96e5abcebda25959",
+      "before_Row": {
+        "diagrams": 10,
+        "topologies": 55,
+        "assignments": 314,
+        "inverse_symmetry": [
+          8,
+          1
+        ],
+        "weights": [
+          8,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            6
+          ],
+          [
+            2,
+            4
+          ]
+        ],
+        "content": 2830695040470270924,
+        "numerators": 2749665472364653713,
+        "named": 4421028482057233418,
+        "ids": 16350038670819282211
+      },
+      "after_Row": {
+        "diagrams": 10,
+        "topologies": 55,
+        "assignments": 314,
+        "inverse_symmetry": [
+          8,
+          1
+        ],
+        "weights": [
+          8,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            6
+          ],
+          [
+            2,
+            4
+          ]
+        ],
+        "content": 2830695040470270924,
+        "numerators": 10873285779789076825,
+        "named": 4421028482057233418,
+        "ids": 16350038670819282211
+      },
+      "Classes": "None",
+      "Grouping": "None",
+      "captured_pool": 1,
+      "physical_argument": {
+        "complete_owners": 118,
+        "whole_tree_identities": 107,
+        "even_f_cycle_relations": 11,
+        "changed_owner_lowerings": 8,
+        "unchanged_imported_input_source_arguments": 110,
+        "basis": "Accepted independent full factorized expression correctness and named-axis transport attached to exact pristine serialized digest owners, with full physical inputs, source factors, memberships, definitions and raw/cooked/decoded capture premises. All other nine fields independently reconstructed unchanged."
+      },
+      "remaining_preapplication_gap": null,
+      "postapplication_test_status": "NOT_RUN; future separately authorized owner required"
+    }
+  ],
+  "blocking_findings": [],
+  "smallest_remaining_preapplication_gap": null,
+  "additional_native_proof_requirement": null,
+  "candidate": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-migration-preparation-20261031-r1",
+    "SEAL_sha256": "b4e75df006b68563219947ecbdef5cb8fd289f9b4c7ba840d79c0ce599377324",
+    "SHA256SUMS_sha256": "7c8c48341828a16d00b4f692f6ce3941d35b5679e73eac2fd4176f139942b503",
+    "manifest_files": 122,
+    "handoff_sha256": "1b69607db0184093de3b16d32541d6f7a5a3f00968b85694685a6d17fb1506b3",
+    "complete_input_manifest_sha256": "600ced69f0172b82a4043aa3d2a255e270c9782a79726f4d745ab93d3cc40e6e",
+    "patch_sha256": "1df84cbea910df5ff092203ff6050e785bccf0027bd627b91a601d1f7b98cf84",
+    "target": {
+      "revision": "83276dc047815d1dcc7f003aeb512c204b26758e",
+      "tree": "c9de5c3fd962bd5d7c9375ab1f86f75699e8a69b",
+      "relevant_code": "6f41807b064bcf2f579883134daef65c8ac279d3",
+      "path": "crates/feynkit-generator/tests/generation_oracle/main.rs",
+      "before_blob": "7283198bf0152c82c1cd5f0173703cddfa7f5c0f",
+      "after_blob": "cc4505a6c4f6fc1687c075ed79e154a8e19f05a6"
+    },
+    "before_sha256": "66f01bcc855552ae888f1fb7c5bb158afbd448492b4e27a26e2bda40f09b07d2",
+    "after_sha256": "17e0abe46c76c6b6922e5b33782925020e1412e1a6ed8cd8dc7e23de438d4aa2",
+    "applied": false
+  },
+  "additive_scientific_join": {
+    "root_acceptance": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/root-next-qcd-scientific-interface-acceptance-20261031.json",
+    "root_acceptance_sha256": "225b2c244ba02f16ca3ee73a59d23df3fff12204deef44f3aa405397247a0ea7",
+    "review": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-next-qcd-scientific-interface-astra-20261031-5a3KbP5x/review.json",
+    "review_sha256": "6d892bd9263a7c093bba5fd372fb4663a5a4e81dfaad4bfc709bbba052b96d21",
+    "SEAL_sha256": "888b82c478697e917cb243587653cc16d09a484f299a671c5ffd8981e58c1d99",
+    "manifest_files": 57,
+    "disposition": "Completed exact six-cell finite mathematics and named-consumer acceptance consumed additively; no original PENDING string altered or treated as a remaining blocker. The scientific review itself did not grant migration approval; this NEW decision does.",
+    "all_original_source_capture_definition_premises": [
+      "Historical source2b1ef4f07a44bc061bcc97c378bbdd9c41cb0e94 uses Symbolica/Numerica gitc78cffc20f318df1fce50539a587cbe8ffc717c0 and Graphica registry3.0.1. Original dev-optim, actual direct-rustc diagnostics and current CI profiles remain distinct; no all-git-c78 or profile equivalence claim.",
+      "Current pristine actualffa76ec420642c03349ab756d2d7720ab93c0057/archive8993e6c8346b84f6d91c7e65c4c4fc5ed83cf6d932e969bb7fc55cbdced20740/kernel8eb7c3729d6abefc916decc1bdf0c06536f8af80; observer actualbuilt5ea149ffd88ae3afc4072a38c0871c1329be8424 plus qualified overlay remains distinct from proofsource5ba and evidencec344. Existing qualified source invariance supplies only its recorded finite boundaries.",
+      "eae/1a is the failing baseline, never the original reference. Old historical grouped/source gaps are not repaired or upgraded by this review.",
+      "Accepted capture provenance remains an explicit dependency:12 invocations=3 preservedr1+9r2;6 historical passes and6 current numerator-only exit101 failures;24 public worlds,12 complete observer worlds,1200 raw-owner records and600 paired relations. Only historicalNone asserts the literal Row; Auto has its own world/request association.",
+      "Exact IDs are strings with full keys, not rounded f64 diagnostic IDs or ordinal-only joins. Raw/cooked/decoded/public/observer association and pristine-observer equivalence are reused only through the accepted exact capture/source bindings.",
+      "The original nested-Fraction controller failure and missing original afterrecord are retained, with separate additive exact revalidation. No retroactive historical success or original receipt field is invented.",
+      "Captured symbol tables contain full spellings/tags/attributes. Uncaptured callback/userdata semantics, source constructors, model/module initialization and qualified compiler/kernel/store behavior remain explicit premises. The48 reconstructed typed schedules include2372 explicit parse events; they do not claim newly observed global interner order.",
+      "Missing historical interface metadata means infer through its actual source owner, never an empty interface. Original physical factorization, signed routes, sources and factor2 on4of5 sym diagrams are essential premises."
+    ],
+    "original_scientific_restrictions_verbatim_with_original_scope": [
+      "Exactly xs_qcd_gguu_sym_L1, xs_qcd_gguu_L1 and xs_qcd_gggg_L1; None andAuto separately; GroupingNone; capturedpool1.",
+      "No migration/literal application, expectation edit, postapplication runtime, other60 rows, grouped/fullpool8/32, full371, global integration, publication or general runner approval.",
+      "No new historical full-integrand or old grouped theorem; no universal decoder, callback/userdata, locality/UV, denominator-evenness, trace/component execution, evaluator or physical cross-section validation claim.",
+      "Both operand and output-axis maps mandatory. Same-value/port compatibility does not authorize positional or cached-plan interchangeability. Historical profile/source/observer/raw-cooked-decoded premises remain in force.",
+      "This closes the requested finite scientific/interface review only. Any later migration and runtime validation remain separate tasks."
+    ]
+  },
+  "WP9": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/docs/architecture/generation-integration-plan.typ",
+    "sha256": "4489dc7383468cf2daf7f8c177d3ea87fe9cad45c99af1afc0f160b202ff06f6",
+    "rule": "Re-certifying a snapshot needs group membership and weights, or full expression equivalence, plus an independent correctness argument. Equal group counts and summed weights are not enough; re-recorded hashes are not proof.",
+    "reasoning": "The historicalNone fullRows match original literals; pristine currentNone fullRows differ solely in numerators. Full physical graph domains, source factors and memberships are equal, and independently accepted whole-expression congruence/even-f-cycle mathematics plus finite named operand/output-axis covariance attach to every exact raw/cooked-decoded/public owner serialized into the digest. Exact source invariance transports this finite scientific justification to832 without claiming a new832 runtime. Thus this is a justified representation-sensitive expectation change, not re-recording a failed actual hash. Commit-only-passing-expectations remains a future postapplication gate, not asserted complete here.",
+    "global_completion": false
+  },
+  "pipeline_comparison": {
+    "shared_inputs": "Same serialized model, actual request/classes/options/Run, GroupingNone, captured pool1, exact graph IDs/full keys, unique memberships, source factors, cuts, signed routing/basis, edge/vertex incidence and half-edge order, particles and masses.",
+    "historical": "Historical2b generation -> original current-at-the-time cooked carrier -> observed raw/decoded/ports/flags -> historical public serialization with absent explicit interface -> exact captured None/Auto worlds.",
+    "current": "Pristineffa/archive8993/kernel8eb public generation capture and separately qualified observerbuilt5ea+overlay -> actual raw/decoded/ports/flags -> current public explicit interfaces on34/63/8 owners per case/mode -> exact captured worlds.",
+    "first_observed_difference": "Raw cooked spelling is the first captured differing boundary, not a claim about the first internal producer divergence. After the five full-token source maps, decoded trees agree for65/65 and117/117 per mode; gggg107/118 are literal and11 require even f cycles. Historical interface absence is distinct from explicit empty metadata.",
+    "excluded": "Counts alone, rounded raw JSON f64 IDs, old onePI batches, denominator evenness, numerical substitution and graph-numerator expansion supply no proof credit."
+  },
+  "independent_reconstruction": {
+    "full_ten_field_Rows": 12,
+    "eras": [
+      "historical",
+      "current"
+    ],
+    "modes": [
+      "None",
+      "Auto"
+    ],
+    "literal_assertion_mode": "None",
+    "implementation": "Fresh stdlib digest/factor/Row decoder implemented from immutable Rust census; no candidate derive() execution and no failed assertion hash as input. Pure owner/parser helpers are inspected private byte-identical copies with stdlib imports only.",
+    "encoding": "FNV1a wrappingu64; exact LEu64/u128; canonical serialized JSON, text0xff/nameNone0xfe; full key/frame/numerator/interface vertex-then-edge encoding; ordered named/group folds; sorted digest multisets; exact rational source-factor evaluation.",
+    "complete_capture_joins": "All twelve full worlds directly joined to pristine and observer public JSON/source companions, exact census report, complete mode-event ledgers and raw owner data. Historical missing live.threads remains omitted and actual Run binds Some(1). No ordinal-only or rounded-ID matching.",
+    "report": "all12-Rows-independent.json"
+  },
+  "proof_payload_binding": {
+    "report": "proof-review-independent.json",
+    "owner_bindings": "proof-owner-join-independent.json",
+    "fold_bindings": "fold-output-join-independent.json",
+    "method": "All600 native input/actual owners rejoined to exact pristine serialized expression and explicit-or-absent interface segments; complete raw/decoded/port/flag data, model/request/options/Run, full keys/IDs, source factor/rule/coupling membership and full definition maps checked. Both actual operand and canonical output maps satisfy the complete commuting square.",
+    "local_relations": {
+      "whole_tree_literal": 578,
+      "nonliteral_even_f_cycle": 22,
+      "unexpanded_products": 96
+    },
+    "native_math_partitions": [
+      {
+        "batch": "faithfulness-historical",
+        "unique_pairs": 166,
+        "obligations": 166,
+        "definitions": 209
+      },
+      {
+        "batch": "current-faithfulness-and-equivalence",
+        "unique_pairs": 118,
+        "obligations": 203,
+        "definitions": 142
+      }
+    ],
+    "native_rows_total": 568,
+    "inverse_references": 4268,
+    "selected_integer_plan_pairs": 1890,
+    "actual_fold_steps": 456,
+    "actual_fold_endpoint_pairs": 720,
+    "changed_owner_lowerings": 210,
+    "accepted_lowering_layouts_bound_to_same_actual_owners": 420,
+    "unchanged_equal_input_source_arguments": 390,
+    "new_native_credit": 0,
+    "scientific_proof_status": "Accepted independent finite physical mathematics retained, not inferred from counts/weights/hash consistency."
+  },
+  "source_applicability": {
+    "actual_pristine": "ffa76ec420642c03349ab756d2d7720ab93c0057",
+    "target": "83276dc047815d1dcc7f003aeb512c204b26758e",
+    "relevant_code": "6f41807b064bcf2f579883134daef65c8ac279d3",
+    "immutable_tree": "c9de5c3fd962bd5d7c9375ab1f86f75699e8a69b",
+    "source_objects_each_revision": 1521,
+    "method": "Read and independently hash every immutable object across complete crates/assets/root manifests/lock domain; match mode/type/blob and file inventories for actualffa/832/6f. Compare all repository deltas separately. Recheck16 frozen source files directly against Git objects.",
+    "only_generator_delta": "Exactly one unrelated previously approved xs_qed_eemm_identical_L2.numerators token; replacing that complete row in target with actualffa row reproduces every main.rs byte. All other1520 objects identical.832 and6f full relevant domains identical.",
+    "outside_domain_deltas": "1193 docs/evidence paths and one notebook .pyi stub; complete paths and object IDs retained. All other root source/test/build configuration unchanged.",
+    "producer_relabelled": false,
+    "new_target_compile_or_runtime": false,
+    "reports": [
+      "source-objects-independent.json",
+      "all-target-deltas-independent.json",
+      "ordered-scopes-independent.json"
+    ]
+  },
+  "patch_scope": {
+    "before_blob": "7283198bf0152c82c1cd5f0173703cddfa7f5c0f",
+    "after_blob": "cc4505a6c4f6fc1687c075ed79e154a8e19f05a6",
+    "patch_sha256": "1df84cbea910df5ff092203ff6050e785bccf0027bd627b91a601d1f7b98cf84",
+    "bytes": 77616,
+    "Rows": 149,
+    "unchanged_full_Rows": 146,
+    "prior13_preserved": [
+      "xs_qed_eemm_L1",
+      "xs_qed_eedd_L1",
+      "xs_qed_eeee_1pi_L1",
+      "qed_eemm_L1",
+      "ctorder_qcd_uugg_L1",
+      "sm_eemm_L0",
+      "ym_g6_L0",
+      "xs_qed_eemm_L2",
+      "sm_eeww_L0",
+      "qed_ee4f_L0",
+      "xs_qed_eeee_L1",
+      "xs_qcd_gguu_1pi_L1",
+      "xs_qed_eemm_identical_L2"
+    ],
+    "only_fields": [
+      "numerators"
+    ],
+    "token_spans": [
+      {
+        "case": "xs_qcd_gguu_sym_L1",
+        "old": "0xb9fdc23ed056fa0c",
+        "new": "0xe4b209849953f1fa",
+        "start": 49850,
+        "end_exclusive": 49868
+      },
+      {
+        "case": "xs_qcd_gguu_L1",
+        "old": "0x5edf8e5f7a11eeb3",
+        "new": "0x665e13a4c88da679",
+        "start": 49295,
+        "end_exclusive": 49313
+      },
+      {
+        "case": "xs_qcd_gggg_L1",
+        "old": "0x2628c62dc373ac91",
+        "new": "0x96e5abcebda25959",
+        "start": 48453,
+        "end_exclusive": 48471
+      }
+    ],
+    "actual_changed_byte_positions": [
+      48455,
+      48457,
+      48458,
+      48459,
+      48460,
+      48461,
+      48462,
+      48463,
+      48464,
+      48465,
+      48466,
+      48467,
+      48468,
+      48469,
+      48470,
+      49297,
+      49298,
+      49299,
+      49300,
+      49301,
+      49302,
+      49303,
+      49304,
+      49305,
+      49306,
+      49307,
+      49308,
+      49309,
+      49310,
+      49311,
+      49312,
+      49852,
+      49853,
+      49854,
+      49855,
+      49856,
+      49857,
+      49858,
+      49859,
+      49860,
+      49861,
+      49863,
+      49865,
+      49866,
+      49867
+    ],
+    "all_other_bytes_equal": true,
+    "same_hash_sibling_preserved": true,
+    "private_patch_fuzz": 0,
+    "private_patch_offset": 0,
+    "postapplication_runtime": "NOT_RUN",
+    "applied_to_tracked_source": false
+  },
+  "validation": {
+    "fresh_controls": {
+      "total": 26,
+      "positive": 4,
+      "intended_rejections": 22,
+      "report": "fresh-controls.json",
+      "credit": "Pure byte/identity/definition/map controls only; no native or scientific negative credit."
+    },
+    "before_unique_files": 4056,
+    "final_unique_files": 4057,
+    "all_initial_inputs_unchanged": true,
+    "integrity_failures": [],
+    "candidate_external_files_rehashed": 3869,
+    "previously_unread_source_configs_rehashed": [
+      "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/observer-src/.config/nextest.toml",
+      "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/observer-src/vendor/clarabel/.cargo/config.toml"
+    ],
+    "supplemental_scientific_source_and_association_files_rehashed": 221,
+    "Git_refs_before_after_equal": true,
+    "refs_action": "Read-only disclosure; never restore or mutate concurrent work.",
+    "reviewer_errors": "errors.json; interpreter lookup, initial integer-aut assumption and overbroad schema discovery retained, no semantic credit.",
+    "candidate_authoring_history": "Eight errors/fixes retained unchanged in candidate/errors.json, with original failed scripts/streams; no native failure rewritten.",
+    "Typst": "UNRENDERED; no compiler invoked"
+  },
+  "historical_reviews": "accepted-source-audits-rehashed.json retains exact capture/R1 PREP/R2 PREP+supervisor/R3 supervisor review hashes and original decisions; later native execution is separately authorized by650f597b... and accepted scientifically by6d892bd9... . No retroactive overwrite.",
+  "conditions_and_restrictions": [
+    "Only the three named numerators tokens in the exact832 source blob and exact proposed patch are approved. All149 Rows,13 prior full migrated Rows,118 ordered source scopes and every other byte must remain exact. xs_qcd_gggg_sym_L1 is excluded despite its shared old hash.",
+    "The accepted scientific premise is finite: the six separately captured case/None-or-Auto cells, GroupingNone, pool1. OnlyNone receives the original literal Row assertion. Auto remains independently captured/reconstructed and supplies no separate literal assertion.",
+    "Full exact model, request, options, Run, graph128-bit string IDs and full canonical keys, group source indices/members/ratios, source factors, cuts, signs, routing, incidence/half-edge slots, particle/mass/rule/coupling ownership remain bound. NumeratorIndependentSymmetryGrouping(2) applies to exactly4of5 sym gguu diagrams, not the entire case.",
+    "Both entering-operand and surviving-output maps are essential. The current typed8eb consumer imports both eras; this is not new c78 typed execution. Historical interface absence is not an empty interface. No historical positional identity or stale cached-plan interchangeability is authorized.",
+    "All600 full owner relations,96 unexpanded products, complete166/118 native pair partitions per kernel and exact definition/side orders remain dependencies.4268 inverse references are associations, not new obligations. Native568 pair-result rows and5baseline/16specific-negative evidence remain historical retained execution, never rerun here.",
+    "For210 changed owners retain both actual lowerings and the accepted420 layout audits;390 unchanged owners use exact imported expression/ports/flags plus the qualified deterministic source. Actual flags belong to reconstructed owners, not serialized-flag admission. Rank8 numerator plus rank4 projector leaves FOURcoad8 outputs. No scalar closure or component evaluation is inferred.",
+    "Historical2b1ef4f07a44bc061bcc97c378bbdd9c41cb0e94 uses Symbolica/Numerica c78cffc20f318df1fce50539a587cbe8ffc717c0 and registryGraphica3.0.1. Current pristine actualffa76ec420642c03349ab756d2d7720ab93c0057/archive8993e6c8346b84f6d91c7e65c4c4fc5ed83cf6d932e969bb7fc55cbdced20740/kernel8eb7c3729d6abefc916decc1bdf0c06536f8af80 is distinct from observerbuilt5ea149ffd88ae3afc4072a38c0871c1329be8424+qualified overlay and proofsource5ba04864ca506e259d9eef4a54f65acdd8323fc2. No producer is relabelled832/6f.",
+    "Whole symbol spellings/tags/attributes, uncaptured callback/userdata semantics, constructors/model/module initialization, original profile/compiler/kernel/store honesty and qualified observer/raw-cooked-decoded provenance remain explicit premises. Historicaldev-optim/currentCI/direct-rustc qualifications are not declared equivalent. eae/1a remains a failing baseline, never the original reference.",
+    "Finite locality912 records/1096momentum calls certify their exact dependencies only.41088visited factor subsets are finite pure enumeration, not native runs;456actual folds/720endpoint pairs are the actual retained typed observations. No general decoder/locality/UV/full-integrand/denominator-evenness/trace/component/evaluator/cross-section theorem is approved.",
+    "Cooperative protected-record/source/command/input/result consistency is the execution premise; no hostile or cryptographic attestation, new global interner observation or inner-PID/private-value evidence is invented.",
+    "INFO-1 remains nonblocking solely because the accepted independent scientific audit checked the exact actual integer plans, dispatch kinds and420lowering layouts. This migration review additionally checks all actual selected and fold integer plans and output maps. No general audit_native validator reuse is approved.26builtin bis no-ops earn zero rejection credit.",
+    "All unnamed rows, grouped modes, new sources/models/options/definitions, pool8/32, full371/WP3/M-rebuild/main/publication/global integration remain outside this approval. Metadata acceptance at832 is not a fullWP3 pass. Latest actual full-package result remains302passed/69failed/49ignored; no subtraction-based updated count is claimed.",
+    "External capture, source, helper, proof, actual execution and review dependencies remain required at their recorded paths/hashes; this review packet is not self-contained."
+  ],
+  "nonblocking_findings": [
+    {
+      "id": "MIG-INFO-1",
+      "title": "General auditor limitations remain excluded",
+      "disposition": "Accepted scientific review independently closed integer-plan/dispatch/lowering-layout checks for this exact sealed corpus. No additional native execution is needed. No broader validator qualification."
+    },
+    {
+      "id": "MIG-INFO-2",
+      "title": "Postapplication execution is a separate gate",
+      "disposition": "No tracked patch applied or runtime claimed. Future owner needs exact new producer archive, actual full-Row tests at1/8/32, fresh capture/proof joins where required and new integration review."
+    },
+    {
+      "id": "MIG-INFO-3",
+      "title": "Historical pending and failed-preparation records remain unchanged",
+      "disposition": "Scientific gate consumed through additive root acceptance225b2c..., while original preparation pending strings, eight authoring fixes, PREP1/PREP2 and SUP1/SUP2/SUP3 history, and original nested-Fraction capture error remain historical records."
+    }
+  ],
+  "future_authorized_owner_boundary": {
+    "preapplication_missing_proof": null,
+    "required_later": [
+      "Apply only the exact three-token patch to its exact immutable before bytes in the separately authorized implementation workspace.",
+      "Create a new postapplication producer archive/source qualification and run actual full-Row tests for all three cases at pools1,8,32.",
+      "Attach fresh capture/proof joins wherever the ensuing source, build, payload or interface boundary requires them; preserve all inherited finite/source conditions.",
+      "Obtain a NEW integration review of the actual postapplication evidence before any broader checkpoint or commit/publication claim."
+    ],
+    "approved_runtime_passes_now": false,
+    "proof_native21_rerun_required": false
+  },
+  "latest_full_package_result": {
+    "passed": 302,
+    "failed": 69,
+    "ignored": 49,
+    "updated_full_run": false,
+    "inventory_note": "All unnamed rows excluded regardless of the historical other60 phrase; no inferred remaining-failure count."
+  },
+  "activity": {
+    "new_native_or_loader_executions": 0,
+    "scientific_library_imports": 0,
+    "private_user_config_or_license_reads": 0,
+    "Nix_build_compiler_network_commands": 0,
+    "tracked_edits": 0,
+    "VCS_index_ref_snapshot_mutations": 0,
+    "writes_outside_new_review_directory": 0,
+    "delegations": 0,
+    "publication": false,
+    "patch_application": "Only frozen private copy within review directory",
+    "owned_processes_remaining": 0
+  },
+  "guidance": {
+    "read": [
+      "main/AGENTS.md",
+      "main/CONTRIBUTING.typ",
+      "selected AGENTS.md",
+      "selected CONTRIBUTING.typ",
+      "accepted integration plan WP9",
+      "applicable source and prior review guidance"
+    ],
+    "local": "No deeper applicable AGENTS under selected generator/source/review paths; .local/ ignore rule read directly. Explicit inspection-only task overrides implementation/build/license/VCS workflows. No Rust source implementation edit or style departure."
+  },
+  "retention": "Retain this NEW ignored review directory, independent scripts/controls, original failed reviewer probes, source copies, exact private patch result and hash manifests for root continuation. All original candidate/capture/proof/review inputs retained at original paths. No new ref created under explicit prohibition; no workspace removed; no owned process remains. External dependencies required; not self-contained."
+}

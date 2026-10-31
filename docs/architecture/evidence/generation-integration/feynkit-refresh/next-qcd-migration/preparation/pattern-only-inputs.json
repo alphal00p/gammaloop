@@ -1,0 +1,32 @@
+[
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/prepare_candidate.py",
+    "sha256": "c976c4375cf6d9632f1683e6331263168f42809242df6f30f4de257ae9594fb6",
+    "bytes": 13375
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/handoff.json",
+    "sha256": "067f4aa62546e10fdf35d8a99b40812ae4ac5c0e927daddcf2190ae353eb23ad",
+    "bytes": 3230
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-migration-preparation-20261031-r2/patch-binding.json",
+    "sha256": "51edb04919adfb8d9623e39de0cc2555187db9e750b33cd16453f18f62b18ca7",
+    "bytes": 4857
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-identical-migration-preparation-20261031-r1/handoff.json",
+    "sha256": "6279084309a00acfadede1c160cee1a2715f5b45a2e16e82dfba3470194b099c",
+    "bytes": 4625
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-identical-migration-preparation-20261031-r1/patch-binding.json",
+    "sha256": "e582884948bfe45d3ec4994960dd137de107e5a2acf64fa58b7942bcf73763a0",
+    "bytes": 14648
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-identical-migration-preparation-20261031-r1/preserved-prior12-Rows.json",
+    "sha256": "73f1df95ed686450766b54dbe129409130652ef8b4286c07e26bdfbacde507e6",
+    "bytes": 4991
+  }
+]

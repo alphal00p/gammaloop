@@ -1,0 +1,401 @@
+{
+  "scope": [
+    {
+      "case": "xs_qcd_gguu_sym_L1",
+      "mode": "None",
+      "graphs": 5,
+      "owners": 65,
+      "pure_literal": 65,
+      "nonliteral": 0,
+      "affected_port_orders": 34,
+      "declared_interfaces": 34,
+      "first_raw_boundary": {
+        "id": "6170f31e6eb07c29aac54d0c6cc14371",
+        "owner": "vertex:0"
+      },
+      "first_decoded_boundary": null,
+      "first_public_interface_boundary": {
+        "id": "6170f31e6eb07c29aac54d0c6cc14371",
+        "owner": "vertex:0"
+      },
+      "source_factor_trees": [
+        {
+          "id": "6170f31e6eb07c29aac54d0c6cc14371",
+          "overall_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(1)*feynkit_generator_factor::{}::InternalFermionLoopSign(-1)",
+          "symmetry_factor": 1
+        },
+        {
+          "id": "4ec3077f4f3e6e2fd1fbdbfbf5ba04c0",
+          "overall_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(1)*feynkit_generator_factor::{}::InternalFermionLoopSign(-1)*feynkit_generator_factor::{}::NumeratorIndependentSymmetryGrouping(2)",
+          "symmetry_factor": 1
+        },
+        {
+          "id": "fc350794b8b5d4b2a61350028cb5b539",
+          "overall_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(1)*feynkit_generator_factor::{}::InternalFermionLoopSign(-1)*feynkit_generator_factor::{}::NumeratorIndependentSymmetryGrouping(2)",
+          "symmetry_factor": 1
+        },
+        {
+          "id": "31d0890641674e5ee9afceaff1e22206",
+          "overall_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(1)*feynkit_generator_factor::{}::InternalFermionLoopSign(-1)*feynkit_generator_factor::{}::NumeratorIndependentSymmetryGrouping(2)",
+          "symmetry_factor": 1
+        },
+        {
+          "id": "14ac74bf7c503631cbbf625890f7ea67",
+          "overall_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(1)*feynkit_generator_factor::{}::InternalFermionLoopSign(-1)*feynkit_generator_factor::{}::NumeratorIndependentSymmetryGrouping(2)",
+          "symmetry_factor": 1
+        }
+      ]
+    },
+    {
+      "case": "xs_qcd_gguu_sym_L1",
+      "mode": "Auto",
+      "graphs": 5,
+      "owners": 65,
+      "pure_literal": 65,
+      "nonliteral": 0,
+      "affected_port_orders": 34,
+      "declared_interfaces": 34,
+      "first_raw_boundary": {
+        "id": "6170f31e6eb07c29aac54d0c6cc14371",
+        "owner": "vertex:0"
+      },
+      "first_decoded_boundary": null,
+      "first_public_interface_boundary": {
+        "id": "6170f31e6eb07c29aac54d0c6cc14371",
+        "owner": "vertex:0"
+      },
+      "source_factor_trees": [
+        {
+          "id": "6170f31e6eb07c29aac54d0c6cc14371",
+          "overall_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(1)*feynkit_generator_factor::{}::InternalFermionLoopSign(-1)",
+          "symmetry_factor": 1
+        },
+        {
+          "id": "4ec3077f4f3e6e2fd1fbdbfbf5ba04c0",
+          "overall_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(1)*feynkit_generator_factor::{}::InternalFermionLoopSign(-1)*feynkit_generator_factor::{}::NumeratorIndependentSymmetryGrouping(2)",
+          "symmetry_factor": 1
+        },
+        {
+          "id": "fc350794b8b5d4b2a61350028cb5b539",
+          "overall_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(1)*feynkit_generator_factor::{}::InternalFermionLoopSign(-1)*feynkit_generator_factor::{}::NumeratorIndependentSymmetryGrouping(2)",
+          "symmetry_factor": 1
+        },
+        {
+          "id": "31d0890641674e5ee9afceaff1e22206",
+          "overall_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(1)*feynkit_generator_factor::{}::InternalFermionLoopSign(-1)*feynkit_generator_factor::{}::NumeratorIndependentSymmetryGrouping(2)",
+          "symmetry_factor": 1
+        },
+        {
+          "id": "14ac74bf7c503631cbbf625890f7ea67",
+          "overall_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(1)*feynkit_generator_factor::{}::InternalFermionLoopSign(-1)*feynkit_generator_factor::{}::NumeratorIndependentSymmetryGrouping(2)",
+          "symmetry_factor": 1
+        }
+      ]
+    },
+    {
+      "case": "xs_qcd_gguu_L1",
+      "mode": "None",
+      "graphs": 9,
+      "owners": 117,
+      "pure_literal": 117,
+      "nonliteral": 0,
+      "affected_port_orders": 63,
+      "declared_interfaces": 63,
+      "first_raw_boundary": {
+        "id": "6170f31e6eb07c29aac54d0c6cc14371",
+        "owner": "vertex:0"
+      },
+      "first_decoded_boundary": null,
+      "first_public_interface_boundary": {
+        "id": "6170f31e6eb07c29aac54d0c6cc14371",
+        "owner": "vertex:0"
+      },
+      "source_factor_trees": [
+        {
+          "id": "6170f31e6eb07c29aac54d0c6cc14371",
+          "overall_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(1)*feynkit_generator_factor::{}::InternalFermionLoopSign(-1)",
+          "symmetry_factor": 1
+        },
+        {
+          "id": "4ec3077f4f3e6e2fd1fbdbfbf5ba04c0",
+          "overall_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(1)*feynkit_generator_factor::{}::InternalFermionLoopSign(-1)",
+          "symmetry_factor": 1
+        },
+        {
+          "id": "ae57dde2bc65dc277a5257d49ccc59fe",
+          "overall_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(1)*feynkit_generator_factor::{}::InternalFermionLoopSign(-1)",
+          "symmetry_factor": 1
+        },
+        {
+          "id": "7ce5089571bbba80ae6bc324a1c58721",
+          "overall_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(1)*feynkit_generator_factor::{}::InternalFermionLoopSign(-1)",
+          "symmetry_factor": 1
+        },
+        {
+          "id": "fc350794b8b5d4b2a61350028cb5b539",
+          "overall_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(1)*feynkit_generator_factor::{}::InternalFermionLoopSign(-1)",
+          "symmetry_factor": 1
+        },
+        {
+          "id": "ad0818e3abc13783bfcc2695b849034d",
+          "overall_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(1)*feynkit_generator_factor::{}::InternalFermionLoopSign(-1)",
+          "symmetry_factor": 1
+        },
+        {
+          "id": "31d0890641674e5ee9afceaff1e22206",
+          "overall_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(1)*feynkit_generator_factor::{}::InternalFermionLoopSign(-1)",
+          "symmetry_factor": 1
+        },
+        {
+          "id": "14ac74bf7c503631cbbf625890f7ea67",
+          "overall_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(1)*feynkit_generator_factor::{}::InternalFermionLoopSign(-1)",
+          "symmetry_factor": 1
+        },
+        {
+          "id": "c490e590d90aa4c6acda54e116e788a7",
+          "overall_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(1)*feynkit_generator_factor::{}::InternalFermionLoopSign(-1)",
+          "symmetry_factor": 1
+        }
+      ]
+    },
+    {
+      "case": "xs_qcd_gguu_L1",
+      "mode": "Auto",
+      "graphs": 9,
+      "owners": 117,
+      "pure_literal": 117,
+      "nonliteral": 0,
+      "affected_port_orders": 63,
+      "declared_interfaces": 63,
+      "first_raw_boundary": {
+        "id": "6170f31e6eb07c29aac54d0c6cc14371",
+        "owner": "vertex:0"
+      },
+      "first_decoded_boundary": null,
+      "first_public_interface_boundary": {
+        "id": "6170f31e6eb07c29aac54d0c6cc14371",
+        "owner": "vertex:0"
+      },
+      "source_factor_trees": [
+        {
+          "id": "6170f31e6eb07c29aac54d0c6cc14371",
+          "overall_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(1)*feynkit_generator_factor::{}::InternalFermionLoopSign(-1)",
+          "symmetry_factor": 1
+        },
+        {
+          "id": "4ec3077f4f3e6e2fd1fbdbfbf5ba04c0",
+          "overall_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(1)*feynkit_generator_factor::{}::InternalFermionLoopSign(-1)",
+          "symmetry_factor": 1
+        },
+        {
+          "id": "ae57dde2bc65dc277a5257d49ccc59fe",
+          "overall_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(1)*feynkit_generator_factor::{}::InternalFermionLoopSign(-1)",
+          "symmetry_factor": 1
+        },
+        {
+          "id": "7ce5089571bbba80ae6bc324a1c58721",
+          "overall_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(1)*feynkit_generator_factor::{}::InternalFermionLoopSign(-1)",
+          "symmetry_factor": 1
+        },
+        {
+          "id": "fc350794b8b5d4b2a61350028cb5b539",
+          "overall_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(1)*feynkit_generator_factor::{}::InternalFermionLoopSign(-1)",
+          "symmetry_factor": 1
+        },
+        {
+          "id": "ad0818e3abc13783bfcc2695b849034d",
+          "overall_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(1)*feynkit_generator_factor::{}::InternalFermionLoopSign(-1)",
+          "symmetry_factor": 1
+        },
+        {
+          "id": "31d0890641674e5ee9afceaff1e22206",
+          "overall_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(1)*feynkit_generator_factor::{}::InternalFermionLoopSign(-1)",
+          "symmetry_factor": 1
+        },
+        {
+          "id": "14ac74bf7c503631cbbf625890f7ea67",
+          "overall_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(1)*feynkit_generator_factor::{}::InternalFermionLoopSign(-1)",
+          "symmetry_factor": 1
+        },
+        {
+          "id": "c490e590d90aa4c6acda54e116e788a7",
+          "overall_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(1)*feynkit_generator_factor::{}::InternalFermionLoopSign(-1)",
+          "symmetry_factor": 1
+        }
+      ]
+    },
+    {
+      "case": "xs_qcd_gggg_L1",
+      "mode": "None",
+      "graphs": 10,
+      "owners": 118,
+      "pure_literal": 107,
+      "nonliteral": 11,
+      "affected_port_orders": 8,
+      "declared_interfaces": 8,
+      "first_raw_boundary": {
+        "id": "60777b11dd5b7f48966632644fd7be49",
+        "owner": "vertex:0"
+      },
+      "first_decoded_boundary": {
+        "id": "18b13eeeb65c9709e4c5c21ec7a7a98f",
+        "owner": "vertex:2"
+      },
+      "first_public_interface_boundary": {
+        "id": "60777b11dd5b7f48966632644fd7be49",
+        "owner": "vertex:3"
+      },
+      "source_factor_trees": [
+        {
+          "id": "60777b11dd5b7f48966632644fd7be49",
+          "overall_factor": "(feynkit_generator_factor::{}::AutG(2))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(1)",
+          "symmetry_factor": 2
+        },
+        {
+          "id": "34498cfddfa1715e5f37b81f08a3a5d1",
+          "overall_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(1)",
+          "symmetry_factor": 1
+        },
+        {
+          "id": "0af4380c341efde7ecff7cbb6f5f4f19",
+          "overall_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(1)",
+          "symmetry_factor": 1
+        },
+        {
+          "id": "18b13eeeb65c9709e4c5c21ec7a7a98f",
+          "overall_factor": "(feynkit_generator_factor::{}::AutG(2))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(1)",
+          "symmetry_factor": 2
+        },
+        {
+          "id": "b99217732e97b6d10d4d62ca187ba691",
+          "overall_factor": "(feynkit_generator_factor::{}::AutG(2))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(1)",
+          "symmetry_factor": 2
+        },
+        {
+          "id": "bb1e565a95ca61262d0c798add6934e6",
+          "overall_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(1)",
+          "symmetry_factor": 1
+        },
+        {
+          "id": "c43b096f49ae40345818f7590fef86a4",
+          "overall_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(1)",
+          "symmetry_factor": 1
+        },
+        {
+          "id": "721a6dc992be505389b72c6184f56e95",
+          "overall_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(1)",
+          "symmetry_factor": 1
+        },
+        {
+          "id": "765da42d85f911f16f4e3816abe7c485",
+          "overall_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(1)",
+          "symmetry_factor": 1
+        },
+        {
+          "id": "1a1f4e1d3f1a08cf35ba1945be3d97c9",
+          "overall_factor": "(feynkit_generator_factor::{}::AutG(2))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(1)",
+          "symmetry_factor": 2
+        }
+      ]
+    },
+    {
+      "case": "xs_qcd_gggg_L1",
+      "mode": "Auto",
+      "graphs": 10,
+      "owners": 118,
+      "pure_literal": 107,
+      "nonliteral": 11,
+      "affected_port_orders": 8,
+      "declared_interfaces": 8,
+      "first_raw_boundary": {
+        "id": "60777b11dd5b7f48966632644fd7be49",
+        "owner": "vertex:0"
+      },
+      "first_decoded_boundary": {
+        "id": "18b13eeeb65c9709e4c5c21ec7a7a98f",
+        "owner": "vertex:2"
+      },
+      "first_public_interface_boundary": {
+        "id": "60777b11dd5b7f48966632644fd7be49",
+        "owner": "vertex:3"
+      },
+      "source_factor_trees": [
+        {
+          "id": "60777b11dd5b7f48966632644fd7be49",
+          "overall_factor": "(feynkit_generator_factor::{}::AutG(2))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(1)",
+          "symmetry_factor": 2
+        },
+        {
+          "id": "34498cfddfa1715e5f37b81f08a3a5d1",
+          "overall_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(1)",
+          "symmetry_factor": 1
+        },
+        {
+          "id": "0af4380c341efde7ecff7cbb6f5f4f19",
+          "overall_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(1)",
+          "symmetry_factor": 1
+        },
+        {
+          "id": "18b13eeeb65c9709e4c5c21ec7a7a98f",
+          "overall_factor": "(feynkit_generator_factor::{}::AutG(2))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(1)",
+          "symmetry_factor": 2
+        },
+        {
+          "id": "b99217732e97b6d10d4d62ca187ba691",
+          "overall_factor": "(feynkit_generator_factor::{}::AutG(2))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(1)",
+          "symmetry_factor": 2
+        },
+        {
+          "id": "bb1e565a95ca61262d0c798add6934e6",
+          "overall_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(1)",
+          "symmetry_factor": 1
+        },
+        {
+          "id": "c43b096f49ae40345818f7590fef86a4",
+          "overall_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(1)",
+          "symmetry_factor": 1
+        },
+        {
+          "id": "721a6dc992be505389b72c6184f56e95",
+          "overall_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(1)",
+          "symmetry_factor": 1
+        },
+        {
+          "id": "765da42d85f911f16f4e3816abe7c485",
+          "overall_factor": "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(1)",
+          "symmetry_factor": 1
+        },
+        {
+          "id": "1a1f4e1d3f1a08cf35ba1945be3d97c9",
+          "overall_factor": "(feynkit_generator_factor::{}::AutG(2))^(-1)*feynkit_generator_factor::{}::AntiFermionSpinSumSign(1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(1)",
+          "symmetry_factor": 2
+        }
+      ]
+    }
+  ],
+  "recomputed_cell_files": 48,
+  "full_relations": 600,
+  "literal": 578,
+  "even_cycles": 22,
+  "even_rewrites": 144,
+  "unexpanded_products": 96,
+  "math_batches": [
+    {
+      "batch": "faithfulness-historical",
+      "unique_pairs": 166,
+      "obligation_groups": 166,
+      "definitions": 209,
+      "member_references_per_kernel": 1008
+    },
+    {
+      "batch": "current-faithfulness-and-equivalence",
+      "unique_pairs": 118,
+      "obligation_groups": 203,
+      "definitions": 142,
+      "member_references_per_kernel": 1126
+    }
+  ],
+  "locality_records": 912,
+  "momentum_calls": 1096,
+  "method": "Fresh reconstruction from twelve captured worlds; exact full pure grammar plus independent path/parity congruence and finite locality traversal. No expansion or numerical substitution. Native results read, not rerun."
+}

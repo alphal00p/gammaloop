@@ -1,0 +1,8 @@
+{
+  "id": "math-sign--8eb",
+  "status": "EXPECTED_SEMANTIC_REJECTION",
+  "validated_predicate": true,
+  "semantic_negative_credit": true,
+  "process_reaped": true,
+  "error": null
+}

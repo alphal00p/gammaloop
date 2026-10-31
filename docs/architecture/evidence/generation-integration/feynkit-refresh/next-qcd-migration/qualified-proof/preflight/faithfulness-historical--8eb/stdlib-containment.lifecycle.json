@@ -1,0 +1,13 @@
+{
+  "exit": 0,
+  "timed_out": false,
+  "pid": 1925746,
+  "cleanup": {
+    "signalled_pids": [
+      1925747
+    ],
+    "remaining_pids": []
+  },
+  "seconds": 0.7945957409683615,
+  "process_reaped": true
+}

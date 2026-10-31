@@ -1,0 +1,6 @@
+{
+  "fontPaths": "/nix/store/idpfl7br0zvh7aah3dmpwkg0xwbasff0-roboto-3.015/share/fonts/truetype",
+  "packageCache": "/nix/store/vnjry04dnavpyvl41mz607ir21pjb2hp-typst-0.15.1-env/lib/typst/packages",
+  "compiler": "/nix/store/vnjry04dnavpyvl41mz607ir21pjb2hp-typst-0.15.1-env/bin/typst",
+  "existing": true
+}

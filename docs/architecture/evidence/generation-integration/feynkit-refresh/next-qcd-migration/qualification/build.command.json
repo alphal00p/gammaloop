@@ -1,0 +1,28 @@
+{
+  "argv": [
+    "nix",
+    "--option",
+    "allow-import-from-derivation",
+    "false",
+    "build",
+    "--max-jobs",
+    "1",
+    "--cores",
+    "2",
+    "--no-link",
+    "--json",
+    "/nix/store/w2y0rfjpbxnnr5cw05hxzl7rbz549hs1-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0.drv^out"
+  ],
+  "cwd": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh",
+  "license_keys_removed": [
+    "SYMBOLICA_LICENSE",
+    "SYMBOLICA_LICENSE_PATH",
+    "SYMBOLICA_LICENSE_SIGNED",
+    "SYMBOLICA_LICENSE_FILE"
+  ],
+  "start": "2026-10-31T07:13:14.289407+00:00",
+  "exit": 0,
+  "end": "2026-10-31T07:31:51.876165+00:00",
+  "stdout_sha256": "4cd15b7a7890ca54a4c54d10f3aba84f11dfeca01a50c3fceffacd79a2155158",
+  "stderr_sha256": "0ab670aab9f5aadd050837a2dc57a3f577ef4d3ad33a96da381302be791fc2a9"
+}

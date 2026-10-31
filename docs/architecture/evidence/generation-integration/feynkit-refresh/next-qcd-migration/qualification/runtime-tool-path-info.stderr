@@ -1,0 +1,1 @@
+warning: '--json' without '--json-format' is deprecated; please specify '--json-format 1' or '--json-format 2'. This will become an error in a future release.

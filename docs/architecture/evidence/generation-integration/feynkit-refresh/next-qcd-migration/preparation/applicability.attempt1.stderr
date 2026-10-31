@@ -1,0 +1,10 @@
+Traceback (most recent call last):
+  File "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-migration-preparation-20261031-r1/applicability.py", line 46, in <module>
+    if __name__=='__main__': main()
+                             ~~~~^^
+  File "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-migration-preparation-20261031-r1/applicability.py", line 26, in main
+    C.need(masked==before and len(changed_rows)==4,'all-main-bytes-four-prior-tokens')
+    ~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-migration-preparation-20261031-r1/context.py", line 34, in need
+    raise Reject(predicate, detail)
+context.Reject: all-main-bytes-four-prior-tokens: 

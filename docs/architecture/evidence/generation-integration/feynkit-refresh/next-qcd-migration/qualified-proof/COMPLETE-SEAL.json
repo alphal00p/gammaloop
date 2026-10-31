@@ -1,0 +1,12 @@
+{
+  "schema": "next-qcd-native-complete-evidence-seal/1",
+  "manifest_sha256": "844465ea17e9142778839984035d1851b73866aa371a0aee75a278f9f7d5fc7a",
+  "bound_files": 232,
+  "execution_manifest_sha256": "a08f0940cc6e282d98540ac0dc10779fa747a0c5c37e438b53fd87b5d6638fc5",
+  "execution_files": 135,
+  "report_sha256": "3baf87d1d031f790b753bb944d2a4c180f0620297b7808ad348dfa7ea65c76f0",
+  "inner_seal_sha256": "522817b3b339b7ce0d8b82cdb013c03721da8b99700ee98f4be63ff3d309d0ef",
+  "verification_sha256": "a10ae4f7468df0fbb325e6893a93383551e791859a2d90c1ff4e36756ab7ccf4",
+  "includes_closed_assembly_streams": true,
+  "final_scientific_approval": false
+}

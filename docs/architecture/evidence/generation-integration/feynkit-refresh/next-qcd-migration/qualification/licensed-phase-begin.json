@@ -1,0 +1,7 @@
+{
+  "time": "2026-10-31T07:32:48.335249+00:00",
+  "pure_nix_boundary_sha256": "355f366999acac5a581a88f6d4c1312f11142daf4b2bb13d85f99a0d9aa18b41",
+  "loader_and_containment_qualified": true,
+  "private_environment_absent_in_pure_children": true,
+  "schedule": "one exact selected identity per process; existing16worker/2heavy/240s config unchanged"
+}

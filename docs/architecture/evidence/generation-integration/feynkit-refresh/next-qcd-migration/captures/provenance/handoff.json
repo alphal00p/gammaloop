@@ -1,0 +1,130 @@
+{
+  "schema": "raw-next-qcd-captures-r2/1",
+  "status": "COMBINED_TWELVE_CAPTURE_STAGE_COMPLETE_INDEPENDENT_PROVENANCE_REVIEW_REQUIRED",
+  "completed_utc": "2026-10-31T03:14:45.089379+00:00",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families",
+  "packet": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-captures-20261031-r2",
+  "author": "Lucien Huber <im@lcnbr.ch>",
+  "summary": {
+    "planned": 12,
+    "first_three_reused_from_immutable_r1": 3,
+    "fresh_r2": 9,
+    "combined_executed_once": 12,
+    "public_mode_world_copies": 24,
+    "complete_historical_current_observer_worlds": 12,
+    "case_mode_cells": 6,
+    "historical_native_passes": 6,
+    "current_expected_native_failures_exit101": 6,
+    "native_reruns": 0,
+    "native_algebra_interface_invocations": 0
+  },
+  "scope": {
+    "cases": [
+      "xs_qcd_gguu_sym_L1",
+      "xs_qcd_gguu_L1",
+      "xs_qcd_gggg_L1"
+    ],
+    "Classes": [
+      "None",
+      "Auto"
+    ],
+    "Grouping": "None",
+    "pool": 1,
+    "actual_None_diagrams": [
+      5,
+      9,
+      10
+    ],
+    "two_modes_per_exact_libtest_invocation": true,
+    "argv_semantic_environment_selectors_unchanged": true,
+    "deadline_seconds": 240,
+    "retries": 0
+  },
+  "immutable_r1": {
+    "handoff_sha256": "d73651512a36aad066ca52734bd7b560c0372f92245b1f6e038864cd7e454666",
+    "seal_sha256": "a5383b9bd408f6bff2a0afdce5e2e50b537bf84c84fe7e14093187c0bd27aebf",
+    "bindings_preserved": 1764,
+    "original_outcomes_amended": false,
+    "first_three_native_invocations_repeated": false,
+    "all_original_error_records_retained": true,
+    "full_manifest": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-captures-20261031-r1/SHA256SUMS"
+  },
+  "repair": {
+    "existing_Row_parser_functions": [
+      "parsed_summary",
+      "expected_row"
+    ],
+    "owner_source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/capsule/helpers/gauge/4-row.py",
+    "strict_framing": "Balanced nested delimiters; exact ten distinct top-level fields; exact Fraction subfields and scalar syntax before existing semantic parser.",
+    "controls": "4 positive,31 rejecting pure retained-stream/schema/identity/count/exit/hash controls; no licensed/native fixtures.",
+    "controls_path": "pure-repair-controls.json",
+    "source_patch": "controller-r1-r2.patch",
+    "original_error": "r1 invocation3 failed controller Summary framing; native101 remains a failed test.",
+    "additive_revalidation": "invocation3-revalidation.json",
+    "revalidation_scope": "Exact original id/command/result/streams/artifacts and immutable Row; original-before/current-pure-after tool hashes unchanged. No invented old result.inputs_after and no native pass.",
+    "prerequisite_exception": "Only xs_qcd_gguu_sym_L1--current-pristine can consume the pinned additive receipt. Wrong ID/path/hash/boundary controls reject; every other prerequisite remains original validated result."
+  },
+  "commands": "combined-twelve-commands.json",
+  "six_cells": "six-cells.json",
+  "complete_world_bindings": "complete-world-bindings.json",
+  "retained_physical_captures_records": "capture-record-manifest.json",
+  "public_joins": "Every case/route independently joins pristine and observer public None/Auto JSON, both source companions and census exact bytes. Full ledger sequences and live/raw/census associations bound. Finite public observational scope only.",
+  "literal_original_status": "All three historical selected None Rows actually pass in pristine and observer. Auto is captured independently and checked by each test, but only returned None is literally asserted against Row. All current tests exit101 with exact sole numerators difference and all nine other fields plus immutable expected Row correct.",
+  "pipeline": "pipeline-comparison.json",
+  "owners": {
+    "complete_counts_per_route_per_mode": [
+      65,
+      117,
+      118
+    ],
+    "tables": "case-audits/CASE/ROUTE-MODE-owners.json",
+    "whole_symbol_definition_tables": "Exact captured raw/decoded/ports/source-factor symbol spellings and attributes, with full live model/request/options/Run; no claim for uncaptured callbacks/user data.",
+    "raw_decoded_ports_flags": "Captured raw tensors preserved verbatim; absent public interfaces and absent flags remain absent. Explicit empty arrays only when serialized.",
+    "complete_owner_input_candidates": "case-audits/CASE/MODE-owner-input-candidates.json; data associations only, no algebra/native proof preparation or acceptance.",
+    "old_onePI_reuse": "NONE. Conditional byte overlaps do not substitute for a separately reviewed complete new-input/native binding.",
+    "source_factor2": "All actual physical factors retained; symmetrized case has four diagrams with NumeratorIndependentSymmetryGrouping(2) and one without."
+  },
+  "source_provenance": {
+    "complete_r1_binding": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-captures-20261031-r1/producer-source-bindings.json",
+    "original": "2b1ef4f07a44bc061bcc97c378bbdd9c41cb0e94; literals introduced8cf6cecaf22be4d5c62d467b8e6827e80c6ba66d",
+    "historical_kernel_origins": "Symbolica/Numerica git c78cffc20f318df1fce50539a587cbe8ffc717c0; Graphica registry3.0.1, actual features/profiles/artifact records retained.",
+    "current_pristine": "actual ffa76ec420642c03349ab756d2d7720ab93c0057, archive8993e6c8346b84f6d91c7e65c4c4fc5ed83cf6d932e969bb7fc55cbdced20740, kernel8eb7c3729d6abefc916decc1bdf0c06536f8af80",
+    "current_observer": "actual built5ea149ffd88ae3afc4072a38c0871c1329be8424+qualified overlay, kernel8eb. Proof-source5ba and built5ea remain distinct.",
+    "selected_source_invariance": "Only four unrelated Row literals versus ffa among inspected owners; no broader equality claim.",
+    "failing_baseline": "eae/1a remains distinct from original reference.",
+    "all_prior_limitations_retained": [
+      "Prior exact historical qualification did not pass these three selected Rows; fresh runtime is mandatory.",
+      "Historical Graphica 3.0.1 is registry sourced; Symbolica/Numerica are c78. No old-crate all-git claim.",
+      "Historical dev-optim, current ci-optim and direct-rustc observer diagnostics retain actual compile options; no profile-equivalence claim.",
+      "Current observer built 5ea+qualified additive overlay. Prior proof-source5ba/evidence/c344 are distinct from built5ea. Selected invariance to ffa is only four unrelated Row literals among inspected owners.",
+      "Kernel source c78/8eb binding relies on qualified lock/vendor/store/compiler records and prior ScopeA; no newly executed build/compiler or general provenance theorem.",
+      "Old historical grouped frames/source gaps retain original unapproved limits; fresh association does not retroactively prove unrecorded provenance.",
+      "Initial 1591408c REQUEST_CHANGES is superseded only by corrected ScopeB disposition 20261030T202304Z within its finite scope. Actual shared ScopeA 565caeac is provenance/runtime/evidence only.",
+      "eae/1a is failing baseline, not original reference. Full371 assertion-only pool1 characterization is separate.",
+      "Auto is captured but only returned None receives original Row assertion.",
+      "No new math/interface/native helper, migration, physical, fullpool8/32, grouped, WP3 or global approval."
+    ],
+    "prior_scopeA_and_corrected_gauge_dispositions": "Read/bound in immutable r1. No retroactive repair of old grouped/source gaps or inherited finite math/interface scope."
+  },
+  "validation": {
+    "pure_repair_controls": 35,
+    "r1_cooperative_lifecycle_environment_containment_loader_checks_retained": true,
+    "unchanged_240s_private_handoff_and_reaping": true,
+    "four_private_names_excluded": true,
+    "records_outside_child_write_mount": true,
+    "no_network_readonly_capsule_runtime_argv_unchanged": true,
+    "license_values_hashes_files_environment_dumps_or_secret_paths_recorded": false,
+    "no_Nix_build_compiler_network_publication_delegation": true,
+    "no_full371_oldonePI_algebra_interface_run": true,
+    "no_expectation_change": true,
+    "tracked_JJ_ref_index_mutations_issued": 0,
+    "owned_processes": 0
+  },
+  "retention": "Retain complete r1/r2 packets and all twelve actual preflight execution work/record trees for NEW independent provenance review and later proof assignment. No physical payload deleted or moved. No workspace/ref/index/JJ change. No owned background process.",
+  "non_approvals": [
+    "Independent provenance review remains mandatory for the completed stage.",
+    "No finite mathematics, native algebra/helper, interface/admission or physical-equivalence proof.",
+    "No migration, expectation, integration, grouped, fullpool8/32, WP3 or global self-approval.",
+    "Pure proof preparation and any future native obligations remain separate assignments."
+  ]
+}

@@ -1,0 +1,14 @@
+Traceback (most recent call last):
+  File "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-next-qcd-migration-astra-20261031-efvezb1p/rows_review.py", line 159, in <module>
+    if __name__=='__main__':main()
+                            ~~~~^^
+  File "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-next-qcd-migration-astra-20261031-efvezb1p/rows_review.py", line 142, in main
+    row,detail=derive(w['payload'],w['live']['report'])
+               ~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-next-qcd-migration-astra-20261031-efvezb1p/rows_review.py", line 88, in derive
+    key=fnv(encoded(d['key']));frame,num,segments=frame_numerator(d['payload']);aut=d['aut'];require(type(aut)is int and aut>0 and aut==d['payload']['symmetry_factor'],'aut')
+                                                                                             ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-next-qcd-migration-astra-20261031-efvezb1p/rows_review.py", line 9, in require
+    if not ok:raise Rejected(label)
+              ^^^^^^^^^^^^^^^^^^^^^
+Rejected: aut

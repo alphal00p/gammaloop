@@ -1,0 +1,718 @@
+{
+  "schema": "independent-next-qcd-capture-provenance-review/1",
+  "reviewer": {
+    "model": "Astra",
+    "role": "independent NEW review sub-agent",
+    "fallback": "User-authorized Astra fallback",
+    "delegations": 0
+  },
+  "completed_utc": "2026-10-31T03:30:55.460534+00:00",
+  "decision": "approve",
+  "verdict": "APPROVE_EXACT_NEXT_THREE_QCD_CAPTURE_PROVENANCE_ASSOCIATION_AND_NARROW_CONTROLLER_REPAIR",
+  "blocking_findings": [],
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families",
+  "review_directory": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-next-qcd-captures-astra-20261031-IYGt5Jrv",
+  "scope": {
+    "cases": [
+      "xs_qcd_gguu_sym_L1",
+      "xs_qcd_gguu_L1",
+      "xs_qcd_gggg_L1"
+    ],
+    "Classes": [
+      "None",
+      "Auto"
+    ],
+    "Grouping": "None",
+    "pool": 1,
+    "meaning": "Only factual provenance, retained capture associations, exact saved libtest outcome classification, and the r2 Summary framing/additive prerequisite repair for this completed finite stage. No scientific, migration, finite-interface, general-runner or global integration approval.",
+    "authorized_write_scope": "This new ignored review directory only; all main/source/candidate/frozen inputs read-only."
+  },
+  "frozen_input_verification": {
+    "packets": [
+      {
+        "name": "raw-next-qcd-preflight-20261031-r1",
+        "bindings": 936,
+        "manifest_sha256": "f9c8fedc2ac92451f900aef63f9a70112244c93fc1d6f135d5e20e8bf29b2dfc",
+        "handoff_sha256": "3e31a23aeff6de506bf6fb98ff3d0961a6d8bc49cb0576c57ad4ec9ca17cdb6d",
+        "seal_sha256": "a8cf51bb72bb650604532452cc560952d8067f31acb75a78366054e8106f5304"
+      },
+      {
+        "name": "raw-next-qcd-captures-20261031-r1",
+        "bindings": 1764,
+        "manifest_sha256": "9ef16efed9f8d8d16f8cc3d92ce87a9ceb12a2454f9e1c7d60c33ef0917eb5a9",
+        "handoff_sha256": "d73651512a36aad066ca52734bd7b560c0372f92245b1f6e038864cd7e454666",
+        "seal_sha256": "a5383b9bd408f6bff2a0afdce5e2e50b537bf84c84fe7e14093187c0bd27aebf"
+      },
+      {
+        "name": "raw-next-qcd-captures-20261031-r2",
+        "bindings": 1976,
+        "manifest_sha256": "6a34871a549ccadd8c5f8344f7ed039823a33b118df29700b83971d9ffcd009a",
+        "handoff_sha256": "9da40bc2d34381c7c6b67fa81a6d91032ff699222349f6910f9787a18cc7e660",
+        "seal_sha256": "166dd40ee056d9bf67da1a84eef200dc5bc9ff0fea55e15a88e9feb8f4e98d4b"
+      }
+    ],
+    "errors": [],
+    "native_executions": 0,
+    "candidate_imports": 0,
+    "unique_files_hashed": 1978,
+    "bindings_verified": 4676,
+    "original_before_after_equal": true,
+    "supplemental_bindings_unchanged": 3590,
+    "total_unique_files_hashed_with_supplemental": 5568,
+    "pass": true
+  },
+  "candidate_actual_counts": {
+    "planned_native_invocations": 12,
+    "r1_actual_invocations": 3,
+    "r2_fresh_invocations": 9,
+    "r1_invocations_reused_without_rerun": 3,
+    "combined_actual_native_invocations": 12,
+    "native_reruns": 0,
+    "native_retries": 0,
+    "historical_passed_tests": 6,
+    "current_failed_tests_exit101": 6,
+    "tests_selected_per_invocation": 1,
+    "public_mode_world_copies": 24,
+    "complete_observer_worlds": 12,
+    "case_mode_cells": 6,
+    "algebra_or_interface_native_invocations": 0,
+    "mode_contract": "Each exact test internally executes both requested modes. Only the returned None Summary receives the original literal Row assertion; Auto is not assigned a literal Row pass."
+  },
+  "per_case": [
+    {
+      "case": "xs_qcd_gguu_sym_L1",
+      "None_diagrams": 5,
+      "native_invocations": 4,
+      "historical_native_passes": 2,
+      "current_native_failures_exit101": 2,
+      "current_only_different_field": "numerators",
+      "old_numerators_hex": "0xb9fdc23ed056fa0c",
+      "current_numerators_hex": "0xe4b209849953f1fa",
+      "both_modes_observed": true,
+      "Auto_literal_asserted": false
+    },
+    {
+      "case": "xs_qcd_gguu_L1",
+      "None_diagrams": 9,
+      "native_invocations": 4,
+      "historical_native_passes": 2,
+      "current_native_failures_exit101": 2,
+      "current_only_different_field": "numerators",
+      "old_numerators_hex": "0x5edf8e5f7a11eeb3",
+      "current_numerators_hex": "0x665e13a4c88da679",
+      "both_modes_observed": true,
+      "Auto_literal_asserted": false
+    },
+    {
+      "case": "xs_qcd_gggg_L1",
+      "None_diagrams": 10,
+      "native_invocations": 4,
+      "historical_native_passes": 2,
+      "current_native_failures_exit101": 2,
+      "current_only_different_field": "numerators",
+      "old_numerators_hex": "0x2628c62dc373ac91",
+      "current_numerators_hex": "0x96e5abcebda25959",
+      "both_modes_observed": true,
+      "Auto_literal_asserted": false
+    }
+  ],
+  "original_failure_and_repair": {
+    "r1_original_result": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/execution/records/xs_qcd_gguu_sym_L1--current-pristine/result.json",
+    "r1_original_result_sha256": "4fc8ef33d9574ccfd50e6ea7d1043dbf68a6b9f05f4b3e9f19fe708eb63afcdf",
+    "native_exit": 101,
+    "native_test_pass": false,
+    "original_controller_validation": false,
+    "original_controller_error": {
+      "phase": "assertion_boundary",
+      "type": "ValueError",
+      "predicate": "ten Summary fields"
+    },
+    "reproduced_cause": "Original flat regex yields 12 entries by including nested Fraction denominator fields. It fails before validating the saved ten-field Summary; that controller error is not native success and is not a semantic rejection.",
+    "original_missing_inputs_after_preserved": true,
+    "repair_sources": {
+      "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-captures-20261031-r2/controller.py": "5f5baf299380658fe126028b08cdde81c9385d8e7eb4a4a2c9525fe13cf36187",
+      "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-captures-20261031-r2/row_boundary.py": "086559360a05a5699fe5aa53c9e93641019ac01d6621d20f57964f9c1d38e6a6",
+      "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-captures-20261031-r2/revalidation.py": "76589b13df1dd4a1f41ca126b88f642902ee00e33b85b7149a4724e504990e5f",
+      "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-captures-20261031-r2/controller-r1-r2.patch": "b24f2b36bd7a0691ca1112b1f67f49f63caf12bcc944511633bc763095b2955b",
+      "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-captures-20261031-r2/binder-paths-and-exact-revalidation.patch": "88fb625210489918ae9f44b39fae8f9c3f43f7df1799ecb47c9fe1d2b00129dc"
+    },
+    "parser": "Balanced delimiters, exactly ten unique top-level Summary fields, exact Fraction fields and integer syntax, valid symmetry tuples; then the existing parsed_summary/expected_row owner. A separate reviewer recursive grammar independently agrees on all six saved failing Summary pairs and the immutable three Rows.",
+    "additive_receipt": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-captures-20261031-r2/invocation3-revalidation.json",
+      "sha256": "67f9a3d8e16998bb3a0185581c77886fd56ed6b5410b155a9d0e7aa5c6b34f68",
+      "original_artifact_bindings": 14,
+      "original_before_and_current_pure_after_inputs": 26
+    },
+    "receipt_limit": "The after hash set is a new pure rehash, corroborated by immutable r1 integrity evidence and read-only mounts. No original result.inputs_after record is invented.",
+    "prerequisites": "Only the exact xs_qcd_gguu_sym_L1--current-pristine ID can use the fixed receipt path and pinned receipt hash; it rechecks the original result/command/streams/artifacts, immutable expected Row and parser hash. All other prerequisites resolve their own protected records. Original two historical results remain bound to r1. First-three indices are prohibited in the r2 capture path.",
+    "unchanged_runtime_owners": [
+      "write",
+      "subreaper",
+      "descendants",
+      "reap",
+      "bounded"
+    ],
+    "unchanged_guards": "Exact frozen plans/producer hashes, sequence and matching-pristine gates, fresh resolved work/record paths, protected results, 240-second deadline, zero retries, private pipe and reaping remain. Source patches reproduce the complete old-to-new files.",
+    "r2_failed_pure_attempt_preserved": "preparation-attempts/v1-* retains the tuple-versus-JSON-list receipt mismatch and its source/error; it preceded the corrected pure controls and the nine native captures."
+  },
+  "capture_associations": {
+    "public_joins": "All 12 case/era/mode joins independently check pristine JSON == observer JSON == both source companions as exact bytes. Six case/era census pairs are byte-identical. Census lines independently bind exact string IDs, names, aut, source factors and momentum bases.",
+    "manifest_inventory": "The 120 physical capture/record files exactly equal the twelve actual record/work tree inventories. The 15 complete-world bindings exactly equal twelve prepared worlds plus three binding files. All sizes/hashes and root six-cell/per-case tables agree.",
+    "whole_ledgers": [
+      {
+        "case": "xs_qcd_gguu_sym_L1",
+        "era": "historical",
+        "events": 14,
+        "stages": {
+          "small-gauge-live": 2,
+          "into-representative": 10,
+          "small-gauge-raw": 2
+        }
+      },
+      {
+        "case": "xs_qcd_gguu_sym_L1",
+        "era": "current",
+        "events": 6,
+        "stages": {
+          "batch-live-inputs": 2,
+          "batch-raw-diagrams": 2,
+          "batch-raw-census": 2
+        }
+      },
+      {
+        "case": "xs_qcd_gguu_L1",
+        "era": "historical",
+        "events": 22,
+        "stages": {
+          "small-gauge-live": 2,
+          "into-representative": 18,
+          "small-gauge-raw": 2
+        }
+      },
+      {
+        "case": "xs_qcd_gguu_L1",
+        "era": "current",
+        "events": 6,
+        "stages": {
+          "batch-live-inputs": 2,
+          "batch-raw-diagrams": 2,
+          "batch-raw-census": 2
+        }
+      },
+      {
+        "case": "xs_qcd_gggg_L1",
+        "era": "historical",
+        "events": 24,
+        "stages": {
+          "small-gauge-live": 2,
+          "into-representative": 20,
+          "small-gauge-raw": 2
+        }
+      },
+      {
+        "case": "xs_qcd_gggg_L1",
+        "era": "current",
+        "events": 6,
+        "stages": {
+          "batch-live-inputs": 2,
+          "batch-raw-diagrams": 2,
+          "batch-raw-census": 2
+        }
+      }
+    ],
+    "phase_and_mode_binding": "Historical complete segments are live, one into-representative event per actual diagram, then raw; current complete segments are live, raw, census. None then Auto are each selected by actual case/mode and request.classes; sequences are contiguous and complete. Null OrderClasses is never used as Auto evidence. Older sample/prefix events are not substituted for the final complete diagram domain.",
+    "identity": "Joins use native 32-hex string IDs and full exact key objects, with duplicate/missing domains rejected. Diagnostic rg.json.id is an f64-rounded serde_json::Value field and is explicitly excluded from identity decisions; ordinal-only mapping is not used.",
+    "owners": "65/117/118 owners per era and mode: 1,200 complete raw/decoded/ports/flags records and 600 historical/current input pairs checked. Every retained tensor, exact full key, owner label, ordered port list, present/absent interface field and flag matches its direct source world.",
+    "definitions": "Independent full-consumption syntax/token scans reproduce every complete captured symbol table, including tags/attributes, for raw tensors, decoded expressions, ordered ports and source factors. These tables are captured spellings only, not uncaptured callbacks or user data.",
+    "world_inventory": [
+      {
+        "case": "xs_qcd_gguu_sym_L1",
+        "era": "historical",
+        "mode": "None",
+        "diagrams": 5,
+        "counts": {
+          "owners": 65,
+          "public_interface_present": 0,
+          "public_interface_absent": 65,
+          "is_metric_present": 65,
+          "is_metric_absent": 0,
+          "is_metric_true": 0,
+          "is_composite_present": 65,
+          "is_composite_absent": 0,
+          "is_composite_true": 65,
+          "raw_ports": 260
+        },
+        "symbol_definitions": 38,
+        "symmetry2_diagrams": 4
+      },
+      {
+        "case": "xs_qcd_gguu_sym_L1",
+        "era": "historical",
+        "mode": "Auto",
+        "diagrams": 5,
+        "counts": {
+          "owners": 65,
+          "public_interface_present": 0,
+          "public_interface_absent": 65,
+          "is_metric_present": 65,
+          "is_metric_absent": 0,
+          "is_metric_true": 0,
+          "is_composite_present": 65,
+          "is_composite_absent": 0,
+          "is_composite_true": 65,
+          "raw_ports": 260
+        },
+        "symbol_definitions": 38,
+        "symmetry2_diagrams": 4
+      },
+      {
+        "case": "xs_qcd_gguu_sym_L1",
+        "era": "current",
+        "mode": "None",
+        "diagrams": 5,
+        "counts": {
+          "owners": 65,
+          "public_interface_present": 34,
+          "public_interface_absent": 31,
+          "is_metric_present": 65,
+          "is_metric_absent": 0,
+          "is_metric_true": 0,
+          "is_composite_present": 65,
+          "is_composite_absent": 0,
+          "is_composite_true": 65,
+          "raw_ports": 260
+        },
+        "symbol_definitions": 22,
+        "symmetry2_diagrams": 4
+      },
+      {
+        "case": "xs_qcd_gguu_sym_L1",
+        "era": "current",
+        "mode": "Auto",
+        "diagrams": 5,
+        "counts": {
+          "owners": 65,
+          "public_interface_present": 34,
+          "public_interface_absent": 31,
+          "is_metric_present": 65,
+          "is_metric_absent": 0,
+          "is_metric_true": 0,
+          "is_composite_present": 65,
+          "is_composite_absent": 0,
+          "is_composite_true": 65,
+          "raw_ports": 260
+        },
+        "symbol_definitions": 22,
+        "symmetry2_diagrams": 4
+      },
+      {
+        "case": "xs_qcd_gguu_L1",
+        "era": "historical",
+        "mode": "None",
+        "diagrams": 9,
+        "counts": {
+          "owners": 117,
+          "public_interface_present": 0,
+          "public_interface_absent": 117,
+          "is_metric_present": 117,
+          "is_metric_absent": 0,
+          "is_metric_true": 0,
+          "is_composite_present": 117,
+          "is_composite_absent": 0,
+          "is_composite_true": 117,
+          "raw_ports": 468
+        },
+        "symbol_definitions": 37,
+        "symmetry2_diagrams": 0
+      },
+      {
+        "case": "xs_qcd_gguu_L1",
+        "era": "historical",
+        "mode": "Auto",
+        "diagrams": 9,
+        "counts": {
+          "owners": 117,
+          "public_interface_present": 0,
+          "public_interface_absent": 117,
+          "is_metric_present": 117,
+          "is_metric_absent": 0,
+          "is_metric_true": 0,
+          "is_composite_present": 117,
+          "is_composite_absent": 0,
+          "is_composite_true": 117,
+          "raw_ports": 468
+        },
+        "symbol_definitions": 37,
+        "symmetry2_diagrams": 0
+      },
+      {
+        "case": "xs_qcd_gguu_L1",
+        "era": "current",
+        "mode": "None",
+        "diagrams": 9,
+        "counts": {
+          "owners": 117,
+          "public_interface_present": 63,
+          "public_interface_absent": 54,
+          "is_metric_present": 117,
+          "is_metric_absent": 0,
+          "is_metric_true": 0,
+          "is_composite_present": 117,
+          "is_composite_absent": 0,
+          "is_composite_true": 117,
+          "raw_ports": 468
+        },
+        "symbol_definitions": 21,
+        "symmetry2_diagrams": 0
+      },
+      {
+        "case": "xs_qcd_gguu_L1",
+        "era": "current",
+        "mode": "Auto",
+        "diagrams": 9,
+        "counts": {
+          "owners": 117,
+          "public_interface_present": 63,
+          "public_interface_absent": 54,
+          "is_metric_present": 117,
+          "is_metric_absent": 0,
+          "is_metric_true": 0,
+          "is_composite_present": 117,
+          "is_composite_absent": 0,
+          "is_composite_true": 117,
+          "raw_ports": 468
+        },
+        "symbol_definitions": 21,
+        "symmetry2_diagrams": 0
+      },
+      {
+        "case": "xs_qcd_gggg_L1",
+        "era": "historical",
+        "mode": "None",
+        "diagrams": 10,
+        "counts": {
+          "owners": 118,
+          "public_interface_present": 0,
+          "public_interface_absent": 118,
+          "is_metric_present": 118,
+          "is_metric_absent": 0,
+          "is_metric_true": 0,
+          "is_composite_present": 118,
+          "is_composite_absent": 0,
+          "is_composite_true": 118,
+          "raw_ports": 472
+        },
+        "symbol_definitions": 29,
+        "symmetry2_diagrams": 0
+      },
+      {
+        "case": "xs_qcd_gggg_L1",
+        "era": "historical",
+        "mode": "Auto",
+        "diagrams": 10,
+        "counts": {
+          "owners": 118,
+          "public_interface_present": 0,
+          "public_interface_absent": 118,
+          "is_metric_present": 118,
+          "is_metric_absent": 0,
+          "is_metric_true": 0,
+          "is_composite_present": 118,
+          "is_composite_absent": 0,
+          "is_composite_true": 118,
+          "raw_ports": 472
+        },
+        "symbol_definitions": 29,
+        "symmetry2_diagrams": 0
+      },
+      {
+        "case": "xs_qcd_gggg_L1",
+        "era": "current",
+        "mode": "None",
+        "diagrams": 10,
+        "counts": {
+          "owners": 118,
+          "public_interface_present": 8,
+          "public_interface_absent": 110,
+          "is_metric_present": 118,
+          "is_metric_absent": 0,
+          "is_metric_true": 0,
+          "is_composite_present": 118,
+          "is_composite_absent": 0,
+          "is_composite_true": 118,
+          "raw_ports": 472
+        },
+        "symbol_definitions": 14,
+        "symmetry2_diagrams": 0
+      },
+      {
+        "case": "xs_qcd_gggg_L1",
+        "era": "current",
+        "mode": "Auto",
+        "diagrams": 10,
+        "counts": {
+          "owners": 118,
+          "public_interface_present": 8,
+          "public_interface_absent": 110,
+          "is_metric_present": 118,
+          "is_metric_absent": 0,
+          "is_metric_true": 0,
+          "is_composite_present": 118,
+          "is_composite_absent": 0,
+          "is_composite_true": 118,
+          "raw_ports": 472
+        },
+        "symbol_definitions": 14,
+        "symmetry2_diagrams": 0
+      }
+    ],
+    "shared_inputs": "For each cell, full live model, request, options, grouping, Run and prepared length agree between eras. Exact diagram physical descriptors, incidence/routing payloads, full keys, factors and ungrouped source membership/ratios agree after removing only the compared numerator/interface fields.",
+    "symmetry_factor": "Exactly four of the five symmetrized diagrams retain NumeratorIndependentSymmetryGrouping(2); the fifth lacks that head. Plain cases have no such factor. No symmetry-key overlap or old one-PI overlap earns equivalence/native credit.",
+    "old_onePI_native_or_proof_reuse": "None; fresh complete owner-input association does not inherit old native mathematics/interface proof."
+  },
+  "pipeline_observations": {
+    "cells": [
+      {
+        "case": "xs_qcd_gguu_sym_L1",
+        "mode": "None",
+        "observations": {
+          "owners": 65,
+          "raw_bytes_equal_after_five_source_maps": 15,
+          "decoded_syntax_equal_after_five_source_maps": 65,
+          "public_interface_presence_differences": 34
+        },
+        "first_raw": {
+          "id": "6170f31e6eb07c29aac54d0c6cc14371",
+          "owner": "vertex:0"
+        },
+        "first_decoded": null,
+        "first_interface": {
+          "id": "6170f31e6eb07c29aac54d0c6cc14371",
+          "owner": "vertex:0"
+        }
+      },
+      {
+        "case": "xs_qcd_gguu_sym_L1",
+        "mode": "Auto",
+        "observations": {
+          "owners": 65,
+          "raw_bytes_equal_after_five_source_maps": 15,
+          "decoded_syntax_equal_after_five_source_maps": 65,
+          "public_interface_presence_differences": 34
+        },
+        "first_raw": {
+          "id": "6170f31e6eb07c29aac54d0c6cc14371",
+          "owner": "vertex:0"
+        },
+        "first_decoded": null,
+        "first_interface": {
+          "id": "6170f31e6eb07c29aac54d0c6cc14371",
+          "owner": "vertex:0"
+        }
+      },
+      {
+        "case": "xs_qcd_gguu_L1",
+        "mode": "None",
+        "observations": {
+          "owners": 117,
+          "raw_bytes_equal_after_five_source_maps": 27,
+          "decoded_syntax_equal_after_five_source_maps": 117,
+          "public_interface_presence_differences": 63
+        },
+        "first_raw": {
+          "id": "6170f31e6eb07c29aac54d0c6cc14371",
+          "owner": "vertex:0"
+        },
+        "first_decoded": null,
+        "first_interface": {
+          "id": "6170f31e6eb07c29aac54d0c6cc14371",
+          "owner": "vertex:0"
+        }
+      },
+      {
+        "case": "xs_qcd_gguu_L1",
+        "mode": "Auto",
+        "observations": {
+          "owners": 117,
+          "raw_bytes_equal_after_five_source_maps": 27,
+          "decoded_syntax_equal_after_five_source_maps": 117,
+          "public_interface_presence_differences": 63
+        },
+        "first_raw": {
+          "id": "6170f31e6eb07c29aac54d0c6cc14371",
+          "owner": "vertex:0"
+        },
+        "first_decoded": null,
+        "first_interface": {
+          "id": "6170f31e6eb07c29aac54d0c6cc14371",
+          "owner": "vertex:0"
+        }
+      },
+      {
+        "case": "xs_qcd_gggg_L1",
+        "mode": "None",
+        "observations": {
+          "owners": 118,
+          "raw_bytes_equal_after_five_source_maps": 30,
+          "decoded_syntax_equal_after_five_source_maps": 107,
+          "public_interface_presence_differences": 8
+        },
+        "first_raw": {
+          "id": "60777b11dd5b7f48966632644fd7be49",
+          "owner": "vertex:0"
+        },
+        "first_decoded": {
+          "id": "18b13eeeb65c9709e4c5c21ec7a7a98f",
+          "owner": "vertex:2"
+        },
+        "first_interface": {
+          "id": "60777b11dd5b7f48966632644fd7be49",
+          "owner": "vertex:3"
+        }
+      },
+      {
+        "case": "xs_qcd_gggg_L1",
+        "mode": "Auto",
+        "observations": {
+          "owners": 118,
+          "raw_bytes_equal_after_five_source_maps": 30,
+          "decoded_syntax_equal_after_five_source_maps": 107,
+          "public_interface_presence_differences": 8
+        },
+        "first_raw": {
+          "id": "60777b11dd5b7f48966632644fd7be49",
+          "owner": "vertex:0"
+        },
+        "first_decoded": {
+          "id": "18b13eeeb65c9709e4c5c21ec7a7a98f",
+          "owner": "vertex:2"
+        },
+        "first_interface": {
+          "id": "60777b11dd5b7f48966632644fd7be49",
+          "owner": "vertex:3"
+        }
+      }
+    ],
+    "meaning": "The first differing captured representation is at the raw cooked tensor spelling boundary. This is distinct from decoded syntax and later public interface serialization, and is not necessarily the first internal production divergence.",
+    "decoded_syntax": "After the five exact source-qualified spelling maps, all 65 sym gguu and all 117 plain gguu decoded owner trees match per mode; gggg has 107 of 118 matches, leaving 11 syntax differences per mode.",
+    "serialization": "Historical explicit public interfaces are absent for all owners. Current explicit interfaces occur on 34/63/8 owners per case and mode; absence is not rewritten as an empty list. Raw port order and flags remain preserved separately.",
+    "attribution_limit": "No deeper algebraic cause follows from names, equal counts/digests, or matching decoded trees. No physical correctness, numerator equivalence or finite interface policy is approved."
+  },
+  "actual_producer_binding": {
+    "producers": {
+      "historical-pristine": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-eemm-identical/bin/historical/generation_oracle-pristine",
+        "sha256": "8fc54ea4a2a84824847314c367e2aa5f3fdc02b0c9a330183346d44b2ad9ebae",
+        "code": "2b1ef4f07a44bc061bcc97c378bbdd9c41cb0e94",
+        "kernel": "c78cffc20f318df1fce50539a587cbe8ffc717c0",
+        "qualification": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-eemm-identical/build/historical/qualification.json",
+        "selected_case_runtime_credit": "None from this preflight; fresh selected-case pristine/observer qualification required"
+      },
+      "historical-observer": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/small-gauge-raw-parallel-20261030-sol-01/adapter-build/historical/artifacts/generation_oracle-ded84c41ff366641",
+        "sha256": "6a2225dcb4853b6eafebaabb02060e1d03ac02533c630c6c0c60177be58001b2",
+        "code": "2b1ef4f07a44bc061bcc97c378bbdd9c41cb0e94",
+        "kernel": "c78cffc20f318df1fce50539a587cbe8ffc717c0",
+        "qualification": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/small-gauge-raw-parallel-20261030-sol-01/adapter-build/historical/qualification.json",
+        "selected_case_runtime_credit": "None from this preflight; fresh selected-case pristine/observer qualification required"
+      },
+      "current-pristine": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-raw-three-integration-astra-20261031-012811Z-323f4486/archive/target/ci-optim/deps/generation_oracle-3892f55f31822180",
+        "sha256": "5d7275d26392474f2490963dd0503f4f46ccebc30572a4f31f7a66228303b30f",
+        "code": "ffa76ec420642c03349ab756d2d7720ab93c0057",
+        "kernel": "8eb7c3729d6abefc916decc1bdf0c06536f8af80",
+        "qualification": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/full-generator-characterization-20261031-r1/compiled-qualification.json",
+        "selected_case_runtime_credit": "None from this preflight; fresh selected-case pristine/observer qualification required"
+      },
+      "current-observer": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/helper-build/generation_oracle/generation_oracle-68d1b7f3e1ca788b",
+        "sha256": "30eaae032dc0c0c5d789eda9f75c3cca7a7dafd4368fb31f81e1c01f3de5a527",
+        "code": "5ea149ffd88ae3afc4072a38c0871c1329be8424",
+        "kernel": "8eb7c3729d6abefc916decc1bdf0c06536f8af80",
+        "qualification": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/helper-build/generation_oracle/qualification.json",
+        "selected_case_runtime_credit": "None from this preflight; fresh selected-case pristine/observer qualification required"
+      }
+    },
+    "historical_source": "Actual retained original source 2b1ef4f07a44bc061bcc97c378bbdd9c41cb0e94; selected literals introduced at 8cf6cecaf22be4d5c62d467b8e6827e80c6ba66d. All five source snapshots retain those same three Row texts; fresh historical selected tests are the actual new pass evidence.",
+    "historical_kernel": "Symbolica/Numerica git c78cffc20f318df1fce50539a587cbe8ffc717c0; Graphica registry 3.0.1. Original dev-optim and actual diagnostic compiler/features/flags remain distinct from current CI qualifications; no all-git-c78 or profile-equivalence claim.",
+    "historical_observer_supplement": {
+      "source_files_rehashed": 3551,
+      "actual_linked_generator_sha256": "8a448cb3d4f3d7eabbd3ba20a269267aed35f5c940ad84b9d8287484bd19f88a",
+      "actual_observer_source_sha256": "cdfbfddff5deeb3875f54596a0216e94776da3920f6e6bd15c863a152484ae4b",
+      "method": "Actual adapter qualification-before hash -> historical manual-build qualification -> equal source/source_after map and linked generator artifact -> adapter compile before/after hashes -> retained adapter ELF; all relevant current file bytes rechecked. The original tensor observer equals the sealed capsule source."
+    },
+    "current_pristine": "Actual ffa76ec420642c03349ab756d2d7720ab93c0057 / archive8993e6c8346b84f6d91c7e65c4c4fc5ed83cf6d932e969bb7fc55cbdced20740 / kernel8eb7c3729d6abefc916decc1bdf0c06536f8af80. Pure streaming extraction of its selected archive member reproduces executed ELF5d7275d26392474f2490963dd0503f4f46ccebc30572a4f31f7a66228303b30f.",
+    "current_observer": "Actual built5ea149ffd88ae3afc4072a38c0871c1329be8424 plus qualified additive observer overlay, kernel8eb. Proof source5ba, actual built5ea and evidencec344 remain distinct. Inspected 412-path invariance to ffa has only one changed file with four unrelated Row literals; no broader equivalence claimed.",
+    "source_snapshot_blobs_verified": 759,
+    "prior_review_identities": {
+      "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-feynkit-refresh-shared-provenance-opus-20261030T193404Z-3c0453ff/review.json": "565caeace0112a30fb9118f94b2bb759e4267d2b802395c314e485b89b4b2b70",
+      "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-raw-four-dispositions-opus-20261030T202304Z-196212/review.json": "6e4410dd16ef6c2366b08793af0e835c21e55526bf124a2d3581283c32f1a9a2",
+      "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/capsule/qualification/reviews/review-interface-runner-r3-astra-20261031-020333Z-4003b785.json": "b370752781691d7286766047658ca518a4a898a463c76df26226f2f114d43a62",
+      "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/capsule/qualification/reviews/review-small-gauge-fresh8eb-math-opus-20261030T192536Z-3568994.json": "1591408caad7566439fcd54a1c76398691473bb4e41c59ddd3cb85a5e1337823",
+      "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/capsule/qualification/reviews/review-raw-three-interface-astra-20261031-002103Z-8a5d8001.json": "d9303d91d922c994f87b07e10cce895b44dba96e294d64be231a3ecdf921b14c",
+      "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/review-raw-three-integration-astra-20261031-012811Z-323f4486/review.json": "535b792610c531b446d8beb1a9f300246e6d498e8126509b637189e8eb80a091",
+      "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-preflight-20261031-r1/capsule/qualification/accepted-characterization-review.json": "fb688585bc7efd0b494fef7648df5abad398f88bfe8c439e8b42c0dd520eaa37"
+    },
+    "reused_scope": "Shared ScopeA565caeace0112a30fb9118f94b2bb759e4267d2b802395c314e485b89b4b2b70 supplies its exact producer/closure provenance only. Corrected gauge disposition6e4410dd16ef6c2366b08793af0e835c21e55526bf124a2d3581283c32f1a9a2 supersedes the report blockers of initial1591408c within its stated finite scope. Bounded12 review535b7926 and full-pool1 characterizationfb688585 remain separate; neither supplies next-three scientific proof.",
+    "limits": "Build/Nix/store honesty and qualified lock/vendor/compiler provenance remain inherited premises. This review does not rebuild, verify a general compiler theorem or repair old historical grouped/source gaps. eae/1a remains the failing baseline, never the original reference."
+  },
+  "capsule_and_controller": {
+    "actual_records": "All twelve actual command plans equal the prepared argv/environment; direct exact selectors, one libtest thread, oracle pool1, 240-second per invocation deadline, zero retries and no new 20-GiB cap.",
+    "mounts": "Fresh work/record destinations; input parent, program, exec bridge and capsule read-only; only owned work/home binds writable, plus private tmp/proc/dev mounts. Exact runtime store packages only; no host-root/home/config/credential, compiler, donor-cache or Nix-socket mount. Network unshared; original four unlicensed mount probes show only loopback.",
+    "original_validation": "18 r1 pure control groups, including the original 23 negative finite guards and four mount/four loader probes, plus three final-r1-source simulated durable failures. These are retained evidence, not newly run by this reviewer. Initial/final/r2 lifecycle function ASTs agree.",
+    "private_boundary": "All four private environment names are absent from every actual native preexec environment and pure subprocess plan. Controller alone obtains the license, preserving a nonempty exported value or using its current-user config fallback; anonymous stdin pipe goes to the immediate native exec bridge. No secret/config lookup, secret hashing or secret-value scan was performed in this review. Source/record inspection grants no adversarial secrecy theorem.",
+    "fixture_disclosure": "Original r1 pure_errors.py uses a public stand-in environment value only with native launch replaced. This review ran no license fixture and imported no controller/module top-level code.",
+    "durability": "Original outcomes and streams remain protected outside writable child mounts, including the frozen failed invocation3 without an original after record. Every actual result reports no remaining descendants; candidate cleanup records are retained.",
+    "limit": "Cooperative lifecycle and finite capture containment only; no general future-runner or adversarial TOCTOU approval."
+  },
+  "fresh_vs_candidate_validation": {
+    "candidate_r2_repair_controls": {
+      "positive": 4,
+      "negative": 31,
+      "native": 0
+    },
+    "reviewer_saved_invocation_replays": 12,
+    "reviewer_independent_failed_Summary_pairs": 6,
+    "reviewer_independent_original_Rows": 3,
+    "reviewer_repaired_parser_receipt_negative_controls": 43,
+    "reviewer_original_parser_bug_reproductions": 1,
+    "reviewer_data_association_negative_controls": 18,
+    "reviewer_complete_world_joins": 12,
+    "reviewer_owner_records": 1200,
+    "reviewer_input_pairs": 600,
+    "reviewer_native_invocations": 0,
+    "reviewer_loader_mount_probes": 0,
+    "reviewer_builds": 0,
+    "reviewer_license_config_reads": 0,
+    "control_credit": "All reviewer rejection controls reach their named ValueError predicates. These are pure syntax/schema/identity/hash/association checks; no parser/setup failure is counted as scientific or native semantic rejection.",
+    "method": "Standard-library scripts and explicitly extracted named pure AST functions only; no candidate module import, former helper entry point, scientific library, native capture, build/compiler, Nix, network or delegation."
+  },
+  "reviewer_probe_history": [
+    {
+      "probe": "provenance_probe.py v1",
+      "error": "Reviewer initially required historical_None_Row_native_pass=true even on an Auto cell. Candidate correctly sets it false for Auto. Reviewer predicate corrected to (mode==None); v1 script/stdout/stderr retained. No candidate defect and no semantic credit."
+    },
+    {
+      "probe": "read-only source lookup",
+      "error": "An initial guessed target/xs-qed-eemm-identical/manual-source path did not exist; followed the actual qualification to sources/historical-observation-v2. No producer execution or mutation."
+    }
+  ],
+  "remaining_gates": [
+    "Independent factor-preserving exact mathematics for these complete new owner domains, including the 11 gggg decoded syntax differences per mode.",
+    "Native raw/decoded admission, full captured symbol and port/flag finite-interface obligations, with separate approval before adopting interface explicitness/order or Row migration.",
+    "Physical locality remains required: edge factors use only their own signed momentum and vertex factors incident momenta. No universal locality, denominator/integrand/UV or physical-equivalence theorem is supplied.",
+    "No migration/literal change, general decoder, fullpool8/32, grouped, WP3, global integration, source46 expansion or publication approval.",
+    "Old historical grouped/source gaps stay unapproved; fresh case association cannot reconstruct unrecorded past provenance."
+  ],
+  "process_and_retention": {
+    "writes": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-next-qcd-captures-astra-20261031-IYGt5Jrv",
+    "ignored_by": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.gitignore (.local/)",
+    "main_source_candidates_unchanged": true,
+    "jj_ref_index_snapshot_operations": 0,
+    "network_operations": 0,
+    "delegations": 0,
+    "retained": "Review scripts, independent probe results, full before/after hash inventories, supplemental source bindings and the reviewer schema-error history are retained for audit. All frozen candidate inputs preserved.",
+    "owned_processes_remaining": 0,
+    "workspace_or_ref_cleanup": "No workspace/ref removed or modified; this review is a new ignored artifact only."
+  }
+}

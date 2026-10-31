@@ -1,0 +1,21 @@
+[
+  {
+    "step": "bare python3 lookup",
+    "effect": "shell python3 unavailable; reused already qualified pinned Python; no task script executed"
+  },
+  {
+    "step": "initial producer invocation",
+    "error": "selected-drv.txt absent because evaluation was still active",
+    "artifact": "realization-before-evaluation-finished.stderr",
+    "effect": "No Nix build invocation or runtime. Existing evaluation reused; wait until it fully completes."
+  },
+  {
+    "step": "capture pure selfcheck1",
+    "error": "AST helper context lacked sha/unique; no native call or input mutation",
+    "artifacts": [
+      "capture_join.before-context-completion.py",
+      "capture-selfcheck-attempt1.stderr"
+    ],
+    "fix": "Supply exact stdlib hash and duplicate-key helpers in the task-local context"
+  }
+]

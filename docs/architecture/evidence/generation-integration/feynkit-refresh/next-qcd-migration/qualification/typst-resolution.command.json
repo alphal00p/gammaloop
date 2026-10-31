@@ -1,0 +1,25 @@
+{
+  "argv": [
+    "nix",
+    "--offline",
+    "--option",
+    "allow-import-from-derivation",
+    "false",
+    "eval",
+    "--json",
+    "--expr",
+    "let f=builtins.getFlake \"git+file:///shared/lcnbr/dev/gammaloop/main?rev=432b6544f3d2d884f6efffb8be104ae5820183b0&shallow=1&allRefs=1\"; in map (p: { name=p.name or \"\"; path=toString p; drv=p.drvPath; }) (builtins.filter (p: builtins.match \"typst.*\" (p.name or \"\") != null) f.devShells.x86_64-linux.default.buildInputs)"
+  ],
+  "cwd": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh",
+  "license_keys_removed": [
+    "SYMBOLICA_LICENSE",
+    "SYMBOLICA_LICENSE_PATH",
+    "SYMBOLICA_LICENSE_SIGNED",
+    "SYMBOLICA_LICENSE_FILE"
+  ],
+  "start": "2026-10-31T07:18:10.579746+00:00",
+  "exit": 0,
+  "end": "2026-10-31T07:18:11.383876+00:00",
+  "stdout_sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+  "stderr_sha256": "613228d48dd639e1d9f8b8151506f09d8e9b9b27166687df7ff4c947e219cb15"
+}

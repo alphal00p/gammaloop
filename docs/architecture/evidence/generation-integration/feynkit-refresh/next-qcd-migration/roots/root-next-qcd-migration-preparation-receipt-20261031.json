@@ -1,0 +1,42 @@
+{
+  "schema": "root-next-qcd-migration-preparation-receipt/1",
+  "utc": "2026-10-31 06:48:13 UTC",
+  "status": "VERIFIED_PREPARATORY_PACKET_AWAITING_SCIENTIFIC_VERDICT",
+  "packet": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-migration-preparation-20261031-r1",
+  "seal_sha256": "b4e75df006b68563219947ecbdef5cb8fd289f9b4c7ba840d79c0ce599377324",
+  "handoff_sha256": "1b69607db0184093de3b16d32541d6f7a5a3f00968b85694685a6d17fb1506b3",
+  "patch_sha256": "1df84cbea910df5ff092203ff6050e785bccf0027bd627b91a601d1f7b98cf84",
+  "target_revision": "83276dc047815d1dcc7f003aeb512c204b26758e",
+  "before_blob": "7283198bf0152c82c1cd5f0173703cddfa7f5c0f",
+  "after_blob": "cc4505a6c4f6fc1687c075ed79e154a8e19f05a6",
+  "root_checks": {
+    "packet_manifest_entries": 122,
+    "external_file_hashes": 3869,
+    "exact_immutable_target_before_bytes": true,
+    "three_token_replacement_reconstructs_after_exactly": true,
+    "all_other_source_bytes_equal": true,
+    "source_configuration_verification": [
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/observer-src/.config/nextest.toml",
+        "sha256": "03e166fbe150d150450df98ebfa00e3b823b487cab5f6f9ff3d4cfb4bff4b09f",
+        "bytes": 20893,
+        "root_rehash_verified": true
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/observer-src/vendor/clarabel/.cargo/config.toml",
+        "sha256": "018961be865676c88eadccae53a8386aa016a7c37ebfefe198872299c4e121cd",
+        "bytes": 237,
+        "root_rehash_verified": true
+      }
+    ],
+    "scope": "Public repository test/build configuration only; no user private config or license access. Original preparatory record remains unchanged."
+  },
+  "scientific_review_task": "node:delegated-task:command%3Amcp%3A4985cec9-8e94-44e4-b120-162e0b230921%3Adelegate-task%3Ageneration-next-qcd-scientific-interface-astra-review-20261031-r1",
+  "scientific_review_status": "RUNNING_NO_PENDING_QUESTION_AT_CHECK",
+  "migration_review": "NOT_DISPATCHED; await completed scientific/interface verdict and root disposition",
+  "applied": false,
+  "scientific_approval": false,
+  "migration_approval": false,
+  "vcs_mutation": false,
+  "retention": "Original preparation packet and external dependencies remain unchanged. Source-configuration verification here is additive; preparer's historical unread disclosure is preserved."
+}

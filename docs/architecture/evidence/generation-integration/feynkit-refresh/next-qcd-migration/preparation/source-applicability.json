@@ -1,0 +1,169 @@
+{
+  "target_revision": "83276dc047815d1dcc7f003aeb512c204b26758e",
+  "relevant_code": "6f41807b064bcf2f579883134daef65c8ac279d3",
+  "actual_capture_producer": "ffa76ec420642c03349ab756d2d7720ab93c0057",
+  "actual_capture_producer_relabelled": false,
+  "historical_capture_producer": "2b1ef4f07a44bc061bcc97c378bbdd9c41cb0e94",
+  "historical_kernel": "c78cffc20f318df1fce50539a587cbe8ffc717c0",
+  "current_kernel": "8eb7c3729d6abefc916decc1bdf0c06536f8af80",
+  "observer_built": "5ea149ffd88ae3afc4072a38c0871c1329be8424 + qualified overlay",
+  "proof_source": "5ba04864ca506e259d9eef4a54f65acdd8323fc2",
+  "source_files": 1521,
+  "byte_identical_source_object_files": 1520,
+  "delta_fields": [
+    "one unrelated prior grouped numerator literal in149-Row table"
+  ],
+  "prior_rows_differing": [
+    {
+      "case": "xs_qed_eemm_identical_L2",
+      "actual_pristine_Row": {
+        "diagrams": 29,
+        "topologies": 157,
+        "assignments": 714,
+        "inverse_symmetry": [
+          29,
+          1
+        ],
+        "weights": [
+          4,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            29
+          ]
+        ],
+        "content": 14332662944654766447,
+        "numerators": 70588155281068377,
+        "named": 4427813161249353281,
+        "ids": 14779335372597709007
+      },
+      "target_Row": {
+        "diagrams": 29,
+        "topologies": 157,
+        "assignments": 714,
+        "inverse_symmetry": [
+          29,
+          1
+        ],
+        "weights": [
+          4,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            29
+          ]
+        ],
+        "content": 14332662944654766447,
+        "numerators": 11965487560827894243,
+        "named": 4427813161249353281,
+        "ids": 14779335372597709007
+      }
+    }
+  ],
+  "all_nonrow_main_bytes_identical": true,
+  "selected_frozen_sources": [
+    {
+      "path": "crates/feynkit-generator/src/lib.rs",
+      "actual_pristine": "ffa76ec420642c03349ab756d2d7720ab93c0057",
+      "target": "83276dc047815d1dcc7f003aeb512c204b26758e",
+      "git_blob": "ed5825559775432cd514b9778c7810cd7f57d4a5",
+      "sha256": "94c2c10d04d2ab37c9d2adac2874e99861e23f2061d01b71167621f4fee46fae",
+      "bytes": 1233,
+      "byte_identical": true
+    },
+    {
+      "path": "crates/feynkit-generator/src/grouping.rs",
+      "actual_pristine": "ffa76ec420642c03349ab756d2d7720ab93c0057",
+      "target": "83276dc047815d1dcc7f003aeb512c204b26758e",
+      "git_blob": "66cc3fe8280694c72b213d71dee37fb40a1ad997",
+      "sha256": "ee0e666ae2c7b8d13c14741d03d49adc41de50ace966034561f9d39d20191c00",
+      "bytes": 227293,
+      "byte_identical": true
+    },
+    {
+      "path": "crates/feynkit-graph/src/lib.rs",
+      "actual_pristine": "ffa76ec420642c03349ab756d2d7720ab93c0057",
+      "target": "83276dc047815d1dcc7f003aeb512c204b26758e",
+      "git_blob": "03fa811b133f5816415a2b445445ea5a2d87365d",
+      "sha256": "5cb3612abc2f45eb9e2317d476ad5b9c29469c8a6f6d30cef9b4578d99ce2848",
+      "bytes": 241884,
+      "byte_identical": true
+    },
+    {
+      "path": "crates/feynkit-graph/src/numerator_interface.rs",
+      "actual_pristine": "ffa76ec420642c03349ab756d2d7720ab93c0057",
+      "target": "83276dc047815d1dcc7f003aeb512c204b26758e",
+      "git_blob": "d22ae10a44c352e0765d361b2ac2f430f6f94baa",
+      "sha256": "596a58fda9f2f182ba19a3da2457b3ed45e73b554d1dd67092cc42a4c2f68ed8",
+      "bytes": 43267,
+      "byte_identical": true
+    },
+    {
+      "path": "crates/feynkit-model/src/lib.rs",
+      "actual_pristine": "ffa76ec420642c03349ab756d2d7720ab93c0057",
+      "target": "83276dc047815d1dcc7f003aeb512c204b26758e",
+      "git_blob": "156537ac7b156a7c61332cd98322fb13f0e0bbab",
+      "sha256": "292f43e53bfe1e40fa6163d47ae4d8e5941b5dd582dbf99e7a75d367d59a7b0b",
+      "bytes": 1096,
+      "byte_identical": true
+    },
+    {
+      "path": "crates/idenso/src/tensor/composition.rs",
+      "actual_pristine": "ffa76ec420642c03349ab756d2d7720ab93c0057",
+      "target": "83276dc047815d1dcc7f003aeb512c204b26758e",
+      "git_blob": "c07853ca7e70f8a90183f7c5132f91a2947596ee",
+      "sha256": "b81e984ae44962ce16da32b63dba41d1fbbe02ed0297446d6aee2555379951ad",
+      "bytes": 358633,
+      "byte_identical": true
+    },
+    {
+      "path": "crates/idenso/src/tensor/composition/product.rs",
+      "actual_pristine": "ffa76ec420642c03349ab756d2d7720ab93c0057",
+      "target": "83276dc047815d1dcc7f003aeb512c204b26758e",
+      "git_blob": "e423514abe8eb2bdd47924c5d1af76b13e632dd7",
+      "sha256": "446af47385609650a55b87d85e37afed79fcfd9ff9021d4b1f24c2b294791dac",
+      "bytes": 25701,
+      "byte_identical": true
+    },
+    {
+      "path": "crates/spenso/src/structure/partial.rs",
+      "actual_pristine": "ffa76ec420642c03349ab756d2d7720ab93c0057",
+      "target": "83276dc047815d1dcc7f003aeb512c204b26758e",
+      "git_blob": "ebb012589b0c64b39db068bb8cc2ab0e532c672f",
+      "sha256": "1ac7c89050b169502d9cba462c7e6e7cc1d2f4419003998457be24feb8ca11f7",
+      "bytes": 12495,
+      "byte_identical": true
+    },
+    {
+      "path": "Cargo.toml",
+      "actual_pristine": "ffa76ec420642c03349ab756d2d7720ab93c0057",
+      "target": "83276dc047815d1dcc7f003aeb512c204b26758e",
+      "git_blob": "a7033cd4a8c4cb83ddb176e2be32eb3a50bfe787",
+      "sha256": "fbc0408bac3bdf1ed16eb9276d1db34923280b23300801555ca97afee6511478",
+      "bytes": 5967,
+      "byte_identical": true
+    },
+    {
+      "path": "Cargo.lock",
+      "actual_pristine": "ffa76ec420642c03349ab756d2d7720ab93c0057",
+      "target": "83276dc047815d1dcc7f003aeb512c204b26758e",
+      "git_blob": "ceae72cbcbf552aff4b969c1ce81a8930dfc03ea",
+      "sha256": "e111296686b2573ac88b9274cac2bf1e10aad07669f8fc6d243ac5b47d985ae0",
+      "bytes": 219012,
+      "byte_identical": true
+    }
+  ],
+  "model_assets": "Entire assets subtree identical by exact Git objects; complete captured model/request/options/Run and physical ownership bound separately in physical-input-bindings.json.",
+  "features": "Cargo manifests/lock exact832==actualffa; actual historical dev-optim/default+native, current ci-optim/default+native and direct-rustc observer qualifications retained from producer-source-bindings.json. No new build/profile equivalence.",
+  "external_producer_qualification": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-captures-20261031-r1/producer-source-bindings.json",
+    "sha256": "70fa9c8de3d3ae2cb91e6d612b4cfbb600df6f2f4810e9e6df5daa5ea0b495f8",
+    "bytes": 225769
+  },
+  "other_changes": "Complete all-path deltas retained. Docs/evidence and notebook stub are outside the identical crates/assets/manifests/lock domain; they are not generator or case changes.",
+  "runtime_at_target": "NOT_RUN; source applicability only. No new compile/runtime pass."
+}

@@ -1,0 +1,26 @@
+{
+  "/nix/store/wp125rj96wsjjqlbk8vrk7xd4mxjshl9-source": {
+    "ca": "fixed:r:sha256:1p1x9axz6ds7x3gmk92ddvdzd208pw1adgwviai9nhgma1yik4y4",
+    "deriver": null,
+    "narHash": "sha256-xJMZfVD1QZuiipu/pgK/CIj2225NpFnf6Ec387tKPdw=",
+    "narSize": 201980528,
+    "references": [],
+    "registrationTime": 1793430739,
+    "signatures": [],
+    "storeDir": "/nix/store",
+    "ultimate": false,
+    "version": 1
+  },
+  "/nix/store/ynnb4iz406bds753h2gl8dc4d977s1vj-source": {
+    "ca": "fixed:r:sha256:0jb05lrmggfalmhdy5sbg5fgbpyh1zmb5hf05298dapm9fxbm4ax",
+    "deriver": null,
+    "narHash": "sha256-XZG6ukv1qoaSKMDBsuoP0N/1XHlLF99gpcq9VzMtYEk=",
+    "narSize": 14685640,
+    "references": [],
+    "registrationTime": 1793430762,
+    "signatures": [],
+    "storeDir": "/nix/store",
+    "ultimate": false,
+    "version": 1
+  }
+}

@@ -13,6 +13,19 @@ title = "Implemented architecture"
 summary = "How the current runtime, physics layers, parsers, and symbolic engines are organized."
 
 [[section.note]]
+id = "generation-next-qcd-migration"
+title = "Next three QCD numerator migration qualification"
+summary = "Exactly three accepted QCD numerator tokens; new pure archive, 48 complete-Row executions and six fresh public capture/proof joins."
+source = "docs/architecture/generation-next-qcd-migration.typ"
+kind = "Bounded migration qualification record"
+status = "NEW independent integration review required; integration832 unchanged"
+lifecycle = "investigation"
+owner = "unassigned"
+products = ["feynkit", "gammaloop"]
+topics = ["generation", "testing", "numerators", "provenance"]
+review_triggers = ["crates/feynkit-generator/tests/generation_oracle/**", "docs/architecture/generation-next-qcd-migration.typ", "docs/architecture/evidence/generation-integration/feynkit-refresh/next-qcd-migration/**"]
+
+[[section.note]]
 id = "generation-grouped-identical-migration"
 reviewed_at = "2026-10-31"
 title = "Grouped Identical numerator migration qualification"

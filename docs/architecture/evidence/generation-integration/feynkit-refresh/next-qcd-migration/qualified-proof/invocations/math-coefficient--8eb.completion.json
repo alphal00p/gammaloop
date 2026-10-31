@@ -1,0 +1,25 @@
+{
+  "index": 18,
+  "id": "math-coefficient--8eb",
+  "argv": [
+    "/nix/store/4168xqs4l5jbfc7xyi9zrhdhszx0pnlb-python3-3.13.16/bin/python3",
+    "-I",
+    "-S",
+    "-B",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r3/supervisor.py",
+    "--id",
+    "math-coefficient--8eb",
+    "--execute-licensed",
+    "--assignment",
+    "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/root-next-qcd-proof-native-execution-assignment-20261031-r3.json"
+  ],
+  "cwd": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families",
+  "start": "2026-10-31T06:20:06.331649+00:00",
+  "retries": 0,
+  "controller_pid": 2150399,
+  "controller_exit": 0,
+  "end": "2026-10-31T06:20:16.129554+00:00",
+  "status": "EXPECTED_SEMANTIC_REJECTION",
+  "validated": true,
+  "audit_exit": 0
+}

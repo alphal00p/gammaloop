@@ -1,0 +1,6 @@
+{
+  "uri": "git+file:///shared/lcnbr/dev/gammaloop/main?rev=432b6544f3d2d884f6efffb8be104ae5820183b0&shallow=1&allRefs=1",
+  "rev": "432b6544f3d2d884f6efffb8be104ae5820183b0",
+  "drvPath": "/nix/store/3kgfp3jm5lzvk60bc0sq0jslxl5idpwi-gammaloop-nextest-binaries-feynkit.drv",
+  "source": "/nix/store/wp125rj96wsjjqlbk8vrk7xd4mxjshl9-source"
+}

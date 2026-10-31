@@ -1,0 +1,74 @@
+[
+  {
+    "manifest": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-captures-20261031-r2/SHA256SUMS",
+      "sha256": "6a34871a549ccadd8c5f8344f7ed039823a33b118df29700b83971d9ffcd009a",
+      "bytes": 453841
+    },
+    "bindings": 1976
+  },
+  {
+    "manifest": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/SHA256SUMS",
+      "sha256": "01593fdf8e3ca02bc6a2eeb3ba7a8d10684643d09d3c00b4d4d9acb64b21b6dc",
+      "bytes": 29521
+    },
+    "bindings": 260
+  },
+  {
+    "manifest": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r2/SHA256SUMS",
+      "sha256": "c185f191356c4ddfa80d48bc3d18250b2e4aa1228f3b6994562105a7f6d8b0d2",
+      "bytes": 46401
+    },
+    "bindings": 361
+  },
+  {
+    "manifest": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r3/SHA256SUMS",
+      "sha256": "61055964d912f0a104de2627758e61590ae5b7e8c82a77efdebd5a71a2753f9f",
+      "bytes": 27319
+    },
+    "bindings": 229
+  },
+  {
+    "manifest": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-native-execution-20261031-r1/COMPLETE-SHA256SUMS",
+      "sha256": "844465ea17e9142778839984035d1851b73866aa371a0aee75a278f9f7d5fc7a",
+      "bytes": 28253
+    },
+    "bindings": 232
+  },
+  {
+    "manifest": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-native-execution-20261031-r1/EXECUTION-SHA256SUMS",
+      "sha256": "a08f0940cc6e282d98540ac0dc10779fa747a0c5c37e438b53fd87b5d6638fc5",
+      "bytes": 33354
+    },
+    "bindings": 135
+  },
+  {
+    "manifest": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-next-qcd-captures-astra-20261031-IYGt5Jrv/SHA256SUMS",
+      "sha256": "b41e81a4980733c2074b8536f29b5bae76116bd73787305f26cf261ad4af8b5f",
+      "bytes": 2158
+    },
+    "bindings": 25
+  },
+  {
+    "manifest": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-next-qcd-proof-r2-supervisor-astra-20261031-mtFpBwVu/SHA256SUMS",
+      "sha256": "848e5f3c06697e79029c02d5fab2d462975399b58cd25756c7c99a48d6a4b275",
+      "bytes": 52568
+    },
+    "bindings": 360
+  },
+  {
+    "manifest": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-next-qcd-supervisor-r3-astra-20261031-22d61lkb/SHA256SUMS",
+      "sha256": "97d3f7953aac1e8bd59f5b1bbcf0031b4dadaef78a5642cd0f95c3c58d5dbb25",
+      "bytes": 24196
+    },
+    "bindings": 187
+  }
+]

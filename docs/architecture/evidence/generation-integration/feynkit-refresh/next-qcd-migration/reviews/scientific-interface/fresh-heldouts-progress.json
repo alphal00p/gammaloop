@@ -1,0 +1,197 @@
+[
+  {
+    "name": "authentic typed baseline pure replay",
+    "result": "ACCEPT",
+    "expected_stage": null
+  },
+  {
+    "name": "last cell removed",
+    "result": "REJECT",
+    "stage": "native-inventory",
+    "message": "six complete cells",
+    "expected_stage": "native-inventory"
+  },
+  {
+    "name": "last owner removed",
+    "result": "REJECT",
+    "stage": "native-inventory",
+    "message": "all owners",
+    "expected_stage": "native-inventory"
+  },
+  {
+    "name": "imported metric flag flipped",
+    "result": "REJECT",
+    "stage": "native-flags",
+    "message": "actual reconstructed owner; not serialized flag admission",
+    "expected_stage": "native-flags"
+  },
+  {
+    "name": "last fold plan absent",
+    "result": "REJECT",
+    "stage": "native-fold-plan",
+    "message": "present object physical_plan",
+    "expected_stage": "native-fold-plan"
+  },
+  {
+    "name": "last fold plan kind wrong",
+    "result": "REJECT",
+    "stage": "native-fold-kind",
+    "message": "source-supported Scalar/Outer/Contract dispatch",
+    "expected_stage": "native-fold-kind"
+  },
+  {
+    "name": "real fold cof right endpoints swapped",
+    "result": "REJECT",
+    "stage": "native-fold-endpoint-orientation",
+    "message": "exact representation/dimension/index and compatible dual orientation",
+    "expected_stage": "native-fold-endpoint-orientation"
+  },
+  {
+    "name": "actual fold duplicate endpoint",
+    "result": "REJECT",
+    "stage": "native-fold-endpoint-duplicate",
+    "message": "no duplicate pair",
+    "expected_stage": "native-fold-endpoint-duplicate"
+  },
+  {
+    "name": "public output-only inverse permutation swapped",
+    "result": "REJECT",
+    "stage": "native-layout",
+    "message": "actual inverse",
+    "expected_stage": "native-layout"
+  },
+  {
+    "name": "unmatched coad output omitted",
+    "result": "REJECT",
+    "stage": "native-fold",
+    "message": "all survivors",
+    "expected_stage": "native-fold"
+  },
+  {
+    "name": "changed-owner lowering dangling output missing",
+    "result": "REJECT",
+    "stage": "native-lowering",
+    "message": "complete dangling multiset",
+    "expected_stage": "native-lowering"
+  },
+  {
+    "name": "authentic math baseline replay",
+    "result": "ACCEPT",
+    "expected_stage": null
+  },
+  {
+    "name": "last native row parsed_equal",
+    "result": "REJECT",
+    "stage": "native-math",
+    "message": "all exact native predicates",
+    "expected_stage": "native-math"
+  },
+  {
+    "name": "last native row canonical_equal",
+    "result": "REJECT",
+    "stage": "native-math",
+    "message": "all exact native predicates",
+    "expected_stage": "native-math"
+  },
+  {
+    "name": "last native row sign_rejected",
+    "result": "REJECT",
+    "stage": "native-math",
+    "message": "all exact native predicates",
+    "expected_stage": "native-math"
+  },
+  {
+    "name": "last native row coefficient_rejected",
+    "result": "REJECT",
+    "stage": "native-math",
+    "message": "all exact native predicates",
+    "expected_stage": "native-math"
+  },
+  {
+    "name": "last native row power_rejected",
+    "result": "REJECT",
+    "stage": "native-math",
+    "message": "all exact native predicates",
+    "expected_stage": "native-math"
+  },
+  {
+    "name": "boolean replaced by integer",
+    "result": "REJECT",
+    "stage": "native-math",
+    "message": "all exact native predicates",
+    "expected_stage": "native-math"
+  },
+  {
+    "name": "live case binding",
+    "result": "REJECT",
+    "stage": "live-case",
+    "message": "current expected live case",
+    "expected_stage": "live-case"
+  },
+  {
+    "name": "live mode binding",
+    "result": "REJECT",
+    "stage": "live-mode",
+    "message": "current expected live mode",
+    "expected_stage": "live-mode"
+  },
+  {
+    "name": "physical symmetry factor changed",
+    "result": "REJECT",
+    "stage": "cross-physical",
+    "message": "complete physical owner records/model fingerprint",
+    "expected_stage": "cross-physical"
+  },
+  {
+    "name": "odd attributed f transposition",
+    "result": "REJECT",
+    "stage": "cycle-proof",
+    "message": "only explicit even 3-cycle",
+    "expected_stage": "cycle-proof"
+  },
+  {
+    "name": "whole-definition conflict",
+    "result": "REJECT",
+    "stage": "symbol-definition",
+    "message": "inconsistent definition spenso::f",
+    "expected_stage": "symbol-definition"
+  },
+  {
+    "name": "unchanged actual receipt copy",
+    "result": "ACCEPT",
+    "expected_stage": null
+  },
+  {
+    "name": "missing result artifact digest",
+    "result": "REJECT",
+    "stage": "baseline-artifact-inventory",
+    "message": "exact four fixed baseline artifacts",
+    "expected_stage": "baseline-artifact-inventory"
+  },
+  {
+    "name": "missing postinput",
+    "result": "REJECT",
+    "stage": "baseline-inputs-after",
+    "message": "complete exact protected input map",
+    "expected_stage": "baseline-inputs-after"
+  },
+  {
+    "name": "native receipt fixture marker",
+    "result": "REJECT",
+    "stage": "baseline-flags",
+    "message": "typed consistent synthetic",
+    "expected_stage": "baseline-flags"
+  },
+  {
+    "name": "changed native result bytes without digest update",
+    "result": "REJECT",
+    "stage": "baseline-artifact-hash",
+    "message": "every required protected byte artifact",
+    "expected_stage": "baseline-artifact-hash"
+  },
+  {
+    "name": "diagnostic integer plan string ignored by packet auditor",
+    "result": "ACCEPT",
+    "expected_stage": null
+  }
+]

@@ -1,0 +1,688 @@
+{
+  "outcomes": [
+    {
+      "id": "faithfulness-historical--c78",
+      "kind": "math-baseline",
+      "status": "BASELINE_PASS",
+      "actual_exit": 0,
+      "seconds": 0.14369102893397212,
+      "program": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-eemm-identical/bin/historical/oracle_identical_exact",
+        "sha256": "d5f41949153560d3ff9eda7367ff26fc6dadfcaabf846b6dcf17c25cdfd6b996"
+      },
+      "input": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/prepared/math/faithfulness-historical/portable-pairs.json",
+        "sha256": "77eac1d40fa6c0c1f8ef135d83bde82b342c9976fbbc28bb17e401910f8d5b85"
+      },
+      "receipt_sha256": "bcd77b1611592cabb0d76833f219c300bf796ce0c3b0989a331eeb76692af552",
+      "audit": {
+        "checked_math_rows": 166,
+        "native_execution_evidence": "parent command/exit/source/program/input/definition-order/streams and before-after guards MUST be independently bound; this pure audit cannot supply that evidence"
+      },
+      "stdout": "166 exact factorized expression pairs\n",
+      "stderr": ""
+    },
+    {
+      "id": "faithfulness-historical--8eb",
+      "kind": "math-baseline",
+      "status": "BASELINE_PASS",
+      "actual_exit": 0,
+      "seconds": 0.17405171203427017,
+      "program": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/helper-build/oracle_family_exact/oracle_family_exact-350edf2766083f3f",
+        "sha256": "5141d8fddacf40a81f5452e212cd788daa15c3cb3e6d2290fbfc6b65f76c48e1"
+      },
+      "input": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/prepared/math/faithfulness-historical/portable-pairs.json",
+        "sha256": "77eac1d40fa6c0c1f8ef135d83bde82b342c9976fbbc28bb17e401910f8d5b85"
+      },
+      "receipt_sha256": "92c28799334d91f66cf778d81b0de6c785f9138bd7f4e2754a0e2e8c344f7728",
+      "audit": {
+        "checked_math_rows": 166,
+        "native_execution_evidence": "parent command/exit/source/program/input/definition-order/streams and before-after guards MUST be independently bound; this pure audit cannot supply that evidence"
+      },
+      "stdout": "166 exact factorized expression pairs\n",
+      "stderr": ""
+    },
+    {
+      "id": "current-faithfulness-and-equivalence--c78",
+      "kind": "math-baseline",
+      "status": "BASELINE_PASS",
+      "actual_exit": 0,
+      "seconds": 0.14053210406564176,
+      "program": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-eemm-identical/bin/historical/oracle_identical_exact",
+        "sha256": "d5f41949153560d3ff9eda7367ff26fc6dadfcaabf846b6dcf17c25cdfd6b996"
+      },
+      "input": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/prepared/math/current-faithfulness-and-equivalence/portable-pairs.json",
+        "sha256": "c886c293f5c6eb0e94f17f5b77896d37f5f06787d20465f380db7c38e55bc936"
+      },
+      "receipt_sha256": "a00f71b102aeeb4ff9b363e3a9eecba53c07cfbf4a0d5ec7d136fac0978a1ce2",
+      "audit": {
+        "checked_math_rows": 118,
+        "native_execution_evidence": "parent command/exit/source/program/input/definition-order/streams and before-after guards MUST be independently bound; this pure audit cannot supply that evidence"
+      },
+      "stdout": "118 exact factorized expression pairs\n",
+      "stderr": ""
+    },
+    {
+      "id": "current-faithfulness-and-equivalence--8eb",
+      "kind": "math-baseline",
+      "status": "BASELINE_PASS",
+      "actual_exit": 0,
+      "seconds": 0.1425737829413265,
+      "program": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/helper-build/oracle_family_exact/oracle_family_exact-350edf2766083f3f",
+        "sha256": "5141d8fddacf40a81f5452e212cd788daa15c3cb3e6d2290fbfc6b65f76c48e1"
+      },
+      "input": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/prepared/math/current-faithfulness-and-equivalence/portable-pairs.json",
+        "sha256": "c886c293f5c6eb0e94f17f5b77896d37f5f06787d20465f380db7c38e55bc936"
+      },
+      "receipt_sha256": "0522c02476de94ec7656c236efccb053a3e4a45d7f05ff3d01d569961273a9b9",
+      "audit": {
+        "checked_math_rows": 118,
+        "native_execution_evidence": "parent command/exit/source/program/input/definition-order/streams and before-after guards MUST be independently bound; this pure audit cannot supply that evidence"
+      },
+      "stdout": "118 exact factorized expression pairs\n",
+      "stderr": ""
+    },
+    {
+      "id": "all-six-cells--typed8eb",
+      "kind": "typed-baseline",
+      "status": "BASELINE_PASS",
+      "actual_exit": 0,
+      "seconds": 1.610987365944311,
+      "program": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/build-v4/raw_three_interface_probe",
+        "sha256": "f54f28b032308dbd040958945fb4895efde0ff4fe0a9fa276481a23267349ef6"
+      },
+      "input": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/prepared/interface-inputs.json",
+        "sha256": "a1100378ffa6fad823978233ffa430c565537b4a7a96f57689c3e8d28d35d89d"
+      },
+      "receipt_sha256": "46ba0203020352d8d80d95a57bc4971c5852773e76c5587b04333c32840c892a",
+      "audit": {
+        "graphs": 48,
+        "owners": 600,
+        "plans": 1890,
+        "fold_steps": 456,
+        "lowerings": 210,
+        "fold_plans": 456,
+        "fold_endpoint_pairs": 720,
+        "builtin_noop_controls_withheld": [
+          {
+            "case": "xs_qcd_gguu_sym_L1",
+            "mode": "None",
+            "id": "6170f31e6eb07c29aac54d0c6cc14371",
+            "owner": "vertex:2",
+            "control": "wrong_type",
+            "credit": false
+          },
+          {
+            "case": "xs_qcd_gguu_sym_L1",
+            "mode": "None",
+            "id": "4ec3077f4f3e6e2fd1fbdbfbf5ba04c0",
+            "owner": "vertex:1",
+            "control": "wrong_type",
+            "credit": false
+          },
+          {
+            "case": "xs_qcd_gguu_sym_L1",
+            "mode": "Auto",
+            "id": "6170f31e6eb07c29aac54d0c6cc14371",
+            "owner": "vertex:2",
+            "control": "wrong_type",
+            "credit": false
+          },
+          {
+            "case": "xs_qcd_gguu_sym_L1",
+            "mode": "Auto",
+            "id": "4ec3077f4f3e6e2fd1fbdbfbf5ba04c0",
+            "owner": "vertex:1",
+            "control": "wrong_type",
+            "credit": false
+          },
+          {
+            "case": "xs_qcd_gguu_L1",
+            "mode": "None",
+            "id": "6170f31e6eb07c29aac54d0c6cc14371",
+            "owner": "vertex:2",
+            "control": "wrong_type",
+            "credit": false
+          },
+          {
+            "case": "xs_qcd_gguu_L1",
+            "mode": "None",
+            "id": "4ec3077f4f3e6e2fd1fbdbfbf5ba04c0",
+            "owner": "vertex:1",
+            "control": "wrong_type",
+            "credit": false
+          },
+          {
+            "case": "xs_qcd_gguu_L1",
+            "mode": "None",
+            "id": "ae57dde2bc65dc277a5257d49ccc59fe",
+            "owner": "vertex:1",
+            "control": "wrong_type",
+            "credit": false
+          },
+          {
+            "case": "xs_qcd_gguu_L1",
+            "mode": "Auto",
+            "id": "6170f31e6eb07c29aac54d0c6cc14371",
+            "owner": "vertex:2",
+            "control": "wrong_type",
+            "credit": false
+          },
+          {
+            "case": "xs_qcd_gguu_L1",
+            "mode": "Auto",
+            "id": "4ec3077f4f3e6e2fd1fbdbfbf5ba04c0",
+            "owner": "vertex:1",
+            "control": "wrong_type",
+            "credit": false
+          },
+          {
+            "case": "xs_qcd_gguu_L1",
+            "mode": "Auto",
+            "id": "ae57dde2bc65dc277a5257d49ccc59fe",
+            "owner": "vertex:1",
+            "control": "wrong_type",
+            "credit": false
+          },
+          {
+            "case": "xs_qcd_gggg_L1",
+            "mode": "None",
+            "id": "60777b11dd5b7f48966632644fd7be49",
+            "owner": "vertex:3",
+            "control": "wrong_type",
+            "credit": false
+          },
+          {
+            "case": "xs_qcd_gggg_L1",
+            "mode": "None",
+            "id": "34498cfddfa1715e5f37b81f08a3a5d1",
+            "owner": "vertex:3",
+            "control": "wrong_type",
+            "credit": false
+          },
+          {
+            "case": "xs_qcd_gggg_L1",
+            "mode": "None",
+            "id": "0af4380c341efde7ecff7cbb6f5f4f19",
+            "owner": "vertex:1",
+            "control": "wrong_type",
+            "credit": false
+          },
+          {
+            "case": "xs_qcd_gggg_L1",
+            "mode": "None",
+            "id": "0af4380c341efde7ecff7cbb6f5f4f19",
+            "owner": "vertex:3",
+            "control": "wrong_type",
+            "credit": false
+          },
+          {
+            "case": "xs_qcd_gggg_L1",
+            "mode": "None",
+            "id": "bb1e565a95ca61262d0c798add6934e6",
+            "owner": "vertex:1",
+            "control": "wrong_type",
+            "credit": false
+          },
+          {
+            "case": "xs_qcd_gggg_L1",
+            "mode": "None",
+            "id": "bb1e565a95ca61262d0c798add6934e6",
+            "owner": "vertex:3",
+            "control": "wrong_type",
+            "credit": false
+          },
+          {
+            "case": "xs_qcd_gggg_L1",
+            "mode": "None",
+            "id": "c43b096f49ae40345818f7590fef86a4",
+            "owner": "vertex:1",
+            "control": "wrong_type",
+            "credit": false
+          },
+          {
+            "case": "xs_qcd_gggg_L1",
+            "mode": "None",
+            "id": "c43b096f49ae40345818f7590fef86a4",
+            "owner": "vertex:3",
+            "control": "wrong_type",
+            "credit": false
+          },
+          {
+            "case": "xs_qcd_gggg_L1",
+            "mode": "Auto",
+            "id": "60777b11dd5b7f48966632644fd7be49",
+            "owner": "vertex:3",
+            "control": "wrong_type",
+            "credit": false
+          },
+          {
+            "case": "xs_qcd_gggg_L1",
+            "mode": "Auto",
+            "id": "34498cfddfa1715e5f37b81f08a3a5d1",
+            "owner": "vertex:3",
+            "control": "wrong_type",
+            "credit": false
+          },
+          {
+            "case": "xs_qcd_gggg_L1",
+            "mode": "Auto",
+            "id": "0af4380c341efde7ecff7cbb6f5f4f19",
+            "owner": "vertex:1",
+            "control": "wrong_type",
+            "credit": false
+          },
+          {
+            "case": "xs_qcd_gggg_L1",
+            "mode": "Auto",
+            "id": "0af4380c341efde7ecff7cbb6f5f4f19",
+            "owner": "vertex:3",
+            "control": "wrong_type",
+            "credit": false
+          },
+          {
+            "case": "xs_qcd_gggg_L1",
+            "mode": "Auto",
+            "id": "bb1e565a95ca61262d0c798add6934e6",
+            "owner": "vertex:1",
+            "control": "wrong_type",
+            "credit": false
+          },
+          {
+            "case": "xs_qcd_gggg_L1",
+            "mode": "Auto",
+            "id": "bb1e565a95ca61262d0c798add6934e6",
+            "owner": "vertex:3",
+            "control": "wrong_type",
+            "credit": false
+          },
+          {
+            "case": "xs_qcd_gggg_L1",
+            "mode": "Auto",
+            "id": "c43b096f49ae40345818f7590fef86a4",
+            "owner": "vertex:1",
+            "control": "wrong_type",
+            "credit": false
+          },
+          {
+            "case": "xs_qcd_gggg_L1",
+            "mode": "Auto",
+            "id": "c43b096f49ae40345818f7590fef86a4",
+            "owner": "vertex:3",
+            "control": "wrong_type",
+            "credit": false
+          }
+        ],
+        "scope": "current8eb imports of both representations; no new historical c78 consumer execution; unaffected exact same-input lowerings follow deterministic source owner only, not observed native lowering output",
+        "negative_control_credit": false
+      },
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "xs_qcd_gguu_sym_L1--None--actual-dimension--typed8eb",
+      "kind": "typed-negative",
+      "status": "EXPECTED_SEMANTIC_REJECTION",
+      "actual_exit": 1,
+      "seconds": 0.13654237613081932,
+      "program": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/build-v4/raw_three_interface_probe",
+        "sha256": "f54f28b032308dbd040958945fb4895efde0ff4fe0a9fa276481a23267349ef6"
+      },
+      "input": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/prepared/native-controls/xs_qcd_gguu_sym_L1--None--actual-dimension.json",
+        "sha256": "26b2b7996aad41af155eb2778775c86545686e41fbd5659e70ff3aa738fdc616"
+      },
+      "receipt_sha256": "d81fc0b142b807c8388f0a944981cdbb70b6117921b2d4d9e9a639f134cc4d77",
+      "audit": {
+        "predicate": "invalid diagram tensor: transformed expression does not preserve a compatible tensor interface",
+        "result_policy": "complete_expected_error_envelope"
+      },
+      "stdout": "",
+      "stderr": "Error: Tensor(Invalid(\"transformed expression does not preserve a compatible tensor interface\"))\n"
+    },
+    {
+      "id": "xs_qcd_gguu_sym_L1--Auto--actual-dimension--typed8eb",
+      "kind": "typed-negative",
+      "status": "EXPECTED_SEMANTIC_REJECTION",
+      "actual_exit": 1,
+      "seconds": 0.1358417219016701,
+      "program": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/build-v4/raw_three_interface_probe",
+        "sha256": "f54f28b032308dbd040958945fb4895efde0ff4fe0a9fa276481a23267349ef6"
+      },
+      "input": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/prepared/native-controls/xs_qcd_gguu_sym_L1--Auto--actual-dimension.json",
+        "sha256": "230020779cfbba20540e80d003b75422fdd18bb89cc15acd277303f4875dd2c5"
+      },
+      "receipt_sha256": "66806ba45eafbd8521845ee517e3b8ff8af901ca155a1e6ea915ec0aa099b67f",
+      "audit": {
+        "predicate": "invalid diagram tensor: transformed expression does not preserve a compatible tensor interface",
+        "result_policy": "complete_expected_error_envelope"
+      },
+      "stdout": "",
+      "stderr": "Error: Tensor(Invalid(\"transformed expression does not preserve a compatible tensor interface\"))\n"
+    },
+    {
+      "id": "xs_qcd_gguu_L1--None--actual-dimension--typed8eb",
+      "kind": "typed-negative",
+      "status": "EXPECTED_SEMANTIC_REJECTION",
+      "actual_exit": 1,
+      "seconds": 0.09154033893719316,
+      "program": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/build-v4/raw_three_interface_probe",
+        "sha256": "f54f28b032308dbd040958945fb4895efde0ff4fe0a9fa276481a23267349ef6"
+      },
+      "input": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/prepared/native-controls/xs_qcd_gguu_L1--None--actual-dimension.json",
+        "sha256": "f66ae69e179837c3a0952d34d9cb55985309edc30131a3e3f11b782d9fcdfe2f"
+      },
+      "receipt_sha256": "0d0acb4a006a16ac11eede896a95a3f2b95c37fec0164f574708e471b0f274af",
+      "audit": {
+        "predicate": "invalid diagram tensor: transformed expression does not preserve a compatible tensor interface",
+        "result_policy": "complete_expected_error_envelope"
+      },
+      "stdout": "",
+      "stderr": "Error: Tensor(Invalid(\"transformed expression does not preserve a compatible tensor interface\"))\n"
+    },
+    {
+      "id": "xs_qcd_gguu_L1--Auto--actual-dimension--typed8eb",
+      "kind": "typed-negative",
+      "status": "EXPECTED_SEMANTIC_REJECTION",
+      "actual_exit": 1,
+      "seconds": 0.10588600113987923,
+      "program": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/build-v4/raw_three_interface_probe",
+        "sha256": "f54f28b032308dbd040958945fb4895efde0ff4fe0a9fa276481a23267349ef6"
+      },
+      "input": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/prepared/native-controls/xs_qcd_gguu_L1--Auto--actual-dimension.json",
+        "sha256": "0b350a887564512bad0296ce441e98fd011c48f6032a573725f03a7892c219f2"
+      },
+      "receipt_sha256": "06cbfd72b0065b699fe5c18a4562251d831235cec82aeadca64fea352c8e38af",
+      "audit": {
+        "predicate": "invalid diagram tensor: transformed expression does not preserve a compatible tensor interface",
+        "result_policy": "complete_expected_error_envelope"
+      },
+      "stdout": "",
+      "stderr": "Error: Tensor(Invalid(\"transformed expression does not preserve a compatible tensor interface\"))\n"
+    },
+    {
+      "id": "xs_qcd_gggg_L1--None--actual-dimension--typed8eb",
+      "kind": "typed-negative",
+      "status": "EXPECTED_SEMANTIC_REJECTION",
+      "actual_exit": 1,
+      "seconds": 0.08523466112092137,
+      "program": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/build-v4/raw_three_interface_probe",
+        "sha256": "f54f28b032308dbd040958945fb4895efde0ff4fe0a9fa276481a23267349ef6"
+      },
+      "input": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/prepared/native-controls/xs_qcd_gggg_L1--None--actual-dimension.json",
+        "sha256": "4698578ce7080a8cf337c61f382d9e2f68494cf329cb8fbb625b86340be422f8"
+      },
+      "receipt_sha256": "568636770a012a6884aa991f785af2a1b2c932cfb155c4292ef5f0e422cff168",
+      "audit": {
+        "predicate": "invalid diagram tensor: transformed expression does not preserve a compatible tensor interface",
+        "result_policy": "complete_expected_error_envelope"
+      },
+      "stdout": "",
+      "stderr": "Error: Tensor(Invalid(\"transformed expression does not preserve a compatible tensor interface\"))\n"
+    },
+    {
+      "id": "xs_qcd_gggg_L1--Auto--actual-dimension--typed8eb",
+      "kind": "typed-negative",
+      "status": "EXPECTED_SEMANTIC_REJECTION",
+      "actual_exit": 1,
+      "seconds": 0.1154759528581053,
+      "program": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/build-v4/raw_three_interface_probe",
+        "sha256": "f54f28b032308dbd040958945fb4895efde0ff4fe0a9fa276481a23267349ef6"
+      },
+      "input": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/prepared/native-controls/xs_qcd_gggg_L1--Auto--actual-dimension.json",
+        "sha256": "5ab90e7f1f4fdc445708d7a78528c2eac78008e410fc95ac410422fb4656b266"
+      },
+      "receipt_sha256": "e25e29a9ede3ce0bc094c6d8c89b12c0cdff0c1f7c33f321b71be739045a20c8",
+      "audit": {
+        "predicate": "invalid diagram tensor: transformed expression does not preserve a compatible tensor interface",
+        "result_policy": "complete_expected_error_envelope"
+      },
+      "stdout": "",
+      "stderr": "Error: Tensor(Invalid(\"transformed expression does not preserve a compatible tensor interface\"))\n"
+    },
+    {
+      "id": "xs_qcd_gguu_L1--None--wrong-owner--typed8eb",
+      "kind": "typed-negative",
+      "status": "EXPECTED_SEMANTIC_REJECTION",
+      "actual_exit": 1,
+      "seconds": 0.14156410587020218,
+      "program": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/build-v4/raw_three_interface_probe",
+        "sha256": "f54f28b032308dbd040958945fb4895efde0ff4fe0a9fa276481a23267349ef6"
+      },
+      "input": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/prepared/native-controls/xs_qcd_gguu_L1--None--wrong-owner.json",
+        "sha256": "e68df0aa03796a7d7ce9d8a4d407b418a5f646e5a2165b7aaec6bfecb4eaec30"
+      },
+      "receipt_sha256": "fa32f4ab0d82cbc15728fd79d4bc4e26612f3988aefdb215d339cb8768dfc148",
+      "audit": {
+        "predicate": "invalid diagram tensor: transformed expression does not preserve a compatible tensor interface",
+        "result_policy": "complete_expected_error_envelope"
+      },
+      "stdout": "",
+      "stderr": "Error: Tensor(Invalid(\"transformed expression does not preserve a compatible tensor interface\"))\n"
+    },
+    {
+      "id": "xs_qcd_gguu_sym_L1--None--wrong-duality--typed8eb",
+      "kind": "typed-negative",
+      "status": "EXPECTED_SEMANTIC_REJECTION",
+      "actual_exit": 1,
+      "seconds": 0.12711108196526766,
+      "program": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/build-v4/raw_three_interface_probe",
+        "sha256": "f54f28b032308dbd040958945fb4895efde0ff4fe0a9fa276481a23267349ef6"
+      },
+      "input": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/prepared/native-controls/xs_qcd_gguu_sym_L1--None--wrong-duality.json",
+        "sha256": "ac24802cc8e5ea5d06b27f2a97f9b8f4a611d037ceef09bcfd5e63775401b31f"
+      },
+      "receipt_sha256": "1bcdfa56a5299ae4d5c63bbb084a971e8bceb1a20953a99293e5f1f749fa453b",
+      "audit": {
+        "predicate": "invalid diagram tensor: transformed expression does not preserve a compatible tensor interface",
+        "result_policy": "complete_expected_error_envelope"
+      },
+      "stdout": "",
+      "stderr": "Error: Tensor(Invalid(\"transformed expression does not preserve a compatible tensor interface\"))\n"
+    },
+    {
+      "id": "xs_qcd_gggg_L1--None--metric-owner-claim--typed8eb",
+      "kind": "typed-negative",
+      "status": "EXPECTED_SEMANTIC_REJECTION",
+      "actual_exit": 1,
+      "seconds": 0.11572143202647567,
+      "program": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/build-v4/raw_three_interface_probe",
+        "sha256": "f54f28b032308dbd040958945fb4895efde0ff4fe0a9fa276481a23267349ef6"
+      },
+      "input": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/prepared/native-controls/xs_qcd_gggg_L1--None--metric-owner-claim.json",
+        "sha256": "f546e1cc1ce8dfa396e1120be9109ddb8b1a9c87c00e0afe7dfc50132b66ea47"
+      },
+      "receipt_sha256": "c85301d06f7f9caa6ef8fbbd7e67eee276b8e82e077a1b9b81268af0f3b72717",
+      "audit": {
+        "predicate": "owner vertex:3: metric owner binding",
+        "result_policy": "complete_expected_error_envelope"
+      },
+      "stdout": "",
+      "stderr": "Error: Custom { kind: Other, error: \"owner vertex:3: metric owner binding\" }\n"
+    },
+    {
+      "id": "xs_qcd_gguu_L1--Auto--composite-owner-claim--typed8eb",
+      "kind": "typed-negative",
+      "status": "EXPECTED_SEMANTIC_REJECTION",
+      "actual_exit": 1,
+      "seconds": 0.16003634384833276,
+      "program": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-three-interface-proof-20261030-r1/build-v4/raw_three_interface_probe",
+        "sha256": "f54f28b032308dbd040958945fb4895efde0ff4fe0a9fa276481a23267349ef6"
+      },
+      "input": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/prepared/native-controls/xs_qcd_gguu_L1--Auto--composite-owner-claim.json",
+        "sha256": "e5abb34c74bf293246d39854f89ddafc426a7dedb95d24f4230a9a0043c99ce6"
+      },
+      "receipt_sha256": "ac4f369ec64e27e455b978716fbf8f411011a6fad4e6dcebf124d9596d5acfe9",
+      "audit": {
+        "predicate": "owner vertex:0: composite owner binding",
+        "result_policy": "complete_expected_error_envelope"
+      },
+      "stdout": "",
+      "stderr": "Error: Custom { kind: Other, error: \"owner vertex:0: composite owner binding\" }\n"
+    },
+    {
+      "id": "math-sign--c78",
+      "kind": "math-negative",
+      "status": "EXPECTED_SEMANTIC_REJECTION",
+      "actual_exit": 101,
+      "seconds": 0.09091692394576967,
+      "program": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-eemm-identical/bin/historical/oracle_identical_exact",
+        "sha256": "d5f41949153560d3ff9eda7367ff26fc6dadfcaabf846b6dcf17c25cdfd6b996"
+      },
+      "input": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/prepared/native-controls/math-sign.json",
+        "sha256": "4ce6448b86bffbfcfb605fa56f41b05217774f8509313edc71bc0c2e90ec804c"
+      },
+      "receipt_sha256": "46adbb009c4317de963217de1f2eb50f98de1f1ba049f6139338959205bc4aa5",
+      "audit": {
+        "predicate": "assertion failed: row.parsed_equal && row.canonical_equal",
+        "result_policy": "absent_by_source_before_final_write"
+      },
+      "stdout": "",
+      "stderr": "\nthread 'main' (2) panicked at /shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-diagnosis/round2/archived-sources/oracle_family_exact.rs:44:9:\nassertion failed: row.parsed_equal && row.canonical_equal\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+    },
+    {
+      "id": "math-sign--8eb",
+      "kind": "math-negative",
+      "status": "EXPECTED_SEMANTIC_REJECTION",
+      "actual_exit": 101,
+      "seconds": 0.09101215400733054,
+      "program": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/helper-build/oracle_family_exact/oracle_family_exact-350edf2766083f3f",
+        "sha256": "5141d8fddacf40a81f5452e212cd788daa15c3cb3e6d2290fbfc6b65f76c48e1"
+      },
+      "input": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/prepared/native-controls/math-sign.json",
+        "sha256": "4ce6448b86bffbfcfb605fa56f41b05217774f8509313edc71bc0c2e90ec804c"
+      },
+      "receipt_sha256": "bb1a3a45dcc6de8786f95d2e6032e8554610c2d24dfd50ee059698032d443689",
+      "audit": {
+        "predicate": "assertion failed: row.parsed_equal && row.canonical_equal",
+        "result_policy": "absent_by_source_before_final_write"
+      },
+      "stdout": "",
+      "stderr": "\nthread 'main' (2) panicked at /shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/observer-src/crates/feynkit-generator/examples/oracle_family_exact.rs:44:9:\nassertion failed: row.parsed_equal && row.canonical_equal\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+    },
+    {
+      "id": "math-coefficient--c78",
+      "kind": "math-negative",
+      "status": "EXPECTED_SEMANTIC_REJECTION",
+      "actual_exit": 101,
+      "seconds": 0.09086908306926489,
+      "program": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-eemm-identical/bin/historical/oracle_identical_exact",
+        "sha256": "d5f41949153560d3ff9eda7367ff26fc6dadfcaabf846b6dcf17c25cdfd6b996"
+      },
+      "input": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/prepared/native-controls/math-coefficient.json",
+        "sha256": "57344ba47119b5f7a5a8061422a3cfaeb49c4a1e41b271619b30c4754218ba8a"
+      },
+      "receipt_sha256": "9fdb7b6c8c43a94344dd5021dbe9ba6fb8572683e438c328e39480fd6aacd088",
+      "audit": {
+        "predicate": "assertion failed: row.parsed_equal && row.canonical_equal",
+        "result_policy": "absent_by_source_before_final_write"
+      },
+      "stdout": "",
+      "stderr": "\nthread 'main' (2) panicked at /shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-diagnosis/round2/archived-sources/oracle_family_exact.rs:44:9:\nassertion failed: row.parsed_equal && row.canonical_equal\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+    },
+    {
+      "id": "math-coefficient--8eb",
+      "kind": "math-negative",
+      "status": "EXPECTED_SEMANTIC_REJECTION",
+      "actual_exit": 101,
+      "seconds": 0.09064508089795709,
+      "program": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/helper-build/oracle_family_exact/oracle_family_exact-350edf2766083f3f",
+        "sha256": "5141d8fddacf40a81f5452e212cd788daa15c3cb3e6d2290fbfc6b65f76c48e1"
+      },
+      "input": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/prepared/native-controls/math-coefficient.json",
+        "sha256": "57344ba47119b5f7a5a8061422a3cfaeb49c4a1e41b271619b30c4754218ba8a"
+      },
+      "receipt_sha256": "7a8d93da786d83c3e3ff5076e176dca1362f3f858988f56a9751288ffcd3f1e9",
+      "audit": {
+        "predicate": "assertion failed: row.parsed_equal && row.canonical_equal",
+        "result_policy": "absent_by_source_before_final_write"
+      },
+      "stdout": "",
+      "stderr": "\nthread 'main' (2) panicked at /shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/observer-src/crates/feynkit-generator/examples/oracle_family_exact.rs:44:9:\nassertion failed: row.parsed_equal && row.canonical_equal\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+    },
+    {
+      "id": "math-power--c78",
+      "kind": "math-negative",
+      "status": "EXPECTED_SEMANTIC_REJECTION",
+      "actual_exit": 101,
+      "seconds": 0.10443445085547864,
+      "program": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/xs-qed-eemm-identical/bin/historical/oracle_identical_exact",
+        "sha256": "d5f41949153560d3ff9eda7367ff26fc6dadfcaabf846b6dcf17c25cdfd6b996"
+      },
+      "input": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/prepared/native-controls/math-power.json",
+        "sha256": "91cd46454c67304c1cd5c7267455fd96484a23a59395aa93a86080c5c8f9dca4"
+      },
+      "receipt_sha256": "66475ca4bb6a68a8e192d426a73babb07be1ff4a74d1a79847ca45080be2e7df",
+      "audit": {
+        "predicate": "assertion failed: row.parsed_equal && row.canonical_equal",
+        "result_policy": "absent_by_source_before_final_write"
+      },
+      "stdout": "",
+      "stderr": "\nthread 'main' (2) panicked at /shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-diagnosis/round2/archived-sources/oracle_family_exact.rs:44:9:\nassertion failed: row.parsed_equal && row.canonical_equal\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+    },
+    {
+      "id": "math-power--8eb",
+      "kind": "math-negative",
+      "status": "EXPECTED_SEMANTIC_REJECTION",
+      "actual_exit": 101,
+      "seconds": 0.09040077007375658,
+      "program": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/helper-build/oracle_family_exact/oracle_family_exact-350edf2766083f3f",
+        "sha256": "5141d8fddacf40a81f5452e212cd788daa15c3cb3e6d2290fbfc6b65f76c48e1"
+      },
+      "input": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/prepared/native-controls/math-power.json",
+        "sha256": "91cd46454c67304c1cd5c7267455fd96484a23a59395aa93a86080c5c8f9dca4"
+      },
+      "receipt_sha256": "b710dfd55b184bb6720e284f45d5bd95a16c20dbf58b5aeb68aa3eff6fd6cdc1",
+      "audit": {
+        "predicate": "assertion failed: row.parsed_equal && row.canonical_equal",
+        "result_policy": "absent_by_source_before_final_write"
+      },
+      "stdout": "",
+      "stderr": "\nthread 'main' (2) panicked at /shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/qualification/observer-src/crates/feynkit-generator/examples/oracle_family_exact.rs:44:9:\nassertion failed: row.parsed_equal && row.canonical_equal\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+    }
+  ],
+  "ordered_count": 21,
+  "baselines": 5,
+  "negative_predicates": 16,
+  "protected_inputs_per_card": 344,
+  "limit": "Exact cooperative command/source/input/order/result/lifecycle consistency, not hostile attestation. Replayed only pure classifiers; no native or private calls."
+}

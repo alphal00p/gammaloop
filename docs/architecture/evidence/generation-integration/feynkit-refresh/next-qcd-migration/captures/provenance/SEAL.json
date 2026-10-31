@@ -1,0 +1,16 @@
+{
+  "schema": "raw-next-qcd-captures-r2-seal/1",
+  "status": "COMBINED_TWELVE_CAPTURE_STAGE_COMPLETE_INDEPENDENT_PROVENANCE_REVIEW_REQUIRED",
+  "manifest_sha256": "6a34871a549ccadd8c5f8344f7ed039823a33b118df29700b83971d9ffcd009a",
+  "files": 1976,
+  "handoff_json_sha256": "9da40bc2d34381c7c6b67fa81a6d91032ff699222349f6910f9787a18cc7e660",
+  "handoff_typ_sha256": "e54880d2327df34e59850794fb72880e7eb87960e6a809f3f2dd65ed58a1ae91",
+  "r1_bindings_unchanged": 1764,
+  "preflight936_unchanged": true,
+  "native_combined": 12,
+  "first_three_reused": 3,
+  "nine_fresh": 9,
+  "public_mode_world_copies": 24,
+  "six_cells": 6,
+  "owned_processes": 0
+}

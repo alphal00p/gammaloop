@@ -1,0 +1,19 @@
+{
+  "index": 4,
+  "id": "all-six-cells--typed8eb",
+  "argv": [
+    "/nix/store/4168xqs4l5jbfc7xyi9zrhdhszx0pnlb-python3-3.13.16/bin/python3",
+    "-I",
+    "-S",
+    "-B",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r3/supervisor.py",
+    "--id",
+    "all-six-cells--typed8eb",
+    "--execute-licensed",
+    "--assignment",
+    "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/root-next-qcd-proof-native-execution-assignment-20261031-r3.json"
+  ],
+  "cwd": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families",
+  "start": "2026-10-31T06:17:59.496106+00:00",
+  "retries": 0
+}

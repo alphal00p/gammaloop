@@ -1,0 +1,116 @@
+{
+  "status": "PASS",
+  "probes": [
+    {
+      "id": "faithfulness-historical--c78",
+      "probe": "loader-verify",
+      "lifecycle": {
+        "exit": 0,
+        "timed_out": false,
+        "pid": 1923319,
+        "cleanup": {
+          "signalled_pids": [
+            1923322
+          ],
+          "remaining_pids": []
+        },
+        "seconds": 0.08871204196475446,
+        "process_reaped": true
+      },
+      "root": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-native-execution-20261031-r1/preflight/faithfulness-historical--c78"
+    },
+    {
+      "id": "faithfulness-historical--c78",
+      "probe": "stdlib-containment",
+      "lifecycle": {
+        "exit": 0,
+        "timed_out": false,
+        "pid": 1923377,
+        "cleanup": {
+          "signalled_pids": [
+            1923395
+          ],
+          "remaining_pids": []
+        },
+        "seconds": 2.6719479910098016,
+        "process_reaped": true
+      },
+      "root": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-native-execution-20261031-r1/preflight/faithfulness-historical--c78"
+    },
+    {
+      "id": "faithfulness-historical--8eb",
+      "probe": "loader-verify",
+      "lifecycle": {
+        "exit": 0,
+        "timed_out": false,
+        "pid": 1925689,
+        "cleanup": {
+          "signalled_pids": [
+            1925691
+          ],
+          "remaining_pids": []
+        },
+        "seconds": 0.09056769101880491,
+        "process_reaped": true
+      },
+      "root": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-native-execution-20261031-r1/preflight/faithfulness-historical--8eb"
+    },
+    {
+      "id": "faithfulness-historical--8eb",
+      "probe": "stdlib-containment",
+      "lifecycle": {
+        "exit": 0,
+        "timed_out": false,
+        "pid": 1925746,
+        "cleanup": {
+          "signalled_pids": [
+            1925747
+          ],
+          "remaining_pids": []
+        },
+        "seconds": 0.7945957409683615,
+        "process_reaped": true
+      },
+      "root": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-native-execution-20261031-r1/preflight/faithfulness-historical--8eb"
+    },
+    {
+      "id": "all-six-cells--typed8eb",
+      "probe": "loader-verify",
+      "lifecycle": {
+        "exit": 0,
+        "timed_out": false,
+        "pid": 1926223,
+        "cleanup": {
+          "signalled_pids": [
+            1926226
+          ],
+          "remaining_pids": []
+        },
+        "seconds": 0.0912561530712992,
+        "process_reaped": true
+      },
+      "root": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-native-execution-20261031-r1/preflight/all-six-cells--typed8eb"
+    },
+    {
+      "id": "all-six-cells--typed8eb",
+      "probe": "stdlib-containment",
+      "lifecycle": {
+        "exit": 0,
+        "timed_out": false,
+        "pid": 1926261,
+        "cleanup": {
+          "signalled_pids": [
+            1926267
+          ],
+          "remaining_pids": []
+        },
+        "seconds": 0.996610163943842,
+        "process_reaped": true
+      },
+      "root": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-native-execution-20261031-r1/preflight/all-six-cells--typed8eb"
+    }
+  ],
+  "scientific_helper_executions": 0,
+  "private_acquisitions": 0,
+  "private_pipe_runtime": "Pending first authorized native baseline; no dummy license used."
+}

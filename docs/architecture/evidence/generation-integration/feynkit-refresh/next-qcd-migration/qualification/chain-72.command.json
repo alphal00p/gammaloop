@@ -1,0 +1,43 @@
+{
+  "argv": [
+    "nix",
+    "--offline",
+    "--option",
+    "allow-import-from-derivation",
+    "false",
+    "derivation",
+    "show",
+    "/nix/store/1d3vyl862my7i2vydi300dcrsc5s85g3-gammaloop-crate-symbolica-notation-dependency-deps-inputs.drv",
+    "/nix/store/1sz8y14di2awnmgddaf40mzp5jlfv76m-gammaloop-crate-feynkit-kinematics-dependency-deps-deps-0.1.0.drv",
+    "/nix/store/5c7my73kafjfvq7g3hq5c5p8q3sz3lap-gammaloop-ci-consumer-kurvst-Cargo.toml.drv",
+    "/nix/store/5syarsky9mx5y9lrwcxd2y48wk6wvjjr-gammaloop-crate-idenso-dependency-deps-deps-0.1.0.drv",
+    "/nix/store/6j6xvyzhmysiigix25sbqf80lbzvi5w4-gammaloop-crate-symbolica-utils-dependency-deps-inputs.drv",
+    "/nix/store/86jf17hrbhx6camrrvhnr589xbv0llbk-gammaloop-crate-linnest-dependency-deps-deps-0.1.0.drv",
+    "/nix/store/8ah6l8lgi7cq460gzj34n7r27hlh6ya5-gammaloop-crate-test-dependencies-2ca22185254c7710-deps-0.1.0.drv",
+    "/nix/store/bfmqmrrlzc3fbm0mpc8mjg46qh5r3qk5-gammaloop-crate-feynkit-amplitude-dependency-deps-deps-0.1.0.drv",
+    "/nix/store/bwh0nbh1xfz5y31x4bxp57yfy9x3i3jf-gammaloop-workspace-deps-deps-0.1.0.drv",
+    "/nix/store/f8q6wylzj7q1r4dvwmkbg7i8454g0rmh-gammaloop-crate-linnet-dependency-deps-deps-0.1.0.drv",
+    "/nix/store/fm2z2rskfl1y9xajhc3azamrjvmagaa7-gammaloop-crate-spenso-hep-lib-dependency-deps-deps-0.1.0.drv",
+    "/nix/store/i9j5634wdaavx63ayp6j3rp68m8xjkzg-gammaloop-crate-spenso-dependency-deps-deps-0.1.0.drv",
+    "/nix/store/qm3sjy5a25yfn8i83icjb8ndyaqnlaxr-gammaloop-crate-feynkit-model-dependency-deps-deps-0.1.0.drv",
+    "/nix/store/s4ycxhj217mrb84qbrg9f6cdknrgxbas-gammaloop-crate-test-dependencies-c6c90cbc1dc5ad9b-deps-0.1.0.drv",
+    "/nix/store/sfvb4nb9r1492xnd8h3j8087dhkj0nwg-gammaloop-ci-consumer-symbolica-utils-Cargo.toml.drv",
+    "/nix/store/v6r1zkcksk38hk4ycvjjr0mq92zrks9d-gammaloop-crate-feynkit-graph-dependency-deps-deps-0.1.0.drv",
+    "/nix/store/v8pdg7hv82xy4xa2nbk5dsmsd45xkmhy-gammaloop-crate-test-dependencies-b23a4d72cde30c10-deps-0.1.0.drv",
+    "/nix/store/vxp5z4j2ga676gdc09kyz0a8dj6kdkir-gammaloop-crate-test-dependencies-cdbd8bb0e2eb5ad3-deps-0.1.0.drv",
+    "/nix/store/wg55fvnm7qzdgp84h8z99cp3ylb9xqwn-gammaloop-ci-consumer-symbolica-notation-Cargo.toml.drv",
+    "/nix/store/x8g4k9vi6jqn5zfd2ik4hp2cjb9bfrr2-gammaloop-ci-consumer-spenso-macros-Cargo.toml.drv"
+  ],
+  "cwd": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh",
+  "license_keys_removed": [
+    "SYMBOLICA_LICENSE",
+    "SYMBOLICA_LICENSE_PATH",
+    "SYMBOLICA_LICENSE_SIGNED",
+    "SYMBOLICA_LICENSE_FILE"
+  ],
+  "start": "2026-10-31T07:31:56.029155+00:00",
+  "exit": 0,
+  "end": "2026-10-31T07:31:56.098566+00:00",
+  "stdout_sha256": "569ddb7abb5e975d095c7963fbace890085591e687d962e5f87c6823263a01b6",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+}

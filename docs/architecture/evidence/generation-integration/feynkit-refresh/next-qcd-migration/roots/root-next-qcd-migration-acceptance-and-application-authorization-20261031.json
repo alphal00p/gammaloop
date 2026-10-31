@@ -1,0 +1,43 @@
+{
+  "schema": "root-next-qcd-migration-acceptance-and-application-authorization/1",
+  "utc": "2026-10-31 07:06:46 UTC",
+  "decision": "ACCEPT_EXACT_THREE_TOKEN_MIGRATION_AND_AUTHORIZE_POSTAPPLICATION_QUALIFICATION",
+  "review_path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-next-qcd-migration-astra-20261031-efvezb1p/review.json",
+  "review_sha256": "132a73c7a6711a7d4f74bbe47b0427e5e8fc2ddcb58079ec4f686b78bfc39f74",
+  "review_seal_sha256": "c66f4a1039b9c9fad744633c99d99d05f3b57c30db82a3e101f7fc04b9ee8e25",
+  "verified_review_files": 74,
+  "scientific_acceptance": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/root-next-qcd-scientific-interface-acceptance-20261031.json",
+  "candidate": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-migration-preparation-20261031-r1",
+  "candidate_seal_sha256": "b4e75df006b68563219947ecbdef5cb8fd289f9b4c7ba840d79c0ce599377324",
+  "patch_sha256": "1df84cbea910df5ff092203ff6050e785bccf0027bd627b91a601d1f7b98cf84",
+  "target_revision": "83276dc047815d1dcc7f003aeb512c204b26758e",
+  "before_blob": "7283198bf0152c82c1cd5f0173703cddfa7f5c0f",
+  "after_blob": "cc4505a6c4f6fc1687c075ed79e154a8e19f05a6",
+  "authorized_work": {
+    "workspace": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh",
+    "source_change": "Only the exact three numerators tokens in crates/feynkit-generator/tests/generation_oracle/main.rs.",
+    "implementation_model": "gpt-6.1-sol",
+    "pure_build": "One new exact postapplication generator nextest archive, with actual source/profile/kernel qualification. Reuse exact compatible store dependencies; no replacement core/host builds.",
+    "runtime": "Actual complete-Row tests for all 16 approved migration identities at pools 1,8,32: 48 intended executions, zero retries or selected skip credit. Use new pool-1 target-row runs to obtain public None/Auto capture evidence and exact proof joins.",
+    "new_proof_native_runs": 0,
+    "evidence": "Preserve the scientific and migration verdicts, native evidence and all source/axis-map premises, create new durable review evidence, qualify immutable Git manifest closure including ignored logs.",
+    "candidate_refs": "New task-specific code/evidence/candidate bookmarks only; keep generation-integration at832 until new independent integration approval.",
+    "parallel_budget": "Existing core union stays active and owns one heavy slot. New generator owner may use the second; existing worker/memory-slot/test-timeout/retry policy remains unchanged."
+  },
+  "remaining_gates": [
+    "New postapplication producer/archive qualification",
+    "48 actual complete-Row executions and exact fresh capture/proof associations",
+    "New independent integration review",
+    "Core/API/evaluator runtime, WP3/M-rebuild and later plan gates",
+    "Explicit user publication authorization"
+  ],
+  "preserved_restrictions": [
+    "All scientific review source/profile/capture/full-definition and both operand/output-axis premises.",
+    "No general audit_native validator qualification; retain independent exact plan/layout audits.",
+    "Only the three named tokens; sibling xs_qcd_gggg_sym_L1 and all other bytes remain unchanged.",
+    "No new global/full371 result; historical302/69/49 remains source-bound.",
+    "Private RustRed remains private validation only; CI false and resource proposals unadopted."
+  ],
+  "no_global_bookmark_advance": true,
+  "no_publication": true
+}

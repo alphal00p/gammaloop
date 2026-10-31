@@ -1,0 +1,50 @@
+{
+  "attempts": [
+    {
+      "phase": "review interpreter lookup",
+      "error": "python3: command not found",
+      "resolution": "Used the already present pinned Python 3.13.16 executable with -I -S -B; no Nix/build/install."
+    },
+    {
+      "phase": "review helper source lookup",
+      "error": "Guessed raw_three_interface_probe_v4.rs path did not exist",
+      "resolution": "Resolved exact source via authenticated input inventory to sources/original/interface-0-interface_probe_v4.rs."
+    },
+    {
+      "phase": "review initial integrity safeguard",
+      "error": "Blanket /.config/ prohibition stopped at frozen observer-src/.config/nextest.toml before reading it",
+      "source": "integrity.py",
+      "stream": "integrity-before.stderr",
+      "resolution": "integrity_v2.py permits frozen repository-source configuration bytes but still forbids private user configuration/license paths. Successful complete rehash retained."
+    },
+    {
+      "phase": "review receipt schema assumption",
+      "error": "KeyError: error; successful receipts omit the optional field",
+      "source": "execution_review.py",
+      "stream": "execution-review.stderr",
+      "resolution": "execution_review_v2.py checks receipt.get(error). All21 actual records pass, with full metadata and semantic replay."
+    },
+    {
+      "phase": "review script syntax",
+      "error": "unmatched closing parenthesis in independent no-op expression",
+      "source": "interface_review.py",
+      "stream": "interface-review.stderr",
+      "resolution": "interface_review_v2.py fixes the syntax; all finite typed computations then pass."
+    },
+    {
+      "phase": "review original parser lookup",
+      "error": "StopIteration: looked for original helper functions in syntax.py, which only owns the corrected parse wrapper",
+      "source": "source_runtime_review.py",
+      "stream": "source-runtime.stderr",
+      "resolution": "source_runtime_review_v2.py compares functions to approved-family-parser.py, ignoring cache decorators only; separate parser-source-independent.json checks the complete corrected parse adaptation and exact constants."
+    },
+    {
+      "phase": "candidate pre-native static ELF analysis",
+      "error": "Initial depth-first dependency scan omitted already-loaded library reuse",
+      "source": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-native-execution-20261031-r1/elf-qualification.json",
+      "resolution": "Original failure retained under the inner and outer seals; corrected separate-exec breadth-first metadata and genuine loader/stdlib records are independently checked. This was not a native-card retry or semantic negative."
+    }
+  ],
+  "negative_credit_for_errors": 0,
+  "all_original_candidate_failures_preserved": true
+}

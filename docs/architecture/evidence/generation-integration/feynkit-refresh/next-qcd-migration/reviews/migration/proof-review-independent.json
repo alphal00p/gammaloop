@@ -1,0 +1,109 @@
+{
+  "scientific_review_sha256": "6d892bd9263a7c093bba5fd372fb4663a5a4e81dfaad4bfc709bbba052b96d21",
+  "root_additive_join_sha256": "225b2c244ba02f16ca3ee73a59d23df3fff12204deef44f3aa405397247a0ea7",
+  "per_cell": [
+    {
+      "case": "xs_qcd_gguu_sym_L1",
+      "mode": "None",
+      "graphs": 5,
+      "changed": 34,
+      "owners": 65,
+      "unchanged": 31,
+      "selected_pairs": 306,
+      "fold_endpoint_pairs": 80,
+      "fold_steps": 50,
+      "factor2_ids": [
+        "4ec3077f4f3e6e2fd1fbdbfbf5ba04c0",
+        "fc350794b8b5d4b2a61350028cb5b539",
+        "31d0890641674e5ee9afceaff1e22206",
+        "14ac74bf7c503631cbbf625890f7ea67"
+      ]
+    },
+    {
+      "case": "xs_qcd_gguu_sym_L1",
+      "mode": "Auto",
+      "graphs": 5,
+      "changed": 34,
+      "owners": 65,
+      "unchanged": 31,
+      "selected_pairs": 306,
+      "fold_endpoint_pairs": 80,
+      "fold_steps": 50,
+      "factor2_ids": [
+        "4ec3077f4f3e6e2fd1fbdbfbf5ba04c0",
+        "fc350794b8b5d4b2a61350028cb5b539",
+        "31d0890641674e5ee9afceaff1e22206",
+        "14ac74bf7c503631cbbf625890f7ea67"
+      ]
+    },
+    {
+      "case": "xs_qcd_gguu_L1",
+      "mode": "None",
+      "graphs": 9,
+      "changed": 63,
+      "owners": 117,
+      "unchanged": 54,
+      "selected_pairs": 567,
+      "fold_endpoint_pairs": 144,
+      "fold_steps": 90,
+      "factor2_ids": []
+    },
+    {
+      "case": "xs_qcd_gguu_L1",
+      "mode": "Auto",
+      "graphs": 9,
+      "changed": 63,
+      "owners": 117,
+      "unchanged": 54,
+      "selected_pairs": 567,
+      "fold_endpoint_pairs": 144,
+      "fold_steps": 90,
+      "factor2_ids": []
+    },
+    {
+      "case": "xs_qcd_gggg_L1",
+      "mode": "None",
+      "graphs": 10,
+      "unchanged": 110,
+      "owners": 118,
+      "changed": 8,
+      "selected_pairs": 72,
+      "fold_endpoint_pairs": 136,
+      "fold_steps": 88,
+      "factor2_ids": []
+    },
+    {
+      "case": "xs_qcd_gggg_L1",
+      "mode": "Auto",
+      "graphs": 10,
+      "unchanged": 110,
+      "owners": 118,
+      "changed": 8,
+      "selected_pairs": 72,
+      "fold_endpoint_pairs": 136,
+      "fold_steps": 88,
+      "factor2_ids": []
+    }
+  ],
+  "all_local_relations": 600,
+  "literal_relations": 578,
+  "nonliteral_even_cycles": 22,
+  "unexpanded_products": 96,
+  "native_math_partitions": [
+    {
+      "batch": "faithfulness-historical",
+      "unique_pairs": 166,
+      "obligations": 166,
+      "definitions": 209
+    },
+    {
+      "batch": "current-faithfulness-and-equivalence",
+      "unique_pairs": 118,
+      "obligations": 203,
+      "definitions": 142
+    }
+  ],
+  "inverse_references": 4268,
+  "scientific_lowering_layouts_bound_to_actual_owners": 420,
+  "restriction": "Accepted finite physical mathematics and named interfaces attached to all exact pristine digest owners. No new native/library work, general validator or broader runtime theorem."
+}

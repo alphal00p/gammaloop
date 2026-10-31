@@ -1,0 +1,10 @@
+{
+  "corrected_Gaussian_parser_body_matches_exact_disclosed_adaptation": true,
+  "whole_F_SPELLINGS_TOKEN_constants_identical": true,
+  "imports_old_runtime_wrapper": false,
+  "source_bindings": {
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/sources/original/syntax.py": "8cee5302b6b5b9a600882001eecf057449d7df46685cae22b100a94219a601a8",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/sources/original/approved-family-parser.py": "b468b3a4e394424c8b8add875d3e682ac80f9be9895c82bcc232fee7ac5e9fcb",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r3/pure_parser.py": "c1f3913881382cdd2444d66fecc482df82ee09e1b11266ad9c1449626a9c9a57"
+  }
+}

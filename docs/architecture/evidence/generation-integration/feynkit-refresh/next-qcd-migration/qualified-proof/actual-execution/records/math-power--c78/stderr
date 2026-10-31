@@ -1,0 +1,4 @@
+
+thread 'main' (2) panicked at /shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/docs/architecture/evidence/generation-oracle-family-diagnosis/round2/archived-sources/oracle_family_exact.rs:44:9:
+assertion failed: row.parsed_equal && row.canonical_equal
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace

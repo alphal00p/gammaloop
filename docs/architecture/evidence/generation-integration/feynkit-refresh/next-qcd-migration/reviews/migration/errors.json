@@ -1,0 +1,21 @@
+[
+  {
+    "stage": "interpreter lookup",
+    "error": "python3: command not found",
+    "resolution": "Used already present pinned Python 3.13.16 with -I -S -B. No Nix/build/install."
+  },
+  {
+    "stage": "independent row reconstruction attempt1",
+    "error": "Rejected: aut",
+    "cause": "Reviewer required integer JSON aut; native serialized census aut is decimal string, distinct from integer payload.symmetry_factor.",
+    "resolution": "Require exact positive decimal text, convert losslessly, compare payload integer. Failed source/stdout/stderr retained.",
+    "scientific_credit": 0
+  },
+  {
+    "stage": "read-only schema probe",
+    "error": "KeyError: payload after three aut readings",
+    "cause": "Broad *.json discovery also included a binding file.",
+    "resolution": "Subsequent reads use explicit case/era/mode paths. No original changed.",
+    "scientific_credit": 0
+  }
+]

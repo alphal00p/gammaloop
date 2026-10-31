@@ -1,0 +1,26 @@
+{
+  "schema": "independent-next-three-raw-qcd-migration-review-seal/1",
+  "decision": "APPROVE_EXACT_THREE_TOKENS_ONLY",
+  "files": 74,
+  "manifest_sha256": "ac29871fb9c867877af3994e80654ce63a3705bff85368113f02c053698be6cd",
+  "review_sha256": "132a73c7a6711a7d4f74bbe47b0427e5e8fc2ddcb58079ec4f686b78bfc39f74",
+  "findings_sha256": "1ef4da54aaf2c58a7537393714e836f708eb241447a1ee4beb13887c3c134a1c",
+  "fresh_controls_sha256": "0d2fead7091581f63d4075b75166134c77bf692d1bd4baa4460a90d8b4a894ba",
+  "candidate_seal_sha256": "b4e75df006b68563219947ecbdef5cb8fd289f9b4c7ba840d79c0ce599377324",
+  "candidate_patch_sha256": "1df84cbea910df5ff092203ff6050e785bccf0027bd627b91a601d1f7b98cf84",
+  "root_scientific_acceptance_sha256": "225b2c244ba02f16ca3ee73a59d23df3fff12204deef44f3aa405397247a0ea7",
+  "scientific_review_sha256": "6d892bd9263a7c093bba5fd372fb4663a5a4e81dfaad4bfc709bbba052b96d21",
+  "target": {
+    "revision": "83276dc047815d1dcc7f003aeb512c204b26758e",
+    "tree": "c9de5c3fd962bd5d7c9375ab1f86f75699e8a69b",
+    "relevant_code": "6f41807b064bcf2f579883134daef65c8ac279d3",
+    "path": "crates/feynkit-generator/tests/generation_oracle/main.rs",
+    "before_blob": "7283198bf0152c82c1cd5f0173703cddfa7f5c0f",
+    "after_blob": "cc4505a6c4f6fc1687c075ed79e154a8e19f05a6"
+  },
+  "applied_to_tracked_source": false,
+  "postapplication_runtime_approved": false,
+  "broader_integration_approved": false,
+  "external_dependencies_required": true,
+  "owned_processes_remaining": 0
+}

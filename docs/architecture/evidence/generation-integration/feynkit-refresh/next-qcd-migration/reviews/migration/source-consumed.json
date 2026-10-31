@@ -1,0 +1,82 @@
+{
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-migration-preparation-20261031-r1/frozen-source-bindings.json": {
+    "sha256": "1192f8e1ede7b701c579a43ce16aa00c74c56bb3129ce282fa78aab4a57c79d8",
+    "bytes": 7682
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-migration-preparation-20261031-r1/source-blobs/target/crates/feynkit-generator/tests/generation_oracle/main.rs": {
+    "sha256": "66f01bcc855552ae888f1fb7c5bb158afbd448492b4e27a26e2bda40f09b07d2",
+    "bytes": 77616
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-migration-preparation-20261031-r1/source-blobs/target/crates/feynkit-generator/tests/generation_oracle/census.rs": {
+    "sha256": "b46641d3c13dd70304a457ad4f884cedd486f188ce86dd92c73328a6b1da05d3",
+    "bytes": 66236
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-migration-preparation-20261031-r1/source-blobs/target/crates/feynkit-generator/tests/generation_oracle/cases.rs": {
+    "sha256": "e3ef8ec52578364ef24cf278965eaba2ec967f1f626c707bb7667c2834e319a2",
+    "bytes": 30265
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-migration-preparation-20261031-r1/source-blobs/target/crates/feynkit-generator/tests/generation_oracle/classes.rs": {
+    "sha256": "f605e4436ff0a2225155840fdad2065d50e74fd88b34979faaa97f7153a3e4fe",
+    "bytes": 13314
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-migration-preparation-20261031-r1/source-blobs/code/crates/feynkit-generator/tests/generation_oracle/main.rs": {
+    "sha256": "66f01bcc855552ae888f1fb7c5bb158afbd448492b4e27a26e2bda40f09b07d2",
+    "bytes": 77616
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-migration-preparation-20261031-r1/source-blobs/code/crates/feynkit-generator/tests/generation_oracle/census.rs": {
+    "sha256": "b46641d3c13dd70304a457ad4f884cedd486f188ce86dd92c73328a6b1da05d3",
+    "bytes": 66236
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-migration-preparation-20261031-r1/source-blobs/code/crates/feynkit-generator/tests/generation_oracle/cases.rs": {
+    "sha256": "e3ef8ec52578364ef24cf278965eaba2ec967f1f626c707bb7667c2834e319a2",
+    "bytes": 30265
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-migration-preparation-20261031-r1/source-blobs/code/crates/feynkit-generator/tests/generation_oracle/classes.rs": {
+    "sha256": "f605e4436ff0a2225155840fdad2065d50e74fd88b34979faaa97f7153a3e4fe",
+    "bytes": 13314
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-migration-preparation-20261031-r1/source-blobs/actual-pristine/crates/feynkit-generator/tests/generation_oracle/main.rs": {
+    "sha256": "6dacf61baca9f13f3e4a6d719f89eaced429fb3cb14c7904dcb41fe4c86b66df",
+    "bytes": 77616
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-migration-preparation-20261031-r1/source-blobs/actual-pristine/crates/feynkit-generator/tests/generation_oracle/census.rs": {
+    "sha256": "b46641d3c13dd70304a457ad4f884cedd486f188ce86dd92c73328a6b1da05d3",
+    "bytes": 66236
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-migration-preparation-20261031-r1/source-blobs/actual-pristine/crates/feynkit-generator/tests/generation_oracle/cases.rs": {
+    "sha256": "e3ef8ec52578364ef24cf278965eaba2ec967f1f626c707bb7667c2834e319a2",
+    "bytes": 30265
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-migration-preparation-20261031-r1/source-blobs/actual-pristine/crates/feynkit-generator/tests/generation_oracle/classes.rs": {
+    "sha256": "f605e4436ff0a2225155840fdad2065d50e74fd88b34979faaa97f7153a3e4fe",
+    "bytes": 13314
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-migration-preparation-20261031-r1/source-blobs/historical/crates/feynkit-generator/tests/generation_oracle/main.rs": {
+    "sha256": "a7d59e30a76bcb73f16f91221835ff1e076d00c78a6d40f266182f395ff7e16d",
+    "bytes": 63174
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-migration-preparation-20261031-r1/source-blobs/historical/crates/feynkit-generator/tests/generation_oracle/census.rs": {
+    "sha256": "9820eeaae584966add033d5e934c30cf660e6821ef4c318a52cd22b5be7782c9",
+    "bytes": 63801
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-migration-preparation-20261031-r1/source-blobs/historical/crates/feynkit-generator/tests/generation_oracle/cases.rs": {
+    "sha256": "f9b7e9f80c7d0102c2d2c3b8c319edab7a1c4883109da4e231c6f1189bca00a8",
+    "bytes": 27799
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-migration-preparation-20261031-r1/source-blobs/historical/crates/feynkit-generator/tests/generation_oracle/classes.rs": {
+    "sha256": "49f6c1cbac7e775a9dc534ef4aac7edd1fb102a96a765b78f831b1a729840edb",
+    "bytes": 12731
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-migration-preparation-20261031-r1/before.rs": {
+    "sha256": "66f01bcc855552ae888f1fb7c5bb158afbd448492b4e27a26e2bda40f09b07d2",
+    "bytes": 77616
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-migration-preparation-20261031-r1/after.NOT-APPLIED.rs": {
+    "sha256": "17e0abe46c76c6b6922e5b33782925020e1412e1a6ed8cd8dc7e23de438d4aa2",
+    "bytes": 77616
+  },
+  "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-migration-preparation-20261031-r1/ordered118-source-bindings.json": {
+    "sha256": "43825a9babe9516b879a10d8d4c3c9e086f09777ceb7a14ec233a546f3893f6b",
+    "bytes": 232861
+  }
+}

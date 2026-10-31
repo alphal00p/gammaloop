@@ -1,0 +1,3 @@
+Full-delta categories {'crates': 1, 'docs': 1193, 'examples': 1}
+All non-doc/non-main deltas ['examples/notebooks/symbolica-host/python/symbolica/community/hepkit/__init__.pyi']
+PASS:1521 complete source objects,16 frozen source files,118 ordered scopes; actualffa preserved as actual producer.

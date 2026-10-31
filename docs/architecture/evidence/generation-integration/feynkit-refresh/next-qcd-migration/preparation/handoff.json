@@ -1,0 +1,252 @@
+{
+  "schema": "next-three-raw-qcd-migration-preparation/1",
+  "status": "NOT_APPLIED_PREPARATORY_CANDIDATE_READY_FOR_ROOT_JOIN_AFTER_SCIENTIFIC_VERDICT",
+  "gates": [
+    "SCIENTIFIC_INTERFACE_REVIEW_PENDING",
+    "NEW_MIGRATION_REVIEW_REQUIRED"
+  ],
+  "author": "Lucien Huber <im@lcnbr.ch>",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families",
+  "packet": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-migration-preparation-20261031-r1",
+  "target": {
+    "revision": "83276dc047815d1dcc7f003aeb512c204b26758e",
+    "tree": "c9de5c3fd962bd5d7c9375ab1f86f75699e8a69b",
+    "relevant_code": "6f41807b064bcf2f579883134daef65c8ac279d3",
+    "path": "crates/feynkit-generator/tests/generation_oracle/main.rs",
+    "before_blob": "7283198bf0152c82c1cd5f0173703cddfa7f5c0f",
+    "after_blob": "cc4505a6c4f6fc1687c075ed79e154a8e19f05a6"
+  },
+  "patch": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-migration-preparation-20261031-r1/proposed-not-applied.patch",
+    "sha256": "1df84cbea910df5ff092203ff6050e785bccf0027bd627b91a601d1f7b98cf84",
+    "bytes": 4521
+  },
+  "before": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-migration-preparation-20261031-r1/before.rs",
+    "sha256": "66f01bcc855552ae888f1fb7c5bb158afbd448492b4e27a26e2bda40f09b07d2",
+    "bytes": 77616
+  },
+  "after_not_applied": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-migration-preparation-20261031-r1/after.NOT-APPLIED.rs",
+    "sha256": "17e0abe46c76c6b6922e5b33782925020e1412e1a6ed8cd8dc7e23de438d4aa2",
+    "bytes": 77616
+  },
+  "candidates": {
+    "xs_qcd_gguu_sym_L1": {
+      "old": "0xb9fdc23ed056fa0c",
+      "new": "0xe4b209849953f1fa",
+      "before_Row": {
+        "diagrams": 5,
+        "topologies": 55,
+        "assignments": 314,
+        "inverse_symmetry": [
+          5,
+          1
+        ],
+        "weights": [
+          -9,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            5
+          ]
+        ],
+        "content": 712537782630059826,
+        "numerators": 13402081641163586060,
+        "named": 11632919173438081337,
+        "ids": 16028865599310850548
+      },
+      "after_Row": {
+        "diagrams": 5,
+        "topologies": 55,
+        "assignments": 314,
+        "inverse_symmetry": [
+          5,
+          1
+        ],
+        "weights": [
+          -9,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            5
+          ]
+        ],
+        "content": 712537782630059826,
+        "numerators": 16479244451614814714,
+        "named": 11632919173438081337,
+        "ids": 16028865599310850548
+      }
+    },
+    "xs_qcd_gguu_L1": {
+      "old": "0x5edf8e5f7a11eeb3",
+      "new": "0x665e13a4c88da679",
+      "before_Row": {
+        "diagrams": 9,
+        "topologies": 55,
+        "assignments": 314,
+        "inverse_symmetry": [
+          9,
+          1
+        ],
+        "weights": [
+          -9,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            9
+          ]
+        ],
+        "content": 14314625976713108301,
+        "numerators": 6836339300092735155,
+        "named": 16923202097874588873,
+        "ids": 3305438741699831416
+      },
+      "after_Row": {
+        "diagrams": 9,
+        "topologies": 55,
+        "assignments": 314,
+        "inverse_symmetry": [
+          9,
+          1
+        ],
+        "weights": [
+          -9,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            9
+          ]
+        ],
+        "content": 14314625976713108301,
+        "numerators": 7376354838139741817,
+        "named": 16923202097874588873,
+        "ids": 3305438741699831416
+      }
+    },
+    "xs_qcd_gggg_L1": {
+      "old": "0x2628c62dc373ac91",
+      "new": "0x96e5abcebda25959",
+      "before_Row": {
+        "diagrams": 10,
+        "topologies": 55,
+        "assignments": 314,
+        "inverse_symmetry": [
+          8,
+          1
+        ],
+        "weights": [
+          8,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            6
+          ],
+          [
+            2,
+            4
+          ]
+        ],
+        "content": 2830695040470270924,
+        "numerators": 2749665472364653713,
+        "named": 4421028482057233418,
+        "ids": 16350038670819282211
+      },
+      "after_Row": {
+        "diagrams": 10,
+        "topologies": 55,
+        "assignments": 314,
+        "inverse_symmetry": [
+          8,
+          1
+        ],
+        "weights": [
+          8,
+          1
+        ],
+        "symmetry_factors": [
+          [
+            1,
+            6
+          ],
+          [
+            2,
+            4
+          ]
+        ],
+        "content": 2830695040470270924,
+        "numerators": 10873285779789076825,
+        "named": 4421028482057233418,
+        "ids": 16350038670819282211
+      }
+    }
+  },
+  "validation": {
+    "ten_field_pristine_Rows_reconstructed": 12,
+    "None_literal_candidates": 3,
+    "changed_numerator_tokens": 3,
+    "all_Rows": 149,
+    "unchanged_Rows": 146,
+    "prior_migrated_full_Rows_preserved": 13,
+    "ordered_source_scopes_preserved": 118,
+    "source_objects_bound": 1521,
+    "actual_pristine_to_target_generator_delta": "ONE unrelated prior grouped numerator token; all remaining crate/asset/manifests/lock objects identical.",
+    "proof_counts": {
+      "changed_owner_lowerings": 210,
+      "owners": 600,
+      "unchanged_conditional_inputs": 390,
+      "selected_pairs": 1890,
+      "fold_steps": 456
+    },
+    "retained_math_member_associations": 4268,
+    "focused_controls": {
+      "total": 34,
+      "accepted": 2,
+      "rejected": 32
+    },
+    "original_files_rehashed": 3861,
+    "total_external_files_rehashed": 3869,
+    "unread_config_dependencies": 2,
+    "originals_unchanged": true,
+    "post_patch_runtime": "NOT_RUN",
+    "Typst": "UNRENDERED; no compiler invoked",
+    "owned_processes": 0
+  },
+  "warnings_and_conditions": [
+    "SCIENTIFIC_INTERFACE_REVIEW_PENDING: running Astra review not accessed, consumed, waited for or polled; no scientific verdict or root scientific acceptance invented.",
+    "NEW_MIGRATION_REVIEW_REQUIRED: candidate supplies no migration approval or application authorization. Root must join the later completed scientific verdict to this exact seal, then assign a NEW independent migration review.",
+    "NOT_APPLIED: no source/expectation/ref/index/JJ/snapshot edits. Private patch test only. No new target producer build, native runtime pass, full371, WP3/M-rebuild/main/publication or broader combined approval.",
+    "Typed8eb imports both eras; no new historical c78 consumer. Both operand AND output maps are mandatory; numerator rank8 plus projector rank4 leaves four coad8 outputs.",
+    "210 changed-owner lowerings have retained actual outputs;390 unchanged cases retain identical-input/deterministic-source conditions.26builtin bis noops earn zero credit. No positional identity or cached-plan theorem.",
+    "Historical2b/c78 Symbolica/Numerica and registryGraphica3.0.1; current pristine actualffa/archive8993/kernel8eb; observer built5ea+qualified overlay and proofsource5ba remain distinct. No profile/compiler/observer/callback/userdata/source qualification upgrade.",
+    "Raw/cooked/decoded association, whole definitions, symbol callbacks/userdata and qualified actual source/feature/registration state remain finite captured premises. Locality912 records do not prove UV subtraction, decoder universality or arbitrary component physics.",
+    "OnlyNone receives original Row assertion. Auto has its own captured worlds and separately reconstructed Rows; equal finite values do not invent an Auto literal assertion. Symfactor2 applies to4of5 sym graphs.",
+    "External dependencies are retained honestly.3861 original files and all additionally consumed external files are rehashed. Two source configuration dependencies remain recorded-only and unread under the explicit no-config-read boundary; their earlier native/root verification is not a fresh check here.",
+    "Cooperative native receipt consistency is retained evidence, not hostile/cryptographic attestation. Pure controls earn zero native or scientific proof credit."
+  ],
+  "scientific_review": {
+    "task_name": "generation-next-qcd-scientific-interface-astra-review-20261031-r1",
+    "status": "PENDING_NOT_CONSUMED",
+    "verdict": null,
+    "root_acceptance": null
+  },
+  "approval": false,
+  "applied": false,
+  "new_native_scientific_credit": 0,
+  "input_manifest": "complete-input-manifest.json",
+  "byte_scope_audit": "byte-scope-audit.json",
+  "scope_after_audit": "all118-scopes-after-candidate.json",
+  "physical_argument": "wp9-draft.typ",
+  "errors": "errors.json",
+  "retention": "Retain entire NEW ignored packet, before/after blobs, scripts, failed authoring versions, hashes and external dependencies for root/new migration review. No owned processes; no cleanup of other work; no new durable VCS reference created under explicit no-ref-mutation scope."
+}

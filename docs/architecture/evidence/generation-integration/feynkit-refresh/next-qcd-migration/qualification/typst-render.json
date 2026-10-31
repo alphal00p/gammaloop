@@ -1,0 +1,26 @@
+{
+  "compiler": {
+    "fontPaths": "/nix/store/idpfl7br0zvh7aah3dmpwkg0xwbasff0-roboto-3.015/share/fonts/truetype",
+    "packageCache": "/nix/store/vnjry04dnavpyvl41mz607ir21pjb2hp-typst-0.15.1-env/lib/typst/packages",
+    "compiler": "/nix/store/vnjry04dnavpyvl41mz607ir21pjb2hp-typst-0.15.1-env/bin/typst",
+    "existing": true
+  },
+  "available": true,
+  "compiled": true,
+  "standalone_only": true,
+  "license_absent": true,
+  "argv": [
+    "/nix/store/vnjry04dnavpyvl41mz607ir21pjb2hp-typst-0.15.1-env/bin/typst",
+    "compile",
+    "--root",
+    "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh",
+    "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/docs/architecture/generation-next-qcd-migration.typ",
+    "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/migration-note.pdf"
+  ],
+  "exit": 0,
+  "PDF_external": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/next-qcd-migration-20261031/migration-note.pdf",
+    "sha256": "928031031746cfa8e444c32245ce5f014ecea3dc04167fa56682e02fb3ae51ef",
+    "bytes": 44313
+  }
+}

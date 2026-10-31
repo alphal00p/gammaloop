@@ -1,0 +1,6 @@
+faithfulness-historical--c78 loader-verify PASS
+faithfulness-historical--c78 stdlib-containment PASS
+faithfulness-historical--8eb loader-verify PASS
+faithfulness-historical--8eb stdlib-containment PASS
+all-six-cells--typed8eb loader-verify PASS
+all-six-cells--typed8eb stdlib-containment PASS

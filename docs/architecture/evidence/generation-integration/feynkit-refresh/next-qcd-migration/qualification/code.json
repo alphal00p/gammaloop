@@ -1,0 +1,10 @@
+{
+  "code": "432b6544f3d2d884f6efffb8be104ae5820183b0",
+  "code_bookmark": "generation-next-qcd-migration-code-20261031",
+  "before": "83276dc047815d1dcc7f003aeb512c204b26758e",
+  "after_blob": "cc4505a6c4f6fc1687c075ed79e154a8e19f05a6",
+  "author": "Lucien Huber <im@lcnbr.ch>",
+  "patch": "Exact reviewed patch via strict no-offset/no-fuzz parser",
+  "start_bookmark": "generation-next-qcd-migration-start-20261031",
+  "global_integration_unchanged": true
+}

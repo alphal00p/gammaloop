@@ -1,0 +1,13 @@
+{
+  "schema": "next-qcd-native-execution-evidence-seal/1",
+  "manifest_sha256": "5fc3defcbb0b4ba7b50bbc6a8d4acad91e48a9dea84a3f953d79c7c5de09c236",
+  "bound_files": 227,
+  "execution_manifest_sha256": "a08f0940cc6e282d98540ac0dc10779fa747a0c5c37e438b53fd87b5d6638fc5",
+  "execution_files": 135,
+  "report_sha256": "3baf87d1d031f790b753bb944d2a4c180f0620297b7808ad348dfa7ea65c76f0",
+  "final_scientific_approval": false,
+  "excluded_active_assembly_streams": [
+    "assembly.stdout",
+    "assembly.stderr"
+  ]
+}

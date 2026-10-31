@@ -1,0 +1,52 @@
+{
+  "all-local-relations.json": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/prepared/all-local-relations.json",
+    "sha256": "50e917d99fc95a6e9d909d06419500cd92b0343d8560b17ef8d72f63d2109c93",
+    "bytes": 9242151
+  },
+  "all-layout-cells.json": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/prepared/all-layout-cells.json",
+    "sha256": "6215a602b8c9045af23d817e2447adcafe7b3dc5ac8a6ef9f9505f2885244257",
+    "bytes": 1380581
+  },
+  "all-aggregate-relations.json": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/prepared/all-aggregate-relations.json",
+    "sha256": "fc956a4140ae6da304f3d8a333b5d30e3242840a34c541e4577eb0939bc12e79",
+    "bytes": 2113643
+  },
+  "consumer-obligations.json": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/prepared/consumer-obligations.json",
+    "sha256": "708ae85744a6a6055f3b0704a7cf02e7d614064824d37e7404df77fbef2c9f75",
+    "bytes": 15091223
+  },
+  "finite-locality-and-mass-inputs.json": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/prepared/finite-locality-and-mass-inputs.json",
+    "sha256": "ee49067ee926a1aa3ae67871ca55c0f939425b3c750fb46918a559c4ac47dd76",
+    "bytes": 4184037
+  },
+  "pristine-observer-census-associations.json": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/prepared/pristine-observer-census-associations.json",
+    "sha256": "756ebe4994f375f69e32028e2ff03bbef5db827ea07d647f56429f7156753db7",
+    "bytes": 22487
+  },
+  "complete-key-multiplicity-domains.json": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/prepared/complete-key-multiplicity-domains.json",
+    "sha256": "83960496aacad7adaa82c8ff1a99d9fd5723c1c28c48f826eb6670a0d0d78814",
+    "bytes": 359329
+  },
+  "gggg-even-cycle-witnesses.json": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/prepared/gggg-even-cycle-witnesses.json",
+    "sha256": "24e86581ad3f4d6c679939dc57f39b6440d980c11f9d85ea5d7b471cbe54a9c8",
+    "bytes": 170595
+  },
+  "native-math-batches.json": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/prepared/native-math-batches.json",
+    "sha256": "8d10d49ab5411a6a5b23f275b69d17e97e7ccc4160be592821ec6c5f612a160e",
+    "bytes": 726
+  },
+  "interface-definition-order.json": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/raw-next-qcd-proof-preparation-20261031-r1/prepared/interface-definition-order.json",
+    "sha256": "2bc2f62842c2f24bba992bf79ea1d6c8cba0727b83a81450ff8f1d793ecf002e",
+    "bytes": 2922331
+  }
+}

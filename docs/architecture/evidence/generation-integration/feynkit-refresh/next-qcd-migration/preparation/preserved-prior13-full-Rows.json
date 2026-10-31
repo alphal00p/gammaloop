@@ -1,0 +1,370 @@
+{
+  "xs_qed_eemm_L1": {
+    "complete_Row": {
+      "diagrams": 1,
+      "topologies": 17,
+      "assignments": 34,
+      "inverse_symmetry": [
+        1,
+        1
+      ],
+      "weights": [
+        -1,
+        1
+      ],
+      "symmetry_factors": [
+        [
+          1,
+          1
+        ]
+      ],
+      "content": 9447115182819179791,
+      "numerators": 4705745366627904232,
+      "named": 17585428203571335429,
+      "ids": 17138230670786534741
+    },
+    "line": "    fast xs_qed_eemm_L1: Row { diagrams: 1, topologies: 17, assignments: 34, inverse_symmetry: (1, 1), weights: (-1, 1), symmetry_factors: &[(1, 1)], content: 0x831ae534b022fd0f, numerators: 0x414e2a7a954beae8, named: 0xf40bfdc791015105, ids: 0xedd739fe2aef9d55 };",
+    "sha256": "cca700c29740ceb8d3c468b70f099366129ad6b5e2f68e0a869e2806563894d2",
+    "before_after_byte_equal": true
+  },
+  "xs_qed_eedd_L1": {
+    "complete_Row": {
+      "diagrams": 1,
+      "topologies": 17,
+      "assignments": 34,
+      "inverse_symmetry": [
+        1,
+        1
+      ],
+      "weights": [
+        -1,
+        1
+      ],
+      "symmetry_factors": [
+        [
+          1,
+          1
+        ]
+      ],
+      "content": 12999594963008401146,
+      "numerators": 15252899439262742187,
+      "named": 15938435765113127527,
+      "ids": 6407438128916878803
+    },
+    "line": "    fast xs_qed_eedd_L1: Row { diagrams: 1, topologies: 17, assignments: 34, inverse_symmetry: (1, 1), weights: (-1, 1), symmetry_factors: &[(1, 1)], content: 0xb467d6be7a12aefa, numerators: 0xd3ad2f3a0802b6ab, named: 0xdd30b2e206f30267, ids: 0x58ebcb07ba6255d3 };",
+    "sha256": "34a0134498f14c09b0c5d70b1ce38cc07136e885581608935658432c26cc66c4",
+    "before_after_byte_equal": true
+  },
+  "xs_qed_eeee_1pi_L1": {
+    "complete_Row": {
+      "diagrams": 1,
+      "topologies": 3,
+      "assignments": 4,
+      "inverse_symmetry": [
+        1,
+        1
+      ],
+      "weights": [
+        -1,
+        1
+      ],
+      "symmetry_factors": [
+        [
+          1,
+          1
+        ]
+      ],
+      "content": 9693693735513158291,
+      "numerators": 2281158538656870576,
+      "named": 17702699951451974615,
+      "ids": 17831975467429499839
+    },
+    "line": "    fast xs_qed_eeee_1pi_L1: Row { diagrams: 1, topologies: 3, assignments: 4, inverse_symmetry: (1, 1), weights: (-1, 1), symmetry_factors: &[(1, 1)], content: 0x8686eb17d2b0f293, numerators: 0x1fa84d9ad4fdf0b0, named: 0xf5ac9fd01b9eabd7, ids: 0xf777e735b39d93bf };",
+    "sha256": "927563336b9c08feb85a5685d93d77dab98bd57c71df9ca112091352f31bc78b",
+    "before_after_byte_equal": true
+  },
+  "qed_eemm_L1": {
+    "complete_Row": {
+      "diagrams": 17,
+      "topologies": 10,
+      "assignments": 17,
+      "inverse_symmetry": [
+        17,
+        1
+      ],
+      "weights": [
+        1,
+        1
+      ],
+      "symmetry_factors": [
+        [
+          1,
+          17
+        ]
+      ],
+      "content": 7422309700345920757,
+      "numerators": 4064195188384296888,
+      "named": 10592316861553909751,
+      "ids": 2145380692827460863
+    },
+    "line": "    fast qed_eemm_L1: Row { diagrams: 17, topologies: 10, assignments: 17, inverse_symmetry: (17, 1), weights: (1, 1), symmetry_factors: &[(1, 17)], content: 0x67015758ee0dfcf5, numerators: 0x3866ebfda57f6fb8, named: 0x92ff7810a94d1ff7, ids: 0x1dc5ec5f97f654ff };",
+    "sha256": "ed12fc5c51772acafe19c5f039ed7d68bcc6ecab3b4051c0ca32c811c09985bb",
+    "before_after_byte_equal": true
+  },
+  "ctorder_qcd_uugg_L1": {
+    "complete_Row": {
+      "diagrams": 268,
+      "topologies": 32,
+      "assignments": 268,
+      "inverse_symmetry": [
+        251,
+        1
+      ],
+      "weights": [
+        13,
+        1
+      ],
+      "symmetry_factors": [
+        [
+          1,
+          234
+        ],
+        [
+          2,
+          34
+        ]
+      ],
+      "content": 3739432559396318766,
+      "numerators": 4212057454336633711,
+      "named": 14366692940614832948,
+      "ids": 116655280719852808
+    },
+    "line": "    fast ctorder_qcd_uugg_L1: Row { diagrams: 268, topologies: 32, assignments: 268, inverse_symmetry: (251, 1), weights: (13, 1), symmetry_factors: &[(1, 234), (2, 34)], content: 0x33e52219b458ee2e, numerators: 0x3a743bf033456b6f, named: 0xc760bf1c8a759334, ids: 0x019e715c187af508 };",
+    "sha256": "31014fa242e782bfcc308d15c130ce3cebb849a8b1796eab93a3dd91ce54367c",
+    "before_after_byte_equal": true
+  },
+  "sm_eemm_L0": {
+    "complete_Row": {
+      "diagrams": 4,
+      "topologies": 1,
+      "assignments": 4,
+      "inverse_symmetry": [
+        4,
+        1
+      ],
+      "weights": [
+        -4,
+        1
+      ],
+      "symmetry_factors": [
+        [
+          1,
+          4
+        ]
+      ],
+      "content": 10929955570424177348,
+      "numerators": 13848782818041491456,
+      "named": 13842947773127443770,
+      "ids": 10495501204288162602
+    },
+    "line": "    fast sm_eemm_L0: Row { diagrams: 4, topologies: 1, assignments: 4, inverse_symmetry: (4, 1), weights: (-4, 1), symmetry_factors: &[(1, 4)], content: 0x97af00ae91ef62c4, numerators: 0xc030c29958e57000, named: 0xc01c07a8158bc53a, ids: 0x91a782bcdd47cb2a };",
+    "sha256": "35535814ce49dadd2617e4f7242779b8597aba270c2464fc20cab8fdf857e6be",
+    "before_after_byte_equal": true
+  },
+  "ym_g6_L0": {
+    "complete_Row": {
+      "diagrams": 220,
+      "topologies": 220,
+      "assignments": 220,
+      "inverse_symmetry": [
+        220,
+        1
+      ],
+      "weights": [
+        220,
+        1
+      ],
+      "symmetry_factors": [
+        [
+          1,
+          220
+        ]
+      ],
+      "content": 16241761859322678488,
+      "numerators": 14358221921182706788,
+      "named": 600665664770254046,
+      "ids": 5335496870149672531
+    },
+    "line": "    fast ym_g6_L0: Row { diagrams: 220, topologies: 220, assignments: 220, inverse_symmetry: (220, 1), weights: (220, 1), symmetry_factors: &[(1, 220)], content: 0xe166545bc76a8cd8, numerators: 0xc742a6c3a2526c64, named: 0x0855fe3d5967a4de, ids: 0x4a0b7e227d7ace53 };",
+    "sha256": "197d43da8509b4b454b8c0c4b307e061b55477275e8ed8d44e5e4253a78a4b73",
+    "before_after_byte_equal": true
+  },
+  "xs_qed_eemm_L2": {
+    "complete_Row": {
+      "diagrams": 30,
+      "topologies": 157,
+      "assignments": 714,
+      "inverse_symmetry": [
+        30,
+        1
+      ],
+      "weights": [
+        4,
+        1
+      ],
+      "symmetry_factors": [
+        [
+          1,
+          30
+        ]
+      ],
+      "content": 8056915727855707115,
+      "numerators": 17909042738907132227,
+      "named": 811150720901089260,
+      "ids": 14290904471616678913
+    },
+    "line": "    fast xs_qed_eemm_L2: Row { diagrams: 30, topologies: 157, assignments: 714, inverse_symmetry: (30, 1), weights: (4, 1), symmetry_factors: &[(1, 30)], content: 0x6fcfea2ac818e3eb, numerators: 0xf889b37c1fd93143, named: 0x0b41c948729c87ec, ids: 0xc6537de685c0ec01 };",
+    "sha256": "096727fb1f310cb174fe9bf4989f1d28dd510890f3786b2fd78765e8ca9748fb",
+    "before_after_byte_equal": true
+  },
+  "sm_eeww_L0": {
+    "complete_Row": {
+      "diagrams": 4,
+      "topologies": 2,
+      "assignments": 4,
+      "inverse_symmetry": [
+        4,
+        1
+      ],
+      "weights": [
+        -4,
+        1
+      ],
+      "symmetry_factors": [
+        [
+          1,
+          4
+        ]
+      ],
+      "content": 8392395207565614451,
+      "numerators": 42963035440195323,
+      "named": 5198450464672462412,
+      "ids": 17749905428536467506
+    },
+    "line": "    fast sm_eeww_L0: Row { diagrams: 4, topologies: 2, assignments: 4, inverse_symmetry: (4, 1), weights: (-4, 1), symmetry_factors: &[(1, 4)], content: 0x7477c6f9f9a39d73, numerators: 0x0098a2a731e2a6fb, named: 0x48249b27b144364c, ids: 0xf65454f1b8b1a032 };",
+    "sha256": "d3e4a77921bac5ac5f02401d39dd22281e7a99f86257f871c206b847dbb58362",
+    "before_after_byte_equal": true
+  },
+  "qed_ee4f_L0": {
+    "complete_Row": {
+      "diagrams": 6,
+      "topologies": 7,
+      "assignments": 6,
+      "inverse_symmetry": [
+        6,
+        1
+      ],
+      "weights": [
+        -6,
+        1
+      ],
+      "symmetry_factors": [
+        [
+          1,
+          6
+        ]
+      ],
+      "content": 7418213026047758212,
+      "numerators": 2094309210284571858,
+      "named": 9955192864026428413,
+      "ids": 15420108436151051566
+    },
+    "line": "    fast qed_ee4f_L0: Row { diagrams: 6, topologies: 7, assignments: 6, inverse_symmetry: (6, 1), weights: (-6, 1), symmetry_factors: &[(1, 6)], content: 0x66f2c9719dc08f84, numerators: 0x1d107b2170d73cd2, named: 0x8a27f32a3acc83fd, ids: 0xd5ff3aec66c9a52e };",
+    "sha256": "7b17d49b6f88ffbaee671cb44395e9ea42d1c97df58b518611aa604013606fc9",
+    "before_after_byte_equal": true
+  },
+  "xs_qed_eeee_L1": {
+    "complete_Row": {
+      "diagrams": 4,
+      "topologies": 17,
+      "assignments": 34,
+      "inverse_symmetry": [
+        4,
+        1
+      ],
+      "weights": [
+        0,
+        1
+      ],
+      "symmetry_factors": [
+        [
+          1,
+          4
+        ]
+      ],
+      "content": 3022486068726070230,
+      "numerators": 8589669465914692809,
+      "named": 13426690394181497681,
+      "ids": 18306469787178189955
+    },
+    "line": "    fast xs_qed_eeee_L1: Row { diagrams: 4, topologies: 17, assignments: 34, inverse_symmetry: (4, 1), weights: (0, 1), symmetry_factors: &[(1, 4)], content: 0x29f20710d0fbfbd6, numerators: 0x7734a2de85dd54c9, named: 0xba552fc69e567351, ids: 0xfe0da547942d4483 };",
+    "sha256": "bb29160ecfd3391b3175d8f927b692623f570c7b3580a9618fb4502f4653740c",
+    "before_after_byte_equal": true
+  },
+  "xs_qcd_gguu_1pi_L1": {
+    "complete_Row": {
+      "diagrams": 4,
+      "topologies": 12,
+      "assignments": 54,
+      "inverse_symmetry": [
+        4,
+        1
+      ],
+      "weights": [
+        -4,
+        1
+      ],
+      "symmetry_factors": [
+        [
+          1,
+          4
+        ]
+      ],
+      "content": 13292509521889608637,
+      "numerators": 7142019012713190507,
+      "named": 15278292068172816218,
+      "ids": 9379374420500739387
+    },
+    "line": "    fast xs_qcd_gguu_1pi_L1: Row { diagrams: 4, topologies: 12, assignments: 54, inverse_symmetry: (4, 1), weights: (-4, 1), symmetry_factors: &[(1, 4)], content: 0xb8787afbc1ba43bd, numerators: 0x631d8c73b7db146b, named: 0xd40765b02a1bdf5a, ids: 0x822a3b576554f53b };",
+    "sha256": "665a599c07f9611ff7dd4780aae5656c4a8032edbc1d7c64b49372d46f9e1c81",
+    "before_after_byte_equal": true
+  },
+  "xs_qed_eemm_identical_L2": {
+    "complete_Row": {
+      "diagrams": 29,
+      "topologies": 157,
+      "assignments": 714,
+      "inverse_symmetry": [
+        29,
+        1
+      ],
+      "weights": [
+        4,
+        1
+      ],
+      "symmetry_factors": [
+        [
+          1,
+          29
+        ]
+      ],
+      "content": 14332662944654766447,
+      "numerators": 11965487560827894243,
+      "named": 4427813161249353281,
+      "ids": 14779335372597709007
+    },
+    "line": "    fast xs_qed_eemm_identical_L2: Row { diagrams: 29, topologies: 157, assignments: 714, inverse_symmetry: (29, 1), weights: (4, 1), symmetry_factors: &[(1, 29)], content: 0xc6e7d902ad8d316f, numerators: 0xa60df38a6b8079e3, named: 0x3d72c09c50112e41, ids: 0xcd1abf37940d48cf };",
+    "sha256": "87eb65e9a8dddbf04c6995689293e54b4fdf94d793e0c77f4efc7e2c02cee45b",
+    "before_after_byte_equal": true
+  }
+}

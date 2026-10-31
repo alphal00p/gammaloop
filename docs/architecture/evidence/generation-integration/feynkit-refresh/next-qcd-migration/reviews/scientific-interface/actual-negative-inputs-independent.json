@@ -1,0 +1,221 @@
+[
+  {
+    "id": "xs_qcd_gguu_sym_L1--None--actual-dimension",
+    "changed_path": [
+      "cells",
+      0,
+      "graphs",
+      0,
+      "current_payload",
+      "vertices",
+      0,
+      "num_interface",
+      0
+    ],
+    "before": "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(3,1))",
+    "after": "spenso::{spenso::representation,spenso::self_dual}::bis(5,gammalooprs::{spenso::index}::hedge(3,1))",
+    "actual_graph": "6170f31e6eb07c29aac54d0c6cc14371",
+    "actual_predicate": "invalid diagram tensor: transformed expression does not preserve a compatible tensor interface",
+    "kind": "actual used current interface"
+  },
+  {
+    "id": "xs_qcd_gguu_sym_L1--Auto--actual-dimension",
+    "changed_path": [
+      "cells",
+      0,
+      "graphs",
+      0,
+      "current_payload",
+      "vertices",
+      0,
+      "num_interface",
+      0
+    ],
+    "before": "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(3,1))",
+    "after": "spenso::{spenso::representation,spenso::self_dual}::bis(5,gammalooprs::{spenso::index}::hedge(3,1))",
+    "actual_graph": "6170f31e6eb07c29aac54d0c6cc14371",
+    "actual_predicate": "invalid diagram tensor: transformed expression does not preserve a compatible tensor interface",
+    "kind": "actual used current interface"
+  },
+  {
+    "id": "xs_qcd_gguu_L1--None--actual-dimension",
+    "changed_path": [
+      "cells",
+      0,
+      "graphs",
+      0,
+      "current_payload",
+      "vertices",
+      0,
+      "num_interface",
+      0
+    ],
+    "before": "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(3,1))",
+    "after": "spenso::{spenso::representation,spenso::self_dual}::bis(5,gammalooprs::{spenso::index}::hedge(3,1))",
+    "actual_graph": "6170f31e6eb07c29aac54d0c6cc14371",
+    "actual_predicate": "invalid diagram tensor: transformed expression does not preserve a compatible tensor interface",
+    "kind": "actual used current interface"
+  },
+  {
+    "id": "xs_qcd_gguu_L1--Auto--actual-dimension",
+    "changed_path": [
+      "cells",
+      0,
+      "graphs",
+      0,
+      "current_payload",
+      "vertices",
+      0,
+      "num_interface",
+      0
+    ],
+    "before": "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(3,1))",
+    "after": "spenso::{spenso::representation,spenso::self_dual}::bis(5,gammalooprs::{spenso::index}::hedge(3,1))",
+    "actual_graph": "6170f31e6eb07c29aac54d0c6cc14371",
+    "actual_predicate": "invalid diagram tensor: transformed expression does not preserve a compatible tensor interface",
+    "kind": "actual used current interface"
+  },
+  {
+    "id": "xs_qcd_gggg_L1--None--actual-dimension",
+    "changed_path": [
+      "cells",
+      0,
+      "graphs",
+      0,
+      "current_payload",
+      "vertices",
+      3,
+      "num_interface",
+      0
+    ],
+    "before": "spenso::{spenso::representation,spenso::self_dual}::coad(8,gammalooprs::{spenso::index}::hedge(9,1))",
+    "after": "spenso::{spenso::representation,spenso::self_dual}::coad(9,gammalooprs::{spenso::index}::hedge(9,1))",
+    "actual_graph": "60777b11dd5b7f48966632644fd7be49",
+    "actual_predicate": "invalid diagram tensor: transformed expression does not preserve a compatible tensor interface",
+    "kind": "actual used current interface"
+  },
+  {
+    "id": "xs_qcd_gggg_L1--Auto--actual-dimension",
+    "changed_path": [
+      "cells",
+      0,
+      "graphs",
+      0,
+      "current_payload",
+      "vertices",
+      3,
+      "num_interface",
+      0
+    ],
+    "before": "spenso::{spenso::representation,spenso::self_dual}::coad(8,gammalooprs::{spenso::index}::hedge(9,1))",
+    "after": "spenso::{spenso::representation,spenso::self_dual}::coad(9,gammalooprs::{spenso::index}::hedge(9,1))",
+    "actual_graph": "60777b11dd5b7f48966632644fd7be49",
+    "actual_predicate": "invalid diagram tensor: transformed expression does not preserve a compatible tensor interface",
+    "kind": "actual used current interface"
+  },
+  {
+    "id": "xs_qcd_gguu_L1--None--wrong-owner",
+    "changed_path": [
+      "cells",
+      0,
+      "graphs",
+      0,
+      "current_payload",
+      "vertices",
+      0,
+      "num_interface",
+      0
+    ],
+    "before": "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(3,1))",
+    "after": "spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::proof_wrong_owner(3,1))",
+    "actual_graph": "6170f31e6eb07c29aac54d0c6cc14371",
+    "actual_predicate": "invalid diagram tensor: transformed expression does not preserve a compatible tensor interface",
+    "kind": "actual used current interface"
+  },
+  {
+    "id": "xs_qcd_gguu_sym_L1--None--wrong-duality",
+    "changed_path": [
+      "cells",
+      0,
+      "graphs",
+      0,
+      "current_payload",
+      "vertices",
+      0,
+      "num_interface",
+      5
+    ],
+    "before": "spenso::{spenso::lower}::dind(spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(4,1)))",
+    "after": "spenso::{spenso::representation,spenso::dualizable}::cof(3,gammalooprs::{spenso::index}::hedge(4,1))",
+    "actual_graph": "6170f31e6eb07c29aac54d0c6cc14371",
+    "actual_predicate": "invalid diagram tensor: transformed expression does not preserve a compatible tensor interface",
+    "kind": "actual used current interface"
+  },
+  {
+    "id": "xs_qcd_gggg_L1--None--metric-owner-claim",
+    "changed_path": [
+      "cells",
+      0,
+      "graphs",
+      0,
+      "owners",
+      3,
+      "is_metric"
+    ],
+    "before": false,
+    "after": true,
+    "actual_graph": "60777b11dd5b7f48966632644fd7be49",
+    "actual_predicate": "owner vertex:3: metric owner binding",
+    "kind": "actual imported owner claim"
+  },
+  {
+    "id": "xs_qcd_gguu_L1--Auto--composite-owner-claim",
+    "changed_path": [
+      "cells",
+      0,
+      "graphs",
+      0,
+      "owners",
+      0,
+      "is_composite"
+    ],
+    "before": true,
+    "after": false,
+    "actual_graph": "6170f31e6eb07c29aac54d0c6cc14371",
+    "actual_predicate": "owner vertex:0: composite owner binding",
+    "kind": "actual imported owner claim"
+  },
+  {
+    "id": "math-sign",
+    "parent_equivalence_row": 85,
+    "kernels": [
+      "c78",
+      "8eb"
+    ],
+    "fresh_symbol": "next_qcd_proof::{}::fresh_witness_0",
+    "actual_predicate": "assertion failed: row.parsed_equal && row.canonical_equal",
+    "nondegeneracy": "formal polynomial in z has coefficient 1; sign/coefficient changes it, square gives z-degree 2. Distinct fresh witness names in merged baseline and retained control preserve the identical base relation."
+  },
+  {
+    "id": "math-coefficient",
+    "parent_equivalence_row": 85,
+    "kernels": [
+      "c78",
+      "8eb"
+    ],
+    "fresh_symbol": "next_qcd_proof::{}::fresh_witness_0",
+    "actual_predicate": "assertion failed: row.parsed_equal && row.canonical_equal",
+    "nondegeneracy": "formal polynomial in z has coefficient 1; sign/coefficient changes it, square gives z-degree 2. Distinct fresh witness names in merged baseline and retained control preserve the identical base relation."
+  },
+  {
+    "id": "math-power",
+    "parent_equivalence_row": 85,
+    "kernels": [
+      "c78",
+      "8eb"
+    ],
+    "fresh_symbol": "next_qcd_proof::{}::fresh_witness_0",
+    "actual_predicate": "assertion failed: row.parsed_equal && row.canonical_equal",
+    "nondegeneracy": "formal polynomial in z has coefficient 1; sign/coefficient changes it, square gives z-degree 2. Distinct fresh witness names in merged baseline and retained control preserve the identical base relation."
+  }
+]
