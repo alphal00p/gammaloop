@@ -92,7 +92,8 @@ mod tests {
     /// Retained results of the former depth-first strategy (gammaloop
     /// 31a8b166e, rustred 604daaf7) for every input below, frozen before
     /// depth-first reduction was removed from Vakint.
-    const DEPTH_FIRST_REFERENCES: &str = include_str!("ordered_depth_first_references.json");
+    const DEPTH_FIRST_REFERENCES: &str =
+        include_str!("../../tests/resources/rustred/ordered_depth_first_references.json");
 
     /// Both Ordered weight arithmetics; they must return identical results.
     const ARITHMETICS: [&str; 2] = ["exact", "modular:threads=1"];
