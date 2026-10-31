@@ -199,6 +199,37 @@ The topology-action hierarchy follows the useful outer structure of
 Ruijl's thesis, section 3.7 and figure 21]; it does not assert that each raw
 parametric template is a once-only action.
 
+== Replaying native requests
+
+Engine development does not need Vakint in the loop. Setting
+#raw("VAKINT_DUMP_ORDERED_REQUEST=DIR") makes every native reduction request
+(one per compatible mass/spectator channel, at one to five loops) write
+#raw("DIR/<stem>.request.json") before it runs: the loop count, the program
+identity (family fingerprint and external-data files, or the saved 5L
+application path), the strategy, Ordered weight arithmetic, master mode and
+channel label, and the exact input keys with coefficients as Symbolica
+canonical strings of rational functions in the family dimension. Caller-side
+nonzero conditions are recorded for reference; RustRed receives only the
+inputs.
+
+When no monitor is attached, #raw("<stem>.phases.jsonl") receives the native
+ordered counters at every phase end, flushed per line, so truncated runs keep
+them. #raw("<stem>.result.json") records BLAKE3 digests of the exact native
+output: its terms in native order and the sorted set of its guards (layout
+#raw("vakint.ordered-native-output.v1")). #raw("DIR/index.jsonl") lists all
+files. With #raw("VAKINT_DUMP_ORDERED_REQUEST_ONLY=1") the requests are written
+and their native reductions skipped; the evaluation then fails explicitly.
+Without these variables nothing is written or allocated.
+
+RustRed's #raw("ordered_replay") example (crate #raw("rustred-app")) loads the
+same program from an external-data checkout, replays a request and prints one
+JSONL record per phase with its wall time and counters. It compares the counters
+and the output digests with the recorded ones, can stop after a phase and can
+capture the complete weighted frontier at the start of a phase. It replays with
+exact weights: the output digests of a request recorded under modular weights
+still compare, but its monomial counters do not, and saved five-loop requests
+recorded with non-default options are refused.
+
 == Cache isolation and limitations
 
 Ordered reduction neither consumes nor produces the depth-first engine's

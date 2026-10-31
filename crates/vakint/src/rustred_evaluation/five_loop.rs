@@ -16,6 +16,7 @@ use std::{
 
 use super::experimental::timing::MathSpan;
 use super::monitor::{MonitorContext, RustRedMonitorOptions, RustRedMonitorScope};
+use super::request_dump::{self, DumpChannel, DumpProgram, DumpRequest, RequestDump};
 use rustred::algebra::Coefficient;
 use rustred::family::IntegralKey;
 use rustred::input::{Compiler, Limits, LoweringLimits, TextProject, TextPropagator};
@@ -117,6 +118,8 @@ impl Drop for RetainedBatchCleanup {
 
 pub(crate) struct SavedApplication {
     pub(super) prepared: Mutex<PreparedSavedApplication<15>>,
+    /// Canonical package directory, recorded by native request dumps.
+    path: PathBuf,
     pub(super) cache_digest: [u8; 32],
     pub(super) cache: Mutex<Option<super::cache::SavedFiveLoopCache>>,
     fingerprint: String,
@@ -467,6 +470,7 @@ impl Vakint {
             log::debug!(target: "vakint::saved_application", "phase=native_load_end elapsed_seconds={:.6}", started.elapsed().as_secs_f64());
             let application = Arc::new(SavedApplication::new(
                 prepared,
+                path.clone(),
                 settings.rustred_product_limits,
                 Arc::clone(&data),
                 cache_digest,
@@ -846,6 +850,7 @@ impl SavedApplication {
 
     fn new(
         mut prepared: PreparedSavedApplication<15>,
+        path: PathBuf,
         product_limits: VacuumProductReductionLimits,
         data: Arc<super::data::RustRedData>,
         cache_digest: [u8; 32],
@@ -917,6 +922,7 @@ impl SavedApplication {
             fingerprint: prepared.family().fingerprint().to_owned(),
             data_version,
             prepared: Mutex::new(prepared),
+            path,
             cache_digest,
             cache: Mutex::new(None),
             products,
@@ -1023,6 +1029,7 @@ impl SavedApplication {
         );
         let family = application.family();
         let loop_count = family.loop_count();
+        let family_coefficient_variables = family.coefficient_context().parameter_names().to_vec();
         let dimension = family.dimension().to_expression();
         let epsilon = Atom::var(vk_symbol!(settings.epsilon_symbol.as_str()));
         let physical_dimension = Atom::num(4) - Atom::num(2) * &epsilon;
@@ -1214,11 +1221,45 @@ impl SavedApplication {
             settings.rustred_application_options.reduction_strategy
                 == crate::RustRedReductionStrategy::Ordered
         });
+        let mut skipped = 0;
         for (cohort_index, ((mass_squared, spectator, exponent), terms)) in
             batches.into_iter().enumerate()
         {
             if let Some(progress) = cohort_progress {
                 progress.cohorts(cohort_index, cohort_total);
+            }
+            let options = SavedApplicationOptions {
+                unresolved_policy: rustred::solver::UnresolvedPolicy::Preserve,
+                ..settings.rustred_application_options
+            };
+            let mut dump = RequestDump::begin(DumpRequest {
+                loop_count,
+                program: DumpProgram::SavedApplication {
+                    path: &self.path,
+                    family_fingerprint: application.family().fingerprint(),
+                    options: &options,
+                },
+                strategy: settings.rustred_application_options.reduction_strategy,
+                weight_arithmetic: settings.rustred_application_options.ordered_weight_arithmetic,
+                master_mode: request_dump::master_mode(settings),
+                channel: DumpChannel {
+                    index: cohort_index,
+                    total: cohort_total,
+                    mass_squared: &mass_squared,
+                    spectator: &spectator,
+                    exponent,
+                },
+                limits: settings.rustred_application_options.reduction_limits,
+                coefficient_variables: family_coefficient_variables.clone(),
+                inputs: &terms,
+                caller_conditions: conditions
+                    .iter()
+                    .map(|condition| condition.to_canonical_string())
+                    .collect(),
+            })?;
+            if dump.as_ref().is_some_and(RequestDump::only) {
+                skipped += 1;
+                continue;
             }
             // Declare this before the returned native values: the complete
             // exact reduction/assembly interval includes their natural cleanup.
@@ -1239,7 +1280,26 @@ impl SavedApplication {
             let preparation_before = math
                 .is_active()
                 .then(|| application.owner_preparation_statistics().preparation_time);
-            let reduced = self.reduce_saved(&mut application, terms, observation.as_deref_mut())?;
+            let reduced = request_dump::observe_native(
+                dump.as_mut(),
+                observation.as_deref_mut(),
+                |observation| self.reduce_saved(&mut application, terms, observation),
+            )??;
+            if let Some(dump) = dump {
+                dump.finish(
+                    reduced.terms().iter().map(|(terminal, coefficient)| {
+                        (
+                            terminal.family_fingerprint(),
+                            terminal.integral(),
+                            coefficient,
+                        )
+                    }),
+                    reduced.nonzero_conditions(),
+                    observation
+                        .as_deref()
+                        .and_then(|observer| observer.last_ordered_progress()),
+                )?;
+            }
             if let Some(before) = preparation_before {
                 // Native reports elapsed WALL time for each deferred owner.
                 // The prepared-owner mutex and one-worker qualification keep
@@ -1467,6 +1527,9 @@ impl SavedApplication {
         }
         if let Some(progress) = cohort_progress {
             progress.cohorts(cohort_total, cohort_total);
+        }
+        if skipped != 0 {
+            return Err(request_dump::skipped(skipped).into());
         }
         conditions.extend(symbolic_masses);
         let normalization_started = std::time::Instant::now();

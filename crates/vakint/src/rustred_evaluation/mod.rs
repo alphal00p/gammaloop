@@ -30,6 +30,7 @@ mod materialize;
 pub(crate) mod monitor;
 mod numerator;
 mod ordered;
+mod request_dump;
 #[cfg(test)]
 mod terminal;
 

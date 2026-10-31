@@ -24,6 +24,7 @@ use super::experimental::ExperimentalRustRed;
 use super::experimental::catalog::OfflineTerminalCatalog;
 use super::experimental::native::NativeCandidate;
 use super::experimental::timing::MathSpan;
+use super::request_dump::{self, DumpChannel, DumpProgram, DumpRequest, RequestDump};
 use super::{RustRedEvaluationError, RustRedEvaluationOptions};
 use crate::symbols::S;
 use crate::utils::vakint_macros::vk_symbol;
@@ -56,6 +57,7 @@ struct Input {
 }
 
 struct Descriptor {
+    label: &'static str,
     physical_momenta: Vec<Atom>,
     family_fingerprint: String,
 }
@@ -96,7 +98,7 @@ impl FourLoopPrograms {
         }
         let descriptors = inputs
             .iter()
-            .map(|input| descriptor(&input.csv))
+            .map(|input| descriptor(input.label, &input.csv))
             .collect::<Result<Vec<_>, _>>()
             .map_err(super::data::failure)?;
         let programs = inputs
@@ -143,7 +145,7 @@ impl Vakint {
     }
 }
 
-fn descriptor(source: &str) -> Result<Descriptor, String> {
+fn descriptor(label: &'static str, source: &str) -> Result<Descriptor, String> {
     let mut physical_momenta = Vec::new();
     let mut propagators = Vec::new();
     let mut auxiliary_seen = false;
@@ -210,6 +212,7 @@ fn descriptor(source: &str) -> Result<Descriptor, String> {
         .map_err(|error| error.to_string())?
         .into_family();
     Ok(Descriptor {
+        label,
         physical_momenta,
         family_fingerprint: family.fingerprint().to_owned(),
     })
@@ -458,20 +461,67 @@ pub(super) fn evaluate_ordered_batch(
     let mut raw = BTreeMap::<Atom, Atom>::new();
     let dimension = crate::utils::vakint_macros::vk_parse!("4-2*ep").unwrap();
     let cohort_total = channels.len();
+    let mut skipped = 0;
     for (cohort_index, ((index, mass, spectator, exponent), terms)) in
         channels.into_iter().enumerate()
     {
         if let Some(progress) = progress {
             progress.cohorts(cohort_index, cohort_total);
         }
-        let _math = MathSpan::new();
         let program = &programs.programs[index];
-        let reduced = program.native.reduce_linear_combination_ordered_with_arithmetic(
-            terms,
-            settings.rustred_application_options.reduction_limits,
-            settings.rustred_application_options.ordered_weight_arithmetic,
+        let descriptor = &programs.descriptors[index];
+        let mut dump = RequestDump::begin(DumpRequest {
+            loop_count: 4,
+            program: DumpProgram::CandidateProgram {
+                label: descriptor.label,
+                index,
+                family_fingerprint: &descriptor.family_fingerprint,
+                data: &data.loops[&4],
+            },
+            strategy: settings.rustred_application_options.reduction_strategy,
+            weight_arithmetic: settings.rustred_application_options.ordered_weight_arithmetic,
+            master_mode: request_dump::master_mode(settings),
+            channel: DumpChannel {
+                index: cohort_index,
+                total: cohort_total,
+                mass_squared: &mass,
+                spectator: &spectator,
+                exponent,
+            },
+            limits: settings.rustred_application_options.reduction_limits,
+            coefficient_variables: program
+                .native
+                .family_shared()
+                .coefficient_context()
+                .parameter_names()
+                .to_vec(),
+            inputs: &terms,
+            caller_conditions: Vec::new(),
+        })?;
+        if dump.as_ref().is_some_and(RequestDump::only) {
+            skipped += 1;
+            continue;
+        }
+        let _math = MathSpan::new();
+        let reduced = request_dump::observe_native(
+            dump.as_mut(),
             observation.as_deref_mut(),
-        )?;
+            |observation| {
+                program.native.reduce_linear_combination_ordered_with_arithmetic(
+                    terms,
+                    settings.rustred_application_options.reduction_limits,
+                    settings.rustred_application_options.ordered_weight_arithmetic,
+                    observation,
+                )
+            },
+        )??;
+        if let Some(dump) = dump {
+            dump.finish(
+                request_dump::family_terms(reduced.family_fingerprint(), reduced.terms()),
+                reduced.nonzero_conditions(),
+                Some(*reduced.progress()),
+            )?;
+        }
         let family = program.native.family_shared();
         let family_dimension = family.dimension().to_expression();
         let masters = reduced
@@ -492,6 +542,9 @@ pub(super) fn evaluate_ordered_batch(
     }
     if let Some(progress) = progress {
         progress.cohorts(cohort_total, cohort_total);
+    }
+    if skipped != 0 {
+        return Err(request_dump::skipped(skipped).into());
     }
     let mut value = Atom::Zero;
     for (mass, raw) in raw {

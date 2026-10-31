@@ -14,6 +14,7 @@ use crate::{MATADOptions, VakintSettings};
 
 use super::experimental::timing::MathSpan;
 use super::matching::MatchedScalarFamily;
+use super::request_dump::{self, DumpChannel, DumpProgram, DumpRequest, RequestDump};
 use super::{RustRedEvaluationError, RustRedEvaluationOptions};
 
 pub(super) fn evaluate(
@@ -368,44 +369,82 @@ pub(super) fn evaluate_ordered_batch(
         }
     }
     let cohort_total = channels.len();
+    let mut skipped = 0;
     for (cohort_index, ((mass, spectator, exponent), terms)) in channels.into_iter().enumerate() {
         if let Some(progress) = progress {
             progress.cohorts(cohort_index, cohort_total);
         }
+        let mut dump = RequestDump::begin(DumpRequest {
+            loop_count: first.loop_count,
+            program: DumpProgram::ClosedArtifact {
+                family_fingerprint: artifact.family_fingerprint(),
+                artifact_sha256: snapshot.source_digest(),
+                data: &data.loops[&first.loop_count],
+            },
+            strategy: settings.rustred_application_options.reduction_strategy,
+            weight_arithmetic: settings.rustred_application_options.ordered_weight_arithmetic,
+            master_mode: request_dump::master_mode(settings),
+            channel: DumpChannel {
+                index: cohort_index,
+                total: cohort_total,
+                mass_squared: &mass,
+                spectator: &spectator,
+                exponent,
+            },
+            limits: settings.rustred_application_options.reduction_limits,
+            coefficient_variables: artifact.coefficient_context().parameter_names().to_vec(),
+            inputs: &terms,
+            caller_conditions: Vec::new(),
+        })?;
+        if dump.as_ref().is_some_and(RequestDump::only) {
+            skipped += 1;
+            continue;
+        }
         let _math = MathSpan::new();
-        let reduction = match observation.as_deref_mut() {
-            Some(observer) => {
-                observer.clear_native_summary();
-                let mut envelope = rustred::solver::CandidateRoutedApplicationEnvelope::new(
-                    rustred::solver::CandidateRoutedApplicationEvent::ActivityStarted,
-                    artifact.family_fingerprint(),
-                );
-                envelope.caller_phase = Some("entry_admission");
-                observer.emit(envelope);
-                Reducer::reduce_artifact_linear_combination_ordered_with_arithmetic(
+        let reduction = request_dump::observe_native(
+            dump.as_mut(),
+            observation.as_deref_mut(),
+            |observation| match observation {
+                Some(observer) => {
+                    observer.clear_native_summary();
+                    let mut envelope = rustred::solver::CandidateRoutedApplicationEnvelope::new(
+                        rustred::solver::CandidateRoutedApplicationEvent::ActivityStarted,
+                        artifact.family_fingerprint(),
+                    );
+                    envelope.caller_phase = Some("entry_admission");
+                    observer.emit(envelope);
+                    Reducer::reduce_artifact_linear_combination_ordered_with_arithmetic(
+                        artifact,
+                        terms,
+                        settings.rustred_application_options.reduction_limits,
+                        settings.rustred_application_options.ordered_weight_arithmetic,
+                        &mut |progress, current| {
+                            observer.emit_ordered_progress(
+                                artifact.family_fingerprint(),
+                                *progress,
+                                current,
+                            );
+                            Ok(())
+                        },
+                    )
+                }
+                None => Reducer::reduce_artifact_linear_combination_ordered_with_arithmetic(
                     artifact,
                     terms,
                     settings.rustred_application_options.reduction_limits,
                     settings.rustred_application_options.ordered_weight_arithmetic,
-                    &mut |progress, current| {
-                        observer.emit_ordered_progress(
-                            artifact.family_fingerprint(),
-                            *progress,
-                            current,
-                        );
-                        Ok(())
-                    },
-                )
-            }
-            None => Reducer::reduce_artifact_linear_combination_ordered_with_arithmetic(
-                artifact,
-                terms,
-                settings.rustred_application_options.reduction_limits,
-                settings.rustred_application_options.ordered_weight_arithmetic,
-                &mut |_, _| Ok(()),
-            ),
-        }
+                    &mut |_, _| Ok(()),
+                ),
+            },
+        )?
         .map_err(RustRedEvaluationError::from_native)?;
+        if let Some(dump) = dump {
+            dump.finish(
+                request_dump::family_terms(artifact.family_fingerprint(), &reduction.terms),
+                &reduction.nonzero_conditions,
+                Some(reduction.progress),
+            )?;
+        }
         let masters = reduction
             .terms
             .into_iter()
@@ -426,6 +465,9 @@ pub(super) fn evaluate_ordered_batch(
     }
     if let Some(progress) = progress {
         progress.cohorts(cohort_total, cohort_total);
+    }
+    if skipped != 0 {
+        return Err(request_dump::skipped(skipped));
     }
     let mut value = Atom::Zero;
     for (mass, raw) in raw {

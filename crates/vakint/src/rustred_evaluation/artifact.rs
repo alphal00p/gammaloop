@@ -63,7 +63,6 @@ impl ArtifactSnapshot {
         &self.artifact
     }
 
-    #[cfg(test)]
     pub(super) fn source_digest(&self) -> [u8; 32] {
         self.source_digest
     }

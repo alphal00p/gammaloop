@@ -37,6 +37,7 @@ serde_json.workspace = true
 rustred.workspace = true
 rustred-app.workspace = true
 sha2 = "0.10.9"
+blake3 = "1"
 spenso = { workspace = true, default-features = false }
 spenso-macros = { workspace = true, default-features = false }
 string-template-plus = "0.4.3"
