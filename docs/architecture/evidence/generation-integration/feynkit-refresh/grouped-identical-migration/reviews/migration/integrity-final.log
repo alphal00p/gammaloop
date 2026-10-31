@@ -1,0 +1,12 @@
+{
+  "verified": 15899,
+  "mismatches": [],
+  "candidate_files": 71,
+  "extra": {
+    "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/root-grouped-none-acceptance-20261031.json": "8141146a38484454c8fc65d72845f0f360c462bc16604349d67fb8fdf25d1224",
+    "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/root-grouped-auto-acceptance-20261031.json": "e0a659e8798eba47179623e218340852c1d2fafe2ca09d03bc1b7e6a9ede86e4",
+    "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/root-full-generator-pool1-acceptance-20261031.json": "297b23048d86665efa8832b50848173a6ae7a08a5b45251ef8e9e15fb3377b87",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-none-aggregation-astra-20261030-independent-b1/seal.json": "abd2b7018207a7925c712d4b555b2910299619b3cb06408236a349ae4749cb90",
+    "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-auto-aggregation-astra-20261031-independent-r1-1793413266607828149/seal.json": "fea4337d34fb0f22c71f6e80b33be456db9d1193d80be46fb68b5d2cb4eb5a9f"
+  }
+}

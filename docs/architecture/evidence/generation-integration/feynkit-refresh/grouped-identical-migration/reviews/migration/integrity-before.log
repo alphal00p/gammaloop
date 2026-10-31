@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-identical-migration-astra-20261031-024225Z-1469f5e4/integrity.py", line 18, in <module>
+    assert Path(p).name.lower() not in ['.env','.envrc','license','license.txt','.netrc'],p
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: /shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/grouped-none-qualification-20261030T191919/source/LICENSE

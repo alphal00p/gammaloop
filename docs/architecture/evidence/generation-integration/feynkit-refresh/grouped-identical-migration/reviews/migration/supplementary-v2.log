@@ -1,0 +1,13 @@
+Traceback (most recent call last):
+  File "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-identical-migration-astra-20261031-024225Z-1469f5e4/supplementary-v2.py", line 121, in <module>
+    try:main()
+        ~~~~^^
+  File "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-identical-migration-astra-20261031-024225Z-1469f5e4/supplementary-v2.py", line 94, in main
+    originals=uninstrumented_sources()
+  File "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-identical-migration-astra-20261031-024225Z-1469f5e4/supplementary-v2.py", line 20, in uninstrumented_sources
+    patch=read(Q/'current-observational.patch');need(hashlib.sha256(patch).hexdigest()=='7e55ba7b0315acce0d6bfbabba2df0f48494f2a050f510da10807ea99fd8edfc','original overlay pin')
+                                                ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-identical-migration-astra-20261031-024225Z-1469f5e4/supplementary-v2.py", line 11, in need
+    if not x:raise AssertionError(s)
+             ^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: original overlay pin

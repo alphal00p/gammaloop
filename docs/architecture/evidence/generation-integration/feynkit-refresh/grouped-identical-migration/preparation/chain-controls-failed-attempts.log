@@ -1,0 +1,29 @@
+Traceback (most recent call last):
+  File "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-identical-migration-preparation-20261031-r1/chain_controls.py", line 103, in negative
+    try:validate(r,model)
+        ~~~~~~~~^^^^^^^^^
+  File "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-identical-migration-preparation-20261031-r1/chain_controls.py", line 59, in validate
+    need(owners(d)==owners(representative),'final-representative-ordered-owners')
+         ~~~~~~^^^
+  File "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-identical-migration-preparation-20261031-r1/bind_evidence.py", line 82, in owners
+    need(p[interface]==t['ports'], 'declared-interface-ordered '+owner)
+    ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-identical-migration-preparation-20261031-r1/bind_evidence.py", line 22, in need
+    raise AssertionError(p)
+AssertionError: declared-interface-ordered edge:7
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-identical-migration-preparation-20261031-r1/chain_controls.py", line 126, in <module>
+    try:main()
+        ~~~~^^
+  File "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-identical-migration-preparation-20261031-r1/chain_controls.py", line 120, in main
+    negative('order-only captured interface','declared-interface-ordered edge:2',interface_mutation)
+    ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-identical-migration-preparation-20261031-r1/chain_controls.py", line 105, in negative
+    need(str(e)==predicate,'intended-control-predicate '+name+' got '+str(e))
+    ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-identical-migration-preparation-20261031-r1/bind_evidence.py", line 22, in need
+    raise AssertionError(p)
+AssertionError: intended-control-predicate order-only captured interface got declared-interface-ordered edge:7

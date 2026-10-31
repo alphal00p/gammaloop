@@ -1,0 +1,15 @@
+Traceback (most recent call last):
+  File "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-identical-migration-preparation-20261031-r1/bind_evidence.py", line 187, in <module>
+    main()
+    ~~~~^^
+  File "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-identical-migration-preparation-20261031-r1/bind_evidence.py", line 179, in main
+    rows,pristine,live,raw,approved,partitions=bind()
+                                               ~~~~^^
+  File "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-identical-migration-preparation-20261031-r1/bind_evidence.py", line 116, in bind
+    actual=owners(g)
+  File "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-identical-migration-preparation-20261031-r1/bind_evidence.py", line 85, in owners
+    need(re.fullmatch(r'spenso::\{spenso::representation,spenso::self_dual\}::(?:bis|mink)\(4,gammalooprs::\{spenso::index\}::(?:hedge|edge)\([0-9]+,1\)\)',port) is not None, 'finite-explicit-port-domain')
+    ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/target/grouped-identical-migration-preparation-20261031-r1/bind_evidence.py", line 22, in need
+    raise AssertionError(p)
+AssertionError: finite-explicit-port-domain

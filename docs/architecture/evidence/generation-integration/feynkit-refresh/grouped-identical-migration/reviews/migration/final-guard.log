@@ -1,0 +1,37 @@
+{
+  "utc": "2026-10-31T02:56:30.948455+00:00",
+  "protected_files_unchanged": 15899,
+  "fresh_external_read_bindings": 5379,
+  "fresh_external_changes": [],
+  "candidate_files_unchanged": 71,
+  "prior12_rows_exact": true,
+  "registry_movements_during_review": [],
+  "preparation_reported_external_ref_movement": {
+    "main_head": false,
+    "refs_sha256": true,
+    "index_sha256": false
+  },
+  "preparation_reported_registry_movement": [
+    {
+      "path": "docs/developers.toml",
+      "before": "e69387779add2c299598f80aad98bd61a3d11cfb20c59794c70220692fee15ef",
+      "after": "9e2ef1846586777d052bed6848d2d63dec7b9a8ebf4a5dca6059786d6f00b59f"
+    }
+  ],
+  "ref_index_operations_in_this_review": 0,
+  "fresh_general_ref_invariance_claim": false,
+  "Python_AST_parsed": [
+    "supplementary.py",
+    "integrity.py",
+    "controls.py",
+    "supplementary-v2.py",
+    "supplementary-v3.py",
+    "final_guard.py",
+    "finite_named_consumer.py",
+    "integrity-v3.py",
+    "integrity-v2.py",
+    "reconstruct_independent.py"
+  ],
+  "owned_processes_remaining": [],
+  "no_restore_or_cleanup_of_external_work": true
+}

@@ -1,0 +1,11 @@
+Traceback (most recent call last):
+  File "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-identical-migration-astra-20261031-024225Z-1469f5e4/supplementary.py", line 99, in <module>
+    try:main()
+        ~~~~^^
+  File "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-identical-migration-astra-20261031-024225Z-1469f5e4/supplementary.py", line 84, in main
+    else:need(old==current==selected,'invariant source '+p)
+         ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/shared/lcnbr/dev/gammaloop/generation-oracle-numerator-families/.local/review-grouped-identical-migration-astra-20261031-024225Z-1469f5e4/supplementary.py", line 11, in need
+    if not x:raise AssertionError(s)
+             ^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: invariant source crates/feynkit-generator/tests/generation_oracle/classes.rs
