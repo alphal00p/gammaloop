@@ -3192,7 +3192,9 @@ end_anchor = "\nin {\n  inherit"
 # runtime consumers; prior review references remain historical. Pending ordinary review.
 # Candidate 2026-10-31: isolate the notebook Cargo target to preserve
 # prepared workspace library identities. Pending ordinary owner review.
-digest = "1f5166203b45d48fa1e151a63e60c7622e3c295f"
+# Candidate 2026-10-31: make only copied font directories owner-writable
+# for cleanup; resource bytes and notices are unchanged. Pending ordinary review.
+digest = "4ac185462fd555c59aa374c9312c5c4ba012bbe7"
 
 [[section.note.scope]]
 path = "nix/rust-workspace.nix"

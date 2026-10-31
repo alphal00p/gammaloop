@@ -403,8 +403,15 @@
     "$linnet_python/bin/python" - <<'PY'
     import shutil
     from pathlib import Path
+
     from symbolica import data
-    shutil.copytree("${symbolicaRenderData}", Path(data.__file__).parent / "_data/fonts")
+
+    fonts = Path(data.__file__).parent / "_data/fonts"
+    shutil.copytree("${symbolicaRenderData}", fonts)
+    # The private copy inherits Nix-store directory modes; keep it removable.
+    for path in [fonts, *fonts.rglob("*")]:
+        if path.is_dir():
+            path.chmod(path.stat().st_mode | 0o200)
     PY
     "$linnet_python/bin/python" -m unittest discover -s crates/linnet-py/tests -p 'test_*.py'
     cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-builder -- check
