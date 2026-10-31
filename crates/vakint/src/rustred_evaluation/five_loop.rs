@@ -42,13 +42,29 @@ use super::{
 use crate::topologies::five_loop::{ParentDescriptor, common_momentum_rows, descriptors};
 use crate::utils::vakint_macros::vk_symbol;
 use crate::{
-    ReplacementRules, Topology, Vakint, VakintError, VakintExpression, VakintSettings, symbols::S,
+    ReplacementRules, Topology, Vakint, VakintError, VakintExpression, VakintSettings, VakintTerm,
+    symbols::S,
 };
 
 static PARENTS: LazyLock<Vec<ParentDescriptor>> = LazyLock::new(descriptors);
 
+/// PLUMBING POINT (n_cores): worker threads for the independent five-loop
+/// frontend items (witness screening, full witness keys, and per-contribution
+/// scalar lowering). `1` is strictly sequential on the calling thread, with no
+/// pool. Replace the interim `VAKINT_FRONTEND_THREADS` override by the shared
+/// `n_cores` setting once it exists; results never depend on this value.
+fn frontend_threads(_settings: &VakintSettings) -> usize {
+    std::env::var("VAKINT_FRONTEND_THREADS")
+        .ok()
+        .and_then(|threads| threads.parse::<usize>().ok())
+        .filter(|threads| *threads >= 1)
+        .unwrap_or(1)
+}
+
 #[path = "five_loop/witness_cache.rs"]
 mod witness_cache;
+#[path = "five_loop/witness_screen.rs"]
+mod witness_screen;
 pub use witness_cache::RustRedWitnessCacheStatistics;
 use witness_cache::{Policy as WitnessPolicy, WitnessCache};
 
@@ -186,6 +202,46 @@ fn project_chart(
     projected.map_err(native_failure)
 }
 
+/// The registered complete common momentum basis as a RustRed family.
+fn common_basis_family(
+    name: &str,
+) -> Result<rustred::family::IntegralFamily, RustRedEvaluationError> {
+    Ok(Compiler::new(Limits::default())
+        .map_err(native_failure)?
+        .compile_text(TextProject {
+            name: Some(name.to_owned()),
+            parameters: None,
+            loop_momenta: (1..=5).map(|axis| format!("k{axis}")).collect(),
+            external_momenta: Vec::new(),
+            dimension: "d".into(),
+            propagators: common_momentum_rows()
+                .iter()
+                .enumerate()
+                .map(|(slot, row)| {
+                    let momentum = row
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, coefficient)| **coefficient != 0)
+                        .map(|(axis, coefficient)| format!("({coefficient})*k{}", axis + 1))
+                        .collect::<Vec<_>>()
+                        .join("+");
+                    TextPropagator {
+                        id: format!("D{}", slot + 1),
+                        expression: format!("({momentum})^2-1"),
+                        target_power: 0,
+                        power_shift: None,
+                    }
+                })
+                .collect(),
+            external_gram: Vec::new(),
+            numerator: None,
+        })
+        .map_err(native_failure)?
+        .into_lowered(LoweringLimits::default())
+        .map_err(native_failure)?
+        .into_family())
+}
+
 fn select(topology: &Topology) -> Result<&'static ParentDescriptor, RustRedEvaluationError> {
     if !matches!(topology, Topology::FiveLoop(_)) {
         return Err(failure(
@@ -219,7 +275,9 @@ impl Vakint {
         // Select and validate the active immutable package before any memo hit.
         // The ordinary no-package matching path retains its previous behavior.
         if settings.rustred_artifact_path.is_none() && !self.has_rustred_loop(5) {
-            return self.match_rustred_input_uncached(settings, integral, numerator);
+            return Ok(self
+                .match_rustred_input_selected(settings, integral, numerator)?
+                .map(|(witness, _)| witness));
         }
         let application = self.saved_application(settings)?;
         // Loading also installs the catalogue in a clone created before load.
@@ -233,8 +291,8 @@ impl Vakint {
         if let Some(cached) = cached {
             // The memo lock is released before native lowering/package locking.
             // Typed policy errors propagate; a scope miss invalidates the entry.
-            match self.rustred_matched_input_key(settings, numerator, &cached.witness)? {
-                Some(key) if key == cached.accepted => {
+            match self.rustred_matched_input_support(settings, numerator, &cached.witness)? {
+                Some(support) if support == cached.accepted => {
                     log::debug!(target: "vakint::saved_application", "phase=frontend_witness_memo_hit");
                     return Ok(Some(cached.witness.clone()));
                 }
@@ -245,47 +303,72 @@ impl Vakint {
                 }
             }
         }
-        let matched = self.match_rustred_input_uncached(settings, integral, numerator)?;
-        if let Some(witness) = &matched {
-            // A verified fallback outside recorded coverage remains usable by
-            // the partial reducer. Only covered witnesses enter this memo.
-            if matches!(witness.canonical_topology, Topology::FiveLoop(_))
-                && let Some(accepted) =
-                    self.rustred_matched_input_key(settings, numerator, witness)?
-                && let Ok(mut cache) = application.witnesses.lock()
-            {
-                cache.insert(registry, policy, integral, numerator, witness, accepted);
-            }
+        let Some((witness, support)) =
+            self.match_rustred_input_selected(settings, integral, numerator)?
+        else {
+            return Ok(None);
+        };
+        // A verified fallback outside recorded coverage remains usable by
+        // the partial reducer. Only covered witnesses enter this memo, with
+        // the exact support their selection proved admitted.
+        if matches!(witness.canonical_topology, Topology::FiveLoop(_))
+            && let Some(support) = support.flatten()
+            && let Ok(mut cache) = application.witnesses.lock()
+        {
+            cache.insert(registry, policy, integral, numerator, &witness, support);
         }
-        Ok(matched)
+        Ok(Some(witness))
     }
 
+    #[cfg(test)]
     fn match_rustred_input_uncached(
         &self,
         settings: &VakintSettings,
         integral: AtomView,
         numerator: AtomView,
     ) -> Result<Option<ReplacementRules>, VakintError> {
+        Ok(self
+            .match_rustred_input_selected(settings, integral, numerator)?
+            .map(|(witness, _)| witness))
+    }
+
+    /// Select the verified witness whose exact surviving common-family
+    /// integrand is minimal (see [`Self::select_rustred_witness`]). The second
+    /// value is `Some(Some(support))` when the selector proved the returned
+    /// witness admitted with that exact lowered key support, `Some(None)` when
+    /// it proved it outside the saved entry union, and `None` when no
+    /// selector ran (no five-loop witness). The selector also runs on a single
+    /// parametric/short-form five-loop fallback, so its support is recorded.
+    fn match_rustred_input_selected(
+        &self,
+        settings: &VakintSettings,
+        integral: AtomView,
+        numerator: AtomView,
+    ) -> Result<Option<(ReplacementRules, Option<Option<Vec<IntegralKey>>>)>, VakintError> {
         #[cfg(all(
             test,
             feature = "weighted-lowering-diagnostics",
             feature = "feynkit-ingress"
         ))]
         let diagnostic_thread = weighted_diagnostic::begin_search(integral, numerator)?;
+        let mut selection = None;
         let result = self
             .topologies
-            .match_topologies_to_user_input_with_acceptance(
+            .match_topologies_to_user_input_with_selection(
                 integral,
                 settings.allow_unknown_integrals,
                 settings.rustred_momentum_match_limits,
-                |matched| {
+                |witnesses| {
                     #[cfg(all(
                         test,
                         feature = "weighted-lowering-diagnostics",
                         feature = "feynkit-ingress"
                     ))]
                     weighted_diagnostic::assert_thread(diagnostic_thread)?;
-                    self.rustred_matched_input_key(settings, numerator, matched)
+                    let (index, support) =
+                        self.select_rustred_witness(settings, numerator, witnesses)?;
+                    selection = Some(support);
+                    Ok(index)
                 },
             );
         #[cfg(all(
@@ -296,17 +379,232 @@ impl Vakint {
         if let Ok(selected) = &result {
             weighted_diagnostic::end_search(selected.as_ref())?;
         }
-        result
+        let Some(witness) = result? else {
+            return Ok(None);
+        };
+        // The selector also screens the single short-form fallback witness;
+        // either way its support belongs to the returned witness.
+        Ok(Some((witness, selection)))
+    }
+
+    /// Exact selection among verified witnesses, identical to taking the first
+    /// witness (in enumeration order) with the minimal admitted key of
+    /// [`Self::rustred_matched_input_key`], or `None` if no witness is admitted.
+    ///
+    /// The full key needs a weighted lowering over symbolic coefficients per
+    /// witness. Instead, admission is first decided from the exact lowered key
+    /// support computed from rational groups ([`witness_screen`]) where the
+    /// numerator allows it: a certainly nonzero key outside the saved entry
+    /// union proves rejection, as the full key rejects exactly such witnesses
+    /// (screening stops at the first one). Among admitted witnesses,
+    /// keys are compared lexicographically and the first entries' integral keys
+    /// are distinct whenever their smallest support keys are, so only witnesses
+    /// sharing the smallest first key can be minimal. A unique one is selected
+    /// without its full key; otherwise the full keys of exactly those witnesses
+    /// decide as before. Witnesses outside the grouped grammar always use the
+    /// full key. Returns the selected index and its exact support, if admitted.
+    ///
+    /// Behavioural difference, errors only: a witness that this exact
+    /// screening rejects or outranks is never fully lowered, so an error that
+    /// only its full lowering would raise (e.g. an exact-algebra size limit)
+    /// no longer aborts the match, and admission is probed in discovery rather
+    /// than key order. Count diagnostics disable the screening.
+    fn select_rustred_witness(
+        &self,
+        settings: &VakintSettings,
+        numerator: AtomView,
+        witnesses: &[ReplacementRules],
+    ) -> Result<(Option<usize>, Option<Vec<IntegralKey>>), VakintError> {
+        let started = std::time::Instant::now();
+        let threads = frontend_threads(settings);
+        let application = self.saved_application(settings)?;
+        let prepared = application.prepared.lock().map_err(failure)?;
+        let scalar = FamilyScalarNumeratorService::try_new(
+            prepared.family(),
+            S.dot,
+            (1..=5).map(|axis| S.k.call(axis)).collect(),
+            settings.rustred_scalar_numerator_limits,
+        )
+        .map_err(native_failure)?;
+        let prepared = &*prepared;
+        let groups = if settings.verify_numerator_identification
+            || settings.rustred_scalar_numerator_limits.diagnostics_enabled
+        {
+            None
+        } else {
+            // The full key starts with this witness-independent scalar form.
+            let scalar_form = VakintTerm::scalar_product_form(settings, numerator)?;
+            witness_screen::NumeratorGroups::new(scalar_form.as_view())
+        };
+        log::debug!(target: "vakint::five_loop_match", "phase=witness_screen_groups witnesses={} threads={threads} groups={:?}", witnesses.len(), groups.as_ref().map(witness_screen::NumeratorGroups::shape));
+        // Admission of a key is a pure function of the locked package; share
+        // it between witnesses. Errors are never cached.
+        let admission = Mutex::new(BTreeMap::<IntegralKey, bool>::new());
+        let admitted = |key: &IntegralKey| -> Result<bool, VakintError> {
+            if let Some(known) = admission.lock().map_err(failure)?.get(key) {
+                return Ok(*known);
+            }
+            let known = prepared
+                .routed_entry_is_admitted(key)
+                .map_err(native_failure)?;
+            admission
+                .lock()
+                .map_err(failure)?
+                .insert(key.clone(), known);
+            Ok(known)
+        };
+        enum Status {
+            Rejected,
+            Admitted(Vec<IntegralKey>),
+            Unknown,
+        }
+        let status = match &groups {
+            Some(groups) => super::parallel::map_ordered(threads, witnesses, |_, witness| {
+                groups.screen(settings, witness, &scalar, &admitted)
+            }),
+            None => witnesses.iter().map(|_| Ok(None)).collect(),
+        }
+        .into_iter()
+        .map(|screen| {
+            Ok(match screen? {
+                None => Status::Unknown,
+                Some(witness_screen::Screen::Rejected) => Status::Rejected,
+                Some(witness_screen::Screen::Admitted(support)) => Status::Admitted(support),
+            })
+        })
+        .collect::<Result<Vec<_>, VakintError>>()?;
+        let full_key = |index: usize| {
+            self.matched_input_key_with(settings, numerator, &witnesses[index], prepared, &scalar)
+        };
+        let unknown = status
+            .iter()
+            .enumerate()
+            .filter_map(|(index, status)| matches!(status, Status::Unknown).then_some(index))
+            .collect::<Vec<_>>();
+        let mut keys = BTreeMap::new();
+        for (index, key) in unknown.iter().zip(super::parallel::map_ordered(
+            threads,
+            &unknown,
+            |_, index| full_key(*index),
+        )) {
+            keys.insert(*index, key?);
+        }
+        // Smallest first integral key of every admitted witness (`None` for
+        // an empty support, which precedes every nonempty key).
+        let heads = status
+            .iter()
+            .enumerate()
+            .filter_map(|(index, status)| match status {
+                Status::Rejected => None,
+                Status::Admitted(support) => Some((index, support.first().cloned())),
+                Status::Unknown => keys[&index]
+                    .as_ref()
+                    .map(|key| (index, key.first().map(|(key, _)| key.clone()))),
+            })
+            .collect::<Vec<_>>();
+        let support_of =
+            |index: usize, keys: &BTreeMap<usize, Option<Vec<(IntegralKey, Atom)>>>| match &status
+                [index]
+            {
+                Status::Admitted(support) => support.clone(),
+                _ => keys[&index]
+                    .as_ref()
+                    .expect("admitted full key")
+                    .iter()
+                    .map(|(key, _)| key.clone())
+                    .collect(),
+            };
+        let Some(minimum) = heads.iter().map(|(_, head)| head).min().cloned() else {
+            log::debug!(target: "vakint::five_loop_match", "phase=witness_selection admitted=0 screened={} full_keys={} elapsed_seconds={:.6}", witnesses.len() - unknown.len(), keys.len(), started.elapsed().as_secs_f64());
+            return Ok((None, None));
+        };
+        let tied = heads
+            .iter()
+            .filter(|(_, head)| *head == minimum)
+            .map(|(index, _)| *index)
+            .collect::<Vec<_>>();
+        let selected = if let [only] = tied.as_slice() {
+            *only
+        } else {
+            let missing = tied
+                .iter()
+                .copied()
+                .filter(|index| !keys.contains_key(index))
+                .collect::<Vec<_>>();
+            for (index, key) in missing.iter().zip(super::parallel::map_ordered(
+                threads,
+                &missing,
+                |_, index| full_key(*index),
+            )) {
+                keys.insert(*index, key?);
+            }
+            // The first minimal full key in enumeration order, as before.
+            let mut best: Option<(&Vec<(IntegralKey, Atom)>, usize)> = None;
+            for index in &tied {
+                let key = keys[index].as_ref();
+                // Screened witnesses are cross-checked against their full key.
+                if let Status::Admitted(support) = &status[*index]
+                    && key.is_none_or(|key| !key.iter().map(|(key, _)| key).eq(support.iter()))
+                {
+                    return Err(failure(
+                        "exact witness screening disagrees with the full weighted lowering",
+                    )
+                    .into());
+                }
+                let key = key.ok_or_else(|| failure("tied witness has no admitted key"))?;
+                if best.is_none_or(|(old, _)| key < old) {
+                    best = Some((key, *index));
+                }
+            }
+            best.expect("tied witnesses are nonempty").1
+        };
+        log::debug!(target: "vakint::five_loop_match", "phase=witness_selection admitted={} tied={} selected={selected} screened={} full_keys={} elapsed_seconds={:.6}", heads.len(), tied.len(), witnesses.len() - unknown.len(), keys.len(), started.elapsed().as_secs_f64());
+        Ok((Some(selected), Some(support_of(selected, &keys))))
+    }
+
+    /// The exact lowered key support of an admitted witness, or `None` if it
+    /// is outside the saved entry union. This is the memo's admission token.
+    fn rustred_matched_input_support(
+        &self,
+        settings: &VakintSettings,
+        numerator: AtomView,
+        matched: &ReplacementRules,
+    ) -> Result<Option<Vec<IntegralKey>>, VakintError> {
+        Ok(self
+            .select_rustred_witness(settings, numerator, std::slice::from_ref(matched))?
+            .1)
     }
 
     /// Order already verified matcher witnesses by their exact surviving
     /// common-family integrand. This checks the saved entry union without
-    /// applying any rule or preparing an owner.
+    /// applying any rule or preparing an owner. Selection computes the same
+    /// key where it needs one; tests and diagnostics call this directly.
+    #[cfg(test)]
     pub(crate) fn rustred_matched_input_key(
         &self,
         settings: &VakintSettings,
         numerator: AtomView,
         matched: &ReplacementRules,
+    ) -> Result<Option<Vec<(IntegralKey, Atom)>>, VakintError> {
+        let application = self.saved_application(settings)?;
+        let prepared = application.prepared.lock().map_err(failure)?;
+        let scalar = FamilyScalarNumeratorService::try_new(
+            prepared.family(),
+            S.dot,
+            (1..=5).map(|axis| S.k.call(axis)).collect(),
+            settings.rustred_scalar_numerator_limits,
+        )
+        .map_err(native_failure)?;
+        self.matched_input_key_with(settings, numerator, matched, &prepared, &scalar)
+    }
+
+    fn matched_input_key_with(
+        &self,
+        settings: &VakintSettings,
+        numerator: AtomView,
+        matched: &ReplacementRules,
+        prepared: &PreparedSavedApplication<15>,
+        scalar: &FamilyScalarNumeratorService<'_>,
     ) -> Result<Option<Vec<(IntegralKey, Atom)>>, VakintError> {
         #[cfg(all(
             test,
@@ -332,15 +630,6 @@ impl Vakint {
             settings,
             ScalarNumeratorForm::PreserveProducts,
         )?;
-        let application = self.saved_application(settings)?;
-        let prepared = application.prepared.lock().map_err(failure)?;
-        let scalar = FamilyScalarNumeratorService::try_new(
-            prepared.family(),
-            S.dot,
-            (1..=5).map(|axis| S.k.call(axis)).collect(),
-            settings.rustred_scalar_numerator_limits,
-        )
-        .map_err(native_failure)?;
         #[cfg(all(
             test,
             feature = "weighted-lowering-diagnostics",
@@ -858,40 +1147,7 @@ impl SavedApplication {
         let started = std::time::Instant::now();
         // Compile the same complete common basis through RustRed's existing
         // input boundary. No denominator inversion is implemented in Vakint.
-        let expected = Compiler::new(Limits::default())
-            .map_err(native_failure)?
-            .compile_text(TextProject {
-                name: Some(prepared.family().name().to_owned()),
-                parameters: None,
-                loop_momenta: (1..=5).map(|axis| format!("k{axis}")).collect(),
-                external_momenta: Vec::new(),
-                dimension: "d".into(),
-                propagators: common_momentum_rows()
-                    .iter()
-                    .enumerate()
-                    .map(|(slot, row)| {
-                        let momentum = row
-                            .iter()
-                            .enumerate()
-                            .filter(|(_, coefficient)| **coefficient != 0)
-                            .map(|(axis, coefficient)| format!("({coefficient})*k{}", axis + 1))
-                            .collect::<Vec<_>>()
-                            .join("+");
-                        TextPropagator {
-                            id: format!("D{}", slot + 1),
-                            expression: format!("({momentum})^2-1"),
-                            target_power: 0,
-                            power_shift: None,
-                        }
-                    })
-                    .collect(),
-                external_gram: Vec::new(),
-                numerator: None,
-            })
-            .map_err(native_failure)?
-            .into_lowered(LoweringLimits::default())
-            .map_err(native_failure)?
-            .into_family();
+        let expected = common_basis_family(prepared.family().name())?;
         if prepared.family().fingerprint() != expected.fingerprint() {
             return Err(failure(
                 "saved package does not use the registered common momentum basis",
@@ -1057,40 +1313,56 @@ impl SavedApplication {
                 "matched contributions lowered",
             )
         });
-        for (input_index, contribution) in contributions.iter().enumerate() {
-            let lowering_started = std::time::Instant::now();
-            let descriptor = select(&contribution.matched.canonical_topology)?;
-            let mut input = MatchedScalarInput::prepare(
-                contribution.numerator.as_view(),
-                &contribution.matched,
-                &descriptor.momenta,
-                descriptor.physical_slots,
-                15,
-                settings,
-                ScalarNumeratorForm::PreserveProducts,
-            )?;
-            if settings.rustred_application_options.reduction_strategy
-                == crate::RustRedReductionStrategy::Ordered
-            {
-                // Preserve the received rational domain before identifying
-                // epsilon with (4-d)/2 can remove a denominator algebraically.
-                conditions.extend(input.input_conditions_after_mapping(&scalar, |condition| {
-                    condition
-                        .replace(dimension.to_pattern())
-                        .with(physical_dimension.to_pattern())
-                })?);
-                input.numerator = MatchedScalarInput::numerator_in_family_dimension(
-                    input.numerator.as_view(),
+        // Transport and weighted lowering are independent per contribution
+        // and run first (in parallel when configured); everything below then
+        // consumes them strictly in contribution order, as before.
+        let lowered = super::parallel::map_ordered_by_cost(
+            frontend_threads(settings),
+            contributions,
+            // Lowering cost grows with the numerator; start the largest first.
+            |contribution| contribution.numerator.as_view().get_byte_size(),
+            |_, contribution| -> Result<_, VakintError> {
+                let lowering_started = std::time::Instant::now();
+                let descriptor = select(&contribution.matched.canonical_topology)?;
+                let mut input = MatchedScalarInput::prepare(
+                    contribution.numerator.as_view(),
+                    &contribution.matched,
+                    &descriptor.momenta,
+                    descriptor.physical_slots,
+                    15,
                     settings,
-                    &dimension,
-                );
-            }
-            let lowering = scalar
-                .lower_weighted(&input.numerator, &input.target, &input.mass_squared)
-                .map_err(native_failure)?;
-            log::debug!(target: "vakint::saved_application",
-                "phase=parent_transport_and_scalar_lowering elapsed_seconds={:.6} lowered_count={}",
-                lowering_started.elapsed().as_secs_f64(), lowering.terms().len());
+                    ScalarNumeratorForm::PreserveProducts,
+                )?;
+                let mut input_conditions = Vec::new();
+                if settings.rustred_application_options.reduction_strategy
+                    == crate::RustRedReductionStrategy::Ordered
+                {
+                    // Preserve the received rational domain before identifying
+                    // epsilon with (4-d)/2 can remove a denominator algebraically.
+                    input_conditions =
+                        input.input_conditions_after_mapping(&scalar, |condition| {
+                            condition
+                                .replace(dimension.to_pattern())
+                                .with(physical_dimension.to_pattern())
+                        })?;
+                    input.numerator = MatchedScalarInput::numerator_in_family_dimension(
+                        input.numerator.as_view(),
+                        settings,
+                        &dimension,
+                    );
+                }
+                let lowering = scalar
+                    .lower_weighted(&input.numerator, &input.target, &input.mass_squared)
+                    .map_err(native_failure)?;
+                log::debug!(target: "vakint::saved_application",
+                    "phase=parent_transport_and_scalar_lowering elapsed_seconds={:.6} lowered_count={}",
+                    lowering_started.elapsed().as_secs_f64(), lowering.terms().len());
+                Ok((input, input_conditions, lowering))
+            },
+        );
+        for (input_index, lowered) in lowered.into_iter().enumerate() {
+            let (input, input_conditions, lowering) = lowered?;
+            conditions.extend(input_conditions);
             MonitorContext::native_phase(
                 observation.as_deref_mut(),
                 "coverage_mass_batching",
