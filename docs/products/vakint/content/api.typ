@@ -189,9 +189,14 @@ statement of the conventions, also shown as "Normalisation" on the constant card
   columns: (1fr, 1.3fr, 2.4fr),
   [*Class*], [*Examples*], [*Normalisation*],
   [Elementary and polylogarithmic numbers],
-  [`𝜋`, `γ`, `zeta(n)`, `log(q)`, `polylog(n,q)`, `s6weak`],
+  [`𝜋`, `γ`, `zeta(n)`, `log(q)`, `polylog(n,q)`],
   [Plain real number given by the convergent integral shown, first interval
    outermost; no loop measure and no further factor.],
+  [Alternating Euler sum],
+  [`s6` (and the external-data record `s6weak`, same number)],
+  [`s6 = Σ_(m≥k≥1) (-1)^(m+k)/(m^5 k) = ζ(-5,-1) + ζ(6)`, diagonal included:
+   the double integral `∫_0^1 ∫_0^1 log(x_1)^4/24 · 1/(1+x_2) · (1/(1+x_1) + x_2/(1-x_1 x_2)) dx_2 dx_1`;
+   a plain real number, no further factor.],
   [Clausen values],
   [`cl2`, `cl4`, `S2`],
   [`Cl_n(π/3) = Im Li_n(exp(i π/3))`, with `Cl_2(π/3) = -∫_0^(π/3) log(2 sin(t/2)) dt`

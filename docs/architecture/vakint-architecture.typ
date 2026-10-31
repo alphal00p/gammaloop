@@ -95,8 +95,8 @@ rebind the same name to different data.
 Symbolic reduction binds these finite leaves after exact combination, using the same period
 registry without choosing a numerical fallback. Loading rejects declarations that shadow native
 evaluators, reserved Vakint symbols, existing period aliases or master basis identities.
-This includes the inert definition heads and the built-in constants `cl4`, `log(q)` for positive
-rational `q` other than one, `D5bar1/2`, `D6bar1/2`, `T111bar4` and `BNbar4`.
+This includes the inert definition heads and the built-in constants `cl4`, `s6`, `log(q)` for
+positive rational `q` other than one, `D5bar1/2`, `D6bar1/2`, `T111bar4` and `BNbar4`.
 A record may carry an optional `symbolic_definition`. Loading parses and validates it, and it
 must agree with any definition reconstructed from the record's `definition_metadata`. An invalid
 definition, a contradiction or inconsistent metadata rejects the pack. Records without

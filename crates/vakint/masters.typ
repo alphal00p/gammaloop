@@ -194,7 +194,7 @@ written out explicitly outside the heads:
   `√3 (1-2 ep)(ep-1)/Γ(1+ep)^2`, without an `exp(L γ ep)` factor; their values
   are the tabulated HPL combinations. `BNbar4` is a convenience consistent with
   `matad.rs`, not a basis generator: it equals a combination of
-  `Li_6(1/2)`, `s6weak` and classical constants.
+  `Li_6(1/2)`, `s6` and classical constants.
   The weight-seven bars `D5bar3`, `T111bar5` and `BNbar5` come from external data
   with the same conventions.
 - `D=2` periods are `LoopIntegral(2, ∏ 1/(q_E²+1))` and their `D=2-2δ` jets are
@@ -205,6 +205,11 @@ written out explicitly outside the heads:
   `Cl_2(π/3)`, `Cl_4(π/3) = √3/12 ∫_0^1 (-log t)^3/(1-t+t^2) dt` (`cl4`) and
   `S2 = 4/(9√3) Cl_2(π/3)` use one-dimensional integrals; `𝑒` and square roots
   are their own elementary definitions.
+- The built-in alternating Euler sum `s6 = Σ_(m≥k≥1) (-1)^(m+k)/(m^5 k) = ζ(-5,-1) + ζ(6)`
+  (diagonal included) is the double integral
+  `Integral(log(x(1))^4/24 (1+x(2))^(-1) ((1+x(1))^(-1) + x(2)/(1-x(1) x(2))), Interval(x(1),0,1), Interval(x(2),0,1))`,
+  the definition of the external-data record `s6weak`, which holds the same number.
+  Its value is `π^6/945 + GPLReal(0,0,0,0,-1,1,1)` at any precision.
 - `HR`/`HI(a1,…,an, z)` are `real_part`/`imaginary_part` of the
   radial-path HPL at `z=(1±𝑖√3)/2`; each letter contributes `z f_a(z s_i)` over
   `1 > s_1 > … > 0`, trailing zeros become the innermost `log(z s_k)^m/m!`.
@@ -224,9 +229,14 @@ card:
   columns: (1fr, 1.3fr, 2.4fr),
   [*Class*], [*Examples*], [*Normalisation*],
   [Elementary and polylogarithmic numbers],
-  [`𝜋`, `γ`, `zeta(n)`, `log(q)`, `polylog(n,q)`, `s6weak`],
+  [`𝜋`, `γ`, `zeta(n)`, `log(q)`, `polylog(n,q)`],
   [Plain real number given by the convergent integral shown, first interval
    outermost; no loop measure and no further factor.],
+  [Alternating Euler sum],
+  [`s6` (and the external-data record `s6weak`, same number)],
+  [`s6 = Σ_(m≥k≥1) (-1)^(m+k)/(m^5 k) = ζ(-5,-1) + ζ(6)`, diagonal included:
+   the double integral `∫_0^1 ∫_0^1 log(x_1)^4/24 · 1/(1+x_2) · (1/(1+x_1) + x_2/(1-x_1 x_2)) dx_2 dx_1`;
+   a plain real number, no further factor.],
   [Clausen values],
   [`cl2`, `cl4`, `S2`],
   [`Cl_n(π/3) = Im Li_n(exp(i π/3))`, with `Cl_2(π/3) = -∫_0^(π/3) log(2 sin(t/2)) dt`

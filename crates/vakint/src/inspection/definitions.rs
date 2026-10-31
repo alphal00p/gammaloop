@@ -202,6 +202,21 @@ fn clausen4() -> Atom {
         )
 }
 
+/// `s6 = Σ_(m≥k≥1) (-1)^(m+k)/(m^5 k) = ζ(-5,-1) + ζ(6)`, the diagonal included.
+///
+/// With `1/m^5 = ∫_0^1 x^(m-1) log(x)^4/24 dx` and the alternating harmonic sums
+/// `Σ_(k≤m) (-1)^k/k = -∫_0^1 (1-(-y)^m)/(1+y) dy` it is the double integral
+/// `∫_0^1 ∫_0^1 log(x1)^4/24 · 1/(1+x2) · (1/(1+x1) + x2/(1-x1 x2)) dx2 dx1`,
+/// the defining integral of the external-data record `s6weak`.
+fn alternating_euler_sum6() -> Atom {
+    let one = || Atom::num(1);
+    integral(
+        log(x(1)).pow(Atom::num(4)) / Atom::num(24) / (one() + x(2))
+            * (one() / (one() + x(1)) + x(2) / (one() - x(1) * x(2))),
+        vec![(x(1), Atom::Zero, one()), (x(2), Atom::Zero, one())],
+    )
+}
+
 /// `log(q) = ∫_1^q dt/t` for a positive rational `q`.
 fn logarithm(point: Atom) -> Atom {
     integral(Atom::num(1) / t(), vec![(t(), Atom::num(1), point)])
@@ -788,6 +803,8 @@ pub(crate) fn builtin(source: AtomView<'_>) -> Result<Option<Atom>, VakintError>
                 matad_master("miT111", 2).ok_or_else(unsupported)?
             } else if symbol == vk_symbol!("cl4") {
                 clausen4()
+            } else if symbol == vk_symbol!("s6") {
+                alternating_euler_sum6()
             } else if let Some((_, family, order)) = super::constants::MATAD_BARS
                 .iter()
                 .find(|(bar, _, _)| symbol == vk_symbol!(bar))
@@ -1647,6 +1664,7 @@ fn check(view: AtomView, scope: &mut Vec<Atom>) -> Result<(), String> {
 /// Plain-language normalization statements, one per class of definition.
 const PLAIN_INTEGRAL: &str = "Plain real number: the convergent integral shown, first interval outermost; no loop measure and no further factor.";
 const ALGEBRAIC: &str = "Exact algebraic or elementary number; no integral is needed.";
+const EULER_SUM: &str = "Alternating Euler sum s6 = Σ_(m≥k≥1) (-1)^(m+k)/(m^5 k) = ζ(-5,-1) + ζ(6), the diagonal m = k included; a plain real number given by the convergent double integral shown over [0,1]², first interval outermost; no loop measure and no further factor.";
 const CLAUSEN: &str = "Clausen value at π/3, a plain real number: Cl2(π/3) = Im Li2(e^(iπ/3)) = -∫_0^(π/3) log(2 sin(t/2)) dt, Cl4(π/3) = Im Li4(e^(iπ/3)); the MATAD constant S2 = 4/(9√3) Cl2(π/3).";
 const HPL: &str = "Real (HR) or imaginary (HI) part of the harmonic polylogarithm H(w; z) at z = (1 ± i√3)/2 = e^(±iπ/3): iterated integral on the straight path t = z s with 1 > s1 > … > sk > 0 (first interval outermost), letters 1/t, 1/(1-t), 1/(1+t) for 0, 1, -1, trailing zeros as log(z s)^m/m! on the principal branch; a plain number.";
 const GPL: &str = "Real or imaginary part of the Goncharov polylogarithm G(a1,…,an; 1) = ∫_(1>t1>…>tn>0) ∏ dt_i/(t_i - a_i), first interval outermost, letters among 0, ±1 and the sixth roots of unity; it converges without shuffle regularization and is a plain number.";
@@ -1658,8 +1676,9 @@ const PUBLIC_MASTER: &str = "Public Vakint/FMFT master normalization";
 const MATAD_MASTER: &str = "MATAD normalization";
 const EVEN_MASTER: &str = "Public Vakint/FMFT and MATAD normalization (identical for even Σa)";
 const MATAD_BAR: &str = "MATAD bar";
-const D2_PERIOD: &str = "D = 2 period";
-const D2_JET: &str = "D = 2-2δ jet";
+/// The external-data acceptance tests select the D = 2 constants by these labels.
+pub(crate) const D2_PERIOD: &str = "D = 2 period";
+pub(crate) const D2_JET: &str = "D = 2-2δ jet";
 const LOOP_INTEGRAL: &str = "Loop integral with explicit factors";
 
 /// A loop-integral definition read off its structure:
@@ -2061,6 +2080,9 @@ pub(crate) fn normalisation(
     }
     if named(symbol, &["PolylogReal", "PolylogImag"]) {
         return POLYLOG_PROJECTION.into();
+    }
+    if named(symbol, &["s6", "s6weak"]) {
+        return EULER_SUM.into();
     }
     if named(symbol, &["cl2", "cl4", "S2"]) {
         return CLAUSEN.into();

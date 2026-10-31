@@ -2,10 +2,14 @@
 //! This test deliberately loads the complete local pack, including its graph
 //! and IBP metadata, and never contacts a producer workspace or the network.
 //!
-//! The data-dependent expectations below (`D2_DIGITS`, `D2_DEPENDENT_CELLS`, the
-//! 520-digit cap of the `P19`/`P73` ε¹ rows and the 739 published formulas) are
-//! those of `vakint-external-data` `main` at `f51bc5a2` (the closed 4L formulas
-//! with 520-digit D = 2 periods). Earlier packs such as `ca49f328` cap the D = 2
+//! The data-dependent expectations below (`D2_DIGITS`, the 520-digit cap of the
+//! `P19`/`P73` ε¹ rows, and the floors `MIN_D2_DEPENDENT_CELLS` and 739
+//! published formulas) hold for `vakint-external-data` `main` at `f51bc5a2`
+//! (the closed 4L formulas with 520-digit D = 2 periods) and for its rewrite of
+//! every 1L–4L coefficient in the constant basis v4. Which coefficient cells
+//! depend on a D = 2 period, and which constants the formulas name, are read
+//! off the loaded data, because the two releases write the same coefficients
+//! in different constants. Earlier packs such as `ca49f328` cap the D = 2
 //! periods at 215 digits and fail these assertions; update them together with
 //! the data.
 
@@ -16,15 +20,19 @@ use symbolica::domains::{float::Float, rational::Rational};
 
 use crate::{
     AvailablePrecision, CoefficientPrecision, ConstantSymbol, ErrorQuality, MasterSymbol,
-    PrecisionWarning, Vakint, precision::decimal_bits, utils::vakint_macros::vk_parse,
+    MasterSymbolicExpression, PrecisionWarning, Vakint, VakintSettings, precision::decimal_bits,
+    utils::vakint_macros::vk_parse,
 };
 
 const CERTIFIED_DIGITS: u32 = 20_000;
 /// Validated digits of the independently computed D = 2 periods and their jets.
 const D2_DIGITS: u32 = 520;
-/// D2-dependent coefficient cells of the takeover closures (`PR7D2`, `PR10D2`,
-/// `PR15D2` and their jets): the original 15 plus the 43 closed formulas' cells.
-const D2_DEPENDENT_CELLS: usize = 62;
+/// Lower bound on the 4L coefficient cells whose formula contains a D = 2
+/// period or jet. The cells themselves are read off the loaded formulas:
+/// `f51bc5a2` has 62 (the original 15 plus the 43 closed formulas' cells); the
+/// basis v4 rewrite also writes the `P19`/`P73` ε⁰ rows, previously
+/// `-PR11dep0 - 5 ζ(5)`, in D = 2 periods, giving 64.
+const MIN_D2_DEPENDENT_CELLS: usize = 62;
 
 /// Parse a finite decimal as an exact rational. In particular, this comparison
 /// never rounds a 20,008-digit reference or its tiny error radius to f64.
@@ -365,6 +373,7 @@ fn public_engine_certified_periods_at_20000_digits() {
 #[test]
 #[ignore = "loads independently validated D2 periods; set VAKINT_TEST_EXTERNAL_DATA"]
 fn public_engine_independent_d2_periods_and_formula_inventory() {
+    use symbolica::atom::AtomCore;
     let root = std::env::var_os("VAKINT_TEST_EXTERNAL_DATA")
         .map(PathBuf::from)
         .expect("set VAKINT_TEST_EXTERNAL_DATA to the external-data checkout");
@@ -376,14 +385,27 @@ fn public_engine_independent_d2_periods_and_formula_inventory() {
 
     // The inspection catalogue must expose every concrete constant used by
     // the loaded formulas, including the new independently defined periods.
+    // The D = 2 periods and jets among them are recognized by the loop
+    // integral of their loaded definition, not by their names.
     let inventory = engine.constant_symbols().unwrap();
+    let mut d2_constants = Vec::new();
     for symbol in &inventory {
         let constant = engine.get_constant(symbol, 16).unwrap();
         assert!(constant.to_atom().is_ok(), "{symbol}");
+        let normalisation = constant.normalisation();
+        if normalisation.starts_with(super::definitions::D2_PERIOD)
+            || normalisation.starts_with(super::definitions::D2_JET)
+        {
+            d2_constants.push(symbol.as_atom().clone());
+        }
     }
     for name in ["PR7D2", "PR10D2", "PR15D2"] {
         let symbol: ConstantSymbol = name.parse().unwrap();
         assert!(inventory.contains(&symbol));
+        assert!(
+            d2_constants.contains(symbol.as_atom()),
+            "{name} is not defined as a D = 2 period"
+        );
         for requested in [16, D2_DIGITS + 1] {
             let constant = engine.get_constant(&symbol, requested).unwrap();
             assert_eq!(
@@ -413,8 +435,14 @@ fn public_engine_independent_d2_periods_and_formula_inventory() {
 
     // These archived coefficients were computed independently of the exact
     // formulas (the 43 closures against the 500-digit physical values). Compare
-    // every affected cell, not an expression solved for its period.
+    // every affected cell, not an expression solved for its period. A cell is
+    // affected when its published formula contains a D = 2 constant.
+    let settings = VakintSettings {
+        run_time_decimal_precision: 80,
+        ..VakintSettings::default()
+    };
     let mut checked = 0;
+    let mut formulas_evaluated_directly = 0;
     for metadata in manifest["masters"].as_array().unwrap() {
         let symbolic_path = metadata["files"]["symbolic.json"]["path"].as_str().unwrap();
         let formulas: Vec<(i64, String)> =
@@ -423,10 +451,12 @@ fn public_engine_independent_d2_periods_and_formula_inventory() {
         let affected = formulas
             .iter()
             .filter(|(_, formula)| {
-                ["PR7D2", "PR10D2", "PR15D2"]
+                let expression = vk_parse!(formula).unwrap();
+                d2_constants
                     .iter()
-                    .any(|name| formula.contains(name))
+                    .any(|constant| expression.contains(constant))
             })
+            .map(|(power, _)| *power)
             .collect::<Vec<_>>();
         if affected.is_empty() {
             continue;
@@ -439,38 +469,87 @@ fn public_engine_independent_d2_periods_and_formula_inventory() {
                 .unwrap();
         let identity: MasterSymbol = metadata["master_id"].as_str().unwrap().parse().unwrap();
         let master = engine.get_master(&identity, 80).unwrap();
-        for (power, _) in affected {
-            let coefficient = &master.coefficients()[power];
+        for power in affected {
+            let label = format!("{identity} epsilon^{power}");
+            let coefficient = &master.coefficients()[&power];
             // A D2 period caps the formula; a better archived value may win.
+            let available = coefficient.available_precision();
             assert!(
-                matches!(coefficient.available_precision(),
+                matches!(available,
                     AvailablePrecision::FixedPrecision(digits) if digits >= D2_DIGITS),
-                "{identity} epsilon^{power}: {}",
-                coefficient.available_precision()
+                "{label}: {available}"
             );
-            let reference = exact_decimal(&references.iter().find(|(p, _)| p == power).unwrap().1);
-            let difference = coefficient.numerical_value().to_rational() - &reference;
-            let distance = if difference < 0 {
-                -difference
-            } else {
-                difference
-            };
-            let scale = if reference < 0 { -reference } else { reference };
-            let tolerance = (Rational::from(1) + scale) * exact_decimal("1e-70");
-            assert!(distance < tolerance, "{identity} epsilon^{power}");
+            let reference = exact_decimal(&references.iter().find(|(p, _)| *p == power).unwrap().1);
+            assert_agrees_to_70_digits(
+                &label,
+                coefficient.numerical_value().to_rational(),
+                &reference,
+            );
             assert!(coefficient.precision().imaginary().exact_zero());
             assert!(coefficient.to_atom().is_ok());
+            // Exact formulas win ties, so the value above is the formula's
+            // unless a more accurate archived value won (the 20,000-digit
+            // ε⁰ rows of P17/P52/P74, and in basis v4 also P19/P73). Then it
+            // is the reference itself, and the formula is evaluated here.
+            if available != AvailablePrecision::FixedPrecision(D2_DIGITS) {
+                let MasterSymbolicExpression::Expression(formula) =
+                    coefficient.symbolic_expression()
+                else {
+                    panic!("{label}: the published formula is not exposed");
+                };
+                let (value, _) = engine
+                    .numerical_evaluation(
+                        &settings,
+                        formula.as_view(),
+                        &Default::default(),
+                        &Default::default(),
+                        None,
+                    )
+                    .unwrap();
+                let value = value.get_epsilon_coefficient(0);
+                assert_agrees_to_70_digits(
+                    &format!("{label} formula"),
+                    value.re.to_rational(),
+                    &reference,
+                );
+                assert_agrees_to_70_digits(
+                    &format!("{label} formula, imaginary part"),
+                    value.im.to_rational(),
+                    &Rational::from(0),
+                );
+                formulas_evaluated_directly += 1;
+            }
             checked += 1;
         }
     }
-    assert_eq!(
-        checked, D2_DEPENDENT_CELLS,
-        "the published D2-dependent cells must all be checked"
+    assert!(
+        checked >= MIN_D2_DEPENDENT_CELLS,
+        "only {checked} published D2-dependent cells"
     );
     eprintln!(
-        "checked {} constants and {checked} independent D2-dependent coefficients",
-        inventory.len()
+        "checked {} constants ({} D = 2) and {checked} independent D2-dependent coefficients; \
+         {formulas_evaluated_directly} formulas evaluated directly because a more accurate \
+         archived value is returned",
+        inventory.len(),
+        d2_constants.len()
     );
+}
+
+/// `|value - reference| < 10^-70 (1 + |reference|)`, compared exactly.
+fn assert_agrees_to_70_digits(label: &str, value: Rational, reference: &Rational) {
+    let difference = value - reference;
+    let distance = if difference < 0 {
+        -difference
+    } else {
+        difference
+    };
+    let scale = if *reference < 0 {
+        -reference.clone()
+    } else {
+        reference.clone()
+    };
+    let tolerance = (Rational::from(1) + scale) * exact_decimal("1e-70");
+    assert!(distance < tolerance, "{label}");
 }
 
 #[test]
@@ -707,12 +786,47 @@ fn public_engine_every_published_leaf_has_an_explicit_definition() {
     let mut engine = Vakint::new().unwrap();
     engine.load_external_data(&root, 4).unwrap();
 
+    // A formula that names any symbol or function must yield a leaf; this
+    // guards the collector without a leaf count tuned to one data release.
+    fn collect(
+        label: &str,
+        expression: &symbolica::atom::Atom,
+        leaves: &mut BTreeMap<symbolica::atom::Atom, usize>,
+    ) {
+        use symbolica::atom::AtomView;
+        let mut own = BTreeMap::new();
+        collect_leaves(expression.as_view(), &mut own);
+        let mut names_something = false;
+        expression.visitor(&mut |part| {
+            names_something |= matches!(part, AtomView::Var(_) | AtomView::Fun(_));
+            !names_something
+        });
+        assert_eq!(
+            !own.is_empty(),
+            names_something,
+            "{label}: leaves {own:?} of {expression}"
+        );
+        for (leaf, count) in own {
+            *leaves.entry(leaf).or_default() += count;
+        }
+    }
+
     let mut leaves = BTreeMap::new();
     let mut formulas = 0;
+    let mut published = Vec::new();
+    let mut records = Vec::new();
     for loops in 1..=4 {
         let directory = root.join(format!("{loops}L"));
         let manifest: Value =
             serde_json::from_slice(&fs::read(directory.join("manifest.json")).unwrap()).unwrap();
+        if let Some(path) = manifest["constant_bindings"]["path"].as_str() {
+            let entries: Vec<Value> =
+                serde_json::from_slice(&fs::read(directory.join(path)).unwrap()).unwrap();
+            for entry in entries {
+                let symbol: ConstantSymbol = entry["symbol"].as_str().unwrap().parse().unwrap();
+                records.push(symbol);
+            }
+        }
         for master in manifest["masters"].as_array().unwrap() {
             let Some(path) = master["files"]["symbolic.json"]["path"].as_str() else {
                 continue;
@@ -720,9 +834,11 @@ fn public_engine_every_published_leaf_has_an_explicit_definition() {
             let rows: Vec<(i64, String)> =
                 serde_json::from_slice(&fs::read(directory.join(path)).unwrap()).unwrap();
             for (power, formula) in rows {
-                let expression = vk_parse!(&formula)
-                    .unwrap_or_else(|error| panic!("{loops}L {path} ε^{power}: {error}"));
-                collect_leaves(expression.as_view(), &mut leaves);
+                let label = format!("{loops}L {path} ε^{power}");
+                let expression =
+                    vk_parse!(&formula).unwrap_or_else(|error| panic!("{label}: {error}"));
+                collect(&label, &expression, &mut leaves);
+                published.push(expression);
                 formulas += 1;
             }
         }
@@ -732,10 +848,27 @@ fn public_engine_every_published_leaf_has_an_explicit_definition() {
         for formula in &extra {
             let expression =
                 vk_parse!(formula).unwrap_or_else(|error| panic!("{formula}: {error}"));
-            collect_leaves(expression.as_view(), &mut leaves);
+            collect(formula, &expression, &mut leaves);
+            published.push(expression);
         }
         eprintln!("{} further formulas from {}", extra.len(), path.display());
         formulas += extra.len();
+    }
+
+    // Every constant record of the loaded packs that a formula contains is a
+    // collected leaf, whichever constants the release writes its formulas in.
+    let mut referenced = 0;
+    for record in &records {
+        if published
+            .iter()
+            .any(|formula| formula.contains(record.as_atom()))
+        {
+            assert!(
+                leaves.contains_key(record.as_atom()),
+                "{record} occurs in a published formula but is not a collected leaf"
+            );
+            referenced += 1;
+        }
     }
     let mut by_class = BTreeMap::<String, usize>::new();
     let mut dump = Vec::new();
@@ -779,12 +912,20 @@ fn public_engine_every_published_leaf_has_an_explicit_definition() {
         fs::write(path, serde_json::to_vec_pretty(&dump).unwrap()).unwrap();
     }
     eprintln!(
-        "{formulas} published 1L-4L formulas, {} distinct leaves, every one explicitly defined",
-        leaves.len()
+        "{formulas} published 1L-4L formulas, {} distinct leaves, every one explicitly defined; \
+         {referenced} of {} constant records occur in them",
+        leaves.len(),
+        records.len()
     );
     for (class, count) in &by_class {
         eprintln!("  {count:4}  {class}");
     }
     assert!(formulas >= 739, "{formulas} formulas");
-    assert!(leaves.len() >= 300, "{} leaves", leaves.len());
+    // The number of distinct leaves depends on the basis the release writes
+    // its formulas in (`f51bc5a2`: 428, most of them HPL words; basis v4: 69),
+    // so it is not pinned. Non-vacuity is checked per formula above and here.
+    assert!(
+        referenced > 0,
+        "no published formula contains a constant record"
+    );
 }

@@ -32,7 +32,7 @@ const NAMED_CONSTANTS: &[&str] = &[
 /// name, the `matad.rs` coefficient family and its order. Their exact values
 /// are the tabulated HPL combinations of `matad::MASTERS_SUBSTITUTION`.
 /// `BNbar4` is a convenience consistent with `matad.rs`; it is not
-/// independent of `Li_6(1/2)`, `s6weak` and the classical constants.
+/// independent of `Li_6(1/2)`, `s6` and the classical constants.
 pub(crate) const MATAD_BARS: [(&str, &str, i64); 6] = [
     ("D5bar1", "D5bar", 1),
     ("D5bar2", "D5bar", 2),
@@ -45,6 +45,13 @@ pub(crate) const MATAD_BARS: [(&str, &str, i64); 6] = [
 /// `Cl_4(π/3) = Im Li_4(e^(iπ/3))`.
 fn clausen4() -> Atom {
     vk_symbol!("PolylogImag").call((Atom::num(4), positive_sixth_root()))
+}
+
+/// The alternating Euler sum `s6 = Σ_(m≥k≥1) (-1)^(m+k)/(m^5 k) = ζ(-5,-1) + ζ(6)`
+/// (diagonal included), evaluated as `π^6/945 + G(0,0,0,0,-1,1; 1)`.
+fn alternating_euler_sum6() -> Atom {
+    Atom::var(Symbol::PI).pow(Atom::num(6)) / Atom::num(945)
+        + vk_symbol!("GPLReal").call(&[0_i64, 0, 0, 0, -1, 1, 1].map(Atom::num)[..])
 }
 
 fn positive_sixth_root() -> Atom {
@@ -126,6 +133,9 @@ pub(crate) fn builtin_definition(source: AtomView<'_>) -> Result<Option<Atom>, V
             }
             if symbol == vk_symbol!("cl4") {
                 return Ok(Some(clausen4()));
+            }
+            if symbol == vk_symbol!("s6") {
+                return hpl::normalize_constants(alternating_euler_sum6().as_view()).map(Some);
             }
             if let Some((_, family, order)) = MATAD_BARS
                 .iter()
@@ -230,6 +240,7 @@ pub(crate) fn builtin_symbols() -> Vec<Atom> {
         Atom::var(Symbol::E),
         Atom::var(euler_gamma()),
         Atom::var(vk_symbol!("cl4")),
+        Atom::var(vk_symbol!("s6")),
     ]);
     symbols.extend(
         MATAD_BARS

@@ -746,7 +746,9 @@ anchor = "pub(crate) struct RustRedData {"
 # Reviewed 2026-10-30 against d505df40 (PR #243): test-only regression for
 # optional symbolic_definition records (absent, agreeing, contradicting, invalid,
 # reserved identities). Production snapshot ownership and activation are unchanged.
-digest = "5069473c575f75c05e1533938ef5dd5de3804343"
+# Reviewed 2026-10-31 (built-in s6): the same regression also rejects a data
+# record named vakint::s6. Production code is unchanged.
+digest = "05dd28ca790cf1953ee92e708a8b32380f7dfca2"
 
 [[section.note.scope]]
 path = "crates/vakint/src/rustred_evaluation/masters.rs"
@@ -937,7 +939,10 @@ anchor = "pub(crate) fn builtin_symbols()"
 # rational other than one and the MATAD bars D5bar1/2, D6bar1/2, T111bar4 and BNbar4
 # become built-in real constants. Their values come from the existing matad.rs
 # and HPL owners, and they are therefore reserved identities.
-digest = "39b1649db1233f627ebe908581ae9a5950716839"
+# Reviewed 2026-10-31: the alternating Euler sum s6 = ζ(-5,-1) + ζ(6) becomes a
+# built-in real constant with value π^6/945 + GPLReal(0,0,0,0,-1,1,1) from the
+# existing GPL owner; it is a reserved identity like cl4.
+digest = "558b71b3c8165dfdd4487b93b6ed7403d824d8d9"
 
 [[section.note.scope]]
 path = "crates/vakint/src/matad.rs"
