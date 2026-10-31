@@ -640,7 +640,14 @@ anchor = "pub struct Vakint {"
 # reduction-strategy selector; Ordered requests batch matched contributions per
 # source and master mode and share one real simplification before master
 # substitution. Other strategies, guards and ownership are unchanged.
-digest = "a07af269eb5477002698030f4c3ca11e7edf2e81"
+# Reviewed 2026-10-31 for the vakint_rustred consolidation: Ordered is the
+# default strategy and RustRed leads the default order, which keeps only the
+# backends whose once-per-process FORM/pySecDec probes succeed. Backend selection
+# prefers the first supporting method with loaded data at every selection site;
+# missing FORM for an explicit FORM backend is the typed FormRequired error.
+# Ordered requests honour the selected weight arithmetic (exact or modular), parsed by
+# parse_rustred_ordered_weight_arithmetic. Topology and FORM contracts are unchanged.
+digest = "7574da9f84af693df5782d200cdff6a9eac80fc0"
 
 [[section.note.scope]]
 path = "crates/vakint/src/lorentz.rs"
@@ -705,7 +712,11 @@ anchor = "pub struct VakintWrapper {"
 # Reviewed 2026-10-30 against dbd1cc72: Python settings expose
 # rustred_reduction_strategy; explicit cache operations and prepared-cache
 # loading require depth_first. Wrapper ownership and data loading are unchanged.
-digest = "9c4bfb10afc57e13c69ac7c8cdb63059245e7efa"
+# Reviewed 2026-10-31 for the vakint_rustred consolidation: the Python default
+# strategy is ordered and the default order follows EvaluationOrder::available for
+# the given FORM/Python paths. Cache operations and prepared-cache loading share the
+# depth-first requirement helper, whose error names the opt-in. Ownership is unchanged.
+digest = "b2894177ff4b1c9d149c1ced6db6b34cf70c5d18"
 
 [[section.note.scope]]
 path = "crates/vakint/src/symbolica_community_module/numerical.rs"
@@ -746,7 +757,10 @@ anchor = "pub(crate) struct RustRedData {"
 # Reviewed 2026-10-30 against d505df40 (PR #243): test-only regression for
 # optional symbolic_definition records (absent, agreeing, contradicting, invalid,
 # reserved identities). Production snapshot ownership and activation are unchanged.
-digest = "5069473c575f75c05e1533938ef5dd5de3804343"
+# Reviewed 2026-10-31 for the vakint_rustred consolidation: the default loaders
+# skip prepared caches because the default ordered strategy never reads them; the
+# public *_with_prepared_caches loaders opt in. Validation and ownership are unchanged.
+digest = "56628c8e3dd63da34a3fb00fe11a718b0a10d51c"
 
 [[section.note.scope]]
 path = "crates/vakint/src/rustred_evaluation/masters.rs"
@@ -784,7 +798,11 @@ anchor = "pub(crate) struct MasterCatalog {"
 # carry a symbolic_definition. It is parsed, validated and checked against the
 # metadata reconstruction inside the same transactional load, and definition heads
 # are rejected as identities. Record bytes still enter the snapshot tag.
-digest = "d1fc1c9b474d20ea85ca63f92208fbdee0b94331"
+# Reviewed 2026-10-31 for the vakint_rustred consolidation: exact combination
+# first tries one canonicalization over a shared remainder with univariate
+# denominators factored over Z, and otherwise keeps the term-wise path. It returns the
+# identical expression (3L/4L retained outputs, 58-product 5L proxy). Ownership is unchanged.
+digest = "1bae246fec89800c23cb0cc0d54d4ed629b37280"
 
 [[section.note.scope]]
 path = "crates/vakint/src/precision.rs"

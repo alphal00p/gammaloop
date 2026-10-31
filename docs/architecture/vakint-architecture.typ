@@ -55,8 +55,10 @@ ephemeral transformation plan, not a persisted cache.
 
 `VakintSettings` controls epsilon and scale symbols, executable paths, input rationalization and
 runtime precision, numerator verification, normalization, unknown-integral policy, temporary
-files, epsilon depth, dot-product notation, and `EvaluationOrder`. A `Vakint` engine is reusable;
-settings are passed explicitly to Rust operations. The Python `Vakint` wrapper stores the engine
+files, epsilon depth, dot-product notation, and `EvaluationOrder`. The default order is
+`EvaluationOrder::available`: `all()` (RustRed, AlphaLoop, MATAD, FMFT, pySecDec) restricted to the
+backends whose FORM and pySecDec probes succeed, so it is RustRed alone without FORM. A `Vakint`
+engine is reusable; settings are passed explicitly to Rust operations. The Python `Vakint` wrapper stores the engine
 and settings together for convenience.
 
 == RustRed data and numerical capabilities
@@ -115,7 +117,12 @@ to the same catalogue owner. It combines them once, independently for each full
 terminal-product scalar coefficient, including coefficients of undeclared residuals. Mass powers,
 measure normalization and symbolic spectators remain in those coefficients. A surviving terminal
 inside an opaque function or composite denominator requires general exact combination instead;
-raw Float input keeps the expanded-only policy. The resulting sum need not have the same serialized
+raw Float input keeps the expanded-only policy. When the expanded terms of one coefficient share a
+single remainder and differ only by rational multiples of powers of one symbol (an exact Q(d)
+coefficient expanded in the regulator), they are summed into one polynomial, the univariate
+denominators are factored once over Z, and that product is canonicalized once. The result is the
+expression the term-wise canonicalization produces; every other shape uses the term-wise path.
+The resulting sum need not have the same serialized
 shape as a single global rational expression. Agreement requires exact equality of every complete
 master-product coefficient and the full guard/family metadata, rather than matching term counts or
 a finite Laurent truncation.
@@ -244,6 +251,11 @@ Ordered. Ordered contributions are first grouped by source and master mode, then
 together on one weighted frontier. They share a single real-argument simplification after
 batching and before master substitution, so the per-integral simplification is skipped for
 that strategy. Ordered and non-memoized depth-first requests bypass depth-first result caches.
+Ordered is the default (`DEFAULT_RUSTRED_REDUCTION_STRATEGY`); RustRed's own default stays
+depth-first. `rustred_application_options.ordered_weight_arithmetic` selects exact (default) or
+modular frontier weights for Ordered requests at every loop count. Both expand the same keys and
+return the same terms and guards. `VAKINT_DUMP_ORDERED_REQUEST` records every native Ordered
+request with digests of its exact output, for replay without Vakint.
 
 Five-loop retained evaluation also reports coverage/mass batching (with actual lowered
 keys checked), guard and coefficient materialization, normalization and notation conversion,
@@ -354,7 +366,10 @@ AlphaLoop, MATAD, and FMFT invoke FORM. The pySecDec method invokes both FORM an
 the configured Python executable. RustRed and the default FeynKit tensor path require no FORM or
 Mathematica process. `validate_settings` checks only dependencies required by the
 selected evaluation order, validates the loop-normalization expression, and enforces FORM >=
-4.2.1 and pySecDec >= 1.6.4 when those tools are selected.
+4.2.1 and pySecDec >= 1.6.4 when those tools are selected. Each distinct version probe runs once
+per process and its outcome, including a failure, is cached. An explicitly selected FORM backend
+without a usable FORM, or a FORM process that cannot be spawned, fails with `FormRequired`, which
+names the backends needing FORM and the FORM-free RustRed and FeynKit defaults.
 
 FORM programs, headers, and run templates are embedded in the Rust binary with `include_str!`.
 Input serialization follows the exact expression tree, retaining symbol identities and argument
@@ -429,8 +444,10 @@ workspace was reused. For RustRed, also record the resolved data version and loa
   sequential replacement is avoided because one replacement target can be another source.
 - When `verify_numerator_identification` is enabled, no unrecognized loop-momentum dependence may
   remain after canonical mapping.
-- `EvaluationOrder` is policy: the first supported method wins. Unsupported methods are skipped,
-  but execution errors from the selected method are returned.
+- `EvaluationOrder` is policy: the first supported method whose data is loaded wins (RustRed needs
+  loaded four- or five-loop data at those loop counts); if none has data, the first supported
+  method is selected and reports the missing data. Every selection site shares this choice.
+  Unsupported methods are skipped, but execution errors from the selected method are returned.
 - Loop normalization may reference only the documented symbols and is expanded to the requested
   epsilon order before backend results are normalized.
 - Requested working precision never increases the declared accuracy of an input or finite source.
