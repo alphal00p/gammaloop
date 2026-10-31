@@ -8339,6 +8339,47 @@ mod tests {
     }
 
     #[test]
+    fn ordered_weight_arithmetic_parses_exact_and_modular_options() {
+        assert_eq!(
+            parse_rustred_ordered_weight_arithmetic(" Exact ").unwrap(),
+            RustRedOrderedWeightArithmetic::Exact
+        );
+        assert_eq!(
+            parse_rustred_ordered_weight_arithmetic("modular").unwrap(),
+            RustRedOrderedWeightArithmetic::Modular(RustRedModularWeightOptions::default())
+        );
+        assert_eq!(
+            parse_rustred_ordered_weight_arithmetic(
+                "modular:threads=16, batch=32,seed=7,checks=3,verification_primes=2,\
+                 max_primes=40,max_points=1024,cross_check=1"
+            )
+            .unwrap(),
+            RustRedOrderedWeightArithmetic::Modular(RustRedModularWeightOptions {
+                batch_points: 32,
+                threads: 16,
+                seed: 7,
+                verification_points: 3,
+                verification_primes: 2,
+                max_primes: 40,
+                max_points_per_prime: 1024,
+                cross_check_exact: true,
+            })
+        );
+        for invalid in [
+            "fast",
+            "modulo",
+            "modular:threads",
+            "modular:threads=-1",
+            "modular:speed=1",
+        ] {
+            assert!(
+                parse_rustred_ordered_weight_arithmetic(invalid).is_err(),
+                "{invalid}"
+            );
+        }
+    }
+
+    #[test]
     fn short_form_conditions_preserve_fixed_slots_and_power_types() {
         let vakint = Vakint::new().unwrap();
         let valid = vk_parse!("topo(I3L_pinch_3_6(mass_squared,2,n,0,1,1,0))").unwrap();

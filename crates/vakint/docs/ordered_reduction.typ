@@ -132,6 +132,43 @@ applying its rule can avoid that rule and its conditions. Coverage warnings,
 preserved unresolved integrals and numerical capability errors retain their
 existing meaning.
 
+== Weight arithmetic
+
+The scheduler's control flow depends on the weights only through exact-zero
+erasure of merged keys, so how the weights are computed is a separate choice.
+#raw("settings.rustred_application_options.ordered_weight_arithmetic")
+(RustRed's #raw("OrderedWeightArithmetic"), reexported as
+#raw("vakint::RustRedOrderedWeightArithmetic")) selects it for the closed one-
+to three-loop artifacts, the four-loop candidate programs and the saved
+five-loop application:
+
+- #raw("Exact"), the default, keeps exact rational functions of the dimension
+  on the frontier.
+- #raw("Modular(RustRedModularWeightOptions)") records the weight-independent
+  trace once, with small modular probes deciding the zero erasures, replays it
+  over 64-bit prime fields at many sample points and reconstructs every
+  terminal coefficient exactly: Thiele interpolation per prime, Chinese
+  remaindering and rational reconstruction, then verification on fresh primes.
+  Every replay re-checks each recorded erasure and fails the request on a
+  disagreement. Modular weights need a coefficient context with at most one
+  variable, which holds for Vakint's native requests.
+
+Both expand the same keys and return the same terms and nonzero conditions.
+Only the monitor's frontier monomial counters differ: modular weights count one
+monomial per key.
+#raw("vakint::parse_rustred_ordered_weight_arithmetic") reads #raw("exact") or
+#raw("modular[:key=value,...]") with the keys #raw("threads"), #raw("batch"),
+#raw("seed"), #raw("checks"), #raw("verification_primes"),
+#raw("max_primes"), #raw("max_points") and #raw("cross_check"). The rung
+fixtures and the #raw("ordered_reduction_rungs") example read the same syntax
+from #raw("VAKINT_ORDERED_WEIGHT_ARITHMETIC"):
+
+```rust
+let mut settings = vakint::VakintSettings::default();
+settings.rustred_application_options.ordered_weight_arithmetic =
+    vakint::parse_rustred_ordered_weight_arithmetic("modular:threads=8")?;
+```
+
 == Reading the monitor
 
 Enable the existing terminal monitor or progress snapshot as usual. The
