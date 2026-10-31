@@ -591,6 +591,8 @@ mod tests {
             native_epoch: 2,
             family_fingerprint: "ordered-fixture".into(),
             sampled_at: Duration::ZERO,
+            phase_start: (0, 0),
+            step_cache_phases: Vec::new(),
         });
         let rendered = text(&render(&state.view(Duration::ZERO), 220, 80, false));
         for expected in [

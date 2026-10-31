@@ -63,6 +63,9 @@ struct Descriptor {
 // normalization; the catalogue only authenticates the declared outputs.
 struct LoadedProgram {
     native: Arc<NativeCandidate<10>>,
+    /// Ordered step-cache identity: RustRed's binding of the loaded bundle,
+    /// installed terminal normalization and unresolved policy.
+    step_cache: super::cache::OrderedCacheProgram,
 }
 
 pub(super) struct FourLoopPrograms {
@@ -117,6 +120,14 @@ impl FourLoopPrograms {
                 self.descriptors[index].physical_momenta.len(),
             )
         })
+    }
+
+    /// Ordered step-cache identities of the four programs.
+    pub(super) fn ordered_cache_programs(&self) -> Vec<super::cache::OrderedCacheProgram> {
+        self.programs
+            .iter()
+            .map(|program| program.step_cache.clone())
+            .collect()
     }
 
     pub(super) fn physical_momenta(&self, index: usize) -> Option<&[Atom]> {
@@ -243,8 +254,16 @@ fn load(input: &Input, descriptor: &Descriptor) -> Result<LoadedProgram, String>
     catalog.require_complete()?;
     catalog.require_exact_keys(native.output_terminals())?;
     native.preserve_unresolved()?;
+    // The program, normalization and policy are final here; RustRed digests
+    // them (and the loaded bundle bytes) into the cache binding.
+    let step_cache = super::cache::OrderedCacheProgram::new(
+        4,
+        input.label,
+        native.ordered_step_cache_binding()?,
+    );
     Ok(LoadedProgram {
         native: Arc::new(native),
+        step_cache,
     })
 }
 
@@ -452,6 +471,7 @@ pub(super) fn evaluate_ordered_batch(
             skipped += 1;
             continue;
         }
+        let step_cache = vakint.ordered_step_cache(settings, &program.step_cache)?;
         let _math = MathSpan::new();
         let reduced = request_dump::observe_native(
             dump.as_mut(),
@@ -465,6 +485,7 @@ pub(super) fn evaluate_ordered_batch(
                         settings
                             .rustred_application_options
                             .ordered_weight_arithmetic,
+                        step_cache,
                         observation,
                     )
             },

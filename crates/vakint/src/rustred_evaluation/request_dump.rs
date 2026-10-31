@@ -14,6 +14,10 @@
 //! * `<stem>.result.json` afterwards: BLAKE3 digests of the exact native output
 //!   (terms, and the guard set) plus the final counters.
 //!
+//! Both also record the request's cumulative Ordered step-cache hits and
+//! misses (`step_cache`), apart from the structural counters (`progress`),
+//! which do not depend on the cache.
+//!
 //! `index.jsonl` in the same directory lists every written file. With
 //! `VAKINT_DUMP_ORDERED_REQUEST_ONLY=1` the native reductions are skipped after
 //! their requests are written and the evaluation fails with an explicit error.
@@ -320,6 +324,7 @@ impl RequestDump {
             "missed_phase_ends": progress.completed_phases - 1 - log.recorded,
             "elapsed_seconds": elapsed.as_secs_f64(),
             "progress": progress_json(progress),
+            "step_cache": step_cache_json(progress),
         });
         log.recorded = progress.completed_phases;
         if let Err(error) = writeln!(log.writer, "{record}").and_then(|()| log.writer.flush()) {
@@ -351,6 +356,7 @@ impl RequestDump {
                 "wall_seconds": seconds,
                 "output": digest,
                 "progress": progress.or(self.last_progress).as_ref().map(progress_json),
+                "step_cache": progress.or(self.last_progress).as_ref().map(step_cache_json),
             }),
         )?;
         append_index(
@@ -450,6 +456,15 @@ pub(super) fn output_digest<'k>(
         "nonzero_conditions": nonzero_conditions.len(),
         "distinct_nonzero_conditions": guards.len(),
         "nonzero_conditions_blake3": guard_hasher.finalize().to_hex().to_string(),
+    })
+}
+
+/// Cumulative Ordered step-cache counters of the request, kept apart from
+/// the structural counters (which do not depend on the cache).
+fn step_cache_json(progress: &CandidateOrderedReductionProgress) -> Value {
+    json!({
+        "hits": progress.step_cache_hits,
+        "misses": progress.step_cache_misses,
     })
 }
 

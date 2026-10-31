@@ -4,9 +4,10 @@ pub mod historical;
 
 use super::super::vakint::{
     AvailablePrecision, ConstantSymbol, EvaluationMethod, EvaluationOrder, LoopNormalizationFactor,
-    MasterSymbol, OfficialExternalDataOptions, RustRedEvaluationOptions, RustRedMasterMode,
-    RustRedMonitorOptions, RustRedMonitorScope, RustRedOrderedWeightArithmetic, Vakint,
-    VakintMaster, VakintSettings, vakint_parse, vakint_symbol,
+    MasterSymbol, OfficialExternalDataOptions, OrderedCacheMode, OrderedCacheSettings,
+    RustRedEvaluationOptions, RustRedMasterMode, RustRedMonitorOptions, RustRedMonitorScope,
+    RustRedOrderedWeightArithmetic, Vakint, VakintMaster, VakintSettings, vakint_parse,
+    vakint_symbol,
 };
 use super::{LadderFixture, Projection, Result};
 use sha2::{Digest, Sha256};
@@ -40,6 +41,20 @@ pub fn arithmetic_from_environment() -> Result<RustRedOrderedWeightArithmetic> {
         ),
         None => Ok(RustRedOrderedWeightArithmetic::Exact),
     }
+}
+
+/// The Ordered step cache selected by `VAKINT_ORDERED_CACHE` (`off`,
+/// `read-only` or `read-write`) and `VAKINT_ORDERED_CACHE_DIR`; the engine
+/// default (in memory, read-write) when neither is set.
+pub fn ordered_cache_from_environment() -> Result<OrderedCacheSettings> {
+    let mut settings = OrderedCacheSettings {
+        directory: std::env::var_os("VAKINT_ORDERED_CACHE_DIR").map(PathBuf::from),
+        ..Default::default()
+    };
+    if let Some(mode) = std::env::var_os("VAKINT_ORDERED_CACHE") {
+        settings.mode = mode.to_string_lossy().parse::<OrderedCacheMode>()?;
+    }
+    Ok(settings)
 }
 
 impl CompletedRun {
@@ -235,6 +250,30 @@ fn reference_precision(engine: &Vakint, expression: &Atom) -> Result<(u32, serde
     ))
 }
 
+/// Settings and counters of the engine's Ordered step caches after the
+/// retained call (cumulative over the engine's lifetime).
+fn ordered_cache_report(engine: &Vakint, settings: &OrderedCacheSettings) -> serde_json::Value {
+    let statistics = engine.ordered_cache_statistics();
+    serde_json::json!({
+        "mode": settings.mode.as_str(),
+        "directory": settings.directory,
+        "autosave": settings.autosave.as_str(),
+        "max_resident_bytes": settings.max_resident_bytes,
+        "records": statistics.records, "hits": statistics.hits, "misses": statistics.misses,
+        "inserts": statistics.inserts, "resident_bytes": statistics.resident_bytes,
+        "file_bytes": statistics.file_bytes,
+        "last_autosave_error": statistics.last_autosave_error,
+        "programs": statistics.programs.iter().map(|program| serde_json::json!({
+            "program": program.program, "stamp": program.stamp, "directory": program.directory,
+            "records": program.native.records, "hits": program.native.hits,
+            "misses": program.native.misses, "inserts": program.native.inserts,
+            "loaded_shards": program.native.loaded_shards, "shards": program.native.shards.len(),
+            "load_seconds": program.native.load_seconds,
+            "resident_bytes": program.native.resident_bytes, "file_bytes": program.native.file_bytes,
+        })).collect::<Vec<_>>(),
+    })
+}
+
 pub fn run(
     prepared: &LadderFixture,
     directory: &Path,
@@ -358,6 +397,7 @@ fn run_scoped(
     settings
         .rustred_application_options
         .ordered_weight_arithmetic = options.arithmetic;
+    settings.ordered_cache = ordered_cache_from_environment()?;
     // Native owner-preparation diagnostics sum worker wall times. Keep one
     // worker so subtracting measured preparation from math spans is valid.
     settings.rustred_application_options.preparation_workers = 1;
@@ -400,6 +440,7 @@ fn run_scoped(
     });
     let (value, guards) = retained_result?;
     let reduction_seconds = reduction.elapsed().as_secs_f64();
+    let step_cache = ordered_cache_report(&engine, &settings.ordered_cache);
     let retained_memory = process_memory();
     if let Some(scope) = scope.as_deref_mut() {
         scope.expression_phase("retained_expression_serialization", value.as_view());
@@ -474,7 +515,9 @@ fn run_scoped(
         "intrinsic_memoization_scope":"Ordered has no completed-result memo; checked opaque factorization may use a fresh isolated internal memo",
         "cache_policy":{"prepared_cache_loaded":false,"previous_run_cache_restored":false,
             "depth_first_intrinsic_memoization":false,
-            "ordered_result_cache":"not supported"},
+            "ordered_result_cache":"not supported",
+            "ordered_step_cache":"one-step records only (see ordered_step_cache); replayed steps are identical to checked ones"},
+        "ordered_step_cache":step_cache,
         "worker_policy":{"owner_preparation_workers":1,
             "scope":"single owner preparation worker required for native timing subtraction"},
         "input_sha256":sha256(prepared.input.to_canonical_string().as_bytes()),

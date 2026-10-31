@@ -346,6 +346,21 @@ pub(super) struct CallerExpressionSample {
     pub sampled_at: Duration,
 }
 
+/// Ordered step-cache replays of one completed phase of a native request.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct StepCachePhase {
+    /// Zero-based position of the phase in the request's fixed schedule.
+    pub phase: usize,
+    pub kind: rustred::solver::CandidateOrderedPhaseKind,
+    pub support: Option<usize>,
+    pub owner: Option<usize>,
+    pub hits: usize,
+    pub misses: usize,
+}
+
+/// Completed phases retained per request for the step-cache rows.
+const STEP_CACHE_PHASES: usize = 16;
+
 /// One exact native frontier census, separate from caller expressions and from
 /// previous requests in a monitor spanning a complete job.
 #[derive(Clone, Debug)]
@@ -354,9 +369,137 @@ pub(super) struct OrderedReductionSample {
     pub native_epoch: u64,
     pub family_fingerprint: String,
     pub sampled_at: Duration,
+    /// Step-cache hits and misses of the request when its current phase
+    /// started (the counters themselves are cumulative per request).
+    pub phase_start: (usize, usize),
+    /// The most recent completed phases of this request, oldest first.
+    pub step_cache_phases: Vec<StepCachePhase>,
 }
 
 impl OrderedReductionSample {
+    /// The next census of a request, carrying the per-phase step-cache
+    /// counters over from the previous census of the same request.
+    pub(super) fn next(
+        previous: Option<&Self>,
+        counts: CandidateOrderedReductionProgress,
+        native_epoch: u64,
+        family_fingerprint: &str,
+        sampled_at: Duration,
+    ) -> Self {
+        let mut sample = Self {
+            counts,
+            native_epoch,
+            family_fingerprint: family_fingerprint.to_owned(),
+            sampled_at,
+            phase_start: (0, 0),
+            step_cache_phases: Vec::new(),
+        };
+        let Some(previous) = previous.filter(|previous| {
+            previous.native_epoch == native_epoch
+                && previous.counts.completed_phases <= counts.completed_phases
+        }) else {
+            return sample;
+        };
+        sample.step_cache_phases = previous.step_cache_phases.clone();
+        if previous.counts.completed_phases == counts.completed_phases {
+            sample.phase_start = previous.phase_start;
+            return sample;
+        }
+        // The previous census belongs to the phase that has completed since;
+        // its counters close that phase (phases without steps are omitted).
+        let closed = (
+            previous.counts.step_cache_hits,
+            previous.counts.step_cache_misses,
+        );
+        if closed != previous.phase_start {
+            sample.step_cache_phases.push(StepCachePhase {
+                phase: previous.counts.completed_phases,
+                kind: previous.counts.phase_kind,
+                support: previous.counts.active_support,
+                owner: previous.counts.owner_index,
+                hits: closed.0.saturating_sub(previous.phase_start.0),
+                misses: closed.1.saturating_sub(previous.phase_start.1),
+            });
+            let excess = sample
+                .step_cache_phases
+                .len()
+                .saturating_sub(STEP_CACHE_PHASES);
+            sample.step_cache_phases.drain(..excess);
+        }
+        sample.phase_start = closed;
+        sample
+    }
+
+    /// Step-cache hits and misses of the current phase.
+    pub(super) fn phase_step_cache(&self) -> (usize, usize) {
+        (
+            self.counts
+                .step_cache_hits
+                .saturating_sub(self.phase_start.0),
+            self.counts
+                .step_cache_misses
+                .saturating_sub(self.phase_start.1),
+        )
+    }
+
+    /// Rows of the cache panel; without step-cache activity in this request
+    /// the cache is off (or nothing was expanded yet).
+    fn step_cache_rows(&self) -> Vec<(String, String)> {
+        let c = self.counts;
+        if c.step_cache_hits == 0 && c.step_cache_misses == 0 {
+            return vec![(
+                "Ordered step cache".into(),
+                "no replayed or recorded steps in this request (off or not started)".into(),
+            )];
+        }
+        let share = |hits: usize, misses: usize| {
+            let total = hits + misses;
+            if total == 0 {
+                "-".to_owned()
+            } else {
+                format!("{:.1}%", 100.0 * hits as f64 / total as f64)
+            }
+        };
+        let (phase_hits, phase_misses) = self.phase_step_cache();
+        let mut rows = vec![
+            (
+                "Step cache hits / misses (request)".into(),
+                format!(
+                    "{} / {} · {} replayed",
+                    c.step_cache_hits,
+                    c.step_cache_misses,
+                    share(c.step_cache_hits, c.step_cache_misses)
+                ),
+            ),
+            (
+                "Step cache hits / misses (current phase)".into(),
+                format!(
+                    "{phase_hits} / {phase_misses} · {} replayed",
+                    share(phase_hits, phase_misses)
+                ),
+            ),
+        ];
+        if let Some(last) = self.step_cache_phases.last() {
+            rows.push((
+                "Step cache hits / misses (last completed phase)".into(),
+                format!(
+                    "{} / {} · phase {} {:?} support {}",
+                    last.hits,
+                    last.misses,
+                    last.phase,
+                    last.kind,
+                    last.support
+                        .map_or_else(|| "none".into(), |s| s.to_string())
+                ),
+            ));
+        }
+        rows.push((
+            "Step cache scope".into(),
+            "misses run the checked step (recorded when the cache populates); replayed steps are identical".into(),
+        ));
+        rows
+    }
+
     fn overview_rows(&self) -> Vec<(String, String)> {
         vec![
             (
@@ -735,6 +878,17 @@ impl MonitorState {
                 "processed_keys":c.processed_keys,
                 "grouping_scope":"global frontier/output; excludes input and intra-rule coalescing",
                 "phase_fraction_is_time_fraction":false,
+                "step_cache":{
+                    "scope":"Ordered step cache of this native request; misses run the checked step and are recorded when the cache populates",
+                    "hits":c.step_cache_hits, "misses":c.step_cache_misses,
+                    "phase_hits":sample.phase_step_cache().0,
+                    "phase_misses":sample.phase_step_cache().1,
+                    "completed_phases":sample.step_cache_phases.iter().map(|phase| serde_json::json!({
+                        "phase":phase.phase, "phase_kind":format!("{:?}", phase.kind),
+                        "active_support":phase.support, "owner_index":phase.owner,
+                        "hits":phase.hits, "misses":phase.misses,
+                    })).collect::<Vec<_>>(),
+                },
             })
         });
         let mut document = serde_json::json!({
@@ -1170,8 +1324,9 @@ impl MonitorState {
             view.frontier = ordered.frontier_rows();
             view.cache.push((
                 "Reduction-result cache".into(),
-                "disabled for ordered engine".into(),
+                "none: the ordered engine replays one-step records only".into(),
             ));
+            view.cache.extend(ordered.step_cache_rows());
             view.complexity.insert(
                 0,
                 (

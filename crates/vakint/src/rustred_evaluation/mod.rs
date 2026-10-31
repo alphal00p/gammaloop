@@ -18,6 +18,13 @@ mod official;
 #[cfg(all(unix, not(target_arch = "wasm32")))]
 pub use official::{ExternalDataLoadReport, ExternalDataLoopReport, OfficialExternalDataOptions};
 pub(crate) mod cache;
+pub use cache::{
+    DEFAULT_ORDERED_CACHE_MAX_RESIDENT_BYTES, OrderedCacheAutosave, OrderedCacheMode,
+    OrderedCacheProgramSaveReport, OrderedCacheProgramStatistics, OrderedCacheSaveReport,
+    OrderedCacheSettings, OrderedCacheStatistics, OrderedCacheWarmReport,
+    RustRedOrderedStepCacheSaveReport, RustRedOrderedStepCacheShardStatistics,
+    RustRedOrderedStepCacheStatistics,
+};
 mod factor_projection;
 mod factor_provider;
 pub(crate) mod five_loop;
@@ -113,6 +120,8 @@ pub enum RustRedEvaluationError {
     CacheLockPoisoned,
     #[error("RustRed cache operation failed: {source}")]
     CacheOperation { source: rustred_app::AppError },
+    #[error("RustRed Ordered step cache: {detail}")]
+    OrderedStepCache { detail: String },
     #[deprecated(
         since = "0.1.2",
         note = "retained for source compatibility with the pre-artifact RustRed seam"

@@ -424,6 +424,7 @@ impl VakintSettings {
             rustred_artifact_path: None,
             rustred_resources: Default::default(),
             rustred_application_options: Default::default(),
+            ordered_cache: Default::default(),
             rustred_scalar_numerator_limits: Default::default(),
             rustred_product_limits: Default::default(),
             rustred_momentum_match_limits: Default::default(),

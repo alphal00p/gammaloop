@@ -843,7 +843,7 @@ impl VakintWrapper {
         Ok(result)
     }
 
-    #[pyo3(signature = (run_time_decimal_precision = None, evaluation_order = None, tensor_reduction_method = None, epsilon_symbol = None, mu_r_sq_symbol = None, form_exe_path = None, python_exe_path = None, verify_numerator_identification = None, integral_normalization_factor = None, allow_unknown_integrals = None, clean_tmp_dir = None, number_of_terms_in_epsilon_expansion = None, use_dot_product_notation = None, temporary_directory = None, rustred_artifact_path = None, rustred_cache_bytes = None, rustred_cache_terms = None, rustred_product_cache_bytes = None, rustred_product_cache_terms = None, rustred_scalar_max_work = None, max_process_rss_bytes = None, max_elapsed_seconds = None))]
+    #[pyo3(signature = (run_time_decimal_precision = None, evaluation_order = None, tensor_reduction_method = None, epsilon_symbol = None, mu_r_sq_symbol = None, form_exe_path = None, python_exe_path = None, verify_numerator_identification = None, integral_normalization_factor = None, allow_unknown_integrals = None, clean_tmp_dir = None, number_of_terms_in_epsilon_expansion = None, use_dot_product_notation = None, temporary_directory = None, rustred_artifact_path = None, rustred_cache_bytes = None, rustred_cache_terms = None, rustred_product_cache_bytes = None, rustred_product_cache_terms = None, rustred_scalar_max_work = None, max_process_rss_bytes = None, max_elapsed_seconds = None, ordered_cache = "read-write", ordered_cache_directory = None, ordered_cache_ram_bytes = None, ordered_cache_autosave = "after-evaluation"))]
     #[allow(clippy::too_many_arguments)]
     #[new]
     /// Create a new Vakint instance, specifying details of the evaluation stack. Note that the same instance can be recycled across multiple evaluations.
@@ -941,6 +941,22 @@ impl VakintWrapper {
     ///     Cooperative elapsed-time ceiling per public operation, including data
     ///     loading and lookup. None disables it. Native kernels are checked at
     ///     boundaries, so an external supervisor is needed for a hard deadline.
+    /// ordered_cache : str
+    ///     Use of the persistent Ordered step cache: "read-write" (default; replay
+    ///     recorded reduction steps and record new ones), "read-only" (replay the
+    ///     steps saved in `ordered_cache_directory`) or "off". Replayed steps are
+    ///     identical to computed ones, so results never depend on this setting.
+    /// ordered_cache_directory : Optional[str]
+    ///     Directory of the Ordered step cache, one subdirectory per reduction
+    ///     program and engine build. None (default) keeps records in memory for
+    ///     the lifetime of this engine. One writer per directory at a time.
+    /// ordered_cache_ram_bytes : Optional[int]
+    ///     Ceiling on the estimated resident bytes of each program's cache.
+    ///     Default 8 GiB; records beyond it are recomputed instead of kept.
+    /// ordered_cache_autosave : str
+    ///     When new records of a directory-backed read-write cache are written:
+    ///     "after-evaluation" (default), "on-drop" (when the engine is released)
+    ///     or "never" (only `save_ordered_cache`).
     pub fn new(
         run_time_decimal_precision: Option<u32>,
         evaluation_order: Option<Vec<PyRef<VakintEvaluationMethodWrapper>>>,
@@ -964,8 +980,18 @@ impl VakintWrapper {
         rustred_scalar_max_work: Option<usize>,
         max_process_rss_bytes: Option<u64>,
         max_elapsed_seconds: Option<f64>,
+        ordered_cache: &str,
+        ordered_cache_directory: Option<PathBuf>,
+        ordered_cache_ram_bytes: Option<usize>,
+        ordered_cache_autosave: &str,
     ) -> PyResult<VakintWrapper> {
         let rustred_resources = resources::limits(max_process_rss_bytes, max_elapsed_seconds)?;
+        let ordered_cache = cache::settings(
+            ordered_cache,
+            ordered_cache_directory,
+            ordered_cache_ram_bytes,
+            ordered_cache_autosave,
+        )?;
         resources::run(rustred_resources, || {
             let mut rustred_application_options =
                 VakintSettings::default().rustred_application_options;
@@ -1068,12 +1094,84 @@ impl VakintWrapper {
                 rustred_scalar_numerator_limits,
                 rustred_product_limits,
                 rustred_resources,
+                ordered_cache,
                 ..VakintSettings::default()
             };
             let vakint = Vakint::new().map_err(vakint_to_python_error)?;
             let wrapper = VakintWrapper { vakint, settings };
             Ok(wrapper)
         })
+    }
+
+    /// Attach the Ordered step caches of every loaded reduction program now,
+    /// as evaluations would on first use, and return their statistics.
+    ///
+    /// Opening a cache directory checks its manifests; shard files are read at
+    /// their first lookup. A five-loop application is covered once loaded.
+    /// Raises if a directory holds a cache of another program or engine build.
+    pub fn load_ordered_cache<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        let statistics = resources::run(self.settings.rustred_resources, || {
+            self.vakint
+                .load_ordered_cache(&self.settings)
+                .map_err(vakint_to_python_error)
+        })?;
+        cache::statistics(py, &statistics)
+    }
+
+    /// Write the unsaved records of every directory-backed read-write Ordered
+    /// step cache and return what was written.
+    ///
+    /// Shard files are content-addressed and the manifest is replaced
+    /// atomically, so an interrupted save keeps the previous cache valid.
+    pub fn save_ordered_cache<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        let report = self
+            .vakint
+            .save_ordered_cache()
+            .map_err(vakint_to_python_error)?;
+        cache::save_report(py, &report)
+    }
+
+    /// Cumulative hits, misses, inserts, records and bytes of every attached
+    /// Ordered step cache, in total and per reduction program.
+    pub fn ordered_cache_statistics<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        cache::statistics(py, &self.vakint.ordered_cache_statistics())
+    }
+
+    /// Detach every Ordered step cache and drop its resident records.
+    ///
+    /// Files are kept and reopened by the next evaluation; unsaved records are
+    /// discarded (call `save_ordered_cache` first to keep them).
+    pub fn clear_ordered_cache(&self) {
+        self.vakint.clear_ordered_cache();
+    }
+
+    /// Populate the Ordered step caches by reducing each integral expression
+    /// with RustRed (retained masters; the results are discarded), then save
+    /// them when a cache directory is configured.
+    ///
+    /// Each expression is one evaluation. The cache is used read-write here
+    /// whatever its configured mode. Returns the replayed and recorded steps,
+    /// the save report and the resulting statistics.
+    ///
+    /// Parameters
+    /// ----------
+    ///
+    /// integrals : Sequence[Expression]
+    ///   Vakint integral expressions, as accepted by `evaluate`.
+    pub fn warm_ordered_cache<'py>(
+        &self,
+        py: Python<'py>,
+        integrals: Vec<PythonExpression>,
+    ) -> PyResult<Bound<'py, PyDict>> {
+        let report = resources::run(self.settings.rustred_resources, || {
+            self.vakint
+                .warm_ordered_cache(
+                    &self.settings,
+                    integrals.iter().map(|integral| integral.expr.as_view()),
+                )
+                .map_err(vakint_to_python_error)
+        })?;
+        cache::warm_report(py, &report)
     }
 
     /// Explicitly load a local five-loop application package once.

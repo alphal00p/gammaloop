@@ -65,7 +65,12 @@ loop count share an exact frontier per compatible coefficient channel. There is 
 strategy setting; `rustred_application_options.ordered_weight_arithmetic` selects
 exact or modular frontier weights (`parse_rustred_ordered_weight_arithmetic`), with
 identical results. Depth-first reduction, its prepared and running caches and the
-Python cache operations were removed. See
+Python cache operations were removed. Instead, `VakintSettings::ordered_cache` (Python:
+`ordered_cache`, `ordered_cache_directory`, `ordered_cache_ram_bytes`,
+`ordered_cache_autosave`) configures the Ordered step cache, which replays each expanded
+integral's recorded reduction step exactly: `read-write` in memory by default, or a
+directory reused by later processes. `load_ordered_cache`, `save_ordered_cache`,
+`warm_ordered_cache`, `clear_ordered_cache` and `ordered_cache_statistics` operate on it. See
 #source-link("crates/vakint/docs/ordered_reduction.typ", label: "the ordered reduction guide").
 
 Python's `evaluate_rustred_symbolic(integral_expression, ...)` returns the retained

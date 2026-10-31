@@ -18,7 +18,8 @@ from Vakint. The RustRed library keeps its depth-first reducer for its own users
 
 #panel[
   *Scope.* Existing reduction tables and topology matching; exact rational
-  coefficients; a #raw("BTreeMap") frontier; no reduction-result cache.
+  coefficients; a #raw("BTreeMap") frontier; no reduction-result cache, only a
+  cache of one-step records (see "Ordered step cache").
   No offline rule rewriting, synthesized composite rules, or loop-specific
   scheduling heuristics are required.
 ]
@@ -38,10 +39,12 @@ evaluation order; FORM-based backends follow it only when FORM is usable.
 
 The Python constructor has no strategy argument. The former
 #raw("rustred_reduction_strategy") and #raw("rustred_cache_policy") keywords and
-the cache operations (#raw("prepare_cache"), #raw("load_cache"), running caches,
-#raw("save_cache"), #raw("import_cache"), #raw("download_cache"),
-#raw("cache_statistics") and the related clear/detach methods) were removed.
-#raw("load_official_external_data") no longer takes #raw("load_prepared_caches").
+the depth-first cache operations (#raw("prepare_cache"), #raw("load_cache"),
+running caches, #raw("save_cache"), #raw("import_cache"),
+#raw("download_cache"), #raw("cache_statistics") and the related clear/detach
+methods) were removed. #raw("load_official_external_data") no longer takes
+#raw("load_prepared_caches"). #raw("VakintSettings::ordered_cache") (Python:
+the #raw("ordered_cache*") keywords) configures the Ordered step cache below.
 
 == What is ordered
 
@@ -187,6 +190,12 @@ the current request. Different batches need not have the same cohort total.
     preserved unresolved integrals and its own merge/cancellation counts.
     This precedes terminal substitutions and final catalogue canonicalization;
     it is not the final declared-master count.],
+  [Step cache hits / misses], [Cache panel: expanded keys of this request whose
+    checked step was replayed from the Ordered step cache / ran (and was
+    recorded when the cache populates), for the request, the current phase and
+    the last completed phase. The JSON snapshot lists the most recent completed
+    phases under #raw("ordered_reduction.step_cache"). Both stay zero without
+    a cache.],
 )
 
 Watch frontier size together with processed keys, merging, cancellations and
@@ -239,28 +248,97 @@ exact weights: the output digests of a request recorded under modular weights
 still compare, but its monomial counters do not, and saved five-loop requests
 recorded with non-default options are refused.
 
-== Caching and limitations
+== Ordered step cache
 
-Ordered reduction keeps no reduction-result cache between requests. Immutable
-program preparation, lazily prepared five-loop owners, the frontend witness memo
-and the active external-data registry remain reusable; they are not
-reduction-result caches. External-data releases up to v0.1.2 also ship prepared
-depth-first caches; Vakint neither loads nor checksums them (an explicit read of
-such a file still verifies it), which removes a large part of the five-loop
-loading time.
+Every expanded key runs one checked step: the selected route or rule, the
+ordered children with their exact step coefficients, emitted terminal
+coefficients and the step's nonzero conditions. The step is a deterministic
+function of the key and the immutable program, so RustRed's
+#raw("OrderedStepCache") records it once and replays it on every later
+expansion of that key. A replayed step is identical to the checked one: the
+scheduler performs the same merges, cancellations and guard interning as
+without a cache, in every weight arithmetic and every modular pass. Records
+never contain frontier or terminal weights, zero decisions or final answers,
+so cold, warm and uncached runs have identical frontier digests at every
+phase end and identical results. Closed-artifact product factorizations are
+recorded as opaque and always recomputed, because their memoized lower-factor
+reductions retain guards only at first use.
+
+Vakint keeps one cache per reduction program: the closed one- to three-loop
+artifacts, the four four-loop candidate programs and the five-loop saved
+application. Records are sharded by stage, support and owner sector (Route by
+the owner it transports to, Apply by owner) and are shared by all requests,
+channels and arithmetics of an engine and its clones.
+#raw("VakintSettings::ordered_cache") selects how evaluations use them:
+
+#table(
+  columns: (0.3fr, 1fr), inset: 7pt, stroke: 0.4pt + rgb("d5dee7"),
+  fill: (x, y) => if y == 0 { pale } else { none },
+  table.header([*Field (Python keyword)*], [*Meaning*]),
+  [#raw("mode") (#raw("ordered_cache"))], [#raw("read-write") (default):
+    replay recorded steps and record new ones (live population).
+    #raw("read-only"): replay the steps saved in the directory, record
+    nothing. #raw("off"): no cache.],
+  [#raw("directory") (#raw("ordered_cache_directory"))], [Root directory; none
+    (default) keeps records in memory for the lifetime of the engine. Shard files
+    are read at their first lookup.],
+  [#raw("max_resident_bytes") (#raw("ordered_cache_ram_bytes"))], [Ceiling on
+    the estimated resident bytes of each program's cache (default 8 GiB). New
+    records and shards beyond it are not kept and their steps are recomputed;
+    the Symbolica RSS budget of #raw("rustred_resources") applies as well.],
+  [#raw("autosave") (#raw("ordered_cache_autosave"))], [When records of a
+    directory-backed read-write cache are written: #raw("after-evaluation")
+    (default; at the end of every public evaluation call, also a failed one),
+    #raw("on-drop") (when the last clone of the engine is dropped) or
+    #raw("never") (only explicit saves). An automatic save never fails an
+    evaluation; its last error is reported in the statistics.],
+)
+
+Operations (Rust #raw("Vakint") methods, Python methods of the same name):
+#raw("load_ordered_cache(settings)") attaches the caches of every loaded
+program now (a five-loop application once it is loaded) and checks their
+manifests; #raw("save_ordered_cache()") writes the unsaved records of every
+directory-backed read-write cache; #raw("ordered_cache_statistics()") reports
+hits, misses, inserts, records, resident and file bytes in total and per
+program and shard; #raw("clear_ordered_cache()") drops the resident records
+(files are kept); #raw("warm_ordered_cache(settings, integrals)") evaluates each
+expression with RustRed in retained mode (results discarded, the cache used
+read-write) and saves. The rung tests and examples read
+#raw("VAKINT_ORDERED_CACHE") (#raw("off"), #raw("read-only"),
+#raw("read-write")) and #raw("VAKINT_ORDERED_CACHE_DIR"), and report the cache
+counters in #raw("ordered_step_cache").
+
+A cache directory holds one subdirectory per program,
+#raw("<loops>L-<program>.<stamp>") (e.g. #raw("4L-four-loop-h.1f2e...")): a
+manifest and content-addressed shard files written atomically, so an
+interrupted save keeps the previous cache valid. The stamp is a BLAKE3 digest
+of the binding: the program bytes (closed artifacts: the #raw("rules.rrbin")
+bytes; candidate programs and saved applications: digests RustRed computes
+from the bundle or package it loaded), the family, coefficient variables,
+unresolved policy, the installed four-loop terminal convention, the RustRed
+step semantics and a build-time digest of the RustRed sources and the
+Symbolica build. A newer engine or data release therefore writes a new
+subdirectory and never replays foreign records; stale subdirectories can be
+deleted. RustRed rejects a manifest or shard whose stamp or payload digest
+differs; Vakint reports this as an error naming the directory. A directory
+has one writer at a time: two engines or processes writing the same
+directory lose records of one of them (never mix them); readers are safe.
 
 The depth-first caches stored a complete terminal decomposition per integral.
 Consuming such a record replaces a frontier key by its terminal image and skips
 every grouping and cancellation below it, so ordered reduction never used them.
-A persistent ordered cache stores weight-independent one-step records instead
-(the checked route or rule application of one key), bound to the saved
-application identity computed in #raw("rustred_evaluation::cache"); it attaches
-at that module boundary.
+External-data releases up to v0.1.2 still ship them; Vakint neither loads nor
+checksums them (an explicit read of such a file still verifies it), which
+removes a large part of the five-loop loading time.
+
+== Limitations
 
 Keeping more unfinished contributions visible can increase frontier memory.
-Exact coefficient combination can also cost more than the reductions it avoids.
-Ordered reduction therefore has no universal speedup promise over the historical
-depth-first measurements, which remain separate cohorts in the benchmark report.
+Exact coefficient combination can also cost more than the reductions it avoids;
+the step cache saves the checked steps, not the frontier arithmetic (a warm
+exact run is dominated by the latter). Ordered reduction therefore has no
+universal speedup promise over the historical depth-first measurements, which
+remain separate cohorts in the benchmark report.
 
 == Reproducible physical comparisons
 

@@ -96,26 +96,36 @@ impl<const N: usize> NativeCandidate<N> {
             terms,
             limits,
             rustred::reduction::OrderedWeightArithmetic::Exact,
+            None,
             observation,
         )
     }
 
     /// As [`Self::reduce_linear_combination_ordered`] with an explicit
-    /// frontier weight arithmetic (identical exact results).
+    /// frontier weight arithmetic and an optional Ordered step cache bound
+    /// to [`Self::ordered_step_cache_binding`] (identical exact results).
     pub(crate) fn reduce_linear_combination_ordered_with_arithmetic(
         &self,
         terms: Vec<(IntegralKey, rustred::algebra::Coefficient)>,
         limits: ReductionLimits,
         arithmetic: rustred::reduction::OrderedWeightArithmetic,
+        step_cache: Option<Arc<rustred::reduction::OrderedStepCache>>,
         observation: Option<&mut rustred::solver::CandidateRoutedApplicationObserver<'_>>,
     ) -> Result<rustred::solver::CandidateOrderedReduction, crate::RustRedEvaluationError> {
-        let reducer = self
+        let mut reducer = self
             .reducer
             .lock()
             .map_err(|_| crate::RustRedEvaluationError::Reduction {
                 detail: "candidate reducer lock poisoned".into(),
             })?
             .fork_empty_with_limits(limits);
+        // The fork is request-local; RustRed checks the binding (program,
+        // family, policy, terminal convention) here and at the request.
+        if step_cache.is_some() {
+            reducer
+                .set_ordered_step_cache(step_cache)
+                .map_err(crate::RustRedEvaluationError::from_native)?;
+        }
         match observation {
             Some(observer) => {
                 observer.clear_native_summary();
@@ -143,6 +153,19 @@ impl<const N: usize> NativeCandidate<N> {
             }
         }
         .map_err(crate::RustRedEvaluationError::from_native)
+    }
+
+    /// RustRed's Ordered step-cache binding of this program: the digest its
+    /// bundle loader declared, family, coefficient variables, unresolved
+    /// policy and installed terminal convention.
+    pub(crate) fn ordered_step_cache_binding(
+        &self,
+    ) -> Result<rustred::reduction::OrderedStepCacheBinding, String> {
+        self.reducer
+            .lock()
+            .map_err(|_| "candidate reducer lock poisoned".to_owned())?
+            .ordered_step_cache_binding()
+            .map_err(|error| error.to_string())
     }
 
     pub(crate) fn preserve_unresolved(&mut self) -> Result<(), String> {

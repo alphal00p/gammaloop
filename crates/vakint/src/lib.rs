@@ -95,6 +95,13 @@ pub use rustred_evaluation::monitor::{
     RustRedMonitorDisplay, RustRedMonitorOptions, RustRedMonitorScope, RustRedMonitorWork,
     RustRedSnapshotViewer,
 };
+pub use rustred_evaluation::{
+    DEFAULT_ORDERED_CACHE_MAX_RESIDENT_BYTES, OrderedCacheAutosave, OrderedCacheMode,
+    OrderedCacheProgramSaveReport, OrderedCacheProgramStatistics, OrderedCacheSaveReport,
+    OrderedCacheSettings, OrderedCacheStatistics, OrderedCacheWarmReport,
+    RustRedOrderedStepCacheSaveReport, RustRedOrderedStepCacheShardStatistics,
+    RustRedOrderedStepCacheStatistics,
+};
 #[cfg(all(unix, not(target_arch = "wasm32")))]
 pub use rustred_evaluation::{
     ExternalDataLoadReport, ExternalDataLoopReport, OfficialExternalDataOptions,
@@ -2355,6 +2362,11 @@ pub struct VakintSettings {
     /// `cache_policy`/`cache_representation` never apply). No option enlarges
     /// the saved entry domains. Complete factorization remains a checked action.
     pub rustred_application_options: rustred_app::SavedApplicationOptions,
+    /// Use of the persistent Ordered step cache (mode, directory, resident
+    /// ceiling, autosave). The default records steps in memory for the
+    /// lifetime of the engine. Replayed steps are identical to checked ones,
+    /// so results never depend on this setting.
+    pub ordered_cache: OrderedCacheSettings,
     /// Per-call numerator lowering allowances for the saved five-loop lane.
     /// These do not change entry admission, legacy lower-loop programs, or
     /// the independent lower-factor product policy.
@@ -2615,6 +2627,7 @@ impl Default for VakintSettings {
                 reduction_strategy: rustred::reduction::ReductionStrategy::Ordered,
                 ..Default::default()
             },
+            ordered_cache: OrderedCacheSettings::default(),
             rustred_scalar_numerator_limits: Default::default(),
             rustred_product_limits: Default::default(),
             rustred_momentum_match_limits: Default::default(),
@@ -2654,6 +2667,8 @@ pub struct Vakint {
     rustred_application:
         Arc<std::sync::Mutex<Option<rustred_evaluation::five_loop::LoadedApplication>>>,
     rustred_data: Option<Arc<rustred_evaluation::data::RustRedData>>,
+    /// Ordered step caches of the loaded programs, shared by clones.
+    ordered_cache: Arc<rustred_evaluation::cache::OrderedCacheRegistry>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -4949,6 +4964,7 @@ impl Vakint {
             topologies,
             rustred_application: Arc::default(),
             rustred_data: None,
+            ordered_cache: Arc::default(),
         })
     }
 
@@ -7326,7 +7342,7 @@ Evaluated (n_loops=1, mu_r=1) :
         settings: &VakintSettings,
         input: AtomView,
     ) -> Result<Atom, VakintError> {
-        self.evaluate_observed(settings, input, None, None)
+        self.autosave_ordered_cache(self.evaluate_observed(settings, input, None, None))
     }
 
     /// Evaluate through the ordinary backend and finalization path with per-call diagnostics.
@@ -7336,9 +7352,9 @@ Evaluated (n_loops=1, mu_r=1) :
         input: AtomView,
         monitor: &RustRedMonitorOptions,
     ) -> Result<Atom, VakintError> {
-        MonitorContext::run(monitor, |observation, progress| {
+        self.autosave_ordered_cache(MonitorContext::run(monitor, |observation, progress| {
             self.evaluate_observed(settings, input, observation, progress)
-        })
+        }))
     }
 
     fn evaluate_observed(
@@ -7409,12 +7425,12 @@ Evaluated (n_loops=1, mu_r=1) :
         settings: &VakintSettings,
         input: AtomView,
     ) -> Result<Atom, VakintError> {
-        settings.with_resource_budget(|| {
+        self.autosave_ordered_cache(settings.with_resource_budget(|| {
             self.validate_settings(settings)?;
             let mut vakint_expr = VakintExpression::prepare_evaluation(input, self, settings)?;
             vakint_expr.evaluate_integral(self, settings)?;
             Ok(vakint_expr.into())
-        })
+        }))
     }
 }
 

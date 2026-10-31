@@ -472,6 +472,27 @@ impl RustRedData {
         Ok(Arc::clone(data))
     }
 
+    /// Ordered step-cache identities of every loaded lower-loop and
+    /// four-loop program.
+    pub(super) fn ordered_cache_programs(
+        &self,
+    ) -> Result<Vec<super::cache::OrderedCacheProgram>, RustRedEvaluationError> {
+        let mut programs = Vec::new();
+        for (loop_count, snapshot) in &self.lower {
+            let family = super::artifact::shipped_family_for_loop_count(*loop_count)
+                .ok_or_else(|| failure("lower-loop program without a registered family"))?;
+            programs.push(super::cache::OrderedCacheProgram::new(
+                *loop_count,
+                family.name(),
+                snapshot.ordered_step_cache_binding(),
+            ));
+        }
+        if let Some(four_loop) = &self.four_loop {
+            programs.extend(four_loop.ordered_cache_programs());
+        }
+        Ok(programs)
+    }
+
     pub(super) fn artifact(
         &self,
         family: ArtifactFamily,
