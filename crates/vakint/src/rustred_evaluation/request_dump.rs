@@ -5,7 +5,7 @@
 //!
 //! * `<stem>.request.json` before the request runs: loop count, the program
 //!   identity needed to load the same native program from the external data,
-//!   strategy, Ordered weight arithmetic, master mode, channel label, the exact
+//!   strategy (always Ordered), weight arithmetic, master mode, channel label, the exact
 //!   input keys and
 //!   coefficients (Symbolica canonical strings of rational functions in the
 //!   family dimension) and the caller-side nonzero conditions;
@@ -156,7 +156,7 @@ impl DumpProgram<'_> {
                 options,
             } => {
                 let replayable = rustred_app::SavedApplicationOptions {
-                    reduction_strategy: options.reduction_strategy,
+                    reduction_strategy: rustred::reduction::ReductionStrategy::Ordered,
                     unresolved_policy: rustred::solver::UnresolvedPolicy::Preserve,
                     ..Default::default()
                 };
@@ -187,7 +187,6 @@ pub(super) struct DumpChannel<'a> {
 pub(super) struct DumpRequest<'a> {
     pub(super) loop_count: usize,
     pub(super) program: DumpProgram<'a>,
-    pub(super) strategy: crate::RustRedReductionStrategy,
     /// Recorded for information: every arithmetic yields the same exact
     /// output, but modular weights report a different monomial census.
     pub(super) weight_arithmetic: crate::RustRedOrderedWeightArithmetic,
@@ -256,7 +255,8 @@ impl RequestDump {
             "process_id": std::process::id(),
             "loop_count": request.loop_count,
             "program": request.program.describe(),
-            "reduction_strategy": format!("{:?}", request.strategy),
+            // Vakint reduces only with the ordered scheduler; replay expects it.
+            "reduction_strategy": "Ordered",
             "ordered_weight_arithmetic": format!("{:?}", request.weight_arithmetic),
             "master_mode": request.master_mode.map(|mode| format!("{mode:?}")),
             "channel": {
@@ -539,7 +539,7 @@ mod tests {
         let key = IntegralKey::try_new([2, -1]).unwrap();
         let inputs = vec![(key.clone(), weight.clone())];
         let options = rustred_app::SavedApplicationOptions {
-            reduction_strategy: crate::RustRedReductionStrategy::Ordered,
+            reduction_strategy: rustred::reduction::ReductionStrategy::Ordered,
             unresolved_policy: rustred::solver::UnresolvedPolicy::Preserve,
             ..Default::default()
         };
@@ -553,7 +553,6 @@ mod tests {
                     family_fingerprint: "family",
                     options: &options,
                 },
-                strategy: options.reduction_strategy,
                 weight_arithmetic: options.ordered_weight_arithmetic,
                 master_mode: Some(crate::RustRedMasterMode::Retain),
                 channel: DumpChannel {

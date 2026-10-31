@@ -1,4 +1,4 @@
-"""The zero-momentum QCD fixture, its provenance, and cache comparisons."""
+"""The zero-momentum QCD fixture, its provenance, and its ordered reduction."""
 
 # Marimo cell outputs and generated return markers are intentional.
 # ruff: noqa: B018, PLR1711
@@ -10,13 +10,11 @@ app = marimo.App(width="full", app_title="Vakint · Five-loop UV reduction")
 
 @app.cell
 def _():
-    import os
-
     import marimo as mo
     from shared_gallery import Gallery
     from symbolica.community.hepkit import FeynmanDiagram, Model
 
-    return FeynmanDiagram, Gallery, Model, mo, os
+    return FeynmanDiagram, Gallery, Model, mo
 
 
 @app.cell(hide_code=True)
@@ -27,7 +25,7 @@ def _(Gallery, mo):
         "A five-loop zero-momentum reduction",
         "One closed massless quark trace and four gluon rungs. Follow the "
         "unaveraged metric/color contraction through the authenticated campaign "
-        "and compare its uncached, light-cache and heavy-cache reductions.",
+        "and its ordered reduction.",
     )
     return
 
@@ -162,27 +160,11 @@ def _(Gallery, mo):
             Gallery.section(
                 mo,
                 "03 / measurements",
-                "Uncached versus cumulative-cache reduction",
-                "Verified scalar-input loading, external data, native reduction and cache attachment are measured separately. Fresh scientific preparation is independent validation.",
+                "Ordered reduction of the saved input",
+                "Verified scalar-input loading, external data and native ordered reduction are measured separately. Fresh scientific preparation is independent validation.",
             ),
             Gallery.evidence_card(
                 mo, "zero-momentum", "Complete zero-momentum physical reduction"
-            ),
-            Gallery.evidence_card(
-                mo,
-                "zero-momentum-running-cache",
-                "Optimized zero-momentum run · cumulative cache progress",
-            ),
-            Gallery.evidence_card(
-                mo, "zero-momentum-light-cache", "Official light cache · at most 95 MB"
-            ),
-            Gallery.evidence_card(
-                mo, "zero-momentum-heavy-cache", "Full heavy cache · hosted separately"
-            ),
-            Gallery.note(
-                mo,
-                "Two cache tiers, separately measured",
-                "The full accumulated heavy cache is preserved without an aggregate size cap and supplied as a compressed local artifact for separate hosting. Only the trimmed light cache, selected by measured rule frequency and usefulness and limited to 95 MB, is published in the official repository and releases. A cached run uses the server's explicitly configured immutable base; light and heavy results remain distinct.",
             ),
             mo.md(
                 "Final comparisons use three fresh processes per configuration with the same verified scalar input, medians and ranges, fixed workers/affinity, and exact result/guard checks. Original graph and numerator preparation are reported separately. Warm in-process reuse is reported separately."
@@ -204,11 +186,7 @@ def _(Gallery, mo):
 
 
 @app.cell
-def _(Gallery, mo, os):
-    use_cache = mo.ui.checkbox(
-        label="Attach the configured light or heavy cache",
-        disabled=not bool(os.environ.get("VAKINT_GALLERY_CACHE")),
-    )
+def _(Gallery, mo):
     run_benchmark = mo.ui.run_button(
         label="Run reduction of the saved scalar input",
         kind="warn",
@@ -221,11 +199,10 @@ def _(Gallery, mo, os):
                 "Zero-momentum only",
                 "This action reduces the verified zero-momentum input. The quadratic fixture is deferred and has no gallery Run action.",
             ),
-            use_cache,
             Gallery.note(
                 mo,
                 "May take substantial time",
-                "This invokes the compiled Rust reduction with the complete verified zero-momentum scalar input, preserving all contributions and contraction conditions. It reuses graph and trace preparation and saves completed native work in a fresh per-run cache delta, including durable prefixes of failed reductions. Reduction can still take minutes or hours; there is no default time cutoff. A single interactive run is not a controlled three-run benchmark.",
+                "This invokes the compiled Rust ordered reduction with the complete verified zero-momentum scalar input, preserving all contributions and contraction conditions. It reuses graph and trace preparation. Reduction can still take minutes or hours; there is no default time cutoff. A single interactive run is not a controlled three-run benchmark.",
             ),
             run_benchmark,
             mo.md(
@@ -235,14 +212,14 @@ def _(Gallery, mo, os):
             ),
         ]
     )
-    return run_benchmark, use_cache
+    return (run_benchmark,)
 
 
 @app.cell
-def _(Gallery, mo, run_benchmark, use_cache):
+def _(Gallery, mo, run_benchmark):
     mo.stop(not run_benchmark.value)
     try:
-        benchmark_job = Gallery.start_benchmark("zero-momentum", cached=use_cache.value)
+        benchmark_job = Gallery.start_benchmark("zero-momentum")
     except (OSError, ValueError, RuntimeError) as _error:
         mo.stop(True, mo.callout(str(_error), kind="warn"))
     return (benchmark_job,)

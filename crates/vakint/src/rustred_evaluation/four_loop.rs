@@ -8,7 +8,6 @@
 //! pinned RustRed/Symbolica stack, not a public untrusted-file input boundary.
 
 use std::{collections::BTreeMap, sync::Arc};
-pub(super) mod cache;
 
 use rustred::input::{Compiler, Limits, LoweringLimits, TextProject, TextPropagator};
 use rustred::persistence::BinaryIoLimits;
@@ -16,21 +15,19 @@ use rustred::reduction::ReductionLimits;
 use rustred_app::{
     CandidateBundleLimits, MAX_CANDIDATE_BUNDLE_BYTES, load_generated_candidate_bundle,
 };
+use symbolica::atom::Atom;
 use symbolica::atom::AtomCore;
-use symbolica::atom::{Atom, AtomView};
 use symbolica::function;
 
-use super::experimental::ExperimentalRustRed;
+use super::RustRedEvaluationError;
 use super::experimental::catalog::OfflineTerminalCatalog;
 use super::experimental::native::NativeCandidate;
 use super::experimental::timing::MathSpan;
 use super::request_dump::{self, DumpChannel, DumpProgram, DumpRequest, RequestDump};
-use super::{RustRedEvaluationError, RustRedEvaluationOptions};
 use crate::symbols::S;
 use crate::utils::vakint_macros::vk_symbol;
 use crate::{
-    ReplacementRules, Topology, Vakint, VakintError, VakintSettings, get_integer_from_atom,
-    get_prop_with_id,
+    Topology, Vakint, VakintError, VakintSettings, get_integer_from_atom, get_prop_with_id,
 };
 
 // Explicit shipped-data policy. These caps bound decompressed/framed data;
@@ -62,12 +59,10 @@ struct Descriptor {
     family_fingerprint: String,
 }
 
-// Independent lazy cells avoid loading all large programs when a calculation
-// only visits one parent. NativeCandidate owns one shared memoized applier.
+// Each parent program owns its native candidate rules and terminal
+// normalization; the catalogue only authenticates the declared outputs.
 struct LoadedProgram {
     native: Arc<NativeCandidate<10>>,
-    evaluator: ExperimentalRustRed,
-    cache_program: rustred::solver::CandidateUnitMassProgram<10>,
 }
 
 pub(super) struct FourLoopPrograms {
@@ -245,18 +240,11 @@ fn load(input: &Input, descriptor: &Descriptor) -> Result<LoadedProgram, String>
         reducer,
         &input.normalization,
     )?;
-    let cache_program =
-        native.cache_program(cache::source_digest(&bytes, &input.normalization)?)?;
     catalog.require_complete()?;
     catalog.require_exact_keys(native.output_terminals())?;
     native.preserve_unresolved()?;
-    let native = Arc::new(native);
-    let evaluator = ExperimentalRustRed::new(native.clone(), catalog.into_terms())
-        .map_err(|error| error.to_string())?;
     Ok(LoadedProgram {
-        native,
-        evaluator,
-        cache_program,
+        native: Arc::new(native),
     })
 }
 
@@ -343,45 +331,6 @@ fn invalid(detail: impl Into<String>) -> RustRedEvaluationError {
 
 pub(super) fn supports(topology: &Topology) -> bool {
     validate_concrete(topology).is_ok()
-}
-
-pub(super) fn evaluate(
-    vakint: &Vakint,
-    settings: &VakintSettings,
-    numerator: AtomView,
-    matched: &ReplacementRules,
-    _options: &RustRedEvaluationOptions,
-) -> Result<Atom, VakintError> {
-    let data = vakint.four_loop_data()?;
-    let programs = data.four_loop.as_ref().unwrap();
-    let index = select(programs, &matched.canonical_topology)?;
-    let program = &programs.programs[index];
-    log::warn!(
-        "RustRed 4L uses finite-tested candidate rules; there is no guarantee of a complete reduction to the known masters outside the documented validation workload"
-    );
-    program.evaluator.evaluate_catalog(
-        settings,
-        numerator,
-        matched,
-        &programs.descriptors[index].family_fingerprint,
-        &data.masters,
-        |target| {
-            if settings.rustred_application_options.reduction_strategy
-                == crate::RustRedReductionStrategy::DepthFirstWithoutMemoization
-            {
-                program
-                    .native
-                    .reduce_unit_mass_without_memoization(
-                        target,
-                        settings.rustred_application_options.reduction_limits,
-                    )
-                    .map(Some)
-                    .map_err(VakintError::from)
-            } else {
-                vakint.cached_candidate_reduction(index, target)
-            }
-        },
-    )
 }
 
 pub(super) fn evaluate_ordered_batch(
@@ -478,7 +427,6 @@ pub(super) fn evaluate_ordered_batch(
                 family_fingerprint: &descriptor.family_fingerprint,
                 data: &data.loops[&4],
             },
-            strategy: settings.rustred_application_options.reduction_strategy,
             weight_arithmetic: settings
                 .rustred_application_options
                 .ordered_weight_arithmetic,
@@ -586,7 +534,7 @@ mod tests {
 
     #[test]
     fn shipped_descriptors_have_distinct_family_bindings() {
-        let engine = super::super::cache_tests::external_engine();
+        let engine = super::super::test_data::external_engine();
         let data = engine.four_loop_data().unwrap();
         let descriptors = &data.four_loop.as_ref().unwrap().descriptors;
         assert_eq!(
@@ -606,7 +554,7 @@ mod tests {
 
     #[test]
     fn shipped_programs_cold_load_with_exact_terminal_catalogs() {
-        let engine = super::super::cache_tests::external_engine();
+        let engine = super::super::test_data::external_engine();
         let first_data = engine.four_loop_data().unwrap();
         let second_data = engine.clone().four_loop_data().unwrap();
         for index in 0..4 {
@@ -626,7 +574,7 @@ mod tests {
         // These are expectations for vendored input data, not engine limits or
         // a dispatch based on a topology name. Original rules stay raw; catalog
         // values cover only the exact output convention installed by RustRed.
-        let engine = super::super::cache_tests::external_engine();
+        let engine = super::super::test_data::external_engine();
         let data = engine.four_loop_data().unwrap();
         for (input, (raw_count, output_count)) in data
             .four_loop
@@ -686,13 +634,54 @@ mod tests {
         }
     }
 
+    /// A parent-family scalar input built from the shipped descriptor rows.
+    fn test_input_mass(namespace: usize, powers: &[i64], mass: &Atom) -> Atom {
+        use crate::utils::vakint_macros::vk_parse;
+        assert_eq!(powers.len(), 10);
+        Vakint::initialize_vakint_symbols();
+        let engine = super::super::test_data::external_engine();
+        let data = engine.four_loop_data().unwrap();
+        let programs = data.four_loop.as_ref().unwrap();
+        let descriptors = &programs.descriptors;
+        let mut propagators = Atom::num(1);
+        for (slot, line) in programs.inputs[namespace]
+            .csv
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty() && !line.starts_with('#'))
+            .enumerate()
+        {
+            let row = line
+                .split(',')
+                .map(|entry| entry.trim().parse::<i64>().unwrap())
+                .collect::<Vec<_>>();
+            if row[0] == 0 && row[1] == 0 {
+                assert_eq!(powers[slot], 0);
+                continue;
+            }
+            propagators *= vk_parse!(format!(
+                "prop({},edge({},{}),{},{},{})",
+                slot + 1,
+                row[0],
+                row[1],
+                descriptors[namespace].physical_momenta[slot].to_canonical_string(),
+                mass.to_canonical_string(),
+                powers[slot]
+            ))
+            .unwrap();
+        }
+        function!(S.topo, propagators)
+    }
+
     #[test]
     fn public_four_loop_raw_master_mode_does_not_expand_the_finite_master_table() {
         use crate::utils::vakint_macros::vk_parse;
-        use crate::{EvaluationMethod, EvaluationOrder, LoopNormalizationFactor};
+        use crate::{
+            EvaluationMethod, EvaluationOrder, LoopNormalizationFactor, RustRedEvaluationOptions,
+        };
 
-        let vakint = super::super::cache_tests::external_engine();
-        let input = cache::test_input_mass(
+        let vakint = super::super::test_data::external_engine();
+        let input = test_input_mass(
             1,
             &[1, 1, 1, 1, 1, 1, 1, 1, 0, 0],
             &vk_parse!("muvsq").unwrap(),

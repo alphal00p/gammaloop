@@ -211,10 +211,9 @@ fn external_dataset() -> &'static (Vakint, PathBuf) {
             );
             for pack in &report.loops {
                 eprintln!(
-                    "  {}L: {} cache_available={} path={}",
+                    "  {}L: {} path={}",
                     pack.loop_count,
                     pack.source,
-                    pack.cache_available,
                     pack.path.display()
                 );
             }

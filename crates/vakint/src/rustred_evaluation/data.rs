@@ -30,65 +30,6 @@ pub(super) struct ReleaseManifest {
     pub schema: String,
     pub version: String,
     pub loop_packs: Vec<LoopPack>,
-    #[serde(default)]
-    pub runtime_cache_snapshots: Vec<RuntimeCacheReference>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub(super) struct RuntimeCacheReference {
-    pub loop_count: usize,
-    pub manifest: String,
-    pub manifest_sha256: String,
-    pub manifest_bytes: u64,
-}
-
-impl RuntimeCacheReference {
-    fn validate(&self) -> Result<(), RustRedEvaluationError> {
-        let path = relative_path(&self.manifest)?;
-        let prefix = format!("{}L/cache/", self.loop_count);
-        let name = self.manifest.strip_prefix(&prefix).unwrap_or_default();
-        if !(1..=5).contains(&self.loop_count)
-            || self.manifest_bytes == 0
-            || path.components().count() != 3
-            || !name.ends_with(".json")
-            || !name
-                .as_bytes()
-                .first()
-                .is_some_and(u8::is_ascii_alphanumeric)
-            || !name
-                .bytes()
-                .all(|c| c.is_ascii_alphanumeric() || b"._-".contains(&c))
-        {
-            return Err(failure("invalid runtime cache descriptor reference"));
-        }
-        self.sha256()?;
-        Ok(())
-    }
-
-    pub(super) fn sha256(&self) -> Result<[u8; 32], RustRedEvaluationError> {
-        if self.manifest_sha256.len() != 64
-            || !self
-                .manifest_sha256
-                .bytes()
-                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
-        {
-            return Err(failure("invalid runtime cache descriptor SHA256"));
-        }
-        let mut result = [0u8; 32];
-        for (index, byte) in result.iter_mut().enumerate() {
-            *byte = u8::from_str_radix(&self.manifest_sha256[index * 2..index * 2 + 2], 16)
-                .map_err(failure)?;
-        }
-        Ok(result)
-    }
-}
-
-#[derive(Clone, Debug)]
-pub(super) struct RuntimeCacheSnapshot {
-    pub reference: RuntimeCacheReference,
-    #[cfg(all(unix, not(target_arch = "wasm32")))]
-    pub descriptor: Arc<super::cache::transfer::NativePackManifest>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -124,19 +65,30 @@ pub(crate) struct LoopManifest {
     pub masters: Vec<serde_json::Value>,
     #[serde(default)]
     pub constant_bindings: Option<FileReference>,
+    #[serde(default)]
     pub cache: CacheManifest,
     pub coverage: String,
     pub files: BTreeMap<String, FileDigest>,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+/// A pack's prepared depth-first result cache, published by releases up to
+/// v0.1.2. Vakint reduces only with the ordered scheduler and never reads it.
+#[derive(Clone, Debug, Default, Deserialize)]
 pub(crate) struct CacheManifest {
-    pub available: bool,
-    pub path: Option<String>,
+    /// Cache metadata file, e.g. `cache.json`, next to the `cache/` directory.
     #[serde(default)]
-    pub format: Option<String>,
-    #[serde(default)]
-    pub identity: Option<rustred_app::SavedApplicationCacheFileIdentity>,
+    pub metadata: Option<String>,
+}
+
+impl LoopManifest {
+    /// Files that Vakint never reads at run time: the prepared depth-first
+    /// cache with its metadata, and the benchmark inputs. Loading skips their
+    /// checksums; any later read still verifies them like every other file.
+    fn is_unused_at_runtime(&self, path: &str) -> bool {
+        path.starts_with("cache/")
+            || path.starts_with("benchmarks/")
+            || self.cache.metadata.as_deref() == Some(path)
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -272,6 +224,9 @@ impl LoopData {
             manifest_sha256: pack.manifest_sha256.clone(),
         };
         for path in data.manifest.files.keys() {
+            if data.manifest.is_unused_at_runtime(path) {
+                continue;
+            }
             resources::checkpoint()?;
             data.read(path)?;
         }
@@ -327,7 +282,6 @@ pub(crate) struct RustRedData {
     lower: BTreeMap<usize, ArtifactSnapshot>,
     pub(super) four_loop: Option<Arc<super::four_loop::FourLoopPrograms>>,
     pub(crate) masters: Arc<super::masters::MasterCatalog>,
-    pub(super) runtime_cache_snapshots: BTreeMap<usize, RuntimeCacheSnapshot>,
 }
 
 impl std::fmt::Debug for RustRedData {
@@ -391,66 +345,12 @@ impl RustRedData {
         Ok(loops)
     }
 
-    fn load_runtime_cache_snapshots(
-        manifest: &ReleaseManifest,
-        loops: &BTreeMap<usize, Arc<LoopData>>,
-        max_loop_count: usize,
-    ) -> Result<BTreeMap<usize, RuntimeCacheSnapshot>, RustRedEvaluationError> {
-        let mut runtime_cache_snapshots = BTreeMap::new();
-        let mut selected = std::collections::BTreeSet::new();
-        for reference in &manifest.runtime_cache_snapshots {
-            reference.validate()?;
-            if !selected.insert(reference.loop_count) {
-                return Err(failure(
-                    "multiple selected runtime cache snapshots for one loop",
-                ));
-            }
-            if reference.loop_count > max_loop_count {
-                continue;
-            }
-            let pack = &loops[&reference.loop_count];
-            let relative = reference
-                .manifest
-                .strip_prefix(&format!("{}L/", reference.loop_count))
-                .unwrap();
-            let identity = pack.manifest.files.get(relative).ok_or_else(|| {
-                failure("runtime cache descriptor is absent from loop file inventory")
-            })?;
-            if identity.sha256 != reference.manifest_sha256
-                || identity.bytes != reference.manifest_bytes
-            {
-                return Err(failure(
-                    "runtime cache descriptor differs from loop file inventory",
-                ));
-            }
-            let bytes = pack.read(relative)?;
-            #[cfg(all(unix, not(target_arch = "wasm32")))]
-            let descriptor = Arc::new(
-                super::cache::transfer::NativePackManifest::parse(&bytes, reference.loop_count)
-                    .map_err(super::cache::operation)?,
-            );
-            #[cfg(not(all(unix, not(target_arch = "wasm32"))))]
-            return Err(failure("official native cache snapshots require Unix"));
-            #[cfg(all(unix, not(target_arch = "wasm32")))]
-            runtime_cache_snapshots.insert(
-                reference.loop_count,
-                RuntimeCacheSnapshot {
-                    reference: reference.clone(),
-                    descriptor,
-                },
-            );
-        }
-        Ok(runtime_cache_snapshots)
-    }
-
     fn load(
         source: Source,
         manifest: ReleaseManifest,
         max_loop_count: usize,
     ) -> Result<Arc<Self>, RustRedEvaluationError> {
         let loops = Self::load_loops(&source, &manifest, max_loop_count)?;
-        let runtime_cache_snapshots =
-            Self::load_runtime_cache_snapshots(&manifest, &loops, max_loop_count)?;
         let mut lower = BTreeMap::new();
         for (&count, data) in loops.range(..=3) {
             let family = super::artifact::shipped_family_for_loop_count(count).unwrap();
@@ -473,25 +373,9 @@ impl RustRedData {
             lower,
             four_loop,
             masters,
-            runtime_cache_snapshots,
         });
         resources::checkpoint()?;
         Ok(data)
-    }
-
-    pub(super) fn runtime_cache_path(
-        &self,
-        count: usize,
-    ) -> Result<PathBuf, RustRedEvaluationError> {
-        let snapshot = &self.runtime_cache_snapshots[&count];
-        match &self.loops[&count].source {
-            Source::Directory(root) => Ok(root
-                .join("cache-snapshots")
-                .join(&snapshot.reference.manifest_sha256)),
-            _ => Err(failure(
-                "runtime cache snapshots require an external dataset directory",
-            )),
-        }
     }
 
     pub(super) fn from_directory(
@@ -559,14 +443,7 @@ impl RustRedData {
         // This is the same complete schema/checksum/coverage validation used by
         // ordinary loading. It deliberately precedes an identity reuse decision.
         let loops = Self::load_loops(&source, &manifest, max_loop_count)?;
-        let selected = Self::load_runtime_cache_snapshots(&manifest, &loops, max_loop_count)?;
-        Ok(self.runtime_cache_snapshots.len() == selected.len()
-            && selected.iter().all(|(count, snapshot)| {
-                self.runtime_cache_snapshots
-                    .get(count)
-                    .is_some_and(|current| current.reference == snapshot.reference)
-            })
-            && self.version == manifest.version
+        Ok(self.version == manifest.version
             && loops.iter().all(|(count, pack)| {
                 self.loops
                     .get(count)
@@ -636,65 +513,26 @@ impl Vakint {
     }
 
     /// Load all loop packs up to the requested maximum from an existing checkout.
-    /// Prepared caches are attached only if the default reduction strategy
-    /// reads them (it does not: ordered reduction never uses them). Depth-first
-    /// users opt in through [`Self::load_external_data_with_prepared_caches`].
+    /// Validation finishes before this engine is replaced.
     pub fn load_external_data(
         &mut self,
         path: impl AsRef<Path>,
         max_loop_count: usize,
     ) -> Result<(), VakintError> {
-        self.load_external_data_with_prepared_caches(
-            path,
-            max_loop_count,
-            super::uses_prepared_caches(crate::DEFAULT_RUSTRED_REDUCTION_STRATEGY),
-        )
-    }
-
-    /// Load all loop packs up to the requested maximum from an existing checkout,
-    /// attaching their prepared depth-first caches if requested. Validation and
-    /// cache attachment finish before this engine is replaced.
-    pub fn load_external_data_with_prepared_caches(
-        &mut self,
-        path: impl AsRef<Path>,
-        max_loop_count: usize,
-        load_prepared_caches: bool,
-    ) -> Result<(), VakintError> {
         let data = RustRedData::from_directory(path.as_ref(), "latest", max_loop_count)?;
-        self.activate_external_data(data, load_prepared_caches)
+        self.activate_external_data(data)
     }
 
     /// Load native IBPs from a local pack or a sealed 1L–3L rules file. A bare
-    /// closed program retains the active master catalog and drops that loop's
-    /// prepared cache, whose identity belonged to the preceding program.
-    /// Prepared caches of a pack follow [`Self::load_external_data`].
+    /// closed program retains the active master catalog.
     pub fn load_rustred_artifacts(
         &mut self,
         loop_count: usize,
         path: impl AsRef<Path>,
     ) -> Result<(), VakintError> {
-        self.load_rustred_artifacts_with_prepared_caches(
-            loop_count,
-            path,
-            super::uses_prepared_caches(crate::DEFAULT_RUSTRED_REDUCTION_STRATEGY),
-        )
-    }
-
-    /// [`Self::load_rustred_artifacts`], attaching the prepared depth-first
-    /// caches of a local pack if requested.
-    pub fn load_rustred_artifacts_with_prepared_caches(
-        &mut self,
-        loop_count: usize,
-        path: impl AsRef<Path>,
-        load_prepared_caches: bool,
-    ) -> Result<(), VakintError> {
         let path = path.as_ref();
         if let Some(root) = RustRedData::release_root(path)? {
-            return self.load_external_data_with_prepared_caches(
-                root,
-                loop_count,
-                load_prepared_caches,
-            );
+            return self.load_external_data(root, loop_count);
         }
         let family = super::artifact::shipped_family_for_loop_count(loop_count)
             .ok_or_else(|| failure("4L/5L IBPs require a local external-data pack; the explicit saved-application API also accepts a bare 5L application"))?;
@@ -715,12 +553,6 @@ impl Vakint {
                 bytes: bytes.len() as u64,
             },
         );
-        pack.manifest.cache = CacheManifest {
-            available: false,
-            path: None,
-            format: None,
-            identity: None,
-        };
         let original = match pack.source {
             Source::Override { original, .. } => original,
             source => Arc::new(source),
@@ -732,77 +564,22 @@ impl Vakint {
         };
         data.loops.insert(loop_count, Arc::new(pack));
         data.lower.insert(loop_count, snapshot);
-        data.runtime_cache_snapshots.remove(&loop_count);
         data.version = format!("local-{}", &digest[..16]);
-        self.activate_external_data(Arc::new(data), load_prepared_caches)
+        self.activate_external_data(Arc::new(data))
     }
 
     pub(super) fn activate_external_data(
         &mut self,
         data: Arc<RustRedData>,
-        load_prepared_caches: bool,
     ) -> Result<(), VakintError> {
         let mut staged = self.clone();
         staged.rustred_data = Some(Arc::clone(&data));
-        staged.rustred_lower_caches = Arc::default();
         staged.rustred_application = Arc::default();
-        #[cfg(all(unix, not(target_arch = "wasm32")))]
-        for snapshot in data.runtime_cache_snapshots.values() {
-            snapshot.descriptor.validate_program(&staged)?;
-        }
-        if load_prepared_caches {
-            staged.attach_external_caches()?;
-        }
         if data.loops.contains_key(&5) {
             staged.saved_application(&crate::VakintSettings::default())?;
         }
         resources::checkpoint()?;
         *self = staged;
-        Ok(())
-    }
-
-    pub(super) fn attach_external_caches(&self) -> Result<(), VakintError> {
-        let data = self.rustred_data()?;
-        for (&count, pack) in &data.loops {
-            if let Some(snapshot) = data.runtime_cache_snapshots.get(&count) {
-                #[cfg(all(unix, not(target_arch = "wasm32")))]
-                {
-                    snapshot.descriptor.validate_program(self)?;
-                    let path = data.runtime_cache_path(count)?;
-                    if !path.exists() {
-                        return Err(failure(format!("selected official native cache is missing at {}; populate it explicitly with download_cache/import_cache or set load_prepared_caches=False", path.display())).into());
-                    }
-                    snapshot
-                        .descriptor
-                        .validate_directory(&path)
-                        .map_err(super::cache::operation)?;
-                    self.load_cache(count, path, &Default::default())?;
-                }
-            } else if pack.manifest.cache.available {
-                let relative = pack
-                    .manifest
-                    .cache
-                    .path
-                    .as_deref()
-                    .ok_or_else(|| failure("available cache has no path"))?;
-                let path = pack
-                    .path(relative)?
-                    .ok_or_else(|| failure("vendored data must not contain caches"))?;
-                let mut options = super::cache::RustRedCacheLoadOptions::default();
-                if count == 5 {
-                    if pack.manifest.cache.format.as_deref()
-                        != Some("rustred.saved-application-cache-file.v1")
-                    {
-                        return Err(failure("unsupported five-loop prepared-cache format").into());
-                    }
-                    options.file_identity =
-                        Some(pack.manifest.cache.identity.ok_or_else(|| {
-                            failure("five-loop prepared cache has no authenticated file identity")
-                        })?);
-                }
-                self.load_cache(count, path, &options)?;
-            }
-        }
         Ok(())
     }
 }
@@ -889,7 +666,6 @@ mod tests {
         let data = RustRedData::from_directory(directory.path(), "latest", 3).unwrap();
         let mut engine = Vakint::new().unwrap();
         engine.rustred_data = Some(Arc::clone(&data));
-        let caches = Arc::clone(&engine.rustred_lower_caches);
         let application = Arc::clone(&engine.rustred_application);
         assert!(data.matches_directory(directory.path(), 3).unwrap());
         assert!(
@@ -914,7 +690,6 @@ mod tests {
         assert!(data.matches_directory(directory.path(), 3).is_err());
         assert!(engine.load_external_data(directory.path(), 3).is_err());
         assert!(Arc::ptr_eq(&data, &engine.rustred_data().unwrap()));
-        assert!(Arc::ptr_eq(&caches, &engine.rustred_lower_caches));
         assert!(Arc::ptr_eq(&application, &engine.rustred_application));
         fs::write(&coverage_path, &coverage).unwrap();
         assert!(data.matches_directory(directory.path(), 3).unwrap());
@@ -1245,7 +1020,7 @@ mod tests {
     #[test]
     fn external_inspection_preserves_dots_and_uncomputed_numerators() {
         Vakint::initialize_vakint_symbols();
-        let source = Source::Directory(super::super::cache_tests::external_path_through(5));
+        let source = Source::Directory(super::super::test_data::external_path_through(5));
         let release: ReleaseManifest =
             serde_json::from_slice(&source.read("manifest.json").unwrap()).unwrap();
         // Graph lookup does not need to construct a reduction application or
@@ -1321,7 +1096,7 @@ mod tests {
     fn authentic_five_loop_declared_terminals_remain_uncomputed() {
         Vakint::initialize_vakint_symbols();
         let source = Source::Directory(
-            super::super::cache_tests::external_path_through(5)
+            super::super::test_data::external_path_through(5)
                 .canonicalize()
                 .unwrap(),
         );

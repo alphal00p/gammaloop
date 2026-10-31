@@ -3,7 +3,7 @@ use super::*;
 use crate::{EvaluationMethod, EvaluationOrder, LoopNormalizationFactor, RustRedEvaluationOptions};
 
 fn engine() -> (Vakint, VakintSettings) {
-    let path = super::super::cache_tests::external_path_through(5);
+    let path = super::super::test_data::external_path_through(5);
     let mut engine = Vakint::new().unwrap();
     engine.load_external_data(path, 5).unwrap();
     assert_eq!(

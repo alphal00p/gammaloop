@@ -1,8 +1,8 @@
 //! Uncertified scalar inputs survive exact lowering without invoking a reducer.
 use super::*;
 use crate::{
-    EvaluationMethod, EvaluationOrder, LoopNormalizationFactor, RustRedMasterMode, Vakint,
-    vakint_parse,
+    EvaluationMethod, EvaluationOrder, LoopNormalizationFactor, RustRedEvaluationOptions,
+    RustRedMasterMode, Vakint, vakint_parse,
 };
 use std::sync::Arc;
 
@@ -161,15 +161,23 @@ fn preserving_uncertified_lower_inputs_still_enforces_scalar_work_limits() {
         mass_squared: Atom::one(),
         parent_coordinates: None,
     };
-    let error = evaluate(
-        &engine,
-        matched,
+    // The ordered batch lowers each matched input exactly like this before
+    // admission; an uncertified root must not bypass the scalar work limit.
+    let data = engine.rustred_data().unwrap();
+    let snapshot = data.artifact(matched.family).unwrap();
+    let error = prepare_lower_input(
+        &matched,
         &settings,
         Atom::one().as_view(),
-        &RustRedEvaluationOptions {
-            master_mode: RustRedMasterMode::Retain,
-        },
+        snapshot.artifact(),
+        super::super::numerator::ScalarNumeratorForm::PreserveProducts,
     )
+    .and_then(|(scalar, input)| {
+        scalar
+            .lower_weighted(&input.numerator, &input.target, &input.mass_squared)
+            .map(|_| ())
+            .map_err(RustRedEvaluationError::from_native)
+    })
     .unwrap_err();
     assert!(error.to_string().contains("limit"), "{error}");
 }

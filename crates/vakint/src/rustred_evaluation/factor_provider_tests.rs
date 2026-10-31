@@ -230,7 +230,7 @@ fn four_loop_provider_matches_h_positive_corner_and_dotted_reductions() {
     crate::Vakint::initialize_vakint_symbols();
     // H is deliberately the first installed descriptor. Full physical support
     // exercises the exact mapper without an unrelated failed parent search.
-    let engine = crate::rustred_evaluation::cache_tests::external_engine();
+    let engine = crate::rustred_evaluation::test_data::external_engine();
     let data = engine.four_loop_data().unwrap();
     let (native, physical) = data.four_loop.as_ref().unwrap().native_program(0).unwrap();
     let family = native.family_shared();

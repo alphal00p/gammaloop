@@ -3,46 +3,31 @@
 //! The saved zero-momentum result can be inspected or expanded through epsilon^5
 //! without repeating IBPs using `five_loop_q0_coefficients.py`. Its master products
 //! stay formal; see `docs/five_loop_q0_coefficients.typ` for the precision contract.
-#[path = "build_cache/cache_file_args.rs"]
-mod cache_file_args;
-#[path = "build_cache/cache_hit_capture.rs"]
-mod cache_hit_capture;
-#[path = "build_cache/cache_hit_diagnostic.rs"]
-mod cache_hit_diagnostic;
-#[path = "build_cache/cache_identity.rs"]
-mod cache_identity;
 #[path = "../tests/fixtures/qcd_ladder/mod.rs"]
 mod fixture;
-#[path = "build_cache/resource_guard_admission.rs"]
+#[path = "five_loop_qcd_ladder/resource_guard_admission.rs"]
 mod resource_guard_admission;
 use ::vakint;
-use cache_hit_capture::{CacheHitDiagnostic, ClassificationLogging};
-use cache_hit_diagnostic::validate_hit_diagnostic;
-use cache_identity::{CacheIdentity, digest};
-use rustred::solver::CandidateCacheRepresentation;
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use std::{
     collections::{BTreeMap, BTreeSet},
-    fs::{self, File, OpenOptions},
     io::{BufWriter, Write},
-    path::{Path, PathBuf},
-    sync::{Mutex, mpsc},
-    thread::{self, JoinHandle},
-    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+    path::PathBuf,
+    sync::Mutex,
+    time::{Duration, Instant},
 };
 use symbolica::atom::{Atom, AtomCore, AtomView};
 use vakint::{
     EvaluationMethod, EvaluationOrder, OfficialExternalDataOptions, RustRedEvaluationOptions,
-    RustRedMasterMode, RustRedMonitorDisplay, RustRedMonitorOptions, RustRedMonitorScope,
-    RustRedRunningCacheControl, RustRedRunningCacheOptions, Vakint, VakintSettings,
+    RustRedMasterMode, RustRedMonitorDisplay, RustRedMonitorOptions, RustRedMonitorScope, Vakint,
+    VakintSettings,
 };
 
-const USAGE: &str = "usage: five_loop_qcd_ladder --work-dir PATH [--artifacts PATH] [--projection quadratic|zero-momentum] [--coefficient-representation sparse|factorized] [--prepared-input PATH|--fresh-prepare] [--prepare-only|--dress-only] [--cache PATH] [--cache-max-compressed-bytes N] [--cache-max-decoded-bytes N] [--cache-max-index-bytes N] [--cache-decoded-directory PATH] [--running-cache PATH] [--running-cache-capture-only] [--running-cache-no-read-delta] [--warm] [--classify-cache-hits] [--monitor] [--progress-snapshot PATH] [--progress-interval-seconds N]\nCache file options require --cache. Byte grants are explicit and never raised automatically; compact defaults apply when omitted. --cache-decoded-directory selects file-backed decoded storage in an existing directory.\n--classify-cache-hits requires experimental-rustred, --cache and an existing --prepared-input (or prepared work directory). It runs one retained functional diagnostic; fresh preparation, warm runs, running caches and monitoring are forbidden. Diagnostic timings cannot support performance claims.\nMonitoring defaults off. --monitor requires progress-tui and defaults its snapshot to work-dir/monitor.json. A snapshot path enables native JSON without a TUI; interval defaults to 1s and must be finite and nonnegative. Monitored timings include diagnostic observation overhead.";
+const USAGE: &str = "usage: five_loop_qcd_ladder --work-dir PATH [--artifacts PATH] [--projection quadratic|zero-momentum] [--prepared-input PATH|--fresh-prepare] [--prepare-only|--dress-only] [--warm] [--monitor] [--progress-snapshot PATH] [--progress-interval-seconds N]\nThe reduction uses RustRed's ordered scheduler with the weight arithmetic of VAKINT_ORDERED_WEIGHT_ARITHMETIC (exact when unset). --warm repeats the evaluation in the same engine and checks exact parity; there is no result cache.\nMonitoring defaults off. --monitor requires progress-tui and defaults its snapshot to work-dir/monitor.json. A snapshot path enables native JSON without a TUI; interval defaults to 1s and must be finite and nonnegative. Monitored timings include diagnostic observation overhead.";
 
 struct StageLogger {
     phases: Mutex<BTreeMap<String, Vec<f64>>>,
-    cache_hits: Mutex<CacheHitDiagnostic>,
 }
 
 impl StageLogger {
@@ -52,11 +37,10 @@ impl StageLogger {
             "disjoint_evaluation_spans":[
                 "frontend_setup","frontend_canonicalization","frontend_tensor_prepass",
                 "scalar_input_split","frontend_admitted_witness_search","numerator_replacement",
-                "detailed_evaluation_total","caller_result_merge",
-                "retained_finalization_total","public_result_packing"
+                "ordered_batch_total","retained_finalization_total","public_result_packing"
             ],
             "nested_spans":{
-                "detailed_evaluation_total":[
+                "ordered_batch_total":[
                     "parent_transport_and_scalar_lowering","coverage_mass_batching",
                     "lowering_guard_materialization","saved_rule_application",
                     "terminal_geometry_and_lower_factors","retained_guard_materialization",
@@ -68,9 +52,9 @@ impl StageLogger {
                     "retained_catalogue_exact_combination","retained_catalogue_classification"
                 ]
             },
-            "unassigned":"Public evaluation minus disjoint spans and detailed/finalization totals minus their own children remain raw uninstrumented control, logging and caller cleanup time. Report each residual explicitly; no residual is a pure IBP estimate.",
-            "saved_rule_application_scope":"The complete saved call includes cache lookup/decode/validation when used, entry transport, weighted exact assembly, saved terminal substitution and running-cache flush. Cache hits do not imply IBP rule applications; inspect the recorded work counters.",
-            "loading_scope":"Initial loading_stages are captured before evaluation. Preparation spans may recur inside frontend_setup after a representation reload; products_prepared includes family_verified. Never add these overlapping spans to measured loading or evaluation wall totals.",
+            "unassigned":"Public evaluation minus disjoint spans and ordered-batch/finalization totals minus their own children remain raw uninstrumented control, logging and caller cleanup time. Report each residual explicitly; no residual is a pure IBP estimate.",
+            "saved_rule_application_scope":"The complete saved call includes entry transport, the ordered native reduction with weighted exact assembly, and saved terminal substitution.",
+            "loading_scope":"Initial loading_stages are captured before evaluation. Preparation spans may recur inside frontend_setup when changed application options reload the package; products_prepared includes family_verified. Never add these overlapping spans to measured loading or evaluation wall totals.",
             "path_scope":"Successful and fallback batch spans append independently. Unprojected terminal materialization is a fallback path; cleanup is measured after existing batch locals naturally drop. Failed operations may omit completed spans."
         })
     }
@@ -78,17 +62,10 @@ impl StageLogger {
 
 static LOGGER: StageLogger = StageLogger {
     phases: Mutex::new(BTreeMap::new()),
-    cache_hits: Mutex::new(CacheHitDiagnostic::new()),
 };
 static WARNINGS: Mutex<Vec<String>> = Mutex::new(Vec::new());
 impl log::Log for StageLogger {
     fn enabled(&self, metadata: &log::Metadata<'_>) -> bool {
-        if matches!(
-            metadata.target(),
-            "vakint::benchmark_cache_hits" | "vakint::cache_workload"
-        ) {
-            return cfg!(feature = "experimental-rustred") && ClassificationLogging::enabled();
-        }
         metadata.level() <= log::Level::Warn || metadata.target() == "vakint::saved_application"
     }
     fn log(&self, record: &log::Record<'_>) {
@@ -96,26 +73,6 @@ impl log::Log for StageLogger {
             return;
         }
         let message = record.args().to_string();
-        if matches!(
-            record.target(),
-            "vakint::benchmark_cache_hits" | "vakint::cache_workload"
-        ) {
-            let mut diagnostic = self.cache_hits.lock().unwrap_or_else(|poison| {
-                let mut diagnostic = poison.into_inner();
-                diagnostic.hit_error = Some("cache-hit logger mutex was poisoned".into());
-                diagnostic
-            });
-            if record.target() == "vakint::benchmark_cache_hits" {
-                if diagnostic.hit_error.is_none()
-                    && let Err(error) = diagnostic.capture_hit_event(&message)
-                {
-                    diagnostic.hit_error = Some(error.to_string());
-                }
-            } else if let Err(error) = diagnostic.capture_input_roots(&message) {
-                diagnostic.input_roots_error = Some(error.to_string());
-            }
-            return;
-        }
         if record.level() <= log::Level::Warn {
             eprintln!("{message}");
             if let Ok(mut warnings) = WARNINGS.lock() {
@@ -141,106 +98,6 @@ impl log::Log for StageLogger {
     fn flush(&self) {}
 }
 
-struct RunningTelemetry {
-    stop: mpsc::Sender<()>,
-    worker: Option<JoinHandle<serde_json::Value>>,
-}
-
-impl RunningTelemetry {
-    fn start(
-        control: RustRedRunningCacheControl,
-        work: PathBuf,
-        phase: &'static str,
-    ) -> std::io::Result<Self> {
-        let (stop, receiver) = mpsc::channel();
-        let worker = thread::Builder::new()
-            .name("running-cache-telemetry".into())
-            .spawn(move || {
-                let session = format!(
-                    "{}-{phase}-{}",
-                    std::process::id(),
-                    SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_nanos()
-                );
-                let mut reports = 0_u64;
-                let mut errors = 0_u64;
-                let mut last_good_utc = None;
-                let mut last_error = None;
-                loop {
-                    let utc = SystemTime::now()
-                        .duration_since(UNIX_EPOCH)
-                        .ok()
-                        .map(|time| time.as_secs_f64());
-                    let result = (|| -> Result<(), String> {
-                        let native = control.report().map_err(|error| error.to_string())?;
-                        let document = json!({
-                            "schema":"vakint.running-cache.telemetry.v1",
-                            "utc_unix_seconds":utc,"pid":std::process::id(),
-                            "session":session,"phase":phase,"interval_seconds":10,
-                            "native":native.to_document(),
-                            "record_semantics":"accepted is enqueued; committed is acknowledged durable",
-                        });
-                        Self::write_atomic(&work.join("running-cache-live.json"), &document)
-                            .map_err(|error| error.to_string())?;
-                        last_good_utc = utc;
-                        reports = reports.saturating_add(1);
-                        Ok(())
-                    })();
-                    if let Err(error) = result {
-                        errors = errors.saturating_add(1);
-                        last_error = Some(error.clone());
-                        eprintln!("running-cache telemetry failed: {error}");
-                        // Preserve the last good live report. Reporting failure
-                        // never touches the native writer or calculation.
-                        let _ = Self::write_atomic(
-                            &work.join("running-cache-telemetry-error.json"),
-                            &json!({"utc_unix_seconds":utc,"pid":std::process::id(),
-                                "session":session,"phase":phase,"error":error,
-                                "last_good_utc_unix_seconds":last_good_utc}),
-                        );
-                    }
-                    match receiver.recv_timeout(Duration::from_secs(10)) {
-                        Ok(()) | Err(mpsc::RecvTimeoutError::Disconnected) => break,
-                        Err(mpsc::RecvTimeoutError::Timeout) => {}
-                    }
-                }
-                json!({"session":session,"phase":phase,"reports":reports,"errors":errors,
-                    "last_good_utc_unix_seconds":last_good_utc,"last_error":last_error,
-                    "stopped_and_joined":true})
-            })?;
-        Ok(Self {
-            stop,
-            worker: Some(worker),
-        })
-    }
-
-    fn write_atomic(path: &Path, document: &serde_json::Value) -> std::io::Result<()> {
-        let pending = path.with_extension(format!("{}.pending", std::process::id()));
-        let mut file = File::create(&pending)?;
-        serde_json::to_writer_pretty(&mut file, document).map_err(std::io::Error::other)?;
-        file.sync_all()?;
-        fs::rename(pending, path)?;
-        File::open(path.parent().unwrap_or(Path::new(".")))?.sync_all()
-    }
-
-    fn stop(mut self) -> serde_json::Value {
-        let _ = self.stop.send(());
-        match self.worker.take().map(JoinHandle::join) {
-            Some(Ok(report)) => report,
-            Some(Err(_)) => json!({"stopped_and_joined":true,"thread_panicked":true}),
-            None => serde_json::Value::Null,
-        }
-    }
-}
-
-impl Drop for RunningTelemetry {
-    fn drop(&mut self) {
-        let _ = self.stop.send(());
-        if let Some(worker) = self.worker.take() {
-            let _ = worker.join();
-        }
-    }
-}
-
 fn git(arguments: &[&str]) -> Option<String> {
     let output = std::process::Command::new("git")
         .args(arguments)
@@ -256,85 +113,24 @@ fn git(arguments: &[&str]) -> Option<String> {
 }
 
 fn collector_helper_sources() -> BTreeMap<&'static str, String> {
-    [
-        (
-            "crates/vakint/examples/build_cache/cache_file_args.rs",
-            include_bytes!("build_cache/cache_file_args.rs").as_slice(),
-        ),
-        (
-            "crates/vakint/examples/build_cache/resource_guard_admission.rs",
-            include_bytes!("build_cache/resource_guard_admission.rs").as_slice(),
-        ),
-        (
-            "crates/vakint/examples/build_cache/cache_identity.rs",
-            include_bytes!("build_cache/cache_identity.rs").as_slice(),
-        ),
-        (
-            "crates/vakint/examples/build_cache/cache_hit_diagnostic.rs",
-            include_bytes!("build_cache/cache_hit_diagnostic.rs").as_slice(),
-        ),
-        (
-            "crates/vakint/examples/build_cache/cache_hit_capture.rs",
-            include_bytes!("build_cache/cache_hit_capture.rs").as_slice(),
-        ),
-    ]
+    [(
+        "crates/vakint/examples/five_loop_qcd_ladder/resource_guard_admission.rs",
+        include_bytes!("five_loop_qcd_ladder/resource_guard_admission.rs").as_slice(),
+    )]
     .into_iter()
     .map(|(path, bytes)| (path, format!("{:x}", Sha256::digest(bytes))))
     .collect()
 }
 
-fn validate_classification(
-    enabled: bool,
-    cache: Option<&Path>,
-    incompatible: bool,
-    prepared: bool,
-) -> fixture::Result<()> {
-    if enabled {
-        if !cfg!(feature = "experimental-rustred") {
-            return Err("--classify-cache-hits requires experimental-rustred".into());
-        }
-        if cache.is_none() || incompatible {
-            return Err("classification requires --cache and forbids fresh preparation, prepare-only, dress-only, warm runs, running caches and monitoring".into());
-        }
-        if !prepared {
-            return Err("classification requires an existing verified --prepared-input or prepared work directory".into());
-        }
-    }
-    Ok(())
-}
-
-fn cache_identity(path: Option<&Path>) -> eyre::Result<serde_json::Value> {
-    let mut identity = json!({"cache_sha256":null,"cache_native_index_identity":null});
-    if let Some(path) = path {
-        match CacheIdentity::read(path)? {
-            CacheIdentity::File(hash) => identity["cache_sha256"] = hash.into(),
-            CacheIdentity::Native(indexes) => identity["cache_native_index_identity"] = indexes,
-        }
-    }
-    Ok(identity)
-}
-
-fn write_json(path: &Path, document: &serde_json::Value) -> eyre::Result<()> {
-    RunningTelemetry::write_atomic(path, document)?;
-    Ok(())
-}
-
 fn main() -> fixture::Result<()> {
     let mut work = None;
     let mut artifacts = None;
-    let mut cache = None;
-    let mut cache_file_options = cache_file_args::CacheFileArgs::default();
-    let mut running_cache = None;
-    let mut running_cache_capture_only = false;
-    let mut running_cache_no_read_delta = false;
     let mut prepared_input = None;
     let mut prepare_only = false;
     let mut fresh_prepare = false;
     let mut dress_only = false;
     let mut warm = false;
-    let mut classify_cache_hits = false;
     let mut monitor = RustRedMonitorOptions::default();
-    let mut coefficient_representation = CandidateCacheRepresentation::Sparse;
     let mut projection = fixture::Projection::QuadraticTransverse;
     let mut arguments = std::env::args_os().skip(1);
     while let Some(argument) = arguments.next() {
@@ -353,22 +149,6 @@ fn main() -> fixture::Result<()> {
                     arguments.next().ok_or("missing artifact path")?,
                 ))
             }
-            Some("--cache") => {
-                cache = Some(PathBuf::from(arguments.next().ok_or("missing cache path")?))
-            }
-            Some(flag) if cache_file_args::CacheFileArgs::recognizes(flag) => {
-                let value = arguments
-                    .next()
-                    .ok_or_else(|| format!("missing value for {flag}"))?;
-                cache_file_options.set(flag, value)?;
-            }
-            Some("--running-cache") => {
-                running_cache = Some(PathBuf::from(
-                    arguments.next().ok_or("missing running-cache path")?,
-                ))
-            }
-            Some("--running-cache-capture-only") => running_cache_capture_only = true,
-            Some("--running-cache-no-read-delta") => running_cache_no_read_delta = true,
             Some("--prepared-input") => {
                 prepared_input = Some(PathBuf::from(
                     arguments.next().ok_or("missing prepared-input directory")?,
@@ -378,7 +158,6 @@ fn main() -> fixture::Result<()> {
             Some("--fresh-prepare") => fresh_prepare = true,
             Some("--dress-only") => dress_only = true,
             Some("--warm") => warm = true,
-            Some("--classify-cache-hits") => classify_cache_hits = true,
             Some("--monitor") => monitor.display = RustRedMonitorDisplay::Tui,
             Some("--progress-snapshot") => {
                 monitor.progress_snapshot = Some(PathBuf::from(
@@ -395,21 +174,6 @@ fn main() -> fixture::Result<()> {
                 monitor.interval = Duration::try_from_secs_f64(seconds)?;
             }
 
-            Some("--coefficient-representation") => {
-                coefficient_representation = match arguments
-                    .next()
-                    .and_then(|value| value.into_string().ok())
-                    .as_deref()
-                {
-                    Some("sparse") => CandidateCacheRepresentation::Sparse,
-                    Some("factorized") => CandidateCacheRepresentation::Factorized,
-                    _ => {
-                        return Err(
-                            "coefficient representation must be sparse or factorized".into()
-                        );
-                    }
-                }
-            }
             Some("--projection") => {
                 projection = match arguments
                     .next()
@@ -424,50 +188,18 @@ fn main() -> fixture::Result<()> {
             _ => return Err(USAGE.into()),
         }
     }
-    cache_file_options.normalize(cache.as_deref())?;
     if fresh_prepare && prepared_input.is_some() {
         return Err("--fresh-prepare cannot be combined with --prepared-input".into());
     }
     if dress_only && prepared_input.is_some() {
         return Err("--dress-only cannot be combined with --prepared-input".into());
     }
-    if running_cache_capture_only && running_cache.is_none() {
-        return Err("--running-cache-capture-only requires --running-cache".into());
-    }
-    if running_cache_capture_only && cache.is_some() {
-        return Err("capture-only running cache cannot be combined with --cache".into());
-    }
-    if running_cache_no_read_delta && running_cache.is_none() {
-        return Err("--running-cache-no-read-delta requires --running-cache".into());
-    }
-    let representation_name = match coefficient_representation {
-        CandidateCacheRepresentation::Sparse => "sparse",
-        CandidateCacheRepresentation::Factorized => "factorized",
-    };
+    let arithmetic = fixture::comparison::arithmetic_from_environment()?;
     let work = work.ok_or("--work-dir is required")?;
     if monitor.display == RustRedMonitorDisplay::Tui && monitor.progress_snapshot.is_none() {
         monitor.progress_snapshot = Some(work.join("monitor.json"));
     }
     monitor.validate()?;
-    let classification_incompatible = fresh_prepare
-        || prepare_only
-        || dress_only
-        || warm
-        || running_cache.is_some()
-        || running_cache_capture_only
-        || running_cache_no_read_delta
-        || monitor.enabled();
-    // Reject incompatible diagnostic invocations before preparing any input.
-    validate_classification(
-        classify_cache_hits,
-        cache.as_deref(),
-        classification_incompatible,
-        true,
-    )?;
-    #[cfg(feature = "experimental-rustred")]
-    {
-        monitor.cache_hit_diagnostic = classify_cache_hits;
-    }
 
     let _guard_admission = resource_guard_admission::admit_from_task_env()?;
 
@@ -497,12 +229,6 @@ fn main() -> fixture::Result<()> {
             }
             prepared_input = Some(work.clone());
         }
-        validate_classification(
-            classify_cache_hits,
-            cache.as_deref(),
-            classification_incompatible,
-            prepared_input.is_some(),
-        )?;
         let fresh_native_preparation = prepared_input.is_none();
         let input_started = Instant::now();
         if let Some(scope) = scope.as_deref_mut() { scope.phase(if fresh_native_preparation { "scalar_input_preparation" } else { "prepared_input_loading" }); }
@@ -549,7 +275,7 @@ fn main() -> fixture::Result<()> {
             .map(|(name, bytes)| (name, format!("{:x}", Sha256::digest(bytes))))
             .collect::<BTreeMap<_, _>>();
         let mut report = json!({"schema":"vakint.qcd-ladder.benchmark.v1", "projection":prepared.projection,
-            "coefficient_representation":representation_name,
+            "reduction_strategy":"Ordered","ordered_weight_arithmetic":format!("{arithmetic:?}"),
             "source_commit":git(&["rev-parse", "HEAD"]), "source_dirty":git(&["status", "--porcelain"]).map(|value| !value.is_empty()),
             "compiled_cohort":{
                 "main_revision":option_env!("VAKINT_CACHE_BUILD_GIT_REVISION"),
@@ -565,20 +291,9 @@ fn main() -> fixture::Result<()> {
             "collector_helper_sources_sha256":collector_helper_sources(),
             "master_mode":"retain",
             "guard_policy":"canonical-full-sorted-deduplicated",
-            "cache_identity":({
-                if let Some(scope) = scope.as_deref_mut() { scope.phase("initial_cache_identity_verification"); }
-                let identity = cache_identity(cache.as_deref())?;
-                if let Some(scope) = scope.as_deref_mut() { scope.phase("prepared_input_report"); }
-                identity
-            }),
-            "cache_identity_after":null,
-            "cache_hit_diagnostic_enabled":classify_cache_hits,
-            "diagnostic_only":classify_cache_hits,
             "performance_claim":false,
             "warm_requested":warm,
-            "cache_hit_diagnostic":null,
             "input_canonical_sha256":format!("{:x}",Sha256::digest(prepared.input.to_canonical_string().as_bytes())),
-            "compiled_cache_file_args_sha256":format!("{:x}", Sha256::digest(include_bytes!("build_cache/cache_file_args.rs"))),
             "fresh_native_preparation":fresh_native_preparation,
             "input_mode":if fresh_native_preparation {"fresh"} else {"prepared"},
             "fixture_sources_sha256":manifest.producer.fixture_sources_sha256,
@@ -597,10 +312,7 @@ fn main() -> fixture::Result<()> {
                 "native_denominator_basis_lowering":"required by saved-index application"},
             "contributions":prepared.contributions, "input_sha256":manifest.input.sha256,
             "input_bytes":manifest.input.bytes, "prepared_nonzero_conditions":prepared.nonzero_conditions.iter().map(AtomCore::to_canonical_string).collect::<Vec<_>>(),
-            "persistent_cache":cache, "running_cache_path":running_cache,
-            "cache_file_options":cache_file_options.document()?,
-            "running_cache_capture_only":running_cache_capture_only,
-            "running_cache_read_delta":!running_cache_no_read_delta,
+            "persistent_cache":null,
             "reduction_completed":false});
         if monitor.enabled() {
             report["monitor"] = json!({
@@ -612,7 +324,7 @@ fn main() -> fixture::Result<()> {
                 "progress_snapshot": monitor.progress_snapshot,
                 "interval_seconds": monitor.interval.as_secs_f64(),
                 "diagnostic_timing": true,
-                "scope":"job", "api_completion":"separate from durable outputs and cache closure",
+                "scope":"job", "api_completion":"separate from durable outputs",
             });
         }
         if let Some(scope) = scope.as_deref_mut() { scope.phase("durable_report_write"); }
@@ -635,20 +347,9 @@ fn main() -> fixture::Result<()> {
         // the recorded options describe the application that actually runs.
         settings.rustred_application_options.unresolved_policy =
             rustred::solver::UnresolvedPolicy::Preserve;
-        // Persistent and running caches belong to depth-first reduction.
-        settings.rustred_application_options.reduction_strategy =
-            vakint::RustRedReductionStrategy::DepthFirst;
-        settings.rustred_application_options.cache_representation = coefficient_representation;
-        // The public loader prepares its default Sparse session. Selecting
-        // Factorized reloads that session on the first evaluation; retain and
-        // report this setup cost instead of introducing another loading path.
-        report["representation_setup"] = json!({
-            "initial_data_load":"sparse",
-            "evaluation_requested":representation_name,
-            "first_evaluation_reloads_application":coefficient_representation != CandidateCacheRepresentation::Sparse,
-            "reload_timing_scope":"Any representation reload is included in reduction_seconds, not data_loading_seconds",
-            "owner_preparation_counter_scope":"Before/after counters belong to different sessions when the representation reloads; their subtraction is not an isolated same-session preparation measurement"
-        });
+        settings
+            .rustred_application_options
+            .ordered_weight_arithmetic = arithmetic;
         report["conventions"] = json!({
             "integral_normalization":format!("{:?}",settings.integral_normalization_factor),
             "integral_normalization_expression":settings.get_integral_normalization_factor_atom()?.to_canonical_string(),
@@ -664,16 +365,9 @@ fn main() -> fixture::Result<()> {
             5,
             &OfficialExternalDataOptions {
                 local_artifacts_path: artifacts,
-                load_prepared_caches: false,
                 ..Default::default()
             },
         )?;
-        let caches_before = (1..=5)
-            .map(|loops| Ok((loops, engine.cache_statistics(loops)?.has_read_backing())))
-            .collect::<fixture::Result<BTreeMap<_, _>>>()?;
-        if caches_before.values().any(|attached| *attached) {
-            return Err("baseline must never import a persistent cache".into());
-        }
         report["data_manifest_sha256"] = json!(format!(
             "{:x}",
             Sha256::digest(std::fs::read(loaded.path.join("manifest.json"))?)
@@ -682,243 +376,28 @@ fn main() -> fixture::Result<()> {
         report["data_loading_seconds"] = json!(started.elapsed().as_secs_f64());
         report["loading_stages"] = json!(*LOGGER.phases.lock().map_err(|error| error.to_string())?);
         let owners_after_data_load = engine.rustred_application_owner_preparation_statistics()?;
-        if let Some(cache) = &cache {
-            let started = Instant::now();
-            if let Some(scope) = scope.as_deref_mut() { scope.phase("persistent_cache_loading"); }
-            engine.load_cache(5, cache, &cache_file_options.load_options())?;
-            report["cache_loading_seconds"] = json!(started.elapsed().as_secs_f64());
-            engine.clear_cache(5)?;
-        }
-        if let Some(scope) = scope.as_deref_mut() { scope.phase("running_cache_attachment"); }
-        let running_read_backing = running_cache.is_some() && !running_cache_capture_only;
-        let running_started = Instant::now();
-        let running_control = running_cache
-            .as_ref()
-            .map(|path| {
-                engine.attach_running_cache(
-                    5,
-                    path,
-                    &RustRedRunningCacheOptions {
-                        read_backing: running_read_backing,
-                        read_delta: !running_cache_no_read_delta,
-                        ..Default::default()
-                    },
-                )
-            })
-            .transpose()?;
         let evaluation = (|| -> fixture::Result<()> {
-            report["running_cache_loading_seconds"] = json!(
-                running_control
-                    .as_ref()
-                    .map(|_| running_started.elapsed().as_secs_f64())
-            );
-            report["running_cache_read_backing"] = json!(running_read_backing);
-            report["running_cache_attached"] =
-                json!(running_control.is_some() && engine.cache_statistics(5)?.attached);
-            let caches_during_evaluation = (1..=5)
-                .map(|loops| Ok((loops, engine.cache_statistics(loops)?.has_read_backing())))
-                .collect::<fixture::Result<BTreeMap<_, _>>>()?;
-            if caches_during_evaluation.iter().any(|(&loops, &attached)| {
-                attached != ((cache.is_some() || running_read_backing) && loops == 5)
-            }) {
-                return Err(
-                    "measurement persistent backing differs from the declared five-loop cache policy"
-                        .into(),
-                );
-            }
-            report["persistent_cache_attached"] = json!(caches_during_evaluation[&5]);
-            report["persistent_cache_attachments_before"] = json!(caches_before);
-            report["persistent_cache_attachments_during_evaluation"] = json!(caches_during_evaluation);
-            report["persistent_cache_policy"] =
-                json!(if running_read_backing && running_cache_no_read_delta {
-                    "immutable-five-loop-base-only-with-running-capture"
-                } else if running_read_backing && cache.is_some() {
-                    "manual-five-loop-base-and-running-delta"
-                } else if running_read_backing {
-                    "running-five-loop-delta"
-                } else if cache.is_some() {
-                    "manual-five-loop-only"
-                } else {
-                    "none"
-                });
-            let flush_running_cache =
-                |phase: &str| -> (serde_json::Value, Option<Box<dyn std::error::Error>>) {
-                    let Some(control) = &running_control else {
-                        return (serde_json::Value::Null, None);
-                    };
-                    let started = Instant::now();
-                    let flushed = control.flush();
-                    let seconds = started.elapsed().as_secs_f64();
-                    let flush_complete = flushed.as_ref().is_ok_and(|report| {
-                        report.pending_records == 0 && report.writer_error.is_none()
-                    });
-                    let document = match &flushed {
-                        Ok(report) => Some(report.to_document()),
-                        Err(_) => control.report().ok().map(|report| report.to_document()),
-                    };
-                    let flush_error = flushed.as_ref().err().map(ToString::to_string).or_else(|| {
-                        (!flush_complete)
-                            .then(|| "native flush did not commit all accepted records".to_owned())
-                    });
-                    let mut persistence_error: Option<Box<dyn std::error::Error>> = flushed
-                        .err()
-                        .map(|error| Box::new(error) as Box<dyn std::error::Error>);
-                    if persistence_error.is_none() && !flush_complete {
-                        persistence_error =
-                            Some("native flush did not commit all accepted records".into());
-                    }
-                    let mut snapshot_seconds = None;
-                    let mut snapshot_sidecar = None;
-                    let mut snapshot_descriptor = None;
-                    let mut snapshot_error = None;
-                    let snapshot = if flush_complete {
-                        let started = Instant::now();
-                        let frozen = (|| -> fixture::Result<serde_json::Value> {
-                            let delta = fs::canonicalize(
-                                running_cache
-                                    .as_ref()
-                                    .ok_or("running cache has no delta path")?,
-                            )?;
-                            let directory = fs::canonicalize(&work)?.join("running-cache-snapshots");
-                            if directory.starts_with(&delta) {
-                                return Err("snapshot must be outside the running delta".into());
-                            }
-                            fs::create_dir_all(&directory)?;
-                            let directory = fs::canonicalize(directory)?;
-                            if directory.starts_with(&delta) {
-                                return Err(
-                                    "snapshot directory resolves inside the running delta".into()
-                                );
-                            }
-                            let stamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
-                            let sidecar = directory.join(format!(
-                                "ladder-{phase}-{}-{stamp}.rrindex",
-                                std::process::id()
-                            ));
-                            let descriptor = sidecar.with_extension("json");
-                            if sidecar.exists() || descriptor.exists() {
-                                return Err("preserve the existing running-cache snapshot".into());
-                            }
-                            snapshot_sidecar = Some(sidecar.clone());
-                            snapshot_descriptor = Some(descriptor.clone());
-                            let document = control.snapshot(&sidecar)?.to_document();
-                            let mut file = OpenOptions::new()
-                                .write(true)
-                                .create_new(true)
-                                .open(&descriptor)?;
-                            serde_json::to_writer_pretty(&mut file, &document)?;
-                            file.sync_all()?;
-                            File::open(directory)?.sync_all()?;
-                            Ok(document)
-                        })();
-                        snapshot_seconds = Some(started.elapsed().as_secs_f64());
-                        match frozen {
-                            Ok(document) => Some(document),
-                            Err(error) => {
-                                snapshot_error = Some(error.to_string());
-                                persistence_error = Some(error);
-                                None
-                            }
-                        }
-                    } else {
-                        None
-                    };
-                    let mut receipt = json!({
-                        "path":running_cache,"read_backing":running_read_backing,
-                        "phase":phase,"read_delta":!running_cache_no_read_delta,
-                        "flush_seconds":seconds,"report":document,
-                        "flush_error":flush_error,"flush_complete":flush_complete,
-                        "snapshot":snapshot,"snapshot_error":snapshot_error,"snapshot_seconds":snapshot_seconds,
-                        "snapshot_sidecar":snapshot_sidecar,"snapshot_descriptor":snapshot_descriptor,
-                    });
-                    let saved = (|| -> fixture::Result<()> {
-                        let stamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
-                        let temporary = work.join(format!(
-                            "running-cache-{phase}-{}-{stamp}.json.pending",
-                            std::process::id()
-                        ));
-                        let mut file = OpenOptions::new()
-                            .write(true)
-                            .create_new(true)
-                            .open(&temporary)?;
-                        serde_json::to_writer_pretty(&mut file, &receipt)?;
-                        file.sync_all()?;
-                        fs::rename(&temporary, work.join("running-cache.json"))?;
-                        File::open(&work)?.sync_all()?;
-                        Ok(())
-                    })();
-                    if let Err(error) = saved {
-                        eprintln!("could not write running-cache receipt: {error}");
-                        receipt["receipt_error"] = json!(error.to_string());
-                        if persistence_error.is_none() {
-                            persistence_error = Some(error);
-                        }
-                    }
-                    (receipt, persistence_error)
-                };
-            let start_telemetry = |phase| {
-                let Some(control) = &running_control else {
-                    return (None, None);
-                };
-                match RunningTelemetry::start(control.clone(), work.clone(), phase) {
-                    Ok(telemetry) => (Some(telemetry), None),
-                    Err(error) => {
-                        eprintln!("could not start running-cache telemetry: {error}");
-                        let _ = RunningTelemetry::write_atomic(
-                            &work.join("running-cache-telemetry-error.json"),
-                            &json!({"pid":std::process::id(),"phase":phase,
-                            "utc_unix_seconds":SystemTime::now().duration_since(UNIX_EPOCH).ok().map(|time|time.as_secs_f64()),
-                            "error":error.to_string(),"reporter_started":false}),
-                        );
-                        (None, Some(error.to_string()))
-                    }
-                }
-            };
             let owners_before = engine.rustred_application_owner_preparation_statistics()?;
             LOGGER
                 .phases
                 .lock()
                 .map_err(|error| error.to_string())?
                 .clear();
-            let (telemetry, telemetry_error) = start_telemetry("cold");
-            report["running_cache_telemetry_start_error"] = json!(telemetry_error);
             report["execution_threads"] = json!({"math":1,
-            "native_io_writer":usize::from(running_control.is_some()),
-            "telemetry":usize::from(telemetry.is_some()),
-            "scope":"dedicated collector math, native writer and telemetry; not measured OS thread count"});
+            "scope":"dedicated collector math; not measured OS thread count"});
             let started = Instant::now();
-            let outcome = {
-                let _logging = ClassificationLogging::enter(classify_cache_hits);
-                if let Some(scope) = scope.as_deref_mut() {
-                    engine.evaluate_rustred_symbolic_in_scope(&settings, prepared.input.as_view(), scope)
-                } else if monitor.enabled() || classify_cache_hits {
-                    engine.evaluate_rustred_symbolic_with_monitor(
-                        &settings,
-                        prepared.input.as_view(),
-                        &monitor,
-                    )
-                } else {
-                    engine.evaluate_rustred_symbolic(&settings, prepared.input.as_view())
-                }
+            let outcome = if let Some(scope) = scope.as_deref_mut() {
+                engine.evaluate_rustred_symbolic_in_scope(&settings, prepared.input.as_view(), scope)
+            } else if monitor.enabled() {
+                engine.evaluate_rustred_symbolic_with_monitor(
+                    &settings,
+                    prepared.input.as_view(),
+                    &monitor,
+                )
+            } else {
+                engine.evaluate_rustred_symbolic(&settings, prepared.input.as_view())
             };
             report["reduction_seconds"] = json!(started.elapsed().as_secs_f64());
-            if classify_cache_hits {
-                let diagnostic = LOGGER.cache_hits.lock().unwrap_or_else(|poison| {
-                    let mut diagnostic = poison.into_inner();
-                    diagnostic.hit_error = Some("cache-hit logger mutex was poisoned".into());
-                    diagnostic
-                });
-                report["cache_hit_diagnostic"] = diagnostic.save_hit_diagnostic(&work, outcome.is_ok());
-            }
-            if let Some(scope) = scope.as_deref_mut() { scope.phase("cache_telemetry_finalization"); }
-            report["running_cache_telemetry"] = telemetry
-                .map(RunningTelemetry::stop)
-                .unwrap_or(serde_json::Value::Null);
-            // The control does not borrow the reducer. Flush completed native nodes
-            // before fallible telemetry or error propagation can leave this scope.
-            if let Some(scope) = scope.as_deref_mut() { scope.phase("running_cache_flush"); }
-            let (running_receipt, running_flush_error) = flush_running_cache("cold");
-            report["running_cache"] = running_receipt;
             report["end_to_end_seconds"] = json!(total_started.elapsed().as_secs_f64());
             let result = match outcome {
                 Ok(result) => result,
@@ -936,19 +415,10 @@ fn main() -> fixture::Result<()> {
             if let Some(scope) = scope.as_deref_mut() { scope.phase("evaluation_statistics"); }
             report["warnings"] = json!(*WARNINGS.lock().map_err(|error| error.to_string())?);
             report["stages"] = json!(*LOGGER.phases.lock().map_err(|error| error.to_string())?);
-            report["cache_statistics"] = json!(format!(
-                "{:?}",
-                engine.rustred_application_cache_statistics()?
-            ));
             report["witness_cache_statistics"] = json!(format!(
                 "{:?}",
                 engine.rustred_application_witness_cache_statistics()?
             ));
-            report["saved_application_cache"] = engine
-                .cache_statistics(5)?
-                .saved_application
-                .map(|statistics| statistics.to_document())
-                .unwrap_or(serde_json::Value::Null);
             let owners_after = engine.rustred_application_owner_preparation_statistics()?;
             report["owner_preparation"] = json!({
                 "declared_owners":owners_after.declared_owners,
@@ -956,16 +426,13 @@ fn main() -> fixture::Result<()> {
                 "failed_owners":owners_after.failed_owners,
                 "preparation_attempts":owners_after.preparation_attempts,
                 "prepared_owners_after_data_load":owners_after_data_load.prepared_owners,
-                "prepared_owners_after_cache_setup":owners_before.prepared_owners,
                 "preparation_attempts_after_data_load":owners_after_data_load.preparation_attempts,
-                "preparation_attempts_after_cache_setup":owners_before.preparation_attempts,
                 "preparation_during_load_seconds":owners_after_data_load.preparation_time.as_secs_f64(),
-                "preparation_during_cache_setup_seconds":owners_before.preparation_time.saturating_sub(owners_after_data_load.preparation_time).as_secs_f64(),
                 "preparation_during_reduction_seconds":owners_after.preparation_time.saturating_sub(owners_before.preparation_time).as_secs_f64()
             });
             report["native_timing_scope"] = json!({
                 "saved_rule_application":"Native entry transport, lazy owner preparation, DAG reduction, exact sum, and terminal substitution",
-                "owner_preparation":"Measured cumulative deferred-owner preparation counters at data load, cache setup, and reduction boundaries",
+                "owner_preparation":"Measured cumulative deferred-owner preparation counters at data load and reduction boundaries",
                 "pure_ibp_seconds":null,"terminal_substitution_seconds":null,
                 "separate_native_phase_durations_available":false,
                 "phase_duration_estimates_by_subtraction":false,
@@ -1062,22 +529,12 @@ fn main() -> fixture::Result<()> {
             // Include cold-result classification and artifact serialization, while
             // keeping the optional warm repetition outside the cold total.
             report["end_to_end_seconds"] = json!(total_started.elapsed().as_secs_f64());
-            if let Some(error) = running_flush_error {
-                report["running_cache_capture_failed"] = json!(true);
-                if let Some(scope) = scope.as_deref_mut() { scope.phase("durable_report_write"); }
-                if let Err(receipt_error) = write_report(&report) {
-                    eprintln!("could not write failed running-cache receipt: {receipt_error}");
-                }
-                return Err(error);
-            }
             if warm {
                 LOGGER
                     .phases
                     .lock()
                     .map_err(|error| error.to_string())?
                     .clear();
-                let (telemetry, telemetry_error) = start_telemetry("warm");
-                report["warm_running_cache_telemetry_start_error"] = json!(telemetry_error);
                 let started = Instant::now();
                 let outcome = if let Some(scope) = scope.as_deref_mut() {
                     engine.evaluate_rustred_symbolic_in_scope(&settings, prepared.input.as_view(), scope)
@@ -1091,12 +548,6 @@ fn main() -> fixture::Result<()> {
                     engine.evaluate_rustred_symbolic(&settings, prepared.input.as_view())
                 };
                 report["warm_reduction_seconds"] = json!(started.elapsed().as_secs_f64());
-                report["warm_running_cache_telemetry"] = telemetry
-                    .map(RunningTelemetry::stop)
-                    .unwrap_or(serde_json::Value::Null);
-                if let Some(scope) = scope.as_deref_mut() { scope.phase("warm_running_cache_flush"); }
-                let (running_receipt, running_flush_error) = flush_running_cache("warm");
-                report["warm_running_cache"] = running_receipt;
                 let second = match outcome {
                     Ok(result) => result,
                     Err(error) => {
@@ -1108,14 +559,6 @@ fn main() -> fixture::Result<()> {
                         return Err(error.into());
                     }
                 };
-                if let Some(error) = running_flush_error {
-                    report["running_cache_capture_failed"] = json!(true);
-                    if let Some(scope) = scope.as_deref_mut() { scope.phase("durable_report_write"); }
-                    if let Err(receipt_error) = write_report(&report) {
-                        eprintln!("could not write failed running-cache receipt: {receipt_error}");
-                    }
-                    return Err(error);
-                }
                 report["warm_stages"] =
                     json!(*LOGGER.phases.lock().map_err(|error| error.to_string())?);
                 if let Some(scope) = scope.as_deref_mut() { scope.phase("warm_exact_parity"); }
@@ -1129,49 +572,6 @@ fn main() -> fixture::Result<()> {
             }
             Ok(())
         })();
-        // Close exactly once after the final cold/warm durability barrier. Even an
-        // ordinary calculation/reporting error must release the physical writer.
-        if let Some(scope) = scope.as_deref_mut() { scope.phase("running_cache_close"); }
-        let close_error = running_control.as_ref().and_then(|control| {
-            let started = Instant::now();
-            let closed = control.close();
-            let document = match &closed {
-                Ok(closed) => Some(closed.to_document()),
-                Err(_) => control.report().ok().map(|report| report.to_document()),
-            };
-            report["running_cache_close"] = json!({"seconds":started.elapsed().as_secs_f64(),
-                "report":document,"error":closed.as_ref().err().map(ToString::to_string)});
-            closed.err()
-        });
-        if let Some(scope) = scope.as_deref_mut() { scope.phase("running_cache_terminal_receipt"); }
-        let terminal_receipt_error = running_control.as_ref().and_then(|_| {
-            let mut terminal = if warm && !report["warm_running_cache"].is_null() {
-                report["warm_running_cache"].clone()
-            } else {
-                report["running_cache"].clone()
-            };
-            terminal["flush_report"] = terminal["report"].clone();
-            terminal["report"] = report["running_cache_close"]["report"].clone();
-            terminal["close"] = report["running_cache_close"].clone();
-            terminal["terminal"] = json!(true);
-            terminal["utc_unix_seconds"] = json!(
-                SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .ok()
-                    .map(|time| time.as_secs_f64())
-            );
-            RunningTelemetry::write_atomic(&work.join("running-cache.json"), &terminal).err()
-        });
-        if let Some(error) = &terminal_receipt_error {
-            report["running_cache_terminal_receipt_error"] = json!(error.to_string());
-            eprintln!("could not write terminal running-cache receipt: {error}");
-        }
-        if let Some(scope) = scope.as_deref_mut() { scope.phase("final_cache_identity_verification"); }
-        let cache_identity_result = cache_identity(cache.as_deref());
-        match &cache_identity_result {
-            Ok(identity) => report["cache_identity_after"] = identity.clone(),
-            Err(error) => report["cache_identity_error"] = json!(error.to_string()),
-        }
         if let Err(error) = evaluation {
             if let Some(scope) = scope.as_deref_mut() { scope.phase("durable_report_write"); }
             if let Err(receipt_error) = write_report(&report) {
@@ -1179,120 +579,25 @@ fn main() -> fixture::Result<()> {
             }
             return Err(error);
         }
-        let final_cache_identity = match cache_identity_result {
-            Ok(identity) => identity,
-            Err(error) => {
-                if let Some(scope) = scope.as_deref_mut() { scope.phase("durable_report_write"); }
-                write_report(&report)?;
-                return Err(error.to_string().into());
-            }
-        };
-        if final_cache_identity != report["cache_identity"] {
-            report["cache_identity_error"] = json!("cache identity changed during evaluation");
-            if let Some(scope) = scope.as_deref_mut() { scope.phase("durable_report_write"); }
-            write_report(&report)?;
-            return Err("cache identity changed during evaluation".into());
-        }
-        if let Some(error) = close_error {
-            report["running_cache_capture_failed"] = json!(true);
-            if let Some(scope) = scope.as_deref_mut() { scope.phase("durable_report_write"); }
-            if let Err(receipt_error) = write_report(&report) {
-                eprintln!("could not write terminal running-cache receipt: {receipt_error}");
-            }
-            return Err(error.into());
-        }
-        if let Some(error) = terminal_receipt_error {
-            return Err(error.into());
-        }
         if let Some(scope) = scope { scope.phase("final_durable_report"); }
         write_report(&report)?;
         Ok(report)
     };
-    // Classification retains its existing single-API lossless observer contract.
-    let output = if classify_cache_hits {
-        operation(None)
-    } else {
-        RustRedMonitorScope::run(&monitor, |scope| operation(Some(scope)))
-    }?;
+    let output = RustRedMonitorScope::run(&monitor, |scope| operation(Some(scope)))?;
     // Deliver stdout after the TUI is restored; all durable artifacts are done.
     println!("{output}");
     Ok(())
 }
 
 #[cfg(test)]
-mod cache_classification_tests {
+mod stage_logger_tests {
     use super::*;
     use log::Log;
-
-    #[test]
-    fn diagnostic_admission_is_explicit_and_preserves_default_invocations() {
-        assert!(validate_classification(false, None, true, false).is_ok());
-        assert!(validate_classification(true, None, false, true).is_err());
-        assert!(validate_classification(true, Some(Path::new("cache.gz")), true, true).is_err());
-        assert!(validate_classification(true, Some(Path::new("cache.gz")), false, false).is_err());
-        assert_eq!(
-            validate_classification(true, Some(Path::new("cache.gz")), false, true).is_ok(),
-            cfg!(feature = "experimental-rustred")
-        );
-    }
-
-    #[test]
-    fn physical_logger_uses_the_same_lossless_stream_and_admission_scope() {
-        let logger = StageLogger {
-            phases: Mutex::new(BTreeMap::new()),
-            cache_hits: Mutex::new(CacheHitDiagnostic::new()),
-        };
-        let metadata = log::Metadata::builder()
-            .level(log::Level::Debug)
-            .target("vakint::benchmark_cache_hits")
-            .build();
-        assert!(!logger.enabled(&metadata));
-        {
-            let _admission = ClassificationLogging::enter(true);
-            assert_eq!(
-                logger.enabled(&metadata),
-                cfg!(feature = "experimental-rustred")
-            );
-            logger.log(
-                &log::Record::builder()
-                    .level(log::Level::Debug)
-                    .target("vakint::cache_workload")
-                    .args(format_args!(
-                        "{}",
-                        json!({"phase":"input_roots","roots":[vec![1;15]]})
-                    ))
-                    .build(),
-            );
-            logger.log(
-                &log::Record::builder()
-                    .level(log::Level::Debug)
-                    .target("vakint::benchmark_cache_hits")
-                    .args(format_args!(
-                        "{}",
-                        json!({"schema":"vakint.cache-hit-events.v1","event":"backing_hit"})
-                    ))
-                    .build(),
-            );
-            let diagnostic = logger.cache_hits.lock().unwrap();
-            assert_eq!(
-                diagnostic.input_dispatch_count,
-                u64::from(cfg!(feature = "experimental-rustred"))
-            );
-            assert_eq!(
-                diagnostic.hit_events.len(),
-                usize::from(cfg!(feature = "experimental-rustred"))
-            );
-            // A retained fragment is not a complete reconciled stream.
-            assert!(validate_hit_diagnostic(&diagnostic.hit_diagnostic(true)).is_err());
-        }
-        assert!(!logger.enabled(&metadata));
-    }
 
     #[test]
     fn physical_logger_keeps_repeated_nested_spans_separate_from_parent_totals() {
         let logger = StageLogger {
             phases: Mutex::new(BTreeMap::new()),
-            cache_hits: Mutex::new(CacheHitDiagnostic::new()),
         };
         for (phase, seconds) in [
             ("frontend_setup", 1.0),
@@ -1301,7 +606,7 @@ mod cache_classification_tests {
             ("retained_guard_materialization", 2.0),
             ("retained_guard_materialization", 3.0),
             ("retained_batch_cleanup", 0.5),
-            ("detailed_evaluation_total", 12.0),
+            ("ordered_batch_total", 12.0),
             ("retained_finalization_total", 5.0),
             ("retained_catalogue_exact_combination", 3.0),
             ("retained_catalogue_classification", 1.0),
@@ -1318,7 +623,7 @@ mod cache_classification_tests {
         let phases = logger.phases.lock().unwrap();
         assert_eq!(phases["coverage_mass_batching"], [2.0, 3.0]);
         assert_eq!(phases["retained_guard_materialization"], [2.0, 3.0]);
-        assert_eq!(phases["detailed_evaluation_total"], [12.0]);
+        assert_eq!(phases["ordered_batch_total"], [12.0]);
         let accounting = StageLogger::stage_accounting();
         let disjoint = accounting["disjoint_evaluation_spans"]
             .as_array()
@@ -1363,33 +668,5 @@ mod cache_classification_tests {
                 .unwrap()
                 .contains("explicitly")
         );
-        assert!(logger.cache_hits.lock().unwrap().hit_events.is_empty());
-    }
-
-    #[test]
-    fn physical_cache_identity_uses_existing_file_or_index_projection() -> fixture::Result<()> {
-        let scratch = tempfile::tempdir()?;
-        let cache = scratch.path().join("closed-cache.gz");
-        fs::write(&cache, b"tiny opaque identity control")?;
-        let before = cache_identity(Some(&cache)).map_err(|error| error.to_string())?;
-        assert_eq!(
-            before["cache_sha256"],
-            digest(&cache).map_err(|error| error.to_string())?
-        );
-        assert!(before["cache_native_index_identity"].is_null());
-        assert_eq!(
-            before,
-            cache_identity(Some(&cache)).map_err(|error| error.to_string())?
-        );
-        fs::write(&cache, b"changed closed cache")?;
-        assert_ne!(
-            before,
-            cache_identity(Some(&cache)).map_err(|error| error.to_string())?
-        );
-        assert_eq!(
-            cache_identity(None).map_err(|error| error.to_string())?,
-            json!({"cache_sha256":null,"cache_native_index_identity":null})
-        );
-        Ok(())
     }
 }

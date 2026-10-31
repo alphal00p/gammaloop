@@ -418,7 +418,7 @@ fn external_package_witness_memo_preserves_native_minimum_and_policy() {
             .rustred_application_witness_cache_statistics()
             .unwrap()
     );
-    engine.clear_rustred_application_cache().unwrap();
+    engine.clear_rustred_application_witness_cache().unwrap();
     let cleared = engine
         .rustred_application_witness_cache_statistics()
         .unwrap();

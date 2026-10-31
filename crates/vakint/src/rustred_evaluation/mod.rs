@@ -1,5 +1,9 @@
 //! FORM-independent scalar reduction through shipped RustRed programs.
 //!
+//! Every request reduces with RustRed's ordered scheduler: all matched
+//! contributions of a loop count share one exact frontier per compatible
+//! coefficient channel (see `ordered.rs`).
+//!
 //! One through three loops use sealed artifacts. Four loops use finite-tested
 //! candidate programs with pointwise guard, descent, and terminal checks;
 //! successful evaluation is not an unrestricted family-closure claim.
@@ -13,13 +17,7 @@ pub(crate) use masters::combine_exact;
 mod official;
 #[cfg(all(unix, not(target_arch = "wasm32")))]
 pub use official::{ExternalDataLoadReport, ExternalDataLoopReport, OfficialExternalDataOptions};
-pub mod cache;
-#[cfg(test)]
-mod cache_four_loop_tests;
-#[cfg(test)]
-mod cache_lower_tests;
-#[cfg(test)]
-mod cache_tests;
+pub(crate) mod cache;
 mod factor_projection;
 mod factor_provider;
 pub(crate) mod five_loop;
@@ -33,6 +31,8 @@ mod ordered;
 mod request_dump;
 #[cfg(test)]
 mod terminal;
+#[cfg(test)]
+mod test_data;
 
 #[cfg(feature = "experimental-rustred")]
 pub mod experimental;
@@ -109,9 +109,7 @@ pub enum RustRedEvaluationError {
     ExternalData { detail: String },
     #[error("RustRed master data capability: {detail}")]
     MasterCapability { detail: String },
-    #[error("RustRed cache backend is unavailable for {loop_count} loops")]
-    CacheBackendUnavailable { loop_count: usize },
-    #[error("RustRed lower-loop cache lock is poisoned")]
+    #[error("RustRed application lock is poisoned")]
     CacheLockPoisoned,
     #[error("RustRed cache operation failed: {source}")]
     CacheOperation { source: rustred_app::AppError },
@@ -205,6 +203,20 @@ pub(crate) fn supports(
         || five_loop::supports(topology)
 }
 
+/// Native application options of one request. Vakint always reduces with
+/// RustRed's ordered scheduler and preserves exact uncovered leaves; the
+/// `reduction_strategy` of [`VakintSettings::rustred_application_options`] is
+/// ignored.
+pub(crate) fn application_options(
+    settings: &VakintSettings,
+) -> rustred_app::SavedApplicationOptions {
+    rustred_app::SavedApplicationOptions {
+        reduction_strategy: rustred::reduction::ReductionStrategy::Ordered,
+        unresolved_policy: rustred::solver::UnresolvedPolicy::Preserve,
+        ..settings.rustred_application_options
+    }
+}
+
 /// Whether the data needed to reduce a supported topology is loaded. One to
 /// three loops use the vendored artifacts; four and five loops need external
 /// data or, at five loops, a configured application package.
@@ -217,12 +229,6 @@ pub(crate) fn has_data(vakint: &Vakint, settings: &VakintSettings, topology: &To
         5 => settings.rustred_artifact_path.is_some() || vakint.has_rustred_loop(5),
         _ => true,
     }
-}
-
-/// Whether a strategy reads the prepared completed-result caches shipped with
-/// the external data. Only depth-first reduction does.
-pub(crate) fn uses_prepared_caches(strategy: crate::RustRedReductionStrategy) -> bool {
-    strategy == crate::RustRedReductionStrategy::DepthFirst
 }
 
 impl Vakint {
@@ -255,16 +261,10 @@ impl Vakint {
         mode: RustRedMasterMode,
         observation: Option<&mut CandidateRoutedApplicationObserver<'_>>,
     ) -> Result<Atom, VakintError> {
-        // Ordinary reduction simplifies each normalized contribution before
-        // this boundary. Ordered reduction combines those contributions first,
-        // so apply the same convention once here, before master substitution.
-        let raw = if settings.rustred_application_options.reduction_strategy
-            == crate::RustRedReductionStrategy::Ordered
-        {
-            crate::utils::simplify_real(raw.as_view())
-        } else {
-            raw
-        };
+        // Ordered reduction combines all normalized contributions first, so
+        // simplify real logarithms and zero powers once here, before master
+        // substitution, rather than per contribution.
+        let raw = crate::utils::simplify_real(raw.as_view());
         let data = self.rustred_data()?;
         let announced = self.announced_bare_masters()?;
         let result = if mode == RustRedMasterMode::Retain {
@@ -302,54 +302,19 @@ impl Vakint {
         settings: &VakintSettings,
         numerator: AtomView,
         integral_specs: &ReplacementRules,
-        mut observation: Option<&mut CandidateRoutedApplicationObserver<'_>>,
+        observation: Option<&mut CandidateRoutedApplicationObserver<'_>>,
     ) -> Result<Atom, VakintError> {
-        if settings.rustred_application_options.reduction_strategy
-            == crate::RustRedReductionStrategy::Ordered
-        {
-            return self.rustred_reduce_ordered(
-                settings,
-                vec![MatchedContribution {
-                    numerator: numerator.to_owned(),
-                    matched: integral_specs.clone(),
-                }],
-                observation,
-                None,
-            );
-        }
-        // Raw contributions must combine before the public notation is restored.
-        let mut scalar_settings = settings.clone();
-        scalar_settings.use_dot_product_notation = true;
-        let settings = &scalar_settings;
-        let options = &RustRedEvaluationOptions {
-            master_mode: RustRedMasterMode::Retain,
-        };
-        crate::citations::USED_CITATIONS.record(crate::citations::CitationSource::RustRed);
-        if integral_specs.canonical_topology.get_integral().n_loops == 5 {
-            MonitorContext::native_phase(
-                observation.as_deref_mut(),
-                "saved_application_preparation",
-                None,
-            );
-            return self.saved_application(settings)?.evaluate(
-                settings,
-                numerator,
-                integral_specs,
-                observation.as_deref_mut(),
-            );
-        }
-        MonitorContext::native_phase(observation, "lower_loop_reduction_unobserved", None);
-        if integral_specs.canonical_topology.get_integral().n_loops == 4 {
-            return four_loop::evaluate(self, settings, numerator, integral_specs, options);
-        }
-        MatchedScalarFamily::try_new(integral_specs)?
-            .evaluate(self, settings, numerator, options)
-            .map_err(Into::into)
+        self.rustred_reduce_ordered(
+            settings,
+            vec![MatchedContribution {
+                numerator: numerator.to_owned(),
+                matched: integral_specs.clone(),
+            }],
+            observation,
+            None,
+        )
     }
 }
-
-#[cfg(test)]
-mod bundled_cache_tests;
 
 #[cfg(test)]
 mod selection_tests {
@@ -400,7 +365,7 @@ mod selection_tests {
             bare.evaluation_method(&rustred_only, &four_loop),
             Some(EvaluationMethod::RustRed(_))
         ));
-        let loaded = super::cache_tests::external_engine();
+        let loaded = super::test_data::external_engine();
         assert!(matches!(
             loaded.evaluation_method(&with_fmft, &four_loop),
             Some(EvaluationMethod::RustRed(_))

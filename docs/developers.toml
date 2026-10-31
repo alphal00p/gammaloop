@@ -647,7 +647,12 @@ anchor = "pub struct Vakint {"
 # missing FORM for an explicit FORM backend is the typed FormRequired error.
 # Ordered requests honour the selected weight arithmetic (exact or modular), parsed by
 # parse_rustred_ordered_weight_arithmetic. Topology and FORM contracts are unchanged.
-digest = "7574da9f84af693df5782d200cdff6a9eac80fc0"
+# Reviewed 2026-10-31 for the vakint DFS removal: Vakint reduces only with the
+# ordered scheduler. The strategy re-export, its default constant, the depth-first
+# cache exports and the lower-loop cache state are removed; the inherited
+# reduction_strategy option is ignored and every RustRed contribution is batched.
+# Topology, FORM, evaluation-order and finalization contracts are unchanged.
+digest = "93fe2819ab28640a51fd45d648a27c928b3acb61"
 
 [[section.note.scope]]
 path = "crates/vakint/src/lorentz.rs"
@@ -716,7 +721,11 @@ anchor = "pub struct VakintWrapper {"
 # strategy is ordered and the default order follows EvaluationOrder::available for
 # the given FORM/Python paths. Cache operations and prepared-cache loading share the
 # depth-first requirement helper, whose error names the opt-in. Ownership is unchanged.
-digest = "b2894177ff4b1c9d149c1ced6db6b34cf70c5d18"
+# Reviewed 2026-10-31 for the vakint DFS removal: the wrapper drops the strategy
+# and cache-policy keywords, the depth-first cache operations, load_prepared_caches
+# and the cache-hit diagnostic; monitor keywords move to a private helper module.
+# Wrapper ownership, defaults and data loading are otherwise unchanged.
+digest = "9a847ea0f2e7cfa546eb987356806488455af7d1"
 
 [[section.note.scope]]
 path = "crates/vakint/src/symbolica_community_module/numerical.rs"
@@ -760,7 +769,11 @@ anchor = "pub(crate) struct RustRedData {"
 # Reviewed 2026-10-31 for the vakint_rustred consolidation: the default loaders
 # skip prepared caches because the default ordered strategy never reads them; the
 # public *_with_prepared_caches loaders opt in. Validation and ownership are unchanged.
-digest = "56628c8e3dd63da34a3fb00fe11a718b0a10d51c"
+# Reviewed 2026-10-31 for the vakint DFS removal: prepared-cache attachment,
+# runtime cache snapshots and the *_with_prepared_caches loaders are removed.
+# Loading skips the never-read cache/, cache metadata and benchmarks/ files; every
+# other listed file is validated before transactional activation, as before.
+digest = "dacd0faf73c68aa396d521af0b553ac41b4b2a41"
 
 [[section.note.scope]]
 path = "crates/vakint/src/rustred_evaluation/masters.rs"
@@ -1383,7 +1396,10 @@ end_anchor = "workspacePackageExtraSourceRootsForSourcePackages ="
 # are also compile-time inputs of the exact full-coefficient retention test.
 # Only those two existing fixture files enter the library test source closure;
 # production sources, dependency features and producer ownership are unchanged.
-digest = "7d0a6e9e623f06673a4fde97720b1dc3bf9a0de3"
+# Reviewed 2026-10-31 for the vakint DFS removal: the deleted build_cache
+# qualification fixture no longer enters the vakint test source closure.
+# Production sources and producer ownership are unchanged.
+digest = "eebd519d4763297450edc3ecbc7bec601ec6995c"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"

@@ -130,7 +130,7 @@ fn vendored_five_line_epsilon_three_is_available() {
 
 #[test]
 fn external_pr2_epsilon_three_is_available() {
-    let path = super::super::cache_tests::external_path();
+    let path = super::super::test_data::external_path();
     let data = RustRedData::from_directory(&path, "latest", 4).unwrap();
     check_added_coefficient(&data, 4, "P2", 3);
 }

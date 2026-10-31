@@ -1,6 +1,4 @@
 use super::*;
-#[path = "official_nativepack_tests.rs"]
-mod nativepack;
 use std::{
     collections::BTreeMap,
     net::TcpListener,
@@ -101,12 +99,7 @@ fn checkout_is_cumulative_offline_and_version_checked_transactionally() {
             .collect::<Vec<_>>(),
         [1, 2]
     );
-    assert!(
-        report
-            .loops
-            .iter()
-            .all(|p| p.source == "local" && !p.cache_available)
-    );
+    assert!(report.loops.iter().all(|p| p.source == "local"));
     assert!(!directory.path().join(".vakint-external-data").exists());
     let vendored = RustRedData::vendored().unwrap();
     let two_loop = engine.rustred_data().unwrap();
@@ -146,91 +139,6 @@ fn checkout_is_cumulative_offline_and_version_checked_transactionally() {
     fs::write(directory.path().join("1L/masters/P1/symbolic.json"), b"[]").unwrap();
     assert!(engine.load_official_external_data(2, &options).is_err());
     assert!(Arc::ptr_eq(&active, &engine.rustred_data().unwrap()));
-}
-
-#[test]
-fn authenticated_pack_with_wrong_cache_binding_preserves_active_data_and_cache() {
-    let directory = fixture();
-    let prepared = tempfile::tempdir().unwrap();
-    let cache = prepared.path().join("cache");
-    let mut engine = Vakint::new().unwrap();
-    engine
-        .prepare_cache(
-            1,
-            &cache,
-            &crate::RustRedCachePreparationOptions {
-                workload: crate::RustRedCacheWorkload::Explicit(vec![crate::RustRedCacheRoot {
-                    namespace: 0,
-                    integral: rustred::family::IntegralKey::try_new([2]).unwrap(),
-                }]),
-                ..Default::default()
-            },
-            &AtomicBool::new(false),
-            |_| Ok(()),
-        )
-        .unwrap();
-    engine.load_cache(1, &cache, &Default::default()).unwrap();
-    let active_data = engine.rustred_data().unwrap();
-    let active_caches = Arc::clone(&engine.rustred_lower_caches);
-    let statistics = engine.cache_statistics(1).unwrap();
-    assert!(statistics.attached);
-
-    // This is a valid native 1L cache with valid package checksums. Only the
-    // later attachment to the declared 2L program must reject its identity.
-    let loop_root = directory.path().join("2L");
-    copy_tree(&cache, &loop_root.join("cache"));
-    let loop_manifest_path = loop_root.join("manifest.json");
-    let mut manifest: serde_json::Value =
-        serde_json::from_slice(&fs::read(&loop_manifest_path).unwrap()).unwrap();
-    manifest["cache"] = serde_json::json!({"available": true, "path": "cache"});
-    let mut pending = vec![loop_root.join("cache")];
-    while let Some(path) = pending.pop() {
-        for entry in fs::read_dir(path).unwrap() {
-            let entry = entry.unwrap();
-            if entry.file_type().unwrap().is_dir() {
-                pending.push(entry.path());
-            } else {
-                let bytes = fs::read(entry.path()).unwrap();
-                let relative = entry.path().strip_prefix(&loop_root).unwrap().to_owned();
-                manifest["files"][relative.to_str().unwrap()] = serde_json::json!({
-                    "sha256": format!("{:x}", Sha256::digest(&bytes)), "bytes": bytes.len()
-                });
-            }
-        }
-    }
-    let bytes = serde_json::to_vec(&manifest).unwrap();
-    fs::write(&loop_manifest_path, &bytes).unwrap();
-    let release_path = directory.path().join("manifest.json");
-    let mut release: ReleaseManifest =
-        serde_json::from_slice(&fs::read(&release_path).unwrap()).unwrap();
-    let pack = release
-        .loop_packs
-        .iter_mut()
-        .find(|p| p.loop_count == 2)
-        .unwrap();
-    pack.manifest_sha256 = format!("{:x}", Sha256::digest(&bytes));
-    data::validate_loop_directory(directory.path(), pack, &release.version).unwrap();
-    fs::write(release_path, serde_json::to_vec(&release).unwrap()).unwrap();
-    let error = engine
-        .load_official_external_data_from(
-            2,
-            &OfficialExternalDataOptions {
-                local_artifacts_path: Some(directory.path().to_owned()),
-                ..OfficialExternalDataOptions::for_strategy(
-                    crate::RustRedReductionStrategy::DepthFirst,
-                )
-            },
-            "http://127.0.0.1:1",
-        )
-        .unwrap_err()
-        .to_string();
-    assert!(
-        error.contains("cache bundle program bindings differ"),
-        "{error}"
-    );
-    assert!(Arc::ptr_eq(&active_data, &engine.rustred_data().unwrap()));
-    assert!(Arc::ptr_eq(&active_caches, &engine.rustred_lower_caches));
-    assert_eq!(statistics, engine.cache_statistics(1).unwrap());
 }
 
 fn release_assets(root: &Path) -> BTreeMap<String, Vec<u8>> {
@@ -399,7 +307,7 @@ fn official_download_follows_redirect_then_reuses_offline_without_extraction() {
 #[test]
 fn fixture_release_bypasses_stale_latest_and_reuses_immutable_data_offline() {
     let source = fixture();
-    let required = super::super::cache_tests::external_data_fixture::required_version();
+    let required = super::super::test_data::external_data_fixture::required_version();
     assert_eq!(fixture_manifest(source.path()).version, required);
     let server = Server::start(release_assets(source.path()));
     let destination = tempfile::tempdir().unwrap();
@@ -654,7 +562,8 @@ fn extraction_bounds_extension_metadata_before_tar_yields_file_entries() {
 }
 
 // The bytes are package-authenticated but deliberately not a native cache.
-// A disabled cache policy must not even attempt native decoding/import.
+// Vakint never reads prepared depth-first caches, so loading must not decode,
+// import or even checksum them.
 fn advertise_undecodable_cache(root: &Path, loops: usize) -> PathBuf {
     let path = root.join(format!("{loops}L/cache/cache.json"));
     fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -689,66 +598,40 @@ fn advertise_undecodable_cache(root: &Path, loops: usize) -> PathBuf {
 }
 
 #[test]
-fn disabling_prepared_caches_skips_native_decode_but_preserves_dataset_authentication() {
-    // Prepared caches follow the strategy that reads them: only depth-first.
-    assert!(!OfficialExternalDataOptions::default().load_prepared_caches);
-    for (strategy, loads) in [
-        (crate::RustRedReductionStrategy::DepthFirst, true),
-        (crate::RustRedReductionStrategy::Ordered, false),
-        (
-            crate::RustRedReductionStrategy::DepthFirstWithoutMemoization,
-            false,
-        ),
-    ] {
-        assert_eq!(
-            OfficialExternalDataOptions::for_strategy(strategy).load_prepared_caches,
-            loads
-        );
-    }
+fn advertised_prepared_caches_are_neither_decoded_nor_validated_at_load() {
     let directory = fixture();
     let payload = advertise_undecodable_cache(directory.path(), 1);
     let mut engine = Vakint::new().unwrap();
-    let active_data = engine.rustred_data().unwrap();
-    let active_caches = Arc::clone(&engine.rustred_lower_caches);
     let options = OfficialExternalDataOptions {
-        local_artifacts_path: Some(directory.path().to_owned()),
-        ..OfficialExternalDataOptions::for_strategy(crate::RustRedReductionStrategy::DepthFirst)
-    };
-    // Depth-first activation attempts cache decoding, with the original
-    // transactional state preserved when the authenticated codec is invalid.
-    assert!(engine.load_official_external_data(1, &options).is_err());
-    assert!(Arc::ptr_eq(&active_data, &engine.rustred_data().unwrap()));
-    assert!(Arc::ptr_eq(&active_caches, &engine.rustred_lower_caches));
-    let disabled = OfficialExternalDataOptions {
         local_artifacts_path: Some(directory.path().to_owned()),
         ..Default::default()
     };
-    let report = engine.load_official_external_data(1, &disabled).unwrap();
-    assert!(!report.load_prepared_caches);
-    assert!(report.loops[0].cache_available);
-    assert!(!report.loops[0].cache_loaded);
-    assert!(!engine.cache_statistics(1).unwrap().attached);
+    let report = engine.load_official_external_data(1, &options).unwrap();
+    assert_eq!(report.loops[0].source, "local");
     assert!(engine.rustred_application.lock().unwrap().is_none());
-    let active_data = engine.rustred_data().unwrap();
-    let active_caches = Arc::clone(&engine.rustred_lower_caches);
-    // Disabling import does not waive authentication of optional payload bytes.
-    fs::write(payload, b"tampered cache bytes").unwrap();
-    let error = engine
-        .load_official_external_data(1, &disabled)
+    // Tampered cache bytes are irrelevant to an ordered engine: loading skips
+    // them, while an explicit read still authenticates every listed file.
+    fs::write(&payload, b"tampered cache bytes").unwrap();
+    engine.load_official_external_data(1, &options).unwrap();
+    let error = engine.rustred_data().unwrap().loops[&1]
+        .read("cache/cache.json")
         .unwrap_err()
         .to_string();
     assert!(
         error.contains("incorrect size") || error.contains("SHA256 mismatch"),
         "{error}"
     );
-    assert!(Arc::ptr_eq(&active_data, &engine.rustred_data().unwrap()));
-    assert!(Arc::ptr_eq(&active_caches, &engine.rustred_lower_caches));
+    // Every other package file is still authenticated at load.
+    fs::write(directory.path().join("1L/masters/P1/symbolic.json"), b"[]").unwrap();
+    let active = engine.rustred_data().unwrap();
+    assert!(engine.load_official_external_data(1, &options).is_err());
+    assert!(Arc::ptr_eq(&active, &engine.rustred_data().unwrap()));
 }
 
 #[test]
 #[ignore = "requires the authenticated 5L application pack; no IBP reduction"]
-fn disabled_prepared_caches_leave_no_one_through_five_loop_backings() {
-    let source = super::super::cache_tests::external_path_through(5);
+fn advertised_prepared_caches_are_ignored_through_five_loops() {
+    let source = super::super::test_data::external_path_through(5);
     let directory = tempfile::tempdir().unwrap();
     fs::copy(
         source.join("manifest.json"),
@@ -771,31 +654,10 @@ fn disabled_prepared_caches_leave_no_one_through_five_loop_backings() {
             5,
             &OfficialExternalDataOptions {
                 local_artifacts_path: Some(directory.path().to_owned()),
-                load_prepared_caches: false,
                 ..Default::default()
             },
         )
         .unwrap();
-    assert!(!report.load_prepared_caches);
-    assert!(
-        report
-            .loops
-            .iter()
-            .filter(|item| matches!(item.loop_count, 1 | 5))
-            .all(|item| item.cache_available)
-    );
-    assert!(report.loops.iter().all(|item| !item.cache_loaded));
-    for loops in 1..=5 {
-        assert!(
-            !engine.cache_statistics(loops).unwrap().attached,
-            "{loops}L backing attached"
-        );
-    }
-    assert!(
-        engine
-            .cache_statistics(5)
-            .unwrap()
-            .saved_application
-            .is_some()
-    );
+    assert_eq!(report.loops.len(), 5);
+    assert!(engine.loaded_application().is_ok());
 }

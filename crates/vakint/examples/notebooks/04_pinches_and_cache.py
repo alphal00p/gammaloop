@@ -1,4 +1,4 @@
-"""Exact numerator cancellation and cumulative persistent-cache evidence."""
+"""Exact numerator cancellation and historical depth-first cache evidence."""
 
 # Marimo generated return markers are intentional.
 # ruff: noqa: PLR1711
@@ -42,9 +42,7 @@ def _(Gallery, mo):
         mo,
         "closure",
         "Cancel a denominator. Check the reduction.",
-        "Independent pinch constructions test exact reduction identities. "
-        "Measured held-out inputs reveal which prepared shortcuts help beyond "
-        "the cases used to build the cache.",
+        "Independent pinch constructions test exact reduction identities.",
     )
     return
 
@@ -270,70 +268,20 @@ def _(Gallery, mo):
         [
             Gallery.section(
                 mo,
-                "03 / workload",
-                "Keep useful work from every reduction",
-                "Running capture saves completed native reduction nodes and their local conditions. Partial reductions are excluded.",
-            ),
-            Gallery.metrics(
-                mo,
-                [
-                    ("Cumulative", "physical examples and useful descendants"),
-                    ("Preserved", "every durable prefix, including failed runs"),
-                    ("≥ 12", "held-out cases, frozen before selection"),
-                ],
+                "03 / history",
+                "Depth-first caches: recorded evidence only",
+                "Vakint now reduces only with the ordered scheduler and no longer loads, prepares or captures depth-first caches.",
             ),
             Gallery.evidence_card(
-                mo, "cache-build", "Accumulated cache and source provenance"
-            ),
-            mo.md(r"""
-        ```sh
-        five_loop_qcd_ladder --artifacts DATA --work-dir NEW_RUN \
-          --projection zero-momentum --prepared-input SAVED_INPUT \
-          --running-cache NEW_RUN/running-cache --running-cache-capture-only
-        ```
-
-        A reduction can preserve its completed descendants even when persistent
-        cache reads are disabled. A cached run instead adds `--cache BASE` and
-        omits `--running-cache-capture-only`: it reads the immutable base and its
-        own fresh delta while saving new work. Each run keeps a separate delta;
-        a failure never discards its durable prefix.
-
-        **Heavy cache:** preserve the full accumulated native cache, without an
-        aggregate size cap. Its compressed local artifact is hosted separately;
-        it is not a GitHub repository or release asset.
-
-        **Light cache:** distribute a trimmed file of at most **95 MB** through
-        the official external-data repository and releases. Selection uses
-        measured rule frequency and usefulness. Report light and heavy timings
-        separately; neither size nor a live counter establishes a speedup.
-
-        Both tiers retain exact completed reductions, codec and campaign bindings.
-        Vakint's `prepare_cache()` and `build_cache` workload driver remain
-        available for reproducible seed workloads. This app never starts a
-        cache-production job.
-        """),
-        ]
-    )
-    return
-
-
-@app.cell(hide_code=True)
-def _(Gallery, mo):
-    mo.vstack(
-        [
-            Gallery.section(
-                mo,
-                "04 / held out",
-                "Measure reuse beyond the training roots",
-                "Final held-out results do not influence workload selection. Regressions are retained alongside improvements.",
+                mo, "cache-build", "Accumulated depth-first cache and source provenance"
             ),
             Gallery.evidence_card(
                 mo, "held-out", "Held-out timings, root hits and intermediate hits"
             ),
             Gallery.note(
                 mo,
-                "Measure the cache that is actually distributed",
-                "Record source captures, raw record counts, decoded and compressed sizes, immutable index identities and final validation. Distinguish a fresh reuse of a captured physical input from held-out inputs, and distinguish persistent hits from same-process memoization. No speedup is inferred from cache size or live record counts.",
+                "Historical measurements",
+                "These receipts describe the removed depth-first completed-result caches. A completed terminal image replaces a frontier key and skips every grouping and cancellation below it, so ordered reduction never consumed them. A persistent ordered cache stores weight-independent one-step records instead; it is reported separately.",
             ),
             Gallery.footer(mo),
         ]

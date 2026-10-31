@@ -35,7 +35,6 @@ pub use precision::{
     AvailablePrecision, CoefficientPrecision, ComponentPrecision, ErrorQuality,
     NumericalCoefficient, NumericalEvaluationResult, PrecisionSource, PrecisionWarning,
 };
-pub use rustred::reduction::ReductionStrategy as RustRedReductionStrategy;
 pub use rustred::reduction::{
     ModularWeightOptions as RustRedModularWeightOptions,
     OrderedWeightArithmetic as RustRedOrderedWeightArithmetic,
@@ -89,20 +88,7 @@ pub fn parse_rustred_ordered_weight_arithmetic(
 }
 pub use rustred::scalar_numerator::ScalarNumeratorLimits as RustRedScalarNumeratorLimits;
 use rustred::solver::CandidateRoutedApplicationObserver;
-pub use rustred::solver::{
-    CandidateRoutedCachePolicy as RustRedCachePolicy,
-    CandidateRoutedCacheStatistics as RustRedCacheWorkStatistics,
-};
 use rustred_evaluation::MathSpan;
-pub use rustred_evaluation::cache::{
-    RustRedCacheFileLimits, RustRedCacheFileOptions, RustRedCacheLoadOptions,
-    RustRedCacheNamespaceStatistics, RustRedCachePreparationOptions, RustRedCacheRoot,
-    RustRedCacheSaveMode, RustRedCacheSaveOptions, RustRedCacheSaveReport, RustRedCacheStatistics,
-    RustRedCacheWorkload, RustRedRunningCacheControl, RustRedRunningCacheOptions,
-    RustRedRunningCacheReport, RustRedRunningCacheSnapshot, RustRedSavedCacheStatistics,
-};
-#[cfg(all(unix, not(target_arch = "wasm32")))]
-pub use rustred_evaluation::cache::{RustRedCacheTransferOptions, RustRedCacheTransferReport};
 pub use rustred_evaluation::five_loop::{RustRedSymbolicEvaluation, RustRedWitnessCacheStatistics};
 use rustred_evaluation::monitor::{CallerProgress, MonitorContext};
 pub use rustred_evaluation::monitor::{
@@ -280,13 +266,6 @@ fn create_unique_tmp_run_dir(base_dir: Option<&str>, prefix: &str) -> std::io::R
 
 static MINIMAL_FORM_VERSION: &str = "4.2.1";
 static MINIMAL_PYSECDEC_VERSION: &str = "1.6.4";
-
-/// RustRed scheduler selected by [`VakintSettings::default`] and the Python
-/// bindings. The rustred library's own default remains depth-first; select
-/// [`RustRedReductionStrategy::DepthFirst`] explicitly for completed-result
-/// caches.
-pub const DEFAULT_RUSTRED_REDUCTION_STRATEGY: RustRedReductionStrategy =
-    RustRedReductionStrategy::Ordered;
 
 fn default_form_exe_path() -> String {
     env::var("FORM_PATH").unwrap_or("form".into())
@@ -2148,12 +2127,9 @@ impl EvaluationMethod {
                 vakint.rustred_evaluate(settings, numerator, integral_specs, opts)
             }
         }?;
-        // Ordered RustRed already applies this convention at its common
+        // RustRed already applies this convention at its common
         // pre-substitution boundary, including this direct public entry point.
-        if matches!(self, EvaluationMethod::RustRed(_))
-            && settings.rustred_application_options.reduction_strategy
-                == RustRedReductionStrategy::Ordered
-        {
+        if matches!(self, EvaluationMethod::RustRed(_)) {
             Ok(result)
         } else {
             // Simplify logarithms and zero powers knowing that all arguments are real.
@@ -2373,14 +2349,11 @@ pub struct VakintSettings {
     /// Absent ceilings impose no restriction. Opaque external calls can only
     /// be checked at their boundaries; hard deadlines require a supervisor.
     pub rustred_resources: ResourceLimits,
-    /// Native reduction strategy and operational application/cache allowances.
-    /// `reduction_strategy` selects the scalar scheduler at every loop count
-    /// and defaults to [`DEFAULT_RUSTRED_REDUCTION_STRATEGY`] (ordered).
-    /// Ordered requests use their own frontier; depth-first without memoization
-    /// also recomputes every completed descendant occurrence. Both bypass DFS
-    /// result caches, so cache operations require selecting
-    /// [`RustRedReductionStrategy::DepthFirst`]. No strategy enlarges the saved
-    /// entry domains. Complete factorization remains a checked action.
+    /// Native reduction limits, Ordered weight arithmetic and operational
+    /// application allowances. Vakint always reduces with RustRed's ordered
+    /// scheduler, so `reduction_strategy` is ignored (and the depth-first
+    /// `cache_policy`/`cache_representation` never apply). No option enlarges
+    /// the saved entry domains. Complete factorization remains a checked action.
     pub rustred_application_options: rustred_app::SavedApplicationOptions,
     /// Per-call numerator lowering allowances for the saved five-loop lane.
     /// These do not change entry admission, legacy lower-loop programs, or
@@ -2639,7 +2612,7 @@ impl Default for VakintSettings {
             rustred_artifact_path: None,
             rustred_resources: ResourceLimits::default(),
             rustred_application_options: rustred_app::SavedApplicationOptions {
-                reduction_strategy: DEFAULT_RUSTRED_REDUCTION_STRATEGY,
+                reduction_strategy: rustred::reduction::ReductionStrategy::Ordered,
                 ..Default::default()
             },
             rustred_scalar_numerator_limits: Default::default(),
@@ -2680,7 +2653,6 @@ pub struct Vakint {
     pub topologies: Topologies,
     rustred_application:
         Arc<std::sync::Mutex<Option<rustred_evaluation::five_loop::LoadedApplication>>>,
-    rustred_lower_caches: Arc<std::sync::Mutex<rustred_evaluation::cache::LoadedLowerCaches>>,
     rustred_data: Option<Arc<rustred_evaluation::data::RustRedData>>,
 }
 
@@ -2881,12 +2853,9 @@ impl VakintTerm {
                 },
             ),
         };
-        // Ordered contributions share one normalization boundary after
+        // RustRed contributions share one normalization boundary after
         // batching and before master substitution in finalize_rustred.
-        self.numerator = if matches!(evaluation_approach, EvaluationMethod::RustRed(_))
-            && settings.rustred_application_options.reduction_strategy
-                == RustRedReductionStrategy::Ordered
-        {
+        self.numerator = if matches!(evaluation_approach, EvaluationMethod::RustRed(_)) {
             evaluated_integral
         } else {
             simplify_real(evaluated_integral.as_view())
@@ -4683,77 +4652,53 @@ impl VakintExpression {
             >::new();
             for (source_id, term) in self.0.iter_mut().enumerate() {
                 resources::checkpoint()?;
-                let stage = if settings.rustred_application_options.reduction_strategy
-                    == RustRedReductionStrategy::Ordered
-                {
-                    let matched =
-                        term.prepare_integral_specs(vakint, settings, observation.as_deref_mut())?;
-                    let method = vakint
-                        .evaluation_method(settings, &matched.canonical_topology)
-                        .ok_or_else(|| {
-                            VakintError::NoEvaluationMethodFound(
-                                term.integral.to_string(),
-                                settings.number_of_terms_in_epsilon_expansion
-                                    - matched.canonical_topology.get_integral().n_loops as i64
-                                    - 1,
-                            )
-                        })?;
-                    if let EvaluationMethod::RustRed(options) = method {
-                        let key = (
-                            matched.canonical_topology.get_integral().n_loops,
-                            options.master_mode,
-                        );
-                        ordered.entry(key).or_default().push(
-                            rustred_evaluation::MatchedContribution {
-                                numerator: term.numerator.clone(),
-                                matched,
-                            },
-                        );
-                        let (_, vectors) = reductions
-                            .entry(key)
-                            .or_insert_with(|| (Atom::Zero, std::collections::BTreeSet::new()));
-                        vectors.extend(term.vectors.iter().cloned());
-                        continue;
-                    }
-                    term.numerator = simplify_real(
-                        method
-                            .reduce_integral(
-                                vakint,
-                                settings,
-                                term.numerator.as_view(),
-                                &matched,
-                                source_id,
-                            )?
-                            .as_view(),
+                let matched =
+                    term.prepare_integral_specs(vakint, settings, observation.as_deref_mut())?;
+                let method = vakint
+                    .evaluation_method(settings, &matched.canonical_topology)
+                    .ok_or_else(|| {
+                        VakintError::NoEvaluationMethodFound(
+                            term.integral.to_string(),
+                            settings.number_of_terms_in_epsilon_expansion
+                                - matched.canonical_topology.get_integral().n_loops as i64
+                                - 1,
+                        )
+                    })?;
+                if let EvaluationMethod::RustRed(options) = method {
+                    let key = (
+                        matched.canonical_topology.get_integral().n_loops,
+                        options.master_mode,
                     );
-                    term.integral = Atom::one();
-                    IntegralEvaluation::Complete {
-                        numerical: method.numerical_output(),
-                    }
+                    ordered
+                        .entry(key)
+                        .or_default()
+                        .push(rustred_evaluation::MatchedContribution {
+                            numerator: term.numerator.clone(),
+                            matched,
+                        });
+                    let (_, vectors) = reductions
+                        .entry(key)
+                        .or_insert_with(|| (Atom::Zero, std::collections::BTreeSet::new()));
+                    vectors.extend(term.vectors.iter().cloned());
+                    continue;
+                }
+                term.numerator = simplify_real(
+                    method
+                        .reduce_integral(
+                            vakint,
+                            settings,
+                            term.numerator.as_view(),
+                            &matched,
+                            source_id,
+                        )?
+                        .as_view(),
+                );
+                term.integral = Atom::one();
+                if method.numerical_output() {
+                    numerical += &term.numerator;
+                    numerical_vectors.extend(term.vectors.iter().cloned());
                 } else {
-                    term.reduce_integral(vakint, settings, source_id, observation.as_deref_mut())?
-                };
-                match stage {
-                    IntegralEvaluation::Complete { numerical: true } => {
-                        numerical += &term.numerator;
-                        numerical_vectors.extend(term.vectors.iter().cloned());
-                    }
-                    IntegralEvaluation::Complete { numerical: false } => {
-                        complete.push(term.clone())
-                    }
-                    IntegralEvaluation::RustRed { loop_count, mode } => {
-                        // Preserve the existing loop-count-specific epsilon target,
-                        // but combine every matching contribution before checking
-                        // missing orders, finite precision, or residual masters.
-                        let (raw, vectors) = reductions
-                            .entry((loop_count, mode))
-                            .or_insert_with(|| (Atom::Zero, std::collections::BTreeSet::new()));
-                        {
-                            let _math = MathSpan::new();
-                            *raw += term.numerator.clone();
-                        }
-                        vectors.extend(term.vectors.iter().cloned());
-                    }
+                    complete.push(term.clone());
                 }
             }
             let batch_total = ordered.len();
@@ -5003,7 +4948,6 @@ impl Vakint {
         Ok(Vakint {
             topologies,
             rustred_application: Arc::default(),
-            rustred_lower_caches: Arc::default(),
             rustred_data: None,
         })
     }

@@ -61,7 +61,6 @@ fn main() -> Result<()> {
         "loop_manifest_sha256": format!("{:x}", Sha256::digest(&manifest_bytes)),
         "graphs": graph_report,
         "remaining_masters": masters.len(),
-        "cache_available": manifest["cache"]["available"],
         "all_five_loop_masters_unevaluated": true,
     });
     output["graphs"]["elapsed_seconds"] = json!(graphs_started.elapsed().as_secs_f64());
@@ -343,8 +342,7 @@ fn main() -> Result<()> {
         "numerical_unavailable": unavailable,
         "canaries": canary_reports,
         "recorded_scope_policy": "native strict admission checked separately; Vakint retains its existing Preserve policy",
-        "cache_statistics": format!("{:?}", engine.rustred_application_cache_statistics()?),
-        "cache_work_statistics": format!("{:?}", engine.rustred_application_cache_work_statistics()?),
+        "owner_preparation_statistics": format!("{:?}", engine.rustred_application_owner_preparation_statistics()?),
     });
     let lower_inputs = [
         "topo(I1L(1,1))",

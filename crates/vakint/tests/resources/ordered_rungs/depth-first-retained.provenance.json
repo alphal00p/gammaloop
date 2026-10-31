@@ -1,0 +1,54 @@
+{
+  "schema": "vakint.ordered-rung-depth-first-references.v1",
+  "scope": "Retained MSbar results of the removed depth-first strategy (rustred 604daaf7, external data v0.1.2), frozen before depth-first reduction was removed from Vakint. Ordered results must equal them exactly after canonical normalization; byte equality is not required.",
+  "references": {
+    "1L-zero-momentum": {
+      "file": "1L-zero-momentum.depth-first-retained.symbolica",
+      "bytes": 508,
+      "sha256": "a8b3c3e944009c6ea0f2e97b1bd670bba45c6a67bc6a302dd2598f5af8357b6f",
+      "source": "gammaloop 31a8b166e ordered_reduction_rungs test one_loop_zero_momentum_rung_engine_parity, DFS arm"
+    },
+    "1L-quadratic": {
+      "file": "1L-quadratic.depth-first-retained.symbolica",
+      "bytes": 459,
+      "sha256": "20f08c848e9dfacb02c92f4389a1b5e3e5e4d6f041d832ce9c3008508ec3c460",
+      "source": "gammaloop 31a8b166e ordered_reduction_rungs test one_loop_quadratic_rung_engine_parity, DFS arm"
+    },
+    "2L-zero-momentum": {
+      "file": "2L-zero-momentum.depth-first-retained.symbolica",
+      "bytes": 1653,
+      "sha256": "6f85f1401a94395a33dfcacb948b0c037c32940ee9496a6bb2de9c88e55fe9a4",
+      "source": "gammaloop 31a8b166e ordered_reduction_rungs test two_loop_zero_momentum_rung_engine_parity, DFS arm"
+    },
+    "2L-quadratic": {
+      "file": "2L-quadratic.depth-first-retained.symbolica",
+      "bytes": 1826,
+      "sha256": "e95ed8dc528c9d440bd653a9bb3a9c6571734814bfb3be57770797ef255fb8a0",
+      "source": "gammaloop 31a8b166e ordered_reduction_rungs test two_loop_quadratic_rung_engine_parity, DFS arm"
+    },
+    "3L-zero-momentum": {
+      "file": "3L-zero-momentum.depth-first-retained.symbolica",
+      "bytes": 16865,
+      "sha256": "2f48233ca24979143ca839289877d18bdf4f0fde70bd68399d770227d73c6b2a",
+      "source": "gammaloop 31a8b166e ordered_reduction_rungs test three_loop_zero_momentum_rung_engine_parity, DFS arm"
+    },
+    "3L-quadratic": {
+      "file": "3L-quadratic.depth-first-retained.symbolica",
+      "bytes": 21586,
+      "sha256": "5acbeebe2429d711d5cd9c1264efc469886c5c5e5961f6470be8f7970c400821",
+      "source": "gammaloop 31a8b166e ordered_reduction_rungs test three_loop_quadratic_rung_engine_parity, DFS arm"
+    },
+    "4L-zero-momentum": {
+      "file": "4L-zero-momentum.depth-first-retained.symbolica",
+      "bytes": 15494,
+      "sha256": "b93080b3991149f79b41ffd37361e54dfa48daba068e8b640f9c44ef29ce3012",
+      "source": "gammaloop 31a8b166e ordered_reduction_rungs example --loops 4 --projection zero-momentum --engine dfs (no prepared caches)"
+    },
+    "4L-quadratic": {
+      "file": "4L-quadratic.depth-first-retained.symbolica",
+      "bytes": 22078,
+      "sha256": "6986f629362956bf28bfbb3bf5a941e5d1f4df667a626d93395dbde8059a8f77",
+      "source": "historical DFS report of 4L-quadratic.json provenance.exact_saved_depth_first_reference (L4-quadratic-dfs-manual-reference-047-01); re-produced at gammaloop 31a8b166e with --engine dfs"
+    }
+  }
+}

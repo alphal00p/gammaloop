@@ -27,11 +27,6 @@ pub struct OfficialExternalDataOptions {
     /// None resolves the current working directory when the loader is called.
     pub local_artifacts_path: Option<PathBuf>,
     pub refresh: bool,
-    /// Attach advertised native prepared caches. Disabling this still validates
-    /// every package checksum, but never decodes or imports its cache backing.
-    /// Only depth-first reduction reads these caches, so this defaults to
-    /// false for the default ordered strategy; see [`Self::for_strategy`].
-    pub load_prepared_caches: bool,
     /// Timeout for each HTTP request. Native authentication, copying and reuse
     /// have no default compute deadline; caller resource budgets still apply.
     pub timeout: Duration,
@@ -46,9 +41,6 @@ impl Default for OfficialExternalDataOptions {
             version: "latest".into(),
             local_artifacts_path: None,
             refresh: false,
-            load_prepared_caches: super::uses_prepared_caches(
-                crate::DEFAULT_RUSTRED_REDUCTION_STRATEGY,
-            ),
             timeout: Duration::from_secs(3600),
             max_archive_bytes: 2 * 1024 * 1024 * 1024,
             max_extracted_bytes: 8 * 1024 * 1024 * 1024,
@@ -57,28 +49,10 @@ impl Default for OfficialExternalDataOptions {
     }
 }
 
-impl OfficialExternalDataOptions {
-    /// Default options that attach prepared caches exactly when `strategy`
-    /// reads them, i.e. for [`crate::RustRedReductionStrategy::DepthFirst`].
-    pub fn for_strategy(strategy: crate::RustRedReductionStrategy) -> Self {
-        Self {
-            load_prepared_caches: super::uses_prepared_caches(strategy),
-            ..Default::default()
-        }
-    }
-}
-
 #[derive(Clone, Debug, Serialize)]
 pub struct ExternalDataLoopReport {
     pub loop_count: usize,
     pub path: PathBuf,
-    pub cache_available: bool,
-    /// Whether this activation imported the available prepared cache.
-    pub cache_loaded: bool,
-    pub cache_path: Option<PathBuf>,
-    pub cache_format: Option<String>,
-    /// Cache transport is separate from installing the ordinary loop pack.
-    pub cache_source: Option<String>,
     /// "local", "reused", or "downloaded".
     pub source: String,
 }
@@ -88,7 +62,6 @@ pub struct ExternalDataLoadReport {
     pub version: String,
     pub path: PathBuf,
     pub loops: Vec<ExternalDataLoopReport>,
-    pub load_prepared_caches: bool,
 }
 
 fn version_component(version: &str) -> Result<(), RustRedEvaluationError> {
@@ -185,16 +158,8 @@ impl Vakint {
             .map_err(data::failure)?;
         if local_dataset(&base)? {
             let loaded = RustRedData::from_directory(&base, &options.version, max_loop_count)?;
-            let report = report(
-                &loaded,
-                base,
-                max_loop_count,
-                &BTreeSet::new(),
-                &BTreeSet::new(),
-                true,
-                options.load_prepared_caches,
-            )?;
-            self.activate_external_data(loaded, options.load_prepared_caches)?;
+            let report = report(&loaded, base, max_loop_count, &BTreeSet::new(), true);
+            self.activate_external_data(loaded)?;
             return Ok(report);
         }
         let cache = base.join(".vakint-external-data");
@@ -299,62 +264,8 @@ impl Vakint {
         }
         let loaded = RustRedData::from_directory(&destination, &manifest.version, max_loop_count)?;
         let mut staged = self.clone();
-        // Authenticate any selected NativePack against this new registry, never
-        // the engine's preceding release. No backing is activated yet.
-        staged.activate_external_data(loaded.clone(), false)?;
-        let mut downloaded_caches = BTreeSet::new();
-        if options.load_prepared_caches {
-            for (&count, snapshot) in &loaded.runtime_cache_snapshots {
-                snapshot.descriptor.validate_program(&staged)?;
-                let path = loaded.runtime_cache_path(count)?;
-                if path.try_exists().map_err(data::failure)? {
-                    continue;
-                }
-                let parent = path.parent().unwrap();
-                match fs::symlink_metadata(parent) {
-                    Ok(metadata) if !metadata.is_dir() || metadata.file_type().is_symlink() => {
-                        return Err(
-                            data::failure("invalid official cache installation directory").into(),
-                        );
-                    }
-                    Ok(_) => {}
-                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                        fs::create_dir(parent).map_err(data::failure)?;
-                    }
-                    Err(error) => return Err(data::failure(error).into()),
-                }
-                let transfer = snapshot
-                    .descriptor
-                    .official_options(
-                        snapshot.reference.sha256()?,
-                        snapshot.reference.manifest_bytes,
-                        options.timeout,
-                    )
-                    .map_err(super::cache::operation)?;
-                let basename = Path::new(&snapshot.reference.manifest)
-                    .file_name()
-                    .unwrap()
-                    .to_str()
-                    .unwrap();
-                staged.download_cache(
-                    count,
-                    &format!("{releases}/{}/{basename}", manifest.version),
-                    &path,
-                    &transfer,
-                )?;
-                downloaded_caches.insert(count);
-            }
-            staged.attach_external_caches()?;
-        }
-        let report = report(
-            &loaded,
-            destination,
-            max_loop_count,
-            &downloaded,
-            &downloaded_caches,
-            false,
-            options.load_prepared_caches,
-        )?;
+        staged.activate_external_data(loaded.clone())?;
+        let report = report(&loaded, destination, max_loop_count, &downloaded, false);
         if options.version == "latest" {
             atomic_write(&latest, manifest.version.as_bytes())?;
         }
@@ -368,65 +279,26 @@ fn report(
     path: PathBuf,
     maximum: usize,
     downloaded: &BTreeSet<usize>,
-    downloaded_caches: &BTreeSet<usize>,
     local: bool,
-    load_prepared_caches: bool,
-) -> Result<ExternalDataLoadReport, RustRedEvaluationError> {
-    Ok(ExternalDataLoadReport {
+) -> ExternalDataLoadReport {
+    ExternalDataLoadReport {
         version: data.version.clone(),
-        load_prepared_caches,
         loops: (1..=maximum)
-            .map(|n| {
-                let pack = &data.loops[&n];
-                let selected = data.runtime_cache_snapshots.contains_key(&n);
-                let available = selected || pack.manifest.cache.available;
-                let cache_path = if selected {
-                    Some(data.runtime_cache_path(n)?)
+            .map(|n| ExternalDataLoopReport {
+                loop_count: n,
+                path: path.join(format!("{n}L")),
+                source: if local {
+                    "local"
+                } else if downloaded.contains(&n) {
+                    "downloaded"
                 } else {
-                    pack.manifest
-                        .cache
-                        .path
-                        .as_deref()
-                        .map(|p| pack.path(p))
-                        .transpose()?
-                        .flatten()
-                };
-                Ok(ExternalDataLoopReport {
-                    loop_count: n,
-                    path: path.join(format!("{n}L")),
-                    cache_available: available,
-                    cache_loaded: load_prepared_caches && available,
-                    cache_path,
-                    cache_format: if selected {
-                        Some(super::cache::transfer::NativePackManifest::FORMAT.into())
-                    } else {
-                        pack.manifest.cache.format.clone()
-                    },
-                    cache_source: (load_prepared_caches && available).then(|| {
-                        if local {
-                            "local"
-                        } else if downloaded_caches.contains(&n)
-                            || (!selected && downloaded.contains(&n))
-                        {
-                            "downloaded"
-                        } else {
-                            "reused"
-                        }
-                        .into()
-                    }),
-                    source: if local {
-                        "local"
-                    } else if downloaded.contains(&n) {
-                        "downloaded"
-                    } else {
-                        "reused"
-                    }
-                    .into(),
-                })
+                    "reused"
+                }
+                .into(),
             })
-            .collect::<Result<Vec<_>, RustRedEvaluationError>>()?,
+            .collect(),
         path,
-    })
+    }
 }
 
 fn validate_manifest(

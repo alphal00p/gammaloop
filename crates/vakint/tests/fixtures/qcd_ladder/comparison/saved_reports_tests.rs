@@ -39,6 +39,8 @@ fn change_report(directory: &Path, update: impl FnOnce(&mut serde_json::Value)) 
     Ok(())
 }
 
+// `dfs` reports stand for preserved historical depth-first runs; Vakint
+// itself now only produces Ordered reports.
 #[test]
 fn saved_pair_proves_nontrivial_exact_rational_parity_without_evaluation() -> Result<()> {
     let directory = tempfile::tempdir()?;
@@ -59,11 +61,44 @@ fn saved_pair_proves_nontrivial_exact_rational_parity_without_evaluation() -> Re
     let destination = directory.path().join("proof.json");
     compare_two_reports(&dfs, &ordered, &destination, true)?;
     let proof: serde_json::Value = serde_json::from_slice(&std::fs::read(destination)?)?;
-    assert_eq!(proof["schema"], "vakint.ordered-rung-functional-pair.v1");
+    assert_eq!(proof["schema"], "vakint.ordered-rung-functional-pair.v2");
     assert_eq!(proof["performance_eligible"], false);
     assert_eq!(proof["numerical_enclosures_agree"], true);
     assert_eq!(proof["new_evaluations"], 0);
-    assert!(proof["reports"].get("dfs_no_memo").is_none());
+    assert_eq!(proof["reports"]["reference"]["strategy"], "DepthFirst");
+    Ok(())
+}
+
+#[test]
+fn two_ordered_reports_compare_exactly() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let exact = directory.path().join("exact");
+    let modular = directory.path().join("modular");
+    save(
+        &exact,
+        "Ordered",
+        "RustRedMaster(family,1)/(1-ε)",
+        numerical("1"),
+    )?;
+    save(
+        &modular,
+        "Ordered",
+        "RustRedMaster(family,1)/(1-ε)",
+        numerical("1"),
+    )?;
+    let destination = directory.path().join("proof.json");
+    compare_two_reports(&exact, &modular, &destination, true)?;
+    std::fs::remove_file(&destination)?;
+    // The compared run itself must be an Ordered report.
+    let dfs = directory.path().join("dfs");
+    save(
+        &dfs,
+        "DepthFirst",
+        "RustRedMaster(family,1)/(1-ε)",
+        numerical("1"),
+    )?;
+    assert!(compare_two_reports(&exact, &dfs, &destination, true).is_err());
+    assert!(!destination.exists());
     Ok(())
 }
 
@@ -189,22 +224,14 @@ fn retain_only_never_ignores_an_exact_expression_mismatch() -> Result<()> {
 }
 
 #[test]
-fn default_pair_checks_existing_numerics_and_three_report_contract_is_unchanged() -> Result<()> {
+fn default_pair_checks_existing_numerics() -> Result<()> {
     let directory = tempfile::tempdir()?;
     let dfs = directory.path().join("dfs");
-    let no_memo = directory.path().join("no-memo");
     let ordered = directory.path().join("ordered");
     save(&dfs, "DepthFirst", "1", numerical("1"))?;
-    save(
-        &no_memo,
-        "DepthFirstWithoutMemoization",
-        "1",
-        serde_json::Value::Null,
-    )?;
     save(&ordered, "Ordered", "1", numerical("2"))?;
     let destination = directory.path().join("proof.json");
     assert!(compare_two_reports(&dfs, &ordered, &destination, true).is_err());
-    assert!(compare_reports(&dfs, &no_memo, &ordered, &destination).is_err());
     assert!(!destination.exists());
     Ok(())
 }

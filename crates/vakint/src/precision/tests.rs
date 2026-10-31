@@ -527,10 +527,8 @@ fn finite_custom_normalization_is_tracked_before_series_expansion() {
 fn symbolic_rustred_keeps_finite_input_uncertainty_until_numerical_evaluation() {
     Vakint::initialize_vakint_symbols();
     let engine = Vakint::new().unwrap();
-    for strategy in [
-        crate::RustRedReductionStrategy::DepthFirst,
-        crate::RustRedReductionStrategy::Ordered,
-    ] {
+    // Exact and modular Ordered weights must agree on tracked sources.
+    for arithmetic in ["exact", "modular:threads=1"] {
         let mut settings = VakintSettings {
             evaluation_order: crate::EvaluationOrder(vec![crate::EvaluationMethod::RustRed(
                 crate::RustRedEvaluationOptions {
@@ -542,7 +540,10 @@ fn symbolic_rustred_keeps_finite_input_uncertainty_until_numerical_evaluation() 
             integral_normalization_factor: crate::LoopNormalizationFactor::FMFTandMATAD,
             ..Default::default()
         };
-        settings.rustred_application_options.reduction_strategy = strategy;
+        settings
+            .rustred_application_options
+            .ordered_weight_arithmetic =
+            crate::parse_rustred_ordered_weight_arithmetic(arithmetic).unwrap();
         let input = vk_parse!(format!(
             "(1.25-1.25*{})*topo(I1L(muvsq,1))",
             settings.epsilon_symbol,
