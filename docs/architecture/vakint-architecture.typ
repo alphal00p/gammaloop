@@ -257,6 +257,16 @@ modular frontier weights for Ordered requests at every loop count. Both expand t
 return the same terms and guards. `VAKINT_DUMP_ORDERED_REQUEST` records every native Ordered
 request with digests of its exact output, for replay without Vakint.
 
+A long-form five-loop input enumerates every verified momentum witness and selects the first
+one whose admitted weighted-lowering key is minimal, or keeps the first witness when none is
+admitted. Admission and the smallest key are first decided exactly from the lowered key
+support: the scalar numerator is grouped by coefficients free of loop momenta (proven linearly
+independent over the rationals) and by scalar-product degree, and each group is lowered through
+RustRed's rational path at unit mass. Witnesses sharing the smallest first key, and inputs
+outside that grammar, use the unchanged full weighted lowering. The witness memo records the
+exact admitted support. Witness screening and per-contribution scalar lowering may run on
+scoped worker threads; results are consumed in input order, and one thread runs inline.
+
 Five-loop retained evaluation also reports coverage/mass batching (with actual lowered
 keys checked), guard and coefficient materialization, normalization and notation conversion,
 catalogue coefficient combination, residual catalogue classification,
