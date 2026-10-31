@@ -169,6 +169,7 @@ def _(
         parameter_substitutions={_mass: E("1")},
     ).to_expression()
     _engine = Gallery.engine()
+    closure_execution = Gallery.execution(_engine)
     _start = perf_counter()
     source_result = _engine.evaluate_integral(source_integral)
     target_result = _engine.evaluate_integral(target_integral)
@@ -178,6 +179,7 @@ def _(
         raise AssertionError(f"Numerator/power closure failed: {difference}")
     return (
         cancelling_numerator,
+        closure_execution,
         closure_seconds,
         difference,
         source_graph,
@@ -193,6 +195,7 @@ def _(
 def _(
     Gallery,
     cancelling_numerator,
+    closure_execution,
     closure_seconds,
     difference,
     mo,
@@ -235,6 +238,7 @@ def _(
                 [
                     ("Exact", "difference vanishes symbolically"),
                     (f"{closure_seconds:.3f} s", "this interactive paired reduction"),
+                    (closure_execution, "ordered weight arithmetic and worker cores"),
                 ],
             ),
             closure_view,

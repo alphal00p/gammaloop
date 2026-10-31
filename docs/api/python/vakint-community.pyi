@@ -390,6 +390,18 @@ class Vakint:
     does not need FORM. Explicit cache operations require
     `rustred_reduction_strategy="depth_first"`.
     """
+    @property
+    def n_cores(self) -> builtins.int:
+        r"""
+        Worker threads of this instance (the `n_cores` constructor argument).
+        """
+    @property
+    def ordered_weight_arithmetic(self) -> builtins.str:
+        r"""
+        Selected Ordered weight arithmetic in RustRed's canonical text, e.g.
+        "exact" or "modular_sampled"; "threads" appears only when the selection
+        fixes the modular workers instead of following `n_cores`.
+        """
     def load_external_data(self, path: builtins.str | os.PathLike | pathlib.Path, max_loop_count: builtins.int) -> None:
         r"""
         Load a local external-data checkout without network access.
@@ -406,7 +418,7 @@ class Vakint:
         `load_prepared_caches=False` to skip them explicitly; `ordered` (the
         default strategy) and `depth_first_without_memoization` always skip them.
         """
-    def __new__(cls, run_time_decimal_precision: typing.Optional[builtins.int] = None, evaluation_order: typing.Optional[typing.Sequence[VakintEvaluationMethod]] = None, tensor_reduction_method: typing.Optional[builtins.str] = None, epsilon_symbol: typing.Optional[Expression] = None, mu_r_sq_symbol: typing.Optional[Expression] = None, form_exe_path: typing.Optional[builtins.str] = None, python_exe_path: typing.Optional[builtins.str] = None, verify_numerator_identification: typing.Optional[builtins.bool] = None, integral_normalization_factor: typing.Optional[builtins.str] = None, allow_unknown_integrals: typing.Optional[builtins.bool] = None, clean_tmp_dir: typing.Optional[builtins.bool] = None, number_of_terms_in_epsilon_expansion: typing.Optional[builtins.int] = None, use_dot_product_notation: typing.Optional[builtins.bool] = None, temporary_directory: typing.Optional[builtins.str] = None, rustred_artifact_path: typing.Optional[builtins.str] = None, rustred_cache_bytes: typing.Optional[builtins.int] = None, rustred_cache_terms: typing.Optional[builtins.int] = None, rustred_product_cache_bytes: typing.Optional[builtins.int] = None, rustred_product_cache_terms: typing.Optional[builtins.int] = None, rustred_cache_policy: builtins.str = 'evict-lru', rustred_scalar_max_work: typing.Optional[builtins.int] = None, max_process_rss_bytes: typing.Optional[builtins.int] = None, max_elapsed_seconds: typing.Optional[builtins.float] = None, rustred_reduction_strategy: builtins.str = 'ordered') -> Vakint:
+    def __new__(cls, run_time_decimal_precision: typing.Optional[builtins.int] = None, evaluation_order: typing.Optional[typing.Sequence[VakintEvaluationMethod]] = None, tensor_reduction_method: typing.Optional[builtins.str] = None, epsilon_symbol: typing.Optional[Expression] = None, mu_r_sq_symbol: typing.Optional[Expression] = None, form_exe_path: typing.Optional[builtins.str] = None, python_exe_path: typing.Optional[builtins.str] = None, verify_numerator_identification: typing.Optional[builtins.bool] = None, integral_normalization_factor: typing.Optional[builtins.str] = None, allow_unknown_integrals: typing.Optional[builtins.bool] = None, clean_tmp_dir: typing.Optional[builtins.bool] = None, number_of_terms_in_epsilon_expansion: typing.Optional[builtins.int] = None, use_dot_product_notation: typing.Optional[builtins.bool] = None, temporary_directory: typing.Optional[builtins.str] = None, rustred_artifact_path: typing.Optional[builtins.str] = None, rustred_cache_bytes: typing.Optional[builtins.int] = None, rustred_cache_terms: typing.Optional[builtins.int] = None, rustred_product_cache_bytes: typing.Optional[builtins.int] = None, rustred_product_cache_terms: typing.Optional[builtins.int] = None, rustred_cache_policy: builtins.str = 'evict-lru', rustred_scalar_max_work: typing.Optional[builtins.int] = None, max_process_rss_bytes: typing.Optional[builtins.int] = None, max_elapsed_seconds: typing.Optional[builtins.float] = None, rustred_reduction_strategy: builtins.str = 'ordered', n_cores: typing.Optional[builtins.int] = None, ordered_weight_arithmetic: typing.Optional[builtins.str] = None) -> Vakint:
         r"""
         Create a new Vakint instance, specifying details of the evaluation stack. Note that the same instance can be recycled across multiple evaluations.
         Note that the creation of a Vakint instance involves the processing and creation of the library of all known topologies, which can be time consuming.
@@ -516,6 +528,18 @@ class Vakint:
             Neither "ordered" nor "depth_first_without_memoization" uses or produces
             completed-result caches, including persistent caches; data loading skips
             prepared caches for both.
+        n_cores : Optional[int]
+            Worker threads of this instance: the single source of every Vakint and RustRed
+            worker count (modular weight arithmetic, five-loop route verification in data
+            loading). 1 runs every computation on the calling thread without spawning a thread.
+            None (default) uses min(10, cores available to this process), or 1 without a
+            Symbolica license. Results are identical for every value.
+        ordered_weight_arithmetic : Optional[str]
+            Frontier weight arithmetic of the "ordered" strategy: "exact", "modular_sampled" or
+            "modular_polynomial", optionally with RustRed's advanced options as
+            "modular_sampled:key=value,..." ("modular" is an alias of "modular_sampled").
+            Every arithmetic returns the same exact result. Modular arithmetics run on n_cores
+            workers unless the options set threads. None (default) selects "exact".
         """
     def load_rustred_application(self, path: builtins.str) -> None:
         r"""

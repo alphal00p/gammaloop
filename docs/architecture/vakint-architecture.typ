@@ -256,10 +256,19 @@ together on one weighted frontier. They share a single real-argument simplificat
 batching and before master substitution, so the per-integral simplification is skipped for
 that strategy. Ordered and non-memoized depth-first requests bypass depth-first result caches.
 Ordered is the default (`DEFAULT_RUSTRED_REDUCTION_STRATEGY`); RustRed's own default stays
-depth-first. `rustred_application_options.ordered_weight_arithmetic` selects exact (default) or
-modular frontier weights for Ordered requests at every loop count. Both expand the same keys and
-return the same terms and guards. `VAKINT_DUMP_ORDERED_REQUEST` records every native Ordered
-request with digests of its exact output, for replay without Vakint.
+depth-first. `VakintSettings.ordered_weight_arithmetic` (`OrderedWeightArithmetic`, RustRed's
+canonical text `exact | modular_sampled[:...] | modular_polynomial[:...]`) selects the frontier
+weights of Ordered requests at every loop count; the default is the single constant
+`DEFAULT_ORDERED_WEIGHT_ARITHMETIC` (exact). All modes expand the same keys and return the same
+terms and guards. `VakintSettings.n_cores` (default `default_n_cores()`: available cores, at most
+ten, one without a Symbolica license) is the single source of every worker count: the modular
+workers unless the selection fixes `threads`, and the five-loop route verification while the
+saved application loads. Both native fields (`ordered_weight_arithmetic`,
+`preparation_workers` of `rustred_application_options`) are derived in
+`rustred_evaluation::application_options` and must keep their defaults; neither enters the
+saved-application reload identity. One core runs everything on the calling thread, which
+`tests/single_core_tests.rs` enforces with a seccomp filter. `VAKINT_DUMP_ORDERED_REQUEST`
+records every native Ordered request with digests of its exact output, for replay without Vakint.
 
 A long-form five-loop input enumerates every verified momentum witness and selects the first
 one whose admitted weighted-lowering key is minimal, or keeps the first witness when none is

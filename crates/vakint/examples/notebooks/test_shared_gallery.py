@@ -833,5 +833,52 @@ class GalleryFooterTests(unittest.TestCase):
         self.assertIn("alert(&quot;x&quot;)", footer)
 
 
+class GalleryEngineTests(unittest.TestCase):
+    """The engine forwards worker cores and the Ordered weight arithmetic."""
+
+    def engine(self, environment, **arguments):
+        vakint = Mock(name="Vakint")
+        module = SimpleNamespace(Vakint=vakint, VakintEvaluationMethod=Mock())
+        with (
+            patch.dict(os.environ, environment, clear=True),
+            patch.dict(sys.modules, {"symbolica.community.hepkit.vakint": module}),
+        ):
+            Gallery.engine(**arguments)
+        return vakint.call_args.kwargs
+
+    def test_defaults_leave_the_choice_to_vakint(self):
+        arguments = self.engine({})
+        self.assertIsNone(arguments["n_cores"])
+        self.assertIsNone(arguments["ordered_weight_arithmetic"])
+
+    def test_server_environment_selects_cores_and_arithmetic(self):
+        arguments = self.engine(
+            {
+                "VAKINT_GALLERY_N_CORES": "4",
+                "VAKINT_GALLERY_ARITHMETIC": "modular_sampled",
+            }
+        )
+        self.assertEqual(arguments["n_cores"], 4)
+        self.assertEqual(arguments["ordered_weight_arithmetic"], "modular_sampled")
+
+    def test_explicit_arguments_override_the_environment(self):
+        arguments = self.engine(
+            {
+                "VAKINT_GALLERY_N_CORES": "4",
+                "VAKINT_GALLERY_ARITHMETIC": "modular_sampled",
+            },
+            n_cores=1,
+            ordered_weight_arithmetic="exact",
+        )
+        self.assertEqual(arguments["n_cores"], 1)
+        self.assertEqual(arguments["ordered_weight_arithmetic"], "exact")
+
+    def test_execution_names_the_arithmetic_and_cores(self):
+        engine = SimpleNamespace(n_cores=1, ordered_weight_arithmetic="exact")
+        self.assertEqual(Gallery.execution(engine), "exact · 1 core")
+        engine = SimpleNamespace(n_cores=8, ordered_weight_arithmetic="modular_sampled")
+        self.assertEqual(Gallery.execution(engine), "modular_sampled · 8 cores")
+
+
 if __name__ == "__main__":
     unittest.main()

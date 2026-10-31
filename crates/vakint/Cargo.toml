@@ -64,6 +64,10 @@ linnet = { workspace = true, default-features = true }
 feynkit-generator = { workspace = true }
 test-log = "0.2.19"
 
+# Seccomp thread-creation guard of the single-core test.
+[target.'cfg(target_os = "linux")'.dev-dependencies]
+libc = "0.2"
+
 [features]
 progress-tui = ["dep:ratatui", "dep:crossterm", "rustix/termios"]
 feynkit-ingress = []

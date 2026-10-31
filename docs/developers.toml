@@ -651,10 +651,14 @@ anchor = "pub struct Vakint {"
 # numerator replacement are built only when verification is enabled; five-loop
 # witness selection decides admission from the exact grouped lowering support
 # (unchanged full keys for ties and other inputs) and may screen witnesses and
-# lower contributions on scoped workers with input-ordered results.
 # lower contributions on scoped workers with input-ordered results;
 # split_integrals orders its topo() variables, so term order is deterministic.
-digest = "c5a023ef8758534e10bc341c4c192d10510d6865"
+# Reviewed 2026-10-31 for vakint-ncores-arith: VakintSettings gains n_cores (default
+# default_n_cores(), the single source of every worker count) and ordered_weight_arithmetic
+# (OrderedWeightArithmetic over RustRed's exact/modular_sampled/modular_polynomial, default
+# DEFAULT_ORDERED_WEIGHT_ARITHMETIC). validate_settings rejects invalid core counts and native
+# fields derived from both; the thin RustRed parser stays. Topology and FORM contracts are unchanged.
+digest = "a10a061c27833372df4e9281e24ce928fb3f70ec"
 
 [[section.note.scope]]
 path = "crates/vakint/src/lorentz.rs"
@@ -727,7 +731,10 @@ anchor = "pub struct VakintWrapper {"
 # strategy is ordered and the default order follows EvaluationOrder::available for
 # the given FORM/Python paths. Cache operations and prepared-cache loading share the
 # depth-first requirement helper, whose error names the opt-in. Ownership is unchanged.
-digest = "b2894177ff4b1c9d149c1ced6db6b34cf70c5d18"
+# Reviewed 2026-10-31 for vakint-ncores-arith: the constructor takes n_cores and
+# ordered_weight_arithmetic (validated, ValueError) with read-only getters, and the loaders
+# verify five-loop routes on the instance's n_cores. Wrapper ownership is unchanged.
+digest = "0b81ae906b1aba18af5f58aba30d8a6977e92713"
 
 [[section.note.scope]]
 path = "crates/vakint/src/symbolica_community_module/numerical.rs"
@@ -773,7 +780,10 @@ anchor = "pub(crate) struct RustRedData {"
 # public *_with_prepared_caches loaders opt in. Validation and ownership are unchanged.
 # Reviewed 2026-10-31 (built-in s6): the same regression also rejects a data
 # record named vakint::s6. Production code is unchanged.
-digest = "4e8ee5aedb0b845d4e419debee77d00f6886bc2d"
+# Reviewed 2026-10-31 for vakint-ncores-arith: activation prepares a five-loop application
+# whose routes are verified on an explicit core count (the loader's n_cores, default_n_cores()
+# for the option-free loaders). Validation and data ownership are unchanged.
+digest = "0d8bc17126c1b816a9e98e225c3c95b7a384d7a8"
 
 [[section.note.scope]]
 path = "crates/vakint/src/rustred_evaluation/masters.rs"

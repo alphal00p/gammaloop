@@ -423,6 +423,8 @@ impl VakintSettings {
             python_exe_path: self.python_exe_path.clone(),
             rustred_artifact_path: None,
             rustred_resources: Default::default(),
+            n_cores: vakint::default_n_cores(),
+            ordered_weight_arithmetic: Default::default(),
             rustred_application_options: Default::default(),
             rustred_scalar_numerator_limits: Default::default(),
             rustred_product_limits: Default::default(),

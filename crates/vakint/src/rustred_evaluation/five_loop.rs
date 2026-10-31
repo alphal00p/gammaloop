@@ -707,12 +707,13 @@ impl Vakint {
         if let Some(root) = root
             && !data.matches_directory(&root, 5)?
         {
-            self.load_external_data_with_prepared_caches(
+            self.load_external_data_on(
                 root,
                 5,
                 super::uses_prepared_caches(
                     configured.rustred_application_options.reduction_strategy,
                 ),
+                configured.n_cores,
             )?;
         }
         self.saved_application(&configured)?;
@@ -737,7 +738,7 @@ impl Vakint {
             .or(official_path.as_ref())
             .ok_or(RustRedEvaluationError::SavedApplicationUnavailable)?;
         let path = path.canonicalize().map_err(failure)?;
-        let mut options = settings.rustred_application_options;
+        let mut options = super::application_options(settings);
         // Strategy changes do not change immutable tables or the DFS cache
         // namespace. Select the request engine under the prepared-owner lock.
         options.reduction_strategy = crate::RustRedReductionStrategy::DepthFirst;
@@ -746,10 +747,18 @@ impl Vakint {
         // A different arithmetic must not reload and re-prepare the package.
         options.ordered_weight_arithmetic = rustred::reduction::OrderedWeightArithmetic::Exact;
         options.unresolved_policy = rustred::solver::UnresolvedPolicy::Preserve;
+        // Requests also select their weight arithmetic under that lock, and
+        // preparation workers only parallelize route verification during the
+        // load: neither changes the prepared application.
+        let prepared_identity = |options: SavedApplicationOptions| SavedApplicationOptions {
+            ordered_weight_arithmetic: Default::default(),
+            preparation_workers: 1,
+            ..options
+        };
         let mut loaded = self.rustred_application.lock().map_err(failure)?;
         if loaded.as_ref().is_none_or(|current| {
             current.path != path
-                || current.options != options
+                || prepared_identity(current.options) != prepared_identity(options)
                 || current.product_limits != settings.rustred_product_limits
         }) {
             let bare = super::data::RustRedData::release_root(&path)?.is_none();
@@ -1290,11 +1299,7 @@ impl SavedApplication {
         MonitorContext::native_phase(observation.as_deref_mut(), "scalar_lowering", None);
         let mut application = self.prepared.lock().map_err(failure)?;
         application.set_reduction_strategy(settings.rustred_application_options.reduction_strategy);
-        application.set_ordered_weight_arithmetic(
-            settings
-                .rustred_application_options
-                .ordered_weight_arithmetic,
-        );
+        application.set_ordered_weight_arithmetic(settings.rustred_ordered_weight_arithmetic());
         let family = application.family();
         let loop_count = family.loop_count();
         let family_coefficient_variables = family.coefficient_context().parameter_names().to_vec();
@@ -1514,7 +1519,7 @@ impl SavedApplication {
             }
             let options = SavedApplicationOptions {
                 unresolved_policy: rustred::solver::UnresolvedPolicy::Preserve,
-                ..settings.rustred_application_options
+                ..super::application_options(settings)
             };
             let mut dump = RequestDump::begin(DumpRequest {
                 loop_count,
@@ -1524,9 +1529,7 @@ impl SavedApplication {
                     options: &options,
                 },
                 strategy: settings.rustred_application_options.reduction_strategy,
-                weight_arithmetic: settings
-                    .rustred_application_options
-                    .ordered_weight_arithmetic,
+                weight_arithmetic: options.ordered_weight_arithmetic,
                 master_mode: request_dump::master_mode(settings),
                 channel: DumpChannel {
                     index: cohort_index,
@@ -1549,10 +1552,12 @@ impl SavedApplication {
             }
             // Declare this before the returned native values: the complete
             // exact reduction/assembly interval includes their natural cleanup.
+            // Deferred owners are prepared on this request's thread whatever
+            // n_cores is (preparation workers only verify routes while the
+            // application loads), so their summed preparation time is a part
+            // of this span. Stepping keys on several threads would have to
+            // invalidate it.
             let math = MathSpan::new();
-            if settings.rustred_application_options.preparation_workers != 1 {
-                math.invalidate("net timing requires one owner-preparation worker");
-            }
             let spectator = spectator
                 .replace(dimension.to_pattern())
                 .with(physical_dimension.to_pattern());

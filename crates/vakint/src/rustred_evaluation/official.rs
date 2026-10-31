@@ -38,6 +38,10 @@ pub struct OfficialExternalDataOptions {
     pub max_archive_bytes: u64,
     pub max_extracted_bytes: u64,
     pub max_entries: usize,
+    /// Workers verifying the five-loop routes while the application loads,
+    /// usually the [`crate::VakintSettings::n_cores`] of later evaluations;
+    /// one verifies on the calling thread. Defaults to [`crate::default_n_cores`].
+    pub n_cores: usize,
 }
 
 impl Default for OfficialExternalDataOptions {
@@ -53,6 +57,7 @@ impl Default for OfficialExternalDataOptions {
             max_archive_bytes: 2 * 1024 * 1024 * 1024,
             max_extracted_bytes: 8 * 1024 * 1024 * 1024,
             max_entries: 250_000,
+            n_cores: crate::default_n_cores(),
         }
     }
 }
@@ -177,6 +182,7 @@ impl Vakint {
             )
             .into());
         }
+        crate::execution::validate_n_cores(options.n_cores)?;
         let base = options
             .local_artifacts_path
             .clone()
@@ -194,7 +200,7 @@ impl Vakint {
                 true,
                 options.load_prepared_caches,
             )?;
-            self.activate_external_data(loaded, options.load_prepared_caches)?;
+            self.activate_external_data(loaded, options.load_prepared_caches, options.n_cores)?;
             return Ok(report);
         }
         let cache = base.join(".vakint-external-data");
@@ -301,7 +307,7 @@ impl Vakint {
         let mut staged = self.clone();
         // Authenticate any selected NativePack against this new registry, never
         // the engine's preceding release. No backing is activated yet.
-        staged.activate_external_data(loaded.clone(), false)?;
+        staged.activate_external_data(loaded.clone(), false, options.n_cores)?;
         let mut downloaded_caches = BTreeSet::new();
         if options.load_prepared_caches {
             for (&count, snapshot) in &loaded.runtime_cache_snapshots {

@@ -219,6 +219,12 @@ impl MathSpan {
         self.state.is_some()
     }
 
+    /// Disqualify the net time, e.g. when owner preparation may run on
+    /// several threads at once and its summed time no longer nests in the span.
+    #[cfg_attr(
+        not(test),
+        allow(dead_code, reason = "owner preparation runs on the request thread")
+    )]
     pub(crate) fn invalidate(&self, reason: &'static str) {
         if let Some(state) = &self.state {
             state.invalidate(reason);

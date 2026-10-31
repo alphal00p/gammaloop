@@ -653,15 +653,32 @@ impl Vakint {
 
     /// Load all loop packs up to the requested maximum from an existing checkout,
     /// attaching their prepared depth-first caches if requested. Validation and
-    /// cache attachment finish before this engine is replaced.
+    /// cache attachment finish before this engine is replaced. The five-loop
+    /// routes are verified on [`crate::default_n_cores`] workers.
     pub fn load_external_data_with_prepared_caches(
         &mut self,
         path: impl AsRef<Path>,
         max_loop_count: usize,
         load_prepared_caches: bool,
     ) -> Result<(), VakintError> {
+        self.load_external_data_on(
+            path,
+            max_loop_count,
+            load_prepared_caches,
+            crate::default_n_cores(),
+        )
+    }
+
+    /// [`Self::load_external_data_with_prepared_caches`] on `n_cores` workers.
+    pub(crate) fn load_external_data_on(
+        &mut self,
+        path: impl AsRef<Path>,
+        max_loop_count: usize,
+        load_prepared_caches: bool,
+        n_cores: usize,
+    ) -> Result<(), VakintError> {
         let data = RustRedData::from_directory(path.as_ref(), "latest", max_loop_count)?;
-        self.activate_external_data(data, load_prepared_caches)
+        self.activate_external_data(data, load_prepared_caches, n_cores)
     }
 
     /// Load native IBPs from a local pack or a sealed 1L–3L rules file. A bare
@@ -688,13 +705,25 @@ impl Vakint {
         path: impl AsRef<Path>,
         load_prepared_caches: bool,
     ) -> Result<(), VakintError> {
+        self.load_rustred_artifacts_on(
+            loop_count,
+            path,
+            load_prepared_caches,
+            crate::default_n_cores(),
+        )
+    }
+
+    /// [`Self::load_rustred_artifacts_with_prepared_caches`] on `n_cores` workers.
+    pub(crate) fn load_rustred_artifacts_on(
+        &mut self,
+        loop_count: usize,
+        path: impl AsRef<Path>,
+        load_prepared_caches: bool,
+        n_cores: usize,
+    ) -> Result<(), VakintError> {
         let path = path.as_ref();
         if let Some(root) = RustRedData::release_root(path)? {
-            return self.load_external_data_with_prepared_caches(
-                root,
-                loop_count,
-                load_prepared_caches,
-            );
+            return self.load_external_data_on(root, loop_count, load_prepared_caches, n_cores);
         }
         let family = super::artifact::shipped_family_for_loop_count(loop_count)
             .ok_or_else(|| failure("4L/5L IBPs require a local external-data pack; the explicit saved-application API also accepts a bare 5L application"))?;
@@ -734,13 +763,16 @@ impl Vakint {
         data.lower.insert(loop_count, snapshot);
         data.runtime_cache_snapshots.remove(&loop_count);
         data.version = format!("local-{}", &digest[..16]);
-        self.activate_external_data(Arc::new(data), load_prepared_caches)
+        self.activate_external_data(Arc::new(data), load_prepared_caches, n_cores)
     }
 
+    /// Validate and activate loaded packs; a five-loop application is
+    /// prepared with its routes verified on `n_cores` workers.
     pub(super) fn activate_external_data(
         &mut self,
         data: Arc<RustRedData>,
         load_prepared_caches: bool,
+        n_cores: usize,
     ) -> Result<(), VakintError> {
         let mut staged = self.clone();
         staged.rustred_data = Some(Arc::clone(&data));
@@ -754,7 +786,10 @@ impl Vakint {
             staged.attach_external_caches()?;
         }
         if data.loops.contains_key(&5) {
-            staged.saved_application(&crate::VakintSettings::default())?;
+            staged.saved_application(&crate::VakintSettings {
+                n_cores,
+                ..Default::default()
+            })?;
         }
         resources::checkpoint()?;
         *self = staged;
