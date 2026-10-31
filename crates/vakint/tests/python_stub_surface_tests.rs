@@ -28,6 +28,20 @@ fn graph_adapter_and_rich_output_are_present_in_valid_python_stubs() {
     ] {
         assert!(stub.contains(parameter), "{parameter}");
     }
+    // The Ordered step cache replaces them: constructor keywords and methods.
+    for present in [
+        "ordered_cache",
+        "ordered_cache_directory",
+        "ordered_cache_ram_bytes",
+        "ordered_cache_autosave",
+        "def load_ordered_cache",
+        "def save_ordered_cache",
+        "def ordered_cache_statistics",
+        "def clear_ordered_cache",
+        "def warm_ordered_cache",
+    ] {
+        assert!(stub.contains(present), "{present}");
+    }
     let graph_adapter = &module.function["integral_from_diagram"];
     assert_eq!(graph_adapter.len(), 1);
     assert_eq!(graph_adapter[0].r#return.name, "VakintExpression");

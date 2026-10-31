@@ -426,6 +426,7 @@ impl VakintSettings {
             n_cores: vakint::default_n_cores(),
             ordered_weight_arithmetic: Default::default(),
             rustred_application_options: Default::default(),
+            ordered_cache: Default::default(),
             rustred_scalar_numerator_limits: Default::default(),
             rustred_product_limits: Default::default(),
             rustred_momentum_match_limits: Default::default(),

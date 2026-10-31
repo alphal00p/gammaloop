@@ -76,7 +76,8 @@ validated packs are reused offline. Activation is transactional and replaces the
 application and numerical context. Explicit IBP and saved-application paths remain available. See
 the crate's `external_data.typ` for loading and release conventions.
 
-Vakint reduces only with RustRed's ordered scheduler and has no reduction-result cache. The
+Vakint reduces only with RustRed's ordered scheduler and has no reduction-result cache (its
+Ordered step cache records one checked step per expanded key, see below). The
 prepared depth-first caches and benchmark inputs that older releases list in their pack
 manifests are never read at run time, so loading skips their checksums; every other listed file
 is validated before activation. A saved-application path inside a recognized release uses that release's cumulative
@@ -442,10 +443,17 @@ schemas and authenticated program bindings before activation.
 
 Vakint persists no reduction results. The depth-first prepared caches, running caches, snapshots
 and cache transport were removed together with depth-first reduction, because a completed
-terminal image replaces a frontier key and skips every grouping and cancellation below it. A
-persistent ordered cache of weight-independent one-step records attaches at the
-`rustred_evaluation::cache` boundary, which keeps the saved-application identity used to bind such
-records (`symbolica_community_module::cache` is its Python counterpart).
+terminal image replaces a frontier key and skips every grouping and cancellation below it.
+Instead, `rustred_evaluation::cache` owns one RustRed `OrderedStepCache` per reduction program
+(closed 1L–3L artifacts, the four 4L candidate programs, the 5L saved application), shared by the
+engine's clones. It stores the weight-independent checked step of each expanded key, replayed
+exactly by every arithmetic, pass, channel and request, never weights, zero decisions or results.
+`VakintSettings::ordered_cache` selects off, read-only or read-write (default, in memory), an
+optional directory with one `<loops>L-<program>.<stamp>` subdirectory per program binding (the
+stamp digests the program, its family and policy, and the RustRed/Symbolica build), a resident
+ceiling and an autosave policy; `load_`, `save_`, `warm_`, `clear_ordered_cache` and
+`ordered_cache_statistics` are the operations (`symbolica_community_module::cache` holds the
+Python report conversion). A foreign or corrupt directory is rejected, not replayed.
 
 A reproducible result therefore depends on more than the input expression: record the topology
 form, numerator, normalization convention, epsilon depth, decimal precision, backend order and

@@ -145,6 +145,9 @@ pub(crate) struct SavedApplication {
     product_charts: SavedApplicationProductChartStatistics,
     data: Arc<super::data::RustRedData>,
     witnesses: Mutex<WitnessCache>,
+    /// Ordered step-cache identity computed by RustRed from the loaded
+    /// package (selection, queries, payload digests, family, policy).
+    step_cache: super::cache::OrderedCacheProgram,
 }
 
 #[derive(Debug, Clone)]
@@ -899,7 +902,9 @@ impl Vakint {
         settings: &VakintSettings,
         input: AtomView,
     ) -> Result<RustRedSymbolicEvaluation, VakintError> {
-        self.evaluate_rustred_symbolic_observed(settings, input, None, None)
+        self.autosave_ordered_cache(
+            self.evaluate_rustred_symbolic_observed(settings, input, None, None),
+        )
     }
 
     /// Experimental five-loop diagnostics on the ordinary public evaluation.
@@ -913,7 +918,12 @@ impl Vakint {
         input: AtomView,
         observer: &mut CandidateRoutedApplicationObserver<'_>,
     ) -> Result<RustRedSymbolicEvaluation, VakintError> {
-        self.evaluate_rustred_symbolic_observed(settings, input, Some(observer), None)
+        self.autosave_ordered_cache(self.evaluate_rustred_symbolic_observed(
+            settings,
+            input,
+            Some(observer),
+            None,
+        ))
     }
 
     /// Retain exact five-loop masters and guards with optional per-call diagnostics.
@@ -923,9 +933,9 @@ impl Vakint {
         input: AtomView,
         monitor: &RustRedMonitorOptions,
     ) -> Result<RustRedSymbolicEvaluation, VakintError> {
-        MonitorContext::run(monitor, |observation, progress| {
+        self.autosave_ordered_cache(MonitorContext::run(monitor, |observation, progress| {
             self.evaluate_rustred_symbolic_observed(settings, input, observation, progress)
-        })
+        }))
     }
 
     /// Retain exact masters inside an existing caller-owned job monitor.
@@ -936,9 +946,9 @@ impl Vakint {
         input: AtomView,
         scope: &mut RustRedMonitorScope<'_, '_>,
     ) -> Result<RustRedSymbolicEvaluation, VakintError> {
-        scope.evaluate(|observation, progress| {
+        self.autosave_ordered_cache(scope.evaluate(|observation, progress| {
             self.evaluate_rustred_symbolic_observed(settings, input, observation, progress)
-        })
+        }))
     }
 
     fn evaluate_rustred_symbolic_observed(
@@ -1009,9 +1019,12 @@ impl Vakint {
                 // This parent span includes callee cleanup. Its recorded
                 // subphases must not be added to it as disjoint durations.
                 let batch_started = std::time::Instant::now();
+                let step_cache =
+                    self.ordered_step_cache(settings, application.ordered_cache_program())?;
                 let result = application.evaluate_ordered_batch(
                     &tensor_settings,
                     &contributions,
+                    step_cache,
                     observation.as_deref_mut(),
                     progress,
                 );
@@ -1084,7 +1097,13 @@ impl SavedApplication {
             ));
         }
         let data_version = data.masters.version.clone();
+        let step_cache = super::cache::OrderedCacheProgram::new(
+            5,
+            prepared.family().name(),
+            prepared.ordered_step_cache_binding(),
+        );
         Ok(Self {
+            step_cache,
             fingerprint: prepared.family().fingerprint().to_owned(),
             data_version,
             prepared: Mutex::new(prepared),
@@ -1139,19 +1158,44 @@ impl SavedApplication {
         Ok(crate::utils::simplify_real(factor.as_view()))
     }
 
+    /// Ordered step-cache identity of this package.
+    pub(super) fn ordered_cache_program(&self) -> &super::cache::OrderedCacheProgram {
+        &self.step_cache
+    }
+
     /// Reduce all matched contributions of one request with the ordered
     /// scheduler, one native frontier per (mass, spectator, exponent) channel.
+    /// `step_cache` (bound to [`Self::ordered_cache_program`]) is attached to
+    /// the native application for this batch, or detached when absent.
     pub(super) fn evaluate_ordered_batch(
         &self,
         settings: &VakintSettings,
         contributions: &[MatchedContribution],
+        step_cache: Option<Arc<rustred::reduction::OrderedStepCache>>,
         mut observation: Option<&mut CandidateRoutedApplicationObserver<'_>>,
         progress: Option<&super::monitor::CallerProgress>,
     ) -> Result<RustRedSymbolicEvaluation, VakintError> {
         MonitorContext::native_phase(observation.as_deref_mut(), "scalar_lowering", None);
         let mut application = self.prepared.lock().map_err(failure)?;
         application.set_reduction_strategy(rustred::reduction::ReductionStrategy::Ordered);
-        application.set_ordered_weight_arithmetic(settings.rustred_ordered_weight_arithmetic());
+        application.set_ordered_weight_arithmetic(
+            settings.rustred_ordered_weight_arithmetic(),
+        );
+        // The cache is opened with this package's own binding, so its stamp
+        // matches; RustRed checks family, variables and policy again here
+        // and at every request.
+        if step_cache
+            .as_ref()
+            .is_some_and(|cache| cache.stamp() != self.step_cache.binding.stamp())
+        {
+            return Err(super::cache::ordered_cache_failure(
+                "the step cache is bound to another saved application",
+            )
+            .into());
+        }
+        application
+            .set_ordered_step_cache(step_cache)
+            .map_err(super::cache::operation)?;
         let family = application.family();
         let loop_count = family.loop_count();
         let family_coefficient_variables = family.coefficient_context().parameter_names().to_vec();
@@ -1743,10 +1787,7 @@ mod tests {
         let loaded = vakint.loaded_application().unwrap();
         let mut settings = VakintSettings::default();
         for arithmetic in ["modular:threads=1", "modular:threads=2,batch=8", "exact"] {
-            settings
-                .rustred_application_options
-                .ordered_weight_arithmetic =
-                crate::parse_rustred_ordered_weight_arithmetic(arithmetic).unwrap();
+            settings.ordered_weight_arithmetic = arithmetic.parse().unwrap();
             let reused = vakint.saved_application(&settings).unwrap();
             assert!(
                 Arc::ptr_eq(&loaded, &reused),

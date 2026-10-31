@@ -57,10 +57,20 @@ impl Vakint {
                 observation,
                 progress,
             ),
-            5 => self
-                .saved_application(&scalar_settings)?
-                .evaluate_ordered_batch(&scalar_settings, &contributions, observation, progress)
-                .map(|result| result.value),
+            5 => {
+                let application = self.saved_application(&scalar_settings)?;
+                let step_cache =
+                    self.ordered_step_cache(&scalar_settings, application.ordered_cache_program())?;
+                application
+                    .evaluate_ordered_batch(
+                        &scalar_settings,
+                        &contributions,
+                        step_cache,
+                        observation,
+                        progress,
+                    )
+                    .map(|result| result.value)
+            }
             _ => Err(RustRedEvaluationError::UnsupportedMatchedFamily {
                 detail: format!("no loaded adapter for {loop_count} loops"),
             }
@@ -99,10 +109,7 @@ mod tests {
             form_exe_path: "/ordered-reduction-must-not-call-form".into(),
             ..Default::default()
         };
-        settings
-            .rustred_application_options
-            .ordered_weight_arithmetic =
-            crate::parse_rustred_ordered_weight_arithmetic(arithmetic).unwrap();
+        settings.ordered_weight_arithmetic = arithmetic.parse().unwrap();
         settings
     }
 
@@ -135,28 +142,43 @@ mod tests {
     }
 
     /// Every arithmetic reproduces the historical depth-first result exactly,
-    /// and the modular arithmetic returns the exact arithmetic's expression.
+    /// and the modular arithmetic returns the exact arithmetic's expression,
+    /// without and with the engine's Ordered step cache (populated by the
+    /// first arithmetic and earlier inputs, replayed by the later ones).
     fn assert_depth_first_parity(settings: impl Fn(&str) -> VakintSettings, inputs: &[&str]) {
         let engine = Vakint::new().unwrap();
         for input in inputs {
             let parsed = vakint_parse!(input).unwrap();
             let mut results = Vec::new();
-            for arithmetic in ARITHMETICS {
-                let settings = settings(arithmetic);
-                let ordered = engine
-                    .evaluate_integral(&settings, parsed.as_view())
-                    .unwrap();
-                assert!(
-                    (&ordered - depth_first_reference(&settings, input))
-                        .together()
-                        .expand()
-                        .is_zero(),
-                    "{arithmetic}: {input}"
-                );
-                results.push(ordered);
+            for cache in [
+                crate::OrderedCacheSettings::off(),
+                crate::OrderedCacheSettings::default(),
+            ] {
+                for arithmetic in ARITHMETICS {
+                    let settings = VakintSettings {
+                        ordered_cache: cache.clone(),
+                        ..settings(arithmetic)
+                    };
+                    let ordered = engine
+                        .evaluate_integral(&settings, parsed.as_view())
+                        .unwrap();
+                    assert!(
+                        (&ordered - depth_first_reference(&settings, input))
+                            .together()
+                            .expand()
+                            .is_zero(),
+                        "{arithmetic} {:?}: {input}",
+                        cache.mode
+                    );
+                    results.push(ordered);
+                }
             }
-            assert_eq!(results[0], results[1], "{input}");
+            assert!(
+                results.iter().all(|result| result == &results[0]),
+                "{input}"
+            );
         }
+        assert!(engine.ordered_cache_statistics().hits > 0);
     }
 
     #[test]

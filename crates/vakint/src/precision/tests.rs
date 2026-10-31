@@ -540,10 +540,7 @@ fn symbolic_rustred_keeps_finite_input_uncertainty_until_numerical_evaluation() 
             integral_normalization_factor: crate::LoopNormalizationFactor::FMFTandMATAD,
             ..Default::default()
         };
-        settings
-            .rustred_application_options
-            .ordered_weight_arithmetic =
-            crate::parse_rustred_ordered_weight_arithmetic(arithmetic).unwrap();
+        settings.ordered_weight_arithmetic = arithmetic.parse().unwrap();
         let input = vk_parse!(format!(
             "(1.25-1.25*{})*topo(I1L(muvsq,1))",
             settings.epsilon_symbol,

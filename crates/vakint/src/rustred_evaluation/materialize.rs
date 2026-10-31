@@ -199,6 +199,18 @@ pub(super) fn evaluate_ordered_batch(
             }
         }
     }
+    let step_cache = if channels.is_empty() {
+        None
+    } else {
+        vakint.ordered_step_cache(
+            settings,
+            &super::cache::OrderedCacheProgram::new(
+                first.loop_count,
+                first.family.name(),
+                snapshot.ordered_step_cache_binding(),
+            ),
+        )?
+    };
     let cohort_total = channels.len();
     let mut skipped = 0;
     let arithmetic = settings.rustred_ordered_weight_arithmetic();
@@ -244,11 +256,12 @@ pub(super) fn evaluate_ordered_batch(
                     );
                     envelope.caller_phase = Some("entry_admission");
                     observer.emit(envelope);
-                    Reducer::reduce_artifact_linear_combination_ordered_with_arithmetic(
+                    Reducer::reduce_artifact_linear_combination_ordered_with_step_cache(
                         artifact,
                         terms,
                         settings.rustred_application_options.reduction_limits,
                         arithmetic,
+                        step_cache.as_deref(),
                         &mut |progress, current| {
                             observer.emit_ordered_progress(
                                 artifact.family_fingerprint(),
@@ -257,14 +270,17 @@ pub(super) fn evaluate_ordered_batch(
                             );
                             Ok(())
                         },
+                        None,
                     )
                 }
-                None => Reducer::reduce_artifact_linear_combination_ordered_with_arithmetic(
+                None => Reducer::reduce_artifact_linear_combination_ordered_with_step_cache(
                     artifact,
                     terms,
                     settings.rustred_application_options.reduction_limits,
                     arithmetic,
+                    step_cache.as_deref(),
                     &mut |_, _| Ok(()),
+                    None,
                 ),
             },
         )?

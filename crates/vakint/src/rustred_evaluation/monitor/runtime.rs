@@ -1018,12 +1018,13 @@ fn update_display(pending: &mut Pending, envelope: &Envelope<'_>, detail: bool, 
     {
         // Sample the O(1) counters themselves. Saved terminal forwarding must
         // retain the genuine native census time and request identity.
-        display.ordered = Some(OrderedReductionSample {
+        display.ordered = Some(OrderedReductionSample::next(
+            display.ordered.as_ref(),
             counts,
-            native_epoch: display.native_epoch,
-            family_fingerprint: envelope.family_fingerprint.to_owned(),
-            sampled_at: envelope.elapsed,
-        });
+            display.native_epoch,
+            envelope.family_fingerprint,
+            envelope.elapsed,
+        ));
     }
     if detail
         && envelope.activity != Activity::Caller
@@ -1722,6 +1723,8 @@ mod tests {
             native_epoch: 1,
             family_fingerprint: "previous-native-family".into(),
             sampled_at: Duration::from_secs(10),
+            phase_start: (0, 0),
+            step_cache_phases: Vec::new(),
         };
         {
             let mut pending = shared.pending();

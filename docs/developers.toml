@@ -663,6 +663,11 @@ anchor = "pub struct Vakint {"
 # cache exports and the lower-loop cache state are removed; the inherited
 # reduction_strategy option is ignored and every RustRed contribution is batched.
 # Topology, FORM, evaluation-order and finalization contracts are unchanged.
+# Reviewed 2026-10-31 for the Ordered step cache: VakintSettings gains
+# ordered_cache (mode, directory, resident ceiling, autosave) and the engine an
+# Arc-shared registry of one RustRed OrderedStepCache per reduction program.
+# Public evaluation entry points run the after-evaluation autosave; replayed
+# steps equal checked ones, so results, guards and ownership are unchanged.
 digest = "a10a061c27833372df4e9281e24ce928fb3f70ec"
 
 [[section.note.scope]]
@@ -743,6 +748,10 @@ anchor = "pub struct VakintWrapper {"
 # and cache-policy keywords, the depth-first cache operations, load_prepared_caches
 # and the cache-hit diagnostic; monitor keywords move to a private helper module.
 # Wrapper ownership, defaults and data loading are otherwise unchanged.
+# Reviewed 2026-10-31 for the Ordered step cache: the wrapper adds the
+# ordered_cache* constructor keywords and the load/save/statistics/clear/warm
+# cache methods (reports built in the private cache module). Wrapper ownership,
+# defaults of the existing keywords and evaluation entry points are unchanged.
 digest = "0b81ae906b1aba18af5f58aba30d8a6977e92713"
 
 [[section.note.scope]]
@@ -796,6 +805,9 @@ anchor = "pub(crate) struct RustRedData {"
 # runtime cache snapshots and the *_with_prepared_caches loaders are removed.
 # Loading skips the never-read cache/, cache metadata and benchmarks/ files; every
 # other listed file is validated before transactional activation, as before.
+# Reviewed 2026-10-31 for the Ordered step cache: RustRedData lists the
+# step-cache identities (bindings) of its loaded lower-loop and four-loop
+# programs for load_ordered_cache; loading, validation and activation are unchanged.
 digest = "0d8bc17126c1b816a9e98e225c3c95b7a384d7a8"
 
 [[section.note.scope]]

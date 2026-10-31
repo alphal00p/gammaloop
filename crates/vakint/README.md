@@ -73,7 +73,11 @@ Vakint reduces with RustRed's ordered scheduler only: all contributions of a req
 exact frontier per compatible coefficient channel, with exact or modular weight arithmetic. See
 [ordered reduction](docs/ordered_reduction.typ). Depth-first reduction and its completed-result
 caches were removed from Vakint; prepared depth-first caches shipped by older external-data
-releases are ignored. See also the [historical program refresh record](rustred_package_refresh.typ).
+releases are ignored. Instead, an Ordered step cache records each expanded integral's checked
+reduction step once and replays it exactly (never weights or results), in memory by default or
+in a directory that later processes reuse (`VakintSettings::ordered_cache`; Python
+`ordered_cache*` keywords and `load_`/`save_`/`warm_`/`clear_ordered_cache`). See also the
+[historical program refresh record](rustred_package_refresh.typ).
 
 Licensed Symbolica execution uses `SYMBOLICA_LICENSE` in the environment. Neither
 building nor running Vakint requires Mathematica.

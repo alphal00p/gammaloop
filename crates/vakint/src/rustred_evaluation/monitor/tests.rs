@@ -54,10 +54,14 @@ fn ordered_progress_exposes_phase_and_cancellation_scopes_without_time_percent()
             terminal_merges: 2,
             terminal_cancellations: 1,
             processed_keys: 19,
+            step_cache_hits: 15,
+            step_cache_misses: 4,
         },
         native_epoch: 2,
         family_fingerprint: "ordered-family".into(),
         sampled_at: Duration::from_secs(8),
+        phase_start: (12, 3),
+        step_cache_phases: Vec::new(),
     });
     state.observe(sample, Duration::from_secs(10));
     let view = state.view(Duration::from_secs(13));
@@ -134,6 +138,60 @@ fn ordered_progress_exposes_phase_and_cancellation_scopes_without_time_percent()
         document["ordered_reduction"]["phase_fraction_is_time_fraction"],
         false
     );
+    assert_eq!(
+        row(&view.cache, "Step cache hits / misses (request)"),
+        "15 / 4 · 78.9% replayed"
+    );
+    assert_eq!(
+        row(&view.cache, "Step cache hits / misses (current phase)"),
+        "3 / 1 · 75.0% replayed"
+    );
+    let cache = &document["ordered_reduction"]["step_cache"];
+    assert_eq!(cache["hits"], 15);
+    assert_eq!(cache["misses"], 4);
+    assert_eq!(cache["phase_hits"], 3);
+    assert_eq!(cache["phase_misses"], 1);
+}
+
+#[test]
+fn ordered_step_cache_counters_are_split_by_completed_phase() {
+    use rustred::solver::CandidateOrderedPhaseKind;
+    let census = |completed_phases, hits, misses| CandidateOrderedReductionProgress {
+        completed_phases,
+        total_phases: 4,
+        phase_kind: CandidateOrderedPhaseKind::Reduction,
+        active_support: Some(completed_phases + 1),
+        step_cache_hits: hits,
+        step_cache_misses: misses,
+        ..Default::default()
+    };
+    let at = Duration::from_secs(1);
+    let first = OrderedReductionSample::next(None, census(0, 2, 1), 1, "family", at);
+    let same_phase = OrderedReductionSample::next(Some(&first), census(0, 5, 2), 1, "family", at);
+    assert_eq!(same_phase.phase_step_cache(), (5, 2));
+    let next_phase =
+        OrderedReductionSample::next(Some(&same_phase), census(1, 9, 2), 1, "family", at);
+    assert_eq!(next_phase.phase_step_cache(), (4, 0));
+    assert_eq!(
+        next_phase.step_cache_phases,
+        [StepCachePhase {
+            phase: 0,
+            kind: CandidateOrderedPhaseKind::Reduction,
+            support: Some(1),
+            owner: None,
+            hits: 5,
+            misses: 2,
+        }]
+    );
+    // Two phases completed between censuses: the earlier census closes the
+    // phase it observed; the counters restart for the next request.
+    let skipped = OrderedReductionSample::next(Some(&next_phase), census(3, 9, 7), 1, "family", at);
+    assert_eq!(skipped.step_cache_phases.len(), 2);
+    assert_eq!(skipped.step_cache_phases[1].hits, 4);
+    assert_eq!(skipped.phase_step_cache(), (0, 5));
+    let request = OrderedReductionSample::next(Some(&skipped), census(0, 1, 0), 2, "family", at);
+    assert!(request.step_cache_phases.is_empty());
+    assert_eq!(request.phase_step_cache(), (1, 0));
 }
 
 #[test]
