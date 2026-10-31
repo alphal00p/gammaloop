@@ -48,10 +48,10 @@ use ::tracing::level_filters::LevelFilter;
 use ::tracing::warn;
 use clap::parser::ValueSource;
 use clap::{CommandFactory, FromArgMatches, Parser};
-use commands::save::SaveState;
 use commands::Commands;
+use commands::save::SaveState;
 
-use gammalooprs::utils::serde_utils::{SerdeFileError, SHOWDEFAULTS};
+use gammalooprs::utils::serde_utils::{SHOWDEFAULTS, SerdeFileError};
 use session::{CliSession, CliSessionState};
 use tracing::{
     configure_file_log_boot_mode, set_file_log_filter, set_file_log_filter_override,
@@ -65,7 +65,7 @@ use tracing::{
 
 use color_eyre::Result;
 use colored::Colorize;
-use eyre::{eyre, Context};
+use eyre::{Context, eyre};
 use gammaloop_tracing_filter::LogFormat;
 use gammalooprs::{
     initialisation::initialise,
@@ -73,14 +73,18 @@ use gammalooprs::{
     settings::{GlobalSettings, RuntimeSettings},
     utils::serde_utils::IsDefault,
     utils::{
-        serde_utils::{get_schema_folder, is_false, is_true, SmartSerde},
+        serde_utils::{SmartSerde, get_schema_folder, is_false, is_true},
         tracing::LogLevel,
     },
 };
-use schemars::{schema_for, JsonSchema};
+use schemars::{JsonSchema, schema_for};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use state::{classify_state_folder, RunHistory, State, StateFolderKind, SyncSettings};
+use state::{RunHistory, State, StateFolderKind, SyncSettings, classify_state_folder};
+#[cfg(test)]
+use std::env;
+#[cfg(test)]
+use std::sync::OnceLock;
 use std::{ffi::OsString, path::Path, path::PathBuf, sync::atomic::Ordering};
 use std::{fs, fs::File, ops::ControlFlow, time::Duration, time::Instant};
 use walkdir::WalkDir;
@@ -130,19 +134,27 @@ fn is_test_workspace_root(path: &Path) -> bool {
 
 #[cfg(test)]
 pub(crate) fn test_workspace_root() -> &'static Path {
-    static WORKSPACE_ROOT: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+    static WORKSPACE_ROOT: OnceLock<PathBuf> = OnceLock::new();
 
     WORKSPACE_ROOT
         .get_or_init(|| {
-            let current_dir = std::env::current_dir().ok();
-            let current_exe = std::env::current_exe().ok();
-            let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+            if let Some(root) = env::var_os("GAMMALOOP_WORKSPACE_ROOT")
+                .or_else(|| env::var_os("NEXTEST_WORKSPACE_ROOT"))
+            {
+                return PathBuf::from(root);
+            }
+
+            let current_dir = env::current_dir().ok();
+            let current_exe = env::current_exe().ok();
+            let manifest_dir = env::var_os("CARGO_MANIFEST_DIR")
+                .map(PathBuf::from)
+                .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")));
 
             let mut candidates = Vec::new();
-            if let Some(dir) = current_dir.clone() {
+            if let Some(dir) = &current_dir {
                 candidates.extend(dir.ancestors().map(Path::to_path_buf));
             }
-            if let Some(exe) = current_exe.clone() {
+            if let Some(exe) = &current_exe {
                 candidates.extend(exe.ancestors().skip(1).map(Path::to_path_buf));
             }
             candidates.extend(manifest_dir.ancestors().map(Path::to_path_buf));
@@ -1079,7 +1091,7 @@ impl OneShot {
                         "Failed to inspect state path '{}' before cleaning",
                         self.state_folder.display()
                     )
-                })
+                });
             }
         };
 
@@ -1909,12 +1921,12 @@ mod tests {
     };
 
     use super::{
-        CLISettings, Commands, LogFormat, LogLevel, OneShot, Repl, RunHistory, StateSettings,
-        GLOBAL_SETTINGS_FILENAME, LOG_TEST_MUTEX,
+        CLISettings, Commands, GLOBAL_SETTINGS_FILENAME, LOG_TEST_MUTEX, LogFormat, LogLevel,
+        OneShot, Repl, RunHistory, StateSettings,
     };
     #[cfg(feature = "cli")]
     use {
-        super::{generate_completion_script, CompletionShell, State},
+        super::{CompletionShell, State, generate_completion_script},
         crate::{
             commands::save::SaveState,
             state::{CommandHistory, CommandsBlock},
@@ -2155,23 +2167,25 @@ mod tests {
             command_blocks: vec![
                 CommandsBlock {
                     name: "cmdBlockA".to_string(),
-                    commands: vec![CommandHistory::from_raw_string(
-                        "set global kv global.logfile_directive=error",
-                    )
-                    .unwrap()],
+                    commands: vec![
+                        CommandHistory::from_raw_string(
+                            "set global kv global.logfile_directive=error",
+                        )
+                        .unwrap(),
+                    ],
                 },
                 CommandsBlock {
                     name: "cmdBlockB".to_string(),
-                    commands: vec![CommandHistory::from_raw_string(
-                        "set default-runtime kv general.mu_r=12.0",
-                    )
-                    .unwrap()],
+                    commands: vec![
+                        CommandHistory::from_raw_string("set default-runtime kv general.mu_r=12.0")
+                            .unwrap(),
+                    ],
                 },
             ],
-            commands: vec![CommandHistory::from_raw_string(
-                "set global kv global.display_directive=warn",
-            )
-            .unwrap()],
+            commands: vec![
+                CommandHistory::from_raw_string("set global kv global.display_directive=warn")
+                    .unwrap(),
+            ],
             ..RunHistory::default()
         };
         fs::write(&run_path, run_history.to_toml_string(true).unwrap()).unwrap();

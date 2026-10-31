@@ -1,7 +1,14 @@
 # Ordinary local and CI recipes share the strict fast policy in nextest.toml.
 [positional-arguments]
-test *args:
-    just _test-ci "$@"
+test CRATE *args:
+    #!/usr/bin/env bash
+    bash scripts/develop.sh --backend {{ quote(backend) }} test -p "$1" "${@:2}"
+
+# Explicit Cargo iteration with ordinary defaults and requested features.
+[positional-arguments]
+test-cargo CRATE *args:
+    #!/usr/bin/env bash
+    bash scripts/develop.sh --backend cargo test -p "$1" "${@:2}"
 
 # Classes narrow the fast lane; selecting `slow` does not enable ignored tests
 # or the long cases reserved for main. With no class, select the whole fast lane.
@@ -10,7 +17,7 @@ test_gammaloop *args:
     #!/usr/bin/env bash
     set -euo pipefail
     raw_args=("$@")
-    cargo_profile_args=(--cargo-profile {{ ci_cargo_profile }})
+    cargo_profile_args=(--cargo-profile {{ quote(profile) }})
     filter_terms=()
     nextest_args=()
     passthrough_mode=0
@@ -43,8 +50,7 @@ test_gammaloop *args:
                 ;;
         esac
     done
-    cmd=(cargo nextest run --workspace "${cargo_profile_args[@]}"
-         --profile ci_gammaloop --locked --no-fail-fast)
+    cmd=(bash scripts/develop.sh --backend {{ quote(backend) }} test --workspace "${cargo_profile_args[@]}")
     if [ ${#filter_terms[@]} -gt 0 ]; then
         filterset="${filter_terms[0]}"
         for term in "${filter_terms[@]:1}"; do
@@ -80,7 +86,7 @@ test-all:
 # Explicit release compilation retains the same runtime selection and cap.
 [positional-arguments]
 test-release *args:
-    cargo nextest run --workspace --release --profile ci_gammaloop --locked --no-fail-fast "$@"
+    bash scripts/develop.sh --backend {{ quote(backend) }} test --workspace --release "$@"
 
 [positional-arguments]
 test-ci *args:
@@ -93,11 +99,11 @@ test-ci-mac *args:
 
 [positional-arguments]
 _test-ci *args:
-    cargo nextest run --workspace --cargo-profile {{ ci_cargo_profile }} --profile ci_gammaloop --locked --no-fail-fast "$@"
+    bash scripts/develop.sh --backend {{ quote(backend) }} test --workspace "$@"
 
 # Run the Python API integration tests explicitly after preparing the Python env.
 test-python-api:
-    cargo nextest run -p gammaloop-integration-tests --cargo-profile {{ ci_cargo_profile }} --features python-api-tests --test test_python_api --profile ci_gammaloop --locked --no-fail-fast
+    bash scripts/develop.sh --backend {{ quote(backend) }} test -p gammaloop-integration-tests --features python-api-tests --test test_python_api
 
 [positional-arguments]
 test-fast *args:
@@ -105,7 +111,7 @@ test-fast *args:
 
 # Inventory includes skipped and ignored tests; listing does not run their bodies.
 list-all-tests:
-    cargo nextest list --workspace --cargo-profile {{ ci_cargo_profile }} --locked --profile ci_full
+    bash scripts/develop.sh --backend {{ quote(backend) }} list --workspace --profile ci_full
 
 # Example: just test_one evaluate_1l_scalar_vacuum
 [positional-arguments]
@@ -120,7 +126,7 @@ test-verbose TEST_NAME:
 # Exact algebra regressions independent of the on-shell component operation.
 [positional-arguments]
 test-fixed-frame-algebra *args:
-    cargo nextest run -p spenso -p idenso -p spenso-hep-lib -p gammalooprs -p vakint --features spenso/shadowing --lib --test on_shell_projectors --test component_selectors --test tensor_reduction_mode_tests --cargo-profile {{ ci_cargo_profile }} --profile ci_gammaloop --locked --no-fail-fast \
+    bash scripts/develop.sh --backend {{ quote(backend) }} test -p spenso -p idenso -p spenso-hep-lib -p gammalooprs -p vakint --features spenso/shadowing --lib --test on_shell_projectors --test component_selectors --test tensor_reduction_mode_tests \
         -E 'test(overlap_numerators::tests) or test(exact_scalar_sum_keys_) or test(compact_factors_) or test(native_projector_markers_remain_lorentz_ports) or test(native_tensor_coefficients_keep_their_connected_lorentz_interface) or test(scalar_laurent_boundary_preserves_powered_opaque_coefficients) or test(tensor_backend_modes_retain_powered_external_coefficients) or test(whole_numerator_and_projected_analytic_backends_have_identical_laurent_coefficients) or test(projected_temporal_and_external_slashes_share_a_native_interface) or test(restored_projector_indices_are_fresh_after_dimension_unification) or test(restored_symbolic_vakint_slots_preserve_the_native_source_interface) or binary(=on_shell_projectors) or binary(=component_selectors) or test(fixed_frame_regressions) or test(fixed_basis_products) or test(fixed_minkowski_basis_products) or test(metric_constructor) or test(sparse_evaluation_preserves_flat_positions) or (package(gammalooprs) and (test(projected_fixed_velocity) or test(exact_os_coefficients_use_fundamental_color_dimension_identities) or test(analytic_os_temporal_dot) or test(analytic_spin_expansion_preserves_powered_scalar_products) or test(analytic_spin_simplification_preserves_shared_color_factor) or test(projected_dirac_algebra_precedes_single_and_double_pole_expansion) or test(projected_dirac_numerator_matches_scalar_master_before_backend_truncation) or test(analytic_uv_spin_algebra_rejects_unsupported_residual_contractions) or test(residual_tensor_contractions_are_checked_per_analytic_branch) or test(scalar_dimensions_are_substituted_inside_functions_but_not_lorentz_slots)))' "$@"
 
 generation_oracle_filter := "binary(generation_oracle) or (package(feynkit-generator) and test(/^generation::/) and not test(/::failing::/)) or (package(linnet) and test(/^half_edge::generate::/)) or (package(feynkit-py) and test(=generation::tests::python_typed_hooks_prune_like_rust_hooks))"

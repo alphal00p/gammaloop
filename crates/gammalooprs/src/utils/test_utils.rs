@@ -17,11 +17,25 @@ use crate::settings::runtime::{
 };
 use crate::utils::{F, GS, determinant, global_inv_parameterize, global_parameterize};
 
+/// Locate fixtures in the runtime workspace when tests are relocated from a build archive.
+pub(crate) fn workspace_root() -> PathBuf {
+    env::var_os("GAMMALOOP_WORKSPACE_ROOT")
+        .or_else(|| env::var_os("NEXTEST_WORKSPACE_ROOT"))
+        .map(PathBuf::from)
+        .unwrap_or_else(|| {
+            // This module is compiled only into gammalooprs's own test binary.
+            env::var_os("CARGO_MANIFEST_DIR")
+                .map(PathBuf::from)
+                .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")))
+                .join("../..")
+        })
+}
+
 pub fn output_dir() -> PathBuf {
     if let Ok(pytest_output_path) = env::var("PYTEST_OUTPUT_PATH_FOR_RUST") {
         pytest_output_path.into()
     } else {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/test_resources")
+        workspace_root().join("crates/gammalooprs/src/test_resources")
     }
 }
 
