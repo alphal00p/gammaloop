@@ -1,15 +1,27 @@
 """All Community graph owners honor the same advanced rendering settings."""
 
 import json
-from pathlib import Path
-from tempfile import TemporaryDirectory
 import unittest
 import xml.etree.ElementTree as ET
+from html.parser import HTMLParser
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from rendering_metrics import external_metrics_snapshot
-
 from symbolica import E
 from symbolica.community import graph, hepkit, tensor
+
+
+class NativeSvgPages(HTMLParser):
+    def __init__(self, source):
+        super().__init__()
+        self.pages = []
+        self.feed(source)
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        if tag == "svg" and attrs.get("data-linnet-renderer") == "native":
+            self.pages.append(attrs)
 
 
 class CommunityRenderingTests(unittest.TestCase):
@@ -92,8 +104,20 @@ class CommunityRenderingTests(unittest.TestCase):
             for index, (result, count) in enumerate(results):
                 with self.subTest(owner=type(owners[index][0]).__name__):
                     self.assertIs(type(result), graph.DiagramRender)
-                    self.assertEqual(len(result.to_svg_pages()), count)
-                    self.assertEqual(result.to_html().count("<svg"), count)
+                    pages = result.to_svg_pages()
+                    self.assertEqual(len(pages), count)
+                    # Script comments can contain "<svg". Match the ordered native
+                    # roots and their viewport attributes to the standalone pages.
+                    html_pages = NativeSvgPages(result.to_html()).pages
+                    self.assertEqual(len(html_pages), count)
+                    self.assertEqual(
+                        html_pages,
+                        [
+                            attrs
+                            for page in pages
+                            for attrs in NativeSvgPages(page).pages
+                        ],
+                    )
                     if count == 1:
                         self.assertIn("<svg", result._repr_svg_())
                     else:
