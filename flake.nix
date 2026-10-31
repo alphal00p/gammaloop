@@ -161,6 +161,11 @@
           ./scripts/python_wheel.py
           ./scripts/cache_publication.py
           ./nix/browser-check.py
+          ./.github/scripts/run-nix-ci-check.sh
+          ./.github/scripts/export-test-timings.py
+          ./.github/scripts/test_export_test_timings.py
+          ./.github/workflows/nix.yml
+          ./.github/workflows/docs-pages.yml
           ./.github/scripts/test_cache_publication.py
           ./.github/scripts/test_develop.py
           ./.github/scripts/test_python_wheel.py
@@ -177,9 +182,10 @@
           python3 ${developmentDispatchSource}/.github/scripts/test_python_wheel.py
           python3 ${developmentDispatchSource}/.github/scripts/test_cache_publication.py
           python3 ${developmentDispatchSource}/.github/scripts/test_nix_crate_runner.py BrowserSelectionTests
+          python3 ${developmentDispatchSource}/.github/scripts/test_export_test_timings.py
           (
             cd ${developmentDispatchSource}
-            shellcheck scripts/develop.sh scripts/develop_nix.sh scripts/develop_dyndrv.sh
+            shellcheck scripts/develop.sh scripts/develop_nix.sh scripts/develop_dyndrv.sh .github/scripts/run-nix-ci-check.sh
           )
           test -e ${workspace.allChecks.gammaloop-guppy-workspace-graph}
           mkdir -p "$out"
@@ -392,7 +398,8 @@
               python3 .github/scripts/test_python_wheel.py "$@"
               python3 .github/scripts/test_cache_publication.py "$@"
               python3 .github/scripts/test_nix_crate_runner.py BrowserSelectionTests "$@"
-              shellcheck scripts/develop.sh scripts/develop_nix.sh scripts/develop_dyndrv.sh
+              python3 .github/scripts/test_export_test_timings.py "$@"
+              shellcheck scripts/develop.sh scripts/develop_nix.sh scripts/develop_dyndrv.sh .github/scripts/run-nix-ci-check.sh
             '';
           };
         };

@@ -7,6 +7,11 @@ id = "unassigned"
 name = "Ownership decision required"
 contact = "https://github.com/alphal00p/gammaloop/issues"
 
+[[owner]]
+id = "lucien-huber"
+name = "Lucien Huber"
+contact = "https://github.com/lcnbr"
+
 [[section]]
 id = "implemented"
 title = "Implemented architecture"
@@ -34,7 +39,7 @@ source = "docs/architecture/generation-grouped-identical-migration.typ"
 kind = "Bounded migration qualification record"
 status = "Accepted entire bounded applied grouped conjunction at7f; broader combined refresh review required"
 lifecycle = "investigation"
-owner = "Lucien Huber"
+owner = "lucien-huber"
 review_ref = "7f03ab8fd5834d7c78164429e2a44dab8d01ef74"
 evidence_revision = "7f03ab8fd5834d7c78164429e2a44dab8d01ef74"
 products = ["feynkit", "gammaloop"]
@@ -401,7 +406,9 @@ path = "nix/rust-workspace.nix"
 symbol = "declared local Cargo patch source ownership"
 anchor = "  workspaceCargoPatches ="
 end_anchor = "  localCargoPatchSources ="
-digest = "b8ef6794d3fb70d911b1e39e8ee3b4a98d03f227"
+# Workflow repair candidate 2026-10-31: binds current source boundaries and
+# runtime consumers; prior review references remain historical. Pending ordinary review.
+digest = "4fc918f66fa9732aacf7f9fee4ec27082ada40a6"
 
 [[section.note]]
 id = "generation-sampling-staged"
@@ -2885,7 +2892,9 @@ anchor = "ci-checks-and-upload:"
 # No architecture impact 2026-10-10: remove recipes for absent audit/deny
 # checks and correct the dependency-profile comment; selected checks, uploads,
 # and runtime producer boundaries are unchanged.
-digest = "0f8a76ea61d80a7847d9e8d16756e9914e245ae2"
+# Workflow repair candidate 2026-10-31: binds current source boundaries and
+# runtime consumers; prior review references remain historical. Pending ordinary review.
+digest = "ef1bc3ca6abdc9ec7cd6c08f7d36893dd4a6dd64"
 
 [[section.note]]
 id = "feynkit-merge-readiness"
@@ -3025,7 +3034,9 @@ end_anchor = "# Exercise the embedded Typst watcher"
 # terminal publication boundaries are retained.
 # Reviewed 2026-10-15: The live registry remains the source of authored note/product
 # inputs. Historical CI experiments defer current policy to ci.typ.
-digest = "a6e8d348f30ef64d9c936604c62dcb59ca635d1a"
+# Workflow repair candidate 2026-10-31: binds current source boundaries and
+# runtime consumers; prior review references remain historical. Pending ordinary review.
+digest = "d308350caf18c37c0d225d113c45ddd22119277c"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"
@@ -3048,7 +3059,9 @@ end_anchor = "documentationRegistry = builtins.fromTOML"
 # Reviewed 2026-10-19: linked FeynKit installed tests and the notebook host's
 # Linnet Python shim are staged with existing terminal documentation sources.
 # Source-link and wheel validation stay strict; reusable compiler ownership is unchanged.
-digest = "bfafb920e4cc1fc0511aa12ad4c1f86272bb8e75"
+# Workflow repair candidate 2026-10-31: binds current source boundaries and
+# runtime consumers; prior review references remain historical. Pending ordinary review.
+digest = "dab92bd19a2b4198f578e2acfae5545edfcfa326"
 
 [[section.note.scope]]
 path = "nix/rust-workspace.nix"
@@ -3060,7 +3073,9 @@ end_anchor = "cargoGraphGenerationSrc ="
 # Reviewed 2026-10-15: Dependency manifests remain the compilation input tier. Current
 # CI policy retains selected local checks, artifact upload and the existing
 # performance trigger.
-digest = "6ae7769a5fab0c19db4004118a07e14882b6f4af"
+# Workflow repair candidate 2026-10-31: binds current source boundaries and
+# runtime consumers; prior review references remain historical. Pending ordinary review.
+digest = "506c1c99e6b250200fb46d3be3f4a08d4a50187d"
 
 [[section.note.scope]]
 path = "nix/rust-workspace.nix"
@@ -3141,13 +3156,15 @@ end_anchor = "workspacePackageExtraSourceRootsForSourcePackages ="
 # Nextest scheduling and all other package source owners remain unchanged.
 # Community refresh extends explicit iframe/test source delivery and runs the widget browser check.
 # Existing input ownership/filter and cache-selection rules remain; added coverage has no old pass credit.
-digest = "7105f205fa57a2e8ca470614d15176310d8787dc"
+# Workflow repair candidate 2026-10-31: binds current source boundaries and
+# runtime consumers; prior review references remain historical. Pending ordinary review.
+digest = "c6b24b68d11a89c401b3746a8c96423aa34c0977"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"
 symbol = "alphal00pDocsDerivationArgs and terminal documentation consumers"
 anchor = "alphal00pDocsDerivationArgs ="
-end_anchor = "\nin\n{\n  inherit"
+end_anchor = "\nin {\n  inherit"
 # Reviewed 2026-09-14: Git and Jujutsu provide checkout provenance;
 # archive builds retain explicit revision and timestamp inputs.
 # Reviewed 2026-09-14: the terminal Python closure supplies pinned Typst;
@@ -3171,7 +3188,9 @@ end_anchor = "\nin\n{\n  inherit"
 # No-impact attestation 2026-10-24: the pinned font bundle is copied into the
 # installed package only in the terminal documentation test script, after wheel
 # builds; reusable Cargo/crane producer inputs and cache boundaries are unchanged.
-digest = "a36c6354ece22a926dc6efb1ac634895402cf522"
+# Workflow repair candidate 2026-10-31: binds current source boundaries and
+# runtime consumers; prior review references remain historical. Pending ordinary review.
+digest = "5ed36b61ea8ad8c23cc3c1b14123945fa7b7e893"
 
 [[section.note.scope]]
 path = "nix/rust-workspace.nix"
@@ -3196,7 +3215,9 @@ anchor = "nextestRuntimeSrcFor ="
 end_anchor = "nextestFeatureArgsFor ="
 # Reviewed 2026-10-15: Runtime source selection retains the producer/runtime split.
 # Reconciliation does not add feature-branch performance triggers.
-digest = "e70efccc2a78b7ab7b002facfefa375418e590f0"
+# Workflow repair candidate 2026-10-31: binds current source boundaries and
+# runtime consumers; prior review references remain historical. Pending ordinary review.
+digest = "39a1f668e9bc82a93e8589a8cf162093fb7660e3"
 
 [[section.note.scope]]
 path = "crates/alphal00p-docs-builder/src/typst_render.rs"

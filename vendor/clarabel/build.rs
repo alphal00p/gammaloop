@@ -10,6 +10,9 @@ macro_rules! printinfo {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
+    // The default build only depends on this script and Cargo feature flags.
+    // Avoid whole-package scans whose newest-file tie changes across Nix stages.
+    println!("cargo:rerun-if-changed=build.rs");
     config_python_blas();
 
     #[cfg(feature = "buildinfo")]
