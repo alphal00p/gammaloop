@@ -9297,13 +9297,13 @@ class Parameter:
     @property
     def typstname(self) -> typing.Optional[builtins.str]:
         r"""
-        Native Typst math label, without dollar delimiters.
+        Native Typst math label without dollar delimiters, or None if not supplied.
 
         Examples
         --------
         >>> from symbolica.community import hepkit as hep
-        >>> hep.Model.standard_model().parameter("aS").typstname
-        'alpha_s'
+        >>> hep.Model.phi4().parameter("lam").typstname
+        'lambda'
         """
     @property
     def name(self) -> builtins.str:
@@ -9634,24 +9634,25 @@ class Particle:
     @property
     def typstname(self) -> typing.Optional[builtins.str]:
         r"""
-        Native Typst math label, without dollar delimiters.
+        Native Typst math label without dollar delimiters, or None if not supplied.
 
         Examples
         --------
         >>> from symbolica.community import hepkit as hep
-        >>> hep.Model.qcd().particle("g").typstname
-        'g'
+        >>> hep.Model.phi4().particle("phi").typstname
+        'phi'
         """
     @property
     def antitypstname(self) -> typing.Optional[builtins.str]:
         r"""
-        Native Typst math label of the antiparticle, without dollar delimiters.
+        Native Typst math label of the antiparticle without dollar delimiters,
+        or None if not supplied.
 
         Examples
         --------
         >>> from symbolica.community import hepkit as hep
-        >>> hep.Model.qcd().particle("u").antitypstname
-        'overline(u)'
+        >>> hep.Model.phi4().particle("phi").antitypstname
+        'phi'
         """
     @property
     def name(self) -> builtins.str:
@@ -11882,6 +11883,54 @@ class SquaredAmplitude:
 
         >>> print(squared)
         """
+    def paged(self, page_size: typing.Optional[builtins.int] = None, *, settings: typing.Optional[DisplaySettings] = None, notation_source: typing.Optional[builtins.str] = None) -> typing.Any:
+        r"""
+        Explore the current tensor expression with the interactive notebook pager.
+
+        Examples
+        --------
+        Using the setup in the ``SquaredAmplitude`` class example:
+
+        >>> viewer = squared.paged()
+        >>> first_page = viewer.page()
+
+        Parameters
+        ----------
+        page_size : int, optional
+            None uses automatic previews: compact products may be shown completely,
+            with 25 entries per page otherwise. An explicit size sets the maximum
+            entries per page, between 1 and 500. Rendering budgets may show fewer.
+        settings : DisplaySettings, optional
+            Tensor notation, index labels, and presentation preferences.
+        notation_source : str, optional
+            Unsupported by the direct MathML pager, as for TensorExpression.paged().
+        """
+    def _display_(self) -> typing.Any:
+        r"""
+        Present the current tensor expression with its interactive notebook display.
+
+        Examples
+        --------
+        Using the setup in the ``SquaredAmplitude`` class example:
+
+        >>> presentation = squared._display_()
+        """
+    def _repr_mimebundle_(self, include: typing.Optional[typing.Sequence[builtins.str]] = None, exclude: typing.Optional[typing.Sequence[builtins.str]] = None) -> typing.Any:
+        r"""
+        Return the tensor expression's static and optional live representations.
+
+        Examples
+        --------
+        Using the setup in the ``SquaredAmplitude`` class example:
+
+        >>> bundle = squared._repr_mimebundle_(include=["text/html"])
+        >>> html = bundle["text/html"]
+
+        Parameters
+        ----------
+        include, exclude : list[str], optional
+            MIME types to include or exclude from the returned representations.
+        """
     def _repr_html_(self) -> typing.Any:
         r"""
         Render the current tensor expression with Spenso's printer.
@@ -12682,13 +12731,16 @@ class TensorReductionError(FeynkitError):
     --------
     >>> from symbolica import S, E
     >>> from symbolica.community import hepkit as hep
-    >>> D, k, mu = S("D", "k", "mu")
-    >>> mink = S("spenso::mink")
-    >>> reducer = hep.TensorReducer(D, integrated=[k(mink(D))])
+    >>> from symbolica.community.tensor import Representation, TensorName
+    >>> D, mu = S("D", "mu")
+    >>> k = TensorName.vector("tensor_reduction_error_example::k")
+    >>> reducer = hep.TensorReducer(D)
     >>> try:
-    ...     scalar = reducer.reduce(k(mink(D, mu))**2)
+    ...     reducer.reduce(k(Representation.mink(D)(mu)))
     ... except hep.TensorReductionError as error:
-    ...     message = str(error)
+    ...     assert "no integrated vectors selected" in str(error)
+    ... else:
+    ...     raise AssertionError("expected a missing-selector error")
     """
     ...
 
