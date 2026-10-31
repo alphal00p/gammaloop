@@ -52,19 +52,76 @@ fn charge(
     Ok(())
 }
 
+/// Select the first verified witness, in enumeration order, whose acceptance
+/// key is minimal. Without any accepted key, `None` keeps the ordinary first
+/// witness. Errors from acceptance are never confused with ordinary rejection.
+pub(crate) fn first_minimal_acceptance<K: Ord>(
+    witnesses: &[ReplacementRules],
+    mut accept: impl FnMut(&ReplacementRules) -> Result<Option<K>, VakintError>,
+) -> Result<Option<usize>, VakintError> {
+    let mut best: Option<(K, usize)> = None;
+    for (index, candidate) in witnesses.iter().enumerate() {
+        let accepted = accept(candidate)?;
+        if index < 8 {
+            log::debug!(target: "vakint::five_loop_match", "phase=alternative_admission ordinal={} admitted={}", index + 1, accepted.is_some());
+        }
+        if let Some(key) = accepted
+            && best.as_ref().is_none_or(|(old, _)| key < *old)
+        {
+            best = Some((key, index));
+        }
+    }
+    Ok(best.map(|(_, index)| index))
+}
+
 impl MomentumInput {
+    #[cfg(test)]
     pub fn match_topologies_with_acceptance<'a, K: Ord>(
         &self,
         topologies: impl IntoIterator<Item = &'a Topology>,
         limits: MomentumMatchLimits,
-        mut accept: impl FnMut(&ReplacementRules) -> Result<Option<K>, VakintError>,
+        accept: impl FnMut(&ReplacementRules) -> Result<Option<K>, VakintError>,
     ) -> Result<Option<ReplacementRules>, VakintError> {
+        self.match_topologies_with_selection(topologies, limits, |witnesses| {
+            first_minimal_acceptance(witnesses, accept)
+        })
+    }
+
+    /// Enumerate every verified witness under the shared budget, then let the
+    /// caller select one by index. `None` from the selector, or an index out
+    /// of range, keeps the ordinary first witness, so a complete scope miss
+    /// has a deterministic fallback for partial reduction. Without any
+    /// verified witness the selector is not called.
+    pub fn match_topologies_with_selection<'a>(
+        &self,
+        topologies: impl IntoIterator<Item = &'a Topology>,
+        limits: MomentumMatchLimits,
+        select: impl FnOnce(&[ReplacementRules]) -> Result<Option<usize>, VakintError>,
+    ) -> Result<Option<ReplacementRules>, VakintError> {
+        let mut witnesses = self.verified_witnesses(topologies, limits)?;
+        if witnesses.is_empty() {
+            log::debug!(target:"vakint::five_loop_match", "phase=admitted_witness_search verified_witnesses=0 admitted=false");
+            return Ok(None);
+        }
+        let selected = select(&witnesses)?;
+        log::debug!(target:"vakint::five_loop_match", "phase=admitted_witness_search verified_witnesses={} admitted={} selected={selected:?}", witnesses.len(), selected.is_some());
+        let index = selected
+            .filter(|index| *index < witnesses.len())
+            .unwrap_or(0);
+        Ok(Some(witnesses.swap_remove(index)))
+    }
+
+    /// Every verified exact momentum witness, in the deterministic order of
+    /// the native proposals: the ordinary incidence witness of each topology
+    /// first, then its edge-automorphism images. Coordinates repeated by
+    /// different proposals are verified once.
+    pub fn verified_witnesses<'a>(
+        &self,
+        topologies: impl IntoIterator<Item = &'a Topology>,
+        limits: MomentumMatchLimits,
+    ) -> Result<Vec<ReplacementRules>, VakintError> {
         let topologies = topologies.into_iter().collect::<Vec<_>>();
-        // Retain the ordinary exact witness for partial reduction if every
-        // verified alternative is outside the saved entry union. Errors from
-        // acceptance are never confused with ordinary out-of-scope rejection.
-        let mut fallback = None;
-        let mut best = None;
+        let mut witnesses = Vec::new();
         let source_graph = edge_orbits::EdgeGraph::new(&self.incidence)?;
         let loops = self.family.loop_momenta();
         let variables = (1..=loops.len())
@@ -177,24 +234,12 @@ impl MomentumInput {
                             .then_some(limits.max_verified_witnesses),
                         "verified momentum witnesses",
                     )?;
-                    let candidate = self.replacement(topology, &physical, &mapping);
                     if verified <= 8 {
                         log::debug!(target: "vakint::five_loop_match",
                             "phase=verified_alternative ordinal={verified} topology={} source_rows={} target_rows={} denominator_map={:?} coordinates={:?}",
                             integral.name,self.propagators.len(),physical.len(),mapping.denominator_map(),coordinates);
                     }
-                    if fallback.is_none() {
-                        fallback = Some(candidate.clone());
-                    }
-                    let accepted = accept(&candidate)?;
-                    if verified <= 8 {
-                        log::debug!(target: "vakint::five_loop_match", "phase=alternative_admission ordinal={verified} admitted={}",accepted.is_some());
-                    }
-                    if let Some(key) = accepted
-                        && best.as_ref().is_none_or(|(old, _)| key < *old)
-                    {
-                        best = Some((key, candidate));
-                    }
+                    witnesses.push(self.replacement(topology, &physical, &mapping));
                 }
                 Ok(())
             };
@@ -220,7 +265,7 @@ impl MomentumInput {
                 &mut evaluate,
             )?;
         }
-        log::debug!(target:"vakint::five_loop_match", "phase=admitted_witness_search graph_maps={graph_maps} orientation_candidates={tried} verified_witnesses={verified} admitted={}",best.is_some());
-        Ok(best.map(|(_, candidate)| candidate).or(fallback))
+        log::debug!(target:"vakint::five_loop_match", "phase=verified_witness_enumeration graph_maps={graph_maps} orientation_candidates={tried} verified_witnesses={verified}");
+        Ok(witnesses)
     }
 }
