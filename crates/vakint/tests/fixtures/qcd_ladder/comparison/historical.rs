@@ -8,7 +8,9 @@ use super::{
 use rustred::algebra::{Coefficient, CoefficientContext, ExactAlgebraLimits};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
+use std::sync::Arc;
 use std::time::Instant;
+use symbolica::poly::{PolyVariable, PolynomialConversionError};
 use symbolica::prelude::{Q, Z};
 
 const HISTORICAL_BYTES: usize = 6_683_821;
@@ -67,13 +69,78 @@ fn unit_point(value: &Atom, report: &serde_json::Value) -> Result<Atom> {
         .with(Atom::one()))
 }
 
+/// Exact Q(d) conversion of one expanded scalar. Terms sharing their negative
+/// powers are summed as one polynomial numerator before the group is divided
+/// by its denominator, instead of normalizing every term as a separate rational
+/// function against the same large denominator. Both compute the same rational
+/// function; any other shape, refusal or variable outside `variables` takes the
+/// direct conversion, so results, errors and diagnostics are unchanged.
+fn rational_coefficient(
+    scalar: AtomView<'_>,
+    variables: &Arc<Vec<PolyVariable>>,
+) -> std::result::Result<Coefficient, PolynomialConversionError> {
+    let direct = || scalar.try_to_rational_polynomial(&Q, &Z, Some(variables.clone()));
+    let AtomView::Add(sum) = scalar else {
+        return direct();
+    };
+    let mut groups = BTreeMap::<Atom, Vec<Atom>>::new();
+    for term in sum.iter() {
+        let factors = match term {
+            AtomView::Mul(product) => product.iter().collect::<Vec<_>>(),
+            view => vec![view],
+        };
+        let (denominator, numerator): (Vec<_>, Vec<_>) = factors.into_iter().partition(|factor| {
+            let AtomView::Pow(power) = factor else {
+                return false;
+            };
+            i64::try_from(power.get_exp()).is_ok_and(|exponent| exponent < 0)
+        });
+        let denominator = if denominator.is_empty() {
+            Atom::num(1)
+        } else {
+            Atom::mul_many(denominator)
+        };
+        let numerator = if numerator.is_empty() {
+            Atom::num(1)
+        } else {
+            Atom::mul_many(numerator)
+        };
+        groups.entry(denominator).or_default().push(numerator);
+    }
+    let mut result: Option<Coefficient> = None;
+    for (denominator, numerators) in groups {
+        let convert = |part: Atom| -> Option<Coefficient> {
+            part.as_view()
+                .try_to_rational_polynomial(&Q, &Z, Some(variables.clone()))
+                .ok()
+        };
+        let (Some(numerator), Some(denominator)) =
+            (convert(Atom::add_many(numerators)), convert(denominator))
+        else {
+            return direct();
+        };
+        if numerator.get_variables() != variables || denominator.get_variables() != variables {
+            return direct();
+        }
+        let part = &numerator * &denominator;
+        result = Some(match result {
+            Some(sum) => &sum + &part,
+            None => part,
+        });
+    }
+    result.map_or_else(direct, Ok)
+}
+
 /// Collect only in the formal masters; rational normalization is scalar-local.
+/// Products are converted independently on up to `threads` workers and merged
+/// in collection order, exactly as one thread would.
 fn coefficients(
     value: &Atom,
     symbols: &BTreeSet<Atom>,
     common: &Atom,
     epsilon: &Atom,
     context: &CoefficientContext,
+    threads: usize,
 ) -> Result<BTreeMap<Atom, Coefficient>> {
     let variables = context.one().get_variables().clone();
     let dimension = context.parameter("d").unwrap().to_expression();
@@ -81,13 +148,12 @@ fn coefficients(
     let parameters = symbols.iter().cloned().collect::<Vec<_>>();
     let archived_euler = Atom::var(symbolica::transcendental::euler_gamma());
     let current_euler = Atom::var(vakint_symbol!("EulerGamma"));
-    let mut result = BTreeMap::new();
-    for (product, scalar) in value.coefficient_list::<i32>(&parameters) {
-        if !product_is_polynomial(product.as_view(), symbols) || !masters(&scalar).is_empty() {
+    let rows = value.coefficient_list::<i32>(&parameters);
+    let convert = |(product, scalar): &(Atom, Atom)| -> std::result::Result<Coefficient, String> {
+        if !product_is_polynomial(product.as_view(), symbols) || !masters(scalar).is_empty() {
             return Err(format!(
                 "retained result is not a polynomial in formal masters at {product}"
-            )
-            .into());
+            ));
         }
         // The small universal loop factor is never included in the native
         // polynomial variable map. Expand only this one scalar coefficient,
@@ -99,13 +165,13 @@ fn coefficients(
         let scalar = (scalar / common)
             .replace(archived_euler.clone())
             .with(current_euler.clone());
-        let scalar = canonical_retained(&scalar)?.expand();
+        let scalar = canonical_retained(&scalar)
+            .map_err(|error| error.to_string())?
+            .expand();
         let scalar = scalar
             .replace(epsilon.clone())
             .with(physical_epsilon.clone());
-        let coefficient = scalar
-            .as_view()
-            .try_to_rational_polynomial(&Q, &Z, Some(variables.clone()))
+        let coefficient = rational_coefficient(scalar.as_view(), &variables)
             .map_err(|error| format!("coefficient of {product} is not exact Q(d): {error}"))?;
         context
             .validate_with_limits(&coefficient, ExactAlgebraLimits::default())
@@ -131,6 +197,12 @@ fn coefficients(
                     describe(coefficient.denominator.variables()),
                 )
             })?;
+        Ok(coefficient)
+    };
+    let converted = super::map_ordered(threads, &rows, convert);
+    let mut result = BTreeMap::new();
+    for ((product, _), coefficient) in rows.into_iter().zip(converted) {
+        let coefficient = coefficient?;
         if !coefficient.is_zero() {
             if let Some(previous) = result.get_mut(&product) {
                 *previous =
@@ -163,8 +235,9 @@ impl Comparison {
             .cloned()
             .collect::<BTreeSet<_>>();
         let context = CoefficientContext::try_new(["d"])?;
-        let left = coefficients(&left, &symbols, &common, &epsilon, &context)?;
-        let right = coefficients(&right, &symbols, &common, &epsilon, &context)?;
+        let threads = super::fixture_threads();
+        let left = coefficients(&left, &symbols, &common, &epsilon, &context, threads)?;
+        let right = coefficients(&right, &symbols, &common, &epsilon, &context, threads)?;
         let products = left
             .keys()
             .chain(right.keys())

@@ -18,6 +18,62 @@ use std::{
 use symbolica::atom::{Atom, AtomCore, AtomView};
 use symbolica::domains::{integer::Integer, rational::Rational};
 
+/// Workers for the fixture's independent per-guard and per-product work. It
+/// mirrors the library's interim post-processing plumbing point
+/// (`VAKINT_POSTPROCESSING_THREADS`, default 1) until the engine has `n_cores`.
+pub fn fixture_threads() -> usize {
+    std::env::var("VAKINT_POSTPROCESSING_THREADS")
+        .ok()
+        .and_then(|threads| threads.trim().parse::<usize>().ok())
+        .filter(|threads| *threads > 0)
+        .unwrap_or(1)
+}
+
+/// Map `items` on up to `threads` scoped workers and return the results in
+/// input order. With one thread (or item) the map runs inline, unspawned.
+pub fn map_ordered<T: Sync, R: Send>(
+    threads: usize,
+    items: &[T],
+    task: impl Fn(&T) -> R + Sync,
+) -> Vec<R> {
+    let workers = threads.min(items.len());
+    if workers <= 1 {
+        return items.iter().map(task).collect();
+    }
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    let mut results = (0..items.len()).map(|_| None).collect::<Vec<_>>();
+    std::thread::scope(|scope| {
+        let handles = (0..workers)
+            .map(|_| {
+                scope.spawn(|| {
+                    let mut done = Vec::new();
+                    loop {
+                        let index = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        let Some(item) = items.get(index) else {
+                            break done;
+                        };
+                        done.push((index, task(item)));
+                    }
+                })
+            })
+            .collect::<Vec<_>>();
+        for handle in handles {
+            match handle.join() {
+                Ok(done) => {
+                    for (index, result) in done {
+                        results[index] = Some(result);
+                    }
+                }
+                Err(panic) => std::panic::resume_unwind(panic),
+            }
+        }
+    });
+    results
+        .into_iter()
+        .map(|result| result.expect("every item is mapped exactly once"))
+        .collect()
+}
+
 pub struct RunOptions {
     pub strategy: RustRedReductionStrategy,
     pub artifacts: Option<PathBuf>,
@@ -495,13 +551,22 @@ fn run_scoped(
             let mut progress = scope.as_deref_mut().map(|scope| {
                 scope.work_phase("guard_serialization", all.len(), "guards serialized")
             });
-            for (index, guard) in all.iter().enumerate() {
-                if index > 0 {
-                    text.push('\n');
+            // Guards are printed independently and joined in set order.
+            let all = all.into_iter().collect::<Vec<_>>();
+            let threads = fixture_threads();
+            let chunk = 4096.max(threads);
+            for (chunk_index, guards) in all.chunks(chunk).enumerate() {
+                for (offset, guard) in map_ordered(threads, guards, AtomCore::to_canonical_string)
+                    .into_iter()
+                    .enumerate()
+                {
+                    if chunk_index > 0 || offset > 0 {
+                        text.push('\n');
+                    }
+                    text.push_str(&guard);
                 }
-                text.push_str(&guard.to_canonical_string());
                 if let Some(progress) = &mut progress {
-                    progress.completed(index + 1);
+                    progress.completed(chunk_index * chunk + guards.len());
                 }
             }
             serde_json::json!({"payload":write_identity(directory,"nonzero-conditions.symbolica",&text)?,"count":all.len(),"scope":"sufficient conditions, including scalar preparation; exact exceptional-domain equality is not inferred from equal results"})
