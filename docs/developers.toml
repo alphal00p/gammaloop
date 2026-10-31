@@ -968,7 +968,7 @@ anchor = "pub struct Model {"
 # helper-bearing internal parameters; cached numeric values and GC names do not.
 # Original registration order is retained. New-source code/result review remains
 # separate from the frozen f2f714 scientific evidence and prior source attestations.
-digest = "f7e2ddcd2bccefa45a0d7f031483621d58804ed4"
+digest = "070493df9da33eeb81b29f9f0270c603e73b6c5e"
 
 [[section.note.scope]]
 path = "crates/feynkit-graph/src/lib.rs"

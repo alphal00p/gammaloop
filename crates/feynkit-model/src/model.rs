@@ -9,7 +9,7 @@ use linnet::half_edge::algorithms::topological_order::TopoError;
 use linnet::half_edge::builder::HedgeGraphBuilder;
 use linnet::half_edge::involution::Orientation;
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
-use symbolica::atom::{Atom, AtomCore, AtomView, Symbol, UserData};
+use symbolica::atom::{Atom, AtomCore, AtomView, NamespacedSymbol, Symbol, UserData};
 use symbolica::domains::rational::Rational;
 use symbolica::id::{Pattern, Replacement};
 use symbolica::parser::ParseSettings;
@@ -829,7 +829,9 @@ impl Model {
                 if declared_conjugate {
                     return Ok(expression);
                 }
-                let Some(helper) = Symbol::get_symbol("UFO::complexconjugate") else {
+                let Some(helper) =
+                    Symbol::get_symbol(NamespacedSymbol::parse("UFO::complexconjugate"))
+                else {
                     return Ok(expression);
                 };
                 if helper.has_attributes()
