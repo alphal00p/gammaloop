@@ -156,13 +156,16 @@ mod tests {
     use symbolica::atom::AtomCore;
 
     #[test]
-    fn registry_keeps_default_numerical_fallback_eligible() {
+    fn registry_keeps_pysecdec_numerical_fallback_eligible() {
         let vakint = crate::Vakint::new().unwrap();
         vakint
             .topologies
             .prepare_five_loop_catalogue_for_tests()
             .unwrap();
-        let settings = crate::VakintSettings::default();
+        let settings = crate::VakintSettings {
+            evaluation_order: crate::EvaluationOrder::all(),
+            ..Default::default()
+        };
         for topology in vakint
             .topologies
             .iter()

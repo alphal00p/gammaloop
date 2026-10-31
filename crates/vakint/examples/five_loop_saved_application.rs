@@ -695,6 +695,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         )]),
         form_exe_path: "/five-loop-example-must-not-use-form".into(),
         integral_normalization_factor: LoopNormalizationFactor::Custom("1".into()),
+        // Warm requests and cache statistics observe depth-first result caches.
+        rustred_application_options: rustred_app::SavedApplicationOptions {
+            reduction_strategy: vakint::RustRedReductionStrategy::DepthFirst,
+            ..Default::default()
+        },
         ..Default::default()
     };
     let catalog_started = Instant::now();

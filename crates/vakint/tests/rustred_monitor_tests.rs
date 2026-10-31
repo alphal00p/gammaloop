@@ -213,7 +213,10 @@ fn five_loop_monitor_preserves_full_results_and_final_substitution_errors() -> R
         },
     )?;
     assert!(report.loops.iter().any(|pack| pack.loop_count == 5));
-    let settings = settings(RustRedMasterMode::Retain);
+    let mut settings = settings(RustRedMasterMode::Retain);
+    // The stored-state assertions below describe the depth-first application.
+    settings.rustred_application_options.reduction_strategy =
+        vakint::RustRedReductionStrategy::DepthFirst;
     let fixture = five_loop_closure::factorized::fixtures(&engine)?
         .into_iter()
         .find(|fixture| fixture.label == "single_positive_line")

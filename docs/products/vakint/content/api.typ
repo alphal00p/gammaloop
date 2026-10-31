@@ -17,6 +17,8 @@ The main Rust types make the workflow state explicit:
   order;
 - `VakintExpression` and `VakintTerm` separate numerators from topology atoms;
 - `EvaluationOrder` and `EvaluationMethod` select RustRed, AlphaLoop, MATAD, FMFT, or pySecDec;
+  the default order is RustRed first, followed by the FORM-based backends usable on the system
+  (`EvaluationOrder::available`), and RustRed defaults to ordered reduction;
 - `NumericalEvaluationResult` stores Laurent coefficients in the dimensional regulator.
 
 For a dependency-free canonicalization setup, select an empty backend order before validating:
@@ -39,7 +41,9 @@ parse failures before passing a user-supplied expression to matching or evaluati
 
 `Vakint::load_official_external_data(max_loop_count, &options)` installs and loads
 all loop packs from one through the requested maximum. `OfficialExternalDataOptions`
-defaults to version `latest`, the current working directory, and no refresh.
+defaults to version `latest`, the current working directory, no refresh, and no prepared
+caches, which only depth-first reduction reads; `OfficialExternalDataOptions::for_strategy`
+selects them for a given strategy.
 The matching Python method accepts `max_loop_count`, `version`,
 `local_artifacts_path`, and `refresh`. A path containing a checked-out external-data
 manifest is validated and loaded without network access or checkout modification.

@@ -25,6 +25,7 @@ def engine(mode="symbolic"):
         form_exe_path="/external-data-smoke-must-not-use-form",
         integral_normalization_factor="FMFTandMATAD",
         run_time_decimal_precision=80,
+        rustred_reduction_strategy="depth_first",
     )
 
 

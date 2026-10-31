@@ -230,6 +230,112 @@ fn create_unique_tmp_run_dir(base_dir: Option<&str>, prefix: &str) -> std::io::R
 static MINIMAL_FORM_VERSION: &str = "4.2.1";
 static MINIMAL_PYSECDEC_VERSION: &str = "1.6.4";
 
+/// RustRed scheduler selected by [`VakintSettings::default`] and the Python
+/// bindings. The rustred library's own default remains depth-first; select
+/// [`RustRedReductionStrategy::DepthFirst`] explicitly for completed-result
+/// caches.
+pub const DEFAULT_RUSTRED_REDUCTION_STRATEGY: RustRedReductionStrategy =
+    RustRedReductionStrategy::Ordered;
+
+fn default_form_exe_path() -> String {
+    env::var("FORM_PATH").unwrap_or("form".into())
+}
+
+fn default_python_exe_path() -> String {
+    env::var("PYTHON_BIN_PATH").unwrap_or("python3".into())
+}
+
+/// Standard output of a successful `program args` run, or `None` when it
+/// cannot be started or fails. Settings validation and the default evaluation
+/// order both probe external executables, so each command runs at most once
+/// per process.
+fn probe_command_output(program: &str, args: &[&str]) -> Option<String> {
+    static PROBES: LazyLock<Mutex<HashMap<Vec<String>, Option<String>>>> =
+        LazyLock::new(Default::default);
+    let command = std::iter::once(program)
+        .chain(args.iter().copied())
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+    let mut probes = PROBES
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    probes
+        .entry(command)
+        .or_insert_with(|| {
+            Command::new(program)
+                .args(args)
+                .stderr(Stdio::null())
+                .output()
+                .ok()
+                .filter(|output| output.status.success())
+                .map(|output| String::from_utf8_lossy(&output.stdout).into_owned())
+        })
+        .clone()
+}
+
+/// Version captured by `pattern` in a probe output, checked against `minimal`.
+fn parse_dependency_version(
+    dependency: &str,
+    command: &str,
+    output: &str,
+    pattern: &str,
+    minimal: &str,
+) -> Result<String, String> {
+    let Some(version) = Regex::new(pattern)
+        .unwrap()
+        .captures(output)
+        .map(|captures| captures[1].to_owned())
+    else {
+        return Err(format!(
+            "Could not obtain {dependency} version from command:\n{command}\nOutput was:\n{output}"
+        ));
+    };
+    match compare_to(&version, minimal, Cmp::Ge) {
+        Ok(true) => Ok(version),
+        Ok(false) => Err(format!(
+            "{} version installed on your system does not meet minimal requirements: {}<{}",
+            dependency.red(),
+            version.red(),
+            minimal
+        )),
+        Err(_) => Err(format!(
+            "Could not parse {} version '{}'.",
+            dependency.red(),
+            version.red()
+        )),
+    }
+}
+
+/// Version of a FORM executable that meets [`MINIMAL_FORM_VERSION`].
+fn checked_form_version(form_exe_path: &str) -> Result<String, VakintError> {
+    let output =
+        probe_command_output(form_exe_path, &["-version"]).ok_or(VakintError::FormUnavailable)?;
+    parse_dependency_version(
+        "FORM",
+        &format!("{form_exe_path} -version"),
+        &output,
+        r"FORM\s([\.|\d]+)",
+        MINIMAL_FORM_VERSION,
+    )
+    .map_err(VakintError::FormVersion)
+}
+
+/// pySecDec version importable by a Python executable that meets
+/// [`MINIMAL_PYSECDEC_VERSION`].
+fn checked_pysecdec_version(python_exe_path: &str) -> Result<String, VakintError> {
+    const IMPORT: &str = "import pySecDec; print(pySecDec.__version__)";
+    let output = probe_command_output(python_exe_path, &["-c", IMPORT])
+        .ok_or(VakintError::PySecDecUnavailable)?;
+    parse_dependency_version(
+        "PySecDec",
+        &format!("{python_exe_path} -c '{IMPORT}'"),
+        &output,
+        r"([\.|\d]+)",
+        MINIMAL_PYSECDEC_VERSION,
+    )
+    .map_err(VakintError::PySecDecVersion)
+}
+
 static FORM_SRC: phf::Map<&'static str, &'static str> = phf_map! {
     "integrateduv.frm" =>  include_str!(concat!(
         env!("CARGO_MANIFEST_DIR"),
@@ -309,8 +415,21 @@ pub enum VakintError {
     FormError(String, String, String, String),
     #[error("{0}")]
     FormVersion(String),
-    #[error("FORM is not installed in your system and required for vakint to work.")]
+    #[error("FORM is not installed or could not be run.")]
     FormUnavailable,
+    #[error(
+        "FORM is required by {required_by}, but the FORM executable '{form_exe_path}' is unusable: {reason}\n\
+        Install FORM >= {minimal} and expose it through PATH, FORM_PATH or form_exe_path, \
+        or use the FORM-independent defaults instead: RustRed evaluation \
+        (EvaluationOrder::rustred_only(), the default order when FORM is unavailable) and \
+        FeynKit tensor reduction.",
+        minimal = MINIMAL_FORM_VERSION
+    )]
+    FormRequired {
+        required_by: String,
+        form_exe_path: String,
+        reason: String,
+    },
     #[error("PySecDec error: {0}")]
     PySecDecError(String),
     #[error("{0}")]
@@ -1742,10 +1861,25 @@ impl fmt::Display for MATADOptions {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VakintDependency {
     FORM,
     PySecDec,
+}
+
+impl VakintDependency {
+    /// Supported version of this external dependency for the given
+    /// executables. Each executable is probed at most once per process.
+    pub fn version(
+        &self,
+        form_exe_path: &str,
+        python_exe_path: &str,
+    ) -> Result<String, VakintError> {
+        match self {
+            Self::FORM => checked_form_version(form_exe_path),
+            Self::PySecDec => checked_pysecdec_version(python_exe_path),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -1774,6 +1908,17 @@ impl fmt::Display for EvaluationMethod {
 }
 
 impl EvaluationMethod {
+    /// Backend name used in diagnostics.
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::AlphaLoop(_) => "alphaLoop",
+            Self::MATAD(_) => "MATAD",
+            Self::FMFT(_) => "FMFT",
+            Self::PySecDec(_) => "pySecDec",
+            Self::RustRed(_) => "RustRed",
+        }
+    }
+
     fn numerical_output(&self) -> bool {
         match self {
             Self::AlphaLoop(options) => options.susbstitute_masters,
@@ -1973,13 +2118,11 @@ pub struct EvaluationOrder(
 );
 
 impl Default for EvaluationOrder {
+    /// [`EvaluationOrder::available`] for the executables named by the
+    /// `FORM_PATH` and `PYTHON_BIN_PATH` environment variables, which default
+    /// to `form` and `python3` as in [`VakintSettings::default`].
     fn default() -> Self {
-        EvaluationOrder(vec![
-            EvaluationMethod::AlphaLoop(AlphaLoopOptions::default()),
-            EvaluationMethod::MATAD(MATADOptions::default()),
-            EvaluationMethod::FMFT(FMFTOptions::default()),
-            EvaluationMethod::PySecDec(PySecDecOptions::default()),
-        ])
+        Self::available(&default_form_exe_path(), &default_python_exe_path())
     }
 }
 
@@ -2046,8 +2189,11 @@ impl EvaluationOrder {
     pub fn empty() -> Self {
         EvaluationOrder(vec![])
     }
+    /// Every backend, RustRed first. The FORM-based backends are fallbacks for
+    /// integrals RustRed does not support or whose RustRed data is not loaded.
     pub fn all() -> Self {
         EvaluationOrder(vec![
+            EvaluationMethod::RustRed(RustRedEvaluationOptions::default()),
             EvaluationMethod::AlphaLoop(AlphaLoopOptions::default()),
             EvaluationMethod::MATAD(MATADOptions::default()),
             EvaluationMethod::FMFT(FMFTOptions::default()),
@@ -2060,6 +2206,20 @@ impl EvaluationOrder {
             EvaluationMethod::MATAD(MATADOptions::default()),
             EvaluationMethod::PySecDec(PySecDecOptions::default()),
         ])
+    }
+    /// [`EvaluationOrder::all`] restricted to the backends whose external
+    /// dependencies are usable with these executables: RustRed alone when FORM
+    /// is unavailable, and pySecDec only when it can also be imported.
+    /// Executables are probed at most once per process.
+    pub fn available(form_exe_path: &str, python_exe_path: &str) -> Self {
+        let mut order = Self::all();
+        order.0.retain(|method| {
+            method
+                .dependencies()
+                .iter()
+                .all(|dependency| dependency.version(form_exe_path, python_exe_path).is_ok())
+        });
+        order
     }
 
     pub fn adjust(
@@ -2128,7 +2288,11 @@ pub struct VakintSettings {
     pub epsilon_symbol: String,
     /// Symbol used for the squared renormalization scale.
     pub mu_r_sq_symbol: String,
-    /// Executable name or path used to invoke FORM.
+    /// Executable name or path used to invoke FORM, by default `FORM_PATH` or
+    /// `form`. FORM is optional: only the alphaLoop, MATAD, FMFT and pySecDec
+    /// backends and alphaLoop tensor reduction run it. The default evaluation
+    /// order is resolved for the default path; after changing this path, use
+    /// [`EvaluationOrder::available`] to resolve it for the new executable.
     pub form_exe_path: String,
     /// Executable name or path used to invoke Python-based backends.
     pub python_exe_path: String,
@@ -2146,6 +2310,10 @@ pub struct VakintSettings {
     /// Whether successful external-backend runs remove their temporary directories.
     pub clean_tmp_dir: bool,
     /// Ordered analytic and numerical backends considered for each integral.
+    /// The first backend supporting a matched topology evaluates it; a RustRed
+    /// entry whose four- or five-loop data is not loaded yields to a later
+    /// supporting backend. Defaults to [`EvaluationOrder::available`]: RustRed
+    /// first, then the FORM-based backends usable on this system.
     pub evaluation_order: EvaluationOrder,
     /// Optional externally supplied application package for symbolic five-loop RustRed.
     /// No package is downloaded or embedded; lower-loop artifacts are unchanged.
@@ -2155,11 +2323,13 @@ pub struct VakintSettings {
     /// be checked at their boundaries; hard deadlines require a supervisor.
     pub rustred_resources: ResourceLimits,
     /// Native reduction strategy and operational application/cache allowances.
-    /// `reduction_strategy` selects the scalar scheduler at every loop count.
+    /// `reduction_strategy` selects the scalar scheduler at every loop count
+    /// and defaults to [`DEFAULT_RUSTRED_REDUCTION_STRATEGY`] (ordered).
     /// Ordered requests use their own frontier; depth-first without memoization
     /// also recomputes every completed descendant occurrence. Both bypass DFS
-    /// result caches. No strategy enlarges the saved entry domains. Complete
-    /// factorization remains a checked action.
+    /// result caches, so cache operations require selecting
+    /// [`RustRedReductionStrategy::DepthFirst`]. No strategy enlarges the saved
+    /// entry domains. Complete factorization remains a checked action.
     pub rustred_application_options: rustred_app::SavedApplicationOptions,
     /// Per-call numerator lowering allowances for the saved five-loop lane.
     /// These do not change entry admission, legacy lower-loop programs, or
@@ -2402,20 +2572,25 @@ impl TryFrom<&LoopNormalizationFactor> for Atom {
 #[allow(clippy::derivable_impls)]
 impl Default for VakintSettings {
     fn default() -> Self {
+        let form_exe_path = default_form_exe_path();
+        let python_exe_path = default_python_exe_path();
         VakintSettings {
             epsilon_symbol: format!("{}::ε", NAMESPACE),
             mu_r_sq_symbol: format!("{}::mursq", NAMESPACE),
-            form_exe_path: env::var("FORM_PATH").unwrap_or("form".into()),
-            python_exe_path: env::var("PYTHON_BIN_PATH").unwrap_or("python3".into()),
+            evaluation_order: EvaluationOrder::available(&form_exe_path, &python_exe_path),
+            form_exe_path,
+            python_exe_path,
             verify_numerator_identification: false,
             run_time_decimal_precision: 32,
             integral_normalization_factor: LoopNormalizationFactor::pySecDec,
             allow_unknown_integrals: true,
             clean_tmp_dir: env::var("VAKINT_NO_CLEAN_TMP_DIR").is_err(),
-            evaluation_order: EvaluationOrder::default(),
             rustred_artifact_path: None,
             rustred_resources: ResourceLimits::default(),
-            rustred_application_options: rustred_app::SavedApplicationOptions::default(),
+            rustred_application_options: rustred_app::SavedApplicationOptions {
+                reduction_strategy: DEFAULT_RUSTRED_REDUCTION_STRATEGY,
+                ..Default::default()
+            },
             rustred_scalar_numerator_limits: Default::default(),
             rustred_product_limits: Default::default(),
             rustred_momentum_match_limits: Default::default(),
@@ -2506,11 +2681,8 @@ impl VakintTerm {
         // Admission checks inspect concrete powers and masses, just as they do
         // at reduction. The unmatched template still contains pow(n) slots.
         matched.apply_replacement_rules()?;
-        Ok(settings
-            .evaluation_order
-            .0
-            .iter()
-            .find(|method| method.supports(settings, &matched.canonical_topology))
+        Ok(vakint
+            .evaluation_method(settings, &matched.canonical_topology)
             .is_some_and(EvaluationMethod::stages_input_coefficients))
     }
 
@@ -2589,13 +2761,10 @@ impl VakintTerm {
         // Choose the witness before transporting the scalar numerator. A
         // finite saved union may admit only some exact family presentations;
         // ordinary/default backends keep their original matching path.
-        let scalar_rustred =
-            matches!(
-                settings.evaluation_order.0.iter().find(|method| {
-                    method.supports(settings, &integral_specs.canonical_topology)
-                }),
-                Some(EvaluationMethod::RustRed(_))
-            );
+        let scalar_rustred = matches!(
+            vakint.evaluation_method(settings, &integral_specs.canonical_topology),
+            Some(EvaluationMethod::RustRed(_))
+        );
         let scalar_five_loop =
             matches!(integral_specs.canonical_topology, Topology::FiveLoop(_)) && scalar_rustred;
         if scalar_five_loop {
@@ -2625,54 +2794,54 @@ impl VakintTerm {
         let integral_specs =
             self.prepare_integral_specs(vakint, settings, observation.as_deref_mut())?;
 
-        for evaluation_approach in &settings.evaluation_order.0 {
-            if evaluation_approach.supports(settings, &integral_specs.canonical_topology) {
-                let (evaluated_integral, stage) = match evaluation_approach {
-                    EvaluationMethod::RustRed(options) => (
-                        vakint.rustred_reduce_observed(
-                            settings,
-                            self.numerator.as_view(),
-                            &integral_specs,
-                            observation.as_deref_mut(),
-                        )?,
-                        IntegralEvaluation::RustRed {
-                            loop_count: integral_specs.canonical_topology.get_integral().n_loops,
-                            mode: options.master_mode,
-                        },
-                    ),
-                    _ => (
-                        evaluation_approach.reduce_integral(
-                            vakint,
-                            settings,
-                            self.numerator.as_view(),
-                            &integral_specs,
-                            source_id,
-                        )?,
-                        IntegralEvaluation::Complete {
-                            numerical: evaluation_approach.numerical_output(),
-                        },
-                    ),
-                };
-                // Ordered contributions share one normalization boundary after
-                // batching and before master substitution in finalize_rustred.
-                self.numerator = if matches!(evaluation_approach, EvaluationMethod::RustRed(_))
-                    && settings.rustred_application_options.reduction_strategy
-                        == RustRedReductionStrategy::Ordered
-                {
-                    evaluated_integral
-                } else {
-                    simplify_real(evaluated_integral.as_view())
-                };
-                self.integral = Atom::num(1);
-                return Ok(stage);
-            }
-        }
-        Err(VakintError::NoEvaluationMethodFound(
-            self.integral.to_string(),
-            settings.number_of_terms_in_epsilon_expansion
-                - integral_specs.canonical_topology.get_integral().n_loops as i64
-                - 1,
-        ))
+        let Some(evaluation_approach) =
+            vakint.evaluation_method(settings, &integral_specs.canonical_topology)
+        else {
+            return Err(VakintError::NoEvaluationMethodFound(
+                self.integral.to_string(),
+                settings.number_of_terms_in_epsilon_expansion
+                    - integral_specs.canonical_topology.get_integral().n_loops as i64
+                    - 1,
+            ));
+        };
+        let (evaluated_integral, stage) = match evaluation_approach {
+            EvaluationMethod::RustRed(options) => (
+                vakint.rustred_reduce_observed(
+                    settings,
+                    self.numerator.as_view(),
+                    &integral_specs,
+                    observation.as_deref_mut(),
+                )?,
+                IntegralEvaluation::RustRed {
+                    loop_count: integral_specs.canonical_topology.get_integral().n_loops,
+                    mode: options.master_mode,
+                },
+            ),
+            _ => (
+                evaluation_approach.reduce_integral(
+                    vakint,
+                    settings,
+                    self.numerator.as_view(),
+                    &integral_specs,
+                    source_id,
+                )?,
+                IntegralEvaluation::Complete {
+                    numerical: evaluation_approach.numerical_output(),
+                },
+            ),
+        };
+        // Ordered contributions share one normalization boundary after
+        // batching and before master substitution in finalize_rustred.
+        self.numerator = if matches!(evaluation_approach, EvaluationMethod::RustRed(_))
+            && settings.rustred_application_options.reduction_strategy
+                == RustRedReductionStrategy::Ordered
+        {
+            evaluated_integral
+        } else {
+            simplify_real(evaluated_integral.as_view())
+        };
+        self.integral = Atom::num(1);
+        Ok(stage)
     }
 
     pub fn apply_numerator_replacement_rules(
@@ -3085,9 +3254,7 @@ impl VakintTerm {
                 .is_some_and(|matched| {
                     matches!(matched.canonical_topology, Topology::FiveLoop(_))
                         && matches!(
-                            settings.evaluation_order.0.iter().find(|method| {
-                                method.supports(settings, &matched.canonical_topology)
-                            }),
+                            vakint.evaluation_method(settings, &matched.canonical_topology),
                             Some(EvaluationMethod::RustRed(_))
                         )
                 });
@@ -4470,11 +4637,8 @@ impl VakintExpression {
                 {
                     let matched =
                         term.prepare_integral_specs(vakint, settings, observation.as_deref_mut())?;
-                    let method = settings
-                        .evaluation_order
-                        .0
-                        .iter()
-                        .find(|method| method.supports(settings, &matched.canonical_topology))
+                    let method = vakint
+                        .evaluation_method(settings, &matched.canonical_topology)
                         .ok_or_else(|| {
                             VakintError::NoEvaluationMethodFound(
                                 term.integral.to_string(),
@@ -4819,9 +4983,18 @@ impl Vakint {
                 return Ok(Some(matched));
             }
         }
+        // Without five-loop data, RustRed yields to a configured pySecDec
+        // fallback for the unknown-integral topology, as at four loops.
+        let unknown_fallback = settings.allow_unknown_integrals
+            && settings
+                .evaluation_order
+                .0
+                .iter()
+                .any(|method| matches!(method, EvaluationMethod::PySecDec(_)));
         if needs_five_loop
             && settings.rustred_artifact_path.is_none()
             && !self.has_rustred_loop(5)
+            && !unknown_fallback
             && settings
                 .evaluation_order
                 .0
@@ -4839,6 +5012,31 @@ impl Vakint {
         }
     }
 
+    /// Backend evaluating a matched topology: the first entry of the evaluation
+    /// order that supports it and has its data loaded. When no supporting entry
+    /// has its data, the first supporting one is selected to report what is missing.
+    pub(crate) fn evaluation_method<'s>(
+        &self,
+        settings: &'s VakintSettings,
+        topology: &Topology,
+    ) -> Option<&'s EvaluationMethod> {
+        let mut supporting = settings
+            .evaluation_order
+            .0
+            .iter()
+            .filter(|method| method.supports(settings, topology))
+            .peekable();
+        let first = supporting.peek().copied();
+        supporting
+            .find(|method| match method {
+                EvaluationMethod::RustRed(_) => {
+                    rustred_evaluation::has_data(self, settings, topology)
+                }
+                _ => true,
+            })
+            .or(first)
+    }
+
     pub fn validate_settings(&self, settings: &VakintSettings) -> Result<(), VakintError> {
         // Verify that the chosen normalisation only contains the expected symbols
         let (_full_atom, expanded, evaluated) =
@@ -4853,72 +5051,42 @@ Evaluated (n_loops=1, mu_r=1) :
             settings.integral_normalization_factor, expanded, evaluated
         );
 
-        if settings
-            .evaluation_order
-            .0
-            .iter()
-            .any(|em| em.dependencies().contains(&VakintDependency::FORM))
-        {
-            let form_version = self.get_form_version(settings)?;
-            match compare_to(form_version.clone(), MINIMAL_FORM_VERSION, Cmp::Ge) {
-                Ok(valid) => {
-                    if valid {
-                        debug!(
-                            "{} successfully detected with version '{}'",
-                            "FORM".green(),
-                            form_version.green()
-                        );
-                    } else {
-                        return Err(VakintError::FormVersion(format!(
-                            "{} version installed on your system does not meet minimal requirements: {}<{}",
-                            "FORM".red(),
-                            form_version.red(),
-                            MINIMAL_FORM_VERSION
-                        )));
-                    }
-                }
-                Err(_) => {
-                    return Err(VakintError::FormVersion(format!(
-                        "Could not parse {} version '{}'.",
-                        "FORM".red(),
-                        form_version.red()
-                    )));
-                }
-            };
+        let required_by = |dependency| {
+            settings
+                .evaluation_order
+                .0
+                .iter()
+                .filter(|method| method.dependencies().contains(&dependency))
+                .map(EvaluationMethod::name)
+                .collect::<Vec<_>>()
+        };
+        let form_users = required_by(VakintDependency::FORM);
+        if !form_users.is_empty() {
+            let version = VakintDependency::FORM
+                .version(&settings.form_exe_path, &settings.python_exe_path)
+                .map_err(|error| VakintError::FormRequired {
+                    required_by: format!(
+                        "the evaluation backend{} {}",
+                        if form_users.len() > 1 { "s" } else { "" },
+                        form_users.join(", ")
+                    ),
+                    form_exe_path: settings.form_exe_path.clone(),
+                    reason: error.to_string(),
+                })?;
+            debug!(
+                "{} successfully detected with version '{}'",
+                "FORM".green(),
+                version.green()
+            );
         }
-
-        if settings
-            .evaluation_order
-            .0
-            .iter()
-            .any(|em| em.dependencies().contains(&VakintDependency::PySecDec))
-        {
-            let pysecdec_version = self.get_pysecdec_version(settings)?;
-            match compare_to(pysecdec_version.clone(), MINIMAL_PYSECDEC_VERSION, Cmp::Ge) {
-                Ok(valid) => {
-                    if valid {
-                        debug!(
-                            "{} successfully detected with version '{}'",
-                            "PySecDec".green(),
-                            pysecdec_version.green()
-                        );
-                    } else {
-                        return Err(VakintError::FormVersion(format!(
-                            "{} version installed on your system does not meet minimal requirements: {}<{}.",
-                            "PySecDec".red(),
-                            pysecdec_version.red(),
-                            MINIMAL_PYSECDEC_VERSION
-                        )));
-                    }
-                }
-                Err(_) => {
-                    return Err(VakintError::FormVersion(format!(
-                        "Could not parse {} version '{}'.",
-                        "PySecDec".red(),
-                        pysecdec_version.red()
-                    )));
-                }
-            };
+        if !required_by(VakintDependency::PySecDec).is_empty() {
+            let version = VakintDependency::PySecDec
+                .version(&settings.form_exe_path, &settings.python_exe_path)?;
+            debug!(
+                "{} successfully detected with version '{}'",
+                "PySecDec".green(),
+                version.green()
+            );
         }
 
         Ok(())
@@ -6221,60 +6389,6 @@ Evaluated (n_loops=1, mu_r=1) :
         Ok(evaluated_integral)
     }
 
-    fn get_pysecdec_version(&self, settings: &VakintSettings) -> Result<String, VakintError> {
-        let mut cmd = Command::new(settings.python_exe_path.as_str());
-        cmd.arg("-c");
-        cmd.arg("import pySecDec; print(pySecDec.__version__)");
-        let output = if let Ok(o) = cmd.output() {
-            o
-        } else {
-            return Err(VakintError::PySecDecUnavailable);
-        };
-        if !ExitStatus::success(&output.status) {
-            return Err(VakintError::PySecDecUnavailable);
-        }
-        let output_str = String::from_utf8_lossy(&output.stdout).into_owned();
-        let re = Regex::new(r"([\.|\d]+)").unwrap();
-        let mut versions = vec![];
-        for (_, [version]) in re.captures_iter(output_str.as_str()).map(|ci| ci.extract()) {
-            versions.push(version);
-        }
-        if versions.is_empty() {
-            return Err(VakintError::PySecDecVersion(format!(
-                "Could not obtain PySecDec version from command:\n{:?}\nOutput was:\n{}",
-                cmd, output_str
-            )));
-        }
-        Ok(versions[0].into())
-    }
-
-    fn get_form_version(&self, settings: &VakintSettings) -> Result<String, VakintError> {
-        let mut cmd = Command::new(settings.form_exe_path.as_str());
-        cmd.arg("-version");
-        let output = if let Ok(o) = cmd.output() {
-            o
-        } else {
-            return Err(VakintError::FormUnavailable);
-        };
-
-        if !ExitStatus::success(&output.status) {
-            return Err(VakintError::FormUnavailable);
-        }
-        let output_str = String::from_utf8_lossy(&output.stdout).into_owned();
-        let re = Regex::new(r"FORM\s([\.|\d]+)").unwrap();
-        let mut versions = vec![];
-        for (_, [version]) in re.captures_iter(output_str.as_str()).map(|ci| ci.extract()) {
-            versions.push(version);
-        }
-        if versions.is_empty() {
-            return Err(VakintError::FormVersion(format!(
-                "Could not obtain form version from command:\n{:?}\nOutput was:\n{}",
-                cmd, output_str
-            )));
-        }
-        Ok(versions[0].into())
-    }
-
     pub fn convert_from_dot_notation(atom: AtomView) -> Atom {
         let dummy_pat = function!(S.dot_dummy_ind, S.a_).to_pattern();
 
@@ -7143,7 +7257,15 @@ Evaluated (n_loops=1, mu_r=1) :
             debug!("Temporary run directory: {}", tmp_dir.display());
         }
         //println!("Running {} with command: {:?}", "FORM".green(), cmd);
-        let output = cmd.stderr(Stdio::piped()).stdout(Stdio::piped()).output()?;
+        let output = cmd
+            .stderr(Stdio::piped())
+            .stdout(Stdio::piped())
+            .output()
+            .map_err(|error| VakintError::FormRequired {
+                required_by: "the requested FORM-based computation".into(),
+                form_exe_path: settings.form_exe_path.clone(),
+                reason: error.to_string(),
+            })?;
         // println!("{}", String::from_utf8_lossy(&output.stdout));
         if !ExitStatus::success(&output.status) {
             return Err(VakintError::FormError(
@@ -8086,18 +8208,40 @@ mod tests {
     }
 
     #[test]
-    fn rustred_scalar_evaluation_is_opt_in_and_form_independent() {
-        let default_order = EvaluationOrder::default();
-        assert_eq!(default_order.0.len(), 4);
+    fn rustred_scalar_evaluation_is_default_and_form_independent() {
         assert!(matches!(
-            default_order.0.as_slice(),
+            EvaluationOrder::all().0.as_slice(),
             [
+                EvaluationMethod::RustRed(_),
                 EvaluationMethod::AlphaLoop(_),
                 EvaluationMethod::MATAD(_),
                 EvaluationMethod::FMFT(_),
                 EvaluationMethod::PySecDec(_),
             ]
         ));
+        // FORM-based backends are dropped when FORM cannot be run, and
+        // pySecDec additionally needs an importable pySecDec.
+        let without_form = EvaluationOrder::available(
+            "/default-order-test/missing-form",
+            "/default-order-test/missing-python",
+        );
+        assert_eq!(
+            without_form.to_string(),
+            EvaluationOrder::rustred_only().to_string()
+        );
+        let default_order = EvaluationOrder::default();
+        assert!(matches!(
+            default_order.0.first(),
+            Some(EvaluationMethod::RustRed(_))
+        ));
+        let form_available = VakintDependency::FORM
+            .version(&default_form_exe_path(), &default_python_exe_path())
+            .is_ok();
+        assert_eq!(default_order.0.len() > 1, form_available);
+        assert_eq!(
+            VakintSettings::default().evaluation_order.to_string(),
+            default_order.to_string()
+        );
 
         let rustred_order = EvaluationOrder::rustred_only();
         let [EvaluationMethod::RustRed(options)] = rustred_order.0.as_slice() else {
@@ -8109,6 +8253,42 @@ mod tests {
             rustred_order.to_string(),
             "[RustRed (master_mode=numerical)]"
         );
+    }
+
+    #[test]
+    fn explicit_form_backends_report_a_missing_form() {
+        let vakint = Vakint::new().unwrap();
+        let missing = "/explicit-form-backend-test/missing-form";
+        let settings = VakintSettings {
+            form_exe_path: missing.into(),
+            evaluation_order: EvaluationOrder(vec![
+                EvaluationMethod::RustRed(RustRedEvaluationOptions::default()),
+                EvaluationMethod::MATAD(MATADOptions::default()),
+                EvaluationMethod::FMFT(FMFTOptions::default()),
+            ]),
+            ..Default::default()
+        };
+        let error = vakint.validate_settings(&settings).unwrap_err();
+        assert!(
+            matches!(
+                &error,
+                VakintError::FormRequired { required_by, form_exe_path, .. }
+                    if required_by == "the evaluation backends MATAD, FMFT"
+                        && form_exe_path == missing
+            ),
+            "{error}"
+        );
+        assert!(
+            error
+                .to_string()
+                .contains("EvaluationOrder::rustred_only()")
+        );
+        vakint
+            .validate_settings(&VakintSettings {
+                evaluation_order: EvaluationOrder::rustred_only(),
+                ..settings
+            })
+            .unwrap();
     }
 
     #[test]

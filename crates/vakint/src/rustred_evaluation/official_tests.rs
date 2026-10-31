@@ -216,7 +216,9 @@ fn authenticated_pack_with_wrong_cache_binding_preserves_active_data_and_cache()
             2,
             &OfficialExternalDataOptions {
                 local_artifacts_path: Some(directory.path().to_owned()),
-                ..Default::default()
+                ..OfficialExternalDataOptions::for_strategy(
+                    crate::RustRedReductionStrategy::DepthFirst,
+                )
             },
             "http://127.0.0.1:1",
         )
@@ -688,7 +690,21 @@ fn advertise_undecodable_cache(root: &Path, loops: usize) -> PathBuf {
 
 #[test]
 fn disabling_prepared_caches_skips_native_decode_but_preserves_dataset_authentication() {
-    assert!(OfficialExternalDataOptions::default().load_prepared_caches);
+    // Prepared caches follow the strategy that reads them: only depth-first.
+    assert!(!OfficialExternalDataOptions::default().load_prepared_caches);
+    for (strategy, loads) in [
+        (crate::RustRedReductionStrategy::DepthFirst, true),
+        (crate::RustRedReductionStrategy::Ordered, false),
+        (
+            crate::RustRedReductionStrategy::DepthFirstWithoutMemoization,
+            false,
+        ),
+    ] {
+        assert_eq!(
+            OfficialExternalDataOptions::for_strategy(strategy).load_prepared_caches,
+            loads
+        );
+    }
     let directory = fixture();
     let payload = advertise_undecodable_cache(directory.path(), 1);
     let mut engine = Vakint::new().unwrap();
@@ -696,16 +712,16 @@ fn disabling_prepared_caches_skips_native_decode_but_preserves_dataset_authentic
     let active_caches = Arc::clone(&engine.rustred_lower_caches);
     let options = OfficialExternalDataOptions {
         local_artifacts_path: Some(directory.path().to_owned()),
-        ..Default::default()
+        ..OfficialExternalDataOptions::for_strategy(crate::RustRedReductionStrategy::DepthFirst)
     };
-    // Default activation still attempts cache decoding, with the original
+    // Depth-first activation attempts cache decoding, with the original
     // transactional state preserved when the authenticated codec is invalid.
     assert!(engine.load_official_external_data(1, &options).is_err());
     assert!(Arc::ptr_eq(&active_data, &engine.rustred_data().unwrap()));
     assert!(Arc::ptr_eq(&active_caches, &engine.rustred_lower_caches));
     let disabled = OfficialExternalDataOptions {
-        load_prepared_caches: false,
-        ..options
+        local_artifacts_path: Some(directory.path().to_owned()),
+        ..Default::default()
     };
     let report = engine.load_official_external_data(1, &disabled).unwrap();
     assert!(!report.load_prepared_caches);

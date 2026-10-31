@@ -3,6 +3,11 @@ use super::*;
 use crate::rustred_evaluation::cache::transfer::tests::MultipartFixture;
 use serde_json::{Value, json};
 
+/// Native packs are prepared depth-first caches, which only that strategy loads.
+fn depth_first_options() -> OfficialExternalDataOptions {
+    OfficialExternalDataOptions::for_strategy(crate::RustRedReductionStrategy::DepthFirst)
+}
+
 struct NativeRelease {
     directory: tempfile::TempDir,
     native: MultipartFixture,
@@ -88,7 +93,7 @@ fn official_nativepack_installs_then_reuses_without_network_or_static_cache() {
     let mut engine = Vakint::new().unwrap();
     let options = OfficialExternalDataOptions {
         local_artifacts_path: Some(installation.path().into()),
-        ..Default::default()
+        ..depth_first_options()
     };
     let disabled = OfficialExternalDataOptions {
         load_prepared_caches: false,
@@ -141,7 +146,7 @@ fn official_nativepack_checkout_never_downloads_or_mutates_missing_snapshot() {
     let release = NativeRelease::new();
     let options = OfficialExternalDataOptions {
         local_artifacts_path: Some(release.directory.path().into()),
-        ..Default::default()
+        ..depth_first_options()
     };
     let mut engine = Vakint::new().unwrap();
     let active = engine.rustred_data().unwrap();
@@ -198,7 +203,7 @@ fn official_nativepack_failed_download_preserves_engine_and_latest_marker() {
     let installation = tempfile::tempdir().unwrap();
     let options = OfficialExternalDataOptions {
         local_artifacts_path: Some(installation.path().into()),
-        ..Default::default()
+        ..depth_first_options()
     };
     let mut engine = Vakint::new().unwrap();
     let active = engine.rustred_data().unwrap();
@@ -244,7 +249,7 @@ fn official_nativepack_binding_and_reference_failures_are_transactional() {
     let disabled = OfficialExternalDataOptions {
         local_artifacts_path: Some(release.directory.path().into()),
         load_prepared_caches: false,
-        ..Default::default()
+        ..depth_first_options()
     };
     let error = engine
         .load_official_external_data_from(1, &disabled, "http://127.0.0.1:1")
@@ -320,7 +325,7 @@ fn official_nativepack_reuse_checks_native_generation_and_reference_census() {
     let active = engine.rustred_data().unwrap();
     let options = OfficialExternalDataOptions {
         local_artifacts_path: Some(release.directory.path().into()),
-        ..Default::default()
+        ..depth_first_options()
     };
     for field in ["generation", "stored_record_references"] {
         let mut descriptor = release.native.manifest.clone();
@@ -359,7 +364,7 @@ fn official_nativepack_reuse_rejects_a_symlinked_parent_without_http() {
     let active = engine.rustred_data().unwrap();
     let options = OfficialExternalDataOptions {
         local_artifacts_path: Some(release.directory.path().into()),
-        ..Default::default()
+        ..depth_first_options()
     };
     let error = engine
         .load_official_external_data_from(1, &options, "http://127.0.0.1:1")
@@ -390,7 +395,7 @@ fn official_five_loop_selected_running_snapshot_attaches_with_lower_loop_caches(
             5,
             &OfficialExternalDataOptions {
                 local_artifacts_path: Some(root),
-                ..Default::default()
+                ..depth_first_options()
             },
         )
         .unwrap();
@@ -459,7 +464,7 @@ fn official_nativepack_failed_refresh_preserves_old_cache_and_offline_alias() {
     let installation = tempfile::tempdir().unwrap();
     let options = OfficialExternalDataOptions {
         local_artifacts_path: Some(installation.path().into()),
-        ..Default::default()
+        ..depth_first_options()
     };
     let mut engine = Vakint::new().unwrap();
     let old = engine

@@ -116,7 +116,7 @@ class CacheFileIdentitySmoke(unittest.TestCase):
                     CacheFileIdentity(**invalid)
 
     def test_load_cache_forwards_typed_identity_before_lower_loop_path_access(self):
-        engine = Vakint()
+        engine = Vakint(rustred_reduction_strategy="depth_first")
         identity = CacheFileIdentity.from_document(document())
         with tempfile.TemporaryDirectory(prefix="vakint-file-identity-") as scratch:
             absent = Path(scratch) / "must-not-be-read-or-created"

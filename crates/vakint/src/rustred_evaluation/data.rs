@@ -636,16 +636,25 @@ impl Vakint {
     }
 
     /// Load all loop packs up to the requested maximum from an existing checkout.
-    /// Validation and cache attachment finish before this engine is replaced.
+    /// Prepared caches are attached only if the default reduction strategy
+    /// reads them (it does not: ordered reduction never uses them). Depth-first
+    /// users opt in through [`Self::load_external_data_with_prepared_caches`].
     pub fn load_external_data(
         &mut self,
         path: impl AsRef<Path>,
         max_loop_count: usize,
     ) -> Result<(), VakintError> {
-        self.load_external_data_with_prepared_caches(path, max_loop_count, true)
+        self.load_external_data_with_prepared_caches(
+            path,
+            max_loop_count,
+            super::uses_prepared_caches(crate::DEFAULT_RUSTRED_REDUCTION_STRATEGY),
+        )
     }
 
-    pub(crate) fn load_external_data_with_prepared_caches(
+    /// Load all loop packs up to the requested maximum from an existing checkout,
+    /// attaching their prepared depth-first caches if requested. Validation and
+    /// cache attachment finish before this engine is replaced.
+    pub fn load_external_data_with_prepared_caches(
         &mut self,
         path: impl AsRef<Path>,
         max_loop_count: usize,
@@ -658,15 +667,22 @@ impl Vakint {
     /// Load native IBPs from a local pack or a sealed 1L–3L rules file. A bare
     /// closed program retains the active master catalog and drops that loop's
     /// prepared cache, whose identity belonged to the preceding program.
+    /// Prepared caches of a pack follow [`Self::load_external_data`].
     pub fn load_rustred_artifacts(
         &mut self,
         loop_count: usize,
         path: impl AsRef<Path>,
     ) -> Result<(), VakintError> {
-        self.load_rustred_artifacts_with_prepared_caches(loop_count, path, true)
+        self.load_rustred_artifacts_with_prepared_caches(
+            loop_count,
+            path,
+            super::uses_prepared_caches(crate::DEFAULT_RUSTRED_REDUCTION_STRATEGY),
+        )
     }
 
-    pub(crate) fn load_rustred_artifacts_with_prepared_caches(
+    /// [`Self::load_rustred_artifacts`], attaching the prepared depth-first
+    /// caches of a local pack if requested.
+    pub fn load_rustred_artifacts_with_prepared_caches(
         &mut self,
         loop_count: usize,
         path: impl AsRef<Path>,

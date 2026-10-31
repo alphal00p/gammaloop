@@ -1520,7 +1520,9 @@ mod tests {
         let scratch = tempfile::tempdir().unwrap();
         let delta = scratch.path().join("delta");
         let mut engine = Vakint::new().unwrap();
-        engine.load_external_data(source, 5).unwrap();
+        engine
+            .load_external_data_with_prepared_caches(source, 5, true)
+            .unwrap();
         engine.detach_cache(5).unwrap();
         let application = engine.loaded_application().unwrap();
         let target = IntegralKey::try_new([0, 0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 0, 5]).unwrap();
@@ -1928,7 +1930,9 @@ mod tests {
         let scratch = tempfile::tempdir().unwrap();
         let output = scratch.path().join("prepared.rrcache.gz");
         let mut engine = Vakint::new().unwrap();
-        engine.load_external_data(source, 5).unwrap();
+        engine
+            .load_external_data_with_prepared_caches(source, 5, true)
+            .unwrap();
         engine.detach_cache(5).unwrap();
         let application = engine.loaded_application().unwrap();
         let base = IntegralKey::try_new([0, 0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 0, 5]).unwrap();

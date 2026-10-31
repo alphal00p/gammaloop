@@ -603,7 +603,10 @@ the five-loop single-file implementation described above.
 == Explicit import and download
 
 An explicit `load_official_external_data` call also installs the release's
-selected cumulative NativePack when `load_prepared_caches=True` (the default).
+selected cumulative NativePack when prepared caches are loaded: in Rust with
+`load_prepared_caches: true` (see `OfficialExternalDataOptions::for_strategy`),
+and in Python with `load_prepared_caches=True` (the default) on an engine using
+`rustred_reduction_strategy="depth_first"`.
 Its root `runtime_cache_snapshots` reference and loop inventory authenticate
 the descriptor; the existing multipart transport authenticates every part and
 native file before activation. A selected snapshot supersedes that loop's

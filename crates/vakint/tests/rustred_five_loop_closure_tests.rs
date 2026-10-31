@@ -14,7 +14,7 @@ use symbolica::atom::{Atom, AtomCore, AtomView};
 use vakint::{
     EvaluationMethod, EvaluationOrder, LoopNormalizationFactor, MasterSymbol,
     OfficialExternalDataOptions, RustRedEvaluationOptions, RustRedMasterMode,
-    RustRedSymbolicEvaluation, Vakint, VakintSettings, vakint_symbol,
+    RustRedReductionStrategy, RustRedSymbolicEvaluation, Vakint, VakintSettings, vakint_symbol,
 };
 
 struct ClosureEngine {
@@ -49,7 +49,7 @@ fn engine() -> Result<ClosureEngine> {
         &OfficialExternalDataOptions {
             version: external_data_fixture::required_version(),
             local_artifacts_path: std::env::var_os("VAKINT_TEST_EXTERNAL_DATA").map(PathBuf::from),
-            ..Default::default()
+            ..OfficialExternalDataOptions::for_strategy(RustRedReductionStrategy::DepthFirst)
         },
     )?;
     // Five-loop vacuum master identities contain one family and fifteen indices.
@@ -77,6 +77,11 @@ fn engine() -> Result<ClosureEngine> {
         integral_normalization_factor: LoopNormalizationFactor::Custom("1".into()),
         form_exe_path: "/five-loop-closure-must-not-use-form".into(),
         verify_numerator_identification: true,
+        // The closure budgets and cache snapshots describe depth-first reduction.
+        rustred_application_options: rustred_app::SavedApplicationOptions {
+            reduction_strategy: RustRedReductionStrategy::DepthFirst,
+            ..Default::default()
+        },
         ..Default::default()
     };
     // Reuse the exact options used by transactional data activation. Changing

@@ -9,9 +9,17 @@ use crate::{
 #[test]
 fn absent_five_loop_catalogue_preserves_the_legacy_unknown_contract() {
     let vakint = Vakint::new().unwrap();
+    // Without RustRed in the order, a five-loop input never asks for the
+    // saved catalogue. RustRed (as in the default order) instead reports that
+    // five-loop data is not loaded unless a pySecDec fallback is configured.
     let settings = VakintSettings {
         allow_unknown_integrals: true,
+        evaluation_order: EvaluationOrder::analytic_only(),
         ..Default::default()
+    };
+    let rustred = VakintSettings {
+        evaluation_order: EvaluationOrder::rustred_only(),
+        ..settings.clone()
     };
     // The Unknown lane describes formal denominators without authenticating
     // their incidence as a vacuum graph. These are five independent tadpoles
@@ -28,6 +36,11 @@ fn absent_five_loop_catalogue_preserves_the_legacy_unknown_contract() {
             .unwrap(),
         expected
     );
+    let error = vakint
+        .to_canonical(&rustred, input.as_view(), false)
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("5L RustRed data is not loaded"), "{error}");
     let mut calls = 0;
     let matched = vakint
         .topologies

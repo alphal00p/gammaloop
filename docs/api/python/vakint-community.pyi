@@ -386,7 +386,9 @@ class Vakint:
 
     Construct one instance and reuse it. Initialization prepares lower-loop data;
     the five-loop catalogue is attached only after successful artifact loading.
-    Explicit cache operations require `rustred_reduction_strategy="depth_first"`.
+    RustRed with the `"ordered"` reduction strategy is the default backend; it
+    does not need FORM. Explicit cache operations require
+    `rustred_reduction_strategy="depth_first"`.
     """
     def load_external_data(self, path: builtins.str | os.PathLike | pathlib.Path, max_loop_count: builtins.int) -> None:
         r"""
@@ -401,14 +403,15 @@ class Vakint:
         Install all official loop packs through the requested maximum, or load a
         supplied checkout directly. Existing validated installations work offline.
         Prepared native caches load by default only for `depth_first`. Set
-        `load_prepared_caches=False` to skip them explicitly; `ordered` and
-        `depth_first_without_memoization` always skip them.
+        `load_prepared_caches=False` to skip them explicitly; `ordered` (the
+        default strategy) and `depth_first_without_memoization` always skip them.
         """
-    def __new__(cls, run_time_decimal_precision: typing.Optional[builtins.int] = None, evaluation_order: typing.Optional[typing.Sequence[VakintEvaluationMethod]] = None, tensor_reduction_method: typing.Optional[builtins.str] = None, epsilon_symbol: typing.Optional[Expression] = None, mu_r_sq_symbol: typing.Optional[Expression] = None, form_exe_path: typing.Optional[builtins.str] = None, python_exe_path: typing.Optional[builtins.str] = None, verify_numerator_identification: typing.Optional[builtins.bool] = None, integral_normalization_factor: typing.Optional[builtins.str] = None, allow_unknown_integrals: typing.Optional[builtins.bool] = None, clean_tmp_dir: typing.Optional[builtins.bool] = None, number_of_terms_in_epsilon_expansion: typing.Optional[builtins.int] = None, use_dot_product_notation: typing.Optional[builtins.bool] = None, temporary_directory: typing.Optional[builtins.str] = None, rustred_artifact_path: typing.Optional[builtins.str] = None, rustred_cache_bytes: typing.Optional[builtins.int] = None, rustred_cache_terms: typing.Optional[builtins.int] = None, rustred_product_cache_bytes: typing.Optional[builtins.int] = None, rustred_product_cache_terms: typing.Optional[builtins.int] = None, rustred_cache_policy: builtins.str = 'evict-lru', rustred_scalar_max_work: typing.Optional[builtins.int] = None, max_process_rss_bytes: typing.Optional[builtins.int] = None, max_elapsed_seconds: typing.Optional[builtins.float] = None, rustred_reduction_strategy: builtins.str = 'depth_first') -> Vakint:
+    def __new__(cls, run_time_decimal_precision: typing.Optional[builtins.int] = None, evaluation_order: typing.Optional[typing.Sequence[VakintEvaluationMethod]] = None, tensor_reduction_method: typing.Optional[builtins.str] = None, epsilon_symbol: typing.Optional[Expression] = None, mu_r_sq_symbol: typing.Optional[Expression] = None, form_exe_path: typing.Optional[builtins.str] = None, python_exe_path: typing.Optional[builtins.str] = None, verify_numerator_identification: typing.Optional[builtins.bool] = None, integral_normalization_factor: typing.Optional[builtins.str] = None, allow_unknown_integrals: typing.Optional[builtins.bool] = None, clean_tmp_dir: typing.Optional[builtins.bool] = None, number_of_terms_in_epsilon_expansion: typing.Optional[builtins.int] = None, use_dot_product_notation: typing.Optional[builtins.bool] = None, temporary_directory: typing.Optional[builtins.str] = None, rustred_artifact_path: typing.Optional[builtins.str] = None, rustred_cache_bytes: typing.Optional[builtins.int] = None, rustred_cache_terms: typing.Optional[builtins.int] = None, rustred_product_cache_bytes: typing.Optional[builtins.int] = None, rustred_product_cache_terms: typing.Optional[builtins.int] = None, rustred_cache_policy: builtins.str = 'evict-lru', rustred_scalar_max_work: typing.Optional[builtins.int] = None, max_process_rss_bytes: typing.Optional[builtins.int] = None, max_elapsed_seconds: typing.Optional[builtins.float] = None, rustred_reduction_strategy: builtins.str = 'ordered') -> Vakint:
         r"""
         Create a new Vakint instance, specifying details of the evaluation stack. Note that the same instance can be recycled across multiple evaluations.
         Note that the creation of a Vakint instance involves the processing and creation of the library of all known topologies, which can be time consuming.
-        External executables are validated when an operation needs them, so the FeynKit tensor backend can be used on systems without FORM.
+        External executables are validated when an operation needs them. FORM is optional: the default
+        RustRed backend and the default FeynKit tensor backend do not use it.
 
         ## Examples
         ```python
@@ -416,7 +419,7 @@ class Vakint:
             integral_normalization_factor="MSbar",
             mu_r_sq_symbol=S("mursq"),
             # If you select 5 terms, then MATAD will be used, but for 4 and fewer, alphaLoop is will be used as
-            # it is first in the evaluation_order supplied.
+            # it is first in the evaluation_order supplied. The default order instead starts with RustRed.
             number_of_terms_in_epsilon_expansion=4,
             evaluation_order=[
                 VakintEvaluationMethod.new_alphaloop_method(),
@@ -445,7 +448,11 @@ class Vakint:
         run_time_decimal_precision : Optional[int]
             The decimal precision to be used during the evaluation. Default is 17.
         evaluation_order : Optional[Sequence[VakintEvaluationMethod]]
-            A list of `VakintEvaluationMethod` instances specifying the order in which evaluation methods are to be applied. Default is all available methods in a sensible order.
+            A list of `VakintEvaluationMethod` instances specifying the order in which evaluation methods are to be applied.
+            The first method supporting an integral evaluates it; RustRed yields to a later supporting method when its
+            four- or five-loop data is not loaded. Default is RustRed first, followed by alphaLoop, MATAD, FMFT and pySecDec
+            when their dependencies are usable with `form_exe_path` and `python_exe_path`, i.e. RustRed only without FORM.
+            Methods requested explicitly report an error if FORM (or pySecDec) is missing.
         tensor_reduction_method : Optional[str]
             Numerator tensor-reduction backend: "feynkit" is the default, native backend and does not require FORM; "alphaloop" explicitly selects the historical FORM projector.
         epsilon_symbol : Optional[Expression]
@@ -453,7 +460,8 @@ class Vakint:
         mu_r_sq_symbol : Optional[Expression]
             The symbol to be used for the renormalisation scale squared. Default is "mursq".
         form_exe_path : Optional[str]
-            The path to the FORM executable. Default is "form".
+            The path to the FORM executable. Default is "form". FORM is optional and only used by the alphaLoop,
+            MATAD, FMFT and pySecDec methods and the "alphaloop" tensor reduction.
         python_exe_path : Optional[str]
             The path to the Python executable. Default is "python3".
         verify_numerator_identification : Optional[bool]
@@ -500,12 +508,14 @@ class Vakint:
             loading and lookup. None disables it. Native kernels are checked at
             boundaries, so an external supervisor is needed for a hard deadline.
         rustred_reduction_strategy : str
-            "depth_first" (default), "depth_first_without_memoization", or "ordered".
-            "depth_first_without_memoization" recomputes repeated descendants;
-            immutable program preparation remains shared. "ordered" combines the
-            global integral frontier between checked steps. Neither alternative
-            uses or produces completed-result caches, including persistent caches;
-            official loading skips prepared caches for both.
+            "ordered" (default), "depth_first", or "depth_first_without_memoization".
+            "ordered" combines the global integral frontier between checked steps.
+            "depth_first" memoizes completed reductions and is required by every
+            explicit cache operation. "depth_first_without_memoization" recomputes
+            repeated descendants; immutable program preparation remains shared.
+            Neither "ordered" nor "depth_first_without_memoization" uses or produces
+            completed-result caches, including persistent caches; data loading skips
+            prepared caches for both.
         """
     def load_rustred_application(self, path: builtins.str) -> None:
         r"""

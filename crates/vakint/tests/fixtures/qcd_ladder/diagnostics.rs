@@ -1169,6 +1169,9 @@ impl PublicCensusCorpus {
         };
         settings.rustred_application_options.unresolved_policy =
             rustred::solver::UnresolvedPolicy::Preserve;
+        // These diagnostics observe the depth-first saved application and caches.
+        settings.rustred_application_options.reduction_strategy =
+            crate::RustRedReductionStrategy::DepthFirst;
         settings.rustred_application_options.entry_coverage_policy =
             rustred_app::SavedApplicationEntryCoveragePolicy::Advisory;
         settings.rustred_application_options.cache_representation =
@@ -1638,6 +1641,9 @@ fn prepared_ladder_selected_campaign_census_without_ibps() -> Result<()> {
     };
     settings.rustred_application_options.unresolved_policy =
         rustred::solver::UnresolvedPolicy::Preserve;
+    // These diagnostics observe the depth-first saved application and caches.
+    settings.rustred_application_options.reduction_strategy =
+        crate::RustRedReductionStrategy::DepthFirst;
     eprintln!("qcd_campaign_census phase=engine_construction_begin");
     let mut engine = Vakint::new()?;
     eprintln!("qcd_campaign_census phase=data_loading_begin");
@@ -1646,7 +1652,7 @@ fn prepared_ladder_selected_campaign_census_without_ibps() -> Result<()> {
         5,
         &OfficialExternalDataOptions {
             local_artifacts_path: Some(data_path),
-            ..Default::default()
+            ..OfficialExternalDataOptions::for_strategy(crate::RustRedReductionStrategy::DepthFirst)
         },
     )?;
     let application = engine.saved_application(&settings)?;
@@ -1917,6 +1923,9 @@ fn physical_uncovered_witness_safe_reduction() -> Result<()> {
     };
     settings.rustred_application_options.unresolved_policy =
         rustred::solver::UnresolvedPolicy::Preserve;
+    // These diagnostics observe the depth-first saved application and caches.
+    settings.rustred_application_options.reduction_strategy =
+        crate::RustRedReductionStrategy::DepthFirst;
     let started = Instant::now();
     eprintln!("qcd_uncovered_witness phase=data_loading_begin");
     let mut engine = Vakint::new()?;
@@ -1924,7 +1933,7 @@ fn physical_uncovered_witness_safe_reduction() -> Result<()> {
         5,
         &OfficialExternalDataOptions {
             local_artifacts_path: Some(data_path),
-            ..Default::default()
+            ..OfficialExternalDataOptions::for_strategy(crate::RustRedReductionStrategy::DepthFirst)
         },
     )?;
     engine.detach_cache(5)?;

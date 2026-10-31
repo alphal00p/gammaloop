@@ -33,11 +33,18 @@ The loop argument is always a maximum: four loads 1L, 2L, 3L and 4L. All packs
 come from one immutable release. The default path is the current working
 directory, with managed installations below `.vakint-external-data/<version>`.
 The report identifies the version, per-loop paths, available caches, and whether
-each pack was local, reused, or downloaded. Prepared caches are loaded by default:
-`OfficialExternalDataOptions.load_prepared_caches` is `true`, and the Python
-keyword `load_prepared_caches` defaults to `True`. Set the Rust option to `false`
-or pass `load_prepared_caches=False` in Python to load the same authenticated data
-without native cache decoding or import. Checksums still cover every listed
+each pack was local, reused, or downloaded. Prepared caches hold completed
+depth-first reductions, which only `RustRedReductionStrategy::DepthFirst` reads.
+Because Vakint's default strategy is ordered, `OfficialExternalDataOptions::default()`
+sets `load_prepared_caches` to `false`, and `load_external_data` and
+`load_rustred_artifacts` skip prepared caches as well.
+`OfficialExternalDataOptions::for_strategy(RustRedReductionStrategy::DepthFirst)`,
+`load_external_data_with_prepared_caches` and
+`load_rustred_artifacts_with_prepared_caches` load them. The Python keyword
+`load_prepared_caches` defaults to `True` but applies only to engines constructed
+with `rustred_reduction_strategy="depth_first"`; pass `load_prepared_caches=False`
+to load the same authenticated data without native cache decoding or import.
+Skipping prepared caches never skips data validation. Checksums still cover every listed
 file, including optional cache bytes; this is an activation policy, not a change
 to the dataset. Use this option with `local_artifacts_path` for a local checkout.
 

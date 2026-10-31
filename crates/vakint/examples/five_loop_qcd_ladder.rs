@@ -635,6 +635,9 @@ fn main() -> fixture::Result<()> {
         // the recorded options describe the application that actually runs.
         settings.rustred_application_options.unresolved_policy =
             rustred::solver::UnresolvedPolicy::Preserve;
+        // Persistent and running caches belong to depth-first reduction.
+        settings.rustred_application_options.reduction_strategy =
+            vakint::RustRedReductionStrategy::DepthFirst;
         settings.rustred_application_options.cache_representation = coefficient_representation;
         // The public loader prepares its default Sparse session. Selecting
         // Factorized reloads that session on the first evaluation; retain and

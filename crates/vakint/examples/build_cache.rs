@@ -512,7 +512,7 @@ fn build_cache(
     );
     checkpoint()?;
     let mut engine = Vakint::new()?;
-    engine.load_external_data(&options.artifacts, 5)?;
+    engine.load_external_data_with_prepared_caches(&options.artifacts, 5, true)?;
     let binding = engine
         .cache_statistics(5)?
         .saved_application

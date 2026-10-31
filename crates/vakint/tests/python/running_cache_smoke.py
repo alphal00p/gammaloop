@@ -206,6 +206,7 @@ class RunningCacheSmoke(unittest.TestCase):
             use_dot_product_notation=True,
             form_exe_path="/running-cache-python-test-must-not-use-form",
             temporary_directory=str(cls.directory / "native"),
+            rustred_reduction_strategy="depth_first",
         )
         loaded = cls.obj.load_official_external_data(
             5, local_artifacts_path=data, load_prepared_caches=False

@@ -35,6 +35,11 @@ fn settings() -> VakintSettings {
             },
         )]),
         use_dot_product_notation: true,
+        // Cache tests observe depth-first completed-result caches.
+        rustred_application_options: rustred_app::SavedApplicationOptions {
+            reduction_strategy: crate::RustRedReductionStrategy::DepthFirst,
+            ..Default::default()
+        },
         ..Default::default()
     }
 }
