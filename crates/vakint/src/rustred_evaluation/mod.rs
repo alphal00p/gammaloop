@@ -219,6 +219,20 @@ pub(crate) fn has_data(vakint: &Vakint, settings: &VakintSettings, topology: &To
     }
 }
 
+/// Native application options of one request: the allowances of
+/// [`VakintSettings::rustred_application_options`] with the Ordered weight
+/// arithmetic of [`VakintSettings::ordered_weight_arithmetic`] and the
+/// five-loop route-verification workers of [`VakintSettings::n_cores`].
+pub(crate) fn application_options(
+    settings: &VakintSettings,
+) -> rustred_app::SavedApplicationOptions {
+    rustred_app::SavedApplicationOptions {
+        ordered_weight_arithmetic: settings.rustred_ordered_weight_arithmetic(),
+        preparation_workers: settings.n_cores,
+        ..settings.rustred_application_options
+    }
+}
+
 /// Whether a strategy reads the prepared completed-result caches shipped with
 /// the external data. Only depth-first reduction does.
 pub(crate) fn uses_prepared_caches(strategy: crate::RustRedReductionStrategy) -> bool {

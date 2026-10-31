@@ -8237,6 +8237,7 @@ dependencies = [
  "feynkit-tensor",
  "flate2",
  "idenso",
+ "libc",
  "linnet",
  "log",
  "once_cell",

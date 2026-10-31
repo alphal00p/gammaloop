@@ -3,6 +3,7 @@ pub mod alphaloop_numerics;
 mod citations;
 #[cfg(feature = "feynkit-ingress")]
 pub mod diagram_integral;
+mod execution;
 pub mod fmft;
 pub mod fmft_numerics;
 pub mod graph;
@@ -22,6 +23,10 @@ pub mod utils;
 
 use ahash::RandomState;
 use colored::Colorize;
+pub use execution::{
+    DEFAULT_ORDERED_WEIGHT_ARITHMETIC, MAX_DEFAULT_N_CORES, OrderedWeightArithmetic,
+    default_n_cores,
+};
 use eyre::Result;
 use feynkit_tensor::TensorReducer;
 use graph::Graph;
@@ -37,55 +42,21 @@ pub use precision::{
 };
 pub use rustred::reduction::ReductionStrategy as RustRedReductionStrategy;
 pub use rustred::reduction::{
-    ModularWeightOptions as RustRedModularWeightOptions,
+    ModularCommon as RustRedModularCommon,
     OrderedWeightArithmetic as RustRedOrderedWeightArithmetic,
+    PolynomialDenominators as RustRedPolynomialDenominators,
+    PolynomialOptions as RustRedPolynomialOptions, SampledOptions as RustRedSampledOptions,
 };
 
-/// Parse an Ordered weight arithmetic: `exact`, or
-/// `modular[:key=value,...]` with keys `threads`, `batch`, `seed`, `checks`,
-/// `verification_primes`, `max_primes`, `max_points` and `cross_check`
-/// (`0`/`1`). Both arithmetics return identical exact results.
+/// Parse RustRed's Ordered weight arithmetic from its canonical text
+/// `exact | modular_sampled[:key=value,...] | modular_polynomial[:key=value,...]`
+/// (`modular` is an alias of `modular_sampled`). An absent `threads` option
+/// means one worker; settings select [`OrderedWeightArithmetic`] instead,
+/// whose workers follow [`VakintSettings::n_cores`].
 pub fn parse_rustred_ordered_weight_arithmetic(
     text: &str,
 ) -> Result<RustRedOrderedWeightArithmetic, String> {
-    let text = text.trim();
-    if text.eq_ignore_ascii_case("exact") {
-        return Ok(RustRedOrderedWeightArithmetic::Exact);
-    }
-    let Some(rest) = text.strip_prefix("modular") else {
-        return Err(format!(
-            "unknown ordered weight arithmetic {text:?}; expected 'exact' or 'modular[:key=value,...]'"
-        ));
-    };
-    let mut options = RustRedModularWeightOptions::default();
-    let rest = rest.strip_prefix(':').unwrap_or(rest);
-    for item in rest
-        .split(',')
-        .map(str::trim)
-        .filter(|item| !item.is_empty())
-    {
-        let (key, value) = item
-            .split_once('=')
-            .ok_or_else(|| format!("expected key=value in modular options, found {item:?}"))?;
-        let number = || {
-            value
-                .trim()
-                .parse::<u64>()
-                .map_err(|e| format!("invalid modular option {key}={value}: {e}"))
-        };
-        match key.trim() {
-            "threads" => options.threads = number()? as usize,
-            "batch" => options.batch_points = number()? as usize,
-            "seed" => options.seed = number()?,
-            "checks" => options.verification_points = number()? as usize,
-            "verification_primes" => options.verification_primes = number()? as usize,
-            "max_primes" => options.max_primes = number()? as usize,
-            "max_points" => options.max_points_per_prime = number()? as usize,
-            "cross_check" => options.cross_check_exact = number()? != 0,
-            other => return Err(format!("unknown modular option {other:?}")),
-        }
-    }
-    Ok(RustRedOrderedWeightArithmetic::Modular(options))
+    text.parse().map_err(|error| format!("{error}"))
 }
 pub use rustred::scalar_numerator::ScalarNumeratorLimits as RustRedScalarNumeratorLimits;
 use rustred::solver::CandidateRoutedApplicationObserver;
@@ -527,6 +498,10 @@ pub enum VakintError {
     FeynKitLoopDot(String),
     #[error("unknown numerator tensor reduction method '{0}'; expected 'alphaloop' or 'feynkit'")]
     InvalidTensorReductionMethod(String),
+    #[error("invalid n_cores = {n_cores}: {reason}")]
+    InvalidNCores { n_cores: usize, reason: String },
+    #[error("{0}")]
+    InvalidOrderedWeightArithmetic(String),
     #[error(transparent)]
     RustRedEvaluation(#[from] RustRedEvaluationError),
     #[error(transparent)]
@@ -2373,6 +2348,19 @@ pub struct VakintSettings {
     /// Absent ceilings impose no restriction. Opaque external calls can only
     /// be checked at their boundaries; hard deadlines require a supervisor.
     pub rustred_resources: ResourceLimits,
+    /// Worker threads of one call: the single source of every Vakint and
+    /// RustRed worker count (modular weight arithmetic, five-loop route
+    /// verification). `1` runs every computation on the calling thread, with
+    /// no thread pool and no spawned thread; only an enabled progress monitor
+    /// adds its presentation thread. Defaults to [`default_n_cores`]; zero, more
+    /// cores than this process may use, and more than one core without a
+    /// Symbolica license are rejected. Results are identical for every value.
+    pub n_cores: usize,
+    /// Frontier weight arithmetic of Ordered RustRed requests, defaulting to
+    /// [`DEFAULT_ORDERED_WEIGHT_ARITHMETIC`]. Every arithmetic returns the same
+    /// exact result; modular ones run on `n_cores` workers unless the selection
+    /// fixes its `threads`.
+    pub ordered_weight_arithmetic: OrderedWeightArithmetic,
     /// Native reduction strategy and operational application/cache allowances.
     /// `reduction_strategy` selects the scalar scheduler at every loop count
     /// and defaults to [`DEFAULT_RUSTRED_REDUCTION_STRATEGY`] (ordered).
@@ -2381,6 +2369,9 @@ pub struct VakintSettings {
     /// result caches, so cache operations require selecting
     /// [`RustRedReductionStrategy::DepthFirst`]. No strategy enlarges the saved
     /// entry domains. Complete factorization remains a checked action.
+    /// `ordered_weight_arithmetic` and `preparation_workers` are derived from
+    /// [`Self::ordered_weight_arithmetic`] and [`Self::n_cores`] and must keep
+    /// their defaults here.
     pub rustred_application_options: rustred_app::SavedApplicationOptions,
     /// Per-call numerator lowering allowances for the saved five-loop lane.
     /// These do not change entry admission, legacy lower-loop programs, or
@@ -2418,6 +2409,52 @@ impl VakintSettings {
             resources::checkpoint()?;
             Ok(result)
         })
+    }
+
+    /// RustRed's Ordered weight arithmetic of a request: the selected
+    /// [`Self::ordered_weight_arithmetic`] on [`Self::n_cores`] workers unless
+    /// the selection fixes them.
+    pub fn rustred_ordered_weight_arithmetic(&self) -> RustRedOrderedWeightArithmetic {
+        self.ordered_weight_arithmetic.resolve(self.n_cores)
+    }
+
+    /// Check the worker count, the Ordered weight arithmetic and the native
+    /// options derived from them.
+    fn validate_execution(&self) -> Result<(), VakintError> {
+        execution::validate_n_cores(self.n_cores)?;
+        let arithmetic = self.rustred_ordered_weight_arithmetic();
+        arithmetic
+            .validate()
+            .map_err(VakintError::InvalidOrderedWeightArithmetic)?;
+        // A fixed modular worker count obeys the same core budget.
+        if let Some(threads) = self.ordered_weight_arithmetic.threads() {
+            rustred::campaign::ParallelExecution::preflight_requested_core_budget(threads)
+                .map_err(|error| {
+                    VakintError::InvalidOrderedWeightArithmetic(format!(
+                        "ordered weight arithmetic {}: {error}",
+                        self.ordered_weight_arithmetic
+                    ))
+                })?;
+        }
+        let defaults = rustred_app::SavedApplicationOptions::default();
+        if self.rustred_application_options.ordered_weight_arithmetic
+            != defaults.ordered_weight_arithmetic
+        {
+            return Err(VakintError::InvalidOrderedWeightArithmetic(
+                "select the arithmetic with VakintSettings::ordered_weight_arithmetic; \
+                 rustred_application_options.ordered_weight_arithmetic is derived from it"
+                    .into(),
+            ));
+        }
+        if self.rustred_application_options.preparation_workers != defaults.preparation_workers {
+            return Err(VakintError::InvalidNCores {
+                n_cores: self.n_cores,
+                reason: "set the workers with VakintSettings::n_cores; \
+                         rustred_application_options.preparation_workers is derived from it"
+                    .into(),
+            });
+        }
+        Ok(())
     }
 
     pub fn get_integral_normalization_factor_atom(&self) -> Result<Atom, VakintError> {
@@ -2638,6 +2675,8 @@ impl Default for VakintSettings {
             clean_tmp_dir: env::var("VAKINT_NO_CLEAN_TMP_DIR").is_err(),
             rustred_artifact_path: None,
             rustred_resources: ResourceLimits::default(),
+            n_cores: default_n_cores(),
+            ordered_weight_arithmetic: OrderedWeightArithmetic::default(),
             rustred_application_options: rustred_app::SavedApplicationOptions {
                 reduction_strategy: DEFAULT_RUSTRED_REDUCTION_STRATEGY,
                 ..Default::default()
@@ -5089,6 +5128,7 @@ impl Vakint {
     }
 
     pub fn validate_settings(&self, settings: &VakintSettings) -> Result<(), VakintError> {
+        settings.validate_execution()?;
         // Verify that the chosen normalisation only contains the expected symbols
         let (_full_atom, expanded, evaluated) =
             settings.integral_normalization_factor.validate(settings)?;
@@ -8343,14 +8383,14 @@ mod tests {
     }
 
     #[test]
-    fn ordered_weight_arithmetic_parses_exact_and_modular_options() {
+    fn ordered_weight_arithmetic_parses_rustred_text() {
         assert_eq!(
             parse_rustred_ordered_weight_arithmetic(" Exact ").unwrap(),
             RustRedOrderedWeightArithmetic::Exact
         );
         assert_eq!(
             parse_rustred_ordered_weight_arithmetic("modular").unwrap(),
-            RustRedOrderedWeightArithmetic::Modular(RustRedModularWeightOptions::default())
+            RustRedOrderedWeightArithmetic::modular_sampled()
         );
         assert_eq!(
             parse_rustred_ordered_weight_arithmetic(
@@ -8358,16 +8398,30 @@ mod tests {
                  max_primes=40,max_points=1024,cross_check=1"
             )
             .unwrap(),
-            RustRedOrderedWeightArithmetic::Modular(RustRedModularWeightOptions {
-                batch_points: 32,
-                threads: 16,
-                seed: 7,
-                verification_points: 3,
-                verification_primes: 2,
-                max_primes: 40,
-                max_points_per_prime: 1024,
-                cross_check_exact: true,
-            })
+            RustRedOrderedWeightArithmetic::ModularSampled(
+                RustRedModularCommon {
+                    threads: 16,
+                    seed: 7,
+                    verification_primes: 2,
+                    max_primes: 40,
+                    cross_check_exact: true,
+                },
+                RustRedSampledOptions {
+                    batch_points: 32,
+                    verification_points: 3,
+                    max_points_per_prime: 1024,
+                }
+            )
+        );
+        assert_eq!(
+            parse_rustred_ordered_weight_arithmetic("modular_polynomial:lanes=2").unwrap(),
+            RustRedOrderedWeightArithmetic::ModularPolynomial(
+                RustRedModularCommon::default(),
+                RustRedPolynomialOptions {
+                    lanes: 2,
+                    ..Default::default()
+                }
+            )
         );
         for invalid in [
             "fast",
@@ -8381,6 +8435,74 @@ mod tests {
                 "{invalid}"
             );
         }
+    }
+
+    #[test]
+    fn settings_derive_the_native_arithmetic_and_reject_invalid_execution() {
+        let vakint = Vakint::new().unwrap();
+        let base = VakintSettings {
+            evaluation_order: EvaluationOrder::rustred_only(),
+            n_cores: 1,
+            ..Default::default()
+        };
+        assert_eq!(VakintSettings::default().n_cores, default_n_cores());
+        assert_eq!(
+            VakintSettings::default().ordered_weight_arithmetic,
+            DEFAULT_ORDERED_WEIGHT_ARITHMETIC.parse().unwrap()
+        );
+        vakint.validate_settings(&base).unwrap();
+        let sampled = VakintSettings {
+            ordered_weight_arithmetic: OrderedWeightArithmetic::modular_sampled(),
+            ..base.clone()
+        };
+        assert_eq!(sampled.rustred_ordered_weight_arithmetic().threads(), 1);
+        vakint.validate_settings(&sampled).unwrap();
+        let zero = vakint
+            .validate_settings(&VakintSettings {
+                n_cores: 0,
+                ..base.clone()
+            })
+            .unwrap_err();
+        assert!(
+            matches!(zero, VakintError::InvalidNCores { n_cores: 0, .. }),
+            "{zero}"
+        );
+        let available = std::thread::available_parallelism().map_or(1, usize::from);
+        let fixed = VakintSettings {
+            ordered_weight_arithmetic: OrderedWeightArithmetic::modular_sampled()
+                .with_threads(available + 1),
+            ..base.clone()
+        };
+        assert_eq!(
+            fixed.rustred_ordered_weight_arithmetic().threads(),
+            available + 1
+        );
+        let error = vakint.validate_settings(&fixed).unwrap_err();
+        assert!(
+            matches!(error, VakintError::InvalidOrderedWeightArithmetic(_)),
+            "{error}"
+        );
+        // The native fields derived from the settings must keep their defaults.
+        let mut native_arithmetic = base.clone();
+        native_arithmetic
+            .rustred_application_options
+            .ordered_weight_arithmetic = RustRedOrderedWeightArithmetic::modular_sampled();
+        let error = vakint.validate_settings(&native_arithmetic).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("VakintSettings::ordered_weight_arithmetic"),
+            "{error}"
+        );
+        let mut native_workers = base;
+        native_workers
+            .rustred_application_options
+            .preparation_workers = 2;
+        let error = vakint.validate_settings(&native_workers).unwrap_err();
+        assert!(
+            error.to_string().contains("VakintSettings::n_cores"),
+            "{error}"
+        );
     }
 
     #[test]

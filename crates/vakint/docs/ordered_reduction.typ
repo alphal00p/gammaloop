@@ -132,42 +132,78 @@ applying its rule can avoid that rule and its conditions. Coverage warnings,
 preserved unresolved integrals and numerical capability errors retain their
 existing meaning.
 
-== Weight arithmetic
+== Weight arithmetic and worker cores
 
 The scheduler's control flow depends on the weights only through exact-zero
 erasure of merged keys, so how the weights are computed is a separate choice.
-#raw("settings.rustred_application_options.ordered_weight_arithmetic")
-(RustRed's #raw("OrderedWeightArithmetic"), reexported as
+#raw("settings.ordered_weight_arithmetic") (#raw("vakint::OrderedWeightArithmetic"),
+a selection of RustRed's #raw("OrderedWeightArithmetic"), reexported as
 #raw("vakint::RustRedOrderedWeightArithmetic")) selects it for the closed one-
 to three-loop artifacts, the four-loop candidate programs and the saved
 five-loop application:
 
-- #raw("Exact"), the default, keeps exact rational functions of the dimension
-  on the frontier.
-- #raw("Modular(RustRedModularWeightOptions)") records the weight-independent
-  trace once, with small modular probes deciding the zero erasures, replays it
-  over 64-bit prime fields at many sample points and reconstructs every
-  terminal coefficient exactly: Thiele interpolation per prime, Chinese
-  remaindering and rational reconstruction, then verification on fresh primes.
-  Every replay re-checks each recorded erasure and fails the request on a
-  disagreement. Modular weights need a coefficient context with at most one
-  variable, which holds for Vakint's native requests.
+- #raw("exact") keeps exact rational functions of the dimension on the
+  frontier.
+- #raw("modular_sampled") records the weight-independent trace once, with
+  small modular probes deciding the zero erasures, replays it over 64-bit prime
+  fields at sample points and interpolates every terminal coefficient per prime
+  (Thiele continued fractions). Every replay re-checks each recorded erasure and
+  fails the request on a disagreement.
+- #raw("modular_polynomial") runs scheduler passes whose weights are rational
+  functions of the dimension over prime fields, without interpolation. Until
+  RustRed implements it, a request fails with a
+  #raw("modular_polynomial weight arithmetic is not implemented yet") error.
 
-Both expand the same keys and return the same terms and nonzero conditions.
-Only the monitor's frontier monomial counters differ: modular weights count one
-monomial per key.
-#raw("vakint::parse_rustred_ordered_weight_arithmetic") reads #raw("exact") or
-#raw("modular[:key=value,...]") with the keys #raw("threads"), #raw("batch"),
-#raw("seed"), #raw("checks"), #raw("verification_primes"),
-#raw("max_primes"), #raw("max_points") and #raw("cross_check"). The rung
-fixtures and the #raw("ordered_reduction_rungs") example read the same syntax
-from #raw("VAKINT_ORDERED_WEIGHT_ARITHMETIC"):
+Both modular modes lift their prime images over the rationals (Chinese
+remaindering and rational reconstruction) and verify every coefficient on fresh
+primes. They need a coefficient context with at most one variable, which holds
+for Vakint's native requests. Every mode expands the same keys and returns the
+same terms and nonzero conditions; only the monitor's frontier monomial counters
+differ (modular weights count one monomial per key). The default is
+#raw("vakint::DEFAULT_ORDERED_WEIGHT_ARITHMETIC") (#raw("exact")), a single
+constant that also sets the Python default.
+
+The text form is RustRed's canonical syntax #raw("exact"),
+#raw("modular_sampled[:key=value,...]") or
+#raw("modular_polynomial[:key=value,...]"); #raw("modular") is an alias of
+#raw("modular_sampled"). The keys are #raw("threads"), #raw("seed"),
+#raw("verification_primes"), #raw("max_primes") and #raw("cross_check_exact")
+for both modular modes, #raw("batch_points"), #raw("verification_points") and
+#raw("max_points_per_prime") for the sampled mode, and #raw("lanes"),
+#raw("denominators") (#raw("factorized") or #raw("dense")) and
+#raw("max_degree") for the polynomial mode. The historical spellings
+#raw("batch"), #raw("checks"), #raw("max_points") and #raw("cross_check") are
+accepted. #raw("settings.rustred_application_options.ordered_weight_arithmetic")
+is derived from this selection and must keep its default.
+
+#raw("settings.n_cores") is the single source of every Vakint and RustRed worker
+count. It defaults to #raw("vakint::default_n_cores()"): the cores available to
+the process (affinity masks and cgroup quotas included), at most ten, and one
+without a Symbolica license. Zero, more cores than the process may use and
+more than one core without a license are rejected before any work. One core
+runs every computation on the calling thread, without a thread pool or a
+spawned thread; only an enabled progress monitor adds its presentation thread.
+A modular arithmetic runs on #raw("n_cores") workers unless its selection sets
+#raw("threads"). The same count verifies the five-loop routes while the saved
+application loads (#raw("preparation_workers"), derived and otherwise left at
+its default; data loaders take it from
+#raw("OfficialExternalDataOptions::n_cores")). Results are identical for every
+core count.
 
 ```rust
 let mut settings = vakint::VakintSettings::default();
-settings.rustred_application_options.ordered_weight_arithmetic =
-    vakint::parse_rustred_ordered_weight_arithmetic("modular:threads=8")?;
+settings.n_cores = 8;
+settings.ordered_weight_arithmetic = "modular_sampled".parse()?;
 ```
+
+```python
+vakint = Vakint(n_cores=8, ordered_weight_arithmetic="modular_sampled")
+```
+
+The rung fixtures and the
+#raw("ordered_reduction_rungs") example read #raw("VAKINT_N_CORES") and
+#raw("VAKINT_ORDERED_WEIGHT_ARITHMETIC") (without a #raw("threads") option the
+modular workers follow the cores) and record both in their report.
 
 == Reading the monitor
 
@@ -263,9 +299,11 @@ same program from an external-data checkout, replays a request and prints one
 JSONL record per phase with its wall time and counters. It compares the counters
 and the output digests with the recorded ones, can stop after a phase and can
 capture the complete weighted frontier at the start of a phase. It replays with
-exact weights: the output digests of a request recorded under modular weights
-still compare, but its monomial counters do not, and saved five-loop requests
-recorded with non-default options are refused.
+exact weights unless #raw("--arithmetic SPEC") selects another arithmetic: the
+output digests of a request recorded under modular weights still compare, but
+its monomial counters do not, and saved five-loop requests recorded with
+non-default options are refused. The recorded preparation workers (Vakint's
+#raw("n_cores")) do not count as such an option.
 
 == Cache isolation and limitations
 

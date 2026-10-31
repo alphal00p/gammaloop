@@ -12,6 +12,12 @@ fn graph_adapter_and_rich_output_are_present_in_valid_python_stubs() {
             .to_string()
             .contains("rustred_reduction_strategy: builtins.str = 'ordered'")
     );
+    for parameter in [
+        "n_cores: typing.Optional[builtins.int] = None",
+        "ordered_weight_arithmetic: typing.Optional[builtins.str] = None",
+    ] {
+        assert!(module.to_string().contains(parameter), "{parameter}");
+    }
     let graph_adapter = &module.function["integral_from_diagram"];
     assert_eq!(graph_adapter.len(), 1);
     assert_eq!(graph_adapter[0].r#return.name, "VakintExpression");

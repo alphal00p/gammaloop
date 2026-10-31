@@ -155,9 +155,12 @@ impl DumpProgram<'_> {
                 family_fingerprint,
                 options,
             } => {
+                // Preparation workers (Vakint's n_cores) only parallelize
+                // route verification while loading; results do not depend on them.
                 let replayable = rustred_app::SavedApplicationOptions {
                     reduction_strategy: options.reduction_strategy,
                     unresolved_policy: rustred::solver::UnresolvedPolicy::Preserve,
+                    preparation_workers: options.preparation_workers,
                     ..Default::default()
                 };
                 json!({
@@ -538,9 +541,11 @@ mod tests {
             .unwrap();
         let key = IntegralKey::try_new([2, -1]).unwrap();
         let inputs = vec![(key.clone(), weight.clone())];
+        // Vakint's n_cores sets the preparation workers; they do not change results.
         let options = rustred_app::SavedApplicationOptions {
             reduction_strategy: crate::RustRedReductionStrategy::Ordered,
             unresolved_policy: rustred::solver::UnresolvedPolicy::Preserve,
+            preparation_workers: 4,
             ..Default::default()
         };
         let mass = Atom::num(1);
@@ -582,6 +587,7 @@ mod tests {
             request["program"]["options_are_defaults_with_preserve"],
             true
         );
+        assert_eq!(request["program"]["preparation_workers"], 4);
         assert_eq!(request["reduction_limits_are_default"], true);
         assert_eq!(request["inputs"][0]["powers"], json!([2, -1]));
         let text = request["inputs"][0]["coefficient"].as_str().unwrap();

@@ -4,9 +4,9 @@ pub mod historical;
 
 use super::super::vakint::{
     AvailablePrecision, ConstantSymbol, EvaluationMethod, EvaluationOrder, LoopNormalizationFactor,
-    MasterSymbol, OfficialExternalDataOptions, RustRedEvaluationOptions, RustRedMasterMode,
-    RustRedMonitorOptions, RustRedMonitorScope, RustRedReductionStrategy, Vakint, VakintMaster,
-    VakintSettings, vakint_parse, vakint_symbol,
+    MasterSymbol, OfficialExternalDataOptions, OrderedWeightArithmetic, RustRedEvaluationOptions,
+    RustRedMasterMode, RustRedMonitorOptions, RustRedMonitorScope, RustRedReductionStrategy,
+    Vakint, VakintMaster, VakintSettings, vakint_parse, vakint_symbol,
 };
 use super::{LadderFixture, Projection, Result};
 use sha2::{Digest, Sha256};
@@ -353,6 +353,26 @@ fn five_loop_loading_error_publishes_snapshot_in_fresh_evidence_directory() {
     assert!(!evidence.join("report.json").exists());
 }
 
+/// Worker cores and Ordered weight arithmetic of a fixture run: Vakint's
+/// defaults, overridden by `VAKINT_N_CORES` and
+/// `VAKINT_ORDERED_WEIGHT_ARITHMETIC` (RustRed's canonical text; without a
+/// `threads` option the modular workers follow the cores). Every choice
+/// returns the same exact result.
+fn execution_from_environment() -> Result<(usize, OrderedWeightArithmetic)> {
+    let n_cores = match std::env::var("VAKINT_N_CORES") {
+        Ok(text) => text
+            .trim()
+            .parse()
+            .map_err(|error| format!("VAKINT_N_CORES={text}: {error}"))?,
+        Err(_) => super::super::vakint::default_n_cores(),
+    };
+    let arithmetic = match std::env::var("VAKINT_ORDERED_WEIGHT_ARITHMETIC") {
+        Ok(text) => text.parse()?,
+        Err(_) => OrderedWeightArithmetic::default(),
+    };
+    Ok((n_cores, arithmetic))
+}
+
 fn run_scoped(
     prepared: &LadderFixture,
     directory: &Path,
@@ -360,6 +380,7 @@ fn run_scoped(
     mut scope: Option<&mut RustRedMonitorScope<'_, '_>>,
 ) -> Result<CompletedRun> {
     let total = Instant::now();
+    let (n_cores, ordered_weight_arithmetic) = execution_from_environment()?;
     let loading = Instant::now();
     if let Some(scope) = scope.as_deref_mut() {
         scope.phase("data_loading");
@@ -371,6 +392,7 @@ fn run_scoped(
             &OfficialExternalDataOptions {
                 local_artifacts_path: options.artifacts.clone(),
                 load_prepared_caches: false,
+                n_cores,
                 ..Default::default()
             },
         )?;
@@ -394,16 +416,8 @@ fn run_scoped(
         ..Default::default()
     };
     settings.rustred_application_options.reduction_strategy = options.strategy;
-    // Optional prototype switch: identical exact results with modular weights.
-    if let Some(text) = std::env::var_os("VAKINT_ORDERED_WEIGHT_ARITHMETIC") {
-        settings
-            .rustred_application_options
-            .ordered_weight_arithmetic =
-            super::super::vakint::parse_rustred_ordered_weight_arithmetic(&text.to_string_lossy())?;
-    }
-    // Native owner-preparation diagnostics sum worker wall times. Keep one
-    // worker so subtracting measured preparation from math spans is valid.
-    settings.rustred_application_options.preparation_workers = 1;
+    settings.n_cores = n_cores;
+    settings.ordered_weight_arithmetic = ordered_weight_arithmetic;
     // Bind the fixture's exact native trace dimension identically for both
     // public evaluators; the raw prepared scalar payload remains unchanged.
     let native_d = super::dimension()?;
@@ -521,6 +535,10 @@ fn run_scoped(
             "ordered_result_cache":"not supported"},
         "worker_policy":{"owner_preparation_workers":1,
             "scope":"single owner preparation worker required for native timing subtraction"},
+        "execution":{"n_cores":settings.n_cores,
+            "ordered_weight_arithmetic":settings.ordered_weight_arithmetic.to_string(),
+            "native_ordered_weight_arithmetic":format!("{:#}",settings.rustred_ordered_weight_arithmetic()),
+            "scope":"identical results for every core count and arithmetic; owner preparation stays on the request thread"},
         "input_sha256":sha256(prepared.input.to_canonical_string().as_bytes()),
         "evaluated_input_sha256":sha256(evaluation_input.to_canonical_string().as_bytes()),
         "dimension_binding":{"source":native_d.to_canonical_string(),"target":physical_d.to_canonical_string(),"scope":"exact fixture trace dimension; all public evaluations share this binding"},

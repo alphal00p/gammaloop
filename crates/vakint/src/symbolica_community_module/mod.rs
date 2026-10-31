@@ -833,12 +833,13 @@ impl VakintWrapper {
         let staged = resources::run(self.settings.rustred_resources, || {
             let mut staged = self.staged_engine()?;
             staged
-                .load_external_data_with_prepared_caches(
+                .load_external_data_on(
                     path,
                     max_loop_count,
                     crate::rustred_evaluation::uses_prepared_caches(
                         self.settings.rustred_application_options.reduction_strategy,
                     ),
+                    self.settings.n_cores,
                 )
                 .map_err(vakint_to_python_error)?;
             Ok(staged)
@@ -856,12 +857,13 @@ impl VakintWrapper {
         let staged = resources::run(self.settings.rustred_resources, || {
             let mut staged = self.staged_engine()?;
             staged
-                .load_rustred_artifacts_with_prepared_caches(
+                .load_rustred_artifacts_on(
                     loop_count,
                     path,
                     crate::rustred_evaluation::uses_prepared_caches(
                         self.settings.rustred_application_options.reduction_strategy,
                     ),
+                    self.settings.n_cores,
                 )
                 .map_err(vakint_to_python_error)?;
             Ok(staged)
@@ -900,6 +902,7 @@ impl VakintWrapper {
                         local_artifacts_path,
                         refresh,
                         load_prepared_caches,
+                        n_cores: self.settings.n_cores,
                         ..Default::default()
                     },
                 )
@@ -928,7 +931,7 @@ impl VakintWrapper {
         Ok(result)
     }
 
-    #[pyo3(signature = (run_time_decimal_precision = None, evaluation_order = None, tensor_reduction_method = None, epsilon_symbol = None, mu_r_sq_symbol = None, form_exe_path = None, python_exe_path = None, verify_numerator_identification = None, integral_normalization_factor = None, allow_unknown_integrals = None, clean_tmp_dir = None, number_of_terms_in_epsilon_expansion = None, use_dot_product_notation = None, temporary_directory = None, rustred_artifact_path = None, rustred_cache_bytes = None, rustred_cache_terms = None, rustred_product_cache_bytes = None, rustred_product_cache_terms = None, rustred_cache_policy = "evict-lru", rustred_scalar_max_work = None, max_process_rss_bytes = None, max_elapsed_seconds = None, rustred_reduction_strategy = "ordered"))]
+    #[pyo3(signature = (run_time_decimal_precision = None, evaluation_order = None, tensor_reduction_method = None, epsilon_symbol = None, mu_r_sq_symbol = None, form_exe_path = None, python_exe_path = None, verify_numerator_identification = None, integral_normalization_factor = None, allow_unknown_integrals = None, clean_tmp_dir = None, number_of_terms_in_epsilon_expansion = None, use_dot_product_notation = None, temporary_directory = None, rustred_artifact_path = None, rustred_cache_bytes = None, rustred_cache_terms = None, rustred_product_cache_bytes = None, rustred_product_cache_terms = None, rustred_cache_policy = "evict-lru", rustred_scalar_max_work = None, max_process_rss_bytes = None, max_elapsed_seconds = None, rustred_reduction_strategy = "ordered", n_cores = None, ordered_weight_arithmetic = None))]
     #[allow(clippy::too_many_arguments)]
     #[new]
     /// Create a new Vakint instance, specifying details of the evaluation stack. Note that the same instance can be recycled across multiple evaluations.
@@ -1039,6 +1042,18 @@ impl VakintWrapper {
     ///     Neither "ordered" nor "depth_first_without_memoization" uses or produces
     ///     completed-result caches, including persistent caches; data loading skips
     ///     prepared caches for both.
+    /// n_cores : Optional[int]
+    ///     Worker threads of this instance: the single source of every Vakint and RustRed
+    ///     worker count (modular weight arithmetic, five-loop route verification in data
+    ///     loading). 1 runs every computation on the calling thread without spawning a thread.
+    ///     None (default) uses min(10, cores available to this process), or 1 without a
+    ///     Symbolica license. Results are identical for every value.
+    /// ordered_weight_arithmetic : Optional[str]
+    ///     Frontier weight arithmetic of the "ordered" strategy: "exact", "modular_sampled" or
+    ///     "modular_polynomial", optionally with RustRed's advanced options as
+    ///     "modular_sampled:key=value,..." ("modular" is an alias of "modular_sampled").
+    ///     Every arithmetic returns the same exact result. Modular arithmetics run on n_cores
+    ///     workers unless the options set threads. None (default) selects "exact".
     pub fn new(
         run_time_decimal_precision: Option<u32>,
         evaluation_order: Option<Vec<PyRef<VakintEvaluationMethodWrapper>>>,
@@ -1064,8 +1079,17 @@ impl VakintWrapper {
         max_process_rss_bytes: Option<u64>,
         max_elapsed_seconds: Option<f64>,
         rustred_reduction_strategy: &str,
+        n_cores: Option<usize>,
+        ordered_weight_arithmetic: Option<&str>,
     ) -> PyResult<VakintWrapper> {
         let rustred_resources = resources::limits(max_process_rss_bytes, max_elapsed_seconds)?;
+        let n_cores = n_cores.unwrap_or_else(crate::default_n_cores);
+        crate::execution::validate_n_cores(n_cores)
+            .map_err(|error| exceptions::PyValueError::new_err(error.to_string()))?;
+        let ordered_weight_arithmetic = ordered_weight_arithmetic
+            .unwrap_or(crate::DEFAULT_ORDERED_WEIGHT_ARITHMETIC)
+            .parse::<crate::OrderedWeightArithmetic>()
+            .map_err(|error| exceptions::PyValueError::new_err(error.to_string()))?;
         resources::run(rustred_resources, || {
             let mut rustred_application_options = rustred_app::SavedApplicationOptions {
                 cache_policy: self::rustred_cache_policy(rustred_cache_policy)
@@ -1169,6 +1193,8 @@ impl VakintWrapper {
                     .unwrap_or(4),
                 use_dot_product_notation: use_dot_product_notation.unwrap_or(false),
                 rustred_artifact_path: rustred_artifact_path.map(Into::into),
+                n_cores,
+                ordered_weight_arithmetic,
                 rustred_application_options,
                 rustred_scalar_numerator_limits,
                 rustred_product_limits,
@@ -1179,6 +1205,20 @@ impl VakintWrapper {
             let wrapper = VakintWrapper { vakint, settings };
             Ok(wrapper)
         })
+    }
+
+    /// Worker threads of this instance (the `n_cores` constructor argument).
+    #[getter]
+    pub fn n_cores(&self) -> usize {
+        self.settings.n_cores
+    }
+
+    /// Selected Ordered weight arithmetic in RustRed's canonical text, e.g.
+    /// "exact" or "modular_sampled"; "threads" appears only when the selection
+    /// fixes the modular workers instead of following `n_cores`.
+    #[getter]
+    pub fn ordered_weight_arithmetic(&self) -> String {
+        self.settings.ordered_weight_arithmetic.to_string()
     }
 
     /// Explicitly load a local five-loop application package once.

@@ -462,6 +462,7 @@ pub(super) fn evaluate_ordered_batch(
     let dimension = crate::utils::vakint_macros::vk_parse!("4-2*ep").unwrap();
     let cohort_total = channels.len();
     let mut skipped = 0;
+    let arithmetic = settings.rustred_ordered_weight_arithmetic();
     for (cohort_index, ((index, mass, spectator, exponent), terms)) in
         channels.into_iter().enumerate()
     {
@@ -479,9 +480,7 @@ pub(super) fn evaluate_ordered_batch(
                 data: &data.loops[&4],
             },
             strategy: settings.rustred_application_options.reduction_strategy,
-            weight_arithmetic: settings
-                .rustred_application_options
-                .ordered_weight_arithmetic,
+            weight_arithmetic: arithmetic,
             master_mode: request_dump::master_mode(settings),
             channel: DumpChannel {
                 index: cohort_index,
@@ -514,9 +513,7 @@ pub(super) fn evaluate_ordered_batch(
                     .reduce_linear_combination_ordered_with_arithmetic(
                         terms,
                         settings.rustred_application_options.reduction_limits,
-                        settings
-                            .rustred_application_options
-                            .ordered_weight_arithmetic,
+                        arithmetic,
                         observation,
                     )
             },

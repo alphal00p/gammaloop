@@ -233,7 +233,8 @@ fn external_package_all_813_witnesses_pass_native_frontend_admission_without_red
         ..Default::default()
     };
     if let Ok(workers) = std::env::var("VAKINT_SAVED_APPLICATION_PREPARATION_WORKERS") {
-        settings.rustred_application_options.preparation_workers = workers
+        // The route-verification workers follow n_cores.
+        settings.n_cores = workers
             .parse()
             .expect("positive native preparation worker count");
     }

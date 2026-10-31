@@ -164,9 +164,18 @@ class Gallery:
         )
 
     @staticmethod
-    def engine(precision=32, mode="retain"):
+    def engine(
+        precision=32, mode="retain", n_cores=None, ordered_weight_arithmetic=None
+    ):
+        """RustRed-only engine. Worker cores and the Ordered weight arithmetic
+        come from the arguments, else VAKINT_GALLERY_N_CORES and
+        VAKINT_GALLERY_ARITHMETIC, else Vakint's defaults."""
         from symbolica.community.hepkit.vakint import Vakint, VakintEvaluationMethod
 
+        if n_cores is None and os.environ.get("VAKINT_GALLERY_N_CORES"):
+            n_cores = int(os.environ["VAKINT_GALLERY_N_CORES"])
+        if ordered_weight_arithmetic is None:
+            ordered_weight_arithmetic = os.environ.get("VAKINT_GALLERY_ARITHMETIC")
         return Vakint(
             evaluation_order=[
                 VakintEvaluationMethod.new_rustred_method(master_mode=mode)
@@ -174,7 +183,15 @@ class Gallery:
             run_time_decimal_precision=precision,
             integral_normalization_factor="FMFTandMATAD",
             form_exe_path="/gallery-uses-rustred-only",
+            n_cores=n_cores,
+            ordered_weight_arithmetic=ordered_weight_arithmetic,
         )
+
+    @staticmethod
+    def execution(engine):
+        """The engine's Ordered weight arithmetic and worker cores, for display."""
+        cores = engine.n_cores
+        return f"{engine.ordered_weight_arithmetic} · {cores} core{'' if cores == 1 else 's'}"
 
     @staticmethod
     def load_data(engine, max_loop_count):

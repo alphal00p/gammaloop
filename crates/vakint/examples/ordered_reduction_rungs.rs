@@ -116,7 +116,7 @@ fn main() -> fixture::Result<()> {
             }
             "--help" => {
                 println!(
-                    "ordered_reduction_rungs --work-dir PATH --build-profile release [--loops N] [--projection zero-momentum|quadratic] [--engine dfs|dfs-no-memo|ordered|all] [--artifacts PATH] [--prepared-input PATH] [--prepare-only] [--no-numerical-reference] [--no-monitor | --monitor] [--progress-snapshot PATH]\nFor completed fresh processes: --work-dir OUT --compare-reports DFS_DIRECTORY DFS_NO_MEMO_DIRECTORY ORDERED_DIRECTORY.\nFor a functional two-engine proof only: --work-dir OUT --compare-two-reports DFS_DIRECTORY ORDERED_DIRECTORY; --no-numerical-reference explicitly compares retained expressions only without changing the saved reports.\nDefault: one loop, zero momentum; all three strategies through four loops, ordered only at five loops; tracked numerical reference through four loops. DFS retains its ordinary per-run memo; dfs-no-memo disables that memo and its bookkeeping. Neither restores prepared or previous-run caches. Saved inputs under work-dir/input-LN-projection are authenticated and reused; --prepared-input selects a shared or legacy bundle. Reduction math is captured with the experimental-rustred feature; the complete retained public call is timed separately. Both timings exclude the subsequent numerical reference. Use --no-monitor for qualified performance comparisons: it disables both dashboard and snapshot callbacks and conflicts with --monitor and --progress-snapshot. Use a release build without profile overrides."
+                    "ordered_reduction_rungs --work-dir PATH --build-profile release [--loops N] [--projection zero-momentum|quadratic] [--engine dfs|dfs-no-memo|ordered|all] [--artifacts PATH] [--prepared-input PATH] [--prepare-only] [--no-numerical-reference] [--no-monitor | --monitor] [--progress-snapshot PATH]\nFor completed fresh processes: --work-dir OUT --compare-reports DFS_DIRECTORY DFS_NO_MEMO_DIRECTORY ORDERED_DIRECTORY.\nFor a functional two-engine proof only: --work-dir OUT --compare-two-reports DFS_DIRECTORY ORDERED_DIRECTORY; --no-numerical-reference explicitly compares retained expressions only without changing the saved reports.\nDefault: one loop, zero momentum; all three strategies through four loops, ordered only at five loops; tracked numerical reference through four loops. DFS retains its ordinary per-run memo; dfs-no-memo disables that memo and its bookkeeping. Neither restores prepared or previous-run caches. Saved inputs under work-dir/input-LN-projection are authenticated and reused; --prepared-input selects a shared or legacy bundle. Reduction math is captured with the experimental-rustred feature; the complete retained public call is timed separately. Both timings exclude the subsequent numerical reference. Use --no-monitor for qualified performance comparisons: it disables both dashboard and snapshot callbacks and conflicts with --monitor and --progress-snapshot. Use a release build without profile overrides.\nEnvironment: VAKINT_N_CORES (worker cores; default min(10, available cores)) and VAKINT_ORDERED_WEIGHT_ARITHMETIC (exact | modular_sampled[:key=value,...] | modular_polynomial[:key=value,...]; default exact; modular workers follow the cores unless threads is set); both are recorded under report.json execution and never change the exact results."
                 );
                 return Ok(());
             }
@@ -279,6 +279,14 @@ fn main() -> fixture::Result<()> {
             directory.join("report.json"),
             serde_json::to_vec_pretty(&run.report)?,
         )?;
+        let execution = &run.report["execution"];
+        println!(
+            "{name}: {} weights on {} cores",
+            execution["ordered_weight_arithmetic"]
+                .as_str()
+                .unwrap_or("unrecorded"),
+            execution["n_cores"]
+        );
         let public_seconds = run.report["retained_reduction_seconds"]
             .as_f64()
             .unwrap_or_default();

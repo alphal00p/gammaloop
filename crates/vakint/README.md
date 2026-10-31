@@ -10,6 +10,19 @@ AlphaLoop, MATAD and FMFT after RustRed as fallbacks, followed by pySecDec when 
 Explicitly requested FORM-based backends report a missing FORM installation. Cache operations
 require selecting the depth-first strategy explicitly.
 
+Two settings control how the ordered strategy computes. `n_cores` is the single source of every
+worker count. It defaults to the cores available to the process, at most ten, and to one without
+a Symbolica license. With `n_cores = 1` every computation runs on the calling thread.
+`ordered_weight_arithmetic` selects `exact` (the default), `modular_sampled` or
+`modular_polynomial` frontier weights. Advanced options use RustRed's syntax, for example
+`modular_sampled:batch_points=64`. All choices return identical exact results:
+
+```python
+vakint = Vakint(n_cores=8, ordered_weight_arithmetic="modular_sampled")
+```
+
+The [ordered-reduction notes](docs/ordered_reduction.typ) describe the modes and their options.
+
 Use the canonical Typst documentation for maintained workflows:
 
 - [overview and backend boundaries](https://alphal00p.github.io/gammaloop/products/vakint/latest/)
