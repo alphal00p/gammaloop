@@ -128,22 +128,12 @@ impl TimedPair {
         )
     }
 
-    fn cache_statistics(vakint: &Vakint) -> Result<Value, Box<dyn std::error::Error>> {
-        let mut loops = BTreeMap::new();
-        for count in 1..=5 {
-            let statistics = vakint.cache_statistics(count)?;
-            loops.insert(count, json!({
-                "attached":statistics.attached,
-                "statistics_debug":format!("{statistics:?}"),
-                "saved_application":statistics.saved_application.as_ref().map(|value|value.to_document()),
-            }));
-        }
+    /// Same-engine state that can differ between the cold and warm calls:
+    /// lazily prepared owners and the frontend witness memo. Ordered reduction
+    /// keeps no completed-result cache.
+    fn application_statistics(vakint: &Vakint) -> Result<Value, Box<dyn std::error::Error>> {
         Ok(json!({
-            "persistent":loops,
-            "application_debug":format!("{:?}",vakint.rustred_application_cache_statistics()?),
-            "application_work_debug":format!("{:?}",vakint.rustred_application_cache_work_statistics()?),
             "owner_preparation_debug":format!("{:?}",vakint.rustred_application_owner_preparation_statistics()?),
-            "factor_debug":format!("{:?}",vakint.rustred_application_factor_cache_statistics()?),
             "witness_debug":format!("{:?}",vakint.rustred_application_witness_cache_statistics()?),
         }))
     }
@@ -178,11 +168,10 @@ impl TimedPair {
         let input = self.write("input.symbolica", input.to_canonical_string().as_bytes())?;
         self.write_json("input.json", &json!({
             "schema":"vakint.five-loop-connected-timed-pair.v1",
-            "scope":"supplementary same-process cold/warm whole public evaluate_rustred_symbolic calls; not a persistent-cache comparison or pure IBP timer",
-            "timing_excludes":"pre-evaluation data/application loading, input preparation, result serialization, cache-statistics snapshots and parity checks",
+            "scope":"supplementary same-process cold/warm whole public evaluate_rustred_symbolic calls; Ordered reduction has no result cache; not a pure IBP timer",
+            "timing_excludes":"pre-evaluation data/application loading, input preparation, result serialization, statistics snapshots and parity checks",
             "owner_preparation_scope":"on-demand owner preparation inside either timed public API call is included",
-            "warm_policy":"same engine, settings and input; no cache clear or extra evaluation between the two calls",
-            "cache_policy":"with_rustred_application default local-checkout loading, including any available prepared lower-loop caches",
+            "warm_policy":"same engine, settings and input; no extra evaluation between the two calls",
             "dot":dot,"dot_source":Self::file_identity(&scalar.path)?,"powers_native_order":scalar.powers,
             "input":input,"mass_squared":"1","numerator":"1","settings_debug":format!("{settings:?}"),
             "application_directory":application,"data_manifests":manifests,
@@ -199,7 +188,7 @@ impl TimedPair {
             "build_symbolica_revision":option_env!("VAKINT_CACHE_BUILD_SYMBOLICA_REVISION"),
             "build_main_source_snapshot_sha256":option_env!("VAKINT_CACHE_BUILD_MAIN_SOURCE_SNAPSHOT_SHA256"),
             "build_native_source_snapshot_sha256":option_env!("VAKINT_CACHE_BUILD_NATIVE_SOURCE_SNAPSHOT_SHA256"),
-            "cache_statistics_before_cold":Self::cache_statistics(vakint)?,
+            "application_statistics_before_cold":Self::application_statistics(vakint)?,
         }))?;
         Ok(())
     }
@@ -231,7 +220,7 @@ impl TimedPair {
             "phase":phase,"completed":true,"whole_public_application_seconds":seconds,
             "value":value,"ordered_nonzero_conditions":guards,"families":families,
             "nonzero_condition_count":result.nonzero_conditions.len(),"family_count":result.families.len(),
-            "cache_statistics_after":Self::cache_statistics(vakint)?,
+            "application_statistics_after":Self::application_statistics(vakint)?,
         }))
     }
 }
@@ -695,11 +684,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         )]),
         form_exe_path: "/five-loop-example-must-not-use-form".into(),
         integral_normalization_factor: LoopNormalizationFactor::Custom("1".into()),
-        // Warm requests and cache statistics observe depth-first result caches.
-        rustred_application_options: rustred_app::SavedApplicationOptions {
-            reduction_strategy: vakint::RustRedReductionStrategy::DepthFirst,
-            ..Default::default()
-        },
         ..Default::default()
     };
     let catalog_started = Instant::now();
@@ -990,18 +974,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             &mut guard_discrepancies,
         )?;
         println!("indexed_simultaneous_routing_value_parity=passed");
-        println!("cache={:?}", vakint.rustred_application_cache_statistics()?);
-        println!(
-            "cache_work={:?}",
-            vakint.rustred_application_cache_work_statistics()?
-        );
         println!(
             "owner_preparation={:?}",
             vakint.rustred_application_owner_preparation_statistics()?
-        );
-        println!(
-            "factor_cache={:?}",
-            vakint.rustred_application_factor_cache_statistics()?
         );
         println!(
             "witness_cache={:?}",
@@ -1047,7 +1022,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             println!("nonunit_mass_scaling=passed");
         }
-        // Settings remain the sole enable path, including on a clone with a warm cache.
+        // Settings remain the sole enable path, including on a clone with a loaded package.
         let clone = vakint.clone();
         let mut disabled = settings.clone();
         disabled.rustred_artifact_path = None;
@@ -1055,7 +1030,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .evaluate_rustred_symbolic(&disabled, input.as_view())
             .is_ok()
         {
-            return Err("removing the settings path did not disable a cached application".into());
+            return Err("removing the settings path did not disable a loaded application".into());
         }
         let mut tightened = settings.clone();
         tightened
@@ -1066,24 +1041,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .evaluate_rustred_symbolic(&tightened, input.as_view())
             .is_ok()
         {
-            return Err("a warm cache bypassed changed application options".into());
+            return Err("a loaded application bypassed changed application options".into());
         }
-        vakint.clear_rustred_application_cache()?;
-        if vakint
-            .rustred_application_witness_cache_statistics()?
-            .retained_entries
-            != 0
-        {
-            return Err("clearing the application left frontend witnesses cached".into());
-        }
-        if vakint
-            .rustred_application_factor_cache_statistics()?
-            .cached_factors
-            != 0
-        {
-            return Err("clearing the application left lower-factor entries cached".into());
-        }
-        println!("cached_path_and_options_guards=passed");
+        println!("loaded_path_and_options_guards=passed");
     }
     if args[1].as_os_str() == "--admitted-suite" {
         for fixture in cancellation_controls {

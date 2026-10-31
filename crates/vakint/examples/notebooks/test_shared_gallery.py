@@ -29,7 +29,6 @@ class GalleryBenchmarkTests(unittest.TestCase):
             "VAKINT_GALLERY_WORK": str(self.work),
             "VAKINT_GALLERY_ARTIFACTS": str(self.root / "artifacts"),
             "VAKINT_GALLERY_PREPARED_INPUT_ROOT": str(self.prepared),
-            "VAKINT_GALLERY_CACHE": str(self.root / "NOT-A-CACHE"),
         }
         environment_patch = patch.dict(os.environ, self.environment, clear=True)
         environment_patch.start()
@@ -91,7 +90,7 @@ class GalleryBenchmarkTests(unittest.TestCase):
         (self.prepared / "quadratic" / "prepared-input.json").write_text("invalid")
         with patch.object(Path, "read_text", side_effect=AssertionError("eager read")):
             self.assertTrue(Gallery.benchmark_available())
-        for name in self.environment.keys() - {"VAKINT_GALLERY_CACHE"}:
+        for name in self.environment:
             with self.subTest(name=name), patch.dict(os.environ, {name: ""}):
                 self.assertFalse(Gallery.benchmark_available())
 
@@ -124,15 +123,11 @@ class GalleryBenchmarkTests(unittest.TestCase):
             command[command.index("--artifacts") + 1],
             self.environment["VAKINT_GALLERY_ARTIFACTS"],
         )
-        self.assertNotIn("--cache", command)
-        self.assertIn("--running-cache-capture-only", command)
-        self.assertNotIn("--running-cache-no-read-delta", command)
-        self.assertEqual(
-            command[command.index("--running-cache") + 1],
-            str(work / "running-cache"),
+        # Ordered reduction reads and writes no persistent cache.
+        self.assertFalse(
+            any(argument.startswith(("--cache", "--running-cache")) for argument in command)
         )
         self.assertTrue(work.is_dir())
-        self.assertFalse((work / "running-cache").exists())
         self.assertEqual(
             json.loads((work / "status.json").read_text()),
             {"state": "starting"},
@@ -156,47 +151,6 @@ class GalleryBenchmarkTests(unittest.TestCase):
         popen.assert_not_called()
         self.assertFalse(self.work.exists())
 
-    def test_cached_launch_uses_configured_cache(self):
-        with patch("shared_gallery.subprocess.Popen"):
-            work = Path(Gallery.start_benchmark("zero-momentum", cached=True))
-        command = json.loads((work / "request.json").read_text())["command"]
-        self.assertEqual(
-            command[command.index("--cache") + 1],
-            self.environment["VAKINT_GALLERY_CACHE"],
-        )
-        self.assertEqual(
-            command[command.index("--running-cache") + 1],
-            str(work / "running-cache"),
-        )
-        self.assertNotIn("--running-cache-capture-only", command)
-        self.assertNotIn("--running-cache-no-read-delta", command)
-        self.assertEqual(
-            command[command.index("--progress-snapshot") + 1],
-            str(work / "monitor.json"),
-        )
-
-    def test_cached_launch_accepts_an_immutable_native_directory(self):
-        cache = Path(self.environment["VAKINT_GALLERY_CACHE"])
-        cache.mkdir()
-        index = cache / "bundle.rrindex"
-        index.write_bytes(b"synthetic opaque native index")
-        before = index.read_bytes()
-        with patch("shared_gallery.subprocess.Popen"):
-            work = Path(Gallery.start_benchmark("zero-momentum", cached=True))
-        command = json.loads((work / "request.json").read_text())["command"]
-        self.assertEqual(command[command.index("--cache") + 1], str(cache))
-        self.assertEqual(index.read_bytes(), before)
-        self.assertEqual(list(cache.iterdir()), [index])
-
-    def test_missing_cache_does_not_launch_uncached_instead(self):
-        os.environ.pop("VAKINT_GALLERY_CACHE")
-        with (
-            patch("shared_gallery.subprocess.Popen") as popen,
-            self.assertRaisesRegex(ValueError, "cache"),
-        ):
-            Gallery.start_benchmark("zero-momentum", cached=True)
-        popen.assert_not_called()
-
     def test_fresh_output_directories_share_only_prepared_input(self):
         with patch("shared_gallery.subprocess.Popen"):
             first = Path(Gallery.start_benchmark("zero-momentum"))
@@ -207,10 +161,7 @@ class GalleryBenchmarkTests(unittest.TestCase):
             self.assertTrue((work / "request.json").is_file())
             self.assertNotEqual(work, self.prepared / "zero-momentum")
             command = json.loads((work / "request.json").read_text())["command"]
-            self.assertEqual(
-                command[command.index("--running-cache") + 1],
-                str(work / "running-cache"),
-            )
+            self.assertEqual(command[command.index("--work-dir") + 1], str(work))
 
     def test_held_lock_prevents_another_benchmark(self):
         self.work.mkdir()
@@ -404,9 +355,7 @@ class GalleryWorkerTests(unittest.TestCase):
         self.assertEqual(monitor.read_text(), raw)
 
     def test_nonzero_exit_retains_failure_and_log(self):
-        capture = self.work / "running-cache"
-        capture.mkdir()
-        prefix = capture / "committed-prefix"
+        prefix = self.work / "partial-output"
         prefix.write_bytes(b"synthetic durable prefix")
         status = self.run_worker(result=17, output="synthetic native failure")
         self.assertEqual(status["state"], "failed")

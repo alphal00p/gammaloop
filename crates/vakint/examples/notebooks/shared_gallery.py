@@ -522,7 +522,7 @@ class Gallery:
         return directory
 
     @staticmethod
-    def start_benchmark(projection, *, cached=False):
+    def start_benchmark(projection):
         """Start one serialized background job, leaving the app kernel responsive."""
         import fcntl
 
@@ -535,8 +535,6 @@ class Gallery:
                 "This gallery server needs a benchmark runner, workspace, external data and prepared scalar inputs"
             )
         prepared_input = Gallery.prepared_input_directory(projection)
-        if cached and not os.environ.get("VAKINT_GALLERY_CACHE"):
-            raise ValueError("This gallery server has no configured prepared cache")
         root = Path(os.environ["VAKINT_GALLERY_WORK"]).resolve()
         root.mkdir(parents=True, exist_ok=True)
         lock = (root / "benchmark.lock").open("a+")
@@ -561,13 +559,7 @@ class Gallery:
             str(work / "monitor.json"),
             "--prepared-input",
             str(prepared_input),
-            "--running-cache",
-            str(work / "running-cache"),
         ]
-        if cached:
-            command.extend(["--cache", os.environ["VAKINT_GALLERY_CACHE"]])
-        else:
-            command.append("--running-cache-capture-only")
         (work / "request.json").write_text(json.dumps({"command": command}))
         (work / "status.json").write_text(json.dumps({"state": "starting"}))
         try:

@@ -12,64 +12,36 @@
 
 The ordered strategy combines equal, not-yet-reduced integrals across the
 request before expanding them. It is a scheduler over the existing checked
-reduction operations and Vakint's default strategy. The RustRed library's own
-default remains depth-first, which Vakint users select explicitly when they
-need completed-result caches.
+reduction operations and Vakint's only reduction strategy: depth-first
+reduction, its completed-result caches and their Python operations were removed
+from Vakint. The RustRed library keeps its depth-first reducer for its own users.
 
 #panel[
   *Scope.* Existing reduction tables and topology matching; exact rational
-  coefficients; a #raw("BTreeMap") frontier; no ordered reduction-result cache.
+  coefficients; a #raw("BTreeMap") frontier; no reduction-result cache.
   No offline rule rewriting, synthesized composite rules, or loop-specific
   scheduling heuristics are required.
 ]
 
-== Selecting the strategy
+== Configuration
 
-Use the same evaluation methods and master modes as for depth-first reduction.
-The strategy belongs to the existing RustRed application settings and defaults
-to #raw("vakint::DEFAULT_RUSTRED_REDUCTION_STRATEGY"), i.e. ordered. Select
-depth-first reduction explicitly, for example to use completed-result caches:
+There is no strategy setting: every RustRed evaluation, at one to five loops,
+uses the ordered scheduler. #raw("VakintSettings::rustred_application_options")
+is RustRed's #raw("SavedApplicationOptions"); Vakint sets its
+#raw("reduction_strategy") to #raw("Ordered") by default and ignores any other
+value, as it ignores the depth-first #raw("cache_policy") and
+#raw("cache_representation"). Its reduction limits, preparation workers and
+#raw("ordered_weight_arithmetic") (see below) apply. The scheduler changes the
+order of the checked identities, not the definitions, normalization or
+requested numerical precision of the masters. RustRed leads the default
+evaluation order; FORM-based backends follow it only when FORM is usable.
 
-```rust
-use vakint::{RustRedReductionStrategy, VakintSettings};
-
-let mut settings = VakintSettings::default();
-settings.rustred_application_options.reduction_strategy =
-    RustRedReductionStrategy::DepthFirst;
-```
-
-#raw("RustRedReductionStrategy") reexports RustRed's strategy enum. Selecting
-it changes scheduling, not the definitions, normalization or requested numerical
-precision of the masters. RustRed leads the default evaluation order; FORM-based
-backends follow it only when FORM is usable. The Python constructor exposes the
-same choice:
-
-```python
-from symbolica.community.hepkit.vakint import Vakint, VakintEvaluationMethod
-
-engine = Vakint(
-    rustred_reduction_strategy="depth_first",
-    evaluation_order=[VakintEvaluationMethod.new_rustred_method()],
-)
-```
-
-The accepted strings are #raw("ordered") (the default), #raw("depth_first"),
-and #raw("depth_first_without_memoization"). Unknown values
-produce an error. The no-memoization choice, exposed in Rust as
-#raw("RustRedReductionStrategy::DepthFirstWithoutMemoization"), recomputes repeated
-descendants without completed-result memoization, lookup/insertion bookkeeping,
-or persistent caches, including dependent factor reductions. A zero cache budget
-or subtraction of bookkeeping time is not this execution path. Immutable
-program preparation remains shared. Python instances configured with ordered
-or no-memoization reduction reject explicit cache operations, with an error
-explaining the #raw("depth_first") opt-in, and skip prepared caches during data
-loading. In Rust, #raw("OfficialExternalDataOptions::default()") and
-#raw("load_external_data") likewise skip prepared caches;
-#raw("OfficialExternalDataOptions::for_strategy(RustRedReductionStrategy::DepthFirst)")
-and #raw("load_external_data_with_prepared_caches") load them. Rust evaluations
-in these modes never consume attached DFS completed-result backings. Ordinary
-numerical, symbolic and retained-master evaluation retain their existing public
-interfaces.
+The Python constructor has no strategy argument. The former
+#raw("rustred_reduction_strategy") and #raw("rustred_cache_policy") keywords and
+the cache operations (#raw("prepare_cache"), #raw("load_cache"), running caches,
+#raw("save_cache"), #raw("import_cache"), #raw("download_cache"),
+#raw("cache_statistics") and the related clear/detach methods) were removed.
+#raw("load_official_external_data") no longer takes #raw("load_prepared_caches").
 
 == What is ordered
 
@@ -106,9 +78,9 @@ heuristics.
 Suppose the checked identities give $X -> 2 U + V$ and $Y -> -2 U + W$,
 with both $X$ and $Y$ greater than $U$ in the reduction ordering. A request
 containing $X+Y$ accumulates $2U-2U$ at one frontier key before expanding $U$.
-The zero entry disappears, leaving only $V+W$ to reduce. Depth-first reduction
-can reuse a completed reduction of $U$, but generally computes it before the
-two contributions cancel.
+The zero entry disappears, leaving only $V+W$ to reduce. The removed
+depth-first reduction expanded each parent to its terminals separately, so it
+generally reduced $U$ before the two contributions could cancel.
 
 Two integrals combine only when their *canonical operational identities* agree:
 family, transport/owner state, signed powers and compatible coefficient channel.
@@ -279,7 +251,7 @@ Engine development does not need Vakint in the loop. Setting
 (one per compatible mass/spectator channel, at one to five loops) write
 #raw("DIR/<stem>.request.json") before it runs: the loop count, the program
 identity (family fingerprint and external-data files, or the saved 5L
-application path), the strategy, Ordered weight arithmetic, master mode and
+application path), the strategy (always #raw("Ordered")), weight arithmetic, master mode and
 channel label, and the exact input keys with coefficients as Symbolica
 canonical strings of rational functions in the family dimension. Caller-side
 nonzero conditions are recorded for reference; RustRed receives only the
@@ -305,27 +277,28 @@ its monomial counters do not, and saved five-loop requests recorded with
 non-default options are refused. The recorded preparation workers (Vakint's
 #raw("n_cores")) do not count as such an option.
 
-== Cache isolation and limitations
+== Caching and limitations
 
-Ordered reduction neither consumes nor produces the depth-first engine's
-completed-result cache. An attached DFS cache is not queried by ordered
-evaluation. Python ordered loading skips prepared caches; explicitly requesting
-cache operations in an ordered Python instance produces an error. Immutable
-program preparation and the active external-data registry remain reusable:
-they are not reduction-result caches.
+Ordered reduction keeps no reduction-result cache between requests. Immutable
+program preparation, lazily prepared five-loop owners, the frontend witness memo
+and the active external-data registry remain reusable; they are not
+reduction-result caches. External-data releases up to v0.1.2 also ship prepared
+depth-first caches; Vakint neither loads nor checksums them (an explicit read of
+such a file still verifies it), which removes a large part of the five-loop
+loading time.
 
-Global cancellation deliberately avoids computing some individual unit-integral
-reductions, so a completed result for each such integral does not exist to save.
-Future ordered caching needs its own semantic type and binding. No partial
-frontier or weighted amplitude is written as a completed DFS identity.
+The depth-first caches stored a complete terminal decomposition per integral.
+Consuming such a record replaces a frontier key by its terminal image and skips
+every grouping and cancellation below it, so ordered reduction never used them.
+A persistent ordered cache stores weight-independent one-step records instead
+(the checked route or rule application of one key), bound to the saved
+application identity computed in #raw("rustred_evaluation::cache"); it attaches
+at that module boundary.
 
 Keeping more unfinished contributions visible can increase frontier memory.
 Exact coefficient combination can also cost more than the reductions it avoids.
-The ordered strategy therefore has no universal speedup promise. New comparisons
-measure three arms directly: ordinary DFS with intrinsic per-run memoization,
-DFS without that memoization/bookkeeping, and Ordered. Prepared/saved caches and
-previous-run reduction state are unloaded in all three arms. Cached historical
-measurements remain separate cohorts.
+Ordered reduction therefore has no universal speedup promise over the historical
+depth-first measurements, which remain separate cohorts in the benchmark report.
 
 == Reproducible physical comparisons
 
@@ -338,55 +311,58 @@ Both zero-momentum metric and complete quadratic transverse projections are
 tested. Prepared scalar inputs are authenticated and reused independently of
 reduction, preserving full mass and numerator conventions.
 
-From the repository workspace root, for a functional comparison:
+From the repository workspace root, for an exact/modular functional comparison:
 
 ```sh
 cargo run --locked --release -p vakint \
   --features feynkit-ingress,experimental-rustred --example ordered_reduction_rungs -- \
   --work-dir /absolute/workspace/rung-L1-q0 \
-  --loops 1 --projection zero-momentum --engine all --build-profile release
+  --loops 1 --projection zero-momentum --arithmetic both --build-profile release
 ```
 
-Through four loops, use separate #raw("--engine dfs"),
-#raw("--engine dfs-no-memo") and #raw("--engine ordered") invocations
-with fixed affinity, #raw("--no-monitor")
-and a release build for qualified fresh-process timing. Declare the actual build with #raw("--build-profile");
-this is a label, not compiler introspection. The
-#raw("--engine all") mode creates three fresh engines in one process and is useful
-for exact parity; it is not three fresh-process measurements. Existing report
-files are never overwritten. Pass #raw("--artifacts PATH") to select an
-authenticated checkout or installation; explicit four- and five-loop data is
-needed. #raw("--prepare-only") saves input without reduction.
-Five-loop physical runs use the ordered engine only, zero momentum followed by
-quadratic. The accepted saved zero-momentum result supplies the exact historical
-reference after conversion from its original pySecDec normalization through the
-existing normalization API, before any Laurent truncation. Its raw payload and
-original timing remain unchanged. No new five-loop depth-first run is required.
+#raw("--arithmetic") selects #raw("exact"), #raw("modular[:key=value,...]") or
+#raw("both"); without it the collector uses
+#raw("VAKINT_ORDERED_WEIGHT_ARITHMETIC") (exact when unset). #raw("both")
+creates two fresh engines in one process and checks that they retain the same
+expression; it is not two fresh-process measurements. Use separate invocations
+with fixed affinity, #raw("--no-monitor") and a release build for qualified
+fresh-process timing. Declare the actual build with #raw("--build-profile");
+this is a label, not compiler introspection. Existing report files are never
+overwritten. Pass #raw("--artifacts PATH") to select an authenticated checkout
+or installation; explicit four- and five-loop data is needed.
+#raw("--prepare-only") saves input without reduction. Five-loop physical runs
+reduce zero momentum followed by quadratic.
 
-After separate runs,
-#raw("--work-dir OUT --compare-reports DFS_DIRECTORY DFS_NO_MEMO_DIRECTORY ORDERED_DIRECTORY")
-authenticates their saved payloads and compares exact retained expressions and
-serialized numerical centers/error estimates without reducing again. These are
-mathematical bounds only for components marked #raw("Bounded"). It writes a bound
-#raw("parity.json") suitable for the benchmark adapter.
-For current performance qualification, run each DFS variant once and Ordered
-three times. Reuse those same saved baseline reports for the three cheap exact
-comparisons. Their repeated references are not repeated timing samples: the
-report labels each DFS baseline as one observation and gives only Ordered a
-three-run median/range. Prior balanced measurements retain their original counts.
+The historical depth-first results remain the exact references. The rung tests
+compare the exact Ordered result of every one- to four-loop case with the
+depth-first retained expression frozen in
+#raw("tests/resources/ordered_rungs/<case>.depth-first-retained.symbolica")
+(produced at gammaloop 31a8b166e) and with the recorded high-precision
+numerical reference, and require modular weights to retain the identical
+expression. The accepted saved five-loop zero-momentum depth-first result
+supplies the five-loop reference after conversion from its original pySecDec
+normalization through the existing normalization API, before any Laurent
+truncation.
+
+#raw("--work-dir OUT --compare-two-reports REFERENCE_DIRECTORY ORDERED_DIRECTORY")
+authenticates two saved reports, an Ordered run and either another Ordered run
+or a preserved historical depth-first report, and compares their exact retained
+expressions and, unless #raw("--no-numerical-reference") is given, serialized
+numerical centers/error estimates without reducing again. These are
+mathematical bounds only for components marked #raw("Bounded").
 
 The comparison headline is #raw("reduction_math_seconds"): measured
 non-overlapping math spans covering IBP/routing and exact weighted terminal
 coefficient assembly/grouping. Necessary terminal substitutions, projections
 and lower-factor reductions are included, as is request-local reducer/dispatch
-state construction for both engines. Immutable artifact loading, deserialization
+state construction. Immutable artifact loading, deserialization
 and program import, graph/data preparation, matching,
 initial scalar lowering, MATAD normalization, numerical evaluation and
 serialization are excluded. This is broader than a Native-kernel IBP timer.
 It sums disjoint math blocks, including later exact coefficient combination;
 normalization intervals themselves remain outside. Natural request-state cleanup
 inside the current call is included, while engine-lifetime teardown after the
-call is excluded. No forced cache clearing changes the execution path.
+call is excluded.
 
 The collector retains gross math time and subtracts the *measured* lazy owner
 preparation wall time, with one owner-preparation worker. The checked net,
@@ -398,17 +374,15 @@ remains separate and includes frontend lowering/finalization. Missing math
 times never fall back to that public timer. In particular, the historical
 40-hour public observation supplies no isolated reduction-math duration.
 
-Prepared caches and previous-run result caches remain unloaded for these
-comparisons. Each new report states *primary-engine completed-result*
-memoization as a boolean, true only for ordinary DFS. Ordered's opaque checked
+No prepared or previous-run result state is loaded for these comparisons; each
+report records #raw("intrinsic_memoization") as false. Ordered's opaque checked
 factorization may use a fresh private memo internally; it does not feed a
-reusable ordered-result cache. The no-memo DFS arm disables these dependent
-result memos too. Reusing the common authenticated scalar input is frontend
-preparation, not a reduction-result cache. Data loading and
-the subsequent numerical reference calculation remain separate.
-Qualified comparisons disable monitoring in every arm. Dashboard/snapshot
-checks, including the large five-loop runs, retain their observer overhead and
-are diagnostic observations; independent RAM guarding remains active.
+reusable result cache. Reusing the common authenticated scalar input is frontend
+preparation, not a reduction-result cache. Data loading and the subsequent
+numerical reference calculation remain separate. Qualified comparisons disable
+monitoring. Dashboard/snapshot checks, including the large five-loop runs,
+retain their observer overhead and are diagnostic observations; independent
+RAM guarding remains active.
 For one through four loops the collector chooses the smallest validated finite
 source cap among surviving dependencies, or an explicit 300-digit target if
 all are arbitrary precision. It records achieved component accuracy and errors

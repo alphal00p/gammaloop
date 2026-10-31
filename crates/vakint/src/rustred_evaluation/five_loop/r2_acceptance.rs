@@ -236,11 +236,9 @@ fn evaluate(
         println!("case={} exact_lowered_piece_parity=passed", fixture.name);
     }
     println!(
-        "case={} coefficients={:?} witnesses={:?} factor_cache={:?}",
+        "case={} witnesses={:?}",
         fixture.name,
-        engine.rustred_application_cache_statistics()?,
         engine.rustred_application_witness_cache_statistics()?,
-        engine.rustred_application_factor_cache_statistics()?
     );
     Ok(first)
 }

@@ -22,9 +22,9 @@ use rustred::algebra::Coefficient;
 use rustred::family::IntegralKey;
 use rustred::input::{Compiler, Limits, LoweringLimits, TextProject, TextPropagator};
 use rustred::reduction::terminal_normalization::{
-    VacuumFactor, VacuumProductCacheStatistics, VacuumProductChartLimits, VacuumProductProjection,
-    VacuumProductReducer, VacuumProductReductionLimits, VacuumTensorProjection,
-    VacuumTensorProjectionInput, VerifiedVacuumProductChart,
+    VacuumFactor, VacuumProductChartLimits, VacuumProductProjection, VacuumProductReducer,
+    VacuumProductReductionLimits, VacuumTensorProjection, VacuumTensorProjectionInput,
+    VerifiedVacuumProductChart,
 };
 use rustred::scalar_numerator::{FamilyScalarNumeratorService, ScalarNumeratorLimits};
 use rustred::solver::CandidateRoutedApplicationObserver;
@@ -139,13 +139,10 @@ pub(crate) struct SavedApplication {
     pub(super) prepared: Mutex<PreparedSavedApplication<15>>,
     /// Canonical package directory, recorded by native request dumps.
     path: PathBuf,
-    pub(super) cache_digest: [u8; 32],
-    pub(super) cache: Mutex<Option<super::cache::SavedFiveLoopCache>>,
     fingerprint: String,
     data_version: String,
     products: SavedApplicationProductStatistics,
     product_charts: SavedApplicationProductChartStatistics,
-    product_reducer: Mutex<VacuumProductReducer<ShippedFactorProvider>>,
     data: Arc<super::data::RustRedData>,
     witnesses: Mutex<WitnessCache>,
 }
@@ -707,14 +704,7 @@ impl Vakint {
         if let Some(root) = root
             && !data.matches_directory(&root, 5)?
         {
-            self.load_external_data_on(
-                root,
-                5,
-                super::uses_prepared_caches(
-                    configured.rustred_application_options.reduction_strategy,
-                ),
-                configured.n_cores,
-            )?;
+            self.load_external_data_on(root, 5, configured.n_cores)?;
         }
         self.saved_application(&configured)?;
         *settings = configured;
@@ -738,18 +728,11 @@ impl Vakint {
             .or(official_path.as_ref())
             .ok_or(RustRedEvaluationError::SavedApplicationUnavailable)?;
         let path = path.canonicalize().map_err(failure)?;
-        let mut options = super::application_options(settings);
-        // Strategy changes do not change immutable tables or the DFS cache
-        // namespace. Select the request engine under the prepared-owner lock.
-        options.reduction_strategy = crate::RustRedReductionStrategy::DepthFirst;
-        // Likewise the Ordered weight arithmetic only selects how a request
-        // computes its frontier weights; every batch sets it before reducing.
-        // A different arithmetic must not reload and re-prepare the package.
-        options.ordered_weight_arithmetic = rustred::reduction::OrderedWeightArithmetic::Exact;
-        options.unresolved_policy = rustred::solver::UnresolvedPolicy::Preserve;
-        // Requests also select their weight arithmetic under that lock, and
-        // preparation workers only parallelize route verification during the
-        // load: neither changes the prepared application.
+        let options = super::application_options(settings);
+        // Requests select their weight arithmetic under the prepared-owner
+        // lock before reducing, and preparation workers only parallelize route
+        // verification during the load: neither changes the prepared
+        // application, so neither may reload and re-prepare the package.
         let prepared_identity = |options: SavedApplicationOptions| SavedApplicationOptions {
             ordered_weight_arithmetic: Default::default(),
             preparation_workers: 1,
@@ -763,10 +746,10 @@ impl Vakint {
         }) {
             let bare = super::data::RustRedData::release_root(&path)?.is_none();
             let started = std::time::Instant::now();
-            let cache_digest = super::cache::saved_application_digest(&data, &path)?;
+            let identity = super::cache::saved_application_digest(&data, &path)?;
             log::debug!(target: "vakint::saved_application", "phase=native_load_begin");
             let prepared = load_saved_application::<15>(&path, options).map_err(native_failure)?;
-            if super::cache::saved_application_digest(&data, &path)? != cache_digest {
+            if super::cache::saved_application_digest(&data, &path)? != identity {
                 return Err(failure(
                     "saved application changed while its native payload was loading",
                 )
@@ -778,14 +761,7 @@ impl Vakint {
                 path.clone(),
                 settings.rustred_product_limits,
                 Arc::clone(&data),
-                cache_digest,
             )?);
-            if let Some(previous) = loaded.as_ref()
-                && previous.path == path
-                && previous.application.cache_digest == cache_digest
-            {
-                application.inherit_compatible_cache(&previous.application)?;
-            }
             // Only a fully authenticated, prepared publication can activate
             // the optional catalogue. Cache/options reloads reuse its Arc.
             let catalogue = match self
@@ -867,9 +843,15 @@ impl Vakint {
         Ok(())
     }
 
-    /// Clear the explicitly loaded package's cache without changing its entry scope.
-    pub fn clear_rustred_application_cache(&self) -> Result<(), VakintError> {
-        self.loaded_application()?.clear_cache_state(false)
+    /// Clear the optional frontend witness memo of the loaded package. Ordered
+    /// reduction retains no other result state between requests.
+    pub fn clear_rustred_application_witness_cache(&self) -> Result<(), VakintError> {
+        self.loaded_application()?
+            .witnesses
+            .lock()
+            .map_err(failure)?
+            .clear();
+        Ok(())
     }
 
     /// Observe the optional frontend witness memo, not the IBP coefficient cache.
@@ -883,31 +865,6 @@ impl Vakint {
             .lock()
             .map_err(failure)?
             .statistics())
-    }
-
-    pub fn rustred_application_cache_statistics(
-        &self,
-    ) -> Result<rustred::solver::CandidateStatistics, VakintError> {
-        let application = self.loaded_application()?;
-        Ok(application
-            .prepared
-            .lock()
-            .map_err(failure)?
-            .cache_statistics())
-    }
-
-    /// Cumulative eviction/recomputation work, including failed requests.
-    /// Clearing retained entries does not reset these counters. Recomputed
-    /// nodes are repeated misses within one request, not cross-request history.
-    pub fn rustred_application_cache_work_statistics(
-        &self,
-    ) -> Result<crate::RustRedCacheWorkStatistics, VakintError> {
-        let application = self.loaded_application()?;
-        Ok(application
-            .prepared
-            .lock()
-            .map_err(failure)?
-            .cache_work_statistics())
     }
 
     /// One-time exact factor-product preparation, excluded from warm application.
@@ -933,18 +890,6 @@ impl Vakint {
             .lock()
             .map_err(failure)?
             .owner_preparation_statistics())
-    }
-
-    /// Qualified lower-factor memoization, separate from saved-entry memoization.
-    pub fn rustred_application_factor_cache_statistics(
-        &self,
-    ) -> Result<VacuumProductCacheStatistics, VakintError> {
-        Ok(self
-            .loaded_application()?
-            .product_reducer
-            .lock()
-            .map_err(failure)?
-            .cache_statistics())
     }
 
     /// Evaluate five-loop input while retaining each exact nonzero condition.
@@ -1004,9 +949,7 @@ impl Vakint {
         progress: Option<&super::monitor::CallerProgress>,
     ) -> Result<RustRedSymbolicEvaluation, VakintError> {
         settings.with_resource_budget(|| {
-            let ordered = settings.rustred_application_options.reduction_strategy
-                == crate::RustRedReductionStrategy::Ordered;
-            if ordered && let Some(progress) = progress {
+            if let Some(progress) = progress {
                 progress.ordered_batch(0, 1, "5L / Retain");
             }
             let setup_started = std::time::Instant::now();
@@ -1031,10 +974,7 @@ impl Vakint {
             expression.tensor_reduce(self, &tensor_settings)?;
             log::debug!(target: "vakint::saved_application", "phase=frontend_tensor_prepass elapsed_seconds={:.6}", tensor_started.elapsed().as_secs_f64());
             log::debug!(target: "vakint::five_loop_match", "phase=symbolic_tensor_reduced input={expression}");
-            let mut value = Atom::Zero;
-            let mut conditions = BTreeSet::new();
-            let mut families = BTreeMap::new();
-            let mut ordered_contributions = Vec::new();
+            let mut contributions = Vec::new();
             let split_started = std::time::Instant::now();
             let expression = Atom::from(expression);
             MonitorContext::native_phase(observation.as_deref_mut(), "scalar_input", Some(expression.as_view()));
@@ -1055,49 +995,31 @@ impl Vakint {
                 term.apply_scalar_numerator_replacement_rules(&matched, settings)?;
                 log::debug!(target: "vakint::saved_application", "phase=numerator_replacement elapsed_seconds={:.6}", replacement_started.elapsed().as_secs_f64());
                 log::debug!(target: "vakint::five_loop_match", "phase=symbolic_candidate_numerator numerator={}", term.numerator);
-                if settings.rustred_application_options.reduction_strategy
-                    == crate::RustRedReductionStrategy::Ordered
-                {
-                    ordered_contributions.push(MatchedContribution {
-                        numerator: term.numerator,
-                        matched,
-                    });
-                    continue;
+                contributions.push(MatchedContribution {
+                    numerator: term.numerator,
+                    matched,
+                });
+            }
+            let (value, conditions, families) = if contributions.is_empty() {
+                if let Some(progress) = progress {
+                    progress.cohorts(0, 0);
                 }
+                (Atom::Zero, Vec::new(), BTreeMap::new())
+            } else {
                 // This parent span includes callee cleanup. Its recorded
                 // subphases must not be added to it as disjoint durations.
-                let detailed_started = std::time::Instant::now();
-                let result =
-                    application.evaluate_detailed(&tensor_settings, term.numerator.as_view(), &matched, observation.as_deref_mut(), progress);
-                log::debug!(target: "vakint::saved_application", "phase=detailed_evaluation_total elapsed_seconds={:.6}", detailed_started.elapsed().as_secs_f64());
-                let result = result?;
-                let merge_started = std::time::Instant::now();
-                MonitorContext::native_phase(observation.as_deref_mut(), "caller_result_merge", Some(result.value.as_view()));
-                {
-                    let _math = MathSpan::new();
-                    value += result.value;
-                    conditions.extend(result.nonzero_conditions);
-                    families.extend(result.families);
-                }
-                log::debug!(target: "vakint::saved_application", "phase=caller_result_merge elapsed_seconds={:.6}", merge_started.elapsed().as_secs_f64());
-            }
-            if !ordered_contributions.is_empty() {
+                let batch_started = std::time::Instant::now();
                 let result = application.evaluate_ordered_batch(
                     &tensor_settings,
-                    &ordered_contributions,
+                    &contributions,
                     observation.as_deref_mut(),
                     progress,
-                )?;
-                {
-                    let _math = MathSpan::new();
-                    value += result.value;
-                    conditions.extend(result.nonzero_conditions);
-                    families.extend(result.families);
-                }
-            } else if ordered && let Some(progress) = progress {
-                progress.cohorts(0, 0);
-            }
-            if ordered && let Some(progress) = progress {
+                );
+                log::debug!(target: "vakint::saved_application", "phase=ordered_batch_total elapsed_seconds={:.6}", batch_started.elapsed().as_secs_f64());
+                let result = result?;
+                (result.value, result.nonzero_conditions, result.families)
+            };
+            if let Some(progress) = progress {
                 progress.ordered_batch(1, 1, "5L / Retain");
             }
             // The catalogue's own exact-combination and classification spans
@@ -1116,7 +1038,7 @@ impl Vakint {
             MonitorContext::native_phase(observation.as_deref_mut(), "retained_public_result_packing", Some(value.as_view()));
             let result = RustRedSymbolicEvaluation {
                 value,
-                nonzero_conditions: conditions.into_iter().collect(),
+                nonzero_conditions: conditions,
                 families,
             };
             log::debug!(target: "vakint::saved_application", "phase=public_result_packing elapsed_seconds={:.6}", packing_started.elapsed().as_secs_f64());
@@ -1127,38 +1049,11 @@ impl Vakint {
 }
 
 impl SavedApplication {
-    pub(in crate::rustred_evaluation) fn clear_cache_state(
-        &self,
-        detach_backing: bool,
-    ) -> Result<(), VakintError> {
-        // Evaluation, attachment and statistics all acquire Prepared before Cache.
-        // Wait for every owner before checking the resource budget, so a refusal
-        // cannot leave only some resident caches cleared or the backing detached.
-        let mut prepared = self.prepared.lock().map_err(failure)?;
-        let mut attached = self.cache.lock().map_err(failure)?;
-        let mut products = self.product_reducer.lock().map_err(failure)?;
-        let mut witnesses = self.witnesses.lock().map_err(failure)?;
-        super::cache::resource_checkpoint()?;
-        if detach_backing && let Some(cache) = attached.as_ref() {
-            cache.flush()?;
-        }
-        // These native clears release retained entries without allocation or
-        // resource polls. The commit therefore cannot introduce a ResourceError.
-        prepared.clear_cache().map_err(super::cache::operation)?;
-        products.clear_cache().map_err(native_failure)?;
-        witnesses.clear();
-        if detach_backing {
-            *attached = None;
-        }
-        Ok(())
-    }
-
     fn new(
         mut prepared: PreparedSavedApplication<15>,
         path: PathBuf,
         product_limits: VacuumProductReductionLimits,
         data: Arc<super::data::RustRedData>,
-        cache_digest: [u8; 32],
     ) -> Result<Self, RustRedEvaluationError> {
         let started = std::time::Instant::now();
         // Compile the same complete common basis through RustRed's existing
@@ -1180,26 +1075,22 @@ impl SavedApplication {
             })
             .map_err(native_failure)?;
         log::debug!(target: "vakint::saved_application", "phase=products_prepared elapsed_seconds={:.6}", started.elapsed().as_secs_f64());
-        let anchor = prepared
+        if prepared
             .output_family_shared(prepared.family().fingerprint())
-            .ok_or_else(|| failure("saved application does not expose its authenticated family"))?;
+            .is_none()
+        {
+            return Err(failure(
+                "saved application does not expose its authenticated family",
+            ));
+        }
         let data_version = data.masters.version.clone();
-        let product_reducer = VacuumProductReducer::try_new(
-            ShippedFactorProvider::with_data(Arc::clone(&data)),
-            anchor,
-            product_limits,
-        )
-        .map_err(native_failure)?;
         Ok(Self {
             fingerprint: prepared.family().fingerprint().to_owned(),
             data_version,
             prepared: Mutex::new(prepared),
             path,
-            cache_digest,
-            cache: Mutex::new(None),
             products,
             product_charts,
-            product_reducer: Mutex::new(product_reducer),
             data,
             witnesses: Mutex::new(WitnessCache::default()),
         })
@@ -1248,48 +1139,9 @@ impl SavedApplication {
         Ok(crate::utils::simplify_real(factor.as_view()))
     }
 
-    pub(super) fn evaluate(
-        &self,
-        settings: &VakintSettings,
-        numerator: AtomView,
-        matched: &ReplacementRules,
-        observation: Option<&mut CandidateRoutedApplicationObserver<'_>>,
-    ) -> Result<Atom, VakintError> {
-        Ok(self
-            .evaluate_detailed(settings, numerator, matched, observation, None)?
-            .value)
-    }
-
-    fn evaluate_detailed(
-        &self,
-        settings: &VakintSettings,
-        numerator: AtomView,
-        matched: &ReplacementRules,
-        observation: Option<&mut CandidateRoutedApplicationObserver<'_>>,
-        progress: Option<&super::monitor::CallerProgress>,
-    ) -> Result<RustRedSymbolicEvaluation, VakintError> {
-        self.evaluate_matched_batch(
-            settings,
-            &[MatchedContribution {
-                numerator: numerator.to_owned(),
-                matched: matched.clone(),
-            }],
-            observation,
-            progress,
-        )
-    }
-
+    /// Reduce all matched contributions of one request with the ordered
+    /// scheduler, one native frontier per (mass, spectator, exponent) channel.
     pub(super) fn evaluate_ordered_batch(
-        &self,
-        settings: &VakintSettings,
-        contributions: &[MatchedContribution],
-        observation: Option<&mut CandidateRoutedApplicationObserver<'_>>,
-        progress: Option<&super::monitor::CallerProgress>,
-    ) -> Result<RustRedSymbolicEvaluation, VakintError> {
-        self.evaluate_matched_batch(settings, contributions, observation, progress)
-    }
-
-    fn evaluate_matched_batch(
         &self,
         settings: &VakintSettings,
         contributions: &[MatchedContribution],
@@ -1298,7 +1150,7 @@ impl SavedApplication {
     ) -> Result<RustRedSymbolicEvaluation, VakintError> {
         MonitorContext::native_phase(observation.as_deref_mut(), "scalar_lowering", None);
         let mut application = self.prepared.lock().map_err(failure)?;
-        application.set_reduction_strategy(settings.rustred_application_options.reduction_strategy);
+        application.set_reduction_strategy(rustred::reduction::ReductionStrategy::Ordered);
         application.set_ordered_weight_arithmetic(settings.rustred_ordered_weight_arithmetic());
         let family = application.family();
         let loop_count = family.loop_count();
@@ -1345,24 +1197,19 @@ impl SavedApplication {
                     settings,
                     ScalarNumeratorForm::PreserveProducts,
                 )?;
-                let mut input_conditions = Vec::new();
-                if settings.rustred_application_options.reduction_strategy
-                    == crate::RustRedReductionStrategy::Ordered
-                {
-                    // Preserve the received rational domain before identifying
-                    // epsilon with (4-d)/2 can remove a denominator algebraically.
-                    input_conditions =
-                        input.input_conditions_after_mapping(&scalar, |condition| {
-                            condition
-                                .replace(dimension.to_pattern())
-                                .with(physical_dimension.to_pattern())
-                        })?;
-                    input.numerator = MatchedScalarInput::numerator_in_family_dimension(
-                        input.numerator.as_view(),
-                        settings,
-                        &dimension,
-                    );
-                }
+                // Preserve the received rational domain before identifying
+                // epsilon with (4-d)/2 can remove a denominator algebraically.
+                let input_conditions =
+                    input.input_conditions_after_mapping(&scalar, |condition| {
+                        condition
+                            .replace(dimension.to_pattern())
+                            .with(physical_dimension.to_pattern())
+                    })?;
+                input.numerator = MatchedScalarInput::numerator_in_family_dimension(
+                    input.numerator.as_view(),
+                    settings,
+                    &dimension,
+                );
                 let lowering = scalar
                     .lower_weighted(&input.numerator, &input.target, &input.mass_squared)
                     .map_err(native_failure)?;
@@ -1420,22 +1267,15 @@ impl SavedApplication {
                                 .max_scalar_product_degree,
                         ),
                 );
-                let channels = if settings.rustred_application_options.reduction_strategy
-                    == crate::RustRedReductionStrategy::Ordered
-                {
-                    MatchedScalarInput::channel_coefficients(
-                        spectator,
-                        term.coefficient(),
-                        family.coefficient_context(),
-                        settings
-                            .rustred_application_options
-                            .reduction_limits
-                            .exact_algebra,
-                    )?
-                } else {
-                    vec![(spectator, term.coefficient().clone())]
-                };
-                for (spectator, coefficient) in channels {
+                for (spectator, coefficient) in MatchedScalarInput::channel_coefficients(
+                    spectator,
+                    term.coefficient(),
+                    family.coefficient_context(),
+                    settings
+                        .rustred_application_options
+                        .reduction_limits
+                        .exact_algebra,
+                )? {
                     batches
                         .entry((input.mass_squared.clone(), spectator, exponent))
                         .or_default()
@@ -1477,50 +1317,29 @@ impl SavedApplication {
         }
         let mut value = Atom::Zero;
         let mut families = BTreeMap::new();
-        // Alternative strategies never consume the ordinary DFS product memo.
-        // Ordered retains its approved request-local checked-factorization
-        // primitive; DFS without memoization disables that primitive's completed
-        // factor results as well as the outer Route/Apply result maps.
-        let strategy = settings.rustred_application_options.reduction_strategy;
-        let mut ordered_products = if strategy != crate::RustRedReductionStrategy::DepthFirst {
+        // Lower-loop factor products are reduced by a request-local checked
+        // factorization primitive; no product result outlives the request.
+        let mut products_reducer = {
             let _math = MathSpan::new();
             let anchor = application
                 .output_family_shared(application.family().fingerprint())
                 .ok_or_else(|| failure("saved application has no output family"))?;
-            let reducer =
-                if strategy == crate::RustRedReductionStrategy::DepthFirstWithoutMemoization {
-                    VacuumProductReducer::try_new_without_memoization(
-                        ShippedFactorProvider::without_memoization(Arc::clone(&self.data)),
-                        anchor,
-                        settings.rustred_product_limits,
-                    )
-                } else {
-                    VacuumProductReducer::try_new(
-                        ShippedFactorProvider::with_data(Arc::clone(&self.data)),
-                        anchor,
-                        settings.rustred_product_limits,
-                    )
-                };
-            Some(reducer.map_err(native_failure)?)
-        } else {
-            None
+            VacuumProductReducer::try_new(
+                ShippedFactorProvider::with_data(Arc::clone(&self.data)),
+                anchor,
+                settings.rustred_product_limits,
+            )
+            .map_err(native_failure)?
         };
         let cohort_total = batches.len();
-        let cohort_progress = progress.filter(|_| {
-            settings.rustred_application_options.reduction_strategy
-                == crate::RustRedReductionStrategy::Ordered
-        });
         let mut skipped = 0;
         for (cohort_index, ((mass_squared, spectator, exponent), terms)) in
             batches.into_iter().enumerate()
         {
-            if let Some(progress) = cohort_progress {
+            if let Some(progress) = progress {
                 progress.cohorts(cohort_index, cohort_total);
             }
-            let options = SavedApplicationOptions {
-                unresolved_policy: rustred::solver::UnresolvedPolicy::Preserve,
-                ..super::application_options(settings)
-            };
+            let options = super::application_options(settings);
             let mut dump = RequestDump::begin(DumpRequest {
                 loop_count,
                 program: DumpProgram::SavedApplication {
@@ -1528,7 +1347,6 @@ impl SavedApplication {
                     family_fingerprint: application.family().fingerprint(),
                     options: &options,
                 },
-                strategy: settings.rustred_application_options.reduction_strategy,
                 weight_arithmetic: options.ordered_weight_arithmetic,
                 master_mode: request_dump::master_mode(settings),
                 channel: DumpChannel {
@@ -1574,7 +1392,18 @@ impl SavedApplication {
             let reduced = request_dump::observe_native(
                 dump.as_mut(),
                 observation.as_deref_mut(),
-                |observation| self.reduce_saved(&mut application, terms, observation),
+                |observation| {
+                    match observation {
+                        Some(observation) => application
+                            .reduce_routed_linear_combination_with_observation(
+                                terms,
+                                observation,
+                                None,
+                            ),
+                        None => application.reduce_routed_linear_combination(terms),
+                    }
+                    .map_err(super::cache::operation)
+                },
             )??;
             if let Some(dump) = dump {
                 dump.finish(
@@ -1687,14 +1516,7 @@ impl SavedApplication {
                 "lower_factor_normalization_unobserved",
                 None,
             );
-            let normalized = match ordered_products.as_mut() {
-                Some(reducer) => reducer.reduce_products(products, product_conditions),
-                None => self
-                    .product_reducer
-                    .lock()
-                    .map_err(failure)?
-                    .reduce_products(products, product_conditions),
-            };
+            let normalized = products_reducer.reduce_products(products, product_conditions);
             let normalized = match normalized {
                 Ok(normalized) => normalized,
                 Err(rustred::reduction::terminal_normalization::VacuumProductReductionError::UnresolvedFactor { family, target }) => {
@@ -1829,7 +1651,7 @@ impl SavedApplication {
             );
             cleanup.arm();
         }
-        if let Some(progress) = cohort_progress {
+        if let Some(progress) = progress {
             progress.cohorts(cohort_total, cohort_total);
         }
         if skipped != 0 {
@@ -1868,11 +1690,10 @@ impl SavedApplication {
             "normalized_retained_output",
             Some(result.value.as_view()),
         );
-        // Alternative strategies own their product execution state; the
-        // ordinary DFS product memo keeps its engine lifetime and policy.
-        if let Some(products) = ordered_products {
+        // The request-local product state is part of the timed reduction work.
+        {
             let _math = MathSpan::new();
-            drop(products);
+            drop(products_reducer);
         }
         Ok(result)
     }
@@ -2003,7 +1824,7 @@ mod tests {
     }
 
     #[test]
-    fn saved_cache_policy_defaults_to_lru_and_participates_in_session_identity() {
+    fn scalar_numerator_defaults_and_unloaded_application_statistics() {
         let defaults = VakintSettings::default();
         assert_eq!(
             defaults.rustred_scalar_numerator_limits,
@@ -2016,17 +1837,10 @@ mod tests {
                 .max_term_operations,
             16_000_000
         );
-        assert_eq!(
-            defaults.rustred_application_options.cache_policy,
-            crate::RustRedCachePolicy::EvictLeastRecentlyUsed
-        );
-        let mut fail = defaults.rustred_application_options;
-        fail.cache_policy = crate::RustRedCachePolicy::FailOnLimit;
-        assert_ne!(fail, defaults.rustred_application_options);
         assert!(matches!(
             Vakint::new()
                 .unwrap()
-                .rustred_application_cache_work_statistics(),
+                .rustred_application_owner_preparation_statistics(),
             Err(VakintError::RustRedEvaluation(
                 RustRedEvaluationError::SavedApplicationUnavailable
             ))
@@ -2128,167 +1942,6 @@ mod tests {
     }
 
     #[test_log::test]
-    #[ignore = "requires VAKINT_SAVED_APPLICATION pointing to an external generation-54 package"]
-    fn external_package_bounded_lru_cache_preserves_admitted_repeats() {
-        // A measured 1 MiB allowance cannot hold this root's protected live
-        // children. 4 MiB still forces eviction below its 7.8 MB full cache.
-        const CACHE_BYTES: usize = 4 * 1024 * 1024;
-        let path = std::env::var_os("VAKINT_SAVED_APPLICATION")
-            .expect("set VAKINT_SAVED_APPLICATION to the uncommitted external package");
-        let mut settings = settings();
-        settings.rustred_application_options.cache_policy =
-            crate::RustRedCachePolicy::EvictLeastRecentlyUsed;
-        settings
-            .rustred_application_options
-            .reduction_limits
-            .max_cached_coefficient_bytes = CACHE_BYTES;
-        settings
-            .rustred_application_options
-            .reduction_limits
-            .max_cached_coefficient_terms = usize::MAX;
-        let vakint = Vakint::new()
-            .unwrap()
-            .with_rustred_application(&mut settings, PathBuf::from(path))
-            .unwrap();
-        let application = vakint.loaded_application().unwrap();
-        let mut controls = Vec::new();
-        for powers in [
-            // Generation-54 points162 and163. The second requires more than
-            // this retained allowance with fail-on-limit memoization.
-            [0, 0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 0, 5],
-            [0, 0, 0, 0, 1, 1, 0, 0, 1, 0, 0, 1, 0, 1, 4],
-        ] {
-            let key = IntegralKey::try_new(powers).unwrap();
-            assert!(
-                application
-                    .prepared
-                    .lock()
-                    .unwrap()
-                    .routed_entry_is_admitted(&key)
-                    .unwrap()
-            );
-            let input = super::admission_census_tests::input_for_key(&key)
-                .unwrap()
-                .expression();
-            let first = vakint
-                .evaluate_rustred_symbolic(&settings, input.as_view())
-                .unwrap();
-            assert!(
-                vakint
-                    .rustred_application_cache_statistics()
-                    .unwrap()
-                    .cached_coefficient_bytes()
-                    <= CACHE_BYTES
-            );
-            controls.push((input, first));
-        }
-        assert!(
-            controls.len() > 1,
-            "the pinned package must provide distinct admitted cache controls"
-        );
-        for (input, first) in &controls {
-            let repeated = vakint
-                .evaluate_rustred_symbolic(&settings, input.as_view())
-                .unwrap();
-            assert_eq!(first.value, repeated.value);
-            assert_eq!(first.nonzero_conditions, repeated.nonzero_conditions);
-            assert_eq!(first.families, repeated.families);
-            assert!(
-                vakint
-                    .rustred_application_cache_statistics()
-                    .unwrap()
-                    .cached_coefficient_bytes()
-                    <= CACHE_BYTES
-            );
-        }
-        let work = vakint.rustred_application_cache_work_statistics().unwrap();
-        assert!(
-            work.evicted_entries > 0,
-            "the real workload must actually exercise eviction"
-        );
-        assert!(work.evicted_coefficient_bytes > 0);
-        // A warmed rule cache must not bypass a tightened caller-numerator
-        // policy, in either witness selection or the final weighted handoff.
-        let mut strict = settings.clone();
-        strict.rustred_scalar_numerator_limits.max_input_nodes = 0;
-        strict.rustred_scalar_numerator_limits =
-            strict.rustred_scalar_numerator_limits.with_diagnostics();
-        assert!(Arc::ptr_eq(
-            &application,
-            &vakint.saved_application(&strict).unwrap()
-        ));
-        let expression = VakintExpression::try_from(controls[0].0.as_view()).unwrap();
-        let mut matched = vakint
-            .topologies
-            .match_topologies_to_user_input(expression.0[0].integral.as_view(), false)
-            .unwrap()
-            .unwrap();
-        let expected = rustred::scalar_numerator::ScalarNumeratorError::ResourceLimit {
-            resource: "weighted lowering input nodes",
-            requested: 1,
-            limit: 0,
-        }
-        .to_string();
-        let assert_scalar_limit = |error: VakintError| match error {
-            VakintError::RustRedEvaluation(RustRedEvaluationError::Reduction { detail }) => {
-                assert_eq!(detail, expected)
-            }
-            other => panic!("unexpected tightened scalar-policy failure: {other}"),
-        };
-        let before = vakint.rustred_application_cache_statistics().unwrap();
-        assert_scalar_limit(
-            vakint
-                .rustred_matched_input_key(&strict, expression.0[0].numerator.as_view(), &matched)
-                .unwrap_err(),
-        );
-        matched.apply_replacement_rules().unwrap();
-        let mut term = expression.0[0].clone();
-        term.apply_scalar_numerator_replacement_rules(&matched, &strict)
-            .unwrap();
-        assert_scalar_limit(
-            application
-                .evaluate_detailed(&strict, term.numerator.as_view(), &matched, None, None)
-                .unwrap_err(),
-        );
-        let after = vakint.rustred_application_cache_statistics().unwrap();
-        assert_eq!(before.cached_integrals(), after.cached_integrals());
-        assert_eq!(
-            before.cached_coefficient_bytes(),
-            after.cached_coefficient_bytes()
-        );
-        assert_eq!(
-            work,
-            vakint.rustred_application_cache_work_statistics().unwrap()
-        );
-        assert!(
-            application
-                .prepared
-                .lock()
-                .unwrap()
-                .routed_entry_is_admitted(
-                    &IntegralKey::try_new([0, 0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 0, 5]).unwrap()
-                )
-                .unwrap()
-        );
-        println!(
-            "tightened_scalar_policy_before_warm_cache=refused_without_reload_or_scope_change"
-        );
-        println!("admitted_lru_controls={} work={work:?}", controls.len());
-        vakint.clear_rustred_application_cache().unwrap();
-        assert_eq!(
-            vakint
-                .rustred_application_cache_statistics()
-                .unwrap()
-                .cached_integrals(),
-            0
-        );
-        assert_eq!(
-            vakint.rustred_application_cache_work_statistics().unwrap(),
-            work
-        );
-    }
-
-    #[test_log::test]
     #[ignore = "requires VAKINT_SAVED_APPLICATION pointing to <data root>/5L/ibps of the external 640-terminal package"]
     fn external_package_all_factorized_terminals_reduce_through_existing_lower_programs() {
         use rustred::reduction::terminal_normalization::VacuumProductProjection;
@@ -2310,7 +1963,7 @@ mod tests {
             .with_rustred_application(&mut settings, path)
             .unwrap();
         // Activating a complete release replaces this instance's registry and
-        // application cache. Earlier clones retain their previous snapshot.
+        // application. Earlier clones retain their previous snapshot.
         assert!(before_load_clone.loaded_application().is_err());
         assert!(
             before_load_clone
@@ -2344,15 +1997,16 @@ mod tests {
                 .topology_count,
             67
         );
-        let cache_work = vakint.rustred_application_cache_work_statistics().unwrap();
-        assert_eq!(cache_work, crate::RustRedCacheWorkStatistics::default());
-        vakint.clear_rustred_application_cache().unwrap();
-        assert_eq!(
-            vakint.rustred_application_cache_work_statistics().unwrap(),
-            cache_work
-        );
         let prepared = application.prepared.lock().unwrap();
-        let mut reducer = application.product_reducer.lock().unwrap();
+        // The same request-local checked factorization as ordered reduction.
+        let mut reducer = VacuumProductReducer::try_new(
+            ShippedFactorProvider::with_data(Arc::clone(&application.data)),
+            prepared
+                .output_family_shared(prepared.family().fingerprint())
+                .unwrap(),
+            settings.rustred_product_limits,
+        )
+        .unwrap();
         let mut projected_count = 0;
         let mut cross_count = 0;
         let mut positive_count = 0;

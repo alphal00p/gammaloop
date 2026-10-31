@@ -14,7 +14,7 @@ use symbolica::atom::{Atom, AtomCore, AtomView};
 use vakint::{
     EvaluationMethod, EvaluationOrder, LoopNormalizationFactor, MasterSymbol,
     OfficialExternalDataOptions, RustRedEvaluationOptions, RustRedMasterMode,
-    RustRedReductionStrategy, RustRedSymbolicEvaluation, Vakint, VakintSettings, vakint_symbol,
+    RustRedSymbolicEvaluation, Vakint, VakintSettings, vakint_symbol,
 };
 
 struct ClosureEngine {
@@ -26,21 +26,6 @@ struct ClosureEngine {
     completed_cases: Cell<usize>,
 }
 
-impl ClosureEngine {
-    fn cache_statistics(&self) -> Result<serde_json::Value> {
-        let saved = self.engine.rustred_application_cache_statistics()?;
-        let factors = self.engine.rustred_application_factor_cache_statistics()?;
-        Ok(json!({
-            "saved_rule_applications": saved.rule_applications(),
-            "saved_cache_hits": saved.cache_hits(),
-            "saved_cached_integrals": saved.cached_integrals(),
-            "saved_cached_coefficient_bytes": saved.cached_coefficient_bytes(),
-            "cached_factors": factors.cached_factors,
-            "cached_factor_coefficient_bytes": factors.coefficient_bytes,
-        }))
-    }
-}
-
 fn engine() -> Result<ClosureEngine> {
     let started = Instant::now();
     let mut engine = Vakint::new()?;
@@ -49,7 +34,7 @@ fn engine() -> Result<ClosureEngine> {
         &OfficialExternalDataOptions {
             version: external_data_fixture::required_version(),
             local_artifacts_path: std::env::var_os("VAKINT_TEST_EXTERNAL_DATA").map(PathBuf::from),
-            ..OfficialExternalDataOptions::for_strategy(RustRedReductionStrategy::DepthFirst)
+            ..Default::default()
         },
     )?;
     // Five-loop vacuum master identities contain one family and fifteen indices.
@@ -77,11 +62,6 @@ fn engine() -> Result<ClosureEngine> {
         integral_normalization_factor: LoopNormalizationFactor::Custom("1".into()),
         form_exe_path: "/five-loop-closure-must-not-use-form".into(),
         verify_numerator_identification: true,
-        // The closure budgets and cache snapshots describe depth-first reduction.
-        rustred_application_options: rustred_app::SavedApplicationOptions {
-            reduction_strategy: RustRedReductionStrategy::DepthFirst,
-            ..Default::default()
-        },
         ..Default::default()
     };
     // Reuse the exact options used by transactional data activation. Changing
@@ -174,18 +154,15 @@ fn run_case(name: &str, context: &ClosureEngine) -> Result<()> {
         .ok_or("unknown closure case")?;
     let pair = Pair::new(case)?;
     let fixture_seconds = preparation.elapsed().as_secs_f64();
-    let cache_before = context.cache_statistics()?;
     log::info!(target: "vakint::closure", "case={name} phase=fixture_ready fixture_seconds={fixture_seconds:.6}");
     log::info!(target: "vakint::closure", "case={name} phase=reduce_factored load_seconds={load_seconds:.6}");
     let started = Instant::now();
     let factored = engine.evaluate_rustred_symbolic(settings, pair.factored.as_view())?;
     let factored_seconds = started.elapsed().as_secs_f64();
-    let cache_after_factored = context.cache_statistics()?;
     let second = Instant::now();
     log::info!(target: "vakint::closure", "case={name} phase=reduce_pinched factored_seconds={factored_seconds:.6}");
     let pinched = engine.evaluate_rustred_symbolic(settings, pair.pinched.as_view())?;
     let pinched_seconds = second.elapsed().as_secs_f64();
-    let cache_after_pinched = context.cache_statistics()?;
     log::info!(target: "vakint::closure", "case={name} phase=compare_results pinched_seconds={pinched_seconds:.6}");
     assert!(
         !factored.value.is_zero(),
@@ -205,7 +182,6 @@ fn run_case(name: &str, context: &ClosureEngine) -> Result<()> {
     log::info!(target: "vakint::closure", "case={name} phase=reduce_expanded");
     let expanded = engine.evaluate_rustred_symbolic(settings, pair.expanded.as_view())?;
     let expanded_seconds = expanded_started.elapsed().as_secs_f64();
-    let cache_after_expanded = context.cache_statistics()?;
     assert_eq!(
         factored.value, expanded.value,
         "{name}: expansion changed exact reduction"
@@ -231,7 +207,6 @@ fn run_case(name: &str, context: &ClosureEngine) -> Result<()> {
         );
     }
     let elapsed = started.elapsed().as_secs_f64();
-    let cache_after = context.cache_statistics()?;
     let report = json!({
         "schema": "vakint.five-loop-closure.v1", "name": name, "data_version": version,
         "data_manifest_sha256": manifest_sha256,
@@ -247,8 +222,6 @@ fn run_case(name: &str, context: &ClosureEngine) -> Result<()> {
         "right_guard_count": pinched.nonzero_conditions.len(),
         "generic_d_guards_validated": true, "identical_route_guard_parity": true,
         "declared_retained_integrals": masters, "engine_prior_cases": context.completed_cases.get(), "fixture_seconds": fixture_seconds, "load_seconds": load_seconds,
-        "cache_snapshots": { "before": cache_before, "after_factored": cache_after_factored,
-            "after_pinched": cache_after_pinched, "after_expanded": cache_after_expanded, "after": cache_after },
         "factored_seconds": factored_seconds, "pinched_seconds": pinched_seconds,
         "expanded_seconds": expanded_seconds, "comparison_seconds": elapsed,
         "exact_equality": true, "all_five_loop_terminals_in_catalogue": true,
@@ -442,14 +415,11 @@ fn run_factorized_case(name: &str, context: &ClosureEngine) -> Result<()> {
         .iter()
         .find(|pair| pair.label == name)
         .ok_or("unknown factorized fixture")?;
-    let cache_before = context.cache_statistics()?;
     let started = Instant::now();
     log::info!(target: "vakint::closure", "case={name} phase=reduce_numerator setup_seconds={:.6}", setup.elapsed().as_secs_f64());
     let cancelled = engine.evaluate_rustred_symbolic(settings, pair.cancelled.as_view())?;
-    let cache_after_numerator = context.cache_statistics()?;
     log::info!(target: "vakint::closure", "case={name} phase=reduce_pinched numerator_seconds={:.6}", started.elapsed().as_secs_f64());
     let pinched = engine.evaluate_rustred_symbolic(settings, pair.pinched.as_view())?;
-    let cache_after_pinched = context.cache_statistics()?;
     assert!(!cancelled.value.is_zero());
     assert!(
         (&cancelled.value - &pinched.value)
@@ -474,7 +444,6 @@ fn run_factorized_case(name: &str, context: &ClosureEngine) -> Result<()> {
         );
     }
     let elapsed = started.elapsed().as_secs_f64();
-    let cache_after = context.cache_statistics()?;
     if let Some(directory) = std::env::var_os("VAKINT_FIVE_LOOP_CLOSURE_REPORTS") {
         let directory = PathBuf::from(directory);
         std::fs::create_dir_all(&directory)?;
@@ -482,8 +451,6 @@ fn run_factorized_case(name: &str, context: &ClosureEngine) -> Result<()> {
             "schema": "vakint.five-loop-closure.v1", "name": name,
             "class": "factorized", "data_version": version, "load_seconds": load_seconds,
             "engine_prior_cases": context.completed_cases.get(),
-            "cache_snapshots": { "before": cache_before, "after_numerator": cache_after_numerator,
-                "after_pinched": cache_after_pinched, "after": cache_after },
             "data_manifest_sha256": manifest_sha256,
             "cancellations": pair.positive_cancellations,
             "mass_squared": pair.mass_squared.to_canonical_string(),

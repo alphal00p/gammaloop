@@ -6,19 +6,16 @@ mod external_data_fixture;
 #[allow(dead_code)]
 mod five_loop_closure;
 
-use std::{fs, path::Path, sync::atomic::AtomicBool, time::Duration};
+use std::{fs, path::Path, time::Duration};
 
 use feynkit_kinematics::Kinematics;
-use rustred::family::IntegralKey;
-use rustred_app::CachePreparationStatus;
 use serde_json::Value;
 use symbolica::atom::Atom;
 use vakint::{
     EvaluationMethod, EvaluationOrder, LoopNormalizationFactor, MasterSymbol,
-    OfficialExternalDataOptions, RustRedCachePreparationOptions, RustRedCacheRoot,
-    RustRedCacheWorkload, RustRedEvaluationOptions, RustRedMasterMode, RustRedMonitorOptions,
-    Vakint, VakintExpression, VakintSettings, diagram_integral::DiagramIntegralOptions,
-    vakint_parse,
+    OfficialExternalDataOptions, RustRedEvaluationOptions, RustRedMasterMode,
+    RustRedMonitorOptions, Vakint, VakintExpression, VakintSettings,
+    diagram_integral::DiagramIntegralOptions, vakint_parse,
 };
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
@@ -146,60 +143,6 @@ fn snapshot_publication_fault_does_not_replace_the_native_result() -> Result<()>
 }
 
 #[test]
-fn one_loop_cache_monitor_keeps_complete_and_cancelled_report_status() -> Result<()> {
-    let directory = tempfile::tempdir()?;
-    let engine = Vakint::new()?;
-    let path = directory.path().join("latest.json");
-    let monitor = snapshot_options(&path);
-    let options = RustRedCachePreparationOptions {
-        workload: RustRedCacheWorkload::Explicit(vec![RustRedCacheRoot {
-            namespace: 0,
-            integral: IntegralKey::try_new([2])?,
-        }]),
-        ..Default::default()
-    };
-    for cancelled in [false, true] {
-        let cancellation = AtomicBool::new(cancelled);
-        let reference = engine.prepare_cache(
-            1,
-            directory.path().join(format!("ordinary-{cancelled}")),
-            &options,
-            &cancellation,
-            |_| Ok(()),
-        )?;
-        let observed = engine.prepare_cache_with_monitor(
-            1,
-            directory.path().join(format!("observed-{cancelled}")),
-            &options,
-            &cancellation,
-            |_| Ok(()),
-            &monitor,
-        )?;
-        assert_eq!(observed.status, reference.status);
-        assert_eq!(observed.total_roots, reference.total_roots);
-        assert_eq!(observed.completed_roots, reference.completed_roots);
-        assert_eq!(observed.total_roots, 1);
-        let document = latest(&path, "succeeded")?;
-        assert_eq!(document["core"], Value::Null);
-        if cancelled {
-            assert_eq!(observed.status, CachePreparationStatus::Cancelled);
-            assert_eq!(observed.completed_roots, 0);
-            // The call returned its real partial report. Successful return is
-            // not completion of the selected workload; the phase stays explicit.
-            assert_eq!(document["caller_phase"], "cache_preparation_cancelled");
-            assert_eq!(document["monitor"]["view"]["status"], "Partial");
-        } else {
-            assert_eq!(observed.status, CachePreparationStatus::Complete);
-            assert_eq!(observed.completed_roots, 1);
-            assert_eq!(document["caller_phase"], "cache_preparation_complete");
-            assert_eq!(document["monitor"]["view"]["status"], "Succeeded");
-        }
-        assert!(!engine.cache_statistics(1)?.attached);
-    }
-    Ok(())
-}
-
-#[test]
 fn five_loop_monitor_preserves_full_results_and_final_substitution_errors() -> Result<()> {
     // One authenticated load serves every 5L assertion in this test process.
     let mut engine = Vakint::new()?;
@@ -208,15 +151,11 @@ fn five_loop_monitor_preserves_full_results_and_final_substitution_errors() -> R
         &OfficialExternalDataOptions {
             version: external_data_fixture::required_version(),
             local_artifacts_path: std::env::var_os("VAKINT_TEST_EXTERNAL_DATA").map(Into::into),
-            load_prepared_caches: false,
             ..Default::default()
         },
     )?;
     assert!(report.loops.iter().any(|pack| pack.loop_count == 5));
-    let mut settings = settings(RustRedMasterMode::Retain);
-    // The stored-state assertions below describe the depth-first application.
-    settings.rustred_application_options.reduction_strategy =
-        vakint::RustRedReductionStrategy::DepthFirst;
+    let settings = settings(RustRedMasterMode::Retain);
     let fixture = five_loop_closure::factorized::fixtures(&engine)?
         .into_iter()
         .find(|fixture| fixture.label == "single_positive_line")
@@ -233,13 +172,16 @@ fn five_loop_monitor_preserves_full_results_and_final_substitution_errors() -> R
     );
     let request = latest(&path, "succeeded")?;
     assert_eq!(request["core"]["status"], "succeeded");
-    assert_eq!(request["stored_state"]["unstarted_roots"], 0);
-    assert_eq!(request["stored_state"]["deferred_rule_maps"], 0);
-    assert_eq!(
-        request["stored_state"]["deferred_child_integral_occurrences"],
-        0
+    // The ordered scheduler's final native state: every phase completed, an
+    // empty frontier and the collected terminal keys.
+    let ordered = &request["monitor"]["ordered_reduction"];
+    assert_eq!(ordered["completed_phases"], ordered["total_phases"]);
+    assert_eq!(ordered["frontier_keys"], 0);
+    assert!(
+        ordered["terminal_keys"]
+            .as_u64()
+            .is_some_and(|keys| keys > 0)
     );
-    assert!(request["stored_state"]["collected_output_integrals"].is_u64());
     assert_eq!(
         request["monitor"]["caller_expression"]["encoded_bytes"],
         ordinary.as_view().get_byte_size()

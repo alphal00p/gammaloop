@@ -1,8 +1,8 @@
-//! Compare native massless-quark rung fixtures using identical scalar inputs.
+//! Reduce native massless-quark rung fixtures with RustRed's ordered scheduler.
 //! Build with `--release --features feynkit-ingress,experimental-rustred`;
-//! run one strategy per fresh process for performance measurements, or
-//! `--engine all` for exact three-strategy parity. Reduction math and the complete
-//! retained public call have separate timing scopes.
+//! run one weight arithmetic per fresh process for performance measurements, or
+//! `--arithmetic both` for exact exact/modular parity. Reduction math and the
+//! complete retained public call have separate timing scopes.
 
 use ::vakint;
 #[path = "../tests/fixtures/qcd_ladder/mod.rs"]
@@ -10,14 +10,14 @@ use ::vakint;
 mod fixture;
 
 use std::{io::Read, path::PathBuf, process::Command};
-use vakint::{RustRedMonitorDisplay, RustRedMonitorOptions, RustRedReductionStrategy};
+use vakint::{RustRedMonitorDisplay, RustRedMonitorOptions};
 
 fn main() -> fixture::Result<()> {
     let mut arguments = std::env::args().skip(1);
     let mut work = None;
     let mut loop_count = 1_usize;
     let mut projection = fixture::Projection::ZeroMomentumMetric;
-    let mut engine = None;
+    let mut arithmetic = None;
     let mut artifacts = None;
     let mut prepare_only = false;
     let mut prepared_input = None;
@@ -26,7 +26,6 @@ fn main() -> fixture::Result<()> {
     let mut no_monitor = false;
     let mut snapshot = None;
     let mut build_profile = None;
-    let mut compare_reports = None;
     let mut compare_two_reports = None;
     while let Some(argument) = arguments.next() {
         match argument.as_str() {
@@ -48,11 +47,11 @@ fn main() -> fixture::Result<()> {
                     _ => return Err("--projection must be zero-momentum or quadratic".into()),
                 }
             }
-            "--engine" => {
-                engine = Some(
+            "--arithmetic" => {
+                arithmetic = Some(
                     arguments
                         .next()
-                        .ok_or("--engine needs dfs, dfs-no-memo, ordered, or all")?,
+                        .ok_or("--arithmetic needs exact, modular[:key=value,...], or both")?,
                 )
             }
             "--artifacts" => {
@@ -70,29 +69,12 @@ fn main() -> fixture::Result<()> {
                 }
                 build_profile = Some(value);
             }
-            "--compare-reports" => {
-                compare_reports = Some((
-                    PathBuf::from(arguments.next().ok_or(
-                        "--compare-reports needs DFS, DFS-no-memo and ordered report directories",
-                    )?),
-                    PathBuf::from(
-                        arguments
-                            .next()
-                            .ok_or("--compare-reports needs a DFS-no-memo report directory")?,
-                    ),
-                    PathBuf::from(
-                        arguments
-                            .next()
-                            .ok_or("--compare-reports needs an ordered report directory")?,
-                    ),
-                ))
-            }
             "--compare-two-reports" => {
                 compare_two_reports = Some((
                     PathBuf::from(
                         arguments
                             .next()
-                            .ok_or("--compare-two-reports needs a DFS report directory")?,
+                            .ok_or("--compare-two-reports needs a reference report directory")?,
                     ),
                     PathBuf::from(
                         arguments
@@ -116,7 +98,7 @@ fn main() -> fixture::Result<()> {
             }
             "--help" => {
                 println!(
-                    "ordered_reduction_rungs --work-dir PATH --build-profile release [--loops N] [--projection zero-momentum|quadratic] [--engine dfs|dfs-no-memo|ordered|all] [--artifacts PATH] [--prepared-input PATH] [--prepare-only] [--no-numerical-reference] [--no-monitor | --monitor] [--progress-snapshot PATH]\nFor completed fresh processes: --work-dir OUT --compare-reports DFS_DIRECTORY DFS_NO_MEMO_DIRECTORY ORDERED_DIRECTORY.\nFor a functional two-engine proof only: --work-dir OUT --compare-two-reports DFS_DIRECTORY ORDERED_DIRECTORY; --no-numerical-reference explicitly compares retained expressions only without changing the saved reports.\nDefault: one loop, zero momentum; all three strategies through four loops, ordered only at five loops; tracked numerical reference through four loops. DFS retains its ordinary per-run memo; dfs-no-memo disables that memo and its bookkeeping. Neither restores prepared or previous-run caches. Saved inputs under work-dir/input-LN-projection are authenticated and reused; --prepared-input selects a shared or legacy bundle. Reduction math is captured with the experimental-rustred feature; the complete retained public call is timed separately. Both timings exclude the subsequent numerical reference. Use --no-monitor for qualified performance comparisons: it disables both dashboard and snapshot callbacks and conflicts with --monitor and --progress-snapshot. Use a release build without profile overrides.\nEnvironment: VAKINT_N_CORES (worker cores; default min(10, available cores)) and VAKINT_ORDERED_WEIGHT_ARITHMETIC (exact | modular_sampled[:key=value,...] | modular_polynomial[:key=value,...]; default exact; modular workers follow the cores unless threads is set); both are recorded under report.json execution and never change the exact results."
+                    "ordered_reduction_rungs --work-dir PATH --build-profile release [--loops N] [--projection zero-momentum|quadratic] [--arithmetic exact|modular_sampled[:key=value,...]|modular_polynomial[:key=value,...]|both] [--artifacts PATH] [--prepared-input PATH] [--prepare-only] [--no-numerical-reference] [--no-monitor | --monitor] [--progress-snapshot PATH]\nFor a functional proof between saved reports: --work-dir OUT --compare-two-reports REFERENCE_DIRECTORY ORDERED_DIRECTORY, where the reference is another Ordered report or a preserved historical depth-first report; --no-numerical-reference explicitly compares retained expressions only without changing the saved reports.\nDefault: one loop, zero momentum; the arithmetic of VAKINT_ORDERED_WEIGHT_ARITHMETIC (Vakint's default when unset); tracked numerical reference through four loops. `both` runs exact weights and the modular arithmetic of VAKINT_ORDERED_WEIGHT_ARITHMETIC (modular_polynomial when it is unset or exact) in one process and checks that they retain the same expression. No prepared or previous-run cache is restored. Saved inputs under work-dir/input-LN-projection are authenticated and reused; --prepared-input selects a shared or legacy bundle. Reduction math is captured with the experimental-rustred feature; the complete retained public call is timed separately. Both timings exclude the subsequent numerical reference. Use --no-monitor for qualified performance comparisons: it disables both dashboard and snapshot callbacks and conflicts with --monitor and --progress-snapshot. Use a release build without profile overrides.\nEnvironment: VAKINT_N_CORES (worker cores; default min(10, available cores)) and VAKINT_ORDERED_WEIGHT_ARITHMETIC (exact | modular_sampled[:key=value,...] | modular_polynomial[:key=value,...]; default modular_polynomial; modular workers follow the cores unless threads is set); both are recorded under report.json execution and never change the exact results."
                 );
                 return Ok(());
             }
@@ -126,47 +108,32 @@ fn main() -> fixture::Result<()> {
     if no_monitor && (tui || snapshot.is_some()) {
         return Err("--no-monitor conflicts with --monitor and --progress-snapshot".into());
     }
-    if compare_reports.is_some() && compare_two_reports.is_some() {
-        return Err("select only one saved-report comparison mode".into());
-    }
     if loop_count == 0 {
         return Err("--loops must be positive".into());
     }
-    let engine = engine.unwrap_or_else(|| {
-        if loop_count <= 4 {
-            "all".to_owned()
-        } else {
-            "ordered".to_owned()
-        }
-    });
-    if !["dfs", "dfs-no-memo", "ordered", "all"].contains(&engine.as_str()) {
-        return Err("--engine must be dfs, dfs-no-memo, ordered, or all".into());
-    }
-    if loop_count == 5 && engine != "ordered" {
-        return Err("five-loop physical benchmarks permit only --engine ordered; both DFS variants are excluded".into());
-    }
+    let arms = match arithmetic.as_deref() {
+        None => vec![(
+            "ordered",
+            fixture::comparison::arithmetic_from_environment()?,
+        )],
+        Some("both") => vec![
+            ("exact", vakint::OrderedWeightArithmetic::exact()),
+            ("modular", fixture::comparison::modular_arithmetic_from_environment()?),
+        ],
+        Some(text) => vec![("ordered", text.parse::<vakint::OrderedWeightArithmetic>()?)],
+    };
     let work = work.ok_or("--work-dir is required; keep development data under workspace")?;
     std::fs::create_dir_all(&work)?;
-    if let Some((dfs, ordered)) = compare_two_reports {
+    if let Some((reference, ordered)) = compare_two_reports {
         fixture::comparison::compare_two_reports(
-            &dfs,
+            &reference,
             &ordered,
             &work.join("functional-pair.json"),
             numerical,
         )?;
         println!(
-            "Authenticated functional two-engine comparison passed; no performance qualification."
+            "Authenticated functional two-report comparison passed; no performance qualification."
         );
-        return Ok(());
-    }
-    if let Some((dfs, dfs_no_memo, ordered)) = compare_reports {
-        fixture::comparison::compare_reports(
-            &dfs,
-            &dfs_no_memo,
-            &ordered,
-            &work.join("parity.json"),
-        )?;
-        println!("Authenticated retained and numerical comparisons passed.");
         return Ok(());
     }
     if !prepare_only && build_profile.is_none() {
@@ -194,22 +161,6 @@ fn main() -> fixture::Result<()> {
         return Ok(());
     }
     let mut run_directories = Vec::new();
-    let strategies = match engine.as_str() {
-        "dfs" => vec![("dfs", RustRedReductionStrategy::DepthFirst)],
-        "dfs-no-memo" => vec![(
-            "dfs-no-memo",
-            RustRedReductionStrategy::DepthFirstWithoutMemoization,
-        )],
-        "ordered" => vec![("ordered", RustRedReductionStrategy::Ordered)],
-        _ => vec![
-            ("dfs", RustRedReductionStrategy::DepthFirst),
-            (
-                "dfs-no-memo",
-                RustRedReductionStrategy::DepthFirstWithoutMemoization,
-            ),
-            ("ordered", RustRedReductionStrategy::Ordered),
-        ],
-    };
     // Development binaries contain gigabytes of debug information. Their
     // supervising launch receipt authenticates them; avoid repeating that
     // metadata work with unoptimized hashing. Release hashes stream once.
@@ -228,7 +179,7 @@ fn main() -> fixture::Result<()> {
         }
         Some(format!("{:x}", digest.finalize()))
     };
-    for (name, strategy) in strategies {
+    for (name, arithmetic) in &arms {
         let directory = work.join(format!("L{loop_count}-{projection_name}-{name}"));
         if directory.join("report.json").exists() {
             return Err(format!(
@@ -238,7 +189,7 @@ fn main() -> fixture::Result<()> {
             .into());
         }
         let options = fixture::comparison::RunOptions {
-            strategy,
+            arithmetic: *arithmetic,
             artifacts: artifacts.clone(),
             numerical_reference: numerical && loop_count <= 4,
             monitor: RustRedMonitorOptions {
@@ -248,7 +199,7 @@ fn main() -> fixture::Result<()> {
                     RustRedMonitorDisplay::Off
                 },
                 progress_snapshot: snapshot.as_ref().filter(|_| !no_monitor).map(|path| {
-                    if engine == "all" {
+                    if arms.len() > 1 {
                         path.with_extension(format!("{name}.json"))
                     } else {
                         path.clone()
@@ -274,7 +225,7 @@ fn main() -> fixture::Result<()> {
             "native_runtime_arities":option_env!("RUSTRED_RUNTIME_ARITIES"),
             "allowed_cpus":std::fs::read_to_string("/proc/self/status").ok().and_then(|status| status.lines().find_map(|line| line.strip_prefix("Cpus_allowed_list:").map(|value|value.trim().to_owned()))),
             "profile_contract":"caller must build --release with no profile overrides; debug_assertions is not compiler-profile introspection",
-            "comparison_process":if engine == "all" {"three fresh Vakint instances in one process; use separate invocations for fresh-process timing"} else {"one engine in this process"}});
+            "comparison_process":if arms.len() > 1 {"two fresh Vakint instances in one process; use separate invocations for fresh-process timing"} else {"one engine in this process"}});
         std::fs::write(
             directory.join("report.json"),
             serde_json::to_vec_pretty(&run.report)?,
@@ -301,14 +252,14 @@ fn main() -> fixture::Result<()> {
         }
         run_directories.push(directory);
     }
-    if let [dfs, dfs_no_memo, ordered] = run_directories.as_slice() {
-        fixture::comparison::compare_reports(
-            dfs,
-            dfs_no_memo,
-            ordered,
+    if let [exact, modular] = run_directories.as_slice() {
+        fixture::comparison::compare_two_reports(
+            exact,
+            modular,
             &work.join(format!("L{loop_count}-{projection_name}-parity.json")),
+            false,
         )?;
-        println!("Exact retained expressions and numerical references agree.");
+        println!("Exact and modular weights retained the same expression.");
     }
     Ok(())
 }

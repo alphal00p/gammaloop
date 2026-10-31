@@ -20,15 +20,16 @@ use symbolica::{
 };
 use vakint::{
     EvaluationMethod, EvaluationOrder, FMFTOptions, LoopNormalizationFactor,
-    OfficialExternalDataOptions, RustRedEvaluationOptions, RustRedMasterMode,
-    RustRedReductionStrategy, Vakint, VakintSettings, vakint_parse, vakint_symbol,
+    OfficialExternalDataOptions, RustRedEvaluationOptions, RustRedMasterMode, Vakint,
+    VakintSettings, vakint_parse, vakint_symbol,
 };
 
 const CASES: &str = include_str!("../tests/fixtures/benchmark_reduction.json");
 const SCOPE: &str = "First public evaluate_integral call in a fresh process; retained masters, \
-    common symbolic mUVsq and FMFTandMATAD normalization. Excludes engine/data loading, cache \
-    attachment, input parsing and validation. FMFT includes version check, process launch, \
-    reduction, I/O and output parsing. Cache chunks are cold in-process; OS pages are not flushed.";
+    common symbolic mUVsq and FMFTandMATAD normalization. Excludes engine/data loading, input \
+    parsing and validation. FMFT includes version check, process launch, reduction, I/O and \
+    output parsing. RustRed reduces with its ordered scheduler and exact weights, without any \
+    result cache; OS pages are not flushed.";
 
 #[derive(Deserialize)]
 struct Case {
@@ -43,14 +44,14 @@ struct Case {
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Backend {
     Fmft,
-    Cached,
+    Ordered,
 }
 
 impl Backend {
     fn name(self) -> &'static str {
         match self {
             Self::Fmft => "fmft",
-            Self::Cached => "cached",
+            Self::Ordered => "ordered",
         }
     }
 }
@@ -127,7 +128,7 @@ impl Options {
                 "--mode" => {
                     result.backend = match value.as_str() {
                         "fmft" => Backend::Fmft,
-                        "cached" => Backend::Cached,
+                        "ordered" => Backend::Ordered,
                         _ => bail!("unknown backend {value}"),
                     }
                 }
@@ -148,19 +149,16 @@ impl Options {
             .ok_or_else(|| eyre::eyre!("invalid case index {index}"))?;
         let start = Instant::now();
         let mut engine = Vakint::new()?;
-        if self.backend == Backend::Cached {
+        if self.backend == Backend::Ordered {
             let report = engine.load_official_external_data(
                 4,
                 &OfficialExternalDataOptions {
                     version: self.version.clone(),
                     local_artifacts_path: self.artifacts.clone(),
-                    ..OfficialExternalDataOptions::for_strategy(
-                        RustRedReductionStrategy::DepthFirst,
-                    )
+                    ..Default::default()
                 },
             )?;
             ensure!(report.version == self.version, "data version changed");
-            ensure!(engine.cache_statistics(4)?.attached, "4L cache is absent");
         }
         let loader_seconds = start.elapsed().as_secs_f64();
         let input = vakint_parse!(&case.input).map_err(eyre::Report::msg)?;
@@ -170,7 +168,7 @@ impl Options {
                     expand_masters: false,
                     susbstitute_masters: false,
                 })),
-                Backend::Cached => {
+                Backend::Ordered => {
                     EvaluationOrder(vec![EvaluationMethod::RustRed(RustRedEvaluationOptions {
                         master_mode: RustRedMasterMode::Retain,
                     })])
@@ -180,36 +178,15 @@ impl Options {
             form_exe_path: if self.backend == Backend::Fmft {
                 self.form.to_string_lossy().into_owned()
             } else {
-                "/cached-benchmark-must-not-use-form".into()
+                "/ordered-benchmark-must-not-use-form".into()
             },
             temporary_directory: Some(self.work_dir.to_string_lossy().into_owned()),
             use_dot_product_notation: true,
-            // The cached backend measures depth-first prepared-cache reuse.
-            rustred_application_options: rustred_app::SavedApplicationOptions {
-                reduction_strategy: RustRedReductionStrategy::DepthFirst,
-                ..Default::default()
-            },
             ..Default::default()
         };
         let start = Instant::now();
         let value = engine.evaluate_integral(&settings, input.as_view())?;
         let reduction_seconds = start.elapsed().as_secs_f64();
-        let stats = engine.cache_statistics(4)?;
-        if self.backend == Backend::Cached {
-            if case.kind == "base" {
-                ensure!(stats.native.backing_hits > 0, "base root missed cache");
-                ensure!(
-                    stats.native.work.rule_applications() == 0,
-                    "base root performed native reduction"
-                );
-            } else {
-                ensure!(stats.native.backing_hits == 0, "held-out root was cached");
-                ensure!(
-                    stats.native.descendant_backing_hits > 0,
-                    "held-out reduction did not reuse intermediate cache entries"
-                );
-            }
-        }
         Json::write(
             &self.output,
             &json!({
@@ -218,9 +195,6 @@ impl Options {
                 "repetition": self.repetition, "input": input.to_canonical_string(),
                 "output": value.to_canonical_string(), "loader_seconds": loader_seconds,
                 "reduction_seconds": reduction_seconds,
-                "prepared_entry_hits": stats.native.backing_hits,
-                "prepared_descendant_hits": stats.native.descendant_backing_hits,
-                "native_rule_applications": stats.native.work.rule_applications(),
             }),
         )
     }
@@ -247,10 +221,9 @@ impl Options {
             &OfficialExternalDataOptions {
                 version: self.version.clone(),
                 local_artifacts_path: self.artifacts.clone(),
-                ..OfficialExternalDataOptions::for_strategy(RustRedReductionStrategy::DepthFirst)
+                ..Default::default()
             },
         )?;
-        ensure!(engine.cache_statistics(4)?.attached, "4L cache is absent");
         drop(engine);
         let root_manifest_path = report.path.join("manifest.json");
         let root_manifest_hash = Provenance::sha256(&root_manifest_path)?;
@@ -260,9 +233,9 @@ impl Options {
         for repetition in 0..self.repetitions {
             for (index, case) in cases.iter().enumerate() {
                 let modes = if repetition % 2 == 0 {
-                    [Backend::Fmft, Backend::Cached]
+                    [Backend::Fmft, Backend::Ordered]
                 } else {
-                    [Backend::Cached, Backend::Fmft]
+                    [Backend::Ordered, Backend::Fmft]
                 };
                 for mode in modes {
                     let label = format!("{index}-{}-{repetition}", mode.name());
@@ -326,11 +299,11 @@ impl Options {
             .iter()
             .map(|case| {
                 let fmft = Measurements::summarize(case, "fmft", &runs)?;
-                let cached = Measurements::summarize(case, "cached", &runs)?;
+                let ordered = Measurements::summarize(case, "ordered", &runs)?;
                 Ok(json!({
                     "family": case.family, "power": case.power, "kind": case.kind,
-                    "fmft_over_cached": fmft.median_seconds / cached.median_seconds,
-                    "fmft": fmft, "cached": cached,
+                    "fmft_over_ordered": fmft.median_seconds / ordered.median_seconds,
+                    "fmft": fmft, "ordered": ordered,
                 }))
             })
             .collect::<Result<Vec<_>>>()?;
@@ -342,7 +315,7 @@ impl Options {
                 "validation_passed": true, "runs": runs.len(),
                 "protocol": Provenance::collect(self, &form, &executable, &report.version, &root_manifest_hash, &manifest_hash)?,
                 "summary": summary, "exact_parity": parity,
-                "cached_loader_seconds": runs.iter().filter(|r| r["mode"] == "cached")
+                "ordered_loader_seconds": runs.iter().filter(|r| r["mode"] == "ordered")
                     .map(|r| &r["loader_seconds"]).collect::<Vec<_>>(),
                 "raw_runs": runs,
             }),
@@ -432,7 +405,7 @@ impl Validation {
                     .with(Atom::num(1)))
             };
             let form = get("fmft")?;
-            let native = get("cached")?.replace_multiple(&aliases);
+            let native = get("ordered")?.replace_multiple(&aliases);
             ensure!(
                 !native.contains_symbol(vakint_symbol!("RustRedMaster")),
                 "unmapped master for {}",

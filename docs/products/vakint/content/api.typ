@@ -18,7 +18,7 @@ The main Rust types make the workflow state explicit:
 - `VakintExpression` and `VakintTerm` separate numerators from topology atoms;
 - `EvaluationOrder` and `EvaluationMethod` select RustRed, AlphaLoop, MATAD, FMFT, or pySecDec;
   the default order is RustRed first, followed by the FORM-based backends usable on the system
-  (`EvaluationOrder::available`), and RustRed defaults to ordered reduction;
+  (`EvaluationOrder::available`), and RustRed always reduces with its ordered scheduler;
 - `NumericalEvaluationResult` stores Laurent coefficients in the dimensional regulator.
 
 For a dependency-free canonicalization setup, select an empty backend order before validating:
@@ -41,9 +41,8 @@ parse failures before passing a user-supplied expression to matching or evaluati
 
 `Vakint::load_official_external_data(max_loop_count, &options)` installs and loads
 all loop packs from one through the requested maximum. `OfficialExternalDataOptions`
-defaults to version `latest`, the current working directory, no refresh, and no prepared
-caches, which only depth-first reduction reads; `OfficialExternalDataOptions::for_strategy`
-selects them for a given strategy.
+defaults to version `latest`, the current working directory and no refresh. Prepared
+depth-first caches shipped by older releases are neither loaded nor checksummed.
 The matching Python method accepts `max_loop_count`, `version`,
 `local_artifacts_path`, and `refresh`. A path containing a checked-out external-data
 manifest is validated and loaded without network access or checkout modification.
@@ -57,42 +56,24 @@ and rejects missing epsilon coefficients or unresolved masters with their exact 
 All three RustRed modes preserve inexact input coefficients for later tracked evaluation.
 Passing retained uncertainty sources to pySecDec returns an explicit error before input generation.
 Use #source-link("crates/vakint/external_data.typ", label: "the external-data guide")
-for campaign coverage, cache bindings, and release conventions.
+for campaign coverage and release conventions.
 
-== Incremental five-loop caches and monitoring
+== Ordered reduction and monitoring
 
-`attach_running_cache(5, path, ...)` creates or resumes a standalone native delta;
-`load_running_cache` requires an existing one. Native capture keeps strictly
-completed roots and descendants with their exact nonzero conditions, including
-useful completed work from a parent that ultimately remains partially reduced.
-Partial nodes never become strict shortcuts. Immutable bases stay separate from
-the delta; use `read_backing=False` for capture without persistent reads, or
-`read_delta=False` to keep reads restricted to explicit immutable bases/snapshots.
-
-The returned `RunningCacheControl` exposes `report()`, `flush()`, `snapshot(path)`
-and `close()` independently of the reducer lock. Accepted records are queued;
-committed records are durably acknowledged. `save_running_cache(5)` flushes;
-`freeze_running_cache(5, path)` writes a new native index outside the delta and
-returns its descriptor.
-`load_cache_snapshot(5, snapshots=[descriptor])` reads a frozen generation without
-capturing new work. Retain the descriptor, referenced data and explicit bases;
-freezing does not copy payloads. Closing the control releases its writer lease.
-Bundle-managed child directories cannot be used as standalone writable deltas.
+RustRed reduces every request with its ordered scheduler: all contributions of one
+loop count share an exact frontier per compatible coefficient channel. There is no
+strategy setting; `rustred_application_options.ordered_weight_arithmetic` selects
+exact or modular frontier weights (`parse_rustred_ordered_weight_arithmetic`), with
+identical results. Depth-first reduction, its prepared and running caches and the
+Python cache operations were removed. See
+#source-link("crates/vakint/docs/ordered_reduction.typ", label: "the ordered reduction guide").
 
 Python's `evaluate_rustred_symbolic(integral_expression, ...)` returns the retained
-value, nonzero conditions and family map. This method and `prepare_cache` accept
+value, nonzero conditions and family map. This method and `evaluate` accept
 `monitor="off"`, `"json"` or `"tui"`, a `progress_snapshot` path and
 `progress_interval_seconds`. JSON mode requires a snapshot path.
 Monitoring defaults off; the TUI requires
-`progress-tui`. Pressing `q` closes only the display: reduction and capture continue.
-
-On supported native platforms, `import_cache` and `download_cache` transport
-directory packs for one through five loops. Select `format="multipart_manifest"`
-explicitly for a large native pack and authenticate its manifest with `sha256`;
-`max_manifest_bytes` optionally adjusts its read limit. Import/download publishes
-a new directory without attaching it. There is no 50/95 MiB aggregate native-pack
-cap. See #source-link("crates/vakint/cache_preparation.typ", label: "the cache guide")
-for the lifecycle example, explicit operational limits and snapshot semantics.
+`progress-tui`. Pressing `q` closes only the display: reduction continues.
 
 The #link("reference/rust/")[Rust orientation] identifies the compiled crates, versions, and
 feature matrix and links directly to native Rustdoc. The generated

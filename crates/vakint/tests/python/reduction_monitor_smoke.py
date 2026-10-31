@@ -40,7 +40,6 @@ def engine(**overrides):
         "form_exe_path": "/monitor-python-test-must-not-use-form",
         "integral_normalization_factor": "FMFTandMATAD",
         "use_dot_product_notation": True,
-        "rustred_reduction_strategy": "depth_first",
     }
     options.update(overrides)
     return Vakint(**options)
@@ -189,13 +188,7 @@ class ReductionMonitorSmoke(unittest.TestCase):
         cls.directory = Path(cls.scratch.name)
         cls.obj = engine(temporary_directory=str(cls.directory / "native"))
         data = Path(os.environ["VAKINT_TEST_EXTERNAL_DATA"])
-        report = cls.obj.load_official_external_data(
-            5, local_artifacts_path=data, load_prepared_caches=False
-        )
-        assert report["load_prepared_caches"] is False
-        assert all(
-            not cls.obj.cache_statistics(loop)["attached"] for loop in range(1, 6)
-        )
+        cls.obj.load_official_external_data(5, local_artifacts_path=data)
         manifest = json.loads((data / "5L/manifest.json").read_text())
         metadata = next(
             master for master in manifest["masters"] if master["name"] == "P65"

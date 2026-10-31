@@ -125,14 +125,15 @@ IBP coverage. Cached/uncached 1L–4L parity passed with the final native bindin
 == Published cache workload and size
 
 The offline producer was run separately for 1L, 2L, 3L and 4L. The public
-reproduction driver is #link("examples/prepare_bundled_caches.rs")[`prepare_bundled_caches`]:
-it calls `prepare_cache` with the loop count and default `Primer` options.
+reproduction driver was the `prepare_bundled_caches` example, removed from Vakint
+together with depth-first reduction and its caches (see the repository history):
+it called `prepare_cache` with the loop count and default `Primer` options.
 The input is the complete finite primer, spanning all physical parent pinches,
 at most two total extra positive powers above the surviving unit lines, and
 numerator rank at most one. At 4L the parents are H, FG, BMW and X. This covers
 common unit, dotted, pinched and rank-one requests while harvesting complete
 guarded intermediate reductions along their paths. It is independent of the
-later illustrative requests in `native_cache.rs` and of certification coverage.
+later illustrative requests of the former `native_cache` example and of certification coverage.
 
 Each container is `nL/cache/`, containing `bundle.rrindex`, one
 `bindings/<binding-id>/cache.rrindex` per program, and hash-named

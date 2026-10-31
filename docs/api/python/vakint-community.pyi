@@ -36,47 +36,6 @@ class AvailablePrecision:
     def FixedPrecision(max_decimal_precision: builtins.int) -> AvailablePrecision: ...
 
 @typing.final
-class CacheFileIdentity:
-    r"""
-    Read-only native single-file content identity. Obtain this document from an
-    authenticated manifest; constructing the record does not authenticate its source.
-    """
-    @property
-    def compressed_bytes(self) -> builtins.int: ...
-    @property
-    def compressed_blake3(self) -> bytes: ...
-    @property
-    def decoded_bytes(self) -> builtins.int: ...
-    @property
-    def decoded_blake3(self) -> bytes: ...
-    def __new__(cls, *, compressed_bytes: builtins.int, compressed_blake3: typing.Sequence[builtins.int], decoded_bytes: builtins.int, decoded_blake3: typing.Sequence[builtins.int]) -> CacheFileIdentity: ...
-    @staticmethod
-    def from_document(document: dict) -> CacheFileIdentity:
-        r"""
-        Parse the exact native identity schema, rejecting missing or extra fields.
-        """
-    def to_document(self) -> dict:
-        r"""
-        Return a detached document in the native serializer's schema.
-        """
-
-@typing.final
-class CacheFileOptions:
-    r"""
-    Explicit native single-file transport and decoded-store grants. Ordinary
-    construction retains the compact distribution defaults.
-    """
-    @property
-    def max_compressed_bytes(self) -> builtins.int: ...
-    @property
-    def max_decoded_bytes(self) -> builtins.int: ...
-    @property
-    def max_index_bytes(self) -> builtins.int: ...
-    @property
-    def decoded_directory(self) -> typing.Optional[pathlib.Path]: ...
-    def __new__(cls, *, max_compressed_bytes: typing.Optional[builtins.int] = None, max_decoded_bytes: typing.Optional[builtins.int] = None, max_index_bytes: typing.Optional[builtins.int] = None, decoded_directory: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None) -> CacheFileOptions: ...
-
-@typing.final
 class CoefficientPrecision:
     r"""
     Read-only record from Vakint's precision-aware data snapshot.
@@ -358,50 +317,15 @@ class PrecisionWarning:
     def _repr_html_(self) -> builtins.str: ...
 
 @typing.final
-class RunningCacheControl:
-    r"""
-    Independent native I/O control; it never borrows a prepared reduction owner.
-    """
-    def report(self) -> dict:
-        r"""
-        Read native queue and durability counters without locking the reducer.
-        """
-    def flush(self) -> dict:
-        r"""
-        Acknowledge a native durability barrier, independently of evaluation.
-        """
-    def snapshot(self, sidecar_path: builtins.str | os.PathLike | pathlib.Path) -> dict:
-        r"""
-        Freeze the current delta generation into a native descriptor.
-        """
-    def close(self) -> dict:
-        r"""
-        Flush and release the native writer lock for every cloned control.
-        """
-
-@typing.final
 class Vakint:
     r"""
     Vakint engine and settings used for matching, reduction, and evaluation.
 
     Construct one instance and reuse it. Initialization prepares lower-loop data;
     the five-loop catalogue is attached only after successful artifact loading.
-    RustRed with the `"ordered"` reduction strategy is the default backend; it
-    does not need FORM. Explicit cache operations require
-    `rustred_reduction_strategy="depth_first"`.
+    RustRed, which always reduces with its ordered scheduler, is the default
+    backend; it does not need FORM.
     """
-    @property
-    def n_cores(self) -> builtins.int:
-        r"""
-        Worker threads of this instance (the `n_cores` constructor argument).
-        """
-    @property
-    def ordered_weight_arithmetic(self) -> builtins.str:
-        r"""
-        Selected Ordered weight arithmetic in RustRed's canonical text, e.g.
-        "exact" or "modular_sampled"; "threads" appears only when the selection
-        fixes the modular workers instead of following `n_cores`.
-        """
     def load_external_data(self, path: builtins.str | os.PathLike | pathlib.Path, max_loop_count: builtins.int) -> None:
         r"""
         Load a local external-data checkout without network access.
@@ -410,15 +334,12 @@ class Vakint:
         r"""
         Load a local loop pack, or a sealed lower-loop native rules file.
         """
-    def load_official_external_data(self, max_loop_count: builtins.int, version: builtins.str = 'latest', local_artifacts_path: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, refresh: builtins.bool = False, *, load_prepared_caches: builtins.bool = True) -> dict:
+    def load_official_external_data(self, max_loop_count: builtins.int, version: builtins.str = 'latest', local_artifacts_path: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, refresh: builtins.bool = False) -> dict:
         r"""
         Install all official loop packs through the requested maximum, or load a
         supplied checkout directly. Existing validated installations work offline.
-        Prepared native caches load by default only for `depth_first`. Set
-        `load_prepared_caches=False` to skip them explicitly; `ordered` (the
-        default strategy) and `depth_first_without_memoization` always skip them.
         """
-    def __new__(cls, run_time_decimal_precision: typing.Optional[builtins.int] = None, evaluation_order: typing.Optional[typing.Sequence[VakintEvaluationMethod]] = None, tensor_reduction_method: typing.Optional[builtins.str] = None, epsilon_symbol: typing.Optional[Expression] = None, mu_r_sq_symbol: typing.Optional[Expression] = None, form_exe_path: typing.Optional[builtins.str] = None, python_exe_path: typing.Optional[builtins.str] = None, verify_numerator_identification: typing.Optional[builtins.bool] = None, integral_normalization_factor: typing.Optional[builtins.str] = None, allow_unknown_integrals: typing.Optional[builtins.bool] = None, clean_tmp_dir: typing.Optional[builtins.bool] = None, number_of_terms_in_epsilon_expansion: typing.Optional[builtins.int] = None, use_dot_product_notation: typing.Optional[builtins.bool] = None, temporary_directory: typing.Optional[builtins.str] = None, rustred_artifact_path: typing.Optional[builtins.str] = None, rustred_cache_bytes: typing.Optional[builtins.int] = None, rustred_cache_terms: typing.Optional[builtins.int] = None, rustred_product_cache_bytes: typing.Optional[builtins.int] = None, rustred_product_cache_terms: typing.Optional[builtins.int] = None, rustred_cache_policy: builtins.str = 'evict-lru', rustred_scalar_max_work: typing.Optional[builtins.int] = None, max_process_rss_bytes: typing.Optional[builtins.int] = None, max_elapsed_seconds: typing.Optional[builtins.float] = None, rustred_reduction_strategy: builtins.str = 'ordered', n_cores: typing.Optional[builtins.int] = None, ordered_weight_arithmetic: typing.Optional[builtins.str] = None) -> Vakint:
+    def __new__(cls, run_time_decimal_precision: typing.Optional[builtins.int] = None, evaluation_order: typing.Optional[typing.Sequence[VakintEvaluationMethod]] = None, tensor_reduction_method: typing.Optional[builtins.str] = None, epsilon_symbol: typing.Optional[Expression] = None, mu_r_sq_symbol: typing.Optional[Expression] = None, form_exe_path: typing.Optional[builtins.str] = None, python_exe_path: typing.Optional[builtins.str] = None, verify_numerator_identification: typing.Optional[builtins.bool] = None, integral_normalization_factor: typing.Optional[builtins.str] = None, allow_unknown_integrals: typing.Optional[builtins.bool] = None, clean_tmp_dir: typing.Optional[builtins.bool] = None, number_of_terms_in_epsilon_expansion: typing.Optional[builtins.int] = None, use_dot_product_notation: typing.Optional[builtins.bool] = None, temporary_directory: typing.Optional[builtins.str] = None, rustred_artifact_path: typing.Optional[builtins.str] = None, rustred_cache_bytes: typing.Optional[builtins.int] = None, rustred_cache_terms: typing.Optional[builtins.int] = None, rustred_product_cache_bytes: typing.Optional[builtins.int] = None, rustred_product_cache_terms: typing.Optional[builtins.int] = None, rustred_scalar_max_work: typing.Optional[builtins.int] = None, max_process_rss_bytes: typing.Optional[builtins.int] = None, max_elapsed_seconds: typing.Optional[builtins.float] = None) -> Vakint:
         r"""
         Create a new Vakint instance, specifying details of the evaluation stack. Note that the same instance can be recycled across multiple evaluations.
         Note that the creation of a Vakint instance involves the processing and creation of the library of all known topologies, which can be time consuming.
@@ -494,21 +415,17 @@ class Vakint:
             Saved application package for exact symbolic five-loop RustRed reduction.
             Use master_mode="retain" for reduction without coefficient evaluation.
         rustred_cache_bytes : Optional[int]
-            Saved-application coefficient-cache payload-byte allowance. None
-            imposes no payload-byte ceiling and does not enable count diagnostics.
+            Native coefficient-cache payload-byte allowance of the reduction limits.
+            None imposes no payload-byte ceiling and does not enable count diagnostics.
         rustred_cache_terms : Optional[int]
             Optional diagnostic aggregate coefficient-term ceiling. Supplying a
             count ceiling explicitly enables the corresponding native diagnostic profile.
         rustred_product_cache_bytes : Optional[int]
-            Separate lower-factor cache budget; not an aggregate with the saved
-            application cache. None imposes no payload-byte ceiling.
+            Separate lower-factor product cache budget of one request; not an
+            aggregate with `rustred_cache_bytes`. None imposes no payload-byte ceiling.
         rustred_product_cache_terms : Optional[int]
             Optional lower-factor aggregate-term diagnostic. None leaves count
             diagnostics disabled; a byte override alone does not enable them.
-        rustred_cache_policy : str
-            "evict-lru" (default) evicts inactive completed saved-rule results;
-            "fail-on-limit" preserves them and reports a cache-limit error.
-            A protected working set that cannot fit still errors under LRU.
         rustred_scalar_max_work : Optional[int]
             Optional scalar-work diagnostic per five-loop caller-numerator lowering.
             None disables count diagnostics. This does not change campaign domains.
@@ -519,142 +436,13 @@ class Vakint:
             Cooperative elapsed-time ceiling per public operation, including data
             loading and lookup. None disables it. Native kernels are checked at
             boundaries, so an external supervisor is needed for a hard deadline.
-        rustred_reduction_strategy : str
-            "ordered" (default), "depth_first", or "depth_first_without_memoization".
-            "ordered" combines the global integral frontier between checked steps.
-            "depth_first" memoizes completed reductions and is required by every
-            explicit cache operation. "depth_first_without_memoization" recomputes
-            repeated descendants; immutable program preparation remains shared.
-            Neither "ordered" nor "depth_first_without_memoization" uses or produces
-            completed-result caches, including persistent caches; data loading skips
-            prepared caches for both.
-        n_cores : Optional[int]
-            Worker threads of this instance: the single source of every Vakint and RustRed
-            worker count (modular weight arithmetic, five-loop route verification in data
-            loading). 1 runs every computation on the calling thread without spawning a thread.
-            None (default) uses min(10, cores available to this process), or 1 without a
-            Symbolica license. Results are identical for every value.
-        ordered_weight_arithmetic : Optional[str]
-            Frontier weight arithmetic of the "ordered" strategy: "exact", "modular_sampled" or
-            "modular_polynomial", optionally with RustRed's advanced options as
-            "modular_sampled:key=value,..." ("modular" is an alias of "modular_sampled").
-            Every arithmetic returns the same exact result. Modular arithmetics run on n_cores
-            workers unless the options set threads. None (default) selects "exact".
         """
     def load_rustred_application(self, path: builtins.str) -> None:
         r"""
         Explicitly load a local five-loop application package once.
         Also selects this package in the engine settings.
         """
-    def rustred_application_cache_statistics(self) -> builtins.dict[builtins.str, builtins.int]:
-        r"""
-        Saved-rule cache occupancy and cumulative work counters. Byte counts
-        describe charged coefficient payloads, not total process RSS.
-        `recomputed_nodes` counts repeated cache misses within a single request;
-        no unbounded cross-request history is retained.
-        """
-    def clear_rustred_application_cache(self) -> None:
-        r"""
-        Clear saved-rule and lower-factor memoization without changing the
-        admitted scope. Cumulative work/eviction counters are not reset.
-        """
-    def prepare_cache(self, n_loops: builtins.int, output_path: builtins.str, *, ram_bytes: typing.Optional[builtins.int] = None, disk_bytes: typing.Optional[builtins.int] = None, cache_policy: builtins.str = 'evict-lru', cache_terms: typing.Optional[builtins.int] = None, cache_integrals: typing.Optional[builtins.int] = None, max_rule_applications: typing.Optional[builtins.int] = None, time_limit_seconds: typing.Optional[builtins.int] = None, checkpoint_interval_seconds: typing.Optional[builtins.int] = None, max_roots: typing.Optional[builtins.int] = None, batch_records: typing.Optional[builtins.int] = None, extra_dots: typing.Optional[builtins.int] = None, numerator_rank: typing.Optional[builtins.int] = None, workload: typing.Optional[typing.Sequence[tuple[builtins.int, typing.Sequence[builtins.int]]]] = None, checkpoint_path: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, resume: builtins.bool = True, progress: typing.Optional[typing.Any] = None, cancel: typing.Optional[typing.Any] = None, progress_interval_seconds: builtins.float = 1.0, monitor: builtins.str = 'off', progress_snapshot: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, cache_hit_diagnostic: builtins.bool = False) -> dict:
-        r"""
-        Explicitly prepare a finite native cache for one through five loops.
-        No cache attaches automatically and no numerical masters are computed.
-        Inspect the returned status: resource/time/cancellation stops are partial.
-        `workload` is a sequence of `(namespace, complete_integer_powers)` pairs;
-        otherwise the native all-pinch relative-dot/rank primer is used for 1L–4L.
-        Five-loop preparation requires an explicit selected workload and writes
-        one compressed cache file. `checkpoint_path` selects its resumable work
-        directory; it is only valid for 5L and never changes the final file format.
-
-        The GIL is released during native work. `progress(report)` runs between
-        roots (throttled) and may return False to cancel; `cancel()` is a polled
-        predicate. Python signals and callback errors stop cooperatively after
-        the current native operation, checkpoint completed roots, then re-raise
-        with `cache_report` attached when possible. No hard deadline is promised.
-        Count overrides (`cache_terms`, `cache_integrals`, `max_rule_applications`
-        and `max_roots`) explicitly enable their native diagnostic profiles;
-        omission leaves count stops disabled. `batch_records` selects the flush
-        layout, while `extra_dots` and `numerator_rank` select a workload.
-        `monitor` selects optional per-call native diagnostics; detaching its TUI
-        never requests cancellation. `progress_snapshot` writes latest native JSON.
-        `cache_hit_diagnostic` explicitly emits lossless native cache events through
-        the host logger; it cannot be combined with a display or snapshot.
-        """
-    def load_cache(self, n_loops: builtins.int, path: builtins.str, *, ram_bytes: typing.Optional[builtins.int] = None, disk_bytes: typing.Optional[builtins.int] = None, cache_policy: typing.Optional[builtins.str] = None, lookup_budget_policy: typing.Optional[builtins.str] = None, cache_terms: typing.Optional[builtins.int] = None, cache_integrals: typing.Optional[builtins.int] = None, max_rule_applications: typing.Optional[builtins.int] = None, file_options: typing.Optional[CacheFileOptions] = None, file_identity: typing.Optional[CacheFileIdentity] = None) -> None:
-        r"""
-        Attach an exact read-only native cache bundle. Omitted settings preserve
-        the active RAM, work, eviction and lookup policies. A new attachment
-        uses native defaults, not preparation's larger RAM default.
-        For a five-loop single file, `file_identity` checks both compressed and
-        decoded content against an independently authenticated native identity.
-        """
-    def attach_running_cache(self, n_loops: builtins.int, path: builtins.str | os.PathLike | pathlib.Path, *, read_backing: builtins.bool = True, read_delta: builtins.bool = True, base_paths: typing.Optional[typing.Sequence[builtins.str | os.PathLike | pathlib.Path]] = None, snapshots: typing.Optional[typing.Sequence[dict]] = None, disk_bytes: typing.Optional[builtins.int] = None, max_pending_records: typing.Optional[builtins.int] = None, max_pending_bytes: typing.Optional[builtins.int] = None, batch_records: typing.Optional[builtins.int] = None, batch_bytes: typing.Optional[builtins.int] = None, checkpoint_interval_seconds: typing.Optional[builtins.float] = None, file_options: typing.Optional[CacheFileOptions] = None) -> RunningCacheControl:
-        r"""
-        Attach incremental native capture, creating its delta if necessary.
-        Immutable bases remain separate. `read_backing=False` disables all
-        persistent reads while retaining ordinary RAM memoization and capture.
-        `read_delta=False` reads only the pinned bases and snapshots. The returned
-        control can report or checkpoint while evaluation holds the engine.
-        Queue and checkpoint options use the native defaults when omitted.
-        """
-    def load_running_cache(self, n_loops: builtins.int, path: builtins.str | os.PathLike | pathlib.Path, *, read_backing: builtins.bool = True, read_delta: builtins.bool = True, base_paths: typing.Optional[typing.Sequence[builtins.str | os.PathLike | pathlib.Path]] = None, snapshots: typing.Optional[typing.Sequence[dict]] = None, disk_bytes: typing.Optional[builtins.int] = None, max_pending_records: typing.Optional[builtins.int] = None, max_pending_bytes: typing.Optional[builtins.int] = None, batch_records: typing.Optional[builtins.int] = None, batch_bytes: typing.Optional[builtins.int] = None, checkpoint_interval_seconds: typing.Optional[builtins.float] = None, file_options: typing.Optional[CacheFileOptions] = None) -> RunningCacheControl:
-        r"""
-        Resume an existing incremental native cache; never create a new delta.
-        This has the same read policy and queue options as `attach_running_cache`.
-        """
-    def load_cache_snapshot(self, n_loops: builtins.int, *, base_paths: typing.Optional[typing.Sequence[builtins.str | os.PathLike | pathlib.Path]] = None, snapshots: typing.Optional[typing.Sequence[dict]] = None, disk_bytes: typing.Optional[builtins.int] = None, file_options: typing.Optional[CacheFileOptions] = None) -> None:
-        r"""
-        Attach immutable bases and frozen native descriptors without a writer.
-        Frozen generations do not refresh, and evaluation captures no records.
-        """
-    def save_running_cache(self, n_loops: builtins.int) -> dict:
-        r"""
-        Flush accepted native records and return the acknowledged durable report.
-        A flush failure is an error; pending records must not be reported saved.
-        """
-    def freeze_running_cache(self, n_loops: builtins.int, sidecar_path: builtins.str | os.PathLike | pathlib.Path) -> dict:
-        r"""
-        Flush and freeze a small native descriptor for this delta generation.
-        Immutable base payloads are referenced separately and are never copied.
-        """
-    def save_cache(self, n_loops: builtins.int, output_path: builtins.str, *, mode: builtins.str, disk_bytes: typing.Optional[builtins.int] = None, resume: builtins.bool = False, file_options: typing.Optional[CacheFileOptions] = None) -> dict:
-        r"""
-        Explicitly save `resident-roots` or a portable `full-snapshot`.
-        A full snapshot includes captured bases and completed resident nodes.
-        Five loops stream one shared-table file; a running writer must already
-        be closed. Lower loops retain native byte-copy/checkpoint reporting.
-        Every full snapshot requires a new destination.
-        """
-    def import_cache(self, n_loops: builtins.int, archive_path: builtins.str, output_path: builtins.str, *, sha256: builtins.str, format: builtins.str = 'archive', max_manifest_bytes: typing.Optional[builtins.int] = None, max_archive_bytes: typing.Optional[builtins.int] = None, max_extracted_bytes: typing.Optional[builtins.int] = None, max_entries: typing.Optional[builtins.int] = None, max_temporary_bytes: typing.Optional[builtins.int] = None, disk_bytes: typing.Optional[builtins.int] = None) -> dict:
-        r"""
-        Import a trusted SHA-256 checked archive or native multipart manifest.
-        The imported snapshot is not attached to evaluation automatically.
-        """
-    def download_cache(self, n_loops: builtins.int, url: builtins.str, output_path: builtins.str, *, sha256: builtins.str, format: builtins.str = 'archive', max_manifest_bytes: typing.Optional[builtins.int] = None, max_archive_bytes: typing.Optional[builtins.int] = None, max_extracted_bytes: typing.Optional[builtins.int] = None, max_entries: typing.Optional[builtins.int] = None, max_temporary_bytes: typing.Optional[builtins.int] = None, disk_bytes: typing.Optional[builtins.int] = None, timeout_seconds: typing.Optional[builtins.float] = None) -> dict:
-        r"""
-        Explicit download with a required trusted checksum. Archive downloads
-        refuse redirects; HTTPS multipart downloads follow at most eight redirects.
-        Load the published snapshot separately.
-        """
-    def clear_cache(self, n_loops: builtins.int) -> None:
-        r"""
-        Clear only the attached native RAM cache; preserve its read-only files
-        and cumulative counters. No program is loaded for an empty attachment.
-        """
-    def detach_cache(self, n_loops: builtins.int) -> None:
-        r"""
-        Detach persistent backing and clear resident reduction records.
-        The loaded reduction campaign remains available for uncached evaluation.
-        """
-    def cache_statistics(self, n_loops: builtins.int) -> dict:
-        r"""
-        Return aggregate and exact-namespace cache telemetry. Coefficient payload
-        and I/O buffers are separate; neither is a measurement of process RSS.
-        """
-    def evaluate_rustred_symbolic(self, integral_expression: Expression, *, monitor: builtins.str = 'off', progress_snapshot: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, progress_interval_seconds: builtins.float = 1.0, cache_hit_diagnostic: builtins.bool = False) -> tuple[Expression, builtins.list[Expression], builtins.list[tuple[Expression, builtins.str]]]:
+    def evaluate_rustred_symbolic(self, integral_expression: Expression, *, monitor: builtins.str = 'off', progress_snapshot: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, progress_interval_seconds: builtins.float = 1.0) -> tuple[Expression, builtins.list[Expression], builtins.list[tuple[Expression, builtins.str]]]:
         r"""
         Apply the selected five-loop package and retain its symbolic conditions.
 
@@ -665,9 +453,6 @@ class Vakint:
         before scalar application, with the same settings as `evaluate`.
         Optional `monitor` diagnostics are local to this call. A snapshot path
         enables JSON output independently of the terminal display.
-        `cache_hit_diagnostic=True` emits lossless cache events through the host
-        logger, with presentation and snapshots off. Configure the corresponding
-        Python loggers at DEBUG before the first call.
         """
     def get_constant(self, symbol: ConstantSymbol, prec: builtins.int = 16) -> VakintConstant:
         r"""
@@ -843,7 +628,7 @@ class Vakint:
         integral_expression : Expression
           A Symbolica expression representing a vakint integral.
         """
-    def evaluate(self, integral_expression: Expression, *, monitor: builtins.str = 'off', progress_snapshot: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, progress_interval_seconds: builtins.float = 1.0, cache_hit_diagnostic: builtins.bool = False) -> Expression:
+    def evaluate(self, integral_expression: Expression, *, monitor: builtins.str = 'off', progress_snapshot: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, progress_interval_seconds: builtins.float = 1.0) -> Expression:
         r"""
         Perform the complete parametric evaluation of the Vakint integral represented by the Symbolica expression given in input.
         Note that the tensor reduction will be automatically performed on the input given.
@@ -874,8 +659,6 @@ class Vakint:
           A Symbolica expression representing a vakint integral.
         Optional native diagnostics use `monitor="tui"` or `monitor="json"`.
         A `progress_snapshot` path also enables JSON with terminal monitoring off.
-        `cache_hit_diagnostic=True` emits lossless native cache events through the
-        host logger, separately from presentation and snapshots.
         """
 
 @typing.final

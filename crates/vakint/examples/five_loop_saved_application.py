@@ -24,10 +24,6 @@ def main():
     parser.add_argument(
         "--powers", help="comma-separated powers in native family order"
     )
-    parser.add_argument("--cache-gib", type=int, default=1)
-    parser.add_argument(
-        "--cache-policy", choices=("evict-lru", "fail-on-limit"), default="evict-lru"
-    )
     parser.add_argument(
         "--verbose", action="store_true", help="print the complete guarded result"
     )
@@ -44,22 +40,19 @@ def main():
         ],
         form_exe_path="/five-loop-example-must-not-use-form",
         integral_normalization_factor="1",
-        rustred_cache_bytes=args.cache_gib * 1024**3,
-        rustred_cache_policy=args.cache_policy,
-        rustred_reduction_strategy="depth_first",
     )
     start = perf_counter()
     engine.load_rustred_application(str(args.application))
     print(f"load_seconds={perf_counter() - start:.6f}")
     previous = None
-    for phase in ("first", "warm"):
+    # The repeat reuses lazily prepared owners; Ordered keeps no result cache.
+    for phase in ("first", "repeat"):
         start = perf_counter()
         result = engine.evaluate_rustred_symbolic(integral.to_expression())
         print(f"{phase}_application_seconds={perf_counter() - start:.6f}")
         if previous is not None and result != previous:
-            raise AssertionError("warm application changed the exact result")
+            raise AssertionError("repeated application changed the exact result")
         previous = result
-        print("cache:", engine.rustred_application_cache_statistics())
     value, conditions, families = result
     print(f"nonzero_conditions={len(conditions)} families={len(families)}")
     if args.verbose:

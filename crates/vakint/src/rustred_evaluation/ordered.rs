@@ -1,4 +1,5 @@
-//! Whole-expression handoff to RustRed's ordered scheduler.
+//! Whole-expression handoff to RustRed's ordered scheduler, Vakint's only
+//! reduction strategy.
 //!
 //! Matching, scalar lowering and normalization retain their existing owners.
 //! Only compatible unit-mass coefficient channels share a native frontier.
@@ -38,7 +39,7 @@ impl Vakint {
         scalar_settings.use_dot_product_notation = true;
         crate::citations::USED_CITATIONS.record(crate::citations::CitationSource::RustRed);
         log::debug!(target: "vakint::ordered_reduction",
-            "ordered reduction: {} matched contributions; DFS result caches inactive",
+            "ordered reduction: {} matched contributions",
             contributions.len());
         match loop_count {
             1..=3 => materialize::evaluate_ordered_batch(
@@ -73,12 +74,20 @@ mod tests {
     use super::*;
     use crate::{
         EvaluationMethod, EvaluationOrder, LoopNormalizationFactor, RustRedEvaluationOptions,
-        RustRedMasterMode, RustRedReductionStrategy, vakint_parse,
+        RustRedMasterMode, vakint_parse,
     };
     use rustred::solver::{CandidateRoutedObservationOptions, CandidateRoutedObserverControl};
     use symbolica::atom::AtomCore;
 
-    fn settings(strategy: RustRedReductionStrategy) -> VakintSettings {
+    /// Retained results of the former depth-first strategy (gammaloop
+    /// 31a8b166e, rustred 604daaf7) for every input below, frozen before
+    /// depth-first reduction was removed from Vakint.
+    const DEPTH_FIRST_REFERENCES: &str = include_str!("ordered_depth_first_references.json");
+
+    /// Both Ordered weight arithmetics; they must return identical results.
+    const ARITHMETICS: [&str; 2] = ["exact", "modular:threads=1"];
+
+    fn settings(arithmetic: &str) -> VakintSettings {
         let mut settings = VakintSettings {
             evaluation_order: EvaluationOrder(vec![EvaluationMethod::RustRed(
                 RustRedEvaluationOptions {
@@ -90,71 +99,102 @@ mod tests {
             form_exe_path: "/ordered-reduction-must-not-call-form".into(),
             ..Default::default()
         };
-        settings.rustred_application_options.reduction_strategy = strategy;
+        settings
+            .rustred_application_options
+            .ordered_weight_arithmetic =
+            crate::parse_rustred_ordered_weight_arithmetic(arithmetic).unwrap();
         settings
     }
 
-    fn assert_parity(inputs: &[&str]) {
+    fn depth_first_reference(settings: &VakintSettings, input: &str) -> Atom {
+        let normalization = match settings.integral_normalization_factor {
+            LoopNormalizationFactor::MSbar => "MSbar",
+            LoopNormalizationFactor::FMFTandMATAD => "FMFTandMATAD",
+            _ => panic!("no frozen depth-first reference for this normalization"),
+        };
+        let epsilon = (settings.epsilon_symbol != VakintSettings::default().epsilon_symbol)
+            .then_some(settings.epsilon_symbol.as_str());
+        let references: serde_json::Value = serde_json::from_str(DEPTH_FIRST_REFERENCES).unwrap();
+        let reference = references
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|row| {
+                row["normalization"] == normalization
+                    && row["epsilon_symbol"].as_str() == epsilon
+                    && row["input"] == input
+            })
+            .unwrap_or_else(|| panic!("no frozen depth-first reference for {input}"));
+        Vakint::initialize_vakint_symbols();
+        Atom::parse(
+            reference["depth_first_retained"].as_str().unwrap(),
+            "vakint",
+            Default::default(),
+        )
+        .unwrap()
+    }
+
+    /// Every arithmetic reproduces the historical depth-first result exactly,
+    /// and the modular arithmetic returns the exact arithmetic's expression.
+    fn assert_depth_first_parity(settings: impl Fn(&str) -> VakintSettings, inputs: &[&str]) {
         let engine = Vakint::new().unwrap();
         for input in inputs {
-            let input = vakint_parse!(input).unwrap();
-            let depth_first = engine
-                .evaluate_integral(
-                    &settings(RustRedReductionStrategy::DepthFirst),
-                    input.as_view(),
-                )
-                .unwrap();
-            let ordered = engine
-                .evaluate_integral(
-                    &settings(RustRedReductionStrategy::Ordered),
-                    input.as_view(),
-                )
-                .unwrap();
-            assert!(
-                (depth_first - ordered).together().expand().is_zero(),
-                "{input}"
-            );
+            let parsed = vakint_parse!(input).unwrap();
+            let mut results = Vec::new();
+            for arithmetic in ARITHMETICS {
+                let settings = settings(arithmetic);
+                let ordered = engine
+                    .evaluate_integral(&settings, parsed.as_view())
+                    .unwrap();
+                assert!(
+                    (&ordered - depth_first_reference(&settings, input))
+                        .together()
+                        .expand()
+                        .is_zero(),
+                    "{arithmetic}: {input}"
+                );
+                results.push(ordered);
+            }
+            assert_eq!(results[0], results[1], "{input}");
         }
     }
 
     #[test]
-    fn one_loop_ordered_and_depth_first_agree() {
-        assert_parity(&["3*topo(I1L(muvsq,7))-2*topo(I1L(muvsq,8))+topo(I1L(muvsq,9))"]);
+    fn one_loop_ordered_matches_depth_first_reference() {
+        assert_depth_first_parity(
+            settings,
+            &["3*topo(I1L(muvsq,7))-2*topo(I1L(muvsq,8))+topo(I1L(muvsq,9))"],
+        );
     }
 
     #[test]
-    fn ordered_msbar_retained_normalization_matches_depth_first() {
-        let engine = Vakint::new().unwrap();
-        let euler_gamma = crate::vakint_symbol!("EulerGamma");
-        for input in [
+    fn ordered_msbar_retained_normalization_matches_depth_first_reference() {
+        let msbar = |arithmetic: &str| VakintSettings {
+            integral_normalization_factor: LoopNormalizationFactor::MSbar,
+            ..settings(arithmetic)
+        };
+        let inputs = [
             "topo(I1L(1,3))+2*topo(I1L(1,4))",
             "topo(I2L(7/3,2,1,1))+2*topo(I2L(7/3,1,2,1))",
-        ] {
-            let input = vakint_parse!(input).unwrap();
-            let mut results = Vec::new();
-            for strategy in [
-                RustRedReductionStrategy::DepthFirst,
-                RustRedReductionStrategy::Ordered,
-            ] {
-                let mut settings = settings(strategy);
-                settings.integral_normalization_factor = LoopNormalizationFactor::MSbar;
-                let result = engine
-                    .evaluate_integral(&settings, input.as_view())
-                    .unwrap();
-                assert!(
-                    !result.contains_symbol(euler_gamma),
-                    "MSbar must cancel normalization exponentials before retaining masters: {result}"
-                );
-                results.push(result);
-            }
-            assert!((&results[0] - &results[1]).together().expand().is_zero());
+        ];
+        assert_depth_first_parity(msbar, &inputs);
+        let engine = Vakint::new().unwrap();
+        let euler_gamma = crate::vakint_symbol!("EulerGamma");
+        for input in inputs {
+            let result = engine
+                .evaluate_integral(&msbar("exact"), vakint_parse!(input).unwrap().as_view())
+                .unwrap();
+            assert!(
+                !result.contains_symbol(euler_gamma),
+                "MSbar must cancel normalization exponentials before retaining masters: {result}"
+            );
         }
     }
 
     #[test]
     fn ordered_msbar_normalization_is_shared_by_direct_entry_points() {
         let engine = Vakint::new().unwrap();
-        let mut settings = settings(RustRedReductionStrategy::Ordered);
+        let mut settings = settings("exact");
         settings.integral_normalization_factor = LoopNormalizationFactor::MSbar;
         for integral in ["topo(I1L(1,3))", "topo(I2L(1,2,1,1))"] {
             let integral = vakint_parse!(integral).unwrap();
@@ -192,11 +232,8 @@ mod tests {
             let input = vakint_parse!(input).unwrap();
             let mut values = Vec::new();
             for mode in [RustRedMasterMode::Symbolic, RustRedMasterMode::Numerical] {
-                for strategy in [
-                    RustRedReductionStrategy::DepthFirst,
-                    RustRedReductionStrategy::Ordered,
-                ] {
-                    let mut settings = settings(strategy);
+                for arithmetic in ARITHMETICS {
+                    let mut settings = settings(arithmetic);
                     settings.integral_normalization_factor = LoopNormalizationFactor::MSbar;
                     settings.number_of_terms_in_epsilon_expansion = loop_count + 1;
                     settings.run_time_decimal_precision = 40;
@@ -242,30 +279,32 @@ mod tests {
     }
 
     #[test]
-    fn two_loop_ordered_and_depth_first_agree() {
-        assert_parity(&[
-            "topo(I2L(muvsq,2,1,1))+2*topo(I2L(muvsq,1,2,1))",
-            "dot(k(1),k(2))*topo(I2L(muvsq,1,1,1))",
-        ]);
+    fn two_loop_ordered_matches_depth_first_reference() {
+        assert_depth_first_parity(
+            settings,
+            &[
+                "topo(I2L(muvsq,2,1,1))+2*topo(I2L(muvsq,1,2,1))",
+                "dot(k(1),k(2))*topo(I2L(muvsq,1,1,1))",
+            ],
+        );
     }
 
     #[test]
-    fn two_loop_complex_coefficients_agree_with_depth_first() {
-        assert_parity(&[
-            "-8*𝑖/3*topo(I2L(muvsq,2,1,1))",
-            "(2/3+3*𝑖/5)*topo(I2L(muvsq,2,1,1))+(-2/3+7*𝑖/5)*topo(I2L(muvsq,3,1,1))",
-        ]);
+    fn two_loop_complex_coefficients_match_depth_first_reference() {
+        assert_depth_first_parity(
+            settings,
+            &[
+                "-8*𝑖/3*topo(I2L(muvsq,2,1,1))",
+                "(2/3+3*𝑖/5)*topo(I2L(muvsq,2,1,1))+(-2/3+7*𝑖/5)*topo(I2L(muvsq,3,1,1))",
+            ],
+        );
     }
 
     #[test]
     fn complex_dimension_numerators_share_channels_across_regulator_aliases() {
         let engine = Vakint::new().unwrap();
-        let mut ordered_settings = settings(RustRedReductionStrategy::Ordered);
+        let mut ordered_settings = settings("exact");
         ordered_settings.epsilon_symbol = "ordered_carrier_control::epsilon".into();
-        let mut depth_first_settings = ordered_settings.clone();
-        depth_first_settings
-            .rustred_application_options
-            .reduction_strategy = RustRedReductionStrategy::DepthFirst;
         let directory = tempfile::tempdir().unwrap();
         for (alias_index, epsilon) in [ordered_settings.epsilon_symbol.as_str(), "vakint::ep"]
             .into_iter()
@@ -293,10 +332,12 @@ mod tests {
                         },
                     )
                     .unwrap();
-                let depth_first = engine
-                    .evaluate_integral(&depth_first_settings, input.as_view())
-                    .unwrap();
-                assert!((&ordered - depth_first).together().expand().is_zero());
+                assert!(
+                    (&ordered - depth_first_reference(&ordered_settings, &inputs[form_index]))
+                        .together()
+                        .expand()
+                        .is_zero()
+                );
                 let document: serde_json::Value =
                     serde_json::from_reader(std::fs::File::open(snapshot).unwrap()).unwrap();
                 assert_eq!(document["monitor"]["reduction_cohorts"]["total"], 2);
@@ -317,14 +358,14 @@ mod tests {
     }
 
     #[test]
-    fn three_loop_ordered_and_depth_first_agree() {
-        assert_parity(&["topo(I3L(muvsq,2,1,1,1,1,1))"]);
+    fn three_loop_ordered_matches_depth_first_reference() {
+        assert_depth_first_parity(settings, &["topo(I3L(muvsq,2,1,1,1,1,1))"]);
     }
 
     #[test]
     fn ordered_combines_distinct_roots_before_full_reduction() {
         let engine = Vakint::new().unwrap();
-        let settings = settings(RustRedReductionStrategy::Ordered);
+        let settings = settings("exact");
         for mass in ["1", "7/3", "muvsq"] {
             for epsilon in [settings.epsilon_symbol.as_str(), "vakint::ep"] {
                 for phase in ["1", "𝑖", "-8*𝑖/3", "2/3+3*𝑖/5"] {
@@ -355,31 +396,47 @@ mod tests {
     }
 
     #[test]
-    fn ordered_is_the_vakint_default_strategy() {
+    fn vakint_always_reduces_with_the_ordered_scheduler() {
+        // The rustred library keeps its own depth-first default; Vakint's
+        // settings name the strategy actually used, and any other value of
+        // the inherited field is ignored.
         assert_eq!(
             VakintSettings::default()
                 .rustred_application_options
                 .reduction_strategy,
-            RustRedReductionStrategy::Ordered
+            rustred::reduction::ReductionStrategy::Ordered
         );
-        // The rustred library keeps its own depth-first default.
-        assert_eq!(
-            RustRedReductionStrategy::default(),
-            RustRedReductionStrategy::DepthFirst
+        let engine = Vakint::new().unwrap();
+        let input = vakint_parse!("topo(I2L(muvsq,2,1,1))+2*topo(I2L(muvsq,1,2,1))").unwrap();
+        let expected = engine
+            .evaluate_integral(&settings("exact"), input.as_view())
+            .unwrap();
+        let mut inherited = settings("exact");
+        inherited.rustred_application_options.reduction_strategy =
+            rustred::reduction::ReductionStrategy::DepthFirst;
+        let mut callback = |_: &rustred::solver::CandidateRoutedApplicationEnvelope<'_>| {
+            Ok(CandidateRoutedObserverControl::Continue)
+        };
+        let mut observer = CandidateRoutedApplicationObserver::new(
+            CandidateRoutedObservationOptions::default(),
+            &mut callback,
         );
+        let actual = engine
+            .evaluate_observed(&inherited, input.as_view(), Some(&mut observer), None)
+            .unwrap();
+        assert_eq!(actual, expected);
+        let progress = observer.last_ordered_progress().unwrap();
+        assert_eq!(progress.completed_phases, progress.total_phases);
     }
 
     #[test]
-    fn reduction_math_capture_observes_both_engines_without_changing_results() {
+    fn reduction_math_capture_observes_both_arithmetics_without_changing_results() {
         use crate::rustred_evaluation::experimental::timing::capture_reduction_timing;
 
         let engine = Vakint::new().unwrap();
         let input = vakint_parse!("topo(I1L(1,4))+2*topo(I1L(1,5))").unwrap();
-        for strategy in [
-            RustRedReductionStrategy::DepthFirst,
-            RustRedReductionStrategy::Ordered,
-        ] {
-            let settings = settings(strategy);
+        for arithmetic in ARITHMETICS {
+            let settings = settings(arithmetic);
             let expected = engine
                 .evaluate_integral(&settings, input.as_view())
                 .unwrap();
@@ -401,7 +458,7 @@ mod tests {
     #[test]
     fn ordered_normal_monitor_reports_all_loop_batches_and_mass_cohorts() {
         let engine = Vakint::new().unwrap();
-        let settings = settings(RustRedReductionStrategy::Ordered);
+        let settings = settings("exact");
         let input =
             vakint_parse!("topo(I1L(1,2))+topo(I1L(2,3))+topo(I2L(1,1,1,1))+topo(I2L(2,1,1,1))")
                 .unwrap();
@@ -434,7 +491,7 @@ mod tests {
     #[test]
     fn ordered_rejects_original_poles_that_vanish_under_dimension_identification() {
         let engine = Vakint::new().unwrap();
-        let settings = settings(RustRedReductionStrategy::Ordered);
+        let settings = settings("exact");
         for epsilon in [settings.epsilon_symbol.as_str(), "vakint::ep"] {
             let input =
                 vakint_parse!(&format!("topo(I1L(1,1))/(rustred::d+2*{epsilon}-4)")).unwrap();
@@ -468,47 +525,5 @@ mod tests {
                     .is_zero()
             );
         }
-    }
-
-    #[test]
-    fn ordered_requests_leave_attached_depth_first_cache_untouched() {
-        use crate::{RustRedCachePreparationOptions, RustRedCacheRoot, RustRedCacheWorkload};
-        use rustred::family::IntegralKey;
-        use std::sync::atomic::AtomicBool;
-
-        let engine = Vakint::new().unwrap();
-        let directory = tempfile::tempdir().unwrap();
-        let path = directory.path().join("depth-first-cache");
-        let options = RustRedCachePreparationOptions {
-            workload: RustRedCacheWorkload::Explicit(vec![RustRedCacheRoot {
-                namespace: 0,
-                integral: IntegralKey::try_new([7]).unwrap(),
-            }]),
-            ..Default::default()
-        };
-        engine
-            .prepare_cache(1, &path, &options, &AtomicBool::new(false), |_| Ok(()))
-            .unwrap();
-        engine.load_cache(1, &path, &Default::default()).unwrap();
-        let before = engine.cache_statistics(1).unwrap();
-        let input = vakint_parse!("topo(I1L(1,7))").unwrap();
-        let ordered = engine
-            .evaluate_integral(
-                &settings(RustRedReductionStrategy::Ordered),
-                input.as_view(),
-            )
-            .unwrap();
-        assert_eq!(engine.cache_statistics(1).unwrap(), before);
-        let depth_first = engine
-            .evaluate_integral(
-                &settings(RustRedReductionStrategy::DepthFirst),
-                input.as_view(),
-            )
-            .unwrap();
-        assert!((ordered - depth_first).together().expand().is_zero());
-        assert_eq!(
-            engine.cache_statistics(1).unwrap().native.backing_hits,
-            before.native.backing_hits + 1
-        );
     }
 }

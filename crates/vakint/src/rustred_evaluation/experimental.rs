@@ -1,7 +1,9 @@
 //! Opt-in, per-integral comparisons of unsealed RustRed candidate rules.
 //!
-//! This diagnostic seam accepts explicitly supplied candidate programs. The
-//! shipped four-loop backend reuses its already-matched-input adapter.
+//! This offline diagnostic seam accepts explicitly supplied candidate programs
+//! and applies them per target; it is independent of Vakint's evaluation path,
+//! which always reduces with the ordered scheduler. The shipped four-loop
+//! backend reuses only its already-matched-input adapter.
 //! Successful numerical comparisons certify neither a whole family nor
 //! arbitrary indices. Rule selection, pointwise
 //! guards, descent, memoization and unresolved-leaf errors belong to RustRed.
@@ -242,83 +244,6 @@ pub struct ExperimentalRustRed {
 }
 
 impl ExperimentalRustRed {
-    pub(super) fn evaluate_catalog(
-        &self,
-        settings: &VakintSettings,
-        numerator: AtomView,
-        matched: &ReplacementRules,
-        family_fingerprint: &str,
-        catalog: &super::masters::MasterCatalog,
-        mut cached: impl FnMut(&IntegralKey) -> Result<Option<CandidateReduction>, VakintError>,
-    ) -> Result<Atom, VakintError> {
-        let terms = prepare_matched_candidate_integral(
-            numerator,
-            matched,
-            self.reducer.as_ref(),
-            settings,
-        )?;
-        let mut contributions = BTreeMap::<Atom, Atom>::new();
-        for term in terms {
-            let _math = timing::MathSpan::new();
-            let reduction = match cached(&term.target)? {
-                Some(value) => value,
-                None => self
-                    .reducer
-                    .reduce_unit_mass(&term.target)
-                    .map_err(candidate_error)?,
-            };
-            let raw = reduction
-                .terms
-                .into_iter()
-                .map(|(master, coefficient)| {
-                    coefficient * catalog.symbol(family_fingerprint, master.powers())
-                })
-                .sum::<Atom>();
-            let dimension = vk_parse!("4-2*ep").unwrap();
-            let raw = raw
-                .replace(self.reducer.dimension().to_pattern())
-                .with(dimension.to_pattern());
-            let exponent = term
-                .target
-                .powers()
-                .iter()
-                .try_fold(8i128, |sum, &power| sum.checked_sub(i128::from(power)))
-                .and_then(|sum| sum.checked_add(i128::from(term.common_mass_squared_power)))
-                .and_then(|sum| i64::try_from(sum).ok())
-                .ok_or_else(|| candidate_error("mass exponent overflow"))?;
-            let raw = raw
-                * term.mass_squared.clone().pow(Atom::num(exponent))
-                * term.coefficient
-                * term.scalar_numerator;
-            *contributions.entry(term.mass_squared).or_insert(Atom::Zero) += raw;
-        }
-        let mut value = Atom::Zero;
-        for (mass, raw) in contributions {
-            let raw = {
-                let _math = timing::MathSpan::new();
-                super::combine_exact(raw)
-            };
-            let normalized = crate::matad::MATAD::with_settings(settings.clone())
-                .finalize_reduced_masters(
-                    raw,
-                    4,
-                    None,
-                    &mass,
-                    &crate::MATADOptions {
-                        expand_masters: false,
-                        susbstitute_masters: false,
-                        substitute_hpls: false,
-                        direct_numerical_substition: false,
-                    },
-                )?;
-            {
-                let _math = timing::MathSpan::new();
-                value += normalized;
-            }
-        }
-        Ok(value)
-    }
-
     pub fn new(
         reducer: Arc<dyn CandidateScalarReduction>,
         terminals: BTreeMap<IntegralKey, Atom>,

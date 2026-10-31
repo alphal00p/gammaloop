@@ -1169,9 +1169,6 @@ impl PublicCensusCorpus {
         };
         settings.rustred_application_options.unresolved_policy =
             rustred::solver::UnresolvedPolicy::Preserve;
-        // These diagnostics observe the depth-first saved application and caches.
-        settings.rustred_application_options.reduction_strategy =
-            crate::RustRedReductionStrategy::DepthFirst;
         settings.rustred_application_options.entry_coverage_policy =
             rustred_app::SavedApplicationEntryCoveragePolicy::Advisory;
         settings.rustred_application_options.cache_representation =
@@ -1182,39 +1179,28 @@ impl PublicCensusCorpus {
             5,
             &OfficialExternalDataOptions {
                 local_artifacts_path: Some(corpus.data_path.clone()),
-                load_prepared_caches: false,
                 ..Default::default()
             },
         )?;
-        let cache_attachments = (1..=5)
-            .map(|loops| -> Result<_> {
-                Ok((loops, engine.cache_statistics(loops)?.has_read_backing()))
-            })
-            .collect::<Result<BTreeMap<_, _>>>()?;
         if load
             .loops
             .iter()
             .map(|pack| pack.loop_count)
             .collect::<Vec<_>>()
             != [1, 2, 3, 4, 5]
-            || load
-                .loops
-                .iter()
-                .any(|pack| pack.cache_loaded || pack.source != "local")
-            || cache_attachments.values().any(|attached| *attached)
+            || load.loops.iter().any(|pack| pack.source != "local")
         {
-            return Err(
-                "census must load only local cumulative data without prepared caches".into(),
-            );
+            return Err("census must load only local cumulative data".into());
         }
         engine.validate_settings(&settings)?;
         let application = engine.saved_application(&settings)?;
-        let binding = engine
-            .cache_statistics(5)?
-            .saved_application
-            .ok_or("missing application binding")?
-            .to_document()["binding"]
-            .clone();
+        let data = engine.rustred_data()?;
+        let identity =
+            crate::rustred_evaluation::cache::saved_application_digest(&data, &application.path)?;
+        let binding = json!({"application_identity": identity
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>()});
         let native_before = {
             let prepared = application
                 .prepared
@@ -1316,7 +1302,7 @@ impl PublicCensusCorpus {
             .to_owned();
         let mut rows = Vec::new();
         for case in selected_cases {
-            engine.clear_rustred_application_cache()?;
+            engine.clear_rustred_application_witness_cache()?;
             let case_native_before = {
                 let prepared = application
                     .prepared
@@ -1434,16 +1420,8 @@ impl PublicCensusCorpus {
                 prepared.cache_work_statistics(),
             )
         };
-        if native_before != native_after
-            || application
-                .cache
-                .lock()
-                .map_err(|error| error.to_string())?
-                .is_some()
-        {
-            return Err(
-                "lower-only corpus changed native owner/cache work or attached capture".into(),
-            );
+        if native_before != native_after {
+            return Err("lower-only corpus changed native owner/cache work".into());
         }
         let mut pairs = Vec::new();
         for (index, row) in rows.iter().enumerate() {
@@ -1482,7 +1460,6 @@ impl PublicCensusCorpus {
             "requested_candidate":candidate,"declared_case_count":corpus.cases.len(),
             "source_identity":source_identity,"input_corpus":{"path":path,"sha256":format!("{:x}",Sha256::digest(&bytes))},
             "source_inventory":{"path":corpus.source_inventory.path,"sha256":corpus.source_inventory.sha256},"data":load,
-            "persistent_cache_attachments":cache_attachments,
             "data_manifest_sha256":corpus.data_manifest_sha256,"loop_manifest_sha256":corpus.loop_manifest_sha256,"application_sha256":corpus.application_sha256,
             "semantic_binding":binding,"family_fingerprint":family,"application_options":format!("{:?}",settings.rustred_application_options),
             "scalar_limits":format!("{:?}",settings.rustred_scalar_numerator_limits),"matching_limits":format!("{:?}",settings.rustred_momentum_match_limits),
@@ -1641,9 +1618,6 @@ fn prepared_ladder_selected_campaign_census_without_ibps() -> Result<()> {
     };
     settings.rustred_application_options.unresolved_policy =
         rustred::solver::UnresolvedPolicy::Preserve;
-    // These diagnostics observe the depth-first saved application and caches.
-    settings.rustred_application_options.reduction_strategy =
-        crate::RustRedReductionStrategy::DepthFirst;
     eprintln!("qcd_campaign_census phase=engine_construction_begin");
     let mut engine = Vakint::new()?;
     eprintln!("qcd_campaign_census phase=data_loading_begin");
@@ -1652,7 +1626,7 @@ fn prepared_ladder_selected_campaign_census_without_ibps() -> Result<()> {
         5,
         &OfficialExternalDataOptions {
             local_artifacts_path: Some(data_path),
-            ..OfficialExternalDataOptions::for_strategy(crate::RustRedReductionStrategy::DepthFirst)
+            ..Default::default()
         },
     )?;
     let application = engine.saved_application(&settings)?;
@@ -1923,9 +1897,6 @@ fn physical_uncovered_witness_safe_reduction() -> Result<()> {
     };
     settings.rustred_application_options.unresolved_policy =
         rustred::solver::UnresolvedPolicy::Preserve;
-    // These diagnostics observe the depth-first saved application and caches.
-    settings.rustred_application_options.reduction_strategy =
-        crate::RustRedReductionStrategy::DepthFirst;
     let started = Instant::now();
     eprintln!("qcd_uncovered_witness phase=data_loading_begin");
     let mut engine = Vakint::new()?;
@@ -1933,10 +1904,9 @@ fn physical_uncovered_witness_safe_reduction() -> Result<()> {
         5,
         &OfficialExternalDataOptions {
             local_artifacts_path: Some(data_path),
-            ..OfficialExternalDataOptions::for_strategy(crate::RustRedReductionStrategy::DepthFirst)
+            ..Default::default()
         },
     )?;
-    engine.detach_cache(5)?;
     let application = engine.saved_application(&settings)?;
     let admitted = application
         .prepared

@@ -6,12 +6,10 @@ use symbolica::id::Replacement;
 
 use crate::symbols::S;
 use crate::utils::vakint_macros::vk_symbol;
-use crate::{
-    Integral, ReplacementRules, Topology, VakintSettings, get_integer_from_atom, get_prop_with_id,
-};
+use crate::{Integral, ReplacementRules, Topology, get_integer_from_atom, get_prop_with_id};
 
+use super::RustRedEvaluationError;
 use super::artifact::{ArtifactFamily, shipped_family_for_loop_count};
-use super::{RustRedEvaluationError, RustRedEvaluationOptions};
 
 pub(super) struct MatchedScalarFamily {
     pub(super) family: ArtifactFamily,
@@ -231,16 +229,6 @@ impl MatchedScalarFamily {
                     .clone()
             }),
         })
-    }
-
-    pub(super) fn evaluate(
-        self,
-        vakint: &crate::Vakint,
-        settings: &VakintSettings,
-        numerator: symbolica::atom::AtomView,
-        options: &RustRedEvaluationOptions,
-    ) -> Result<Atom, RustRedEvaluationError> {
-        super::materialize::evaluate(vakint, self, settings, numerator, options)
     }
 }
 

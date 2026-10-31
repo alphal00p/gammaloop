@@ -102,27 +102,15 @@ CLI validates its exact payload, projection, scientific identity and producer
 provenance. Missing or invalid configured input reports an error and never falls
 back to fresh preparation. Historical quadratic bundles can be retained,
 but the gallery launcher rejects that projection while it is deferred.
-The executable must support #raw("--running-cache") and
-#raw("--running-cache-capture-only"); bind its bytes and capabilities to the
-reviewed build and consumer-validation receipts before enabling the button.
-An older executable is not a fallback for unsupported flags.
-#raw("VAKINT_GALLERY_CACHE") optionally supplies an immutable validated base:
-a native directory or a legacy compressed cache file. Use the official load
-report's #raw("cache_path") and #raw("cache_format"), or an explicitly qualified
-base, rather than guessing a #raw("*.rrcache.gz") filename. Authenticate a
-directory through its bound native index/descriptor identity; a file checksum
-does not represent a directory.
+Bind the executable's bytes and capabilities to the reviewed build and
+consumer-validation receipts before enabling the button.
 These paths are deployment configuration, not browser-controlled commands.
 
 A separate worker runs the same Rust example with #raw("--projection"),
-#raw("--prepared-input"), #raw("--artifacts"), #raw("--work-dir") and optional
-#raw("--cache"). Every run also receives #raw("--running-cache") pointing to
-its own fresh #raw("WORK/running-cache") delta. An uncached run adds
-#raw("--running-cache-capture-only") and never reads a persistent cache. A cached
-run reads the immutable selected base and its own delta with the normal running
-cache policy. Native reduction owns capture, flush and close. Preserve every
-durable prefix, including when the reduction or reporting fails; do not reuse a
-failed job's directory for another attempt.
+#raw("--prepared-input"), #raw("--artifacts"), #raw("--work-dir") and
+#raw("--progress-snapshot"). The reduction uses RustRed's ordered scheduler,
+which reads and writes no persistent cache. Do not reuse a failed job's
+directory for another attempt.
 
 Each fresh process uses the same complete scalar input without
 repeating native graph generation or trace contraction. The report separates
@@ -141,17 +129,10 @@ snapshot is displayed through a bounded JSON preview with its actual file age.
 Before the first Native event, progress remains explicitly pending; repeated
 heartbeats do not imply scientific progress or a new Native observation.
 Requests, logs and resulting receipts remain below the configured workspace.
-The app never starts #raw("prepare_cache") or a #raw("build_cache") production
-job. Completed native work captured during reductions can later join the
-authenticated cumulative cache. Preserve the full *heavy* running cache without
-an aggregate size cap, and provide its compressed local artifact for separate
-hosting. Only the trimmed *light* cache, selected using measured rule frequency
-and usefulness and limited to *95 MB*, is published in the official repository
-and releases. Keep light and heavy provenance, sizes and timing comparisons
-distinct; neither live counts nor compressed size proves a speedup. Both preserve
-native codec and campaign bindings. The graph tutorial's explicit tensor-contraction
-button is a separate, interactive algebra demonstration, not a controlled timing
-sample of the physical zero-momentum fixture.
+The depth-first cache evidence shown by the closure page is historical: Vakint
+no longer prepares, captures or reads depth-first caches. The graph tutorial's
+explicit tensor-contraction button is a separate, interactive algebra
+demonstration, not a controlled timing sample of the physical zero-momentum fixture.
 
 The ten small teaching formulae use their objects' existing native HTML protocol
 through the shared gallery presentation method. This retains native MathML and

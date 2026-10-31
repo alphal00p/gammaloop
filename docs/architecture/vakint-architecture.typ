@@ -21,7 +21,7 @@ Rust crate owns these boundaries:
 - `VakintSettings`, `EvaluationOrder`, and `EvaluationMethod`: precision, normalization,
   dependency, and backend-selection policy;
 - FORM and pySecDec adapters: template rendering, subprocess execution, and result decoding;
-- RustRed's immutable data registry, reduction programs, master capabilities, and strict caches;
+- RustRed's immutable data registry, reduction programs and master capabilities;
 - `precision` and `inspection`: tracked Laurent coefficients and snapshot-owned constant/master
   records, using Symbolica/Numerica's shared numerical error propagation;
 - the optional Symbolica community Vakint module: Python classes that own a Rust engine and
@@ -65,20 +65,21 @@ and settings together for convenience.
 
 Each engine owns an immutable `RustRedData` snapshot shared through `Arc`. Its programs, master
 coefficients, topology identities, coverage predicates and graph references feed matching,
-reduction, product factors, master evaluation and cache attachment. Ordinary construction remains
-offline with cache-free one- through three-loop material. Four- and five-loop RustRed material
+reduction, product factors and master evaluation. Ordinary construction remains
+offline with vendored one- through three-loop material. Four- and five-loop RustRed material
 requires explicit loading.
 
 `load_official_external_data(N, options)` validates and activates one cumulative one- through
 N-loop snapshot. It recognizes a local checkout before considering network access; managed
 installations use checksummed per-loop release archives, locking and atomic installation. Existing
-validated packs are reused offline. Activation is transactional and replaces incompatible caches
-and numerical context. Explicit IBP, saved-application and cache paths remain available. See
+validated packs are reused offline. Activation is transactional and replaces the loaded
+application and numerical context. Explicit IBP and saved-application paths remain available. See
 the crate's `external_data.typ` for loading and release conventions.
 
-Prepared caches attach only when requested for depth-first reduction, the one strategy that
-reads them (`OfficialExternalDataOptions::for_strategy`). The default ordered strategy never reads
-them, so default loading activates the validated registry without importing those caches. A saved-application path inside a recognized release uses that release's cumulative
+Vakint reduces only with RustRed's ordered scheduler and has no reduction-result cache. The
+prepared depth-first caches and benchmark inputs that older releases list in their pack
+manifests are never read at run time, so loading skips their checksums; every other listed file
+is validated before activation. A saved-application path inside a recognized release uses that release's cumulative
 snapshot; a bare application supplies terminal declarations without inventing coefficient or
 graph records.
 
@@ -109,8 +110,7 @@ family-qualified unknown integrals. After exact combination, Retain mode warns w
 deduplicated undeclared identities and authenticated candidate parent-topology graph references;
 a common family does not imply a unique parent. Symbolic and Numerical substitution both fail
 gracefully if surviving unknown integrals or declared terminals lack required coefficients.
-Uncomputed declared pack masters remain valid retained results. Prepared caches accept strict
-completed reductions, including valid captured descendants, and never store partial results.
+Uncomputed declared pack masters remain valid retained results.
 
 Ordinary evaluation and dedicated five-loop symbolic evaluation pass retained master polynomials
 to the same catalogue owner. It combines them once, independently for each full
@@ -221,17 +221,17 @@ Its opaque borrowed scope keeps the native observer on the caller thread and
 exposes only phase notices, existing Atom-header samples, and actual completed
 caller-item counters. `evaluate_rustred_symbolic_in_scope` reborrows that observer
 for the ordinary retained-evaluation implementation; it creates no second
-presenter, solver, cache or reduction path. Reduction API status is separate from
+presenter, solver or reduction path. Reduction API status is separate from
 whole-job completion. An API return leaves the job active, including during
-opaque output or cache-close work, until the outer closure returns. The
+opaque output work, until the outer closure returns. The
 closure's result and error retain precedence over telemetry faults. Invalid
 options use its declared `From<VakintError>` conversion; disabled options start
-no monitor workers. The existing single-API convenience path and lossless
-cache-hit classification retain their own completion boundaries.
+no monitor workers. The existing single-API convenience path retains its own
+completion boundary.
 
 The physical five-loop collector enters a job scope after guard admission and
-initial setup, covering preparation/loading through result and guard writes,
-running-cache flush and close, and the final report write. Its guard counter
+initial setup, covering preparation/loading through result and guard writes
+and the final report write. Its guard counter
 advances only after each existing serialization step succeeds. The original
 calculation, durability and error-handling order remains intact; stdout is
 delivered after terminal restoration. Frozen displays keep API and whole-job
@@ -249,25 +249,25 @@ retain explicitly aged recorded values, while host memory can refresh independen
 and drawing remain responsive when producer updates stop. If OS sampling itself stalls,
 the displayed sample age continues to grow instead of claiming fresh memory readings.
 
-`VakintSettings.rustred_application_options.reduction_strategy` selects the native scalar
-scheduler at every loop count: memoized depth-first, depth-first without memoization, or
-Ordered. Ordered contributions are first grouped by source and master mode, then reduced
-together on one weighted frontier. They share a single real-argument simplification after
-batching and before master substitution, so the per-integral simplification is skipped for
-that strategy. Ordered and non-memoized depth-first requests bypass depth-first result caches.
-Ordered is the default (`DEFAULT_RUSTRED_REDUCTION_STRATEGY`); RustRed's own default stays
-depth-first. `VakintSettings.ordered_weight_arithmetic` (`OrderedWeightArithmetic`, RustRed's
-canonical text `exact | modular_sampled[:...] | modular_polynomial[:...]`) selects the frontier
-weights of Ordered requests at every loop count; the default is the single constant
-`DEFAULT_ORDERED_WEIGHT_ARITHMETIC` (exact). All modes expand the same keys and return the same
-terms and guards. `VakintSettings.n_cores` (default `default_n_cores()`: available cores, at most
-ten, one without a Symbolica license) is the single source of every worker count: the modular
-workers unless the selection fixes `threads`, and the five-loop route verification while the
-saved application loads. Both native fields (`ordered_weight_arithmetic`,
-`preparation_workers` of `rustred_application_options`) are derived in
-`rustred_evaluation::application_options` and must keep their defaults; neither enters the
-saved-application reload identity. One core runs everything on the calling thread, which
-`tests/single_core_tests.rs` enforces with a seccomp filter. `VAKINT_DUMP_ORDERED_REQUEST`
+RustRed reduces every request at every loop count with its ordered scheduler; Vakint has no
+strategy setting and forces `Ordered` into the native options it passes (the inherited
+`rustred_application_options.reduction_strategy` field is ignored). Depth-first reduction and
+its prepared, running and transported result caches were removed from Vakint; RustRed keeps its
+own depth-first reducer. RustRed contributions are first grouped by source and master mode,
+then reduced together on one weighted frontier per compatible coefficient channel. They share
+a single real-argument simplification after batching and before master substitution, so no
+per-integral simplification is applied to them. `VakintSettings.ordered_weight_arithmetic`
+(`OrderedWeightArithmetic`, RustRed's canonical text
+`exact | modular_sampled[:...] | modular_polynomial[:...]`) selects the frontier weights at every
+loop count; the default is the single constant `DEFAULT_ORDERED_WEIGHT_ARITHMETIC` (exact). All
+modes expand the same keys and return the same terms and guards. `VakintSettings.n_cores`
+(default `default_n_cores()`: available cores, at most ten, one without a Symbolica license) is
+the single source of every worker count: the modular workers unless the selection fixes
+`threads`, and the five-loop route verification while the saved application loads. Both native
+fields (`ordered_weight_arithmetic`, `preparation_workers` of `rustred_application_options`) are
+derived in `rustred_evaluation::application_options` and must keep their defaults; neither
+enters the saved-application reload identity. One core runs everything on the calling thread,
+which `tests/single_core_tests.rs` enforces with a seccomp filter. `VAKINT_DUMP_ORDERED_REQUEST`
 records every native Ordered request with digests of its exact output, for replay without Vakint.
 
 A long-form five-loop input enumerates every verified momentum witness and selects the first
@@ -291,7 +291,7 @@ catalogue coefficient combination, residual catalogue classification,
 result packing and natural completed-batch cleanup. Caller phases cover work before
 and after native reduction; monitoring inspects existing Atom headers rather than creating
 another expression for monitoring. Each recorded stage duration is one completed
-span, with repeated calls retained separately. `detailed_evaluation_total` includes
+span, with repeated calls retained separately. `ordered_batch_total` includes
 its reduction and materialization children plus callee cleanup;
 `retained_finalization_total` includes the catalogue combination and classification
 children. Add only the explicitly listed disjoint spans when comparing their sum
@@ -303,11 +303,9 @@ scope time.
 
 Symbolic sizes follow the objects actually stored by each owner. The caller reports the
 encoded byte length and stored summands of its existing Atom at phase boundaries, without
-formatting or constructing another expression. Native reports unstarted coalesced roots,
-deferred rule maps and their child-integral occurrences, and collected output keys. Deferred
-maps include the current map while its coefficients are being combined. These partitions
-can overlap; they are not summed into a distinct-integral count or the size of an expanded
-global expression, which the depth-first reducer never materializes. Native coefficient
+formatting or constructing another expression. The ordered native request reports its pending
+frontier keys, terminal keys and the materialized coefficient monomials of both; these are
+integral and size censuses of one request, not the size of an expanded global expression. Native coefficient
 byte censuses remain clone-owned bounds, distinct from Atom bytes and process RSS. Each
 sample retains its scope and age; caller forwarding and fresh OS memory samples do not
 make old native observations current. Metadata overflow gives an unknown count and never
@@ -439,26 +437,15 @@ Vakint does not serialize its topology library or settings. Known topologies are
 `Vakint::new`, which is why one engine should be reused for multiple operations. Durable values
 cross the API as checked Symbolica expressions or precision-bearing Laurent records. Temporary FORM/pySecDec
 workspaces are implementation artifacts unless cleanup is disabled or a reuse directory is
-explicitly supplied. RustRed's external packs and native prepared caches are explicit durable
-data, validated against their schemas and authenticated program bindings before attachment.
+explicitly supplied. RustRed's external packs are explicit durable data, validated against their
+schemas and authenticated program bindings before activation.
 
-A running five-loop cache may append strict completed native Route/Apply nodes during ordinary
-reductions. Explicit flush reports acknowledge durable records; freezing records a generation
-descriptor for later read-only attachment. Loading an immutable snapshot has no writer and
-captures no new records. Partial reductions never enter distributed strict caches.
-
-Single-file cache admission uses `RustRedCacheFileOptions` (`CacheFileOptions` in Python) for
-compressed, decoded and owned-index byte grants and an optional decoded-store directory. Omitted
-grants retain the compact distribution defaults; larger independently hosted files require
-explicit grants. These do not enlarge runtime RAM, work, queue or eviction policies. File-backed
-loading authenticates transport and framing before attachment, shares a lazy coefficient table,
-and checks complete record semantics at each solver hit.
-
-Five-loop `FullSnapshot` export combines completed attached-base records and resident completed
-nodes into one compressed native file with a shared coefficient table. An attached running
-writer must be closed first, and the destination must be new. One- through four-loop exports
-retain their native base-copy and checkpoint workflow. Python forwards the same file options
-and snapshot operation to Rust; it does not implement another cache format.
+Vakint persists no reduction results. The depth-first prepared caches, running caches, snapshots
+and cache transport were removed together with depth-first reduction, because a completed
+terminal image replaces a frontier key and skips every grouping and cancellation below it. A
+persistent ordered cache of weight-independent one-step records attaches at the
+`rustred_evaluation::cache` boundary, which keeps the saved-application identity used to bind such
+records (`symbolica_community_module::cache` is its Python counterpart).
 
 A reproducible result therefore depends on more than the input expression: record the topology
 form, numerator, normalization convention, epsilon depth, decimal precision, backend order and

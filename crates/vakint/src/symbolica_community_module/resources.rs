@@ -43,22 +43,10 @@ pub(super) fn run<T>(
                 checked?;
                 Ok(value)
             }
-            // Python callback errors and signals retain their original type,
-            // identity and durable cache_report even if the request also timed out.
+            // Python callback errors and signals retain their original type and
+            // identity even if the request also timed out.
             Err(error) => Err(error),
         }
-    })
-}
-
-/// Native commit-aware operations check immediately before publication. A
-/// later facade check could report failure after an attachment or file changed.
-pub(super) fn run_committing<T>(
-    limits: ResourceLimits,
-    operation: impl FnOnce() -> PyResult<T>,
-) -> PyResult<T> {
-    ResourceBudget::new(limits).run(|| {
-        checkpoint()?;
-        operation()
     })
 }
 

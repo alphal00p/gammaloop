@@ -7,16 +7,26 @@ fn graph_adapter_and_rich_output_are_present_in_valid_python_stubs() {
     Python::initialize();
     let info = vakint::stub_info().expect("build Python stub inventory");
     let module = &info.modules["symbolica.community.hepkit.vakint"];
-    assert!(
-        module
-            .to_string()
-            .contains("rustred_reduction_strategy: builtins.str = 'ordered'")
-    );
+    // Vakint reduces only with the ordered scheduler: no strategy or
+    // depth-first cache surface remains.
+    let stub = module.to_string();
+    for removed in [
+        "rustred_reduction_strategy",
+        "rustred_cache_policy",
+        "load_prepared_caches",
+        "def prepare_cache",
+        "def load_cache",
+        "def cache_statistics",
+        "class RunningCacheControl",
+        "cache_hit_diagnostic",
+    ] {
+        assert!(!stub.contains(removed), "{removed}");
+    }
     for parameter in [
         "n_cores: typing.Optional[builtins.int] = None",
         "ordered_weight_arithmetic: typing.Optional[builtins.str] = None",
     ] {
-        assert!(module.to_string().contains(parameter), "{parameter}");
+        assert!(stub.contains(parameter), "{parameter}");
     }
     let graph_adapter = &module.function["integral_from_diagram"];
     assert_eq!(graph_adapter.len(), 1);

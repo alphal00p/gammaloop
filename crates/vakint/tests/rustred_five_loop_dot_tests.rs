@@ -235,9 +235,5 @@ fn external_r0_connected_dot_matches_known_admitted_key_and_warm_repeat() -> Res
     );
     assert!(!first.families.is_empty());
     println!("native_dot_known_key_exact_parity=passed");
-    println!(
-        "native_dot_cache={:?}",
-        engine.rustred_application_cache_statistics()?
-    );
     Ok(())
 }

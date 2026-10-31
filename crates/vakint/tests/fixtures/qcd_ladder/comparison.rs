@@ -5,8 +5,8 @@ pub mod historical;
 use super::super::vakint::{
     AvailablePrecision, ConstantSymbol, EvaluationMethod, EvaluationOrder, LoopNormalizationFactor,
     MasterSymbol, OfficialExternalDataOptions, OrderedWeightArithmetic, RustRedEvaluationOptions,
-    RustRedMasterMode, RustRedMonitorOptions, RustRedMonitorScope, RustRedReductionStrategy,
-    Vakint, VakintMaster, VakintSettings, vakint_parse, vakint_symbol,
+    RustRedMasterMode, RustRedMonitorOptions, RustRedMonitorScope, Vakint, VakintMaster,
+    VakintSettings, vakint_parse, vakint_symbol,
 };
 use super::{LadderFixture, Projection, Result};
 use sha2::{Digest, Sha256};
@@ -75,7 +75,9 @@ pub fn map_ordered<T: Sync, R: Send>(
 }
 
 pub struct RunOptions {
-    pub strategy: RustRedReductionStrategy,
+    /// Ordered weight arithmetic; every arithmetic returns the same result.
+    /// Without fixed `threads`, modular workers follow the run's cores.
+    pub arithmetic: OrderedWeightArithmetic,
     pub artifacts: Option<PathBuf>,
     pub monitor: RustRedMonitorOptions,
     pub numerical_reference: bool,
@@ -86,22 +88,47 @@ pub struct CompletedRun {
     pub report: serde_json::Value,
 }
 
+/// The weight arithmetic selected by `VAKINT_ORDERED_WEIGHT_ARITHMETIC`
+/// (RustRed's canonical text `exact | modular_sampled[:key=value,...] |
+/// modular_polynomial[:key=value,...]`), Vakint's default when it is unset.
+pub fn arithmetic_from_environment() -> Result<OrderedWeightArithmetic> {
+    match std::env::var("VAKINT_ORDERED_WEIGHT_ARITHMETIC") {
+        Ok(text) => Ok(text.parse()?),
+        Err(_) => Ok(OrderedWeightArithmetic::default()),
+    }
+}
+
+/// The modular arm of a two-arm comparison: the arithmetic selected by
+/// `VAKINT_ORDERED_WEIGHT_ARITHMETIC` when it is modular, otherwise
+/// `modular_polynomial` with workers following the cores.
+pub fn modular_arithmetic_from_environment() -> Result<OrderedWeightArithmetic> {
+    let selected = arithmetic_from_environment()?;
+    Ok(if selected == OrderedWeightArithmetic::exact() {
+        OrderedWeightArithmetic::modular_polynomial()
+    } else {
+        selected
+    })
+}
+
 impl CompletedRun {
-    fn read(directory: &Path, strategy: &str, memoization: bool) -> Result<Self> {
+    /// Read a completed saved report: an Ordered run, or a historical run of
+    /// the former depth-first strategy (whose own per-run memo is recorded).
+    pub fn read(directory: &Path) -> Result<Self> {
         let report: serde_json::Value =
             serde_json::from_slice(&std::fs::read(directory.join("report.json"))?)?;
+        let memoization = report["strategy"] == "DepthFirst";
         if report["schema"] != "vakint.ordered-rung-comparison.v1"
             || report["persistent_cache"] != false
             || report["reduction_completed"] != true
             || report["catalogue_closure"]["closed"] != true
             || report["catalogue_closure"]["unknown_count"] != 0
-            || report["strategy"] != strategy
+            || !(report["strategy"] == "Ordered" || memoization)
             || report["intrinsic_memoization"] != memoization
             || report["cache_policy"]["depth_first_intrinsic_memoization"] != memoization
             || report["cache_policy"]["prepared_cache_loaded"] != false
             || report["cache_policy"]["previous_run_cache_restored"] != false
         {
-            return Err(format!("comparison requires a completed {strategy} report with the declared memoization policy and no loaded prepared or previous-run caches").into());
+            return Err("comparison requires a completed Ordered (or historical depth-first) report with its declared memoization policy and no loaded prepared or previous-run caches".into());
         }
         if report["retained"]["file"] != "retained.symbolica" {
             return Err("unexpected retained result filename".into());
@@ -281,9 +308,6 @@ pub fn run(
     directory: &Path,
     options: &RunOptions,
 ) -> Result<CompletedRun> {
-    if prepared.loop_count == 5 && options.strategy != RustRedReductionStrategy::Ordered {
-        return Err("five-loop physical benchmarks permit only ordered reduction; use the preserved historical DFS result for comparison".into());
-    }
     // The asynchronous publisher may write its first frame immediately when
     // the scope starts. Its evidence directory must already exist.
     std::fs::create_dir_all(directory)?;
@@ -293,55 +317,6 @@ pub fn run(
         })
     } else {
         run_scoped(prepared, directory, options, None)
-    }
-}
-
-#[cfg(test)]
-#[test]
-fn five_loop_benchmarks_reject_both_depth_first_strategies_before_loading() {
-    let prepared = LadderFixture {
-        loop_count: 5,
-        input: Atom::one(),
-        preparation_seconds: 0.0,
-        scalar_terms: 1,
-        contributions: 1,
-        nonzero_conditions: Vec::new(),
-        projection: Projection::ZeroMomentumMetric,
-        timings: super::PreparationTimings::default(),
-        prepared_input: None,
-    };
-    let directory = tempfile::tempdir().unwrap();
-    // A recognized but incomplete external-data manifest prevents network
-    // access even if this guard regresses and the loader is reached.
-    let manifest: serde_json::Value = serde_json::from_str(include_str!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/data/manifest.json"
-    )))
-    .unwrap();
-    std::fs::write(
-        directory.path().join("manifest.json"),
-        serde_json::to_vec(&serde_json::json!({"schema":manifest["schema"]})).unwrap(),
-    )
-    .unwrap();
-    let output = directory.path().join("must-not-create");
-    for strategy in [
-        RustRedReductionStrategy::DepthFirst,
-        RustRedReductionStrategy::DepthFirstWithoutMemoization,
-    ] {
-        let error = run(
-            &prepared,
-            &output,
-            &RunOptions {
-                strategy,
-                artifacts: Some(directory.path().to_owned()),
-                monitor: RustRedMonitorOptions::default(),
-                numerical_reference: false,
-            },
-        )
-        .err()
-        .expect("a five-loop DFS benchmark must fail before any work");
-        assert!(error.to_string().contains("permit only ordered reduction"));
-        assert!(!output.exists());
     }
 }
 
@@ -381,7 +356,7 @@ fn five_loop_loading_error_publishes_snapshot_in_fresh_evidence_directory() {
         &prepared,
         &evidence,
         &RunOptions {
-            strategy: RustRedReductionStrategy::Ordered,
+            arithmetic: OrderedWeightArithmetic::exact(),
             artifacts: Some(artifacts.clone()),
             monitor: RustRedMonitorOptions {
                 progress_snapshot: Some(snapshot.clone()),
@@ -409,24 +384,16 @@ fn five_loop_loading_error_publishes_snapshot_in_fresh_evidence_directory() {
     assert!(!evidence.join("report.json").exists());
 }
 
-/// Worker cores and Ordered weight arithmetic of a fixture run: Vakint's
-/// defaults, overridden by `VAKINT_N_CORES` and
-/// `VAKINT_ORDERED_WEIGHT_ARITHMETIC` (RustRed's canonical text; without a
-/// `threads` option the modular workers follow the cores). Every choice
-/// returns the same exact result.
-fn execution_from_environment() -> Result<(usize, OrderedWeightArithmetic)> {
-    let n_cores = match std::env::var("VAKINT_N_CORES") {
+/// Worker cores of a fixture run: Vakint's default, overridden by
+/// `VAKINT_N_CORES`. Every core count returns the same exact result.
+pub fn n_cores_from_environment() -> Result<usize> {
+    Ok(match std::env::var("VAKINT_N_CORES") {
         Ok(text) => text
             .trim()
             .parse()
             .map_err(|error| format!("VAKINT_N_CORES={text}: {error}"))?,
         Err(_) => super::super::vakint::default_n_cores(),
-    };
-    let arithmetic = match std::env::var("VAKINT_ORDERED_WEIGHT_ARITHMETIC") {
-        Ok(text) => text.parse()?,
-        Err(_) => OrderedWeightArithmetic::default(),
-    };
-    Ok((n_cores, arithmetic))
+    })
 }
 
 fn run_scoped(
@@ -436,7 +403,7 @@ fn run_scoped(
     mut scope: Option<&mut RustRedMonitorScope<'_, '_>>,
 ) -> Result<CompletedRun> {
     let total = Instant::now();
-    let (n_cores, ordered_weight_arithmetic) = execution_from_environment()?;
+    let n_cores = n_cores_from_environment()?;
     let loading = Instant::now();
     if let Some(scope) = scope.as_deref_mut() {
         scope.phase("data_loading");
@@ -447,7 +414,6 @@ fn run_scoped(
             prepared.loop_count,
             &OfficialExternalDataOptions {
                 local_artifacts_path: options.artifacts.clone(),
-                load_prepared_caches: false,
                 n_cores,
                 ..Default::default()
             },
@@ -471,9 +437,8 @@ fn run_scoped(
         number_of_terms_in_epsilon_expansion: prepared.loop_count as i64 + 1,
         ..Default::default()
     };
-    settings.rustred_application_options.reduction_strategy = options.strategy;
     settings.n_cores = n_cores;
-    settings.ordered_weight_arithmetic = ordered_weight_arithmetic;
+    settings.ordered_weight_arithmetic = options.arithmetic;
     // Bind the fixture's exact native trace dimension identically for both
     // public evaluators; the raw prepared scalar payload remains unchanged.
     let native_d = super::dimension()?;
@@ -589,14 +554,13 @@ fn run_scoped(
             serde_json::json!({"scope":"existing lower-loop public Atom API does not expose its internal guard set","preparation":prepared.nonzero_conditions.iter().map(AtomCore::to_canonical_string).collect::<Vec<_>>()})
         }
     };
-    let intrinsic_memoization = options.strategy == RustRedReductionStrategy::DepthFirst;
     let mut report = serde_json::json!({"schema":"vakint.ordered-rung-comparison.v1",
         "loop_count":prepared.loop_count,"gluon_rungs":prepared.loop_count-1,"projection":prepared.projection,
-        "strategy":format!("{:?}",options.strategy),"persistent_cache":false,
-        "intrinsic_memoization":intrinsic_memoization,
-        "intrinsic_memoization_scope":"primary depth-first completed-result reuse; DFS-no-memo also bypasses dependency/product result memos, while Ordered checked opaque factorization may use a fresh isolated internal memo",
+        "strategy":"Ordered","ordered_weight_arithmetic":options.arithmetic.to_string(),
+        "persistent_cache":false,"intrinsic_memoization":false,
+        "intrinsic_memoization_scope":"Ordered has no completed-result memo; checked opaque factorization may use a fresh isolated internal memo",
         "cache_policy":{"prepared_cache_loaded":false,"previous_run_cache_restored":false,
-            "depth_first_intrinsic_memoization":intrinsic_memoization,
+            "depth_first_intrinsic_memoization":false,
             "ordered_result_cache":"not supported"},
         "worker_policy":{"owner_preparation_workers":1,
             "scope":"single owner preparation worker required for native timing subtraction"},
@@ -892,7 +856,7 @@ pub fn compare(left: &CompletedRun, right: &CompletedRun) -> Result<()> {
         .expand()
         .is_zero()
     {
-        return Err("physical reduction strategies differ exactly".into());
+        return Err("physical reductions differ exactly".into());
     }
     let left = &left.report["numerical_reference"];
     let right = &right.report["numerical_reference"];
@@ -902,76 +866,48 @@ pub fn compare(left: &CompletedRun, right: &CompletedRun) -> Result<()> {
     Ok(())
 }
 
-/// Authenticate and compare separate completed processes without repeating IBPs.
-pub fn compare_reports(
-    dfs: &Path,
-    dfs_no_memo: &Path,
-    ordered: &Path,
-    destination: &Path,
-) -> Result<()> {
-    let memoized = CompletedRun::read(dfs, "DepthFirst", true)?;
-    let nonmemoized = CompletedRun::read(dfs_no_memo, "DepthFirstWithoutMemoization", false)?;
-    let ordered_result = CompletedRun::read(ordered, "Ordered", false)?;
-    compare(&memoized, &nonmemoized)?;
-    compare(&memoized, &ordered_result)?;
-    let dfs_report = std::fs::canonicalize(dfs.join("report.json"))?;
-    let dfs_no_memo_report = std::fs::canonicalize(dfs_no_memo.join("report.json"))?;
-    let ordered_report = std::fs::canonicalize(ordered.join("report.json"))?;
-    std::fs::write(
-        destination,
-        serde_json::to_vec_pretty(&serde_json::json!({
-            "schema":"vakint.ordered-rung-parity.v2","exact_retained_equality":true,
-            "numerical_enclosures_agree":if memoized.report["numerical_reference"].is_null() { None } else { Some(true) },
-            "input_sha256":memoized.report["input_sha256"],
-            "reports":{
-                "dfs":{"path":dfs_report,"sha256":sha256(&std::fs::read(&dfs_report)?)},
-                "dfs_no_memo":{"path":dfs_no_memo_report,"sha256":sha256(&std::fs::read(&dfs_no_memo_report)?)},
-                "ordered":{"path":ordered_report,"sha256":sha256(&std::fs::read(&ordered_report)?)}},
-            "retained":{"dfs":memoized.report["retained"]["sha256"],"dfs_no_memo":nonmemoized.report["retained"]["sha256"],"ordered":ordered_result.report["retained"]["sha256"]},
-            "intrinsic_memoization":{"dfs":true,"dfs_no_memo":false,"ordered":false},
-            "equality_scope":"exact retained equality after documented positive-real EulerGamma normalization; exact binary-rational tracked-error overlap when numerical references are present (rigorous bounds only when error quality is Bounded); no claim of identical exceptional-dimensional guard sets",
-        "comparison_normalization":"(exp(±EulerGamma))^p = exp(±EulerGamma*p), using only the registered real Euler constant and its positive exponentials",
-            "numerical_check":{"minimum_meaningful_digits":64,"point":{"mUV":1,"mu_r_squared":1,"UFO_G":1}}
-        }))?,
-    )?;
-    Ok(())
-}
-
-/// A functional two-engine proof, never a performance-qualified three-arm sample.
+/// A functional proof that two saved runs agree exactly, without repeating
+/// IBPs: an Ordered run against a historical depth-first report, or two
+/// Ordered runs (e.g. exact and modular weights). Never a performance sample.
 /// Retain-only comparison discards numerical metadata in these loaded copies;
 /// neither the source reports nor their recorded timing/evidence are modified.
 pub fn compare_two_reports(
-    dfs: &Path,
+    reference: &Path,
     ordered: &Path,
     destination: &Path,
     numerical_reference: bool,
 ) -> Result<()> {
-    let mut dfs_result = CompletedRun::read(dfs, "DepthFirst", true)?;
-    let mut ordered_result = CompletedRun::read(ordered, "Ordered", false)?;
+    let mut reference_result = CompletedRun::read(reference)?;
+    let mut ordered_result = CompletedRun::read(ordered)?;
+    if ordered_result.report["strategy"] != "Ordered" {
+        return Err("the compared run must be an Ordered report".into());
+    }
     if numerical_reference
-        && (dfs_result.report["numerical_reference"].is_null()
+        && (reference_result.report["numerical_reference"].is_null()
             || ordered_result.report["numerical_reference"].is_null())
     {
         return Err("two-report comparison requires both numerical references; explicitly select --no-numerical-reference for retained-only proof".into());
     }
     if !numerical_reference {
-        dfs_result.report["numerical_reference"] = serde_json::Value::Null;
+        reference_result.report["numerical_reference"] = serde_json::Value::Null;
         ordered_result.report["numerical_reference"] = serde_json::Value::Null;
     }
-    compare(&dfs_result, &ordered_result)?;
+    compare(&reference_result, &ordered_result)?;
     let numerical_checked =
-        numerical_reference && !dfs_result.report["numerical_reference"].is_null();
-    let dfs_report = std::fs::canonicalize(dfs.join("report.json"))?;
+        numerical_reference && !reference_result.report["numerical_reference"].is_null();
+    let reference_report = std::fs::canonicalize(reference.join("report.json"))?;
     let ordered_report = std::fs::canonicalize(ordered.join("report.json"))?;
     let certificate = serde_json::json!({
-        "schema":"vakint.ordered-rung-functional-pair.v1","functional_only":true,"performance_eligible":false,
+        "schema":"vakint.ordered-rung-functional-pair.v2","functional_only":true,"performance_eligible":false,
         "exact_retained_equality":true,"numerical_enclosures_agree":if numerical_checked {Some(true)} else {None},
         "numerical_check":if numerical_checked {"checked existing references"} else {"not checked"},
         "retain_only_explicitly_requested":!numerical_reference,"new_evaluations":0,
-        "input_sha256":dfs_result.report["input_sha256"],
-        "reports":{"dfs":{"path":dfs_report,"sha256":sha256(&std::fs::read(&dfs_report)?)},
-            "ordered":{"path":ordered_report,"sha256":sha256(&std::fs::read(&ordered_report)?)}},
-        "retained":{"dfs":dfs_result.report["retained"]["sha256"],"ordered":ordered_result.report["retained"]["sha256"]},
+        "input_sha256":reference_result.report["input_sha256"],
+        "reports":{"reference":{"path":reference_report,"sha256":sha256(&std::fs::read(&reference_report)?),
+                "strategy":reference_result.report["strategy"],"ordered_weight_arithmetic":reference_result.report["ordered_weight_arithmetic"]},
+            "ordered":{"path":ordered_report,"sha256":sha256(&std::fs::read(&ordered_report)?),
+                "ordered_weight_arithmetic":ordered_result.report["ordered_weight_arithmetic"]}},
+        "retained":{"reference":reference_result.report["retained"]["sha256"],"ordered":ordered_result.report["retained"]["sha256"]},
         "equality_scope":"existing exact retained comparator and, when checked, tracked numerical enclosure overlap; no exceptional-domain equality or timing qualification",
     });
     std::fs::write(destination, serde_json::to_vec_pretty(&certificate)?)?;

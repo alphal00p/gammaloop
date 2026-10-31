@@ -1,8 +1,9 @@
 = External reduction data and master capabilities
 
-Vakint ships its 1L–3L RustRed programs, master coefficients and graphs without
-prepared caches. The separate #link("https://github.com/alphal00p/vakint-external-data")[external-data repository]
-contains independently packaged loop data and optional complete native caches.
+Vakint ships its 1L–3L RustRed programs, master coefficients and graphs. The separate
+#link("https://github.com/alphal00p/vakint-external-data")[external-data repository]
+contains independently packaged loop data. Releases up to v0.1.2 also contain
+prepared depth-first caches, which Vakint no longer reads.
 FORM reduction rules and their hard-coded master formulas remain in Vakint.
 See #link("external_data_validation.typ")[the migration validation report] for
 release identities, numerical evidence, completed checks and remaining gates.
@@ -32,26 +33,17 @@ report = engine.load_official_external_data(
 The loop argument is always a maximum: four loads 1L, 2L, 3L and 4L. All packs
 come from one immutable release. The default path is the current working
 directory, with managed installations below `.vakint-external-data/<version>`.
-The report identifies the version, per-loop paths, available caches, and whether
-each pack was local, reused, or downloaded. Prepared caches hold completed
-depth-first reductions, which only `RustRedReductionStrategy::DepthFirst` reads.
-Because Vakint's default strategy is ordered, `OfficialExternalDataOptions::default()`
-sets `load_prepared_caches` to `false`, and `load_external_data` and
-`load_rustred_artifacts` skip prepared caches as well.
-`OfficialExternalDataOptions::for_strategy(RustRedReductionStrategy::DepthFirst)`,
-`load_external_data_with_prepared_caches` and
-`load_rustred_artifacts_with_prepared_caches` load them. The Python keyword
-`load_prepared_caches` defaults to `True` but applies only to engines constructed
-with `rustred_reduction_strategy="depth_first"`; pass `load_prepared_caches=False`
-to load the same authenticated data without native cache decoding or import.
-Skipping prepared caches never skips data validation. Checksums still cover every listed
-file, including optional cache bytes; this is an activation policy, not a change
-to the dataset. Use this option with `local_artifacts_path` for a local checkout.
+The report identifies the version, per-loop paths, and whether each pack was
+local, reused, or downloaded.
 
-`cache_available` reports the manifest declaration. Per-loop `cache_loaded`
-reports actual automatic attachment, and the top-level `load_prepared_caches`
-field records the requested policy. Availability may therefore be true while
-loading is false. Explicit cache load methods remain available after data loading.
+Vakint reduces only with RustRed's ordered scheduler, which has no use for the
+prepared depth-first caches of older releases. Loading neither decodes nor
+checksums the files of a pack's `cache/` directory, its cache metadata file
+(`cache.json`) or its `benchmarks/` inputs; Vakint never reads them at run time,
+and an explicit read of such a file still verifies its listed checksum. Every
+other listed file is validated before activation. For the five-loop pack this
+skips about 125 MB of the 610 MB listed payload; for the four-loop pack about
+96 MB in 9,818 files.
 
 If the supplied directory contains the repository manifest, Vakint validates and
 loads it directly. It never downloads into or modifies this checkout. `latest`
@@ -66,15 +58,14 @@ Managed installations reuse validated files without downloading or extracting
 again. `refresh=True` checks the `data-latest` release alias; pinned versions remain
 immutable. A failed refresh reports an error and leaves the active engine intact.
 Checksums, relative paths and schemas are checked before activation. Native
-program/cache bindings are checked when their native payloads are activated. Loading a new snapshot replaces the prior external selection;
-old clones keep their existing immutable data and cache sessions.
+program bindings are checked when their native payloads are activated. Loading a new snapshot replaces the prior external selection;
+old clones keep their existing immutable data and loaded applications.
 
 `load_external_data(path, maximum)` loads an existing checkout directly. The
 `load_rustred_artifacts(loop_count, path)` method accepts a local pack/IBP path
-or a sealed 1L–3L rules file; bare programs retain the active master values and
-discard the preceding program's cache attachment. The
-explicit native cache load/import/download methods and the saved-application
-path interface remain available. No ordinary evaluation initiates a download.
+or a sealed 1L–3L rules file; bare programs retain the active master values. The
+saved-application path interface remains available. No ordinary evaluation
+initiates a download.
 
 == Four-loop acceptance tests
 
@@ -245,7 +236,7 @@ stored decimal does not provide more accurate digits.
 == Partial campaigns
 
 Recorded coverage predicates describe the actual campaign scope. Summary maxima
-and completed cache workloads do not enlarge that scope. Outside certified
+do not enlarge that scope. Outside certified
 coverage, Vakint warns and applies only rules whose mathematical conditions hold.
 Unsupported integrals remain exact, family-qualified residuals. Corruption, unsafe
 guards, invalid transports and operational-limit failures remain errors.
@@ -259,9 +250,7 @@ terminals and no computed 5L coefficients; it does not certify a complete basis.
 
 Run `python3 tools/vendor_external_data.py /path/to/vakint-external-data` from the
 Vakint crate. The tool validates input hashes and copies all available 1L–3L
-coefficients, graphs and programs, excluding caches. Native cache compatibility is
-determined by codec and authenticated program identities, not producer revision
-strings alone. Rebuild only caches invalidated by actual program/format changes.
+coefficients, graphs and programs, excluding caches.
 
 Mathematica may be used to develop independent numerical reference values. It is
 not a build or runtime dependency of Vakint or the official-data loader.

@@ -83,7 +83,8 @@ impl<const N: usize> NativeCandidate<N> {
             .map_err(crate::RustRedEvaluationError::from_native)
     }
 
-    /// Request-local global reduction; never reads or fills the DFS point cache.
+    /// Request-local global reduction; never reads or fills the point cache of
+    /// the experimental per-target applier.
     #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn reduce_linear_combination_ordered(
         &self,
@@ -155,27 +156,12 @@ impl<const N: usize> NativeCandidate<N> {
     pub(crate) fn cache_test_statistics(&self) -> rustred::solver::CandidateStatistics {
         self.reducer.lock().unwrap().statistics()
     }
-    /// Snapshot immutable native rules and their already-installed terminal
-    /// convention, without clearing or cloning the ordinary point cache.
-    pub(crate) fn cache_program(
-        &self,
-        source_digest: [u8; 32],
-    ) -> Result<rustred::solver::CandidateUnitMassProgram<N>, String> {
-        let reducer = self
-            .reducer
-            .lock()
-            .map_err(|_| "candidate reducer lock poisoned")?;
-        Ok(rustred::solver::CandidateUnitMassProgram::new(
-            &reducer,
-            source_digest,
-        ))
-    }
     pub(crate) fn family_shared(&self) -> Arc<IntegralFamily> {
         Arc::clone(&self.family)
     }
 
     /// One scoped transported batch over a fresh native program fork. Its
-    /// internal memo never reads or clears the ordinary DFS session's state.
+    /// internal memo never reads or clears the shared candidate point cache.
     pub(crate) fn reduce_transported_unit_mass_guarded(
         &self,
         transport: &rustred::sector::symmetry::integral_transport::Prepared,
@@ -247,83 +233,6 @@ impl<const N: usize> NativeCandidate<N> {
             });
         }
         Ok(result)
-    }
-
-    /// Execute the same checked native program without retaining completed
-    /// integral results, including the ordinary candidate session's point map.
-    pub(crate) fn reduce_unit_mass_without_memoization_guarded(
-        &self,
-        target: &IntegralKey,
-        remaining: ReductionLimits,
-    ) -> Result<
-        (
-            CandidateDecomposition,
-            Vec<rustred::algebra::Coefficient>,
-            ReductionStatistics,
-        ),
-        VacuumProductReductionError,
-    > {
-        let result = self
-            .reducer
-            .lock()
-            .map_err(|_| VacuumProductReductionError::Provider {
-                family: self.family.fingerprint().into(),
-                target: target.clone(),
-                message: "candidate reducer lock poisoned".into(),
-            })?
-            .reduce_unit_mass_without_memoization_guarded(target, remaining)
-            .map_err(|error| {
-                if let Some(resource) = crate::RustRedEvaluationError::resource_cause(&error) {
-                    return VacuumProductReductionError::Reduction(
-                        rustred::reduction::ReductionError::Resources(resource.clone()),
-                    );
-                }
-                match error {
-                    rustred::solver::CandidateReductionError::Uncovered { .. }
-                    | rustred::solver::CandidateReductionError::OutsideNumeratorRank { .. } => {
-                        VacuumProductReductionError::UnresolvedFactor {
-                            family: self.family.fingerprint().into(),
-                            target: target.clone(),
-                        }
-                    }
-                    error => VacuumProductReductionError::Provider {
-                        family: self.family.fingerprint().into(),
-                        target: target.clone(),
-                        message: error.to_string(),
-                    },
-                }
-            })?;
-        if !result.0.unresolved().is_empty() {
-            return Err(VacuumProductReductionError::UnresolvedFactor {
-                family: self.family.fingerprint().into(),
-                target: target.clone(),
-            });
-        }
-        Ok(result)
-    }
-
-    pub(crate) fn reduce_unit_mass_without_memoization(
-        &self,
-        target: &IntegralKey,
-        limits: ReductionLimits,
-    ) -> Result<CandidateReduction, crate::RustRedEvaluationError> {
-        let reducer =
-            self.reducer
-                .lock()
-                .map_err(|_| crate::RustRedEvaluationError::Reduction {
-                    detail: "candidate reducer lock poisoned".into(),
-                })?;
-        let (decomposition, _, work) = reducer
-            .reduce_unit_mass_without_memoization_guarded(target, limits)
-            .map_err(crate::RustRedEvaluationError::from_native)?;
-        Ok(CandidateReduction {
-            terms: decomposition
-                .terms()
-                .iter()
-                .map(|(key, coefficient)| (key.clone(), coefficient.to_expression()))
-                .collect(),
-            applied_rules: work.rule_applications(),
-        })
     }
 
     /// Steer an existing RustRed candidate applier without running discovery.
@@ -679,7 +588,7 @@ mod tests {
     }
 
     #[test]
-    fn ordered_candidate_uses_request_limits_without_changing_depth_first_state() {
+    fn ordered_candidate_uses_request_limits_without_changing_the_point_cache() {
         let (native, key) = terminal_only_candidate();
         let coefficient = native.family.coefficient_context().one();
         let before = native.cache_test_statistics();
