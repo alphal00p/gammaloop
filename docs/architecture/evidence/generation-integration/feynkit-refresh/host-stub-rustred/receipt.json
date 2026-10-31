@@ -222,5 +222,11 @@
     "store_inputs_scratch_and_environments_retained_for_review": true,
     "no_publication_push_PR_fetch_upload": true,
     "no_CI_budget_or_global_integration_change": true
+  },
+  "evidence_packaging_correction": {
+    "partial_revision_preserved": "b6c3886feb702cbf120ec448356684ec5c9b7857",
+    "initial_tracking_warning": "JJ refused two files above existing 1MiB new-file limit; initial candidate seal referenced those not-yet-tracked files.",
+    "correction": "Exact large files retained locally by path/size/hash; final Git packet references them in large-evidence-bindings.json. Existing limits unchanged.",
+    "producer_runtime_or_source_result_changed": false
   }
 }

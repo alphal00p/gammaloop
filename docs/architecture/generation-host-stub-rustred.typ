@@ -90,4 +90,7 @@ candidate. Only structural validation of this new note/registry is claimed;
 no compiler or Nix command runs after the licensed boundary. Main and its index,
 CI, resource budgets and the global integration bookmark are preserved. Exact
 store inputs, native extractions and complete private environments remain
-retained locally for review, as listed in `retained-artifacts.json`.
+retained locally for review, as listed in `retained-artifacts.json`. Two large
+guard/provenance JSON inputs are hash-bound by `large-evidence-bindings.json`;
+the partial JJ tracking candidate and its prior seal remain preserved. Existing
+tracking limits are unchanged.

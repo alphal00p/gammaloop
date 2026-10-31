@@ -1,13 +1,14 @@
 {
   "schema_version": 1,
-  "sealed_utc": "2026-10-31T02:25:00.168038+00:00",
+  "sealed_utc": "2026-10-31T02:27:54.947486+00:00",
   "code": "2cfb52b28d99f92305a9d571bbe3911cf04b8a19",
-  "files": 329,
-  "manifest_sha256": "d5fdaa5aabc14bd23e1fbf701b9e51ab55e32dba5db347a259ed43f51413b555",
-  "receipt_sha256": "dbcc9a5ded82fee900ad4198dba94e1de5115db94422dcbf6823286cee4289e5",
-  "scope": "Candidate evidence integrity only; NEW independent review required, no self approval.",
-  "big_inputs": "retained-artifacts.json",
-  "all_original_packet_seals_verified": true,
-  "licensed_runtime_finished": true,
-  "owned_processes_remaining": 0
+  "files": 337,
+  "manifest_sha256": "f01c681f0efac977c3daad7688e2f0aec0341d3a2a1353aa327fd1d05cc96e60",
+  "receipt_sha256": "0bef8556e9ed27bc44cd391cbe6593eb0cc1baac39680767931a3cdab84a524c",
+  "scope": "Evidence integrity only; NEW independent review required, no self approval.",
+  "large_input_bindings": "large-evidence-bindings.json",
+  "prior_partial_candidate": "b6c3886feb702cbf120ec448356684ec5c9b7857",
+  "prior_seal": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/host-stub-rustred-integration-20261031-r1/evidence-seal-attempt1",
+  "owned_processes_remaining": 0,
+  "includes_exact_nested_review_seals_and_manifests": true
 }

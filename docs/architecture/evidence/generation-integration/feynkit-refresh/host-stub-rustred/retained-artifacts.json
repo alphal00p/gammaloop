@@ -50,5 +50,21 @@
     "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/host-stub-rustred-integration-20261031-r1/runtime/ordinary/installed/venv",
     "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/host-stub-rustred-integration-20261031-r1/runtime/private/installed/venv"
   ],
-  "purpose": "Retain exact store sources, two built distributions, final native/fingerprint/depfile provenance, fresh whole-wheel environments and failures for independent review. No shared cache cleanup or donor/workspace removal."
+  "purpose": "Retain exact store sources, two built distributions, final native/fingerprint/depfile provenance, fresh whole-wheel environments and failures for independent review. No shared cache cleanup or donor/workspace removal.",
+  "large_evidence": [
+    {
+      "original_evidence_path": "qualification/initial-candidate-files.json",
+      "retained_path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/host-stub-rustred-integration-20261031-r1/initial-candidate-files.json",
+      "sha256": "7b8e644baf1f8af8f9fd45c6d632c78467d9f707619e133156d2a5779e612ba2",
+      "bytes": 1176320,
+      "purpose": "Exact guard/compiled-source provenance retained for independent review; omitted from Git under unchanged 1MiB new-file limit."
+    },
+    {
+      "original_evidence_path": "qualification/artifacts/ordinary/compiled-source-bindings.json",
+      "retained_path": "/shared/lcnbr/dev/gammaloop/generation-feynkit-refresh/.local/feynkit-refresh/host-stub-rustred-integration-20261031-r1/artifacts/ordinary/compiled-source-bindings.json",
+      "sha256": "5d3797e28e7f38a643f794a869afee10a0454ffab1bef05c6f3cb2f02aef3c85",
+      "bytes": 1779878,
+      "purpose": "Exact guard/compiled-source provenance retained for independent review; omitted from Git under unchanged 1MiB new-file limit."
+    }
+  ]
 }
