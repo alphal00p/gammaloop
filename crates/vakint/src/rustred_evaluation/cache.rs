@@ -438,8 +438,11 @@ impl OrderedCacheRegistry {
                 current.autosave = settings.autosave;
                 return Ok(Some(Arc::clone(&current.cache)));
             }
-            if current.autosave != OrderedCacheAutosave::Never {
-                current.save()?;
+            // An automatic save: a failure is reported, not raised.
+            if current.autosave != OrderedCacheAutosave::Never
+                && let Err(error) = current.save()
+            {
+                self.autosave_failed(error);
             }
         }
         let options = OrderedStepCacheOptions {
@@ -528,12 +531,16 @@ impl OrderedCacheRegistry {
     /// is logged and kept for the statistics; it never fails the evaluation.
     pub(crate) fn after_evaluation(&self) {
         if let Err(error) = self.save(Some(OrderedCacheAutosave::AfterEvaluation)) {
-            log::warn!("Vakint could not save its Ordered step cache: {error}");
-            *self
-                .last_autosave_error
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner) = Some(error.to_string());
+            self.autosave_failed(error);
         }
+    }
+
+    fn autosave_failed(&self, error: RustRedEvaluationError) {
+        log::warn!("Vakint could not save its Ordered step cache: {error}");
+        *self
+            .last_autosave_error
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) = Some(error.to_string());
     }
 
     fn clear(&self) {
