@@ -386,7 +386,9 @@
     export UV_OFFLINE=true
     uv venv "$linnet_python" --python "${linnetPython}/bin/python3" --system-site-packages
     linnet_wheels="$TMPDIR/alphal00p-docs-linnet-wheels"
-    maturin build \
+    # The notebook is a separate Cargo workspace. Keep its un-hashed
+    # cdylib/rlib outputs out of the prepared docs workspace target.
+    CARGO_TARGET_DIR="$TMPDIR/alphal00p-docs-notebook-target" maturin build \
       --offline \
       --locked \
       --profile ${docsCargoProfile} \

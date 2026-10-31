@@ -3190,7 +3190,9 @@ end_anchor = "\nin {\n  inherit"
 # builds; reusable Cargo/crane producer inputs and cache boundaries are unchanged.
 # Workflow repair candidate 2026-10-31: binds current source boundaries and
 # runtime consumers; prior review references remain historical. Pending ordinary review.
-digest = "5ed36b61ea8ad8c23cc3c1b14123945fa7b7e893"
+# Candidate 2026-10-31: isolate the notebook Cargo target to preserve
+# prepared workspace library identities. Pending ordinary owner review.
+digest = "1f5166203b45d48fa1e151a63e60c7622e3c295f"
 
 [[section.note.scope]]
 path = "nix/rust-workspace.nix"
