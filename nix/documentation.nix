@@ -10,6 +10,7 @@
   symbolicaRenderData,
   ciArgs,
   ciCargoProfile,
+  buildDepsOnlyWithArtifacts,
   nativeCargoArtifacts,
   dummyCargoTarget,
   normalizeWorkspaceHackBuildScriptTimestampScript,
@@ -321,7 +322,7 @@
       TYPST_PACKAGE_CACHE_PATH = "${docsTypst}/lib/typst/packages";
     };
 
-  watchCargoArtifacts = craneLib.buildDepsOnly watchArgs;
+  watchCargoArtifacts = buildDepsOnlyWithArtifacts watchArgs;
 
   watchCheck = craneLib.mkCargoDerivation (
     watchArgs

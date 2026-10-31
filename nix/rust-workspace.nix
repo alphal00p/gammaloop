@@ -29,6 +29,7 @@
       symbolicaRenderData
       ciArgs
       ciCargoProfile
+      buildDepsOnlyWithArtifacts
       dummyCargoTarget
       normalizeWorkspaceHackBuildScriptTimestampScript
       workspacePackageSrcFor
