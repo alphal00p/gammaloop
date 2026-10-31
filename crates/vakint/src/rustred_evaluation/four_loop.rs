@@ -466,9 +466,10 @@ pub(super) fn evaluate_ordered_batch(
         }
         let _math = MathSpan::new();
         let program = &programs.programs[index];
-        let reduced = program.native.reduce_linear_combination_ordered(
+        let reduced = program.native.reduce_linear_combination_ordered_with_arithmetic(
             terms,
             settings.rustred_application_options.reduction_limits,
+            settings.rustred_application_options.ordered_weight_arithmetic,
             observation.as_deref_mut(),
         )?;
         let family = program.native.family_shared();

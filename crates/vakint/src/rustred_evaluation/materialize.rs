@@ -382,10 +382,11 @@ pub(super) fn evaluate_ordered_batch(
                 );
                 envelope.caller_phase = Some("entry_admission");
                 observer.emit(envelope);
-                Reducer::reduce_artifact_linear_combination_ordered_with_observation(
+                Reducer::reduce_artifact_linear_combination_ordered_with_arithmetic(
                     artifact,
                     terms,
                     settings.rustred_application_options.reduction_limits,
+                    settings.rustred_application_options.ordered_weight_arithmetic,
                     &mut |progress, current| {
                         observer.emit_ordered_progress(
                             artifact.family_fingerprint(),
@@ -396,10 +397,12 @@ pub(super) fn evaluate_ordered_batch(
                     },
                 )
             }
-            None => Reducer::reduce_artifact_linear_combination_ordered(
+            None => Reducer::reduce_artifact_linear_combination_ordered_with_arithmetic(
                 artifact,
                 terms,
                 settings.rustred_application_options.reduction_limits,
+                settings.rustred_application_options.ordered_weight_arithmetic,
+                &mut |_, _| Ok(()),
             ),
         }
         .map_err(RustRedEvaluationError::from_native)?;
