@@ -723,8 +723,10 @@ impl MasterCatalog {
     /// workers. Expansion distributes over that sum and the final sum of all
     /// expanded summands is normalized once, which is the same canonical
     /// expanded expression; every other shape expands on the calling thread.
+    /// Floating-point coefficients would be summed in another order, so such
+    /// expressions also expand on the calling thread.
     fn expand_on(expression: &Atom, threads: usize) -> Atom {
-        if threads > 1 {
+        if threads > 1 && !Self::has_floating_coefficients(expression) {
             match expression.as_view() {
                 AtomView::Add(sum) => {
                     let terms = sum.iter().collect::<Vec<_>>();
@@ -1448,13 +1450,17 @@ mod tests {
             "x^2+(x+1)^3/(x-2)+y*(x+y)^2",
             "(x+1)*(x-2)/(3*x+5)",
             "(1+x)^2+(1-x)^2-2*x^2",
+            // floating coefficients keep the sequential expansion bit for bit
+            "(0.1*x+0.2*x^2+0.3)*(x+1/3)*0.7+0.1*x*(0.2+x)",
         ];
         for (index, expression) in expressions.into_iter().enumerate() {
             let expression = vk_parse!(expression).unwrap();
             for threads in [2, 3, 8] {
                 assert_eq!(
-                    MasterCatalog::expand_on(&expression, threads),
-                    expression.expand(),
+                    MasterCatalog::expand_on(&expression, threads)
+                        .as_view()
+                        .get_data(),
+                    expression.expand().as_view().get_data(),
                     "{expression}"
                 );
             }
@@ -1467,8 +1473,10 @@ mod tests {
             let sequential = MasterCatalog::combine_master_coefficients(raw.clone(), 1);
             for threads in [2, 3, 8] {
                 assert_eq!(
-                    MasterCatalog::combine_master_coefficients(raw.clone(), threads),
-                    sequential
+                    MasterCatalog::combine_master_coefficients(raw.clone(), threads)
+                        .as_view()
+                        .get_data(),
+                    sequential.as_view().get_data()
                 );
             }
         }

@@ -805,9 +805,9 @@ anchor = "pub(crate) struct MasterCatalog {"
 # Reviewed 2026-10-31 for the 5L pipeline speedup: retention expands the summands of the
 # top-level sum (or of the only sum factor of a product) and combines the complete coefficients
 # on the post-processing workers, summing in input order; one worker runs inline. Results are
-# identical for every worker count (3L/4L retained outputs, 58-product 5L proxy). Ownership is
-# unchanged.
-digest = "c02d0fe3fc42669419eee73c3a66ed102972e4bf"
+# identical for every worker count (3L/4L retained outputs, 58-product 5L proxy); expressions
+# with Float coefficients keep the sequential expansion. Ownership is unchanged.
+digest = "bd58b65bdcb84947f92e0b4044726dac4ff59db7"
 
 [[section.note.scope]]
 path = "crates/vakint/src/precision.rs"
