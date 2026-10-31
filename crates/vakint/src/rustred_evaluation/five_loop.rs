@@ -449,6 +449,10 @@ impl Vakint {
         // Strategy changes do not change immutable tables or the DFS cache
         // namespace. Select the request engine under the prepared-owner lock.
         options.reduction_strategy = crate::RustRedReductionStrategy::DepthFirst;
+        // Likewise the Ordered weight arithmetic only selects how a request
+        // computes its frontier weights; every batch sets it before reducing.
+        // A different arithmetic must not reload and re-prepare the package.
+        options.ordered_weight_arithmetic = rustred::reduction::OrderedWeightArithmetic::Exact;
         options.unresolved_policy = rustred::solver::UnresolvedPolicy::Preserve;
         let mut loaded = self.rustred_application.lock().map_err(failure)?;
         if loaded.as_ref().is_none_or(|current| {
@@ -1601,6 +1605,39 @@ mod tests {
                     Atom::one()
                 );
             }
+        }
+    }
+
+    #[test]
+    #[ignore = "loads the official five-loop package twice over (minutes); needs VAKINT_TEST_EXTERNAL_DATA"]
+    fn weight_arithmetic_changes_reuse_the_loaded_application() {
+        let artifacts = PathBuf::from(
+            std::env::var_os("VAKINT_TEST_EXTERNAL_DATA")
+                .expect("set VAKINT_TEST_EXTERNAL_DATA to the official external-data checkout"),
+        );
+        let mut vakint = Vakint::new().unwrap();
+        vakint
+            .load_official_external_data(
+                5,
+                &crate::OfficialExternalDataOptions {
+                    local_artifacts_path: Some(artifacts),
+                    load_prepared_caches: false,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        let loaded = vakint.loaded_application().unwrap();
+        let mut settings = VakintSettings::default();
+        for arithmetic in ["modular:threads=1", "modular:threads=2,batch=8", "exact"] {
+            settings
+                .rustred_application_options
+                .ordered_weight_arithmetic =
+                crate::parse_rustred_ordered_weight_arithmetic(arithmetic).unwrap();
+            let reused = vakint.saved_application(&settings).unwrap();
+            assert!(
+                Arc::ptr_eq(&loaded, &reused),
+                "{arithmetic} reloaded the package"
+            );
         }
     }
 

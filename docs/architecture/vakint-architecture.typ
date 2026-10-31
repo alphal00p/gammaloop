@@ -257,6 +257,9 @@ modular frontier weights for Ordered requests at every loop count. Both expand t
 return the same terms and guards. `VAKINT_DUMP_ORDERED_REQUEST` records every native Ordered
 request with digests of its exact output, for replay without Vakint.
 
+The loaded five-loop application is shared by all Ordered weight arithmetics: each request sets
+its arithmetic before reducing, so a different arithmetic never reloads or re-prepares the package.
+
 Five-loop retained evaluation also reports coverage/mass batching (with actual lowered
 keys checked), guard and coefficient materialization, normalization and notation conversion,
 catalogue coefficient combination, residual catalogue classification,
