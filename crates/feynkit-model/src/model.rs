@@ -2530,6 +2530,7 @@ fn reference<'a, V>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use symbolica::evaluate::FunctionMap;
     use symbolica::symbol;
 
     fn model_json(coupling_name: &str) -> String {
@@ -2934,6 +2935,78 @@ mod tests {
             )]))
             .unwrap();
         model.validate_covariant_cut_multiplets().unwrap();
+    }
+
+    #[test]
+    fn native_ufo_conjugation_lowers_scalar_definitions() {
+        let mut definition: ModelDefinition = serde_json::from_str(&model_json("GC1")).unwrap();
+        definition.parameters[2].parameter_type = ParameterType::Complex;
+        definition.parameters[2].expression = Some("complexconjugate(3+4𝑖)".to_owned());
+        definition.couplings[0].expression =
+            "complexconjugate(1𝑖)+complexconjugate(complexconjugate(2+3𝑖))".to_owned();
+        let cached_value = definition.couplings[0].value;
+        let model = Model::new(definition).unwrap();
+
+        assert_eq!(
+            model.parameter("double_mass").unwrap().expression,
+            Some(Atom::num(3) - Atom::num(4) * Atom::i())
+        );
+        assert_eq!(
+            model.coupling("GC1").unwrap().expression,
+            Atom::num(2) + Atom::num(2) * Atom::i()
+        );
+        assert_eq!(model.coupling("GC1").unwrap().value, cached_value);
+        let restored = Model::from_json(&model.to_json().unwrap()).unwrap();
+        assert_eq!(restored.fingerprint(), model.fingerprint());
+    }
+
+    #[test]
+    fn native_ufo_conjugation_preserves_other_function_contracts() {
+        let mut definition: ModelDefinition = serde_json::from_str(&model_json("GC1")).unwrap();
+        let source = "other_model::complexconjugate(1𝑖)+UFO::complexconjugate(1𝑖,2𝑖)";
+        definition.couplings[0].expression = source.to_owned();
+        let expected = parse_expression(EntityKind::Coupling, "GC1", "expression", source).unwrap();
+        let model = Model::new(definition.clone()).unwrap();
+        assert_eq!(model.coupling("GC1").unwrap().expression, expected);
+
+        definition.functions.push(ModelFunctionDefinition {
+            name: "complexconjugate".to_owned(),
+            arguments: vec!["z".to_owned()],
+            expression: Some("z+1".to_owned()),
+        });
+        definition.couplings[0].expression = "complexconjugate(1𝑖)".to_owned();
+        let model = Model::new(definition).unwrap();
+        assert_eq!(
+            model.coupling("GC1").unwrap().expression,
+            function!(symbol!("UFO::complexconjugate"), Atom::i())
+        );
+        assert_eq!(model.function("complexconjugate").unwrap().arguments, ["z"]);
+    }
+
+    #[test]
+    fn standard_model_gc100_conjugates_a_nonreal_mixing_entry() {
+        let model = Model::standard_model();
+        let source = Atom::var(symbol!("UFO::GC_100"));
+        let mixing = Atom::var(symbol!("UFO::CKM1x1"));
+        let expanded = model.expand_couplings(&source);
+        let conjugate = model.coupling("GC_40").unwrap().expression.clone()
+            * (Atom::num(3) - Atom::num(4) * Atom::i());
+        let specialized = expanded
+            .replace(mixing.to_pattern())
+            .with(Atom::num(3) + Atom::num(4) * Atom::i());
+        assert_eq!(specialized, conjugate);
+        assert_eq!(source, Atom::var(symbol!("UFO::GC_100")));
+        expanded
+            .as_view()
+            .to_evaluation_tree(
+                &FunctionMap::new(),
+                &[
+                    mixing,
+                    Atom::var(symbol!("UFO::ee")),
+                    Atom::var(symbol!("UFO::sw")),
+                ],
+            )
+            .unwrap();
     }
 
     #[test]
