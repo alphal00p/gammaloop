@@ -652,7 +652,12 @@ anchor = "pub struct Vakint {"
 # cache exports and the lower-loop cache state are removed; the inherited
 # reduction_strategy option is ignored and every RustRed contribution is batched.
 # Topology, FORM, evaluation-order and finalization contracts are unchanged.
-digest = "93fe2819ab28640a51fd45d648a27c928b3acb61"
+# Reviewed 2026-10-31 for the Ordered step cache: VakintSettings gains
+# ordered_cache (mode, directory, resident ceiling, autosave) and the engine an
+# Arc-shared registry of one RustRed OrderedStepCache per reduction program.
+# Public evaluation entry points run the after-evaluation autosave; replayed
+# steps equal checked ones, so results, guards and ownership are unchanged.
+digest = "8887c24cea97f8c0c48e75cd43ddfbf4cff421c2"
 
 [[section.note.scope]]
 path = "crates/vakint/src/lorentz.rs"
@@ -725,7 +730,11 @@ anchor = "pub struct VakintWrapper {"
 # and cache-policy keywords, the depth-first cache operations, load_prepared_caches
 # and the cache-hit diagnostic; monitor keywords move to a private helper module.
 # Wrapper ownership, defaults and data loading are otherwise unchanged.
-digest = "9a847ea0f2e7cfa546eb987356806488455af7d1"
+# Reviewed 2026-10-31 for the Ordered step cache: the wrapper adds the
+# ordered_cache* constructor keywords and the load/save/statistics/clear/warm
+# cache methods (reports built in the private cache module). Wrapper ownership,
+# defaults of the existing keywords and evaluation entry points are unchanged.
+digest = "b304091c799b91f57fea87531ba76d4ccf5c5d62"
 
 [[section.note.scope]]
 path = "crates/vakint/src/symbolica_community_module/numerical.rs"
@@ -773,7 +782,10 @@ anchor = "pub(crate) struct RustRedData {"
 # runtime cache snapshots and the *_with_prepared_caches loaders are removed.
 # Loading skips the never-read cache/, cache metadata and benchmarks/ files; every
 # other listed file is validated before transactional activation, as before.
-digest = "dacd0faf73c68aa396d521af0b553ac41b4b2a41"
+# Reviewed 2026-10-31 for the Ordered step cache: RustRedData lists the
+# step-cache identities (bindings) of its loaded lower-loop and four-loop
+# programs for load_ordered_cache; loading, validation and activation are unchanged.
+digest = "f2944696bbd2d290d96fb448936c6a4dd4d07a69"
 
 [[section.note.scope]]
 path = "crates/vakint/src/rustred_evaluation/masters.rs"
