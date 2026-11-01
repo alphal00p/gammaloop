@@ -928,7 +928,7 @@ anchor = "pub enum GenerationError {"
 # labeller. Reduced selectors/transport/admitted history remain intact; all_cuts production
 # is unchanged and terminal-pocket tests strengthen its boundary. Four certified literal
 # migrations are test-only, not a production physics correction.
-digest = "5ba73ee8f0b70a9dc5b500e0e84caad9819eb377"
+digest = "0198b89225657afb93c476d3a639428fbb1aee4f"
 
 [[section.note.scope]]
 path = "crates/feynkit-model/src/model.rs"
@@ -1048,7 +1048,7 @@ path = "crates/feynkit-generator/src/generation/staged.rs"
 symbol = "Request / DiagramSet / BuiltDiagramSet staged ownership"
 anchor = "impl Request {"
 # SOURCE31: checked discovery/count/build/select/group and squared-order pairing ownership.
-digest = "4c1ca2bb58010add5d33dd84657f74d99b00e6fc"
+digest = "d7df69ef684687c6c58894a3372976f7f34513b2"
 
 [[section.note]]
 id = "generation-integration-wp1"

@@ -1404,9 +1404,8 @@ mod tests {
     use crate::{Cuts, GenerationControl, GraphGroupingOptions};
     use crate::{Loops, Orders, Process, Restrict, TopologyRules};
     use feynkit_graph as graph_api;
-    use feynkit_graph::DiagramId;
     use feynkit_graph::symbols;
-    use feynkit_graph::{DiagramEndpoint, ExternalState};
+    use feynkit_graph::{DiagramEndpoint, DiagramId, ExternalState};
     use serde_json::Value;
     use serde_json::json;
     use std::mem;
@@ -1538,7 +1537,7 @@ mod tests {
 
         for classes in [Classes::None, Classes::Auto] {
             for enabled in [false, true] {
-                let request = request(enabled).with_classes(classes.clone());
+                let request = request(enabled).with_classes(classes);
                 let resolved =
                     ResolvedProcess::new(&model, &process, GenerationType::CrossSection, &request)
                         .unwrap();

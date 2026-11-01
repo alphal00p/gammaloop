@@ -3566,9 +3566,14 @@ impl ResolvedProcess {
                 } else {
                     edge.particle
                 };
+                // Compare the same CP action that the selected frame applies below.
+                // Neutral adjoint ghosts retain their ghost-number arrow under CP.
+                let conjugated = swapped
+                    && particle.antiparticle != edge.particle
+                    && !(particle.is_ghost() && particle.color == 8 && particle.charge.is_zero());
                 let orientation = if !edge.directed {
                     Orientation::Undirected
-                } else if reverse {
+                } else if reverse != conjugated {
                     Orientation::Reversed
                 } else {
                     Orientation::Default
@@ -3613,14 +3618,29 @@ impl ResolvedProcess {
             .map_err(|error| GenerationError::GraphConstruction(error.to_string()))?;
             candidates.push((labelling, swapped));
         }
-        let (reduced, left_right_swapped) = candidates
-            .into_iter()
-            .min_by(|left, right| (&left.0.form, left.1).cmp(&(&right.0.form, right.1)))
-            .ok_or_else(|| GenerationError::GraphConstruction("no canonical graph".to_owned()))?;
+        let (reduced, left_right_swapped) =
+            if candidates.len() == 2 && candidates[0].0.form == candidates[1].0.form {
+                // A reduced skeleton omits ordinary charged arrows. A tie therefore need
+                // not describe a physical self-mirror: comparing the incidental exchange
+                // flags would select the unswapped branch for both distinct CP partners.
+                let physical_form = |swapped| {
+                    CanonicalForm::label_edges(graph.vertices(), physical_edges(swapped))
+                        .map(|labelled| labelled.form)
+                        .map_err(|error| GenerationError::GraphConstruction(error.to_string()))
+                };
+                let selected = usize::from(physical_form(false)? > physical_form(true)?);
+                candidates.swap_remove(selected)
+            } else {
+                candidates
+                    .into_iter()
+                    .min_by(|left, right| left.0.form.cmp(&right.0.form))
+                    .ok_or_else(|| {
+                        GenerationError::GraphConstruction("no canonical graph".to_owned())
+                    })?
+            };
         // Reduced colors deliberately forget particle and flow distinctions for numerator
         // grouping. When the reduced group moves a vertex, fix only that residual labelling
-        // ambiguity in the physical frame. The choice above compares reduced forms alone, so
-        // only the selected exchange needs it.
+        // ambiguity in the physical frame. Only the selected exchange needs this refinement.
         let positions = if reduced.moves_nodes {
             Self::anchored_positions(
                 graph.vertices(),
