@@ -1397,15 +1397,227 @@ impl BuiltDiagramSet {
 
 #[cfg(test)]
 mod tests {
+    use super::super::ResolvedProcess;
     use super::*;
+    use crate::Classes;
     use crate::generation::graph::{Endpoint, GeneratedGraph};
     use crate::{Cuts, GenerationControl, GraphGroupingOptions};
     use crate::{Loops, Orders, Process, Restrict, TopologyRules};
     use feynkit_graph as graph_api;
     use feynkit_graph::DiagramId;
     use feynkit_graph::symbols;
+    use feynkit_graph::{DiagramEndpoint, ExternalState};
     use serde_json::Value;
     use serde_json::json;
+    use std::mem;
+
+    #[test]
+    fn cp_merge_preserves_complete_preparation_and_counts_each_graph_once() {
+        let model = Arc::new(Model::qed());
+        let photon = model.particle_id_by_pdg(22).unwrap();
+        let electron = model.particle_id_by_pdg(11).unwrap();
+        let rule = model.vertex_rule_id("V_98").unwrap();
+        // Two charged triangles joined by a photon. The four labelled photon legs
+        // are the unsewn form of the witnessed aaee forward graph.
+        let graph = GeneratedGraph::new(
+            [rule; 6],
+            [
+                (0, 1, photon),
+                (3, 0, electron),
+                (0, 5, electron),
+                (1, 2, electron),
+                (4, 1, electron),
+                (2, 4, electron),
+                (5, 3, electron),
+            ]
+            .into_iter()
+            .map(|(source, sink, particle)| GeneratedEdge {
+                source: Endpoint::Vertex(source),
+                sink: Endpoint::Vertex(sink),
+                particle,
+                directed: particle == electron,
+            })
+            .chain(
+                [(0, 5), (1, 3), (2, 2), (3, 4)].map(|(index, vertex)| GeneratedEdge {
+                    source: Endpoint::External(ExternalNode {
+                        index,
+                        state: if index < 2 {
+                            ExternalState::Incoming
+                        } else {
+                            ExternalState::Outgoing
+                        },
+                        particle: photon,
+                    }),
+                    sink: Endpoint::Vertex(vertex),
+                    particle: photon,
+                    directed: false,
+                }),
+            ),
+        );
+        // Explicit CP, independent of the canonicalizer: exchange all sewn legs,
+        // conjugate charged fields, and apply the certified vertex permutation.
+        let cp = |graph: &GeneratedGraph| {
+            let endpoint = |endpoint| match endpoint {
+                Endpoint::Vertex(vertex) => Endpoint::Vertex([1, 0, 5, 4, 3, 2][vertex]),
+                Endpoint::External(external) => Endpoint::External(ExternalNode {
+                    index: (external.index + 2) % 4,
+                    state: if external.index < 2 {
+                        ExternalState::Outgoing
+                    } else {
+                        ExternalState::Incoming
+                    },
+                    ..external
+                }),
+            };
+            GeneratedGraph::new(
+                graph.vertices(),
+                graph.edges().map(|edge| GeneratedEdge {
+                    source: endpoint(edge.source),
+                    sink: endpoint(edge.sink),
+                    particle: if edge.directed {
+                        model.particle_by_id(edge.particle).unwrap().antiparticle
+                    } else {
+                        edge.particle
+                    },
+                    ..edge
+                }),
+            )
+        };
+        let mirror = cp(&graph);
+        assert_eq!(cp(&mirror), graph);
+        let process = Process::new(["a", "a"], ["e+", "e-"]);
+        let generator = Generator::new(Arc::clone(&model));
+        let request = |enabled| {
+            process
+                .clone()
+                .cross_section(Loops::forward(2..=2))
+                .with_topology(TopologyRules::new().with_self_loops(false))
+                .with_cuts(
+                    Cuts::new()
+                        .with_blobs(1..=1)
+                        .with_spectators(0..=0)
+                        .with_symmetrize_left_right(enabled),
+                )
+        };
+        let off = request(false);
+        let resolved =
+            ResolvedProcess::new(&model, &process, GenerationType::CrossSection, &off).unwrap();
+        let mut inventory = resolved.cut_partitions(&graph, &model, &off).unwrap();
+        let mut other = resolved.cut_partitions(&mirror, &model, &off).unwrap();
+        assert_eq!(inventory.physical.len(), 2);
+        assert_eq!(inventory.topology_threshold_candidates.len(), 2);
+        // CP interchanges the complete sides, including orders and loop counts.
+        // The selected cut end becomes its complement; storage itself is unchanged.
+        let complement = |endpoint| match endpoint {
+            DiagramEndpoint::Source => DiagramEndpoint::Target,
+            DiagramEndpoint::Target => DiagramEndpoint::Source,
+        };
+        for cut in &mut inventory.physical {
+            mem::swap(&mut cut.left, &mut cut.right);
+            for hedge in &mut cut.cut {
+                hedge.endpoint = complement(hedge.endpoint);
+            }
+            cut.cut.sort();
+        }
+        for threshold in &mut inventory.topology_threshold_candidates {
+            mem::swap(&mut threshold.left, &mut threshold.right);
+            for hedge in &mut threshold.cut {
+                hedge.endpoint = complement(hedge.endpoint);
+            }
+            threshold.cut.sort();
+        }
+        inventory.physical.sort();
+        inventory.topology_threshold_candidates.sort();
+        other.physical.sort();
+        other.topology_threshold_candidates.sort();
+        assert_eq!(inventory.physical, other.physical);
+        assert_eq!(
+            inventory.topology_threshold_candidates,
+            other.topology_threshold_candidates
+        );
+
+        for classes in [Classes::None, Classes::Auto] {
+            for enabled in [false, true] {
+                let request = request(enabled).with_classes(classes.clone());
+                let resolved =
+                    ResolvedProcess::new(&model, &process, GenerationType::CrossSection, &request)
+                        .unwrap();
+                let prepared = [&graph, &mirror].map(|graph| {
+                    let canonical = resolved
+                        .canonicalize_numerator_graph(graph, &model, &Grouping::None)
+                        .unwrap();
+                    assert_eq!(
+                        canonical,
+                        resolved
+                            .canonicalize_numerator_graph(&canonical, &model, &Grouping::None)
+                            .unwrap()
+                    );
+                    let input = generator
+                        .diagram_input(&resolved, graph.clone(), 1, 1, &request, &Grouping::None)
+                        .unwrap()
+                        .unwrap();
+                    assert_eq!(input.representative.cut_partitions.len(), 2);
+                    assert_eq!(input.representative.topology_threshold_candidates.len(), 2);
+                    assert_eq!(input.representative.symmetry, 1);
+                    assert_eq!(
+                        input.signs,
+                        FermionSigns {
+                            internal_loop_negative: false,
+                            include_external_ordering: true,
+                            external_ordering_negative: false,
+                            include_antifermion_spin_sum: true,
+                            antifermion_spin_sum_negative: false,
+                        }
+                    );
+                    let repeated = generator
+                        .diagram_input(
+                            &resolved,
+                            input.representative.graph.clone(),
+                            1,
+                            1,
+                            &request,
+                            &Grouping::None,
+                        )
+                        .unwrap()
+                        .unwrap();
+                    assert_eq!(input.representative, repeated.representative);
+                    assert_eq!(input.signs, repeated.signs);
+                    assert!(input.reversed_edges.is_empty());
+                    assert_eq!(input.comparison, input.representative);
+                    input
+                });
+                assert_eq!(
+                    OrbitKey::of(&prepared[0]) == OrbitKey::of(&prepared[1]),
+                    enabled,
+                    "CP={enabled}, classes={classes:?}: compare every ordered OrbitKey field"
+                );
+                if enabled {
+                    assert_eq!(prepared[0].representative, prepared[1].representative);
+                }
+                let set = request
+                    .generate(Arc::clone(&model), &Run::default().threads(1))
+                    .unwrap();
+                let witnesses = set
+                    .diagrams
+                    .iter()
+                    .filter(|diagram| {
+                        prepared
+                            .iter()
+                            .any(|input| OrbitKey::of(&diagram.input) == OrbitKey::of(input))
+                    })
+                    .collect::<Vec<_>>();
+                assert_eq!(witnesses.len(), if enabled { 1 } else { 2 });
+                assert_eq!(
+                    witnesses
+                        .iter()
+                        .map(|diagram| diagram.input.multiplicity)
+                        .sum::<u64>(),
+                    2,
+                    "two physical cuts must not multiply the number of source graphs"
+                );
+            }
+        }
+    }
 
     fn model() -> Arc<Model> {
         Arc::new(
