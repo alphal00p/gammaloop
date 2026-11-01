@@ -29,11 +29,18 @@ def main():
             if hashlib.sha256(payload).hexdigest() != pack["manifest_sha256"]:
                 raise ValueError(f"{n}L manifest checksum mismatch")
             manifest = json.loads(payload)
+            # The vendored snapshot carries no caches: neither the retired
+            # depth-first ones nor shipped Ordered step caches (Vakint uses
+            # those only from an external-data directory).
             manifest["cache"] = {"available": False}
+            manifest.pop("ordered_cache", None)
             manifest["files"] = {
                 name: digest
                 for name, digest in manifest["files"].items()
-                if name != "cache.json" and not name.startswith("cache/")
+                if name != "cache.json"
+                and not name.startswith("cache/")
+                and name != "ordered-cache.json"
+                and not name.startswith("ordered-cache/")
             }
             for name, digest in manifest["files"].items():
                 relative = Path(name)
