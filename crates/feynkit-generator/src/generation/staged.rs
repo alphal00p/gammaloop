@@ -1618,6 +1618,172 @@ mod tests {
         }
     }
 
+    #[test]
+    fn cp_rule_colors_are_repaired_before_frame_selection() {
+        let model = Arc::new(Model::standard_model());
+        let rules = ["V_82", "V_117", "V_133", "V_133", "V_71"]
+            .map(|name| model.vertex_rule_id(name).unwrap());
+        // Two flavour-changing quark pentagons. The two labelled charm-photon
+        // attachments in each pentagon distinguish its two physical orientations.
+        // Goldstones join the conjugate weak vertices; the remaining photons join
+        // the down-quark vertices. All stars are actual Standard Model rules.
+        let graph = GeneratedGraph::new(
+            rules.into_iter().chain(rules),
+            [
+                (0, 2, 4),
+                (2, 3, 4),
+                (3, 1, 4),
+                (1, 4, 1),
+                (4, 0, 1),
+                (5, 7, 4),
+                (7, 8, 4),
+                (8, 6, 4),
+                (6, 9, 1),
+                (9, 5, 1),
+                (6, 0, 251),
+                (1, 5, 251),
+                (4, 9, 22),
+            ]
+            .map(|(source, sink, pdg)| GeneratedEdge {
+                source: Endpoint::Vertex(source),
+                sink: Endpoint::Vertex(sink),
+                particle: model.particle_id_by_pdg(pdg).unwrap(),
+                directed: pdg != 22,
+            })
+            .into_iter()
+            .chain(
+                [(0, 2), (1, 3), (2, 7), (3, 8)].map(|(index, vertex)| GeneratedEdge {
+                    source: Endpoint::External(ExternalNode {
+                        index,
+                        state: if index < 2 {
+                            ExternalState::Incoming
+                        } else {
+                            ExternalState::Outgoing
+                        },
+                        particle: model.particle_id_by_pdg(22).unwrap(),
+                    }),
+                    sink: Endpoint::Vertex(vertex),
+                    particle: model.particle_id_by_pdg(22).unwrap(),
+                    directed: false,
+                }),
+            ),
+        );
+        // An explicit full CP map: exchange pentagons and sewn partners,
+        // conjugate every charged field AND its interaction rule.
+        let cp = |graph: &GeneratedGraph| {
+            let mut cp_rules = vec![rules[0]; 10];
+            for (vertex, rule) in graph.vertices().enumerate() {
+                cp_rules[(vertex + 5) % 10] = if rule == rules[0] {
+                    rules[1]
+                } else if rule == rules[1] {
+                    rules[0]
+                } else {
+                    rule
+                };
+            }
+            let endpoint = |endpoint| match endpoint {
+                Endpoint::Vertex(vertex) => Endpoint::Vertex((vertex + 5) % 10),
+                Endpoint::External(external) => Endpoint::External(ExternalNode {
+                    index: (external.index + 2) % 4,
+                    state: if external.index < 2 {
+                        ExternalState::Outgoing
+                    } else {
+                        ExternalState::Incoming
+                    },
+                    ..external
+                }),
+            };
+            GeneratedGraph::new(
+                cp_rules,
+                graph.edges().map(|edge| GeneratedEdge {
+                    source: endpoint(edge.source),
+                    sink: endpoint(edge.sink),
+                    particle: model.particle_by_id(edge.particle).unwrap().antiparticle,
+                    ..edge
+                }),
+            )
+        };
+        let mirror = cp(&graph);
+        assert_eq!(cp(&mirror), graph);
+        let generator = Generator::new(Arc::clone(&model));
+        for graph in [&graph, &mirror] {
+            assert_eq!(
+                *graph,
+                generator
+                    .repair_cp_interaction_rules(graph.clone())
+                    .unwrap()
+            );
+            for (vertex, rule) in graph.vertices().enumerate() {
+                generator
+                    .interaction_half_edges(graph, vertex, model.vertex_rule_by_id(rule).unwrap())
+                    .unwrap();
+            }
+        }
+        let process = Process::new(["a", "a"], ["c", "c~"]);
+        for enabled in [false, true] {
+            let request = process
+                .clone()
+                .cross_section(Loops::forward(0..=6))
+                .with_cuts(Cuts::new().with_symmetrize_left_right(enabled));
+            let resolved =
+                ResolvedProcess::new(&model, &process, GenerationType::CrossSection, &request)
+                    .unwrap();
+            let prepared = [&graph, &mirror].map(|graph| {
+                let canonical = resolved
+                    .canonicalize_numerator_graph(graph, &model, &Grouping::None)
+                    .unwrap();
+                assert_eq!(
+                    canonical,
+                    generator
+                        .repair_cp_interaction_rules(canonical.clone())
+                        .unwrap(),
+                    "CP frame selection must expose actual repaired rule colors"
+                );
+                assert_eq!(
+                    canonical,
+                    resolved
+                        .canonicalize_numerator_graph(&canonical, &model, &Grouping::None)
+                        .unwrap()
+                );
+                let input = generator
+                    .diagram_input(&resolved, graph.clone(), 1, 1, &request, &Grouping::None)
+                    .unwrap()
+                    .unwrap();
+                assert!(!input.representative.cut_partitions.is_empty());
+                assert!(
+                    !input
+                        .representative
+                        .topology_threshold_candidates
+                        .is_empty()
+                );
+                assert_eq!(
+                    input.representative.graph,
+                    generator
+                        .repair_cp_interaction_rules(input.representative.graph.clone())
+                        .unwrap()
+                );
+                let repeated = generator
+                    .diagram_input(
+                        &resolved,
+                        input.representative.graph.clone(),
+                        1,
+                        1,
+                        &request,
+                        &Grouping::None,
+                    )
+                    .unwrap()
+                    .unwrap();
+                assert_eq!(input.representative, repeated.representative);
+                assert_eq!(input.signs, repeated.signs);
+                input
+            });
+            assert_eq!(
+                OrbitKey::of(&prepared[0]) == OrbitKey::of(&prepared[1]),
+                enabled
+            );
+        }
+    }
+
     fn model() -> Arc<Model> {
         Arc::new(
             Model::from_json(include_str!(
