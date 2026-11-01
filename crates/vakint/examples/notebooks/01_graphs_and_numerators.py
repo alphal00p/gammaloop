@@ -41,7 +41,8 @@ def _(Gallery, mo):
         mo,
         "01 / geometry",
         "Choose the graph",
-        "Start small, then inspect the five-loop target.",
+        "Start small: the bubble and the three- and four-loop ladders contract "
+        "here in about a second; the five-loop ladder is shown as geometry.",
     )
     return
 
@@ -50,8 +51,10 @@ def _(Gallery, mo):
 def _(mo):
     graph_choice = mo.ui.dropdown(
         {
-            "One-loop quark bubble · quick example": "bubble",
-            "Five-loop four-rung fixture · geometry": "ladder",
+            "One-loop quark bubble · quick example": 1,
+            "Three-loop two-rung ladder (reduced on page 05)": 3,
+            "Four-loop three-rung ladder (reduced on page 05)": 4,
+            "Five-loop four-rung fixture · geometry (explored on page 03)": 5,
         },
         value="One-loop quark bubble · quick example",
         label="QCD topology",
@@ -64,7 +67,7 @@ def _(mo):
 @app.cell
 def _(FeynmanDiagram, Gallery, Model, graph_choice):
     model = Model.qcd()
-    if graph_choice.value == "bubble":
+    if graph_choice.value == 1:
         topology = """digraph quark_bubble {
             incoming [style=invis]; outgoing [style=invis];
             incoming -> a [particle="g"];
@@ -73,9 +76,7 @@ def _(FeynmanDiagram, Gallery, Model, graph_choice):
             b -> a [particle="d"];
         }"""
     else:
-        topology = (
-            Gallery.directory.parents[1] / "tests/fixtures/qcd_ladder/ladder.dot"
-        ).read_text()
+        topology = Gallery.ladder_dot(graph_choice.value)
     diagram = FeynmanDiagram.from_dot(model, topology)
     return diagram, model, topology
 
@@ -135,16 +136,27 @@ def _(Gallery, mo):
 
 @app.cell
 def _(Gallery, graph_choice, mo):
+    _interactive = graph_choice.value <= 4
     contract_button = mo.ui.run_button(
-        label="Build and contract this numerator", kind="success"
+        label="Build and contract this numerator",
+        kind="success",
+        disabled=not _interactive,
     )
     mo.vstack(
         [
             Gallery.note(
                 mo,
                 "Explicit computation",
-                "The five-loop numerator can take several minutes. This unaveraged metric/color contraction is a tensor demonstration; the next app follows the complete zero-momentum vacuum reduction. The quadratic Taylor fixture is deferred.",
-                pending=graph_choice.value == "ladder",
+                "This unaveraged metric/color contraction is a tensor demonstration "
+                "that runs in this page's kernel. Page 05 reduces the prepared "
+                "three- and four-loop ladder inputs end to end in a cancellable "
+                "background job."
+                if _interactive
+                else "The five-loop numerator takes about 16 s of tensor algebra "
+                "(longer on a busy server) that a page cannot interrupt, so this "
+                "page only shows its geometry. Page 03 explores the five-loop "
+                "reduction without running it.",
+                pending=not _interactive,
             ),
             contract_button,
         ]
@@ -153,8 +165,18 @@ def _(Gallery, graph_choice, mo):
 
 
 @app.cell
-def _(S, TensorExpression, contract_button, diagram, mo, model, perf_counter):
-    mo.stop(not contract_button.value)
+def _(
+    S,
+    TensorExpression,
+    contract_button,
+    diagram,
+    graph_choice,
+    mo,
+    model,
+    perf_counter,
+):
+    # Never contract the 5L numerator in the kernel, even if re-enabled.
+    mo.stop(not contract_button.value or graph_choice.value > 4)
     _start = perf_counter()
     dressed = diagram.apply_feynman_rules()
     numerator = dressed.numerator_expression(
@@ -205,7 +227,7 @@ def _(Gallery, contraction_seconds, mo, numerator, projected, projector, reduced
             Gallery.note(
                 mo,
                 "One native tensor workflow",
-                "The returned scalar is still a TensorExpression. Model parameters remain symbolic and SU(3) invariants are evaluated. The physical five-loop example specializes the massless quark at zero external momentum and keeps the unaveraged metric/color contraction. Its quadratic Taylor expansion is deferred.",
+                "The returned scalar is still a TensorExpression. Model parameters remain symbolic and SU(3) invariants are evaluated. The physical ladder fixtures specialize the massless quark at zero external momentum (or take its quadratic Taylor coefficient) and keep the unaveraged metric/color contraction.",
             ),
         ]
     )
@@ -226,12 +248,12 @@ def _(Gallery, mo):
         retained = engine.evaluate_integral(integral.to_expression())
         ```
 
-        The vacuum diagram and its family must have matching routing. The complete
-        zero-momentum five-loop fixture keeps both current vertices and the
-        unaveraged metric/color contraction. Its massless quark numerators are
-        specialized at $q=0$; the common mass enters only the vacuum denominators.
-        The distinct quadratic Taylor/transverse fixture is deferred and has no
-        gallery Run action.
+        The vacuum diagram and its family must have matching routing. The ladder
+        fixtures keep both current vertices and the unaveraged metric/color
+        contraction. Their massless quark numerators are specialized at $q=0$
+        (or Taylor-expanded to second order); the common mass enters only the
+        vacuum denominators. Page 05 reduces the prepared 3L and 4L inputs to
+        retained masters; page 03 explores the five-loop fixture.
         """),
             Gallery.footer(mo),
         ]

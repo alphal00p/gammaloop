@@ -32,28 +32,53 @@ def _(Gallery, mo):
 
 @app.cell
 def _(Gallery, mo):
-    load_catalogue = mo.ui.run_button(
-        label="Load the official 1L–5L catalogue", kind="success"
+    _four = "1L–4L · adds the 4L pack (about 140 MB, seconds)"
+    _options = {_four: 4}
+    if Gallery.five_loop_load_enabled():
+        _options[
+            "1L–5L · adds the 5L pack (about 435 MB more; minutes, several GB, "
+            "cannot be cancelled)"
+        ] = 5
+    catalogue_choice = mo.ui.radio(
+        _options, value=_four, label="Official catalogue to load"
     )
+    load_catalogue = mo.ui.run_button(label="Load this catalogue", kind="success")
     mo.vstack(
         [
             Gallery.note(
                 mo,
                 "Offline by default",
-                "The built-in 1L–3L registry is ready immediately. Loading 5L is explicit: a configured checkout is validated locally; otherwise the official latest packs download once and are reused on disk.",
+                "The built-in 1L–3L registry is ready immediately. Loading is "
+                "explicit and runs in this page: a configured checkout "
+                "(VAKINT_GALLERY_ARTIFACTS) is validated locally; otherwise the "
+                "official packs install once into the gallery's data cache, "
+                f"{Gallery.data_directory()}, never into the server's working "
+                "directory. Loading reads data only; it reduces nothing.",
             ),
+            catalogue_choice,
             load_catalogue,
+            mo.md("")
+            if Gallery.five_loop_load_enabled()
+            else Gallery.note(
+                mo,
+                "No five-loop catalogue on this server",
+                "Loading the 5L pack runs inside this page for minutes, holds "
+                "several GB for the session and cannot be cancelled, so the "
+                "operator enables it with VAKINT_GALLERY_ALLOW_5L=1. The "
+                "five-loop page explores the 5L plan and saved result without it.",
+                pending=True,
+            ),
         ]
     )
-    return (load_catalogue,)
+    return catalogue_choice, load_catalogue
 
 
 @app.cell
-def _(Gallery, load_catalogue):
+def _(Gallery, catalogue_choice, load_catalogue):
     engine = Gallery.engine()
     load_report = None
     if load_catalogue.value:
-        load_report = Gallery.load_data(engine, 5)
+        load_report = Gallery.load_data(engine, int(catalogue_choice.value))
     constant_symbols = engine.constant_symbols()
     master_symbols = engine.master_symbols()
     return constant_symbols, engine, load_report, master_symbols
@@ -68,7 +93,12 @@ def _(Gallery, constant_symbols, load_report, master_symbols, mo):
                 [
                     (len(constant_symbols), "registered constant identities"),
                     (len(master_symbols), "loaded master identities"),
-                    ("1L–5L" if load_report else "1L–3L", "active catalogue"),
+                    (
+                        f"1L–{max(item['loop_count'] for item in load_report['loops'])}L"
+                        if load_report
+                        else "1L–3L",
+                        "active catalogue",
+                    ),
                 ],
             ),
             mo.accordion({"Validated load report": mo.json(load_report)})

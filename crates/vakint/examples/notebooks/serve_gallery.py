@@ -1,4 +1,4 @@
-"""Serve the four interactive apps behind a tailnet-only reverse proxy."""
+"""Serve the five interactive apps behind a tailnet-only reverse proxy."""
 
 import hashlib
 import os
@@ -39,6 +39,7 @@ def create_app():
         ("/inspect", "02_constants_and_masters.py"),
         ("/five-loop", "03_five_loop_uv.py"),
         ("/closure", "04_pinches_and_cache.py"),
+        ("/reduce", "05_ladder_reductions.py"),
     ]:
         builder = builder.with_app(path=route, root=str(directory / source))
     return Starlette(

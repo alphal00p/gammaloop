@@ -1,0 +1,259 @@
+{
+ "schema": "vakint.gallery.ladder-cases.v1",
+ "description": "Prepared scalar inputs of the massless-quark QCD ladder self-energy rungs (the rung fixture of tests/ordered_reduction_rungs.rs). Each input is the fixture's vakint-input.symbolica; its sha256 equals the rung reference's source_input_sha256, which the rung test checks against a fresh native preparation. retained_sha256 is the sha256 of the retained-master result's canonical string (MSbar, retain mode, dot-product notation, L+1 epsilon terms), identical for every arithmetic and n_cores.",
+ "reference_resources": "crates/vakint/tests/resources/ordered_rungs",
+ "external_data": "vakint-external-data v0.1.2 (f1626f67) for the recorded values",
+ "recorded_scope": "one release-build run of the rung test on the development host, n_cores 4, modular_polynomial (2026-10-31); indicative, not a benchmark",
+ "cases": {
+  "3L-zero-momentum": {
+   "label": "3L ladder · zero momentum",
+   "loop_count": 3,
+   "projection": "zero-momentum",
+   "default": true,
+   "input": {
+    "file": "3L-zero-momentum.vakint-input.symbolica",
+    "shipped": true,
+    "bytes": 6021,
+    "sha256": "9d92612c562e56bdea26e888a797d21321705c48e7fbe7a02014f6c675ca0da0"
+   },
+   "evaluated_input_sha256": "2172eedf26343328f883faae78965c37ded7bcfe9e8489b5ea067dc116bc7fe8",
+   "dimension_binding": {
+    "source": "rustred::{}::d",
+    "target": "-2*vakint::{}::ε+4"
+   },
+   "external_data": "built-in 1L-3L registry",
+   "retained_sha256": "2f48233ca24979143ca839289877d18bdf4f0fde70bd68399d770227d73c6b2a",
+   "catalogue_masters": 14,
+   "contributions": 1,
+   "scalar_terms": 1,
+   "recorded": {
+    "data_loading_seconds": 0.97,
+    "retained_reduction_seconds": 0.089,
+    "preparation_seconds": 0.03,
+    "n_cores": 4,
+    "ordered_weight_arithmetic": "modular_polynomial"
+   },
+   "conventions": "Native model-rule-generated massless QCD quark loop with 2 gluon rungs; fixed SU(3), tr_Dirac(1)=4, generic Lorentz dimension d.\nBoth external current vertices retained; unaveraged g_munu*delta_ab contraction at q=0.\nNo transverse projector, no division by 8(d-1), and no auxiliary angular integration.\nL=3, original A=8, 6 vacuum incidence edges, 5 distinct quadratic forms.\nUnlowered D_source=A-r_mom=5; omega_UV(d=4)=2.\nCommon UV mass inserted only into denominators; original slash numerators remain massless.\nNot a complete beta function. Verified saved scalar inputs separate preparation from IBP timing.",
+   "numerical_reference": {
+    "point": {
+     "UFO_G": 1,
+     "mUV": 1,
+     "mu_r_squared": 1
+    },
+    "normalization": "MSbar",
+    "coefficients": [
+     {
+      "epsilon_power": -3,
+      "real": "0",
+      "imaginary": "6.01945297046210819496434e-7"
+     },
+     {
+      "epsilon_power": -2,
+      "real": "0",
+      "imaginary": "1.12864743196164528655581e-6"
+     },
+     {
+      "epsilon_power": -1,
+      "real": "0",
+      "imaginary": "-9.98162458438572684418920e-7"
+     },
+     {
+      "epsilon_power": 0,
+      "real": "0",
+      "imaginary": "1.45011958619399104545039e-5"
+     }
+    ]
+   }
+  },
+  "3L-quadratic": {
+   "label": "3L ladder · quadratic Taylor coefficient",
+   "loop_count": 3,
+   "projection": "quadratic",
+   "default": true,
+   "input": {
+    "file": "3L-quadratic.vakint-input.symbolica",
+    "shipped": true,
+    "bytes": 122849,
+    "sha256": "ae62eeb11d6ef31928c480b8fd03daee9c2d5649d47b22c0ac7abe558d68fc05"
+   },
+   "evaluated_input_sha256": "c21383b91b87be34f6dcc49e657b7505a9f36e1e15e71ff2603c31ba5e6390e1",
+   "dimension_binding": {
+    "source": "rustred::{}::d",
+    "target": "-2*vakint::{}::ε+4"
+   },
+   "external_data": "built-in 1L-3L registry",
+   "retained_sha256": "5acbeebe2429d711d5cd9c1264efc469886c5c5e5961f6470be8f7970c400821",
+   "catalogue_masters": 14,
+   "contributions": 10,
+   "scalar_terms": 10,
+   "recorded": {
+    "data_loading_seconds": 0.97,
+    "retained_reduction_seconds": 0.724,
+    "preparation_seconds": 1.66,
+    "n_cores": 4,
+    "ordered_weight_arithmetic": "modular_polynomial"
+   },
+   "conventions": "Native model-rule-generated massless QCD quark loop with 2 gluon rungs; fixed SU(3), tr_Dirac(1)=4, generic Lorentz dimension d.\nComplete homogeneous quadratic Taylor coefficient of numerator AND denominators.\nTransverse contraction delta_ab*(g_munu-q_mu*q_nu/q^2)/[8*(d-1)*q^2]; normalized auxiliary angular average at fixed q^2.\nL=3, original A=8, 6 vacuum incidence edges, 5 distinct quadratic forms.\nUnlowered D_source=A-r_mom=6; omega_UV(d=4)=0.\nCommon UV mass inserted only into denominators; original slash numerators remain massless.\nNot a complete beta function. Verified saved scalar inputs separate preparation from IBP timing.",
+   "numerical_reference": {
+    "point": {
+     "UFO_G": 1,
+     "mUV": 1,
+     "mu_r_squared": 1
+    },
+    "normalization": "MSbar",
+    "coefficients": [
+     {
+      "epsilon_power": -3,
+      "real": "0",
+      "imaginary": "-3.13513175544901468487726e-9"
+     },
+     {
+      "epsilon_power": -2,
+      "real": "0",
+      "imaginary": "-1.28017880014168099632488e-8"
+     },
+     {
+      "epsilon_power": -1,
+      "real": "0",
+      "imaginary": "7.13459351424338232470786e-8"
+     },
+     {
+      "epsilon_power": 0,
+      "real": "0",
+      "imaginary": "-2.08033906175189459685375e-7"
+     }
+    ]
+   }
+  },
+  "4L-zero-momentum": {
+   "label": "4L ladder · zero momentum",
+   "loop_count": 4,
+   "projection": "zero-momentum",
+   "default": true,
+   "input": {
+    "file": "4L-zero-momentum.vakint-input.symbolica",
+    "shipped": true,
+    "bytes": 36095,
+    "sha256": "1b2d0500b557a43def79b51b1a583a0126dfad3308bdb5c56908bc2419639d4e"
+   },
+   "evaluated_input_sha256": "606b756a537269a56e95e7d9c8fae43bb2e4b8015227207abfa388e649d00bb2",
+   "dimension_binding": {
+    "source": "rustred::{}::d",
+    "target": "-2*vakint::{}::ε+4"
+   },
+   "external_data": "4L",
+   "retained_sha256": "b93080b3991149f79b41ffd37361e54dfa48daba068e8b640f9c44ef29ce3012",
+   "catalogue_masters": 10,
+   "contributions": 1,
+   "scalar_terms": 1,
+   "recorded": {
+    "data_loading_seconds": 8.45,
+    "retained_reduction_seconds": 0.621,
+    "preparation_seconds": 0.07,
+    "n_cores": 4,
+    "ordered_weight_arithmetic": "modular_polynomial"
+   },
+   "conventions": "Native model-rule-generated massless QCD quark loop with 3 gluon rungs; fixed SU(3), tr_Dirac(1)=4, generic Lorentz dimension d.\nBoth external current vertices retained; unaveraged g_munu*delta_ab contraction at q=0.\nNo transverse projector, no division by 8(d-1), and no auxiliary angular integration.\nL=4, original A=11, 9 vacuum incidence edges, 7 distinct quadratic forms.\nUnlowered D_source=A-r_mom=7; omega_UV(d=4)=2.\nCommon UV mass inserted only into denominators; original slash numerators remain massless.\nNot a complete beta function. Verified saved scalar inputs separate preparation from IBP timing.",
+   "numerical_reference": {
+    "point": {
+     "UFO_G": 1,
+     "mUV": 1,
+     "mu_r_squared": 1
+    },
+    "normalization": "MSbar",
+    "coefficients": [
+     {
+      "epsilon_power": -4,
+      "real": "0",
+      "imaginary": "-3.17655260336774409034194e-10"
+     },
+     {
+      "epsilon_power": -3,
+      "real": "0",
+      "imaginary": "-1.42944867151548484065387e-9"
+     },
+     {
+      "epsilon_power": -2,
+      "real": "0",
+      "imaginary": "-2.90213093608485056542311e-10"
+     },
+     {
+      "epsilon_power": -1,
+      "real": "0",
+      "imaginary": "-1.40767083578545318009797e-8"
+     },
+     {
+      "epsilon_power": 0,
+      "real": "0",
+      "imaginary": "-5.99911124094362530888098e-8"
+     }
+    ]
+   }
+  },
+  "4L-quadratic": {
+   "label": "4L ladder · quadratic Taylor coefficient (advanced)",
+   "loop_count": 4,
+   "projection": "quadratic",
+   "default": false,
+   "input": {
+    "file": "4L-quadratic.vakint-input.symbolica",
+    "shipped": false,
+    "bytes": 1672532,
+    "sha256": "050c3d0fbd9b87046986de5f458b6626bdd5652aea464cd932fbe6c43f2abaa8"
+   },
+   "evaluated_input_sha256": "6aef1c6de7703e2e3476c0dde43dfd5ffc40565c2d5d4459dc44001332ee6b6e",
+   "dimension_binding": {
+    "source": "rustred::{}::d",
+    "target": "-2*vakint::{}::ε+4"
+   },
+   "external_data": "4L",
+   "retained_sha256": "6986f629362956bf28bfbb3bf5a941e5d1f4df667a626d93395dbde8059a8f77",
+   "catalogue_masters": 10,
+   "contributions": 15,
+   "scalar_terms": 15,
+   "recorded": {
+    "data_loading_seconds": 8.29,
+    "retained_reduction_seconds": 24.636,
+    "preparation_seconds": 159.94,
+    "n_cores": 4,
+    "ordered_weight_arithmetic": "modular_polynomial"
+   },
+   "conventions": "Native model-rule-generated massless QCD quark loop with 3 gluon rungs; fixed SU(3), tr_Dirac(1)=4, generic Lorentz dimension d.\nComplete homogeneous quadratic Taylor coefficient of numerator AND denominators.\nTransverse contraction delta_ab*(g_munu-q_mu*q_nu/q^2)/[8*(d-1)*q^2]; normalized auxiliary angular average at fixed q^2.\nL=4, original A=11, 9 vacuum incidence edges, 7 distinct quadratic forms.\nUnlowered D_source=A-r_mom=8; omega_UV(d=4)=0.\nCommon UV mass inserted only into denominators; original slash numerators remain massless.\nNot a complete beta function. Verified saved scalar inputs separate preparation from IBP timing.",
+   "numerical_reference": {
+    "point": {
+     "UFO_G": 1,
+     "mUV": 1,
+     "mu_r_squared": 1
+    },
+    "normalization": "MSbar",
+    "coefficients": [
+     {
+      "epsilon_power": -4,
+      "real": "0",
+      "imaginary": "1.65445448092070004705309e-12"
+     },
+     {
+      "epsilon_power": -3,
+      "real": "0",
+      "imaginary": "1.36492494675957753881880e-11"
+     },
+     {
+      "epsilon_power": -2,
+      "real": "0",
+      "imaginary": "-6.48783155438134177718544e-11"
+     },
+     {
+      "epsilon_power": -1,
+      "real": "0",
+      "imaginary": "1.20965944324016481670451e-10"
+     },
+     {
+      "epsilon_power": 0,
+      "real": "0",
+      "imaginary": "1.93532621392919488103639e-11"
+     }
+    ]
+   }
+  }
+ }
+}
