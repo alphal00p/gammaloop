@@ -385,6 +385,43 @@ External-data releases up to v0.1.2 still ship them; Vakint neither loads nor
 checksums them (an explicit read of such a file still verifies it), which
 removes a large part of the five-loop loading time.
 
+== Saved five-loop route preparation
+
+Loading the five-loop saved application verifies its 8,179 momentum routes
+exactly: about 136 s on one core and about 64 s at any larger
+#raw("n_cores") (RustRed's verification scales only to about two workers).
+That work depends only on the saved application in #raw("5L/ibps"), so RustRed
+records it once into a route preparation add-on
+(#raw("rustred_app::write_saved_application_route_addon")) and restores the
+identical routes from it in under a second; the whole native load then takes
+about 22 s at every core count. The add-on is an extra file next to the
+unchanged artifact: a data pack declares it in #raw("5L/manifest.json") as
+
+```json
+"route_preparation": {"path": "route-preparation.rrbin",
+                      "format": "rustred.saved-application.route-preparation.v1"}
+```
+
+and lists the file in #raw("files"), so its sha256 is checked like every other
+file. Vakint uses it only for the official pack's own #raw("ibps/")
+application; RustRed accepts it only when its format, its verified-map
+semantics version and the application identity (family fingerprint and the
+digest of #raw("selection.json")) match. A missing, corrupt or stale add-on is
+rejected with a warning and every route is verified, as without it. A user
+artifact passed through #raw("rustred_artifact_path") uses RustRed's default: a
+#raw("route-preparation.rrbin") next to its #raw("application.json"), when
+present. Produce or refresh the add-on with
+
+```sh
+cargo run --release -p vakint --example five_loop_route_preparation -- \
+    DATA_ROOT route-preparation.rrbin 6 --check
+```
+
+which verifies every route once, writes the file, checks that loading from it
+gives identical routes and prints the manifest entries. Regenerate it whenever
+the 5L #raw("ibps/") files or RustRed's #raw("SAVED_VERIFIED_MAP_SEMANTICS")
+change.
+
 == Limitations
 
 Keeping more unfinished contributions visible can increase frontier memory.

@@ -29,8 +29,9 @@ use rustred::reduction::terminal_normalization::{
 use rustred::scalar_numerator::{FamilyScalarNumeratorService, ScalarNumeratorLimits};
 use rustred::solver::CandidateRoutedApplicationObserver;
 use rustred_app::{
-    PreparedSavedApplication, SavedApplicationOptions, SavedApplicationProductChartStatistics,
-    SavedApplicationProductStatistics, load_saved_application,
+    PreparedSavedApplication, SAVED_ROUTE_PREPARATION_SCHEMA, SavedApplicationOptions,
+    SavedApplicationProductChartStatistics, SavedApplicationProductStatistics, SavedRouteAddon,
+    SavedRoutePreparationSource, load_saved_application_with_route_addon,
 };
 use sha2::{Digest, Sha256};
 use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
@@ -718,6 +719,58 @@ impl Vakint {
         &self,
         settings: &VakintSettings,
     ) -> Result<Arc<SavedApplication>, VakintError> {
+        /// Route preparation add-on choice of one native load.
+        enum RouteAddonChoice {
+            /// The official 5L pack declares it and its sha256 matched.
+            Declared(PathBuf),
+            /// Declared but unusable here (unlisted, sha256 mismatch, other
+            /// format): verify every route.
+            Rejected,
+            /// Not declared: RustRed's default (a `route-preparation.rrbin`
+            /// next to `application.json`, when present).
+            Undeclared,
+        }
+        /// The add-on applies only to the official pack's own `ibps/` saved
+        /// application; its file is checked against the pack manifest.
+        fn route_preparation_addon(
+            data: &super::data::RustRedData,
+            official: Option<&Path>,
+            path: &Path,
+        ) -> RouteAddonChoice {
+            let Some(pack) = data.loops.get(&5) else {
+                return RouteAddonChoice::Undeclared;
+            };
+            let Some(declared) = pack.manifest.route_preparation.as_ref() else {
+                return RouteAddonChoice::Undeclared;
+            };
+            if official.and_then(|official| official.canonicalize().ok()).as_deref() != Some(path) {
+                return RouteAddonChoice::Undeclared;
+            }
+            let checked = (|| {
+                if declared.format != SAVED_ROUTE_PREPARATION_SCHEMA {
+                    return Err(format!(
+                        "format {} is not {SAVED_ROUTE_PREPARATION_SCHEMA}",
+                        declared.format
+                    ));
+                }
+                pack.read(&declared.path).map_err(|error| error.to_string())?;
+                pack.path(&declared.path)
+                    .map_err(|error| error.to_string())?
+                    .ok_or_else(|| "the pack has no file system path".to_owned())
+            })();
+            match checked {
+                Ok(addon) => RouteAddonChoice::Declared(addon),
+                Err(reason) => {
+                    log::warn!(
+                        target: "vakint::saved_application",
+                        "5L route preparation add-on {} rejected ({reason}); verifying every route",
+                        declared.path
+                    );
+                    RouteAddonChoice::Rejected
+                }
+            }
+        }
+
         let data = self.rustred_data()?;
         let official_path = data
             .loops
@@ -753,7 +806,32 @@ impl Vakint {
             let started = std::time::Instant::now();
             let identity = super::cache::saved_application_digest(&data, &path)?;
             log::debug!(target: "vakint::saved_application", "phase=native_load_begin");
-            let prepared = load_saved_application::<15>(&path, options).map_err(native_failure)?;
+            let route_addon = route_preparation_addon(&data, official_path.as_deref(), &path);
+            let prepared = load_saved_application_with_route_addon::<15>(
+                &path,
+                options,
+                match &route_addon {
+                    RouteAddonChoice::Declared(addon) => SavedRouteAddon::File(addon),
+                    RouteAddonChoice::Rejected => SavedRouteAddon::Disabled,
+                    RouteAddonChoice::Undeclared => SavedRouteAddon::Auto,
+                },
+            )
+            .map_err(native_failure)?;
+            let routes = prepared.route_preparation();
+            if let Some(reason) = &routes.rejected {
+                log::warn!(
+                    target: "vakint::saved_application",
+                    "route preparation add-on rejected ({reason}); verified every route instead"
+                );
+            }
+            log::debug!(
+                target: "vakint::saved_application",
+                "phase=native_routes source={}",
+                match routes.source {
+                    SavedRoutePreparationSource::Addon => "addon",
+                    SavedRoutePreparationSource::Verified => "verified",
+                }
+            );
             if super::cache::saved_application_digest(&data, &path)? != identity {
                 return Err(failure(
                     "saved application changed while its native payload was loading",

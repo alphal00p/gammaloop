@@ -67,8 +67,26 @@ pub(crate) struct LoopManifest {
     pub constant_bindings: Option<FileReference>,
     #[serde(default)]
     pub cache: CacheManifest,
+    /// Optional saved route preparation add-on of the 5L saved application.
+    #[serde(default)]
+    pub route_preparation: Option<RoutePreparationManifest>,
     pub coverage: String,
     pub files: BTreeMap<String, FileDigest>,
+}
+
+/// A RustRed route preparation add-on: the verified momentum routes of the
+/// pack's saved application, recorded once so that loading does not verify
+/// them again (`rustred_app::write_saved_application_route_addon`). It is
+/// derived from the unchanged `ibps/` artifact and listed in `files`, so its
+/// sha256 is checked like every other file. RustRed accepts it only when its
+/// format, verified-map semantics version and application identity match;
+/// otherwise the load verifies every route, as without it.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub(crate) struct RoutePreparationManifest {
+    /// Pack-relative path of the add-on file.
+    pub path: String,
+    /// RustRed file schema, `rustred.saved-application.route-preparation.v1`.
+    pub format: String,
 }
 
 /// A pack's prepared depth-first result cache, published by releases up to
@@ -651,6 +669,29 @@ mod tests {
             fs::write(path, bytes).unwrap();
         }
         directory
+    }
+
+    #[test]
+    fn route_preparation_entry_is_optional_and_typed() {
+        let mut manifest = serde_json::json!({
+            "schema": LOOP_SCHEMA, "version": "v0", "loop_count": 5,
+            "normalization": "FMFTandMATAD", "dimension": "4-2*epsilon",
+            "families": [], "masters": [], "coverage": "coverage.json", "files": {}
+        });
+        let plain: LoopManifest = serde_json::from_value(manifest.clone()).unwrap();
+        assert_eq!(plain.route_preparation, None);
+        manifest["route_preparation"] = serde_json::json!({
+            "path": "route-preparation.rrbin",
+            "format": rustred_app::SAVED_ROUTE_PREPARATION_SCHEMA,
+        });
+        let declared: LoopManifest = serde_json::from_value(manifest).unwrap();
+        assert_eq!(
+            declared.route_preparation,
+            Some(RoutePreparationManifest {
+                path: "route-preparation.rrbin".into(),
+                format: "rustred.saved-application.route-preparation.v1".into(),
+            })
+        );
     }
 
     #[test]
