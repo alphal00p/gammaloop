@@ -701,7 +701,7 @@ symbol = "original-pair B2 certificate and current colour completion"
 anchor = "    fn vacuum_group28_original_pair_identity()"
 # Source19-21 owner reconciliation; B2 body/fixtures remain unchanged.
 # Quotient/nonfinite checks and actual Run pool coverage require new slice review.
-digest = "0e1ae1edaa0a32d2e347d081e3ddddb7102dd177"
+digest = "c6a651978f84d7bbdd6202c26c9475cde2117c37"
 
 [[section.note]]
 id = "gammaloop-architecture"
@@ -928,7 +928,7 @@ anchor = "pub enum GenerationError {"
 # labeller. Reduced selectors/transport/admitted history remain intact; all_cuts production
 # is unchanged and terminal-pocket tests strengthen its boundary. Four certified literal
 # migrations are test-only, not a production physics correction.
-digest = "c988d9d26054998c8fd2f9fcbc35d21b64473a48"
+digest = "59c8629f9dde221d2d22363da98433ed5addd2e4"
 
 [[section.note.scope]]
 path = "crates/feynkit-model/src/model.rs"
@@ -2963,7 +2963,7 @@ anchor = "pub(crate) fn group_diagrams("
 # scoped source reconciliation and regression results are recorded in WP3 units03-07.
 # SOURCE31 semantic attestation (candidate, not independent approval):
 # Historical readiness results retain their named revisions. Current staged grouping uses finite quotient comparison, deterministic source indices and exact scalar normalization; current contract belongs to architecture-current and source19–21 rather than old timing claims.
-digest = "0e1ae1edaa0a32d2e347d081e3ddddb7102dd177"
+digest = "c6a651978f84d7bbdd6202c26c9475cde2117c37"
 
 [[section.note]]
 id = "nix-crane-cache-reuse"

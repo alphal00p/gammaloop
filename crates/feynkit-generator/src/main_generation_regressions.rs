@@ -21,8 +21,9 @@ fn paired_incoming_three_cycles_preserve_the_canonical_connection_frame() {
     let model = Model::phi4();
     let particle = model.particle_id("phi").unwrap();
     let interaction = model.vertex_rule_id(&model.vertex_rules()[0].name).unwrap();
-    // An asymmetric attachment graph exercises the canonical coordinate map
-    // independently of Feynman-rule evaluation. A three-cycle is not its own inverse.
+    // An asymmetric phi4 attachment graph exercises the canonical coordinate map.
+    // Its final self-loop keeps every interaction four-valent. A three-cycle is
+    // not its own inverse.
     let relabel = |cycled: Option<bool>| {
         let mut graph = Graph::new();
         for _ in 0..6 {
@@ -60,11 +61,18 @@ fn paired_incoming_three_cycles_preserve_the_canonical_connection_frame() {
             (0, 2),
             (0, 3),
             (1, 4),
-            (3, 5),
+            (5, 5),
         ] {
             graph.add_edge(source, target, false, particle).unwrap();
         }
-        graph.build()
+        let graph = graph.build();
+        let generator = Generator::new(Arc::new(model.clone()));
+        for (vertex, rule) in graph.vertices().enumerate() {
+            generator
+                .interaction_half_edges(&graph, vertex, model.vertex_rule_by_id(rule).unwrap())
+                .unwrap();
+        }
+        graph
     };
     let process = Process::new(["phi", "phi", "phi"], ["phi", "phi"]);
     // Exchanging identical beams is a rotation only in a 2 -> X process. The sewn-pair

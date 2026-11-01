@@ -2071,10 +2071,13 @@ mod tests {
     use spenso::structure::TensorStructure;
     use spenso_hep_lib as hep_lib;
     use std::env;
+    use std::fs;
+    use std::path::PathBuf;
     use std::process::Command;
     use std::sync::Arc;
     use std::sync::atomic::AtomicBool;
     use std::thread;
+    use symbolica::atom::ZeroTestSettings;
 
     use feynkit_graph::{
         DiagramCut, DiagramCutSide, DiagramEdge, DiagramEndpoint, DiagramHalfEdge, DiagramVertex,
@@ -2091,6 +2094,161 @@ mod tests {
             ParseSettings::default(),
         )
         .unwrap()
+    }
+
+    // C gamma^T C^-1 = -gamma. In a closed spinor circuit the inserted
+    // C matrices cancel; the spinor metric is unchanged. Keep each matrix
+    // product and propagator sum factorized, as in the sewn self-energy proof.
+    fn conjugate_spinor_circuits(input: &Atom) -> Atom {
+        input.replace_map(|atom, _, output| {
+            if let AtomView::Fun(function) = atom
+                && function.get_symbol() == AGS.gamma
+            {
+                assert_eq!(function.get_nargs(), 3);
+                **output = -FunctionBuilder::new(AGS.gamma)
+                    .add_args([function.get(1), function.get(0), function.get(2)])
+                    .finish();
+            }
+        })
+    }
+
+    #[test]
+    #[ignore = "bounded proof over frozen scalar observations; requires FEYNKIT_ORACLE_DUMP"]
+    fn scalar_changed_factorized_components() {
+        let directory = PathBuf::from(env::var("FEYNKIT_ORACLE_DUMP").unwrap());
+        let observations = ["baseline", "candidate"].map(|label| {
+            let data = fs::read(directory.join(format!("{label}.json"))).unwrap();
+            serde_json::from_slice::<Value>(&data).unwrap()
+        });
+        let data = fs::read(directory.join("components.json")).unwrap();
+        let components: Value = serde_json::from_slice(&data).unwrap();
+        let model = Model::qcd_qed();
+        let options = GraphGroupingOptions {
+            number_of_numerical_samples: 0,
+            fully_numerical_substitution: true,
+            check_canonical_numerator: true,
+            symmetric_polarizations: true,
+            ..GraphGroupingOptions::default()
+        };
+        let scalars = scalar_names(&model);
+        let mut results = Vec::new();
+        for component in components.as_array().unwrap() {
+            let anchor = component["candidate_groups"][0]["master_source"]
+                .as_u64()
+                .unwrap();
+            let exact = |side: usize, source: u64| {
+                let event = observations[side]["events"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .find(|event| {
+                        event["stage"] == "canonical_numerator" && event["source"] == source
+                    })
+                    .unwrap();
+                let expression = test_atom(event["exact"].as_str().unwrap());
+                SymbolicTensor::infer(expression).unwrap()
+            };
+            let master = exact(1, anchor);
+            let master = PreparedNumerator {
+                sample_source: master.clone(),
+                exact: master,
+                samples: Vec::new(),
+            };
+            let mut totals = Vec::new();
+            let mut certificates = Vec::new();
+            let mut complete = true;
+            for (side, label) in ["baseline", "candidate"].into_iter().enumerate() {
+                let mut total = Atom::Zero;
+                for group in component[format!("{label}_groups")].as_array().unwrap() {
+                    for member in group["members"].as_array().unwrap() {
+                        let source = member["source"].as_u64().unwrap();
+                        let numerator = exact(side, source);
+                        let prepared = PreparedNumerator {
+                            sample_source: numerator.clone(),
+                            exact: numerator,
+                            samples: Vec::new(),
+                        };
+                        let mut ratio = compare(
+                            &prepared,
+                            &master,
+                            ComparisonMode::UpToScalar,
+                            &options,
+                            &scalars,
+                        )
+                        .unwrap();
+                        let mut charge_conjugated = false;
+                        if ratio.is_none() {
+                            assert_eq!(
+                                prepared
+                                    .exact
+                                    .structure()
+                                    .canonical()
+                                    .external_structure_iter()
+                                    .count(),
+                                0,
+                                "charge conjugation requires closed spinor circuits"
+                            );
+                            let conjugated = conjugate_spinor_circuits(prepared.exact.expression());
+                            assert_eq!(
+                                conjugate_spinor_circuits(&conjugated),
+                                *prepared.exact.expression()
+                            );
+                            let exact = prepared
+                                .exact
+                                .with_checked_expression(conjugated)
+                                .unwrap()
+                                .canonize()
+                                .unwrap();
+                            let conjugated = PreparedNumerator {
+                                sample_source: exact.clone(),
+                                exact,
+                                samples: Vec::new(),
+                            };
+                            ratio = compare(
+                                &conjugated,
+                                &master,
+                                ComparisonMode::UpToScalar,
+                                &options,
+                                &scalars,
+                            )
+                            .unwrap();
+                            charge_conjugated = true;
+                        }
+                        if let Some(ratio) = &ratio {
+                            let factor = test_atom(member["factor"].as_str().unwrap());
+                            total += ratio * evaluate_overall_factor(factor.as_view());
+                        } else {
+                            complete = false;
+                        }
+                        certificates.push(json!({
+                            "side": label, "source": source,
+                            "charge_conjugated_closed_spinor_circuits": charge_conjugated,
+                            "ratio_to_anchor": ratio.map(|ratio| ratio.to_canonical_string()),
+                        }));
+                    }
+                }
+                totals.push(total);
+            }
+            let difference = (&totals[0] - &totals[1]).collect_factors();
+            let equal = complete
+                && difference
+                    .check_zero_with(
+                        &ZeroTestSettings::default()
+                            .finite_field_samples(0)
+                            .numerical_samples(0)
+                            .exact_fallback(true),
+                    )
+                    .is_true();
+            results.push(json!({
+                "component": component["component"], "anchor_candidate_source": anchor,
+                "certificates": certificates, "complete": complete, "equal": equal,
+                "difference": difference.to_canonical_string(),
+            }));
+        }
+        let output = directory.join("proof-result.json");
+        assert!(!output.exists(), "proof output must be new");
+        fs::write(&output, serde_json::to_vec(&results).unwrap()).unwrap();
+        assert!(results.iter().all(|result| result["equal"] == true));
     }
 
     // Authored fixture expressions enter at the source boundary. These exact
@@ -3172,18 +3330,6 @@ mod tests {
                 "../tests/fixtures/sewn_top_self_energy_cc_right.atom"
             )),
         ];
-        let conjugate = |input: &Atom| {
-            input.replace_map(|atom, _, output| {
-                if let AtomView::Fun(function) = atom
-                    && function.get_symbol() == AGS.gamma
-                {
-                    assert_eq!(function.get_nargs(), 3);
-                    **output = -FunctionBuilder::new(AGS.gamma)
-                        .add_args([function.get(1), function.get(0), function.get(2)])
-                        .finish();
-                }
-            })
-        };
         // C gamma^T C^-1=-gamma, so a closed spinor circuit is unchanged by
         // transposing every matrix and inserting these signs. This exact
         // certificate is independent of the numerical grouping decision.
@@ -3200,8 +3346,11 @@ mod tests {
                 0
             );
         }
-        assert_eq!(conjugate(&sources[0]), sources[1]);
-        assert_eq!(conjugate(&conjugate(&sources[0])), sources[0]);
+        assert_eq!(conjugate_spinor_circuits(&sources[0]), sources[1]);
+        assert_eq!(
+            conjugate_spinor_circuits(&conjugate_spinor_circuits(&sources[0])),
+            sources[0]
+        );
 
         let diagrams = sources
             .into_iter()

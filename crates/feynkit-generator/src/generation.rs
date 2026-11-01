@@ -7375,20 +7375,28 @@ mod tests {
             .collect::<Vec<_>>();
         let left = graph.add_node(ColoredNode::Interaction(vertex(&model, "V")));
         let right = graph.add_node(ColoredNode::Interaction(vertex(&model, "V")));
+        let left_partner = graph.add_node(ColoredNode::Interaction(vertex(&model, "V")));
+        let right_partner = graph.add_node(ColoredNode::Interaction(vertex(&model, "V")));
         let charged = particle(&model, 1);
         graph
             .add_edge(external_nodes[0], left, true, charged)
             .unwrap();
         graph
-            .add_edge(left, external_nodes[1], true, charged)
+            .add_edge(left_partner, external_nodes[1], true, charged)
             .unwrap();
         graph
             .add_edge(right, external_nodes[2], true, charged)
             .unwrap();
         graph
-            .add_edge(external_nodes[3], right, true, charged)
+            .add_edge(external_nodes[3], right_partner, true, charged)
             .unwrap();
-        graph.add_edge(left, right, true, charged).unwrap();
+        graph.add_edge(left, left_partner, true, charged).unwrap();
+        graph.add_edge(right_partner, right, true, charged).unwrap();
+        let photon = particle(&model, 22);
+        graph.add_edge(left, right, false, photon).unwrap();
+        graph
+            .add_edge(left_partner, right_partner, false, photon)
+            .unwrap();
 
         let external_swap = BTreeMap::from([
             (external_nodes[0], external_nodes[2]),
@@ -7409,6 +7417,15 @@ mod tests {
                     model.particle_by_id(particle).unwrap().antiparticle,
                 )
                 .unwrap();
+        }
+
+        let generator = Generator::new(model.clone());
+        for graph in [graph.build(), mirror.build()] {
+            for (vertex, rule) in graph.vertices().enumerate() {
+                generator
+                    .interaction_half_edges(&graph, vertex, model.vertex_rule_by_id(rule).unwrap())
+                    .unwrap();
+            }
         }
 
         let grouping = Grouping::UpToScalar(GraphGroupingOptions::default());
@@ -7432,7 +7449,7 @@ mod tests {
 
         let internal_edge = canonical
             .edges()
-            .position(|edge| !edge.is_external())
+            .position(|edge| edge.directed && !edge.is_external())
             .unwrap();
         let generator = Generator::new(model.clone());
         let (particle_numerator, particle_fallback) = generator
