@@ -458,12 +458,14 @@ unchanged artifact: a data pack declares it in #raw("5L/manifest.json") as
                       "format": "rustred.saved-application.route-preparation.v1"}
 ```
 
-and lists the file in #raw("files"), so its sha256 is checked like every other
-file. Vakint uses it only for the official pack's own #raw("ibps/")
-application; RustRed accepts it only when its format, its verified-map
-semantics version and the application identity (family fingerprint and the
-digest of #raw("selection.json")) match. A missing, corrupt or stale add-on is
-rejected with a warning and every route is verified, as without it. A user
+and lists the file in #raw("files"). Like a shipped Ordered cache it is a
+derived file: loading the data skips it, and its sha256 is checked when the
+five-loop application loads. Vakint uses it only for the official pack's own
+#raw("ibps/") application; RustRed accepts it only when its format, its
+verified-map semantics version and the application identity (family
+fingerprint and the digest of #raw("selection.json")) match. A missing,
+corrupt or stale add-on is rejected with one line on stderr and every route is
+verified, as without it. A user
 artifact passed through #raw("rustred_artifact_path") uses RustRed's default: a
 #raw("route-preparation.rrbin") next to its #raw("application.json"), when
 present. Produce or refresh the add-on with

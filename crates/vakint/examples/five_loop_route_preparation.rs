@@ -26,8 +26,9 @@
 //! ```
 //!
 //! Re-run it whenever the 5L `ibps/` artifact or RustRed's
-//! `SAVED_VERIFIED_MAP_SEMANTICS` changes: a stale add-on is rejected (with a
-//! warning) and the load verifies every route as without it.
+//! `SAVED_VERIFIED_MAP_SEMANTICS` changes: a missing, corrupt or stale add-on
+//! is rejected (one line on stderr) and the load verifies every route as
+//! without it.
 use std::path::PathBuf;
 
 use rustred_app::{

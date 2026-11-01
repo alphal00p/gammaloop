@@ -723,57 +723,64 @@ impl Vakint {
         enum RouteAddonChoice {
             /// The official 5L pack declares it and its sha256 matched.
             Declared(PathBuf),
-            /// Declared but unusable here (unlisted, sha256 mismatch, other
-            /// format): verify every route.
+            /// Declared but unusable here (missing, unlisted, sha256
+            /// mismatch, other format; reported on stderr): verify every
+            /// route.
             Rejected,
             /// Not declared: RustRed's default (a `route-preparation.rrbin`
             /// next to `application.json`, when present).
             Undeclared,
         }
         /// The add-on applies only to the official pack's own `ibps/` saved
-        /// application; its file is checked against the pack manifest.
+        /// application; its file is checked against the pack manifest here
+        /// (the data load skips it, like a shipped Ordered cache). A refusal
+        /// prints one line on stderr, as RustRed does for an add-on it
+        /// rejects; resource limits stopping the check are the load's error.
         fn route_preparation_addon(
             data: &super::data::RustRedData,
             official: Option<&Path>,
             path: &Path,
-        ) -> RouteAddonChoice {
+        ) -> Result<RouteAddonChoice, RustRedEvaluationError> {
             let Some(pack) = data.loops.get(&5) else {
-                return RouteAddonChoice::Undeclared;
+                return Ok(RouteAddonChoice::Undeclared);
             };
             let Some(declared) = pack.manifest.route_preparation.as_ref() else {
-                return RouteAddonChoice::Undeclared;
+                return Ok(RouteAddonChoice::Undeclared);
             };
             if official
                 .and_then(|official| official.canonicalize().ok())
                 .as_deref()
                 != Some(path)
             {
-                return RouteAddonChoice::Undeclared;
+                return Ok(RouteAddonChoice::Undeclared);
             }
-            let checked = (|| {
-                if declared.format != SAVED_ROUTE_PREPARATION_SCHEMA {
-                    return Err(format!(
-                        "format {} is not {SAVED_ROUTE_PREPARATION_SCHEMA}",
-                        declared.format
-                    ));
+            let reason = if declared.format != SAVED_ROUTE_PREPARATION_SCHEMA {
+                format!(
+                    "format {} is not {SAVED_ROUTE_PREPARATION_SCHEMA}",
+                    declared.format
+                )
+            } else {
+                match pack.read(&declared.path) {
+                    Err(error @ RustRedEvaluationError::ResourceLimit(_)) => return Err(error),
+                    Err(error) => error.to_string(),
+                    Ok(_) => match pack.path(&declared.path) {
+                        Ok(Some(addon)) => return Ok(RouteAddonChoice::Declared(addon)),
+                        Ok(None) => "the pack has no file system path".to_owned(),
+                        Err(error) => error.to_string(),
+                    },
                 }
-                pack.read(&declared.path)
-                    .map_err(|error| error.to_string())?;
-                pack.path(&declared.path)
-                    .map_err(|error| error.to_string())?
-                    .ok_or_else(|| "the pack has no file system path".to_owned())
-            })();
-            match checked {
-                Ok(addon) => RouteAddonChoice::Declared(addon),
-                Err(reason) => {
-                    log::warn!(
-                        target: "vakint::saved_application",
-                        "5L route preparation add-on {} rejected ({reason}); verifying every route",
-                        declared.path
-                    );
-                    RouteAddonChoice::Rejected
-                }
-            }
+            };
+            let shown = pack
+                .path(&declared.path)
+                .ok()
+                .flatten()
+                .unwrap_or_else(|| PathBuf::from(format!("5L/{}", declared.path)));
+            eprintln!(
+                "vakint: 5L route preparation add-on {} not used ({reason}); verifying every \
+                 route",
+                shown.display()
+            );
+            Ok(RouteAddonChoice::Rejected)
         }
 
         let data = self.rustred_data()?;
@@ -811,7 +818,7 @@ impl Vakint {
             let started = std::time::Instant::now();
             let identity = super::cache::saved_application_digest(&data, &path)?;
             log::debug!(target: "vakint::saved_application", "phase=native_load_begin");
-            let route_addon = route_preparation_addon(&data, official_path.as_deref(), &path);
+            let route_addon = route_preparation_addon(&data, official_path.as_deref(), &path)?;
             let prepared = load_saved_application_with_route_addon::<15>(
                 &path,
                 options,
@@ -822,13 +829,8 @@ impl Vakint {
                 },
             )
             .map_err(native_failure)?;
+            // RustRed prints its own line when it rejects the add-on.
             let routes = prepared.route_preparation();
-            if let Some(reason) = &routes.rejected {
-                log::warn!(
-                    target: "vakint::saved_application",
-                    "route preparation add-on rejected ({reason}); verified every route instead"
-                );
-            }
             log::debug!(
                 target: "vakint::saved_application",
                 "phase=native_routes source={}",

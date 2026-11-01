@@ -88,10 +88,13 @@ pub(crate) struct LoopManifest {
 /// A RustRed route preparation add-on: the verified momentum routes of the
 /// pack's saved application, recorded once so that loading does not verify
 /// them again (`rustred_app::write_saved_application_route_addon`). It is
-/// derived from the unchanged `ibps/` artifact and listed in `files`, so its
-/// sha256 is checked like every other file. RustRed accepts it only when its
-/// format, verified-map semantics version and application identity match;
-/// otherwise the load verifies every route, as without it.
+/// derived from the unchanged `ibps/` artifact and listed in `files`; like a
+/// shipped Ordered cache it is checked (sha256) when the five-loop
+/// application loads, not with the data, so a missing or corrupt add-on
+/// never fails the data load. RustRed accepts it only when its format,
+/// verified-map semantics version and application identity match. Otherwise
+/// one line on stderr says why and the load verifies every route, as
+/// without it.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub(crate) struct RoutePreparationManifest {
     /// Pack-relative path of the add-on file.
@@ -112,9 +115,12 @@ pub(crate) struct CacheManifest {
 impl LoopManifest {
     /// Files that Vakint does not read when loading: the prepared
     /// depth-first cache with its metadata (releases up to v0.1.2), the
-    /// benchmark inputs, and the shipped Ordered step caches (verified when a
-    /// program uses them). Loading skips their checksums; any later read
-    /// still verifies them like every other file.
+    /// benchmark inputs, and the optional derived files that only speed up
+    /// later work: the shipped Ordered step caches (verified when a program
+    /// uses them) and the route preparation add-on (verified when the
+    /// five-loop application loads). Loading skips their checksums; any
+    /// later read still verifies them like every other file, and a derived
+    /// file that fails is rejected loudly instead of failing the data.
     fn is_unused_at_runtime(&self, path: &str) -> bool {
         path.starts_with("cache/")
             || path.starts_with("benchmarks/")
@@ -125,6 +131,10 @@ impl LoopManifest {
                         .strip_prefix(section.path.as_str())
                         .is_some_and(|rest| rest.starts_with('/'))
             })
+            || self
+                .route_preparation
+                .as_ref()
+                .is_some_and(|addon| addon.path == path)
     }
 }
 
@@ -716,6 +726,51 @@ mod tests {
                 format: "rustred.saved-application.route-preparation.v1".into(),
             })
         );
+    }
+
+    /// A declared route preparation add-on is a derived file like a shipped
+    /// Ordered cache: a missing or corrupt one never fails the data load, and
+    /// reading it (as the five-loop load does before using it) still checks
+    /// it against the manifest.
+    #[test]
+    fn missing_or_corrupt_route_preparation_addon_never_fails_the_data_load() {
+        let directory = vendored_directory();
+        let pack = directory.path().join("3L");
+        let addon = b"route preparation";
+        let manifest_path = pack.join("manifest.json");
+        let mut manifest: serde_json::Value =
+            serde_json::from_slice(&fs::read(&manifest_path).unwrap()).unwrap();
+        manifest["route_preparation"] = serde_json::json!({
+            "path": "route-preparation.rrbin",
+            "format": rustred_app::SAVED_ROUTE_PREPARATION_SCHEMA,
+        });
+        manifest["files"]["route-preparation.rrbin"] = serde_json::json!({
+            "sha256": format!("{:x}", Sha256::digest(addon)), "bytes": addon.len(),
+        });
+        let bytes = serde_json::to_vec_pretty(&manifest).unwrap();
+        fs::write(&manifest_path, &bytes).unwrap();
+        let root_path = directory.path().join("manifest.json");
+        let mut root: serde_json::Value =
+            serde_json::from_slice(&fs::read(&root_path).unwrap()).unwrap();
+        for entry in root["loop_packs"].as_array_mut().unwrap() {
+            if entry["loop_count"] == 3 {
+                entry["manifest_sha256"] = format!("{:x}", Sha256::digest(&bytes)).into();
+            }
+        }
+        fs::write(&root_path, serde_json::to_vec_pretty(&root).unwrap()).unwrap();
+        let read = || {
+            RustRedData::from_directory(directory.path(), "latest", 3)
+                .unwrap()
+                .loops[&3]
+                .read("route-preparation.rrbin")
+        };
+        // Missing.
+        assert!(read().is_err());
+        // Corrupt (same size).
+        fs::write(pack.join("route-preparation.rrbin"), b"route preparatioN").unwrap();
+        assert!(read().unwrap_err().to_string().contains("SHA256 mismatch"));
+        fs::write(pack.join("route-preparation.rrbin"), addon).unwrap();
+        assert_eq!(read().unwrap(), addon);
     }
 
     #[test]

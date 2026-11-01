@@ -841,7 +841,11 @@ anchor = "pub(crate) struct RustRedData {"
 # other) and shipped Ordered caches (ordered_cache section; their files are skipped at load
 # and sha256-verified when a program uses them); LoopData exposes its manifest sha256 and
 # tests get the vendored file list. Validation and transactional activation are unchanged.
-digest = "c4bb9f0c9c476a5a6fd576e9263399e8e27b2075"
+# Reviewed 2026-11-01 for vakint-final review fixes: the declared 5L route preparation
+# add-on is now a derived file like the shipped Ordered caches (skipped by the load-time
+# checksum pass, sha256-checked when the 5L application loads; a missing or corrupt one is
+# rejected loudly instead of failing the data). Snapshot ownership and activation are unchanged.
+digest = "b11458126a98f44d510103427d862c7eb9cec67e"
 
 [[section.note.scope]]
 path = "crates/vakint/src/rustred_evaluation/masters.rs"

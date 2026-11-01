@@ -269,9 +269,10 @@ the single source of every worker count: the modular workers unless the selectio
 fields (`ordered_weight_arithmetic`, `preparation_workers` of `rustred_application_options`) are
 derived in `rustred_evaluation::application_options` and must keep their defaults; neither
 enters the saved-application reload identity. A data pack may ship a RustRed route preparation
-add-on (`route_preparation` in `5L/manifest.json`, sha256-checked like every file) that replaces
+add-on (`route_preparation` in `5L/manifest.json`; a derived file like the shipped Ordered caches,
+sha256-checked when the application loads, not with the data) that replaces
 the route verification by a restore of the recorded verified routes (load about 22 s instead of
-85-156 s); a missing or stale add-on is rejected with a warning and the routes are verified. One core runs everything on the calling thread,
+85-156 s); a missing, corrupt or stale add-on is rejected with one stderr line and the routes are verified. One core runs everything on the calling thread,
 which `tests/single_core_tests.rs` enforces with a seccomp filter. `VAKINT_DUMP_ORDERED_REQUEST`
 records every native Ordered request with digests of its exact output, for replay without Vakint.
 
