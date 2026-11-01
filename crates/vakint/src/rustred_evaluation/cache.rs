@@ -338,8 +338,10 @@ pub(crate) struct OrderedCacheProgram {
 /// Registry key: program label, rule tables and binding stamp.
 type ProgramKey = (String, [u8; 32], [u8; 32]);
 /// A program key with the sha256 of the loop manifest whose shipped cache
-/// was resolved for it.
-type ShippedKey = (ProgramKey, String);
+/// was resolved for it and the pack's shipped-cache directory (`None` for
+/// data without one): byte-identical data loaded from another directory are
+/// verified again and their cache is opened from there.
+type ShippedKey = (ProgramKey, String, Option<PathBuf>);
 
 /// The rule-table identity of a program read from several data files: a
 /// digest of their paths and declared (verified) sha256 values, in order.
@@ -482,8 +484,9 @@ impl Attached {
 pub(crate) struct OrderedCacheRegistry {
     attached: Mutex<BTreeMap<ProgramKey, Attached>>,
     last_autosave_error: Mutex<Option<String>>,
-    /// Verified shipped caches, resolved (and reported) once per program and
-    /// loop manifest.
+    /// Verified shipped caches, resolved (and reported) once per program,
+    /// loop manifest and data directory. Only verdicts about the data are
+    /// kept; a verification stopped by a request's resource limits is not.
     shipped: Mutex<BTreeMap<ShippedKey, ShippedOrderedCache>>,
 }
 
@@ -519,18 +522,30 @@ impl OrderedCacheRegistry {
     }
 
     /// The verified shipped cache of `program` in `data`, resolved once per
-    /// program and loop manifest (a refusal prints its stderr line once).
-    fn shipped(&self, data: &RustRedData, program: &OrderedCacheProgram) -> ShippedOrderedCache {
+    /// program, loop manifest and data directory (a refusal prints its stderr
+    /// line once). A verification stopped by the request's resource limits
+    /// is that request's error and is not kept: a constrained caller must not
+    /// disable a valid shipped cache for every later request of the engine.
+    fn shipped(
+        &self,
+        data: &RustRedData,
+        program: &OrderedCacheProgram,
+    ) -> Result<ShippedOrderedCache, RustRedEvaluationError> {
         let Some(pack) = data.loops.get(&program.loop_count) else {
-            return ShippedOrderedCache::None;
+            return Ok(ShippedOrderedCache::None);
         };
-        let key = (program.key(), pack.manifest_sha256().to_owned());
-        self.shipped
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .entry(key)
-            .or_insert_with(|| ShippedOrderedCache::resolve(data, program))
-            .clone()
+        let key = (
+            program.key(),
+            pack.manifest_sha256().to_owned(),
+            pack.path(shipped_cache::PACK_DIRECTORY).ok().flatten(),
+        );
+        let mut shipped = self.shipped.lock().unwrap_or_else(PoisonError::into_inner);
+        if let Some(known) = shipped.get(&key) {
+            return Ok(known.clone());
+        }
+        let resolved = ShippedOrderedCache::resolve(data, program)?;
+        shipped.insert(key, resolved.clone());
+        Ok(resolved)
     }
 
     /// The program's cache under `settings`, opened (or reopened after a
@@ -546,7 +561,7 @@ impl OrderedCacheRegistry {
             return Ok(None);
         }
         let shipped = match data {
-            Some(data) if settings.shipped => self.shipped(data, program),
+            Some(data) if settings.shipped => self.shipped(data, program)?,
             _ => ShippedOrderedCache::None,
         };
         let key = program.key();

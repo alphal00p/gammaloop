@@ -16,7 +16,10 @@
 //! carry this build's tail schema and semantics) and its files match the loop
 //! manifest's sha256. Otherwise vakint prints one line on stderr and the
 //! program runs without it (cold); a shipped cache never fails an evaluation
-//! and never changes a result.
+//! and never changes a result. Only such verdicts about the data are kept for
+//! the engine: when the request's resource limits stop the verification
+//! (reading the files checks them), that request fails with the resource
+//! error and the next one verifies again.
 //!
 //! Without a cache directory (the default in-memory mode) an accepted cache
 //! is opened in place: its shards are read lazily, new records stay in memory
@@ -40,6 +43,7 @@ use rustred::reduction::{
 use serde::{Deserialize, Serialize};
 
 use super::{
+    RustRedEvaluationError,
     cache::{OrderedCacheProgram, hex, ordered_cache_failure, program_directory_name},
     data::{LoopData, RustRedData},
 };
@@ -246,28 +250,60 @@ pub(crate) enum ShippedOrderedCache {
     Rejected(ShippedOrderedCacheUse),
 }
 
+/// Why a shipped cache is not used.
+enum Refusal {
+    /// A verdict about the data (version, rule tables, file set, sha256):
+    /// reported once and kept.
+    Data(String),
+    /// The request's resource limits stopped the verification: the request's
+    /// error, never a verdict about the data.
+    Budget(RustRedEvaluationError),
+}
+
+impl From<String> for Refusal {
+    fn from(detail: String) -> Self {
+        Self::Data(detail)
+    }
+}
+
+/// A failed read of the pack file `file`.
+fn read_refusal(file: &str, error: RustRedEvaluationError) -> Refusal {
+    match error {
+        RustRedEvaluationError::ResourceLimit(_) => Refusal::Budget(error),
+        error => Refusal::Data(format!("{file}: {error}")),
+    }
+}
+
 impl ShippedOrderedCache {
     /// Look up and verify the cache the loaded data ship for `program`. A
-    /// refusal prints one line on stderr.
-    pub(crate) fn resolve(data: &RustRedData, program: &OrderedCacheProgram) -> Self {
+    /// refusal prints one line on stderr. Fails only when the request's
+    /// resource limits stop the verification.
+    pub(crate) fn resolve(
+        data: &RustRedData,
+        program: &OrderedCacheProgram,
+    ) -> Result<Self, RustRedEvaluationError> {
         let Some(pack) = data.loops.get(&program.loop_count) else {
-            return Self::None;
+            return Ok(Self::None);
         };
         let Some(section) = &pack.manifest.ordered_cache else {
-            return Self::None;
+            return Ok(Self::None);
         };
         let name = program_directory_name(program);
         let reject =
-            |source: PathBuf, detail: String, entry: Option<&ShippedOrderedCacheProgram>| {
+            |source: PathBuf, refusal: Refusal, entry: Option<&ShippedOrderedCacheProgram>| {
+                let detail = match refusal {
+                    Refusal::Data(detail) => detail,
+                    Refusal::Budget(error) => return Err(error),
+                };
                 loud_rejection(&source, &program.label, &detail);
-                Self::Rejected(ShippedOrderedCacheUse {
+                Ok(Self::Rejected(ShippedOrderedCacheUse {
                     status: ShippedOrderedCacheStatus::Rejected,
                     source,
                     records: entry.map_or(0, |entry| entry.records),
                     bytes: entry.map_or(0, |entry| entry.bytes + entry.tail_bytes),
                     complete: entry.is_some_and(|entry| entry.complete),
                     detail: Some(detail),
-                })
+                }))
             };
         let pack_path = |relative: &str| {
             pack.path(relative)
@@ -277,30 +313,34 @@ impl ShippedOrderedCache {
         };
         let metadata = match metadata(pack, section) {
             Ok(metadata) => metadata,
-            Err(detail) => return reject(pack_path(&section.metadata), detail, None),
+            Err(refusal) => return reject(pack_path(&section.metadata), refusal, None),
         };
         let Some(entry) = metadata
             .programs
             .iter()
             .find(|entry| entry.label == program.label)
         else {
-            return Self::None;
+            return Ok(Self::None);
         };
         let source = match pack.path(&entry.directory) {
             Ok(Some(source)) => source,
             // Vendored or locally overridden data have no directory to read.
-            Ok(None) => return Self::None,
+            Ok(None) => return Ok(Self::None),
             Err(error) => {
-                return reject(pack_path(&section.metadata), error.to_string(), Some(entry));
+                return reject(
+                    pack_path(&section.metadata),
+                    Refusal::Data(error.to_string()),
+                    Some(entry),
+                );
             }
         };
         match verify(pack, program, entry, &name) {
-            Ok(files) => Self::Accepted(AcceptedOrderedCache {
+            Ok(files) => Ok(Self::Accepted(AcceptedOrderedCache {
                 source,
                 files,
                 entry: entry.clone(),
-            }),
-            Err(detail) => reject(source, detail, Some(entry)),
+            })),
+            Err(refusal) => reject(source, refusal, Some(entry)),
         }
     }
 }
@@ -316,29 +356,29 @@ fn loud_rejection(source: &Path, label: &str, detail: &str) {
 fn metadata(
     pack: &LoopData,
     section: &OrderedCacheSection,
-) -> Result<ShippedOrderedCacheMetadata, String> {
+) -> Result<ShippedOrderedCacheMetadata, Refusal> {
     if section.path != PACK_DIRECTORY || section.metadata != METADATA_FILE {
-        return Err(format!(
+        return Err(Refusal::Data(format!(
             "unsupported ordered_cache section {{path: {:?}, metadata: {:?}}}",
             section.path, section.metadata
-        ));
+        )));
     }
     let bytes = pack
         .read(METADATA_FILE)
-        .map_err(|error| error.to_string())?;
+        .map_err(|error| read_refusal(METADATA_FILE, error))?;
     let metadata: ShippedOrderedCacheMetadata =
         serde_json::from_slice(&bytes).map_err(|error| format!("{METADATA_FILE}: {error}"))?;
     if metadata.schema != METADATA_SCHEMA {
-        return Err(format!(
+        return Err(Refusal::Data(format!(
             "{METADATA_FILE} has schema {:?}; this vakint reads {METADATA_SCHEMA:?}",
             metadata.schema
-        ));
+        )));
     }
     if metadata.loop_count != pack.manifest.loop_count {
-        return Err(format!(
+        return Err(Refusal::Data(format!(
             "{METADATA_FILE} describes {} loops",
             metadata.loop_count
-        ));
+        )));
     }
     Ok(metadata)
 }
@@ -422,29 +462,29 @@ fn verify(
     program: &OrderedCacheProgram,
     entry: &ShippedOrderedCacheProgram,
     name: &str,
-) -> Result<Vec<String>, String> {
+) -> Result<Vec<String>, Refusal> {
     let stamp = hex(&program.binding.stamp());
     let tables = hex(&program.rule_tables);
     if entry.rule_tables != tables {
-        return Err(format!(
+        return Err(Refusal::Data(format!(
             "it was prepared for other rule tables ({}..., these data have {}...)",
             entry.rule_tables.get(..16).unwrap_or(&entry.rule_tables),
             &tables[..16]
-        ));
+        )));
     }
     if entry.stamp != stamp {
-        return Err(format!(
+        return Err(Refusal::Data(format!(
             "it was recorded under another cache version (stamp {}..., this build {}...: \
              {ORDERED_STEP_CACHE_SCHEMA}, {ORDERED_STEP_SEMANTICS})",
             entry.stamp.get(..16).unwrap_or(&entry.stamp),
             &stamp[..16]
-        ));
+        )));
     }
     if entry.directory != format!("{PACK_DIRECTORY}/{name}") {
-        return Err(format!(
+        return Err(Refusal::Data(format!(
             "its directory {:?} is not {PACK_DIRECTORY}/{name}",
             entry.directory
-        ));
+        )));
     }
     let prefix = format!("{}/", entry.directory);
     let listed: BTreeSet<String> = pack
@@ -455,26 +495,28 @@ fn verify(
         .collect();
     let read = |file: &str| {
         pack.read(&format!("{prefix}{file}"))
-            .map_err(|error| format!("{file}: {error}"))
+            .map_err(|error| read_refusal(file, error))
     };
     if !listed.contains(RUSTRED_MANIFEST) {
-        return Err(format!("the loop manifest lists no {RUSTRED_MANIFEST}"));
+        return Err(Refusal::Data(format!(
+            "the loop manifest lists no {RUSTRED_MANIFEST}"
+        )));
     }
     let manifest = parse_manifest(&String::from_utf8_lossy(&read(RUSTRED_MANIFEST)?))?;
     if manifest.schema != ORDERED_STEP_CACHE_SCHEMA || manifest.semantics != ORDERED_STEP_SEMANTICS
     {
-        return Err(format!(
+        return Err(Refusal::Data(format!(
             "it was written as {} / {}; this build reads {ORDERED_STEP_CACHE_SCHEMA} / \
              {ORDERED_STEP_SEMANTICS}",
             manifest.schema, manifest.semantics
-        ));
+        )));
     }
     if manifest.stamp != stamp {
-        return Err(format!(
+        return Err(Refusal::Data(format!(
             "its {RUSTRED_MANIFEST} carries stamp {}..., this build {}...",
             manifest.stamp.get(..16).unwrap_or(&manifest.stamp),
             &stamp[..16]
-        ));
+        )));
     }
     let shards: BTreeSet<String> = manifest
         .shards
@@ -492,9 +534,9 @@ fn verify(
             .iter()
             .any(|file| !file.starts_with(&format!("{SHARD_DIRECTORY}/")))
     {
-        return Err(format!(
+        return Err(Refusal::Data(format!(
             "its files differ from the shards its {RUSTRED_MANIFEST} lists"
-        ));
+        )));
     }
     for file in &shards {
         read(file)?;
@@ -543,12 +585,13 @@ impl Vakint {
     /// cache directory name, rule tables, binding stamp and the verified
     /// state of the cache its data ship: [`ShippedOrderedCacheStatus::InPlace`]
     /// when the cache would be used, `Rejected` (with the reason; the stderr
-    /// line is printed) otherwise. Nothing is attached or copied.
+    /// line is printed) otherwise. Nothing is attached or copied. Fails when
+    /// the active resource limits stop the verification.
     pub fn shipped_ordered_caches(&self) -> Result<Vec<ShippedOrderedCacheCheck>, VakintError> {
         let data = self.rustred_data()?;
         let mut out = Vec::new();
         for program in self.ordered_cache_programs()? {
-            let shipped = match ShippedOrderedCache::resolve(&data, &program) {
+            let shipped = match ShippedOrderedCache::resolve(&data, &program)? {
                 ShippedOrderedCache::None => None,
                 ShippedOrderedCache::Accepted(accepted) => {
                     Some(accepted.report(ShippedOrderedCacheStatus::InPlace, None))

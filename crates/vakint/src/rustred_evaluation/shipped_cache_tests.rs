@@ -354,6 +354,97 @@ fn shipped_caches_replay_in_memory_and_from_a_cache_directory() {
     assert!(program(&engine, 3).native.inserts > 0);
 }
 
+/// Resource limits stopping the verification fail that request only: the
+/// next request (with a fresh budget, or none) verifies again and replays the
+/// cache. Byte-identical data loaded from another directory are verified
+/// again and replayed from there.
+#[test]
+fn resource_limits_never_reject_a_shipped_cache_for_later_requests() {
+    use symbolica::utils::resources::{ResourceBudget, ResourceLimitError, ResourceLimits};
+
+    let work = tempfile::tempdir().unwrap();
+    let (data, cold) = shipping_data(work.path());
+    let mut engine = load_engine(data.path());
+    let defaults = settings(OrderedCacheSettings::default());
+    let expired = ResourceBudget::new(ResourceLimits {
+        max_elapsed: Some(std::time::Duration::ZERO),
+        ..Default::default()
+    });
+    let budget_error = |result: Result<(), crate::VakintError>| {
+        assert!(
+            matches!(
+                result,
+                Err(crate::VakintError::RustRedEvaluation(
+                    RustRedEvaluationError::ResourceLimit(ResourceLimitError::Elapsed { .. })
+                ))
+            ),
+            "{result:?}"
+        );
+    };
+    let pack = engine.rustred_data().unwrap();
+    let three_loop = engine
+        .ordered_cache_programs()
+        .unwrap()
+        .into_iter()
+        .find(|program| program.loop_count == 3)
+        .unwrap();
+    budget_error(
+        expired
+            .run(|| ShippedOrderedCache::resolve(&pack, &three_loop))
+            .map(|_| ())
+            .map_err(Into::into),
+    );
+    budget_error(expired.run(|| engine.load_ordered_cache(&defaults).map(|_| ())));
+    budget_error(expired.run(|| engine.shipped_ordered_caches().map(|_| ())));
+    assert!(
+        engine
+            .ordered_cache_statistics()
+            .programs
+            .iter()
+            .all(|program| status(program) != Some(ShippedOrderedCacheStatus::Rejected))
+    );
+    assert_eq!(evaluate_all(&engine, &defaults), cold);
+    for loops in [2, 3] {
+        let program = program(&engine, loops);
+        assert_eq!(
+            status(&program),
+            Some(ShippedOrderedCacheStatus::InPlace),
+            "{program:?}"
+        );
+        assert!(
+            program.native.hits > 0 && program.native.inserts == 0,
+            "{program:?}"
+        );
+    }
+
+    // The same bytes from another directory: replayed from the new copy (the
+    // first one is deleted).
+    let copy = tempfile::tempdir().unwrap();
+    for (relative, bytes) in listing(data.path()) {
+        let path = copy.path().join(relative);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, bytes).unwrap();
+    }
+    drop(data);
+    engine.load_external_data(copy.path(), 3).unwrap();
+    assert_eq!(evaluate_all(&engine, &defaults), cold);
+    let moved = program(&engine, 3);
+    let shipped = moved.shipped.as_ref().unwrap();
+    assert_eq!(shipped.status, ShippedOrderedCacheStatus::InPlace);
+    assert!(
+        shipped
+            .source
+            .canonicalize()
+            .unwrap()
+            .starts_with(copy.path().canonicalize().unwrap()),
+        "{shipped:?}"
+    );
+    assert!(
+        moved.native.hits > 0 && moved.native.inserts == 0,
+        "{moved:?}"
+    );
+}
+
 /// Edit the staged 3L cache with `edit(pack directory, cache directory)`,
 /// optionally rebinding the manifests, and check that the cache is rejected
 /// with a reason containing `reason` while the results stay the cold ones.
