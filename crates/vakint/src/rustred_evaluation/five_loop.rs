@@ -743,7 +743,11 @@ impl Vakint {
             let Some(declared) = pack.manifest.route_preparation.as_ref() else {
                 return RouteAddonChoice::Undeclared;
             };
-            if official.and_then(|official| official.canonicalize().ok()).as_deref() != Some(path) {
+            if official
+                .and_then(|official| official.canonicalize().ok())
+                .as_deref()
+                != Some(path)
+            {
                 return RouteAddonChoice::Undeclared;
             }
             let checked = (|| {
@@ -753,7 +757,8 @@ impl Vakint {
                         declared.format
                     ));
                 }
-                pack.read(&declared.path).map_err(|error| error.to_string())?;
+                pack.read(&declared.path)
+                    .map_err(|error| error.to_string())?;
                 pack.path(&declared.path)
                     .map_err(|error| error.to_string())?
                     .ok_or_else(|| "the pack has no file system path".to_owned())

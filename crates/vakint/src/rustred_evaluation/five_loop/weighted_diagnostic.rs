@@ -467,7 +467,10 @@ fn check_lane(generic: bool, counts: Counts) {
     );
     if generic {
         assert_eq!(counts.rational, 0, "forced generic phase used Q");
-        assert_eq!(counts.grouped, 0, "forced generic phase used the grouped lane");
+        assert_eq!(
+            counts.grouped, 0,
+            "forced generic phase used the grouped lane"
+        );
     } else {
         assert!(
             counts.rational > 0,
