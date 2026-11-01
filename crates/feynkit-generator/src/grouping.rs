@@ -521,7 +521,7 @@ pub(crate) fn group_diagrams(
         cp_merge_diagnostic::record(|| {
             json!({
                 "stage": "comparison_source", "source": source_index(source_diagram),
-                "diagram": cp_merge_diagnostic::operator(&diagram),
+                "diagram": cp_merge_diagnostic::operator(diagram),
             })
         });
         let color_error = |error: TensorInferenceError| GroupingError::ColorSimplification {

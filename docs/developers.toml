@@ -701,7 +701,7 @@ symbol = "original-pair B2 certificate and current colour completion"
 anchor = "    fn vacuum_group28_original_pair_identity()"
 # Source19-21 owner reconciliation; B2 body/fixtures remain unchanged.
 # Quotient/nonfinite checks and actual Run pool coverage require new slice review.
-digest = "c6a651978f84d7bbdd6202c26c9475cde2117c37"
+digest = "c44968878af00a0dae430af597cf87d407f19510"
 
 [[section.note]]
 id = "gammaloop-architecture"
@@ -2963,7 +2963,7 @@ anchor = "pub(crate) fn group_diagrams("
 # scoped source reconciliation and regression results are recorded in WP3 units03-07.
 # SOURCE31 semantic attestation (candidate, not independent approval):
 # Historical readiness results retain their named revisions. Current staged grouping uses finite quotient comparison, deterministic source indices and exact scalar normalization; current contract belongs to architecture-current and source19–21 rather than old timing claims.
-digest = "c6a651978f84d7bbdd6202c26c9475cde2117c37"
+digest = "c44968878af00a0dae430af597cf87d407f19510"
 
 [[section.note]]
 id = "nix-crane-cache-reuse"
