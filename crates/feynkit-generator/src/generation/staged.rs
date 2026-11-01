@@ -24,6 +24,11 @@ use std::collections::HashSet;
 use std::fmt::{Debug, Formatter, Result as FmtResult};
 use std::slice::Iter;
 
+#[cfg(test)]
+use super::cp_merge_diagnostic;
+#[cfg(test)]
+use serde_json::json;
+
 /// Exact physical totals at one loop order, before numerator construction.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct LoopCounts {
@@ -233,6 +238,12 @@ impl DiagramSet {
             if let Some(basis) = basis {
                 diagram = diagram.with_loop_momentum_edges(basis)?;
             }
+            #[cfg(test)]
+            cp_merge_diagnostic::record(|| {
+                json!({
+                    "stage": "built_source", "prepared_source": index, "diagram": diagram,
+                })
+            });
             let mut built = built.lock().unwrap();
             *built += 1;
             run.report_progress(Stage::Numerators, *built, Some(self.len()));
@@ -1397,7 +1408,9 @@ impl BuiltDiagramSet {
 
 #[cfg(test)]
 mod tests {
-    use super::super::ResolvedProcess;
+    use super::super::cases::Case;
+    use super::super::cp_merge_diagnostic;
+    use super::super::{InteractionStars, ResolvedProcess};
     use super::*;
     use crate::Classes;
     use crate::generation::graph::{Endpoint, GeneratedGraph};
@@ -1408,7 +1421,10 @@ mod tests {
     use feynkit_graph::{DiagramEndpoint, DiagramId, ExternalState};
     use serde_json::Value;
     use serde_json::json;
+    use std::env;
+    use std::fs;
     use std::mem;
+    use std::path::PathBuf;
 
     #[test]
     fn cp_merge_preserves_complete_preparation_and_counts_each_graph_once() {
@@ -1543,12 +1559,22 @@ mod tests {
                         .unwrap();
                 let prepared = [&graph, &mirror].map(|graph| {
                     let canonical = resolved
-                        .canonicalize_numerator_graph(graph, &model, &Grouping::None)
+                        .canonicalize_numerator_graph(
+                            graph,
+                            &model,
+                            &InteractionStars::new(&model),
+                            &Grouping::None,
+                        )
                         .unwrap();
                     assert_eq!(
                         canonical,
                         resolved
-                            .canonicalize_numerator_graph(&canonical, &model, &Grouping::None)
+                            .canonicalize_numerator_graph(
+                                &canonical,
+                                &model,
+                                &InteractionStars::new(&model),
+                                &Grouping::None
+                            )
                             .unwrap()
                     );
                     let input = generator
@@ -1720,7 +1746,42 @@ mod tests {
             }
         }
         let process = Process::new(["a", "a"], ["c", "c~"]);
+        let request = process.clone().cross_section(Loops::forward(0..=6));
+        let resolved =
+            ResolvedProcess::new(&model, &process, GenerationType::CrossSection, &request).unwrap();
+        let mut inventory = resolved.cut_partitions(&graph, &model, &request).unwrap();
+        let mut other = resolved.cut_partitions(&mirror, &model, &request).unwrap();
+        let complement = |endpoint| match endpoint {
+            DiagramEndpoint::Source => DiagramEndpoint::Target,
+            DiagramEndpoint::Target => DiagramEndpoint::Source,
+        };
+        for cut in &mut inventory.physical {
+            mem::swap(&mut cut.left, &mut cut.right);
+            for hedge in &mut cut.cut {
+                hedge.endpoint = complement(hedge.endpoint);
+            }
+            cut.cut.sort();
+        }
+        for threshold in &mut inventory.topology_threshold_candidates {
+            mem::swap(&mut threshold.left, &mut threshold.right);
+            for hedge in &mut threshold.cut {
+                hedge.endpoint = complement(hedge.endpoint);
+            }
+            threshold.cut.sort();
+        }
+        inventory.physical.sort();
+        inventory.topology_threshold_candidates.sort();
+        other.physical.sort();
+        other.topology_threshold_candidates.sort();
+        assert_eq!(inventory.physical, other.physical);
+        assert_eq!(
+            inventory.topology_threshold_candidates,
+            other.topology_threshold_candidates
+        );
         for enabled in [false, true] {
+            if enabled {
+                cp_merge_diagnostic::start();
+            }
             let request = process
                 .clone()
                 .cross_section(Loops::forward(0..=6))
@@ -1730,7 +1791,12 @@ mod tests {
                     .unwrap();
             let prepared = [&graph, &mirror].map(|graph| {
                 let canonical = resolved
-                    .canonicalize_numerator_graph(graph, &model, &Grouping::None)
+                    .canonicalize_numerator_graph(
+                        graph,
+                        &model,
+                        &InteractionStars::new(&model),
+                        &Grouping::None,
+                    )
                     .unwrap();
                 assert_eq!(
                     canonical,
@@ -1742,7 +1808,12 @@ mod tests {
                 assert_eq!(
                     canonical,
                     resolved
-                        .canonicalize_numerator_graph(&canonical, &model, &Grouping::None)
+                        .canonicalize_numerator_graph(
+                            &canonical,
+                            &model,
+                            &InteractionStars::new(&model),
+                            &Grouping::None
+                        )
                         .unwrap()
                 );
                 let input = generator
@@ -1781,7 +1852,60 @@ mod tests {
                 OrbitKey::of(&prepared[0]) == OrbitKey::of(&prepared[1]),
                 enabled
             );
+            if enabled {
+                let events = cp_merge_diagnostic::finish();
+                let choices = events
+                    .iter()
+                    .filter(|event| event["stage"] == "frame_choice" && event["remapping"] == true)
+                    .collect::<Vec<_>>();
+                assert!(!choices.is_empty());
+                assert!(choices.iter().all(|event| event["tie"] == true));
+            }
         }
+    }
+
+    #[test]
+    #[ignore = "one focused scalar observation; requires a new FEYNKIT_ORACLE_DUMP directory"]
+    fn scalar_preparation_and_group_components() {
+        let directory = PathBuf::from(env::var("FEYNKIT_ORACLE_DUMP").unwrap());
+        assert!(!directory.exists(), "diagnostic output must be new");
+        let case = Case::named("xs_qcdqed_addx_canonical_scalar_lr_L3");
+        let model = Arc::new(case.model());
+        let request = case.request(&model).with_classes(Classes::None);
+        let run = Run::default().threads(1);
+        cp_merge_diagnostic::start();
+        let prepared = request.generate(Arc::clone(&model), &run).unwrap();
+        let prepared_sources = prepared.diagrams.iter().enumerate().map(|(index, diagram)| {
+            let context = &prepared.context;
+            let raw = context.search.externals.graph(&diagram.compact, &context.search.signatures);
+            json!({"index": index, "raw": cp_merge_diagnostic::graph(&raw), "input": cp_merge_diagnostic::input(&diagram.input)})
+        }).collect::<Vec<_>>();
+        let options = case.numerators().with_naming(Naming::prefix("D"));
+        let built = prepared.build(&options, &run).unwrap();
+        // Operator observations occur at each actual owner before zero admission;
+        // the final grouping records carry indices, factors and ratios only.
+        let sources = built.sources.clone();
+        let grouped = built.group(&case.grouping(), &run).unwrap();
+        let groups = grouped.groups().iter().map(|group| json!({
+            "master": group.master,
+            "members": group.members.iter().map(|member| json!({
+                "source": member.source_diagram, "ratio": member.ratio.to_canonical_string(),
+                "factor": member.overall_factor.to_canonical_string(),
+            })).collect::<Vec<_>>(),
+            "factor": grouped.diagrams()[group.master].overall_factor().to_canonical_string(),
+        })).collect::<Vec<_>>();
+        let events = cp_merge_diagnostic::finish();
+        fs::create_dir_all(&directory).unwrap();
+        fs::write(
+            directory.join("diagnostic.json"),
+            serde_json::to_vec(&json!({
+                "case": case.name, "classes": "None", "pool": 1,
+                "events": events, "prepared_sources": prepared_sources,
+                "sources": sources, "groups": groups,
+            }))
+            .unwrap(),
+        )
+        .unwrap();
     }
 
     fn model() -> Arc<Model> {

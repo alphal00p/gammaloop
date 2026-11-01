@@ -89,18 +89,33 @@ fn paired_incoming_three_cycles_preserve_the_canonical_connection_frame() {
         )
         .unwrap();
         let canonical = resolved
-            .canonicalize_numerator_graph(&relabel(None), &model, &Grouping::None)
+            .canonicalize_numerator_graph(
+                &relabel(None),
+                &model,
+                &InteractionStars::new(&model),
+                &Grouping::None,
+            )
             .unwrap();
         assert_eq!(
             canonical,
             resolved
-                .canonicalize_numerator_graph(&canonical, &model, &Grouping::None)
+                .canonicalize_numerator_graph(
+                    &canonical,
+                    &model,
+                    &InteractionStars::new(&model),
+                    &Grouping::None
+                )
                 .unwrap()
         );
         assert_ne!(
             canonical,
             resolved
-                .canonicalize_numerator_graph(&relabel(Some(false)), &model, &Grouping::None)
+                .canonicalize_numerator_graph(
+                    &relabel(Some(false)),
+                    &model,
+                    &InteractionStars::new(&model),
+                    &Grouping::None
+                )
                 .unwrap(),
             "one-sided permutations must not exchange physical incoming pairs"
         );
@@ -379,10 +394,20 @@ fn ghost_box_reflection_preserves_the_derivative_momentum_chart() {
         [(false, false), (false, true), (true, false), (true, true)].map(|(reverse, storage)| {
             let source = fixture.graph(false, reverse, storage);
             let sorted = process
-                .canonicalize_numerator_graph(&source, &fixture.model, &grouping)
+                .canonicalize_numerator_graph(
+                    &source,
+                    &fixture.model,
+                    &InteractionStars::new(&fixture.model),
+                    &grouping,
+                )
                 .unwrap();
             let repeated = process
-                .canonicalize_numerator_graph(&sorted, &fixture.model, &grouping)
+                .canonicalize_numerator_graph(
+                    &sorted,
+                    &fixture.model,
+                    &InteractionStars::new(&fixture.model),
+                    &grouping,
+                )
                 .unwrap();
             assert!(sorted.vertices().eq(repeated.vertices()));
             assert_eq!(
@@ -417,7 +442,12 @@ fn cp_preserves_neutral_adjoint_ghost_derivative_flow() {
         let process = fixture.process(true, cp);
         let source = fixture.graph(true, reverse, storage);
         process
-            .canonicalize_numerator_graph(&source, &fixture.model, &grouping)
+            .canonicalize_numerator_graph(
+                &source,
+                &fixture.model,
+                &InteractionStars::new(&fixture.model),
+                &grouping,
+            )
             .unwrap()
     };
     assert_ne!(

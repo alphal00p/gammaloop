@@ -1,4 +1,8 @@
 use crate::generation::FACTOR_HEADS;
+#[cfg(test)]
+use crate::generation::cp_merge_diagnostic;
+#[cfg(test)]
+use serde_json::json;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::sync::Mutex;
@@ -513,6 +517,13 @@ pub(crate) fn group_diagrams(
             )));
         }
         let diagram = pair.comparison();
+        #[cfg(test)]
+        cp_merge_diagnostic::record(|| {
+            json!({
+                "stage": "comparison_source", "source": source_index(source_diagram),
+                "diagram": diagram,
+            })
+        });
         let color_error = |error: TensorInferenceError| GroupingError::ColorSimplification {
             diagram: diagram.name().map(str::to_owned),
             message: error.to_string(),
@@ -583,6 +594,12 @@ pub(crate) fn group_diagrams(
                 )
                 .is_true()
         };
+        #[cfg(test)]
+        cp_merge_diagnostic::record(|| {
+            json!({
+                "stage": "numerator_admission", "source": source_index(source_diagram), "zero": is_zero,
+            })
+        });
         if is_zero {
             return Ok(None);
         }
@@ -640,6 +657,13 @@ pub(crate) fn group_diagrams(
         } else {
             SymbolicTensor::infer(Atom::one()).expect("literal scalar one")
         };
+        #[cfg(test)]
+        cp_merge_diagnostic::record(|| {
+            json!({
+                "stage": "canonical_numerator", "source": source_index(source_diagram),
+                "exact": exact.expression().to_canonical_string(),
+            })
+        });
         Ok(Some((
             pair,
             source_diagram,
@@ -714,6 +738,14 @@ pub(crate) fn group_diagrams(
         let canonical = canonical_topology(diagram, model, options, symmetrize_left_right)?;
         let key = canonical.key.clone();
         canonical_frames.push(canonical);
+        #[cfg(test)]
+        cp_merge_diagnostic::record(|| {
+            json!({
+                "stage": "group_frame", "source": source_index(source_diagrams[index]),
+                "vertices": canonical_frames[index].vertex_map,
+                "swapped": canonical_frames[index].left_right_swapped,
+            })
+        });
         numerator.samples = numerical_tensor_samples(&numerator.sample_source, diagram, options)?;
         let mut zero_samples = !numerator.samples.is_empty();
         for (sample, value) in numerator.samples.iter().enumerate() {
@@ -819,14 +851,27 @@ pub(crate) fn group_diagrams(
         // These are scalar normalization weights, not graph numerators.
         // Exact rescaling can leave distinct denominators or algebraic
         // constants such as sqrt(1/2)*sqrt(2). No sampled zero is accepted.
-        !weight
+        let keep = !weight
             .check_zero_with(
                 &symbolica::atom::ZeroTestSettings::default()
                     .finite_field_samples(0)
                     .numerical_samples(0)
                     .exact_fallback(true),
             )
-            .is_true()
+            .is_true();
+        #[cfg(test)]
+        cp_merge_diagnostic::record(|| {
+            json!({
+                "stage": "group_component", "keep": keep,
+                "master_source": source_index(source_diagrams[group.master]),
+                "weight": weight.to_canonical_string(),
+                "members": group.members.iter().map(|member| json!({
+                    "source": member.source_diagram, "ratio": member.ratio.to_canonical_string(),
+                    "factor": member.overall_factor.to_canonical_string(),
+                })).collect::<Vec<_>>(),
+            })
+        });
+        keep
     });
     groups.sort_by_key(|group| group.master);
 

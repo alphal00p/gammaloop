@@ -88,8 +88,14 @@ use num_rational::BigRational;
 use signed_routing::{DiagramWeight, SignedRoutedDiagram};
 
 #[cfg(test)]
+use serde_json::json;
+
+#[cfg(test)]
 #[path = "main_generation_regressions.rs"]
 mod main_generation_regressions;
+
+#[cfg(test)]
+pub(crate) mod cp_merge_diagnostic;
 
 #[derive(Debug, Error)]
 pub enum GenerationError {
@@ -1824,8 +1830,20 @@ impl Generator {
         options: &Request,
         grouping: &Grouping,
     ) -> Result<Option<DiagramInput>, GenerationError> {
+        #[cfg(test)]
+        cp_merge_diagnostic::record(|| {
+            json!({
+                "stage": "diagram_input", "raw": cp_merge_diagnostic::graph(&graph),
+                "aut": symmetry, "multiplicity": multiplicity, "grouping": format!("{grouping:?}"),
+            })
+        });
         let mut topology = ColoredTopology {
-            graph: resolved.canonicalize_numerator_graph(&graph, &self.model, grouping)?,
+            graph: resolved.canonicalize_numerator_graph(
+                &graph,
+                &self.model,
+                &self.cache.stars,
+                grouping,
+            )?,
             symmetry,
             cut_partitions: Vec::new(),
             topology_threshold_candidates: Vec::new(),
@@ -1834,15 +1852,32 @@ impl Generator {
             let inventory = resolved.cut_partitions(&topology.graph, &self.model, options)?;
             topology.cut_partitions = inventory.physical;
             topology.topology_threshold_candidates = inventory.topology_threshold_candidates;
-            if topology.cut_partitions.is_empty()
-                || !self.retain_cut_amplitude_partitions(&mut topology, options)?
-                || !resolved.passes_sewn_filter(&topology.graph, options)
-            {
+            if topology.cut_partitions.is_empty() {
+                #[cfg(test)]
+                cp_merge_diagnostic::record(
+                    || json!({"stage": "reject", "reason": "no_physical_cut"}),
+                );
+                return Ok(None);
+            }
+            if !self.retain_cut_amplitude_partitions(&mut topology, options)? {
+                #[cfg(test)]
+                cp_merge_diagnostic::record(
+                    || json!({"stage": "reject", "reason": "cut_amplitude"}),
+                );
+                return Ok(None);
+            }
+            if !resolved.passes_sewn_filter(&topology.graph, options) {
+                #[cfg(test)]
+                cp_merge_diagnostic::record(|| json!({"stage": "reject", "reason": "sewn_filter"}));
                 return Ok(None);
             }
         }
         topology.graph = self.repair_cp_interaction_rules(topology.graph)?;
         if !self.passes_vertex_selection(&topology.graph, options)? {
+            #[cfg(test)]
+            cp_merge_diagnostic::record(
+                || json!({"stage": "reject", "reason": "vertex_selection"}),
+            );
             return Ok(None);
         }
         let grassmann_loop_count = self.closed_fermion_loop_count(&topology.graph, true)?;
@@ -1872,7 +1907,7 @@ impl Generator {
         } else {
             (topology, normalized.reversed_edges)
         };
-        Ok(Some(DiagramInput {
+        let input = DiagramInput {
             comparison,
             representative,
             signs: FermionSigns {
@@ -1881,7 +1916,16 @@ impl Generator {
             },
             reversed_edges,
             multiplicity,
-        }))
+        };
+        #[cfg(test)]
+        cp_merge_diagnostic::record(|| {
+            let frame = graph.frame_map(&input.representative.graph);
+            let comparison = graph.frame_map(&input.comparison.graph);
+            json!({"stage": "prepared", "input": cp_merge_diagnostic::input(&input),
+                "raw_to_representative": {"vertices": frame.vertices, "edges": frame.edges},
+                "raw_to_comparison": {"vertices": comparison.vertices, "edges": comparison.edges}})
+        });
+        Ok(Some(input))
     }
 
     /// Finalize the comparison and representative diagrams of a prepared input. Equal frames
@@ -2395,30 +2439,7 @@ impl Generator {
         &self,
         graph: GeneratedGraph,
     ) -> Result<GeneratedGraph, GenerationError> {
-        let mut replacements = BTreeMap::new();
-        let mut star = InteractionStar::default();
-        for (vertex, rule_id) in graph.vertices().enumerate() {
-            self.model.vertex_rule_by_id(rule_id)?;
-            self.cache
-                .stars
-                .read(&graph, vertex, &self.model, &mut star)?;
-            let repaired = self
-                .cache
-                .stars
-                .repair_rule(rule_id, vertex, &star, &self.model)?;
-            if repaired != rule_id {
-                replacements.insert(vertex, repaired);
-            }
-        }
-        if replacements.is_empty() {
-            return Ok(graph);
-        }
-        let rules = graph
-            .vertices()
-            .enumerate()
-            .map(|(vertex, rule)| replacements.get(&vertex).copied().unwrap_or(rule))
-            .collect::<Vec<_>>();
-        Ok(graph.with_vertex_rules(rules))
+        self.cache.stars.repair_graph(graph, &self.model)
     }
 
     fn propagator_numerator(&self, particle: &Particle) -> Result<(Atom, bool), GenerationError> {
@@ -3415,6 +3436,7 @@ impl ResolvedProcess {
         &self,
         graph: &GeneratedGraph,
         model: &Model,
+        stars: &InteractionStars,
         grouping: &Grouping,
     ) -> Result<GeneratedGraph, GenerationError> {
         let grouping_options = match grouping {
@@ -3430,6 +3452,7 @@ impl ResolvedProcess {
         let selected = self.canonicalize_numerator_graph_pass(
             graph,
             model,
+            stars,
             exact_internal_particles,
             include_left_right,
             include_left_right,
@@ -3438,6 +3461,7 @@ impl ResolvedProcess {
             self.canonicalize_numerator_graph_pass(
                 &selected,
                 model,
+                stars,
                 exact_internal_particles,
                 false,
                 true,
@@ -3451,6 +3475,7 @@ impl ResolvedProcess {
         &self,
         graph: &GeneratedGraph,
         model: &Model,
+        stars: &InteractionStars,
         exact_internal_particles: bool,
         include_left_right_remapping: bool,
         use_left_right_external_colors: bool,
@@ -3556,6 +3581,46 @@ impl ResolvedProcess {
                 },
             )
         };
+        // Rule colors belong to the physical CP action, before either canonical
+        // comparison or residual anchoring. Reuse the same star owner as final
+        // preparation; CP-off graphs keep their existing late repair boundary.
+        let conjugate = if include_left_right_remapping {
+            let positions = (0..graph.n_vertices()).collect::<Vec<_>>();
+            let candidate = graph.reframed(
+                &positions,
+                edges
+                    .iter()
+                    .enumerate()
+                    .map(|(edge_id, (edge, _, _, particle))| {
+                        let conjugated = edge.directed
+                            && !(particle.is_ghost()
+                                && particle.color == 8
+                                && particle.charge.is_zero());
+                        (
+                            edge_id,
+                            false,
+                            if conjugated {
+                                particle.antiparticle
+                            } else {
+                                edge.particle
+                            },
+                        )
+                    }),
+                partner,
+            );
+            Some(stars.repair_graph(candidate, model)?)
+        } else {
+            None
+        };
+        let physical_graph = |swapped| {
+            if swapped {
+                conjugate
+                    .as_ref()
+                    .expect("the global CP candidate was constructed")
+            } else {
+                graph
+            }
+        };
         // The physical graph of one global left/right choice, in edge order: fields in their
         // physical direction, and legs keyed by the external index they show.
         let physical_edges = |swapped: bool| {
@@ -3618,15 +3683,25 @@ impl ResolvedProcess {
             .map_err(|error| GenerationError::GraphConstruction(error.to_string()))?;
             candidates.push((labelling, swapped));
         }
+        #[cfg(test)]
+        let reduced_tie = candidates.len() == 2 && candidates[0].0.form == candidates[1].0.form;
+        #[cfg(test)]
+        let candidate_moves = candidates
+            .iter()
+            .map(|(form, _)| form.moves_nodes)
+            .collect::<Vec<_>>();
         let (reduced, left_right_swapped) =
             if candidates.len() == 2 && candidates[0].0.form == candidates[1].0.form {
                 // A reduced skeleton omits ordinary charged arrows. A tie therefore need
                 // not describe a physical self-mirror: comparing the incidental exchange
                 // flags would select the unswapped branch for both distinct CP partners.
                 let physical_form = |swapped| {
-                    CanonicalForm::label_edges(graph.vertices(), physical_edges(swapped))
-                        .map(|labelled| labelled.form)
-                        .map_err(|error| GenerationError::GraphConstruction(error.to_string()))
+                    CanonicalForm::label_edges(
+                        physical_graph(swapped).vertices(),
+                        physical_edges(swapped),
+                    )
+                    .map(|labelled| labelled.form)
+                    .map_err(|error| GenerationError::GraphConstruction(error.to_string()))
                 };
                 let selected = usize::from(physical_form(false)? > physical_form(true)?);
                 candidates.swap_remove(selected)
@@ -3638,12 +3713,22 @@ impl ResolvedProcess {
                         GenerationError::GraphConstruction("no canonical graph".to_owned())
                     })?
             };
+        #[cfg(test)]
+        cp_merge_diagnostic::record(|| {
+            json!({
+                "stage": "frame_choice", "remapping": include_left_right_remapping,
+                "left_right_colors": use_left_right_external_colors, "tie": reduced_tie,
+                "swapped": left_right_swapped, "moves_nodes": reduced.moves_nodes,
+                "candidate_moves_nodes": candidate_moves,
+                "rules_before": graph.vertices().map(|rule| rule.index()).collect::<Vec<_>>(),
+            })
+        });
         // Reduced colors deliberately forget particle and flow distinctions for numerator
         // grouping. When the reduced group moves a vertex, fix only that residual labelling
         // ambiguity in the physical frame. Only the selected exchange needs this refinement.
         let positions = if reduced.moves_nodes {
             Self::anchored_positions(
-                graph.vertices(),
+                physical_graph(left_right_swapped).vertices(),
                 physical_edges(left_right_swapped),
                 reduced_edges(left_right_swapped),
                 &reduced.form,
@@ -3707,18 +3792,12 @@ impl ResolvedProcess {
         // model insertion order: CP-conjugate charged lines can otherwise acquire the same
         // edge/LMB order even when their legacy canonical representatives differ.
         edges.sort_by_key(|(edge, pdg_code, _, _)| (edge.source, edge.sink, *pdg_code));
-        Ok(graph.reframed(
+        Ok(physical_graph(left_right_swapped).reframed(
             &positions,
             edges
                 .into_iter()
                 .map(|(edge, _, edge_id, flipped)| (edge_id, flipped, edge.particle)),
-            |external| {
-                if left_right_swapped {
-                    partner(external)
-                } else {
-                    external
-                }
-            },
+            |external| external,
         ))
     }
 
@@ -4603,7 +4682,12 @@ mod tests {
         ] {
             let positions = |graph: &GeneratedGraph| {
                 let canonical = resolved
-                    .canonicalize_numerator_graph(graph, &model, &grouping)
+                    .canonicalize_numerator_graph(
+                        graph,
+                        &model,
+                        &InteractionStars::new(&model),
+                        &grouping,
+                    )
                     .unwrap();
                 graph.frame_map(&canonical).vertices
             };
@@ -4753,7 +4837,12 @@ mod tests {
         );
         assert_eq!(
             resolved
-                .canonicalize_numerator_graph(&graph, &model, &Grouping::None)
+                .canonicalize_numerator_graph(
+                    &graph,
+                    &model,
+                    &InteractionStars::new(&model),
+                    &Grouping::None
+                )
                 .unwrap(),
             graph
         );
@@ -7234,7 +7323,12 @@ mod tests {
                 .iter()
                 .map(|graph| {
                     process
-                        .canonicalize_numerator_graph(&graph.build(), &model, &Grouping::None)
+                        .canonicalize_numerator_graph(
+                            &graph.build(),
+                            &model,
+                            &InteractionStars::new(&model),
+                            &Grouping::None,
+                        )
                         .unwrap()
                 })
                 .collect::<Vec<_>>();
@@ -7319,10 +7413,20 @@ mod tests {
 
         let grouping = Grouping::UpToScalar(GraphGroupingOptions::default());
         let canonical = process
-            .canonicalize_numerator_graph(&graph.build(), &model, &grouping)
+            .canonicalize_numerator_graph(
+                &graph.build(),
+                &model,
+                &InteractionStars::new(&model),
+                &grouping,
+            )
             .unwrap();
         let canonical_mirror = process
-            .canonicalize_numerator_graph(&mirror.build(), &model, &grouping)
+            .canonicalize_numerator_graph(
+                &mirror.build(),
+                &model,
+                &InteractionStars::new(&model),
+                &grouping,
+            )
             .unwrap();
         assert_eq!(canonical, canonical_mirror);
 
@@ -7400,7 +7504,12 @@ mod tests {
             }
 
             let canonical = process
-                .canonicalize_numerator_graph(&graph.build(), &model, &grouping)
+                .canonicalize_numerator_graph(
+                    &graph.build(),
+                    &model,
+                    &InteractionStars::new(&model),
+                    &grouping,
+                )
                 .unwrap();
             let pdgs = canonical
                 .edges()

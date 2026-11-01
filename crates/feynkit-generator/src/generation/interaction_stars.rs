@@ -3,7 +3,7 @@
 //! A plan refers only to positions in a vertex's ordered incidence. Each use
 //! binds the current edge/half-edge identities and flow; graph frames and
 //! symbolic expression ownership remain with their existing owners.
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::{OnceLock, RwLock};
 
 use super::{GeneratedGraph, GenerationError, NumeratorHalfEdge, ParticleStub, incoming_stub};
@@ -39,6 +39,32 @@ pub(super) struct InteractionStar {
 }
 
 impl InteractionStars {
+    pub(super) fn repair_graph(
+        &self,
+        graph: GeneratedGraph,
+        model: &Model,
+    ) -> Result<GeneratedGraph, GenerationError> {
+        let mut replacements = BTreeMap::new();
+        let mut star = InteractionStar::default();
+        for (vertex, rule_id) in graph.vertices().enumerate() {
+            model.vertex_rule_by_id(rule_id)?;
+            self.read(&graph, vertex, model, &mut star)?;
+            let repaired = self.repair_rule(rule_id, vertex, &star, model)?;
+            if repaired != rule_id {
+                replacements.insert(vertex, repaired);
+            }
+        }
+        if replacements.is_empty() {
+            return Ok(graph);
+        }
+        let rules = graph
+            .vertices()
+            .enumerate()
+            .map(|(vertex, rule)| replacements.get(&vertex).copied().unwrap_or(rule))
+            .collect::<Vec<_>>();
+        Ok(graph.with_vertex_rules(rules))
+    }
+
     pub(super) fn new(model: &Model) -> Self {
         // Model construction has already resolved every particle reference.
         // This prepares metadata only; rule expressions are still lowered on demand.

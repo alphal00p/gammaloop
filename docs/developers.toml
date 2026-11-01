@@ -685,7 +685,7 @@ anchor = "pub struct LoopCounts {"
 end_anchor = "#[cfg(test)]\nmod tests {"
 # Source19-21 owner reconciliation; B2 body/fixtures remain unchanged.
 # Quotient/nonfinite checks and actual Run pool coverage require new slice review.
-digest = "f13870d5c7d318468a8a1b83ae9b039bb7419826"
+digest = "e2ae67504b0b952e495d30e811848a626d384cd7"
 
 [[section.note.scope]]
 path = "crates/feynkit-generator/src/generation.rs"
@@ -701,7 +701,7 @@ symbol = "original-pair B2 certificate and current colour completion"
 anchor = "    fn vacuum_group28_original_pair_identity()"
 # Source19-21 owner reconciliation; B2 body/fixtures remain unchanged.
 # Quotient/nonfinite checks and actual Run pool coverage require new slice review.
-digest = "66cc3fe8280694c72b213d71dee37fb40a1ad997"
+digest = "9beecc2db52e66f3a79a5de3a8d79d08b266ce25"
 
 [[section.note]]
 id = "gammaloop-architecture"
@@ -928,7 +928,7 @@ anchor = "pub enum GenerationError {"
 # labeller. Reduced selectors/transport/admitted history remain intact; all_cuts production
 # is unchanged and terminal-pocket tests strengthen its boundary. Four certified literal
 # migrations are test-only, not a production physics correction.
-digest = "0198b89225657afb93c476d3a639428fbb1aee4f"
+digest = "c988d9d26054998c8fd2f9fcbc35d21b64473a48"
 
 [[section.note.scope]]
 path = "crates/feynkit-model/src/model.rs"
@@ -1048,7 +1048,7 @@ path = "crates/feynkit-generator/src/generation/staged.rs"
 symbol = "Request / DiagramSet / BuiltDiagramSet staged ownership"
 anchor = "impl Request {"
 # SOURCE31: checked discovery/count/build/select/group and squared-order pairing ownership.
-digest = "d7df69ef684687c6c58894a3372976f7f34513b2"
+digest = "ea81391d9d622cdf20df779cf87b18a6cbb2c86f"
 
 [[section.note]]
 id = "generation-integration-wp1"
@@ -2963,7 +2963,7 @@ anchor = "pub(crate) fn group_diagrams("
 # scoped source reconciliation and regression results are recorded in WP3 units03-07.
 # SOURCE31 semantic attestation (candidate, not independent approval):
 # Historical readiness results retain their named revisions. Current staged grouping uses finite quotient comparison, deterministic source indices and exact scalar normalization; current contract belongs to architecture-current and source19–21 rather than old timing claims.
-digest = "66cc3fe8280694c72b213d71dee37fb40a1ad997"
+digest = "9beecc2db52e66f3a79a5de3a8d79d08b266ce25"
 
 [[section.note]]
 id = "nix-crane-cache-reuse"
