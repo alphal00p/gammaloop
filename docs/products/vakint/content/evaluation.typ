@@ -159,9 +159,6 @@ remain inspectable, including in notebook displays, when conversion fails. Pytho
 is an explicitly lossy conversion to ordinary Python floats; use named coefficient records
 to retain precision information.
 
-The #source-link("crates/vakint/precision_validation.typ", label: "precision validation report")
-records numerical, graph and interface checks separately from pending scientific and release gates.
-
 == Inspecting registered constants and masters
 
 `get_constant(symbol, prec)` and `get_master(symbol, prec)` inspect the active RustRed registry;

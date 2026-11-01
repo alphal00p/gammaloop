@@ -1,5 +1,4 @@
-//! Native peers for remaining legacy settings/input variants; see
-//! `RUSTRED_ACCEPTANCE.typ` for the complete mapping and workload aliases.
+//! Native peers for remaining legacy settings/input variants.
 //! Existing tests are unchanged. Every three-loop peer remains explicitly
 //! pending until a certified reusable K6 artifact is installed.
 

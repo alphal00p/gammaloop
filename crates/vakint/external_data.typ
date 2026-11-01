@@ -5,8 +5,6 @@ Vakint ships its 1L–3L RustRed programs, master coefficients and graphs. The s
 contains independently packaged loop data. Releases up to v0.1.2 also contain
 prepared depth-first caches, which Vakint no longer reads.
 FORM reduction rules and their hard-coded master formulas remain in Vakint.
-See #link("external_data_validation.typ")[the migration validation report] for
-release identities, numerical evidence, completed checks and remaining gates.
 
 == Explicit loading
 

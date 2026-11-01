@@ -392,7 +392,7 @@ Exact coefficient combination can also cost more than the reductions it avoids;
 the step cache saves the checked steps, not the frontier arithmetic (a warm
 exact run is dominated by the latter). Ordered reduction therefore has no
 universal speedup promise over the historical depth-first measurements, which
-remain separate cohorts in the benchmark report.
+remain separate cohorts in #raw("docs/benchmark/data/results.json").
 
 == Reproducible physical comparisons
 
@@ -485,6 +485,4 @@ are uncomputed, so only exact retained comparison is available there.
 
 Qualification proceeds through both projections at increasing loop count.
 Only complete comparisons measured below fifteen minutes qualify for ordinary
-CI; longer controls remain explicit. The benchmark source and measured records
-live in #link("benchmark/benchmark.typ")[the benchmark report], with append
-instructions in #link("benchmark/maintenance.typ")[its maintenance contract].
+CI; longer controls remain explicit.
