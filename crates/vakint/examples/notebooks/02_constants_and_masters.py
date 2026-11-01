@@ -32,13 +32,15 @@ def _(Gallery, mo):
 
 @app.cell
 def _(Gallery, mo):
+    _four = "1L–4L · adds the 4L pack (about 140 MB, seconds)"
+    _options = {_four: 4}
+    if Gallery.five_loop_load_enabled():
+        _options[
+            "1L–5L · adds the 5L pack (about 435 MB more; minutes, several GB, "
+            "cannot be cancelled)"
+        ] = 5
     catalogue_choice = mo.ui.radio(
-        {
-            "1L–4L · adds the 4L pack (about 140 MB, seconds)": 4,
-            "1L–5L · adds the 5L pack (about 435 MB more; minutes, several GB)": 5,
-        },
-        value="1L–4L · adds the 4L pack (about 140 MB, seconds)",
-        label="Official catalogue to load",
+        _options, value=_four, label="Official catalogue to load"
     )
     load_catalogue = mo.ui.run_button(label="Load this catalogue", kind="success")
     mo.vstack(
@@ -55,6 +57,17 @@ def _(Gallery, mo):
             ),
             catalogue_choice,
             load_catalogue,
+            mo.md("")
+            if Gallery.five_loop_load_enabled()
+            else Gallery.note(
+                mo,
+                "No five-loop catalogue on this server",
+                "Loading the 5L pack runs inside this page for minutes, holds "
+                "several GB for the session and cannot be cancelled, so the "
+                "operator enables it with VAKINT_GALLERY_ALLOW_5L=1. The "
+                "five-loop page explores the 5L plan and saved result without it.",
+                pending=True,
+            ),
         ]
     )
     return catalogue_choice, load_catalogue

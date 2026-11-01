@@ -187,9 +187,10 @@ def _(Gallery, mo):
         _body = Gallery.note(
             mo,
             "Reduction plan not available here",
-            "Set VAKINT_GALLERY_ARTIFACTS to a vakint-external-data checkout (or "
-            "install the 5L pack from the inspection page) to list the plan. "
-            "Only its small JSON index is read; no IBP payload is decoded.",
+            "Set VAKINT_GALLERY_ARTIFACTS to a vakint-external-data checkout to "
+            "list the plan. Only its JSON index, 5L/ibps/selection.json (a few "
+            "MB), is read; no IBP payload is decoded and nothing is downloaded. "
+            "A 5L pack already installed in the gallery's data cache is used too.",
             pending=True,
         )
     else:

@@ -12,6 +12,7 @@ import hashlib
 import html
 import json
 import os
+import re
 import sys
 import tempfile
 import time
@@ -36,6 +37,7 @@ class Gallery:
     arithmetics = ("modular_polynomial", "modular_sampled", "exact")
     default_max_cores = 4
     default_max_seconds = 1800
+    final_states = gallery_jobs.FINAL_STATES
 
     @classmethod
     def header(cls, mo, page, title, subtitle):
@@ -254,10 +256,22 @@ class Gallery:
         directory.mkdir(parents=True, exist_ok=True)
         return directory
 
+    @staticmethod
+    def five_loop_load_enabled():
+        """The in-page 1L-5L catalogue load is a server opt-in
+        (VAKINT_GALLERY_ALLOW_5L=1): it runs in the page kernel for minutes,
+        holds several GB per session and cannot be cancelled."""
+        return os.environ.get("VAKINT_GALLERY_ALLOW_5L") == "1"
+
     @classmethod
     def load_data(cls, engine, max_loop_count):
         # A configured checkout is recognized and validated before any network
         # request. Otherwise the official packs install once into the cache.
+        if max_loop_count >= 5 and not cls.five_loop_load_enabled():
+            raise ValueError(
+                "Loading the 5L catalogue is disabled on this server; the operator "
+                "enables it with VAKINT_GALLERY_ALLOW_5L=1"
+            )
         return engine.load_official_external_data(
             max_loop_count,
             version="latest",
@@ -621,6 +635,25 @@ class Gallery:
         return gallery_jobs.active_job(cls.work_root(), kind=kind)
 
     @classmethod
+    def ladder_job(cls, name):
+        """The ladder job named ``name`` (its directory name, e.g. from the page
+        URL's ``?job=``) under this server's work root, running or finished;
+        None for anything else."""
+        if not isinstance(name, str) or not re.fullmatch(r"\w[\w.-]*", name):
+            return None
+        work = cls.work_root() / name
+        if (work / "status.json").is_file() and gallery_jobs.job_kind(work) == "ladder":
+            return str(work)
+        return None
+
+    @staticmethod
+    def job_link(mo, name, label="show"):
+        """A link that reopens the ladder page on job ``name`` (``?job=``)."""
+        return mo.Html(
+            f'<a href="?job={quote(name)}" target="_self">{html.escape(label)}</a>'
+        )
+
+    @classmethod
     def checked_job(cls, path):
         work = Path(path).resolve()
         if not work.is_relative_to(cls.work_root()):
@@ -654,24 +687,50 @@ class Gallery:
         return gallery_jobs.cancel(cls.checked_job(path))
 
     @classmethod
-    def wait_job(cls, path, *, timeout=None, cancel_after=None, poll_seconds=0.5):
+    def wait_job(
+        cls,
+        path,
+        *,
+        timeout=None,
+        cancel_after=None,
+        poll_seconds=0.5,
+        cancel_on_interrupt=False,
+    ):
         """Block until a job ends (script mode). ``cancel_after`` seconds cancels
-        it exactly as the Cancel button does; the report joins the status."""
+        it exactly as the Cancel button does; the report joins the status. With
+        ``cancel_on_interrupt``, Ctrl-C cancels the job too (status
+        ``interrupted``) instead of leaving it running until its deadline."""
         started = time.monotonic()
         report = None
-        while True:
-            current = cls.job_status(path)
-            if current.get("state") in gallery_jobs.FINAL_STATES:
-                return (
-                    current if report is None else {**current, "cancel_report": report}
-                )
-            elapsed = time.monotonic() - started
-            if cancel_after is not None and report is None and elapsed >= cancel_after:
-                report = cls.cancel_job(path)
-                continue
-            if timeout is not None and elapsed >= timeout:
-                return current
-            time.sleep(poll_seconds)
+        try:
+            while True:
+                current = cls.job_status(path)
+                if current.get("state") in gallery_jobs.FINAL_STATES:
+                    return (
+                        current
+                        if report is None
+                        else {**current, "cancel_report": report}
+                    )
+                elapsed = time.monotonic() - started
+                if (
+                    cancel_after is not None
+                    and report is None
+                    and elapsed >= cancel_after
+                ):
+                    report = cls.cancel_job(path)
+                    continue
+                if timeout is not None and elapsed >= timeout:
+                    return current
+                time.sleep(poll_seconds)
+        except KeyboardInterrupt:
+            if not cancel_on_interrupt:
+                raise
+            report = cls.cancel_job(path)
+            return {
+                **cls.job_status(path),
+                "cancel_report": report,
+                "interrupted": True,
+            }
 
     @classmethod
     def cancel_report(cls, path):
@@ -849,6 +908,174 @@ class Gallery:
                 spec=spec,
             ),
         )
+
+    # -- Script mode of the ladder page ---------------------------------------
+    headless_options = ("case", "n-cores", "arithmetic", "max-seconds", "cancel-after")
+    headless_usage = (
+        "usage: python 05_ladder_reductions.py --case CASE [--n-cores N] "
+        "[--arithmetic exact|modular_sampled|modular_polynomial] "
+        "[--max-seconds SECONDS] [--cancel-after SECONDS]"
+    )
+
+    @classmethod
+    def headless_request(cls, arguments, defaults):
+        """The one run a script-mode ladder page performs.
+
+        ``arguments`` are ``mo.cli_args()``, ``defaults`` the page form's values.
+        Raises ValueError, with the usage, for a missing case, an unknown option
+        or a malformed number; nothing is started then."""
+        arguments = dict(arguments)
+        unknown = sorted(set(arguments) - set(cls.headless_options))
+        if unknown:
+            raise ValueError(
+                "Unknown option "
+                + ", ".join(f"--{key}" for key in unknown)
+                + "; "
+                + cls.headless_usage
+            )
+        case = arguments.get("case")
+        if case is None or case == "" or isinstance(case, (bool, list)):
+            raise ValueError(
+                "Name one case with --case ("
+                + ", ".join(cls.ladder_cases())
+                + "); "
+                + cls.headless_usage
+            )
+
+        def number(key, default, integral=False):
+            value = arguments.get(key, default)
+            if value is None:
+                return None
+            try:
+                if isinstance(value, (bool, list)) or value == "":
+                    raise ValueError
+                value = float(value)
+                if integral and not value.is_integer():
+                    raise ValueError
+            except (TypeError, ValueError):
+                raise ValueError(
+                    f"--{key} needs one {'whole ' if integral else ''}number; "
+                    + cls.headless_usage
+                ) from None
+            return int(value) if integral else value
+
+        cancel_after = number("cancel-after", None)
+        if cancel_after is not None and not cancel_after >= 0:
+            raise ValueError("--cancel-after needs a non-negative number of seconds")
+        return {
+            "case": str(case),
+            "n_cores": number("n-cores", defaults["n_cores"], integral=True),
+            "arithmetic": str(arguments.get("arithmetic") or defaults["arithmetic"]),
+            "max_seconds": number("max-seconds", defaults["max_seconds"]),
+            "ordered_cache": bool(defaults["ordered_cache"]),
+            "cancel_after": cancel_after,
+        }
+
+    @staticmethod
+    def headless_exit(request, error):
+        """A refused script-mode start: one JSON line, the reason on stderr,
+        exit status 2. Nothing else (no other session's job) is touched."""
+        summary = {
+            "ok": False,
+            "state": "not started",
+            "case": (request or {}).get("case"),
+            "error": error,
+        }
+        print(json.dumps(summary, ensure_ascii=False), flush=True)
+        print(f"05_ladder_reductions.py: {error}", file=sys.stderr, flush=True)
+        raise SystemExit(2)
+
+    @classmethod
+    def headless_summary(cls, work, status, request):
+        """The outcome of a script-mode run and its exit status.
+
+        0 only if the run completed, its retained sha256 equals the recorded
+        fixture and the result closes on catalogue masters, or if it was
+        cancelled as ``--cancel-after`` asked with no surviving process. 130
+        after Ctrl-C (the job is cancelled), 1 otherwise."""
+        state = status.get("state")
+        result = cls.job_result(work) or {}
+        retained = result.get("retained") or {}
+        closure = result.get("catalogue_closure") or {}
+        seconds = result.get("seconds") or {}
+        report = status.get("cancel_report") or cls.cancel_report(work)
+        summary = {
+            "job": str(work),
+            "case": request.get("case"),
+            "state": state,
+            "execution": result.get("execution"),
+            "data": result.get("data"),
+            "retained_sha256": retained.get("sha256"),
+            "recorded_sha256": retained.get("recorded_sha256"),
+            "matches_recorded": retained.get("matches_recorded"),
+            "catalogue_closure": {
+                "master_count": closure.get("master_count"),
+                "closed": closure.get("closed"),
+            }
+            if closure
+            else None,
+            "seconds": {
+                key: seconds[key]
+                for key in ("Ordered reduction", "total")
+                if key in seconds
+            },
+        }
+        if report:
+            summary["cancel_report"] = {
+                "signalled": len(report.get("signalled") or []),
+                "survivors": report.get("survivors") or [],
+            }
+        if state != "complete" or "error" in result:
+            summary["message"] = str(
+                result.get("error") or status.get("message") or ""
+            )[-1000:]
+        reproduced = (
+            state == "complete"
+            and result.get("schema") == "vakint.gallery.ladder-run.v1"
+            and "error" not in result
+            and retained.get("matches_recorded") is True
+            and closure.get("closed") is True
+        )
+        cancelled_as_asked = (
+            state == "cancelled"
+            and request.get("cancel_after") is not None
+            and not status.get("interrupted")
+            and bool(report)
+            and not report.get("survivors")
+        )
+        summary["ok"] = reproduced or cancelled_as_asked
+        if status.get("interrupted"):
+            summary["interrupted"] = True
+            return summary, 130
+        return summary, 0 if summary["ok"] else 1
+
+    @classmethod
+    def headless_report(cls, work, status, request):
+        """Print a script-mode run's one-line JSON summary; exit non-zero
+        (SystemExit) unless it reproduced its fixture or was cancelled as asked."""
+        summary, code = cls.headless_summary(work, status, request)
+        print(json.dumps(summary, ensure_ascii=False), flush=True)
+        if code:
+            if summary.get("interrupted"):
+                reason = "interrupted; the job was cancelled"
+            elif summary["state"] == "complete":
+                reason = (
+                    "the retained result differs from the recorded fixture"
+                    if summary["matches_recorded"] is not True
+                    else "the run did not produce a closed, recorded result"
+                )
+            else:
+                reason = f"the run ended {summary['state']}"
+            message = summary.get("message")
+            print(
+                f"05_ladder_reductions.py: {reason}"
+                + (f": {message}" if message else "")
+                + f" ({work})",
+                file=sys.stderr,
+                flush=True,
+            )
+            raise SystemExit(code)
+        return summary
 
     # -- Five-loop exploration (no reduction) -------------------------------
     @classmethod

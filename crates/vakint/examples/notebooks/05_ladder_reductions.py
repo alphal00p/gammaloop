@@ -1,9 +1,17 @@
 """Reduce the three- and four-loop QCD ladders in a cancellable background job.
 
 Interactive: choose a case and press "Reduce in the background"; Cancel stops it.
+The page keeps showing its last run (``?job=<id>`` in the URL survives a
+reload); "Recent jobs" reopens any finished run.
+
 Script mode runs one case headlessly and waits for it, for example
 ``python 05_ladder_reductions.py --case 3L-zero-momentum --n-cores 2``
 (optional ``--arithmetic``, ``--max-seconds``, ``--cancel-after SECONDS``).
+It prints one JSON line (job, state, retained sha256 and whether it matches the
+recorded fixture, closure, seconds) and exits 0 only if the run reproduced the
+fixture, or was cancelled as ``--cancel-after`` asked; 1 otherwise, 2 if the
+run could not start (it never watches or cancels another session's job), 130
+after Ctrl-C (which cancels the job).
 """
 
 # Marimo cell outputs and generated return markers are intentional.
@@ -130,8 +138,10 @@ def _(Gallery, ladder_cases, mo):
                 "Bounded and cancellable",
                 f"A run is its own process group on at most {_cores} CPUs, at low "
                 "priority and with a wall-clock deadline. One run at a time per "
-                "server. Cancel stops every process of the run; a reloaded page "
-                "re-attaches to a run that is still going.",
+                "server. Cancel stops every process of the run. The page keeps "
+                "showing your last run, also after a reload; a fresh page "
+                "re-attaches to a run that is still going, and Recent jobs below "
+                "reopens any finished one.",
             ),
         ]
     )
@@ -139,45 +149,59 @@ def _(Gallery, ladder_cases, mo):
 
 
 @app.cell
-def _(Gallery, mo, run_button, run_form):
-    _script = mo.app_meta().mode == "script"
-    _arguments = mo.cli_args() if _script else {}
-    _choice = dict(run_form.value)
-    if _arguments.get("case"):
-        _choice.update(
-            case=_arguments["case"],
-            arithmetic=_arguments.get("arithmetic") or _choice["arithmetic"],
-            n_cores=_arguments.get("n-cores") or _choice["n_cores"],
-            max_seconds=_arguments.get("max-seconds") or _choice["max_seconds"],
-        )
-    started_job = None
-    start_error = None
-    if run_button.value or _arguments.get("case"):
-        try:
-            started_job = Gallery.start_reduction(
-                _choice["case"],
-                n_cores=int(_choice["n_cores"]),
-                arithmetic=_choice["arithmetic"],
-                max_seconds=float(_choice["max_seconds"]),
-                ordered_cache=bool(_choice["ordered_cache"]),
-            )
-        except (OSError, ValueError, RuntimeError) as _error:
-            start_error = str(_error)
-    mo.callout(start_error, kind="warn") if start_error else mo.md("")
-    return (started_job,)
-
-
-@app.cell
-def _(Gallery, started_job):
-    # A reloaded page (or another session) re-attaches to the running job.
-    watched_job = started_job or Gallery.active_job(kind="ladder")
-    return (watched_job,)
-
-
-@app.cell
-def _(mo):
+def _(Gallery, mo):
     get_finished_job, set_finished_job = mo.state(None)
-    return get_finished_job, set_finished_job
+    # The run this session shows: its last one, or ?job=<id> from the URL.
+    get_shown_job, set_shown_job = mo.state(
+        Gallery.ladder_job(mo.query_params().get("job"))
+    )
+    return get_finished_job, get_shown_job, set_finished_job, set_shown_job
+
+
+@app.cell
+def _(Gallery, mo, run_button, run_form):
+    # Script mode runs exactly the case named on the command line; the report
+    # cell below prints its outcome and sets the exit status.
+    headless = mo.app_meta().mode == "script"
+    run_request = started_job = start_error = None
+    try:
+        if headless:
+            run_request = Gallery.headless_request(mo.cli_args(), run_form.value)
+        elif run_button.value:
+            run_request = {**run_form.value, "cancel_after": None}
+        if run_request is not None:
+            started_job = Gallery.start_reduction(
+                run_request["case"],
+                n_cores=int(run_request["n_cores"]),
+                arithmetic=run_request["arithmetic"],
+                max_seconds=float(run_request["max_seconds"]),
+                ordered_cache=bool(run_request["ordered_cache"]),
+            )
+    except (OSError, ValueError, RuntimeError) as _error:
+        start_error = str(_error)
+    if headless and started_job is None:
+        # Refused (unknown case, missing input, another run going): report it
+        # and exit; never watch or cancel another session's job.
+        Gallery.headless_exit(run_request, start_error)
+    mo.callout(start_error, kind="warn") if start_error else mo.md("")
+    return headless, run_request, started_job
+
+
+@app.cell
+def _(Gallery, get_shown_job, headless, mo, set_shown_job, started_job):
+    if headless:
+        # A headless run watches, reports and cancels only its own job.
+        watched_job = started_job
+    else:
+        # Keep showing this session's last run when a control changes, else
+        # re-attach to a run still going (a reload, another session).
+        watched_job = (
+            started_job or get_shown_job() or Gallery.active_job(kind="ladder")
+        )
+        if watched_job is not None and watched_job != get_shown_job():
+            set_shown_job(watched_job)
+            mo.query_params()["job"] = watched_job.rsplit("/", 1)[-1]
+    return (watched_job,)
 
 
 @app.cell
@@ -186,7 +210,10 @@ def _(Gallery, get_finished_job, mo, watched_job):
         watched_job is None,
         mo.md("_No reduction is running. Choose a case and start one above._"),
     )
-    if get_finished_job() == watched_job:
+    if (
+        get_finished_job() == watched_job
+        or Gallery.job_status(watched_job).get("state") in Gallery.final_states
+    ):
         # The run is over: no Cancel, and no more status polling.
         cancel_button = job_refresh = None
     else:
@@ -210,23 +237,25 @@ def _(
     Gallery,
     cancel_button,
     get_finished_job,
+    headless,
     job_refresh,
     mo,
+    run_request,
     set_finished_job,
     watched_job,
 ):
     job_refresh is not None and job_refresh.value
-    if mo.app_meta().mode == "script":
-        _arguments = mo.cli_args()
-        _cancel_after = _arguments.get("cancel-after")
+    if headless:
+        # Ctrl-C cancels the job rather than leaving it to its deadline.
         job_status = Gallery.wait_job(
             watched_job,
-            cancel_after=None if _cancel_after is None else float(_cancel_after),
+            cancel_after=run_request["cancel_after"],
+            cancel_on_interrupt=True,
         )
     else:
         job_status = Gallery.job_status(watched_job)
     _state = job_status.get("state")
-    _final = _state in ("complete", "failed", "cancelled", "timed_out", "lost")
+    _final = _state in Gallery.final_states
     if _final and get_finished_job() != watched_job:
         set_finished_job(watched_job)
     _report = (
@@ -269,11 +298,17 @@ def _(
 
 
 @app.cell(hide_code=True)
+def _(Gallery, headless, job_status, run_request, watched_job):
+    # Script mode: one JSON line on stdout; a non-zero exit status unless the
+    # run reproduced its recorded fixture (or was cancelled as asked).
+    if headless:
+        Gallery.headless_report(watched_job, job_status, run_request)
+    return
+
+
+@app.cell(hide_code=True)
 def _(Gallery, job_status, ladder_cases, mo, watched_job):
-    mo.stop(
-        job_status.get("state")
-        not in ("complete", "failed", "cancelled", "timed_out", "lost")
-    )
+    mo.stop(job_status.get("state") not in Gallery.final_states)
     ladder_result = Gallery.job_result(watched_job)
     _status = job_status
     if (
@@ -378,18 +413,26 @@ def _(Gallery, job_status, ladder_cases, mo, watched_job):
 
 
 @app.cell(hide_code=True)
-def _(Gallery, mo):
+def _(Gallery, get_finished_job, mo, watched_job):
+    # Listed again when a run starts or ends; a link reopens a run's result.
+    get_finished_job()
     _rows = []
     for _work in Gallery.jobs()[:8]:
         try:
             _status = Gallery.job_status(_work)
         except (OSError, ValueError):
             continue
+        _name = _work.rsplit("/", 1)[-1]
         _rows.append(
             {
-                "job": _work.rsplit("/", 1)[-1],
+                "job": _name,
                 "state": _status.get("state"),
                 "elapsed (s)": round(_status.get("elapsed_seconds") or 0, 1),
+                "result": "shown above"
+                if _work == watched_job
+                else Gallery.job_link(mo, _name)
+                if Gallery.ladder_job(_name)
+                else "",
             }
         )
     mo.vstack(

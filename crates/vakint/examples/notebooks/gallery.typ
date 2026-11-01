@@ -35,11 +35,14 @@ configuration. Restarting the app does not reconfigure Tailscale.
 
 Opening a page does not load five-loop owners or start a physical reduction.
 The inspection app constructs the offline vendored 1L–3L engine. Its explicit
-load button (1L–4L, or 1L–5L) validates #raw("VAKINT_GALLERY_ARTIFACTS") when
+load button (1L–4L) validates #raw("VAKINT_GALLERY_ARTIFACTS") when
 set; otherwise the official latest packs install once into
 #raw("VAKINT_GALLERY_DATA_CACHE") (default: the user cache directory,
 #raw("~/.cache/vakint-gallery")), never into the server's working directory. A loaded engine
-is reused for that session's subsequent lookups. Every master remains a native
+is reused for that session's subsequent lookups. The 1L–5L catalogue is offered
+only when the operator sets #raw("VAKINT_GALLERY_ALLOW_5L=1"): its load runs in
+the page kernel for minutes, holds several GB per session and cannot be
+cancelled. Every master remains a native
 snapshot-bound inspection object, and #raw("master.graph") is an ordinary
 HEPKit graph. The 5L catalogue contains declared, uncomputed terminals with empty
 coefficient maps, never fabricated zeros.
@@ -103,7 +106,7 @@ every signal against PID reuse, and the server's own process group is never
 signalled. The supervisor records #raw("cancelled"), #raw("timed_out"),
 #raw("failed") or #raw("complete"); a supervisor that vanished without a final
 status is reported as #raw("lost"). Jobs live under #raw("VAKINT_GALLERY_WORK")
-(default: a per-user directory under the temporary directory); a reloaded page
+(default: a per-user directory under the temporary directory); a fresh page
 re-attaches to the running job and can cancel it.
 
 Server limits: #raw("VAKINT_GALLERY_MAX_CORES") caps every engine's and job's
@@ -129,12 +132,25 @@ input (1.7 MB, about 25 s of reduction) is not shipped; a server provides it
 with #raw("VAKINT_GALLERY_LADDER_INPUTS"). An optional persistent Ordered step
 cache under the work root makes reruns warm.
 
+The page keeps showing its last run, finished or not, when a control changes;
+the URL carries #raw("?job=<id>"), so a reload shows the same run, and the
+Recent jobs list links every finished ladder run of the server back to its
+result.
+
 Run a case headlessly with the page itself, which then waits for the job:
 
 #raw("python 05_ladder_reductions.py --case 3L-zero-momentum --n-cores 2", block: true)
 
 (optional #raw("--arithmetic"), #raw("--max-seconds") and
-#raw("--cancel-after SECONDS"), which cancels exactly like the button).
+#raw("--cancel-after SECONDS"), which cancels exactly like the button). It
+prints one JSON line: the job directory, its state, the retained sha256 with
+#raw("matches_recorded"), the catalogue closure, the seconds and #raw("ok"). The
+exit status is 0 only if the run completed with the recorded fixture's sha256
+and a closed result, or was cancelled as #raw("--cancel-after") asked with no
+surviving process; 1 for any other outcome (failed, timed out, lost, a
+different hash); 2 if nothing started (unknown case or option, missing input,
+another run holding the server); 130 after Ctrl-C, which cancels the job. A
+headless run watches and cancels only the job it started itself.
 
 == Five loops are explore-only (#raw("/five-loop/"))
 
@@ -151,6 +167,7 @@ and configuring the compiled #raw("VAKINT_GALLERY_BENCHMARK") executable
 #raw("vakint-input.symbolica") and #raw("projector-conditions.symbolica"); the
 native CLI validates it and never falls back to fresh preparation). That run is
 a background job like the others: bounded cores, deadline and Cancel. The
+same opt-in offers the inspection page's 1L–5L catalogue load. The
 quadratic projection has no Run action. The graph page contracts the bubble and
 the three- and four-loop ladders (well under a second each); the five-loop
 numerator (about 16 s that the page kernel could not interrupt) is shown as
@@ -171,7 +188,7 @@ coherent environment. Run the launcher, cancellation and configuration tests wit
 #raw("python -m unittest discover -s . -p test_shared_gallery.py"); they use fake
 commands or short #raw("sleep") processes and perform no graph preparation or
 reduction. With the native host, run the 3L and 4L cases headlessly as above
-and once with #raw("--cancel-after"). Inspect all five apps in a browser, including native SVG,
+and once with #raw("--cancel-after"); each must exit 0 with #raw("\"ok\": true"). Inspect all five apps in a browser, including native SVG,
 formula rendering, lookup forms, source-limit warnings, exact closure controls
 and background status. A notebook source passing static checks does not by itself
 establish native runtime interoperability. Preserve the actual browser and

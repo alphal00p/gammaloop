@@ -5,8 +5,11 @@ short ``sleep`` commands to check cancellation, deadlines and orphan cleanup.
 """
 
 import ast
+import contextlib
 import fcntl
 import hashlib
+import importlib.util
+import io
 import json
 import os
 import re
@@ -16,8 +19,9 @@ import sys
 import tempfile
 import time
 import unittest
+import uuid
 from pathlib import Path
-from types import SimpleNamespace
+from types import MappingProxyType, SimpleNamespace
 from unittest.mock import Mock, patch
 
 import benchmark_job
@@ -920,6 +924,22 @@ class GalleryEngineTests(unittest.TestCase):
             ):
                 self.assertEqual(Gallery.data_directory(), Path("/data/checkout"))
 
+    def test_five_loop_catalogue_load_needs_the_operator_opt_in(self):
+        engine = Mock()
+        with tempfile.TemporaryDirectory() as cache:
+            environment = {"VAKINT_GALLERY_DATA_CACHE": cache}
+            with (
+                patch.dict(os.environ, environment, clear=True),
+                self.assertRaisesRegex(ValueError, "VAKINT_GALLERY_ALLOW_5L"),
+            ):
+                Gallery.load_data(engine, 5)
+            engine.load_official_external_data.assert_not_called()
+            with patch.dict(
+                os.environ, {**environment, "VAKINT_GALLERY_ALLOW_5L": "1"}, clear=True
+            ):
+                Gallery.load_data(engine, 5)
+            self.assertEqual(engine.load_official_external_data.call_args.args, (5,))
+
 
 class FakeProc:
     """A synthetic /proc: {pid: (state, pgid, start_ticks)}."""
@@ -1102,6 +1122,36 @@ class GalleryJobProcessTests(unittest.TestCase):
         self.assertEqual(gallery_jobs.status(work)["state"], "cancelled")
         self.assert_job_gone(work)
         self.assertIsNone(gallery_jobs.active_job(self.root))
+
+    @unittest.skipUnless(importlib.util.find_spec("marimo"), "needs marimo")
+    def test_headless_page_never_cancels_another_sessions_job(self):
+        work = self.launch(kind="ladder")
+        self.wait_for(work, lambda status: status.get("worker_pid"))
+        environment = {**os.environ, "VAKINT_GALLERY_WORK": str(self.root)}
+        page = Gallery.directory / "05_ladder_reductions.py"
+        for arguments in (
+            ["--case", "3L-zero-momentum", "--n-cores", "1", "--cancel-after", "0"],
+            ["--case", "no-such-case", "--cancel-after", "0"],
+        ):
+            with self.subTest(arguments=arguments):
+                finished = subprocess.run(
+                    [sys.executable, str(page), *arguments],
+                    capture_output=True,
+                    text=True,
+                    env=environment,
+                    timeout=120,
+                    check=False,
+                )
+                self.assertEqual(finished.returncode, 2, finished.stderr)
+                summary = json.loads(finished.stdout)
+                self.assertEqual(summary["state"], "not started")
+                self.assertFalse(summary["ok"])
+                self.assertTrue(finished.stderr.strip())
+        self.assertTrue(gallery_jobs.is_running(work))
+        self.assertFalse((work / "cancel-requested.json").exists())
+        self.assertEqual(len(gallery_jobs.jobs(self.root)), 1)
+        gallery_jobs.cancel(work)
+        self.assert_job_gone(work)
 
     def test_deadline_stops_the_command(self):
         work = self.launch(max_seconds=0.5)
@@ -1341,6 +1391,236 @@ class GalleryLadderTests(unittest.TestCase):
         self.assertEqual(status["state"], "cancelled")
         self.assertEqual(status["cancel_report"]["survivors"], [])
 
+    def test_wait_job_cancels_its_job_on_ctrl_c(self):
+        def status(_):
+            if not cancel.called:
+                raise KeyboardInterrupt
+            return {"state": "cancelled"}
+
+        with (
+            patch.object(Gallery, "job_status", side_effect=status),
+            patch.object(
+                Gallery, "cancel_job", return_value={"signalled": [1], "survivors": []}
+            ) as cancel,
+        ):
+            with self.assertRaises(KeyboardInterrupt):
+                Gallery.wait_job("job", poll_seconds=0)
+            cancel.assert_not_called()
+            status = Gallery.wait_job("job", poll_seconds=0, cancel_on_interrupt=True)
+        cancel.assert_called_once_with("job")
+        self.assertEqual(status["state"], "cancelled")
+        self.assertTrue(status["interrupted"])
+
+    # The ladder page's default run form.
+    form = MappingProxyType(
+        {
+            "case": "3L-zero-momentum",
+            "arithmetic": "modular_polynomial",
+            "n_cores": 2,
+            "max_seconds": 600,
+            "ordered_cache": True,
+        }
+    )
+
+    def test_headless_request_takes_the_command_line_and_rejects_typos(self):
+        request = Gallery.headless_request(
+            {"case": "4L-zero-momentum", "n-cores": 4, "cancel-after": 3}, self.form
+        )
+        self.assertEqual(
+            request,
+            {
+                "case": "4L-zero-momentum",
+                "n_cores": 4,
+                "arithmetic": "modular_polynomial",
+                "max_seconds": 600.0,
+                "ordered_cache": True,
+                "cancel_after": 3.0,
+            },
+        )
+        request = Gallery.headless_request(
+            {"case": "3L-quadratic", "arithmetic": "exact", "max-seconds": 90},
+            self.form,
+        )
+        self.assertEqual(request["arithmetic"], "exact")
+        self.assertEqual(request["max_seconds"], 90.0)
+        self.assertIsNone(request["cancel_after"])
+        for arguments, message in (
+            ({}, "Name one case"),
+            ({"case": ""}, "Name one case"),
+            ({"case": "3L-quadratic", "ncores": 2}, "Unknown option --ncores"),
+            ({"case": "3L-quadratic", "n-cores": 2.5}, "whole number"),
+            ({"case": "3L-quadratic", "n-cores": [1, 2]}, "n-cores"),
+            ({"case": "3L-quadratic", "max-seconds": "soon"}, "max-seconds"),
+            ({"case": "3L-quadratic", "cancel-after": -1}, "non-negative"),
+        ):
+            with (
+                self.subTest(arguments=arguments),
+                self.assertRaisesRegex(ValueError, message),
+            ):
+                Gallery.headless_request(arguments, self.form)
+
+    def finished_job(self, receipt=None, **status):
+        work = Gallery.work_root() / f"3L-zero-momentum-{uuid.uuid4().hex[:12]}"
+        work.mkdir(parents=True)
+        (work / "request.json").write_text(json.dumps({"kind": "ladder"}))
+        (work / "status.json").write_text(json.dumps(status))
+        if receipt is not None:
+            (work / "benchmark.json").write_text(json.dumps(receipt))
+        return str(work)
+
+    def receipt(self, matches=True, closed=True):
+        return {
+            "schema": "vakint.gallery.ladder-run.v1",
+            "case": "3L-zero-momentum",
+            "execution": "modular_polynomial · 2 cores",
+            "retained": {
+                "sha256": "2f48233c" if matches else "deadbeef",
+                "recorded_sha256": "2f48233c",
+                "matches_recorded": matches,
+            },
+            "catalogue_closure": {"master_count": 14, "closed": closed},
+            "seconds": {"Ordered reduction": 0.2, "total": 2.1, "other": 1},
+        }
+
+    def test_headless_summary_passes_only_a_reproduced_or_requested_outcome(self):
+        plain = {"case": "3L-zero-momentum", "cancel_after": None}
+        cancelling = {**plain, "cancel_after": 3.0}
+        clean = {"signalled": [10, 11], "survivors": []}
+        cases = (
+            ("reproduced", self.receipt(), {"state": "complete"}, plain, 0),
+            (
+                "other hash",
+                self.receipt(matches=False),
+                {"state": "complete"},
+                plain,
+                1,
+            ),
+            ("not closed", self.receipt(closed=False), {"state": "complete"}, plain, 1),
+            ("no receipt", None, {"state": "complete"}, plain, 1),
+            (
+                "failed",
+                {"schema": "vakint.gallery.ladder-run.v1", "error": "ValueError: sha"},
+                {"state": "failed"},
+                plain,
+                1,
+            ),
+            ("timed out", None, {"state": "timed_out"}, plain, 1),
+            ("lost", None, {"state": "lost"}, plain, 1),
+            (
+                "cancelled as asked",
+                None,
+                {"state": "cancelled", "cancel_report": clean},
+                cancelling,
+                0,
+            ),
+            (
+                "cancelled, not asked",
+                None,
+                {"state": "cancelled", "cancel_report": clean},
+                plain,
+                1,
+            ),
+            (
+                "survivor",
+                None,
+                {
+                    "state": "cancelled",
+                    "cancel_report": {"signalled": [10], "survivors": [10]},
+                },
+                cancelling,
+                1,
+            ),
+            (
+                "ctrl-c",
+                None,
+                {"state": "cancelled", "cancel_report": clean, "interrupted": True},
+                plain,
+                130,
+            ),
+        )
+        for name, receipt, status, request, code in cases:
+            with self.subTest(name):
+                work = self.finished_job(receipt, **status)
+                summary, exit_code = Gallery.headless_summary(work, status, request)
+                self.assertEqual(exit_code, code)
+                self.assertEqual(summary["ok"], code == 0)
+                self.assertEqual(summary["job"], work)
+                self.assertEqual(summary["state"], status["state"])
+        summary, _ = Gallery.headless_summary(
+            self.finished_job(self.receipt(), state="complete"),
+            {"state": "complete"},
+            plain,
+        )
+        self.assertEqual(summary["retained_sha256"], "2f48233c")
+        self.assertTrue(summary["matches_recorded"])
+        self.assertEqual(
+            summary["catalogue_closure"], {"master_count": 14, "closed": True}
+        )
+        self.assertEqual(summary["seconds"], {"Ordered reduction": 0.2, "total": 2.1})
+
+    def test_headless_report_prints_one_line_and_fails_a_different_hash(self):
+        request = {"case": "3L-zero-momentum", "cancel_after": None}
+        work = self.finished_job(self.receipt(), state="complete")
+        output, errors = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(output), contextlib.redirect_stderr(errors):
+            Gallery.headless_report(work, {"state": "complete"}, request)
+        self.assertTrue(json.loads(output.getvalue())["ok"])
+        self.assertEqual(output.getvalue().count("\n"), 1)
+        self.assertEqual(errors.getvalue(), "")
+        work = self.finished_job(self.receipt(matches=False), state="complete")
+        output, errors = io.StringIO(), io.StringIO()
+        with (
+            contextlib.redirect_stdout(output),
+            contextlib.redirect_stderr(errors),
+            self.assertRaises(SystemExit) as stop,
+        ):
+            Gallery.headless_report(work, {"state": "complete"}, request)
+        self.assertEqual(stop.exception.code, 1)
+        self.assertFalse(json.loads(output.getvalue())["matches_recorded"])
+        self.assertIn("differs from the recorded fixture", errors.getvalue())
+        output = io.StringIO()
+        with (
+            contextlib.redirect_stdout(output),
+            contextlib.redirect_stderr(io.StringIO()),
+            self.assertRaises(SystemExit) as stop,
+        ):
+            Gallery.headless_exit({"case": "nope"}, "Unknown ladder case: nope")
+        self.assertEqual(stop.exception.code, 2)
+        self.assertEqual(
+            json.loads(output.getvalue()),
+            {
+                "ok": False,
+                "state": "not started",
+                "case": "nope",
+                "error": "Unknown ladder case: nope",
+            },
+        )
+
+    def test_ladder_job_reopens_only_ladder_jobs_of_this_work_root(self):
+        work = self.finished_job(self.receipt(), state="complete")
+        name = Path(work).name
+        self.assertEqual(Gallery.ladder_job(name), work)
+        other = Gallery.work_root() / "zero-momentum-0123"
+        other.mkdir()
+        (other / "request.json").write_text(json.dumps({"kind": "five-loop"}))
+        (other / "status.json").write_text(json.dumps({"state": "complete"}))
+        outside = self.root / "outside"
+        outside.mkdir()
+        (outside / "request.json").write_text(json.dumps({"kind": "ladder"}))
+        (outside / "status.json").write_text("{}")
+        for value in (
+            None,
+            "",
+            ["a", "b"],
+            other.name,
+            "../outside",
+            "..",
+            str(outside),
+            "missing-job",
+        ):
+            with self.subTest(value=value):
+                self.assertIsNone(Gallery.ladder_job(value))
+
     def test_progress_rows_summarize_the_native_snapshot(self):
         status = {
             "state": "running",
@@ -1390,15 +1670,17 @@ class GalleryExploreOnlyTests(unittest.TestCase):
     class Stop(Exception):
         pass
 
-    def fake_mo(self, mode="run"):
+    def fake_mo(self, mode="run", arguments=None, query=None):
         def stop(condition, output=None):
             if condition:
                 raise self.Stop(output)
 
+        query = {} if query is None else query
         return SimpleNamespace(
             stop=stop,
             app_meta=lambda: SimpleNamespace(mode=mode),
-            cli_args=lambda: {},
+            cli_args=lambda: dict(arguments or {}),
+            query_params=lambda: query,
             callout=lambda *args, **kwargs: ("callout", args),
             md=lambda text: text,
         )
@@ -1467,21 +1749,22 @@ class GalleryExploreOnlyTests(unittest.TestCase):
                 "ordered_cache": False,
             }
         )
-        started = run(
+        headless, request, started = run(
             Gallery=gallery,
             mo=self.fake_mo(),
             run_button=SimpleNamespace(value=False),
             run_form=form,
         )
-        self.assertEqual(started, (None,))
+        self.assertEqual((headless, request, started), (False, None, None))
         gallery.start_reduction.assert_not_called()
-        started = run(
+        headless, request, started = run(
             Gallery=gallery,
             mo=self.fake_mo(),
             run_button=SimpleNamespace(value=True),
             run_form=form,
         )
-        self.assertEqual(started, ("job",))
+        self.assertEqual(started, "job")
+        self.assertIsNone(request["cancel_after"])
         gallery.start_reduction.assert_called_once_with(
             "3L-zero-momentum",
             n_cores=2,
@@ -1489,6 +1772,144 @@ class GalleryExploreOnlyTests(unittest.TestCase):
             max_seconds=60.0,
             ordered_cache=False,
         )
+
+    def ladder_cells(self):
+        run, _ = self.cell(
+            "05_ladder_reductions.py",
+            lambda node: any(
+                isinstance(call, ast.Attribute) and call.attr == "start_reduction"
+                for call in ast.walk(node)
+            ),
+        )
+        watch, _ = self.cell(
+            "05_ladder_reductions.py",
+            lambda node: any(
+                isinstance(target, ast.Name) and target.id == "watched_job"
+                for assign in ast.walk(node)
+                if isinstance(assign, ast.Assign)
+                for target in assign.targets
+            ),
+        )
+        return run, watch
+
+    def test_refused_headless_start_exits_and_never_touches_another_job(self):
+        run, watch = self.ladder_cells()
+        form = SimpleNamespace(value=GalleryLadderTests.form)
+        for arguments, error in (
+            ({"case": "3L-zero-momentum"}, gallery_jobs.JobBusyError("/work/other")),
+            ({"case": "3L-zero-momentum"}, ValueError("Prepared input is missing")),
+            ({"case": "no-such-case"}, ValueError("Unknown ladder case")),
+            ({}, None),
+        ):
+            gallery = SimpleNamespace(
+                headless_request=Gallery.headless_request,
+                headless_exit=Gallery.headless_exit,
+                start_reduction=Mock(side_effect=error),
+                active_job=Mock(return_value="/work/other"),
+                cancel_job=Mock(),
+                wait_job=Mock(),
+            )
+            output = io.StringIO()
+            with (
+                self.subTest(arguments=arguments),
+                contextlib.redirect_stdout(output),
+                contextlib.redirect_stderr(io.StringIO()),
+                self.assertRaises(SystemExit) as stop,
+            ):
+                run(
+                    Gallery=gallery,
+                    mo=self.fake_mo("script", arguments),
+                    run_button=SimpleNamespace(value=False),
+                    run_form=form,
+                )
+            self.assertEqual(stop.exception.code, 2)
+            summary = json.loads(output.getvalue())
+            self.assertFalse(summary["ok"])
+            self.assertEqual(summary["state"], "not started")
+            gallery.active_job.assert_not_called()
+            gallery.cancel_job.assert_not_called()
+            gallery.wait_job.assert_not_called()
+        # Script mode watches only the job it started, never a running one.
+        gallery = SimpleNamespace(active_job=Mock(return_value="/work/other"))
+        shown = Mock(return_value=None)
+        self.assertEqual(
+            watch(
+                Gallery=gallery,
+                get_shown_job=shown,
+                headless=True,
+                mo=self.fake_mo("script"),
+                set_shown_job=Mock(),
+                started_job=None,
+            ),
+            (None,),
+        )
+        gallery.active_job.assert_not_called()
+
+    def test_ladder_page_keeps_showing_its_last_run(self):
+        _, watch = self.ladder_cells()
+        gallery = SimpleNamespace(active_job=Mock(return_value=None))
+        shown = {"job": None}
+        query = {}
+
+        def show(job=None):
+            return shown["job"]
+
+        def set_shown(job):
+            shown["job"] = job
+
+        def watched(started):
+            return watch(
+                Gallery=gallery,
+                get_shown_job=show,
+                headless=False,
+                mo=self.fake_mo(query=query),
+                set_shown_job=set_shown,
+                started_job=started,
+            )[0]
+
+        self.assertIsNone(watched(None))
+        self.assertEqual(
+            watched("/work/3L-zero-momentum-1"), "/work/3L-zero-momentum-1"
+        )
+        self.assertEqual(query, {"job": "3L-zero-momentum-1"})
+        # A control changes after the run ended: the run cell re-runs without
+        # starting anything and nothing is running any more.
+        self.assertEqual(watched(None), "/work/3L-zero-momentum-1")
+        gallery.active_job.assert_called_once()
+        # A fresh page (no last run) re-attaches to a run still going.
+        shown["job"] = None
+        gallery.active_job.return_value = "/work/4L-zero-momentum-2"
+        self.assertEqual(watched(None), "/work/4L-zero-momentum-2")
+        self.assertEqual(shown["job"], "/work/4L-zero-momentum-2")
+        self.assertEqual(query, {"job": "4L-zero-momentum-2"})
+
+    def test_inspection_page_offers_the_five_loop_load_only_with_opt_in(self):
+        choice, _ = self.cell(
+            "02_constants_and_masters.py",
+            lambda node: any(
+                isinstance(call, ast.Attribute) and call.attr == "radio"
+                for call in ast.walk(node)
+            ),
+        )
+        for opt_in, loops in (({}, [4]), ({"VAKINT_GALLERY_ALLOW_5L": "1"}, [4, 5])):
+            radio = Mock()
+            mo = SimpleNamespace(
+                ui=SimpleNamespace(radio=radio, run_button=Mock()),
+                vstack=Mock(),
+                md=lambda text: text,
+                Html=lambda value: value,
+            )
+            with (
+                self.subTest(opt_in=opt_in),
+                tempfile.TemporaryDirectory() as cache,
+                patch.dict(
+                    os.environ,
+                    {"VAKINT_GALLERY_DATA_CACHE": cache, **opt_in},
+                    clear=True,
+                ),
+            ):
+                choice(Gallery=Gallery, mo=mo)
+            self.assertEqual(list(radio.call_args.args[0].values()), loops)
 
     def test_optional_missing_evidence_renders_nothing(self):
         mo = SimpleNamespace(md=lambda text: ("md", text), Html=lambda value: value)
