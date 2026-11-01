@@ -960,6 +960,10 @@ impl VakintWrapper {
     ///     recorded reduction steps and record new ones), "read-only" (replay the
     ///     steps saved in `ordered_cache_directory`) or "off". Replayed steps are
     ///     identical to computed ones, so results never depend on this setting.
+    ///     Caches shipped with the loaded external data seed both the in-memory and
+    ///     the directory cache when their version stamp and sha256 match (otherwise
+    ///     one stderr line and a cold run); "read-only" without a directory replays
+    ///     only those.
     /// ordered_cache_directory : Optional[str]
     ///     Directory of the Ordered step cache, one subdirectory per reduction
     ///     program, rule tables and RustRed cache binding (schema and

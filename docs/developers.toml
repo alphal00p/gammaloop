@@ -674,7 +674,11 @@ anchor = "pub struct Vakint {"
 # five-loop frontend and the retained post-processing workers. validate_settings also
 # rejects a user-set rustred_application_options.ordered_scheduler (derived). The
 # default arithmetic constant is modular_polynomial. Topology and FORM contracts are unchanged.
-digest = "8d2d91e47f0471049e783da351c60156e840dd0e"
+# Reviewed 2026-11-01 for vakint-final (shipped Ordered caches): the crate root
+# re-exports the shipped-cache report types (ShippedOrderedCache*, OrderedCacheExportReport,
+# SHIPPED_ORDERED_CACHE_SCHEMA) and ordered_cache_producer; Vakint's fields, ownership
+# and evaluation entry points are unchanged.
+digest = "01e285a805a1801c3794cd067802bd087b360d80"
 
 [[section.note.scope]]
 path = "crates/vakint/src/lorentz.rs"
@@ -765,7 +769,10 @@ anchor = "pub struct VakintWrapper {"
 # Reviewed 2026-10-31 for the cache-identity review fix: the docstrings of
 # ordered_cache_directory and load_ordered_cache describe subdirectories per
 # program, rule tables and RustRed binding; wrapper behaviour is unchanged.
-digest = "fb5c085cbd0542dd5f77ccf1d73f970f25d5688f"
+# Reviewed 2026-11-01 for vakint-final: the ordered_cache docstring says that caches
+# shipped with the loaded external data seed both cache modes (versioned, sha256-checked)
+# and that read-only without a directory replays only those; wrapper behaviour is unchanged.
+digest = "9ea91488a56336c379a484365a455084d079e4b8"
 
 [[section.note.scope]]
 path = "crates/vakint/src/symbolica_community_module/numerical.rs"
@@ -829,7 +836,12 @@ anchor = "pub(crate) struct RustRedData {"
 # keyed by their load-time rules sha256 instead of the release version, and an
 # activation detaches the Ordered caches of programs the new data replaced.
 # Loading, validation and the activation order are unchanged.
-digest = "9f1c506e829e0ce69b45fbbd4ca6c30aef9fd5be"
+# Reviewed 2026-11-01 for vakint-final: loop manifests may declare the 5L route
+# preparation add-on (route_preparation; the file is listed and sha256-checked like every
+# other) and shipped Ordered caches (ordered_cache section; their files are skipped at load
+# and sha256-verified when a program uses them); LoopData exposes its manifest sha256 and
+# tests get the vendored file list. Validation and transactional activation are unchanged.
+digest = "c4bb9f0c9c476a5a6fd576e9263399e8e27b2075"
 
 [[section.note.scope]]
 path = "crates/vakint/src/rustred_evaluation/masters.rs"
