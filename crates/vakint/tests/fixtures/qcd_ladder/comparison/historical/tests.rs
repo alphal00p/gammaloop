@@ -324,3 +324,41 @@ fn saved_zero_momentum_reference_has_58_complete_rational_products() -> Result<(
     assert_eq!(classified.rows.len(), 58);
     Ok(())
 }
+
+#[test]
+fn complex_coefficients_with_conjugate_denominator_factors_expand_exactly() -> Result<()> {
+    let _ = report(5)?;
+    let context = CoefficientContext::try_new(["d", "imaginary_unit"])?;
+    let variables = context.one().get_variables().clone();
+    let d = context.parameter("d").unwrap().to_expression();
+    let unit = context.parameter("imaginary_unit").unwrap().to_expression();
+    // rustred's form: denominators factored over Q(𝑖), complex numerators.
+    // At d = 4-2ε: 𝑖/(-2ε) + (2+𝑖)/(2-4ε+4ε²)
+    //            = -𝑖/2 ε^-1 + (1+𝑖/2) + (2+𝑖) ε + O(ε²).
+    let scalar = vakint_parse!("(2+𝑖)/((x-3+𝑖)*(x-3-𝑖))+𝑖/(x-4)")?
+        .replace(vakint_parse!("x")?)
+        .with(d.clone())
+        .expand();
+    let scalar = gaussian_numbers_as_unit(&scalar, &unit);
+    let coefficient = rational_coefficient(scalar.as_view(), &variables)?;
+    let (power, values) = laurent_at_four_dimensions(&coefficient, 3)?;
+    let q = |numerator: i64, denominator: i64| Rational::from((numerator, denominator));
+    assert_eq!(power, -1);
+    assert_eq!(
+        values,
+        [(q(0, 1), q(-1, 2)), (q(1, 1), q(1, 2)), (q(2, 1), q(1, 1))]
+    );
+    assert!(laurent_text(power, &values).contains(" i) ε^0"));
+    // Real coefficients keep the plain format.
+    let real = rational_coefficient(
+        vakint_parse!("1/(x-4)")?
+            .replace(vakint_parse!("x")?)
+            .with(d)
+            .as_view(),
+        &variables,
+    )?;
+    let (power, values) = laurent_at_four_dimensions(&real, 2)?;
+    assert_eq!(values, [(q(-1, 2), q(0, 1)), (q(0, 1), q(0, 1))]);
+    assert!(!laurent_text(power, &values).contains(" i"));
+    Ok(())
+}

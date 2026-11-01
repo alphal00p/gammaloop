@@ -1,7 +1,24 @@
 - If running into a linking issue complaining about missing `__emul...` symbol, then it may be a macos specific issue, that can be fixed by building with the following environment variable change `EXTRA_MACOS_LIBS_FOR_GNU_GCC=T` (see impact of this in file `build.rs`.
-- A quick way to run all tests except pySecDec related ones (which can be slow) is the following command:
+- pySecDec tests are opt-in (`RUN_PYSECDEC_TESTS=1`). A quick way to run all other tests is the following command:
 
-VAKINT_SKIP_PYSECDEC_TESTS=true RUST_BACKTRACE=full VAKINT_NO_CLEAN_TMP_DIR=T RUST_LOG=DEBUG cargo test --package vakint --no-default-features
+RUST_BACKTRACE=full VAKINT_NO_CLEAN_TMP_DIR=T RUST_LOG=DEBUG cargo test --package vakint --no-default-features
+
+## Readable physics tests
+
+- `tests/reference_tables.rs` (fast): one test per named one- to four-loop
+  integral, written inline in `topo(prop(...))` notation. vakint's default
+  engine (RustRed, Ordered scheduler, numerical masters, no FORM) is compared
+  coefficient by coefficient with the frozen MATAD/alphaLoop/FMFT (and pySecDec)
+  values of the original tests. Four-loop cases need the official external
+  data (`VAKINT_TEST_EXTERNAL_DATA`). Run with `--nocapture` to see the tables.
+- `tests/ordered_reduction_rungs.rs`: the physical gluon-rung ladder. One to
+  four loops (fast) check exact equality with the frozen depth-first results
+  and exact = modular weights, then print a table against the stored
+  high-precision golden. The five-loop fixtures (`#[ignore]`, slow) keep their
+  exact/sha256 gates and then print a master-product summary: the leading
+  Laurent terms of every master-product coefficient and a master legend.
+- New tables reuse `tests/support/reference_table.rs`. Never loosen an
+  existing exact or digest assertion to make a table pass.
 
 ## Reduction benchmark records
 
