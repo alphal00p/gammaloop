@@ -3,11 +3,13 @@
 //! One test per physical integral. Each test writes the integral in vakint's
 //! `topo(prop(...))` notation, evaluates it with vakint's default engine (RustRed
 //! with its Ordered scheduler, masters substituted numerically, FORM disabled)
-//! and compares every Laurent coefficient with frozen reference values taken
-//! from the original vakint tests: analytic MATAD/alphaLoop results (one to
-//! three loops), FMFT (four loops) and, where an independent numerical run
-//! exists, pySecDec. The printed table shows vakint's value, each reference,
-//! the relative difference and the verdict; run with `--nocapture` to see it:
+//! and compares every requested Laurent coefficient with frozen reference
+//! values taken from the original vakint tests: analytic MATAD/alphaLoop
+//! results (one to three loops), FMFT (four loops) and, where an independent
+//! numerical run exists, pySecDec. A coefficient vakint or a reference does not
+//! list is an exact zero (vanishing orders are written as `"0"`), so spurious
+//! poles fail. The printed table shows vakint's value, each reference, the
+//! relative difference and the verdict; run with `--nocapture` to see it:
 //!
 //! ```text
 //! cargo test --release -p vakint --test reference_tables -- --nocapture
@@ -99,6 +101,8 @@ struct Integral {
     laurent_terms: i64,
     point: &'static [(&'static str, f64)],
     momenta: Momenta,
+    /// Reference values of every requested order; an order a reference does
+    /// not list must vanish.
     references: Vec<Reference>,
 }
 
@@ -137,6 +141,7 @@ fn check(integral: Integral) {
             Some(&test_utils::externals_at_reference_point(&momenta, DIGITS)),
         )
         .unwrap_or_else(|error| panic!("{}: numerical evaluation failed: {error}", integral.name));
+        let first_order = -(integral.loops as i64);
         let point = integral
             .point
             .iter()
@@ -172,6 +177,7 @@ fn check(integral: Integral) {
             ],
             engine: "vakint".into(),
             values: numerical.get_epsilon_coefficients(),
+            orders: Some(first_order..=first_order + integral.laurent_terms - 1),
             shown_digits: DIGITS as usize,
         };
         if let Err(failure) = table.check(&integral.references) {
@@ -292,10 +298,13 @@ fn three_loop_mercedes() {
         laurent_terms: 5,
         point: &[("muvsq", 1.0), ("mursq", 1.0)],
         momenta: Momenta::None,
+        // Overall logarithmically divergent without subdivergences: a single pole.
         references: vec![Reference::new(
             "MATAD",
             ANALYTIC,
             &[
+                (-3, "0", "0"),
+                (-2, "0", "0"),
                 (-1, "0", "-6.105142965702799027412986390958e-7"),
                 (0, "0", "2.548415539172476714996527540285e-6"),
                 (1, "0", "-1.063440725963320582103097545956e-5"),
@@ -456,4 +465,100 @@ fn four_loop_clover_with_numerator() {
             ],
         )],
     });
+}
+
+/// The table's own semantics, without vakint: requested orders vakint leaves
+/// out are exact zeros, and an order a reference does not list must vanish.
+mod laurent_table_semantics {
+    use super::reference_table::{LaurentTable, Reference, complex_from_decimal};
+
+    fn table(values: &[(i64, &str)]) -> LaurentTable {
+        LaurentTable {
+            title: "synthetic 3L result".into(),
+            facts: Vec::new(),
+            engine: "vakint".into(),
+            values: values
+                .iter()
+                .map(|(power, imaginary)| {
+                    (
+                        *power,
+                        complex_from_decimal("0", imaginary).expect("decimal value"),
+                    )
+                })
+                .collect(),
+            orders: Some(-3..=1),
+            shown_digits: 8,
+        }
+    }
+
+    const POLE_AND_FINITE: &[(i64, &str)] = &[(-1, "-6.1e-7"), (0, "2.5e-6"), (1, "-1.1e-5")];
+
+    fn matad(coefficients: &[(i64, &str, &str)]) -> Vec<Reference> {
+        vec![Reference::new("MATAD", 1e-28, coefficients)]
+    }
+
+    #[test]
+    fn explicit_zero_references_match_orders_vakint_leaves_out() {
+        let references = matad(&[
+            (-3, "0", "0"),
+            (-2, "0", "0"),
+            (-1, "0", "-6.1e-7"),
+            (0, "0", "2.5e-6"),
+            (1, "0", "-1.1e-5"),
+        ]);
+        assert_eq!(table(POLE_AND_FINITE).check(&references), Ok(()));
+    }
+
+    #[test]
+    fn a_spurious_pole_fails_against_an_unlisted_reference_order() {
+        let mut values = POLE_AND_FINITE.to_vec();
+        values.push((-2, "3e-9"));
+        let references = matad(&[
+            (-1, "0", "-6.1e-7"),
+            (0, "0", "2.5e-6"),
+            (1, "0", "-1.1e-5"),
+        ]);
+        let failure = table(&values)
+            .check(&references)
+            .expect_err("a nonzero ε^-2 without a reference value must fail");
+        assert!(failure.contains("ε^-2 vs MATAD: Δabs"), "{failure}");
+    }
+
+    #[test]
+    fn a_spurious_pole_fails_against_an_explicit_zero_reference() {
+        let mut values = POLE_AND_FINITE.to_vec();
+        values.push((-3, "1e-20"));
+        let references = matad(&[
+            (-3, "0", "0"),
+            (-2, "0", "0"),
+            (-1, "0", "-6.1e-7"),
+            (0, "0", "2.5e-6"),
+            (1, "0", "-1.1e-5"),
+        ]);
+        let failure = table(&values)
+            .check(&references)
+            .expect_err("a nonzero ε^-3 against a zero reference must fail");
+        assert!(failure.contains("ε^-3 vs MATAD: Δabs"), "{failure}");
+    }
+
+    #[test]
+    fn a_nonzero_reference_fails_when_vakint_leaves_the_order_out() {
+        let references = matad(&[(-2, "0", "4e-8"), (-1, "0", "-6.1e-7"), (0, "0", "2.5e-6")]);
+        let failure = table(POLE_AND_FINITE)
+            .check(&references)
+            .expect_err("vakint's implied zero at ε^-2 differs from the reference");
+        assert!(failure.contains("ε^-2 vs MATAD: Δrel"), "{failure}");
+    }
+
+    #[test]
+    fn a_reference_order_outside_the_requested_orders_is_not_computed() {
+        let references = matad(&[(-1, "0", "-6.1e-7"), (2, "0", "0")]);
+        let failure = table(POLE_AND_FINITE)
+            .check(&references)
+            .expect_err("vakint was not asked for ε^2");
+        assert!(
+            failure.contains("ε^2 vs MATAD: vakint did not compute this order"),
+            "{failure}"
+        );
+    }
 }

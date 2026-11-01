@@ -288,6 +288,8 @@ fn print_rung_table(
         ],
         engine: "vakint".into(),
         values,
+        // Both sides are complete inventories; an order only one lists is zero.
+        orders: None,
         shown_digits: 40,
     };
     let golden = reference_table::Reference {

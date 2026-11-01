@@ -5,7 +5,12 @@
 //! reference value with its relative difference and verdict, then a one-line
 //! summary (`PASS`/`FAIL`). The relative difference of a coefficient is
 //! `max(|Δ re|, |Δ im|) / max(|re|, |im|)` of the reference (the absolute
-//! difference when the reference coefficient is zero).
+//! difference, printed as `Δabs`, when the reference coefficient is zero).
+//! Every order of the requested window is checked; a coefficient a side does
+//! not list is an exact zero, so a reference can state that an order vanishes
+//! (write it as `"0"`) and a spurious vakint pole fails.
+
+use std::ops::RangeInclusive;
 
 use symbolica::domains::float::{Complex, Float, RoundingDirection};
 
@@ -46,8 +51,12 @@ pub struct LaurentTable {
     pub facts: Vec<(String, String)>,
     /// Label of the computed values, e.g. `"vakint"`.
     pub engine: String,
-    /// Computed `(ε power, value)` pairs.
+    /// Computed `(ε power, value)` pairs; vanishing orders may be left out.
     pub values: Vec<(i64, Complex<Float>)>,
+    /// Laurent orders the computation was asked for. vakint's coefficient of a
+    /// requested order it does not list is an exact zero; `None` means the
+    /// orders either side lists.
+    pub orders: Option<RangeInclusive<i64>>,
     /// Significant digits printed per value.
     pub shown_digits: usize,
 }
@@ -74,6 +83,13 @@ fn larger(left: Float, right: Float) -> Float {
 
 fn is_zero(value: &Float) -> bool {
     value.to_rational().is_zero()
+}
+
+fn exact_zero() -> Complex<Float> {
+    Complex::new(
+        parse("0").expect("decimal zero"),
+        parse("0").expect("decimal zero"),
+    )
 }
 
 /// `±d.ddd…e±x` with `digits` significant digits.
@@ -133,9 +149,15 @@ fn order(power: i64) -> String {
 }
 
 impl LaurentTable {
-    /// Print the table and check every reference coefficient. A reference order
-    /// that vakint did not produce fails; vakint orders without a reference
-    /// value are printed as such and do not fail.
+    /// Print the table and check it against every reference the way
+    /// `NumericalEvaluationResult::does_approx_match` compares results: at every
+    /// order of the requested window [`Self::orders`] and at every order that
+    /// vakint or a reference lists, a coefficient a side does not list is an
+    /// exact zero. vakint leaves vanishing orders out of its output, so a
+    /// spurious vakint pole fails against the (listed or implied) zero of the
+    /// reference, and a reference written as `"0"` states that the order
+    /// vanishes. Only a reference order outside the window that vakint did not
+    /// compute fails as `NOT COMPUTED`.
     pub fn check(&self, references: &[Reference]) -> Result<(), String> {
         let mut text = format!("\n━━ {} ━━\n", self.title);
         for (label, fact) in &self.facts {
@@ -147,15 +169,26 @@ impl LaurentTable {
                 reference
                     .coefficients
                     .iter()
-                    .map(|(power, re, im)| Ok((*power, Complex::new(parse(re)?, parse(im)?))))
+                    .map(|(power, re, im)| {
+                        // Never print more digits than the reference was given with.
+                        let written = written_digits(re).max(written_digits(im));
+                        Ok((*power, Complex::new(parse(re)?, parse(im)?), written))
+                    })
                     .collect::<Result<Vec<_>, String>>()
             })
             .collect::<Result<Vec<_>, String>>()?;
+        let in_window = |power: i64| {
+            self.orders
+                .as_ref()
+                .is_none_or(|orders| orders.contains(&power))
+        };
         let mut powers = self
-            .values
-            .iter()
-            .map(|(power, _)| *power)
-            .chain(parsed.iter().flatten().map(|(power, _)| *power))
+            .orders
+            .clone()
+            .into_iter()
+            .flatten()
+            .chain(self.values.iter().map(|(power, _)| *power))
+            .chain(parsed.iter().flatten().map(|(power, _, _)| *power))
             .collect::<Vec<_>>();
         powers.sort_unstable();
         powers.dedup();
@@ -169,40 +202,46 @@ impl LaurentTable {
         let mut failures = Vec::new();
         let mut checked = 0;
         for power in powers {
-            let value = self.values.iter().find(|(computed, _)| *computed == power);
-            let shown = value.map_or_else(
-                || "(not computed)".to_owned(),
-                |(_, value)| complex(value, self.shown_digits),
-            );
+            let listed = self
+                .values
+                .iter()
+                .find(|(computed, _)| *computed == power)
+                .map(|(_, value)| value.clone());
+            // A requested order vakint does not list vanishes.
+            let value = listed.clone().or_else(|| in_window(power).then(exact_zero));
+            let shown = match (&listed, &value) {
+                (Some(listed), _) => complex(listed, self.shown_digits),
+                (None, Some(_)) => "0 (no such term)".to_owned(),
+                (None, None) => "(not computed)".to_owned(),
+            };
             text.push_str(&format!(
                 "  {:<6} {:<width$}  {shown}\n",
                 order(power),
                 self.engine
             ));
-            let mut referenced = false;
             for (reference, coefficients) in references.iter().zip(&parsed) {
-                let Some((_, expected)) = coefficients.iter().find(|(at, _)| *at == power) else {
-                    continue;
+                let listed_reference = coefficients.iter().find(|(at, _, _)| *at == power);
+                let (expected, reference_text) = match listed_reference {
+                    Some((_, expected, written)) => (
+                        expected.clone(),
+                        complex(expected, self.shown_digits.min(*written)),
+                    ),
+                    // An order a reference does not list vanishes for it.
+                    None if value.is_some() => (exact_zero(), "0 (not listed)".to_owned()),
+                    None => continue,
                 };
-                referenced = true;
                 checked += 1;
-                // Never print more digits than the reference was given with.
-                let written = reference
-                    .coefficients
-                    .iter()
-                    .find(|(at, _, _)| *at == power)
-                    .map_or(self.shown_digits, |(_, re, im)| {
-                        written_digits(re).max(written_digits(im))
-                    });
-                let reference_text = complex(expected, self.shown_digits.min(written));
-                let (verdict, difference) = match value {
-                    Some((_, value)) => {
-                        let difference = relative_difference(value, expected);
+                let zero_reference = is_zero(&expected.re) && is_zero(&expected.im);
+                // The difference is absolute when the reference vanishes.
+                let measure = if zero_reference { "Δabs" } else { "Δrel" };
+                let (verdict, difference) = match &value {
+                    Some(value) => {
+                        let difference = relative_difference(value, &expected);
                         let tolerance = Float::with_val(64, reference.tolerance);
                         let ok = difference <= tolerance;
                         if !ok {
                             failures.push(format!(
-                                "{} vs {}: Δrel {:.1e} > {:.0e}",
+                                "{} vs {}: {measure} {:.1e} > {:.0e}",
                                 order(power),
                                 reference.source,
                                 difference,
@@ -220,24 +259,18 @@ impl LaurentTable {
                     }
                     None => {
                         failures.push(format!(
-                            "{} vs {}: vakint has no such coefficient",
+                            "{} vs {}: vakint did not compute this order (outside the requested orders)",
                             order(power),
                             reference.source
                         ));
-                        ("MISSING", "-".to_owned())
+                        ("NOT COMPUTED", "-".to_owned())
                     }
                 };
                 text.push_str(&format!(
-                    "  {:<6} {:<width$}  {reference_text:<column$} Δrel {difference:<8} (tol {:.0e})  {verdict}\n",
+                    "  {:<6} {:<width$}  {reference_text:<column$} {measure} {difference:<8} (tol {:.0e})  {verdict}\n",
                     "",
                     reference.source,
                     reference.tolerance
-                ));
-            }
-            if !referenced {
-                text.push_str(&format!(
-                    "  {:<6} {:<width$}  (no reference value)\n",
-                    "", ""
                 ));
             }
         }
