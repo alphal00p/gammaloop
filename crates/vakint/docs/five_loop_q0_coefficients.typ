@@ -138,5 +138,4 @@ byte-for-byte unchanged; no coefficient was reevaluated.
 #small[These are development #emph[postprocessing] observations, not IBP reduction
 benchmarks or cache speedups. The read-only repair codec is pinned specifically
 to Symbolica #raw("9cd57678d8817ec33c05cacba4925162f1c86b0b"); it makes no claim
-about future native formats. See
-#link("benchmark/benchmark.typ")[the reduction benchmark] for reduction measurements.]
+about future native formats.]
