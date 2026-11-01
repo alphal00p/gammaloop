@@ -629,7 +629,8 @@ mod protocol_tests {
             counts,
             Counts {
                 rational: 0,
-                generic: 0
+                generic: 0,
+                grouped: 0
             }
         );
         assert!(lowering_diagnostics::current().is_none());
