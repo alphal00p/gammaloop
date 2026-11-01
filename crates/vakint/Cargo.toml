@@ -102,3 +102,7 @@ required-features = ["feynkit-ingress"]
 [[example]]
 name = "ordered_reduction_rungs"
 required-features = ["feynkit-ingress"]
+
+[[example]]
+name = "ordered_cache_maintenance"
+required-features = ["feynkit-ingress"]

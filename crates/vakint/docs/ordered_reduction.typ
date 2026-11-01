@@ -321,8 +321,9 @@ channels and arithmetics of an engine and its clones.
   table.header([*Field (Python keyword)*], [*Meaning*]),
   [#raw("mode") (#raw("ordered_cache"))], [#raw("read-write") (default):
     replay recorded steps and record new ones (live population).
-    #raw("read-only"): replay the steps saved in the directory, record
-    nothing. #raw("off"): no cache.],
+    #raw("read-only"): replay the steps saved in the directory (without a
+    directory: the shipped caches only), record nothing. #raw("off"): no
+    cache.],
   [#raw("directory") (#raw("ordered_cache_directory"))], [Root directory; none
     (default) keeps records in memory for the lifetime of the engine. Shard files
     are read at their first lookup.],
@@ -336,6 +337,9 @@ channels and arithmetics of an engine and its clones.
     #raw("on-drop") (when the last clone of the engine is dropped) or
     #raw("never") (only explicit saves). An automatic save never fails an
     evaluation; its last error is reported in the statistics.],
+  [#raw("shipped") (Rust only; default on)], [Use the caches the loaded
+    external data ship (see "Shipped caches" below); #raw("false") ignores them,
+    e.g. for a cold preparation.],
 )
 
 Operations (Rust #raw("Vakint") methods, Python methods of the same name):
@@ -349,8 +353,10 @@ program and shard; #raw("clear_ordered_cache()") drops the resident records
 expression with RustRed in retained mode (results discarded, the cache used
 read-write) and saves. The rung tests and examples read
 #raw("VAKINT_ORDERED_CACHE") (#raw("off"), #raw("read-only"),
-#raw("read-write")) and #raw("VAKINT_ORDERED_CACHE_DIR"), and report the cache
-counters in #raw("ordered_step_cache").
+#raw("read-write")), #raw("VAKINT_ORDERED_CACHE_DIR"),
+#raw("VAKINT_ORDERED_CACHE_SHIPPED") (#raw("on")/#raw("off")) and
+#raw("VAKINT_ORDERED_CACHE_MAX_RESIDENT_BYTES"), and report the cache counters
+(with each program's shipped-cache status) in #raw("ordered_step_cache").
 
 A cache directory holds one subdirectory per program,
 #raw("<loops>L-<program>.<tables>.<stamp>") (e.g.
@@ -377,6 +383,54 @@ manifest or shard whose stamp or payload digest differs; Vakint reports this as
 an error naming the directory. A directory
 has one writer at a time: two engines or processes writing the same
 directory lose records of one of them (never mix them); readers are safe.
+
+=== Shipped caches
+
+External data may ship the cache of each program of a loop pack in the same
+layout: #raw("<L>L/ordered-cache/<label>.<tables>.<stamp>/") (the RustRed
+manifest, the shards it lists and optionally the tail table
+#raw("ordered-tail.rrtail")), described by #raw("<L>L/ordered-cache.json")
+(schema #raw("vakint.external-data.ordered-cache.v2"): producer, workload, and
+per program its label, directory, rule tables, stamp, records and bytes, and
+whether it is complete or trimmed) and listed file by file with their sha256 in
+the loop manifest (section #raw("ordered_cache")). Loading does not read them.
+The same versioning rule applies as to every cache: a shipped cache is used iff
+it was recorded for the program's rule tables under this build's stamp (step
+cache schema and semantics version and the binding's identity fields; a tail
+table must carry this build's tail schema and semantics) and its files match
+the loop manifest's sha256. Otherwise Vakint prints one line on stderr
+(#raw("vakint: shipped Ordered step cache ... not used (<reason>); <program>
+runs without it")) and the program runs cold. There is no fingerprint,
+attestation or restamping: a RustRed release that bumps the step semantics
+needs regenerated caches, any other release keeps them.
+
+Without a cache directory (the default) an accepted cache is opened in place:
+its shards are read at their first lookup, new records stay in memory, and
+nothing is ever written into the data directory; #raw("read-only") replays the
+shipped records only. With a cache directory the files are copied into the
+program's subdirectory there if it holds no cache yet (an existing cache is
+kept) and the cache then grows there as usual. Each program's statistics report
+the outcome (#raw("shipped"): #raw("in-place"), #raw("installed"),
+#raw("already-present") or #raw("rejected") with the reason);
+#raw("shipped_ordered_caches()") lists every loaded program with its
+directory name, tables, stamp and the verified state of its shipped cache.
+The vendored 1L–3L data ship no caches (their cold reduction takes well under
+a second).
+
+The example #raw("ordered_cache_maintenance") maintains them. #raw("prepare")
+runs a deterministic workload cold (shipped caches ignored) into a fresh cache
+directory: the zero-momentum and quadratic QCD-ladder rungs at one to four
+loops, the four-loop benchmark integrals and the five-loop benchmarks of the
+data, then exports the caches of the loaded programs in the pack layout
+(#raw("export_ordered_caches"); the bytes depend only on the records, so the
+export is reproducible) to be staged by vakint-external-data's tooling.
+#raw("check") prints, for every program loaded from a data directory, its
+directory name, tables, stamp and whether its shipped cache is accepted, and
+fails if one is rejected. The five-loop zero-momentum and quadratic workloads
+reduce the same saved application, so they share one program cache; a pack
+may ship it trimmed (#raw("complete: false")) when the full quadratic cache
+exceeds the size budget, and the full cache can be placed unchanged into a
+cache directory under its directory name.
 
 The depth-first caches stored a complete terminal decomposition per integral.
 Consuming such a record replaces a frontier key by its terminal image and skips

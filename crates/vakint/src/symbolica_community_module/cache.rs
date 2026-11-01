@@ -31,6 +31,8 @@ pub(super) fn settings(
         autosave: autosave
             .parse::<OrderedCacheAutosave>()
             .map_err(vakint_to_python_error)?,
+        // Shipped caches seed every mode (Rust default).
+        shipped: defaults.shipped,
     })
 }
 
@@ -61,6 +63,13 @@ pub(super) fn statistics<'py>(
         record.set_item("directory", program.directory.clone())?;
         record.set_item("mode", program.mode.as_str())?;
         record.set_item("autosave", program.autosave.as_str())?;
+        record.set_item(
+            "shipped",
+            program
+                .shipped
+                .as_ref()
+                .map(|shipped| shipped.status.as_str()),
+        )?;
         record.set_item("records", native.records)?;
         record.set_item("hits", native.hits)?;
         record.set_item("misses", native.misses)?;

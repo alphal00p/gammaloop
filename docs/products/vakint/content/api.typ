@@ -70,8 +70,11 @@ Python cache operations were removed. Instead, `VakintSettings::ordered_cache` (
 `ordered_cache`, `ordered_cache_directory`, `ordered_cache_ram_bytes`,
 `ordered_cache_autosave`) configures the Ordered step cache, which replays each expanded
 integral's recorded reduction step exactly: `read-write` in memory by default, or a
-directory reused by later processes. `load_ordered_cache`, `save_ordered_cache`,
-`warm_ordered_cache`, `clear_ordered_cache` and `ordered_cache_statistics` operate on it. See
+directory reused by later processes. Caches shipped with the external data seed both
+(used only when their version stamp matches this build and their files match the loop
+manifest's sha256; otherwise one stderr line and a cold run). `load_ordered_cache`,
+`save_ordered_cache`, `warm_ordered_cache`, `clear_ordered_cache` and
+`ordered_cache_statistics` operate on it. See
 #source-link("crates/vakint/docs/ordered_reduction.typ", label: "the ordered reduction guide").
 
 Python's `evaluate_rustred_symbolic(integral_expression, ...)` returns the retained

@@ -22,6 +22,13 @@ mod vendored {
     include!(concat!(env!("OUT_DIR"), "/vakint_vendored_data.rs"));
 }
 
+/// The vendored 1L-3L data files (relative path, bytes), for tests that need
+/// a writable external-data directory.
+#[cfg(test)]
+pub(super) fn vendored_files() -> &'static [(&'static str, &'static [u8])] {
+    vendored::FILES
+}
+
 pub(super) const RELEASE_SCHEMA: &str = "vakint.external-data.v1";
 const LOOP_SCHEMA: &str = "vakint.external-data.loop.v1";
 
@@ -70,6 +77,10 @@ pub(crate) struct LoopManifest {
     /// Optional saved route preparation add-on of the 5L saved application.
     #[serde(default)]
     pub route_preparation: Option<RoutePreparationManifest>,
+    /// Shipped Ordered step caches (`ordered-cache/`, `ordered-cache.json`;
+    /// see `shipped_cache`).
+    #[serde(default)]
+    pub ordered_cache: Option<super::shipped_cache::OrderedCacheSection>,
     pub coverage: String,
     pub files: BTreeMap<String, FileDigest>,
 }
@@ -99,13 +110,21 @@ pub(crate) struct CacheManifest {
 }
 
 impl LoopManifest {
-    /// Files that Vakint never reads at run time: the prepared depth-first
-    /// cache with its metadata, and the benchmark inputs. Loading skips their
-    /// checksums; any later read still verifies them like every other file.
+    /// Files that Vakint does not read when loading: the prepared
+    /// depth-first cache with its metadata (releases up to v0.1.2), the
+    /// benchmark inputs, and the shipped Ordered step caches (verified when a
+    /// program uses them). Loading skips their checksums; any later read
+    /// still verifies them like every other file.
     fn is_unused_at_runtime(&self, path: &str) -> bool {
         path.starts_with("cache/")
             || path.starts_with("benchmarks/")
             || self.cache.metadata.as_deref() == Some(path)
+            || self.ordered_cache.as_ref().is_some_and(|section| {
+                path == section.metadata
+                    || path
+                        .strip_prefix(section.path.as_str())
+                        .is_some_and(|rest| rest.starts_with('/'))
+            })
     }
 }
 
@@ -278,6 +297,11 @@ impl LoopData {
         }
         checked_bytes(&bytes, &digest.sha256)?;
         Ok(bytes)
+    }
+
+    /// The sha256 of the loop manifest (as declared by the release manifest).
+    pub(crate) fn manifest_sha256(&self) -> &str {
+        &self.manifest_sha256
     }
 
     pub(crate) fn path(&self, relative: &str) -> Result<Option<PathBuf>, RustRedEvaluationError> {

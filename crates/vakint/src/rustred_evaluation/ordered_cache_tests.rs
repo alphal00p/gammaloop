@@ -413,7 +413,7 @@ fn caches_are_keyed_by_program_rule_tables_and_binding_stamp() {
     // unchanged tables keep them across a release.
     let registry = super::OrderedCacheRegistry::default();
     let settings = OrderedCacheSettings::default();
-    let cache = |program| registry.cache(&settings, program).unwrap().unwrap();
+    let cache = |program| registry.cache(&settings, program, None).unwrap().unwrap();
     let first = cache(&release);
     assert!(std::sync::Arc::ptr_eq(&first, &cache(&release)));
     assert!(std::sync::Arc::ptr_eq(&first, &cache(&next_release)));

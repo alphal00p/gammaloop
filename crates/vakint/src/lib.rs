@@ -77,6 +77,11 @@ pub use rustred_evaluation::{
 pub use rustred_evaluation::{
     ExternalDataLoadReport, ExternalDataLoopReport, OfficialExternalDataOptions,
 };
+pub use rustred_evaluation::{
+    OrderedCacheExportReport, SHIPPED_ORDERED_CACHE_SCHEMA, ShippedOrderedCacheCheck,
+    ShippedOrderedCacheMetadata, ShippedOrderedCacheProgram, ShippedOrderedCacheStatus,
+    ShippedOrderedCacheUse, ordered_cache_producer,
+};
 pub use rustred_evaluation::{RustRedEvaluationError, RustRedEvaluationOptions, RustRedMasterMode};
 
 use regex::Regex;

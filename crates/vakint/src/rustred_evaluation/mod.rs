@@ -25,6 +25,12 @@ pub use cache::{
     RustRedOrderedStepCacheSaveReport, RustRedOrderedStepCacheShardStatistics,
     RustRedOrderedStepCacheStatistics,
 };
+pub(crate) mod shipped_cache;
+pub use shipped_cache::{
+    METADATA_SCHEMA as SHIPPED_ORDERED_CACHE_SCHEMA, OrderedCacheExportReport,
+    ShippedOrderedCacheCheck, ShippedOrderedCacheMetadata, ShippedOrderedCacheProgram,
+    ShippedOrderedCacheStatus, ShippedOrderedCacheUse, ordered_cache_producer,
+};
 mod factor_projection;
 mod factor_provider;
 pub(crate) mod five_loop;

@@ -32,6 +32,13 @@
 //! differs. A data update that leaves a program's tables unchanged keeps its
 //! records.
 //!
+//! External data may ship the cache of a program in that same layout (see
+//! [`super::shipped_cache`]). It is used under the same versioning rule (its
+//! stamp and rule tables must be this program's, its files must match the loop
+//! manifest's sha256; otherwise one stderr line and a cold program): opened in
+//! place, read-only on disk, without a cache directory, and copied into the
+//! program's directory of a cache directory that holds no cache for it yet.
+//!
 //! The depth-first completed-result caches (prepared bundles, running caches
 //! and their transport) were removed together with depth-first reduction: a
 //! completed terminal image replaces a frontier key and would skip every
@@ -50,7 +57,9 @@ use sha2::{Digest, Sha256};
 use symbolica::atom::AtomView;
 
 use super::{
-    RustRedEvaluationError, RustRedEvaluationOptions, RustRedMasterMode, data::RustRedData,
+    RustRedEvaluationError, RustRedEvaluationOptions, RustRedMasterMode,
+    data::RustRedData,
+    shipped_cache::{ShippedOrderedCache, ShippedOrderedCacheStatus, ShippedOrderedCacheUse},
 };
 use crate::{EvaluationMethod, EvaluationOrder, Vakint, VakintError, VakintSettings};
 
@@ -166,12 +175,15 @@ impl FromStr for OrderedCacheAutosave {
 /// never mixed). Changing these settings between calls reopens the caches;
 /// unsaved records of the previous configuration are saved first unless its
 /// autosave policy is [`OrderedCacheAutosave::Never`], in which case they are
-/// dropped. Results never depend on these settings.
+/// dropped. Caches shipped with the loaded external data seed both the
+/// in-memory and the directory-backed caches (see `shipped`). Results never
+/// depend on these settings.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct OrderedCacheSettings {
     pub mode: OrderedCacheMode,
     /// Root directory; `None` keeps records in memory only. Read-only mode
-    /// replays saved records, so without a directory it uses no cache.
+    /// replays saved records, so without a directory it replays only the
+    /// shipped caches (and uses no cache when there are none).
     pub directory: Option<PathBuf>,
     /// Ceiling on the estimated resident bytes of each program's cache;
     /// records and shards beyond it are not kept (their steps are
@@ -179,6 +191,14 @@ pub struct OrderedCacheSettings {
     /// [`VakintSettings::rustred_resources`].
     pub max_resident_bytes: Option<usize>,
     pub autosave: OrderedCacheAutosave,
+    /// Use the caches the loaded external data ship (default). Without a
+    /// `directory` a program's accepted shipped cache is opened in place
+    /// (replayed, never written); with one it is copied into the program's
+    /// directory there if that holds no cache yet. A shipped cache of another
+    /// version or rule tables, or with files that fail the loop manifest's
+    /// sha256, is reported on stderr and not used. `false` ignores them (cold
+    /// preparation of new shipped caches).
+    pub shipped: bool,
 }
 
 impl Default for OrderedCacheSettings {
@@ -188,6 +208,7 @@ impl Default for OrderedCacheSettings {
             directory: None,
             max_resident_bytes: Some(DEFAULT_ORDERED_CACHE_MAX_RESIDENT_BYTES),
             autosave: OrderedCacheAutosave::AfterEvaluation,
+            shipped: true,
         }
     }
 }
@@ -237,6 +258,9 @@ pub struct OrderedCacheProgramStatistics {
     pub directory: Option<PathBuf>,
     pub mode: OrderedCacheMode,
     pub autosave: OrderedCacheAutosave,
+    /// The cache the data ship for the program and how it was used (`None`:
+    /// none shipped, or shipped caches are disabled).
+    pub shipped: Option<ShippedOrderedCacheUse>,
     /// Cumulative native counters (hits, misses, inserts, records, bytes,
     /// per-shard states) since the cache was attached.
     pub native: RustRedOrderedStepCacheStatistics,
@@ -311,6 +335,9 @@ pub(crate) struct OrderedCacheProgram {
 
 /// Registry key: program label, rule tables and binding stamp.
 type ProgramKey = (String, [u8; 32], [u8; 32]);
+/// A program key with the sha256 of the loop manifest whose shipped cache
+/// was resolved for it.
+type ShippedKey = (ProgramKey, String);
 
 /// The rule-table identity of a program read from several data files: a
 /// digest of their paths and declared (verified) sha256 values, in order.
@@ -376,6 +403,8 @@ impl OrderedCacheProgram {
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Configuration {
     directory: Option<PathBuf>,
+    /// Without a directory: the accepted shipped cache opened in place.
+    seed: Option<PathBuf>,
     populate: bool,
     max_resident_bytes: Option<usize>,
 }
@@ -388,6 +417,7 @@ struct Attached {
     stamp: [u8; 32],
     configuration: Configuration,
     autosave: OrderedCacheAutosave,
+    shipped: Option<ShippedOrderedCacheUse>,
     cache: Arc<OrderedStepCache>,
 }
 
@@ -437,6 +467,7 @@ impl Attached {
             directory: self.configuration.directory.clone(),
             mode: self.mode(),
             autosave: self.autosave,
+            shipped: self.shipped.clone(),
             native: self.cache.statistics(),
         }
     }
@@ -449,6 +480,9 @@ impl Attached {
 pub(crate) struct OrderedCacheRegistry {
     attached: Mutex<BTreeMap<ProgramKey, Attached>>,
     last_autosave_error: Mutex<Option<String>>,
+    /// Verified shipped caches, resolved (and reported) once per program and
+    /// loop manifest.
+    shipped: Mutex<BTreeMap<ShippedKey, ShippedOrderedCache>>,
 }
 
 impl fmt::Debug for OrderedCacheRegistry {
@@ -459,7 +493,7 @@ impl fmt::Debug for OrderedCacheRegistry {
     }
 }
 
-fn hex(bytes: &[u8]) -> String {
+pub(super) fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
@@ -482,26 +516,56 @@ impl OrderedCacheRegistry {
         self.attached.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
+    /// The verified shipped cache of `program` in `data`, resolved once per
+    /// program and loop manifest (a refusal prints its stderr line once).
+    fn shipped(&self, data: &RustRedData, program: &OrderedCacheProgram) -> ShippedOrderedCache {
+        let Some(pack) = data.loops.get(&program.loop_count) else {
+            return ShippedOrderedCache::None;
+        };
+        let key = (program.key(), pack.manifest_sha256().to_owned());
+        self.shipped
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .entry(key)
+            .or_insert_with(|| ShippedOrderedCache::resolve(data, program))
+            .clone()
+    }
+
     /// The program's cache under `settings`, opened (or reopened after a
-    /// settings change) on first use. `None` when the cache is off.
+    /// settings change) on first use. `None` when the cache is off, or
+    /// read-only without a directory and without a shipped cache.
     pub(crate) fn cache(
         &self,
         settings: &OrderedCacheSettings,
         program: &OrderedCacheProgram,
+        data: Option<&RustRedData>,
     ) -> Result<Option<Arc<OrderedStepCache>>, RustRedEvaluationError> {
-        // Read-only replay needs records saved in a directory.
-        if settings.mode == OrderedCacheMode::Off
-            || (settings.mode == OrderedCacheMode::ReadOnly && settings.directory.is_none())
-        {
+        if settings.mode == OrderedCacheMode::Off {
             return Ok(None);
         }
+        let shipped = match data {
+            Some(data) if settings.shipped => self.shipped(data, program),
+            _ => ShippedOrderedCache::None,
+        };
         let key = program.key();
         let stamp = key.2;
+        let directory = settings
+            .directory
+            .as_ref()
+            .map(|root| program_directory(root, program, &stamp));
+        let seed = match &shipped {
+            ShippedOrderedCache::Accepted(accepted) if directory.is_none() => {
+                Some(accepted.source.clone())
+            }
+            _ => None,
+        };
+        // Read-only replay needs records saved in a directory or shipped.
+        if settings.mode == OrderedCacheMode::ReadOnly && directory.is_none() && seed.is_none() {
+            return Ok(None);
+        }
         let configuration = Configuration {
-            directory: settings
-                .directory
-                .as_ref()
-                .map(|root| program_directory(root, program, &stamp)),
+            directory,
+            seed,
             populate: settings.mode == OrderedCacheMode::ReadWrite,
             max_resident_bytes: settings.max_resident_bytes,
         };
@@ -524,15 +588,49 @@ impl OrderedCacheRegistry {
             max_resident_bytes: configuration.max_resident_bytes,
             ..OrderedStepCacheOptions::default()
         };
-        let cache = match &configuration.directory {
-            Some(directory) => OrderedStepCache::open(directory, program.binding.clone(), options)
-                .map_err(|error| {
-                    ordered_cache_failure(format!(
-                        "{}: {error}; remove the directory to rebuild it",
-                        program.label
-                    ))
-                })?,
-            None => OrderedStepCache::in_memory(program.binding.clone(), options),
+        let mut shipped_use = match (&shipped, &configuration.directory) {
+            (ShippedOrderedCache::None, _) => None,
+            (ShippedOrderedCache::Rejected(report), _) => Some(report.clone()),
+            (ShippedOrderedCache::Accepted(accepted), Some(directory)) => {
+                Some(accepted.install(directory))
+            }
+            (ShippedOrderedCache::Accepted(accepted), None) => {
+                Some(accepted.report(ShippedOrderedCacheStatus::InPlace, None))
+            }
+        };
+        let cache = match (&configuration.directory, &configuration.seed) {
+            (Some(directory), _) => {
+                OrderedStepCache::open(directory, program.binding.clone(), options).map_err(
+                    |error| {
+                        ordered_cache_failure(format!(
+                            "{}: {error}; remove the directory to rebuild it",
+                            program.label
+                        ))
+                    },
+                )?
+            }
+            // The data are never written: the registry saves only caches
+            // with a configured directory.
+            (None, Some(seed)) => {
+                match OrderedStepCache::open(seed, program.binding.clone(), options) {
+                    Ok(cache) => cache,
+                    Err(error) => {
+                        let detail = error.to_string();
+                        eprintln!(
+                            "vakint: shipped Ordered step cache {} not used ({detail}); {} runs \
+                             without it",
+                            seed.display(),
+                            program.label
+                        );
+                        if let Some(report) = &mut shipped_use {
+                            report.status = ShippedOrderedCacheStatus::Rejected;
+                            report.detail = Some(detail);
+                        }
+                        OrderedStepCache::in_memory(program.binding.clone(), options)
+                    }
+                }
+            }
+            (None, None) => OrderedStepCache::in_memory(program.binding.clone(), options),
         };
         attached.insert(
             key,
@@ -544,6 +642,7 @@ impl OrderedCacheRegistry {
                 stamp,
                 configuration,
                 autosave: settings.autosave,
+                shipped: shipped_use,
                 cache: Arc::clone(&cache),
             },
         );
@@ -628,6 +727,10 @@ impl OrderedCacheRegistry {
 
     fn clear(&self) {
         self.lock().clear();
+        self.shipped
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clear();
     }
 
     /// Detach the caches of every program not in `programs` (superseded by a
@@ -675,32 +778,40 @@ impl Drop for OrderedCacheRegistry {
     }
 }
 
-/// `<root>/<label>.<first 16 hex digits of the rule tables>.<first 16 hex
-/// digits of the stamp>`.
-fn program_directory(root: &Path, program: &OrderedCacheProgram, stamp: &[u8; 32]) -> PathBuf {
-    root.join(format!(
+/// `<label>.<first 16 hex digits of the rule tables>.<first 16 hex digits of
+/// the stamp>`: the program's directory in a cache directory and in a loop
+/// pack's shipped `ordered-cache/`.
+pub(super) fn program_directory_name(program: &OrderedCacheProgram) -> String {
+    format!(
         "{}.{}.{}",
         program.label,
         hex(&program.rule_tables[..8]),
-        hex(&stamp[..8])
-    ))
+        hex(&program.binding.stamp()[..8])
+    )
+}
+
+/// `<root>/<label>.<tables>.<stamp>` (see [`program_directory_name`]).
+fn program_directory(root: &Path, program: &OrderedCacheProgram, stamp: &[u8; 32]) -> PathBuf {
+    debug_assert_eq!(*stamp, program.binding.stamp());
+    root.join(program_directory_name(program))
 }
 
 impl Vakint {
     /// Attach the Ordered step caches of every loaded program now, as
     /// evaluations would on first use, and return their statistics. Opening
     /// a directory reads and checks only its manifests; shard files are read
-    /// at their first lookup. A five-loop saved application is covered once
-    /// it is loaded. Fails when a directory holds a cache with another
-    /// binding (RustRed's stamp check: another cache schema or step-semantics
-    /// version, family, variables or policy) or cannot be read.
+    /// at their first lookup. Shipped caches are verified (sha256 of their
+    /// files) and, with a cache directory, installed now. A five-loop saved
+    /// application is covered once it is loaded. Fails when a directory holds
+    /// a cache with another binding (RustRed's stamp check: another cache
+    /// schema or step-semantics version, family, variables or policy) or
+    /// cannot be read.
     pub fn load_ordered_cache(
         &self,
         settings: &VakintSettings,
     ) -> Result<OrderedCacheStatistics, VakintError> {
         for program in self.ordered_cache_programs()? {
-            self.ordered_cache
-                .cache(&settings.ordered_cache, &program)?;
+            self.ordered_step_cache(settings, &program)?;
         }
         Ok(self.ordered_cache_statistics())
     }
@@ -774,7 +885,9 @@ impl Vakint {
         settings: &VakintSettings,
         program: &OrderedCacheProgram,
     ) -> Result<Option<Arc<OrderedStepCache>>, RustRedEvaluationError> {
-        self.ordered_cache.cache(&settings.ordered_cache, program)
+        let data = self.rustred_data().ok();
+        self.ordered_cache
+            .cache(&settings.ordered_cache, program, data.as_deref())
     }
 
     /// Detach the caches of programs this engine no longer has, after its
@@ -787,7 +900,7 @@ impl Vakint {
     }
 
     /// Every program currently loaded in this engine.
-    fn ordered_cache_programs(&self) -> Result<Vec<OrderedCacheProgram>, VakintError> {
+    pub(super) fn ordered_cache_programs(&self) -> Result<Vec<OrderedCacheProgram>, VakintError> {
         let data = self.rustred_data()?;
         let mut programs = data.ordered_cache_programs()?;
         if let Ok(application) = self.loaded_application() {

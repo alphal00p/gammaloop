@@ -107,8 +107,11 @@ pub fn modular_arithmetic_from_environment() -> Result<OrderedWeightArithmetic> 
 }
 
 /// The Ordered step cache selected by `VAKINT_ORDERED_CACHE` (`off`,
-/// `read-only` or `read-write`) and `VAKINT_ORDERED_CACHE_DIR`; the engine
-/// default (in memory, read-write) when neither is set.
+/// `read-only` or `read-write`), `VAKINT_ORDERED_CACHE_DIR`,
+/// `VAKINT_ORDERED_CACHE_SHIPPED` (`on`/`off`: use the caches the data ship)
+/// and `VAKINT_ORDERED_CACHE_MAX_RESIDENT_BYTES` (bytes per program, `none`
+/// for no ceiling); the engine default (in memory, read-write, shipped caches
+/// used) otherwise.
 pub fn ordered_cache_from_environment() -> Result<OrderedCacheSettings> {
     let mut settings = OrderedCacheSettings {
         directory: std::env::var_os("VAKINT_ORDERED_CACHE_DIR").map(PathBuf::from),
@@ -116,6 +119,23 @@ pub fn ordered_cache_from_environment() -> Result<OrderedCacheSettings> {
     };
     if let Some(mode) = std::env::var_os("VAKINT_ORDERED_CACHE") {
         settings.mode = mode.to_string_lossy().parse::<OrderedCacheMode>()?;
+    }
+    if let Some(shipped) = std::env::var_os("VAKINT_ORDERED_CACHE_SHIPPED") {
+        settings.shipped = match shipped.to_string_lossy().trim() {
+            "on" | "1" | "true" => true,
+            "off" | "0" | "false" => false,
+            other => return Err(format!("VAKINT_ORDERED_CACHE_SHIPPED={other:?}").into()),
+        };
+    }
+    if let Some(bytes) = std::env::var_os("VAKINT_ORDERED_CACHE_MAX_RESIDENT_BYTES") {
+        settings.max_resident_bytes = match bytes.to_string_lossy().trim() {
+            "none" => None,
+            bytes => Some(
+                bytes
+                    .parse()
+                    .map_err(|_| format!("VAKINT_ORDERED_CACHE_MAX_RESIDENT_BYTES={bytes:?}"))?,
+            ),
+        };
     }
     Ok(settings)
 }
@@ -322,6 +342,7 @@ fn ordered_cache_report(engine: &Vakint, settings: &OrderedCacheSettings) -> ser
         "directory": settings.directory,
         "autosave": settings.autosave.as_str(),
         "max_resident_bytes": settings.max_resident_bytes,
+        "shipped_setting": settings.shipped,
         "records": statistics.records, "hits": statistics.hits, "misses": statistics.misses,
         "inserts": statistics.inserts, "resident_bytes": statistics.resident_bytes,
         "file_bytes": statistics.file_bytes,
@@ -329,6 +350,7 @@ fn ordered_cache_report(engine: &Vakint, settings: &OrderedCacheSettings) -> ser
         "programs": statistics.programs.iter().map(|program| serde_json::json!({
             "program": program.program, "data_version": program.data_version,
             "rule_tables": program.rule_tables, "stamp": program.stamp, "directory": program.directory,
+            "shipped": program.shipped,
             "records": program.native.records, "hits": program.native.hits,
             "misses": program.native.misses, "inserts": program.native.inserts,
             "loaded_shards": program.native.loaded_shards, "shards": program.native.shards.len(),

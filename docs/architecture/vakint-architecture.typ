@@ -79,8 +79,9 @@ the crate's `external_data.typ` for loading and release conventions.
 Vakint reduces only with RustRed's ordered scheduler and has no reduction-result cache (its
 Ordered step cache records one checked step per expanded key, see below). The
 prepared depth-first caches and benchmark inputs that older releases list in their pack
-manifests are never read at run time, so loading skips their checksums; every other listed file
-is validated before activation. A saved-application path inside a recognized release uses that release's cumulative
+manifests are never read at run time, and shipped Ordered step caches are read only when a
+program uses them, so loading skips their checksums; every other listed file is validated before
+activation. A saved-application path inside a recognized release uses that release's cumulative
 snapshot; a bare application supplies terminal declarations without inventing coefficient or
 graph records.
 
@@ -460,6 +461,14 @@ version; no engine source digests), a resident
 ceiling and an autosave policy; `load_`, `save_`, `warm_`, `clear_ordered_cache` and
 `ordered_cache_statistics` are the operations (`symbolica_community_module::cache` holds the
 Python report conversion). A foreign or corrupt directory is rejected, not replayed.
+`rustred_evaluation::shipped_cache` uses the caches an external-data pack ships in the same
+directory layout (`<L>L/ordered-cache/`, `ordered-cache.json`, every file listed with its sha256 in
+the loop manifest) under the same rule: used iff their stamp and rule tables are the program's and
+their files match the manifest's sha256, otherwise one stderr line and a cold program (no
+attestation or restamping). Without a cache directory an accepted cache is opened in place,
+read-only on disk, with new records kept in memory; with a directory it is copied into the
+program's empty subdirectory there. The `ordered_cache_maintenance` example prepares (cold run,
+export) and checks them.
 
 A reproducible result therefore depends on more than the input expression: record the topology
 form, numerator, normalization convention, epsilon depth, decimal precision, backend order and
