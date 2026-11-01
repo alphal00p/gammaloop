@@ -25,6 +25,34 @@ fn sunset() -> (FeynmanDiagram, IntegralFamily) {
 }
 
 #[test]
+fn graph_ingress_rejects_open_external_half_edges() {
+    let diagram = FeynmanDiagram::from_dot(
+        Model::phi3(),
+        r#"digraph bubble {
+            ext [style=invis];
+            ext -> a [particle="phi"];
+            a -> b [particle="phi", lmb_id=0];
+            a -> b [particle="phi"];
+            b -> ext [particle="phi"];
+        }"#,
+    )
+    .unwrap();
+    assert!(
+        diagram
+            .edges()
+            .any(|(_, ends, _)| ends.source.is_none() || ends.target.is_none())
+    );
+    let family = diagram.propagator_family(&Kinematics::new()).unwrap();
+    let result = VakintExpression::from_diagram(
+        &diagram,
+        &family,
+        &Atom::one(),
+        &DiagramIntegralOptions::default(),
+    );
+    assert!(matches!(result, Err(VakintError::InvalidIntegralFormat(_))));
+}
+
+#[test]
 fn native_graph_ingress_preserves_high_rank_factored_numerator() {
     let (diagram, family) = sunset();
     let first = &family.denominators()[0] + &family.denominators()[1];
