@@ -303,15 +303,20 @@ fn five_loop_zero_momentum_ordered_matches_saved_depth_first_result() -> fixture
 }
 
 /// The saved 5L quadratic result: digests of the canonical retained
-/// expression and of its nonzero conditions, for one five-loop pack and one
-/// prepared input.
+/// expression and of its nonzero conditions, for one five-loop reduction
+/// payload and one prepared input.
 struct FiveLoopFixture {
     /// Data release the digests were produced with.
     data: &'static str,
-    /// sha256 of its `5L/manifest.json` (the release manifest's declared
-    /// `manifest_sha256` of the 5L pack), which pins every 5L file. Releases
-    /// that change only other packs keep it.
-    five_loop_pack_manifest_sha256: &'static str,
+    /// sha256 of the pack's `5L/ibps/application.json`, which pins every
+    /// reduction payload of the saved application by BLAKE3.
+    application_sha256: &'static str,
+    /// [`five_loop_reduction_payload_sha256`] of that pack: the declared
+    /// sha256 of every file its 5L manifest's `ibps.files` names. Derived
+    /// files a pack may add or change (shipped Ordered caches, the route
+    /// preparation add-on, documentation) do not enter it, so the gate holds
+    /// for every pack with the same reduction.
+    reduction_payload_sha256: &'static str,
     /// sha256 of the canonical prepared input.
     input_sha256: &'static str,
     /// sha256 of `retained.symbolica`.
@@ -327,13 +332,15 @@ struct FiveLoopFixture {
 /// new data and a fresh evidence directory under two different weight
 /// arithmetics (e.g. `modular_polynomial` and `modular_sampled`), check that
 /// both `retained.symbolica` and `nonzero-conditions.symbolica` agree byte for
-/// byte, then replace the release name and all four digests here (the pack
-/// digest is `sha256sum 5L/manifest.json` of the data checkout; the others are
-/// the `report.json` fields `input_sha256`, `retained.sha256` and
-/// `guards.payload.sha256`).
+/// byte, then replace the release name and all five digests here (the test's
+/// gate error prints the two payload digests of the data checkout; the others
+/// are the `report.json` fields `input_sha256`, `retained.sha256` and
+/// `guards.payload.sha256`). Data that only add or change derived files
+/// (ordered caches, the route preparation add-on) keep the fixture.
 const FIVE_LOOP_QUADRATIC_FIXTURE: FiveLoopFixture = FiveLoopFixture {
     data: "vakint-external-data v0.1.2 (f1626f67)",
-    five_loop_pack_manifest_sha256: "036858d6d8ca3e48a2a9c6edd2c944eab48c7fc4d92902a99df2f9cdfa9b2160",
+    application_sha256: "976d574c4ad8b4021ac7a1914c624095a77f5975b98e243c7a20a9396a86ff03",
+    reduction_payload_sha256: "aadd2d6b8521a8b0000119803ea00e96324acc1d824a80f43b4c880011613071",
     input_sha256: "276d17a136aa5292b82effe05354d0b7cb639966a5f3797f960bbdf9f301a1fa",
     retained_sha256: "093086472ecdc75fd7180f5ce08a758f822a3048a3661eb8cc60c06e07ce34a4",
     nonzero_conditions_sha256: "5a56684173706ff69d9991147666a47fe04fff88beb888d67f006e45041a7be3",
@@ -342,6 +349,79 @@ const FIVE_LOOP_QUADRATIC_FIXTURE: FiveLoopFixture = FiveLoopFixture {
 fn sha256_hex(bytes: &[u8]) -> String {
     use sha2::Digest;
     format!("{:x}", sha2::Sha256::digest(bytes))
+}
+
+/// The 5L reduction payload of a data checkout: sha256 over the lines
+/// `<path> <declared sha256>\n`, sorted by path, of every file that its
+/// `5L/manifest.json` lists in `ibps.files` (the saved application with all
+/// its payloads, queries and selection); returns it with the sha256 of the
+/// `ibps/application.json` bytes. Loading the data verifies every listed file
+/// against its declared sha256.
+fn five_loop_reduction_payload_sha256(data: &std::path::Path) -> fixture::Result<(String, String)> {
+    let manifest: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(data.join("5L/manifest.json"))?)?;
+    let mut files = manifest["ibps"]["files"]
+        .as_array()
+        .ok_or("5L/manifest.json has no ibps.files")?
+        .iter()
+        .map(|path| {
+            let path = path.as_str().ok_or("ibps.files holds a non-string")?;
+            let sha256 = manifest["files"][path]["sha256"]
+                .as_str()
+                .ok_or_else(|| format!("5L/manifest.json does not list {path}"))?;
+            Ok(format!("{path} {sha256}\n"))
+        })
+        .collect::<fixture::Result<Vec<_>>>()?;
+    files.sort();
+    Ok((
+        sha256_hex(files.concat().as_bytes()),
+        sha256_hex(&std::fs::read(data.join("5L/ibps/application.json"))?),
+    ))
+}
+
+/// Derived files (shipped Ordered caches, the route preparation add-on) may
+/// be added to the 5L pack without invalidating the quadratic fixture; any
+/// change of a reduction payload invalidates it.
+#[test]
+fn five_loop_fixture_gate_pins_the_reduction_payload_only() -> fixture::Result<()> {
+    let data = tempfile::tempdir()?;
+    std::fs::create_dir_all(data.path().join("5L/ibps"))?;
+    let application = b"{\"schema\": \"saved application\"}";
+    std::fs::write(data.path().join("5L/ibps/application.json"), application)?;
+    let mut manifest = serde_json::json!({
+        "ibps": {"kind": "saved-application", "path": "ibps",
+                 "files": ["ibps/application.json", "ibps/objects/a.rrbin.gz.part"]},
+        "files": {
+            "ibps/application.json": {"sha256": sha256_hex(application), "bytes": application.len()},
+            "ibps/objects/a.rrbin.gz.part": {"sha256": "a".repeat(64), "bytes": 1},
+            "coverage.json": {"sha256": "c".repeat(64), "bytes": 1},
+        },
+    });
+    let write = |manifest: &serde_json::Value| {
+        std::fs::write(
+            data.path().join("5L/manifest.json"),
+            serde_json::to_vec_pretty(manifest).unwrap(),
+        )
+    };
+    write(&manifest)?;
+    let gate = five_loop_reduction_payload_sha256(data.path())?;
+    assert_eq!(gate.1, sha256_hex(application));
+    for derived in [
+        "route-preparation.rrbin",
+        "ordered-cache.json",
+        "ordered-cache/5L-x.0.0/ordered-step-cache.txt",
+    ] {
+        manifest["files"][derived] = serde_json::json!({"sha256": "d".repeat(64), "bytes": 1});
+    }
+    manifest["route_preparation"] = serde_json::json!({"path": "route-preparation.rrbin"});
+    manifest["ordered_cache"] =
+        serde_json::json!({"path": "ordered-cache", "metadata": "ordered-cache.json"});
+    write(&manifest)?;
+    assert_eq!(five_loop_reduction_payload_sha256(data.path())?, gate);
+    manifest["files"]["ibps/objects/a.rrbin.gz.part"]["sha256"] = "b".repeat(64).into();
+    write(&manifest)?;
+    assert_ne!(five_loop_reduction_payload_sha256(data.path())?.0, gate.0);
+    Ok(())
 }
 
 #[test]
@@ -354,15 +434,19 @@ fn five_loop_quadratic_ordered_retains_declared_masters() -> fixture::Result<()>
     );
     // Fail before the long run: an ignored test only runs on request, and a
     // silent skip would read as a pass.
-    let pack = sha256_hex(&std::fs::read(data.join("5L/manifest.json"))?);
-    if pack != fixture_data.five_loop_pack_manifest_sha256 {
+    let (payload, application) = five_loop_reduction_payload_sha256(&data)?;
+    if payload != fixture_data.reduction_payload_sha256
+        || application != fixture_data.application_sha256
+    {
         return Err(format!(
-            "the saved digests belong to the 5L pack of {} (5L/manifest.json sha256 {}), but {} \
-             has 5L/manifest.json sha256 {pack}. Run against that pack, or regenerate the \
-             fixture as documented at FIVE_LOOP_QUADRATIC_FIXTURE in \
+            "the saved digests belong to the 5L reduction payload of {} (payload sha256 {}, \
+             ibps/application.json sha256 {}), but {} has payload sha256 {payload} and \
+             ibps/application.json sha256 {application}. Run against that data, or regenerate \
+             the fixture as documented at FIVE_LOOP_QUADRATIC_FIXTURE in \
              tests/ordered_reduction_rungs.rs.",
             fixture_data.data,
-            fixture_data.five_loop_pack_manifest_sha256,
+            fixture_data.reduction_payload_sha256,
+            fixture_data.application_sha256,
             data.display()
         )
         .into());
