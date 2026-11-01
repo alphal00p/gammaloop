@@ -1,4 +1,4 @@
-//! Supervisor-side presentation of the worker's unchanged display projection.
+//! Supervisor-side presentation of a worker's published monitor model.
 
 use std::path::Path;
 
@@ -46,11 +46,19 @@ impl RustRedSnapshotViewer {
     /// only this attachment; the supervisor retains its ordinary worker policy.
     pub fn refresh(&mut self) {
         #[cfg(feature = "progress-tui")]
-        if let Some(active) = self.active.as_mut()
-            && !std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| active.refresh()))
-                .is_ok_and(|result| result.unwrap_or(false))
-        {
-            self.active = None;
+        if let Some(active) = self.active.as_mut() {
+            let outcome =
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| active.refresh()))
+                    .ok()
+                    .and_then(Result::ok)
+                    .unwrap_or(Refresh::Detach);
+            if outcome != Refresh::Continue {
+                // Restore the terminal before any signal is delivered.
+                self.active = None;
+                if outcome == Refresh::Interrupt {
+                    super::tui::interrupt_foreground_group();
+                }
+            }
         }
     }
 }
@@ -70,10 +78,19 @@ use std::{
 
 #[cfg(feature = "progress-tui")]
 use super::{
-    MonitorStatus, MonitorView, NativeCollectionSample, ResourceUsage, UiAction,
+    ResourceUsage, UiAction, UiView,
+    model::{GuardSummary, MODEL_SCHEMA, MemoryModel, MonitorModel},
     runtime::{ResourceBinding, ResourceTask},
     tui,
 };
+
+#[cfg(feature = "progress-tui")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Refresh {
+    Continue,
+    Detach,
+    Interrupt,
+}
 
 #[cfg(feature = "progress-tui")]
 #[derive(serde::Deserialize)]
@@ -81,40 +98,20 @@ struct SnapshotEnvelope {
     monitor: Option<PublishedView>,
 }
 
+/// The parts of a worker's `monitor` object the viewer reads.
 #[cfg(feature = "progress-tui")]
 #[derive(Clone, serde::Deserialize)]
 struct PublishedView {
-    view: MonitorView,
+    #[serde(default)]
+    schema: Option<String>,
+    #[serde(default)]
+    model: Option<MonitorModel>,
     published_unix_seconds: Option<f64>,
     worker_pid: Option<u32>,
     #[serde(default)]
     worker_start_ticks: Option<u64>,
     #[serde(default)]
     phase: Option<String>,
-    #[serde(default)]
-    native_work_active: Option<bool>,
-    #[serde(default)]
-    phase_elapsed_seconds: Option<f64>,
-    #[serde(default)]
-    event_age_seconds: Option<f64>,
-    #[serde(default)]
-    native_observation_age_seconds: Option<f64>,
-    #[serde(default)]
-    native_quantitative_sample_age_seconds: Option<f64>,
-    #[serde(default)]
-    native_document_age_seconds: Option<f64>,
-    #[serde(default)]
-    resources: Option<ResourceUsage>,
-    #[serde(default)]
-    native_collection: Option<NativeCollectionSample>,
-    #[serde(default)]
-    ordered_reduction: Option<OrderedCensusAge>,
-}
-
-#[cfg(feature = "progress-tui")]
-#[derive(Clone, serde::Deserialize)]
-struct OrderedCensusAge {
-    sample_age_seconds: Option<f64>,
 }
 
 #[cfg(feature = "progress-tui")]
@@ -297,28 +294,6 @@ impl SnapshotReader {
 
 #[cfg(feature = "progress-tui")]
 impl PublishedView {
-    fn ordered_census_age(&self, publication_age: Option<Duration>) -> Option<Duration> {
-        self.ordered_reduction
-            .as_ref()?
-            .sample_age_seconds
-            .and_then(|age| Duration::try_from_secs_f64(age).ok())
-            .zip(publication_age)
-            .map(|(age, publication)| age.saturating_add(publication))
-    }
-
-    fn collection_rows(&self, publication_age: Option<Duration>) -> Vec<(String, String)> {
-        if self.ordered_reduction.is_some() && self.native_collection.is_none() {
-            return Vec::new();
-        }
-        let mut sample = self.native_collection.clone().unwrap_or_default();
-        sample.sample_age_seconds = sample
-            .sample_age_seconds
-            .and_then(|age| Duration::try_from_secs_f64(age).ok())
-            .zip(publication_age)
-            .map(|(age, publication)| age.saturating_add(publication).as_secs_f64());
-        sample.rows()
-    }
-
     fn bind_resources(&self, binding: &ResourceBinding) -> bool {
         let Some(expected) = self.worker_start_ticks else {
             // A legacy record can still be inspected, but supplies no identity.
@@ -328,6 +303,8 @@ impl PublishedView {
         binding.try_bind_start_ticks(expected)
     }
 
+    /// The attachment's OS sample, with process values only for the
+    /// published live worker identity.
     fn verified_resources(&self, sample: &ResourceUsage) -> ResourceUsage {
         let mut live = sample.clone();
         if !(sample.process_identity_verified
@@ -343,99 +320,28 @@ impl PublishedView {
             live.cpu_percent = None;
             live.rss_bytes = None;
             live.peak_rss_bytes = None;
-            live.source = live
-                .source
-                .as_ref()
-                .map(|_| "attachment host OS sample; worker PID/start unverified or exited".into());
         }
         live
     }
 
-    fn resource_rows(
-        &self,
-        live: &ResourceUsage,
-        publication_age: Option<Duration>,
-    ) -> Vec<(String, String)> {
-        let mut rows = live.rows();
-        if !live.process_identity_verified {
-            let recorded = self.resources.as_ref().map(ResourceUsage::rows);
-            let recorded_age = self
-                .resources
-                .as_ref()
-                .and_then(|sample| sample.sample_age_seconds)
-                .and_then(|age| Duration::try_from_secs_f64(age).ok())
-                .zip(publication_age)
-                .map(|(sample, publication)| sample.saturating_add(publication));
-            for (label, value) in &mut rows {
-                if matches!(label.as_str(), "Process CPU usage" | "Process RSS / peak") {
-                    let previous = recorded
-                        .as_ref()
-                        .unwrap_or(&self.view.cache)
-                        .iter()
-                        .find(|(name, _)| name == label);
-                    *value = previous.map_or_else(
-                        || "unknown; live worker PID/start is unverified".into(),
-                        |(_, previous)| {
-                            format!(
-                                "recorded/unverified · {previous} · {}",
-                                recorded_age.map_or_else(
-                                    || format!(
-                                        "sample age unknown; publication age {}",
-                                        publication_age.map_or_else(
-                                            || "unknown".into(),
-                                            |age| format!("{:.1}s", age.as_secs_f64())
-                                        )
-                                    ),
-                                    |age| format!("sample age {:.1}s", age.as_secs_f64())
-                                )
-                            )
-                        },
-                    );
-                }
-            }
-        }
-        if let Some((_, detail)) = rows
-            .iter_mut()
-            .find(|(label, _)| label == "Memory units / raw values")
-        {
-            *detail = "IEC units; attachment OS samples separate from recorded worker JSON".into();
-        }
-        rows
+    /// Memory of the attachment: live host values, live process values of
+    /// a verified worker, and the worker's (aged) guard report only then.
+    fn memory(&self, sample: &ResourceUsage, guard: Option<GuardSummary>) -> MemoryModel {
+        let live = self.verified_resources(sample);
+        let mut memory = live.memory();
+        memory.guard = guard.filter(|_| live.process_identity_verified);
+        memory
     }
 
-    fn guard_rows(
-        &self,
-        verified: bool,
-        publication_age: Option<Duration>,
-    ) -> Vec<(String, String)> {
-        let mut guard = self
-            .resources
-            .as_ref()
-            .map(|resources| resources.guard.clone())
-            .unwrap_or_default();
-        if let Some(age) = guard.report_age_seconds.as_mut() {
-            if let Some(publication) = publication_age {
-                *age += publication.as_secs_f64();
-            } else {
-                guard.status = "unknown".into();
-                guard.current_process_covered = false;
-            }
-            if guard
-                .sample_seconds
-                .is_some_and(|interval| *age > 3.0 * interval as f64)
-            {
-                guard.status = "unknown".into();
-                guard.current_process_covered = false;
-                guard.detail = Some("stale guard report; no active coverage claim".into());
-            }
-        }
-        if !verified {
-            guard.status = "unknown".into();
-            guard.current_process_covered = false;
-            guard.detail =
-                Some("worker PID/start is unverified; no live guard coverage claim".into());
-        }
-        guard.rows()
+    /// What the attachment shows: the worker's model `age` after its
+    /// publication (clocks, rates and guard report advanced; a stale worker
+    /// is not shown as running) with the attachment's own OS sample.
+    fn attached_model(&self, age: Option<Duration>, sample: &ResourceUsage) -> MonitorModel {
+        let mut model = self.model();
+        model.at_snapshot_age(age.map(|age| age.as_secs_f64()));
+        let guard = model.memory.guard.take();
+        model.memory = self.memory(sample, guard);
+        model
     }
 
     fn matches_worker(&self, worker_pid: u32, attached: Option<f64>) -> bool {
@@ -454,13 +360,26 @@ impl PublishedView {
         Duration::try_from_secs_f64(now - self.published_unix_seconds?).ok()
     }
 
-    fn phase(&self) -> Option<&str> {
-        self.phase.as_deref().or_else(|| {
-            self.view
-                .overview
-                .iter()
-                .find_map(|(label, value)| (label == "Phase").then_some(value.as_str()))
-        })
+    /// The published model; an older worker without one shows its phase.
+    fn model(&self) -> MonitorModel {
+        match &self.model {
+            Some(model) if self.schema.as_deref() == Some(MODEL_SCHEMA) => model.clone(),
+            _ => {
+                let id = self.phase.clone().unwrap_or_default();
+                MonitorModel {
+                    stage: super::model::StageModel {
+                        kind: super::model::classify_stage(&id),
+                        id,
+                        ..Default::default()
+                    },
+                    events: vec![format!(
+                        "worker snapshot schema {} has no {MODEL_SCHEMA} model",
+                        self.schema.as_deref().unwrap_or("v1")
+                    )],
+                    ..Default::default()
+                }
+            }
+        }
     }
 }
 
@@ -473,14 +392,12 @@ struct ActiveViewer {
     attached_unix_seconds: Option<f64>,
     reader: Option<SnapshotReader>,
     resource_task: Option<ResourceTask>,
-    latest: Arc<PublishedView>,
+    latest: Option<Arc<PublishedView>>,
     received_at: Instant,
     publication_age: Option<Duration>,
-    phase_observed_at: Instant,
     resources: Option<(ResourceUsage, Duration)>,
-    frozen: Option<Arc<PublishedView>>,
-    show_help: bool,
-    scroll: usize,
+    frozen: Option<MonitorModel>,
+    ui: UiView,
 }
 
 #[cfg(feature = "progress-tui")]
@@ -524,43 +441,12 @@ impl ActiveViewer {
                 .map(|now| now.as_secs_f64()),
             reader: None,
             resource_task: None,
-            latest: Arc::new(PublishedView {
-                view: MonitorView {
-                    title: "RustRed · worker snapshot".into(),
-                    subtitle: "Waiting for a worker snapshot; no native work observed yet".into(),
-                    status: MonitorStatus::Running,
-                    frozen: false,
-                    show_help: false,
-                    scroll: 0,
-                    overview: Vec::new(),
-                    frontier: Vec::new(),
-                    cache: Vec::new(),
-                    complexity: Vec::new(),
-                    estimates: Vec::new(),
-                    path: Vec::new(),
-                    events: Vec::new(),
-                },
-                published_unix_seconds: None,
-                worker_pid: None,
-                worker_start_ticks: None,
-                phase: None,
-                native_work_active: None,
-                phase_elapsed_seconds: None,
-                event_age_seconds: None,
-                native_observation_age_seconds: None,
-                native_quantitative_sample_age_seconds: None,
-                native_document_age_seconds: None,
-                resources: None,
-                native_collection: None,
-                ordered_reduction: None,
-            }),
+            latest: None,
             received_at: Instant::now(),
             publication_age: None,
-            phase_observed_at: Instant::now(),
             resources: None,
             frozen: None,
-            show_help: false,
-            scroll: 0,
+            ui: UiView::default(),
         }
     }
 
@@ -586,12 +472,12 @@ impl ActiveViewer {
                 return Err(error);
             }
             if let Some(published) = update.published
-                && !Arc::ptr_eq(&published, &self.latest)
+                && !self
+                    .latest
+                    .as_ref()
+                    .is_some_and(|latest| Arc::ptr_eq(&published, latest))
             {
-                if published.phase() != self.latest.phase() {
-                    self.phase_observed_at = Instant::now();
-                }
-                self.latest = published;
+                self.latest = Some(published);
                 self.received_at = update.received_at;
                 self.publication_age = update.publication_age;
             }
@@ -599,222 +485,70 @@ impl ActiveViewer {
         Ok(())
     }
 
-    fn refresh(&mut self) -> io::Result<bool> {
+    fn refresh(&mut self) -> io::Result<Refresh> {
         if let Some(action) = tui::poll_action(Duration::ZERO)? {
             match action {
-                UiAction::Detach => return Ok(false),
+                UiAction::Detach => return Ok(Refresh::Detach),
+                UiAction::Interrupt => return Ok(Refresh::Interrupt),
                 UiAction::ToggleFreeze => {
                     self.frozen = if self.frozen.is_some() {
                         None
                     } else {
-                        Some(self.latest.clone())
+                        Some(self.model(Instant::now()))
                     };
                 }
-                UiAction::ToggleHelp => self.show_help = !self.show_help,
-                UiAction::ScrollUp => self.scroll = self.scroll.saturating_sub(1),
-                UiAction::ScrollDown => self.scroll = self.scroll.saturating_add(1),
-                UiAction::PageUp => self.scroll = self.scroll.saturating_sub(10),
-                UiAction::PageDown => self.scroll = self.scroll.saturating_add(10),
+                UiAction::ToggleHelp => self.ui.show_help = !self.ui.show_help,
+                UiAction::ToggleDetails => {
+                    self.ui.show_details = !self.ui.show_details;
+                    self.ui.scroll = 0;
+                }
+                UiAction::ScrollUp => self.ui.scroll = self.ui.scroll.saturating_sub(1),
+                UiAction::ScrollDown => self.ui.scroll = self.ui.scroll.saturating_add(1),
+                UiAction::PageUp => self.ui.scroll = self.ui.scroll.saturating_sub(10),
+                UiAction::PageDown => self.ui.scroll = self.ui.scroll.saturating_add(10),
             }
         }
         self.receive()?;
-        let view = self.view(Instant::now());
-        let maximum_scroll = self.terminal.draw_view(&view, self.no_color)?;
-        self.scroll = self.scroll.min(maximum_scroll);
-        Ok(true)
+        let model = self.model(Instant::now());
+        let ui = UiView {
+            frozen: self.frozen.is_some(),
+            ..self.ui
+        };
+        let maximum_scroll = self.terminal.draw_model(&model, ui, self.no_color)?;
+        self.ui.scroll = self.ui.scroll.min(maximum_scroll);
+        Ok(Refresh::Continue)
     }
 
-    fn view(&self, now: Instant) -> MonitorView {
-        let published = self.frozen.as_ref().unwrap_or(&self.latest);
-        let mut view = published.view.clone();
-        // Only native panels freeze. Attachment liveness, status, estimates and
-        // independently sampled worker resources remain visible and current.
-        view.status = self.latest.view.status;
-        view.estimates = self.latest.view.estimates.clone();
-        view.frozen = self.frozen.is_some();
-        view.show_help = self.show_help;
-        view.scroll = self.scroll;
-        let since_read = now.saturating_duration_since(self.received_at);
-        let publication_age = self
+    /// The worker's model with its clocks advanced to `now` and this
+    /// attachment's own memory sample; native panels stay frozen on request.
+    fn model(&self, now: Instant) -> MonitorModel {
+        let Some(published) = &self.latest else {
+            return MonitorModel {
+                elapsed_seconds: now.saturating_duration_since(self.attached).as_secs_f64(),
+                events: vec!["waiting for the worker's first snapshot".into()],
+                ..Default::default()
+            };
+        };
+        let age = self
             .publication_age
-            .map(|age| age.saturating_add(since_read));
-        let event_age = self
-            .latest
-            .event_age_seconds
-            .and_then(|age| Duration::try_from_secs_f64(age).ok())
-            .zip(publication_age)
-            .map(|(age, publication)| age.saturating_add(publication));
-        let native_age = self
-            .latest
-            .native_observation_age_seconds
-            .and_then(|age| Duration::try_from_secs_f64(age).ok())
-            .zip(publication_age)
-            .map(|(age, publication)| age.saturating_add(publication));
-        let quantitative_age = self
-            .latest
-            .native_quantitative_sample_age_seconds
-            .and_then(|age| Duration::try_from_secs_f64(age).ok())
-            .zip(publication_age)
-            .map(|(age, publication)| age.saturating_add(publication));
-        let projection_age = self
-            .latest
-            .native_document_age_seconds
-            .and_then(|age| Duration::try_from_secs_f64(age).ok())
-            .zip(publication_age)
-            .map(|(age, publication)| age.saturating_add(publication));
-        let phase_elapsed = self
-            .latest
-            .phase_elapsed_seconds
-            .and_then(|age| Duration::try_from_secs_f64(age).ok())
-            .zip(publication_age)
-            .map(|(age, publication)| age.saturating_add(publication));
-        let seconds = |age: Option<Duration>| {
-            age.map_or_else(
-                || "unknown".into(),
-                |age| format!("{:.1}s", age.as_secs_f64()),
-            )
-        };
-        let phase_clock = phase_elapsed.map_or_else(
-            || {
-                format!(
-                    "observed {:.1}s (attachment only)",
-                    now.saturating_duration_since(self.phase_observed_at)
+            .map(|age| age.saturating_add(now.saturating_duration_since(self.received_at)));
+        let sample = self.resources.as_ref().map_or_else(
+            ResourceUsage::default,
+            |(resources, sampled_at)| {
+                let mut resources = resources.clone();
+                resources.sample_age_seconds = resources.source.as_ref().map(|_| {
+                    now.saturating_duration_since(self.attached)
+                        .saturating_sub(*sampled_at)
                         .as_secs_f64()
-                )
+                });
+                resources
             },
-            |elapsed| seconds(Some(elapsed)),
         );
-        view.subtitle = format!(
-            "{} · active {} · observer age {} · Attachment live {:.1}s",
-            self.latest
-                .phase()
-                .unwrap_or("waiting for worker")
-                .replace('_', " "),
-            phase_clock,
-            seconds(event_age),
-            now.saturating_duration_since(self.attached).as_secs_f64()
-        );
-        let live_rows = [
-            (
-                "Phase".into(),
-                self.latest.phase().unwrap_or("unobserved").into(),
-            ),
-            ("Worker publication age".into(), seconds(publication_age)),
-            ("Active phase elapsed".into(), phase_clock),
-            ("Worker observer event age".into(), seconds(event_age)),
-            ("Snapshot age".into(), seconds(event_age)),
-            ("Last native observation age".into(), seconds(native_age)),
-            (
-                "Native quantitative sample age".into(),
-                seconds(quantitative_age),
-            ),
-            ("Native projection age".into(), seconds(projection_age)),
-            (
-                "Progress state".into(),
-                if self.latest.published_unix_seconds.is_none() {
-                    "awaiting worker observation; indeterminate"
-                } else if event_age.is_none_or(|age| age >= Duration::from_secs(1))
-                    && view.status == MonitorStatus::Running
-                {
-                    "no newer worker observer event; indeterminate"
-                } else {
-                    "worker observations; no global completion certificate"
-                }
-                .into(),
-            ),
-        ];
-        view.overview
-            .retain(|(label, _)| !live_rows.iter().any(|(live, _)| label == live));
-        view.overview.extend(live_rows);
-        let collection_rows = self.latest.collection_rows(publication_age);
-        view.overview
-            .retain(|(label, _)| !collection_rows.iter().any(|(live, _)| label == live));
-        view.overview.extend(collection_rows);
-        // Batch/cohort counters belong to the caller job, so they remain live
-        // while the user freezes native panels, including when a new batch
-        // clears the previous batch's cohort census.
-        view.overview.retain(|(label, _)| {
-            !matches!(
-                label.as_str(),
-                "Ordered batches completed / total" | "Compatible cohorts completed / total"
-            )
-        });
-        let batch_rows = self
-            .latest
-            .view
-            .overview
-            .iter()
-            .filter(|(label, _)| {
-                matches!(
-                    label.as_str(),
-                    "Ordered batches completed / total" | "Compatible cohorts completed / total"
-                )
-            })
-            .cloned();
-        let insertion = view.overview.len().min(3);
-        view.overview.splice(insertion..insertion, batch_rows);
-        if self.frozen.is_none()
-            && let Some((_, value)) = view
-                .complexity
-                .iter_mut()
-                .find(|(label, _)| label == "Ordered frontier census age")
-        {
-            *value = seconds(self.latest.ordered_census_age(publication_age));
+        let model = published.attached_model(age, &sample);
+        match &self.frozen {
+            Some(frozen) => model.with_frozen_native(frozen),
+            None => model,
         }
-        for (label, value) in &self.latest.view.overview {
-            if matches!(
-                label.as_str(),
-                "Caller phase progress"
-                    | "Request finished"
-                    | "Monitor scope"
-                    | "Reduction API status"
-                    | "Whole job finished"
-            ) && let Some(row) = view.overview.iter_mut().find(|(name, _)| name == label)
-            {
-                row.1 = value.clone();
-            }
-        }
-        if let Some((_, age)) = view
-            .estimates
-            .iter_mut()
-            .find(|(label, _)| label == "Estimate sample age")
-        {
-            *age = seconds(quantitative_age);
-        }
-        if (self.latest.native_work_active != Some(true)
-            || quantitative_age.is_none_or(|age| age >= Duration::from_secs(1)))
-            && view.status == MonitorStatus::Running
-        {
-            for (label, estimate) in &mut view.estimates {
-                if label.ends_with("ETA") {
-                    *estimate = "indeterminate · no newer quantitative sample".into();
-                }
-            }
-        }
-        let sample = if let Some((resources, sampled_at)) = &self.resources {
-            let mut resources = resources.clone();
-            resources.sample_age_seconds = resources.source.as_ref().map(|_| {
-                now.saturating_duration_since(self.attached)
-                    .saturating_sub(*sampled_at)
-                    .as_secs_f64()
-            });
-            resources
-        } else {
-            ResourceUsage::default()
-        };
-        let live = self.latest.verified_resources(&sample);
-        view.subtitle.push('\n');
-        view.subtitle.push_str(&live.headline());
-        let mut rows = self.latest.resource_rows(&live, publication_age);
-        rows.extend(
-            self.latest
-                .guard_rows(live.process_identity_verified, publication_age),
-        );
-        view.cache
-            .retain(|(label, _)| !rows.iter().any(|(live, _)| label == live));
-        rows.extend(view.cache);
-        view.cache = rows;
-        view
     }
 }
 
@@ -830,6 +564,8 @@ mod tests {
         time::Instant,
     };
 
+    use super::super::MonitorStatus;
+    use super::super::model::MODEL_SCHEMA;
     use super::*;
 
     struct PausedChild(std::process::Child);
@@ -880,14 +616,18 @@ mod tests {
     }
 
     fn snapshot(pid: u32, published: f64) -> serde_json::Value {
-        let mut view = super::super::MonitorState::default().view(Duration::ZERO);
-        view.frontier = vec![("Synthetic unchanged identities".into(), "7".into())];
+        let mut model = super::super::MonitorState::default().live_model(Duration::ZERO);
+        model.stage.id = "synthetic_paused_producer".into();
+        model.details.event_age_seconds = Some(0.0);
+        model.ordered = Some(super::super::model::OrderedModel {
+            processed_keys: 7,
+            ..Default::default()
+        });
         serde_json::json!({"monitor": {
-            "view":view, "worker_pid":pid, "published_unix_seconds":published,
+            "schema": MODEL_SCHEMA, "model": model,
+            "worker_pid":pid, "published_unix_seconds":published,
             "worker_start_ticks":super::super::runtime::ResourceSampler::current_start_ticks(pid),
-            "phase":"synthetic_paused_producer", "phase_elapsed_seconds":0.0,
-            "event_age_seconds":0.0, "native_document_age_seconds":0.0,
-            "native_observation_age_seconds":0.0, "native_quantitative_sample_age_seconds":0.0
+            "phase":"synthetic_paused_producer"
         }})
     }
 
@@ -901,70 +641,122 @@ mod tests {
     }
 
     #[test]
-    fn collection_source_age_advances_without_refreshing_frontier_or_legacy_clocks() {
+    fn published_clocks_advance_by_publication_age_without_changing_counters() {
         let mut document = snapshot(42, 10.0);
-        document["monitor"]["native_collection"] = serde_json::json!({
-            "completed_roots":177, "total_roots":1750,
-            "contribution_index":3, "contribution_total":153,
-            "source":"native root collection", "sequence":42,
-            "sample_age_seconds":2.0
-        });
-        let envelope: SnapshotEnvelope = serde_json::from_value(document).unwrap();
-        let mut published = envelope.monitor.unwrap();
-        let frontier = published.view.frontier.clone();
-        let rows = published.collection_rows(Some(Duration::from_secs(36)));
-        let row = |label: &str| {
-            rows.iter()
-                .find(|(name, _)| name == label)
-                .unwrap()
-                .1
-                .as_str()
-        };
-        assert_eq!(
-            row("Current collection completed roots / total"),
-            "177 / 1750"
-        );
-        assert!(
-            row("Contribution currently assembled (index / total)")
-                .contains("3 / 153 · current item, not completed work")
-        );
-        assert_eq!(
-            row("Collection source / sample age"),
-            "native root collection / 38.0s"
-        );
-        assert_eq!(published.view.frontier, frontier);
-        assert_eq!(published.native_quantitative_sample_age_seconds, Some(0.0));
-        assert!(
-            published
-                .collection_rows(None)
-                .iter()
-                .any(|(label, value)| label == "Collection source / sample age"
-                    && value.ends_with("unknown"))
-        );
-        published.native_collection = None;
-        assert!(
-            published
-                .collection_rows(Some(Duration::from_secs(36)))
-                .iter()
-                .all(|(_, value)| value.contains("unknown"))
-        );
-    }
-
-    #[test]
-    fn ordered_census_age_advances_on_attachment_without_changing_counters() {
-        let mut document = snapshot(42, 10.0);
-        document["monitor"]["ordered_reduction"] = serde_json::json!({
-            "completed_phases":3, "total_phases":12,
-            "sample_age_seconds":2.0
+        document["monitor"]["model"]["stage"]["seconds"] = 2.0.into();
+        document["monitor"]["model"]["ordered"]["census_age_seconds"] = 2.0.into();
+        document["monitor"]["model"]["dfs"] = serde_json::json!({
+            "collection": {"completed_roots": 177, "total_roots": 1750, "age_seconds": 2.0}
         });
         let envelope: SnapshotEnvelope = serde_json::from_value(document).unwrap();
         let published = envelope.monitor.unwrap();
-        assert_eq!(
-            published.ordered_census_age(Some(Duration::from_secs(36))),
-            Some(Duration::from_secs(38))
+        let mut model = published.model();
+        model.advance(36.0);
+        assert_eq!(model.stage.seconds, 38.0);
+        let ordered = model.ordered.as_ref().unwrap();
+        assert_eq!(ordered.census_age_seconds, 38.0);
+        assert_eq!(ordered.processed_keys, 7);
+        let collection = model.dfs.as_ref().unwrap().collection.as_ref().unwrap();
+        assert_eq!(collection.age_seconds, Some(38.0));
+        assert_eq!(collection.completed_roots, Some(177));
+        // A finished worker's clocks stop; only ages keep growing.
+        let mut finished = published.model();
+        finished.status = MonitorStatus::Succeeded;
+        finished.advance(36.0);
+        assert_eq!(finished.stage.seconds, 2.0);
+        assert_eq!(finished.ordered.unwrap().census_age_seconds, 38.0);
+    }
+
+    /// A verified attachment sample of the fixture's worker.
+    fn attached_sample(pid: u32) -> ResourceUsage {
+        ResourceUsage {
+            process_pid: Some(pid),
+            process_start_ticks: Some(100),
+            process_identity_verified: true,
+            cpu_percent: Some(0.0),
+            rss_bytes: Some(8_697_000_000),
+            peak_rss_bytes: Some(8_701_000_000),
+            mem_total_bytes: Some(1_081_000_000_000),
+            mem_available_bytes: Some(222_500_000_000),
+            source: Some("fixture".into()),
+            sample_age_seconds: Some(0.4),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn a_silent_worker_is_not_shown_running_on_a_standard_terminal() {
+        use super::super::tui::tests::{
+            assert_screen, five_loop_route_five_full_log, render, text,
+        };
+        let mut model = five_loop_route_five_full_log();
+        model.memory.guard = Some(super::super::model::GuardSummary {
+            status: "active".into(),
+            threshold_bytes: Some(200_000_000_000),
+            covered: true,
+            report_age_seconds: Some(0.5),
+            interval_seconds: Some(1),
+        });
+        let pid = model.details.worker_pid.unwrap();
+        let published = PublishedView {
+            schema: Some(MODEL_SCHEMA.into()),
+            model: Some(model),
+            published_unix_seconds: Some(10.0),
+            worker_pid: Some(pid),
+            worker_start_ticks: Some(100),
+            phase: Some("native".into()),
+        };
+        let sample = attached_sample(pid);
+        // A fresh snapshot: running, with a current rate.
+        let fresh = published.attached_model(Some(Duration::from_millis(400)), &sample);
+        let screen = text(&render(&fresh, UiView::default(), 80, 24, true));
+        assert!(
+            screen.contains("● RUNNING") && screen.contains("/s now"),
+            "{screen}"
         );
-        assert!(published.ordered_census_age(None).is_none());
-        assert_eq!(published.native_quantitative_sample_age_seconds, Some(0.0));
+        assert!(!screen.contains("guard"), "{screen}");
+        // 12.3 s without a snapshot (stopped, stalled, faulted or dead
+        // worker): the header says so at 80x24 even with a full phase log,
+        // there is no current rate and the guard report no longer covers it.
+        let stale = published.attached_model(Some(Duration::from_millis(12_300)), &sample);
+        assert!(stale.stale());
+        let screen = text(&render(&stale, UiView::default(), 80, 24, true));
+        assert_screen("viewer_stale_5l_80x24", &screen);
+        let header = screen.lines().next().unwrap();
+        assert!(header.contains("◌ NO UPDATES 12.3s"), "{screen}");
+        assert!(!screen.contains("RUNNING") && !screen.contains("/s now"));
+        assert!(screen.contains("— now") && screen.contains("guard unknown"));
+        assert_eq!(screen.matches("running").count(), 1, "{screen}");
+        let details = text(&render(
+            &stale,
+            UiView {
+                show_details: true,
+                ..Default::default()
+            },
+            100,
+            40,
+            true,
+        ));
+        assert!(
+            details
+                .lines()
+                .any(|line| line.contains("snapshot age") && line.ends_with("12.3s")),
+            "{details}"
+        );
+        assert!(details.contains("unknown · floor 186.3 GiB · coverage unverified"));
+    }
+
+    #[test]
+    fn legacy_snapshot_without_a_model_shows_its_phase_and_schema() {
+        let document = serde_json::json!({"monitor": {
+            "view": {"title": "RustRed · request"}, "worker_pid": 42,
+            "published_unix_seconds": 10.0, "phase": "prepared_input_loading"
+        }});
+        let envelope: SnapshotEnvelope = serde_json::from_value(document).unwrap();
+        let model = envelope.monitor.unwrap().model();
+        assert_eq!(model.stage.id, "prepared_input_loading");
+        assert_eq!(model.stage.kind, super::super::model::StageKind::DataLoad);
+        assert!(model.events[0].contains(MODEL_SCHEMA));
     }
 
     #[test]
@@ -980,16 +772,18 @@ mod tests {
     }
 
     #[test]
-    fn legacy_process_values_stay_recorded_and_unverified_while_host_memory_refreshes() {
+    fn unverified_process_values_are_hidden_while_host_memory_refreshes() {
         let envelope: SnapshotEnvelope = serde_json::from_value(snapshot(42, 10.0)).unwrap();
         let mut view = envelope.monitor.unwrap();
         view.worker_start_ticks = None;
-        view.resources = Some(ResourceUsage {
-            cpu_percent: Some(12.5),
-            rss_bytes: Some(44),
-            sample_age_seconds: Some(2.0),
+        let mut model = view.model.take().unwrap();
+        model.memory.guard = Some(super::super::model::GuardSummary {
+            status: "active".into(),
+            threshold_bytes: Some(1),
+            covered: true,
             ..Default::default()
         });
+        view.model = Some(model);
         let sample = ResourceUsage {
             process_pid: Some(42),
             process_start_ticks: Some(100),
@@ -1003,37 +797,15 @@ mod tests {
         assert!(!live.process_identity_verified);
         assert!(live.cpu_percent.is_none() && live.rss_bytes.is_none());
         assert_eq!(live.mem_available_bytes, Some(2048));
-        let rows = view.resource_rows(&live, Some(Duration::from_secs(35)));
-        for label in ["Process CPU usage", "Process RSS / peak"] {
-            let value = &rows.iter().find(|(key, _)| key == label).unwrap().1;
-            assert!(value.contains("recorded/unverified") && value.contains("37.0s"));
-            assert!(!value.contains("99.0%") && !value.contains("991 B"));
-        }
-        let recorded = view.resources.as_mut().unwrap();
-        recorded.guard.status = "armed".into();
-        recorded.guard.current_process_covered = true;
-        recorded.guard.report_age_seconds = Some(0.0);
-        recorded.guard.sample_seconds = Some(10);
-        assert!(
-            view.guard_rows(live.process_identity_verified, Some(Duration::ZERO))
-                .iter()
-                .any(
-                    |(label, value)| label == "Local guard state / current-PID coverage"
-                        && value == "unknown / unverified"
-                )
-        );
-        view.resources = None;
-        view.view.cache = vec![(
-            "Process RSS / peak".into(),
-            "original legacy memory row".into(),
-        )];
-        assert!(
-            view.resource_rows(&live, Some(Duration::from_secs(35)))
-                .iter()
-                .any(|(key, value)| key == "Process RSS / peak"
-                    && value.contains("original legacy memory row")
-                    && value.contains("unverified"))
-        );
+        let memory = view.attached_model(Some(Duration::ZERO), &sample).memory;
+        assert!(!memory.verified && memory.rss_bytes.is_none() && memory.cpu_percent.is_none());
+        assert_eq!(memory.available_bytes, Some(2048));
+        // No guard coverage is claimed for an unverified worker.
+        assert!(memory.guard.is_none());
+        view.worker_start_ticks = Some(100);
+        let memory = view.attached_model(Some(Duration::ZERO), &sample).memory;
+        assert!(memory.verified && memory.rss_bytes == Some(991));
+        assert_eq!(memory.guard.unwrap().status, "active");
     }
 
     #[cfg(target_os = "linux")]
@@ -1078,14 +850,14 @@ mod tests {
             super::super::runtime::ResourceSampler::current_start_ticks(child.0.id()).unwrap();
         let envelope: SnapshotEnvelope =
             serde_json::from_value(snapshot(child.0.id(), 10.0)).unwrap();
-        let mut view = envelope.monitor.unwrap();
+        let view = envelope.monitor.unwrap();
         assert!(sampler.bound_start_ticks().is_none());
         assert!(!sampler.sample().process_identity_verified);
         assert!(view.bind_resources(&binding));
         sampler.bind_start_ticks(binding.bound_start_ticks().unwrap());
         let recorded = sampler.sample();
         assert!(view.verified_resources(&recorded).process_identity_verified);
-        view.resources = Some(recorded);
+        assert!(view.memory(&recorded, None).rss_bytes.is_some());
         child
             .0
             .stdin
@@ -1115,12 +887,7 @@ mod tests {
         assert!(zombie.cpu_percent.is_none() && zombie.rss_bytes.is_none());
         let unverified = view.verified_resources(&zombie);
         assert!(!unverified.process_identity_verified);
-        assert!(
-            view.resource_rows(&unverified, Some(Duration::from_secs(1)))
-                .iter()
-                .any(|(label, value)| label == "Process RSS / peak"
-                    && value.contains("recorded/unverified"))
-        );
+        assert!(view.memory(&zombie, None).rss_bytes.is_none());
         assert!(child.0.wait().unwrap().success());
         let sample = sampler.sample();
         assert!(!sample.process_identity_verified);
@@ -1338,6 +1105,36 @@ mod tests {
         std::io::stdout().flush().unwrap();
     }
 
+    /// Ctrl-C in the attachment: the controller checks that the terminal is
+    /// restored and that SIGINT then ends this process.
+    #[test]
+    #[ignore = "requires a fresh controlling PTY whose controller sends Ctrl-C"]
+    fn real_pty_ctrl_c_restores_the_terminal_then_interrupts() {
+        assert_eq!(
+            std::env::var("VAKINT_MONITOR_PTY_SCENARIO").as_deref(),
+            Ok("viewer-interrupt")
+        );
+        let directory = tempfile::tempdir().unwrap();
+        let mut viewer = RustRedSnapshotViewer::new(&directory.path().join("latest.json"), true);
+        assert!(viewer.active.is_some());
+        println!("PTY_READY:viewer-interrupt");
+        std::io::stdout().flush().unwrap();
+        let started = Instant::now();
+        while viewer.active.is_some() {
+            assert!(
+                started.elapsed() < Duration::from_secs(10),
+                "controller sent no Ctrl-C"
+            );
+            viewer.refresh();
+            thread::sleep(Duration::from_millis(10));
+        }
+        // The terminal is restored; SIGINT ends the process before this wait.
+        thread::sleep(Duration::from_secs(2));
+        println!("PTY_NOT_INTERRUPTED:viewer-interrupt");
+        std::io::stdout().flush().unwrap();
+        panic!("Ctrl-C restored the terminal but no SIGINT arrived");
+    }
+
     #[test]
     #[ignore = "requires a fresh controlling PTY; synthetic producer is silent for over 35s"]
     fn real_pty_silent_worker_keeps_live_resources_and_detaches_without_control() {
@@ -1379,41 +1176,22 @@ mod tests {
         while viewer.active.is_some() && started.elapsed() < Duration::from_secs(45) {
             viewer.refresh();
             if let Some(active) = viewer.active.as_ref()
-                && active.latest.published_unix_seconds.is_some()
+                && active.latest.is_some()
             {
-                let view = active.view(Instant::now());
-                saw_help |= view.show_help;
-                saw_freeze |= view.frozen;
-                assert_eq!(
-                    view.frontier,
-                    vec![("Synthetic unchanged identities".into(), "7".into())]
-                );
+                let model = active.model(Instant::now());
+                saw_help |= active.ui.show_help;
+                saw_freeze |= active.frozen.is_some();
+                assert_eq!(model.ordered.as_ref().unwrap().processed_keys, 7);
                 if started.elapsed() > Duration::from_secs(35) {
-                    assert!(view.subtitle.contains("Attachment live"));
+                    assert_eq!(model.stage.id, "synthetic_paused_producer");
+                    assert!(model.stage.seconds >= 35.0, "stage clock stopped");
                     assert!(
-                        view.overview
-                            .iter()
-                            .any(|(key, value)| key == "Progress state"
-                                && value.contains("indeterminate"))
+                        model.details.event_age_seconds.unwrap() >= 35.0,
+                        "event age stopped during native silence"
                     );
-                    for label in [
-                        "Active phase elapsed",
-                        "Worker observer event age",
-                        "Last native observation age",
-                        "Native quantitative sample age",
-                    ] {
-                        let age = view
-                            .overview
-                            .iter()
-                            .find(|(key, _)| key == label)
-                            .unwrap()
-                            .1
-                            .strip_suffix('s')
-                            .unwrap()
-                            .parse::<f64>()
-                            .unwrap();
-                        assert!(age >= 35.0, "{label} stopped during native silence");
-                    }
+                    // A silent worker is no longer shown as running.
+                    assert!(model.stale(), "silent worker still shown as running");
+                    assert!(model.snapshot_age_seconds.unwrap() >= 35.0);
                     #[cfg(target_os = "linux")]
                     {
                         let (resources, at) = active.resources.as_ref().unwrap();

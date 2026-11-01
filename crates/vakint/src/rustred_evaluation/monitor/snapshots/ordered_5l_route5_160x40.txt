@@ -1,0 +1,40 @@
+ vakint monitor · Ordered · call                                                                                                             ● RUNNING  2:30:00
+ Run      exact · 1 core · step cache off                                ── Phases ────────────────────────────────────────────────────────────────────────────
+ Stage    native reduction ▸ coefficient combination            2:27:27      #  phase              time     keys     rate  frontier     mono   cache
+ Batch    1/1 5L / Retain · cohort 1/1                                      64  Apply s8 o12       4.1s     3904    952/s     52.3k   900.0k
+ Phase    76/83 Route s5 · 77.7k keys · 9.7/s          2:13:27 in phase     66  Route s8           6.2s     9812   1583/s     71.4k     1.4M
+ Rate     9.5/s now · 42.6/s request · 381.5k keys done                     67  Apply s7 o3        3.0s     2210    737/s     70.1k     1.5M
+ Frontier 228.4k keys (peak 228.4k) · 29.7M mono (130/key)                  70  Route s7          18.4s    21.5k   1171/s    139.2k     3.5M
+ Output   121 keys · 41.2k mono · 1750 input keys                           71  Route s6           5:50    92.1k    263/s    216.3k     7.5M
+ Grouping 14.1M emitted · 96.4% merged · 61.5k cancelled                    72  Apply s6 o1        6:11    35.5k   95.8/s    230.0k    16.6M
+ Memory   RSS 8.1 GiB (peak 8.1 GiB) · avail 207.2 GiB · CPU 100%           73  Apply s6 o6       22.0s    21.9k    996/s    214.8k    16.0M
+                                                                            74  Apply s6 o8       24.0s    23.5k    977/s    203.1k    15.8M
+ Stages   setup 0.4s · load 1:55 · ingress 37.4s · native 2:27:27           75  Apply s6 o24      24.0s    24.3k   1013/s    197.7k    15.8M
+                                                                            76  Route s5        2:13:27    77.7k    9.7/s   running
+
+                                                                         ── Details ───────────────────────────────────────────────────────────────────────────
+                                                                          native request   2
+                                                                          census age       0.6s
+                                                                          output peak      41.2k mono
+                                                                          output grouping  9871 merged · 12 cancelled
+                                                                          family           5L/zero-momentum/selection-v3:2f0c… (5104 chars)
+                                                                          current key      Ordered [1,1,1,1,1,0,0,0,0,0,0,0,0,0,0]
+                                                                          R / A / D        0 / 5 / 5
+                                                                          event age        0.3s
+                                                                          native age       0.6s
+                                                                          memory age       0.4s
+                                                                          host memory      1006.8 GiB
+                                                                          worker PID       4123599
+
+
+
+
+
+
+
+
+
+
+
+
+ q detach  space freeze  d details  ^C interrupt  ? help

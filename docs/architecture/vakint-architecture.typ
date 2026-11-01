@@ -205,6 +205,11 @@ Rate-limited coefficient updates also read the existing partial contribution's s
 summands and encoded bytes on its owning thread; they never scan or send its Atom. Opaque calls remain explicitly
 indeterminate, and any native ETA remains a diagnostic estimate. Frozen native panels retain
 live status, phase clocks and resources. Detaching the terminal does not cancel calculation.
+The terminal, the supervisor attachment and the published JSON all read one typed model
+(`vakint.monitor.v2`); no presentation decision depends on display text. Caller phases are
+classified into stages by their identifiers, and all native activities form one stage with one
+clock. Ordered phase times, keys and rates come from the census RustRed reports at every phase
+end; without a per-phase pending count there is no Ordered ETA.
 
 Cheap genuine native root-collection/materialization notices also supply a
 separate collection-progress sample. Its coalesced roots completed/selected and
@@ -247,8 +252,11 @@ Shutdown never delivers a synchronous logger warning through a potentially block
 External attachments read/parse snapshots separately from their existing process-resource
 task, so a stalled snapshot read cannot stop resource sampling. Live process resources require
 the bound worker PID and start time to match; exited, reused or legacy-unverified targets
-retain explicitly aged recorded values, while host memory can refresh independently. Input
-and drawing remain responsive when producer updates stop. If OS sampling itself stalls,
+show no process values, while host memory can refresh independently. Input
+and drawing remain responsive when producer updates stop. A running worker whose latest snapshot
+is 10 s old or more is shown as "no updates" instead of running (it may be stopped, stalled or
+dead), without a current rate; the attachment ages the worker's guard report with the snapshot,
+and a report older than three guard intervals claims no coverage. If OS sampling itself stalls,
 the displayed sample age continues to grow instead of claiming fresh memory readings.
 
 RustRed reduces every request at every loop count with its ordered scheduler; Vakint has no

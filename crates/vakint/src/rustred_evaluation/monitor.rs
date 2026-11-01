@@ -8,6 +8,13 @@ use std::{
     time::Duration,
 };
 
+use model::{
+    Collection, Counter, Details, DfsEstimates, DfsModel, EstimateState, ExpressionSize,
+    GuardSummary, MemoryModel, MonitorModel, NATIVE_STAGE, OrderedModel, PhaseKind, PhaseModel,
+    PhaseRecord, Rate, RunConfig, StageKind, StageModel, StageTotal,
+};
+
+mod model;
 mod publication;
 mod runtime;
 #[cfg(test)]
@@ -154,14 +161,15 @@ impl LatestJsonFile {
                 .unwrap_or_else(|| std::path::Path::new("."));
             let mut temporary = tempfile::NamedTempFile::new_in(parent)?;
             write(temporary.as_file_mut())?;
+            // Atomic replacement is enough for a progress file: readers see
+            // the old or the new document, never a partial one. No fsync.
             temporary.as_file_mut().flush()?;
-            temporary.as_file().sync_all()?;
             let lease = self
                 .lease
                 .as_ref()
                 .expect("destination owns a publication lease");
             let _commit = lease.commit();
-            // Recheck AFTER write/flush/sync. Superseded or detached publishers
+            // Recheck AFTER write/flush. Superseded or detached publishers
             // must never commit a delayed old snapshot over a newer owner.
             if !active.load(std::sync::atomic::Ordering::Acquire) || !lease.is_current() {
                 return Ok(());
@@ -191,19 +199,31 @@ pub(super) enum MonitorStatus {
     Succeeded,
     Failed,
     Partial,
-    Detached,
 }
 
 #[cfg(any(feature = "progress-tui", test))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum UiAction {
     Detach,
+    /// Ctrl-C: restore the terminal, then deliver SIGINT as a terminal would.
+    Interrupt,
     ToggleFreeze,
     ToggleHelp,
+    ToggleDetails,
     ScrollUp,
     ScrollDown,
     PageUp,
     PageDown,
+}
+
+/// Display-only state of one terminal attachment.
+#[cfg(any(feature = "progress-tui", test))]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(super) struct UiView {
+    pub frozen: bool,
+    pub show_help: bool,
+    pub show_details: bool,
+    pub scroll: usize,
 }
 
 /// A display projection, not an observer event or serialized native contract.
@@ -213,6 +233,7 @@ pub(super) struct DisplaySnapshot {
     pub scope_kind: ScopeKind,
     pub api_status: ApiStatus,
     pub native_epoch: u64,
+    pub run: Option<RunConfig>,
     /// The current native envelope's key and degrees, never maxima or history.
     pub current_key: Option<String>,
     pub current_degrees: Option<(u128, u128, i128)>,
@@ -225,11 +246,18 @@ pub(super) struct DisplaySnapshot {
     pub ordered: Option<OrderedReductionSample>,
     pub sequence: u64,
     pub elapsed: Duration,
+    /// The caller phase, or `native <Activity>` for native envelopes.
     pub phase: String,
     pub phase_started_at: Duration,
     /// Cumulative wall time of every finished phase label, in first-seen
     /// order. The running phase is added on presentation; labels are bounded.
     pub phase_ledger: Vec<(String, Duration)>,
+    /// The caller phase identifier or [`NATIVE_STAGE`]: unlike `phase`, all
+    /// native activities share one stage and one clock.
+    pub stage: String,
+    pub stage_started_at: Duration,
+    /// Cumulative wall time of every finished stage, per stage kind.
+    pub stage_ledger: Vec<(StageKind, Duration)>,
     pub native_work_active: bool,
     pub caller_work: Option<CallerWork>,
     pub ordered_batches: Option<CallerWork>,
@@ -244,9 +272,7 @@ pub(super) struct DisplaySnapshot {
     pub pending_unique: Option<FrontierCount>,
     pub completed_roots: Option<u64>,
     pub total_roots: Option<u64>,
-    pub root_output_terms: Option<u64>,
-    pub cache: Vec<(String, String)>,
-    pub complexity: Vec<(String, String)>,
+    pub dfs_cache: Option<DfsCacheCounts>,
     pub path: Vec<String>,
     pub events: Vec<String>,
     pub resources: ResourceUsage,
@@ -256,14 +282,24 @@ pub(super) struct DisplaySnapshot {
     pub caller_expression: Option<CallerExpressionSample>,
 }
 
+/// Depth-first cache counters of the last coherent native sample.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(super) struct DfsCacheCounts {
+    pub persistent_hits: u64,
+    pub persistent_misses: u64,
+    pub ram_hits: u64,
+    pub cached_entries: u64,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub(super) enum ScopeKind {
     #[default]
     Api,
     Job,
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub(super) enum ApiStatus {
     #[default]
     NotStarted,
@@ -284,43 +320,6 @@ pub(super) struct NativeCollectionSample {
     pub source: String,
     pub sequence: u64,
     pub sample_age_seconds: Option<f64>,
-}
-
-impl NativeCollectionSample {
-    pub(super) fn rows(&self) -> Vec<(String, String)> {
-        let count = |value: Option<u64>| value.map_or_else(|| "unknown".into(), |v| v.to_string());
-        vec![
-            (
-                "Current collection completed roots / total".into(),
-                format!(
-                    "{} / {}",
-                    count(self.completed_roots),
-                    count(self.total_roots)
-                ),
-            ),
-            (
-                "Contribution currently assembled (index / total)".into(),
-                format!(
-                    "{} / {} · current item, not completed work",
-                    count(self.contribution_index.map(|v| v as u64)),
-                    count(self.contribution_total.map(|v| v as u64))
-                ),
-            ),
-            (
-                "Collection source / sample age".into(),
-                format!(
-                    "{} / {}",
-                    if self.source.is_empty() {
-                        "unobserved"
-                    } else {
-                        &self.source
-                    },
-                    self.sample_age_seconds
-                        .map_or_else(|| "unknown".into(), |age| format!("{age:.1}s"))
-                ),
-            ),
-        ]
-    }
 }
 
 /// Caller loop units are distinct from native integrals and frontier metrics.
@@ -349,39 +348,53 @@ pub(super) struct CallerExpressionSample {
     pub sampled_at: Duration,
 }
 
-/// Ordered step-cache replays of one completed phase of a native request.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) struct StepCachePhase {
-    /// Zero-based position of the phase in the request's fixed schedule.
-    pub phase: usize,
-    pub kind: rustred::solver::CandidateOrderedPhaseKind,
-    pub support: Option<usize>,
-    pub owner: Option<usize>,
+/// Counters of one native request when its current phase started.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(super) struct PhaseStart {
+    pub at: Duration,
+    pub processed: usize,
     pub hits: usize,
     pub misses: usize,
 }
 
-/// Completed phases retained per request for the step-cache rows.
-const STEP_CACHE_PHASES: usize = 16;
+impl PhaseStart {
+    fn of(counts: &CandidateOrderedReductionProgress, at: Duration) -> Self {
+        Self {
+            at,
+            processed: counts.processed_keys,
+            hits: counts.step_cache_hits,
+            misses: counts.step_cache_misses,
+        }
+    }
+}
+
+/// Finished phases retained per request.
+const PHASE_LOG: usize = 16;
+/// Span of the recent-rate window and its minimum spacing between entries.
+const RATE_WINDOW: Duration = Duration::from_secs(30);
+const RATE_SPACING: Duration = Duration::from_millis(500);
 
 /// One exact native frontier census, separate from caller expressions and from
-/// previous requests in a monitor spanning a complete job.
+/// previous requests in a monitor spanning a complete job. The per-phase
+/// bookkeeping relies on RustRed delivering one census at every phase end.
 #[derive(Clone, Debug)]
 pub(super) struct OrderedReductionSample {
     pub counts: CandidateOrderedReductionProgress,
     pub native_epoch: u64,
     pub family_fingerprint: String,
     pub sampled_at: Duration,
-    /// Step-cache hits and misses of the request when its current phase
-    /// started (the counters themselves are cumulative per request).
-    pub phase_start: (usize, usize),
-    /// The most recent completed phases of this request, oldest first.
-    pub step_cache_phases: Vec<StepCachePhase>,
+    pub phase_start: PhaseStart,
+    /// The most recent finished phases with work, oldest first.
+    pub phases: Vec<PhaseRecord>,
+    /// First census of the request: (time, processed keys).
+    pub first: (Duration, usize),
+    /// Recent censuses (time, processed keys), spaced and bounded.
+    pub window: VecDeque<(Duration, usize)>,
 }
 
 impl OrderedReductionSample {
-    /// The next census of a request, carrying the per-phase step-cache
-    /// counters over from the previous census of the same request.
+    /// The next census of a request, carrying the phase log, the phase start
+    /// and the rate window over from the previous census of the same request.
     pub(super) fn next(
         previous: Option<&Self>,
         counts: CandidateOrderedReductionProgress,
@@ -394,42 +407,66 @@ impl OrderedReductionSample {
             native_epoch,
             family_fingerprint: family_fingerprint.to_owned(),
             sampled_at,
-            phase_start: (0, 0),
-            step_cache_phases: Vec::new(),
+            phase_start: PhaseStart::of(&counts, sampled_at),
+            phases: Vec::new(),
+            first: (sampled_at, counts.processed_keys),
+            window: VecDeque::from([(sampled_at, counts.processed_keys)]),
         };
         let Some(previous) = previous.filter(|previous| {
             previous.native_epoch == native_epoch
                 && previous.counts.completed_phases <= counts.completed_phases
+                && previous.counts.processed_keys <= counts.processed_keys
         }) else {
             return sample;
         };
-        sample.step_cache_phases = previous.step_cache_phases.clone();
+        sample.phases.clone_from(&previous.phases);
+        sample.first = previous.first;
+        sample.window.clone_from(&previous.window);
+        if sample
+            .window
+            .back()
+            .is_none_or(|(at, _)| sampled_at.saturating_sub(*at) >= RATE_SPACING)
+        {
+            sample.window.push_back((sampled_at, counts.processed_keys));
+        }
+        while sample.window.len() > 2
+            && sample
+                .window
+                .get(1)
+                .is_some_and(|(at, _)| sampled_at.saturating_sub(*at) >= RATE_WINDOW)
+        {
+            sample.window.pop_front();
+        }
         if previous.counts.completed_phases == counts.completed_phases {
             sample.phase_start = previous.phase_start;
             return sample;
         }
-        // The previous census belongs to the phase that has completed since;
-        // its counters close that phase (phases without steps are omitted).
-        let closed = (
-            previous.counts.step_cache_hits,
-            previous.counts.step_cache_misses,
-        );
-        if closed != previous.phase_start {
-            sample.step_cache_phases.push(StepCachePhase {
-                phase: previous.counts.completed_phases,
-                kind: previous.counts.phase_kind,
-                support: previous.counts.active_support,
-                owner: previous.counts.owner_index,
-                hits: closed.0.saturating_sub(previous.phase_start.0),
-                misses: closed.1.saturating_sub(previous.phase_start.1),
-            });
-            let excess = sample
-                .step_cache_phases
-                .len()
-                .saturating_sub(STEP_CACHE_PHASES);
-            sample.step_cache_phases.drain(..excess);
+        // RustRed reports every phase end; this census closes the phase the
+        // previous census observed (intervening phases, if any, were empty).
+        let closed = previous.counts;
+        let start = previous.phase_start;
+        let record = PhaseRecord {
+            index: closed.completed_phases,
+            kind: PhaseKind::of(
+                closed.phase_kind,
+                closed.owner_index,
+                closed.completed_phases,
+                closed.total_phases,
+            ),
+            support: closed.active_support,
+            owner: closed.owner_index,
+            seconds: sampled_at.saturating_sub(start.at).as_secs_f64(),
+            keys: counts.processed_keys.saturating_sub(start.processed) as u64,
+            step_cache_hits: counts.step_cache_hits.saturating_sub(start.hits) as u64,
+            step_cache_misses: counts.step_cache_misses.saturating_sub(start.misses) as u64,
+            frontier_keys: counts.frontier_keys as u64,
+            frontier_monomials: counts.frontier_coefficient_monomials as u64,
+        };
+        if record.keys > 0 {
+            sample.phases.push(record);
+            let excess = sample.phases.len().saturating_sub(PHASE_LOG);
+            sample.phases.drain(..excess);
         }
-        sample.phase_start = closed;
         sample
     }
 
@@ -438,140 +475,86 @@ impl OrderedReductionSample {
         (
             self.counts
                 .step_cache_hits
-                .saturating_sub(self.phase_start.0),
+                .saturating_sub(self.phase_start.hits),
             self.counts
                 .step_cache_misses
-                .saturating_sub(self.phase_start.1),
+                .saturating_sub(self.phase_start.misses),
         )
     }
 
-    /// Rows of the cache panel; without step-cache activity in this request
-    /// the cache is off (or nothing was expanded yet).
-    fn step_cache_rows(&self) -> Vec<(String, String)> {
-        let c = self.counts;
-        if c.step_cache_hits == 0 && c.step_cache_misses == 0 {
-            return vec![(
-                "Ordered step cache".into(),
-                "no replayed or recorded steps in this request (off or not started)".into(),
-            )];
-        }
-        let share = |hits: usize, misses: usize| {
-            let total = hits + misses;
-            if total == 0 {
-                "-".to_owned()
-            } else {
-                format!("{:.1}%", 100.0 * hits as f64 / total as f64)
-            }
+    /// Keys over the recent window and over the whole request, `silence`
+    /// seconds after this census (a silent core lowers the rates).
+    fn rates(&self, silence: f64) -> (Option<Rate>, Option<Rate>) {
+        let rate = |(at, processed): (Duration, usize)| {
+            Rate::over(
+                self.counts.processed_keys.saturating_sub(processed) as u64,
+                self.sampled_at.saturating_sub(at).as_secs_f64() + silence,
+            )
         };
+        (
+            self.window.front().copied().and_then(rate),
+            rate(self.first),
+        )
+    }
+
+    /// The model `census_age` seconds after this census. `phase_seconds` is
+    /// the time in the unfinished phase, `active` whether the core works on it.
+    fn model(&self, phase_seconds: Option<f64>, active: bool, census_age: f64) -> OrderedModel {
+        let c = &self.counts;
         let (phase_hits, phase_misses) = self.phase_step_cache();
-        let mut rows = vec![
-            (
-                "Step cache hits / misses (request)".into(),
-                format!(
-                    "{} / {} · {} replayed",
-                    c.step_cache_hits,
-                    c.step_cache_misses,
-                    share(c.step_cache_hits, c.step_cache_misses)
+        // Only a working core accumulates silence; a stopped one keeps the
+        // rates of its last census.
+        let silence = if active { census_age } else { 0.0 };
+        let (recent_rate, request_rate) = self.rates(silence);
+        // A current rate only exists while the native core is working.
+        let recent_rate = recent_rate.filter(|_| active);
+        OrderedModel {
+            request: self.native_epoch,
+            phase: PhaseModel {
+                index: c.completed_phases,
+                total: c.total_phases,
+                kind: PhaseKind::of(
+                    c.phase_kind,
+                    c.owner_index,
+                    c.completed_phases,
+                    c.total_phases,
                 ),
-            ),
-            (
-                "Step cache hits / misses (current phase)".into(),
-                format!(
-                    "{phase_hits} / {phase_misses} · {} replayed",
-                    share(phase_hits, phase_misses)
-                ),
-            ),
-        ];
-        if let Some(last) = self.step_cache_phases.last() {
-            rows.push((
-                "Step cache hits / misses (last completed phase)".into(),
-                format!(
-                    "{} / {} · phase {} {:?} support {}",
-                    last.hits,
-                    last.misses,
-                    last.phase,
-                    last.kind,
-                    last.support
-                        .map_or_else(|| "none".into(), |s| s.to_string())
-                ),
-            ));
+                support: c.active_support,
+                owner: c.owner_index,
+                seconds: phase_seconds,
+                active,
+                keys: c.processed_keys.saturating_sub(self.phase_start.processed) as u64,
+                step_cache_hits: phase_hits as u64,
+                step_cache_misses: phase_misses as u64,
+            },
+            input_keys: c.input_keys as u64,
+            processed_keys: c.processed_keys as u64,
+            recent_rate,
+            request_rate,
+            frontier: model::Census {
+                keys: c.frontier_keys as u64,
+                peak_keys: c.peak_frontier_keys as u64,
+                monomials: c.frontier_coefficient_monomials as u64,
+                peak_monomials: c.peak_frontier_coefficient_monomials as u64,
+            },
+            output: model::Census {
+                keys: c.terminal_keys as u64,
+                peak_keys: c.terminal_keys as u64,
+                monomials: c.terminal_coefficient_monomials as u64,
+                peak_monomials: c.peak_terminal_coefficient_monomials as u64,
+            },
+            grouping: model::Grouping {
+                emitted: c.emitted_terms as u64,
+                merged: c.merged_terms as u64,
+                cancelled: c.cancelled_terms as u64,
+                output_merged: c.terminal_merges as u64,
+                output_cancelled: c.terminal_cancellations as u64,
+            },
+            step_cache_hits: c.step_cache_hits as u64,
+            step_cache_misses: c.step_cache_misses as u64,
+            phases: self.phases.clone(),
+            census_age_seconds: census_age,
         }
-        rows.push((
-            "Step cache scope".into(),
-            "misses run the checked step (recorded when the cache populates); replayed steps are identical".into(),
-        ));
-        rows
-    }
-
-    fn overview_rows(&self) -> Vec<(String, String)> {
-        vec![
-            (
-                "Ordered phases completed / total".into(),
-                format!(
-                    "{} / {} · fixed schedule; not time fraction",
-                    self.counts.completed_phases, self.counts.total_phases
-                ),
-            ),
-            (
-                "Ordered topology stage".into(),
-                if self.counts.completed_phases == self.counts.total_phases {
-                    "Complete · no active topology".into()
-                } else {
-                    format!(
-                        "{:?} · support {} · owner {}",
-                        self.counts.phase_kind,
-                        self.counts
-                            .active_support
-                            .map_or_else(|| "none".into(), |s| s.to_string()),
-                        self.counts
-                            .owner_index
-                            .map_or_else(|| "none".into(), |i| i.to_string())
-                    )
-                },
-            ),
-            (
-                "Ordered phase scope".into(),
-                format!(
-                    "native request {} · local phases restart for each request",
-                    self.native_epoch
-                ),
-            ),
-        ]
-    }
-
-    fn frontier_rows(&self) -> Vec<(String, String)> {
-        let c = self.counts;
-        vec![
-            (
-                "Input / current / peak frontier keys".into(),
-                format!(
-                    "{} / {} / {}",
-                    c.input_keys, c.frontier_keys, c.peak_frontier_keys
-                ),
-            ),
-            (
-                "Processed operational keys".into(),
-                c.processed_keys.to_string(),
-            ),
-            (
-                "Checked RHS contributions before grouping".into(),
-                c.emitted_terms.to_string(),
-            ),
-            (
-                "Frontier nonzero merges / exact cancellations".into(),
-                format!("{} / {}", c.merged_terms, c.cancelled_terms),
-            ),
-            ("Terminal output keys".into(), c.terminal_keys.to_string()),
-            (
-                "Terminal nonzero merges / exact cancellations".into(),
-                format!("{} / {}", c.terminal_merges, c.terminal_cancellations),
-            ),
-            (
-                "Grouping counter scope".into(),
-                "global same-identity merges; excludes input/intra-rule grouping; not time saved"
-                    .into(),
-            ),
-        ]
     }
 }
 
@@ -614,7 +597,7 @@ pub(super) struct ResourceGuardView {
 impl Default for ResourceGuardView {
     fn default() -> Self {
         Self {
-            status: "unknown".into(),
+            status: model::GUARD_UNKNOWN.into(),
             threshold_bytes: None,
             sample_seconds: None,
             report_age_seconds: None,
@@ -629,132 +612,29 @@ impl Default for ResourceGuardView {
     }
 }
 
-impl ResourceGuardView {
-    pub(super) fn rows(&self) -> Vec<(String, String)> {
-        vec![
-            (
-                "Local guard state / current-PID coverage".into(),
-                format!(
-                    "{} / {}",
-                    self.status,
-                    if self.current_process_covered {
-                        "reported armed; PID/start matched"
-                    } else {
-                        "unverified"
-                    }
-                ),
-            ),
-            (
-                "Guard MemAvailable floor / report age".into(),
-                format!(
-                    "{} / {} (explicit local policy only)",
-                    ResourceUsage::display_bytes(self.threshold_bytes),
-                    self.report_age_seconds
-                        .map_or_else(|| "unknown".into(), |age| format!("{age:.1}s"))
-                ),
-            ),
-            (
-                "Guard registered workers (reported)".into(),
-                if self.registered_slots.is_empty() {
-                    "unknown".into()
-                } else {
-                    self.registered_slots.join("; ")
+impl ResourceUsage {
+    /// The memory line of the model. Process values require a verified live
+    /// worker identity; host values are always current.
+    pub(super) fn memory(&self) -> MemoryModel {
+        let verified = self.process_identity_verified;
+        let guard = &self.guard;
+        MemoryModel {
+            verified,
+            rss_bytes: self.rss_bytes.filter(|_| verified),
+            peak_rss_bytes: self.peak_rss_bytes.filter(|_| verified),
+            cpu_percent: self.cpu_percent.filter(|_| verified),
+            available_bytes: self.mem_available_bytes,
+            total_bytes: self.mem_total_bytes,
+            sample_age_seconds: self.sample_age_seconds,
+            guard: (guard.status != model::GUARD_UNKNOWN || guard.threshold_bytes.is_some()).then(
+                || GuardSummary {
+                    status: guard.status.clone(),
+                    threshold_bytes: guard.threshold_bytes,
+                    covered: guard.current_process_covered,
+                    report_age_seconds: guard.report_age_seconds,
+                    interval_seconds: guard.sample_seconds,
                 },
             ),
-        ]
-    }
-}
-
-impl ResourceUsage {
-    pub(super) fn headline(&self) -> String {
-        format!(
-            "RSS {} · host available {} / free {} · CPU {} · OS age {}",
-            if self.process_identity_verified {
-                Self::display_bytes(self.rss_bytes)
-            } else {
-                "unverified/exited".into()
-            },
-            Self::display_bytes(self.mem_available_bytes),
-            Self::display_bytes(self.mem_free_bytes),
-            self.cpu_percent
-                .map_or_else(|| "unknown".into(), |cpu| format!("{cpu:.1}%")),
-            self.sample_age_seconds
-                .map_or_else(|| "unknown".into(), |age| format!("{age:.1}s"))
-        )
-    }
-
-    pub(super) fn rows(&self) -> Vec<(String, String)> {
-        vec![
-            (
-                "Worker PID / start identity".into(),
-                format!(
-                    "{} / {} · {}",
-                    self.process_pid
-                        .map_or_else(|| "unknown".into(), |pid| pid.to_string()),
-                    self.process_start_ticks
-                        .map_or_else(|| "unknown".into(), |start| start.to_string()),
-                    if self.process_identity_verified {
-                        "verified live OS target"
-                    } else {
-                        "unverified or exited; not a live-process claim"
-                    }
-                ),
-            ),
-            (
-                "Process CPU usage".into(),
-                self.cpu_percent.map_or_else(
-                    || "unknown / awaiting two OS samples".into(),
-                    |value| format!("{value:.1}% (all process threads; 100% = one CPU)"),
-                ),
-            ),
-            (
-                "Process RSS / peak".into(),
-                format!(
-                    "{} / {} (current / process peak; not payload)",
-                    ResourceUsage::display_bytes(self.rss_bytes),
-                    ResourceUsage::display_bytes(self.peak_rss_bytes)
-                ),
-            ),
-            (
-                "Host MemAvailable / MemFree".into(),
-                format!(
-                    "{} / {} (usable / unused)",
-                    ResourceUsage::display_bytes(self.mem_available_bytes),
-                    ResourceUsage::display_bytes(self.mem_free_bytes)
-                ),
-            ),
-            (
-                "Host MemTotal".into(),
-                ResourceUsage::display_bytes(self.mem_total_bytes),
-            ),
-            (
-                "Memory units / raw values".into(),
-                "IEC units; exact bytes retained in resources JSON".into(),
-            ),
-            (
-                "OS memory source / sample age".into(),
-                format!(
-                    "{} / {}",
-                    self.source.as_deref().unwrap_or("unavailable"),
-                    self.sample_age_seconds
-                        .map_or_else(|| "unknown".into(), |age| format!("{age:.1}s"))
-                ),
-            ),
-        ]
-    }
-
-    /// Rounded display only; serialized observations retain exact byte counts.
-    fn display_bytes(bytes: Option<u64>) -> String {
-        let Some(bytes) = bytes else {
-            return "unknown".into();
-        };
-        let units = ["B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB"];
-        let exponent = (bytes.max(1).ilog2() / 10) as usize;
-        if exponent == 0 {
-            format!("{bytes} B")
-        } else {
-            let scale = (1_u64 << (10 * exponent)) as f64;
-            format!("{:.1} {}", bytes as f64 / scale, units[exponent])
         }
     }
 
@@ -812,7 +692,6 @@ pub(super) struct FrontierCount {
     pub exact: bool,
     /// Only comparable Route/Apply identities may be divided by node throughput.
     pub operational_scope: bool,
-    pub scope: String,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -824,23 +703,6 @@ struct RateSample {
     roots: Option<u64>,
 }
 
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
-pub(super) struct MonitorView {
-    pub title: String,
-    pub subtitle: String,
-    pub status: MonitorStatus,
-    pub frozen: bool,
-    pub show_help: bool,
-    pub scroll: usize,
-    pub overview: Vec<(String, String)>,
-    pub frontier: Vec<(String, String)>,
-    pub cache: Vec<(String, String)>,
-    pub complexity: Vec<(String, String)>,
-    pub estimates: Vec<(String, String)>,
-    pub path: Vec<String>,
-    pub events: Vec<String>,
-}
-
 /// No native callback, solver, registry, coefficients or application is retained.
 #[derive(Default)]
 pub(super) struct MonitorState {
@@ -848,16 +710,24 @@ pub(super) struct MonitorState {
     received_at: Duration,
     samples: VecDeque<RateSample>,
     last_completion: Option<Duration>,
-    frozen: Option<MonitorView>,
-    show_help: bool,
-    scroll: usize,
+    #[cfg(any(feature = "progress-tui", test))]
+    terminal: TerminalDisplay,
+}
+
+/// Display state of the in-process terminal, independent of the model.
+#[cfg(any(feature = "progress-tui", test))]
+#[derive(Default)]
+struct TerminalDisplay {
+    frozen: Option<MonitorModel>,
+    ui: UiView,
     detached: bool,
+    interrupted: bool,
 }
 
 impl MonitorState {
-    /// Only the nested visual view freezes. Machine-readable state stays live.
+    /// Machine-readable state of the monitor. The typed model is always live;
+    /// freezing is a property of one terminal display only.
     pub(super) fn presentation(&self, now: Duration) -> serde_json::Value {
-        let live = self.live_view(now);
         let ordered_reduction = self.latest.ordered.as_ref().map(|sample| {
             let c = sample.counts;
             serde_json::json!({
@@ -886,17 +756,24 @@ impl MonitorState {
                     "hits":c.step_cache_hits, "misses":c.step_cache_misses,
                     "phase_hits":sample.phase_step_cache().0,
                     "phase_misses":sample.phase_step_cache().1,
-                    "completed_phases":sample.step_cache_phases.iter().map(|phase| serde_json::json!({
-                        "phase":phase.phase, "phase_kind":format!("{:?}", phase.kind),
-                        "active_support":phase.support, "owner_index":phase.owner,
-                        "hits":phase.hits, "misses":phase.misses,
-                    })).collect::<Vec<_>>(),
+                    // Phases with step-cache activity; `phase_kind` is the
+                    // native kind (as above), `kind` the displayed one.
+                    "completed_phases":sample.phases.iter()
+                        .filter(|phase| phase.step_cache_hits + phase.step_cache_misses > 0)
+                        .map(|phase| serde_json::json!({
+                            "phase":phase.index,
+                            "phase_kind":phase.kind.native().map(|kind| format!("{kind:?}")),
+                            "kind":phase.kind,
+                            "active_support":phase.support, "owner_index":phase.owner,
+                            "hits":phase.step_cache_hits, "misses":phase.step_cache_misses,
+                        })).collect::<Vec<_>>(),
                 },
             })
         });
         let mut document = serde_json::json!({
-            "scope_kind": match self.latest.scope_kind { ScopeKind::Api => "api", ScopeKind::Job => "job" },
-            "api_status": format!("{:?}", self.latest.api_status),
+            "schema": model::MODEL_SCHEMA,
+            "scope_kind": self.latest.scope_kind,
+            "api_status": self.latest.api_status,
             "job_finished": (self.latest.scope_kind == ScopeKind::Job).then_some(self.latest.request_finished),
             "phase": self.latest.phase,
             "native_work_active": self.latest.native_work_active,
@@ -911,7 +788,7 @@ impl MonitorState {
                 "phase": work.phase, "completed": work.completed, "total": work.total, "unit": work.unit,
                 "sample_age_seconds": now.saturating_sub(work.sampled_at).as_secs_f64(),
             })),
-            "status": format!("{:?}", live.status),
+            "status": self.status(),
             "resources": self.live_resources(now),
             "resource_sample_elapsed_seconds": self.latest.resource_sample_at.map(|at| at.as_secs_f64()),
             "stored_symbolic_state": self.latest.stored_state.as_ref().map(|sample| serde_json::json!({
@@ -930,8 +807,7 @@ impl MonitorState {
                 "stored_summands": sample.stored_summands,
                 "sample_age_seconds": self.observation_age(sample.sampled_at, now).as_secs_f64(),
             })),
-            "estimates": live.estimates,
-            "view": self.view(now),
+            "model": self.live_model(now),
         });
         document["ordered_reduction"] = ordered_reduction.unwrap_or(serde_json::Value::Null);
         document["ordered_batches"] = self.latest.ordered_batches.as_ref().map_or(
@@ -955,6 +831,16 @@ impl MonitorState {
         document
     }
 
+    /// A native core can finish before saved terminal substitution and caller
+    /// post-processing: only the outer request finishing ends the run.
+    fn status(&self) -> MonitorStatus {
+        if self.latest.status == MonitorStatus::Succeeded && !self.latest.request_finished {
+            MonitorStatus::Running
+        } else {
+            self.latest.status
+        }
+    }
+
     pub(super) fn live_resources(&self, now: Duration) -> ResourceUsage {
         let mut resources = self.latest.resources.clone();
         let age = self
@@ -967,12 +853,8 @@ impl MonitorState {
                 .latest
                 .resource_sample_at
                 .map_or(0.0, |at| now.saturating_sub(at).as_secs_f64());
-            if resources
-                .guard
-                .sample_seconds
-                .is_some_and(|interval| *age > 3.0 * interval as f64)
-            {
-                resources.guard.status = "unknown".into();
+            if model::guard_report_stale(*age, resources.guard.sample_seconds) {
+                resources.guard.status = model::GUARD_UNKNOWN.into();
                 resources.guard.current_process_covered = false;
                 resources.guard.detail =
                     Some("stale guard report; no active coverage claim".into());
@@ -1023,6 +905,16 @@ impl MonitorState {
             .saturating_add(now.saturating_sub(self.received_at))
     }
 
+    /// Time since `started_at` on the observer clock; a finished run stops
+    /// its clocks at the final observation.
+    fn clock(&self, started_at: Duration, now: Duration) -> Duration {
+        if self.status() == MonitorStatus::Running {
+            self.observation_age(started_at, now)
+        } else {
+            self.latest.elapsed.saturating_sub(started_at)
+        }
+    }
+
     pub(super) fn observe(&mut self, snapshot: DisplaySnapshot, now: Duration) {
         let resets = snapshot.native_epoch != self.latest.native_epoch
             || snapshot.elapsed < self.latest.elapsed
@@ -1067,459 +959,250 @@ impl MonitorState {
 
     #[cfg(any(feature = "progress-tui", test))]
     pub(super) fn apply(&mut self, action: UiAction, now: Duration) {
+        let frozen = matches!(action, UiAction::ToggleFreeze)
+            .then(|| self.live_model(now))
+            .filter(|_| self.terminal.frozen.is_none());
+        let display = &mut self.terminal;
+        let ui = &mut display.ui;
         match action {
-            UiAction::Detach => self.detached = true,
-            UiAction::ToggleFreeze => {
-                self.frozen = if self.frozen.is_some() {
-                    None
-                } else {
-                    Some(self.live_view(now))
-                };
+            UiAction::Detach => display.detached = true,
+            UiAction::Interrupt => {
+                display.detached = true;
+                display.interrupted = true;
             }
-            UiAction::ToggleHelp => self.show_help = !self.show_help,
-            UiAction::ScrollUp => self.scroll = self.scroll.saturating_sub(1),
-            UiAction::ScrollDown => self.scroll = self.scroll.saturating_add(1),
-            UiAction::PageUp => self.scroll = self.scroll.saturating_sub(10),
-            UiAction::PageDown => self.scroll = self.scroll.saturating_add(10),
+            UiAction::ToggleFreeze => display.frozen = frozen,
+            UiAction::ToggleHelp => ui.show_help = !ui.show_help,
+            UiAction::ToggleDetails => {
+                ui.show_details = !ui.show_details;
+                ui.scroll = 0;
+            }
+            UiAction::ScrollUp => ui.scroll = ui.scroll.saturating_sub(1),
+            UiAction::ScrollDown => ui.scroll = ui.scroll.saturating_add(1),
+            UiAction::PageUp => ui.scroll = ui.scroll.saturating_sub(10),
+            UiAction::PageDown => ui.scroll = ui.scroll.saturating_add(10),
         }
+        ui.frozen = display.frozen.is_some();
     }
 
     #[cfg(any(feature = "progress-tui", test))]
     pub(super) fn detached(&self) -> bool {
-        self.detached
+        self.terminal.detached
     }
 
-    pub(super) fn view(&self, now: Duration) -> MonitorView {
-        let live = self.live_view(now);
-        let mut view = self.frozen.clone().unwrap_or_else(|| live.clone());
-        // Freezing native panels never freezes liveness, resources or estimates.
-        if self.frozen.is_some() {
-            let batch_rows = live
-                .overview
-                .iter()
-                .filter(|(label, _)| {
-                    matches!(
-                        label.as_str(),
-                        "Ordered batches completed / total"
-                            | "Compatible cohorts completed / total"
-                    )
+    #[cfg(any(feature = "progress-tui", test))]
+    pub(super) fn interrupted(&self) -> bool {
+        self.terminal.interrupted
+    }
+
+    /// Display-only state of the terminal attachment.
+    #[cfg(any(feature = "progress-tui", test))]
+    pub(super) fn ui(&self) -> UiView {
+        self.terminal.ui
+    }
+
+    #[cfg(any(feature = "progress-tui", test))]
+    pub(super) fn clamp_scroll(&mut self, maximum: usize) {
+        self.terminal.ui.scroll = self.terminal.ui.scroll.min(maximum);
+    }
+
+    /// The model the terminal shows: live, with frozen native panels while
+    /// the display is frozen.
+    #[cfg(any(feature = "progress-tui", test))]
+    pub(super) fn model(&self, now: Duration) -> MonitorModel {
+        let live = self.live_model(now);
+        match &self.terminal.frozen {
+            Some(frozen) => live.with_frozen_native(frozen),
+            None => live,
+        }
+    }
+
+    pub(super) fn live_model(&self, now: Duration) -> MonitorModel {
+        let snapshot = &self.latest;
+        let seconds = |at: Duration| self.observation_age(at, now).as_secs_f64();
+        let stage_kind = model::classify_stage(&snapshot.stage);
+        let stage_seconds = self.clock(snapshot.stage_started_at, now);
+        let stages = StageKind::ALL
+            .iter()
+            .filter_map(|&kind| {
+                let total = snapshot
+                    .stage_ledger
+                    .iter()
+                    .filter(|(finished, _)| *finished == kind)
+                    .map(|(_, spent)| *spent)
+                    .sum::<Duration>()
+                    + if kind == stage_kind && !snapshot.stage.is_empty() {
+                        stage_seconds
+                    } else {
+                        Duration::ZERO
+                    };
+                (!total.is_zero()).then_some(StageTotal {
+                    kind,
+                    seconds: total.as_secs_f64(),
                 })
-                .cloned()
-                .collect::<Vec<_>>();
-            view.overview.retain(|(label, _)| {
-                !matches!(
-                    label.as_str(),
-                    "Ordered batches completed / total" | "Compatible cohorts completed / total"
-                )
-            });
-            let insertion = view.overview.len().min(3);
-            view.overview.splice(insertion..insertion, batch_rows);
-            view.subtitle = live.subtitle;
-            view.status = live.status;
-            view.estimates = live.estimates;
-            for (label, value) in live.overview {
-                if matches!(
-                    label.as_str(),
-                    "Phase"
-                        | "Active phase elapsed"
-                        | "Caller phase progress"
-                        | "Elapsed at observation"
-                        | "Snapshot age"
-                        | "Last native observation age"
-                        | "Request finished"
-                        | "Monitor scope"
-                        | "Reduction API status"
-                        | "Whole job finished"
-                        | "Current collection completed roots / total"
-                        | "Contribution currently assembled (index / total)"
-                        | "Collection source / sample age"
-                ) && let Some(row) = view.overview.iter_mut().find(|(name, _)| name == &label)
-                {
-                    row.1 = value;
-                }
-            }
-            let resources = self.live_resources(now);
-            let rows = resources
-                .rows()
-                .into_iter()
-                .chain(resources.guard.rows())
-                .collect::<Vec<_>>();
-            view.cache
-                .retain(|(label, _)| !rows.iter().any(|(current, _)| current == label));
-            view.cache.splice(0..0, rows);
+            })
+            .collect::<Vec<_>>();
+        let counter = |work: &CallerWork, label: &str| Counter {
+            completed: work.completed,
+            total: work.total,
+            label: label.to_owned(),
+        };
+        let fingerprint = snapshot
+            .ordered
+            .as_ref()
+            .map(|ordered| ordered.family_fingerprint.as_str())
+            .or(snapshot
+                .stored_state
+                .as_ref()
+                .map(|state| state.family_fingerprint.as_str()))
+            .unwrap_or_default();
+        let resources = self.live_resources(now);
+        MonitorModel {
+            scope: snapshot.scope_kind,
+            status: self.status(),
+            api_status: snapshot.api_status,
+            elapsed_seconds: self.clock(Duration::ZERO, now).as_secs_f64(),
+            // The worker's own model is current; only a supervisor ages it.
+            snapshot_age_seconds: None,
+            run: snapshot.run.clone(),
+            stage: StageModel {
+                kind: stage_kind,
+                id: snapshot.stage.clone(),
+                activity: snapshot
+                    .phase
+                    .strip_prefix("native ")
+                    .filter(|_| snapshot.stage == NATIVE_STAGE)
+                    .map(model::humanize),
+                seconds: stage_seconds.as_secs_f64(),
+                work: snapshot
+                    .caller_work
+                    .as_ref()
+                    .map(|work| counter(work, &work.unit)),
+            },
+            stages,
+            batch: snapshot
+                .ordered_batches
+                .as_ref()
+                .map(|work| counter(work, &work.phase)),
+            cohort: snapshot
+                .reduction_cohorts
+                .as_ref()
+                .map(|work| counter(work, "")),
+            ordered: snapshot.ordered.as_ref().map(|ordered| {
+                // The phase clock runs from the census that opened the phase
+                // while the core works on it; a phase the core left unfinished
+                // (failure, end of the core, caller work) keeps the time up to
+                // its last census.
+                let open = ordered.counts.completed_phases < ordered.counts.total_phases;
+                let active = open && snapshot.native_work_active;
+                let phase_seconds = open.then(|| {
+                    if active {
+                        self.clock(ordered.phase_start.at, now)
+                    } else {
+                        ordered.sampled_at.saturating_sub(ordered.phase_start.at)
+                    }
+                    .as_secs_f64()
+                });
+                ordered.model(phase_seconds, active, seconds(ordered.sampled_at))
+            }),
+            dfs: (snapshot.ordered.is_none()
+                && (snapshot.quantitative_sample_at.is_some()
+                    || snapshot.native_collection.is_some()))
+            .then(|| self.dfs_model(now)),
+            memory: resources.memory(),
+            details: Details {
+                event_age_seconds: (!snapshot.phase.is_empty())
+                    .then(|| now.saturating_sub(self.received_at).as_secs_f64()),
+                native_observation_age_seconds: snapshot.native_observed_at.map(seconds),
+                family: model::short_fingerprint(fingerprint),
+                current_key: snapshot.current_key.clone(),
+                current_degrees: snapshot
+                    .current_degrees
+                    .map(|(r, a, d)| [r.to_string(), a.to_string(), d.to_string()]),
+                caller_expression: snapshot.caller_expression.as_ref().map(|sample| {
+                    ExpressionSize {
+                        bytes: sample.encoded_bytes,
+                        summands: sample.stored_summands,
+                        stage: sample.phase.clone(),
+                    }
+                }),
+                worker_pid: resources.process_pid,
+            },
+            events: snapshot.events.clone(),
         }
-        view.frozen = self.frozen.is_some();
-        view.show_help = self.show_help;
-        view.scroll = self.scroll;
-        if self.detached {
-            view.status = MonitorStatus::Detached;
-        }
-        view
     }
 
-    fn live_view(&self, now: Duration) -> MonitorView {
+    fn dfs_model(&self, now: Duration) -> DfsModel {
         let snapshot = &self.latest;
         let age = now.saturating_sub(self.received_at);
-        let count = |value: Option<u64>| value.map_or_else(|| "unknown".into(), |n| n.to_string());
-        let native_count = |value: u64| {
-            if snapshot.native_observed_at.is_some() || snapshot.completed_unique.is_some() {
-                value.to_string()
-            } else {
-                "unobserved".into()
-            }
-        };
-        let pending = snapshot.pending_unique.as_ref().map_or_else(
-            || "unknown".into(),
-            |value| {
-                format!(
-                    "{} ({}, {})",
-                    value.count,
-                    value.scope,
-                    if value.exact { "exact" } else { "sampled" }
-                )
-            },
-        );
-        let current = snapshot.current_key.as_ref().zip(snapshot.current_degrees);
-        let mut complexity = vec![
-            (
-                "Current canonical native key".into(),
-                current.map_or_else(
-                    || "unknown / no current native entry".into(),
-                    |(key, _)| key.clone(),
-                ),
-            ),
-            (
-                "Current canonical R / A / D".into(),
-                current.map_or_else(
-                    || "unknown".into(),
-                    |(_, (r, a, d))| format!("{r} / {a} / {d}"),
-                ),
-            ),
-        ];
-        complexity.extend(snapshot.complexity.iter().cloned());
-        complexity.extend(self.symbolic_state_rows(now));
-        let resources = self.live_resources(now);
-        let mut cache = resources.rows();
-        cache.extend(resources.guard.rows());
-        cache.extend(snapshot.cache.iter().cloned());
-        let mut view = MonitorView {
-            title: match snapshot.scope_kind {
-                ScopeKind::Api => "RustRed · request",
-                ScopeKind::Job => "Vakint · job",
-            }
-            .into(),
-            subtitle: format!(
-                "Local observations · {} · active {} · event age {} · UI heartbeat {}\n{}",
-                if snapshot.phase.is_empty() {
-                    "Starting monitor".into()
-                } else {
-                    snapshot.phase.replace('_', " ")
-                },
-                seconds(self.observation_age(snapshot.phase_started_at, now)),
-                seconds(age),
-                seconds(now),
-                resources.headline()
-            ),
-            // A native core can finish before saved terminal substitution.
-            status: if snapshot.status == MonitorStatus::Succeeded && !snapshot.request_finished {
-                MonitorStatus::Running
-            } else {
-                snapshot.status
-            },
-            frozen: false,
-            show_help: false,
-            scroll: 0,
-            overview: vec![
-                (
-                    "Monitor scope".into(),
-                    match snapshot.scope_kind {
-                        ScopeKind::Api => "single API call",
-                        ScopeKind::Job => "whole caller job",
-                    }
-                    .into(),
-                ),
-                (
-                    "Reduction API status".into(),
-                    format!("{:?}", snapshot.api_status),
-                ),
-                (
-                    "Whole job finished".into(),
-                    if snapshot.scope_kind == ScopeKind::Job {
-                        snapshot.request_finished.to_string()
-                    } else {
-                        "not a job scope".into()
-                    },
-                ),
-                ("Phase".into(), snapshot.phase.clone()),
-                (
-                    "Active phase elapsed".into(),
-                    seconds(self.observation_age(snapshot.phase_started_at, now)),
-                ),
-                (
-                    "Caller phase progress".into(),
-                    snapshot.caller_work.as_ref().map_or_else(
-                        || {
-                            "Indeterminate; this stage exposes no completed/total work counter"
-                                .into()
-                        },
-                        |work| {
-                            format!(
-                                "{} / {} {} · sample age {}",
-                                work.completed,
-                                work.total,
-                                work.unit,
-                                seconds(now.saturating_sub(work.sampled_at))
-                            )
-                        },
-                    ),
-                ),
-                ("Elapsed at observation".into(), seconds(snapshot.elapsed)),
-                ("Snapshot age".into(), seconds(age)),
-                (
-                    "Last native observation age".into(),
-                    snapshot.native_observed_at.map_or_else(
-                        || "unknown / no native dispatch".into(),
-                        |at| seconds(snapshot.elapsed.saturating_sub(at).saturating_add(age)),
-                    ),
-                ),
-                (
-                    "Request finished".into(),
-                    snapshot.request_finished.to_string(),
-                ),
-                (
-                    "Native roots at frontier census".into(),
-                    format!(
-                        "{} / {}",
-                        count(snapshot.completed_roots),
-                        count(snapshot.total_roots)
-                    ),
-                ),
-                (
-                    "Native root output terms (sampled)".into(),
-                    count(snapshot.root_output_terms),
-                ),
-            ],
-            frontier: vec![
-                (
-                    "Entered unique Route/Apply identities".into(),
-                    native_count(snapshot.unique_entered),
-                ),
-                (
-                    "Completed unique identities (not closure)".into(),
-                    count(snapshot.completed_unique),
-                ),
-                (
-                    "Completion attempts (includes recomputation)".into(),
-                    count(snapshot.completion_attempts),
-                ),
-                (
-                    "Active unique identities".into(),
-                    native_count(snapshot.active_nodes),
-                ),
-                (
-                    "Pending operational frames".into(),
-                    native_count(snapshot.pending_frames),
-                ),
-                ("Pending unique identities".into(), pending),
-                (
-                    "Since last observed new completion".into(),
-                    self.last_completion.map_or_else(
-                        || "unknown".into(),
-                        |last| seconds(snapshot.elapsed.saturating_sub(last).saturating_add(age)),
-                    ),
-                ),
-            ],
-            cache,
-            complexity,
-            estimates: self.estimates(age),
+        let cache = snapshot.dfs_cache;
+        DfsModel {
+            roots_completed: snapshot.completed_roots,
+            roots_total: snapshot.total_roots,
+            entered: snapshot.unique_entered,
+            completed: snapshot.completed_unique,
+            attempts: snapshot.completion_attempts,
+            active: snapshot.active_nodes,
+            pending_frames: snapshot.pending_frames,
+            pending_unique: snapshot
+                .pending_unique
+                .as_ref()
+                .map(|pending| pending.count),
+            pending_exact: snapshot
+                .pending_unique
+                .as_ref()
+                .is_some_and(|pending| pending.exact),
+            persistent_hits: cache.map(|cache| cache.persistent_hits),
+            persistent_misses: cache.map(|cache| cache.persistent_misses),
+            ram_hits: cache.map(|cache| cache.ram_hits),
+            cached_entries: cache.map(|cache| cache.cached_entries),
+            since_completion_seconds: self.last_completion.map(|last| {
+                snapshot
+                    .elapsed
+                    .saturating_sub(last)
+                    .saturating_add(age)
+                    .as_secs_f64()
+            }),
+            estimates: self.dfs_estimates(age),
+            collection: self.live_collection(now).map(|sample| Collection {
+                completed_roots: sample.completed_roots,
+                total_roots: sample.total_roots,
+                contribution: sample.contribution_index,
+                contributions: sample.contribution_total,
+                age_seconds: sample.sample_age_seconds,
+            }),
             path: snapshot.path.clone(),
-            events: snapshot.events.clone(),
-        };
-        if snapshot.ordered.is_none() || snapshot.native_collection.is_some() {
-            view.overview
-                .extend(self.live_collection(now).unwrap_or_default().rows());
         }
-        if let Some(ordered) = &snapshot.ordered {
-            view.overview.retain(|(label, _)| {
-                !matches!(
-                    label.as_str(),
-                    "Native roots at frontier census" | "Native root output terms (sampled)"
-                )
-            });
-            view.overview.splice(3..3, ordered.overview_rows());
-            view.frontier = ordered.frontier_rows();
-            view.cache.push((
-                "Reduction-result cache".into(),
-                "none: the ordered engine replays one-step records only".into(),
-            ));
-            view.cache.extend(ordered.step_cache_rows());
-            view.complexity.insert(
-                0,
-                (
-                    "Ordered frontier census age".into(),
-                    seconds(self.observation_age(ordered.sampled_at, now)),
-                ),
-            );
-            view.complexity.insert(
-                1,
-                (
-                    "Topology complexity convention".into(),
-                    "support = distinct positive denominator slots; dots and graph edges differ"
-                        .into(),
-                ),
-            );
-            let counts = ordered.counts;
-            view.complexity.splice(
-                2..2,
-                [
-                    (
-                        "Frontier coefficient monomials (current / peak)".into(),
-                        format!(
-                            "{} / {} · num+den proxy; not bytes",
-                            counts.frontier_coefficient_monomials,
-                            counts.peak_frontier_coefficient_monomials
-                        ),
-                    ),
-                    (
-                        "Terminal coefficient monomials (current / peak)".into(),
-                        format!(
-                            "{} / {} · num+den proxy; not bytes",
-                            counts.terminal_coefficient_monomials,
-                            counts.peak_terminal_coefficient_monomials
-                        ),
-                    ),
-                ],
-            );
-            view.estimates = vec![(
-                "Ordered schedule progress".into(),
-                "Phase completion is monotone within this request; phase costs differ; no time ETA"
-                    .into(),
-            )];
-        }
-        let mut batch_rows = Vec::new();
-        if let Some(work) = &snapshot.ordered_batches {
-            batch_rows.push((
-                "Ordered batches completed / total".into(),
-                format!("{} / {} · {}", work.completed, work.total, work.phase),
-            ));
-        }
-        if let Some(work) = &snapshot.reduction_cohorts {
-            batch_rows.push((
-                "Compatible cohorts completed / total".into(),
-                format!(
-                    "{} / {} · current collected batch",
-                    work.completed, work.total
-                ),
-            ));
-        }
-        view.overview.splice(3..3, batch_rows);
-        view
     }
 
-    fn symbolic_state_rows(&self, now: Duration) -> Vec<(String, String)> {
-        let count = |value: Option<usize>| {
-            value.map_or_else(|| "unknown".into(), |value| value.to_string())
+    /// Throughput estimates of native depth-first work. They extrapolate the
+    /// observed window; future discovery and caller work are excluded.
+    fn dfs_estimates(&self, age: Duration) -> DfsEstimates {
+        let mut estimates = DfsEstimates {
+            samples: self.samples.len(),
+            sample_age_seconds: self.samples.back().map(|sample| {
+                self.latest
+                    .elapsed
+                    .saturating_sub(sample.elapsed)
+                    .saturating_add(age)
+                    .as_secs_f64()
+            }),
+            ..Default::default()
         };
-        let caller = self.latest.caller_expression.as_ref();
-        let native = self.latest.stored_state.as_ref();
-        vec![
-            (
-                "Caller Atom bytes / stored summands".into(),
-                caller.map_or_else(
-                    || "unobserved".into(),
-                    |sample| format!("{} / {} · {} · age {}", sample.encoded_bytes,
-                        count(sample.stored_summands), sample.phase,
-                        seconds(self.observation_age(sample.sampled_at, now))),
-                ),
-            ),
-            (
-                "Native unstarted roots / output keys".into(),
-                native.map_or_else(
-                    || "unobserved".into(),
-                    |sample| format!("{} / {}", count(sample.counts.unstarted_roots),
-                        count(sample.counts.collected_output_integrals)),
-                ),
-            ),
-            (
-                "Native deferred maps / child occurrences".into(),
-                native.map_or_else(
-                    || "unobserved".into(),
-                    |sample| format!("{} / {}", count(sample.counts.deferred_rule_maps),
-                        count(sample.counts.deferred_child_integral_occurrences)),
-                ),
-            ),
-            (
-                "Stored-state scope / sample age".into(),
-                native.map_or_else(
-                    || "no native stored-state sample".into(),
-                    |sample| format!("{} · {}", sample.family_fingerprint,
-                        seconds(self.observation_age(sample.sampled_at, now))),
-                ),
-            ),
-            (
-                "Symbolic size conventions".into(),
-                if self.latest.ordered.is_some() {
-                    "Ordered keys are coalesced within this request; frontier/output are separate. Key counts exclude coefficient monomials; Atom bytes exclude symbol metadata."
-                } else {
-                    "Stored partitions overlap; no combined global expression. Atom bytes exclude symbol metadata; Native coefficient bytes are clone bounds."
-                }.into(),
-            ),
-        ]
-    }
-
-    fn estimates(&self, age: Duration) -> Vec<(String, String)> {
-        let mut rows = vec![
-            (
-                "Estimate scope".into(),
-                "Native dispatch only; excludes caller postprocessing; future discovery excluded"
-                    .into(),
-            ),
-            (
-                "Estimate sample age".into(),
-                self.samples.back().map_or_else(
-                    || "unknown".into(),
-                    |sample| {
-                        seconds(
-                            self.latest
-                                .elapsed
-                                .saturating_sub(sample.elapsed)
-                                .saturating_add(age),
-                        )
-                    },
-                ),
-            ),
-            ("Discovered-frontier ETA".into(), "warmup / unknown".into()),
-            ("Root-rate ETA".into(), "warmup / unknown".into()),
-            ("Net frontier growth".into(), "unknown".into()),
-            (
-                "Confidence".into(),
-                "Low confidence: heuristic; no remaining-work certificate or global bound".into(),
-            ),
-        ];
         if !self.latest.native_work_active
             || self.latest.request_finished
             || self.latest.status != MonitorStatus::Running
         {
-            rows[2].1 =
-                "indeterminate / unknown · no active native dispatch; caller work is separate"
-                    .into();
-            rows[3].1 =
-                "indeterminate / unknown · no active native dispatch; caller work is separate"
-                    .into();
-            rows[4].1 = "last native sample only".into();
-            return rows;
+            estimates.state = EstimateState::Inactive;
+            return estimates;
         }
         let (Some(first), Some(last)) = (self.samples.front(), self.samples.back()) else {
-            return rows;
+            return estimates;
         };
         let observed_window = last.elapsed.saturating_sub(first.elapsed);
         let window = observed_window.as_secs_f64();
-        rows.push((
-            "Observation window".into(),
-            format!("{window:.1}s / {} snapshots", self.samples.len()),
-        ));
+        estimates.window_seconds = Some(window);
         if window <= 0.0 {
-            return rows;
+            return estimates;
         }
         let sample_age = self
             .latest
@@ -1527,36 +1210,24 @@ impl MonitorState {
             .saturating_sub(last.elapsed)
             .saturating_add(age);
         if sample_age > observed_window.max(Duration::from_secs(1)) {
-            rows[2].1 = "stale / unknown".into();
-            rows[3].1 = "stale / unknown".into();
-            rows[4].1 = "stale / unknown".into();
-            return rows;
+            estimates.state = EstimateState::Stale;
+            return estimates;
         }
+        estimates.state = EstimateState::Live;
         if let (Some(start), Some(end)) = (first.completed, last.completed)
             && end >= start
         {
             let completed = end - start;
-            let growth =
-                (last.entered.saturating_sub(first.entered) as f64 - completed as f64) / window;
-            rows[4].1 = format!(
-                "{growth:+.2} identities/s · {}",
-                if growth > 0.0 {
-                    "growing"
-                } else {
-                    "not growing in sample"
-                }
+            estimates.growth_rate = Some(
+                (last.entered.saturating_sub(first.entered) as f64 - completed as f64) / window,
             );
             if completed > 0 {
                 let rate = completed as f64 / window;
+                estimates.completion_rate = Some(rate);
                 if let Some(frontier) = &self.latest.pending_unique
                     && frontier.operational_scope
-                    && let Some(eta) = duration(frontier.count as f64 / rate)
                 {
-                    rows[2].1 = format!(
-                        "{} · pending identities / {rate:.2} completions/s · {} frontier",
-                        seconds(eta),
-                        if frontier.exact { "exact" } else { "sampled" }
-                    );
+                    estimates.frontier_eta_seconds = finite(frontier.count as f64 / rate);
                 }
             }
         }
@@ -1566,21 +1237,13 @@ impl MonitorState {
             && total >= end
         {
             let rate = (end - start) as f64 / window;
-            if let Some(eta) = duration((total - end) as f64 / rate) {
-                rows[3].1 = format!(
-                    "{} · known selected roots / {rate:.2} collected roots/s; root costs vary",
-                    seconds(eta)
-                );
-            }
+            estimates.root_rate = Some(rate);
+            estimates.root_eta_seconds = finite((total - end) as f64 / rate);
         }
-        rows
+        estimates
     }
 }
 
-fn duration(seconds: f64) -> Option<Duration> {
-    Duration::try_from_secs_f64(seconds).ok()
-}
-
-fn seconds(value: Duration) -> String {
-    format!("{:.1}s", value.as_secs_f64())
+fn finite(seconds: f64) -> Option<f64> {
+    (seconds.is_finite() && seconds >= 0.0).then_some(seconds)
 }

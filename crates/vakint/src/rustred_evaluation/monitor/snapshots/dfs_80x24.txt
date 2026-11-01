@@ -1,0 +1,24 @@
+ vakint monitor · DFS · call                                   ● RUNNING  13:32
+ Stage    native reduction ▸ transport                                    13:10
+ Roots    412/1750 · 0.5/s · ETA 42:53
+ Nodes    20.4k entered · 18.3k completed · 1190 pending (sampled)
+ Rate     12.3/s · frontier +0.50/s · ETA 1:36
+ Cache    persistent 1204 hits / 311 misses · RAM 5633 hits
+ Memory   RSS 4.1 GiB (peak 4.2 GiB) · avail 197.4 GiB · CPU 100%
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ Stages   native 13:10
+ q detach  space freeze  d details  ^C interrupt  ? help

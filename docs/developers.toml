@@ -678,7 +678,11 @@ anchor = "pub struct Vakint {"
 # re-exports the shipped-cache report types (ShippedOrderedCache*, OrderedCacheExportReport,
 # SHIPPED_ORDERED_CACHE_SCHEMA) and ordered_cache_producer; Vakint's fields, ownership
 # and evaluation entry points are unchanged.
-digest = "01e285a805a1801c3794cd067802bd087b360d80"
+# Reviewed 2026-11-01 for the typed progress monitor: monitored evaluation
+# passes its settings (n_cores, Ordered weight arithmetic, step-cache mode) to
+# the presentation owner. Evaluation, expressions and guards are unchanged.
+# Reviewed 2026-11-01 for the merge of the two reviewed changes above (shipped caches + progress monitor); no further change.
+digest = "b9399e64383a7fef8f216393e32f745114cf6825"
 
 [[section.note.scope]]
 path = "crates/vakint/src/lorentz.rs"
