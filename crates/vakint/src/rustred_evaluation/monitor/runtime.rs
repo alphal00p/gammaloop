@@ -22,9 +22,10 @@ use rustred::solver::{
 use symbolica::atom::AtomView;
 
 use super::{
-    ApiStatus, CallerExpressionSample, DisplaySnapshot, FrontierCount, MonitorState, MonitorStatus,
-    NativeCollectionSample, OrderedReductionSample, RustRedMonitorDisplay, RustRedMonitorOptions,
-    ScopeKind, StoredStateSample,
+    ApiStatus, CallerExpressionSample, DfsCacheCounts, DisplaySnapshot, FrontierCount,
+    MonitorState, MonitorStatus, NativeCollectionSample, OrderedReductionSample,
+    RustRedMonitorDisplay, RustRedMonitorOptions, ScopeKind, StoredStateSample,
+    model::{NATIVE_STAGE, RunConfig, classify_stage},
 };
 use crate::VakintError;
 
@@ -192,6 +193,28 @@ pub(crate) struct CallerProgress {
 }
 
 impl CallerProgress {
+    /// Show the settings of the observed evaluation: worker count, Ordered
+    /// weight arithmetic and step-cache mode. Presentation only.
+    pub(crate) fn configure(&self, settings: &crate::VakintSettings) {
+        if !self.handle.shared.active.load(Ordering::Relaxed) {
+            return;
+        }
+        let cache = &settings.ordered_cache;
+        let step_cache = match (cache.mode, &cache.directory) {
+            (crate::OrderedCacheMode::Off, _) | (_, Some(_)) => cache.mode.to_string(),
+            (mode, None) => format!("{mode} (in memory)"),
+        };
+        let mut pending = self.handle.shared.pending();
+        pending.display.run = Some(RunConfig {
+            n_cores: settings.n_cores,
+            arithmetic: settings.ordered_weight_arithmetic.to_string(),
+            step_cache,
+        });
+        pending.dirty = true;
+        drop(pending);
+        let _ = self.handle.wake.try_send(());
+    }
+
     /// Outer loop/mode groups have a known total before ordered dispatch. This
     /// counter survives nested activities and never changes native clocks.
     pub(crate) fn ordered_batch(&self, completed: usize, total: usize, scope: &str) {
@@ -644,7 +667,11 @@ fn worker_with_publisher(
                 None
             }
             Err(_) => {
-                stderr_json = !file_enabled;
+                // No terminal (a notebook, a pipe, TERM=dumb): the display is
+                // off. A JSON stream would flood the caller's output instead.
+                if !file_enabled {
+                    shared.active.store(false, Ordering::Relaxed);
+                }
                 None
             }
         }
@@ -652,8 +679,8 @@ fn worker_with_publisher(
         None
     };
     #[cfg(not(feature = "progress-tui"))]
-    if options.display == RustRedMonitorDisplay::Tui {
-        stderr_json = !file_enabled;
+    if options.display == RustRedMonitorDisplay::Tui && !file_enabled {
+        shared.active.store(false, Ordering::Relaxed);
     }
     if options.display == RustRedMonitorDisplay::Json && !file_enabled {
         stderr_json = true;
@@ -741,7 +768,11 @@ fn worker_with_publisher(
                 Ok(Some(action)) => {
                     state.apply(action, shared.started.elapsed());
                     if state.detached() {
+                        // Restore the terminal before any signal is delivered.
                         terminal = None;
+                        if state.interrupted() {
+                            super::tui::interrupt_foreground_group();
+                        }
                         if !file_enabled {
                             shared.active.store(false, Ordering::Relaxed);
                         }
@@ -900,6 +931,24 @@ fn update_display(pending: &mut Pending, envelope: &Envelope<'_>, detail: bool, 
         display.caller_work = None;
     }
     display.phase = phase;
+    // Native activities share one stage: their flips never restart its clock.
+    let stage = envelope.caller_phase.unwrap_or(NATIVE_STAGE);
+    if display.stage != stage {
+        if !display.stage.is_empty() {
+            let spent = envelope.elapsed.saturating_sub(display.stage_started_at);
+            let kind = classify_stage(&display.stage);
+            match display
+                .stage_ledger
+                .iter_mut()
+                .find(|(finished, _)| *finished == kind)
+            {
+                Some((_, total)) => *total += spent,
+                None => display.stage_ledger.push((kind, spent)),
+            }
+        }
+        display.stage = stage.to_owned();
+        display.stage_started_at = envelope.elapsed;
+    }
     display.native_work_active = envelope.activity != Activity::Caller
         && envelope.caller_phase.is_none()
         && envelope.status == Status::Running
@@ -911,8 +960,9 @@ fn update_display(pending: &mut Pending, envelope: &Envelope<'_>, detail: bool, 
             Status::Failed => MonitorStatus::Failed,
             Status::Succeeded
                 if display.scope_kind == ScopeKind::Api
-                    && (display.phase.contains("cancelled")
-                        || display.phase.contains("incomplete")) =>
+                    && envelope.caller_phase.is_some_and(|phase| {
+                        phase.contains("cancelled") || phase.contains("incomplete")
+                    }) =>
             {
                 MonitorStatus::Partial
             }
@@ -949,9 +999,7 @@ fn update_display(pending: &mut Pending, envelope: &Envelope<'_>, detail: bool, 
         display.pending_frames = 0;
         display.completed_roots = None;
         display.total_roots = None;
-        display.root_output_terms = None;
-        display.cache.clear();
-        display.complexity.clear();
+        display.dfs_cache = None;
         display.path.clear();
     }
     if envelope.activity == Activity::Caller
@@ -1043,129 +1091,19 @@ fn update_display(pending: &mut Pending, envelope: &Envelope<'_>, detail: bool, 
         display.completion_attempts = Some(envelope.metrics.completion_attempts as u64);
         display.completed_roots = Some(envelope.metrics.completed_roots as u64);
         display.total_roots = envelope.metrics.requested_roots.map(|v| v as u64);
-        display.root_output_terms = envelope.metrics.output_terms.map(|v| v as u64);
         display.pending_unique = Some(FrontierCount {
             count: frontier.unique_nodes as u64,
             exact: frontier.exact,
             operational_scope: true,
-            scope: format!(
-                "Route/Apply identities; {}/{} frames sampled",
-                frontier.frames_examined, frontier.total_pending_frames
-            ),
         });
-        display.cache = vec![
-            (
-                "Persistent lookups".into(),
-                snapshot.statistics.persistent_cache.lookups.to_string(),
-            ),
-            (
-                "Persistent requested-root hits".into(),
-                snapshot
-                    .statistics
-                    .persistent_cache
-                    .requested_root_hits
-                    .to_string(),
-            ),
-            (
-                "Persistent intermediate hits".into(),
-                snapshot
-                    .statistics
-                    .persistent_cache
-                    .intermediate_hits
-                    .to_string(),
-            ),
-            (
-                "Persistent Route hits".into(),
-                snapshot.statistics.persistent_cache.route_hits.to_string(),
-            ),
-            (
-                "Persistent Apply hits".into(),
-                snapshot.statistics.persistent_cache.apply_hits.to_string(),
-            ),
-            (
-                "Persistent misses".into(),
-                snapshot.statistics.persistent_cache.misses.to_string(),
-            ),
-            (
-                "Request RAM/work hits".into(),
-                snapshot.statistics.work.cache_hits().to_string(),
-            ),
-            (
-                "Cached native coefficient entries".into(),
-                snapshot.cached.entries.to_string(),
-            ),
-            (
-                "Cached coefficient terms (guards included)".into(),
-                snapshot.cached.coefficient_terms.to_string(),
-            ),
-            (
-                "Cached coefficient bytes (not RSS/encoding)".into(),
-                snapshot.cached.coefficient_bytes.to_string(),
-            ),
-            (
-                "Pinned entries".into(),
-                snapshot.pinned.map_or_else(
-                    || "unknown (policy does not count pins)".into(),
-                    |v| v.entries.to_string(),
-                ),
-            ),
-            (
-                "Eviction-eligible entries".into(),
-                snapshot
-                    .eligible
-                    .map_or_else(|| "unknown".into(), |v| v.entries.to_string()),
-            ),
-            ("Nested factor phases".into(), "unobserved".into()),
-        ];
-        let degrees = envelope.metrics.max_seen_degrees;
-        display.complexity = vec![
-            (
-                "Max seen canonical A".into(),
-                degrees.positive_power_sum.to_string(),
-            ),
-            (
-                "Max seen canonical R".into(),
-                degrees.numerator_rank.to_string(),
-            ),
-            (
-                "Max seen canonical D=A-R".into(),
-                degrees.power_difference.to_string(),
-            ),
-            (
-                "Physical input rank".into(),
-                "caller expression; not inferred from canonical R".into(),
-            ),
-            (
-                "Native output terms (sampled)".into(),
-                envelope
-                    .complexity
-                    .terms
-                    .map_or_else(|| "unknown".into(), |v| v.to_string()),
-            ),
-            (
-                "Native coefficient terms (sampled)".into(),
-                envelope.complexity.coefficient_terms.map_or_else(
-                    || "unknown / not materialized for telemetry".into(),
-                    |v| v.to_string(),
-                ),
-            ),
-            (
-                "Native coefficient bytes (sampled)".into(),
-                envelope
-                    .complexity
-                    .coefficient_bytes
-                    .map_or_else(|| "unknown".into(), |v| v.to_string()),
-            ),
-            (
-                "Complexity scope".into(),
-                if envelope.complexity.factorized {
-                    "factorized native storage"
-                } else {
-                    "current native operation"
-                }
-                .into(),
-            ),
-        ];
+        let statistics = &snapshot.statistics;
+        let persistent = &statistics.persistent_cache;
+        display.dfs_cache = Some(DfsCacheCounts {
+            persistent_hits: (persistent.requested_root_hits + persistent.intermediate_hits) as u64,
+            persistent_misses: persistent.misses as u64,
+            ram_hits: statistics.work.cache_hits() as u64,
+            cached_entries: snapshot.cached.entries as u64,
+        });
     }
     if !envelope.active_path.is_empty() || matches!(envelope.event, Event::CycleDetected) {
         display.path = envelope
@@ -1191,8 +1129,10 @@ fn update_display(pending: &mut Pending, envelope: &Envelope<'_>, detail: bool, 
         Event::CycleDetected | Event::RequestFinished
     ) {
         pending.events.push_back(format!(
-            "{:?} / {:?} / {:?}",
-            envelope.event, envelope.activity, envelope.status
+            "{} · {} · {}",
+            super::model::humanize(&format!("{:?}", envelope.event)),
+            super::model::humanize(&format!("{:?}", envelope.activity)),
+            super::model::humanize(&format!("{:?}", envelope.status)),
         ));
         if pending.events.len() > 64 {
             pending.events.pop_front();
@@ -1714,17 +1654,18 @@ mod tests {
         let progress = CallerProgress {
             handle: handle.clone(),
         };
-        let native_sample = || OrderedReductionSample {
-            counts: rustred::solver::CandidateOrderedReductionProgress {
-                completed_phases: 5,
-                total_phases: 5,
-                ..Default::default()
-            },
-            native_epoch: 1,
-            family_fingerprint: "previous-native-family".into(),
-            sampled_at: Duration::from_secs(10),
-            phase_start: (0, 0),
-            step_cache_phases: Vec::new(),
+        let native_sample = || {
+            OrderedReductionSample::next(
+                None,
+                rustred::solver::CandidateOrderedReductionProgress {
+                    completed_phases: 5,
+                    total_phases: 5,
+                    ..Default::default()
+                },
+                1,
+                "previous-native-family",
+                Duration::from_secs(10),
+            )
         };
         {
             let mut pending = shared.pending();
@@ -1923,8 +1864,30 @@ mod tests {
                 ),
             ]
         );
+        // Stages group phases by kind; every native activity is one stage.
+        assert_eq!(
+            pending.display.stage_ledger,
+            [
+                (
+                    super::super::model::StageKind::DataLoad,
+                    Duration::from_secs(4)
+                ),
+                (
+                    super::super::model::StageKind::Ingress,
+                    Duration::from_secs(2)
+                ),
+                (
+                    super::super::model::StageKind::Native,
+                    Duration::from_secs(10)
+                ),
+            ]
+        );
+        assert_eq!(pending.display.stage, "guard_serialization");
         let mut state = super::super::MonitorState::default();
         state.observe(pending.display.clone(), Duration::from_secs(16));
+        let model = state.live_model(Duration::from_secs(19));
+        assert_eq!(model.stage.kind, super::super::model::StageKind::Output);
+        assert_eq!(model.stage.seconds, 3.0);
         let phases = &state.presentation(Duration::from_secs(19))["phase_seconds"]["phases"];
         let rows = phases
             .as_array()
@@ -2319,46 +2282,36 @@ mod tests {
             false
         );
         assert!(document["monitor"]["last_cycle"].is_object());
-        let view: super::super::MonitorView =
-            serde_json::from_value(document["monitor"]["view"].clone()).unwrap();
+        assert_eq!(document["monitor"]["schema"], "vakint.monitor.v2");
+        let model: super::super::model::MonitorModel =
+            serde_json::from_value(document["monitor"]["model"].clone()).unwrap();
+        // Synthetic phases only: no native census, so no estimate is shown.
+        assert!(model.ordered.is_none() && model.dfs.is_none());
+        assert!(model.memory.verified && model.memory.rss_bytes.is_some());
         assert!(
-            view.estimates
+            model
+                .events
                 .iter()
-                .any(|(label, value)| label == "Discovered-frontier ETA"
-                    && value.contains("unknown"))
-        );
-        assert!(
-            view.events
-                .iter()
-                .any(|event| event.contains("CycleDetected"))
+                .any(|event| event.contains("cycle detected"))
         );
         #[cfg(feature = "progress-tui")]
         {
-            let backend = ratatui::backend::TestBackend::new(220, 80);
-            let mut terminal = ratatui::Terminal::new(backend).unwrap();
-            terminal
-                .draw(|frame| {
-                    super::super::tui::draw(frame, &view, false);
-                })
-                .unwrap();
-            let rendered = terminal
-                .backend()
-                .buffer()
-                .content
-                .iter()
-                .map(|cell| cell.symbol())
-                .collect::<String>();
+            let buffer = super::super::tui::tests::render(
+                &model,
+                super::super::UiView::default(),
+                80,
+                24,
+                false,
+            );
+            let rendered = super::super::tui::tests::text(&buffer);
             for label in [
-                "Process RSS / peak",
-                "MemAvailable / MemFree",
-                "usable / unused",
-                "MemTotal",
-                "sample age",
-                "Caller Atom bytes / stored summands",
-                "CycleDetected",
-                "Failed",
+                "RSS",
+                "avail",
+                "cycle detected",
+                "FAILED",
+                "synthetic busy phase",
             ] {
-                assert!(rendered.contains(label), "missing {label}");
+                assert!(rendered.contains(label), "missing {label}:\n{rendered}");
             }
         }
     }
@@ -2399,11 +2352,12 @@ mod tests {
         assert_eq!(final_document["status"], "succeeded");
         assert_eq!(final_document["request_finished"], true);
         assert_eq!(final_document["caller_phase"], "busy_phase");
+        assert_eq!(final_document["monitor"]["schema"], "vakint.monitor.v2");
         assert_eq!(
-            final_document["monitor"]["view"]["phase"],
-            serde_json::Value::Null
+            final_document["monitor"]["model"]["stage"]["id"],
+            "busy_phase"
         );
-        assert!(final_document["monitor"]["estimates"].is_array());
+        assert_eq!(final_document["monitor"]["model"]["status"], "Succeeded");
     }
 
     #[test]
@@ -2700,27 +2654,295 @@ mod tests {
             Some(Duration::from_millis(100))
         );
         assert_eq!(pending.display.quantitative_sample_sequence, 2);
+        let cache = pending.display.dfs_cache.unwrap();
+        assert_eq!(cache.persistent_hits, 1);
+        assert_eq!(cache.cached_entries, 3);
+    }
+    #[test]
+    fn native_activity_flips_do_not_restart_the_stage_clock() {
+        let mut pending = Pending::default();
+        for (seconds, phase, activity) in [
+            (0, Some("data_loading"), Activity::Caller),
+            (5, None, Activity::Expansion),
+            (6, None, Activity::CoefficientCombination),
+            (7, None, Activity::Transport),
+            (9, None, Activity::CoefficientCombination),
+        ] {
+            let mut envelope = Envelope::new(Event::ActivityStarted, "stage-fixture");
+            envelope.caller_phase = phase;
+            envelope.activity = activity;
+            envelope.elapsed = Duration::from_secs(seconds);
+            update_display(&mut pending, &envelope, false, false);
+        }
+        // The legacy phase label follows every activity; the stage does not.
+        assert_eq!(pending.display.phase_started_at, Duration::from_secs(9));
+        assert_eq!(pending.display.stage, NATIVE_STAGE);
+        assert_eq!(pending.display.stage_started_at, Duration::from_secs(5));
+        let mut state = MonitorState::default();
+        state.observe(pending.display.clone(), Duration::from_secs(9));
+        let model = state.live_model(Duration::from_secs(12));
+        assert_eq!(model.stage.seconds, 7.0);
         assert_eq!(
-            pending
-                .display
-                .cache
-                .iter()
-                .find(|(label, _)| label == "Persistent requested-root hits")
-                .unwrap()
-                .1,
-            "1"
+            model.stage.activity.as_deref(),
+            Some("coefficient combination")
         );
         assert_eq!(
-            pending
-                .display
-                .cache
+            model
+                .stages
                 .iter()
-                .find(|(label, _)| label == "Cached native coefficient entries")
-                .unwrap()
-                .1,
-            "3"
+                .map(|total| (total.kind, total.seconds))
+                .collect::<Vec<_>>(),
+            [
+                (super::super::model::StageKind::DataLoad, 5.0),
+                (super::super::model::StageKind::Native, 7.0)
+            ]
         );
     }
+
+    /// Replay a recorded monitor history (compact JSONL written by
+    /// `SCRATCHPAD/polish-tui/extract_history.py`) through the real display
+    /// path and print the screens at the requested wall times:
+    /// `VAKINT_MONITOR_REPLAY=<jsonl> VAKINT_MONITOR_REPLAY_AT=600,5000 \
+    ///  VAKINT_MONITOR_REPLAY_OUT=<dir> cargo test ... -- --ignored replay`.
+    #[cfg(feature = "progress-tui")]
+    #[test]
+    #[ignore = "needs a recorded monitor history (VAKINT_MONITOR_REPLAY)"]
+    fn replay_recorded_monitor_history() {
+        use std::io::BufRead;
+        let path = std::env::var_os("VAKINT_MONITOR_REPLAY").expect("VAKINT_MONITOR_REPLAY");
+        let output = std::env::var_os("VAKINT_MONITOR_REPLAY_OUT").map(std::path::PathBuf::from);
+        let mut times = std::env::var("VAKINT_MONITOR_REPLAY_AT")
+            .unwrap_or_else(|_| "600,5000,16500,17790,19000".into())
+            .split(',')
+            .map(|time| time.trim().parse::<f64>().unwrap())
+            .collect::<VecDeque<_>>();
+        let activity = |name: &str| match name {
+            "Admission" => Activity::Admission,
+            "Transport" => Activity::Transport,
+            "OwnerPreparation" => Activity::OwnerPreparation,
+            "RootCollection" => Activity::RootCollection,
+            "RootMaterialization" => Activity::RootMaterialization,
+            "CoefficientCombination" => Activity::CoefficientCombination,
+            _ => Activity::Expansion,
+        };
+        let mut pending = Pending::default();
+        pending.display.run = Some(RunConfig {
+            n_cores: 1,
+            arithmetic: "exact".into(),
+            step_cache: "off".into(),
+        });
+        let mut state = MonitorState::default();
+        let reader = std::io::BufReader::new(std::fs::File::open(path).unwrap());
+        let mut sequence = 0;
+        for line in reader.lines() {
+            let row: serde_json::Value = serde_json::from_str(&line.unwrap()).unwrap();
+            let wall = row["w"].as_f64().unwrap();
+            let now = Duration::from_secs_f64(wall);
+            let phase = row["phase"].as_str().unwrap_or_default();
+            sequence += 1;
+            let mut envelope = Envelope::new(Event::Snapshot, "5L zero-momentum (replay)");
+            envelope.sequence = sequence;
+            envelope.elapsed = now;
+            let counts = row["ordered"].as_object().map(|ordered| {
+                let count = |name: &str| ordered[name].as_u64().unwrap_or_default() as usize;
+                rustred::solver::CandidateOrderedReductionProgress {
+                    completed_phases: count("completed_phases"),
+                    total_phases: count("total_phases"),
+                    phase_kind: if ordered["phase_kind"] == "Routing" {
+                        rustred::solver::CandidateOrderedPhaseKind::Routing
+                    } else {
+                        rustred::solver::CandidateOrderedPhaseKind::Reduction
+                    },
+                    active_support: ordered["active_support"].as_u64().map(|v| v as usize),
+                    owner_index: ordered["owner_index"].as_u64().map(|v| v as usize),
+                    input_keys: count("input_keys"),
+                    frontier_keys: count("frontier_keys"),
+                    peak_frontier_keys: count("peak_frontier_keys"),
+                    terminal_keys: count("terminal_keys"),
+                    frontier_coefficient_monomials: count("frontier_coefficient_monomials"),
+                    peak_frontier_coefficient_monomials: count(
+                        "peak_frontier_coefficient_monomials",
+                    ),
+                    terminal_coefficient_monomials: count("terminal_coefficient_monomials"),
+                    peak_terminal_coefficient_monomials: count(
+                        "peak_terminal_coefficient_monomials",
+                    ),
+                    emitted_terms: count("emitted_terms"),
+                    merged_terms: count("merged_terms"),
+                    cancelled_terms: count("cancelled_terms"),
+                    terminal_merges: count("terminal_merges"),
+                    terminal_cancellations: count("terminal_cancellations"),
+                    processed_keys: count("processed_keys"),
+                    ..Default::default()
+                }
+            });
+            match phase.strip_prefix("native ") {
+                Some(name) => {
+                    envelope.activity = activity(name);
+                    envelope.ordered = counts;
+                }
+                None => {
+                    envelope.activity = Activity::Caller;
+                    envelope.caller_phase = Some(phase);
+                }
+            }
+            update_display(&mut pending, &envelope, false, false);
+            let display = &mut pending.display;
+            let caller = |value: &serde_json::Value, label: &str| {
+                value.as_array().map(|work| super::super::CallerWork {
+                    phase: work.get(2).and_then(|v| v.as_str()).unwrap_or(label).into(),
+                    completed: work[0].as_u64().unwrap_or_default() as usize,
+                    total: work[1].as_u64().unwrap_or_default() as usize,
+                    unit: String::new(),
+                    sampled_at: now,
+                })
+            };
+            display.ordered_batches = caller(&row["batch"], "");
+            display.reduction_cohorts = caller(&row["cohort"], "");
+            display.resources = super::super::ResourceUsage {
+                process_identity_verified: true,
+                rss_bytes: row["rss"].as_u64(),
+                peak_rss_bytes: row["peak"].as_u64(),
+                cpu_percent: row["cpu"].as_f64(),
+                mem_available_bytes: row["avail"].as_u64(),
+                mem_total_bytes: row["total"].as_u64(),
+                source: Some("replay".into()),
+                ..Default::default()
+            };
+            display.resource_sample_at = Some(now);
+            state.observe(display.clone(), now);
+            while times.front().is_some_and(|time| *time <= wall) {
+                let at = times.pop_front().unwrap();
+                let model = state.live_model(now);
+                for (width, height) in [(80, 24), (160, 40)] {
+                    let screen = super::super::tui::tests::text(&super::super::tui::tests::render(
+                        &model,
+                        super::super::UiView::default(),
+                        width,
+                        height,
+                        true,
+                    ));
+                    println!("== replay t={at}s (row at {wall:.0}s) {width}x{height}\n{screen}");
+                    if let Some(output) = &output {
+                        std::fs::create_dir_all(output).unwrap();
+                        std::fs::write(
+                            output.join(format!("replay-{at:.0}s-{width}x{height}.txt")),
+                            screen,
+                        )
+                        .unwrap();
+                    }
+                }
+            }
+        }
+    }
+
+    /// Record the published model of a real evaluation (default: a three-loop
+    /// tadpole) every 100 ms and print/write its screens:
+    /// `VAKINT_MONITOR_CAPTURE_OUT=<dir> [VAKINT_MONITOR_CAPTURE_INPUT=<expr>]`.
+    #[cfg(feature = "progress-tui")]
+    #[test]
+    #[ignore = "captures the screens of a real evaluation (VAKINT_MONITOR_CAPTURE_OUT)"]
+    fn capture_evaluation_screens() {
+        use crate::{
+            EvaluationMethod, EvaluationOrder, LoopNormalizationFactor, RustRedEvaluationOptions,
+            RustRedMasterMode, Vakint, VakintSettings,
+        };
+        let output = std::path::PathBuf::from(
+            std::env::var_os("VAKINT_MONITOR_CAPTURE_OUT").expect("VAKINT_MONITOR_CAPTURE_OUT"),
+        );
+        let input = std::env::var("VAKINT_MONITOR_CAPTURE_INPUT")
+            .unwrap_or_else(|_| "topo(I3L(muvsq,2,1,1,1,1,1))".into());
+        std::fs::create_dir_all(&output).unwrap();
+        let snapshot = output.join("monitor.json");
+        let settings = VakintSettings {
+            evaluation_order: EvaluationOrder(vec![EvaluationMethod::RustRed(
+                RustRedEvaluationOptions {
+                    master_mode: RustRedMasterMode::Retain,
+                },
+            )]),
+            integral_normalization_factor: LoopNormalizationFactor::FMFTandMATAD,
+            use_dot_product_notation: true,
+            form_exe_path: "/monitor-capture-must-not-use-form".into(),
+            n_cores: std::env::var("VAKINT_N_CORES")
+                .ok()
+                .and_then(|cores| cores.parse().ok())
+                .unwrap_or(4),
+            ..Default::default()
+        };
+        let engine = Vakint::new().unwrap();
+        let expression = crate::vakint_parse!(&input).unwrap();
+        let stop = Arc::new(AtomicBool::new(false));
+        let poller = {
+            let stop = Arc::clone(&stop);
+            let snapshot = snapshot.clone();
+            thread::spawn(move || {
+                let mut frames = Vec::new();
+                let mut last = None;
+                while !stop.load(Ordering::Relaxed) {
+                    if let Ok(bytes) = std::fs::read(&snapshot)
+                        && last.as_ref() != Some(&bytes)
+                    {
+                        if let Ok(document) = serde_json::from_slice::<serde_json::Value>(&bytes)
+                            && let Ok(model) =
+                                serde_json::from_value::<super::super::model::MonitorModel>(
+                                    document["monitor"]["model"].clone(),
+                                )
+                        {
+                            frames.push(model);
+                        }
+                        last = Some(bytes);
+                    }
+                    thread::sleep(Duration::from_millis(20));
+                }
+                frames
+            })
+        };
+        let started = Instant::now();
+        let result = engine
+            .evaluate_with_monitor(
+                &settings,
+                expression.as_view(),
+                &RustRedMonitorOptions {
+                    progress_snapshot: Some(snapshot.clone()),
+                    interval: Duration::from_millis(100),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        let elapsed = started.elapsed();
+        stop.store(true, Ordering::Relaxed);
+        let mut frames = poller.join().unwrap();
+        let last: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&snapshot).unwrap()).unwrap();
+        frames.push(serde_json::from_value(last["monitor"]["model"].clone()).unwrap());
+        let count = frames.len();
+        let picks = (0..6)
+            .map(|index| index * (count - 1) / 5)
+            .collect::<std::collections::BTreeSet<_>>();
+        for index in picks {
+            for (width, height) in [(80, 24), (160, 40)] {
+                let screen = super::super::tui::tests::text(&super::super::tui::tests::render(
+                    &frames[index],
+                    super::super::UiView::default(),
+                    width,
+                    height,
+                    true,
+                ));
+                println!("== frame {index}/{count} {width}x{height}\n{screen}");
+                std::fs::write(
+                    output.join(format!("frame-{index:03}-{width}x{height}.txt")),
+                    screen,
+                )
+                .unwrap();
+            }
+        }
+        println!(
+            "{input}: {} terms in {:.2}s, {count} published models",
+            result.as_view().nterms(),
+            elapsed.as_secs_f64()
+        );
+    }
+
     #[test]
     fn activity_refreshes_current_native_key_without_fabricating_a_census() {
         use rustred::{family::IntegralKey, solver::CandidateRoutedKeyDegrees};

@@ -7417,6 +7417,9 @@ Evaluated (n_loops=1, mu_r=1) :
         mut observation: Option<&mut CandidateRoutedApplicationObserver<'_>>,
         progress: Option<&CallerProgress>,
     ) -> Result<Atom, VakintError> {
+        if let Some(progress) = progress {
+            progress.configure(settings);
+        }
         settings.with_resource_budget(|| {
             MonitorContext::native_phase(
                 observation.as_deref_mut(),

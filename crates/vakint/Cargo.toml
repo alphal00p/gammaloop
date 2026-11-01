@@ -69,7 +69,7 @@ test-log = "0.2.19"
 libc = "0.2"
 
 [features]
-progress-tui = ["dep:ratatui", "dep:crossterm", "rustix/termios"]
+progress-tui = ["dep:ratatui", "dep:crossterm", "rustix/termios", "rustix/process"]
 feynkit-ingress = []
 # Expose candidate diagnostics and offline validation helpers.
 experimental-rustred = []

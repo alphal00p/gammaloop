@@ -371,18 +371,13 @@ def run_case(binary, scenario, output, cpus):
                 before_detach = screen.text()
                 (case / "screen-before-detach.txt").write_text(before_detach)
                 (case / "screen-before-detach.svg").write_text(screen.svg())
-                assert (
-                    PHASES[scenario].replace("_", " ") in before_detach
-                    and "active" in before_detach
-                )
+                # The stage line names the silent stage and its live clock.
+                assert PHASES[scenario].replace("_", " ") in before_detach
                 assert "display frozen" in before_detach
-                assert (
-                    "Process RSS" in before_detach and "MemAvailable" in before_detach
-                )
-                assert "indeterminate" in before_detach.lower()
+                assert "RSS" in before_detach and "avail" in before_detach
                 assert any(
                     float(age) >= 35
-                    for age in re.findall(r"active (\d+\.\d+)s", before_detach)
+                    for age in re.findall(r"Stage\b.*?(\d+\.\d+)s\b", before_detach)
                 )
                 if scenario == "blocked-publisher":
                     assert b"PTY_SINK_BLOCKED:blocked-publisher" in captured

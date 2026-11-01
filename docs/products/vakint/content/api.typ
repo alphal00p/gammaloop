@@ -79,7 +79,12 @@ value, nonzero conditions and family map. This method and `evaluate` accept
 `monitor="off"`, `"json"` or `"tui"`, a `progress_snapshot` path and
 `progress_interval_seconds`. JSON mode requires a snapshot path.
 Monitoring defaults off; the TUI requires
-`progress-tui`. Pressing `q` closes only the display: reduction continues.
+`progress-tui` and a terminal (without one it shows nothing; use a snapshot path). It shows the
+run settings, the current stage and its clock, Ordered phase position, per-phase keys and rates,
+frontier, output, grouping and step-cache counters, and memory. Pressing `q` closes only the
+display: reduction continues; `space` freezes the census, `d` shows details, and Ctrl-C restores
+the terminal before interrupting as usual. The snapshot's `monitor.model` is the same typed view
+(schema `vakint.monitor.v2`).
 
 The #link("reference/rust/")[Rust orientation] identifies the compiled crates, versions, and
 feature matrix and links directly to native Rustdoc. The generated

@@ -1,4 +1,5 @@
 use super::*;
+use rustred::solver::CandidateOrderedPhaseKind;
 
 fn snapshot(seconds: u64, entered: u64, completed: u64, roots: u64) -> DisplaySnapshot {
     DisplaySnapshot {
@@ -6,7 +7,8 @@ fn snapshot(seconds: u64, entered: u64, completed: u64, roots: u64) -> DisplaySn
         elapsed: Duration::from_secs(seconds),
         quantitative_sample_at: Some(Duration::from_secs(seconds)),
         quantitative_sample_sequence: seconds + 1,
-        phase: "native coefficient combination".into(),
+        phase: "native CoefficientCombination".into(),
+        stage: NATIVE_STAGE.into(),
         native_work_active: true,
         unique_entered: entered,
         completed_unique: Some(completed),
@@ -17,19 +19,41 @@ fn snapshot(seconds: u64, entered: u64, completed: u64, roots: u64) -> DisplaySn
             count: 12,
             exact: false,
             operational_scope: true,
-            scope: "sampled Route/Apply identities".into(),
         }),
         ..Default::default()
     }
 }
 
-fn row<'a>(rows: &'a [(String, String)], label: &str) -> &'a str {
-    &rows.iter().find(|(key, _)| key == label).unwrap().1
+fn estimates(state: &MonitorState, now: u64) -> DfsEstimates {
+    state
+        .live_model(Duration::from_secs(now))
+        .dfs
+        .expect("depth-first census")
+        .estimates
+}
+
+fn census(
+    completed_phases: usize,
+    processed_keys: usize,
+    hits: usize,
+    misses: usize,
+) -> CandidateOrderedReductionProgress {
+    CandidateOrderedReductionProgress {
+        completed_phases,
+        total_phases: 4,
+        phase_kind: CandidateOrderedPhaseKind::Reduction,
+        active_support: Some(completed_phases + 1),
+        processed_keys,
+        frontier_keys: 10 - completed_phases,
+        frontier_coefficient_monomials: 100,
+        step_cache_hits: hits,
+        step_cache_misses: misses,
+        ..Default::default()
+    }
 }
 
 #[test]
-fn ordered_progress_exposes_phase_and_cancellation_scopes_without_time_percent() {
-    use rustred::solver::CandidateOrderedPhaseKind;
+fn ordered_census_shows_phase_position_grouping_and_step_cache_without_time_percent() {
     let mut state = MonitorState::default();
     let mut sample = snapshot(10, 9, 8, 1);
     sample.native_epoch = 2;
@@ -60,142 +84,179 @@ fn ordered_progress_exposes_phase_and_cancellation_scopes_without_time_percent()
         native_epoch: 2,
         family_fingerprint: "ordered-family".into(),
         sampled_at: Duration::from_secs(8),
-        phase_start: (12, 3),
-        step_cache_phases: Vec::new(),
+        phase_start: PhaseStart {
+            at: Duration::from_secs(4),
+            processed: 15,
+            hits: 12,
+            misses: 3,
+        },
+        phases: Vec::new(),
+        first: (Duration::ZERO, 0),
+        window: VecDeque::from([(Duration::from_secs(4), 15)]),
     });
     state.observe(sample, Duration::from_secs(10));
-    let view = state.view(Duration::from_secs(13));
+    let model = state.live_model(Duration::from_secs(13));
+    let ordered = model.ordered.as_ref().unwrap();
+    assert_eq!(ordered.request, 2);
+    assert_eq!((ordered.phase.index, ordered.phase.total), (3, 12));
+    assert_eq!(ordered.phase.kind, PhaseKind::Apply);
     assert_eq!(
-        row(&view.overview, "Ordered phases completed / total"),
-        "3 / 12 · fixed schedule; not time fraction"
+        (ordered.phase.support, ordered.phase.owner),
+        (Some(6), Some(2))
+    );
+    // In phase since the census at t = 4 s; the census itself is 5 s old.
+    assert_eq!(ordered.phase.seconds, Some(9.0));
+    assert_eq!(ordered.phase.keys, 4);
+    assert_eq!(ordered.census_age_seconds, 5.0);
+    // Rates include the 5 s since the census: a silent core slows down.
+    assert_eq!(ordered.recent_rate, Some(4.0 / 9.0));
+    assert_eq!(ordered.request_rate, Some(19.0 / 13.0));
+    assert_eq!(
+        (ordered.frontier.keys, ordered.frontier.peak_keys),
+        (13, 29)
     );
     assert_eq!(
-        row(&view.overview, "Ordered topology stage"),
-        "Reduction · support 6 · owner 2"
-    );
-    assert!(row(&view.overview, "Ordered phase scope").contains("request 2"));
-    assert!(
-        !view
-            .overview
-            .iter()
-            .any(|(label, _)| label == "Native roots at frontier census")
+        (ordered.frontier.monomials, ordered.frontier.peak_monomials),
+        (41, 127)
     );
     assert_eq!(
-        row(&view.frontier, "Input / current / peak frontier keys"),
-        "7 / 13 / 29"
+        (ordered.output.keys, ordered.output.peak_monomials),
+        (4, 53)
     );
     assert_eq!(
-        row(
-            &view.frontier,
-            "Frontier nonzero merges / exact cancellations"
+        (ordered.grouping.merged, ordered.grouping.cancelled),
+        (17, 11)
+    );
+    assert_eq!(
+        (
+            ordered.grouping.output_merged,
+            ordered.grouping.output_cancelled
         ),
-        "17 / 11"
+        (2, 1)
     );
     assert_eq!(
-        row(
-            &view.frontier,
-            "Terminal nonzero merges / exact cancellations"
-        ),
-        "2 / 1"
-    );
-    assert_eq!(row(&view.complexity, "Ordered frontier census age"), "5.0s");
-    assert_eq!(
-        row(
-            &view.complexity,
-            "Frontier coefficient monomials (current / peak)"
-        ),
-        "41 / 127 · num+den proxy; not bytes"
+        (ordered.step_cache_hits, ordered.step_cache_misses),
+        (15, 4)
     );
     assert_eq!(
-        row(
-            &view.complexity,
-            "Terminal coefficient monomials (current / peak)"
+        (
+            ordered.phase.step_cache_hits,
+            ordered.phase.step_cache_misses
         ),
-        "17 / 53 · num+den proxy; not bytes"
+        (3, 1)
     );
-    assert!(!view.estimates.iter().any(|(name, _)| name.ends_with("ETA")));
+    assert!(model.dfs.is_none());
+    assert_eq!(model.details.family.as_deref(), Some("ordered-family"));
     let document = state.presentation(Duration::from_secs(13));
+    assert_eq!(document["schema"], model::MODEL_SCHEMA);
     assert_eq!(document["ordered_reduction"]["native_request"], 2);
     assert_eq!(document["ordered_reduction"]["sample_age_seconds"], 5.0);
     assert_eq!(document["ordered_reduction"]["frontier_keys"], 13);
-    assert_eq!(
-        document["ordered_reduction"]["frontier_coefficient_monomials"],
-        41
-    );
     assert_eq!(
         document["ordered_reduction"]["peak_frontier_coefficient_monomials"],
         127
     );
     assert_eq!(
-        document["ordered_reduction"]["terminal_coefficient_monomials"],
-        17
-    );
-    assert_eq!(
-        document["ordered_reduction"]["peak_terminal_coefficient_monomials"],
-        53
-    );
-    assert_eq!(
         document["ordered_reduction"]["phase_fraction_is_time_fraction"],
         false
     );
-    assert_eq!(
-        row(&view.cache, "Step cache hits / misses (request)"),
-        "15 / 4 · 78.9% replayed"
-    );
-    assert_eq!(
-        row(&view.cache, "Step cache hits / misses (current phase)"),
-        "3 / 1 · 75.0% replayed"
-    );
     let cache = &document["ordered_reduction"]["step_cache"];
-    assert_eq!(cache["hits"], 15);
-    assert_eq!(cache["misses"], 4);
-    assert_eq!(cache["phase_hits"], 3);
-    assert_eq!(cache["phase_misses"], 1);
+    assert_eq!(
+        (cache["hits"].as_u64(), cache["misses"].as_u64()),
+        (Some(15), Some(4))
+    );
+    assert_eq!(
+        (cache["phase_hits"].as_u64(), cache["phase_misses"].as_u64()),
+        (Some(3), Some(1))
+    );
+    assert_eq!(document["model"]["ordered"]["phase"]["kind"], "apply");
+    assert_eq!(document["model"]["ordered"]["frontier"]["keys"], 13);
 }
 
 #[test]
-fn ordered_step_cache_counters_are_split_by_completed_phase() {
-    use rustred::solver::CandidateOrderedPhaseKind;
-    let census = |completed_phases, hits, misses| CandidateOrderedReductionProgress {
-        completed_phases,
-        total_phases: 4,
-        phase_kind: CandidateOrderedPhaseKind::Reduction,
-        active_support: Some(completed_phases + 1),
-        step_cache_hits: hits,
-        step_cache_misses: misses,
-        ..Default::default()
-    };
-    let at = Duration::from_secs(1);
-    let first = OrderedReductionSample::next(None, census(0, 2, 1), 1, "family", at);
-    let same_phase = OrderedReductionSample::next(Some(&first), census(0, 5, 2), 1, "family", at);
-    assert_eq!(same_phase.phase_step_cache(), (5, 2));
-    let next_phase =
-        OrderedReductionSample::next(Some(&same_phase), census(1, 9, 2), 1, "family", at);
-    assert_eq!(next_phase.phase_step_cache(), (4, 0));
+fn every_phase_end_closes_one_phase_record_with_its_time_keys_and_cache() {
+    let at = Duration::from_secs;
+    let first = OrderedReductionSample::next(None, census(0, 0, 0, 0), 1, "family", at(1));
+    let same = OrderedReductionSample::next(Some(&first), census(0, 6, 5, 1), 1, "family", at(3));
+    assert_eq!(same.phase_step_cache(), (5, 1));
+    assert_eq!(same.phase_start.at, at(1));
+    // The census RustRed delivers at the end of phase 0 closes it exactly.
+    let boundary =
+        OrderedReductionSample::next(Some(&same), census(1, 9, 7, 2), 1, "family", at(4));
+    assert_eq!(boundary.phase_step_cache(), (0, 0));
     assert_eq!(
-        next_phase.step_cache_phases,
-        [StepCachePhase {
-            phase: 0,
-            kind: CandidateOrderedPhaseKind::Reduction,
+        boundary.phases,
+        [PhaseRecord {
+            index: 0,
+            kind: PhaseKind::Reduce,
             support: Some(1),
             owner: None,
-            hits: 5,
-            misses: 2,
+            seconds: 3.0,
+            keys: 9,
+            step_cache_hits: 7,
+            step_cache_misses: 2,
+            frontier_keys: 9,
+            frontier_monomials: 100,
         }]
     );
-    // Two phases completed between censuses: the earlier census closes the
-    // phase it observed; the counters restart for the next request.
-    let skipped = OrderedReductionSample::next(Some(&next_phase), census(3, 9, 7), 1, "family", at);
-    assert_eq!(skipped.step_cache_phases.len(), 2);
-    assert_eq!(skipped.step_cache_phases[1].hits, 4);
-    assert_eq!(skipped.phase_step_cache(), (0, 5));
-    let request = OrderedReductionSample::next(Some(&skipped), census(0, 1, 0), 2, "family", at);
-    assert!(request.step_cache_phases.is_empty());
-    assert_eq!(request.phase_step_cache(), (1, 0));
+    // Empty phases are not logged; their time belongs to the next record.
+    let empty =
+        OrderedReductionSample::next(Some(&boundary), census(2, 9, 7, 2), 1, "family", at(5));
+    assert_eq!(empty.phases.len(), 1);
+    assert_eq!(empty.phase_start.at, at(5));
+    let busy = OrderedReductionSample::next(Some(&empty), census(2, 29, 7, 2), 1, "family", at(15));
+    let (recent, request) = busy.rates(0.0);
+    assert_eq!(recent, Some(29.0 / 14.0));
+    assert_eq!(request, Some(29.0 / 14.0));
+    let done = OrderedReductionSample::next(Some(&busy), census(4, 29, 7, 2), 1, "family", at(16));
+    assert_eq!(done.phases.len(), 2);
+    assert_eq!((done.phases[1].index, done.phases[1].keys), (2, 20));
+    assert_eq!(done.phases[1].seconds, 11.0);
+    let model = done.model(None, 0.0);
+    assert_eq!(model.phase.kind, PhaseKind::Done);
+    // A new native request restarts the log, the phase and the rates.
+    let next = OrderedReductionSample::next(Some(&done), census(0, 1, 1, 0), 2, "family", at(17));
+    assert!(next.phases.is_empty());
+    assert_eq!(next.phase_step_cache(), (0, 0));
+    assert_eq!(next.rates(0.0), (None, None));
+    assert_eq!(busy.rates(14.0), (Some(29.0 / 28.0), Some(29.0 / 28.0)));
 }
 
 #[test]
-fn ordered_batch_metadata_round_trips_and_stays_live_across_frozen_native_phases() {
+fn the_phase_log_and_rate_window_stay_bounded() {
+    let mut sample = OrderedReductionSample::next(
+        None,
+        CandidateOrderedReductionProgress {
+            total_phases: 1000,
+            ..Default::default()
+        },
+        1,
+        "family",
+        Duration::ZERO,
+    );
+    for step in 1..=500_usize {
+        let counts = CandidateOrderedReductionProgress {
+            completed_phases: step / 10,
+            total_phases: 1000,
+            processed_keys: step * 3,
+            ..Default::default()
+        };
+        sample = OrderedReductionSample::next(
+            Some(&sample),
+            counts,
+            1,
+            "family",
+            Duration::from_millis(250 * step as u64),
+        );
+    }
+    assert_eq!(sample.phases.len(), PHASE_LOG);
+    assert!(sample.window.len() <= 62, "{}", sample.window.len());
+    let (recent, _) = sample.rates(0.0);
+    assert_eq!(recent, Some(12.0));
+}
+
+#[test]
+fn batch_and_cohort_counters_stay_live_while_native_panels_are_frozen() {
     let mut state = MonitorState::default();
     let mut initial = snapshot(10, 8, 5, 0);
     initial.ordered_batches = Some(CallerWork {
@@ -216,49 +277,34 @@ fn ordered_batch_metadata_round_trips_and_stays_live_across_frozen_native_phases
     state.apply(UiAction::ToggleFreeze, Duration::from_secs(10));
     state.latest.ordered_batches.as_mut().unwrap().completed = 1;
     state.latest.ordered_batches.as_mut().unwrap().phase = "2L / Retain".into();
-    state.latest.reduction_cohorts.as_mut().unwrap().completed = 1;
     state.latest.reduction_cohorts.as_mut().unwrap().total = 3;
-    let view = state.view(Duration::from_secs(15));
-    assert!(view.frozen);
-    assert_eq!(
-        row(&view.overview, "Ordered batches completed / total"),
-        "1 / 2 · 2L / Retain"
-    );
-    assert_eq!(
-        row(&view.overview, "Compatible cohorts completed / total"),
-        "1 / 3 · current collected batch"
-    );
-    assert_eq!(
-        row(&view.frontier, "Completed unique identities (not closure)"),
-        "5"
-    );
-    let encoded = serde_json::to_string(&state.presentation(Duration::from_secs(15))).unwrap();
-    let decoded: serde_json::Value = serde_json::from_str(&encoded).unwrap();
+    state.latest.completed_unique = Some(7);
+    let model = state.model(Duration::from_secs(15));
+    assert!(state.ui().frozen);
+    let batch = model.batch.as_ref().unwrap();
+    assert_eq!((batch.completed, batch.total), (1, 2));
+    assert_eq!(batch.label, "2L / Retain");
+    let cohort = model.cohort.as_ref().unwrap();
+    assert_eq!((cohort.completed, cohort.total), (1, 3));
+    // The native census is the frozen one.
+    assert_eq!(model.dfs.as_ref().unwrap().completed, Some(5));
+    let decoded: serde_json::Value = serde_json::from_str(
+        &serde_json::to_string(&state.presentation(Duration::from_secs(15))).unwrap(),
+    )
+    .unwrap();
     assert_eq!(decoded["ordered_batches"]["completed"], 1);
-    assert_eq!(decoded["ordered_batches"]["total"], 2);
     assert_eq!(decoded["ordered_batches"]["label"], "2L / Retain");
-    assert_eq!(decoded["reduction_cohorts"]["completed"], 1);
     assert_eq!(decoded["reduction_cohorts"]["total"], 3);
     assert_eq!(
         decoded["reduction_cohorts"]["fraction_is_time_fraction"],
         false
     );
-    let decoded_view: MonitorView = serde_json::from_value(decoded["view"].clone()).unwrap();
-    assert_eq!(
-        row(
-            &decoded_view.overview,
-            "Compatible cohorts completed / total"
-        ),
-        "1 / 3 · current collected batch"
-    );
+    // The published model is live, never the frozen display.
+    let published: MonitorModel = serde_json::from_value(decoded["model"].clone()).unwrap();
+    assert_eq!(published.dfs.unwrap().completed, Some(7));
+    assert_eq!(published.cohort.unwrap().total, 3);
     state.latest.reduction_cohorts = None;
-    assert!(
-        !state
-            .view(Duration::from_secs(16))
-            .overview
-            .iter()
-            .any(|(label, _)| label == "Compatible cohorts completed / total")
-    );
+    assert!(state.model(Duration::from_secs(16)).cohort.is_none());
 }
 
 #[test]
@@ -279,18 +325,18 @@ fn proc_memory_preserves_process_peak_and_host_usable_unused_scopes() {
 #[test]
 fn readable_memory_uses_iec_units_without_changing_exact_raw_observations() {
     for (bytes, expected) in [
-        (None, "unknown"),
-        (Some(0), "0 B"),
-        (Some(1023), "1023 B"),
-        (Some(1024), "1.0 KiB"),
-        (Some(1024 * 1024), "1.0 MiB"),
-        (Some(50_000_000_000), "46.6 GiB"),
-        (Some(u64::MAX), "16.0 EiB"),
+        (0, "0 B"),
+        (1023, "1023 B"),
+        (1024, "1.0 KiB"),
+        (1024 * 1024, "1.0 MiB"),
+        (50_000_000_000, "46.6 GiB"),
+        (u64::MAX, "16.0 EiB"),
     ] {
-        assert_eq!(ResourceUsage::display_bytes(bytes), expected);
+        assert_eq!(model::format::bytes(bytes), expected);
     }
     let mut state = MonitorState::default();
     state.latest.resources = ResourceUsage {
+        process_identity_verified: true,
         rss_bytes: Some(50_000_000_000),
         peak_rss_bytes: Some(64 * 1024 * 1024 * 1024),
         mem_total_bytes: Some(u64::MAX),
@@ -303,20 +349,13 @@ fn readable_memory_uses_iec_units_without_changing_exact_raw_observations() {
         ..Default::default()
     };
     let published = state.presentation(Duration::ZERO);
-    let view = state.view(Duration::ZERO);
-    assert_eq!(
-        row(&view.cache, "Process RSS / peak"),
-        "46.6 GiB / 64.0 GiB (current / process peak; not payload)"
-    );
-    assert_eq!(
-        row(&view.cache, "Host MemAvailable / MemFree"),
-        "1.0 GiB / 0 B (usable / unused)"
-    );
-    assert!(row(&view.cache, "Memory units / raw values").contains("resources JSON"));
-    assert!(
-        row(&view.cache, "Guard MemAvailable floor / report age")
-            .starts_with("46.6 GiB / unknown (explicit local policy only)")
-    );
+    let memory = state.live_model(Duration::ZERO).memory;
+    assert_eq!(memory.rss_bytes, Some(50_000_000_000));
+    assert_eq!(memory.total_bytes, Some(u64::MAX));
+    let guard = memory.guard.unwrap();
+    assert_eq!(guard.status, "unknown");
+    assert_eq!(guard.threshold_bytes, Some(50_000_000_000));
+    assert!(!guard.covered);
     assert_eq!(published["resources"]["rss_bytes"], 50_000_000_000_u64);
     assert_eq!(published["resources"]["mem_free_bytes"], 0);
     assert_eq!(published["resources"]["mem_total_bytes"], u64::MAX);
@@ -325,10 +364,11 @@ fn readable_memory_uses_iec_units_without_changing_exact_raw_observations() {
         50_000_000_000_u64
     );
     assert_eq!(published["resources"]["guard"]["status"], "unknown");
-    assert_eq!(
-        published["resources"]["guard"]["current_process_covered"],
-        false
-    );
+    // Process values of an unverified worker are never shown.
+    state.latest.resources.process_identity_verified = false;
+    let memory = state.live_model(Duration::ZERO).memory;
+    assert!(memory.rss_bytes.is_none() && memory.peak_rss_bytes.is_none());
+    assert_eq!(memory.available_bytes, Some(1024 * 1024 * 1024));
 }
 
 #[test]
@@ -352,13 +392,14 @@ fn proc_memory_missing_malformed_units_duplicates_and_overflow_stay_unknown() {
 }
 
 #[test]
-fn display_freeze_keeps_resources_and_status_live_in_view_and_json() {
+fn display_freeze_keeps_resources_and_status_live_in_model_and_json() {
     let mut state = MonitorState::default();
     state.observe(snapshot(0, 3, 1, 0), Duration::ZERO);
     state.latest.resources = ResourceUsage::from_proc("VmRSS: 1 kB", "MemAvailable: 2 kB");
     state.latest.resource_sample_at = Some(Duration::ZERO);
     state.apply(UiAction::ToggleFreeze, Duration::from_secs(1));
     state.latest.resources = ResourceUsage::from_proc("VmRSS: 3 kB", "MemAvailable: 4 kB");
+    state.latest.resources.process_identity_verified = true;
     state.latest.resources.guard = ResourceGuardView {
         status: "latched_abort".into(),
         sample_seconds: Some(1),
@@ -375,33 +416,33 @@ fn display_freeze_keeps_resources_and_status_live_in_view_and_json() {
     failed.phase = "synthetic_failed_finalization".into();
     failed
         .events
-        .push("CycleDetected / synthetic fixture".into());
+        .push("cycle detected · synthetic fixture".into());
     state.observe(failed, Duration::from_secs(6));
-    let frozen = state.view(Duration::from_secs(7));
-    assert!(frozen.frozen);
-    assert!(row(&frozen.cache, "Process RSS / peak").starts_with("3.0 KiB /"));
+    let frozen = state.model(Duration::from_secs(7));
+    assert!(state.ui().frozen);
+    assert_eq!(frozen.status, MonitorStatus::Failed);
+    assert_eq!(frozen.memory.rss_bytes, Some(3 * 1024));
+    assert_eq!(
+        frozen.memory.guard.as_ref().unwrap().status,
+        "latched_abort"
+    );
+    assert_eq!(frozen.events.len(), 1);
     let live = serde_json::to_value(state.live_resources(Duration::from_secs(7))).unwrap();
     assert_eq!(live["rss_bytes"], 3 * 1024);
     assert_eq!(live["mem_available_bytes"], 4 * 1024);
     assert_eq!(live["sample_age_seconds"], 2.0);
     assert_eq!(live["guard"]["status"], "latched_abort");
     assert_eq!(live["guard"]["report_age_seconds"], 2.0);
-    assert!(
-        row(&frozen.cache, "Local guard state / current-PID coverage")
-            .starts_with("latched_abort /")
-    );
     let stale = state.live_resources(Duration::from_secs(9));
     assert_eq!(stale.guard.status, "unknown");
     assert_eq!(stale.guard.reported_latched_abort, Some(true));
     let published = state.presentation(Duration::from_secs(7));
     assert_eq!(published["status"], "Failed");
     assert_eq!(published["phase"], "synthetic_failed_finalization");
-    assert_eq!(published["view"]["frozen"], true);
-    assert_eq!(published["view"]["status"], "Failed");
-    let estimates: Vec<(String, String)> =
-        serde_json::from_value(published["estimates"].clone()).unwrap();
-    assert_eq!(row(&estimates, "Estimate sample age"), "7.0s");
-    assert!(row(&estimates, "Discovered-frontier ETA").contains("unknown"));
+    assert!(published.get("view").is_none());
+    assert_eq!(published["model"]["status"], "Failed");
+    // A finished run has no live estimate.
+    assert_eq!(published["model"]["dfs"]["estimates"]["state"], "inactive");
     assert_eq!(published["resources"]["guard"]["status"], "latched_abort");
 }
 
@@ -418,27 +459,19 @@ fn fresh_os_memory_does_not_refresh_native_progress_eta_or_infer_cycle() {
         "MemTotal: 100 kB\nMemAvailable: 80 kB\nMemFree: 30 kB",
     );
     state.latest.resource_sample_at = Some(Duration::from_secs(5));
-    let view = state.view(Duration::from_secs(6));
+    let model = state.live_model(Duration::from_secs(6));
+    assert_eq!(model.memory.sample_age_seconds, Some(1.0));
+    assert_eq!(model.details.native_observation_age_seconds, Some(6.0));
+    let estimates = model.dfs.as_ref().unwrap().estimates.clone();
+    assert_eq!(estimates.sample_age_seconds, Some(6.0));
+    assert!(estimates.frontier_eta_seconds.is_none());
     assert_eq!(
-        state
-            .live_resources(Duration::from_secs(6))
-            .sample_age_seconds,
-        Some(1.0)
+        model.details.current_degrees,
+        Some(["0".into(), "3".into(), "3".into()])
     );
-    assert_eq!(row(&view.overview, "Last native observation age"), "6.0s");
-    assert_eq!(row(&view.estimates, "Estimate sample age"), "6.0s");
-    assert!(row(&view.estimates, "Discovered-frontier ETA").contains("unknown"));
-    assert_eq!(
-        row(&view.complexity, "Current canonical R / A / D"),
-        "0 / 3 / 3"
-    );
-    assert_eq!(
-        row(&view.complexity, "Caller Atom bytes / stored summands"),
-        "unobserved"
-    );
-    assert_eq!(view.status, MonitorStatus::Running);
-    assert!(view.events.is_empty());
-    assert!(row(&view.cache, "Host MemAvailable / MemFree").contains("usable / unused"));
+    assert!(model.details.caller_expression.is_none());
+    assert_eq!(model.status, MonitorStatus::Running);
+    assert!(model.events.is_empty());
     let json = serde_json::to_value(state.live_resources(Duration::from_secs(6))).unwrap();
     assert_eq!(json["mem_available_bytes"], 80 * 1024);
     assert_eq!(json["mem_free_bytes"], 30 * 1024);
@@ -467,29 +500,17 @@ fn stored_symbolic_partitions_and_caller_sizes_keep_independent_scopes_and_ages(
     });
     // Reception/rendering and native samples intentionally use different epochs.
     state.observe(observed, Duration::from_secs(100));
-    let view = state.view(Duration::from_secs(103));
+    let model = state.live_model(Duration::from_secs(103));
+    let expression = model.details.caller_expression.unwrap();
     assert_eq!(
-        row(&view.complexity, "Native unstarted roots / output keys"),
-        "2 / 3"
+        (
+            expression.bytes,
+            expression.summands,
+            expression.stage.as_str()
+        ),
+        (937, Some(7), "scalar_input")
     );
-    assert_eq!(
-        row(&view.complexity, "Native deferred maps / child occurrences"),
-        "4 / 11"
-    );
-    assert!(
-        row(&view.complexity, "Caller Atom bytes / stored summands")
-            .contains("937 / 7 · scalar_input · age 11.0s")
-    );
-    assert!(
-        row(&view.complexity, "Stored-state scope / sample age").contains("native-family · 5.0s")
-    );
-    assert!(row(&view.complexity, "Symbolic size conventions").contains("partitions overlap"));
-    assert!(
-        !view
-            .complexity
-            .iter()
-            .any(|(label, _)| label == "Full symbolic expression size")
-    );
+    assert_eq!(model.details.family.as_deref(), Some("native-family"));
     let published = state.presentation(Duration::from_secs(103));
     assert_eq!(
         published["stored_symbolic_state"]["sample_age_seconds"],
@@ -682,17 +703,17 @@ fn observational_etas_report_method_scope_growth_and_age() {
     let mut state = MonitorState::default();
     state.observe(snapshot(0, 10, 0, 0), Duration::ZERO);
     state.observe(snapshot(10, 20, 5, 1), Duration::from_secs(10));
-    let view = state.view(Duration::from_secs(13));
-    assert!(row(&view.estimates, "Discovered-frontier ETA").contains("24.0s"));
-    assert!(row(&view.estimates, "Discovered-frontier ETA").contains("sampled"));
-    assert!(row(&view.estimates, "Discovered-frontier ETA").contains("completions/s"));
-    assert!(row(&view.estimates, "Root-rate ETA").contains("40.0s"));
-    assert!(row(&view.estimates, "Root-rate ETA").contains("known selected roots"));
-    assert!(row(&view.estimates, "Net frontier growth").contains("+0.50"));
-    assert!(row(&view.estimates, "Net frontier growth").contains("growing"));
-    assert_eq!(row(&view.estimates, "Estimate sample age"), "3.0s");
-    assert!(row(&view.estimates, "Estimate scope").contains("future discovery excluded"));
-    assert!(row(&view.estimates, "Confidence").contains("no remaining-work certificate"));
+    let estimates = estimates(&state, 13);
+    assert_eq!(estimates.state, EstimateState::Live);
+    assert_eq!(estimates.frontier_eta_seconds, Some(24.0));
+    assert_eq!(estimates.completion_rate, Some(0.5));
+    assert_eq!(estimates.root_eta_seconds, Some(40.0));
+    assert_eq!(estimates.growth_rate, Some(0.5));
+    assert_eq!(estimates.sample_age_seconds, Some(3.0));
+    assert_eq!(
+        (estimates.window_seconds, estimates.samples),
+        (Some(10.0), 2)
+    );
 }
 
 #[test]
@@ -702,22 +723,14 @@ fn unknown_or_incomparable_frontier_never_becomes_a_node_eta() {
     let mut next = snapshot(10, 20, 5, 0);
     next.pending_unique.as_mut().unwrap().operational_scope = false;
     state.observe(next, Duration::from_secs(10));
-    let view = state.view(Duration::from_secs(10));
-    assert_eq!(
-        row(&view.estimates, "Discovered-frontier ETA"),
-        "warmup / unknown"
-    );
-    assert_eq!(row(&view.estimates, "Root-rate ETA"), "warmup / unknown");
+    let estimates = estimates(&state, 10);
+    assert!(estimates.frontier_eta_seconds.is_none());
+    assert!(estimates.root_eta_seconds.is_none());
     let mut next = snapshot(20, 20, 5, 0);
     next.pending_unique = None;
     state.observe(next, Duration::from_secs(20));
-    assert!(
-        row(
-            &state.view(Duration::from_secs(20)).frontier,
-            "Pending unique identities"
-        )
-        .contains("unknown")
-    );
+    let model = state.live_model(Duration::from_secs(20));
+    assert!(model.dfs.unwrap().pending_unique.is_none());
 }
 
 #[test]
@@ -725,46 +738,47 @@ fn pause_and_detach_only_change_the_display() {
     let mut state = MonitorState::default();
     state.observe(snapshot(1, 10, 1, 0), Duration::from_secs(1));
     state.apply(UiAction::ToggleFreeze, Duration::from_secs(1));
-    let frozen = state.view(Duration::from_secs(1));
+    let frozen = state.model(Duration::from_secs(1)).dfs;
     state.observe(snapshot(2, 50, 20, 1), Duration::from_secs(2));
-    assert_eq!(state.view(Duration::from_secs(2)).frontier, frozen.frontier);
+    assert_eq!(state.model(Duration::from_secs(2)).dfs, frozen);
     assert_eq!(state.latest.unique_entered, 50);
     let now = Duration::from_secs(2);
-    state.latest.resources = ResourceUsage::from_proc(
-        "VmRSS: 10 kB\nVmHWM: 20 kB",
-        "MemTotal: 100 kB\nMemAvailable: 80 kB\nMemFree: 30 kB",
-    );
-    state.latest.resource_sample_at = Some(now);
-    let live = serde_json::to_value(state.live_view(now)).unwrap();
-    for (action, scroll, help) in [
-        (UiAction::ScrollUp, 0, false),
-        (UiAction::PageUp, 0, false),
-        (UiAction::ToggleHelp, 0, true),
-        (UiAction::ScrollDown, 1, true),
-        (UiAction::PageDown, 11, true),
-        (UiAction::PageUp, 1, true),
-        (UiAction::ScrollUp, 0, true),
-        (UiAction::ToggleHelp, 0, false),
+    let live = serde_json::to_value(state.live_model(now)).unwrap();
+    for (action, scroll, help, details) in [
+        (UiAction::ScrollUp, 0, false, false),
+        (UiAction::PageUp, 0, false, false),
+        (UiAction::ToggleHelp, 0, true, false),
+        (UiAction::ScrollDown, 1, true, false),
+        (UiAction::PageDown, 11, true, false),
+        (UiAction::ToggleDetails, 0, true, true),
+        (UiAction::PageDown, 10, true, true),
+        (UiAction::ScrollUp, 9, true, true),
+        (UiAction::ToggleHelp, 9, false, true),
     ] {
         state.apply(action, now);
-        let view = state.view(now);
-        assert_eq!(view.scroll, scroll);
-        assert_eq!(view.show_help, help);
-        assert_eq!(view.frontier, frozen.frontier);
-        assert_eq!(serde_json::to_value(state.live_view(now)).unwrap(), live);
+        let ui = state.ui();
+        assert_eq!(
+            (ui.scroll, ui.show_help, ui.show_details),
+            (scroll, help, details)
+        );
+        assert_eq!(state.model(now).dfs, frozen);
+        assert_eq!(serde_json::to_value(state.live_model(now)).unwrap(), live);
     }
-    state.scroll = usize::MAX - 1;
+    state.clamp_scroll(3);
+    assert_eq!(state.ui().scroll, 3);
+    state.terminal.ui.scroll = usize::MAX - 1;
     for action in [UiAction::PageDown, UiAction::ScrollDown] {
         state.apply(action, now);
-        assert_eq!(state.view(now).scroll, usize::MAX);
-        assert_eq!(serde_json::to_value(state.live_view(now)).unwrap(), live);
+        assert_eq!(state.ui().scroll, usize::MAX);
     }
     state.apply(UiAction::Detach, Duration::from_secs(2));
-    assert!(state.detached());
+    assert!(state.detached() && !state.interrupted());
     assert_eq!(state.latest.status, MonitorStatus::Running);
     assert_eq!(state.latest.completed_unique, Some(20));
     state.apply(UiAction::ToggleFreeze, Duration::from_secs(2));
-    assert!(!state.view(Duration::from_secs(2)).frozen);
+    assert!(!state.ui().frozen);
+    state.apply(UiAction::Interrupt, Duration::from_secs(2));
+    assert!(state.detached() && state.interrupted());
 }
 
 #[test]
@@ -774,13 +788,11 @@ fn core_completion_is_not_final_request_success_or_mathematical_closure() {
     finished_core.status = MonitorStatus::Succeeded;
     finished_core.request_finished = false;
     state.observe(finished_core, Duration::from_secs(1));
-    let view = state.view(Duration::from_secs(1));
-    assert_eq!(row(&view.overview, "Request finished"), "false");
-    assert_eq!(view.status, MonitorStatus::Running);
-    assert!(
-        view.frontier
-            .iter()
-            .any(|(label, _)| label.contains("not closure"))
+    let model = state.live_model(Duration::from_secs(1));
+    assert_eq!(model.status, MonitorStatus::Running);
+    assert_eq!(
+        state.presentation(Duration::from_secs(1))["status"],
+        "Running"
     );
 }
 
@@ -789,14 +801,12 @@ fn silent_work_advances_observation_age_and_completion_age_without_inventing_wor
     let mut state = MonitorState::default();
     state.observe(snapshot(0, 10, 0, 0), Duration::ZERO);
     state.observe(snapshot(10, 20, 5, 1), Duration::from_secs(10));
-    let view = state.view(Duration::from_secs(30));
-    assert_eq!(row(&view.overview, "Snapshot age"), "20.0s");
-    assert_eq!(
-        row(&view.frontier, "Since last observed new completion"),
-        "20.0s"
-    );
-    assert_eq!(state.latest.completed_unique, Some(5));
-    assert_eq!(state.latest.unique_entered, 20);
+    let model = state.live_model(Duration::from_secs(30));
+    assert_eq!(model.details.event_age_seconds, Some(20.0));
+    let dfs = model.dfs.unwrap();
+    assert_eq!(dfs.since_completion_seconds, Some(20.0));
+    assert_eq!(dfs.completed, Some(5));
+    assert_eq!(dfs.entered, 20);
 }
 
 #[test]
@@ -807,13 +817,9 @@ fn request_reset_discards_previous_rate_history() {
     state.observe(snapshot(0, 1, 0, 0), Duration::from_secs(30));
     assert_eq!(state.samples.len(), 1);
     assert!(state.last_completion.is_none());
-    assert_eq!(
-        row(
-            &state.view(Duration::from_secs(30)).estimates,
-            "Root-rate ETA"
-        ),
-        "warmup / unknown"
-    );
+    let estimates = estimates(&state, 30);
+    assert!(estimates.root_eta_seconds.is_none());
+    assert_eq!(estimates.state, EstimateState::Warmup);
 }
 
 #[test]
@@ -829,27 +835,17 @@ fn carried_samples_do_not_refresh_eta_or_evict_the_rate_window() {
         carried.elapsed = Duration::from_secs(seconds);
         state.observe(carried, Duration::from_secs(seconds));
     }
-    let view = state.view(Duration::from_secs(93));
+    let model = state.live_model(Duration::from_secs(93));
     assert_eq!(state.samples.len(), 2);
-    assert_eq!(row(&view.overview, "Snapshot age"), "3.0s");
-    assert_eq!(row(&view.estimates, "Estimate sample age"), "83.0s");
-    assert_eq!(
-        row(&view.frontier, "Since last observed new completion"),
-        "83.0s"
-    );
-    assert_eq!(
-        row(&view.estimates, "Discovered-frontier ETA"),
-        "stale / unknown"
-    );
-    assert_eq!(row(&view.estimates, "Root-rate ETA"), "stale / unknown");
-    assert_eq!(
-        row(&view.estimates, "Net frontier growth"),
-        "stale / unknown"
-    );
-    assert_eq!(
-        row(&view.estimates, "Observation window"),
-        "10.0s / 2 snapshots"
-    );
+    assert_eq!(model.details.event_age_seconds, Some(3.0));
+    let dfs = model.dfs.unwrap();
+    assert_eq!(dfs.since_completion_seconds, Some(83.0));
+    let estimates = dfs.estimates;
+    assert_eq!(estimates.state, EstimateState::Stale);
+    assert_eq!(estimates.sample_age_seconds, Some(83.0));
+    assert_eq!(estimates.window_seconds, Some(10.0));
+    assert!(estimates.frontier_eta_seconds.is_none() && estimates.root_eta_seconds.is_none());
+    assert!(estimates.growth_rate.is_none());
 }
 
 #[test]
@@ -858,15 +854,13 @@ fn genuine_unchanged_sample_extends_the_observed_rate_window() {
     state.observe(snapshot(0, 10, 0, 0), Duration::ZERO);
     state.observe(snapshot(10, 20, 5, 1), Duration::from_secs(10));
     state.observe(snapshot(30, 20, 5, 1), Duration::from_secs(30));
-    let view = state.view(Duration::from_secs(30));
+    let model = state.live_model(Duration::from_secs(30));
     assert_eq!(state.samples.len(), 3);
-    assert_eq!(row(&view.estimates, "Estimate sample age"), "0.0s");
-    assert!(row(&view.estimates, "Discovered-frontier ETA").contains("72.0s"));
-    assert!(row(&view.estimates, "Root-rate ETA").contains("120.0s"));
-    assert_eq!(
-        row(&view.frontier, "Since last observed new completion"),
-        "20.0s"
-    );
+    let dfs = model.dfs.unwrap();
+    assert_eq!(dfs.estimates.sample_age_seconds, Some(0.0));
+    assert_eq!(dfs.estimates.frontier_eta_seconds, Some(72.0));
+    assert_eq!(dfs.estimates.root_eta_seconds, Some(120.0));
+    assert_eq!(dfs.since_completion_seconds, Some(20.0));
 }
 
 #[test]
@@ -877,12 +871,11 @@ fn unobserved_quantitative_data_never_creates_a_rate_sample() {
     notice.quantitative_sample_sequence = 0;
     state.observe(notice, Duration::from_secs(20));
     assert!(state.samples.is_empty());
-    let view = state.view(Duration::from_secs(25));
-    assert_eq!(row(&view.estimates, "Estimate sample age"), "unknown");
-    assert_eq!(
-        row(&view.estimates, "Discovered-frontier ETA"),
-        "warmup / unknown"
-    );
+    let estimates = state.dfs_estimates(Duration::from_secs(5));
+    assert_eq!(estimates.state, EstimateState::Warmup);
+    assert!(estimates.sample_age_seconds.is_none());
+    // Without a census there is no depth-first panel at all.
+    assert!(state.live_model(Duration::from_secs(25)).dfs.is_none());
 }
 
 #[test]
@@ -895,81 +888,54 @@ fn new_epoch_with_higher_counters_does_not_invent_a_completion() {
     state.observe(next, Duration::from_secs(30));
     assert_eq!(state.samples.len(), 1);
     assert!(state.last_completion.is_none());
-    assert_eq!(
-        row(
-            &state.view(Duration::from_secs(30)).estimates,
-            "Discovered-frontier ETA"
-        ),
-        "warmup / unknown"
-    );
+    assert!(estimates(&state, 30).frontier_eta_seconds.is_none());
 }
 
 #[test]
-fn current_canonical_degrees_are_not_maxima_or_physical_input_ranks() {
+fn current_canonical_degrees_are_shown_only_for_the_current_key() {
     let mut data = snapshot(1, 10, 2, 0);
     data.current_key = Some("Route [-1,2,8]".into());
     data.current_degrees = Some((1, 10, 9));
-    data.complexity = vec![
-        ("Max seen canonical R".into(), "99".into()),
-        (
-            "Physical input rank".into(),
-            "unobserved; not inferred".into(),
-        ),
-    ];
     let mut state = MonitorState::default();
     state.observe(data.clone(), Duration::from_secs(1));
-    let view = state.view(Duration::from_secs(1));
+    let details = state.live_model(Duration::from_secs(1)).details;
+    assert_eq!(details.current_key.as_deref(), Some("Route [-1,2,8]"));
     assert_eq!(
-        row(&view.complexity, "Current canonical R / A / D"),
-        "1 / 10 / 9"
-    );
-    assert_eq!(
-        row(&view.complexity, "Current canonical native key"),
-        "Route [-1,2,8]"
-    );
-    assert_eq!(row(&view.complexity, "Max seen canonical R"), "99");
-    assert_eq!(
-        row(&view.complexity, "Physical input rank"),
-        "unobserved; not inferred"
+        details.current_degrees,
+        Some(["1".into(), "10".into(), "9".into()])
     );
     data.current_key = None;
     data.current_degrees = None;
     data.elapsed = Duration::from_secs(2);
     state.observe(data, Duration::from_secs(2));
-    let view = state.view(Duration::from_secs(2));
-    assert_eq!(
-        row(&view.complexity, "Current canonical R / A / D"),
-        "unknown"
-    );
-    assert!(row(&view.complexity, "Current canonical native key").contains("unknown"));
-    assert_eq!(row(&view.complexity, "Max seen canonical R"), "99");
+    let details = state.live_model(Duration::from_secs(2)).details;
+    assert!(details.current_key.is_none() && details.current_degrees.is_none());
 }
 
 #[test]
-fn phase_clock_and_resources_remain_live_while_native_panels_are_frozen() {
+fn stage_clock_and_resources_remain_live_while_native_panels_are_frozen() {
     let mut state = MonitorState::default();
     let mut event = snapshot(10, 7, 3, 1);
     event.phase = "retained_catalogue_exact_combination".into();
+    event.stage = "retained_catalogue_exact_combination".into();
     event.native_work_active = false;
     event.phase_started_at = Duration::from_secs(10);
+    event.stage_started_at = Duration::from_secs(10);
     state.observe(event, Duration::from_secs(20));
     state.apply(UiAction::ToggleFreeze, Duration::from_secs(20));
+    state.latest.resources.process_identity_verified = true;
     state.latest.resources.rss_bytes = Some(12345);
     state.latest.resource_sample_at = Some(Duration::from_secs(56));
-    let view = state.view(Duration::from_secs(56));
-    assert!(view.frozen);
-    assert!(view.subtitle.contains("active 36.0s"));
-    assert!(view.subtitle.contains("event age 36.0s"));
-    assert!(row(&view.cache, "Process RSS / peak").contains("12.1 KiB"));
-    assert!(state.presentation(Duration::from_secs(56))["caller_work"].is_null());
-    assert_eq!(
-        state.presentation(Duration::from_secs(56))["phase_elapsed_seconds"],
-        36.0
-    );
-    assert_eq!(
-        state.presentation(Duration::from_secs(56))["event_age_seconds"],
-        36.0
-    );
+    let model = state.model(Duration::from_secs(56));
+    assert!(state.ui().frozen);
+    assert_eq!(model.stage.kind, StageKind::PostProcessing);
+    assert_eq!(model.stage.seconds, 36.0);
+    assert_eq!(model.details.event_age_seconds, Some(36.0));
+    assert_eq!(model.memory.rss_bytes, Some(12345));
+    let document = state.presentation(Duration::from_secs(56));
+    assert!(document["caller_work"].is_null());
+    assert_eq!(document["phase_elapsed_seconds"], 36.0);
+    assert_eq!(document["event_age_seconds"], 36.0);
     assert_eq!(state.latest.completed_unique, Some(3));
 }
 
@@ -986,19 +952,17 @@ fn completed_native_frontier_never_finishes_or_zeroes_the_public_postprocessing_
     core.native_work_active = false;
     core.status = MonitorStatus::Succeeded;
     state.observe(core, Duration::from_secs(100));
-    let just_finished = state.view(Duration::from_secs(100));
+    let just_finished = state.live_model(Duration::from_secs(100));
     assert_eq!(just_finished.status, MonitorStatus::Running);
-    assert!(
-        just_finished
-            .estimates
-            .iter()
-            .filter(|(label, _)| label.ends_with("ETA"))
-            .all(|(_, value)| value.contains("indeterminate"))
-    );
+    let estimates = &just_finished.dfs.as_ref().unwrap().estimates;
+    assert_eq!(estimates.state, EstimateState::Inactive);
+    assert!(estimates.frontier_eta_seconds.is_none() && estimates.root_eta_seconds.is_none());
     state.apply(UiAction::ToggleFreeze, Duration::from_secs(100));
     let mut caller = state.latest.clone();
     caller.phase = "retained_coefficient_materialization".into();
+    caller.stage = "retained_coefficient_materialization".into();
     caller.phase_started_at = Duration::from_secs(11);
+    caller.stage_started_at = Duration::from_secs(11);
     caller.elapsed = Duration::from_secs(11);
     caller.sequence += 1;
     caller.status = MonitorStatus::Running;
@@ -1010,33 +974,17 @@ fn completed_native_frontier_never_finishes_or_zeroes_the_public_postprocessing_
         sampled_at: Duration::from_secs(101),
     });
     state.observe(caller, Duration::from_secs(101));
-    let view = state.view(Duration::from_secs(137));
-    assert!(view.frozen);
-    assert_eq!(view.status, MonitorStatus::Running);
-    assert!(
-        view.subtitle
-            .contains("retained coefficient materialization")
-            && view.subtitle.contains("active 36.0s")
-    );
-    assert_eq!(
-        row(&view.overview, "Phase"),
-        "retained_coefficient_materialization"
-    );
-    assert!(
-        row(&view.overview, "Caller phase progress")
-            .contains("1 / 58 master products materialized")
-    );
-    assert_eq!(
-        row(&view.overview, "Native roots at frontier census"),
-        "1 / 1"
-    );
-    assert!(
-        view.estimates
-            .iter()
-            .filter(|(label, _)| label.ends_with("ETA"))
-            .all(|(_, value)| value.contains("indeterminate"))
-    );
-    assert!(row(&view.estimates, "Estimate scope").contains("excludes caller postprocessing"));
+    let model = state.model(Duration::from_secs(137));
+    assert_eq!(model.status, MonitorStatus::Running);
+    assert_eq!(model.stage.kind, StageKind::PostProcessing);
+    assert_eq!(model.stage.id, "retained_coefficient_materialization");
+    assert_eq!(model.stage.seconds, 36.0);
+    let work = model.stage.work.as_ref().unwrap();
+    assert_eq!((work.completed, work.total), (1, 58));
+    assert_eq!(work.label, "master products materialized");
+    let dfs = model.dfs.as_ref().unwrap();
+    assert_eq!((dfs.roots_completed, dfs.roots_total), (Some(1), Some(1)));
+    assert_eq!(dfs.estimates.state, EstimateState::Inactive);
     assert!(
         !state.presentation(Duration::from_secs(137))["native_work_active"]
             .as_bool()
@@ -1055,19 +1003,22 @@ fn frozen_job_keeps_api_and_whole_job_completion_distinct() {
     state.apply(UiAction::ToggleFreeze, Duration::from_secs(10));
     state.latest.api_status = ApiStatus::Succeeded;
     state.latest.phase = "result_expression_serialization".into();
-    let serializing = state.view(Duration::from_secs(46));
-    assert!(serializing.frozen);
+    let serializing = state.model(Duration::from_secs(46));
+    assert_eq!(serializing.scope, ScopeKind::Job);
     assert_eq!(serializing.status, MonitorStatus::Running);
+    assert_eq!(serializing.api_status, ApiStatus::Succeeded);
     assert_eq!(
-        row(&serializing.overview, "Reduction API status"),
-        "Succeeded"
+        state.presentation(Duration::from_secs(46))["job_finished"],
+        false
     );
-    assert_eq!(row(&serializing.overview, "Whole job finished"), "false");
     state.latest.request_finished = true;
     state.latest.status = MonitorStatus::Succeeded;
-    let finished = state.view(Duration::from_secs(47));
+    let finished = state.model(Duration::from_secs(47));
     assert_eq!(finished.status, MonitorStatus::Succeeded);
-    assert_eq!(row(&finished.overview, "Whole job finished"), "true");
+    assert_eq!(
+        state.presentation(Duration::from_secs(47))["job_finished"],
+        true
+    );
 }
 
 #[test]
@@ -1075,10 +1026,11 @@ fn frozen_frontier_keeps_collection_work_and_its_independent_age_live() {
     let mut state = MonitorState::default();
     state.observe(snapshot(10, 20, 5, 1), Duration::from_secs(100));
     state.apply(UiAction::ToggleFreeze, Duration::from_secs(100));
-    let frozen_frontier = state.view(Duration::from_secs(100)).frontier;
+    let frozen = state.model(Duration::from_secs(100)).dfs.unwrap();
     let mut notice = state.latest.clone();
     notice.elapsed = Duration::from_secs(30);
     notice.sequence += 1;
+    notice.completed_unique = Some(9);
     notice.native_collection = Some(NativeCollectionSample {
         completed_roots: Some(177),
         total_roots: Some(1750),
@@ -1090,28 +1042,20 @@ fn frozen_frontier_keeps_collection_work_and_its_independent_age_live() {
     });
     notice.native_collection_sample_at = Some(Duration::from_secs(30));
     state.observe(notice, Duration::from_secs(120));
-    let view = state.view(Duration::from_secs(156));
-    assert!(view.frozen);
-    assert_eq!(view.frontier, frozen_frontier);
+    let dfs = state.model(Duration::from_secs(156)).dfs.unwrap();
+    // The frontier census is frozen; collection work and its age are live.
+    assert_eq!(dfs.completed, frozen.completed);
+    assert_eq!((dfs.roots_completed, dfs.roots_total), (Some(1), Some(5)));
+    let collection = dfs.collection.unwrap();
     assert_eq!(
-        row(&view.overview, "Native roots at frontier census"),
-        "1 / 5"
-    );
-    assert_eq!(
-        row(&view.overview, "Current collection completed roots / total"),
-        "177 / 1750"
-    );
-    assert!(
-        row(
-            &view.overview,
-            "Contribution currently assembled (index / total)"
-        )
-        .contains("3 / 153 · current item, not completed work")
+        (collection.completed_roots, collection.total_roots),
+        (Some(177), Some(1750))
     );
     assert_eq!(
-        row(&view.overview, "Collection source / sample age"),
-        "native root collection / 36.0s"
+        (collection.contribution, collection.contributions),
+        (Some(3), Some(153))
     );
+    assert_eq!(collection.age_seconds, Some(36.0));
     let document = state.presentation(Duration::from_secs(156));
     assert_eq!(document["native_collection"]["sample_age_seconds"], 36.0);
     assert_eq!(
@@ -1119,5 +1063,4 @@ fn frozen_frontier_keeps_collection_work_and_its_independent_age_live() {
         Some(Duration::from_secs(10))
     );
     assert!(!state.latest.request_finished);
-    assert_eq!(view.status, MonitorStatus::Running);
 }

@@ -674,7 +674,10 @@ anchor = "pub struct Vakint {"
 # five-loop frontend and the retained post-processing workers. validate_settings also
 # rejects a user-set rustred_application_options.ordered_scheduler (derived). The
 # default arithmetic constant is modular_polynomial. Topology and FORM contracts are unchanged.
-digest = "8d2d91e47f0471049e783da351c60156e840dd0e"
+# Reviewed 2026-11-01 for the typed progress monitor: monitored evaluation
+# passes its settings (n_cores, Ordered weight arithmetic, step-cache mode) to
+# the presentation owner. Evaluation, expressions and guards are unchanged.
+digest = "7441b0ed76ae5ea9337d5d9af44866c50c58e28c"
 
 [[section.note.scope]]
 path = "crates/vakint/src/lorentz.rs"

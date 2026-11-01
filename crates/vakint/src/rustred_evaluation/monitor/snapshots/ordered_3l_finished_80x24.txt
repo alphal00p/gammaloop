@@ -1,0 +1,24 @@
+ vakint monitor · Ordered · call                              ✔ SUCCEEDED  3.4s
+ Run      modular_polynomial · 10 cores · step cache read-write
+ Stage    post-processing ▸ evaluation output                              0.2s
+ Batch    1/1 3L / Retain · cohort 2/2
+ Phase    7/7 done
+ Rate     1403/s request · 1876 keys done
+ Frontier 0 keys (peak 611) · 0 mono
+ Output   3 keys · 1207 mono · 2 input keys
+ Grouping 21.4k emitted · 90.2% merged · 214 cancelled
+ Cache    step cache 90.7% replayed (1701 / 175)
+ Memory   RSS 1.2 GiB (peak 1.3 GiB) · avail 216.0 GiB · CPU 310%
+ ── Phases ────────────────────────────────────────────────────────────────────
+     #  phase              time     keys     rate  frontier     mono   cache
+     1  Reduce s6          0.6s      826   1377/s       402    31.0k   98.3%
+     2  Reduce s5          0.7s      702   1003/s       118     6904   86.9%
+     3  Reduce s4          0.3s      348        —         0        0   80.2%
+ ── Events ────────────────────────────────────────────────────────────────────
+  request finished · caller · succeeded
+
+
+
+
+ Stages   setup 0.1s · ingress 0.9s · native 2.0s · post 0.4s
+ q detach  space freeze  d details  ^C interrupt  ? help

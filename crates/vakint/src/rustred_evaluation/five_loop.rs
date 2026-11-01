@@ -970,6 +970,7 @@ impl Vakint {
     ) -> Result<RustRedSymbolicEvaluation, VakintError> {
         settings.with_resource_budget(|| {
             if let Some(progress) = progress {
+                progress.configure(settings);
                 progress.ordered_batch(0, 1, "5L / Retain");
             }
             let setup_started = std::time::Instant::now();
