@@ -252,7 +252,10 @@ External attachments read/parse snapshots separately from their existing process
 task, so a stalled snapshot read cannot stop resource sampling. Live process resources require
 the bound worker PID and start time to match; exited, reused or legacy-unverified targets
 show no process values, while host memory can refresh independently. Input
-and drawing remain responsive when producer updates stop. If OS sampling itself stalls,
+and drawing remain responsive when producer updates stop. A running worker whose latest snapshot
+is 10 s old or more is shown as "no updates" instead of running (it may be stopped, stalled or
+dead), without a current rate; the attachment ages the worker's guard report with the snapshot,
+and a report older than three guard intervals claims no coverage. If OS sampling itself stalls,
 the displayed sample age continues to grow instead of claiming fresh memory readings.
 
 RustRed reduces every request at every loop count with its ordered scheduler; Vakint has no

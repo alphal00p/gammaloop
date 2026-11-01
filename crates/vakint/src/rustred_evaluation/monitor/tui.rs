@@ -367,11 +367,17 @@ fn header(model: &MonitorModel, ui: UiView, width: u16, no_color: bool) -> Line<
     if ui.frozen {
         right.push("display frozen", Role::Warn).sep();
     }
-    let (status, role) = match model.status {
-        MonitorStatus::Running => ("● RUNNING", Role::Time),
-        MonitorStatus::Succeeded => ("✔ SUCCEEDED", Role::Good),
-        MonitorStatus::Failed => ("✖ FAILED", Role::Bad),
-        MonitorStatus::Partial => ("◐ PARTIAL", Role::Warn),
+    let (status, role) = match (model.status, model.snapshot_age_seconds) {
+        // A supervisor that has not heard from its worker cannot tell
+        // whether it still runs (stopped, stalled, faulted or dead).
+        (MonitorStatus::Running, Some(age)) if model.stale() => (
+            format!("◌ NO UPDATES {}", format::duration(age)),
+            Role::Warn,
+        ),
+        (MonitorStatus::Running, _) => ("● RUNNING".to_owned(), Role::Time),
+        (MonitorStatus::Succeeded, _) => ("✔ SUCCEEDED".to_owned(), Role::Good),
+        (MonitorStatus::Failed, _) => ("✖ FAILED".to_owned(), Role::Bad),
+        (MonitorStatus::Partial, _) => ("◐ PARTIAL".to_owned(), Role::Warn),
     };
     right
         .push(status, role)
@@ -510,11 +516,11 @@ fn ordered_lines(ordered: &OrderedModel, width: u16, no_color: bool) -> Vec<Line
     match ordered.recent_rate {
         Some(rate) => {
             value
-                .push(format::rate(rate), Role::Rate)
+                .push(format::rate(rate.per_second()), Role::Rate)
                 .push(" now", Role::Plain);
         }
         // Only a working core has a current rate.
-        None if phase.seconds.is_some() => {
+        None if phase.active => {
             value.push("—", Role::Muted).push(" now", Role::Plain);
         }
         None => {}
@@ -522,7 +528,7 @@ fn ordered_lines(ordered: &OrderedModel, width: u16, no_color: bool) -> Vec<Line
     if let Some(rate) = ordered.request_rate {
         value
             .sep()
-            .push(format::rate(rate), Role::Rate)
+            .push(format::rate(rate.per_second()), Role::Rate)
             .push(" request", Role::Plain);
     }
     value
@@ -854,14 +860,15 @@ fn phase_rows(ordered: &OrderedModel) -> Vec<(PhaseRecord, RowState)> {
                 kind: phase.kind,
                 support: phase.support,
                 owner: phase.owner,
-                seconds: phase.seconds.unwrap_or_default(),
+                // An unknown time renders as —, never as 0.0s.
+                seconds: phase.seconds.unwrap_or(f64::NAN),
                 keys: phase.keys,
                 step_cache_hits: phase.step_cache_hits,
                 step_cache_misses: phase.step_cache_misses,
                 frontier_keys: ordered.frontier.keys,
                 frontier_monomials: ordered.frontier.monomials,
             },
-            if phase.seconds.is_some() {
+            if phase.active {
                 RowState::Running
             } else {
                 RowState::Idle
@@ -946,6 +953,9 @@ fn details_lines(model: &MonitorModel, with_events: bool, no_color: bool) -> Vec
                 super::model::humanize(&expression.stage)
             ),
         ));
+    }
+    if let Some(snapshot) = model.snapshot_age_seconds {
+        rows.push(("snapshot age", format::duration(snapshot)));
     }
     rows.push(("event age", age(details.event_age_seconds)));
     rows.push(("native age", age(details.native_observation_age_seconds)));
@@ -1275,7 +1285,7 @@ pub(super) mod tests {
 
     use super::super::model::{
         Census, Counter, Details, DfsEstimates, DfsModel, EstimateState, Grouping, GuardSummary,
-        MemoryModel, PhaseModel, RunConfig, StageModel, StageTotal,
+        MemoryModel, PhaseModel, Rate, RunConfig, StageModel, StageTotal,
     };
     use super::*;
 
@@ -1316,7 +1326,7 @@ pub(super) mod tests {
 
     /// Human-readable golden screens under `monitor/snapshots/`. Set
     /// `VAKINT_UPDATE_TUI_SNAPSHOTS=1` to rewrite them after a layout change.
-    fn assert_screen(name: &str, rendered: &str) {
+    pub(in super::super) fn assert_screen(name: &str, rendered: &str) {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("src/rustred_evaluation/monitor/snapshots")
             .join(format!("{name}.txt"));
@@ -1369,6 +1379,7 @@ pub(super) mod tests {
             status: MonitorStatus::Running,
             api_status: ApiStatus::Running,
             elapsed_seconds: 9000.0,
+            snapshot_age_seconds: None,
             run: Some(RunConfig {
                 n_cores: 1,
                 arithmetic: "exact".into(),
@@ -1418,14 +1429,21 @@ pub(super) mod tests {
                     support: Some(5),
                     owner: None,
                     seconds: Some(8007.0),
+                    active: true,
                     keys: 77_668,
                     step_cache_hits: 0,
                     step_cache_misses: 0,
                 },
                 input_keys: 1750,
                 processed_keys: 381_512,
-                recent_rate: Some(9.5),
-                request_rate: Some(42.6),
+                recent_rate: Some(Rate {
+                    keys: 285,
+                    seconds: 30.0,
+                }),
+                request_rate: Some(Rate {
+                    keys: 381_512,
+                    seconds: 8_955.7,
+                }),
                 frontier: Census {
                     keys: 228_412,
                     peak_keys: 228_412,
@@ -1556,6 +1574,32 @@ pub(super) mod tests {
         }
     }
 
+    /// The same moment with a full phase log (the 16 most recent finished
+    /// phases and the running one); the earlier phases are illustrative.
+    pub(in super::super) fn five_loop_route_five_full_log() -> MonitorModel {
+        let mut model = five_loop_route_five();
+        let ordered = model.ordered.as_mut().unwrap();
+        // (index, kind, support, owner, seconds, keys, frontier keys, mono)
+        #[rustfmt::skip]
+        let earlier = [
+            (52, PhaseKind::Route, 10, None, 1.2, 1_830, 12_406, 96_000),
+            (54, PhaseKind::Apply, 10, Some(7), 0.8, 1_102, 13_011, 98_000),
+            (56, PhaseKind::Route, 9, None, 2.1, 3_377, 21_542, 200_000),
+            (57, PhaseKind::Apply, 9, Some(2), 1.4, 1_906, 22_310, 300_000),
+            (59, PhaseKind::Apply, 9, Some(11), 1.9, 2_451, 24_870, 300_000),
+            (61, PhaseKind::Route, 8, None, 3.3, 5_120, 38_744, 500_000),
+            (63, PhaseKind::Apply, 8, Some(4), 2.6, 3_015, 47_902, 700_000),
+        ];
+        let earlier = earlier.map(
+            |(index, kind, support, owner, seconds, keys, frontier, mono)| {
+                phase(index, kind, support, owner, seconds, keys, (frontier, mono))
+            },
+        );
+        ordered.phases.splice(0..0, earlier);
+        assert_eq!(ordered.phases.len(), 16);
+        model
+    }
+
     /// A finished three-loop evaluation: four lower-loop Reduce phases.
     fn three_loop_finished() -> MonitorModel {
         MonitorModel {
@@ -1563,6 +1607,7 @@ pub(super) mod tests {
             status: MonitorStatus::Succeeded,
             api_status: ApiStatus::Succeeded,
             elapsed_seconds: 3.4,
+            snapshot_age_seconds: None,
             run: Some(RunConfig {
                 n_cores: 10,
                 arithmetic: "modular_polynomial".into(),
@@ -1614,7 +1659,10 @@ pub(super) mod tests {
                 input_keys: 2,
                 processed_keys: 1_876,
                 recent_rate: None,
-                request_rate: Some(1_403.0),
+                request_rate: Some(Rate {
+                    keys: 1_876,
+                    seconds: 1.337,
+                }),
                 frontier: Census {
                     keys: 0,
                     peak_keys: 611,
@@ -1728,6 +1776,7 @@ pub(super) mod tests {
                     status: "active".into(),
                     threshold_bytes: Some(200_000_000_000),
                     covered: true,
+                    ..Default::default()
                 }),
             },
             ..Default::default()

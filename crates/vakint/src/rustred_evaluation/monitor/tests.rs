@@ -105,12 +105,16 @@ fn ordered_census_shows_phase_position_grouping_and_step_cache_without_time_perc
         (Some(6), Some(2))
     );
     // In phase since the census at t = 4 s; the census itself is 5 s old.
+    assert!(ordered.phase.active);
     assert_eq!(ordered.phase.seconds, Some(9.0));
     assert_eq!(ordered.phase.keys, 4);
     assert_eq!(ordered.census_age_seconds, 5.0);
     // Rates include the 5 s since the census: a silent core slows down.
-    assert_eq!(ordered.recent_rate, Some(4.0 / 9.0));
-    assert_eq!(ordered.request_rate, Some(19.0 / 13.0));
+    assert_eq!(ordered.recent_rate.map(Rate::per_second), Some(4.0 / 9.0));
+    assert_eq!(
+        ordered.request_rate.map(Rate::per_second),
+        Some(19.0 / 13.0)
+    );
     assert_eq!(
         (ordered.frontier.keys, ordered.frontier.peak_keys),
         (13, 29)
@@ -206,20 +210,120 @@ fn every_phase_end_closes_one_phase_record_with_its_time_keys_and_cache() {
     assert_eq!(empty.phase_start.at, at(5));
     let busy = OrderedReductionSample::next(Some(&empty), census(2, 29, 7, 2), 1, "family", at(15));
     let (recent, request) = busy.rates(0.0);
-    assert_eq!(recent, Some(29.0 / 14.0));
-    assert_eq!(request, Some(29.0 / 14.0));
+    assert_eq!(recent.map(Rate::per_second), Some(29.0 / 14.0));
+    assert_eq!(request.map(Rate::per_second), Some(29.0 / 14.0));
     let done = OrderedReductionSample::next(Some(&busy), census(4, 29, 7, 2), 1, "family", at(16));
     assert_eq!(done.phases.len(), 2);
     assert_eq!((done.phases[1].index, done.phases[1].keys), (2, 20));
     assert_eq!(done.phases[1].seconds, 11.0);
-    let model = done.model(None, 0.0);
+    let model = done.model(None, false, 0.0);
     assert_eq!(model.phase.kind, PhaseKind::Done);
     // A new native request restarts the log, the phase and the rates.
     let next = OrderedReductionSample::next(Some(&done), census(0, 1, 1, 0), 2, "family", at(17));
     assert!(next.phases.is_empty());
     assert_eq!(next.phase_step_cache(), (0, 0));
     assert_eq!(next.rates(0.0), (None, None));
-    assert_eq!(busy.rates(14.0), (Some(29.0 / 28.0), Some(29.0 / 28.0)));
+    let (recent, request) = busy.rates(14.0);
+    assert_eq!(recent.map(Rate::per_second), Some(29.0 / 28.0));
+    assert_eq!(request.map(Rate::per_second), Some(29.0 / 28.0));
+}
+
+#[test]
+fn a_phase_interrupted_by_a_failure_keeps_its_time_and_claims_no_current_rate() {
+    let at = Duration::from_secs;
+    let mut state = MonitorState::default();
+    // Phase 1 opens at t = 10 s; the core works on it until it fails at
+    // t = 112 s, whose final census RustRed reports with the failure.
+    let start = OrderedReductionSample::next(None, census(0, 0, 0, 0), 1, "family", at(0));
+    let opened =
+        OrderedReductionSample::next(Some(&start), census(1, 10, 0, 0), 1, "family", at(10));
+    let working =
+        OrderedReductionSample::next(Some(&opened), census(1, 1010, 0, 0), 1, "family", at(110));
+    let mut native = snapshot(110, 0, 0, 0);
+    native.native_epoch = 1;
+    native.ordered = Some(working.clone());
+    state.observe(native.clone(), at(110));
+    let running = state.live_model(at(111));
+    let phase = &running.ordered.as_ref().unwrap().phase;
+    assert!(phase.active);
+    assert_eq!(phase.seconds, Some(101.0));
+    let mut failed = native;
+    failed.sequence += 1;
+    failed.elapsed = at(112);
+    failed.native_work_active = false;
+    failed.status = MonitorStatus::Failed;
+    failed.request_finished = true;
+    failed.ordered = Some(OrderedReductionSample::next(
+        Some(&working),
+        census(1, 1010, 0, 0),
+        1,
+        "family",
+        at(112),
+    ));
+    state.observe(failed, at(112));
+    let model = state.live_model(at(400));
+    let ordered = model.ordered.as_ref().unwrap();
+    assert_eq!(model.status, MonitorStatus::Failed);
+    assert!(!ordered.phase.active);
+    // The phase ran from its opening census to the failure, not 0 s.
+    assert_eq!(ordered.phase.seconds, Some(102.0));
+    assert_eq!(ordered.phase.keys, 1000);
+    assert!(ordered.recent_rate.is_none());
+    assert_eq!(
+        ordered.request_rate,
+        Some(Rate {
+            keys: 1010,
+            seconds: 112.0
+        })
+    );
+    let document = state.presentation(at(400));
+    assert_eq!(document["model"]["ordered"]["phase"]["seconds"], 102.0);
+    assert_eq!(document["model"]["ordered"]["phase"]["active"], false);
+    #[cfg(feature = "progress-tui")]
+    {
+        use super::tui::tests::{render, text};
+        let screen = text(&render(&model, UiView::default(), 80, 24, true));
+        let row = screen
+            .lines()
+            .find(|line| line.contains("Reduce s2") && !line.contains("Phase"))
+            .unwrap_or_else(|| panic!("no row for the interrupted phase:\n{screen}"));
+        assert!(row.contains("1:42") && row.contains("9.8/s") && row.contains("idle"));
+        assert!(!row.contains("0.0s"), "{screen}");
+        assert!(screen.contains("1:42 in phase") && screen.contains("FAILED"));
+        assert!(!screen.contains(" now"), "{screen}");
+    }
+}
+
+#[test]
+fn step_cache_phase_entries_keep_the_native_kind_and_their_cache_activity() {
+    let at = Duration::from_secs;
+    let routing = |completed, processed, hits, misses| CandidateOrderedReductionProgress {
+        phase_kind: CandidateOrderedPhaseKind::Routing,
+        ..census(completed, processed, hits, misses)
+    };
+    let mut state = MonitorState::default();
+    let mut native = snapshot(10, 0, 0, 0);
+    let first = OrderedReductionSample::next(None, routing(0, 0, 0, 0), 1, "family", at(1));
+    // Phase 0 (Route) replays 4 steps; phase 1 (Reduce) has no cache activity.
+    let routed = OrderedReductionSample::next(Some(&first), census(1, 5, 4, 1), 1, "family", at(4));
+    let reduced =
+        OrderedReductionSample::next(Some(&routed), census(2, 9, 4, 1), 1, "family", at(6));
+    assert_eq!(reduced.phases.len(), 2);
+    native.ordered = Some(reduced);
+    state.observe(native, at(10));
+    let document = state.presentation(at(10));
+    let phases = document["ordered_reduction"]["step_cache"]["completed_phases"]
+        .as_array()
+        .unwrap();
+    assert_eq!(phases.len(), 1, "{phases:?}");
+    assert_eq!(phases[0]["phase"], 0);
+    assert_eq!(phases[0]["phase_kind"], "Routing");
+    assert_eq!(phases[0]["kind"], "route");
+    assert_eq!(
+        (phases[0]["hits"].as_u64(), phases[0]["misses"].as_u64()),
+        (Some(4), Some(1))
+    );
+    assert_eq!(document["ordered_reduction"]["phase_kind"], "Reduction");
 }
 
 #[test]
@@ -252,7 +356,7 @@ fn the_phase_log_and_rate_window_stay_bounded() {
     assert_eq!(sample.phases.len(), PHASE_LOG);
     assert!(sample.window.len() <= 62, "{}", sample.window.len());
     let (recent, _) = sample.rates(0.0);
-    assert_eq!(recent, Some(12.0));
+    assert_eq!(recent.map(Rate::per_second), Some(12.0));
 }
 
 #[test]

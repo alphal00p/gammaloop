@@ -33,6 +33,12 @@ CASES = {
     "job-preparation": "rustred_evaluation::monitor::runtime::responsiveness_tests::real_pty_job_scope_covers_preparation_and_post_api_silence",
     "job-output": "rustred_evaluation::monitor::runtime::responsiveness_tests::real_pty_job_scope_covers_preparation_and_post_api_silence",
 }
+# Ctrl-C reaches a raw-mode display as a key: it must restore the terminal and
+# then deliver SIGINT, as the terminal itself would have done.
+INTERRUPT_CASES = {
+    "tui-interrupt": "rustred_evaluation::monitor::runtime::responsiveness_tests::real_pty_ctrl_c_restores_the_terminal_then_interrupts",
+    "viewer-interrupt": "rustred_evaluation::monitor::viewer::tests::real_pty_ctrl_c_restores_the_terminal_then_interrupts",
+}
 PHASES = {
     "embedded-silence": "synthetic_opaque_call",
     "blocked-publisher": "synthetic_opaque_call",
@@ -375,6 +381,12 @@ def run_case(binary, scenario, output, cpus):
                 assert PHASES[scenario].replace("_", " ") in before_detach
                 assert "display frozen" in before_detach
                 assert "RSS" in before_detach and "avail" in before_detach
+                # A supervisor never shows a worker silent for >35s as running.
+                header = before_detach.splitlines()[0]
+                if scenario == "viewer-silence":
+                    assert "NO UPDATES" in header and "RUNNING" not in header, header
+                else:
+                    assert "RUNNING" in header, header
                 assert any(
                     float(age) >= 35
                     for age in re.findall(r"Stage\b.*?(\d+\.\d+)s\b", before_detach)
@@ -548,6 +560,123 @@ def run_case(binary, scenario, output, cpus):
     return result
 
 
+def run_interrupt(binary, scenario, output, cpus):
+    """Send Ctrl-C to a raw-mode display; expect restoration, then SIGINT."""
+    case = output / scenario
+    case.mkdir()
+    master, slave = pty.openpty()
+    fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 80, 0, 0))
+    original = termios.tcgetattr(slave)
+    env = os.environ.copy()
+    env.update(
+        TERM="xterm-256color",
+        VAKINT_MONITOR_PTY_SCENARIO=scenario,
+        OMP_NUM_THREADS="1",
+        MKL_NUM_THREADS="1",
+        RAYON_NUM_THREADS="1",
+        TMPDIR=str(case),
+    )
+    env.pop("NO_COLOR", None)
+    command = [
+        "taskset",
+        "-c",
+        cpus,
+        str(binary),
+        "--exact",
+        INTERRUPT_CASES[scenario],
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1",
+        "--color",
+        "never",
+    ]
+    process = subprocess.Popen(
+        [sys.executable, str(Path(__file__).resolve()), "--pty-exec", *command],
+        stdin=slave,
+        stdout=slave,
+        stderr=slave,
+        env=env,
+        start_new_session=True,
+        close_fds=True,
+    )
+    owned = identity(process.pid)
+    captured = bytearray()
+    screen = Screen(80, 24)
+    start = time.monotonic()
+    ready = sent = exited = None
+    result = {"scenario": scenario, "command": command, "process": owned}
+    try:
+        while process.poll() is None:
+            now = time.monotonic()
+            if now - start > 30:
+                raise RuntimeError("interrupt fixture exceeded its 30s deadline")
+            if available() < 110_000_000_000:
+                raise RuntimeError("owned interrupt fixture stopped below 110GB host floor")
+            if select.select([master], [], [], 0.05)[0]:
+                try:
+                    data = os.read(master, 65536)
+                except OSError:
+                    data = b""
+                captured.extend(data)
+                screen.feed(data)
+            if ready is None and f"PTY_READY:{scenario}".encode() in captured:
+                ready = now
+            # The fixture reports READY only in raw mode, where the line
+            # discipline sends no SIGINT: Ctrl-C reaches the display as a key.
+            if ready is not None and sent is None and now - ready >= 1:
+                (case / "screen-before-interrupt.txt").write_text(screen.text())
+                os.write(master, b"\x03")
+                sent = now
+        exited = time.monotonic()
+        while select.select([master], [], [], 0)[0]:
+            try:
+                data = os.read(master, 65536)
+            except OSError:
+                break
+            if not data:
+                break
+            captured.extend(data)
+        tail = captured.decode(errors="replace")[-3000:]
+        assert sent is not None, tail
+        assert f"PTY_NOT_INTERRUPTED:{scenario}".encode() not in captured, tail
+        assert process.returncode == -signal.SIGINT, (process.returncode, tail)
+        # Raw mode outlives a process killed before restoring it, so equal
+        # attributes after the SIGINT death prove restoration came first.
+        assert termios.tcgetattr(slave) == original, "terminal left raw"
+        enter, leave = captured.count(b"\x1b[?1049h"), captured.count(b"\x1b[?1049l")
+        assert enter == leave == 1, f"alternate screen entered {enter}x, left {leave}x"
+        assert captured.rfind(b"\x1b[?1049l") > captured.rfind(b"\x1b[?1049h")
+        assert captured.rfind(b"\x1b[?25h") > captured.rfind(b"\x1b[?25l"), "cursor hidden"
+        result.update(
+            status="PASS",
+            exit_signal="SIGINT",
+            interrupt_to_exit_seconds=exited - sent,
+            elapsed_seconds=exited - start,
+        )
+    except BaseException as error:
+        result.update(status="FAIL", error=f"{type(error).__name__}: {error}")
+        raise
+    finally:
+        try:
+            if process.poll() is None:
+                try:
+                    still_owned = identity(process.pid) == owned
+                except (FileNotFoundError, ProcessLookupError):
+                    still_owned = False
+                if still_owned:
+                    try:
+                        os.killpg(process.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                    process.wait()
+        finally:
+            (case / "terminal.bin").write_bytes(captured)
+            (case / "result.json").write_text(json.dumps(result, indent=2) + "\n")
+            os.close(master)
+            os.close(slave)
+    return result
+
+
 def run_blocked_stderr(binary, output, cpus):
     """Keep the actual stderr pipe full until scientific completion is reported."""
     case = output / "blocked-stderr"
@@ -681,6 +810,10 @@ def main():
         # Popen already created a session; this fresh helper now claims its
         # terminal and execs the fixture without an unsafe post-fork callback.
         fcntl.ioctl(0, termios.TIOCSCTTY, 0)
+        # A foreground terminal job has default interrupt dispositions, even
+        # when this harness itself was started with SIGINT ignored.
+        signal.signal(signal.SIGINT, signal.SIG_DFL)
+        signal.signal(signal.SIGQUIT, signal.SIG_DFL)
         os.execvp(sys.argv[2], sys.argv[2:])
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--binary", type=Path, required=True)
@@ -694,6 +827,10 @@ def main():
     results = [
         run_case(args.binary, scenario, args.output, args.cpus) for scenario in CASES
     ]
+    interrupts = [
+        run_interrupt(args.binary, scenario, args.output, args.cpus)
+        for scenario in INTERRUPT_CASES
+    ]
     blocked_stderr = run_blocked_stderr(args.binary, args.output, args.cpus)
     (args.output / "result.json").write_text(
         json.dumps(
@@ -703,6 +840,7 @@ def main():
                 "binary": str(args.binary),
                 "binary_sha256": args.binary_sha256,
                 "cases": results,
+                "interrupt_cases": interrupts,
                 "blocked_stderr": blocked_stderr,
             },
             indent=2,

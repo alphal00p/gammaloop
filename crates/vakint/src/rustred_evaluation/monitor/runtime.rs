@@ -186,6 +186,18 @@ impl MonitorHandle {
     }
 }
 
+/// The step cache the run actually uses under `cache`; this mirrors the
+/// configurations `OrderedCacheRegistry::cache` opens.
+fn step_cache_label(cache: &crate::OrderedCacheSettings) -> String {
+    match (cache.mode, &cache.directory) {
+        // Read-only replay needs saved records: without a directory the
+        // registry opens no cache at all.
+        (crate::OrderedCacheMode::ReadOnly, None) => "off (read-only needs a directory)".into(),
+        (crate::OrderedCacheMode::ReadWrite, None) => format!("{} (in memory)", cache.mode),
+        (mode, _) => mode.to_string(),
+    }
+}
+
 /// Caller-owned loop telemetry from the existing per-call presentation owner.
 /// It carries no expressions, callbacks, native cache or reduction capability.
 pub(crate) struct CallerProgress {
@@ -199,16 +211,11 @@ impl CallerProgress {
         if !self.handle.shared.active.load(Ordering::Relaxed) {
             return;
         }
-        let cache = &settings.ordered_cache;
-        let step_cache = match (cache.mode, &cache.directory) {
-            (crate::OrderedCacheMode::Off, _) | (_, Some(_)) => cache.mode.to_string(),
-            (mode, None) => format!("{mode} (in memory)"),
-        };
         let mut pending = self.handle.shared.pending();
         pending.display.run = Some(RunConfig {
             n_cores: settings.n_cores,
             arithmetic: settings.ordered_weight_arithmetic.to_string(),
-            step_cache,
+            step_cache: step_cache_label(&settings.ordered_cache),
         });
         pending.dirty = true;
         drop(pending);
@@ -3004,6 +3011,37 @@ mod disabled_monitor_tests {
         assert_eq!(value, 17);
         assert_eq!(calls, 1);
     }
+
+    #[test]
+    fn run_line_names_the_step_cache_the_registry_opens() {
+        use crate::{OrderedCacheMode, OrderedCacheSettings};
+        let label = |mode, directory: Option<&str>| {
+            step_cache_label(&OrderedCacheSettings {
+                mode,
+                directory: directory.map(Into::into),
+                ..Default::default()
+            })
+        };
+        assert_eq!(label(OrderedCacheMode::Off, None), "off");
+        assert_eq!(label(OrderedCacheMode::Off, Some("cache")), "off");
+        assert_eq!(
+            label(OrderedCacheMode::ReadWrite, None),
+            "read-write (in memory)"
+        );
+        assert_eq!(
+            label(OrderedCacheMode::ReadWrite, Some("cache")),
+            "read-write"
+        );
+        assert_eq!(
+            label(OrderedCacheMode::ReadOnly, Some("cache")),
+            "read-only"
+        );
+        // The registry opens no cache for read-only without saved records.
+        assert_eq!(
+            label(OrderedCacheMode::ReadOnly, None),
+            "off (read-only needs a directory)"
+        );
+    }
 }
 
 #[cfg(test)]
@@ -3515,6 +3553,70 @@ mod responsiveness_tests {
         assert!(!crossterm::terminal::is_raw_mode_enabled().unwrap());
         println!("PTY_DONE:{scenario}");
         std::io::stdout().flush().unwrap();
+    }
+
+    /// Raw mode turns Ctrl-C into a key. The controller checks that the
+    /// display restores the terminal (termios, alternate screen, cursor) and
+    /// that SIGINT then ends this process, as the terminal itself would.
+    #[cfg(all(feature = "progress-tui", unix, not(target_arch = "wasm32")))]
+    #[test]
+    #[ignore = "requires a fresh controlling PTY whose controller sends Ctrl-C"]
+    fn real_pty_ctrl_c_restores_the_terminal_then_interrupts() {
+        use std::io::Write;
+        assert_eq!(
+            std::env::var("VAKINT_MONITOR_PTY_SCENARIO").as_deref(),
+            Ok("tui-interrupt")
+        );
+        assert!(!crossterm::terminal::is_raw_mode_enabled().unwrap());
+        let shared = Arc::new(Shared::new());
+        let (wake, receiver) = mpsc::sync_channel(1);
+        let handle = MonitorHandle {
+            shared: Arc::clone(&shared),
+            wake,
+            interval: Duration::from_secs(60),
+        };
+        let options = RustRedMonitorOptions {
+            display: RustRedMonitorDisplay::Tui,
+            interval: Duration::from_secs(60),
+            ..Default::default()
+        };
+        let worker_shared = Arc::clone(&shared);
+        let presenter = thread::spawn(move || {
+            worker_with_publisher(
+                worker_shared,
+                receiver,
+                options,
+                super::super::publication::SnapshotPublisher::new,
+            )
+        });
+        let mut context = MonitorContext {
+            handle: Some(handle.clone()),
+            worker: Some(presenter),
+        };
+        let mut callback = |envelope: &Envelope<'_>| handle.observe(envelope);
+        let mut observer = Observer::new(Default::default(), &mut callback);
+        MonitorContext::native_phase(Some(&mut observer), "synthetic_interrupted_call", None);
+        let entered = Instant::now();
+        while !crossterm::terminal::is_raw_mode_enabled().unwrap() {
+            assert!(entered.elapsed() < Duration::from_secs(3));
+            thread::sleep(Duration::from_millis(10));
+        }
+        println!("PTY_READY:tui-interrupt");
+        std::io::stdout().flush().unwrap();
+        let started = Instant::now();
+        while crossterm::terminal::is_raw_mode_enabled().unwrap() {
+            assert!(
+                started.elapsed() < Duration::from_secs(10),
+                "controller sent no Ctrl-C"
+            );
+            thread::sleep(Duration::from_millis(10));
+        }
+        // The terminal is restored; SIGINT ends the process before this wait.
+        thread::sleep(Duration::from_secs(2));
+        println!("PTY_NOT_INTERRUPTED:tui-interrupt");
+        std::io::stdout().flush().unwrap();
+        context.finish();
+        panic!("Ctrl-C restored the terminal but no SIGINT arrived");
     }
 
     #[cfg(all(feature = "progress-tui", target_os = "linux"))]

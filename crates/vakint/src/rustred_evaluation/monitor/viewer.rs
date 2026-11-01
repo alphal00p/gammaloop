@@ -78,8 +78,8 @@ use std::{
 
 #[cfg(feature = "progress-tui")]
 use super::{
-    MonitorStatus, ResourceUsage, UiAction, UiView,
-    model::{MODEL_SCHEMA, MemoryModel, MonitorModel},
+    ResourceUsage, UiAction, UiView,
+    model::{GuardSummary, MODEL_SCHEMA, MemoryModel, MonitorModel},
     runtime::{ResourceBinding, ResourceTask},
     tui,
 };
@@ -325,19 +325,23 @@ impl PublishedView {
     }
 
     /// Memory of the attachment: live host values, live process values of
-    /// a verified worker, and the worker's own guard report only then.
-    fn memory(&self, sample: &ResourceUsage) -> MemoryModel {
+    /// a verified worker, and the worker's (aged) guard report only then.
+    fn memory(&self, sample: &ResourceUsage, guard: Option<GuardSummary>) -> MemoryModel {
         let live = self.verified_resources(sample);
         let mut memory = live.memory();
-        memory.guard = live
-            .process_identity_verified
-            .then(|| {
-                self.model
-                    .as_ref()
-                    .and_then(|model| model.memory.guard.clone())
-            })
-            .flatten();
+        memory.guard = guard.filter(|_| live.process_identity_verified);
         memory
+    }
+
+    /// What the attachment shows: the worker's model `age` after its
+    /// publication (clocks, rates and guard report advanced; a stale worker
+    /// is not shown as running) with the attachment's own OS sample.
+    fn attached_model(&self, age: Option<Duration>, sample: &ResourceUsage) -> MonitorModel {
+        let mut model = self.model();
+        model.at_snapshot_age(age.map(|age| age.as_secs_f64()));
+        let guard = model.memory.guard.take();
+        model.memory = self.memory(sample, guard);
+        model
     }
 
     fn matches_worker(&self, worker_pid: u32, attached: Option<f64>) -> bool {
@@ -525,13 +529,9 @@ impl ActiveViewer {
                 ..Default::default()
             };
         };
-        let mut model = published.model();
-        if let Some(age) = self.publication_age {
-            model.advance(
-                age.saturating_add(now.saturating_duration_since(self.received_at))
-                    .as_secs_f64(),
-            );
-        }
+        let age = self
+            .publication_age
+            .map(|age| age.saturating_add(now.saturating_duration_since(self.received_at)));
         let sample = self.resources.as_ref().map_or_else(
             ResourceUsage::default,
             |(resources, sampled_at)| {
@@ -544,16 +544,7 @@ impl ActiveViewer {
                 resources
             },
         );
-        model.memory = published.memory(&sample);
-        // A worker that stopped publishing is not reported as running forever.
-        if model.status == MonitorStatus::Running
-            && self.publication_age.is_some_and(|age| {
-                age.saturating_add(now.saturating_duration_since(self.received_at))
-                    >= Duration::from_secs(10)
-            })
-        {
-            model.events.push("no worker snapshot for over 10s".into());
-        }
+        let model = published.attached_model(age, &sample);
         match &self.frozen {
             Some(frozen) => model.with_frozen_native(frozen),
             None => model,
@@ -573,6 +564,7 @@ mod tests {
         time::Instant,
     };
 
+    use super::super::MonitorStatus;
     use super::super::model::MODEL_SCHEMA;
     use super::*;
 
@@ -675,6 +667,85 @@ mod tests {
         assert_eq!(finished.ordered.unwrap().census_age_seconds, 38.0);
     }
 
+    /// A verified attachment sample of the fixture's worker.
+    fn attached_sample(pid: u32) -> ResourceUsage {
+        ResourceUsage {
+            process_pid: Some(pid),
+            process_start_ticks: Some(100),
+            process_identity_verified: true,
+            cpu_percent: Some(0.0),
+            rss_bytes: Some(8_697_000_000),
+            peak_rss_bytes: Some(8_701_000_000),
+            mem_total_bytes: Some(1_081_000_000_000),
+            mem_available_bytes: Some(222_500_000_000),
+            source: Some("fixture".into()),
+            sample_age_seconds: Some(0.4),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn a_silent_worker_is_not_shown_running_on_a_standard_terminal() {
+        use super::super::tui::tests::{
+            assert_screen, five_loop_route_five_full_log, render, text,
+        };
+        let mut model = five_loop_route_five_full_log();
+        model.memory.guard = Some(super::super::model::GuardSummary {
+            status: "active".into(),
+            threshold_bytes: Some(200_000_000_000),
+            covered: true,
+            report_age_seconds: Some(0.5),
+            interval_seconds: Some(1),
+        });
+        let pid = model.details.worker_pid.unwrap();
+        let published = PublishedView {
+            schema: Some(MODEL_SCHEMA.into()),
+            model: Some(model),
+            published_unix_seconds: Some(10.0),
+            worker_pid: Some(pid),
+            worker_start_ticks: Some(100),
+            phase: Some("native".into()),
+        };
+        let sample = attached_sample(pid);
+        // A fresh snapshot: running, with a current rate.
+        let fresh = published.attached_model(Some(Duration::from_millis(400)), &sample);
+        let screen = text(&render(&fresh, UiView::default(), 80, 24, true));
+        assert!(
+            screen.contains("● RUNNING") && screen.contains("/s now"),
+            "{screen}"
+        );
+        assert!(!screen.contains("guard"), "{screen}");
+        // 12.3 s without a snapshot (stopped, stalled, faulted or dead
+        // worker): the header says so at 80x24 even with a full phase log,
+        // there is no current rate and the guard report no longer covers it.
+        let stale = published.attached_model(Some(Duration::from_millis(12_300)), &sample);
+        assert!(stale.stale());
+        let screen = text(&render(&stale, UiView::default(), 80, 24, true));
+        assert_screen("viewer_stale_5l_80x24", &screen);
+        let header = screen.lines().next().unwrap();
+        assert!(header.contains("◌ NO UPDATES 12.3s"), "{screen}");
+        assert!(!screen.contains("RUNNING") && !screen.contains("/s now"));
+        assert!(screen.contains("— now") && screen.contains("guard unknown"));
+        assert_eq!(screen.matches("running").count(), 1, "{screen}");
+        let details = text(&render(
+            &stale,
+            UiView {
+                show_details: true,
+                ..Default::default()
+            },
+            100,
+            40,
+            true,
+        ));
+        assert!(
+            details
+                .lines()
+                .any(|line| line.contains("snapshot age") && line.ends_with("12.3s")),
+            "{details}"
+        );
+        assert!(details.contains("unknown · floor 186.3 GiB · coverage unverified"));
+    }
+
     #[test]
     fn legacy_snapshot_without_a_model_shows_its_phase_and_schema() {
         let document = serde_json::json!({"monitor": {
@@ -710,6 +781,7 @@ mod tests {
             status: "active".into(),
             threshold_bytes: Some(1),
             covered: true,
+            ..Default::default()
         });
         view.model = Some(model);
         let sample = ResourceUsage {
@@ -725,13 +797,13 @@ mod tests {
         assert!(!live.process_identity_verified);
         assert!(live.cpu_percent.is_none() && live.rss_bytes.is_none());
         assert_eq!(live.mem_available_bytes, Some(2048));
-        let memory = view.memory(&sample);
+        let memory = view.attached_model(Some(Duration::ZERO), &sample).memory;
         assert!(!memory.verified && memory.rss_bytes.is_none() && memory.cpu_percent.is_none());
         assert_eq!(memory.available_bytes, Some(2048));
         // No guard coverage is claimed for an unverified worker.
         assert!(memory.guard.is_none());
         view.worker_start_ticks = Some(100);
-        let memory = view.memory(&sample);
+        let memory = view.attached_model(Some(Duration::ZERO), &sample).memory;
         assert!(memory.verified && memory.rss_bytes == Some(991));
         assert_eq!(memory.guard.unwrap().status, "active");
     }
@@ -785,7 +857,7 @@ mod tests {
         sampler.bind_start_ticks(binding.bound_start_ticks().unwrap());
         let recorded = sampler.sample();
         assert!(view.verified_resources(&recorded).process_identity_verified);
-        assert!(view.memory(&recorded).rss_bytes.is_some());
+        assert!(view.memory(&recorded, None).rss_bytes.is_some());
         child
             .0
             .stdin
@@ -815,7 +887,7 @@ mod tests {
         assert!(zombie.cpu_percent.is_none() && zombie.rss_bytes.is_none());
         let unverified = view.verified_resources(&zombie);
         assert!(!unverified.process_identity_verified);
-        assert!(view.memory(&zombie).rss_bytes.is_none());
+        assert!(view.memory(&zombie, None).rss_bytes.is_none());
         assert!(child.0.wait().unwrap().success());
         let sample = sampler.sample();
         assert!(!sample.process_identity_verified);
@@ -1033,6 +1105,36 @@ mod tests {
         std::io::stdout().flush().unwrap();
     }
 
+    /// Ctrl-C in the attachment: the controller checks that the terminal is
+    /// restored and that SIGINT then ends this process.
+    #[test]
+    #[ignore = "requires a fresh controlling PTY whose controller sends Ctrl-C"]
+    fn real_pty_ctrl_c_restores_the_terminal_then_interrupts() {
+        assert_eq!(
+            std::env::var("VAKINT_MONITOR_PTY_SCENARIO").as_deref(),
+            Ok("viewer-interrupt")
+        );
+        let directory = tempfile::tempdir().unwrap();
+        let mut viewer = RustRedSnapshotViewer::new(&directory.path().join("latest.json"), true);
+        assert!(viewer.active.is_some());
+        println!("PTY_READY:viewer-interrupt");
+        std::io::stdout().flush().unwrap();
+        let started = Instant::now();
+        while viewer.active.is_some() {
+            assert!(
+                started.elapsed() < Duration::from_secs(10),
+                "controller sent no Ctrl-C"
+            );
+            viewer.refresh();
+            thread::sleep(Duration::from_millis(10));
+        }
+        // The terminal is restored; SIGINT ends the process before this wait.
+        thread::sleep(Duration::from_secs(2));
+        println!("PTY_NOT_INTERRUPTED:viewer-interrupt");
+        std::io::stdout().flush().unwrap();
+        panic!("Ctrl-C restored the terminal but no SIGINT arrived");
+    }
+
     #[test]
     #[ignore = "requires a fresh controlling PTY; synthetic producer is silent for over 35s"]
     fn real_pty_silent_worker_keeps_live_resources_and_detaches_without_control() {
@@ -1087,12 +1189,9 @@ mod tests {
                         model.details.event_age_seconds.unwrap() >= 35.0,
                         "event age stopped during native silence"
                     );
-                    assert!(
-                        model
-                            .events
-                            .iter()
-                            .any(|event| event.contains("no worker snapshot"))
-                    );
+                    // A silent worker is no longer shown as running.
+                    assert!(model.stale(), "silent worker still shown as running");
+                    assert!(model.snapshot_age_seconds.unwrap() >= 35.0);
                     #[cfg(target_os = "linux")]
                     {
                         let (resources, at) = active.resources.as_ref().unwrap();

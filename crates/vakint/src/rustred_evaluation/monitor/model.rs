@@ -10,6 +10,11 @@ use super::{ApiStatus, MonitorStatus, ScopeKind};
 /// Version of [`MonitorModel`] inside the published `monitor` object.
 pub(super) const MODEL_SCHEMA: &str = "vakint.monitor.v2";
 
+/// A running worker whose latest snapshot is this old (seconds) gives no
+/// evidence that it is still running: it may be stopped, stalled or dead.
+#[cfg(any(feature = "progress-tui", test))]
+pub(super) const STALE_SNAPSHOT_SECONDS: f64 = 10.0;
+
 /// Everything the monitor shows, in display-independent units (seconds,
 /// counts, bytes). Optional parts are absent when nothing was observed.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -20,6 +25,9 @@ pub(crate) struct MonitorModel {
     pub api_status: ApiStatus,
     /// Wall time since the monitor started.
     pub elapsed_seconds: f64,
+    /// Age of the worker snapshot this model was read from. Only a
+    /// supervisor viewer sets it; the worker itself publishes none.
+    pub snapshot_age_seconds: Option<f64>,
     pub run: Option<RunConfig>,
     pub stage: StageModel,
     /// Cumulative wall time per stage kind, running stage included.
@@ -239,6 +247,15 @@ impl PhaseKind {
             Self::Done => "done",
         }
     }
+
+    /// The native schedule kind this kind refines (`None` once done).
+    pub(super) fn native(self) -> Option<CandidateOrderedPhaseKind> {
+        match self {
+            Self::Route => Some(CandidateOrderedPhaseKind::Routing),
+            Self::Apply | Self::Reduce => Some(CandidateOrderedPhaseKind::Reduction),
+            Self::Done => None,
+        }
+    }
 }
 
 /// The phase running now (or the last one, once the schedule is done).
@@ -251,8 +268,14 @@ pub(crate) struct PhaseModel {
     pub kind: PhaseKind,
     pub support: Option<usize>,
     pub owner: Option<usize>,
-    /// Time in this phase; absent until the phase start was observed.
+    /// Time in this phase, from the census that opened it; absent once the
+    /// schedule is done. While the phase is not [`active`](Self::active) it
+    /// stops at the last census, the last time the phase was seen working.
     pub seconds: Option<f64>,
+    /// The native core is working on this phase. An unfinished phase is
+    /// inactive when the core stopped (finished, failed) or handed control
+    /// back to the caller.
+    pub active: bool,
     /// Keys processed in this phase so far.
     pub keys: u64,
     pub step_cache_hits: u64,
@@ -299,6 +322,29 @@ pub(crate) struct Grouping {
     pub output_cancelled: u64,
 }
 
+/// Keys processed over a span of wall time. The span includes the silence
+/// since the last census, so a core that stops reporting slows down.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub(crate) struct Rate {
+    pub keys: u64,
+    pub seconds: f64,
+}
+
+impl Rate {
+    /// Spans shorter than this give no rate.
+    pub(super) const MIN_SECONDS: f64 = 1.0;
+
+    pub(super) fn over(keys: u64, seconds: f64) -> Option<Self> {
+        (seconds >= Self::MIN_SECONDS).then_some(Self { keys, seconds })
+    }
+
+    #[cfg(any(feature = "progress-tui", test))]
+    pub(super) fn per_second(self) -> f64 {
+        self.keys as f64 / self.seconds
+    }
+}
+
 /// Ordered engine census of the current native request.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -308,10 +354,10 @@ pub(crate) struct OrderedModel {
     pub phase: PhaseModel,
     pub input_keys: u64,
     pub processed_keys: u64,
-    /// Keys per second over the recent window (about 30 s).
-    pub recent_rate: Option<f64>,
-    /// Keys per second over the whole request.
-    pub request_rate: Option<f64>,
+    /// Keys over the recent window (about 30 s); only while the core works.
+    pub recent_rate: Option<Rate>,
+    /// Keys over the whole request.
+    pub request_rate: Option<Rate>,
     pub frontier: Census,
     pub output: Census,
     pub grouping: Grouping,
@@ -406,6 +452,39 @@ pub(crate) struct GuardSummary {
     pub status: String,
     pub threshold_bytes: Option<u64>,
     pub covered: bool,
+    /// Age of the guard's own report, and the guard's sampling interval.
+    pub report_age_seconds: Option<f64>,
+    pub interval_seconds: Option<u64>,
+}
+
+/// Status of a guard whose report is too old to claim coverage.
+pub(super) const GUARD_UNKNOWN: &str = "unknown";
+
+/// A guard report older than three of its sampling intervals is stale: the
+/// guard may have stopped, so it no longer shows active coverage.
+pub(super) fn guard_report_stale(age_seconds: f64, interval_seconds: Option<u64>) -> bool {
+    interval_seconds.is_some_and(|interval| age_seconds > 3.0 * interval as f64)
+}
+
+impl GuardSummary {
+    /// The report `seconds` later; a stale report claims no coverage.
+    #[cfg(any(feature = "progress-tui", test))]
+    pub(super) fn advance(&mut self, seconds: f64) {
+        let Some(age) = self.report_age_seconds.as_mut() else {
+            return;
+        };
+        *age += seconds;
+        if guard_report_stale(*age, self.interval_seconds) {
+            self.forget();
+        }
+    }
+
+    /// No coverage claim (stale or unverifiable report).
+    #[cfg(any(feature = "progress-tui", test))]
+    pub(super) fn forget(&mut self) {
+        GUARD_UNKNOWN.clone_into(&mut self.status);
+        self.covered = false;
+    }
 }
 
 /// Secondary information for the details view.
@@ -460,8 +539,45 @@ impl MonitorModel {
         self
     }
 
+    /// A running worker whose snapshot is too old to show it as running.
+    #[cfg(any(feature = "progress-tui", test))]
+    pub(super) fn stale(&self) -> bool {
+        self.status == MonitorStatus::Running
+            && self
+                .snapshot_age_seconds
+                .is_some_and(|age| age >= STALE_SNAPSHOT_SECONDS)
+    }
+
+    /// The model of a worker snapshot published `age` seconds ago, as a
+    /// supervisor sees it now: clocks, ages, rates and the guard report are
+    /// advanced by `age` (`None`: unknown age, so no guard coverage). A stale
+    /// snapshot claims no current rate and no live estimate.
+    #[cfg(any(feature = "progress-tui", test))]
+    pub(super) fn at_snapshot_age(&mut self, age: Option<f64>) {
+        let Some(age) = age else {
+            if let Some(guard) = &mut self.memory.guard {
+                guard.forget();
+            }
+            return;
+        };
+        self.advance(age);
+        self.snapshot_age_seconds = Some(age);
+        if !self.stale() {
+            return;
+        }
+        if let Some(ordered) = &mut self.ordered {
+            ordered.recent_rate = None;
+        }
+        if let Some(dfs) = &mut self.dfs
+            && dfs.estimates.state == EstimateState::Live
+        {
+            dfs.estimates.state = EstimateState::Stale;
+        }
+    }
+
     /// Advance every running clock by `seconds` (time since the model was
-    /// built, e.g. the publication age seen by a supervisor).
+    /// built, e.g. the publication age seen by a supervisor). The rates of a
+    /// working core include the added silence, as the worker's own do.
     #[cfg(any(feature = "progress-tui", test))]
     pub(super) fn advance(&mut self, seconds: f64) {
         if !(seconds.is_finite() && seconds > 0.0) {
@@ -478,16 +594,23 @@ impl MonitorModel {
             {
                 total.seconds += seconds;
             }
-            if let Some(phase) = self
-                .ordered
-                .as_mut()
-                .and_then(|ordered| ordered.phase.seconds.as_mut())
-            {
-                *phase += seconds;
+            if let Some(ordered) = self.ordered.as_mut().filter(|ordered| ordered.phase.active) {
+                if let Some(phase) = ordered.phase.seconds.as_mut() {
+                    *phase += seconds;
+                }
+                for rate in [&mut ordered.recent_rate, &mut ordered.request_rate]
+                    .into_iter()
+                    .flatten()
+                {
+                    rate.seconds += seconds;
+                }
             }
         }
         if let Some(ordered) = &mut self.ordered {
             ordered.census_age_seconds += seconds;
+        }
+        if let Some(guard) = &mut self.memory.guard {
+            guard.advance(seconds);
         }
         for age in [
             &mut self.details.event_age_seconds,
@@ -645,9 +768,8 @@ mod tests {
         assert!(short.ends_with("(5104 chars)") && short.len() < 64);
     }
 
-    #[test]
-    fn advancing_moves_running_clocks_only() {
-        let mut model = MonitorModel {
+    fn running_ordered() -> MonitorModel {
+        MonitorModel {
             status: MonitorStatus::Running,
             elapsed_seconds: 10.0,
             stage: StageModel {
@@ -662,13 +784,31 @@ mod tests {
             ordered: Some(OrderedModel {
                 phase: PhaseModel {
                     seconds: Some(2.0),
+                    active: true,
                     ..Default::default()
                 },
+                recent_rate: Rate::over(60, 6.0),
+                request_rate: Rate::over(100, 10.0),
                 census_age_seconds: 1.0,
                 ..Default::default()
             }),
+            memory: MemoryModel {
+                guard: Some(GuardSummary {
+                    status: "active".into(),
+                    covered: true,
+                    report_age_seconds: Some(1.0),
+                    interval_seconds: Some(2),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
             ..Default::default()
-        };
+        }
+    }
+
+    #[test]
+    fn advancing_moves_running_clocks_only() {
+        let mut model = running_ordered();
         model.advance(3.0);
         assert_eq!(model.elapsed_seconds, 13.0);
         assert_eq!(model.stage.seconds, 7.0);
@@ -676,9 +816,54 @@ mod tests {
         let ordered = model.ordered.as_ref().unwrap();
         assert_eq!(ordered.phase.seconds, Some(5.0));
         assert_eq!(ordered.census_age_seconds, 4.0);
+        // A silent working core slows down, as in the worker's own model.
+        assert_eq!(ordered.recent_rate.unwrap().per_second(), 60.0 / 9.0);
+        assert_eq!(ordered.request_rate.unwrap().per_second(), 100.0 / 13.0);
         model.status = MonitorStatus::Succeeded;
         model.advance(3.0);
         assert_eq!(model.elapsed_seconds, 13.0);
-        assert_eq!(model.ordered.unwrap().census_age_seconds, 7.0);
+        let ordered = model.ordered.unwrap();
+        assert_eq!(ordered.census_age_seconds, 7.0);
+        assert_eq!(ordered.request_rate.unwrap().seconds, 13.0);
+        // An idle phase keeps the time it ran and its rates.
+        let mut idle = running_ordered();
+        idle.ordered.as_mut().unwrap().phase.active = false;
+        idle.advance(3.0);
+        let ordered = idle.ordered.unwrap();
+        assert_eq!(ordered.phase.seconds, Some(2.0));
+        assert_eq!(ordered.request_rate.unwrap().seconds, 10.0);
+    }
+
+    #[test]
+    fn old_snapshots_are_not_shown_as_running_and_age_their_guard_report() {
+        let mut fresh = running_ordered();
+        fresh.at_snapshot_age(Some(2.0));
+        assert!(!fresh.stale());
+        assert!(fresh.ordered.as_ref().unwrap().recent_rate.is_some());
+        let guard = fresh.memory.guard.as_ref().unwrap();
+        assert_eq!((guard.status.as_str(), guard.covered), ("active", true));
+        assert_eq!(guard.report_age_seconds, Some(3.0));
+        let mut old = running_ordered();
+        old.at_snapshot_age(Some(STALE_SNAPSHOT_SECONDS));
+        assert!(old.stale());
+        assert_eq!(old.snapshot_age_seconds, Some(STALE_SNAPSHOT_SECONDS));
+        let ordered = old.ordered.as_ref().unwrap();
+        assert!(ordered.recent_rate.is_none());
+        assert_eq!(ordered.request_rate.unwrap().seconds, 20.0);
+        // Three missed guard intervals: no coverage claim.
+        let guard = old.memory.guard.as_ref().unwrap();
+        assert_eq!(
+            (guard.status.as_str(), guard.covered),
+            (GUARD_UNKNOWN, false)
+        );
+        // A finished worker is never stale; an unknown age claims no guard.
+        let mut finished = running_ordered();
+        finished.status = MonitorStatus::Succeeded;
+        finished.at_snapshot_age(Some(60.0));
+        assert!(!finished.stale());
+        let mut unknown = running_ordered();
+        unknown.at_snapshot_age(None);
+        assert!(!unknown.stale());
+        assert!(!unknown.memory.guard.unwrap().covered);
     }
 }

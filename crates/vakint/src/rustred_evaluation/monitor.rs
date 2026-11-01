@@ -11,7 +11,7 @@ use std::{
 use model::{
     Collection, Counter, Details, DfsEstimates, DfsModel, EstimateState, ExpressionSize,
     GuardSummary, MemoryModel, MonitorModel, NATIVE_STAGE, OrderedModel, PhaseKind, PhaseModel,
-    PhaseRecord, RunConfig, StageKind, StageModel, StageTotal,
+    PhaseRecord, Rate, RunConfig, StageKind, StageModel, StageTotal,
 };
 
 mod model;
@@ -482,13 +482,14 @@ impl OrderedReductionSample {
         )
     }
 
-    /// Keys per second over the recent window and over the whole request,
-    /// `silence` seconds after this census (a silent core lowers the rates).
-    fn rates(&self, silence: f64) -> (Option<f64>, Option<f64>) {
+    /// Keys over the recent window and over the whole request, `silence`
+    /// seconds after this census (a silent core lowers the rates).
+    fn rates(&self, silence: f64) -> (Option<Rate>, Option<Rate>) {
         let rate = |(at, processed): (Duration, usize)| {
-            let seconds = self.sampled_at.saturating_sub(at).as_secs_f64() + silence;
-            (seconds >= 1.0)
-                .then(|| self.counts.processed_keys.saturating_sub(processed) as f64 / seconds)
+            Rate::over(
+                self.counts.processed_keys.saturating_sub(processed) as u64,
+                self.sampled_at.saturating_sub(at).as_secs_f64() + silence,
+            )
         };
         (
             self.window.front().copied().and_then(rate),
@@ -496,19 +497,17 @@ impl OrderedReductionSample {
         )
     }
 
-    fn model(&self, phase_seconds: Option<f64>, census_age: f64) -> OrderedModel {
+    /// The model `census_age` seconds after this census. `phase_seconds` is
+    /// the time in the unfinished phase, `active` whether the core works on it.
+    fn model(&self, phase_seconds: Option<f64>, active: bool, census_age: f64) -> OrderedModel {
         let c = &self.counts;
         let (phase_hits, phase_misses) = self.phase_step_cache();
-        // Only a running request accumulates silence; a finished one keeps
-        // the rates of its last census.
-        let silence = if phase_seconds.is_some() {
-            census_age
-        } else {
-            0.0
-        };
+        // Only a working core accumulates silence; a stopped one keeps the
+        // rates of its last census.
+        let silence = if active { census_age } else { 0.0 };
         let (recent_rate, request_rate) = self.rates(silence);
         // A current rate only exists while the native core is working.
-        let recent_rate = recent_rate.filter(|_| phase_seconds.is_some());
+        let recent_rate = recent_rate.filter(|_| active);
         OrderedModel {
             request: self.native_epoch,
             phase: PhaseModel {
@@ -523,6 +522,7 @@ impl OrderedReductionSample {
                 support: c.active_support,
                 owner: c.owner_index,
                 seconds: phase_seconds,
+                active,
                 keys: c.processed_keys.saturating_sub(self.phase_start.processed) as u64,
                 step_cache_hits: phase_hits as u64,
                 step_cache_misses: phase_misses as u64,
@@ -597,7 +597,7 @@ pub(super) struct ResourceGuardView {
 impl Default for ResourceGuardView {
     fn default() -> Self {
         Self {
-            status: "unknown".into(),
+            status: model::GUARD_UNKNOWN.into(),
             threshold_bytes: None,
             sample_seconds: None,
             report_age_seconds: None,
@@ -626,13 +626,15 @@ impl ResourceUsage {
             available_bytes: self.mem_available_bytes,
             total_bytes: self.mem_total_bytes,
             sample_age_seconds: self.sample_age_seconds,
-            guard: (guard.status != "unknown" || guard.threshold_bytes.is_some()).then(|| {
-                GuardSummary {
+            guard: (guard.status != model::GUARD_UNKNOWN || guard.threshold_bytes.is_some()).then(
+                || GuardSummary {
                     status: guard.status.clone(),
                     threshold_bytes: guard.threshold_bytes,
                     covered: guard.current_process_covered,
-                }
-            }),
+                    report_age_seconds: guard.report_age_seconds,
+                    interval_seconds: guard.sample_seconds,
+                },
+            ),
         }
     }
 
@@ -754,11 +756,17 @@ impl MonitorState {
                     "hits":c.step_cache_hits, "misses":c.step_cache_misses,
                     "phase_hits":sample.phase_step_cache().0,
                     "phase_misses":sample.phase_step_cache().1,
-                    "completed_phases":sample.phases.iter().map(|phase| serde_json::json!({
-                        "phase":phase.index, "phase_kind":phase.kind,
-                        "active_support":phase.support, "owner_index":phase.owner,
-                        "hits":phase.step_cache_hits, "misses":phase.step_cache_misses,
-                    })).collect::<Vec<_>>(),
+                    // Phases with step-cache activity; `phase_kind` is the
+                    // native kind (as above), `kind` the displayed one.
+                    "completed_phases":sample.phases.iter()
+                        .filter(|phase| phase.step_cache_hits + phase.step_cache_misses > 0)
+                        .map(|phase| serde_json::json!({
+                            "phase":phase.index,
+                            "phase_kind":phase.kind.native().map(|kind| format!("{kind:?}")),
+                            "kind":phase.kind,
+                            "active_support":phase.support, "owner_index":phase.owner,
+                            "hits":phase.step_cache_hits, "misses":phase.step_cache_misses,
+                        })).collect::<Vec<_>>(),
                 },
             })
         });
@@ -845,12 +853,8 @@ impl MonitorState {
                 .latest
                 .resource_sample_at
                 .map_or(0.0, |at| now.saturating_sub(at).as_secs_f64());
-            if resources
-                .guard
-                .sample_seconds
-                .is_some_and(|interval| *age > 3.0 * interval as f64)
-            {
-                resources.guard.status = "unknown".into();
+            if model::guard_report_stale(*age, resources.guard.sample_seconds) {
+                resources.guard.status = model::GUARD_UNKNOWN.into();
                 resources.guard.current_process_covered = false;
                 resources.guard.detail =
                     Some("stale guard report; no active coverage claim".into());
@@ -1057,6 +1061,8 @@ impl MonitorState {
             status: self.status(),
             api_status: snapshot.api_status,
             elapsed_seconds: self.clock(Duration::ZERO, now).as_secs_f64(),
+            // The worker's own model is current; only a supervisor ages it.
+            snapshot_age_seconds: None,
             run: snapshot.run.clone(),
             stage: StageModel {
                 kind: stage_kind,
@@ -1082,11 +1088,21 @@ impl MonitorState {
                 .as_ref()
                 .map(|work| counter(work, "")),
             ordered: snapshot.ordered.as_ref().map(|ordered| {
-                // The phase clock runs from the census that opened the phase.
-                let phase_seconds = (ordered.counts.completed_phases < ordered.counts.total_phases
-                    && snapshot.native_work_active)
-                    .then(|| self.clock(ordered.phase_start.at, now).as_secs_f64());
-                ordered.model(phase_seconds, seconds(ordered.sampled_at))
+                // The phase clock runs from the census that opened the phase
+                // while the core works on it; a phase the core left unfinished
+                // (failure, end of the core, caller work) keeps the time up to
+                // its last census.
+                let open = ordered.counts.completed_phases < ordered.counts.total_phases;
+                let active = open && snapshot.native_work_active;
+                let phase_seconds = open.then(|| {
+                    if active {
+                        self.clock(ordered.phase_start.at, now)
+                    } else {
+                        ordered.sampled_at.saturating_sub(ordered.phase_start.at)
+                    }
+                    .as_secs_f64()
+                });
+                ordered.model(phase_seconds, active, seconds(ordered.sampled_at))
             }),
             dfs: (snapshot.ordered.is_none()
                 && (snapshot.quantitative_sample_at.is_some()
