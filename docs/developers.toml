@@ -685,7 +685,7 @@ anchor = "pub struct LoopCounts {"
 end_anchor = "#[cfg(test)]\nmod tests {"
 # Source19-21 owner reconciliation; B2 body/fixtures remain unchanged.
 # Quotient/nonfinite checks and actual Run pool coverage require new slice review.
-digest = "e2ae67504b0b952e495d30e811848a626d384cd7"
+digest = "bbb55e9c09548e78938aa83c1ec55688a56ff8bd"
 
 [[section.note.scope]]
 path = "crates/feynkit-generator/src/generation.rs"
@@ -701,7 +701,7 @@ symbol = "original-pair B2 certificate and current colour completion"
 anchor = "    fn vacuum_group28_original_pair_identity()"
 # Source19-21 owner reconciliation; B2 body/fixtures remain unchanged.
 # Quotient/nonfinite checks and actual Run pool coverage require new slice review.
-digest = "9beecc2db52e66f3a79a5de3a8d79d08b266ce25"
+digest = "0e1ae1edaa0a32d2e347d081e3ddddb7102dd177"
 
 [[section.note]]
 id = "gammaloop-architecture"
@@ -1048,7 +1048,7 @@ path = "crates/feynkit-generator/src/generation/staged.rs"
 symbol = "Request / DiagramSet / BuiltDiagramSet staged ownership"
 anchor = "impl Request {"
 # SOURCE31: checked discovery/count/build/select/group and squared-order pairing ownership.
-digest = "ea81391d9d622cdf20df779cf87b18a6cbb2c86f"
+digest = "742e6f3d2e2c09658a9883cb028f1e52b828cc80"
 
 [[section.note]]
 id = "generation-integration-wp1"
@@ -2963,7 +2963,7 @@ anchor = "pub(crate) fn group_diagrams("
 # scoped source reconciliation and regression results are recorded in WP3 units03-07.
 # SOURCE31 semantic attestation (candidate, not independent approval):
 # Historical readiness results retain their named revisions. Current staged grouping uses finite quotient comparison, deterministic source indices and exact scalar normalization; current contract belongs to architecture-current and source19–21 rather than old timing claims.
-digest = "9beecc2db52e66f3a79a5de3a8d79d08b266ce25"
+digest = "0e1ae1edaa0a32d2e347d081e3ddddb7102dd177"
 
 [[section.note]]
 id = "nix-crane-cache-reuse"

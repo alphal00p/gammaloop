@@ -1,7 +1,7 @@
 //! Bounded, opt-in scalar CP preparation observation through the ordinary owners.
 //! Compiled only in library tests; no production tracing or serialization API.
 
-use super::{ColoredTopology, DiagramInput, Endpoint, GeneratedGraph};
+use super::{ColoredTopology, DiagramInput, Endpoint, FeynmanDiagram, GeneratedGraph};
 use serde_json::{Value, json};
 use std::cell::RefCell;
 use std::thread_local;
@@ -24,6 +24,15 @@ pub(super) fn start() {
 
 pub(super) fn finish() -> Vec<Value> {
     EVENTS.with_borrow_mut(|events| events.take().unwrap())
+}
+
+pub(crate) fn operator(diagram: &FeynmanDiagram) -> Value {
+    // Match the ordinary oracle census's native serialization route. Its typed
+    // 128-bit diagram ID is retained separately, without a lossy JSON number.
+    let mut payload: Value = serde_json::from_slice(&serde_json::to_vec(diagram).unwrap()).unwrap();
+    payload.as_object_mut().unwrap().remove("id").unwrap();
+    payload.as_object_mut().unwrap().remove("name").unwrap();
+    json!({"id": diagram.id().unwrap().to_string(), "name": diagram.name(), "payload": payload})
 }
 
 pub(super) fn graph(graph: &GeneratedGraph) -> Value {

@@ -241,7 +241,7 @@ impl DiagramSet {
             #[cfg(test)]
             cp_merge_diagnostic::record(|| {
                 json!({
-                    "stage": "built_source", "prepared_source": index, "diagram": diagram,
+                    "stage": "built_source", "prepared_source": index, "diagram": cp_merge_diagnostic::operator(&diagram),
                 })
             });
             let mut built = built.lock().unwrap();
@@ -1425,6 +1425,7 @@ mod tests {
     use std::fs;
     use std::mem;
     use std::path::PathBuf;
+    use symbolica::atom::AtomCore;
 
     #[test]
     fn cp_merge_preserves_complete_preparation_and_counts_each_graph_once() {
