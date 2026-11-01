@@ -407,9 +407,11 @@ needs regenerated caches, any other release keeps them.
 Without a cache directory (the default) an accepted cache is opened in place:
 its shards are read at their first lookup, new records stay in memory, and
 nothing is ever written into the data directory; #raw("read-only") replays the
-shipped records only. With a cache directory the files are copied into the
-program's subdirectory there if it holds no cache yet (an existing cache is
-kept) and the cache then grows there as usual. Each program's statistics report
+shipped records only. With a read-write cache directory the files are copied
+into the program's subdirectory there if it holds no cache yet (an existing
+cache is kept) and the cache then grows there as usual; #raw("read-only")
+never writes, so it opens the shipped cache in place when the directory holds
+no cache of the program. Each program's statistics report
 the outcome (#raw("shipped"): #raw("in-place"), #raw("installed"),
 #raw("already-present") or #raw("rejected") with the reason);
 #raw("shipped_ordered_caches()") lists every loaded program with its

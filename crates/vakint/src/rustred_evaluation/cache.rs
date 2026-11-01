@@ -36,8 +36,9 @@
 //! [`super::shipped_cache`]). It is used under the same versioning rule (its
 //! stamp and rule tables must be this program's, its files must match the loop
 //! manifest's sha256; otherwise one stderr line and a cold program): opened in
-//! place, read-only on disk, without a cache directory, and copied into the
-//! program's directory of a cache directory that holds no cache for it yet.
+//! place, read-only on disk, without a cache directory (and in read-only mode,
+//! which never writes), and copied into the program's directory of a
+//! read-write cache directory that holds no cache for it yet.
 //!
 //! The depth-first completed-result caches (prepared bundles, running caches
 //! and their transport) were removed together with depth-first reduction: a
@@ -59,7 +60,7 @@ use symbolica::atom::AtomView;
 use super::{
     RustRedEvaluationError, RustRedEvaluationOptions, RustRedMasterMode,
     data::RustRedData,
-    shipped_cache::{ShippedOrderedCache, ShippedOrderedCacheStatus, ShippedOrderedCacheUse},
+    shipped_cache::{self, ShippedOrderedCache, ShippedOrderedCacheStatus, ShippedOrderedCacheUse},
 };
 use crate::{EvaluationMethod, EvaluationOrder, Vakint, VakintError, VakintSettings};
 
@@ -193,11 +194,12 @@ pub struct OrderedCacheSettings {
     pub autosave: OrderedCacheAutosave,
     /// Use the caches the loaded external data ship (default). Without a
     /// `directory` a program's accepted shipped cache is opened in place
-    /// (replayed, never written); with one it is copied into the program's
-    /// directory there if that holds no cache yet. A shipped cache of another
-    /// version or rule tables, or with files that fail the loop manifest's
-    /// sha256, is reported on stderr and not used. `false` ignores them (cold
-    /// preparation of new shipped caches).
+    /// (replayed, never written); with one, read-write mode copies it into
+    /// the program's directory there if that holds no cache yet, and
+    /// read-only mode (which never writes) opens it in place instead. A
+    /// shipped cache of another version or rule tables, or with files that
+    /// fail the loop manifest's sha256, is reported on stderr and not used.
+    /// `false` ignores them (cold preparation of new shipped caches).
     pub shipped: bool,
 }
 
@@ -549,12 +551,20 @@ impl OrderedCacheRegistry {
         };
         let key = program.key();
         let stamp = key.2;
-        let directory = settings
+        let mut directory = settings
             .directory
             .as_ref()
             .map(|root| program_directory(root, program, &stamp));
+        // An accepted shipped cache is opened in place without a directory,
+        // and in read-only mode (which never writes) when the directory holds
+        // no cache of the program; read-write copies it into the directory.
+        let in_place = directory.as_ref().is_none_or(|directory| {
+            settings.mode == OrderedCacheMode::ReadOnly
+                && !directory.join(shipped_cache::RUSTRED_MANIFEST).exists()
+        });
         let seed = match &shipped {
-            ShippedOrderedCache::Accepted(accepted) if directory.is_none() => {
+            ShippedOrderedCache::Accepted(accepted) if in_place => {
+                directory = None;
                 Some(accepted.source.clone())
             }
             _ => None,

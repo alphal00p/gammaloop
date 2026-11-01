@@ -20,9 +20,10 @@
 //!
 //! Without a cache directory (the default in-memory mode) an accepted cache
 //! is opened in place: its shards are read lazily, new records stay in memory
-//! and nothing is ever written into the data directory. With a cache directory
-//! its files are copied into the program's directory there when that directory
-//! holds no cache yet.
+//! and nothing is ever written into the data directory. With a read-write
+//! cache directory its files are copied into the program's directory there
+//! when that directory holds no cache yet; read-only mode never writes and
+//! opens it in place instead.
 //!
 //! The maintenance example `ordered_cache_maintenance` prepares the shipped
 //! caches ([`crate::Vakint::export_ordered_caches`]) and checks a data
@@ -51,7 +52,7 @@ pub(crate) const PACK_DIRECTORY: &str = "ordered-cache";
 /// Metadata file of the shipped caches inside a loop pack.
 pub(crate) const METADATA_FILE: &str = "ordered-cache.json";
 /// RustRed's step-cache manifest inside a cache directory.
-const RUSTRED_MANIFEST: &str = "ordered-step-cache.txt";
+pub(super) const RUSTRED_MANIFEST: &str = "ordered-step-cache.txt";
 /// RustRed's tail table inside a cache directory.
 const TAIL_FILE: &str = "ordered-tail.rrtail";
 const SHARD_DIRECTORY: &str = "shards";

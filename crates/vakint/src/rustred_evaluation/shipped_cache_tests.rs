@@ -213,11 +213,7 @@ fn shipping_data(work: &Path) -> (tempfile::TempDir, Vec<Atom>) {
 /// The number of programs of the vendored packs that ship no cache.
 fn report_missing(data: &Path) -> usize {
     (1..=3)
-        .filter(|loops| {
-            !data
-                .join(format!("{loops}L/{METADATA_FILE}"))
-                .is_file()
-        })
+        .filter(|loops| !data.join(format!("{loops}L/{METADATA_FILE}")).is_file())
         .count()
 }
 
@@ -290,6 +286,17 @@ fn shipped_caches_replay_in_memory_and_from_a_cache_directory() {
     assert_eq!(evaluate_all(&engine, &settings(read_only)), cold);
     assert!(program(&engine, 3).native.hits > 0);
     drop(engine);
+    // Read-only never writes: a directory without the program's cache is
+    // left alone and the shipped cache is replayed in place.
+    let untouched = work.path().join("read-only-root");
+    let engine = load_engine(data.path());
+    let read_only = OrderedCacheSettings::read_only(&untouched);
+    assert_eq!(evaluate_all(&engine, &settings(read_only)), cold);
+    let replayed = program(&engine, 3);
+    assert_eq!(status(&replayed), Some(ShippedOrderedCacheStatus::InPlace));
+    assert!(replayed.native.hits > 0 && replayed.directory.is_none());
+    drop(engine);
+    assert!(!untouched.exists());
 
     // A cache directory gets an installed copy, byte for byte.
     let root = work.path().join("warm-root");
