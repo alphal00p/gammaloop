@@ -1,11 +1,16 @@
-"""The zero-momentum QCD fixture, its provenance, and its ordered reduction."""
+"""Explore the five-loop zero-momentum QCD fixture: input, plan and saved result.
+
+Explore-only: opening or using this page never starts a five-loop reduction.
+A server operator can enable one bounded, cancellable zero-momentum run with
+VAKINT_GALLERY_ALLOW_5L=1 and a configured runner (see gallery.typ).
+"""
 
 # Marimo cell outputs and generated return markers are intentional.
 # ruff: noqa: B018, PLR1711
 import marimo
 
 __generated_with = "0.25.2"
-app = marimo.App(width="full", app_title="Vakint · Five-loop UV reduction")
+app = marimo.App(width="full", app_title="Vakint · Five-loop: explore")
 
 
 @app.cell
@@ -22,10 +27,10 @@ def _(Gallery, mo):
     Gallery.header(
         mo,
         "five-loop",
-        "A five-loop zero-momentum reduction",
-        "One closed massless quark trace and four gluon rungs. Follow the "
-        "unaveraged metric/color contraction through the authenticated campaign "
-        "and its ordered reduction.",
+        "Explore a five-loop zero-momentum reduction",
+        "One closed massless quark trace and four gluon rungs. Inspect the input, "
+        "the Ordered reduction plan and the saved exact result. This page never "
+        "starts a five-loop reduction by itself.",
     )
     return
 
@@ -55,12 +60,7 @@ def _(Gallery, mo):
 @app.cell
 def _(FeynmanDiagram, Gallery, Model):
     qcd_model = Model.qcd()
-    ladder = FeynmanDiagram.from_dot(
-        qcd_model,
-        (
-            Gallery.directory.parents[1] / "tests/fixtures/qcd_ladder/ladder.dot"
-        ).read_text(),
-    )
+    ladder = FeynmanDiagram.from_dot(qcd_model, Gallery.ladder_dot(5))
     ladder
     return ladder, qcd_model
 
@@ -136,7 +136,10 @@ def _(Gallery, mo):
                 "The recorded regions have D = 9 or 10 and native index rank up to six. Membership follows each saved signed-key predicate.",
             ),
             Gallery.evidence_card(
-                mo, "campaign", "Campaign identity and mapped-input census"
+                mo,
+                "campaign",
+                "Campaign identity and mapped-input census",
+                optional=True,
             ),
             Gallery.note(
                 mo,
@@ -164,7 +167,10 @@ def _(Gallery, mo):
                 "Verified scalar-input loading, external data and native ordered reduction are measured separately. Fresh scientific preparation is independent validation.",
             ),
             Gallery.evidence_card(
-                mo, "zero-momentum", "Complete zero-momentum physical reduction"
+                mo,
+                "zero-momentum",
+                "Complete zero-momentum physical reduction",
+                optional=True,
             ),
             mo.md(
                 "Final comparisons use three fresh processes per configuration with the same verified scalar input, medians and ranges, fixed workers/affinity, and exact result/guard checks. Original graph and numerator preparation are reported separately. Warm in-process reuse is reported separately."
@@ -176,40 +182,100 @@ def _(Gallery, mo):
 
 @app.cell(hide_code=True)
 def _(Gallery, mo):
+    five_loop_plan = Gallery.five_loop_plan()
+    if five_loop_plan is None:
+        _body = Gallery.note(
+            mo,
+            "Reduction plan not available here",
+            "Set VAKINT_GALLERY_ARTIFACTS to a vakint-external-data checkout (or "
+            "install the 5L pack from the inspection page) to list the plan. "
+            "Only its small JSON index is read; no IBP payload is decoded.",
+            pending=True,
+        )
+    else:
+        _body = mo.vstack(
+            [
+                Gallery.metrics(
+                    mo,
+                    [
+                        (five_loop_plan["owners"], "Apply owners (one phase each)"),
+                        (
+                            f"{five_loop_plan['route_records']:,}",
+                            "saved Route records",
+                        ),
+                        (
+                            f"{five_loop_plan['bundle_bytes'] / 1024**2:,.0f} MiB",
+                            "owner rule bundles",
+                        ),
+                        (five_loop_plan["version"], "external-data version"),
+                    ],
+                ),
+                mo.ui.table(
+                    five_loop_plan["supports"],
+                    selection=None,
+                    pagination=False,
+                    show_download=False,
+                ),
+            ]
+        )
+    mo.vstack(
+        [
+            Gallery.section(
+                mo,
+                "04 / plan",
+                "The Ordered reduction plan, without reducing",
+                "Owners are sectors whose IBP rules eliminate integrals; the Ordered "
+                "scheduler reduces each owner's support exactly once, from the "
+                "largest support down. Read from 5L/ibps/selection.json.",
+            ),
+            _body,
+        ]
+    )
+    return (five_loop_plan,)
+
+
+@app.cell(hide_code=True)
+def _(Gallery, mo):
     Gallery.section(
         mo,
-        "04 / reproduce",
-        "Reduce the verified saved input",
-        "Opening this page never starts the physical benchmark or builds a cache.",
+        "05 / reproduce",
+        "Reduce the verified saved input (server opt-in)",
+        "Opening this page never starts the physical reduction or builds a cache.",
     )
     return
 
 
 @app.cell
 def _(Gallery, mo):
+    _enabled = Gallery.five_loop_runs_enabled()
     run_benchmark = mo.ui.run_button(
-        label="Run reduction of the saved scalar input",
+        label="Run the five-loop zero-momentum reduction",
         kind="warn",
-        disabled=not Gallery.benchmark_available(),
+        disabled=not _enabled,
     )
     mo.vstack(
         [
             Gallery.note(
                 mo,
-                "Zero-momentum only",
-                "This action reduces the verified zero-momentum input. The quadratic fixture is deferred and has no gallery Run action.",
-            ),
-            Gallery.note(
+                "Explore-only unless the operator enables it",
+                "A five-loop reduction takes minutes on many cores and over 10 GB "
+                "of memory. This server does not allow it: explore the plan above "
+                "and the saved result below instead. Operators enable one bounded, "
+                "cancellable zero-momentum run with VAKINT_GALLERY_ALLOW_5L=1 and a "
+                "configured runner.",
+                pending=True,
+            )
+            if not _enabled
+            else Gallery.note(
                 mo,
-                "May take substantial time",
-                "This invokes the compiled Rust ordered reduction with the complete verified zero-momentum scalar input, preserving all contributions and contraction conditions. It reuses graph and trace preparation. Reduction can still take minutes or hours; there is no default time cutoff. A single interactive run is not a controlled three-run benchmark.",
+                "Enabled on this server · substantial cost",
+                f"The run reduces the verified zero-momentum input with the Ordered "
+                f"engine on at most {Gallery.max_cores()} cores, at low priority, "
+                f"with a {Gallery.max_seconds():g} s deadline. Cancel stops every "
+                "process of the run. The quadratic fixture has no Run action.",
+                pending=True,
             ),
             run_benchmark,
-            mo.md(
-                "The server has no fully configured runner and prepared scalar-input collection."
-                if not Gallery.benchmark_available()
-                else "The runner uses the configured verified scalar-input collection. Run logs are retained in its development workspace; fresh scientific generation is validated separately."
-            ),
         ]
     )
     return (run_benchmark,)
@@ -217,36 +283,67 @@ def _(Gallery, mo):
 
 @app.cell
 def _(Gallery, mo, run_benchmark):
-    mo.stop(not run_benchmark.value)
-    try:
-        benchmark_job = Gallery.start_benchmark("zero-momentum")
-    except (OSError, ValueError, RuntimeError) as _error:
-        mo.stop(True, mo.callout(str(_error), kind="warn"))
+    benchmark_job = None
+    if run_benchmark.value:
+        try:
+            benchmark_job = Gallery.start_benchmark("zero-momentum")
+        except (OSError, ValueError, RuntimeError) as _error:
+            mo.stop(True, mo.callout(str(_error), kind="warn"))
+    # A reloaded page re-attaches to a five-loop run that is still going.
+    benchmark_job = benchmark_job or Gallery.active_job(kind="five-loop")
+    mo.stop(benchmark_job is None)
     return (benchmark_job,)
 
 
 @app.cell
-def _(benchmark_job, mo):
-    job_refresh = mo.ui.refresh(
-        options=[5, 15, 30], default_interval=5, label="Background job status"
+def _(Gallery, benchmark_job, mo):
+    cancel_benchmark = mo.ui.button(
+        label="Cancel the five-loop run",
+        kind="danger",
+        on_click=lambda _: Gallery.cancel_job(benchmark_job),
     )
-    job_refresh
-    return (job_refresh,)
+    job_refresh = mo.ui.refresh(
+        options=[2, 5, 15], default_interval=2, label="Background job status"
+    )
+    mo.hstack([cancel_benchmark, job_refresh], justify="start")
+    return cancel_benchmark, job_refresh
 
 
 @app.cell(hide_code=True)
-def _(Gallery, benchmark_job, job_refresh, mo):
+def _(Gallery, benchmark_job, cancel_benchmark, job_refresh, mo):
     job_refresh.value
     interactive_status = Gallery.benchmark_status(benchmark_job)
+    _report = cancel_benchmark.value or Gallery.cancel_report(benchmark_job)
     mo.vstack(
         [
             Gallery.note(
                 mo,
-                f"Benchmark {interactive_status['state']}",
-                "The worker runs independently of the notebook UI. Only one gallery benchmark runs at a time.",
+                f"Five-loop run {str(interactive_status['state']).replace('_', ' ')}",
+                "The run is a separate process group; only one gallery job runs at a time."
+                + (
+                    f" Cancel signalled {len(_report['signalled'])} process(es); "
+                    + (
+                        "none survives."
+                        if not _report["survivors"]
+                        else f"still alive: {_report['survivors']}"
+                    )
+                    if _report
+                    else ""
+                ),
                 pending=interactive_status["state"] != "complete",
             ),
-            mo.json(interactive_status),
+            mo.ui.table(
+                [
+                    {"": label, "value": value}
+                    for label, value in Gallery.progress_rows(interactive_status)
+                ],
+                selection=None,
+                pagination=False,
+                show_download=False,
+            ),
+            mo.accordion(
+                {"Raw job status": mo.json(Gallery.display_receipt(interactive_status))}
+            ),
         ]
     )
     return (interactive_status,)
@@ -258,7 +355,7 @@ def _(Gallery, mo):
         [
             Gallery.section(
                 mo,
-                "05 / saved coefficients",
+                "06 / saved coefficients",
                 "Load the result without repeating its reduction",
                 "The exact retained Atom and 300-digit scalar coefficients are available offline in the companion example.",
             ),
@@ -293,6 +390,58 @@ def _(Gallery, mo):
         ]
     )
     return
+
+
+@app.cell
+def _(mo):
+    inspect_saved = mo.ui.run_button(
+        label="Inspect the saved result here (offline, no reduction)", kind="success"
+    )
+    inspect_saved
+    return (inspect_saved,)
+
+
+@app.cell(hide_code=True)
+def _(Gallery, inspect_saved, mo):
+    mo.stop(not inspect_saved.value)
+    saved_result = Gallery.saved_five_loop_result()
+    _summary = saved_result.summary()
+    _products = saved_result.coefficient_table["products"]
+    _rows = []
+    for _row in _products[:12]:
+        _leading = min(_row["coefficients"], key=lambda number: number["epsilon_power"])
+        _rows.append(
+            {
+                "formal master product": _row["master_product"][:90]
+                + ("…" if len(_row["master_product"]) > 90 else ""),
+                "leading ε power": _leading["epsilon_power"],
+                "leading coefficient (real, 30 digits)": _leading["real"][
+                    "display_300_significant_digits"
+                ][:32],
+            }
+        )
+    mo.vstack(
+        [
+            Gallery.metrics(
+                mo,
+                [
+                    (_summary["master_symbols"], "individual master identities"),
+                    (_summary["master_products"], "formal master products"),
+                    (_summary["scalar_coefficients"], "scalar Laurent coefficients"),
+                    (
+                        f"ε^{_summary['epsilon_minimum']} … ε^{_summary['epsilon_maximum']}",
+                        "recorded orders per product",
+                    ),
+                ],
+            ),
+            mo.ui.table(_rows, selection=None, pagination=False, show_download=False),
+            mo.md(
+                f"First 12 of {len(_products)} products; every file was checked "
+                "against its recorded sha256. The masters themselves stay formal."
+            ),
+        ]
+    )
+    return (saved_result,)
 
 
 @app.cell(hide_code=True)

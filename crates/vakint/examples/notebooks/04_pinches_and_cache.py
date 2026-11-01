@@ -1,11 +1,11 @@
-"""Exact numerator cancellation and historical depth-first cache evidence."""
+"""Exact numerator cancellation, checked with the Ordered engine, and its step cache."""
 
 # Marimo generated return markers are intentional.
 # ruff: noqa: PLR1711
 import marimo
 
 __generated_with = "0.25.2"
-app = marimo.App(width="full", app_title="Vakint · Pinches & caching")
+app = marimo.App(width="full", app_title="Vakint · Pinches & closure")
 
 
 @app.cell
@@ -255,7 +255,9 @@ def _(Gallery, mo):
                 "Strong checks within a bounded runtime",
                 "Each selected paired test has a 240-second target and a 300-second deadline, with no retries.",
             ),
-            Gallery.evidence_card(mo, "closure", "Five-loop exact closure suite"),
+            Gallery.evidence_card(
+                mo, "closure", "Five-loop exact closure suite", optional=True
+            ),
             Gallery.note(
                 mo,
                 "What the suite checks",
@@ -272,20 +274,45 @@ def _(Gallery, mo):
         [
             Gallery.section(
                 mo,
-                "03 / history",
-                "Depth-first caches: recorded evidence only",
-                "Vakint now reduces only with the ordered scheduler and no longer loads, prepares or captures depth-first caches.",
+                "03 / caching",
+                "Ordered step caches: replay one-step records",
+                "Vakint reduces with the Ordered scheduler only. Its persistent cache "
+                "stores weight-independent one-step records, never completed results.",
+            ),
+            mo.md(r"""
+        A replayed step is identical to a computed one, so results never depend
+        on the cache; grouping and cancellations below a key are kept. The
+        engine options are `ordered_cache` (`"read-write"`, `"read-only"` or
+        `"off"`), `ordered_cache_directory` (None keeps records in memory) and
+        `ordered_cache_ram_bytes`; `load_ordered_cache()`,
+        `save_ordered_cache()`, `ordered_cache_statistics()` and
+        `warm_ordered_cache([...])` manage it explicitly. Records are kept per
+        reduction program, rule tables and cache version, so a cache written by
+        another version is never replayed.
+
+        Page 05 keeps one such cache for the 3L/4L ladders: rerun a case to see
+        its hits replace the misses of the first run.
+        """),
+            Gallery.evidence_card(
+                mo,
+                "cache-build",
+                "Accumulated depth-first cache and source provenance",
+                optional=True,
             ),
             Gallery.evidence_card(
-                mo, "cache-build", "Accumulated depth-first cache and source provenance"
-            ),
-            Gallery.evidence_card(
-                mo, "held-out", "Held-out timings, root hits and intermediate hits"
+                mo,
+                "held-out",
+                "Held-out timings, root hits and intermediate hits",
+                optional=True,
             ),
             Gallery.note(
                 mo,
-                "Historical measurements",
-                "These receipts describe the removed depth-first completed-result caches. A completed terminal image replaces a frontier key and skips every grouping and cancellation below it, so ordered reduction never consumed them. A persistent ordered cache stores weight-independent one-step records instead; it is reported separately.",
+                "History",
+                "Earlier versions also reduced depth-first with completed-result "
+                "caches. That strategy and its caches were removed from Vakint: a "
+                "completed terminal image replaces a frontier key and skips every "
+                "grouping and cancellation below it, which the Ordered scheduler "
+                "never does.",
             ),
             Gallery.footer(mo),
         ]

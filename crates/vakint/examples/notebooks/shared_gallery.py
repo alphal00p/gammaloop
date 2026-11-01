@@ -1,7 +1,9 @@
-"""Presentation and authenticated evidence shared by the four Vakint apps.
+"""Presentation, evidence and background jobs shared by the Vakint apps.
 
 Native physics objects stay in their owning HEPKit/Symbolica classes. This module
-only handles presentation, evidence files, and the explicit benchmark launcher.
+only handles presentation, evidence files, the ladder cases and the explicit,
+cancellable background jobs (``gallery_jobs``). Opening a page never starts a
+reduction; every heavy run is an explicit, bounded and cancellable job.
 """
 
 from __future__ import annotations
@@ -10,22 +12,30 @@ import hashlib
 import html
 import json
 import os
-import subprocess
 import sys
-import uuid
+import tempfile
+import time
+from itertools import pairwise
 from pathlib import Path
 from urllib.parse import quote
+
+import gallery_jobs
 
 
 class Gallery:
     directory = Path(__file__).resolve().parent
+    ladder_directory = directory / "data" / "ladder"
     display_receipt_bytes = 8 * 1024**2
     pages = (
         ("graphs", "01", "Graphs & numerators"),
         ("inspect", "02", "Constants & masters"),
-        ("five-loop", "03", "Five-loop UV reduction"),
-        ("closure", "04", "Pinches & caching"),
+        ("five-loop", "03", "Five-loop: explore"),
+        ("closure", "04", "Pinches & closure"),
+        ("reduce", "05", "Reduce 3L & 4L"),
     )
+    arithmetics = ("modular_polynomial", "modular_sampled", "exact")
+    default_max_cores = 4
+    default_max_seconds = 1800
 
     @classmethod
     def header(cls, mo, page, title, subtitle):
@@ -163,17 +173,51 @@ class Gallery:
             "External data and provenance</a>" + provenance + "</footer>"
         )
 
-    @staticmethod
-    def engine(
-        precision=32, mode="retain", n_cores=None, ordered_weight_arithmetic=None
-    ):
-        """RustRed-only engine. Worker cores and the Ordered weight arithmetic
-        come from the arguments, else VAKINT_GALLERY_N_CORES and
-        VAKINT_GALLERY_ARITHMETIC, else Vakint's defaults."""
-        from symbolica.community.hepkit.vakint import Vakint, VakintEvaluationMethod
+    @classmethod
+    def max_cores(cls):
+        """Ceiling on any gallery engine's or job's ``n_cores``.
 
+        VAKINT_GALLERY_MAX_CORES (default 4), never more than the CPUs this
+        server may use. A shared server stays responsive while a run works."""
+        try:
+            allowed = len(os.sched_getaffinity(0))
+        except (AttributeError, OSError):
+            allowed = os.cpu_count() or 1
+        try:
+            limit = int(
+                os.environ.get("VAKINT_GALLERY_MAX_CORES", cls.default_max_cores)
+            )
+        except ValueError:
+            limit = cls.default_max_cores
+        return max(1, min(limit, allowed))
+
+    @classmethod
+    def bounded_cores(cls, n_cores=None):
+        """Requested cores (else VAKINT_GALLERY_N_CORES, else the ceiling),
+        clamped to ``1..max_cores()``."""
         if n_cores is None and os.environ.get("VAKINT_GALLERY_N_CORES"):
             n_cores = int(os.environ["VAKINT_GALLERY_N_CORES"])
+        ceiling = cls.max_cores()
+        return ceiling if n_cores is None else max(1, min(int(n_cores), ceiling))
+
+    @classmethod
+    def engine(
+        cls,
+        precision=32,
+        mode="retain",
+        n_cores=None,
+        ordered_weight_arithmetic=None,
+        normalization="FMFTandMATAD",
+        **options,
+    ):
+        """RustRed-only Ordered engine on at most ``max_cores()`` workers.
+
+        Cores and the Ordered weight arithmetic (exact | modular_sampled |
+        modular_polynomial) come from the arguments, else VAKINT_GALLERY_N_CORES
+        and VAKINT_GALLERY_ARITHMETIC, else the core ceiling and Vakint's default
+        arithmetic (modular_polynomial). Other Vakint options pass through."""
+        from symbolica.community.hepkit.vakint import Vakint, VakintEvaluationMethod
+
         if ordered_weight_arithmetic is None:
             ordered_weight_arithmetic = os.environ.get("VAKINT_GALLERY_ARITHMETIC")
         return Vakint(
@@ -181,10 +225,11 @@ class Gallery:
                 VakintEvaluationMethod.new_rustred_method(master_mode=mode)
             ],
             run_time_decimal_precision=precision,
-            integral_normalization_factor="FMFTandMATAD",
+            integral_normalization_factor=normalization,
             form_exe_path="/gallery-uses-rustred-only",
-            n_cores=n_cores,
+            n_cores=cls.bounded_cores(n_cores),
             ordered_weight_arithmetic=ordered_weight_arithmetic,
+            **options,
         )
 
     @staticmethod
@@ -194,13 +239,29 @@ class Gallery:
         return f"{engine.ordered_weight_arithmetic} · {cores} core{'' if cores == 1 else 's'}"
 
     @staticmethod
-    def load_data(engine, max_loop_count):
+    def data_directory():
+        """External data: a configured checkout (VAKINT_GALLERY_ARTIFACTS), else
+        a download cache (VAKINT_GALLERY_DATA_CACHE, else the user cache
+        directory). Never the server's working directory."""
+        configured = os.environ.get("VAKINT_GALLERY_ARTIFACTS")
+        if configured:
+            return Path(configured).resolve()
+        cache = os.environ.get("VAKINT_GALLERY_DATA_CACHE")
+        if not cache:
+            base = os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache"
+            cache = Path(base) / "vakint-gallery"
+        directory = Path(cache).resolve()
+        directory.mkdir(parents=True, exist_ok=True)
+        return directory
+
+    @classmethod
+    def load_data(cls, engine, max_loop_count):
         # A configured checkout is recognized and validated before any network
-        # request. Otherwise official loading uses the caller's current directory.
+        # request. Otherwise the official packs install once into the cache.
         return engine.load_official_external_data(
             max_loop_count,
             version="latest",
-            local_artifacts_path=os.environ.get("VAKINT_GALLERY_ARTIFACTS"),
+            local_artifacts_path=str(cls.data_directory()),
         )
 
     @classmethod
@@ -296,7 +357,8 @@ class Gallery:
         return mo.Html('<p class="vg-foot">' + " · ".join(links) + "</p>")
 
     @classmethod
-    def evidence_card(cls, mo, name, title):
+    def evidence_card(cls, mo, name, title, *, optional=False):
+        """A checked receipt's card; an absent ``optional`` receipt shows nothing."""
         try:
             receipt = cls.receipt(name)
         except (OSError, ValueError) as error:
@@ -311,6 +373,8 @@ class Gallery:
                     cls.evidence_links(mo, name),
                 ]
             )
+        if receipt is None and optional:
+            return mo.md("")
         if receipt is None:
             return cls.note(
                 mo,
@@ -494,6 +558,361 @@ class Gallery:
             return mo.vstack([cls.metrics(mo, fields), details])
         return details
 
+    # -- Background jobs ---------------------------------------------------
+    @staticmethod
+    def work_root():
+        """Job directories: VAKINT_GALLERY_WORK, else a per-user temporary root."""
+        configured = os.environ.get("VAKINT_GALLERY_WORK")
+        if configured:
+            return Path(configured).resolve()
+        return Path(tempfile.gettempdir()).resolve() / f"vakint-gallery-{os.getuid()}"
+
+    @classmethod
+    def job_cpus(cls, n_cores):
+        """The first ``n_cores`` CPUs this server may use: a job's affinity."""
+        try:
+            allowed = sorted(os.sched_getaffinity(0))
+        except (AttributeError, OSError):
+            return None
+        return allowed[: max(1, n_cores)]
+
+    @classmethod
+    def max_seconds(cls, requested=None):
+        """A job's wall-clock deadline: requested, else VAKINT_GALLERY_MAX_SECONDS,
+        else 30 minutes; at most the server's own ceiling."""
+        try:
+            ceiling = float(
+                os.environ.get("VAKINT_GALLERY_MAX_SECONDS", cls.default_max_seconds)
+            )
+        except ValueError:
+            ceiling = float(cls.default_max_seconds)
+        if requested is None:
+            return ceiling
+        requested = float(requested)
+        if not requested > 0:
+            raise ValueError("A job deadline must be a positive number of seconds")
+        return min(requested, ceiling)
+
+    @classmethod
+    def job_request(cls, kind, command, n_cores, max_seconds, **fields):
+        """Command, bounded threads, CPUs, niceness and deadline of one job."""
+        return {
+            "kind": kind,
+            "command": command,
+            "n_cores": n_cores,
+            "environment": {
+                "RAYON_NUM_THREADS": str(n_cores),
+                "VAKINT_N_CORES": str(n_cores),
+            },
+            "cpus": cls.job_cpus(n_cores),
+            "nice": 10,
+            "max_seconds": max_seconds,
+            **fields,
+        }
+
+    @classmethod
+    def jobs(cls):
+        return gallery_jobs.jobs(cls.work_root())
+
+    @classmethod
+    def active_job(cls, kind=None):
+        """The running job (of one kind: "ladder" or "five-loop"), also after a
+        reload or from another session."""
+        return gallery_jobs.active_job(cls.work_root(), kind=kind)
+
+    @classmethod
+    def checked_job(cls, path):
+        work = Path(path).resolve()
+        if not work.is_relative_to(cls.work_root()):
+            raise ValueError("Job path escapes its workspace")
+        return work
+
+    @classmethod
+    def job_status(cls, path):
+        """The supervisor's status, with live stage, native progress and memory.
+
+        The supervisor writes its status every five seconds; while the job runs,
+        the page overlays the files the command updates continuously."""
+        import benchmark_job
+
+        work = cls.checked_job(path)
+        current = gallery_jobs.status(work)
+        if current.get("state") in gallery_jobs.FINAL_STATES:
+            return current
+        live = dict(current)
+        stage = benchmark_job.read_stage(work)
+        if stage:
+            live["stage"] = stage
+        live["native_progress"] = benchmark_job.read_native_progress(work)
+        if isinstance(current.get("worker_pid"), int):
+            live["resources"] = benchmark_job.worker_resources(current["worker_pid"])
+        return live
+
+    @classmethod
+    def cancel_job(cls, path):
+        """Stop every process of a job (SIGTERM, then SIGKILL) and confirm it."""
+        return gallery_jobs.cancel(cls.checked_job(path))
+
+    @classmethod
+    def wait_job(cls, path, *, timeout=None, cancel_after=None, poll_seconds=0.5):
+        """Block until a job ends (script mode). ``cancel_after`` seconds cancels
+        it exactly as the Cancel button does; the report joins the status."""
+        started = time.monotonic()
+        report = None
+        while True:
+            current = cls.job_status(path)
+            if current.get("state") in gallery_jobs.FINAL_STATES:
+                return (
+                    current if report is None else {**current, "cancel_report": report}
+                )
+            elapsed = time.monotonic() - started
+            if cancel_after is not None and report is None and elapsed >= cancel_after:
+                report = cls.cancel_job(path)
+                continue
+            if timeout is not None and elapsed >= timeout:
+                return current
+            time.sleep(poll_seconds)
+
+    @classmethod
+    def cancel_report(cls, path):
+        """What the last Cancel of this job signalled, or None."""
+        report = cls.checked_job(path) / "cancel-report.json"
+        try:
+            return json.loads(report.read_text())
+        except (OSError, ValueError):
+            return None
+
+    @staticmethod
+    def compact_json(value):
+        return json.dumps(value, ensure_ascii=False) if value else "none"
+
+    @classmethod
+    def job_result(cls, path):
+        """The job's own receipt (``benchmark.json``), or None."""
+        receipt = cls.checked_job(path) / "benchmark.json"
+        if not receipt.is_file() or receipt.stat().st_size > cls.display_receipt_bytes:
+            return None
+        return json.loads(receipt.read_text())
+
+    @staticmethod
+    def progress_rows(status):
+        """A compact progress summary of a job status for the browser."""
+        rows = [("State", str(status.get("state", "unknown")).replace("_", " "))]
+        if status.get("elapsed_seconds") is not None:
+            rows.append(("Elapsed", f"{status['elapsed_seconds']:,.1f} s"))
+        stage = status.get("stage") or {}
+        if stage.get("stage"):
+            rows.append(("Stage", str(stage["stage"])))
+        native = (status.get("native_progress") or {}).get("snapshot") or {}
+        monitor = native.get("monitor") if isinstance(native, dict) else None
+        monitor = monitor if isinstance(monitor, dict) else {}
+        phase = monitor.get("phase") or native.get("caller_phase")
+        if phase:
+            rows.append(("Native phase", str(phase).replace("_", " ")))
+        ordered = native.get("ordered_reduction") or monitor.get("ordered_reduction")
+        if isinstance(ordered, dict):
+            if ordered.get("total_phases"):
+                rows.append(
+                    (
+                        "Ordered phases",
+                        f"{ordered.get('completed_phases', 0)} / {ordered['total_phases']}"
+                        + (
+                            f" ({ordered['phase_kind']})"
+                            if ordered.get("phase_kind")
+                            else ""
+                        ),
+                    )
+                )
+            for key, label in (
+                ("frontier_keys", "Frontier keys"),
+                ("processed_keys", "Processed keys"),
+                ("terminal_keys", "Terminal keys"),
+            ):
+                if isinstance(ordered.get(key), int):
+                    rows.append((label, f"{ordered[key]:,}"))
+        resources = status.get("resources") or {}
+        if resources.get("worker_rss_bytes"):
+            rows.append(
+                ("Worker RSS", f"{resources['worker_rss_bytes'] / 1024**3:.2f} GiB")
+            )
+        return rows
+
+    # -- Ladder reductions (3L, 4L) -----------------------------------------
+    @staticmethod
+    def ladder_dot(loop_count):
+        """DOT of the massless-quark QCD ladder self-energy with L-1 gluon rungs.
+
+        The rung fixture's graph (``ladder_target`` in tests/fixtures/qcd_ladder);
+        L=5 is the four-rung ``ladder.dot`` with the same edges."""
+        if loop_count < 1:
+            raise ValueError("A quark-loop ladder needs at least one loop")
+        rungs = range(1, loop_count)
+        rail = ["left", *(f"t{rung}" for rung in rungs), "right"]
+        rail += [*(f"b{rung}" for rung in reversed(rungs)), "left"]
+        lines = [
+            "digraph massless_quark_ladder_self_energy {",
+            "    incoming [style=invis];",
+            "    outgoing [style=invis];",
+            '    incoming -> left [particle="g"];',
+            '    right -> outgoing [particle="g"];',
+            *(f'    {a} -> {b} [particle="d"];' for a, b in pairwise(rail)),
+            *(f'    t{rung} -> b{rung} [particle="g"];' for rung in rungs),
+            "}",
+        ]
+        return "\n".join(lines) + "\n"
+
+    @classmethod
+    def ladder_cases(cls):
+        """The prepared ladder inputs and their recorded results (data/ladder)."""
+        manifest = json.loads((cls.ladder_directory / "cases.json").read_text())
+        if manifest.get("schema") != "vakint.gallery.ladder-cases.v1":
+            raise ValueError("Unsupported ladder case manifest")
+        return manifest["cases"]
+
+    @classmethod
+    def ladder_input(cls, key):
+        """Path of a case's prepared scalar input; the worker verifies its sha256.
+
+        Small inputs ship in data/ladder. Larger ones (4L quadratic, 1.7 MB) are
+        read from VAKINT_GALLERY_LADDER_INPUTS when the server provides them."""
+        case = cls.ladder_cases().get(key)
+        if case is None:
+            raise ValueError(f"Unknown ladder case: {key}")
+        name = case["input"]["file"]
+        if case["input"]["shipped"]:
+            path = cls.ladder_directory / name
+        else:
+            configured = os.environ.get("VAKINT_GALLERY_LADDER_INPUTS")
+            if not configured:
+                raise ValueError(
+                    f"{case['label']}: its prepared input is not shipped; set "
+                    f"VAKINT_GALLERY_LADDER_INPUTS to a directory holding {name}"
+                )
+            path = Path(configured).resolve() / name
+        if not path.is_file():
+            raise ValueError(f"Prepared input is missing: {path}")
+        return path
+
+    @classmethod
+    def ladder_case_available(cls, key):
+        try:
+            cls.ladder_input(key)
+        except (OSError, ValueError):
+            return False
+        return True
+
+    @classmethod
+    def start_reduction(
+        cls,
+        case,
+        *,
+        n_cores=None,
+        arithmetic=None,
+        max_seconds=None,
+        ordered_cache=True,
+    ):
+        """Reduce one ladder case in a background job; return its directory.
+
+        The job runs reduce_worker.py on at most ``max_cores()`` CPUs with a
+        wall-clock deadline, and stops on ``cancel_job``."""
+        cases = cls.ladder_cases()
+        if case not in cases:
+            raise ValueError(f"Unknown ladder case: {case}")
+        cls.ladder_input(case)
+        arithmetic = arithmetic or "modular_polynomial"
+        if arithmetic not in cls.arithmetics:
+            raise ValueError(f"Unknown Ordered weight arithmetic: {arithmetic}")
+        cores = cls.bounded_cores(n_cores)
+        deadline = cls.max_seconds(max_seconds)
+        root = cls.work_root()
+        spec = {
+            "case": case,
+            "n_cores": cores,
+            "arithmetic": arithmetic,
+            "max_seconds": deadline,
+            "data_directory": str(cls.data_directory())
+            if cases[case]["loop_count"] >= 4
+            or os.environ.get("VAKINT_GALLERY_ARTIFACTS")
+            else None,
+            "ordered_cache_directory": str(root / "ordered-cache")
+            if ordered_cache
+            else None,
+        }
+        return gallery_jobs.launch(
+            root,
+            case,
+            lambda work: cls.job_request(
+                "ladder",
+                [sys.executable, str(cls.directory / "reduce_worker.py"), str(work)],
+                cores,
+                deadline,
+                spec=spec,
+            ),
+        )
+
+    # -- Five-loop exploration (no reduction) -------------------------------
+    @classmethod
+    def five_loop_plan(cls, root=None):
+        """Summarize the 5L Ordered reduction plan from its JSON index, or None.
+
+        Reads only ``5L/ibps/selection.json`` (a few MB) of a configured checkout
+        or of an installed official pack; never downloads or decodes rules."""
+        if root is None:
+            configured = os.environ.get("VAKINT_GALLERY_ARTIFACTS")
+            cache = os.environ.get("VAKINT_GALLERY_DATA_CACHE")
+            base = os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache"
+            root = Path(configured or cache or Path(base) / "vakint-gallery")
+        root = Path(root)
+        candidates = [root / "5L/ibps/selection.json"]
+        candidates += sorted(
+            root.glob(".vakint-external-data/*/5L/ibps/selection.json"), reverse=True
+        )
+        path = next(
+            (candidate for candidate in candidates if candidate.is_file()), None
+        )
+        if path is None or path.stat().st_size > 64 * 1024**2:
+            return None
+        selection = json.loads(path.read_text())
+        manifest = path.parents[1] / "manifest.json"
+        version = (
+            json.loads(manifest.read_text()).get("version", "unknown")
+            if manifest.is_file()
+            else "unknown"
+        )
+        supports = {}
+        for owner in selection["owners"]:
+            support = str(owner["mask"]).count("1")
+            row = supports.setdefault(support, {"owners": 0, "bytes": 0})
+            row["owners"] += 1
+            row["bytes"] += int(owner["bytes"])
+        return {
+            "version": version,
+            "path": str(path),
+            "owners": len(selection["owners"]),
+            "route_records": int(selection.get("route_record_count", 0)),
+            "bundle_bytes": int(selection.get("total_bundle_bytes", 0)),
+            "supports": [
+                {
+                    "owner support (lines)": support,
+                    "owners": row["owners"],
+                    "rule bundles (MiB)": round(row["bytes"] / 1024**2, 1),
+                }
+                for support, row in sorted(supports.items(), reverse=True)
+            ],
+        }
+
+    @classmethod
+    def saved_five_loop_result(cls):
+        """The saved, checksummed 5L zero-momentum result (no reduction)."""
+        examples = str(cls.directory.parent)
+        if examples not in sys.path:
+            sys.path.append(examples)
+        import symbolica
+        from q0_coefficients import SavedQ0Result
+
+        return SavedQ0Result.load(api=symbolica)
+
+    # -- Five-loop benchmark (explore-only unless the server opts in) --------
     @staticmethod
     def benchmark_available():
         return bool(
@@ -501,6 +920,15 @@ class Gallery:
             and os.environ.get("VAKINT_GALLERY_WORK")
             and os.environ.get("VAKINT_GALLERY_ARTIFACTS")
             and os.environ.get("VAKINT_GALLERY_PREPARED_INPUT_ROOT")
+        )
+
+    @classmethod
+    def five_loop_runs_enabled(cls):
+        """5L reductions are opt-in per server: VAKINT_GALLERY_ALLOW_5L=1 plus
+        a configured runner. Otherwise the five-loop page is explore-only."""
+        return (
+            os.environ.get("VAKINT_GALLERY_ALLOW_5L") == "1"
+            and cls.benchmark_available()
         )
 
     @staticmethod
@@ -521,69 +949,44 @@ class Gallery:
             raise ValueError(f"Prepared scalar-input manifest is missing: {manifest}")
         return directory
 
-    @staticmethod
-    def start_benchmark(projection):
-        """Start one serialized background job, leaving the app kernel responsive."""
-        import fcntl
-
+    @classmethod
+    def start_benchmark(cls, projection, *, n_cores=None, max_seconds=None):
+        """Start the opt-in five-loop job; it is bounded and cancellable."""
         if projection != "zero-momentum":
             raise ValueError(
                 "Only the zero-momentum fixture is enabled; quadratic reduction is deferred"
             )
-        if not Gallery.benchmark_available():
+        if not cls.benchmark_available():
             raise ValueError(
                 "This gallery server needs a benchmark runner, workspace, external data and prepared scalar inputs"
             )
-        prepared_input = Gallery.prepared_input_directory(projection)
-        root = Path(os.environ["VAKINT_GALLERY_WORK"]).resolve()
-        root.mkdir(parents=True, exist_ok=True)
-        lock = (root / "benchmark.lock").open("a+")
-        try:
-            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            lock.close()
-            raise RuntimeError(
-                "A gallery benchmark is already running; wait for it to complete"
-            ) from None
-        work = root / f"{projection}-{uuid.uuid4().hex[:12]}"
-        work.mkdir(parents=True)
-        command = [
-            os.environ["VAKINT_GALLERY_BENCHMARK"],
-            "--projection",
-            projection,
-            "--artifacts",
-            os.environ["VAKINT_GALLERY_ARTIFACTS"],
-            "--work-dir",
-            str(work),
-            "--progress-snapshot",
-            str(work / "monitor.json"),
-            "--prepared-input",
-            str(prepared_input),
-        ]
-        (work / "request.json").write_text(json.dumps({"command": command}))
-        (work / "status.json").write_text(json.dumps({"state": "starting"}))
-        try:
-            with (work / "worker.log").open("w") as log:
-                subprocess.Popen(
-                    [
-                        sys.executable,
-                        str(Gallery.directory / "benchmark_job.py"),
-                        str(work),
-                        str(lock.fileno()),
-                    ],
-                    stdout=log,
-                    stderr=subprocess.STDOUT,
-                    pass_fds=(lock.fileno(),),
-                )
-        finally:
-            # The child owns the inherited descriptor until its benchmark ends.
-            lock.close()
-        return str(work)
+        if os.environ.get("VAKINT_GALLERY_ALLOW_5L") != "1":
+            raise ValueError(
+                "Five-loop reductions are disabled on this server (explore-only); "
+                "the operator enables them with VAKINT_GALLERY_ALLOW_5L=1"
+            )
+        prepared_input = cls.prepared_input_directory(projection)
+        cores = cls.bounded_cores(n_cores)
+        deadline = cls.max_seconds(max_seconds)
 
-    @staticmethod
-    def benchmark_status(path):
-        work = Path(path).resolve()
-        root = Path(os.environ["VAKINT_GALLERY_WORK"]).resolve()
-        if not work.is_relative_to(root):
-            raise ValueError("Benchmark path escapes its workspace")
-        return json.loads((work / "status.json").read_text())
+        def request(work):
+            command = [
+                os.environ["VAKINT_GALLERY_BENCHMARK"],
+                "--projection",
+                projection,
+                "--artifacts",
+                os.environ["VAKINT_GALLERY_ARTIFACTS"],
+                "--work-dir",
+                str(work),
+                "--progress-snapshot",
+                str(work / "monitor.json"),
+                "--prepared-input",
+                str(prepared_input),
+            ]
+            return cls.job_request("five-loop", command, cores, deadline)
+
+        return gallery_jobs.launch(cls.work_root(), projection, request)
+
+    @classmethod
+    def benchmark_status(cls, path):
+        return cls.job_status(path)

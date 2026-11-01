@@ -1,12 +1,11 @@
 = Interactive Vakint field notes
 
-These four Marimo applications share the native HEPKit, tensor, graph and
+These five Marimo applications share the native HEPKit, tensor, graph and
 Symbolica types from one coherent host. They demonstrate graph dressing and
 efficient gamma/color contractions, precision-aware constant/master inspection,
-the zero-momentum four-rung vacuum fixture, and exact numerator/pinch closure.
-The quadratic Taylor fixture is retained as deferred history. Its reduction,
-retesting and cache comparison require a later user decision and have no gallery
-Run action.
+an explore-only view of the zero-momentum four-rung (five-loop) vacuum fixture,
+exact numerator/pinch closure, and end-to-end Ordered reductions of the three-
+and four-loop ladders in cancellable background jobs.
 The source follows the native workflow of the
 #link("https://www.hepkit.org/gallery/notebooks/four_loop_numerator.py")[HEPKit numerator tutorial].
 
@@ -21,8 +20,9 @@ second Symbolica wheel into that environment. From this directory run:
 The server binds only to #raw("127.0.0.1:8417"). Configure
 #raw("VAKINT_GALLERY_PORT") to select another local port. A persistent user
 service and tailnet-only HTTPS proxy can expose that port; the notebook process
-does not change the tailnet or existing services itself. The four routes are
-#raw("/graphs/"), #raw("/inspect/"), #raw("/five-loop/") and #raw("/closure/").
+does not change the tailnet or existing services itself. The five routes are
+#raw("/graphs/"), #raw("/inspect/"), #raw("/five-loop/"), #raw("/closure/") and
+#raw("/reduce/").
 The server uses application mode, with source editing disabled.
 
 The dedicated tailnet deployment is
@@ -35,8 +35,10 @@ configuration. Restarting the app does not reconfigure Tailscale.
 
 Opening a page does not load five-loop owners or start a physical reduction.
 The inspection app constructs the offline vendored 1L–3L engine. Its explicit
-load button validates #raw("VAKINT_GALLERY_ARTIFACTS") when set, otherwise calls
-the official latest loader in the caller's working directory. A loaded engine
+load button (1L–4L, or 1L–5L) validates #raw("VAKINT_GALLERY_ARTIFACTS") when
+set; otherwise the official latest packs install once into
+#raw("VAKINT_GALLERY_DATA_CACHE") (default: the user cache directory,
+#raw("~/.cache/vakint-gallery")), never into the server's working directory. A loaded engine
 is reused for that session's subsequent lookups. Every master remains a native
 snapshot-bound inspection object, and #raw("master.graph") is an ordinary
 HEPKit graph. The 5L catalogue contains declared, uncomputed terminals with empty
@@ -53,22 +55,15 @@ and rejects traversal or corruption. Receipt names are #raw("campaign"),
 case which triggered a lowered-entry coverage advisory and still reduced to
 declared catalogue masters. Its provisional owner mapping does not establish
 global physical coverage, a speedup, or an example of unknown residuals.
-An absent receipt is visibly pending and makes no timing
-or successful-reduction claim. The producer remains responsible for scientific
-validation and source/data provenance; a local hash does not certify those facts.
+An absent receipt makes no timing or successful-reduction
+claim: the five-loop and closure pages omit cards whose receipt is absent.
+The producer remains responsible for scientific validation and source/data provenance; a local hash does not certify those facts.
 
-The optional #raw("zero-momentum-running-cache") receipt is an immutable
-observation of an optimized producer and its cumulative native cache. Display
-enqueued and acknowledged-durable record counts separately. Neither count
-establishes completion of the full physical reduction. A fresh process reusing
-that same input is a seen-input check, distinct from the held-out suite.
-Keep final reduction times, speedups and estimates absent until their completed
-authenticated receipts are available. Refreshing this evidence does not require
-changing the deployed native host or starting a numerical calculation.
-The separate #raw("zero-momentum-light-cache") and
-#raw("zero-momentum-heavy-cache") receipts contain completed comparisons for
-their named tier. Keep them pending until exact results, cache identities and
-controlled measurements have been validated.
+The #raw("cache-build") and #raw("held-out") receipts, and the older
+#raw("zero-momentum-running-cache"), #raw("-light-cache") and
+#raw("-heavy-cache") ones, describe the removed depth-first completed-result
+caches. They are historical: Vakint no longer builds or reads those caches, and
+no page shows them unless an evidence directory provides them.
 
 Browser previews have bounded depth, item counts and string lengths. A receipt
 above 8 MiB is offered as a download instead of being parsed into the page.
@@ -89,50 +84,77 @@ Timings distinguish numerator preparation, loading,
 routing, IBP reduction, cache attachment and total runtime. Final comparisons
 use medians/ranges of three fresh processes and exact result/guard checks.
 
-== Explicit expensive runs
+== Background jobs: bounded and cancellable
 
-To enable the saved-input reduction button, configure the qualified compiled
-#raw("VAKINT_GALLERY_BENCHMARK") executable, #raw("VAKINT_GALLERY_ARTIFACTS")
-checkout, #raw("VAKINT_GALLERY_WORK") development directory, and
-#raw("VAKINT_GALLERY_PREPARED_INPUT_ROOT"). This last directory contains
-#raw("zero-momentum/") bundle with
-#raw("prepared-input.json"), #raw("vakint-input.symbolica") and its complete
-#raw("projector-conditions.symbolica"). The selected bundle must exist; the native
-CLI validates its exact payload, projection, scientific identity and producer
-provenance. Missing or invalid configured input reports an error and never falls
-back to fresh preparation. Historical quadratic bundles can be retained,
-but the gallery launcher rejects that projection while it is deferred.
-Bind the executable's bytes and capabilities to the reviewed build and
-consumer-validation receipts before enabling the button.
-These paths are deployment configuration, not browser-controlled commands.
+Every reduction started from a page is a background job, never an
+in-kernel computation. #raw("gallery_jobs.py") starts the supervisor
+#raw("benchmark_job.py") in a new session, so a job is exactly one process
+group. The supervisor runs the job's command with
+#raw("VAKINT_N_CORES") and #raw("RAYON_NUM_THREADS") set to the job's
+#raw("n_cores"), pinned to that many of the server's CPUs, at niceness 10, and
+with a wall-clock deadline. It hands the command the work root's lock, so one
+job runs at a time and the lock is released only when every process of the job
+has exited. The command dies with its supervisor (#raw("PR_SET_PDEATHSIG")):
+no worker outlives its job.
 
-A separate worker runs the same Rust example with #raw("--projection"),
-#raw("--prepared-input"), #raw("--artifacts"), #raw("--work-dir") and
-#raw("--progress-snapshot"). The reduction uses RustRed's ordered scheduler,
-which reads and writes no persistent cache. Do not reuse a failed job's
-directory for another attempt.
+Cancel sends SIGTERM to the job's process group and SIGKILL after five seconds,
+then confirms that no member survives; recorded #raw("/proc") start times guard
+every signal against PID reuse, and the server's own process group is never
+signalled. The supervisor records #raw("cancelled"), #raw("timed_out"),
+#raw("failed") or #raw("complete"); a supervisor that vanished without a final
+status is reported as #raw("lost"). Jobs live under #raw("VAKINT_GALLERY_WORK")
+(default: a per-user directory under the temporary directory); a reloaded page
+re-attaches to the running job and can cancel it.
 
-Each fresh process uses the same complete scalar input without
-repeating native graph generation or trace contraction. The report separates
-current verification/loading from original
-producer preparation; historical preparation is excluded from current end-to-end
-time. Validate fresh scientific generation independently with
-#raw("--fresh-prepare --prepare-only") in a new directory before installing a
-bundle. Reusing scalar input does not cache its IBP result.
+Server limits: #raw("VAKINT_GALLERY_MAX_CORES") caps every engine's and job's
+#raw("n_cores") (default 4, never more than the server's CPUs), and
+#raw("VAKINT_GALLERY_MAX_SECONDS") caps a job's deadline (default 1800 s).
+#raw("VAKINT_GALLERY_N_CORES") and #raw("VAKINT_GALLERY_ARITHMETIC")
+(#raw("exact"), #raw("modular_sampled") or the default
+#raw("modular_polynomial")) select the in-page engines' defaults.
 
-The browser stays responsive and reads atomic status records. A process lock
-permits one gallery benchmark at a time. Physical reductions have no default
-time cutoff.
-The worker refreshes elapsed time and worker/machine RAM observations every five
-seconds while waiting for the collector. Its native #raw("WORK/monitor.json")
-snapshot is displayed through a bounded JSON preview with its actual file age.
-Before the first Native event, progress remains explicitly pending; repeated
-heartbeats do not imply scientific progress or a new Native observation.
-Requests, logs and resulting receipts remain below the configured workspace.
-The depth-first cache evidence shown by the closure page is historical: Vakint
-no longer prepares, captures or reads depth-first caches. The graph tutorial's
-explicit tensor-contraction button is a separate, interactive algebra
-demonstration, not a controlled timing sample of the physical zero-momentum fixture.
+== Three- and four-loop reductions (#raw("/reduce/"))
+
+The page reduces the massless-quark QCD ladder self-energy with two or three
+gluon rungs to retained masters with the Ordered engine (MSbar, dot-product
+notation, L+1 epsilon orders, as in #raw("tests/ordered_reduction_rungs.rs")).
+The prepared scalar inputs ship in #raw("data/ladder/") with
+#raw("cases.json"): 3L zero momentum and quadratic, 4L zero momentum. Each
+input's sha256 equals the rung reference's #raw("source_input_sha256"); the
+worker #raw("reduce_worker.py") checks it, binds the dimension, checks the
+recorded evaluated-input sha256, reduces, and compares the retained result's
+sha256 with the recorded fixture (identical for every arithmetic and core
+count). The 4L cases first load the 4L external-data pack. The 4L quadratic
+input (1.7 MB, about 25 s of reduction) is not shipped; a server provides it
+with #raw("VAKINT_GALLERY_LADDER_INPUTS"). An optional persistent Ordered step
+cache under the work root makes reruns warm.
+
+Run a case headlessly with the page itself, which then waits for the job:
+
+#raw("python 05_ladder_reductions.py --case 3L-zero-momentum --n-cores 2", block: true)
+
+(optional #raw("--arithmetic"), #raw("--max-seconds") and
+#raw("--cancel-after SECONDS"), which cancels exactly like the button).
+
+== Five loops are explore-only (#raw("/five-loop/"))
+
+The five-loop page shows the fixture's definition, the Ordered reduction plan
+(owners and supports, read from #raw("5L/ibps/selection.json") of a configured
+or installed 5L pack; no IBP payload is decoded) and the saved exact
+zero-momentum result (#raw("examples/data/five_loop_q0"), checked against its
+recorded sha256). It never starts a five-loop reduction by default. An operator
+can enable one zero-momentum run by setting #raw("VAKINT_GALLERY_ALLOW_5L=1")
+and configuring the compiled #raw("VAKINT_GALLERY_BENCHMARK") executable
+(#raw("five_loop_qcd_ladder")), the #raw("VAKINT_GALLERY_ARTIFACTS") checkout,
+#raw("VAKINT_GALLERY_WORK") and #raw("VAKINT_GALLERY_PREPARED_INPUT_ROOT")
+(a #raw("zero-momentum/") bundle with #raw("prepared-input.json"),
+#raw("vakint-input.symbolica") and #raw("projector-conditions.symbolica"); the
+native CLI validates it and never falls back to fresh preparation). That run is
+a background job like the others: bounded cores, deadline and Cancel. The
+quadratic projection has no Run action. The graph page contracts the bubble and
+the three- and four-loop ladders (well under a second each); the five-loop
+numerator (about 16 s that the page kernel could not interrupt) is shown as
+geometry only.
 
 The ten small teaching formulae use their objects' existing native HTML protocol
 through the shared gallery presentation method. This retains native MathML and
@@ -145,9 +167,11 @@ browser. Never strip native omission markers to make a preview appear complete.
 == Validation
 
 Run #raw("marimo check 0*.py") and the repository Ruff formatter/checker in the
-coherent environment. Run the cheap launcher/configuration tests with
+coherent environment. Run the launcher, cancellation and configuration tests with
 #raw("python -m unittest discover -s . -p test_shared_gallery.py"); they use fake
-commands and perform no graph preparation or reduction. Inspect all four apps in a browser, including native SVG,
+commands or short #raw("sleep") processes and perform no graph preparation or
+reduction. With the native host, run the 3L and 4L cases headlessly as above
+and once with #raw("--cancel-after"). Inspect all five apps in a browser, including native SVG,
 formula rendering, lookup forms, source-limit warnings, exact closure controls
 and background status. A notebook source passing static checks does not by itself
 establish native runtime interoperability. Preserve the actual browser and
