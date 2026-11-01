@@ -357,6 +357,10 @@ read-write) and saves. The rung tests and examples read
 #raw("VAKINT_ORDERED_CACHE_SHIPPED") (#raw("on")/#raw("off")) and
 #raw("VAKINT_ORDERED_CACHE_MAX_RESIDENT_BYTES"), and report the cache counters
 (with each program's shipped-cache status) in #raw("ordered_step_cache").
+Unlike the engine they ignore shipped caches unless
+#raw("VAKINT_ORDERED_CACHE_SHIPPED=on"): the rungs are the shipped workload, so
+replaying them would skip the step computation the fixtures validate. A run
+that replays a shipped cache sets #raw("cache_policy.prepared_cache_loaded").
 
 A cache directory holds one subdirectory per program,
 #raw("<loops>L-<program>.<tables>.<stamp>") (e.g.

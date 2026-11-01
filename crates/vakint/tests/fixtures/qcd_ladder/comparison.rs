@@ -6,7 +6,8 @@ use super::super::vakint::{
     AvailablePrecision, ConstantSymbol, EvaluationMethod, EvaluationOrder, LoopNormalizationFactor,
     MasterSymbol, OfficialExternalDataOptions, OrderedCacheMode, OrderedCacheSettings,
     OrderedWeightArithmetic, RustRedEvaluationOptions, RustRedMasterMode, RustRedMonitorOptions,
-    RustRedMonitorScope, Vakint, VakintMaster, VakintSettings, vakint_parse, vakint_symbol,
+    RustRedMonitorScope, ShippedOrderedCacheStatus, Vakint, VakintMaster, VakintSettings,
+    vakint_parse, vakint_symbol,
 };
 use super::{LadderFixture, Projection, Result};
 use sha2::{Digest, Sha256};
@@ -108,13 +109,17 @@ pub fn modular_arithmetic_from_environment() -> Result<OrderedWeightArithmetic> 
 
 /// The Ordered step cache selected by `VAKINT_ORDERED_CACHE` (`off`,
 /// `read-only` or `read-write`), `VAKINT_ORDERED_CACHE_DIR`,
-/// `VAKINT_ORDERED_CACHE_SHIPPED` (`on`/`off`: use the caches the data ship)
-/// and `VAKINT_ORDERED_CACHE_MAX_RESIDENT_BYTES` (bytes per program, `none`
-/// for no ceiling); the engine default (in memory, read-write, shipped caches
-/// used) otherwise.
+/// `VAKINT_ORDERED_CACHE_SHIPPED` (`on`/`off`: replay the caches the data
+/// ship) and `VAKINT_ORDERED_CACHE_MAX_RESIDENT_BYTES` (bytes per program,
+/// `none` for no ceiling); the engine default (in memory, read-write)
+/// otherwise. Unlike the engine, fixture runs ignore shipped caches unless
+/// `VAKINT_ORDERED_CACHE_SHIPPED=on`: they validate the step computation
+/// cold, while a shipped cache only replays recorded steps (a run that
+/// replays one reports `cache_policy.prepared_cache_loaded`).
 pub fn ordered_cache_from_environment() -> Result<OrderedCacheSettings> {
     let mut settings = OrderedCacheSettings {
         directory: std::env::var_os("VAKINT_ORDERED_CACHE_DIR").map(PathBuf::from),
+        shipped: false,
         ..Default::default()
     };
     if let Some(mode) = std::env::var_os("VAKINT_ORDERED_CACHE") {
@@ -537,6 +542,18 @@ fn run_scoped(
     let (value, guards) = retained_result?;
     let reduction_seconds = reduction.elapsed().as_secs_f64();
     let step_cache = ordered_cache_report(&engine, &settings.ordered_cache);
+    // A shipped cache opened in place or installed into the cache directory.
+    let shipped_cache_loaded = engine
+        .ordered_cache_statistics()
+        .programs
+        .iter()
+        .filter_map(|program| program.shipped.as_ref())
+        .any(|shipped| {
+            matches!(
+                shipped.status,
+                ShippedOrderedCacheStatus::InPlace | ShippedOrderedCacheStatus::Installed
+            )
+        });
     let retained_memory = process_memory();
     if let Some(scope) = scope.as_deref_mut() {
         scope.expression_phase("retained_expression_serialization", value.as_view());
@@ -618,7 +635,7 @@ fn run_scoped(
         "strategy":"Ordered","ordered_weight_arithmetic":options.arithmetic.to_string(),
         "persistent_cache":false,"intrinsic_memoization":false,
         "intrinsic_memoization_scope":"Ordered has no completed-result memo; checked opaque factorization may use a fresh isolated internal memo",
-        "cache_policy":{"prepared_cache_loaded":false,"previous_run_cache_restored":false,
+        "cache_policy":{"prepared_cache_loaded":shipped_cache_loaded,"previous_run_cache_restored":false,
             "depth_first_intrinsic_memoization":false,
             "ordered_result_cache":"not supported",
             "ordered_step_cache":"one-step records only (see ordered_step_cache); replayed steps are identical to checked ones"},

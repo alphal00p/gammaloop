@@ -24,7 +24,9 @@ fn golden_precision_target_respects_the_selected_source_cap() {
 /// must return the same retained expression, which must equal the historical
 /// depth-first result frozen in `tests/resources/ordered_rungs` before
 /// depth-first reduction was removed from Vakint, and match the recorded
-/// high-precision numerical reference.
+/// high-precision numerical reference. The rungs are the shipped-cache
+/// workload, so they ignore shipped caches (they run cold and validate the
+/// step computation) unless `VAKINT_ORDERED_CACHE_SHIPPED=on`.
 fn compare(loop_count: usize, projection: fixture::Projection) -> fixture::Result<()> {
     let temporary = tempfile::tempdir()?;
     let directory = if let Some(root) = std::env::var_os("VAKINT_ORDERED_RUN_EVIDENCE") {
@@ -92,9 +94,10 @@ fn compare(loop_count: usize, projection: fixture::Projection) -> fixture::Resul
     for result in [&exact, &modular] {
         assert_eq!(result.report["strategy"], "Ordered");
         assert_eq!(result.report["intrinsic_memoization"], false);
-        assert_eq!(
-            result.report["cache_policy"]["prepared_cache_loaded"],
-            false
+        // Shipped caches are replayed only on request.
+        assert!(
+            result.report["cache_policy"]["prepared_cache_loaded"] == false
+                || result.report["ordered_step_cache"]["shipped_setting"] == true
         );
         assert_eq!(
             result.report["cache_policy"]["previous_run_cache_restored"],
@@ -281,6 +284,11 @@ fn four_loop_quadratic_rung_matches_depth_first_and_reference() -> fixture::Resu
 ///     --test ordered_reduction_rungs <test name> -- --ignored --nocapture
 /// ```
 ///
+/// The runs are cold: shipped Ordered caches (whose workload includes these
+/// inputs) are ignored unless `VAKINT_ORDERED_CACHE_SHIPPED=on`, which only
+/// replays recorded steps (for timings; the report then sets
+/// `cache_policy.prepared_cache_loaded`). Validate code changes cold.
+///
 /// The zero-momentum test compares with the accepted historical result shipped
 /// in `examples/data/five_loop_q0`. The quadratic test compares the retained
 /// expression and its nonzero conditions with saved digests, which hold only
@@ -328,8 +336,9 @@ struct FiveLoopFixture {
 /// Produced with vakint-external-data v0.1.2 (commit f1626f67) and the prepared
 /// quadratic bundle `prepared-input-quadratic-4bd7448-v1`; cross-checked by
 /// independent `modular_sampled` and `modular_polynomial` runs (byte-identical
-/// outputs). To regenerate it for another data release: run the test with the
-/// new data and a fresh evidence directory under two different weight
+/// outputs). To regenerate it for another data release: run the test cold
+/// (without `VAKINT_ORDERED_CACHE_SHIPPED=on` or a warm cache directory) with
+/// the new data and a fresh evidence directory under two different weight
 /// arithmetics (e.g. `modular_polynomial` and `modular_sampled`), check that
 /// both `retained.symbolica` and `nonzero-conditions.symbolica` agree byte for
 /// byte, then replace the release name and all five digests here (the test's
