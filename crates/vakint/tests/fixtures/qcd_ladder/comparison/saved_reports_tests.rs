@@ -197,6 +197,23 @@ fn pair_preserves_strategy_cache_closure_and_metadata_checks() -> Result<()> {
         report["cache_policy"]["prepared_cache_loaded"] = true.into()
     })?;
     assert!(compare_two_reports(&dfs, &ordered, &destination, false).is_err());
+    save(&ordered, "Ordered", "1", serde_json::Value::Null)?;
+    change_report(&ordered, |report| {
+        report["persistent_cache"] = true.into();
+        report["cache_policy"]["previous_run_cache_restored"] = true.into();
+    })?;
+    assert!(compare_two_reports(&dfs, &ordered, &destination, false).is_err());
+    assert!(!destination.exists());
+    // An Ordered run that only saved its own records into a cache directory
+    // computed every step.
+    save(&ordered, "Ordered", "1", serde_json::Value::Null)?;
+    change_report(&ordered, |report| report["persistent_cache"] = true.into())?;
+    compare_two_reports(&dfs, &ordered, &destination, false)?;
+    std::fs::remove_file(&destination)?;
+    // A historical depth-first report with a persistent cache is refused.
+    change_report(&dfs, |report| report["persistent_cache"] = true.into())?;
+    assert!(compare_two_reports(&dfs, &ordered, &destination, false).is_err());
+    assert!(!destination.exists());
     Ok(())
 }
 

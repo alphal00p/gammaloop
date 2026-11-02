@@ -29,7 +29,9 @@ fn golden_precision_target_respects_the_selected_source_cap() {
 /// depth-first reduction was removed from Vakint, and match the recorded
 /// high-precision numerical reference. The rungs are the shipped-cache
 /// workload, so they ignore shipped caches (they run cold and validate the
-/// step computation) unless `VAKINT_ORDERED_CACHE_SHIPPED=on`.
+/// step computation) unless `VAKINT_ORDERED_CACHE_SHIPPED=on`, and they fail
+/// when they replay step records saved in a `VAKINT_ORDERED_CACHE_DIR`
+/// (`cache_policy.previous_run_cache_restored`).
 fn compare(loop_count: usize, projection: fixture::Projection) -> fixture::Result<()> {
     let temporary = tempfile::tempdir()?;
     let directory = if let Some(root) = std::env::var_os("VAKINT_ORDERED_RUN_EVIDENCE") {
@@ -102,9 +104,13 @@ fn compare(loop_count: usize, projection: fixture::Projection) -> fixture::Resul
             result.report["cache_policy"]["prepared_cache_loaded"] == false
                 || result.report["ordered_step_cache"]["shipped_setting"] == true
         );
+        // Saved records of a cache directory are never replayed here: they
+        // would skip the step computation this test validates.
         assert_eq!(
-            result.report["cache_policy"]["previous_run_cache_restored"],
-            false
+            result.report["cache_policy"]["previous_run_cache_restored"], false,
+            "the rung tests validate cold: they replayed step records of an existing \
+             VAKINT_ORDERED_CACHE_DIR cache (an earlier run's, or the exact arm's for the \
+             modular arm); unset VAKINT_ORDERED_CACHE_DIR"
         );
         #[cfg(feature = "experimental-rustred")]
         {
@@ -400,7 +406,10 @@ fn four_loop_quadratic_rung_matches_depth_first_and_reference() -> fixture::Resu
 /// The runs are cold: shipped Ordered caches (whose workload includes these
 /// inputs) are ignored unless `VAKINT_ORDERED_CACHE_SHIPPED=on`, which only
 /// replays recorded steps (for timings; the report then sets
-/// `cache_policy.prepared_cache_loaded`). Validate code changes cold.
+/// `cache_policy.prepared_cache_loaded`). A `VAKINT_ORDERED_CACHE_DIR` that
+/// already holds records is replayed as well (for timings; the report then
+/// sets `cache_policy.previous_run_cache_restored`). Validate code changes
+/// cold.
 ///
 /// The zero-momentum test compares with the accepted historical result shipped
 /// in `examples/data/five_loop_q0`. The quadratic test compares the retained

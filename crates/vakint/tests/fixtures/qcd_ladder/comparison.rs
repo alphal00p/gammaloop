@@ -4,10 +4,10 @@ pub mod historical;
 
 use super::super::vakint::{
     AvailablePrecision, ConstantSymbol, EvaluationMethod, EvaluationOrder, LoopNormalizationFactor,
-    MasterSymbol, OfficialExternalDataOptions, OrderedCacheMode, OrderedCacheSettings,
-    OrderedWeightArithmetic, RustRedEvaluationOptions, RustRedMasterMode, RustRedMonitorOptions,
-    RustRedMonitorScope, ShippedOrderedCacheStatus, Vakint, VakintMaster, VakintSettings,
-    vakint_parse, vakint_symbol,
+    MasterSymbol, OfficialExternalDataOptions, OrderedCacheMode, OrderedCacheProgramStatistics,
+    OrderedCacheSettings, OrderedWeightArithmetic, RustRedEvaluationOptions, RustRedMasterMode,
+    RustRedMonitorOptions, RustRedMonitorScope, ShippedOrderedCacheStatus, Vakint, VakintMaster,
+    VakintSettings, vakint_parse, vakint_symbol,
 };
 use super::{LadderFixture, Projection, Result};
 use sha2::{Digest, Sha256};
@@ -115,7 +115,9 @@ pub fn modular_arithmetic_from_environment() -> Result<OrderedWeightArithmetic> 
 /// otherwise. Unlike the engine, fixture runs ignore shipped caches unless
 /// `VAKINT_ORDERED_CACHE_SHIPPED=on`: they validate the step computation
 /// cold, while a shipped cache only replays recorded steps (a run that
-/// replays one reports `cache_policy.prepared_cache_loaded`).
+/// replays one reports `cache_policy.prepared_cache_loaded`, and one that
+/// replays records the cache directory already held reports
+/// `cache_policy.previous_run_cache_restored`).
 pub fn ordered_cache_from_environment() -> Result<OrderedCacheSettings> {
     let mut settings = OrderedCacheSettings {
         directory: std::env::var_os("VAKINT_ORDERED_CACHE_DIR").map(PathBuf::from),
@@ -152,8 +154,12 @@ impl CompletedRun {
         let report: serde_json::Value =
             serde_json::from_slice(&std::fs::read(directory.join("report.json"))?)?;
         let memoization = report["strategy"] == "DepthFirst";
+        // An Ordered run may have saved its records into a cache directory
+        // (`persistent_cache`), but it must not have replayed records that
+        // it did not compute itself (the two restored-cache flags).
+        let persistent_cache = &report["persistent_cache"];
         if report["schema"] != "vakint.ordered-rung-comparison.v1"
-            || report["persistent_cache"] != false
+            || !(*persistent_cache == false || (!memoization && *persistent_cache == true))
             || report["reduction_completed"] != true
             || report["catalogue_closure"]["closed"] != true
             || report["catalogue_closure"]["unknown_count"] != 0
@@ -542,18 +548,34 @@ fn run_scoped(
     let (value, guards) = retained_result?;
     let reduction_seconds = reduction.elapsed().as_secs_f64();
     let step_cache = ordered_cache_report(&engine, &settings.ordered_cache);
+    let cache_programs = engine.ordered_cache_statistics().programs;
+    let shipped_status = |program: &OrderedCacheProgramStatistics| {
+        program.shipped.as_ref().map(|shipped| shipped.status)
+    };
     // A shipped cache opened in place or installed into the cache directory.
-    let shipped_cache_loaded = engine
-        .ordered_cache_statistics()
-        .programs
+    let shipped_cache_loaded = cache_programs.iter().any(|program| {
+        matches!(
+            shipped_status(program),
+            Some(ShippedOrderedCacheStatus::InPlace | ShippedOrderedCacheStatus::Installed)
+        )
+    });
+    // A cache directory backs a program's cache (records read from or saved
+    // to disk).
+    let persistent_cache = cache_programs
         .iter()
-        .filter_map(|program| program.shipped.as_ref())
-        .any(|shipped| {
-            matches!(
-                shipped.status,
-                ShippedOrderedCacheStatus::InPlace | ShippedOrderedCacheStatus::Installed
-            )
-        });
+        .any(|program| program.directory.is_some());
+    // Step records read from a cache directory that already held the
+    // program's cache (an earlier run, or an earlier arm of this process),
+    // as opposed to a shipped cache this run installed there.
+    let previous_run_cache_restored = cache_programs.iter().any(|program| {
+        program.directory.is_some()
+            && shipped_status(program) != Some(ShippedOrderedCacheStatus::Installed)
+            && program
+                .native
+                .shards
+                .iter()
+                .any(|shard| shard.loaded_records > 0)
+    });
     let retained_memory = process_memory();
     if let Some(scope) = scope.as_deref_mut() {
         scope.expression_phase("retained_expression_serialization", value.as_view());
@@ -633,9 +655,9 @@ fn run_scoped(
     let mut report = serde_json::json!({"schema":"vakint.ordered-rung-comparison.v1",
         "loop_count":prepared.loop_count,"gluon_rungs":prepared.loop_count-1,"projection":prepared.projection,
         "strategy":"Ordered","ordered_weight_arithmetic":options.arithmetic.to_string(),
-        "persistent_cache":false,"intrinsic_memoization":false,
+        "persistent_cache":persistent_cache,"intrinsic_memoization":false,
         "intrinsic_memoization_scope":"Ordered has no completed-result memo; checked opaque factorization may use a fresh isolated internal memo",
-        "cache_policy":{"prepared_cache_loaded":shipped_cache_loaded,"previous_run_cache_restored":false,
+        "cache_policy":{"prepared_cache_loaded":shipped_cache_loaded,"previous_run_cache_restored":previous_run_cache_restored,
             "depth_first_intrinsic_memoization":false,
             "ordered_result_cache":"not supported",
             "ordered_step_cache":"one-step records only (see ordered_step_cache); replayed steps are identical to checked ones"},

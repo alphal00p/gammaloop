@@ -360,7 +360,11 @@ read-write) and saves. The rung tests and examples read
 Unlike the engine they ignore shipped caches unless
 #raw("VAKINT_ORDERED_CACHE_SHIPPED=on"): the rungs are the shipped workload, so
 replaying them would skip the step computation the fixtures validate. A run
-that replays a shipped cache sets #raw("cache_policy.prepared_cache_loaded").
+that replays a shipped cache sets #raw("cache_policy.prepared_cache_loaded"),
+one with a cache directory sets #raw("persistent_cache"), and one that replays
+records the directory already held sets
+#raw("cache_policy.previous_run_cache_restored"); the 1L-4L rung tests fail on
+the latter.
 
 A cache directory holds one subdirectory per program,
 #raw("<loops>L-<program>.<tables>.<stamp>") (e.g.
