@@ -81,3 +81,27 @@ in a directory that later processes reuse (`VakintSettings::ordered_cache`; Pyth
 
 Licensed Symbolica execution uses `SYMBOLICA_LICENSE` in the environment. Neither
 building nor running Vakint requires Mathematica.
+
+## Testing
+
+Two recipes run the Vakint tests from the workspace root. Both use CI's build
+(`ci-optim`, feature `feynkit-ingress`) and pass extra arguments to nextest.
+
+- `just test_vakint` is the fast local gate (nextest profile `test_vakint`,
+  under ten minutes with 16 test threads). It covers the vendored 1L–3L
+  evaluation with the MATAD/FMFT/alphaLoop/RustRed comparisons, the ordered
+  reduction rungs through three loops, the Ordered step and shipped caches,
+  external-data loading and validation, and the monitor. The Python stub test
+  needs `--features vakint/python_stubgen,vakint/symbolica_community_module`
+  (a separate build; CI checks the stubs with the docs Python exporter).
+- `just test_vakint_full` runs exactly what CI runs for Vakint (nextest profile
+  `ci_gammaloop`, ignored tests excluded). It adds the four-loop rungs and the
+  five-loop closure and acceptance tests, and like CI it runs the Vakint tests
+  one at a time (about 20 minutes).
+
+CI sets `VAKINT_TEST_EXTERNAL_DATA` to the vakint-external-data commit pinned as
+`vakintExternalTestData` in `nix/rust-workspace.nix`; set it to a checkout of
+that commit to match CI. Without it, tests that need 4L/5L data install the
+release named in `data/manifest.json`. pySecDec comparisons run only with
+`RUN_PYSECDEC_TESTS=1`. Ignored tests are slow fixtures, timings and offline
+FORM oracles; each `#[ignore]` reason says what it needs.

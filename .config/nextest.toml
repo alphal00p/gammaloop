@@ -65,6 +65,25 @@ inherits = "default"
 slow-timeout = "30y"
 default-filter = "not test(/(^|::)(slow|failing)::/)"
 
+[profile.test_vakint]
+inherits = "default"
+# Fast local vakint gate (`just test_vakint`, under ten minutes on 16 test
+# threads): the vakint tests of `ci_gammaloop` (second line) except the long
+# four- and five-loop reductions (last lines), which only
+# `just test_vakint_full` (= CI) runs. Like test_gammaloop it keeps the
+# default profile's single retry, so a load-dependent failure shows as FLAKY.
+slow-timeout = { period = "60s", terminate-after = 10 }
+default-filter = """
+package(vakint)
+and (not test(/(^|::)(slow|failing)::/) or test(/^rustred_evaluation::five_loop::slow::fixture::prepared::tests::/))
+and not (binary(ordered_reduction_rungs) and test(/^four_loop_/))
+and not binary(rustred_five_loop_closure_tests)
+and not test(/^rustred_evaluation::five_loop::partial_acceptance::/)
+"""
+
+[profile.test_vakint.junit]
+path = "junit.xml"
+
 [profile.ci]
 slow-timeout = { period = "120s", terminate-after = 2 }
 # Use all available cores in CI for faster execution

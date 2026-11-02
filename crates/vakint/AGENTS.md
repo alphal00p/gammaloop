@@ -1,7 +1,14 @@
 - If running into a linking issue complaining about missing `__emul...` symbol, then it may be a macos specific issue, that can be fixed by building with the following environment variable change `EXTRA_MACOS_LIBS_FOR_GNU_GCC=T` (see impact of this in file `build.rs`.
-- pySecDec tests are opt-in (`RUN_PYSECDEC_TESTS=1`). A quick way to run all other tests is the following command:
-
-RUST_BACKTRACE=full VAKINT_NO_CLEAN_TMP_DIR=T RUST_LOG=DEBUG cargo test --package vakint --no-default-features
+- pySecDec tests are opt-in (`RUN_PYSECDEC_TESTS=1`). Run the fast local gate with
+  `just test_vakint` and the full CI selection with `just test_vakint_full`
+  (see "Testing" in `README.md`). Keep slow cases out of the gate by adding them
+  to the `test_vakint` default-filter in `.config/nextest.toml`, never by
+  wrapping them in `slow::` modules: CI skips those.
+- Integration tests share their setup: `tests/test_utils.rs` (evaluation lanes,
+  `compare_evaluations`, `compare_exact_peers` at a `ReferencePoint`),
+  `tests/support/rustred.rs` (FORM-free RustRed settings, the pinned
+  external-data release) and `tests/support/reference_table.rs` (Laurent tables).
+  Each test should read as one short call of such a helper.
 
 ## Readable physics tests
 

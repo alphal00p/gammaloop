@@ -172,6 +172,53 @@ test_gammaloop *args:
     printf '\n'
     "${cmd[@]}"
 
+# Nextest profile test_vakint: vendored 1L-3L evaluation with the MATAD/FMFT/
+# alphaLoop/RustRed comparisons, ordered rungs through three loops, step and
+# shipped caches, external-data loading and the monitor. Arguments go to
+# nextest, e.g. `just test_vakint --test-threads 16`; add `--features
+# vakint/python_stubgen,vakint/symbolica_community_module` (separate build)
+# for the Python stub test.
+# Fast local vakint gate (under ten minutes with 16 test threads).
+[positional-arguments]
+test_vakint *args:
+    @{{ just_executable() }} --justfile {{ justfile() }} _vakint_nextest test_vakint "$@"
+
+# Same build profile, features, nextest profile (no fail-fast) and selection
+# as NixCI's gammaloop-nextest-vakint, without ignored tests; like CI it runs
+# the vakint tests one at a time (about 20 minutes).
+# The vakint tests exactly as CI runs them.
+[positional-arguments]
+test_vakint_full *args:
+    @{{ just_executable() }} --justfile {{ justfile() }} _vakint_nextest ci_gammaloop "$@"
+
+# Both vakint recipes share one build (CI's ci-optim profile and features).
+[positional-arguments]
+_vakint_nextest profile *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    profile="$1"
+    shift
+    if [ -n "${VAKINT_TEST_EXTERNAL_DATA:-}" ]; then
+        echo "vakint external test data: $VAKINT_TEST_EXTERNAL_DATA"
+    else
+        echo "VAKINT_TEST_EXTERNAL_DATA is unset: tests that need 4L/5L data install the release named in" >&2
+        echo "crates/vakint/data/manifest.json (network). CI sets it to the vakintExternalTestData checkout" >&2
+        echo "pinned in nix/rust-workspace.nix; set it to that commit's checkout to match CI." >&2
+    fi
+    cmd=(
+        cargo nextest run
+        --cargo-profile {{ ci_cargo_profile }}
+        --locked
+        -p vakint
+        --features vakint/feynkit-ingress
+        -P "$profile"
+        "$@"
+    )
+    printf 'Running:'
+    printf ' %q' "${cmd[@]}"
+    printf '\n'
+    "${cmd[@]}"
+
 test-all:
     cargo nextest run --workspace --cargo-profile release -P local_test_all
 
