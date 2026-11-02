@@ -1427,6 +1427,289 @@ mod tests {
     use std::path::PathBuf;
     use symbolica::atom::AtomCore;
 
+    /// Four independently sewn tree/one-loop QED sources (domain 0, 78, 132, 155).
+    /// The external photons attach to vertices 0..4 in exact label order. Neither
+    /// these arrows nor the B/M actions below use the preparation canonicalizer.
+    fn beam_cp_sources(model: &Model) -> [GeneratedGraph; 4] {
+        let photon = model.particle_id_by_pdg(22).unwrap();
+        let electron = model.particle_id_by_pdg(11).unwrap();
+        let rule = model.vertex_rule_id("V_98").unwrap();
+        [
+            [(0, 2), (1, 0), (2, 4), (3, 1), (4, 5), (5, 3)],
+            [(0, 1), (1, 3), (2, 0), (3, 4), (4, 5), (5, 2)],
+            [(0, 2), (1, 4), (2, 3), (3, 1), (4, 5), (5, 0)],
+            [(0, 4), (1, 3), (2, 0), (3, 2), (4, 5), (5, 1)],
+        ]
+        .map(|arrows| {
+            GeneratedGraph::new(
+                [rule; 6],
+                [GeneratedEdge {
+                    source: Endpoint::Vertex(4),
+                    sink: Endpoint::Vertex(5),
+                    particle: photon,
+                    directed: false,
+                }]
+                .into_iter()
+                .chain(arrows.map(|(source, sink)| GeneratedEdge {
+                    source: Endpoint::Vertex(source),
+                    sink: Endpoint::Vertex(sink),
+                    particle: electron,
+                    directed: true,
+                }))
+                .chain((0..4).map(|index| GeneratedEdge {
+                    source: Endpoint::External(ExternalNode {
+                        index,
+                        state: if index < 2 {
+                            ExternalState::Incoming
+                        } else {
+                            ExternalState::Outgoing
+                        },
+                        particle: photon,
+                    }),
+                    sink: Endpoint::Vertex(index),
+                    particle: photon,
+                    directed: false,
+                })),
+            )
+        })
+    }
+
+    #[test]
+    fn joint_beam_cp_orbit_preserves_complete_preparation_and_source_coverage() {
+        let model = Arc::new(Model::qed());
+        let generator = Generator::new(Arc::clone(&model));
+        let graphs = beam_cp_sources(&model);
+        let physical = |graph: &GeneratedGraph| {
+            // A storage reversal with charge conjugation preserves a directed line.
+            // This comparison retains physical arrows, exact external states and rules.
+            graph
+                .reframed(
+                    &(0..graph.n_vertices()).collect::<Vec<_>>(),
+                    graph.edges().enumerate().map(|(edge, data)| {
+                        let particle = model.particle_by_id(data.particle).unwrap();
+                        let reverse = data.directed && particle.is_antiparticle();
+                        (
+                            edge,
+                            reverse,
+                            if reverse {
+                                particle.antiparticle
+                            } else {
+                                data.particle
+                            },
+                        )
+                    }),
+                    |external| external,
+                )
+                .to_hedge_graph()
+                .canonical_form_by(|&rule| rule, |&particle| particle, |&external| external)
+        };
+        // Explicit independent B=(01)(23), M=CP, BM maps. CP conjugates a
+        // charged line; storing it again as an electron reverses its endpoints.
+        for (images, vertices, beam, mirror) in [
+            ([1, 0, 3, 2], [1, 0, 3, 2, 4, 5], true, false),
+            ([2, 3, 0, 1], [2, 3, 0, 1, 5, 4], false, true),
+            ([3, 2, 1, 0], [3, 2, 1, 0, 5, 4], true, true),
+        ] {
+            for (source, &image) in images.iter().enumerate() {
+                let transformed = graphs[source].reframed(
+                    &vertices,
+                    graphs[source]
+                        .edges()
+                        .enumerate()
+                        .map(|(edge, data)| (edge, mirror && data.directed, data.particle)),
+                    |mut external| {
+                        if beam {
+                            external.index ^= 1;
+                        }
+                        if mirror {
+                            external.index = (external.index + 2) % 4;
+                            external.state = match external.state {
+                                ExternalState::Incoming => ExternalState::Outgoing,
+                                ExternalState::Outgoing => ExternalState::Incoming,
+                            };
+                        }
+                        external
+                    },
+                );
+                assert_eq!(physical(&transformed), physical(&graphs[image]));
+            }
+        }
+        let process = Process::new(["a", "a"], ["e+", "e-"]);
+        let run = Run::default().threads(1);
+        for classes in [Classes::None, Classes::Auto] {
+            for (beam, mirror, partition) in [
+                (false, false, [0, 1, 2, 3]),
+                (true, false, [0, 0, 2, 2]),
+                (false, true, [0, 1, 0, 1]),
+                (true, true, [0, 0, 0, 0]),
+            ] {
+                let request = process
+                    .clone()
+                    .cross_section(Loops::forward(2..=2))
+                    .with_classes(classes)
+                    .with_topology(TopologyRules::default().with_self_loops(false))
+                    .with_symmetrize(Symmetrize {
+                        initial: beam,
+                        final_state: false,
+                        external_fermions: false,
+                    })
+                    .with_cuts(
+                        Cuts::new()
+                            .with_blobs(1..=1)
+                            .with_spectators(0..=0)
+                            .with_symmetrize_left_right(mirror),
+                    );
+                let search = generator.search(&request, |_, _| {}, |_, _| {}).unwrap();
+                let mut members = Vec::new();
+                search
+                    .enumerate(&run, |batch| {
+                        for compact in batch {
+                            let raw = search.externals.graph(&compact, &search.signatures);
+                            if let Some(source) = graphs
+                                .iter()
+                                .position(|graph| physical(graph) == physical(&raw))
+                            {
+                                members.push((source, compact));
+                            }
+                        }
+                        Ok(())
+                    })
+                    .unwrap();
+                members.sort_by_key(|(source, _)| *source);
+                assert_eq!(
+                    members
+                        .iter()
+                        .map(|(source, _)| *source)
+                        .collect::<Vec<_>>(),
+                    [0, 1, 2, 3]
+                );
+                let selected = members
+                    .iter()
+                    .map(|(_, compact)| compact.canonical_form().clone())
+                    .collect::<Vec<_>>();
+                let request = request.select(move |view| {
+                    selected.contains(&view.complete_graph().unwrap().canonical_form_by(
+                        |&rule| rule,
+                        |&particle| particle,
+                        |&label| label,
+                    ))
+                });
+                let mut inputs = Vec::new();
+                let mut events = Vec::new();
+                for (source, compact) in members {
+                    cp_merge_diagnostic::start();
+                    let prepared = search.prepare(&generator, compact).unwrap();
+                    events.push(json!({"source": source, "events": cp_merge_diagnostic::finish()}));
+                    if let Some(prepared) = prepared {
+                        let input = prepared.input;
+                        assert_eq!(input.representative.symmetry, 1);
+                        assert!(input.signs.internal_loop_negative);
+                        assert!(!input.signs.external_ordering_negative);
+                        assert!(!input.signs.antifermion_spin_sum_negative);
+                        assert_eq!(input.comparison, input.representative);
+                        assert!(input.reversed_edges.is_empty());
+                        let graph = &input.representative.graph;
+                        let canonical = search
+                            .resolved
+                            .canonicalize_numerator_graph(
+                                graph,
+                                &model,
+                                &generator.cache.stars,
+                                &Grouping::None,
+                            )
+                            .unwrap();
+                        assert_eq!(
+                            canonical,
+                            search
+                                .resolved
+                                .canonicalize_numerator_graph(
+                                    &canonical,
+                                    &model,
+                                    &generator.cache.stars,
+                                    &Grouping::None
+                                )
+                                .unwrap()
+                        );
+                        let repeated = generator
+                            .diagram_input(
+                                &search.resolved,
+                                graph.clone(),
+                                1,
+                                input.multiplicity,
+                                &request,
+                                &Grouping::None,
+                            )
+                            .unwrap()
+                            .unwrap();
+                        assert_eq!(input.representative, repeated.representative);
+                        assert_eq!(input.signs, repeated.signs);
+                        inputs.push((source, input));
+                    }
+                }
+                assert_eq!(inputs.len(), if beam { 2 } else { 4 });
+                assert_eq!(
+                    inputs
+                        .iter()
+                        .map(|(_, input)| input.multiplicity)
+                        .sum::<u64>(),
+                    4
+                );
+                // Admission must cover each B pair once, with its complete multiplicity.
+                for pair in [[0, 1], [2, 3]] {
+                    assert_eq!(
+                        inputs
+                            .iter()
+                            .filter(|(source, _)| pair.contains(source))
+                            .count(),
+                        if beam { 1 } else { 2 }
+                    );
+                }
+                eprintln!(
+                    "joint preparation beam={beam} cp={mirror} classes={classes:?}: {}",
+                    json!(events)
+                );
+                for (a, left) in &inputs {
+                    for (b, right) in &inputs {
+                        assert_eq!(
+                            OrbitKey::of(left) == OrbitKey::of(right),
+                            partition[*a] == partition[*b],
+                            "complete joint key: beam={beam} cp={mirror} classes={classes:?}, sources {a}/{b}"
+                        );
+                    }
+                }
+                let set = request.generate(Arc::clone(&model), &run).unwrap();
+                let counts = request.count(Arc::clone(&model), &run).unwrap();
+                let expected = if beam && mirror {
+                    1
+                } else if beam || mirror {
+                    2
+                } else {
+                    4
+                };
+                assert_eq!(set.len(), expected);
+                assert_eq!(counts.diagrams, BigUint::from(expected));
+                assert_eq!(
+                    counts.physical_weight,
+                    BigRational::from_integer((-4).into())
+                );
+                assert_eq!(
+                    set.diagrams
+                        .iter()
+                        .map(|diagram| diagram.input.multiplicity)
+                        .sum::<u64>(),
+                    4
+                );
+                for diagram in &set.diagrams {
+                    assert!(
+                        inputs
+                            .iter()
+                            .any(|(_, input)| OrbitKey::of(input) == OrbitKey::of(&diagram.input))
+                    );
+                }
+            }
+        }
+    }
+
     #[test]
     fn cp_merge_preserves_complete_preparation_and_counts_each_graph_once() {
         let model = Arc::new(Model::qed());
