@@ -43,6 +43,11 @@
 //! # }
 //! ```
 
+#[cfg(test)]
+use std::env;
+#[cfg(test)]
+use std::sync::OnceLock;
+
 use ::tracing::info;
 use ::tracing::level_filters::LevelFilter;
 use ::tracing::warn;
@@ -130,19 +135,27 @@ fn is_test_workspace_root(path: &Path) -> bool {
 
 #[cfg(test)]
 pub(crate) fn test_workspace_root() -> &'static Path {
-    static WORKSPACE_ROOT: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+    static WORKSPACE_ROOT: OnceLock<PathBuf> = OnceLock::new();
 
     WORKSPACE_ROOT
         .get_or_init(|| {
-            let current_dir = std::env::current_dir().ok();
-            let current_exe = std::env::current_exe().ok();
-            let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+            if let Some(root) = env::var_os("GAMMALOOP_WORKSPACE_ROOT")
+                .or_else(|| env::var_os("NEXTEST_WORKSPACE_ROOT"))
+            {
+                return PathBuf::from(root);
+            }
+
+            let current_dir = env::current_dir().ok();
+            let current_exe = env::current_exe().ok();
+            let manifest_dir = env::var_os("CARGO_MANIFEST_DIR")
+                .map(PathBuf::from)
+                .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")));
 
             let mut candidates = Vec::new();
-            if let Some(dir) = current_dir.clone() {
+            if let Some(dir) = &current_dir {
                 candidates.extend(dir.ancestors().map(Path::to_path_buf));
             }
-            if let Some(exe) = current_exe.clone() {
+            if let Some(exe) = &current_exe {
                 candidates.extend(exe.ancestors().skip(1).map(Path::to_path_buf));
             }
             candidates.extend(manifest_dir.ancestors().map(Path::to_path_buf));

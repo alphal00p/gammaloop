@@ -663,12 +663,33 @@ fn interface_guide_title(product_title: &str, surface: &str) -> String {
 }
 
 impl SiteBuilder {
+    /// Load documentation from `NEXTEST_WORKSPACE_ROOT`, then
+    /// `GAMMALOOP_WORKSPACE_ROOT`, falling back to this crate's build-time workspace.
+    /// Set an absolute workspace root when running a relocated binary from any directory.
+    ///
+    /// # Errors
+    /// Returns an error if the selected workspace's documentation configuration cannot be read
+    /// or parsed.
+    ///
+    /// # Examples
+    /// ```no_run
+    /// use alphal00p_docs_builder::SiteBuilder;
+    /// # use eyre::Report;
+    ///
+    /// let builder = SiteBuilder::discover()?;
+    /// # Ok::<(), Report>(())
+    /// ```
     pub fn discover() -> Result<Self> {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .ancestors()
-            .nth(2)
-            .context("documentation builder is not inside a workspace")?
-            .to_path_buf();
+        let root = match env::var_os("NEXTEST_WORKSPACE_ROOT")
+            .or_else(|| env::var_os("GAMMALOOP_WORKSPACE_ROOT"))
+        {
+            Some(root) => PathBuf::from(root),
+            None => Path::new(env!("CARGO_MANIFEST_DIR"))
+                .ancestors()
+                .nth(2)
+                .context("documentation builder is not inside a workspace")?
+                .to_path_buf(),
+        };
         Self::load(root)
     }
 
@@ -9740,6 +9761,58 @@ fn resolve_local_link(
 mod tests {
     use super::*;
 
+    #[test]
+    fn discovers_relocated_workspace_from_temporary_cwd() {
+        const EXPECTED_ROOT: &str = "ALPHAL00P_DOCS_DISCOVERY_TEST_ROOT";
+        if let Some(expected) = env::var_os(EXPECTED_ROOT) {
+            let builder = SiteBuilder::discover().unwrap();
+            assert_eq!(builder.root, PathBuf::from(expected));
+            assert_eq!(builder.api_root, builder.root.join("docs/api"));
+            return;
+        }
+
+        let source = SiteBuilder::discover().unwrap();
+        let temporary = tempfile::tempdir().unwrap();
+        let root = temporary.path().join("staged workspace");
+        for file in [
+            "docs/products/registry.toml",
+            "docs/portal.toml",
+            "docs/talks.toml",
+            "docs/developers.toml",
+            "docs/legacy-prose.toml",
+            "docs/data/publications.json",
+        ] {
+            let destination = root.join(file);
+            fs::create_dir_all(destination.parent().unwrap()).unwrap();
+            fs::copy(source.root.join(file), destination).unwrap();
+        }
+
+        // Subprocesses isolate both the working directory and environment from parallel tests.
+        for case in ["nextest", "docs", "precedence"] {
+            let mut command = Command::new(env::current_exe().unwrap());
+            command
+                .args([
+                    "--exact",
+                    "tests::discovers_relocated_workspace_from_temporary_cwd",
+                    "--nocapture",
+                ])
+                .current_dir(temporary.path())
+                .env(EXPECTED_ROOT, &root)
+                .env_remove("NEXTEST_WORKSPACE_ROOT")
+                .env_remove("GAMMALOOP_WORKSPACE_ROOT")
+                .env_remove("ALPHAL00P_DOCS_API_ROOT");
+            if case != "docs" {
+                command.env("NEXTEST_WORKSPACE_ROOT", &root);
+            }
+            if case == "docs" {
+                command.env("GAMMALOOP_WORKSPACE_ROOT", &root);
+            } else if case == "precedence" {
+                command.env("GAMMALOOP_WORKSPACE_ROOT", temporary.path().join("missing"));
+            }
+            assert!(command.status().unwrap().success(), "case: {case}");
+        }
+    }
+
     fn write_test_portal(
         builder: &SiteBuilder,
         output: &Path,
@@ -10941,10 +11014,8 @@ mod tests {
 
     #[test]
     fn persistent_rustdoc_targets_reject_workspace_and_arbitrary_roots() {
-        let workspace = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .ancestors()
-            .nth(2)
-            .unwrap();
+        let builder = SiteBuilder::discover().unwrap();
+        let workspace = &builder.root;
         let arbitrary = workspace
             .parent()
             .unwrap()
@@ -10966,10 +11037,7 @@ mod tests {
         let temporary = tempfile::tempdir().unwrap();
         let workspace = temporary.path().join("workspace");
         fs::create_dir_all(workspace.join("target")).unwrap();
-        let repository = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .ancestors()
-            .nth(2)
-            .unwrap();
+        let repository = SiteBuilder::discover().unwrap().root;
         let escape = temporary.path().join("escape");
         symlink(repository, &escape).unwrap();
 

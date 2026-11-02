@@ -48,6 +48,12 @@ fn find_workspace_root_from(start: &Path) -> Option<PathBuf> {
 pub fn workspace_root() -> PathBuf {
     WORKSPACE_ROOT
         .get_or_init(|| {
+            if let Some(root) = env::var_os("GAMMALOOP_WORKSPACE_ROOT")
+                .or_else(|| env::var_os("NEXTEST_WORKSPACE_ROOT"))
+            {
+                return PathBuf::from(root);
+            }
+
             let mut candidates = Vec::new();
             if let Ok(current_dir) = env::current_dir() {
                 candidates.push(current_dir);

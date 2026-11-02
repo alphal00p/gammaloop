@@ -1144,14 +1144,26 @@ pub fn resolve_stub(workspace_root: &Path, component: &str) -> Option<PathBuf> {
 
 #[cfg(test)]
 mod tests {
+    use std::env;
+
     use super::*;
+
+    pub(super) fn workspace_root() -> PathBuf {
+        env::var_os("NEXTEST_WORKSPACE_ROOT")
+            .or_else(|| env::var_os("GAMMALOOP_WORKSPACE_ROOT"))
+            .map(PathBuf::from)
+            .unwrap_or_else(|| {
+                Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .ancestors()
+                    .nth(2)
+                    .unwrap()
+                    .to_path_buf()
+            })
+    }
 
     #[test]
     fn every_rust_component_has_a_strict_catalog() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .ancestors()
-            .nth(2)
-            .unwrap();
+        let root = workspace_root();
         for component in [
             "gammalooprs",
             "gammaloop-api",
@@ -1181,7 +1193,7 @@ mod tests {
                 module: None,
                 features: vec![],
             };
-            let catalog = export_catalog(&request, root, None).unwrap();
+            let catalog = export_catalog(&request, &root, None).unwrap();
             let docs = catalog.root.docs.expect("annotated component scope docs");
             assert_eq!(docs.format, DocFormat::TypstMarkup);
             assert!(
@@ -1316,10 +1328,7 @@ mod tests {
 
     #[test]
     fn gammalooprs_curated_direct_members_are_documented() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .ancestors()
-            .nth(2)
-            .unwrap();
+        let root = workspace_root();
         let request = CatalogRequest {
             product_id: "gammaloop".to_owned(),
             product_title: "GammaLoop".to_owned(),
@@ -1331,7 +1340,7 @@ mod tests {
             module: None,
             features: vec![],
         };
-        let catalog = export_catalog(&request, root, None).unwrap();
+        let catalog = export_catalog(&request, &root, None).unwrap();
         let supported = &catalog.root.scopes["supported"];
         assert_eq!(supported.items.len(), 20);
 
@@ -1458,10 +1467,7 @@ mod tests {
 
     #[test]
     fn every_supported_gammaloop_python_export_has_docs() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .ancestors()
-            .nth(2)
-            .unwrap();
+        let root = workspace_root();
         let source = fs::read_to_string(root.join("docs/api/python/gammaloop-python.pyi"))
             .expect("checked-in GammaLoop Python stub");
         let declarations = python_declarations(&source).unwrap();
@@ -1495,10 +1501,7 @@ mod tests {
             );
         }
 
-        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .ancestors()
-            .nth(2)
-            .unwrap();
+        let root = workspace_root();
         let source = fs::read_to_string(root.join("docs/api/python/spynso3.pyi"))
             .expect("checked-in spynso3 Python stub");
         let declarations = python_declarations(&source).unwrap();
@@ -1729,10 +1732,7 @@ def run(value: int) -> int:
 
     #[test]
     fn python_catalogs_keep_source_examples_without_introspection_scaffolds() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .ancestors()
-            .nth(2)
-            .unwrap();
+        let root = workspace_root();
         let request = CatalogRequest {
             product_id: "test".to_owned(),
             product_title: "Test".to_owned(),
@@ -1746,7 +1746,7 @@ def run(value: int) -> int:
         };
         let catalog = export_catalog(
             &request,
-            root,
+            &root,
             Some(&root.join("docs/api/python/spynso3.pyi")),
         )
         .unwrap();

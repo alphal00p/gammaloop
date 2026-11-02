@@ -10,6 +10,26 @@ modified code. Check the final diff against the policy, including design rules
 that formatting and Clippy cannot enforce, and report validation and any
 departures from the documented allowances.
 
+Before editing Python, read the [Python guidance](CONTRIBUTING.typ#python-style)
+and use the Ruff formatter. For native tests, builds and PyO3 packaging, use the
+[development commands](CONTRIBUTING.typ#development-commands): `just test CRATE`,
+`just build CRATE`, and `just python-wheel` / `just python-develop`.
+The default `backend=auto` selects Nix when available and Cargo/Maturin otherwise;
+a Nix failure remains a failure. Rust command construction stays in the shared
+shell dispatcher. Explicit `backend=dyndrv` uses `cargo-dyndrv-worker` from the
+fork pinned in `flake.lock` at `c1935d6`; auto never selects it. See the
+[dyndrv workflow](CONTRIBUTING.typ#dyndrv-development) for qualification limits,
+session evidence and cleanup.
+Native commands and wheels share `.config/build-profile`; use
+`just profile=dev COMMAND` or `just profile=release COMMAND` for explicit modes.
+Use `backend=cargo` to explicitly select iteration with host tools. Preserve
+`SYMBOLICA_LICENSE` and the documented environment and wheel-lifetime rules.
+Nix prepares reusable archives and executable runners; licensed tests, doctests
+and documentation run as the invoking user on every invocation. Building or
+substituting a runner is preparation only, never evidence that its tests passed.
+Keep licenses out of Nix evaluation and derivations; use the runtime license
+loading described in the development commands.
+
 If instructions conflict, prefer the more specific local guidance and preserve
 the user's current work unless explicitly asked to change it.
 

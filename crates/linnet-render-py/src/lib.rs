@@ -15,6 +15,13 @@ pub mod data_assets {
     include!(concat!(env!("OUT_DIR"), "/data_assets.rs"));
 }
 #[cfg(feature = "python_stubgen")]
+use pyo3_stub_gen::{Result as StubResult, StubInfo};
+#[cfg(feature = "python_stubgen")]
+use std::env;
+#[cfg(feature = "python_stubgen")]
+use std::path::PathBuf;
+
+#[cfg(feature = "python_stubgen")]
 use pyo3::types::{PyAnyMethods, PyStringMethods, PyTypeMethods};
 use pyo3::types::{PyModule, PyModuleMethods};
 #[cfg(feature = "python_stubgen")]
@@ -53,11 +60,13 @@ impl symbolica::api::python::SymbolicaCommunityModule for GraphModule {
 }
 
 #[cfg(feature = "python_stubgen")]
-fn stub_info() -> pyo3_stub_gen::Result<pyo3_stub_gen::StubInfo> {
-    pyo3_stub_gen::StubInfo::from_project_root(
-        "symbolica".into(),
-        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")),
-    )
+fn stub_info() -> StubResult<StubInfo> {
+    // A caller can be another crate's test binary; its manifest directory is not ours.
+    let project_root = env::var_os("GAMMALOOP_WORKSPACE_ROOT")
+        .or_else(|| env::var_os("NEXTEST_WORKSPACE_ROOT"))
+        .map(|root| PathBuf::from(root).join("crates/linnet-render-py"))
+        .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")));
+    StubInfo::from_project_root("symbolica".into(), project_root)
 }
 #[cfg(feature = "python_stubgen")]
 const STUB_TYPE_ALIASES: &str = r#"class _TypstValueRef(typing.Protocol): ...
