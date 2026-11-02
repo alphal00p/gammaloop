@@ -455,6 +455,34 @@ impl ProcessExternals {
         Some((self.sewn_pair_permutations.len() as u64 + 1) / stabilizer)
     }
 
+    /// The same non-identity sewn-pair actions used for admission, in a physical graph frame.
+    /// Both exact labels of each pair move together; particles and external states are retained.
+    pub(crate) fn sewn_pair_images<'a>(
+        &'a self,
+        graph: &'a GeneratedGraph,
+    ) -> impl Iterator<Item = GeneratedGraph> + 'a {
+        self.sewn_pair_permutations.iter().map(|permutation| {
+            graph.reframed(
+                &(0..graph.n_vertices()).collect::<Vec<_>>(),
+                graph
+                    .edges()
+                    .enumerate()
+                    .map(|(edge, data)| (edge, false, data.particle)),
+                |mut external| {
+                    let label = ExternalLabel::Exact {
+                        state: external.state,
+                        index: external.index,
+                    };
+                    if let Some(&ExternalLabel::Exact { state, index }) = permutation.get(&label) {
+                        external.state = state;
+                        external.index = index;
+                    }
+                    external
+                },
+            )
+        })
+    }
+
     pub(crate) fn legs(&self) -> impl Iterator<Item = (ExternalLabel, ParticleStub)> + '_ {
         self.legs.iter().cloned()
     }

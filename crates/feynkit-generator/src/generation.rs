@@ -3449,26 +3449,49 @@ impl ResolvedProcess {
         let exact_internal_particles =
             grouping_options.is_some_and(|options| !options.differentiate_particle_masses_only);
 
-        let selected = self.canonicalize_numerator_graph_pass(
-            graph,
-            model,
-            stars,
-            exact_internal_particles,
-            include_left_right,
-            include_left_right,
-        )?;
-        if include_left_right {
-            self.canonicalize_numerator_graph_pass(
-                &selected,
+        let canonicalize = |graph: &GeneratedGraph| {
+            let selected = self.canonicalize_numerator_graph_pass(
+                graph,
                 model,
                 stars,
                 exact_internal_particles,
-                false,
-                true,
-            )
-        } else {
-            Ok(selected)
+                include_left_right,
+                include_left_right,
+            )?;
+            if include_left_right {
+                self.canonicalize_numerator_graph_pass(
+                    &selected,
+                    model,
+                    stars,
+                    exact_internal_particles,
+                    false,
+                    true,
+                )
+            } else {
+                Ok(selected)
+            }
+        };
+        let mut selected = canonicalize(graph)?;
+        if include_left_right && self.symmetrize_initial {
+            // Beam admission and CP frame selection need not choose commuting
+            // representatives. Complete the joint orbit using the admission owner's
+            // exact pair actions, then choose one full physical frame before cuts,
+            // rule/flow normalization and their ordered metadata are constructed.
+            // No physical key field is discarded, and admission alone owns multiplicity.
+            let externals = self.externals(model)?;
+            for image in externals.sewn_pair_images(graph) {
+                let candidate = canonicalize(&image)?;
+                if candidate
+                    .vertices()
+                    .cmp(selected.vertices())
+                    .then_with(|| candidate.edges().cmp(selected.edges()))
+                    .is_lt()
+                {
+                    selected = candidate;
+                }
+            }
         }
+        Ok(selected)
     }
 
     fn canonicalize_numerator_graph_pass(

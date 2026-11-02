@@ -1603,8 +1603,12 @@ mod tests {
                     if let Some(prepared) = prepared {
                         let input = prepared.input;
                         assert_eq!(input.representative.symmetry, 1);
+                        assert_eq!(input.representative.cut_partitions.len(), 1);
+                        assert_eq!(input.representative.topology_threshold_candidates.len(), 1);
                         assert!(input.signs.internal_loop_negative);
+                        assert!(input.signs.include_external_ordering);
                         assert!(!input.signs.external_ordering_negative);
+                        assert!(input.signs.include_antifermion_spin_sum);
                         assert!(!input.signs.antifermion_spin_sum_negative);
                         assert_eq!(input.comparison, input.representative);
                         assert!(input.reversed_edges.is_empty());
@@ -1688,6 +1692,11 @@ mod tests {
                 };
                 assert_eq!(set.len(), expected);
                 assert_eq!(counts.diagrams, BigUint::from(expected));
+                assert!(set.report.completed && counts.complete);
+                assert_eq!(
+                    counts.sum_inv_aut,
+                    BigRational::from_integer(expected.into())
+                );
                 assert_eq!(
                     counts.physical_weight,
                     BigRational::from_integer((-4).into())
