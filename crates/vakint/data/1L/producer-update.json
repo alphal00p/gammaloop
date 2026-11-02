@@ -21,8 +21,8 @@
     "retained_supplemented_coefficients": 49,
     "numerical_accuracy_evidence_not_interval_proof": true,
     "previous_producer_update": {
-      "path": "provenance/PR10-epsilon1-v25-before/provenance/producer-update.json",
-      "sha256": "a9d41972366a6d91f51d387faa59e2d2a01ca5b1acc264bf3e02910a2d148645"
+      "path": "provenance/takeover-basis-v4-rewrite-v1-before/provenance/producer-update.json",
+      "sha256": "bdf55ef6b2a9c40a252a4b43c2eb7ba2ec0b4a83c12f99b85255c0f3a3e9202b"
     },
     "actual_PR4_publication": {
       "path": "/shared/codex-2/vacuum_masters/MASTERS/pslq/artifacts/PR4-direct10-acceptance-publication-source-v1/publication-output-v1/publication.json",
@@ -218,6 +218,33 @@
         "path": "provenance/PR10-epsilon1-v25/portable-proof-index.json",
         "sha256": "3d10e05f328295d7956ba7cd92aac6565e6058d1c6943836a31bed6864013876"
       }
+    },
+    "actual_takeover_basis_v4_rewrite_publication": {
+      "path": "provenance/takeover-basis-v4-rewrite-v1/receipt.json",
+      "sha256": "8c660d1cdaf567d6c2c4d19d9e003a56f772415fd7058871a5bc9ff3a2fd7d3d"
+    },
+    "takeover_basis_v4_rewrite_adoption": "takeover publication (user decisions 30-31 Oct 2026: basis v4 with 68 generators, PR11dD2Eps2 dropped through R1, standard constants for fixed combinations, D13; 31 Oct: s6 as the Vakint built-in vakint::s6); local commit only; pushed by the orchestrator after an adversarial review",
+    "takeover_basis_v4_rewrite_cells": {
+      "rows": 739,
+      "rows_changed": 456,
+      "masters": 115
+    },
+    "takeover_basis_v4_rewrite_validation": {
+      "basis": {
+        "path": "provenance/takeover-basis-v4-rewrite-v1/basis-v4.json",
+        "sha256": "220ac52e2d6b749f6d7aa48fdddb73759140876242c72b5d6b6da509a6c3b0d4"
+      },
+      "exact_equivalence": "739/739 (second code path)",
+      "numerical_relations_used": [
+        "R1 (547 digits)",
+        "X3 (4100 digits)",
+        "X4 (4100 digits)"
+      ],
+      "numerical_values_unchanged": true,
+      "portable_proof_index": {
+        "path": "provenance/takeover-basis-v4-rewrite-v1/portable-proof-index.json",
+        "sha256": "8326fefb00269949d39ca6f76930f1296d1e7658543d026e1642dae5aaa493e3"
+      }
     }
   },
   "masters": {
@@ -267,7 +294,7 @@
         },
         "symbolic.json": {
           "path": "masters/P1/symbolic.json",
-          "sha256": "dd594dcff7017cbe1794877e38a83b8cce6270b9fed680135888af42dd8d6f9a"
+          "sha256": "7ebbabf5c0e7a2bda90246a7e00ec2fe722a00ccbc572d7c0e0de41fd3161517"
         },
         "graph.dot": {
           "path": "masters/P1/graph.dot",
@@ -279,8 +306,15 @@
         "sha256": "b54e96eaf3deed297169b16f34bcc28d9d32f6ea2344fd84457f27e21a32ea3d"
       },
       "source_symbolic": {
-        "path": "/shared/codex-2/vacuum_masters/MASTERS/1L/L1_e74e81b24d3540d6e9ab4e5f073993c715c27e2287a726a892d34a5577bab7a4_p1/L1_e74e81b24d3540d6e9ab4e5f073993c715c27e2287a726a892d34a5577bab7a4_p1_symbolic.json",
-        "sha256": "dd594dcff7017cbe1794877e38a83b8cce6270b9fed680135888af42dd8d6f9a"
+        "path": "/shared/vhirschi/vacuum_masters_takeover/prep/basis-v4/rewritten.json",
+        "sha256": "4bd7a7cbf173781fc1bb332cc8753f132c09d1656ffcf0b38c69dc0e283df326",
+        "portable_archive": {
+          "path": "validation/takeover-basis-v4-rewrite-v1-4bd7a7cbf173781fc1bb332cc8753f132c09d1656ffcf0b38c69dc0e283df326.json.gz",
+          "sha256": "ae7a3c498b4bcfb8c22dfecb0bf37a28e7c81054d1167c6ca7dc4a418935585c",
+          "bytes": 604773,
+          "uncompressed_sha256": "4bd7a7cbf173781fc1bb332cc8753f132c09d1656ffcf0b38c69dc0e283df326",
+          "uncompressed_bytes": 4903448
+        }
       },
       "source_stage_digits": 20000,
       "source_validation": {
@@ -315,7 +349,34 @@
       },
       "before_payload_archives": {},
       "rowwise_window_merge_not_whole_file_equivalence": true,
-      "retained_extra_coefficients": []
+      "retained_extra_coefficients": [],
+      "previous_source_symbolic": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/1L/L1_e74e81b24d3540d6e9ab4e5f073993c715c27e2287a726a892d34a5577bab7a4_p1/L1_e74e81b24d3540d6e9ab4e5f073993c715c27e2287a726a892d34a5577bab7a4_p1_symbolic.json",
+        "sha256": "dd594dcff7017cbe1794877e38a83b8cce6270b9fed680135888af42dd8d6f9a"
+      },
+      "symbolic_rewrite": {
+        "publication": "takeover-basis-v4-rewrite-v1",
+        "receipt": {
+          "path": "provenance/takeover-basis-v4-rewrite-v1/receipt.json",
+          "sha256": "8c660d1cdaf567d6c2c4d19d9e003a56f772415fd7058871a5bc9ff3a2fd7d3d"
+        },
+        "epsilon_powers_rewritten": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "epsilon_powers_unchanged": [
+          -1,
+          0
+        ],
+        "exact_equivalence_asserted": true,
+        "acceptance": "the earlier symbolic acceptance records of every row stay authoritative; the receipt binds the restatement row by row"
+      },
+      "latest_before_symbolic_archive": {
+        "path": "provenance/takeover-basis-v4-rewrite-v1-before/1L/masters/P1/symbolic.json",
+        "sha256": "dd594dcff7017cbe1794877e38a83b8cce6270b9fed680135888af42dd8d6f9a"
+      }
     }
   }
 }

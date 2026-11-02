@@ -1205,7 +1205,8 @@ class GalleryJobProcessTests(unittest.TestCase):
 class GalleryLadderTests(unittest.TestCase):
     """The 3L/4L cases: shipped inputs, bounded launches and recorded hashes."""
 
-    # Retained-result sha256 prefixes of the rung fixtures (vakint data v0.1.2).
+    # Retained-result sha256 prefixes of the rung fixtures (recorded with vakint
+    # data v0.1.2, reproduced with v0.2.0).
     recorded = {
         "3L-zero-momentum": "2f48233c",
         "3L-quadratic": "5acbeebe",

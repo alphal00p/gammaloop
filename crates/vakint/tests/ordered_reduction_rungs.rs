@@ -567,7 +567,10 @@ struct FiveLoopFixture {
 /// gate error prints the two payload digests of the data checkout; the others
 /// are the `report.json` fields `input_sha256`, `retained.sha256` and
 /// `guards.payload.sha256`). Data that only add or change derived files
-/// (ordered caches, the route preparation add-on) keep the fixture.
+/// (ordered caches, the route preparation add-on) keep the fixture: release
+/// v0.2.0 has the same reduction payload and application digests (its 5L
+/// `ibps/` is byte-identical to v0.1.2), and these digests were reproduced on
+/// its content.
 const FIVE_LOOP_QUADRATIC_FIXTURE: FiveLoopFixture = FiveLoopFixture {
     data: "vakint-external-data v0.1.2 (f1626f67)",
     application_sha256: "976d574c4ad8b4021ac7a1914c624095a77f5975b98e243c7a20a9396a86ff03",
@@ -656,7 +659,7 @@ fn five_loop_fixture_gate_pins_the_reduction_payload_only() -> fixture::Result<(
 }
 
 #[test]
-#[ignore = "slow optional fixture: full ordered 5L quadratic reduction against the saved retained and nonzero-condition digests (data v0.1.2); needs VAKINT_TEST_EXTERNAL_DATA, VAKINT_QCD_LADDER_PREPARED_INPUT and a fresh VAKINT_ORDERED_RUN_EVIDENCE (see the invocation above)"]
+#[ignore = "slow optional fixture: full ordered 5L quadratic reduction against the saved retained and nonzero-condition digests (5L reduction payload of data v0.1.2 = v0.2.0); needs VAKINT_TEST_EXTERNAL_DATA, VAKINT_QCD_LADDER_PREPARED_INPUT and a fresh VAKINT_ORDERED_RUN_EVIDENCE (see the invocation above)"]
 fn five_loop_quadratic_ordered_retains_declared_masters() -> fixture::Result<()> {
     let fixture_data = &FIVE_LOOP_QUADRATIC_FIXTURE;
     let data = std::path::PathBuf::from(

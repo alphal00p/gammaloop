@@ -6,12 +6,12 @@
 //! `P19`/`P73` ε¹ rows, and the floors `MIN_D2_DEPENDENT_CELLS` and 739
 //! published formulas) hold for `vakint-external-data` `main` at `f51bc5a2`
 //! (the closed 4L formulas with 520-digit D = 2 periods) and for its rewrite of
-//! every 1L–4L coefficient in the constant basis v4. Which coefficient cells
-//! depend on a D = 2 period, and which constants the formulas name, are read
-//! off the loaded data, because the two releases write the same coefficients
-//! in different constants. Earlier packs such as `ca49f328` cap the D = 2
-//! periods at 215 digits and fail these assertions; update them together with
-//! the data.
+//! every 1L–4L coefficient in the constant basis v4, released as v0.2.0 (and
+//! re-validated on that release). Which coefficient cells depend on a D = 2
+//! period, and which constants the formulas name, are read off the loaded data,
+//! because the two data states write the same coefficients in different
+//! constants. Earlier packs such as `ca49f328` cap the D = 2 periods at 215
+//! digits and fail these assertions; update them together with the data.
 
 use std::{fs, path::PathBuf};
 

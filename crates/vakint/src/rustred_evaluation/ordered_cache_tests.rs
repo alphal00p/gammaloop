@@ -79,6 +79,13 @@ fn program_directories(root: &Path) -> Vec<String> {
 /// Uncached, cold (populating), in-process warm and reloaded warm runs return
 /// identical retained expressions in both weight arithmetics.
 fn assert_cold_and_warm_runs_agree(engine: impl Fn() -> Vakint, inputs: &[String]) {
+    // The cache directory holds only the steps these runs record: a shipped
+    // cache of the loaded data (external data from v0.2.0 on ship one for
+    // every 4L program) would be installed into it and leave nothing cold.
+    let own = |cache: OrderedCacheSettings| OrderedCacheSettings {
+        shipped: false,
+        ..cache
+    };
     let directory = tempfile::tempdir().unwrap();
     let uncached = evaluate_all(
         &engine(),
@@ -87,7 +94,7 @@ fn assert_cold_and_warm_runs_agree(engine: impl Fn() -> Vakint, inputs: &[String
     );
     let populating = engine();
     let read_write = settings(
-        OrderedCacheSettings::read_write(directory.path()),
+        own(OrderedCacheSettings::read_write(directory.path())),
         "modular:threads=1",
     );
     assert_eq!(evaluate_all(&populating, &read_write, inputs), uncached);
@@ -102,7 +109,10 @@ fn assert_cold_and_warm_runs_agree(engine: impl Fn() -> Vakint, inputs: &[String
             .all(|program| program.native.shards.iter().all(|shard| !shard.dirty))
     );
     // Warm in the same engine, in the other arithmetic: every step replays.
-    let read_write_exact = settings(OrderedCacheSettings::read_write(directory.path()), "exact");
+    let read_write_exact = settings(
+        own(OrderedCacheSettings::read_write(directory.path())),
+        "exact",
+    );
     assert_eq!(
         evaluate_all(&populating, &read_write_exact, inputs),
         uncached
@@ -116,7 +126,7 @@ fn assert_cold_and_warm_runs_agree(engine: impl Fn() -> Vakint, inputs: &[String
     for arithmetic in ["exact", "modular:threads=1"] {
         let reloaded = engine();
         let read_only = settings(
-            OrderedCacheSettings::read_only(directory.path()),
+            own(OrderedCacheSettings::read_only(directory.path())),
             arithmetic,
         );
         assert_eq!(evaluate_all(&reloaded, &read_only, inputs), uncached);

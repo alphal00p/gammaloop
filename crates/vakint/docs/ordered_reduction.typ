@@ -395,7 +395,9 @@ directory lose records of one of them (never mix them); readers are safe.
 === Shipped caches
 
 External data may ship the cache of each program of a loop pack in the same
-layout: #raw("<L>L/ordered-cache/<label>.<tables>.<stamp>/") (the RustRed
+layout (official releases do from v0.2.0 on: complete 1L–4L caches and a trimmed
+five-loop cache, received by managed installations of v0.2.0 or
+#raw("data-latest")): #raw("<L>L/ordered-cache/<label>.<tables>.<stamp>/") (the RustRed
 manifest, the shards it lists and optionally the tail table
 #raw("ordered-tail.rrtail")), described by #raw("<L>L/ordered-cache.json")
 (schema #raw("vakint.external-data.ordered-cache.v2"): producer, workload, and
@@ -445,9 +447,10 @@ cache directory under its directory name.
 The depth-first caches stored a complete terminal decomposition per integral.
 Consuming such a record replaces a frontier key by its terminal image and skips
 every grouping and cancellation below it, so ordered reduction never used them.
-External-data releases up to v0.1.2 still ship them; Vakint neither loads nor
-checksums them (an explicit read of such a file still verifies it), which
-removes a large part of the five-loop loading time.
+External-data releases up to v0.1.2 ship them (v0.2.0 retired them and ships
+the Ordered step caches and the route preparation add-on below instead); Vakint
+neither loads nor checksums them (an explicit read of such a file still verifies
+it), which removes a large part of the five-loop loading time of those releases.
 
 == Saved five-loop route preparation
 
@@ -466,7 +469,8 @@ unchanged artifact: a data pack declares it in #raw("5L/manifest.json") as
                       "format": "rustred.saved-application.route-preparation.v1"}
 ```
 
-and lists the file in #raw("files"). Like a shipped Ordered cache it is a
+and lists the file in #raw("files") (official releases do from v0.2.0 on). Like a
+shipped Ordered cache it is a
 derived file: loading the data skips it, and its sha256 is checked when the
 five-loop application loads. Vakint uses it only for the official pack's own
 #raw("ibps/") application; RustRed accepts it only when its format, its

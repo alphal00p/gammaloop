@@ -1,6 +1,6 @@
 {
   "schema": "vakint.external-data.loop.v1",
-  "version": "v0.1.2",
+  "version": "v0.2.0",
   "loop_count": 1,
   "dimension": "4-2*epsilon",
   "normalization": "FMFTandMATAD",
@@ -121,7 +121,7 @@
         },
         "symbolic.json": {
           "path": "masters/P1/symbolic.json",
-          "sha256": "dd594dcff7017cbe1794877e38a83b8cce6270b9fed680135888af42dd8d6f9a"
+          "sha256": "7ebbabf5c0e7a2bda90246a7e00ec2fe722a00ccbc572d7c0e0de41fd3161517"
         },
         "graph.dot": {
           "path": "masters/P1/graph.dot",
@@ -197,8 +197,7 @@
   "coverage": "coverage.json",
   "provenance": {
     "master_producer_rustred_revision": "1fca5bd0ae11b8d25c89658a9c78a476a2b76048",
-    "vakint_reference_revision": "43efced0151f00e297af4e0abb06a2115d66f61a",
-    "native_cache_rustred_revision": "74a83e94f9f841ae113f3d151cd80567dbc9805d"
+    "vakint_reference_revision": "43efced0151f00e297af4e0abb06a2115d66f61a"
   },
   "files": {
     "coverage.json": {
@@ -226,16 +225,16 @@
       "bytes": 120166
     },
     "masters/P1/symbolic.json": {
-      "sha256": "dd594dcff7017cbe1794877e38a83b8cce6270b9fed680135888af42dd8d6f9a",
-      "bytes": 350
+      "sha256": "7ebbabf5c0e7a2bda90246a7e00ec2fe722a00ccbc572d7c0e0de41fd3161517",
+      "bytes": 349
     },
     "model.json": {
       "sha256": "d7e113a7e3fb019045e4c1436e03eeb3b49da85de1234f7ed1e110416079215e",
       "bytes": 3477
     },
     "producer-update.json": {
-      "sha256": "6fc5cb3ee82f85412ad19a7ed44a53be6417f353f25e4286759bcba6e2bb34d8",
-      "bytes": 17676
+      "sha256": "c2a7a05a917ac68ad65d214907ac7cd6930e7b5b7112e0f1fbd663f85c578a2f",
+      "bytes": 20543
     }
   },
   "producer_update": "producer-update.json"

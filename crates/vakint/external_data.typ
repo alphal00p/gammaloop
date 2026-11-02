@@ -3,7 +3,11 @@
 Vakint ships its 1L–3L RustRed programs, master coefficients and graphs. The separate
 #link("https://github.com/alphal00p/vakint-external-data")[external-data repository]
 contains independently packaged loop data. Releases up to v0.1.2 also contain
-prepared depth-first caches, which Vakint no longer reads.
+prepared depth-first caches, which Vakint no longer reads. From v0.2.0 on, releases
+ship the Ordered step caches of every loop pack (the five-loop one trimmed to the
+size budget) and the five-loop route preparation add-on instead, so a managed
+installation of v0.2.0 or `data-latest` receives them (see
+#link("docs/ordered_reduction.typ")[the ordered reduction notes]).
 FORM reduction rules and their hard-coded master formulas remain in Vakint.
 
 == Explicit loading
@@ -38,10 +42,11 @@ Vakint reduces only with RustRed's ordered scheduler, which has no use for the
 prepared depth-first caches of older releases. Loading neither decodes nor
 checksums the files of a pack's `cache/` directory, its cache metadata file
 (`cache.json`) or its `benchmarks/` inputs; Vakint never reads them at run time,
-and an explicit read of such a file still verifies its listed checksum. Every
-other listed file is validated before activation. For the five-loop pack this
-skips about 125 MB of the 610 MB listed payload; for the four-loop pack about
-96 MB in 9,818 files.
+and an explicit read of such a file still verifies its listed checksum. For the
+v0.1.2 five-loop pack this skips about 125 MB of the 610 MB listed payload; for
+the four-loop pack about 96 MB in 9,818 files. The shipped Ordered step caches
+and the route preparation add-on are skipped as well and verified when they are
+used. Every other listed file is validated before activation.
 
 If the supplied directory contains the repository manifest, Vakint validates and
 loads it directly. It never downloads into or modifies this checkout. `latest`
@@ -76,7 +81,11 @@ On first use it downloads
 missing packs into the test process's current directory; subsequent processes
 reuse the validated installation without network access. Cargo normally runs a
 test binary from its package directory. Set `VAKINT_TEST_EXTERNAL_DATA` to an
-existing checkout to override that location.
+existing checkout to override that location. That checkout must be the release tag
+the vendored manifest declares (`v0.2.0` for this version): tests that request this
+explicit version reject a checkout declaring another identity, and the
+external-data `main` branch declares the next development version (`v0.2.1` after
+the v0.2.0 release).
 Managed `.vakint-external-data` directories are ignored by Git.
 
 The scientific gates retain their explicit execution flags and FORM requirements.
@@ -247,8 +256,15 @@ terminals and no computed 5L coefficients; it does not certify a complete basis.
 == Maintaining the vendored snapshot
 
 Run `python3 tools/vendor_external_data.py /path/to/vakint-external-data` from the
-Vakint crate. The tool validates input hashes and copies all available 1L–3L
-coefficients, graphs and programs, excluding caches.
+Vakint crate, with a checkout of the release tag to vendor (the snapshot is
+v0.2.0). The tool validates input hashes and copies all available 1L–3L
+coefficients, graphs and programs byte for byte. It excludes caches by design:
+the depth-first caches of older releases and the shipped Ordered step caches,
+whose entries it removes from the copied loop manifests. Vakint uses shipped
+Ordered caches only from an external-data directory (a cache directory of the
+user's own runs is separate); the vendored snapshot has no shipped-cache path, and
+its cold 1L–3L reductions take well under a second. The copied root
+manifest keeps the release version, which also selects the test release above.
 
 Mathematica may be used to develop independent numerical reference values. It is
 not a build or runtime dependency of Vakint or the official-data loader.

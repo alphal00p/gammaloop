@@ -2748,12 +2748,14 @@
 
   # Explicit test fixture only: normal construction embeds cache-free 1L–3L.
   # Pin the source snapshot so native cache and reduction tests stay reproducible.
+  # It must be the release the vendored crates/vakint/data/manifest.json declares
+  # (v0.2.0): tests load it with that explicit version.
   vakintExternalTestData = builtins.fetchTree {
     type = "github";
     owner = "alphal00p";
     repo = "vakint-external-data";
-    rev = "d4384149b5076de84b3f3fda761585dff1776532";
-    narHash = "sha256-pHABwykEmobTJJlE4mmBdIwpcNwgmx476BKt3Wp+pMU=";
+    rev = "d788d4b89be31b94087552a46a99ce3dcd7262fa";
+    narHash = "sha256-e2kicqzChLF7FvPQCzzjVj6s5MCxbp8zNo0vIQrJ4Qg=";
   };
 
   nextestCheckFor = target:

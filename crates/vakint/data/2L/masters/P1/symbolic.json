@@ -17,10 +17,10 @@
   ],
   [
     2,
-    "-4/3*symbolica::zeta(3)+1/2*𝜋^2+5+7/360*𝜋^4"
+    "7/360*𝜋^4-4/3*symbolica::zeta(3)+1/2*𝜋^2+5"
   ],
   [
     3,
-    "-1/9*symbolica::zeta(3)*𝜋^2+-2*symbolica::zeta(3)+-2/5*symbolica::zeta(5)+2/3*𝜋^2+6+7/180*𝜋^4"
+    "(-1/9*symbolica::zeta(3)*𝜋^2-2/5*symbolica::zeta(5))+7/180*𝜋^4-2*symbolica::zeta(3)+2/3*𝜋^2+6"
   ]
 ]
