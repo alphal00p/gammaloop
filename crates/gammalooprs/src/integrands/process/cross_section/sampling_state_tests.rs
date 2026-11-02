@@ -273,10 +273,14 @@ fn native_sampling_saved_state_boundary() -> Result<()> {
                         )?;
                         certified_hosts += 1;
                         let independent_loops =
-                            point.loop_moms().rescale(&solved.solution, Subspace::None);
-                        let source_loops = point
-                            .loop_moms()
-                            .rescale(&host.solution.solution, Subspace::None);
+                            point
+                                .loop_moms()
+                                .rescale(&solved.solution, Subspace::None, None);
+                        let source_loops = point.loop_moms().rescale(
+                            &host.solution.solution,
+                            Subspace::None,
+                            None,
+                        );
                         let Some(SamplingCatalogueEntry::Named(channel)) =
                             graph.sampling_setup().sampling_catalogue.as_ref().and_then(
                                 |catalogue| {

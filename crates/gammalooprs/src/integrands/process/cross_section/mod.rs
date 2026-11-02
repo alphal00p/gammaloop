@@ -503,6 +503,16 @@ impl ProcessIntegrandImpl for CrossSectionIntegrand {
             );
         }
         validate_process_runtime_settings(&self.settings, self.data.explicit_orientation_sum_only)?;
+        for name in self.settings.lu_flow_centers.keys() {
+            if !self
+                .data
+                .graph_terms
+                .iter()
+                .any(|term| &term.graph.name == name)
+            {
+                return Err(eyre!("LU flow center names unknown graph '{name}'"));
+            }
+        }
 
         self.data.rotations = Some(
             Some(Rotation::new(RotationMethod::Identity))
@@ -658,6 +668,75 @@ struct DeferredCutEvaluation<T: FloatLike> {
 }
 
 impl CrossSectionGraphTerm {
+    /// Materialize the fixed point in the generation LMB. External coefficients
+    /// rotate and change precision with the physical momenta, not with a saved
+    /// binary64 spatial center. Edge IDs keep the prescription independent of
+    /// the order of the configured rows.
+    fn lu_flow_center<T: FloatLike>(
+        &self,
+        external_momenta: &ExternalFourMomenta<F<T>>,
+        settings: &RuntimeSettings,
+    ) -> Result<Option<LoopMomenta<F<T>>>> {
+        let Some(rows) = settings.lu_flow_centers.get(&self.graph.name) else {
+            return Ok(None);
+        };
+        let lmb = &self.graph.loop_momentum_basis;
+        let supplied = rows.iter().map(|(edge, _)| *edge).collect::<BTreeSet<_>>();
+        let expected = lmb
+            .loop_edges
+            .iter()
+            .map(|edge| edge.0)
+            .collect::<BTreeSet<_>>();
+        if rows.len() != expected.len() || supplied != expected {
+            return Err(eyre!(
+                "LU flow center for graph '{}' must specify each generation LMB edge {:?} exactly once; received {:?}",
+                self.graph.name,
+                expected,
+                rows,
+            ));
+        }
+        let zero = external_momenta
+            .iter()
+            .next()
+            .ok_or_else(|| eyre!("A configured LU flow center requires external momenta"))?
+            .temporal
+            .value
+            .zero();
+        let mut center = Vec::with_capacity(rows.len());
+        for edge in &lmb.loop_edges {
+            let coefficients = &rows.iter().find(|(id, _)| *id == edge.0).unwrap().1;
+            if coefficients.len() != external_momenta.len()
+                || coefficients
+                    .iter()
+                    .any(|coefficient| !coefficient.is_finite())
+            {
+                return Err(eyre!(
+                    "LU flow center for graph '{}' loop edge {} requires {} finite external coefficients; received {:?}",
+                    self.graph.name,
+                    edge.0,
+                    external_momenta.len(),
+                    coefficients,
+                ));
+            }
+            center.push(coefficients.iter().zip(external_momenta).fold(
+                ThreeMomentum::new(zero.clone(), zero.clone(), zero.clone()),
+                |sum, (coefficient, momentum)| {
+                    sum + &momentum.spatial * F::<T>::from_f64(*coefficient)
+                },
+            ));
+        }
+        if center
+            .iter()
+            .any(|p| !p.px.0.is_finite() || !p.py.0.is_finite() || !p.pz.0.is_finite())
+        {
+            return Err(eyre!(
+                "Nonfinite LU flow center for graph '{}'",
+                self.graph.name
+            ));
+        }
+        Ok(Some(LoopMomenta::from_iter(center)))
+    }
+
     pub fn threshold_counterterm_metadata(&self) -> Option<&ThresholdCountertermMetadataRegistry> {
         self.counterterm.metadata_registry.as_ref()
     }
@@ -2039,11 +2118,19 @@ impl GraphTerm for CrossSectionGraphTerm {
                 let frame = self
                     .multi_channeling_setup
                     .lmb_frame_map(lmb, external_momenta)?;
-                // LU fixes generation K=0. In an affine native frame L=A K+BQ,
-                // its fixed point is BQ; scaling L itself would change the cut.
-                let origin = frame
-                    .inverse(&vec![zero.0.clone(); 3 * parent.len()], &[])?
-                    .coordinates;
+                // Transport the generation fixed point into the native affine
+                // frame. The same point owns host roots and physical LU.
+                let generation_center = self.lu_flow_center(&externals, settings)?;
+                let fixed_point = generation_center.as_ref().map_or_else(
+                    || vec![zero.0.clone(); 3 * parent.len()],
+                    |center| {
+                        center
+                            .iter()
+                            .flat_map(|p| [p.px.0.clone(), p.py.0.clone(), p.pz.0.clone()])
+                            .collect_vec()
+                    },
+                );
+                let origin = frame.inverse(&fixed_point, &[])?.coordinates;
                 let origin_loops =
                     LoopMomenta::from_iter(origin.as_chunks::<3>().0.iter().map(|v| {
                         ThreeMomentum::new(F(v[0].clone()), F(v[1].clone()), F(v[2].clone()))
@@ -2693,6 +2780,22 @@ impl GraphTerm for CrossSectionGraphTerm {
                 self.graph.name
             ));
         }
+        if self.lu_flow_center(&externals, settings)?.is_some() {
+            if !settings.subtraction.disable_threshold_subtraction {
+                return Err(eyre!(
+                    "A configured LU flow center requires subtraction.disable_threshold_subtraction=true; threshold counterterms use the origin flow"
+                ));
+            }
+            if self
+                .fermi_surfaces
+                .iter()
+                .any(|sectors| !sectors.is_empty())
+            {
+                return Err(eyre!(
+                    "A configured LU flow center is not supported with zero-temperature Fermi-surface sectors; their contact terms use origin-flow derivatives"
+                ));
+            }
+        }
         self.graph
             .param_builder
             .add_external_four_mom_all_derivatives(&externals);
@@ -2806,7 +2909,8 @@ impl GraphTerm for CrossSectionGraphTerm {
                 .map_err(|error| SamplingEvaluationError::UncertifiedRoot {
                     detail: format!("{identity}: {error:?}"),
                 })?;
-            let physical_point = sample.rescaled_loop_momenta(&solution.solution, Subspace::None);
+            let physical_point =
+                sample.rescaled_loop_momenta(&solution.solution, Subspace::None, None);
             if let Some(runtime) = context.event_processing_runtime.as_deref_mut()
                 && runtime.has_selectors()
             {
@@ -2853,6 +2957,21 @@ impl GraphTerm for CrossSectionGraphTerm {
 
         // let mut all_cut_result = Complex::new_re(momentum_sample.zero());
         let masses = self.graph.get_real_mass_vector(context.model);
+        let lu_center = self.lu_flow_center(momentum_sample.external_moms(), context.settings)?;
+        let shifted_loops = lu_center
+            .as_ref()
+            .map(|center| momentum_sample.loop_moms() - center);
+        let lu_velocity = shifted_loops
+            .as_ref()
+            .unwrap_or(momentum_sample.loop_moms());
+        let ray_center = lu_center.clone().unwrap_or_else(|| {
+            LoopMomenta::from_iter(
+                momentum_sample
+                    .loop_moms()
+                    .iter()
+                    .map(|p| p.map_ref(&|value| value.zero())),
+            )
+        });
         let hel = context.settings.kinematics.externals.get_helicities();
         let mut cut_results: TiVec<CutGroupId, Vec<Complex<F<T>>>> =
             ti_vec![Vec::new(); self.cut_group_data.cut_groups.len()];
@@ -3010,14 +3129,9 @@ impl GraphTerm for CrossSectionGraphTerm {
                 // Payload remains in the original source frame through all
                 // sample rotations. Rotate its affine coefficients exactly once.
                 let ray = host.ray.rotate(context.rotation);
-                let zero = momentum_sample.zero();
-                let center = LoopMomenta::from_iter(
-                    (0..momentum_sample.loop_moms().0.len())
-                        .map(|_| ThreeMomentum::new(zero.clone(), zero.clone(), zero.clone())),
-                );
                 let completed = surface.routed_ray(
-                    momentum_sample.loop_moms(),
-                    &center,
+                    lu_velocity,
+                    &ray_center,
                     momentum_sample.external_moms(),
                     &masses,
                     &self.graph.loop_momentum_basis,
@@ -3070,12 +3184,18 @@ impl GraphTerm for CrossSectionGraphTerm {
                     // Enclosing mathematical tau*K would miss that rounding.
                     // The canonical source is never remapped in a native attempt.
                     let canonical_point = canonical.sample.rotate(context.rotation, 0, 0);
-                    let canonical_loops = canonical_point
-                        .loop_moms()
-                        .rescale(&original_host.solution.solution, Subspace::None);
-                    let native_loops = momentum_sample
-                        .loop_moms()
-                        .rescale(&host.solution.solution, Subspace::None);
+                    let canonical_center =
+                        self.lu_flow_center(canonical_point.external_moms(), context.settings)?;
+                    let canonical_loops = canonical_point.loop_moms().rescale(
+                        &original_host.solution.solution,
+                        Subspace::None,
+                        canonical_center.as_ref(),
+                    );
+                    let native_loops = momentum_sample.loop_moms().rescale(
+                        &host.solution.solution,
+                        Subspace::None,
+                        lu_center.as_ref(),
+                    );
                     let cached_masses = self
                         .real_mass_vec
                         .as_ref()
@@ -3158,15 +3278,9 @@ impl GraphTerm for CrossSectionGraphTerm {
                     if let Some((ray, solution)) = adopted_hosts.remove(&cut_group_id) {
                         Ok((ray, vec![solution]))
                     } else {
-                        let center = LoopMomenta::from_iter(
-                            momentum_sample
-                                .loop_moms()
-                                .iter()
-                                .map(|momentum| momentum.map_ref(&|value| value.zero())),
-                        );
                         let ray = self.cut_esurface[cut_group.cuts[0]].routed_ray(
-                            momentum_sample.loop_moms(),
-                            &center,
+                            lu_velocity,
+                            &ray_center,
                             momentum_sample.external_moms(),
                             &masses,
                             &self.graph.loop_momentum_basis,
@@ -3181,6 +3295,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                 }
                 HybridSurfaceID::Hsurface(id) => self.hsurfaces[id].positive_radius_roots(
                     momentum_sample.loop_moms(),
+                    &ray_center,
                     momentum_sample.external_moms(),
                     &masses,
                     &self.graph.loop_momentum_basis,
@@ -3296,9 +3411,11 @@ impl GraphTerm for CrossSectionGraphTerm {
             }
             for branch in branches {
                 let physical_point = match &branch {
-                    PreparedCutBranch::Radial(solution) => {
-                        momentum_sample.rescaled_loop_momenta(&solution.solution, Subspace::None)
-                    }
+                    PreparedCutBranch::Radial(solution) => momentum_sample.rescaled_loop_momenta(
+                        &solution.solution,
+                        Subspace::None,
+                        lu_center.as_ref(),
+                    ),
                     PreparedCutBranch::FermiAngular { physical_point, .. } => {
                         physical_point.as_ref().clone()
                     }
@@ -3371,9 +3488,12 @@ impl GraphTerm for CrossSectionGraphTerm {
                                         None,
                                         &context.settings.lu_h_function,
                                     );
-                                    let dual_momenta_for_integrand = momentum_sample
-                                        .loop_moms()
-                                        .rescale_with_hyper_dual(&dual_t_for_integrand, None);
+                                    let dual_momenta_for_integrand =
+                                        momentum_sample.loop_moms().rescale_with_hyper_dual(
+                                            &dual_t_for_integrand,
+                                            None,
+                                            lu_center.as_ref(),
+                                        );
 
                                     let dual_shape_for_esurface =
                                         HyperDual::<F<T>>::new(simple_n_deriv_shape(num_esurfaces));
@@ -3402,8 +3522,11 @@ impl GraphTerm for CrossSectionGraphTerm {
                                         None,
                                         &context.settings.lu_h_function,
                                     );
-                                    let rescaled_momenta = momentum_sample
-                                        .rescaled_loop_momenta(&solution.solution, Subspace::None);
+                                    let rescaled_momenta = momentum_sample.rescaled_loop_momenta(
+                                        &solution.solution,
+                                        Subspace::None,
+                                        lu_center.as_ref(),
+                                    );
 
                                     (
                                         DualOrNot::NonDual(solution.solution.clone()),

@@ -49,6 +49,7 @@ impl Hsurface {
     pub(crate) fn positive_radius_roots<T: FloatLike>(
         &self,
         loop_momenta: &LoopMomenta<F<T>>,
+        center: &LoopMomenta<F<T>>,
         external_momenta: &ExternalFourMomenta<F<T>>,
         masses: &EdgeVec<F<T>>,
         lmb: &LoopMomentumBasis,
@@ -56,19 +57,15 @@ impl Hsurface {
         diagnostics: &mut RadialRootDiagnostics,
         identity: &RadialRootIdentity,
     ) -> eyre::Result<(EnergySurfaceRay<T>, Vec<NewtonIterationResult<T>>)> {
-        let center = LoopMomenta::from_iter(
-            loop_momenta
-                .iter()
-                .map(|momentum| momentum.map_ref(&|value| value.zero())),
-        );
+        let velocity = loop_momenta - center;
         let ray = EnergySurfaceRay::routed(
             self.positive_energies
                 .iter()
                 .map(|&edge| (edge, 1))
                 .chain(self.negative_energies.iter().map(|&edge| (edge, -1))),
             &self.external_shift,
-            loop_momenta,
-            &center,
+            &velocity,
+            center,
             external_momenta,
             masses,
             lmb,
@@ -313,7 +310,7 @@ mod tests {
             ext_edges: (count..2 * count + 1).map(EdgeIndex).collect(),
             edge_signatures: graph.new_edgevec_from_iter(signatures).unwrap(),
         };
-        let loop_momenta = energies
+        let loop_momenta: crate::momentum::sample::LoopMomenta<_> = energies
             .iter()
             .map(|(_, v, _, _)| ThreeMomentum::new(native(v[0]), native(v[1]), native(v[2])))
             .collect();
@@ -354,9 +351,14 @@ mod tests {
             vertex_set: VertexSet::dummy(),
         };
         let e_cm = native(2.0);
+        let center = loop_momenta
+            .iter()
+            .map(|momentum| momentum.map_ref(&|value| value.zero()))
+            .collect();
         surface
             .positive_radius_roots(
                 &loop_momenta,
+                &center,
                 &external_momenta,
                 &masses,
                 &lmb,
@@ -397,6 +399,145 @@ mod tests {
                 assert!(roots[0].derivative_at_solution.0 > 0.0);
             }
         }
+    }
+
+    #[test]
+    fn midpoint_absorption_roots_align_the_scalar_overlap_and_preserve_kinematic_coverage() {
+        fn check<T: FloatLike>() {
+            use crate::{
+                graph::LoopMomentumBasis,
+                momentum::{
+                    FourMomentum, ThreeMomentum,
+                    sample::{ExternalFourMomenta, LoopIndex, LoopMomenta},
+                    signature::LoopExtSignature,
+                },
+                utils::{
+                    F,
+                    newton_solver::{RadialRootDiagnostics, RadialRootIdentity},
+                    test_utils::dummy_hedge_graph,
+                },
+            };
+            use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
+
+            let native = |x: f64| F(T::from_f64_exact_binary(x));
+            let vector = |x, y, z| ThreeMomentum::new(native(x), native(y), native(z));
+            let graph = dummy_hedge_graph(6);
+            // Native edges are (K-r, r-q, q, K-q, r, K). The exchange
+            // edge therefore has zero center when q and r are centered at K/2.
+            let signatures = [
+                ([0_isize, -1], [1_isize]),
+                ([-1, 1], [0]),
+                ([1, 0], [0]),
+                ([-1, 0], [1]),
+                ([0, 1], [0]),
+                ([0, 0], [1]),
+            ]
+            .into_iter()
+            .map(|(internal, external)| {
+                LoopExtSignature::from((internal.to_vec(), external.to_vec()))
+            });
+            let lmb = LoopMomentumBasis {
+                tree: SuBitGraph::empty(0),
+                loop_edges: [EdgeIndex(2), EdgeIndex(4)].into_iter().collect(),
+                ext_edges: [EdgeIndex(5)].into_iter().collect(),
+                edge_signatures: graph.new_edgevec_from_iter(signatures).unwrap(),
+            };
+            let loops = LoopMomenta::from_iter([
+                vector(0.4, 0.2, 0.4412727741192883),
+                vector(0.3, -0.4, 1.1224916106437834),
+            ]);
+            let origin = LoopMomenta::from_iter([vector(0.0, 0.0, 0.0), vector(0.0, 0.0, 0.0)]);
+            let midpoint = LoopMomenta::from_iter([vector(0.0, 0.0, 0.75), vector(0.0, 0.0, 0.75)]);
+            let external: ExternalFourMomenta<_> = [FourMomentum::from_args(
+                native(0.5),
+                native(0.0),
+                native(0.0),
+                native(1.5),
+            )]
+            .into_iter()
+            .collect();
+            let masses = graph
+                .new_edgevec_from_iter([0.6, 0.6, 0.25, 0.25, 0.6, 0.0].into_iter().map(native))
+                .unwrap();
+            let surfaces = [(2, 3), (0, 4)].map(|(positive, negative)| Hsurface {
+                positive_energies: vec![EdgeIndex(positive)],
+                negative_energies: vec![EdgeIndex(negative)],
+                external_shift: vec![(EdgeIndex(5), 1)],
+                vertex_set: VertexSet::dummy(),
+            });
+            let solve = |surface: &Hsurface,
+                         loops: &LoopMomenta<F<T>>,
+                         center: &LoopMomenta<F<T>>,
+                         external: &ExternalFourMomenta<F<T>>| {
+                surface
+                    .positive_radius_roots(
+                        loops,
+                        center,
+                        external,
+                        &masses,
+                        &lmb,
+                        &native(2.0),
+                        &mut RadialRootDiagnostics::default(),
+                        &RadialRootIdentity::new("midpoint scalar absorption".into()),
+                    )
+                    .unwrap()
+            };
+            for (index, surface) in surfaces.iter().enumerate() {
+                for (center, derivatives) in [
+                    (&origin, [0.8109160583319578, -1.304509868856776]),
+                    (&midpoint, [-0.3536345776031434, -0.3624868282402529]),
+                ] {
+                    let (ray, roots) = solve(surface, &loops, center, &external);
+                    assert_eq!(roots.len(), 1);
+                    assert!((&roots[0].solution - native(1.0)).abs() < native(1.0e-12));
+                    assert!(
+                        (&roots[0].derivative_at_solution - native(derivatives[index])).abs()
+                            < native(1.0e-12)
+                    );
+                    // The same routed equation supplies both the localization
+                    // and the derivative, evaluated at the unmodified sample at t=1.
+                    assert!(ray.evaluate(&native(1.0)).0.abs() < native(1.0e-14));
+                }
+            }
+
+            // This direction lies outside the absorption cone:
+            // |K dot (q-K/2)| / |q-K/2| < E. It has no finite positive root.
+            let mut outside_cone = loops.clone();
+            outside_cone[LoopIndex(0)] = vector(0.4, 0.2, 0.65);
+            assert!(
+                solve(&surfaces[0], &outside_cone, &midpoint, &external)
+                    .1
+                    .is_empty()
+            );
+
+            let mut timelike = external.clone();
+            timelike[crate::momentum::sample::ExternalIndex(0)]
+                .temporal
+                .value = native(2.0);
+            for surface in &surfaces {
+                assert!(solve(surface, &loops, &midpoint, &timelike).1.is_empty());
+            }
+            let emission = Esurface {
+                energies: vec![EdgeIndex(2), EdgeIndex(3)],
+                external_shift: vec![(EdgeIndex(5), -1)],
+                vertex_set: VertexSet::dummy(),
+            };
+            let ray =
+                emission.routed_ray(&(&loops - &midpoint), &midpoint, &timelike, &masses, &lmb);
+            assert!(ray.evaluate(&native(0.0)).0 < native(0.0));
+            let roots = ray
+                .positive_radius_roots(
+                    &native(2.0),
+                    &mut RadialRootDiagnostics::default(),
+                    &RadialRootIdentity::new("midpoint timelike emission".into()),
+                )
+                .unwrap();
+            assert_eq!(roots.len(), 1);
+            assert!(roots[0].derivative_at_solution > native(0.0));
+        }
+        check::<f64>();
+        check::<QuadFloat>();
+        check::<ArbPrec>();
     }
 
     #[test]

@@ -770,6 +770,20 @@ The user-facing contract and worked GL297/GL638 examples live in
 
 === 3. Evaluation and Integration Flow
 <3-evaluation-and-integration-flow>
+Cross-section `lu_flow_centers` optionally specifies a fixed spatial point in each
+graph's generation LMB, using loop-edge IDs and linear coefficients of the external
+momenta. The physical flow is $bold(c)+t(bold(k)-bold(c))$ with Jacobian
+$t^(3L)$. The same fixed point owns E/H root rays, scalar and raised-residue
+momentum jets, event momenta, and hosted sampling. Native sampling frames transport
+the fixed point through the existing affine LMB map; stability rotations rebuild it
+from the rotated external data. An absent prescription retains origin-centered LU.
+Configured centers require threshold subtraction disabled and no zero-temperature
+Fermi sectors: the existing threshold and symbolic Fermi contact terms still use
+origin-centered derivatives. The midpoint coefficients are graph routing data,
+not a kinematics-dependent switch or an automatic center finder.
+The choice changes radial conditioning: cancellation at one overlap does not
+guarantee a well-conditioned Jacobian or improved variance for other cuts.
+
 + Commands (`inspect`, `evaluate`, `integrate`) resolve process +
   integrand references.
 + Integrand is warmed up (`ProcessIntegrand::warm_up`) to initialize

@@ -603,49 +603,36 @@ impl<T: FloatLike> LoopMomenta<F<T>> {
         }
     }
 
-    pub(crate) fn rescale(&self, factor: &F<T>, subspace: Subspace) -> Self {
-        match subspace {
-            None => LoopMomenta::from_iter(self.iter().map(|k| k * factor)),
-            // this branch is wrong
-            Some(subspace) => LoopMomenta::from_iter(self.iter_enumerated().map(|(i, k)| {
-                if subspace.contains(&i) {
-                    k * factor
-                } else {
-                    k.clone()
-                }
-            })),
-        }
+    /// Dilate the active loop coordinates about a fixed center (the origin when absent).
+    pub(crate) fn rescale(&self, factor: &F<T>, subspace: Subspace, center: Option<&Self>) -> Self {
+        LoopMomenta::from_iter(self.iter_enumerated().map(|(i, k)| {
+            if subspace.is_some_and(|subspace| !subspace.contains(&i)) {
+                k.clone()
+            } else if let Some(center) = center {
+                (k - &center[i]) * factor + &center[i]
+            } else {
+                k * factor
+            }
+        }))
     }
 
     pub(crate) fn rescale_with_hyper_dual(
         &self,
         factor: &HyperDual<F<T>>,
         subspace: Subspace,
+        center: Option<&Self>,
     ) -> LoopMomenta<HyperDual<F<T>>> {
-        match subspace {
-            None => LoopMomenta::from_iter(self.iter().map(|k| {
-                ThreeMomentum::new(
-                    new_constant(factor, &k.px) * factor,
-                    new_constant(factor, &k.py) * factor,
-                    new_constant(factor, &k.pz) * factor,
-                )
-            })),
-            Some(subspace) => LoopMomenta::from_iter(self.iter_enumerated().map(|(i, k)| {
-                if subspace.contains(&i) {
-                    ThreeMomentum::new(
-                        new_constant(factor, &k.px) * factor,
-                        new_constant(factor, &k.py) * factor,
-                        new_constant(factor, &k.pz) * factor,
-                    )
-                } else {
-                    ThreeMomentum::new(
-                        new_constant(factor, &k.px),
-                        new_constant(factor, &k.py),
-                        new_constant(factor, &k.pz),
-                    )
-                }
-            })),
-        }
+        LoopMomenta::from_iter(self.iter_enumerated().map(|(i, k)| {
+            let dual_momentum = k.map_ref(&|value| new_constant(factor, value));
+            if subspace.is_some_and(|subspace| !subspace.contains(&i)) {
+                dual_momentum
+            } else if let Some(center) = center {
+                let dual_center = center[i].map_ref(&|value| new_constant(factor, value));
+                (dual_momentum - dual_center.clone()) * factor + dual_center
+            } else {
+                dual_momentum * factor
+            }
+        }))
     }
 
     pub(crate) fn rotate(&self, rotation: &Rotation) -> Self {
@@ -680,18 +667,22 @@ impl<T: FloatLike> LoopMomenta<HyperDual<F<T>>> {
         }))
     }
 
-    pub fn rescale(&self, factor: &HyperDual<F<T>>, subspace: Subspace) -> Self {
-        match subspace {
-            None => LoopMomenta::from_iter(self.iter().map(|k| k * factor)),
-            // this branch is wrong
-            Some(subspace) => LoopMomenta::from_iter(self.iter_enumerated().map(|(i, k)| {
-                if subspace.contains(&i) {
-                    k * factor
-                } else {
-                    k.clone()
-                }
-            })),
-        }
+    pub fn rescale(
+        &self,
+        factor: &HyperDual<F<T>>,
+        subspace: Subspace,
+        center: Option<&LoopMomenta<F<T>>>,
+    ) -> Self {
+        LoopMomenta::from_iter(self.iter_enumerated().map(|(i, k)| {
+            if subspace.is_some_and(|subspace| !subspace.contains(&i)) {
+                k.clone()
+            } else if let Some(center) = center {
+                let dual_center = center[i].map_ref(&|value| new_constant(factor, value));
+                (k.clone() - dual_center.clone()) * factor + dual_center
+            } else {
+                k * factor
+            }
+        }))
     }
 }
 
@@ -998,13 +989,21 @@ impl<T: FloatLike> BareMomentumSample<T> {
 
     #[inline]
     #[allow(dead_code)]
-    pub(crate) fn rescaled_loop_momenta(&self, factor: &F<T>, subspace: Subspace) -> Self {
+    pub(crate) fn rescaled_loop_momenta(
+        &self,
+        factor: &F<T>,
+        subspace: Subspace,
+        center: Option<&LoopMomenta<F<T>>>,
+    ) -> Self {
         Self {
-            loop_moms: self.loop_moms.rescale(factor, subspace),
-            dual_loop_moms: self
-                .dual_loop_moms
-                .as_ref()
-                .map(|dlm| dlm.rescale(&new_constant(&dlm[LoopIndex(0)].px, factor), subspace)),
+            loop_moms: self.loop_moms.rescale(factor, subspace, center),
+            dual_loop_moms: self.dual_loop_moms.as_ref().map(|dlm| {
+                dlm.rescale(
+                    &new_constant(&dlm[LoopIndex(0)].px, factor),
+                    subspace,
+                    center,
+                )
+            }),
             loop_mom_cache_id: self.loop_mom_cache_id + 1,
             loop_mom_base_cache_id: self.loop_mom_base_cache_id, // Preserve base cache ID
             external_moms: self.external_moms.clone(),
@@ -1183,9 +1182,14 @@ impl<T: FloatLike> MomentumSample<T> {
 
     #[allow(dead_code)]
     #[inline]
-    pub(crate) fn rescaled_loop_momenta(&self, factor: &F<T>, subspace: Subspace) -> Self {
+    pub(crate) fn rescaled_loop_momenta(
+        &self,
+        factor: &F<T>,
+        subspace: Subspace,
+        center: Option<&LoopMomenta<F<T>>>,
+    ) -> Self {
         Self {
-            sample: self.sample.rescaled_loop_momenta(factor, subspace),
+            sample: self.sample.rescaled_loop_momenta(factor, subspace, center),
         }
     }
 
@@ -1206,6 +1210,145 @@ mod subspace_tests {
         initialisation::test_initialise,
     };
     use typed_index_collections::ti_vec;
+
+    #[test]
+    fn centered_rescaling_preserves_sample_metadata_and_fixed_coordinates() {
+        fn check<T: FloatLike>() {
+            let one = F::<T>::default().one();
+            let momentum =
+                |x, y, z| ThreeMomentum::new(one.from_i64(x), one.from_i64(y), one.from_i64(z));
+            let mut source = MomentumSample {
+                sample: BareMomentumSample {
+                    loop_moms: LoopMomenta(vec![momentum(3, 5, 7), momentum(-1, -2, -3)]),
+                    dual_loop_moms: None,
+                    loop_mom_cache_id: 17,
+                    loop_mom_base_cache_id: 11,
+                    external_moms: ti_vec![FourMomentum::from_args(
+                        one.from_i64(4),
+                        one.zero(),
+                        one.clone(),
+                        one.zero()
+                    )],
+                    external_mom_cache_id: 23,
+                    external_mom_base_cache_id: 19,
+                    jacobian: one.from_i64(3),
+                    orientation: Some(7),
+                    parameterization_branch: Some(2),
+                },
+            };
+            let center = LoopMomenta(vec![momentum(1, 2, 3), momentum(4, 5, 6)]);
+            let active = Some([LoopIndex(0)].as_slice());
+            let factor = one.from_i64(2);
+            let centered = source.rescaled_loop_momenta(&factor, active, Some(&center));
+            assert_eq!(centered.sample.loop_moms[LoopIndex(0)], momentum(5, 8, 11));
+            assert_eq!(
+                centered.sample.loop_moms[LoopIndex(1)],
+                source.sample.loop_moms[LoopIndex(1)]
+            );
+            assert_eq!(centered.sample.loop_mom_cache_id, 18);
+            assert_eq!(centered.sample.loop_mom_base_cache_id, 11);
+            assert_eq!(centered.sample.external_mom_cache_id, 23);
+            assert_eq!(centered.sample.external_mom_base_cache_id, 19);
+            assert_eq!(centered.sample.external_moms, source.sample.external_moms);
+            assert_eq!(centered.sample.jacobian, source.sample.jacobian);
+            assert_eq!(centered.sample.orientation, source.sample.orientation);
+            assert_eq!(
+                centered.sample.parameterization_branch,
+                source.sample.parameterization_branch
+            );
+            assert_eq!(
+                source
+                    .rescaled_loop_momenta(&one, active, Some(&center))
+                    .sample
+                    .loop_moms,
+                source.sample.loop_moms
+            );
+            assert_eq!(
+                source
+                    .rescaled_loop_momenta(&factor, active, None)
+                    .sample
+                    .loop_moms[LoopIndex(0)],
+                momentum(6, 10, 14)
+            );
+
+            let shape = crate::utils::hyperdual_utils::simple_n_deriv_shape(2);
+            source.sample.dual_loop_moms = Some(LoopMomenta::from_iter(
+                source.sample.loop_moms.iter().map(|p| {
+                    p.map_ref(&|value| {
+                        HyperDual::from_values(
+                            shape.clone(),
+                            vec![value.clone(), one.from_i64(4), one.from_i64(5)],
+                        )
+                    })
+                }),
+            ));
+            let centered = source.rescaled_loop_momenta(&factor, active, Some(&center));
+            let dual = centered.sample.dual_loop_moms.as_ref().unwrap();
+            assert_eq!(
+                dual[LoopIndex(0)].px.values,
+                vec![one.from_i64(5), one.from_i64(8), one.from_i64(10)]
+            );
+            assert_eq!(
+                dual[LoopIndex(1)],
+                source.sample.dual_loop_moms.as_ref().unwrap()[LoopIndex(1)]
+            );
+            assert_eq!(centered.sample.loop_mom_cache_id, 18);
+            assert_eq!(centered.sample.loop_mom_base_cache_id, 11);
+        }
+        check::<f64>();
+        check::<crate::utils::QuadFloat>();
+        check::<ArbPrec>();
+    }
+
+    #[test]
+    fn centered_hyper_dual_rescaling_preserves_taylor_coefficients() {
+        fn check<T: FloatLike>() {
+            let one = F::<T>::default().one();
+            let shape = crate::utils::hyperdual_utils::simple_n_deriv_shape(2);
+            let dual = |values: [i64; 3]| {
+                HyperDual::from_values(
+                    shape.clone(),
+                    values.map(|value| one.from_i64(value)).to_vec(),
+                )
+            };
+            let momenta = LoopMomenta(vec![
+                ThreeMomentum::new(one.from_i64(3), one.from_i64(5), one.from_i64(7)),
+                ThreeMomentum::new(-&one, one.from_i64(-2), one.from_i64(-3)),
+            ]);
+            let center = LoopMomenta(vec![
+                ThreeMomentum::new(one.clone(), one.from_i64(2), one.from_i64(3)),
+                ThreeMomentum::new(one.from_i64(4), one.from_i64(5), one.from_i64(6)),
+            ]);
+            let active = Some([LoopIndex(0)].as_slice());
+            let factor = dual([2, 1, 0]);
+            let centered = momenta.rescale_with_hyper_dual(&factor, active, Some(&center));
+            assert_eq!(centered[LoopIndex(0)].px, dual([5, 2, 0]));
+            assert_eq!(centered[LoopIndex(0)].py, dual([8, 3, 0]));
+            assert_eq!(centered[LoopIndex(0)].pz, dual([11, 4, 0]));
+            assert_eq!(centered[LoopIndex(1)].px, dual([-1, 0, 0]));
+            assert_eq!(
+                momenta.rescale_with_hyper_dual(&factor, active, None)[LoopIndex(0)].px,
+                dual([6, 3, 0])
+            );
+
+            let dual_momenta = LoopMomenta(vec![
+                ThreeMomentum::new(dual([3, 4, 5]), dual([5, 6, 7]), dual([7, 8, 9])),
+                ThreeMomentum::new(dual([-1, 2, 3]), dual([-2, 3, 4]), dual([-3, 4, 5])),
+            ]);
+            let centered = dual_momenta.rescale(&factor, active, Some(&center));
+            assert_eq!(centered[LoopIndex(0)].px, dual([5, 10, 14]));
+            assert_eq!(centered[LoopIndex(0)].py, dual([8, 15, 20]));
+            assert_eq!(centered[LoopIndex(0)].pz, dual([11, 20, 26]));
+            assert_eq!(centered[LoopIndex(1)], dual_momenta[LoopIndex(1)]);
+            assert_eq!(
+                dual_momenta.rescale(&factor, active, None)[LoopIndex(0)].px,
+                dual([6, 11, 14])
+            );
+        }
+        check::<f64>();
+        check::<crate::utils::QuadFloat>();
+        check::<ArbPrec>();
+    }
 
     #[test]
     fn canonical_momentum_materialization_preserves_source_metadata() {
@@ -1356,9 +1499,11 @@ mod subspace_tests {
             shifted.hyper_radius_squared(subspaces[0].as_subspace_simple()),
             alternate_shifted.hyper_radius_squared(subspaces[1].as_subspace_simple()),
         );
-        let projected = &shifted.rescale(&F(0.37), subspaces[0].as_subspace_simple()) + &centers[0];
+        let projected =
+            &shifted.rescale(&F(0.37), subspaces[0].as_subspace_simple(), None) + &centers[0];
         let alternate_projected =
-            &alternate_shifted.rescale(&F(0.37), subspaces[1].as_subspace_simple()) + &centers[1];
+            &alternate_shifted.rescale(&F(0.37), subspaces[1].as_subspace_simple(), None)
+                + &centers[1];
         let expected = projected.lmb_transform(
             &lmbs[LmbIndex::from(0)],
             &lmbs[LmbIndex::from(1)],

@@ -805,7 +805,7 @@ fn threshold_approach_loop_momenta<T: FloatLike>(
     let overlap_group_center = overlap_group_center.cast::<T>();
     let threshold_loop_momenta = threshold_point.loop_moms();
     let offset_towards_center =
-        (&overlap_group_center - threshold_loop_momenta).rescale(lambda, None);
+        (&overlap_group_center - threshold_loop_momenta).rescale(lambda, None, None);
 
     threshold_loop_momenta + &offset_towards_center
 }
@@ -1757,8 +1757,8 @@ impl ThresholdLimit {
                     .map(|lambda| LambdaLoopMomentaPoint {
                         loop_momenta: if let Some(approach_center) = approach_center {
                             let threshold_loop_momenta = threshold_point.loop_moms();
-                            let offset_towards_center =
-                                (approach_center - threshold_loop_momenta).rescale(&lambda, None);
+                            let offset_towards_center = (approach_center - threshold_loop_momenta)
+                                .rescale(&lambda, None, None);
                             threshold_loop_momenta + &offset_towards_center
                         } else {
                             threshold_approach_loop_momenta(
@@ -3164,7 +3164,7 @@ mod tests {
         assert_eq!(trajectories.len(), 1);
         for point in &trajectories[0].1 {
             let expected = threshold_point.loop_moms()
-                + &(&full_center - threshold_point.loop_moms()).rescale(&point.lambda, None);
+                + &(&full_center - threshold_point.loop_moms()).rescale(&point.lambda, None, None);
             assert_eq!(point.loop_momenta, expected);
             assert_eq!(
                 point.loop_momenta[LoopIndex::from(1usize)],

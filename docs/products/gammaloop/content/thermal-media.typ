@@ -223,6 +223,47 @@ uncertainty preserved. The maintained
 #source-link("examples/cli/eos/cool_qm/NLO/cool_qm_eos_NLO.toml", label: "NLO cold quark matter run card")
 integrates such a contribution.
 
+== Fixed points for thermal Local Unitarity
+
+The optional runtime `lu_flow_centers` map changes the common spatial LU flow to
+$bold(k)_t=bold(c)+t(bold(k)-bold(c))$. Each graph entry lists pairs
+`[generation_loop_edge_id, [external_coefficients...]]`. Every generation loop
+edge must occur exactly once, with one finite coefficient per physical external
+momentum in the generation LMB's external order. These coefficients construct
+the spatial center from the current external momenta, including rotations and
+changes of precision. Unspecified graphs retain the origin flow.
+
+For the generated Fig. 15 QCD NLO graphs, the midpoint prescription is:
+
+```toml
+[lu_flow_centers]
+GL0 = [[1, [0.5]], [3, [0.5]]]
+GL2 = [[1, [0.0]], [3, [-0.5]]]
+```
+
+Here GL0 is the self-energy graph and GL2 the vertex graph, both with generation
+loop edges 1 and 3 and one external momentum. The vertex exchange momentum has
+zero center; its quark loop is centered at $-bold(K)/2$. Verify names, edge IDs
+and routing before transferring this prescription to another generated process.
+Root solving, raised-cut derivatives and events use the same affine flow, whose
+Jacobian remains $t^(3L)$. The retarded prescription and cut signs are unchanged.
+These fixed points apply on either side of the light cone; the exactly lightlike
+endpoint can still have degenerate roots.
+
+This is an experimental flow prescription. The short Fig. 15 comparison restores
+the tested vertex H/H cancellation and leaves the timelike point well behaved,
+but applying the midpoint to both graphs worsens the spacelike Monte Carlo error.
+The raised self-energy cut develops large inverse radial derivatives near the
+absorption-cone boundary. Changing only the vertex flow also failed to improve
+the short global test. See the
+#source-link("examples/cli/thermal_rates/qcd_vector/figure15/midpoint-runtime-20261020/report.typ", label: "matched runtime investigation")
+for the tested points, precision checks and limits of these conclusions.
+
+Configured centers currently require `subtraction.disable_threshold_subtraction=true`
+and no zero-temperature Fermi-surface sectors. Threshold counterterms and symbolic
+Fermi contact terms still assume the origin flow. The setting is opt-in; an empty
+map preserves existing runs and saved states.
+
 == Fermi surfaces at zero temperature
 
 Several propagators sharing one mass parameter and the same momentum up to an overall sign,

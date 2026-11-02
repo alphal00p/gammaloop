@@ -2,6 +2,7 @@ use bincode_trait_derive::{Decode, Encode};
 use global::{GenerationSettings, Parallelisation};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 use crate::{
     GammaLoopContext,
@@ -79,6 +80,12 @@ pub struct RuntimeSettings {
     /// zero-temperature Fermi-surface distributions.
     #[serde(rename = "h_function", skip_serializing_if = "IsDefault::is_default")]
     pub lu_h_function: HFunctionSettings,
+    /// Fixed Local Unitarity flow centers, keyed by graph name. Each row gives a loop-edge
+    /// ID in the graph's generation basis and coefficients of the physical external spatial
+    /// momenta in canonical external order: c_i = sum_a coefficients[a] * p_a.
+    /// The flow is c_i + t * (k_i - c_i); an omitted graph uses the origin.
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub lu_flow_centers: BTreeMap<String, Vec<(usize, Vec<f64>)>>,
 }
 
 impl RuntimeSettings {
@@ -206,6 +213,49 @@ mod tests {
     #[test]
     fn generation_test_serialize_deserialize() {
         generic_test_settings::<GenerationSettings>();
+    }
+
+    #[test]
+    fn lu_flow_centers_default_and_explicit_centers_roundtrip() {
+        let defaults_guard = ShowDefaultsGuard::new(false);
+        let defaults: RuntimeSettings = toml::from_str("").unwrap();
+        assert!(defaults.lu_flow_centers.is_empty());
+        assert!(
+            !toml::to_string(&defaults)
+                .unwrap()
+                .contains("lu_flow_centers")
+        );
+
+        let settings = RuntimeSettings {
+            lu_flow_centers: std::collections::BTreeMap::from([
+                (
+                    "GL02".to_owned(),
+                    vec![(1, vec![0.5, 0.0]), (3, vec![0.5, 0.0])],
+                ),
+                ("GL05".to_owned(), vec![(2, vec![0.0, -0.5])]),
+            ]),
+            ..Default::default()
+        };
+        let serialized = toml::to_string(&settings).unwrap();
+        assert!(serialized.contains("lu_flow_centers"));
+        assert_eq!(
+            toml::from_str::<RuntimeSettings>(&serialized).unwrap(),
+            settings
+        );
+        let serialized = serde_json::to_string(&settings).unwrap();
+        assert_eq!(
+            serde_json::from_str::<RuntimeSettings>(&serialized).unwrap(),
+            settings
+        );
+
+        drop(defaults_guard);
+        let _defaults_guard = ShowDefaultsGuard::new(true);
+        let serialized = toml::to_string(&defaults).unwrap();
+        assert!(serialized.contains("[lu_flow_centers]"));
+        assert_eq!(
+            toml::from_str::<RuntimeSettings>(&serialized).unwrap(),
+            defaults
+        );
     }
 
     #[test]

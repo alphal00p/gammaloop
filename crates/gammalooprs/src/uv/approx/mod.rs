@@ -2487,7 +2487,7 @@ mod tests {
             .collect();
             let dual_t =
                 HyperDual::new(simple_n_deriv_shape(1)).variable(0, F::<ArbPrec>::from_f64(1.0));
-            let dual_loop_moms = loop_moms.rescale_with_hyper_dual(&dual_t, None);
+            let dual_loop_moms = loop_moms.rescale_with_hyper_dual(&dual_t, None, None);
             let sample = MomentumSample {
                 sample: BareMomentumSample {
                     loop_moms,
