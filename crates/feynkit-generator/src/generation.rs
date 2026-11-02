@@ -1837,6 +1837,18 @@ impl Generator {
                 "aut": symmetry, "multiplicity": multiplicity, "grouping": format!("{grouping:?}"),
             })
         });
+        // Content that cannot occur on any cut is outside physical preparation,
+        // independently of the CP frame. Keep rule-colored comparison unchanged
+        // for every assignment that passes this necessary bound.
+        if resolved.generation_type == GenerationType::CrossSection
+            && !resolved.can_supply_cut_species(&graph, &self.model)?
+        {
+            #[cfg(test)]
+            cp_merge_diagnostic::record(
+                || json!({"stage": "reject", "reason": "missing_required_cut_species"}),
+            );
+            return Ok(None);
+        }
         let mut topology = ColoredTopology {
             graph: resolved.canonicalize_numerator_graph(
                 &graph,
@@ -4095,6 +4107,34 @@ impl ResolvedProcess {
             }
         }
         Ok(loops)
+    }
+
+    /// A necessary bound for the already expanded cross-section targets.
+    /// Cut orientation and CP can exchange a particle with its antiparticle;
+    /// canonical/beam permutations and rule repair introduce no other species.
+    /// Include all edges conservatively, even external edges and self-loops.
+    /// Membership deliberately ignores required multiplicity and connectivity:
+    /// passing this bound never replaces exact physical-cut validation.
+    fn can_supply_cut_species(
+        &self,
+        graph: &GeneratedGraph,
+        model: &Model,
+    ) -> Result<bool, GenerationError> {
+        let mut available = BTreeSet::new();
+        for edge in graph.edges() {
+            let particle = model.particle_by_id(edge.particle)?;
+            available.extend([edge.particle, particle.antiparticle]);
+        }
+        for target in &self.outgoing {
+            let mut present = true;
+            for particle in target {
+                present &= available.contains(&model.particle_id(&particle.name)?);
+            }
+            if present {
+                return Ok(true);
+            }
+        }
+        Ok(false)
     }
 
     // Enumerate exact s-channel cuts for cross-section generation. The caller

@@ -1012,12 +1012,19 @@ impl Request {
         }
         criterion(
             "physical preparation",
-            "native assignments still require canonicalization, CP-rule validation and fermion-flow/sign preparation; no numerator or final diagram is constructed by explain".into(),
+            "cross-section assignments first need the species of some expanded physical-cut target; possible assignments still require canonicalization, CP-rule validation and fermion-flow/sign preparation; no numerator or final diagram is constructed by explain".into(),
             PlanStage::Preparation,
             PlanRole::FinalCheck,
         );
         Ok(report)
     }
+    /// Prepare physical assignments without constructing numerators.
+    ///
+    /// Cross-section assignments missing the particle/antiparticle species of
+    /// every expanded final-state alternative are rejected before CP-rule
+    /// validation. This is only a necessary bound: exact cut multiplicity,
+    /// connectivity and the remaining physical filters are still checked.
+    /// Assignments passing the bound retain their ordinary validation errors.
     pub fn generate(&self, model: Arc<Model>, run: &Run) -> Result<DiagramSet, GenerationError> {
         let generator = Generator::new(model);
         let mut search = generator.search(self, |_, _| {}, |_, _| {})?;
