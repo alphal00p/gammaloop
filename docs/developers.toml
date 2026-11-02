@@ -685,7 +685,9 @@ anchor = "pub struct LoopCounts {"
 end_anchor = "#[cfg(test)]\nmod tests {"
 # Source19-21 owner reconciliation; B2 body/fixtures remain unchanged.
 # Quotient/nonfinite checks and actual Run pool coverage require new slice review.
-digest = "bbb55e9c09548e78938aa83c1ec55688a56ff8bd"
+# 2026-11-02 owner attestation: Current owners documents necessary cut-species
+# admission before CP, with exact-cut and admitted-error boundaries retained.
+digest = "2590b82f5781889c0dc7eada7ceeaab53bbc1e41"
 
 [[section.note.scope]]
 path = "crates/feynkit-generator/src/generation.rs"
@@ -928,7 +930,9 @@ anchor = "pub enum GenerationError {"
 # labeller. Reduced selectors/transport/admitted history remain intact; all_cuts production
 # is unchanged and terminal-pocket tests strengthen its boundary. Four certified literal
 # migrations are test-only, not a production physics correction.
-digest = "5a5239bfb9e4e41bb2670c81364d17f1890e481c"
+# 2026-11-02 owner attestation: architecture Request ownership documents the
+# necessary cut-species bound before CP; exact physical filters still apply.
+digest = "374a5a2c59a842b8147eb3466b74e11e664d2717"
 
 [[section.note.scope]]
 path = "crates/feynkit-model/src/model.rs"
@@ -1048,7 +1052,9 @@ path = "crates/feynkit-generator/src/generation/staged.rs"
 symbol = "Request / DiagramSet / BuiltDiagramSet staged ownership"
 anchor = "impl Request {"
 # SOURCE31: checked discovery/count/build/select/group and squared-order pairing ownership.
-digest = "4c52156aac8151e045840e2afafe00ccdce662a1"
+# 2026-11-02 owner attestation: architecture Request ownership records
+# CrossSection-only admission and amplitude generation's bypass of this bound.
+digest = "3ba783733306896e72869dfb95a4faf5a2b9e910"
 
 [[section.note]]
 id = "generation-integration-wp1"

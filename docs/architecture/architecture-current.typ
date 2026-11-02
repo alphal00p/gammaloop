@@ -209,6 +209,14 @@ No FeynKit crate depends on `gammalooprs`, `gammaloop-api`,
 transitively and rejects source references that bypass a Cargo
 dependency.
 
+Cross-section preparation admits an assignment to CP-rule validation only when
+its available particle/antiparticle species can supply at least one expanded
+physical-cut target. Species membership is a necessary bound that ignores
+multiplicity and connectivity; exact cuts and the remaining physical filters
+still apply. Assignments lacking any such target are rejected before CP-rule
+validation, while those passing the bound retain their ordinary validation
+errors. Amplitude generation bypasses this admission bound.
+
 An explicit `Run::threads(1)` performs skeleton enumeration (linnet's search
 with its parallel mode off), interaction assignment, diagram construction,
 numerator preparation, zero-colour filtering and group preparation on the

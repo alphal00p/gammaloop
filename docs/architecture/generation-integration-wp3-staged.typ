@@ -23,6 +23,14 @@ their actual owner frame. Static template admission remains outside cache write
 guards, concurrent publication keeps one shared template, and localization uses
 the current injective transport and declared/inferred port ordering.
 
+For cross-section assignments, physical preparation first requires the graph's
+particle/antiparticle species to support at least one expanded physical-cut
+target. This necessary admission bound ignores multiplicity and connectivity:
+exact cuts and the remaining physical filters still apply. Assignments that
+cannot satisfy any target are rejected before CP-rule validation; assignments
+that pass the bound retain their ordinary validation errors. Amplitude generation
+bypasses this bound.
+
 The current spectator/scoped-partner protections, colour-only completion and
 scalar eligibility proof remain on their existing owners. The transplant does
 not restore the superseded zero-colour proof helper or a second admission path.
