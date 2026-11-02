@@ -5,9 +5,11 @@ Vakint ships its 1L–3L RustRed programs, master coefficients and graphs. The s
 contains independently packaged loop data. Releases up to v0.1.2 also contain
 prepared depth-first caches, which Vakint no longer reads. From v0.2.0 on, releases
 ship the Ordered step caches of every loop pack (the five-loop one trimmed to the
-size budget) and the five-loop route preparation add-on instead, so a managed
-installation of v0.2.0 or `data-latest` receives them (see
-#link("docs/ordered_reduction.typ")[the ordered reduction notes]).
+size budget) and the five-loop route preparation add-on instead. A new managed
+installation of v0.2.0 or `data-latest` receives them, as does an existing one
+loaded with `version="v0.2.0"` or `refresh=True`; an existing `data-latest`
+installation keeps its cached release (for example v0.1.2) until it is refreshed
+(see #link("docs/ordered_reduction.typ")[the ordered reduction notes]).
 FORM reduction rules and their hard-coded master formulas remain in Vakint.
 
 == Explicit loading

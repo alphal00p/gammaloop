@@ -396,8 +396,10 @@ directory lose records of one of them (never mix them); readers are safe.
 
 External data may ship the cache of each program of a loop pack in the same
 layout (official releases do from v0.2.0 on: complete 1L–4L caches and a trimmed
-five-loop cache, received by managed installations of v0.2.0 or
-#raw("data-latest")): #raw("<L>L/ordered-cache/<label>.<tables>.<stamp>/") (the RustRed
+five-loop cache, received by new managed installations of v0.2.0 or
+#raw("data-latest") and by existing ones loaded with #raw("version=\"v0.2.0\"") or
+#raw("refresh=True"); an existing #raw("data-latest") installation keeps its cached
+release until it is refreshed): #raw("<L>L/ordered-cache/<label>.<tables>.<stamp>/") (the RustRed
 manifest, the shards it lists and optionally the tail table
 #raw("ordered-tail.rrtail")), described by #raw("<L>L/ordered-cache.json")
 (schema #raw("vakint.external-data.ordered-cache.v2"): producer, workload, and
