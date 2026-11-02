@@ -9,8 +9,8 @@
 //! cross section. Their rows were recorded on the API line (f9dc5531), which tracked these
 //! frames explicitly instead of deriving them from the composed permutations. The FeynKit port
 //! re-recorded only the numerator digests (tensor numerators) and the cross section's content
-//! (its loop momenta are routed from the outgoing sewn attachment); the diagram sets, frames,
-//! names and ids are still the API line's.
+//! (its loop momenta are routed from the outgoing sewn attachment). The amplitude fixtures retain
+//! the API line's sets, frames, names and ids; the cross section uses current CP-selected frames.
 //!
 //! A requested projector replaces the external-state projector and moves through the same
 //! relabelling as the prefactor; a bare dot product would leave the external spinor indices
@@ -220,16 +220,16 @@ fn representative_frames_with_left_right_symmetrization() {
         "xs_qed_aaee_lr_L2",
         exact_particles(),
         Row {
-            diagrams: 130,
+            diagrams: 128,
             topologies: 75,
             assignments: 3456,
-            inverse_symmetry: (130, 1),
+            inverse_symmetry: (128, 1),
             weights: (176, 1),
-            symmetry_factors: &[(1, 130)],
-            content: 0x14725973c2aa6413,
-            numerators: 0x9a59879459492f0e,
-            named: 0x188d06a04da1a1e8,
-            ids: 0x9fdbcd539a998b4a,
+            symmetry_factors: &[(1, 128)],
+            content: 0x73d0868ffb0e3f2d,
+            numerators: 0x5f7645e8e3f8170a,
+            named: 0x12e3f1f4e3271893,
+            ids: 0x36441f31ab81e12a,
         },
     );
 }
