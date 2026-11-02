@@ -6086,7 +6086,7 @@ dependencies = [
 
 [[package]]
 name = "vakint"
-version = "0.1.2"
+version = "0.2.0"
 dependencies = [
  "ahash 0.8.12",
  "arrayvec",

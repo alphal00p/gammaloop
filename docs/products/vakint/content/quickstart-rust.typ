@@ -7,8 +7,8 @@ This route parses and canonicalizes the same one-loop integral as the Python exa
 keeping matching policy and expression ownership in Rust.
 
 #callout("Use the current Git API until the next crate release", [
-  The published `vakint 0.1.2` API differs from the current source while carrying the same version
-  number. The pinned Git dependency below matches this manual. Switch to the next published
+  The published `vakint 0.1.2` API differs from the current source (version 0.2.0, not yet
+  published). The pinned Git dependency below matches this manual. Switch to the next published
   Vakint version only after its Rustdoc exposes the `Vakint::new()` and explicit-settings API used
   here.
 ])
