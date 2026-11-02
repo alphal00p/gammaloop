@@ -191,7 +191,11 @@ impl MonitorHandle {
 fn step_cache_label(cache: &crate::OrderedCacheSettings) -> String {
     match (cache.mode, &cache.directory) {
         // Read-only replay needs saved records: without a directory the
-        // registry opens no cache at all.
+        // registry opens each program's accepted shipped cache in place, and
+        // no cache at all when shipped caches are not used.
+        (crate::OrderedCacheMode::ReadOnly, None) if cache.shipped => {
+            "read-only (shipped caches only)".into()
+        }
         (crate::OrderedCacheMode::ReadOnly, None) => "off (read-only needs a directory)".into(),
         (crate::OrderedCacheMode::ReadWrite, None) => format!("{} (in memory)", cache.mode),
         (mode, _) => mode.to_string(),
@@ -3015,13 +3019,15 @@ mod disabled_monitor_tests {
     #[test]
     fn run_line_names_the_step_cache_the_registry_opens() {
         use crate::{OrderedCacheMode, OrderedCacheSettings};
-        let label = |mode, directory: Option<&str>| {
+        let label_with = |mode, directory: Option<&str>, shipped| {
             step_cache_label(&OrderedCacheSettings {
                 mode,
                 directory: directory.map(Into::into),
+                shipped,
                 ..Default::default()
             })
         };
+        let label = |mode, directory| label_with(mode, directory, true);
         assert_eq!(label(OrderedCacheMode::Off, None), "off");
         assert_eq!(label(OrderedCacheMode::Off, Some("cache")), "off");
         assert_eq!(
@@ -3036,10 +3042,20 @@ mod disabled_monitor_tests {
             label(OrderedCacheMode::ReadOnly, Some("cache")),
             "read-only"
         );
-        // The registry opens no cache for read-only without saved records.
+        // Read-only without a directory replays the accepted shipped caches
+        // in place (the default uses them) ...
         assert_eq!(
             label(OrderedCacheMode::ReadOnly, None),
+            "read-only (shipped caches only)"
+        );
+        // ... and opens no cache when shipped caches are not used.
+        assert_eq!(
+            label_with(OrderedCacheMode::ReadOnly, None, false),
             "off (read-only needs a directory)"
+        );
+        assert_eq!(
+            label_with(OrderedCacheMode::ReadOnly, Some("cache"), false),
+            "read-only"
         );
     }
 }
