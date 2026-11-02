@@ -2,6 +2,9 @@
 
 use idenso::tensor::SymbolicTensor;
 
+#[path = "support/rustred.rs"]
+#[allow(dead_code)]
+mod rustred_support;
 #[allow(dead_code)] // Shared CLI helpers also support file-based input outside this suite.
 #[path = "../examples/saved_application/dot.rs"]
 mod saved_application_dot;
@@ -15,8 +18,8 @@ use rustred_app::saved_application_domains;
 use saved_application_dot::{Result, ScalarDotInput};
 use symbolica::atom::{Atom, AtomCore};
 use vakint::{
-    EvaluationMethod, EvaluationOrder, LoopNormalizationFactor, RustRedEvaluationOptions, Vakint,
-    VakintExpression, VakintSettings, vakint_parse,
+    LoopNormalizationFactor, RustRedMasterMode, Vakint, VakintExpression, VakintSettings,
+    vakint_parse,
 };
 
 fn arguments(values: &[&str]) -> Vec<PathBuf> {
@@ -156,14 +159,11 @@ fn external_r0_connected_dot_matches_known_admitted_key_and_warm_repeat() -> Res
 
     let mut settings = VakintSettings {
         epsilon_symbol: "eps".into(),
-        evaluation_order: EvaluationOrder(vec![EvaluationMethod::RustRed(
-            RustRedEvaluationOptions {
-                master_mode: vakint::RustRedMasterMode::Retain,
-            },
-        )]),
-        form_exe_path: "/native-dot-test-must-not-use-form".into(),
         integral_normalization_factor: LoopNormalizationFactor::Custom("1".into()),
-        ..Default::default()
+        ..rustred_support::rustred_only(
+            RustRedMasterMode::Retain,
+            "/native-dot-test-must-not-use-form",
+        )
     };
     let load_started = Instant::now();
     let engine = Vakint::new()?.with_rustred_application(&mut settings, &package)?;

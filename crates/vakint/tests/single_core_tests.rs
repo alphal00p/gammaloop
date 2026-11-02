@@ -5,10 +5,14 @@
 //! thread creation of that thread and of its descendants, then builds the
 //! engine and evaluates Ordered RustRed reductions with each weight
 //! arithmetic. Any spawned compute thread or thread pool fails the evaluation.
+#[path = "support/rustred.rs"]
+#[allow(dead_code)]
+mod rustred_support;
+
+use rustred_support::external_data_checkout;
 use symbolica::atom::Atom;
 use vakint::{
-    EvaluationMethod, EvaluationOrder, OrderedWeightArithmetic, RustRedEvaluationOptions,
-    RustRedMasterMode, Vakint, VakintError, VakintSettings, vakint_parse,
+    OrderedWeightArithmetic, RustRedMasterMode, Vakint, VakintError, VakintSettings, vakint_parse,
 };
 
 /// Child-mode marker of the guarded test.
@@ -18,16 +22,13 @@ const COMPLETED: &str = "single-core guarded evaluations completed";
 
 fn settings(n_cores: usize, arithmetic: OrderedWeightArithmetic) -> VakintSettings {
     VakintSettings {
-        evaluation_order: EvaluationOrder(vec![EvaluationMethod::RustRed(
-            RustRedEvaluationOptions {
-                master_mode: RustRedMasterMode::Retain,
-            },
-        )]),
-        form_exe_path: "/single-core-tests-must-not-use-form".into(),
         use_dot_product_notation: true,
         n_cores,
         ordered_weight_arithmetic: arithmetic,
-        ..Default::default()
+        ..rustred_support::rustred_only(
+            RustRedMasterMode::Retain,
+            "/single-core-tests-must-not-use-form",
+        )
     }
 }
 
@@ -70,11 +71,6 @@ fn evaluate_with_every_arithmetic(vakint: &Vakint, input: &Atom, n_cores: usize)
         .unwrap();
     assert_eq!(polynomial, exact, "modular_polynomial on {n_cores} cores");
     exact
-}
-
-/// Directory of a local external-data checkout with four-loop packs, if any.
-fn external_data() -> Option<std::path::PathBuf> {
-    std::env::var_os("VAKINT_TEST_EXTERNAL_DATA").map(Into::into)
 }
 
 fn load_four_loops(vakint: &mut Vakint, path: std::path::PathBuf, n_cores: usize) {
@@ -210,7 +206,8 @@ fn single_core_reductions_never_create_threads() {
     let mut vakint = Vakint::new().unwrap();
     let _ = evaluate_with_every_arithmetic(&vakint, &lower_loop_input(), 1);
     let mut evaluated_loops = "1-3";
-    if let Some(path) = external_data() {
+    // Four loops only with a local external-data checkout (it has the 4L packs).
+    if let Some(path) = external_data_checkout() {
         load_four_loops(&mut vakint, path, 1);
         let _ = evaluate_with_every_arithmetic(&vakint, &four_loop_input(), 1);
         evaluated_loops = "1-4";
@@ -251,7 +248,7 @@ fn results_do_not_depend_on_n_cores() {
         evaluate_with_every_arithmetic(&vakint, &input, 1),
         evaluate_with_every_arithmetic(&vakint, &input, n_cores)
     );
-    if let Some(path) = external_data() {
+    if let Some(path) = external_data_checkout() {
         load_four_loops(&mut vakint, path, n_cores);
         let input = four_loop_input();
         assert_eq!(

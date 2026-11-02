@@ -5,8 +5,8 @@
 mod test_utils;
 
 use test_utils::{
-    RustRedParityPolicy, TensorPrepass, alphaloop_matad_rustred_lanes,
-    analytic_matad_rustred_lanes, compare_evaluations,
+    External, ReferencePoint, RustRedParityPolicy, TensorPrepass, alphaloop_matad_rustred_lanes,
+    analytic_matad_rustred_lanes, compare_exact_peers,
 };
 use vakint::{LoopNormalizationFactor, Vakint, VakintSettings, vakint_parse};
 
@@ -21,14 +21,26 @@ const RANK_FOUR: &str = "k(1,11)*k(2,11)*k(1,22)*k(2,22)
 const BASKETBALL: &str = "topo(
     prop(1,edge(2,1),k(1),muvsq,1)*prop(2,edge(2,1),k(2),muvsq,1)*
     prop(3,edge(1,2),k(3),muvsq,1)*prop(4,edge(1,2),k(1)+k(2)-k(3),muvsq,1))";
-const SMALL_EXTERNALS: [(usize, (f64, f64, f64, f64)); 2] = [
+const SMALL_EXTERNALS: [External; 2] = [
     (1, (0.17 * 2.0, 0.4 * 3.0, 0.3 * 4.0, 0.12 * 5.0)),
     (2, (0.17 * 3.0, 0.4 * 4.0, 0.3 * 5.0, 0.12 * 6.0)),
 ];
-const LARGE_EXTERNALS: [(usize, (f64, f64, f64, f64)); 2] = [
+const LARGE_EXTERNALS: [External; 2] = [
     (1, (17.0 * 2.0, 4.0 * 3.0, 3.0 * 4.0, 12.0 * 5.0)),
     (2, (17.0 * 3.0, 4.0 * 4.0, 3.0 * 5.0, 12.0 * 6.0)),
 ];
+
+/// Unit mass at the unit and at the doubled renormalization scale.
+const UNIT_SCALE: [(&str, f64); 2] = [("muvsq", 1.0), ("mursq", 1.0)];
+const DOUBLED_SCALE: [(&str, f64); 2] = [("muvsq", 1.0), ("mursq", 2.0)];
+
+/// `n` orders of the ε expansion, everything else at its default.
+fn epsilon_terms(n: i64) -> VakintSettings {
+    VakintSettings {
+        number_of_terms_in_epsilon_expansion: n,
+        ..VakintSettings::default()
+    }
+}
 
 #[test]
 fn rustred_decorated_one_loop_five_terms() {
@@ -45,34 +57,25 @@ fn rustred_decorated_one_loop_five_terms() {
         user_space::{scalar,real}::AAmuvsq,2))"
     )
     .unwrap();
-    compare_evaluations(
+    compare_exact_peers(
         VakintSettings {
             number_of_terms_in_epsilon_expansion: 5,
             integral_normalization_factor: LoopNormalizationFactor::MSbar,
             mu_r_sq_symbol: "some_space::{real,scalar}::AAmursq".into(),
-            run_time_decimal_precision: 32,
             ..VakintSettings::default()
         },
         &analytic_matad_rustred_lanes(RustRedParityPolicy::ExactMatadBasis),
         TensorPrepass::FeynKit,
         input.as_view(),
-        test_utils::params_at_reference_point(
-            &[
-                ("user_space::{scalar,real}::AAmuvsq".into(), 1.0),
-                ("some_space::{real,scalar}::AAmursq".into(), 1.0),
-                ("user_space::AAsigma".into(), 0.5),
-                ("user_space::{scalar,real}::AAsigma2".into(), 0.5),
-            ]
-            .into_iter()
-            .collect(),
-            32,
-        ),
-        test_utils::externals_at_reference_point(
-            &SMALL_EXTERNALS[..1].iter().copied().collect(),
-            32,
-        ),
-        1.0e-25,
-        0.0,
+        &ReferencePoint {
+            params: &[
+                ("user_space::{scalar,real}::AAmuvsq", 1.0),
+                ("some_space::{real,scalar}::AAmursq", 1.0),
+                ("user_space::AAsigma", 0.5),
+                ("user_space::{scalar,real}::AAsigma2", 0.5),
+            ],
+            externals: &SMALL_EXTERNALS[..1],
+        },
         true,
     );
 }
@@ -80,24 +83,15 @@ fn rustred_decorated_one_loop_five_terms() {
 #[test]
 fn rustred_three_loop_scalar_nonunit_scale() {
     // integral_comparison_vs_pysecdec_tests::test_integrate_3l_pysecdec.
-    let input = vakint_parse!(MERCEDES).unwrap();
-    compare_evaluations(
-        VakintSettings {
-            run_time_decimal_precision: 32,
-            ..VakintSettings::default()
-        },
+    compare_exact_peers(
+        VakintSettings::default(),
         &alphaloop_matad_rustred_lanes(RustRedParityPolicy::NumericalOnly),
         TensorPrepass::Skip,
-        input.as_view(),
-        test_utils::params_at_reference_point(
-            &[("muvsq".into(), 1.0), ("mursq".into(), 2.0)]
-                .into_iter()
-                .collect(),
-            32,
-        ),
-        test_utils::externals_at_reference_point(&LARGE_EXTERNALS.into_iter().collect(), 32),
-        1.0e-25,
-        0.0,
+        vakint_parse!(MERCEDES).unwrap().as_view(),
+        &ReferencePoint {
+            params: &DOUBLED_SCALE,
+            externals: &LARGE_EXTERNALS,
+        },
         true,
     );
 }
@@ -105,24 +99,17 @@ fn rustred_three_loop_scalar_nonunit_scale() {
 #[test]
 fn rustred_three_loop_rank_four_large_external_vectors() {
     // integral_comparison_vs_pysecdec_tests::test_integrate_3l_rank_4.
-    let input = vakint_parse!(&format!("({RANK_FOUR})*{MERCEDES}")).unwrap();
-    compare_evaluations(
-        VakintSettings {
-            run_time_decimal_precision: 32,
-            ..VakintSettings::default()
-        },
+    compare_exact_peers(
+        VakintSettings::default(),
         &alphaloop_matad_rustred_lanes(RustRedParityPolicy::NumericalOnly),
         TensorPrepass::FeynKit,
-        input.as_view(),
-        test_utils::params_at_reference_point(
-            &[("muvsq".into(), 1.0), ("mursq".into(), 2.0)]
-                .into_iter()
-                .collect(),
-            32,
-        ),
-        test_utils::externals_at_reference_point(&LARGE_EXTERNALS.into_iter().collect(), 32),
-        1.0e-25,
-        0.0,
+        vakint_parse!(&format!("({RANK_FOUR})*{MERCEDES}"))
+            .unwrap()
+            .as_view(),
+        &ReferencePoint {
+            params: &DOUBLED_SCALE,
+            externals: &LARGE_EXTERNALS,
+        },
         true,
     );
 }
@@ -130,25 +117,17 @@ fn rustred_three_loop_rank_four_large_external_vectors() {
 #[test]
 fn rustred_three_loop_rank_four_five_terms() {
     // integral_comparison_vs_pysecdec_tests::test_integrate_3l_rank_4_matad.
-    let input = vakint_parse!(&format!("({RANK_FOUR})*{MERCEDES}")).unwrap();
-    compare_evaluations(
-        VakintSettings {
-            number_of_terms_in_epsilon_expansion: 5,
-            run_time_decimal_precision: 32,
-            ..VakintSettings::default()
-        },
+    compare_exact_peers(
+        epsilon_terms(5),
         &analytic_matad_rustred_lanes(RustRedParityPolicy::NumericalOnly),
         TensorPrepass::FeynKit,
-        input.as_view(),
-        test_utils::params_at_reference_point(
-            &[("muvsq".into(), 1.0), ("mursq".into(), 2.0)]
-                .into_iter()
-                .collect(),
-            32,
-        ),
-        test_utils::externals_at_reference_point(&SMALL_EXTERNALS.into_iter().collect(), 32),
-        1.0e-25,
-        0.0,
+        vakint_parse!(&format!("({RANK_FOUR})*{MERCEDES}"))
+            .unwrap()
+            .as_view(),
+        &ReferencePoint {
+            params: &DOUBLED_SCALE,
+            externals: &SMALL_EXTERNALS,
+        },
         true,
     );
 }
@@ -156,50 +135,34 @@ fn rustred_three_loop_rank_four_five_terms() {
 #[test]
 fn rustred_basketball_a_finite_part() {
     // Preserve the original pole-only test; this companion adds epsilon^0.
-    let input = vakint_parse!(&format!("k(1,1)^2*{BASKETBALL}")).unwrap();
-    compare_evaluations(
-        VakintSettings {
-            number_of_terms_in_epsilon_expansion: 4,
-            run_time_decimal_precision: 32,
-            ..VakintSettings::default()
-        },
+    compare_exact_peers(
+        epsilon_terms(4),
         &alphaloop_matad_rustred_lanes(RustRedParityPolicy::NumericalOnly),
         TensorPrepass::FeynKit,
-        input.as_view(),
-        test_utils::params_at_reference_point(
-            &[("muvsq".into(), 1.0), ("mursq".into(), 1.0)]
-                .into_iter()
-                .collect(),
-            32,
-        ),
-        test_utils::externals_at_reference_point(&SMALL_EXTERNALS.into_iter().collect(), 32),
-        1.0e-25,
-        0.0,
+        vakint_parse!(&format!("k(1,1)^2*{BASKETBALL}"))
+            .unwrap()
+            .as_view(),
+        &ReferencePoint {
+            params: &UNIT_SCALE,
+            externals: &SMALL_EXTERNALS,
+        },
         true,
     );
 }
 
 #[test]
 fn rustred_basketball_b_finite_part() {
-    let input = vakint_parse!(&format!("k(3,1)^2*{BASKETBALL}")).unwrap();
-    compare_evaluations(
-        VakintSettings {
-            number_of_terms_in_epsilon_expansion: 4,
-            run_time_decimal_precision: 32,
-            ..VakintSettings::default()
-        },
+    compare_exact_peers(
+        epsilon_terms(4),
         &alphaloop_matad_rustred_lanes(RustRedParityPolicy::NumericalOnly),
         TensorPrepass::FeynKit,
-        input.as_view(),
-        test_utils::params_at_reference_point(
-            &[("muvsq".into(), 1.0), ("mursq".into(), 1.0)]
-                .into_iter()
-                .collect(),
-            32,
-        ),
-        test_utils::externals_at_reference_point(&SMALL_EXTERNALS.into_iter().collect(), 32),
-        1.0e-25,
-        0.0,
+        vakint_parse!(&format!("k(3,1)^2*{BASKETBALL}"))
+            .unwrap()
+            .as_view(),
+        &ReferencePoint {
+            params: &UNIT_SCALE,
+            externals: &SMALL_EXTERNALS,
+        },
         true,
     );
 }

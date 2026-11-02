@@ -1,10 +1,11 @@
 #![cfg(all(feature = "feynkit-ingress", unix))]
 //! Public monitor calls preserve the ordinary mathematical and error results.
 
-#[path = "support/external_data.rs"]
-mod external_data_fixture;
 #[allow(dead_code)]
 mod five_loop_closure;
+#[path = "support/rustred.rs"]
+#[allow(dead_code)]
+mod rustred_support;
 
 use std::{fs, path::Path, time::Duration};
 
@@ -12,10 +13,8 @@ use feynkit_kinematics::Kinematics;
 use serde_json::Value;
 use symbolica::atom::Atom;
 use vakint::{
-    EvaluationMethod, EvaluationOrder, LoopNormalizationFactor, MasterSymbol,
-    OfficialExternalDataOptions, RustRedEvaluationOptions, RustRedMasterMode,
-    RustRedMonitorOptions, Vakint, VakintExpression, VakintSettings,
-    diagram_integral::DiagramIntegralOptions, vakint_parse,
+    LoopNormalizationFactor, MasterSymbol, RustRedMasterMode, RustRedMonitorOptions, Vakint,
+    VakintExpression, VakintSettings, diagram_integral::DiagramIntegralOptions, vakint_parse,
 };
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
@@ -23,13 +22,9 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 fn settings(mode: RustRedMasterMode) -> VakintSettings {
     VakintSettings {
         epsilon_symbol: "ep".into(),
-        evaluation_order: EvaluationOrder(vec![EvaluationMethod::RustRed(
-            RustRedEvaluationOptions { master_mode: mode },
-        )]),
         integral_normalization_factor: LoopNormalizationFactor::FMFTandMATAD,
-        form_exe_path: "/monitor-test-must-not-use-form".into(),
         use_dot_product_notation: true,
-        ..Default::default()
+        ..rustred_support::rustred_only(mode, "/monitor-test-must-not-use-form")
     }
 }
 
@@ -146,14 +141,7 @@ fn snapshot_publication_fault_does_not_replace_the_native_result() -> Result<()>
 fn five_loop_monitor_preserves_full_results_and_final_substitution_errors() -> Result<()> {
     // One authenticated load serves every 5L assertion in this test process.
     let mut engine = Vakint::new()?;
-    let report = engine.load_official_external_data(
-        5,
-        &OfficialExternalDataOptions {
-            version: external_data_fixture::required_version(),
-            local_artifacts_path: std::env::var_os("VAKINT_TEST_EXTERNAL_DATA").map(Into::into),
-            ..Default::default()
-        },
-    )?;
+    let report = engine.load_official_external_data(5, &rustred_support::pinned_release())?;
     assert!(report.loops.iter().any(|pack| pack.loop_count == 5));
     let settings = settings(RustRedMasterMode::Retain);
     let fixture = five_loop_closure::factorized::fixtures(&engine)?

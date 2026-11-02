@@ -8,8 +8,8 @@ mod test_utils;
 
 use symbolica::atom::AtomCore;
 use test_utils::{
-    EvaluationTestLane, RustRedParityPolicy, TensorPrepass, alphaloop_matad_lanes,
-    alphaloop_matad_rustred_lanes, compare_evaluations,
+    EvaluationTestLane, External, ReferencePoint, RustRedParityPolicy, TensorPrepass,
+    alphaloop_matad_lanes, alphaloop_matad_rustred_lanes, compare_exact_peers,
 };
 use vakint::{TensorReductionMethod, Vakint, VakintSettings, vakint_parse};
 
@@ -29,6 +29,35 @@ const THREE_LOOP_CLASSES: [(&str, &str); 5] = [
 // Retain the mixed-loop tensor and an even-loop rank-four term: the latter
 // prevents an odd-loop zero from making a factorized routing check vacuous.
 const NUMERATOR: &str = "(muvsq+2*mursq)*(k(1,1)*p(1,1)*k(2,2)*p(2,2)*k(3,3)*p(1,3)*k(1,4)*p(2,4)+k(1,1)*p(1,1)*k(1,2)*p(1,2)*k(2,3)*p(2,3)*k(2,4)*p(2,4))";
+
+const EXTERNALS: [External; 2] = [(1, (0.17, 0.4, 0.3, 0.12)), (2, (0.31, 0.2, 0.7, 0.43))];
+
+/// Compare `lanes` on `numerator` times `topology` with four ε orders at the
+/// mass `muvsq`, `mursq = 0.7` and [`EXTERNALS`], after the native prepass.
+fn compare_three_loop_class(
+    lanes: &[EvaluationTestLane],
+    numerator: &str,
+    topology: &str,
+    muvsq: f64,
+    quiet: bool,
+) {
+    compare_exact_peers(
+        VakintSettings {
+            number_of_terms_in_epsilon_expansion: 4,
+            ..VakintSettings::default()
+        },
+        lanes,
+        TensorPrepass::FeynKit,
+        vakint_parse!(&format!("({numerator})*{topology}"))
+            .unwrap()
+            .as_view(),
+        &ReferencePoint {
+            params: &[("muvsq", muvsq), ("mursq", 0.7)],
+            externals: &EXTERNALS,
+        },
+        quiet,
+    );
+}
 
 #[test]
 fn feynkit_three_loop_class_prepasses_match_the_form_oracle() {
@@ -72,32 +101,7 @@ fn feynkit_three_loop_class_prepasses_match_the_form_oracle() {
 fn feynkit_three_loop_class_scalar_oracles_agree() {
     for (expected_class, topology) in THREE_LOOP_CLASSES {
         eprintln!("three-loop tensor/scalar oracle groundwork: {expected_class}");
-        let input = vakint_parse!(&format!("({NUMERATOR})*{topology}")).unwrap();
-        compare_evaluations(
-            VakintSettings {
-                number_of_terms_in_epsilon_expansion: 4,
-                run_time_decimal_precision: 32,
-                ..VakintSettings::default()
-            },
-            &alphaloop_matad_lanes(),
-            TensorPrepass::FeynKit,
-            input.as_view(),
-            test_utils::params_at_reference_point(
-                &[("muvsq".into(), 1.3), ("mursq".into(), 0.7)]
-                    .into_iter()
-                    .collect(),
-                32,
-            ),
-            test_utils::externals_at_reference_point(
-                &[(1, (0.17, 0.4, 0.3, 0.12)), (2, (0.31, 0.2, 0.7, 0.43))]
-                    .into_iter()
-                    .collect(),
-                32,
-            ),
-            1.0e-25,
-            0.0,
-            true,
-        );
+        compare_three_loop_class(&alphaloop_matad_lanes(), NUMERATOR, topology, 1.3, true);
     }
 }
 
@@ -105,30 +109,11 @@ fn feynkit_three_loop_class_scalar_oracles_agree() {
 fn feynkit_rustred_three_loop_class_numerical_peers() {
     for (expected_class, topology) in THREE_LOOP_CLASSES {
         eprintln!("required FORM-less three-loop RustRed peer: {expected_class}");
-        let input = vakint_parse!(&format!("({NUMERATOR})*{topology}")).unwrap();
-        compare_evaluations(
-            VakintSettings {
-                number_of_terms_in_epsilon_expansion: 4,
-                run_time_decimal_precision: 32,
-                ..VakintSettings::default()
-            },
+        compare_three_loop_class(
             &alphaloop_matad_rustred_lanes(RustRedParityPolicy::NumericalOnly),
-            TensorPrepass::FeynKit,
-            input.as_view(),
-            test_utils::params_at_reference_point(
-                &[("muvsq".into(), 1.3), ("mursq".into(), 0.7)]
-                    .into_iter()
-                    .collect(),
-                32,
-            ),
-            test_utils::externals_at_reference_point(
-                &[(1, (0.17, 0.4, 0.3, 0.12)), (2, (0.31, 0.2, 0.7, 0.43))]
-                    .into_iter()
-                    .collect(),
-                32,
-            ),
-            1.0e-25,
-            0.0,
+            NUMERATOR,
+            topology,
+            1.3,
             true,
         );
     }
@@ -146,32 +131,7 @@ fn compare_pinch_1_6_pair(lanes: [EvaluationTestLane; 2], mass_squared: f64) {
 
 fn compare_pinch_1_6_numerator(lanes: [EvaluationTestLane; 2], mass_squared: f64, numerator: &str) {
     let (_, topology) = THREE_LOOP_CLASSES[3];
-    let input = vakint_parse!(&format!("({numerator})*{topology}")).unwrap();
-    compare_evaluations(
-        VakintSettings {
-            number_of_terms_in_epsilon_expansion: 4,
-            run_time_decimal_precision: 32,
-            ..VakintSettings::default()
-        },
-        &lanes,
-        TensorPrepass::FeynKit,
-        input.as_view(),
-        test_utils::params_at_reference_point(
-            &[("muvsq".into(), mass_squared), ("mursq".into(), 0.7)]
-                .into_iter()
-                .collect(),
-            32,
-        ),
-        test_utils::externals_at_reference_point(
-            &[(1, (0.17, 0.4, 0.3, 0.12)), (2, (0.31, 0.2, 0.7, 0.43))]
-                .into_iter()
-                .collect(),
-            32,
-        ),
-        1.0e-25,
-        0.0,
-        false,
-    );
+    compare_three_loop_class(&lanes, numerator, topology, mass_squared, false);
 }
 
 #[test]

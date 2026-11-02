@@ -1,9 +1,10 @@
 #![cfg(feature = "feynkit-ingress")]
 //! Finite exact closure comparisons; no assertion of arbitrary-index coverage.
 
-#[path = "support/external_data.rs"]
-mod external_data_fixture;
 mod five_loop_closure;
+#[path = "support/rustred.rs"]
+#[allow(dead_code)]
+mod rustred_support;
 
 use std::{cell::Cell, collections::BTreeSet, path::PathBuf, time::Instant};
 
@@ -12,9 +13,8 @@ use serde_json::json;
 use sha2::{Digest, Sha256};
 use symbolica::atom::{Atom, AtomCore, AtomView};
 use vakint::{
-    EvaluationMethod, EvaluationOrder, LoopNormalizationFactor, MasterSymbol,
-    OfficialExternalDataOptions, RustRedEvaluationOptions, RustRedMasterMode,
-    RustRedSymbolicEvaluation, Vakint, VakintSettings, vakint_symbol,
+    LoopNormalizationFactor, MasterSymbol, RustRedMasterMode, RustRedSymbolicEvaluation, Vakint,
+    VakintSettings, vakint_symbol,
 };
 
 struct ClosureEngine {
@@ -29,14 +29,7 @@ struct ClosureEngine {
 fn engine() -> Result<ClosureEngine> {
     let started = Instant::now();
     let mut engine = Vakint::new()?;
-    let report = engine.load_official_external_data(
-        5,
-        &OfficialExternalDataOptions {
-            version: external_data_fixture::required_version(),
-            local_artifacts_path: std::env::var_os("VAKINT_TEST_EXTERNAL_DATA").map(PathBuf::from),
-            ..Default::default()
-        },
-    )?;
+    let report = engine.load_official_external_data(5, &rustred_support::pinned_release())?;
     // Five-loop vacuum master identities contain one family and fifteen indices.
     // Check the active campaign inventory, independently of which checkout was selected.
     let five_loop_masters = engine
@@ -54,15 +47,12 @@ fn engine() -> Result<ClosureEngine> {
     );
     let settings = VakintSettings {
         epsilon_symbol: "eps".into(),
-        evaluation_order: EvaluationOrder(vec![EvaluationMethod::RustRed(
-            RustRedEvaluationOptions {
-                master_mode: RustRedMasterMode::Retain,
-            },
-        )]),
         integral_normalization_factor: LoopNormalizationFactor::Custom("1".into()),
-        form_exe_path: "/five-loop-closure-must-not-use-form".into(),
         verify_numerator_identification: true,
-        ..Default::default()
+        ..rustred_support::rustred_only(
+            RustRedMasterMode::Retain,
+            "/five-loop-closure-must-not-use-form",
+        )
     };
     // Reuse the exact options used by transactional data activation. Changing
     // preparation_workers here would unnecessarily load the application again.

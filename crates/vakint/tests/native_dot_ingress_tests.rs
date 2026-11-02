@@ -6,9 +6,24 @@ use feynkit_model::Model;
 use symbolica::atom::{Atom, AtomCore};
 use vakint::diagram_integral::DiagramIntegralOptions;
 use vakint::{
-    EvaluationMethod, EvaluationOrder, RustRedEvaluationOptions, RustRedMasterMode,
-    TensorReductionMethod, Vakint, VakintExpression, VakintSettings, vakint_parse,
+    RustRedMasterMode, TensorReductionMethod, Vakint, VakintExpression, VakintSettings,
+    vakint_parse,
 };
+
+#[path = "support/rustred.rs"]
+#[allow(dead_code)]
+mod rustred_support;
+
+/// Symbolic RustRed after the native FeynKit tensor reduction, without FORM.
+fn symbolic_rustred() -> VakintSettings {
+    VakintSettings {
+        tensor_reduction_method: TensorReductionMethod::FeynKit,
+        ..rustred_support::rustred_only(
+            RustRedMasterMode::Symbolic,
+            "/this/executable/must/never/run",
+        )
+    }
+}
 
 #[test]
 fn native_dot_diagram_reaches_symbolic_rustred() {
@@ -29,16 +44,7 @@ fn native_dot_diagram_reaches_symbolic_rustred() {
     )
     .unwrap();
     let family = diagram.propagator_family(&Kinematics::new()).unwrap();
-    let settings = VakintSettings {
-        form_exe_path: "/this/executable/must/never/run".into(),
-        evaluation_order: EvaluationOrder(vec![EvaluationMethod::RustRed(
-            RustRedEvaluationOptions {
-                master_mode: RustRedMasterMode::Symbolic,
-            },
-        )]),
-        tensor_reduction_method: TensorReductionMethod::FeynKit,
-        ..Default::default()
-    };
+    let settings = symbolic_rustred();
     let momentum = &family.loop_momenta()[0];
     let mass_squared = (family
         .kinematics()
@@ -73,16 +79,7 @@ fn native_dot_diagram_reaches_symbolic_rustred() {
 
 #[test]
 fn symbolic_one_loop_powers_obey_mass_derivative_identity() {
-    let settings = VakintSettings {
-        form_exe_path: "/this/executable/must/never/run".into(),
-        evaluation_order: EvaluationOrder(vec![EvaluationMethod::RustRed(
-            RustRedEvaluationOptions {
-                master_mode: RustRedMasterMode::Symbolic,
-            },
-        )]),
-        tensor_reduction_method: TensorReductionMethod::FeynKit,
-        ..Default::default()
-    };
+    let settings = symbolic_rustred();
     let engine = Vakint::new().unwrap();
     let result = engine
         .evaluate_integral(

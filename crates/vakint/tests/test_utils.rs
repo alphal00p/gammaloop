@@ -23,9 +23,11 @@ use vakint::{EvaluationOrder, Momentum, VakintSettings};
 #[path = "experimental_rustred_4l/legacy_master_oracle.rs"]
 mod legacy_master_oracle;
 
+#[path = "support/rustred.rs"]
+#[allow(dead_code)]
+pub mod rustred_support;
 #[cfg(all(unix, not(target_arch = "wasm32")))]
-#[path = "support/external_data.rs"]
-mod external_data_fixture;
+use rustred_support::external_data_fixture;
 
 /// Exact scientific reference points retain the authored binary coordinates.
 /// These helpers deliberately differ from public f64 input constructors, which
@@ -886,6 +888,70 @@ pub fn compare_evaluations(
             quiet,
         )
     });
+}
+
+/// Working precision of the exact peer comparisons, in decimal digits.
+pub const PEER_DIGITS: u32 = 32;
+/// Largest relative difference accepted between two exact peers.
+pub const PEER_RELATIVE_THRESHOLD: f64 = 1.0e-25;
+
+/// An external momentum: its index and four components.
+pub type External = (usize, (f64, f64, f64, f64));
+
+/// Parameter values and external momenta at which peers are compared.
+#[derive(Clone, Copy)]
+pub struct ReferencePoint<'a> {
+    pub params: &'a [(&'a str, f64)],
+    pub externals: &'a [External],
+}
+
+#[allow(dead_code)]
+impl ReferencePoint<'_> {
+    /// The parameter values, lifted exactly to `digits` decimal digits.
+    pub fn params_at(&self, digits: u32) -> HashMap<String, Float, ahash::RandomState> {
+        params_at_reference_point(
+            &self
+                .params
+                .iter()
+                .map(|&(name, value)| (name.to_owned(), value))
+                .collect(),
+            digits,
+        )
+    }
+
+    /// The external momenta, lifted exactly to `digits` decimal digits.
+    pub fn externals_at(&self, digits: u32) -> HashMap<usize, Momentum, ahash::RandomState> {
+        externals_at_reference_point(&self.externals.iter().copied().collect(), digits)
+    }
+}
+
+/// [`compare_evaluations`] of exact peers: every lane evaluates `input` at
+/// [`PEER_DIGITS`] digits (all other settings from `settings`) at `point`,
+/// and each lane must match the first to [`PEER_RELATIVE_THRESHOLD`], with
+/// no Monte-Carlo pull. `quiet` prints the values only on a mismatch.
+#[allow(dead_code)]
+pub fn compare_exact_peers(
+    settings: VakintSettings,
+    lanes: &[EvaluationTestLane],
+    tensor_prepass: TensorPrepass,
+    input: AtomView,
+    point: &ReferencePoint,
+    quiet: bool,
+) {
+    compare_evaluations(
+        VakintSettings {
+            run_time_decimal_precision: PEER_DIGITS,
+            ..settings
+        },
+        lanes,
+        tensor_prepass,
+        input,
+        point.params_at(PEER_DIGITS),
+        point.externals_at(PEER_DIGITS),
+        PEER_RELATIVE_THRESHOLD,
+        0.0,
+        quiet,
+    );
 }
 
 /// Compare two algebraically related inputs lane-by-lane.

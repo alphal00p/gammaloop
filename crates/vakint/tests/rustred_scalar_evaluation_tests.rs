@@ -4,30 +4,27 @@ use std::collections::{BTreeSet, HashMap};
 use symbolica::atom::{Atom, AtomCore};
 use symbolica::domains::float::{Float, Real};
 use test_utils::{
-    RustRedParityPolicy, TensorPrepass, alphaloop_matad_rustred_lanes,
-    analytic_matad_rustred_lanes, compare_evaluations,
+    ReferencePoint, RustRedParityPolicy, TensorPrepass, alphaloop_matad_rustred_lanes,
+    analytic_matad_rustred_lanes, compare_exact_peers, rustred_support,
 };
 use vakint::{
-    EvaluationMethod, EvaluationOrder, MATADOptions, NumericalEvaluationResult,
-    RustRedEvaluationOptions, TensorReductionMethod, Vakint, VakintSettings, vakint_parse,
+    EvaluationOrder, MATADOptions, NumericalEvaluationResult, RustRedMasterMode,
+    TensorReductionMethod, Vakint, VakintSettings, vakint_parse,
 };
 
 fn rustred_settings(substitute_masters: bool) -> VakintSettings {
     VakintSettings {
-        form_exe_path: "/this/path/must/not/be/invoked/by/rustred-scalar".to_owned(),
-        evaluation_order: EvaluationOrder(vec![EvaluationMethod::RustRed(
-            RustRedEvaluationOptions {
-                master_mode: if substitute_masters {
-                    vakint::RustRedMasterMode::Numerical
-                } else {
-                    vakint::RustRedMasterMode::Retain
-                },
-            },
-        )]),
         run_time_decimal_precision: 32,
         use_dot_product_notation: true,
         tensor_reduction_method: TensorReductionMethod::FeynKit,
-        ..VakintSettings::default()
+        ..rustred_support::rustred_only(
+            if substitute_masters {
+                RustRedMasterMode::Numerical
+            } else {
+                RustRedMasterMode::Retain
+            },
+            "/this/path/must/not/be/invoked/by/rustred-scalar",
+        )
     }
 }
 
@@ -819,44 +816,29 @@ fn rustred_covers_applicable_pysecdec_peer_inputs_through_two_loops() {
             TensorPrepass::FeynKit,
         ),
     ];
+    let externals = (1..=2)
+        .map(|index: usize| {
+            (
+                index,
+                (
+                    17.0 * ((index + 1) as f64),
+                    4.0 * ((index + 2) as f64),
+                    3.0 * ((index + 3) as f64),
+                    12.0 * ((index + 4) as f64),
+                ),
+            )
+        })
+        .collect::<Vec<_>>();
     for (legacy_test, input, mass_squared, renormalization_scale, tensor_prepass) in cases {
-        let numerical_masses = test_utils::params_at_reference_point(
-            &[
-                ("muvsq".to_owned(), mass_squared),
-                ("mursq".to_owned(), renormalization_scale),
-            ]
-            .into_iter()
-            .collect(),
-            32,
-        );
-        let numerical_external_momenta = test_utils::externals_at_reference_point(
-            &(1..=2)
-                .map(|index| {
-                    (
-                        index,
-                        (
-                            17.0 * ((index + 1) as f64),
-                            4.0 * ((index + 2) as f64),
-                            3.0 * ((index + 3) as f64),
-                            12.0 * ((index + 4) as f64),
-                        ),
-                    )
-                })
-                .collect(),
-            32,
-        );
-        compare_evaluations(
-            VakintSettings {
-                run_time_decimal_precision: 32,
-                ..VakintSettings::default()
-            },
+        compare_exact_peers(
+            VakintSettings::default(),
             &alphaloop_matad_rustred_lanes(RustRedParityPolicy::ExactMatadBasis),
             tensor_prepass,
             input.as_view(),
-            numerical_masses,
-            numerical_external_momenta,
-            1.0e-25,
-            0.0,
+            &ReferencePoint {
+                params: &[("muvsq", mass_squared), ("mursq", renormalization_scale)],
+                externals: &externals,
+            },
             true,
         );
         eprintln!("covered RustRed peer input from {legacy_test}");
@@ -1098,23 +1080,18 @@ fn k6_fixtures_cover_all_registered_matcher_classes() {
 }
 
 fn run_k6_numerical_parity(matcher_class: K6MatcherClass) {
-    let raw_masses = [("muvsq".to_owned(), 1.0), ("mursq".to_owned(), 1.0)]
-        .into_iter()
-        .collect::<ahash::HashMap<_, _>>();
-    let numerical_masses = test_utils::params_at_reference_point(&raw_masses, 32);
-    compare_evaluations(
+    compare_exact_peers(
         VakintSettings {
             number_of_terms_in_epsilon_expansion: 4,
-            run_time_decimal_precision: 32,
             ..VakintSettings::default()
         },
         &alphaloop_matad_rustred_lanes(RustRedParityPolicy::NumericalOnly),
         TensorPrepass::Skip,
         matcher_class.scalar_fixture().as_view(),
-        numerical_masses,
-        ahash::HashMap::default(),
-        1.0e-25,
-        0.0,
+        &ReferencePoint {
+            params: &[("muvsq", 1.0), ("mursq", 1.0)],
+            externals: &[],
+        },
         true,
     );
 }

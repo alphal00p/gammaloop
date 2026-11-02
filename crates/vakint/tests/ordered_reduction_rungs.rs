@@ -8,9 +8,21 @@ mod fixture;
 #[path = "support/reference_table.rs"]
 #[allow(dead_code)]
 mod reference_table;
+#[path = "support/rustred.rs"]
+#[allow(dead_code)]
+mod rustred_support;
 
+use rustred_support::external_data_checkout;
 use symbolica::atom::AtomCore;
 use vakint::{OrderedWeightArithmetic, RustRedMonitorOptions};
+
+/// The directory named by the environment variable `variable`; `purpose`
+/// completes the error "set {variable} to ...".
+fn required_path(variable: &str, purpose: &str) -> fixture::Result<std::path::PathBuf> {
+    std::env::var_os(variable)
+        .map(std::path::PathBuf::from)
+        .ok_or_else(|| format!("set {variable} to {purpose}").into())
+}
 
 fn golden_precision_target(golden_minimum: u64, selected_request: u64) -> u64 {
     golden_minimum.min(selected_request)
@@ -71,7 +83,7 @@ fn compare(loop_count: usize, projection: fixture::Projection) -> fixture::Resul
             &directory.join(name),
             &fixture::comparison::RunOptions {
                 arithmetic,
-                artifacts: std::env::var_os("VAKINT_TEST_EXTERNAL_DATA").map(Into::into),
+                artifacts: external_data_checkout(),
                 monitor: RustRedMonitorOptions::default(),
                 numerical_reference,
             },
@@ -424,10 +436,7 @@ fn five_loop_zero_momentum_ordered_matches_saved_depth_first_result() -> fixture
     let expected_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("examples/data/five_loop_q0/q0-retained.expr");
     let payload = std::fs::read(expected_path)?;
-    let evidence = std::path::PathBuf::from(
-        std::env::var_os("VAKINT_ORDERED_RUN_EVIDENCE")
-            .ok_or("set VAKINT_ORDERED_RUN_EVIDENCE to the completed run directory")?,
-    );
+    let evidence = required_path("VAKINT_ORDERED_RUN_EVIDENCE", "the completed run directory")?;
     let certificate = fixture::comparison::historical::compare_saved_zero_momentum(
         &payload, &completed, &evidence,
     )?;
@@ -662,10 +671,10 @@ fn five_loop_fixture_gate_pins_the_reduction_payload_only() -> fixture::Result<(
 #[ignore = "slow optional fixture: full ordered 5L quadratic reduction against the saved retained and nonzero-condition digests (5L reduction payload of data v0.1.2 = v0.2.0); needs VAKINT_TEST_EXTERNAL_DATA, VAKINT_QCD_LADDER_PREPARED_INPUT and a fresh VAKINT_ORDERED_RUN_EVIDENCE (see the invocation above)"]
 fn five_loop_quadratic_ordered_retains_declared_masters() -> fixture::Result<()> {
     let fixture_data = &FIVE_LOOP_QUADRATIC_FIXTURE;
-    let data = std::path::PathBuf::from(
-        std::env::var_os("VAKINT_TEST_EXTERNAL_DATA")
-            .ok_or("set VAKINT_TEST_EXTERNAL_DATA to the vakint-external-data checkout")?,
-    );
+    let data = required_path(
+        "VAKINT_TEST_EXTERNAL_DATA",
+        "the vakint-external-data checkout",
+    )?;
     // Fail before the long run: an ignored test only runs on request, and a
     // silent skip would read as a pass.
     let (payload, application) = five_loop_reduction_payload_sha256(&data)?;
@@ -690,10 +699,7 @@ fn five_loop_quadratic_ordered_retains_declared_masters() -> fixture::Result<()>
         completed.report["input_sha256"], fixture_data.input_sha256,
         "the saved digests belong to a different prepared quadratic input"
     );
-    let evidence = std::path::PathBuf::from(
-        std::env::var_os("VAKINT_ORDERED_RUN_EVIDENCE")
-            .ok_or("set VAKINT_ORDERED_RUN_EVIDENCE to the completed run directory")?,
-    );
+    let evidence = required_path("VAKINT_ORDERED_RUN_EVIDENCE", "the completed run directory")?;
     for (file, report, expected) in [
         (
             "retained.symbolica",
@@ -786,14 +792,14 @@ fn print_five_loop_quadratic_summary(
 fn ordered_five_loop(
     projection: fixture::Projection,
 ) -> fixture::Result<fixture::comparison::CompletedRun> {
-    let input = std::path::PathBuf::from(
-        std::env::var_os("VAKINT_QCD_LADDER_PREPARED_INPUT")
-            .ok_or("set VAKINT_QCD_LADDER_PREPARED_INPUT to the authenticated 5L scalar bundle")?,
-    );
-    let evidence = std::path::PathBuf::from(
-        std::env::var_os("VAKINT_ORDERED_RUN_EVIDENCE")
-            .ok_or("set VAKINT_ORDERED_RUN_EVIDENCE to a fresh durable workspace directory")?,
-    );
+    let input = required_path(
+        "VAKINT_QCD_LADDER_PREPARED_INPUT",
+        "the authenticated 5L scalar bundle",
+    )?;
+    let evidence = required_path(
+        "VAKINT_ORDERED_RUN_EVIDENCE",
+        "a fresh durable workspace directory",
+    )?;
     if evidence.join("report.json").exists() {
         return Err(
             "preserve the completed physical run and select a new evidence directory".into(),
@@ -816,7 +822,7 @@ fn ordered_five_loop(
         &evidence,
         &fixture::comparison::RunOptions {
             arithmetic: fixture::comparison::arithmetic_from_environment()?,
-            artifacts: std::env::var_os("VAKINT_TEST_EXTERNAL_DATA").map(Into::into),
+            artifacts: external_data_checkout(),
             monitor: RustRedMonitorOptions {
                 progress_snapshot: Some(evidence.join("monitor.json")),
                 ..Default::default()

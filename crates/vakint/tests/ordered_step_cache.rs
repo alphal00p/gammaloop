@@ -1,10 +1,14 @@
 //! A saved Ordered step cache is replayed by a fresh process.
 
+#[path = "support/rustred.rs"]
+#[allow(dead_code)]
+mod rustred_support;
+
 use sha2::{Digest, Sha256};
 use symbolica::atom::{Atom, AtomCore};
 use vakint::{
-    EvaluationMethod, EvaluationOrder, LoopNormalizationFactor, OrderedCacheSettings,
-    RustRedEvaluationOptions, RustRedMasterMode, Vakint, VakintSettings, vakint_parse,
+    LoopNormalizationFactor, OrderedCacheSettings, RustRedMasterMode, Vakint, VakintSettings,
+    vakint_parse,
 };
 
 /// Set by the parent test for its child process.
@@ -19,16 +23,13 @@ const INTEGRALS: [&str; 3] = [
 
 fn settings(cache: OrderedCacheSettings) -> VakintSettings {
     VakintSettings {
-        evaluation_order: EvaluationOrder(vec![EvaluationMethod::RustRed(
-            RustRedEvaluationOptions {
-                master_mode: RustRedMasterMode::Retain,
-            },
-        )]),
         integral_normalization_factor: LoopNormalizationFactor::MSbar,
         use_dot_product_notation: true,
-        form_exe_path: "/ordered-step-cache-test-must-not-call-form".into(),
         ordered_cache: cache,
-        ..Default::default()
+        ..rustred_support::rustred_only(
+            RustRedMasterMode::Retain,
+            "/ordered-step-cache-test-must-not-call-form",
+        )
     }
 }
 
