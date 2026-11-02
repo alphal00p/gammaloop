@@ -1,4 +1,4 @@
-#import "../../shared.typ": source-link
+#import "../../shared.typ": developer-link, source-link
 
 #let feyncalc-coverage = [
 = FeynCalc example coverage
@@ -1107,7 +1107,7 @@ Their sum is $C_A xi/(2epsilon)$ and vanishes in Landau gauge.
 
 The shared SM model uses the antighost-derivative `UUV1` rule `P(3,2)` for
 the ordered fields `[ghost, antighost, vector]`, as derived in the
-#link("../../../architecture/sm-conventions-audit.typ")[SM conventions audit].
+#developer-link("sm-conventions-audit", "sm-conventions-audit.typ", "SM conventions audit").
 With physical momenta $P_0=P_1+P_2$, the open tree tensor is
 $-g_s f(a,b,c)(P_0-P_1)_mu$ for an incoming ghost and
 $-g_s f(a,b,c)(P_0)_mu$ for an incoming antighost. Both FeynKit and GammaLoop

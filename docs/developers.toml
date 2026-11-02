@@ -1972,7 +1972,10 @@ end_anchor = "\nin\n{\n  inherit"
 # sections describe invoking-user execution, runtime licensing/channel/provenance,
 # fresh local renders and publication checks over reusable compiled inputs.
 # Earlier terminal derivations and measurements are explicitly historical.
-digest = "fa83a34c9d3ddb57fcf7a79a57096934b0d5f46f"
+# No-impact review 2026-11-02 against e32b14a2: the terminal resource copy
+# makes only its copied directories owner-writable for runtime cleanup. Pinned
+# resource bytes, installed-package discovery and producer ownership are unchanged.
+digest = "46c2a94622bd5edd53e04db1f4bd04a4a771a5b8"
 
 [[section.note.scope]]
 path = "nix/rust-workspace.nix"

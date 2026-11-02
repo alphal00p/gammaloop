@@ -376,10 +376,18 @@ let
     # Exercise installed-wheel discovery offline with the pinned resource bytes
     # in the same package layout used by symbolica-fonts on PyPI.
     "$linnet_python/bin/python" - <<'PY'
+    import os
     import shutil
+    import stat
     from pathlib import Path
     from symbolica import data
-    shutil.copytree("${symbolicaRenderData}", Path(data.__file__).parent / "_data/fonts")
+    fonts = Path(data.__file__).parent / "_data/fonts"
+    shutil.copytree("${symbolicaRenderData}", fonts)
+    # copytree preserves immutable store directory modes; the private runtime
+    # must be able to remove its copies, while leaving resource bytes untouched.
+    for directory, _, _ in os.walk(fonts):
+        path = Path(directory)
+        path.chmod(path.stat().st_mode | stat.S_IWUSR)
     PY
     "$linnet_python/bin/python" -m unittest discover -s crates/linnet-py/tests -p 'test_*.py'
     cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-builder -- check

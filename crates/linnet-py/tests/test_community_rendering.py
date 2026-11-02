@@ -1,15 +1,25 @@
 """All Community graph owners honor the same advanced rendering settings."""
 
 import json
-from pathlib import Path
-from tempfile import TemporaryDirectory
 import unittest
 import xml.etree.ElementTree as ET
+from html.parser import HTMLParser
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from rendering_metrics import external_metrics_snapshot
-
 from symbolica import E
 from symbolica.community import graph, hepkit, tensor
+
+
+class SvgParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.count = 0
+
+    def handle_starttag(self, tag, attrs):
+        if tag == "svg":
+            self.count += 1
 
 
 class CommunityRenderingTests(unittest.TestCase):
@@ -89,7 +99,11 @@ class CommunityRenderingTests(unittest.TestCase):
                 with self.subTest(owner=type(owners[index][0]).__name__):
                     self.assertIs(type(result), graph.DiagramRender)
                     self.assertEqual(len(result.to_svg_pages()), count)
-                    self.assertEqual(result.to_html().count("<svg"), count)
+                    # SVG mentions inside embedded scripts are not diagram pages.
+                    html = SvgParser()
+                    html.feed(result.to_html())
+                    html.close()
+                    self.assertEqual(html.count, count)
                     if count == 1:
                         self.assertIn("<svg", result._repr_svg_())
                     else:
