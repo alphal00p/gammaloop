@@ -4344,8 +4344,8 @@ impl ResolvedProcess {
 #[cfg(test)]
 mod tests {
     use crate::{
-        Bridges, CancellationToken, CutAmplitude, Cuts, GraphGroupingOptions, Grouping, Loops,
-        Orders, Range, Restrict, Symmetrize, TopologyRules, VertexSelector,
+        Bridges, CancellationToken, Classes, CutAmplitude, Cuts, GraphGroupingOptions, Grouping,
+        Loops, Orders, Range, Restrict, Symmetrize, TopologyRules, VertexSelector,
     };
     use DiagramEndpoint::Source;
     use DiagramEndpoint::Target;
@@ -4605,6 +4605,130 @@ mod tests {
 
     fn edge(model: &Model, pdg: i64) -> ParticleId {
         particle(model, pdg)
+    }
+
+    // The captured four-vertex pre-action incidence, resolved by names in the
+    // existing raw SM fixture. This fixture has 163 rules, not the runtime's
+    // restricted 119-rule effective Model; no fingerprint equality is assumed.
+    fn cut_content_source(model: &Model) -> GeneratedGraph {
+        let photon = model.particle_id("a").unwrap();
+        GeneratedGraph::new(
+            ["V_12", "V_14", "V_46", "V_18"].map(|name| model.vertex_rule_id(name).unwrap()),
+            [
+                (2, 0, ExternalState::Incoming),
+                (3, 1, ExternalState::Outgoing),
+            ]
+            .map(|(vertex, index, state)| GeneratedEdge {
+                source: Endpoint::Vertex(vertex),
+                sink: Endpoint::External(ExternalNode {
+                    index,
+                    state,
+                    particle: photon,
+                }),
+                particle: photon,
+                directed: false,
+            })
+            .into_iter()
+            .chain(
+                [
+                    (0, 2, "W+"),
+                    (0, 3, "ghWm"),
+                    (2, 1, "G+"),
+                    (3, 1, "ghWm"),
+                    (1, 0, "ghA"),
+                ]
+                .map(|(source, sink, name)| GeneratedEdge {
+                    source: Endpoint::Vertex(source),
+                    sink: Endpoint::Vertex(sink),
+                    particle: model.particle_id(name).unwrap(),
+                    directed: true,
+                }),
+            ),
+        )
+    }
+
+    #[test]
+    fn impossible_cross_section_content_is_rejected_before_cp_repair() {
+        let model = Arc::new(standard_model());
+        let graph = cut_content_source(&model);
+        let generator = Generator::new(Arc::clone(&model));
+        for classes in [Classes::None, Classes::Auto] {
+            for cp in [false, true] {
+                let process = Process::new(["a"], ["d", "d~"]);
+                let request = process
+                    .clone()
+                    .cross_section(Loops::forward(2..=2))
+                    .with_classes(classes)
+                    .with_cuts(Cuts::new().with_symmetrize_left_right(cp));
+                let resolved =
+                    ResolvedProcess::new(&model, &process, GenerationType::CrossSection, &request)
+                        .unwrap();
+                let result = generator.diagram_input(
+                    &resolved,
+                    graph.clone(),
+                    1,
+                    1,
+                    &request,
+                    &Grouping::None,
+                );
+                let outcome = result.as_ref().map(Option::is_some);
+                assert!(
+                    matches!(outcome, Ok(false)),
+                    "a cut-impossible assignment must be rejected before CP rule validation; \
+                     classes={classes:?}, cp={cp}, outcome={outcome:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn possible_cross_section_content_preserves_cp_rule_errors() {
+        let model = Arc::new(standard_model());
+        let graph = cut_content_source(&model);
+        let generator = Generator::new(Arc::clone(&model));
+        for classes in [Classes::None, Classes::Auto] {
+            for cp in [false, true] {
+                let process = Process::new(["a"], ["ghWm", "ghWm~"]);
+                let request = process
+                    .clone()
+                    .cross_section(Loops::forward(2..=2))
+                    .with_classes(classes)
+                    .with_cuts(Cuts::new().with_symmetrize_left_right(cp));
+                let resolved =
+                    ResolvedProcess::new(&model, &process, GenerationType::CrossSection, &request)
+                        .unwrap();
+                assert!(
+                    !resolved
+                        .cut_partitions(&graph, &model, &request)
+                        .unwrap()
+                        .physical
+                        .is_empty()
+                );
+                let result = generator.diagram_input(
+                    &resolved,
+                    graph.clone(),
+                    1,
+                    1,
+                    &request,
+                    &Grouping::None,
+                );
+                if cp {
+                    assert!(matches!(result,
+                        Err(GenerationError::InvalidCpInteractionRule {
+                            interaction, candidates, ..
+                        }) if !interaction.is_empty() && candidates.len() != 1));
+                } else {
+                    assert!(
+                        !result
+                            .unwrap()
+                            .unwrap()
+                            .representative
+                            .cut_partitions
+                            .is_empty()
+                    );
+                }
+            }
+        }
     }
 
     fn quark_cycle_reflection(model: &Model, reflected: bool) -> GeneratedGraph {
