@@ -37,6 +37,7 @@ use feynkit_graph::FeynmanDiagram;
 use idenso::tensor::{ContractSettings, SymbolicTensor};
 use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
 use spenso::network::{library::symbolic::ETS, tags::SPENSO_TAG};
+use spenso::structure::CanonicalLayout;
 use spenso::{
     shadowing::TensorCollectFilter,
     structure::{
@@ -257,7 +258,8 @@ impl TensorReduction {
         self.fully_contracted
     }
 
-    /// Materialize all terms as one standard Spenso/Symbolica expression.
+    /// Materialize all terms as one standard Spenso/Symbolica expression,
+    /// retaining the source's declared logical port order.
     ///
     /// # Examples
     ///
@@ -273,16 +275,40 @@ impl TensorReduction {
     /// }
     /// ```
     pub fn expression(&self) -> Result<SymbolicTensor<PartialStructure>, TensorReductionError> {
-        self.terms.iter().try_fold(self.zero.clone(), |sum, term| {
-            Ok(sum.try_add(&term.expression()?)?)
-        })
+        let sum = self.terms.iter().try_fold(self.zero.clone(), |sum, term| {
+            Ok::<_, TensorReductionError>(sum.try_add(&term.expression()?)?)
+        })?;
+        Self::restore_layout(sum, self.zero.structure().layout())
     }
 
     /// Consume the compact result and materialize its expression.
     pub fn into_expression(self) -> Result<SymbolicTensor<PartialStructure>, TensorReductionError> {
-        self.terms
-            .into_iter()
-            .try_fold(self.zero, |sum, term| Ok(sum.try_add(&term.expression()?)?))
+        let layout = self.zero.structure().layout().clone();
+        let sum = self.terms.into_iter().try_fold(self.zero, |sum, term| {
+            Ok::<_, TensorReductionError>(sum.try_add(&term.expression()?)?)
+        })?;
+        Self::restore_layout(sum, &layout)
+    }
+
+    fn restore_layout(
+        sum: SymbolicTensor<PartialStructure>,
+        declared: &CanonicalLayout,
+    ) -> Result<SymbolicTensor<PartialStructure>, TensorReductionError> {
+        let actual = sum.structure().layout();
+        if actual == declared {
+            return Ok(sum);
+        }
+        // Checked addition keeps the zero's canonical rows, but gives named
+        // results canonical axes. Restore only their layout: rewrapping through
+        // the zero would discard the sum's correctly scoped index history.
+        // Positional interfaces retain their layout and return above.
+        let axes = (0..sum.rank())
+            .map(|position| {
+                actual
+                    .canonical_to_logical_position(declared.logical_to_canonical_position(position))
+            })
+            .collect::<Vec<_>>();
+        Ok(sum.permuted(&axes)?)
     }
 }
 
@@ -1848,8 +1874,11 @@ mod tests {
     use crate::CosetType;
     use feynkit_graph::{DiagramEdge, DiagramVertex, NumeratorInterface};
     use feynkit_model::Model;
+    use idenso::representations::Bispinor;
     use idenso::shorthands::UndoShorthands;
+    use idenso::tensor::composition::TensorCompositionError;
     use spenso::structure::abstract_index::AbstractIndex;
+    use spenso::structure::representation::RepName;
     use spenso::vector_symbol;
     use symbolica::symbol;
 
@@ -1992,8 +2021,6 @@ mod tests {
 
     #[test]
     fn reduction_keeps_declared_spectator_axes_and_zero_interfaces() {
-        use idenso::representations::Bispinor;
-        use spenso::structure::representation::RepName;
         let (k, _, _, _) = vectors();
         let dimension = Atom::num(4);
         let mu = Atom::var(symbol!("retained_reduction_mu"));
@@ -2017,13 +2044,15 @@ mod tests {
         .unwrap();
         let reducer = TensorReducer::new(dimension.clone()).with_integrated_head(k);
         let reduced = reducer.reduce(&source).unwrap();
+        assert_eq!(reduced.zero.structure(), source.structure());
+        for term in reduced.terms() {
+            assert_eq!(term.tensor().structure(), source.structure());
+            assert_eq!(term.expression().unwrap().structure(), source.structure());
+        }
         let result = reduced.expression().unwrap();
         assert_eq!(result.structure(), source.structure());
         assert_eq!(result.rank(), 4);
         assert!(result.expression().contains(&spectator));
-        for term in reduced.terms() {
-            assert_eq!(term.tensor().structure(), source.structure());
-        }
         let vector = compact(k, 1, &dimension);
         let expected =
             &spectator * dot(&vector, &vector) * metric(&dimension, &mu, &nu) / &dimension;
@@ -2039,6 +2068,74 @@ mod tests {
         let result = reduced.into_expression().unwrap();
         assert!(result.is_zero());
         assert_eq!(result.structure(), odd.structure());
+    }
+
+    #[test]
+    fn materialization_restores_declared_axes_with_the_sums_scoped_index_history() {
+        let (k, _, _, _) = vectors();
+        let dimension = Atom::num(4);
+        let hidden = AbstractIndex::Normal(71);
+        let contracted = Atom::num(71);
+        let spectator = FunctionBuilder::new(SPENSO_TAG.tensor_symbol("reduction_history_spin"))
+            .add_arg(Bispinor {}.new_rep(4).to_symbolic([Atom::num(9)]))
+            .add_arg(Bispinor {}.new_rep(4).to_symbolic([Atom::num(3)]))
+            .finish();
+        let source =
+            SymbolicTensor::infer(&spectator * indexed(k, 1, &dimension, &contracted).pow(2))
+                .unwrap()
+                .permuted(&[1, 0])
+                .unwrap();
+        let probe = SymbolicTensor::infer(indexed(k, 1, &dimension, &contracted)).unwrap();
+        assert!(matches!(
+            source.multiply(&probe),
+            Err(TensorCompositionError::InvalidExplicitMultiplicity { occurrences: 3, .. })
+        ));
+        let reduced = TensorReducer::new(dimension)
+            .with_integrated_head(k)
+            .reduce(&source)
+            .unwrap();
+        assert_eq!(reduced.terms().len(), 1);
+        assert!(
+            reduced
+                .zero
+                .explicit_indices()
+                .unwrap()
+                .any(|index| index == hidden)
+        );
+        let mut cancelled = reduced.clone();
+        let mut opposite = cancelled.terms[0].clone();
+        opposite.coefficient = -opposite.coefficient;
+        cancelled.terms.push(opposite);
+        for reduced in [reduced, cancelled] {
+            let mut sum = reduced.zero.clone();
+            for term in reduced.terms() {
+                let weighted = term.expression().unwrap();
+                assert_eq!(weighted.structure(), source.structure());
+                assert!(
+                    weighted
+                        .explicit_indices()
+                        .unwrap()
+                        .any(|index| index == hidden)
+                );
+                sum = sum.try_add(&weighted).unwrap();
+            }
+            // Checked addition binds each term's internal pair. Restoring the
+            // declaration must retain that scoped history, including for zero.
+            assert!(!sum.explicit_indices().unwrap().any(|index| index == hidden));
+            for result in [
+                reduced.expression().unwrap(),
+                reduced.into_expression().unwrap(),
+            ] {
+                assert_eq!(result.expression(), sum.expression());
+                assert_eq!(result.presentation_atom(), sum.presentation_atom());
+                assert_eq!(
+                    result.explicit_indices().unwrap().collect::<Vec<_>>(),
+                    sum.explicit_indices().unwrap().collect::<Vec<_>>()
+                );
+                assert!(result.multiply(&probe).is_ok());
+                assert_eq!(result.structure(), source.structure());
+            }
+        }
     }
 
     #[test]
@@ -2225,7 +2322,13 @@ mod tests {
         let reducer = TensorReducer::new(dimension.clone())
             .with_integrated_vector(k0.clone())
             .unwrap();
-        let result = reducer.reduce(&source).unwrap().into_expression().unwrap();
+        let reduced = reducer.reduce(&source).unwrap();
+        assert_eq!(reduced.zero.structure(), source.structure());
+        for term in reduced.terms() {
+            assert_eq!(term.tensor().structure(), source.structure());
+            assert_eq!(term.expression().unwrap().structure(), source.structure());
+        }
+        let result = reduced.into_expression().unwrap();
         let expected = NumeratorInterface::admit(
             dot(&k0, &k0) * metric(&dimension, &mu, &nu) / &dimension + &unselected,
             None,
@@ -2310,16 +2413,26 @@ mod tests {
         selected.add(diagram.underlying()[&EdgeIndex(0)].1);
         let dimension = Atom::num(4)
             - Atom::num(2) * Atom::var(symbol!("feynkit_tensor_test::graph_selector_epsilon"));
-        let result = diagram
+        let reduced = diagram
             .tensor_reduce_of(
                 &selected,
                 dimension.clone(),
                 diagram.projector(),
                 Some(&source),
             )
-            .unwrap()
-            .into_expression()
             .unwrap();
+        assert_eq!(
+            reduced.zero.structure().layout(),
+            source.structure().layout()
+        );
+        for term in reduced.terms() {
+            assert_eq!(term.tensor().structure(), reduced.zero.structure());
+            assert_eq!(
+                term.expression().unwrap().structure(),
+                reduced.zero.structure()
+            );
+        }
+        let result = reduced.into_expression().unwrap();
         let k = compact(momentum, 0, &dimension);
         let expected = NumeratorInterface::admit(
             dot(&k, &k) * metric(&dimension, &mu, &nu) / &dimension

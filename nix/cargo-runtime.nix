@@ -50,7 +50,8 @@ assert pkgs.lib.assertMsg (
 in
   pkgs.writeShellApplication {
     inherit name;
-    runtimeInputs = [pkgs.nix pkgs.coreutils pkgs.findutils];
+    # nix develop resolves bash through PATH when no registry shell is available.
+    runtimeInputs = [pkgs.bash pkgs.nix pkgs.coreutils pkgs.findutils];
     text = ''
       set +x
       if [[ $# -ne 1 || -z "$1" ]]; then

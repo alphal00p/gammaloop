@@ -368,7 +368,12 @@ remain downstream.
 Model recipes and DOT/JSON expression strings remain source boundaries. Live
 `FeynmanDiagram` fragments, aggregate numerators, prefactors and projectors
 retain `SymbolicTensor<PartialStructure>`, as do the generator's localized
-factor caches and prepared grouping values. Grouping samples which still carry
+factor caches and prepared grouping values. Diagram fragment products use
+`SymbolicTensor::multiply_many`: consecutive named interfaces share a metadata
+merge with canonical free-axis order, while positional factors use the existing
+tensor multiplication operation. Live typed reconstruction retains logical ports,
+including those of ranked zero, and scoped index history. JSON/DOT serialization
+retains the expression and logical ports. Grouping samples which still carry
 color ports retain tensors; only completed scalar components and ratios are
 Atoms. Runtime `Graph` checks that every public port is explicitly indexed and
 transfers these carriers into `SymbolicTensor<IndexedStructure>` edge/vertex
@@ -388,8 +393,11 @@ between typed generation stages.
 The generator's model-bound numerator cache retains admitted templates for rules
 whose explicit index identities can be localized injectively. Instantiation
 transports their logical ports and scoped index history, including identities
-absent from a normalized zero, and restores the raw rule's occurrence-based
-logical axis order. `NumeratorInterface::translate` owns this transport for
+absent from a normalized zero. After template transport or actual-owner
+admission, the generator canonicalizes fully named free interfaces. This changes
+their logical axis order without reordering leaf arguments or changing index
+identities and scoped history; unresolved interfaces retain positional order.
+`NumeratorInterface::translate` owns the index transport for
 both templates and existing graph factors, retaining checked callback boundaries
 and using Idenso's metadata-preserving index renaming. Rules with unresolved ports, callback-sensitive notation or
 ambiguous scoped aliases remain source expressions until localized at their

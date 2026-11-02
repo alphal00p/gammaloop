@@ -2554,13 +2554,9 @@
   workspaceChecks = lib.mapAttrs (name: command:
     (if name == "doctest" then mkCargoRuntime else craneLib.mkCargoDerivation) (ciArgs
       // {
-        cargoArtifacts =
-          if name == "doctest"
-          then mergeCargoArtifacts "gammaloop-workspace-doctest-inputs" [
-            cargoCheckArtifacts
-            cranePackageDependencyArtifacts."gammaloop-api"
-          ]
-          else cargoCheckArtifacts;
+        # Keep the workspace feature context coherent: native API artifacts can
+        # overwrite unhashed cdylib outputs such as Clarabel's Rust library.
+        cargoArtifacts = cargoCheckArtifacts;
         pname = "gammaloop-workspace-${name}";
         src = workspaceTestSrc;
         postPatch = workspaceMissingCargoTargetsScript;
@@ -2950,6 +2946,8 @@
 
   nextestRuntimeInputsFor = target:
     [
+      # Archived tests invoke both sh and bash, independently of our shebang.
+      pkgs.bash
       pkgs.coreutils
       pkgs.findutils
       pkgs.gnused

@@ -106,7 +106,10 @@ cannot recover. `from_declared_parts` validates such declarations. A declaration
 does not authorize a mismatched nonzero payload.
 
 Native tensor operations transport the interface and scoped index history with
-the payload. The checked `rename_symbols` operation uses one simultaneous
+the payload. Raw payload or interface mutation invalidates publication; callers
+must use `finish_parts` before further typed algebra. Adjunction and other algebra
+entry points require published index history rather than admitting mutated parts
+implicitly. The checked `rename_symbols` operation uses one simultaneous
 injective map, permits swaps,
 and rejects collisions with unmapped existing names, including names retained
 only by zero metadata. `map_representation_dimensions` changes representation

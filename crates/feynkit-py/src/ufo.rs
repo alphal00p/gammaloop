@@ -607,7 +607,10 @@ mod tests {
             locals
                 .set_item(
                     "MODEL_PATH",
-                    crate_root.join("tests/fixtures/scalars_2p_3p.json"),
+                    crate_root
+                        .join("tests/fixtures/scalars_2p_3p.json")
+                        .to_string_lossy()
+                        .as_ref(),
                 )
                 .unwrap();
             let code = CString::new(

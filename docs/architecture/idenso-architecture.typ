@@ -58,6 +58,10 @@ visible factors without erasing their construction history. Callbacks used by or
 must preserve the admitted tensor meaning; arbitrary interface-changing transformations belong
 at a checked raw-expression boundary.
 
+Raw mutable access invalidates publication. Before further typed algebra,
+callers must explicitly call `finish_parts`; algebra entry points reject
+unpublished parts or missing index history instead of re-admitting the payload.
+
 `SymbolicTensor<S, E = Atom>` owns the tensor interface and symbolic payload:
 
 - the structure `S`, defaulting to `OrderedStructure<LibraryRep, AbstractIndex>`;
@@ -90,6 +94,9 @@ introduce identity tensors when needed. Its `Contract` implementation multiplies
 merges their structures; domain-specific cleanup follows separately. `HasStructure` supports
 structure types implementing `TensorStructure`, and mapping the structure retains the
 expression and classification flags.
+Fresh ordered-structure and scalar intake validate explicit-index multiplicities
+and retain that history. The infallible `ScalarTensor::new_scalar` constructor
+panics if its supplied scalar has invalid multiplicities.
 
 The same symbolic tensor with `PartialStructure` retains canonical-to-logical layout and
 occurrence-local unresolved ports. It owns positional composition, index substitution,
@@ -247,6 +254,9 @@ Function-library wrapping projects the stored interface, including ranked zeros,
 rather than recovering it from the source payload. Explicit encoded open indices
 retain their owner/axis identities during observation. Generic index projection
 matches admitted keys against existing slots without rebuilding index atoms.
+Wrapping and negation give entirely named partial/indexed results canonical
+free-slot order, while positional and materialized-open interfaces retain their
+logical bindings. Named leaf argument order remains unchanged.
 
 Frontier growth is bounded before processing the next factor. The current guard
 counts generated alternatives and estimates state bytes; it is not a
@@ -449,11 +459,11 @@ returns the tensor carrier, preserving untouched open ports while checking
 transformations that could change them.
 
 An identity dimension mapping retains completed reductions and cached
-observations through `finish_parts`, after running the mapper and establishing
-that the native payload, logical layout and oriented index-usage metadata are
-unchanged. Admitted carriers reuse their facts; raw carriers still undergo
-admission. An unchanged zero expression or free interface alone cannot establish
-that hidden index history is unchanged.
+observations when the admitted payload, logical layout and oriented index-usage
+metadata remain unchanged. Mapping requires published input before invoking the
+mapper. Raw or mutated parts must first pass explicit `finish_parts` admission;
+an unchanged zero expression or free interface alone cannot establish unchanged
+hidden index history.
 The color-construction macros have a separate syntax trap: a bare `object.field`
 is representation-pattern shorthand. Literal chain placeholder symbols must use
 `Atom::var`, rather than that field shorthand.
@@ -507,6 +517,12 @@ Each family retains its internal kernel:
 - the epsilon kernel owns epsilon contractions and reductions;
 - `Cookable` replaces selected functions or representation-index payloads with compact symbols,
   either as readable flattened names or reversible Symbolica `UserData::Atom` encodings.
+
+Collection gives parser-lowered power arms independent internal labels in both
+monomial and factored modes before tape coalescence. Public boundary labels still
+connect across arms, and emitted subgraphs retain their index-use history. A
+coalesced scalar power keeps its dummy history local; a non-scalar power repeats
+its public-use metadata and rejects excess multiplicities.
 
 Color-only algebra reduces complete selected products. Intermediate collector
 frontiers do not choose identities: generated terms need the whole selected
@@ -664,6 +680,11 @@ callback-sensitive and inexact powers retain their existing scoped or deferred
 paths, and transformation budgets remain unchanged.
 
 == One symbolic contraction path
+
+Prerequisite regions carry the enclosing carrier's conservative index history
+through their local contraction. They return their payload through
+`with_identity_result`, retaining its release-time checks for callback-sensitive
+publication; region construction does not re-admit the enclosing tensor.
 
 The tensor contractor reads the shared structural graph once, keeping opaque
 leaves and their logical ports. It selects an incident factor, visits its
