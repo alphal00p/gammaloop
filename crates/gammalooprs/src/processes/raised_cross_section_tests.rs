@@ -952,7 +952,8 @@ fn thermal_positive_esurface_sampling_preserves_signed_channels() {
                     runtime::{
                         DiscreteGraphSamplingSettings, DiscreteGraphSamplingType,
                         MultiChannelingSettings, ParameterizationSettings,
-                        SamplingChannelDefinition, SamplingSettings, StabilityLevelSetting,
+                        RotationSetting, SamplingChannelDefinition, SamplingSettings,
+                        StabilityLevelSetting,
                     },
                 },
             };
@@ -1033,6 +1034,24 @@ fn thermal_positive_esurface_sampling_preserves_signed_channels() {
                 .iter()
                 .map(|edge| edge.0)
                 .collect::<Vec<_>>();
+            let alternate_lmb = term
+                .multi_channeling_setup
+                .all_bases
+                .iter()
+                .find(|basis| {
+                    basis.loop_edges.iter().any(|edge| {
+                        term.graph.loop_momentum_basis.edge_signatures[*edge]
+                            .external
+                            .iter()
+                            .any(|sign| *sign != crate::momentum::SignOrZero::Zero)
+                    })
+                })
+                .expect("sunset has an alternate LMB with an external translation")
+                .loop_edges
+                .iter()
+                .map(|edge| edge.0)
+                .collect::<Vec<_>>();
+            assert_ne!(alternate_lmb, parent_lmb);
             let host_group = term
                 .cut_group_data
                 .cut_groups
@@ -1051,6 +1070,11 @@ fn thermal_positive_esurface_sampling_preserves_signed_channels() {
                 .collect::<Vec<_>>()
                 .join(",");
             let mut parameterization = ParameterizationSettings::default();
+            let graph_name = term.graph.name.clone();
+            let flow_center = parent_lmb
+                .iter()
+                .map(|edge| (*edge, vec![1.0 / 3.0]))
+                .collect::<Vec<_>>();
             parameterization.sampling_channels.default_channel_selection =
                 vec!["physical_cut".into(), "ordinary".into()];
             parameterization.sampling_channels.channel_definitions.insert(
@@ -1079,7 +1103,26 @@ fn thermal_positive_esurface_sampling_preserves_signed_channels() {
                     ),
                 ]),
             );
-            for pz in [0.0_f64, 1.0] {
+            let mut centered_parameterization = parameterization.clone();
+            for (name, definition) in centered_parameterization
+                .sampling_channels
+                .channel_definitions
+                .get_mut(&graph_name)
+                .unwrap()
+            {
+                definition.parent_lmb = alternate_lmb.clone();
+                definition.subspace_lmb = alternate_lmb.clone();
+                if name == "ordinary" {
+                    definition.around = format!(
+                        "lmb({})",
+                        alternate_lmb.iter().map(usize::to_string).collect::<Vec<_>>().join(",")
+                    );
+                }
+            }
+            for (pz, centered) in [0.0_f64, 1.0]
+                .into_iter()
+                .flat_map(|pz| [(pz, false), (pz, true)])
+            {
                 let mut kinematics = runtime_settings().kinematics;
                 kinematics.externals = toml::from_str(&format!(
                     "type='constant'\n[data]\nmomenta=[[{},0.0,0.0,{pz}]]\nhelicities=['summed_averaged']",
@@ -1092,12 +1135,26 @@ fn thermal_positive_esurface_sampling_preserves_signed_channels() {
                     sample_orientations: false,
                     sampling_type: DiscreteGraphSamplingType::SamplingMultiChanneling(
                         MultiChannelingSettings {
-                            parameterization_settings: parameterization.clone(),
+                            parameterization_settings: if centered {
+                                centered_parameterization.clone()
+                            } else {
+                                parameterization.clone()
+                            },
                         },
                     ),
                     ..Default::default()
                 });
                 settings.stability.rotation_axis.clear();
+                settings.lu_flow_centers.clear();
+                if centered {
+                    settings
+                        .lu_flow_centers
+                        .insert(graph_name.clone(), flow_center.clone());
+                    settings
+                        .stability
+                        .rotation_axis
+                        .push(RotationSetting::Pi2X {});
+                }
                 settings.stability.levels = vec![StabilityLevelSetting::default_double()];
                 matched.warm_up(&model).unwrap();
                 let ProcessIntegrand::CrossSection(prepared) = &*matched else {
@@ -1145,7 +1202,11 @@ fn thermal_positive_esurface_sampling_preserves_signed_channels() {
                         }
                         let raw_events = raw.event_groups.iter().flat_map(|group| group.iter()).collect::<Vec<_>>();
                         let mapped_events = mapped.event_groups.iter().flat_map(|group| group.iter()).collect::<Vec<_>>();
-                        assert_eq!(raw_events.len(), 4, "pz={pz}, channel={channel}");
+                        if centered {
+                            assert!(!raw_events.is_empty(), "pz={pz}, channel={channel}");
+                        } else {
+                            assert_eq!(raw_events.len(), 4, "pz={pz}, channel={channel}");
+                        }
                         assert_eq!(mapped_events.len(), raw_events.len());
                         let mut sum = Complex::new(F(0.0), F(0.0));
                         for (raw, mapped) in raw_events.iter().zip(mapped_events) {
@@ -3188,10 +3249,10 @@ fn hosted_joint_kite_preserves_original_equations_and_physical_sum() {
                     &RadialRootIdentity::new("independent deep fixed256 host".into()),
                 ).map_err(|error| eyre::eyre!("{error:?}"))?;
                 let retained_loops = point.loop_moms().rescale(
-                    &row.prepared_lu_hosts[0].solution.solution, Subspace::None,
+                    &row.prepared_lu_hosts[0].solution.solution, Subspace::None, None,
                 );
                 let independent_loops = point.loop_moms().rescale(
-                    &independent_root.solution, Subspace::None,
+                    &independent_root.solution, Subspace::None, None,
                 );
                 let original = |surface: &Esurface, loops: &LoopMomenta<F<ArbPrec>>| {
                     surface.evaluate_routed_enclosed(

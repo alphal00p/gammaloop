@@ -200,7 +200,7 @@ impl RstarTDependenceEvaluator {
 
         let rescale_tstar = unrescaled_momentum_sample
             .loop_moms()
-            .rescale_with_hyper_dual(&dual_t, None);
+            .rescale_with_hyper_dual(&dual_t, None, None);
 
         let dualized_externals_three_momenta = unrescaled_momentum_sample
             .external_moms()
@@ -252,7 +252,7 @@ impl RstarTDependenceEvaluator {
         // The same IFT backend differentiates the dimensionless root. Keep the
         // raw active displacement so null directions never enter a normalization.
         let rescale_rstar = shifted_t_dependent_momenta
-            .rescale(&dual_alpha, subspace.as_subspace_simple())
+            .rescale(&dual_alpha, subspace.as_subspace_simple(), None)
             .iter()
             .zip(dualized_overlap_center.iter())
             .map(|(momentum, center)| momentum.clone() + center.clone())

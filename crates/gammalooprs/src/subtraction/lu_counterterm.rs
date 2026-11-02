@@ -3630,7 +3630,7 @@ impl<'a, T: FloatLike> RstarSolution<'a, T> {
             .esurface_ct_builder
             .overlap_builder
             .shifted_loop_momenta
-            .rescale(&self.alpha, subspace.as_subspace_simple())
+            .rescale(&self.alpha, subspace.as_subspace_simple(), None)
             + &self.esurface_ct_builder.overlap_builder.center
     }
 
@@ -3758,7 +3758,7 @@ impl<'a, T: FloatLike> RstarSolution<'a, T> {
             alpha += radial_variation / &radius;
         }
         let rstar_loop_momenta = shifted_momenta
-            .rescale(&alpha, self.subspace().as_subspace_simple())
+            .rescale(&alpha, self.subspace().as_subspace_simple(), None)
             .iter()
             .zip(center.iter())
             .map(|(momentum, center)| momentum.clone() + center.clone())

@@ -119,6 +119,77 @@ sigma = 1.0
                 .any(|sectors| !sectors.is_empty()),
             spectator,
         );
+        if !spectator {
+            let term = &generated.data.graph_terms[0];
+            let mut externals: ExternalFourMomenta<F<f64>> = settings
+                .kinematics
+                .externals
+                .get_dependent_externals(DependentMomentaConstructor::CrossSection)?;
+            externals[ExternalIndex(0)].spatial = ThreeMomentum::new(F(2.0), F(-4.0), F(6.0));
+            let edge = term.graph.loop_momentum_basis.loop_edges[LoopIndex(0)].0;
+            let mut coefficients = vec![0.0; externals.len()];
+            coefficients[0] = 0.5;
+            let rows = vec![(edge, coefficients.clone())];
+            let mut configured = settings.clone();
+            configured
+                .lu_flow_centers
+                .insert(term.graph.name.clone(), rows.clone());
+            let center = term.lu_flow_center(&externals, &configured)?.unwrap();
+            assert_eq!(
+                center[LoopIndex(0)],
+                ThreeMomentum::new(F(1.0), F(-2.0), F(3.0))
+            );
+            let rotation = Rotation::new(RotationMethod::Pi2Y);
+            let rotated_externals = externals.iter().map(|p| p.rotate(&rotation)).collect();
+            let rotated_center = term
+                .lu_flow_center(&rotated_externals, &configured)?
+                .unwrap();
+            assert!(
+                (rotated_center[LoopIndex(0)] - center[LoopIndex(0)].rotate(&rotation))
+                    .norm_squared()
+                    .0
+                    < 1e-24
+            );
+
+            let mut nonfinite = coefficients.clone();
+            nonfinite[0] = f64::NAN;
+            for (invalid_rows, message) in [
+                (vec![], "must specify each generation LMB edge"),
+                (
+                    vec![rows[0].clone(), rows[0].clone()],
+                    "must specify each generation LMB edge",
+                ),
+                (
+                    vec![(usize::MAX, coefficients.clone())],
+                    "must specify each generation LMB edge",
+                ),
+                (vec![(edge, vec![])], "finite external coefficients"),
+                (vec![(edge, nonfinite)], "finite external coefficients"),
+            ] {
+                configured
+                    .lu_flow_centers
+                    .insert(term.graph.name.clone(), invalid_rows);
+                assert!(
+                    term.lu_flow_center(&externals, &configured)
+                        .unwrap_err()
+                        .to_string()
+                        .contains(message)
+                );
+            }
+
+            let previous_settings = runtime.get_settings().clone();
+            runtime.get_mut_settings().lu_flow_centers =
+                BTreeMap::from([("unknown_graph".into(), rows)]);
+            assert!(
+                runtime
+                    .warm_up(&model)
+                    .unwrap_err()
+                    .to_string()
+                    .contains("unknown graph 'unknown_graph'")
+            );
+            *runtime.get_mut_settings() = previous_settings;
+            runtime.warm_up(&model)?;
+        }
         runtimes.push(runtime);
     }
     let mut input = MomentumSpaceEvaluationInput {

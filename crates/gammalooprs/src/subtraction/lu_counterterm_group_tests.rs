@@ -360,7 +360,7 @@ fn shared_group_weights_preserve_foreign_cut_data_and_radial_derivatives() {
                         "alternate parent must exercise an actual external affine shift"
                     );
                 }
-                let mut point = make_point(raw.rescaled_loop_momenta(&tau, None));
+                let mut point = make_point(raw.rescaled_loop_momenta(&tau, None, None));
                 point.unrescaled_sample = raw.clone();
                 point.lu_cut_parameter_cache = vec![LUParams {
                     tstar: DualOrNot::NonDual(tau.clone()),
@@ -371,7 +371,7 @@ fn shared_group_weights_preserve_foreign_cut_data_and_radial_derivatives() {
                     let t = shape.variable(0, tau.clone());
                     let mut packet = raw.clone();
                     packet.sample.dual_loop_moms =
-                        Some(raw.loop_moms().rescale_with_hyper_dual(&t, None));
+                        Some(raw.loop_moms().rescale_with_hyper_dual(&t, None, None));
                     point.dualized_momentum_sample_cache.push(packet);
                 }
                 let native_sample = point

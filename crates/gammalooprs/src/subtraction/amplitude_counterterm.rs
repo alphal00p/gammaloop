@@ -1383,8 +1383,11 @@ impl AmplitudeCountertermData {
                 let radius = shifted_loop_momenta
                     .hyper_radius_squared(subspace.as_subspace_simple())
                     .sqrt();
-                let unit_shifted_momenta =
-                    shifted_loop_momenta.rescale(&radius.inv(), subspace.as_subspace_simple());
+                let unit_shifted_momenta = shifted_loop_momenta.rescale(
+                    &radius.inv(),
+                    subspace.as_subspace_simple(),
+                    None,
+                );
                 let (raw_radius_guess, _) = esurface.get_radius_guess_subspace(
                     &unit_shifted_momenta,
                     sample_in_common_lmb.external_moms(),
@@ -1442,9 +1445,11 @@ impl AmplitudeCountertermData {
                     continue;
                 }
 
-                let root_loop_momenta = &unit_shifted_momenta
-                    .rescale(&solution.solution, subspace.as_subspace_simple())
-                    + &center;
+                let root_loop_momenta = &unit_shifted_momenta.rescale(
+                    &solution.solution,
+                    subspace.as_subspace_simple(),
+                    None,
+                ) + &center;
                 let mut root_in_common_lmb = sample_in_common_lmb.clone();
                 root_in_common_lmb.sample.loop_moms = root_loop_momenta;
                 let root_in_metadata_lmb =
@@ -1718,8 +1723,11 @@ impl AmplitudeCountertermData {
                 let radius = shifted_loop_momenta
                     .hyper_radius_squared(subspace.as_subspace_simple())
                     .sqrt();
-                let unit_shifted_momenta =
-                    shifted_loop_momenta.rescale(&radius.inv(), subspace.as_subspace_simple());
+                let unit_shifted_momenta = shifted_loop_momenta.rescale(
+                    &radius.inv(),
+                    subspace.as_subspace_simple(),
+                    None,
+                );
                 let (raw_radius_guess, _) = esurface.get_radius_guess_subspace(
                     &unit_shifted_momenta,
                     sample_in_common_lmb.external_moms(),
@@ -1774,9 +1782,11 @@ impl AmplitudeCountertermData {
                         )
                     })?;
 
-                let root_loop_momenta = &unit_shifted_momenta
-                    .rescale(&solution.solution, subspace.as_subspace_simple())
-                    + &projected_center;
+                let root_loop_momenta = &unit_shifted_momenta.rescale(
+                    &solution.solution,
+                    subspace.as_subspace_simple(),
+                    None,
+                ) + &projected_center;
                 let mut root_in_common_lmb = sample_in_common_lmb.clone();
                 root_in_common_lmb.sample.loop_moms = root_loop_momenta;
                 let root_in_generation_lmb =
@@ -2134,7 +2144,7 @@ fn evaluate_generalized_rstar<T: FloatLike>(
                 .map(|momentum| momentum.map_ref(&|value| new_constant(&dual_radius_star, value)))
                 .collect::<LoopMomenta<_>>();
             let dual_loop_momenta = unit_shifted_momenta
-                .rescale_with_hyper_dual(&dual_radius_star, subspace.as_subspace_simple())
+                .rescale_with_hyper_dual(&dual_radius_star, subspace.as_subspace_simple(), None)
                 .iter()
                 .zip(dual_center.iter())
                 .map(|(momentum, center)| momentum.clone() + center.clone())
@@ -2167,7 +2177,7 @@ fn evaluate_generalized_rstar<T: FloatLike>(
                 .map(|momentum| momentum.map_ref(&|value| new_constant(&dual_radius_star, value)))
                 .collect::<LoopMomenta<_>>();
             let dual_loop_momenta = unit_shifted_momenta
-                .rescale_with_hyper_dual(&dual_radius_star, subspace.as_subspace_simple())
+                .rescale_with_hyper_dual(&dual_radius_star, subspace.as_subspace_simple(), None)
                 .iter()
                 .zip(dual_center.iter())
                 .map(|(momentum, center)| momentum.clone() + center.clone())
@@ -2324,7 +2334,7 @@ impl<'a, T: FloatLike> CounterTermBuilder<'a, T> {
 
         let shifted_loop_momenta = self.sample.loop_moms() - &rotated_center;
         let radius = shifted_loop_momenta.hyper_radius_squared(None).sqrt();
-        let unit_shifted_momenta = shifted_loop_momenta.rescale(&radius.inv(), None);
+        let unit_shifted_momenta = shifted_loop_momenta.rescale(&radius.inv(), None, None);
 
         OverlapBuilder {
             counterterm_builder: self,
@@ -2591,7 +2601,7 @@ impl<'a, T: FloatLike> RstarSolution<'a, T> {
             .esurface_ct_builder
             .overlap_builder
             .unit_shifted_momenta
-            .rescale(&self.solution.solution, None)
+            .rescale(&self.solution.solution, None, None)
             + &self.esurface_ct_builder.overlap_builder.rotated_center;
 
         let mut rstar_sample = self
@@ -2777,7 +2787,7 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
                     .esurface_ct_builder
                     .overlap_builder
                     .unit_shifted_momenta
-                    .rescale_with_hyper_dual(&dual_radius_star, None)
+                    .rescale_with_hyper_dual(&dual_radius_star, None, None)
                     .iter()
                     .zip(dualized_center.iter())
                     .map(|(momentum, center)| momentum.clone() + center.clone())
@@ -2831,7 +2841,7 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
                     .esurface_ct_builder
                     .overlap_builder
                     .unit_shifted_momenta
-                    .rescale_with_hyper_dual(&dual_radius_star_for_esurface, None)
+                    .rescale_with_hyper_dual(&dual_radius_star_for_esurface, None, None)
                     .iter()
                     .zip(dualized_center_for_esurface.iter())
                     .map(|(momentum, center)| momentum.clone() + center.clone())

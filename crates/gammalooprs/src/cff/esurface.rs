@@ -1620,7 +1620,7 @@ impl Esurface {
     /// Explicit prepared-ray boundary for LU root and jet evaluation. Routing
     /// before radial scaling changes finite-precision association. Existing
     /// non-LU amplitude/static/fiber evaluation keeps scale-then-route semantics.
-    /// The center is supplied explicitly; physical LU uses generation zero.
+    /// The center and velocity are supplied explicitly by the chosen LU flow.
     pub(crate) fn routed_ray<T: FloatLike>(
         &self,
         velocity: &LoopMomenta<F<T>>,
@@ -2556,7 +2556,7 @@ mod tests {
             let mathematical = scalar
                 .evaluate_routed_enclosed(&tau, &loops, &externals, &masses, &lmb)
                 .unwrap();
-            let completed = loops.rescale(&tau, None);
+            let completed = loops.rescale(&tau, None, None);
             let actual = scalar
                 .evaluate_routed_enclosed(&one, &completed, &externals, &masses, &lmb)
                 .unwrap();
