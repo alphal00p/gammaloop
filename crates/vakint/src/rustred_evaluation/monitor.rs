@@ -80,6 +80,16 @@ impl RustRedMonitorOptions {
     }
 }
 
+/// One snapshot as one complete JSON line, serialized in memory. Serializing
+/// into an unbuffered sink costs one system call per JSON token (about 2,000
+/// for a 5L snapshot); on a loaded file system that made a single publication
+/// slower than the final drain allowance. Sinks receive one write instead.
+fn json_line(native: &serde_json::Value) -> io::Result<Vec<u8>> {
+    let mut line = serde_json::to_vec(native)?;
+    line.push(b'\n');
+    Ok(line)
+}
+
 /// JSONL stream adapter for the native projection, without a consumer schema.
 /// This is not the atomic latest-JSON file sink selected by `progress_snapshot`.
 pub(super) struct SnapshotWriter<W>(W);
@@ -90,8 +100,7 @@ impl<W: Write> SnapshotWriter<W> {
     }
 
     pub(super) fn write(&mut self, native: &serde_json::Value) -> io::Result<()> {
-        serde_json::to_writer(&mut self.0, native)?;
-        self.0.write_all(b"\n")?;
+        self.0.write_all(&json_line(native)?)?;
         self.0.flush()
     }
 }
@@ -128,13 +137,8 @@ impl LatestJsonFile {
         native: &serde_json::Value,
         active: &std::sync::atomic::AtomicBool,
     ) -> io::Result<()> {
-        self.write_with_check(
-            |file| {
-                serde_json::to_writer(&mut *file, native)?;
-                file.write_all(b"\n")
-            },
-            active,
-        )
+        let line = json_line(native)?;
+        self.write_with_check(|file| file.write_all(&line), active)
     }
 
     #[cfg(test)]
