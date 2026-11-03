@@ -331,12 +331,64 @@ macro_rules! define_indexed_vec {
         }
 
         impl ::std::convert::TryFrom<$Vec<Option<$Idx>>> for $crate::permutation::Permutation{
-            type Error = ();
+            type Error = $crate::permutation::PermutationError;
             fn try_from(vec: $Vec<Option<$Idx>>) -> Result<Self, Self::Error> {
-                let new_vec:Vec<usize> = vec.into_iter().map(|(i,e)| e.ok_or(()).map(|e|(i,e))).collect::<Result<$Vec<$Idx>, ()>>()?.into_iter().map(|(_,x)| usize::from(x)).collect();
-
-                Ok($crate::permutation::Permutation::from_map(new_vec))
+                let map = vec.into_iter().map(|(i, entry)| {
+                    entry.map(usize::from).ok_or(
+                        $crate::permutation::PermutationError::MissingMapping { index: i.0 }
+                    )
+                }).collect::<Result<::std::vec::Vec<_>, _>>()?;
+                Self::try_from_map(map)
             }
         }
     };
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::half_edge::involution::{EdgeIndex, EdgeVec};
+    use crate::permutation::{Permutation, PermutationError};
+
+    #[test]
+    fn permutation_conversion_rejects_missing_duplicate_and_out_of_range_images() {
+        let missing = EdgeVec::from(vec![Some(EdgeIndex(0)), None]);
+        assert_eq!(
+            Permutation::try_from(missing),
+            Err(PermutationError::MissingMapping { index: 1 })
+        );
+        let duplicate = EdgeVec::from(vec![Some(EdgeIndex(0)), Some(EdgeIndex(0))]);
+        assert_eq!(
+            Permutation::try_from(duplicate),
+            Err(PermutationError::DuplicateImage {
+                value: 0,
+                first_index: 0,
+                second_index: 1,
+            })
+        );
+        let out_of_range = EdgeVec::from(vec![Some(EdgeIndex(1))]);
+        assert_eq!(
+            Permutation::try_from(out_of_range),
+            Err(PermutationError::IndexOutOfRange {
+                index: 0,
+                value: 1,
+                len: 1
+            })
+        );
+    }
+
+    #[test]
+    fn permutation_conversion_accepts_empty_singleton_and_bijections() {
+        for map in [vec![], vec![0], vec![2, 0, 1]] {
+            let indexed = EdgeVec::from(
+                map.iter()
+                    .map(|&index| Some(EdgeIndex(index)))
+                    .collect::<Vec<_>>(),
+            );
+            let permutation = Permutation::try_from(indexed).unwrap();
+            assert_eq!(permutation.map(), map);
+            for i in 0..map.len() {
+                assert_eq!(permutation.inv()[permutation[i]], i);
+            }
+        }
+    }
 }

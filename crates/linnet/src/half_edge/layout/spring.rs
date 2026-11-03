@@ -1620,7 +1620,7 @@ mod energy_trace {
     }
 }
 
-#[cfg(feature = "energy-timing")]
+#[cfg(feature = "energy_trace")]
 pub use energy_trace::{
     reset as energy_timing_reset, snapshot as energy_timing_snapshot, EnergyTiming,
 };
@@ -1846,7 +1846,7 @@ impl SpringChargeEnergy {
     where
         N: NodeStorageOps<NodeData = V> + Clone,
     {
-        #[cfg(feature = "energy-timing")]
+        #[cfg(feature = "energy_trace")]
         let total_start = std::time::Instant::now();
 
         let n = s.vertex_points.len().0;
@@ -1854,7 +1854,7 @@ impl SpringChargeEnergy {
 
         let mut energy = 0.0;
 
-        #[cfg(feature = "energy-timing")]
+        #[cfg(feature = "energy_trace")]
         let vv_start = std::time::Instant::now();
         for i in 0..n {
             let ni = NodeIndex(i);
@@ -1871,10 +1871,10 @@ impl SpringChargeEnergy {
                 energy += self.vv_term(np.distance(vj));
             }
         }
-        #[cfg(feature = "energy-timing")]
+        #[cfg(feature = "energy_trace")]
         energy_trace::record_vv(vv_start.elapsed());
 
-        #[cfg(feature = "energy-timing")]
+        #[cfg(feature = "energy_trace")]
         let ev_start = std::time::Instant::now();
         for i in 0..n {
             let ni = NodeIndex(i);
@@ -1888,33 +1888,32 @@ impl SpringChargeEnergy {
                     if !s.edge_is_active(ei) {
                         continue;
                     }
-                    let ep = s.edge_points[ei];
-                    energy += self.ev_term(np.distance(ep));
+                    for (_, point, weight) in s.edge_charge_samples(ei) {
+                        energy += weight * self.ev_term(np.distance(point));
+                    }
                 }
             }
         }
-        #[cfg(feature = "energy-timing")]
+        #[cfg(feature = "energy_trace")]
         energy_trace::record_ev(ev_start.elapsed());
 
-        #[cfg(feature = "energy-timing")]
+        #[cfg(feature = "energy_trace")]
         let spring_start = std::time::Instant::now();
-        #[cfg(feature = "energy-timing")]
+        #[cfg(feature = "energy_trace")]
         let ee_local_start = std::time::Instant::now();
         for i in 0..n {
             let ni = NodeIndex(i);
             if !s.node_is_active(ni) {
                 continue;
             }
-            let np = s.vertex_points[ni];
             for e in s
                 .graph
                 .iter_crown(ni)
                 .filter(|&hedge| s.hedge_is_active(hedge))
             {
                 let ei = s.graph[&e];
-                let ep = s.edge_points[ei];
                 let length = Self::edge_spring_length(s, ei, self.spring_length);
-                energy += self.spring_term_with_length(np.distance(ep), length);
+                energy += self.spring_term_with_length(s.half_route_length(e), length);
                 for e in s
                     .graph
                     .iter_crown(ni)
@@ -1924,18 +1923,23 @@ impl SpringChargeEnergy {
                     if ei == ej {
                         continue;
                     }
-                    let ejp = s.edge_points[ej];
-                    energy += self.ee_local_term(ejp.distance(ep));
+                    for (_, first, first_weight) in s.edge_charge_samples(ei) {
+                        for (_, second, second_weight) in s.edge_charge_samples(ej) {
+                            energy += first_weight
+                                * second_weight
+                                * self.ee_local_term(first.distance(second));
+                        }
+                    }
                 }
             }
         }
-        #[cfg(feature = "energy-timing")]
+        #[cfg(feature = "energy_trace")]
         {
             energy_trace::record_spring(spring_start.elapsed());
             energy_trace::record_ee_local(ee_local_start.elapsed());
         }
 
-        #[cfg(feature = "energy-timing")]
+        #[cfg(feature = "energy_trace")]
         let center_start = std::time::Instant::now();
         for i in 0..n {
             let ni = NodeIndex(i);
@@ -1947,10 +1951,10 @@ impl SpringChargeEnergy {
                 energy += self.center_term(np.distance(EuclideanSpace::origin()));
             }
         }
-        #[cfg(feature = "energy-timing")]
+        #[cfg(feature = "energy_trace")]
         energy_trace::record_center(center_start.elapsed());
 
-        #[cfg(feature = "energy-timing")]
+        #[cfg(feature = "energy_trace")]
         let dangling_start = std::time::Instant::now();
         for hi in s.ext.included_iter() {
             for hj in s.ext.included_iter() {
@@ -1965,10 +1969,10 @@ impl SpringChargeEnergy {
             }
         }
         energy += self.dangling_centroid_energy(s);
-        #[cfg(feature = "energy-timing")]
+        #[cfg(feature = "energy_trace")]
         energy_trace::record_dangling(dangling_start.elapsed());
 
-        #[cfg(feature = "energy-timing")]
+        #[cfg(feature = "energy_trace")]
         let crossing_start = std::time::Instant::now();
         if self.crossing_penalty != 0.0 {
             let m = s.edge_points.len().0;
@@ -1988,10 +1992,10 @@ impl SpringChargeEnergy {
                 }
             }
         }
-        #[cfg(feature = "energy-timing")]
+        #[cfg(feature = "energy_trace")]
         energy_trace::record_crossing(crossing_start.elapsed());
 
-        #[cfg(feature = "energy-timing")]
+        #[cfg(feature = "energy_trace")]
         energy_trace::record_total(total_start.elapsed());
         energy
     }
@@ -2007,14 +2011,14 @@ impl SpringChargeEnergy {
     where
         N: NodeStorageOps<NodeData = V> + Clone,
     {
-        #[cfg(feature = "energy-timing")]
+        #[cfg(feature = "energy_trace")]
         let total_start = std::time::Instant::now();
 
         let n = next.vertex_points.len().0;
         let m = next.edge_points.len().0;
         let mut delta = 0.0;
 
-        #[cfg(feature = "energy-timing")]
+        #[cfg(feature = "energy_trace")]
         let vv_start = std::time::Instant::now();
         for i in 0..n {
             let ni = NodeIndex(i);
@@ -2038,10 +2042,10 @@ impl SpringChargeEnergy {
                     - self.vv_term(prev_np.distance(prev_vj));
             }
         }
-        #[cfg(feature = "energy-timing")]
+        #[cfg(feature = "energy_trace")]
         energy_trace::record_vv(vv_start.elapsed());
 
-        #[cfg(feature = "energy-timing")]
+        #[cfg(feature = "energy_trace")]
         let ev_start = std::time::Instant::now();
         if self.c_ev != 0.0 {
             for i in 0..n {
@@ -2067,12 +2071,12 @@ impl SpringChargeEnergy {
                 }
             }
         }
-        #[cfg(feature = "energy-timing")]
+        #[cfg(feature = "energy_trace")]
         energy_trace::record_ev(ev_start.elapsed());
 
-        #[cfg(feature = "energy-timing")]
+        #[cfg(feature = "energy_trace")]
         let spring_start = std::time::Instant::now();
-        #[cfg(feature = "energy-timing")]
+        #[cfg(feature = "energy_trace")]
         let ee_local_start = std::time::Instant::now();
         for i in 0..n {
             let ni = NodeIndex(i);
@@ -2120,13 +2124,13 @@ impl SpringChargeEnergy {
                 }
             }
         }
-        #[cfg(feature = "energy-timing")]
+        #[cfg(feature = "energy_trace")]
         {
             energy_trace::record_spring(spring_start.elapsed());
             energy_trace::record_ee_local(ee_local_start.elapsed());
         }
 
-        #[cfg(feature = "energy-timing")]
+        #[cfg(feature = "energy_trace")]
         let center_start = std::time::Instant::now();
         if self.c_center != 0.0 {
             for i in 0..n {
@@ -2142,10 +2146,10 @@ impl SpringChargeEnergy {
                 delta += self.center_term(next_r);
             }
         }
-        #[cfg(feature = "energy-timing")]
+        #[cfg(feature = "energy_trace")]
         energy_trace::record_center(center_start.elapsed());
 
-        #[cfg(feature = "energy-timing")]
+        #[cfg(feature = "energy_trace")]
         let dangling_start = std::time::Instant::now();
         for hi in next.ext.included_iter() {
             let edge_i = next.graph[&hi];
@@ -2167,7 +2171,7 @@ impl SpringChargeEnergy {
                     - self.dangling_term(prev_pi.distance(prev_pj));
             }
         }
-        if self.dangling_centroid_charge != 0.0
+        if (self.dangling_centroid_charge != 0.0 || self.external_pull != 0.0)
             && (next.active_nodes().any(|node| node_changes.includes(&node))
                 || next
                     .ext
@@ -2176,10 +2180,10 @@ impl SpringChargeEnergy {
         {
             delta += self.dangling_centroid_energy(next) - self.dangling_centroid_energy(prev);
         }
-        #[cfg(feature = "energy-timing")]
+        #[cfg(feature = "energy_trace")]
         energy_trace::record_dangling(dangling_start.elapsed());
 
-        #[cfg(feature = "energy-timing")]
+        #[cfg(feature = "energy_trace")]
         let crossing_start = std::time::Instant::now();
         if self.crossing_penalty != 0.0 {
             let m = next.edge_points.len().0;
@@ -2207,10 +2211,10 @@ impl SpringChargeEnergy {
                 }
             }
         }
-        #[cfg(feature = "energy-timing")]
+        #[cfg(feature = "energy_trace")]
         energy_trace::record_crossing(crossing_start.elapsed());
 
-        #[cfg(feature = "energy-timing")]
+        #[cfg(feature = "energy_trace")]
         energy_trace::record_partial(total_start.elapsed());
         delta
     }

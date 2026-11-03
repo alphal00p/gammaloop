@@ -1471,16 +1471,7 @@
   patterned
 }
 
-// `complete` marks a whole edge; split-style halves pass `false` so they keep
-// their anchoring but never get coil fitting or natural endpoints.
-#let _segments-elements(
-  segments,
-  style,
-  phase,
-  anchor-start,
-  anchor-end,
-  complete: true,
-) = {
+#let _segments-elements(segments, style, phase, anchor-start, anchor-end, complete: true) = {
   if _style-value(style, "label-only") { return (elements: (), length: 0) }
   if _has-mark(style) {
     return _derived-path-elements(
@@ -1882,31 +1873,14 @@
   if segments.len() == 0 { return (elements: (), marker: none, length: 0) }
   if _has-mark(style) {
     if _has-pattern(style) {
-      let painted = _segments-elements(
-        segments,
-        _without-mark-style(style),
-        phase,
-        anchor-start,
-        anchor-end,
-        complete: complete,
-      )
-      (
-        elements: painted.elements + _mark-carrier-elements(path, style),
-        length: painted.length,
-      )
+      let painted = _segments-elements(segments, _without-mark-style(style), phase, anchor-start, anchor-end, complete: complete)
+      (..painted, marker: _mark-carrier-input(path, style))
     } else {
       (elements: (), marker: _mark-carrier-input(path, style, paint: true),
         length: curve-api.length(path, accuracy: _style-value(style, "accuracy")))
     }
   } else {
-    _segments-elements(
-      segments,
-      style,
-      phase,
-      anchor-start,
-      anchor-end,
-      complete: complete,
-    )
+    (.._segments-elements(segments, style, phase, anchor-start, anchor-end, complete: complete), marker: none)
   }
 }
 
