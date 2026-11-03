@@ -5422,14 +5422,18 @@ pub(crate) mod tests {
             if !source.is_zero() {
                 // Compact representation metadata must follow indexed and AUTO
                 // ports alike; the old Atom color helper only matched indexed slots.
-                let expected = FunctionBuilder::new(metadata)
-                    .add_arg(ColorAdjoint {}.to_symbolic([Atom::var(CS.nc).pow(2) - 1]))
-                    .finish();
-                let expected = crate::CookSettings::indices()
-                    .with_mode(crate::CookMode::ReversibleEncoding)
+                // Dimension mapping encodes each representation before rebuilding
+                // its Scalar container, which representation cooking leaves opaque.
+                let expected_representation =
+                    ColorAdjoint {}.to_symbolic([Atom::var(CS.nc).pow(2) - 1]);
+                let expected_representation = CookSettings::indices()
+                    .with_mode(CookMode::ReversibleEncoding)
                     .with_representation_payloads(true, true)
-                    .try_cook(expected.as_view())
+                    .try_cook(expected_representation.as_view())
                     .unwrap();
+                let expected = FunctionBuilder::new(metadata)
+                    .add_arg(expected_representation)
+                    .finish();
                 assert!(parametric.expression.contains(&expected));
             }
             assert!(

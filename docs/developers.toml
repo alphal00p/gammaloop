@@ -900,7 +900,12 @@ anchor = "pub struct CookSettings {"
 # Reviewed 2026-10-23: one-argument native labels are retained and explicit-zero
 # aliases use AbstractIndex serialization. Opaque malformed labels and Open/scope
 # validation remain; Idenso architecture and Spenso syntax document the policy.
-digest = "b7327c174d55a96e27a015c5f74ddc0b4061b1b5"
+# Reviewed 2026-11-03: representation-payload cooking and inverse restoration
+# preserve Scalar function metadata, including literal encoded indices/dimensions.
+# The Idenso and syntax notes retain the broader AnyFunction behavior and the
+# existing checked component handoff. Callback and reversible-roundtrip controls
+# cover the new guards; source-filter semantics, not only tests, changed.
+digest = "c7eff67d3494ceef2218a5e578de75349e191b98"
 
 [[section.note.scope]]
 path = "crates/idenso/src/tensor/mod.rs"
