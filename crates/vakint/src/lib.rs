@@ -462,6 +462,11 @@ pub enum VakintError {
         form_exe_path: String,
         reason: String,
     },
+    #[error(
+        "Forcer matched none of its topologies and would silently drop the integral \
+        (a wrong zero); refusing the result. Forcer reported: {0}"
+    )]
+    ForcerUnrecognizedTopology(String),
     #[error("PySecDec error: {0}")]
     PySecDecError(String),
     #[error("{0}")]

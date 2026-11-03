@@ -87,6 +87,37 @@ fn the_four_loop_ladder_is_seventy_zeta7() {
     );
 }
 
+/// The two-loop sunset (three lines from the in to the out vertex).
+const SUNSET: &str = "topo(prop(1,edge(1,2),k(1),0,1)*prop(2,edge(1,2),k(2),0,1)\
+    *prop(3,edge(1,2),p(1)-k(1)-k(2),0,1))";
+
+/// The kite from vertex 1 to vertex 5 followed by the sunset from 5 to 2.
+const KITE_THEN_SUNSET: &str = "topo(prop(1,edge(1,3),k(1),0,1)*prop(2,edge(1,4),p(1)-k(1),0,1)\
+    *prop(3,edge(3,4),k(2),0,1)*prop(4,edge(3,5),k(1)-k(2),0,1)*prop(5,edge(4,5),p(1)-k(1)+k(2),0,1)\
+    *prop(6,edge(5,2),k(3),0,1)*prop(7,edge(5,2),k(4),0,1)*prop(8,edge(5,2),p(1)-k(3)-k(4),0,1))";
+
+#[test]
+fn a_kite_and_a_sunset_in_series_multiply() {
+    // The blocks meet with five momenta at vertex 5: no Forcer topology has
+    // such a vertex, so Forcer must be given the cubic family graph.
+    let Some(form) = forcer_form() else {
+        eprintln!("FORM 5 is unavailable: skipped the live kite-sunset evaluation");
+        return;
+    };
+    let settings = forcer_settings(
+        &form,
+        RustRedMasterMode::Symbolic,
+        LoopNormalizationFactor::GScheme,
+        6,
+    );
+    let glued = forcer_evaluate(&parse(KITE_THEN_SUNSET), &settings);
+    let blocks = forcer_evaluate(&parse(KITE), &settings) * forcer_evaluate(&parse(SUNSET), &settings);
+    assert_eq!(
+        at_unit_scale(&glued, -4, 0),
+        at_unit_scale(&blocks.expand(), -4, 0)
+    );
+}
+
 #[test]
 fn forcer_evaluations_are_routing_invariant() {
     assert_forcer_routing_invariant(

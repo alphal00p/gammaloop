@@ -205,19 +205,158 @@ fn exact(values: &[ReducedPropagatorValue], scale_power: i64) -> Atom {
 
 /// `G(a,b)` at `Q² = 1`, zero for a non-positive integer index.
 fn g(a: i64, b: Atom) -> Atom {
-    if a <= 0 {
+    bubble(&Atom::num(a), &b)
+}
+
+/// `G(a,b)` for any indices: the one-loop bubble with line powers `a` and
+/// `b` at `Q² = 1`, zero (scaleless) for a non-positive integer index.
+fn bubble(a: &Atom, b: &Atom) -> Atom {
+    if [a, b]
+        .iter()
+        .any(|index| get_integer_from_atom(index.as_view()).is_some_and(|n| n <= 0))
+    {
         return Atom::Zero;
     }
     let e = Atom::var(epsilon());
     let half_d = Atom::num(2) - &e;
     let d = Atom::num(4) - Atom::num(2) * &e;
-    let a = Atom::num(a);
-    gamma().call(&a + &b - &half_d) * gamma().call(&half_d - &a) * gamma().call(&half_d - &b)
+    gamma().call(a + b - &half_d) * gamma().call(&half_d - a) * gamma().call(&half_d - b)
         / (gamma().call(a.clone()) * gamma().call(b.clone()) * gamma().call(d - a - b))
+}
+
+/// `C_G` of a scalar sector whose graph, pinched lines contracted, is
+/// series-parallel between the external vertices: two lines between the same
+/// vertices (a bubble) are one line of power `a+b-d/2` times `G(a,b)`, two
+/// lines through a vertex of degree two are one line of power `a+b`, and a
+/// line of power zero is contracted.
+fn series_parallel(family: &PFamilyData, powers: &[i64]) -> Atom {
+    let lines = canonical_lines(family).unwrap();
+    let pinched = powers.iter().map(|&power| power == 0).collect::<Vec<_>>();
+    let graph = ContractedGraph::new(&lines, &pinched);
+    let (mut q_in, mut q_out) = (graph.find(1), graph.find(2));
+    let mut edges = lines
+        .iter()
+        .zip(powers)
+        .filter(|(_, power)| **power != 0)
+        .map(|(line, power)| (graph.find(line.from), graph.find(line.to), Atom::num(*power)))
+        .collect::<Vec<_>>();
+    let half_d = Atom::num(2) - Atom::var(epsilon());
+    let mut value = Atom::num(1) / g_scheme_measure().pow(Atom::num(family.loops as i64));
+    let context = format!("{} {powers:?}", family.name);
+    loop {
+        if q_in == q_out {
+            return Atom::Zero;
+        }
+        if let Some(index) = edges
+            .iter()
+            .position(|(from, to, power)| from == to || power.is_zero())
+        {
+            // A self-loop or coinciding external vertices are scaleless.
+            let (from, to, power) = edges.remove(index);
+            if from == to && !power.is_zero() {
+                return Atom::Zero;
+            }
+            let (kept, merged) = (from.min(to), from.max(to));
+            for end in edges
+                .iter_mut()
+                .flat_map(|edge| [&mut edge.0, &mut edge.1])
+                .chain([&mut q_in, &mut q_out])
+            {
+                if *end == merged {
+                    *end = kept;
+                }
+            }
+            continue;
+        }
+        let [(from, to, _)] = edges.as_slice() else {
+            let same = |i: usize, j: usize| {
+                let ((a, b, _), (c, d, _)) = (&edges[i], &edges[j]);
+                (a, b) == (c, d) || (a, b) == (d, c)
+            };
+            if let Some((i, j)) = (0..edges.len())
+                .flat_map(|i| (i + 1..edges.len()).map(move |j| (i, j)))
+                .find(|&(i, j)| same(i, j))
+            {
+                let (_, _, b) = edges.remove(j);
+                let a = edges[i].2.clone();
+                value *= bubble(&a, &b);
+                edges[i].2 = (a + b - &half_d).expand();
+                continue;
+            }
+            let degree = |vertex: i64| {
+                edges
+                    .iter()
+                    .filter(|(from, to, _)| *from == vertex || *to == vertex)
+                    .count()
+            };
+            let vertex = edges
+                .iter()
+                .flat_map(|(from, to, _)| [*from, *to])
+                .find(|&vertex| vertex != q_in && vertex != q_out && degree(vertex) == 2)
+                .unwrap_or_else(|| panic!("{context} is not series-parallel"));
+            let (first, second) = {
+                let mut at = (0..edges.len())
+                    .filter(|&i| edges[i].0 == vertex || edges[i].1 == vertex)
+                    .collect::<Vec<_>>();
+                let second = edges.remove(at.pop().unwrap());
+                (at[0], second)
+            };
+            let far = |(from, to, _): &(i64, i64, Atom)| if *from == vertex { *to } else { *from };
+            let end = far(&second);
+            let edge = &mut edges[first];
+            *edge = (far(edge), end, (&edge.2 + second.2).expand());
+            continue;
+        };
+        assert_eq!(
+            [*from.min(to), *from.max(to)],
+            [q_in.min(q_out), q_in.max(q_out)],
+            "{context}"
+        );
+        return value;
+    }
 }
 
 fn g_scheme_measure() -> Atom {
     Atom::var(epsilon()) * g(1, Atom::num(1))
+}
+
+/// A scalar battery case on a sector with a vertex of five or more momenta
+/// once its pinched lines are contracted (the graphs Forcer cannot match):
+/// `reduced = (-1)^(Σa+r)·C_G` at `w = 2L-Σa+r`, with `C_G` the
+/// series-parallel `G`-function product, `Σa` the positive powers and `r`
+/// the degree of the negative powers (lines without `p(1)`).
+fn assert_series_parallel(case: &Case, values: &[ReducedPropagatorValue]) {
+    let family = family(&case.family);
+    assert_eq!(case.numerator, "1", "{}", case.name);
+    assert!(max_contracted_valence(family, &case.powers) >= 5, "{}", case.name);
+    let positive: i64 = case.powers.iter().filter(|a| **a > 0).sum();
+    let degree: i64 = -case.powers.iter().filter(|a| **a < 0).sum::<i64>();
+    let sign = if (positive + degree) % 2 == 0 { 1 } else { -1 };
+    let w = 2 * family.loops as i64 - positive + degree;
+    assert_series_zero(
+        exact(values, w) - Atom::num(sign) * series_parallel(family, &case.powers),
+        2,
+        &case.name,
+    );
+}
+
+/// The largest number of momenta (Q included) at a vertex of the sector
+/// graph once the lines of non-positive power are contracted.
+fn max_contracted_valence(family: &PFamilyData, powers: &[i64]) -> usize {
+    let lines = canonical_lines(family).unwrap();
+    let pinched = powers.iter().map(|&power| power <= 0).collect::<Vec<_>>();
+    let graph = ContractedGraph::new(&lines, &pinched);
+    let mut momenta = BTreeMap::<i64, usize>::new();
+    let ends = lines
+        .iter()
+        .zip(&pinched)
+        .filter(|(_, pinched)| !**pinched)
+        .flat_map(|(line, _)| [line.from, line.to])
+        .chain([1, 2]);
+    for vertex in ends {
+        *momenta.entry(graph.find(vertex)).or_default() += 1;
+    }
+    momenta.into_values().max().unwrap()
 }
 
 /// The one-loop closed form of `dot(k(1),p)^n` on `(a, b)`: with
@@ -334,6 +473,9 @@ fn forcer_three_loop_battery() {
     let settings = finalize_tests::settings(LoopNormalizationFactor::GScheme, 4);
     for (case, values) in &battery {
         assert_finalizes(case, values, 4);
+        if case.name.starts_with("contracted") {
+            assert_series_parallel(case, values);
+        }
         // The scalar planar and non-planar tops have the G-scheme value 20ζ5.
         if ["la_top", "no_top"].contains(&case.name.as_str()) {
             let result = finalize(
@@ -431,7 +573,30 @@ fn forcer_four_loop_battery() {
     );
     for (case, values) in &battery {
         assert_finalizes(case, values, 5);
+        if case.name.starts_with("contracted") {
+            assert_series_parallel(case, values);
+        }
     }
+    // dot(k(3),p(1)) on lines k(3) (3) and k(3)+p(1) (6) of a sector with a
+    // six-momentum vertex: k·Q = ((k+Q)² - k² - Q²)/2 in G-functions.
+    let (case, values) = battery
+        .iter()
+        .find(|(case, _)| case.name == "la4_kq_six_momenta")
+        .unwrap();
+    let la4 = family("P4L_LA4");
+    assert!(max_contracted_valence(la4, &case.powers) >= 6);
+    let lowered = |line: usize| {
+        let mut powers = case.powers.clone();
+        powers[line] -= 1;
+        series_parallel(la4, &powers)
+    };
+    let k_dot_q = (lowered(5) - lowered(2) - series_parallel(la4, &case.powers)) / Atom::num(2);
+    let positive: i64 = case.powers.iter().sum();
+    assert_series_zero(
+        exact(values, 8 - positive + 1) - Atom::num(if positive % 2 == 0 { -1 } else { 1 }) * k_dot_q,
+        2,
+        &case.name,
+    );
     // The ladder p-integral is C(2L,L)·ζ(2L-1) in the G-scheme: 70ζ7 at four loops.
     let head = parse("p(1)");
     let settings = finalize_tests::settings(LoopNormalizationFactor::GScheme, 5);
@@ -529,6 +694,90 @@ fn canonical_kite_becomes_the_forcer_graph() {
             coefficient: Atom::num(1),
         }]
     );
+}
+
+/// The `vx(...)` factors of each local of a Forcer program.
+fn forcer_vertices(input: &ForcerInput) -> Vec<Vec<String>> {
+    let vertex = Regex::new(r"vx\([^)]*\)").unwrap();
+    input
+        .program
+        .lines()
+        .filter(|line| line.starts_with("Local "))
+        .map(|local| {
+            vertex
+                .find_iter(local)
+                .map(|found| found.as_str().to_owned())
+                .collect()
+        })
+        .collect()
+}
+
+#[test]
+fn pinched_sectors_keep_the_cubic_family_graph() {
+    // Forcer silently drops a graph that is none of its topologies (at most
+    // four momenta per vertex): contracting pinched lines would merge
+    // vertices into five or more momenta, so every sector is the family graph
+    // with the pinched lines left without propagator.
+    for family in &P_FAMILIES {
+        let n = family.line_count();
+        let input = |powers: &[i64]| {
+            forcer_input(family, powers, Atom::num(1).as_view(), &parse("p(1)")).unwrap()
+        };
+        let [top] = &forcer_vertices(&input(&vec![1; n]).unwrap())[..] else {
+            panic!("{}: one local", family.name);
+        };
+        assert!(top.iter().all(|vertex| vertex.matches(',').count() == 2));
+        for first in 0..n {
+            for second in first + 1..n {
+                let mut powers = vec![1; n];
+                (powers[first], powers[second]) = (0, -1);
+                if let Some(sector) = input(&powers) {
+                    for local in forcer_vertices(&sector) {
+                        assert_eq!(&local, top, "{} {powers:?}", family.name);
+                    }
+                    for pinched in [first, second] {
+                        let name = format!("p{}", pinched + 1);
+                        assert!(!sector.program.contains(&format!("/({name}.{name})")));
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn forcer_warnings_for_unrecognized_graphs_are_errors() {
+    let stdout = "Time =       0.29 sec    Generated terms =          1\n\
+        WARNING: the following diagram did not match a topology:  + acc(v(p1,p2,p6,p9,\n \
+        p10)*v(p1,p6,Q)*EX)\n\nTime =       0.30 sec";
+    assert_eq!(
+        unrecognized_topology(stdout).as_deref(),
+        Some(
+            "WARNING: the following diagram did not match a topology: + acc(v(p1,p2,p6,p9, \
+             p10)*v(p1,p6,Q)*EX)"
+        )
+    );
+    assert_eq!(unrecognized_topology("Time = 0.3 sec\n  F1 = 0;"), None);
+}
+
+#[test]
+fn forcer_refuses_its_silent_zero() {
+    let Some(form) = forcer_test_form() else {
+        eprintln!("FORM 5 is unavailable: skipped the unrecognized-graph run");
+        return;
+    };
+    // A four-loop graph with a five-momentum vertex: no Forcer topology, so
+    // Forcer alone returns 0 (rules-study verify-crossed, valence_test.frm).
+    let program = "#-\n#include- forcer.h\nFormat 255;\nLocal F1 = 1/p1.p1/p2.p2/p3.p3/p4.p4\
+        /p6.p6/p8.p8/p5.p5/p9.p9/p10.p10*vx(Q,-p1,p6)*vx(p1,-p2,-p6,p9,p10)*vx(p2,-p3,p8)\
+        *vx(p3,p4,-Q)*vx(-p4,-p8,-p5)*vx(p5,-p9,-p10);\n#call Forcer()\n.sort\n\
+        #write <F1.out> \"%E\", F1\n.end\n";
+    match run_forcer(&settings(&form), program, &["F1"]) {
+        Err(VakintError::ForcerUnrecognizedTopology(warning)) => {
+            assert!(warning.replace(' ', "").contains("v(p1,p2,p6,p9,p10)"), "{warning}")
+        }
+        other => panic!("expected ForcerUnrecognizedTopology, got {other:?}"),
+    }
 }
 
 #[test]

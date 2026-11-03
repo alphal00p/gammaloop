@@ -287,6 +287,82 @@
       "outputs": [
         "GschemeConstants(0,0)*GschemeConstants(1,0)*GschemeConstants(2,0)*rat(5*ep - 1,36*ep - 12) + GschemeConstants(0,0)*Master(t105)*rat( - ep,6*ep - 2)\n"
       ]
+    },
+    {
+      "name": "contracted_la_five_momenta",
+      "family": "P3L_LA",
+      "powers": [
+        1,
+        1,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)^2*GschemeConstants(1,0)*rat(1,2)\n"
+      ]
+    },
+    {
+      "name": "contracted_no_five_momenta_dot",
+      "family": "P3L_NO",
+      "powers": [
+        1,
+        0,
+        1,
+        1,
+        0,
+        1,
+        1,
+        2
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)*GschemeConstants(1,0)*GschemeConstants(2,0)*rat(4*ep - 1,12*ep + 6)\n"
+      ]
+    },
+    {
+      "name": "contracted_be_two_five_momenta",
+      "family": "P3L_BE",
+      "powers": [
+        0,
+        0,
+        1,
+        0,
+        1,
+        1,
+        0,
+        1
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)*GschemeConstants(1,0)*GschemeConstants(2,0)*rat(ep^2,72*ep^2 - 102*ep + 36)\n"
+      ]
+    },
+    {
+      "name": "contracted_be_five_momenta_numerator",
+      "family": "P3L_BE",
+      "powers": [
+        -1,
+        1,
+        -1,
+        1,
+        1,
+        2,
+        0,
+        0
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)*GschemeConstants(1,0)*GschemeConstants(2,0)*rat(2*ep^3 - ep^2,144*ep^2 - 204*ep + 72)\n"
+      ]
     }
   ]
 }

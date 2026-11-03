@@ -1,8 +1,9 @@
 //! The Forcer backend: massless propagator integrals reduced by the vendored
 //! Forcer FORM program (B. Ruijl, T. Ueda, J.A.M. Vermaseren, arXiv:1704.06650).
 //!
-//! Forcer receives the contracted canonical graph (positive-power lines only)
-//! and returns the exact reduction in its G-scheme master basis,
+//! Forcer receives the canonical family graph, with propagators for the
+//! positive-power lines only (never contracted: Forcer silently drops a graph
+//! that is none of its topologies), and returns the exact reduction in its G-scheme master basis,
 //! `rat(n,d) × GschemeConstants(x1,x2) × Master(name)`. Forcer sets `Q.Q = 1`,
 //! so the numerator is split into homogeneous parts before the run; every
 //! part becomes one [`ReducedPropagatorValue`]. Normalization, expansion and
@@ -347,7 +348,8 @@ fn loop_momenta_in_lines(lines: &[&CanonicalLine], loops: usize) -> Option<Vec<V
 }
 
 /// The contracted graph of a sector: union-find representatives of the
-/// vertices once all pinched lines are contracted.
+/// vertices once all pinched lines are contracted. It decides scalelessness
+/// only; Forcer itself always gets the uncontracted family graph.
 struct ContractedGraph {
     representative: BTreeMap<i64, i64>,
 }
@@ -514,35 +516,45 @@ pub(crate) fn forcer_input(
     }
     let pinched = powers.iter().map(|&power| power <= 0).collect::<Vec<_>>();
     let graph = ContractedGraph::new(&lines, &pinched);
+    // Line `i` (0-based canonical order) is the Forcer momentum `p{i+1}`.
     let remaining = lines
         .iter()
         .zip(powers)
-        .filter(|(_, power)| **power > 0)
+        .enumerate()
+        .filter(|(_, (_, power))| **power > 0)
+        .map(|(index, (line, power))| (index, line, *power))
         .collect::<Vec<_>>();
-    let remaining_lines = remaining.iter().map(|(line, _)| *line).collect::<Vec<_>>();
+    let remaining_lines = remaining.iter().map(|(_, line, _)| *line).collect::<Vec<_>>();
     if graph.is_scaleless(&remaining_lines) {
         return Ok(None);
     }
     let Some(loop_momenta) = loop_momenta_in_lines(&remaining_lines, loops) else {
         return Ok(None);
     };
-    let total_power: i64 = remaining.iter().map(|(_, power)| **power).sum();
+    let total_power: i64 = remaining.iter().map(|(_, _, power)| power).sum();
 
-    // Propagators and vertices of the contracted graph: incoming momenta
-    // count positively, Q enters at canonical vertex 1 and leaves at vertex 2.
+    // Forcer recognizes an input only when its vertex structure is one of its
+    // own topologies, whose vertices carry at most four momenta, and silently
+    // drops any other input (a wrong zero). Contracting pinched lines merges
+    // vertices into five or more momenta, so the input is always the
+    // uncontracted family graph (cubic, a top-level Forcer topology): a pinched
+    // line keeps its place in the vertices and only loses its propagator, and
+    // Forcer's own reduction hands the sector over to its subtopology.
+    // Incoming momenta count positively, Q enters at canonical vertex 1 and
+    // leaves at vertex 2.
     let mut vertices = BTreeMap::<i64, Vec<String>>::new();
+    for (index, line) in lines.iter().enumerate() {
+        let name = format!("p{}", index + 1);
+        vertices.entry(line.from).or_default().push(format!("-{name}"));
+        vertices.entry(line.to).or_default().push(name);
+    }
+    vertices.entry(1).or_default().push("Q".into());
+    vertices.entry(2).or_default().push("-Q".into());
     let mut propagators = String::from("1");
-    for (index, (line, power)) in remaining.iter().enumerate() {
+    for (index, _, power) in &remaining {
         let name = format!("p{}", index + 1);
         propagators.push_str(&format!("/({name}.{name})^{power}"));
-        vertices
-            .entry(graph.find(line.from))
-            .or_default()
-            .push(format!("-{name}"));
-        vertices.entry(graph.find(line.to)).or_default().push(name);
     }
-    vertices.entry(graph.find(1)).or_default().push("Q".into());
-    vertices.entry(graph.find(2)).or_default().push("-Q".into());
     let topology = format!(
         "{propagators}*{}",
         vertices
@@ -563,7 +575,7 @@ pub(crate) fn forcer_input(
                     let vector = if column + 1 == row.len() {
                         "Q".to_string()
                     } else {
-                        format!("p{}", column + 1)
+                        format!("p{}", remaining[column].0 + 1)
                     };
                     value.form_term(&vector)
                 })
@@ -872,6 +884,9 @@ fn run_forcer(
     if !output.status.success() {
         return Err(failure(String::from_utf8_lossy(&output.stderr).into()));
     }
+    if let Some(warning) = unrecognized_topology(&String::from_utf8_lossy(&output.stdout)) {
+        return Err(VakintError::ForcerUnrecognizedTopology(warning));
+    }
     let results = locals
         .iter()
         .map(|local| {
@@ -883,6 +898,16 @@ fn run_forcer(
         fs::remove_dir_all(&run_directory)?;
     }
     Ok(results)
+}
+
+/// Forcer's warning for an input graph that matches none of its topologies
+/// (`matchTopologies` in `forcer/recognition.h`), whitespace-collapsed: such
+/// an input is dropped from the result.
+fn unrecognized_topology(stdout: &str) -> Option<String> {
+    let found = stdout.find("did not match a topology")?;
+    let start = stdout[..found].rfind('\n').map_or(0, |newline| newline + 1);
+    let warning = stdout[start..].split("\n\n").next().unwrap_or_default();
+    Some(warning.split_whitespace().collect::<Vec<_>>().join(" "))
 }
 
 #[cfg(unix)]

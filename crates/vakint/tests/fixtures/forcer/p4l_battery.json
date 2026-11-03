@@ -111,6 +111,116 @@
       "outputs": [
         "Master(no1)*rat(1,1)\n"
       ]
+    },
+    {
+      "name": "contracted_la4_five_momenta",
+      "family": "P4L_LA4",
+      "powers": [
+        0,
+        1,
+        0,
+        1,
+        1,
+        1,
+        0,
+        1,
+        1,
+        1,
+        1
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)^3*GschemeConstants(2,0)*rat(1,3)\n"
+      ]
+    },
+    {
+      "name": "contracted_no2_six_momenta",
+      "family": "P4L_NO2",
+      "powers": [
+        1,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)^2*GschemeConstants(1,0)*GschemeConstants(2,0)*rat(3*ep - 1,6*ep - 3)\n"
+      ]
+    },
+    {
+      "name": "contracted_j4_six_and_five_momenta_dot",
+      "family": "P4L_J4",
+      "powers": [
+        2,
+        0,
+        0,
+        0,
+        1,
+        0,
+        1,
+        0,
+        1,
+        1,
+        1
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)*GschemeConstants(1,0)*GschemeConstants(2,0)*GschemeConstants(3,0)*rat(ep^2,40*ep - 16)\n"
+      ]
+    },
+    {
+      "name": "contracted_no2_six_momenta_numerator",
+      "family": "P4L_NO2",
+      "powers": [
+        -1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        -1,
+        0,
+        0,
+        2,
+        0
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)*GschemeConstants(1,0)*GschemeConstants(2,0)*GschemeConstants(3,0)*rat(9*ep^5 - 21*ep^4 + 15*ep^3 - 3*ep^2,10000*ep^4 - 25500*ep^3 + 23900*ep^2 - 9720*ep + 1440)\n"
+      ]
+    },
+    {
+      "name": "la4_kq_six_momenta",
+      "family": "P4L_LA4",
+      "powers": [
+        1,
+        1,
+        1,
+        1,
+        0,
+        1,
+        0,
+        1,
+        0,
+        1,
+        1
+      ],
+      "numerator": "dot(k(3),p(1))",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)*GschemeConstants(1,0)*GschemeConstants(2,0)*GschemeConstants(3,0)*rat( - ep + 1,120*ep - 48)\n"
+      ]
     }
   ]
 }

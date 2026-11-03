@@ -392,11 +392,17 @@ permission of the Forcer authors (Ben Ruijl, collaborator), granted on 2026-11-0
 ```
 
 Input generation:
-- The input is the contracted graph: positive-power lines only.
-- Forcer momenta `p1..pN` are the remaining lines in canonical order, oriented as the canonical edges. `Q` is the
-  canonical `p(1)`.
-- One `vx(...)` per vertex: `+p` for incoming lines, `-p` for outgoing lines, `Q` at vertex 1 and `-Q` at vertex 2.
-- Propagators are written `1/(pj.pj)^a`.
+- The input is the uncontracted (cubic) family graph, a top-level Forcer topology: Forcer momenta `p1..pN` are all
+  the family lines in canonical order, oriented as the canonical edges. `Q` is the canonical `p(1)`.
+- One `vx(...)` per family vertex: `+p` for incoming lines, `-p` for outgoing lines, `Q` at vertex 1 and `-Q` at
+  vertex 2.
+- Propagators are written `1/(pj.pj)^a` for the positive-power lines only. A pinched line keeps its place in the
+  vertices without a propagator, and Forcer's own reduction hands the sector over to its subtopology.
+- Never contract the pinched lines: Forcer matches the input only against its own topologies, whose vertices carry
+  at most four momenta, and silently drops any other input (a wrong zero). Contracted sectors have vertices with
+  five or six momenta for 3700 of the 4703 non-scaleless sectors of the registry (3L: 97, 4L: 3606).
+- Fail closed: Forcer's warning `the following diagram did not match a topology` on standard output is the error
+  `VakintError::ForcerUnrecognizedTopology`, never a zero.
 - The canonical `k(j)` are solved in line momenta and `Q` (a pinched loop line is solved through the remaining
   lines).
 - The numerator becomes FORM dot products (`p1.p3`, `Q.p2`, `Q.Q`). It is split by degree `r` into separate
