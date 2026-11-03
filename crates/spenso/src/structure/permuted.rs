@@ -422,6 +422,81 @@ mod tests {
 
     use super::*;
 
+    // Mirror the wire format without admitting invalid values as Permutations.
+    #[derive(Serialize, Encode)]
+    #[serde(rename = "Permutation")]
+    struct RawPermutation<'a> {
+        map: &'a [usize],
+        inv: &'a [usize],
+    }
+
+    #[derive(Serialize, Encode)]
+    #[serde(rename = "RepresentationOrder")]
+    struct RawRepresentationOrder<'a>(&'a RawPermutation<'a>);
+
+    #[derive(Serialize, Encode)]
+    #[serde(rename = "IndexOrder")]
+    struct RawIndexOrder<'a>(&'a RawPermutation<'a>);
+
+    #[derive(Serialize, Encode)]
+    #[serde(rename = "CanonicalStages")]
+    enum RawCanonicalStages<'a> {
+        Identity {
+            order: usize,
+        },
+        Mapped {
+            representation: RawRepresentationOrder<'a>,
+            index: RawIndexOrder<'a>,
+        },
+    }
+
+    #[test]
+    fn layout_codec_fixture_matches_valid_stage_encodings() {
+        let stages = [
+            CanonicalStages::Identity { order: 3 },
+            CanonicalStages::Mapped {
+                representation: RepresentationOrder(Permutation::from_map(vec![1, 2, 0])),
+                index: IndexOrder(Permutation::from_map(vec![2, 0, 1])),
+            },
+        ];
+        let CanonicalStages::Mapped {
+            representation,
+            index,
+        } = &stages[1]
+        else {
+            panic!("the second fixture must contain mapped stages");
+        };
+        let raw_representation = RawPermutation {
+            map: representation.0.map(),
+            inv: representation.0.inv(),
+        };
+        let raw_index = RawPermutation {
+            map: index.0.map(),
+            inv: index.0.inv(),
+        };
+        let raw = [
+            RawCanonicalStages::Identity { order: 3 },
+            RawCanonicalStages::Mapped {
+                representation: RawRepresentationOrder(&raw_representation),
+                index: RawIndexOrder(&raw_index),
+            },
+        ];
+        for (raw, stages) in raw.iter().zip(&stages) {
+            assert_eq!(
+                json::to_string(raw).unwrap(),
+                json::to_string(stages).unwrap()
+            );
+            assert_eq!(
+                ron_codec::to_string(raw).unwrap(),
+                ron_codec::to_string(stages).unwrap()
+            );
+            assert_eq!(
+                binary::encode_to_vec(raw, config::standard()).unwrap(),
+                binary::encode_to_vec(stages, config::standard()).unwrap()
+            );
+        }
+    }
+
     #[test]
     fn canonical_layout_preserves_noncommuting_axis_orders() {
         let layout = CanonicalLayout::from_permutations(
@@ -623,20 +698,26 @@ mod tests {
             (vec![0], vec![]),
         ];
         for (map, inverse) in malformed_cases {
-            // Linnet's raw codec permits these values; CanonicalLayout owns the
-            // validation required before stage lookups or identity normalization.
-            let malformed: Permutation =
-                json::from_str(&format!(r#"{{"map":{map:?},"inv":{inverse:?}}}"#)).unwrap();
+            // Encode malformed input directly: Linnet now rejects it during
+            // decoding, before layout stage lookups or identity normalization.
+            let malformed = RawPermutation {
+                map: &map,
+                inv: &inverse,
+            };
+            let identity: Vec<_> = (0..map.len()).collect();
+            let valid = RawPermutation {
+                map: &identity,
+                inv: &identity,
+            };
             for malformed_representation in [false, true] {
-                let valid = Permutation::id(malformed.map().len());
                 let (representation, index) = if malformed_representation {
-                    (malformed.clone(), valid)
+                    (&malformed, &valid)
                 } else {
-                    (valid, malformed.clone())
+                    (&valid, &malformed)
                 };
-                let stages = CanonicalStages::Mapped {
-                    representation: RepresentationOrder(representation),
-                    index: IndexOrder(index),
+                let stages = RawCanonicalStages::Mapped {
+                    representation: RawRepresentationOrder(representation),
+                    index: RawIndexOrder(index),
                 };
                 let encoded = json::to_string(&stages).unwrap();
                 assert!(json::from_str::<CanonicalLayout>(&encoded).is_err());
