@@ -18873,6 +18873,14 @@
       "possible_values": []
     },
     {
+      "path": "runtime.integrator.training_iterations",
+      "value_type": "integer | null",
+      "description": "Number of iterations that adapt the sampling grid; later iterations sample the\nfrozen grid. Unset adapts after every iteration.",
+      "required": false,
+      "default": null,
+      "possible_values": []
+    },
+    {
       "path": "runtime.kinematics.e_cm",
       "value_type": "number",
       "description": "Center-of-mass energy used to normalize and construct external momenta.",
@@ -18947,6 +18955,73 @@
       "possible_values": [
         "constant"
       ]
+    },
+    {
+      "path": "runtime.lu_flow.centers",
+      "value_type": "string",
+      "description": "Prescription for graphs without `fixed_centers`.",
+      "required": false,
+      "default": "origin",
+      "possible_values": [
+        "origin",
+        "search"
+      ]
+    },
+    {
+      "path": "runtime.lu_flow.fixed_centers",
+      "value_type": "object",
+      "description": "Explicit centers keyed by graph name. Each row gives a loop-edge ID in the graph's\ngeneration basis and coefficients of the physical external spatial momenta in\ncanonical external order: `c_i = sum_a coefficients[a] * p_a`.",
+      "required": false,
+      "default": {},
+      "possible_values": []
+    },
+    {
+      "path": "runtime.lu_flow.search.max_patches",
+      "value_type": "integer",
+      "description": "Maximum number of smooth center patches per graph.",
+      "required": false,
+      "default": 8,
+      "possible_values": []
+    },
+    {
+      "path": "runtime.lu_flow.search.min_patch_gain",
+      "value_type": "number",
+      "description": "A further patch must newly cover at least this Boltzmann-weighted fraction of the\nrelevant sampled cut points.",
+      "required": false,
+      "default": 0.02,
+      "possible_values": []
+    },
+    {
+      "path": "runtime.lu_flow.search.rays",
+      "value_type": "integer",
+      "description": "Rays per base point and cut surface used to sample the cut surfaces.",
+      "required": false,
+      "default": 256,
+      "possible_values": []
+    },
+    {
+      "path": "runtime.lu_flow.search.relevance",
+      "value_type": "number",
+      "description": "Ignore cut points whose absorbed bath energies `E` suppress them, by `exp(-beta E)`\nwithout chemical potentials, by more than this factor relative to the most relevant\nsampled cut point of the graph.",
+      "required": false,
+      "default": 1e-10,
+      "possible_values": []
+    },
+    {
+      "path": "runtime.lu_flow.search.seed",
+      "value_type": "integer",
+      "description": "Seed of the sampled surface points.",
+      "required": false,
+      "default": 1,
+      "possible_values": []
+    },
+    {
+      "path": "runtime.lu_flow.search.slope",
+      "value_type": "number",
+      "description": "Required radial slope `grad(eta).(y - c)` of every covered cut point, in units of the\nexternal energy scale `max(|p^0|, |p|)` over the external momenta (`e_cm` if they\nvanish); it decays quadratically in `|y|` beyond that scale. Other cut surfaces\nwithin this many energy units of a point constrain its centers too.",
+      "required": false,
+      "default": 0.05,
+      "possible_values": []
     },
     {
       "path": "runtime.model",

@@ -2583,21 +2583,16 @@ fn apply_iteration_core_states(
             .sampling_state_for_slot(actual_slot_index)
             .discrete_axis_labels
             .clone();
+        let (discrete, continuous) = slots[actual_slot_index]
+            .settings
+            .integrator
+            .learning_rates(integration_state.iter);
         let sampling_state = integration_state.sampling_state_for_slot_mut(actual_slot_index);
         *sampling_state = SamplingSlotState {
             grid: merged_grid,
             discrete_axis_labels,
         };
-        sampling_state.grid.update(
-            F(slots[actual_slot_index]
-                .settings
-                .integrator
-                .discrete_dim_learning_rate),
-            F(slots[actual_slot_index]
-                .settings
-                .integrator
-                .continuous_dim_learning_rate),
-        );
+        sampling_state.grid.update(F(discrete), F(continuous));
     }
 
     integration_state.update_iter(false);
@@ -4087,10 +4082,8 @@ impl MasterNode {
 
     /// Finish the current iteration. This should be called after all jobs have been processed.
     pub(crate) fn update_iter(&mut self) {
-        self.grid.update(
-            F(self.integrator_settings.discrete_dim_learning_rate),
-            F(self.integrator_settings.continuous_dim_learning_rate),
-        );
+        let (discrete, continuous) = self.integrator_settings.learning_rates(self.current_iter);
+        self.grid.update(F(discrete), F(continuous));
         self.master_accumulator_re.update_iter(false);
         self.master_accumulator_im.update_iter(false);
         if let Some(observable_accumulators) = self.observable_accumulators.as_mut() {

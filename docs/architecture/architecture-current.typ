@@ -770,19 +770,25 @@ The user-facing contract and worked GL297/GL638 examples live in
 
 === 3. Evaluation and Integration Flow
 <3-evaluation-and-integration-flow>
-Cross-section `lu_flow_centers` optionally specifies a fixed spatial point in each
-graph's generation LMB, using loop-edge IDs and linear coefficients of the external
-momenta. The physical flow is $bold(c)+t(bold(k)-bold(c))$ with Jacobian
-$t^(3L)$. The same fixed point owns E/H root rays, scalar and raised-residue
-momentum jets, event momenta, and hosted sampling. Native sampling frames transport
-the fixed point through the existing affine LMB map; stability rotations rebuild it
-from the rotated external data. An absent prescription retains origin-centered LU.
-Configured centers require threshold subtraction disabled and no zero-temperature
-Fermi sectors: the existing threshold and symbolic Fermi contact terms still use
-origin-centered derivatives. The midpoint coefficients are graph routing data,
-not a kinematics-dependent switch or an automatic center finder.
-The choice changes radial conditioning: cancellation at one overlap does not
-guarantee a well-conditioned Jacobian or improved variance for other cuts.
+Cross-section `lu_flow` chooses the fixed points of the spatial LU flow
+$bold(c)+t(bold(k)-bold(c))$, whose Jacobian is $t^(3L)$. The default is the origin;
+`fixed_centers` gives explicit per-graph centers from external-momentum coefficients, and
+`centers = "search"` prepares centers at warm-up for the current external kinematics
+(`integrands/process/cross_section/lu_flow.rs`). The search samples every active cut
+surface with certified radial roots, keeps thermally relevant points, and solves linear
+programs in the center for causal slopes `grad(eta).(y-c) > 0` (Clarabel), refined by a
+pattern search on the covered Boltzmann weight. The first center lies in the subspace
+invariant under rotations that fix the external momenta, so it is the origin at rest. Further
+centers form patches with a smooth partition of unity in the physical point $bold(y)$: every
+root of every cut in patch $k$ carries the same weight $w_k(bold(y))$, which vanishes where
+center $k$ is not causal on a nearby cut surface and enters raised residues through the `h`
+jets. Where no patch is fully causal, a small floor on the first patch keeps the partition
+exact. Without relevant cut points the search keeps the origin. Positive-E sampling hosts belong to the first
+patch. A plan stores binary64 centers in the warm-up frame; every precision embeds them
+exactly and stability rotations rotate them. Configured or searched centers require
+threshold subtraction disabled and no zero-temperature Fermi sectors, whose terms still
+use origin-centered derivatives. A center that restores cancellation at one overlap does not
+guarantee a well-conditioned Jacobian or improved variance elsewhere.
 
 + Commands (`inspect`, `evaluate`, `integrate`) resolve process +
   integrand references.

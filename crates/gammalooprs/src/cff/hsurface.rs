@@ -57,14 +57,8 @@ impl Hsurface {
         diagnostics: &mut RadialRootDiagnostics,
         identity: &RadialRootIdentity,
     ) -> eyre::Result<(EnergySurfaceRay<T>, Vec<NewtonIterationResult<T>>)> {
-        let velocity = loop_momenta - center;
-        let ray = EnergySurfaceRay::routed(
-            self.positive_energies
-                .iter()
-                .map(|&edge| (edge, 1))
-                .chain(self.negative_energies.iter().map(|&edge| (edge, -1))),
-            &self.external_shift,
-            &velocity,
+        let ray = self.routed_ray(
+            &(loop_momenta - center),
             center,
             external_momenta,
             masses,
@@ -72,6 +66,29 @@ impl Hsurface {
         );
         let roots = ray.positive_radius_roots(e_cm, diagnostics, identity)?;
         Ok((ray, roots))
+    }
+
+    /// The signed ray `center + t velocity`, without solving it.
+    pub(crate) fn routed_ray<T: FloatLike>(
+        &self,
+        velocity: &LoopMomenta<F<T>>,
+        center: &LoopMomenta<F<T>>,
+        external_momenta: &ExternalFourMomenta<F<T>>,
+        masses: &EdgeVec<F<T>>,
+        lmb: &LoopMomentumBasis,
+    ) -> EnergySurfaceRay<T> {
+        EnergySurfaceRay::routed(
+            self.positive_energies
+                .iter()
+                .map(|&edge| (edge, 1))
+                .chain(self.negative_energies.iter().map(|&edge| (edge, -1))),
+            &self.external_shift,
+            velocity,
+            center,
+            external_momenta,
+            masses,
+            lmb,
+        )
     }
 
     pub(crate) fn to_atom(&self, cut_edges: &[EdgeIndex]) -> Atom {

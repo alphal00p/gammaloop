@@ -95,3 +95,6 @@ mod thermal_inclusive_scalar;
 
 #[path = "test_runs/thermal_inclusive_qcd.rs"]
 mod thermal_inclusive_qcd;
+
+#[path = "test_runs/thermal_lu_centers.rs"]
+mod thermal_lu_centers;

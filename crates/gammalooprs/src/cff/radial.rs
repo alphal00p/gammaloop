@@ -44,6 +44,14 @@ pub(super) struct RadialEnergy<T: FloatLike> {
 // Ephemeral endpoint tuples for the same affine energy fold, with no stored ray.
 type EnclosedRayEnergy<B> = (i64, [[B; 2]; 3], [[B; 2]; 3], [B; 2]);
 
+/// A ray point's equation value, its radial slope `r eta'(r)`, and the momentum weights
+/// `coefficient q_e / E_e` of the energy occurrences, in their order.
+pub(crate) struct RayGradient<N> {
+    pub(crate) value: N,
+    pub(crate) radial: N,
+    pub(crate) weights: Vec<ThreeMomentum<N>>,
+}
+
 /// One represented affine energy equation, retaining its ordered edge occurrences.
 /// This is native geometry, not a cross-precision or selected-host transport record.
 #[derive(Debug, Clone)]
@@ -1471,6 +1479,92 @@ impl<T: FloatLike> EnergySurfaceRay<T> {
         CompactifiedRay {
             energies,
             shift: native(&self.shift),
+        }
+    }
+
+    /// Route a constant loop-space displacement through the signatures of this ray's
+    /// energy occurrences, in their order.
+    pub(crate) fn route_displacement(
+        &self,
+        lmb: &LoopMomentumBasis,
+        displacement: &LoopMomenta<F<T>>,
+    ) -> Vec<ThreeMomentum<F<T>>> {
+        self.energies
+            .iter()
+            .map(|energy| {
+                compute_loop_part(&lmb.edge_signatures[energy.edge].internal, displacement)
+            })
+            .collect()
+    }
+
+    /// The [`RayGradient`] at radius `r`. A displacement `d` routed by
+    /// [`Self::route_displacement`] adds `sum_e w_e . d_e`, giving the slope
+    /// `grad(eta).(y - c + d)` of the same point seen from the center `c - d`.
+    pub(crate) fn evaluate_gradient(&self, radius: &F<T>) -> RayGradient<F<T>> {
+        let zero = radius.zero();
+        let (mut value, mut slope) = (self.shift.clone(), zero.clone());
+        let mut weights = Vec::with_capacity(self.energies.len());
+        for energy in &self.energies {
+            let radial = &energy.velocity * radius;
+            let momentum = radial.clone() + &energy.offset;
+            let omega = (momentum.norm_squared() + &energy.mass * &energy.mass).sqrt();
+            let coefficient = radius.from_i64(energy.coefficient);
+            value += &coefficient * &omega;
+            let weight = if omega == zero {
+                momentum.map_ref(&|_| zero.clone())
+            } else {
+                momentum * &(coefficient / &omega)
+            };
+            slope += weight.clone() * &radial;
+            weights.push(weight);
+        }
+        RayGradient {
+            value,
+            radial: slope,
+            weights,
+        }
+    }
+
+    /// Jets of [`Self::evaluate_gradient`] along the ray.
+    pub(crate) fn evaluate_gradient_dual(
+        &self,
+        radius: &HyperDual<F<T>>,
+    ) -> RayGradient<HyperDual<F<T>>> {
+        let zero = self.shift.zero();
+        let constant = |value: &F<T>| new_constant(radius, value);
+        let (mut value, mut slope) = (constant(&self.shift), radius.zero());
+        let mut weights = Vec::with_capacity(self.energies.len());
+        for energy in &self.energies {
+            let coefficient = self.shift.from_i64(energy.coefficient);
+            let still = energy.velocity.px == zero
+                && energy.velocity.py == zero
+                && energy.velocity.pz == zero;
+            // A constant energy has constant jets; differentiating its square root could
+            // produce 0/0, as in `evaluate_dual`.
+            let weight = if still {
+                let omega = (energy.offset.norm_squared() + &energy.mass * &energy.mass).sqrt();
+                value += constant(&(&coefficient * &omega));
+                if omega == zero {
+                    energy.offset.map_ref(&|_| radius.zero())
+                } else {
+                    (&energy.offset * &(coefficient / &omega)).map_ref(&constant)
+                }
+            } else {
+                let radial = energy.velocity.map_ref(&constant) * radius;
+                let momentum = radial.clone() + energy.offset.map_ref(&constant);
+                let omega =
+                    (momentum.norm_squared() + constant(&(&energy.mass * &energy.mass))).sqrt();
+                value += constant(&coefficient) * &omega;
+                let weight = momentum * &(constant(&coefficient) / &omega);
+                slope += weight.clone() * &radial;
+                weight
+            };
+            weights.push(weight);
+        }
+        RayGradient {
+            value,
+            radial: slope,
+            weights,
         }
     }
 

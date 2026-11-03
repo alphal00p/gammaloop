@@ -132,18 +132,23 @@ sigma = 1.0
             let rows = vec![(edge, coefficients.clone())];
             let mut configured = settings.clone();
             configured
-                .lu_flow_centers
+                .lu_flow
+                .fixed_centers
                 .insert(term.graph.name.clone(), rows.clone());
-            let center = term.lu_flow_center(&externals, &configured)?.unwrap();
+            let masses = term.graph.get_real_mass_vector(&model);
+            let plan = term.prepare_lu_flow(&configured, &externals, &masses)?;
+            assert_eq!(plan.patch_count(), 1);
+            let center = plan.centers::<f64>(&Rotation::new(RotationMethod::Identity))[0]
+                .clone()
+                .unwrap();
             assert_eq!(
                 center[LoopIndex(0)],
                 ThreeMomentum::new(F(1.0), F(-2.0), F(3.0))
             );
+            // A fixed center rotates with the sample instead of being rebuilt from rotated
+            // externals, so every rotation and precision shares one binary64 point.
             let rotation = Rotation::new(RotationMethod::Pi2Y);
-            let rotated_externals = externals.iter().map(|p| p.rotate(&rotation)).collect();
-            let rotated_center = term
-                .lu_flow_center(&rotated_externals, &configured)?
-                .unwrap();
+            let rotated_center = plan.centers::<f64>(&rotation)[0].clone().unwrap();
             assert!(
                 (rotated_center[LoopIndex(0)] - center[LoopIndex(0)].rotate(&rotation))
                     .norm_squared()
@@ -167,10 +172,11 @@ sigma = 1.0
                 (vec![(edge, nonfinite)], "finite external coefficients"),
             ] {
                 configured
-                    .lu_flow_centers
+                    .lu_flow
+                    .fixed_centers
                     .insert(term.graph.name.clone(), invalid_rows);
                 assert!(
-                    term.lu_flow_center(&externals, &configured)
+                    term.prepare_lu_flow(&configured, &externals, &masses)
                         .unwrap_err()
                         .to_string()
                         .contains(message)
@@ -178,7 +184,7 @@ sigma = 1.0
             }
 
             let previous_settings = runtime.get_settings().clone();
-            runtime.get_mut_settings().lu_flow_centers =
+            runtime.get_mut_settings().lu_flow.fixed_centers =
                 BTreeMap::from([("unknown_graph".into(), rows)]);
             assert!(
                 runtime
@@ -204,6 +210,30 @@ sigma = 1.0
         .evaluate_momentum_configuration(&model, &input, false)?
         .integrand_result;
     assert!(baseline.re.0.abs() > 0.0 && baseline.im.0.abs() < 1e-14);
+
+    // Identical patches split every root's weight, so the patch loop must reproduce the
+    // single-center integrand and event weights; the shifted center changes both.
+    let size = |z: Complex<F<f64>>| z.norm_squared().0.sqrt();
+    let center = LoopMomenta::from_iter([ThreeMomentum::new(F(0.3), F(-0.2), F(0.1))]);
+    let mut patched = vec![];
+    for patches in [1, 3] {
+        let ProcessIntegrand::CrossSection(integrand) = &mut runtimes[0] else {
+            unreachable!()
+        };
+        integrand.data.graph_terms[0]
+            .lu_flow
+            .set(Arc::new(LuFlowPlan::repeated(center.clone(), patches)));
+        let result = runtimes[0].evaluate_momentum_configuration(&model, &input, false)?;
+        let events = result
+            .event_groups
+            .iter()
+            .flat_map(|group| group.iter())
+            .fold(Complex::new_re(F(0.0)), |sum, event| sum + event.weight);
+        assert!(size(events - result.integrand_result) < 1e-14 * size(baseline));
+        patched.push(result.integrand_result);
+    }
+    assert!(size(patched[1] - patched[0]) < 1e-13 * size(patched[0]));
+    assert!(size(patched[0] - baseline) > 1e-6 * size(baseline));
     let root = (2.5_f64.powi(2) - 1.0).sqrt();
     let mut last = None;
     for radius in [1.0_f64, 3.0] {

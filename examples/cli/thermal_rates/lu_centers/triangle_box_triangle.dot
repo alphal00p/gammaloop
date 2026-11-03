@@ -1,0 +1,21 @@
+digraph massive_triangle_box_triangle {
+  overall_factor="1/2";
+  edge [particle=L];
+  ext0 [style=invis is_cut=0];
+  v7 [int_id="V_XHH"];
+  v8 [int_id="V_HHL"];
+  v9 [int_id="V_HHL"];
+  v10 [int_id="V_XLL"];
+  v11 [int_id="V_HHL"];
+  v12 [int_id="V_HHL"];
+  ext0 -> v7 [particle=X];
+  v10 -> ext0 [particle=X];
+  v7 -> v8 [id=0 particle=H lmb_id=2];
+  v7 -> v12 [id=1 particle=H];
+  v8 -> v12 [id=2];
+  v8 -> v9 [id=3 particle=H lmb_id=1];
+  v12 -> v11 [id=4 particle=H];
+  v11 -> v9 [id=5 particle=H];
+  v9 -> v10 [id=6 lmb_id=0];
+  v11 -> v10 [id=7];
+}

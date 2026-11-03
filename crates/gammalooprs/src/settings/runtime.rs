@@ -391,6 +391,10 @@ pub struct IntegratorSettings {
     /// Update rate for adaptive grids over continuous integration dimensions.
     #[serde(skip_serializing_if = "is_float::<1>")]
     pub continuous_dim_learning_rate: f64,
+    /// Number of iterations that adapt the sampling grid; later iterations sample the
+    /// frozen grid. Unset adapts after every iteration.
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub training_iterations: Option<usize>,
     /// Train adaptive distributions on iteration averages instead of individual sample weights.
     #[serde(skip_serializing_if = "is_false")]
     pub train_on_avg: bool,
@@ -408,6 +412,24 @@ pub struct IntegratorSettings {
     pub observables_output: ObservablesOutputSettings,
 }
 
+impl IntegratorSettings {
+    /// Grid learning rates for the update closing the zero-based `iteration`. They vanish
+    /// once `training_iterations` updates have been applied, which freezes the grid.
+    pub(crate) fn learning_rates(&self, iteration: usize) -> (f64, f64) {
+        if self
+            .training_iterations
+            .is_some_and(|iterations| iteration >= iterations)
+        {
+            (0.0, 0.0)
+        } else {
+            (
+                self.discrete_dim_learning_rate,
+                self.continuous_dim_learning_rate,
+            )
+        }
+    }
+}
+
 impl Default for IntegratorSettings {
     fn default() -> Self {
         Self {
@@ -422,6 +444,7 @@ impl Default for IntegratorSettings {
             integrated_phase: IntegratedPhase::default(),
             discrete_dim_learning_rate: 1.0,
             continuous_dim_learning_rate: 1.0,
+            training_iterations: None,
             train_on_avg: false,
             show_max_wgt_info: true,
             max_prob_ratio: 30.0,
@@ -707,6 +730,22 @@ mod tests {
     use super::*;
     use crate::utils::serde_utils::ShowDefaultsGuard;
     use spenso::algebra::complex::Complex;
+
+    #[test]
+    fn training_iterations_freeze_the_grid_after_their_updates() {
+        let settings = IntegratorSettings {
+            discrete_dim_learning_rate: 0.5,
+            continuous_dim_learning_rate: 0.75,
+            training_iterations: Some(2),
+            ..Default::default()
+        };
+        assert_eq!(settings.learning_rates(0), (0.5, 0.75));
+        assert_eq!(settings.learning_rates(1), (0.5, 0.75));
+        assert_eq!(settings.learning_rates(2), (0.0, 0.0));
+        assert_eq!(settings.learning_rates(9), (0.0, 0.0));
+        let adaptive = IntegratorSettings::default();
+        assert_eq!(adaptive.learning_rates(1000), (1.0, 1.0));
+    }
 
     #[test]
     fn sampling_lu_h_profile_shorthand_and_table_share_one_definition() {
@@ -2596,6 +2635,108 @@ impl Default for HFunctionSettings {
             function: HFunction::default(),
             enabled_dampening: true,
             power: None,
+        }
+    }
+}
+
+/// How cross-section graphs choose the fixed points of their spatial Local Unitarity flow.
+#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object))]
+#[derive(
+    Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq, Encode, Decode, JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum LuFlowCenters {
+    /// Dilate about the origin of the generation loop-momentum basis.
+    #[default]
+    Origin,
+    /// Search causally oriented centers at warm-up, splitting the integrand into smooth
+    /// patches when no single center orients every relevant cut surface.
+    Search,
+}
+
+/// Spatial Local Unitarity flow `c + t (k - c)` of cross-section graphs.
+#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[serde(default)]
+pub struct LuFlowSettings {
+    /// Prescription for graphs without `fixed_centers`.
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub centers: LuFlowCenters,
+    /// Explicit centers keyed by graph name. Each row gives a loop-edge ID in the graph's
+    /// generation basis and coefficients of the physical external spatial momenta in
+    /// canonical external order: `c_i = sum_a coefficients[a] * p_a`.
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub fixed_centers: BTreeMap<String, Vec<(usize, Vec<f64>)>>,
+    /// Controls of the causal-center search.
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub search: LuCenterSearchSettings,
+}
+
+/// Preparation-time search for causally oriented Local Unitarity centers.
+#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[serde(default)]
+pub struct LuCenterSearchSettings {
+    /// Maximum number of smooth center patches per graph.
+    #[serde(skip_serializing_if = "is_usize::<8>")]
+    pub max_patches: usize,
+    /// A further patch must newly cover at least this Boltzmann-weighted fraction of the
+    /// relevant sampled cut points.
+    #[serde(skip_serializing_if = "is_default_lu_center_patch_gain")]
+    pub min_patch_gain: f64,
+    /// Rays per base point and cut surface used to sample the cut surfaces.
+    #[serde(skip_serializing_if = "is_usize::<256>")]
+    pub rays: usize,
+    /// Required radial slope `grad(eta).(y - c)` of every covered cut point, in units of the
+    /// external energy scale `max(|p^0|, |p|)` over the external momenta (`e_cm` if they
+    /// vanish); it decays quadratically in `|y|` beyond that scale. Other cut surfaces
+    /// within this many energy units of a point constrain its centers too.
+    #[serde(skip_serializing_if = "is_default_lu_center_slope")]
+    pub slope: f64,
+    /// Ignore cut points whose absorbed bath energies `E` suppress them, by `exp(-beta E)`
+    /// without chemical potentials, by more than this factor relative to the most relevant
+    /// sampled cut point of the graph.
+    #[serde(skip_serializing_if = "is_default_lu_center_relevance")]
+    pub relevance: f64,
+    /// Seed of the sampled surface points.
+    #[serde(skip_serializing_if = "is_u64::<1>")]
+    pub seed: u64,
+}
+
+const DEFAULT_LU_CENTER_SLOPE: f64 = 0.05;
+const DEFAULT_LU_CENTER_RELEVANCE: f64 = 1.0e-10;
+const DEFAULT_LU_CENTER_PATCH_GAIN: f64 = 0.02;
+
+fn is_default_lu_center_patch_gain(value: &f64) -> bool {
+    show_defaults_helper(*value == DEFAULT_LU_CENTER_PATCH_GAIN)
+}
+
+fn is_default_lu_center_slope(value: &f64) -> bool {
+    show_defaults_helper(*value == DEFAULT_LU_CENTER_SLOPE)
+}
+
+fn is_default_lu_center_relevance(value: &f64) -> bool {
+    show_defaults_helper(*value == DEFAULT_LU_CENTER_RELEVANCE)
+}
+
+impl LuFlowSettings {
+    /// Whether a graph keeps the origin-centered flow.
+    pub(crate) fn uses_origin(&self, graph: &str) -> bool {
+        self.centers == LuFlowCenters::Origin && !self.fixed_centers.contains_key(graph)
+    }
+}
+
+impl Default for LuCenterSearchSettings {
+    fn default() -> Self {
+        Self {
+            max_patches: 8,
+            min_patch_gain: DEFAULT_LU_CENTER_PATCH_GAIN,
+            rays: 256,
+            slope: DEFAULT_LU_CENTER_SLOPE,
+            relevance: DEFAULT_LU_CENTER_RELEVANCE,
+            seed: 1,
         }
     }
 }

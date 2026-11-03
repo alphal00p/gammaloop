@@ -223,46 +223,73 @@ uncertainty preserved. The maintained
 #source-link("examples/cli/eos/cool_qm/NLO/cool_qm_eos_NLO.toml", label: "NLO cold quark matter run card")
 integrates such a contribution.
 
-== Fixed points for thermal Local Unitarity
+== Flow centers for thermal Local Unitarity
 
-The optional runtime `lu_flow_centers` map changes the common spatial LU flow to
-$bold(k)_t=bold(c)+t(bold(k)-bold(c))$. Each graph entry lists pairs
-`[generation_loop_edge_id, [external_coefficients...]]`. Every generation loop
-edge must occur exactly once, with one finite coefficient per physical external
-momentum in the generation LMB's external order. These coefficients construct
-the spatial center from the current external momenta, including rotations and
-changes of precision. Unspecified graphs retain the origin flow.
+Local Unitarity localizes every cut with the common spatial flow
+$bold(k)_t=bold(c)+t(bold(k)-bold(c))$, whose Jacobian is $t^(3L)$. Cuts that cross at an
+overlap cancel locally only if their radial slopes $nabla eta dot (bold(y)-bold(c))$ share
+one sign; a slope near zero also makes the root ill conditioned. Each physical cut equation
+is oriented as emitted minus absorbed energies minus $E$, so a positive slope is causal.
+E-surfaces are convex and positive about any interior center. Thermal H-surfaces are not:
+at spacelike probe momenta the origin can cross two overlapping absorption cuts with opposite
+slopes, and even at rest the triangle-box-triangle has rotation-invariant H-surfaces that no
+single center sees star-shaped.
 
-For the generated Fig. 15 QCD NLO graphs, the midpoint prescription is:
+The runtime `lu_flow` table chooses the centers:
 
 ```toml
-[lu_flow_centers]
+[lu_flow]
+centers = "search"        # default "origin"
+
+[lu_flow.search]
+max_patches = 8           # defaults shown
+min_patch_gain = 0.02
+rays = 256
+slope = 0.05
+relevance = 1e-10
+seed = 1
+
+[lu_flow.fixed_centers]   # explicit centers override both modes
 GL0 = [[1, [0.5]], [3, [0.5]]]
-GL2 = [[1, [0.0]], [3, [-0.5]]]
 ```
 
-Here GL0 is the self-energy graph and GL2 the vertex graph, both with generation
-loop edges 1 and 3 and one external momentum. The vertex exchange momentum has
-zero center; its quark loop is centered at $-bold(K)/2$. Verify names, edge IDs
-and routing before transferring this prescription to another generated process.
-Root solving, raised-cut derivatives and events use the same affine flow, whose
-Jacobian remains $t^(3L)$. The retarded prescription and cut signs are unchanged.
-These fixed points apply on either side of the light cone; the exactly lightlike
-endpoint can still have degenerate roots.
+A fixed center lists `[generation_loop_edge_id, [external_coefficients...]]` for every
+generation loop edge, with one coefficient per physical external momentum. The search runs at
+warm-up for the current external momenta. It samples every active cut surface with certified
+radial roots. It keeps points whose absorbed bath energies $E$ are not suppressed, by
+$e^(-beta E)$ without chemical potentials, by more than `relevance` relative to the most
+relevant sampled point of the graph. Each point, and every other cut surface whose equation
+is within `slope` times the energy scale of it, requires the center to lie in a causal
+half-space. The energy scale is $max(abs(p^0), abs(bold(p)))$ over the external momenta, and
+the slope threshold, `slope` times that scale, decays quadratically beyond it. A weighted
+linear program, refined by a pattern search on the covered Boltzmann weight, chooses the
+first center in the subspace invariant under rotations that fix the external momenta. For
+the convex relaxation this costs nothing: it is the origin at rest and lies on the probe axis
+otherwise. Further centers are added while each covers at least `min_patch_gain` of the
+Boltzmann-weighted points. They split the integrand with a smooth partition of unity in the
+physical point $bold(y)$. Every root of every cut in patch $k$ carries the same weight
+$w_k(bold(y))$, which vanishes wherever its center is not causal on a nearby cut surface.
+Where no patch is fully causal, the first patch keeps a small floor that keeps the partition
+exact; overlaps it crosses with opposite slopes stay uncancelled there. Raised residues
+differentiate the weights with the `h` profile. The warm-up log reports the centers, the
+causal, partial and uncovered shares of an independent verification sample, and the overlap
+points that keep opposite slopes. A graph without relevant cut points keeps the origin.
 
-This is an experimental flow prescription. The short Fig. 15 comparison restores
-the tested vertex H/H cancellation and leaves the timelike point well behaved,
-but applying the midpoint to both graphs worsens the spacelike Monte Carlo error.
-The raised self-energy cut develops large inverse radial derivatives near the
-absorption-cone boundary. Changing only the vertex flow also failed to improve
-the short global test. See the
-#source-link("examples/cli/thermal_rates/qcd_vector/figure15/midpoint-runtime-20261020/report.typ", label: "matched runtime investigation")
-for the tested points, precision checks and limits of these conclusions.
+Centers are binary64 points stored in the warm-up frame. Every precision embeds them exactly,
+and stability rotations rotate them. Positive-E sampling hosts belong to the first patch.
+Configured or searched centers require `subtraction.disable_threshold_subtraction=true` and
+no zero-temperature Fermi-surface sectors; threshold counterterms and symbolic Fermi contact
+terms still assume the origin flow. The default origin flow preserves existing runs.
 
-Configured centers currently require `subtraction.disable_threshold_subtraction=true`
-and no zero-temperature Fermi-surface sectors. Threshold counterterms and symbolic
-Fermi contact terms still assume the origin flow. The setting is opt-in; an empty
-map preserves existing runs and saved states.
+A causal center removes uncancelled overlap poles but cannot remove folds: rays tangent to
+non-star-shaped H-surfaces give integrable but heavy-tailed weights, and raised cuts amplify
+small slopes. The
+#source-link("examples/cli/thermal_rates/lu_centers/report.typ", label: "LU center validation")
+records the search coverage, pointwise cancellation and frozen-grid Monte Carlo scaling for
+the massive scalar double triangle and triangle-box-triangle, at rest and at spacelike momentum.
+To check one overlap, run `approach` from a point on both cut surfaces along an axis that
+separates their roots, with `general.generate_events=true`. The per-cut event weights show
+whether the two $1\/t$ poles cancel; the card's `approach_dt_overlap` block is an example.
 
 == Fermi surfaces at zero temperature
 

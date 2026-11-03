@@ -2,12 +2,11 @@ use bincode_trait_derive::{Decode, Encode};
 use global::{GenerationSettings, Parallelisation};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
 
 use crate::{
     GammaLoopContext,
     observables::{ObservablesSettings, QuantitiesSettings, SelectorsSettings},
-    settings::runtime::HFunctionSettings,
+    settings::runtime::{HFunctionSettings, LuFlowSettings},
     utils::{
         F, FloatLike,
         serde_utils::{IsDefault, show_defaults_helper},
@@ -80,12 +79,9 @@ pub struct RuntimeSettings {
     /// zero-temperature Fermi-surface distributions.
     #[serde(rename = "h_function", skip_serializing_if = "IsDefault::is_default")]
     pub lu_h_function: HFunctionSettings,
-    /// Fixed Local Unitarity flow centers, keyed by graph name. Each row gives a loop-edge
-    /// ID in the graph's generation basis and coefficients of the physical external spatial
-    /// momenta in canonical external order: c_i = sum_a coefficients[a] * p_a.
-    /// The flow is c_i + t * (k_i - c_i); an omitted graph uses the origin.
+    /// Fixed points of the cross-section Local Unitarity flow `c + t (k - c)`.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
-    pub lu_flow_centers: BTreeMap<String, Vec<(usize, Vec<f64>)>>,
+    pub lu_flow: LuFlowSettings,
 }
 
 impl RuntimeSettings {
@@ -216,28 +212,37 @@ mod tests {
     }
 
     #[test]
-    fn lu_flow_centers_default_and_explicit_centers_roundtrip() {
+    fn lu_flow_default_fixed_and_search_settings_roundtrip() {
+        use crate::settings::runtime::{LuCenterSearchSettings, LuFlowCenters, LuFlowSettings};
+
         let defaults_guard = ShowDefaultsGuard::new(false);
         let defaults: RuntimeSettings = toml::from_str("").unwrap();
-        assert!(defaults.lu_flow_centers.is_empty());
-        assert!(
-            !toml::to_string(&defaults)
-                .unwrap()
-                .contains("lu_flow_centers")
-        );
+        assert_eq!(defaults.lu_flow, LuFlowSettings::default());
+        assert_eq!(defaults.lu_flow.centers, LuFlowCenters::Origin);
+        assert!(!toml::to_string(&defaults).unwrap().contains("lu_flow"));
 
         let settings = RuntimeSettings {
-            lu_flow_centers: std::collections::BTreeMap::from([
-                (
-                    "GL02".to_owned(),
-                    vec![(1, vec![0.5, 0.0]), (3, vec![0.5, 0.0])],
-                ),
-                ("GL05".to_owned(), vec![(2, vec![0.0, -0.5])]),
-            ]),
+            lu_flow: LuFlowSettings {
+                centers: LuFlowCenters::Search,
+                fixed_centers: std::collections::BTreeMap::from([
+                    (
+                        "GL02".to_owned(),
+                        vec![(1, vec![0.5, 0.0]), (3, vec![0.5, 0.0])],
+                    ),
+                    ("GL05".to_owned(), vec![(2, vec![0.0, -0.5])]),
+                ]),
+                search: LuCenterSearchSettings {
+                    max_patches: 3,
+                    slope: 0.1,
+                    ..Default::default()
+                },
+            },
             ..Default::default()
         };
         let serialized = toml::to_string(&settings).unwrap();
-        assert!(serialized.contains("lu_flow_centers"));
+        assert!(serialized.contains("centers = \"search\""));
+        assert!(serialized.contains("fixed_centers"));
+        assert!(!serialized.contains("relevance"));
         assert_eq!(
             toml::from_str::<RuntimeSettings>(&serialized).unwrap(),
             settings
@@ -251,7 +256,14 @@ mod tests {
         drop(defaults_guard);
         let _defaults_guard = ShowDefaultsGuard::new(true);
         let serialized = toml::to_string(&defaults).unwrap();
-        assert!(serialized.contains("[lu_flow_centers]"));
+        for field in [
+            "[lu_flow]",
+            "[lu_flow.fixed_centers]",
+            "[lu_flow.search]",
+            "relevance",
+        ] {
+            assert!(serialized.contains(field), "{field} missing");
+        }
         assert_eq!(
             toml::from_str::<RuntimeSettings>(&serialized).unwrap(),
             defaults

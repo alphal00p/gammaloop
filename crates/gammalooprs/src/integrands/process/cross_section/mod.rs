@@ -87,6 +87,7 @@ use color_eyre::{Result, owo_colors::OwoColorize};
 use eyre::Context;
 use eyre::eyre;
 use std::{
+    borrow::Cow,
     collections::{BTreeMap, BTreeSet, HashSet},
     sync::{Arc, LazyLock},
     time::{Duration, Instant},
@@ -126,8 +127,11 @@ use super::{
 mod cold_tests;
 pub mod export;
 pub mod load;
+mod lu_flow;
 #[cfg(test)]
 mod sampling_state_tests;
+
+use lu_flow::LuFlowPlan;
 
 #[allow(clippy::excessive_precision)]
 const PICOBARN_CONVERSION: F<f64> = F(3.89379372171859372125651613062e8);
@@ -503,7 +507,7 @@ impl ProcessIntegrandImpl for CrossSectionIntegrand {
             );
         }
         validate_process_runtime_settings(&self.settings, self.data.explicit_orientation_sum_only)?;
-        for name in self.settings.lu_flow_centers.keys() {
+        for name in self.settings.lu_flow.fixed_centers.keys() {
             if !self
                 .data
                 .graph_terms
@@ -643,6 +647,8 @@ pub struct CrossSectionGraphTerm {
     #[allow(private_interfaces)]
     pub counterterm: LUCounterTerm,
     pub cut_group_data: CutGroupData,
+    /// Flow centers prepared at warm-up for the current external kinematics.
+    pub(crate) lu_flow: RuntimeCache<Arc<LuFlowPlan>>,
 }
 
 struct CutEventGenerationContext<'a> {
@@ -668,73 +674,13 @@ struct DeferredCutEvaluation<T: FloatLike> {
 }
 
 impl CrossSectionGraphTerm {
-    /// Materialize the fixed point in the generation LMB. External coefficients
-    /// rotate and change precision with the physical momenta, not with a saved
-    /// binary64 spatial center. Edge IDs keep the prescription independent of
-    /// the order of the configured rows.
-    fn lu_flow_center<T: FloatLike>(
-        &self,
-        external_momenta: &ExternalFourMomenta<F<T>>,
-        settings: &RuntimeSettings,
-    ) -> Result<Option<LoopMomenta<F<T>>>> {
-        let Some(rows) = settings.lu_flow_centers.get(&self.graph.name) else {
-            return Ok(None);
-        };
-        let lmb = &self.graph.loop_momentum_basis;
-        let supplied = rows.iter().map(|(edge, _)| *edge).collect::<BTreeSet<_>>();
-        let expected = lmb
-            .loop_edges
-            .iter()
-            .map(|edge| edge.0)
-            .collect::<BTreeSet<_>>();
-        if rows.len() != expected.len() || supplied != expected {
-            return Err(eyre!(
-                "LU flow center for graph '{}' must specify each generation LMB edge {:?} exactly once; received {:?}",
-                self.graph.name,
-                expected,
-                rows,
-            ));
-        }
-        let zero = external_momenta
-            .iter()
-            .next()
-            .ok_or_else(|| eyre!("A configured LU flow center requires external momenta"))?
-            .temporal
-            .value
-            .zero();
-        let mut center = Vec::with_capacity(rows.len());
-        for edge in &lmb.loop_edges {
-            let coefficients = &rows.iter().find(|(id, _)| *id == edge.0).unwrap().1;
-            if coefficients.len() != external_momenta.len()
-                || coefficients
-                    .iter()
-                    .any(|coefficient| !coefficient.is_finite())
-            {
-                return Err(eyre!(
-                    "LU flow center for graph '{}' loop edge {} requires {} finite external coefficients; received {:?}",
-                    self.graph.name,
-                    edge.0,
-                    external_momenta.len(),
-                    coefficients,
-                ));
-            }
-            center.push(coefficients.iter().zip(external_momenta).fold(
-                ThreeMomentum::new(zero.clone(), zero.clone(), zero.clone()),
-                |sum, (coefficient, momentum)| {
-                    sum + &momentum.spatial * F::<T>::from_f64(*coefficient)
-                },
-            ));
-        }
-        if center
-            .iter()
-            .any(|p| !p.px.0.is_finite() || !p.py.0.is_finite() || !p.pz.0.is_finite())
-        {
-            return Err(eyre!(
-                "Nonfinite LU flow center for graph '{}'",
+    fn lu_flow_plan(&self) -> Result<&Arc<LuFlowPlan>> {
+        self.lu_flow.as_ref().ok_or_else(|| {
+            eyre!(
+                "LU flow centers of graph '{}' require warm_up",
                 self.graph.name
-            ));
-        }
-        Ok(Some(LoopMomenta::from_iter(center)))
+            )
+        })
     }
 
     pub fn threshold_counterterm_metadata(&self) -> Option<&ThresholdCountertermMetadataRegistry> {
@@ -1681,6 +1627,7 @@ impl CrossSectionGraphTerm {
                 counterterm,
                 reversed_edges,
                 cut_group_data: graph.derived_data.cut_group_data.clone(),
+                lu_flow: RuntimeCache::default(),
             },
             stats,
         ))
@@ -2119,8 +2066,12 @@ impl GraphTerm for CrossSectionGraphTerm {
                     .multi_channeling_setup
                     .lmb_frame_map(lmb, external_momenta)?;
                 // Transport the generation fixed point into the native affine
-                // frame. The same point owns host roots and physical LU.
-                let generation_center = self.lu_flow_center(&externals, settings)?;
+                // frame. Hosts belong to the first flow patch, whose center also
+                // owns their physical LU roots.
+                let generation_center = self
+                    .lu_flow_plan()?
+                    .centers::<T>(&Rotation::new(RotationMethod::Identity))
+                    .swap_remove(0);
                 let fixed_point = generation_center.as_ref().map_or_else(
                     || vec![zero.0.clone(); 3 * parent.len()],
                     |center| {
@@ -2780,7 +2731,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                 self.graph.name
             ));
         }
-        if self.lu_flow_center(&externals, settings)?.is_some() {
+        if !settings.lu_flow.uses_origin(&self.graph.name) {
             if !settings.subtraction.disable_threshold_subtraction {
                 return Err(eyre!(
                     "A configured LU flow center requires subtraction.disable_threshold_subtraction=true; threshold counterterms use the origin flow"
@@ -2872,6 +2823,12 @@ impl GraphTerm for CrossSectionGraphTerm {
             edge.mass_value(model, &self.param_builder)
                 .map(|mass| mass.re)
         }));
+        let plan = self.prepare_lu_flow(
+            settings,
+            &externals,
+            &self.graph.get_real_mass_vector(model),
+        )?;
+        self.lu_flow.set(Arc::new(plan));
 
         Ok(())
     }
@@ -2957,21 +2914,31 @@ impl GraphTerm for CrossSectionGraphTerm {
 
         // let mut all_cut_result = Complex::new_re(momentum_sample.zero());
         let masses = self.graph.get_real_mass_vector(context.model);
-        let lu_center = self.lu_flow_center(momentum_sample.external_moms(), context.settings)?;
-        let shifted_loops = lu_center
-            .as_ref()
-            .map(|center| momentum_sample.loop_moms() - center);
-        let lu_velocity = shifted_loops
-            .as_ref()
-            .unwrap_or(momentum_sample.loop_moms());
-        let ray_center = lu_center.clone().unwrap_or_else(|| {
-            LoopMomenta::from_iter(
-                momentum_sample
-                    .loop_moms()
-                    .iter()
-                    .map(|p| p.map_ref(&|value| value.zero())),
-            )
-        });
+        // Every patch flows all cut groups about its own center; the origin keeps the
+        // unshifted rescaling.
+        let flow = Arc::clone(self.lu_flow_plan()?);
+        let centers = flow.centers::<T>(context.rotation);
+        let flow_frames = centers
+            .iter()
+            .map(|center| match center {
+                Some(center) => (
+                    Cow::Owned(momentum_sample.loop_moms() - center),
+                    Cow::Borrowed(center),
+                ),
+                None => (
+                    Cow::Borrowed(momentum_sample.loop_moms()),
+                    Cow::Owned(LoopMomenta::from_iter(
+                        momentum_sample
+                            .loop_moms()
+                            .iter()
+                            .map(|p| p.map_ref(&|value| value.zero())),
+                    )),
+                ),
+            })
+            .collect_vec();
+        // Positive-E sampling hosts are bound to the first patch.
+        let lu_center = &centers[0];
+        let (lu_velocity, ray_center) = (&*flow_frames[0].0, &*flow_frames[0].1);
         let hel = context.settings.kinematics.externals.get_helicities();
         let mut cut_results: TiVec<CutGroupId, Vec<Complex<F<T>>>> =
             ti_vec![Vec::new(); self.cut_group_data.cut_groups.len()];
@@ -3131,7 +3098,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                 let ray = host.ray.rotate(context.rotation);
                 let completed = surface.routed_ray(
                     lu_velocity,
-                    &ray_center,
+                    ray_center,
                     momentum_sample.external_moms(),
                     &masses,
                     &self.graph.loop_momentum_basis,
@@ -3184,8 +3151,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                     // Enclosing mathematical tau*K would miss that rounding.
                     // The canonical source is never remapped in a native attempt.
                     let canonical_point = canonical.sample.rotate(context.rotation, 0, 0);
-                    let canonical_center =
-                        self.lu_flow_center(canonical_point.external_moms(), context.settings)?;
+                    let canonical_center = flow.center(0, context.rotation);
                     let canonical_loops = canonical_point.loop_moms().rescale(
                         &original_host.solution.solution,
                         Subspace::None,
@@ -3261,65 +3227,82 @@ impl GraphTerm for CrossSectionGraphTerm {
         }
         let mut adopted_hosts = adopted_hosts?;
 
-        // Record every active cut root at each precision, even if another cut fails. A
-        // later cut then retains its own lower-precision baseline for roundoff rescue.
-        let mut lu_solutions = BTreeMap::new();
+        // Record every active cut root of every patch at each precision, even if another
+        // cut fails. A later cut then retains its own lower-precision baseline for
+        // roundoff rescue.
+        let mut patch_rays = Vec::with_capacity(flow_frames.len());
+        let mut patch_roots = Vec::with_capacity(flow_frames.len());
         let mut lu_root_errors = Vec::new();
-        for (cut_group_id, cut_group) in self.cut_group_data.cut_groups.iter_enumerated() {
-            if !self.counterterm.cut_group_is_active(cut_group_id) {
-                continue;
-            }
-            let identity = RadialRootIdentity::new(format!(
-                "LU cut graph '{}' cut group {} probe rotation {}",
-                self.graph.name, cut_group_id.0, context.rotation.method,
-            ));
-            let prepared = match cut_group.residue.surface_ids[0] {
-                HybridSurfaceID::Esurface(_) => {
-                    if let Some((ray, solution)) = adopted_hosts.remove(&cut_group_id) {
-                        Ok((ray, vec![solution]))
-                    } else {
-                        let ray = self.cut_esurface[cut_group.cuts[0]].routed_ray(
-                            lu_velocity,
-                            &ray_center,
-                            momentum_sample.external_moms(),
-                            &masses,
-                            &self.graph.loop_momentum_basis,
+        for (patch, (velocity, ray_center)) in flow_frames.iter().enumerate() {
+            let (mut rays, mut roots) = (BTreeMap::new(), BTreeMap::new());
+            for (cut_group_id, cut_group) in self.cut_group_data.cut_groups.iter_enumerated() {
+                if !self.counterterm.cut_group_is_active(cut_group_id) {
+                    continue;
+                }
+                let patch_label = if patch == 0 {
+                    String::new()
+                } else {
+                    format!(" patch {patch}")
+                };
+                let identity = RadialRootIdentity::new(format!(
+                    "LU cut graph '{}' cut group {}{patch_label} probe rotation {}",
+                    self.graph.name, cut_group_id.0, context.rotation.method,
+                ));
+                let prepared = match cut_group.residue.surface_ids[0] {
+                    HybridSurfaceID::Esurface(_) => {
+                        if let Some((ray, solution)) = (patch == 0)
+                            .then(|| adopted_hosts.remove(&cut_group_id))
+                            .flatten()
+                        {
+                            Ok((ray, vec![solution]))
+                        } else {
+                            let ray = self.cut_esurface[cut_group.cuts[0]].routed_ray(
+                                velocity,
+                                ray_center,
+                                momentum_sample.external_moms(),
+                                &masses,
+                                &self.graph.loop_momentum_basis,
+                            );
+                            ray.positive_radius_roots(
+                                &F::from_f64(context.settings.kinematics.e_cm),
+                                &mut context.evaluation_metadata.radial_root_diagnostics,
+                                &identity,
+                            )
+                            .map(|roots| (ray, roots))
+                        }
+                    }
+                    HybridSurfaceID::Hsurface(id) => self.hsurfaces[id].positive_radius_roots(
+                        momentum_sample.loop_moms(),
+                        ray_center,
+                        momentum_sample.external_moms(),
+                        &masses,
+                        &self.graph.loop_momentum_basis,
+                        &F::from_f64(context.settings.kinematics.e_cm),
+                        &mut context.evaluation_metadata.radial_root_diagnostics,
+                        &identity,
+                    ),
+                    _ => unreachable!("LU residue groups contain E- or H-surfaces"),
+                };
+                match prepared {
+                    Ok((ray, found)) => {
+                        rays.insert(cut_group_id, ray);
+                        roots.insert(cut_group_id, found);
+                    }
+                    Err(error) => {
+                        crate::debug_tags!(#integration, #cut, #solver;
+                            graph = %self.graph.name,
+                            cut_group_id = cut_group_id.0,
+                            patch = patch,
+                            surfaces = ?cut_group.residue.surface_ids,
+                            error = ?error,
+                            "LU radial root requires precision escalation"
                         );
-                        ray.positive_radius_roots(
-                            &F::from_f64(context.settings.kinematics.e_cm),
-                            &mut context.evaluation_metadata.radial_root_diagnostics,
-                            &identity,
-                        )
-                        .map(|roots| (ray, roots))
+                        lu_root_errors.push(format!("{identity}: {error}"));
                     }
                 }
-                HybridSurfaceID::Hsurface(id) => self.hsurfaces[id].positive_radius_roots(
-                    momentum_sample.loop_moms(),
-                    &ray_center,
-                    momentum_sample.external_moms(),
-                    &masses,
-                    &self.graph.loop_momentum_basis,
-                    &F::from_f64(context.settings.kinematics.e_cm),
-                    &mut context.evaluation_metadata.radial_root_diagnostics,
-                    &identity,
-                ),
-                _ => unreachable!("LU residue groups contain E- or H-surfaces"),
-            };
-            match prepared {
-                Ok(prepared) => {
-                    lu_solutions.insert(cut_group_id, prepared);
-                }
-                Err(error) => {
-                    crate::debug_tags!(#integration, #cut, #solver;
-                        graph = %self.graph.name,
-                        cut_group_id = cut_group_id.0,
-                        surfaces = ?cut_group.residue.surface_ids,
-                        error = ?error,
-                        "LU radial root requires precision escalation"
-                    );
-                    lu_root_errors.push(format!("{identity}: {error}"));
-                }
             }
+            patch_rays.push(rays);
+            patch_roots.push(roots);
         }
         if !lu_root_errors.is_empty() {
             context
@@ -3329,7 +3312,31 @@ impl GraphTerm for CrossSectionGraphTerm {
             return Ok(differential_result);
         }
 
-        for (cut_group_id, cut_group) in self.cut_group_data.cut_groups.iter_enumerated() {
+        // Every patch evaluates all cut groups; the smooth patch weights depend only on the
+        // physical point, so every root sees one common weight.
+        let geometries = patch_rays
+            .iter()
+            .enumerate()
+            .map(|(patch, rays)| {
+                (centers.len() > 1).then(|| {
+                    flow.patch_geometry(
+                        patch,
+                        &centers,
+                        rays.iter().map(|(cut_group_id, ray)| {
+                            let group = &self.cut_group_data.cut_groups[*cut_group_id];
+                            (i64::from(group.surface_sign), ray)
+                        }),
+                        &self.graph.loop_momentum_basis,
+                        &momentum_sample.zero(),
+                    )
+                })
+            })
+            .collect_vec();
+        for (patch, (cut_group_id, cut_group)) in
+            (0..centers.len()).cartesian_product(self.cut_group_data.cut_groups.iter_enumerated())
+        {
+            let (rays, geometry, lu_center) =
+                (&patch_rays[patch], &geometries[patch], &centers[patch]);
             let max_occurrence = cut_group.residue.max_occurrence();
             if !self.counterterm.cut_group_is_active(cut_group_id) {
                 let zero = Complex::new_re(momentum_sample.zero());
@@ -3343,7 +3350,8 @@ impl GraphTerm for CrossSectionGraphTerm {
                 "\n =====START EVALUATION FOR CUT GROUP {}=====",
                 cut_group_id.0
             );
-            let (ray, roots) = lu_solutions
+            let ray = &rays[&cut_group_id];
+            let roots = patch_roots[patch]
                 .remove(&cut_group_id)
                 .expect("all active LU cut roots were validated before evaluation");
             static SECTOR_ORIENTATION_FILTER: LazyLock<SubSet<OrientationID>> =
@@ -3362,18 +3370,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                     Some(orientations)
                 }
             };
-            let absorbed_edges: &[EdgeIndex] = match cut_group.residue.surface_ids[0] {
-                HybridSurfaceID::Esurface(_) => &[],
-                HybridSurfaceID::Hsurface(id) => {
-                    let surface = &self.hsurfaces[id];
-                    if cut_group.surface_sign > 0 {
-                        &surface.negative_energies
-                    } else {
-                        &surface.positive_energies
-                    }
-                }
-                _ => unreachable!("LU residue groups contain E- or H-surfaces"),
-            };
+            let absorbed_edges = cut_group.absorbed_edges(&self.hsurfaces);
             let surface = match cut_group.residue.surface_ids[0] {
                 HybridSurfaceID::Esurface(_) => {
                     HybridSurfaceRef::Esurface(&self.cut_esurface[cut_group.cuts[0]])
@@ -3420,6 +3417,24 @@ impl GraphTerm for CrossSectionGraphTerm {
                         physical_point.as_ref().clone()
                     }
                 };
+                let patch_weight = match (geometry, &branch) {
+                    (Some(geometry), PreparedCutBranch::Radial(solution)) => {
+                        Some(flow.weight(geometry, &solution.solution, physical_point.loop_moms()))
+                    }
+                    _ => None,
+                };
+                // The smooth partition vanishes with all its derivatives where this
+                // patch's center is not causal on a nearby cut surface.
+                if patch_weight
+                    .as_ref()
+                    .is_some_and(|weight| *weight == momentum_sample.zero())
+                {
+                    let zero = Complex::new_re(momentum_sample.zero());
+                    for _ in 1..=max_occurrence {
+                        cut_results[cut_group_id].push(zero.clone());
+                    }
+                    continue;
+                }
                 let prepared_event = prepare_buffered_event(
                     context.settings,
                     context.rotation,
@@ -3494,6 +3509,17 @@ impl GraphTerm for CrossSectionGraphTerm {
                                             None,
                                             lu_center.as_ref(),
                                         );
+                                    let dual_h_function = match geometry {
+                                        Some(geometry) => {
+                                            dual_h_function
+                                                * flow.weight_dual(
+                                                    geometry,
+                                                    &dual_t_for_integrand,
+                                                    &dual_momenta_for_integrand,
+                                                )
+                                        }
+                                        None => dual_h_function,
+                                    };
 
                                     let dual_shape_for_esurface =
                                         HyperDual::<F<T>>::new(simple_n_deriv_shape(num_esurfaces));
@@ -3522,6 +3548,10 @@ impl GraphTerm for CrossSectionGraphTerm {
                                         None,
                                         &context.settings.lu_h_function,
                                     );
+                                    let h_function = match &patch_weight {
+                                        Some(weight) => h_function * weight,
+                                        None => h_function,
+                                    };
                                     let rescaled_momenta = momentum_sample.rescaled_loop_momenta(
                                         &solution.solution,
                                         Subspace::None,

@@ -140,6 +140,21 @@ workspaces for distinct kinematics.
 settings and executable hashes, numerical values, and log paths. Its raw `/tmp` artifacts
 are local to the validation host and are not included in this commit.
 
+=== Causal LU centers continuation
+
+Branch `thermal-lu-centers` adds `lu_flow`: origin, fixed or searched centers of the spatial LU
+flow, with smooth patches when one center does not suffice, and
+`integrator.training_iterations` for frozen-grid convergence studies. The
+#link("lu_centers/report.typ")[LU center report] records the search, the independent
+reference engine for spacelike and triangle-box-triangle targets, pointwise overlap
+cancellation (the card's `approach_dt_overlap` scan), and eight-seed frozen-grid Monte Carlo
+scaling. Origin flow keeps an uncancelled overlap pole in the spacelike double triangle; the
+searched center removes it and restores $N^(-1\/2)$ scaling. At rest below the HH threshold, a
+two-patch plan reduces the triangle-box-triangle's heavy tail but does not remove it. At
+spacelike momentum it keeps heavy-tailed weights from misoriented H-surface overlaps that the
+greedy patch cover does not reach. Open: far radial roots on unbounded H-surface lobes miss
+the solver's absolute residual tolerance without a lower-precision root to compare with.
+
 === Inclusive vacuum-parity continuation: implementation and validation
 
 The comparison with `origin/thermal_rate_investigation` at

@@ -4255,6 +4255,26 @@ pub struct CutGroup {
 }
 
 impl CutGroup {
+    /// Bath particles absorbed by this group: the energies of its surface that the physical
+    /// orientation makes negative.
+    pub(crate) fn absorbed_edges<'a>(
+        &self,
+        hsurfaces: &'a crate::cff::hsurface::HsurfaceCollection,
+    ) -> &'a [EdgeIndex] {
+        match self.residue.surface_ids[0] {
+            HybridSurfaceID::Esurface(_) => &[],
+            HybridSurfaceID::Hsurface(id) => {
+                let surface = &hsurfaces[id];
+                if self.surface_sign > 0 {
+                    &surface.negative_energies
+                } else {
+                    &surface.positive_energies
+                }
+            }
+            _ => unreachable!("LU residue groups contain E- or H-surfaces"),
+        }
+    }
+
     fn from_surface_groups(
         surface_groups: &[RaisedSurfaceGroup],
         cut_esurface_map: &TiVec<CutId, EsurfaceID>,

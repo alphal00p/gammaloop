@@ -1145,10 +1145,11 @@ fn thermal_positive_esurface_sampling_preserves_signed_channels() {
                     ..Default::default()
                 });
                 settings.stability.rotation_axis.clear();
-                settings.lu_flow_centers.clear();
+                settings.lu_flow.fixed_centers.clear();
                 if centered {
                     settings
-                        .lu_flow_centers
+                        .lu_flow
+                        .fixed_centers
                         .insert(graph_name.clone(), flow_center.clone());
                     settings
                         .stability
