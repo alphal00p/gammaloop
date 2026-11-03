@@ -13,6 +13,7 @@ use symbolica::{
     solve::SolveCoverage,
 };
 
+use crate::p_integral::{self, IntegralKind, Normalized, P_FAMILIES, PGraph};
 use crate::{
     EvaluationOrder, Integral, ReplacementRules, VakintError, function_condition,
     get_individual_momenta, get_individual_momenta_from_atom, get_prop_with_id, graph::Graph,
@@ -275,6 +276,16 @@ impl Topologies {
             .0,
         );
 
+        // ==
+        // Massless propagator-type families (one to four loops). Their
+        // pinched sectors are covered by the p-integral catalogue.
+        // ==
+        for family in &P_FAMILIES {
+            topologies
+                .0
+                .push(Topology::Propagator(Integral::new_propagator(family)?));
+        }
+
         topologies.0.push(Topology::Unknown(Integral::new(
             0,
             None,
@@ -350,6 +361,9 @@ impl Topologies {
         input: AtomView,
         allow_unknown_integrals: bool,
     ) -> Result<Option<ReplacementRules>, VakintError> {
+        if p_integral::infer_kind(input)? == IntegralKind::Propagator {
+            return self.match_propagator(input);
+        }
         let match_started = std::time::Instant::now();
         // The optional five-loop parser must not narrow the legacy Unknown
         // contract before any five-loop matching data has been installed.
@@ -371,7 +385,7 @@ impl Topologies {
             // expensive unsuccessful lower-loop pattern permutations.
             log::debug!(target: "vakint::five_loop_match", "phase=legacy_sweep_begin");
             for topology in self.iter() {
-                if matches!(topology, Topology::Unknown(_)) {
+                if matches!(topology, Topology::Unknown(_) | Topology::Propagator(_)) {
                     continue;
                 }
                 if let Topology::FiveLoop(integral) = topology {
@@ -403,6 +417,38 @@ impl Topologies {
             }
         }
         Ok(None)
+    }
+
+    /// Identify a p-integral through the p-integral catalogue
+    /// (docs/p_integrals.md, section 2). The input is normalized for matching
+    /// only: callers apply the normalization factor to the numerator
+    /// ([`crate::VakintTerm::normalize_propagator`]). A scaleless input has no
+    /// witness (`None`); a graph outside the registry is an error.
+    pub(crate) fn match_propagator(
+        &self,
+        input: AtomView,
+    ) -> Result<Option<ReplacementRules>, VakintError> {
+        let graph = match PGraph::parse(input)?.normalize()? {
+            Normalized::Zero => return Ok(None),
+            Normalized::Graph { graph, .. } => graph,
+        };
+        let uncovered = || {
+            VakintError::UnreckognizedIntegral(format!(
+                "{input} (p-integral not covered by the 1L-4L registry)"
+            ))
+        };
+        let Some(matched) = p_integral::match_graph(&graph)? else {
+            return Err(uncovered());
+        };
+        let name = P_FAMILIES[matched.family].name;
+        let topology = self
+            .0
+            .iter()
+            .find(|topology| {
+                matches!(topology, Topology::Propagator(integral) if integral.name == name)
+            })
+            .ok_or_else(uncovered)?;
+        p_integral::replacement_rules(topology, matched, &graph.external).map(Some)
     }
 
     /// Scope-aware exact witness selection for long-form five-loop inputs.
@@ -470,6 +516,9 @@ pub enum Topology {
     ThreeLoop(Integral),
     FourLoop(Integral),
     FiveLoop(Integral),
+    /// A massless propagator-type family (docs/p_integrals.md). A distinct
+    /// variant, so that no vacuum backend claims it by loop count.
+    Propagator(Integral),
     Unknown(Integral),
 }
 
@@ -481,6 +530,9 @@ impl fmt::Display for Topology {
             Topology::ThreeLoop(i) => write!(f, "{}{}{}", "ThreeLoop(".magenta(), i, ")".magenta()),
             Topology::FourLoop(i) => write!(f, "{}{}{}", "FourLoop(".magenta(), i, ")".magenta()),
             Topology::FiveLoop(i) => write!(f, "{}{}{}", "FiveLoop(".magenta(), i, ")".magenta()),
+            Topology::Propagator(i) => {
+                write!(f, "{}{}{}", "Propagator(".magenta(), i, ")".magenta())
+            }
             Topology::Unknown(i) => write!(f, "{}{}{}", "Unknown(".red(), i, ")".red()),
         }
     }
@@ -703,8 +755,12 @@ impl Topology {
             if let Some(m) = get_prop_with_id(input_canonical_expression, prop_id) {
                 prop_ids.push(prop_id);
                 let q = m.get(&vk_symbol!("q_")).unwrap().to_owned();
-                for (_s, (_a_id, mom_id)) in get_individual_momenta_from_atom(q.as_view())?.iter() {
-                    loop_mom_ids.insert(*mom_id);
+                // External heads p(i) of a propagator-type routing are not loops.
+                for (head, (_a_id, mom_id)) in get_individual_momenta_from_atom(q.as_view())?.iter()
+                {
+                    if *head != S.p {
+                        loop_mom_ids.insert(*mom_id);
+                    }
                 }
                 momenta.push((prop_id, q));
             }
@@ -855,6 +911,7 @@ impl Topology {
             | Topology::ThreeLoop(i)
             | Topology::FourLoop(i)
             | Topology::FiveLoop(i)
+            | Topology::Propagator(i)
             | Topology::Unknown(i) => i,
         }
     }
@@ -866,6 +923,7 @@ impl Topology {
             | Topology::ThreeLoop(i)
             | Topology::FourLoop(i)
             | Topology::FiveLoop(i)
+            | Topology::Propagator(i)
             | Topology::Unknown(i) => i,
         }
     }
@@ -999,6 +1057,8 @@ impl Topology {
                     Ok(None)
                 }
             }
+            // p-integrals are matched by their catalogue (`match_propagator`).
+            Topology::Propagator(_) => Ok(None),
             t => {
                 // println!("\n>>>Trying to match: {}\n<<<", self);
                 if let Some(mut replacement_rule) =

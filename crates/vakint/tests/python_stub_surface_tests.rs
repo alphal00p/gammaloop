@@ -65,7 +65,8 @@ fn graph_adapter_and_rich_output_are_present_in_valid_python_stubs() {
             "powers",
             "physical_slots",
             "parameter_substitutions",
-            "external_momenta"
+            "external_momenta",
+            "external_momentum"
         ]
     );
 

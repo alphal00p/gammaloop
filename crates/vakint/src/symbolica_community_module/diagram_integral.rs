@@ -9,7 +9,8 @@ use symbolica::{api::python::PythonExpression, domains::integer::Integer};
 use super::{VakintExpressionWrapper, vakint_to_python_error};
 use crate::{VakintExpression, diagram_integral::DiagramIntegralOptions};
 
-/// Build a native VakintExpression from a routed, uncut vacuum graph.
+/// Build a native VakintExpression from a routed, uncut vacuum graph, or from
+/// a massless propagator-type graph with exactly two external legs.
 ///
 /// The family must retain the graph's stored loop basis; `physical_slots` maps
 /// sorted graph edges to zero-based family indices and defaults to the prefix.
@@ -18,13 +19,16 @@ use crate::{VakintExpression, diagram_integral::DiagramIntegralOptions};
 /// Kinematics.scalar_product notation. Spectator order defines numerical vector
 /// IDs. Parameter substitutions are simultaneous and must already be reflected
 /// in the family's physical denominators. No graph factor is inserted.
+/// For a propagator-type graph, `p(1)` (or the bare `p(i)` given as
+/// `external_momentum`) flows in through the leg with the smallest edge id,
+/// every line must be massless and `external_momenta` must be empty.
 #[cfg_attr(
     feature = "python_stubgen",
     pyo3_stub_gen::derive::gen_stub_pyfunction(module = "symbolica.community.hepkit.vakint")
 )]
 #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pyfunction]
-#[pyo3(signature = (diagram, family, numerator, *, powers=None, physical_slots=None, parameter_substitutions=None, external_momenta=Vec::new()), text_signature = "(diagram, family, numerator, *, powers=None, physical_slots=None, parameter_substitutions=None, external_momenta=())")]
+#[pyo3(signature = (diagram, family, numerator, *, powers=None, physical_slots=None, parameter_substitutions=None, external_momenta=Vec::new(), external_momentum=None), text_signature = "(diagram, family, numerator, *, powers=None, physical_slots=None, parameter_substitutions=None, external_momenta=(), external_momentum=None)")]
 pub(crate) fn integral_from_diagram(
     diagram: PyRef<'_, PyFeynmanDiagram>,
     family: PyRef<'_, PyIntegralFamily>,
@@ -35,6 +39,7 @@ pub(crate) fn integral_from_diagram(
     #[gen_stub(override_type(type_repr="typing.Mapping[symbolica.Expression, symbolica.Expression] | None", imports=("typing", "symbolica")))]
     parameter_substitutions: Option<&Bound<'_, PyMapping>>,
     external_momenta: Vec<PythonExpression>,
+    external_momentum: Option<PythonExpression>,
 ) -> PyResult<VakintExpressionWrapper> {
     super::record_usage();
     let powers = powers
@@ -75,6 +80,7 @@ pub(crate) fn integral_from_diagram(
             .into_iter()
             .map(|value| value.expr)
             .collect(),
+        external_momentum: external_momentum.map(|value| value.expr),
     };
     Ok(VakintExpressionWrapper {
         value: VakintExpression::from_diagram(
