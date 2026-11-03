@@ -755,8 +755,12 @@ impl Topology {
             if let Some(m) = get_prop_with_id(input_canonical_expression, prop_id) {
                 prop_ids.push(prop_id);
                 let q = m.get(&vk_symbol!("q_")).unwrap().to_owned();
-                for (_s, (_a_id, mom_id)) in get_individual_momenta_from_atom(q.as_view())?.iter() {
-                    loop_mom_ids.insert(*mom_id);
+                // External heads p(i) of a propagator-type routing are not loops.
+                for (head, (_a_id, mom_id)) in get_individual_momenta_from_atom(q.as_view())?.iter()
+                {
+                    if *head != S.p {
+                        loop_mom_ids.insert(*mom_id);
+                    }
                 }
                 momenta.push((prop_id, q));
             }

@@ -325,3 +325,40 @@ fn normalization_merges_identical_quadrics_and_contracts_tree_lines() {
     powers.sort();
     assert_eq!(powers, [1, 3]);
 }
+
+#[test]
+fn the_witness_supplies_the_backend_request() {
+    let vakint = crate::Vakint::new().unwrap();
+    let parse = |input: &str| crate::utils::vakint_macros::vk_parse!(input).unwrap();
+    // A dotted bubble in the user's routing k(3), with the head p(2).
+    let integral = parse("topo(prop(1,edge(1,2),k(3)+p(2),0,2)*prop(2,edge(2,1),k(3),0,1))");
+    let rules = vakint
+        .topologies
+        .match_topologies_to_user_input(integral.as_view(), false)
+        .unwrap()
+        .unwrap();
+    let mut term = crate::VakintTerm {
+        integral,
+        numerator: parse("dot(k(3),p(2))^2"),
+        vectors: Vec::new(),
+    };
+    term.canonicalize(&crate::VakintSettings::default(), &rules, false)
+        .unwrap();
+    let request = rules.propagator_request(term.numerator.as_view()).unwrap();
+    assert_eq!(request.family.name, "P1L");
+    let mut powers = request.powers.to_vec();
+    powers.sort();
+    assert_eq!(powers, [1, 2]);
+    let p2 = parse("p(2)");
+    assert!(request.external == p2 || request.external == -&p2);
+    // The canonical numerator is a polynomial in canonical scalar products.
+    let numerator = term.numerator.to_string();
+    assert!(
+        numerator.contains("k(1)") && !numerator.contains("k(3)"),
+        "{numerator}"
+    );
+    assert_eq!(
+        super::scalar_numerator(term.numerator.as_view(), &p2).unwrap(),
+        term.numerator
+    );
+}

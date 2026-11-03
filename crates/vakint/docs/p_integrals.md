@@ -27,7 +27,8 @@ numerator * topo(prop(id, edge(a, b), momentum, 0, power) * ...)
   - At every vertex `v`, `balance(v) = sum(out) - sum(in)`. The integral is valid only if
     `balance = +p(i)` at one vertex (where q enters), `-p(i)` at one other vertex (where q leaves), and `0` everywhere
     else.
-  - Prop ids are distinct positive integers and need not be contiguous; vertex ids are nonnegative integers.
+  - Prop ids are distinct integers (positive by convention; the DOT ingress uses FeynKit edge ids) and need not be
+    contiguous; vertex ids are nonnegative integers.
 - Mass: the literal `0` in every prop.
 - Power: an integer. `power <= 0` pinches the line, and a negative power becomes a numerator factor.
 - Numerator: a polynomial in `dot(k(j),k(l))`, `dot(k(j),p(i))`, `dot(p(i),p(i))` (or the contracted index form
@@ -142,13 +143,20 @@ behind `OnceLock`:
 - 4L size: 11 x 2^11 = 22,528 contractions.
 - At 5L (64 x 2^14 ≈ 1 M) eager enumeration is not affordable. The catalogue API must allow a shipped index or an
   on-demand search, and nothing may assume eager enumeration.
+- Implemented (frontend, M1): the catalogue is split into strata of one loop count and one line count, each built
+  under its own `OnceLock` on first lookup. A lookup builds only its stratum (at 5L, inputs with few pinches touch
+  small strata), and a shipped index can replace one stratum without changing callers.
 
 ### Matching
 
 Matching of a normalized input:
 1. Look up the canonical form of the input graph.
+   - Implemented: the input is first labelled canonically with its powers as edge colours, and that labelled graph
+     is then keyed without powers. The line correspondence thus depends only on the (graph, powers) isomorphism
+     class: reroutings, edge flips, q reversal and head renaming give identical canonical output, and vertex
+     relabelings do too unless an automorphism preserves the powers (then the outputs are equivalent).
 2. Read off the line correspondence (try each assignment of parallel lines) and the orientation `σ`.
-   `σ = +1` iff the user's in-vertex maps to canonical vertex 1.
+   `σ = +1` iff the user's in-vertex maps to canonical vertex 1. Parallel lines are assigned in order of power.
 3. Solve the affine routing (below).
 4. Build `ReplacementRules`:
    - `canonical_topology = Topology::Propagator(family)`;
@@ -156,7 +164,9 @@ Matching of a normalized input:
      `p(1) -> σ·p(i)`;
    - `numerator_substitutions`: `k(j,idx___)` -> its image;
    - `edge_ids_canonical_to_input_map`;
-   - a new field `propagator: Option<PropagatorWitness>`.
+   - a new field `propagator: Option<PropagatorWitness>`. The witness also carries `powers` (the matched power of
+     every canonical line, 0 for pinched ones), so the glue reads the backend `powers` and `external`
+     (`canonical_external() = σ·p(i)`) from it directly.
 5. No graph match: `UnreckognizedIntegral`. There is no quadric-search fallback in M1. Normalization (merging
    identical quadrics, contracting pinched lines) turns self-energy-insertion graphs into contractions of the tops.
    The census test of section 7 proves coverage, and any uncovered graph is added as a new data family, never as
@@ -175,7 +185,7 @@ pub(crate) struct AffineRouting {
 }
 pub(crate) fn input_loop_momenta_in_canonical_basis_affine(
     equations: &[(Atom, Atom)],          // (input line momentum, ± canonical line momentum)
-    external: Option<(&Atom, &Atom)>,   // (user head p(i), canonical head p(1))
+    external: Option<(&Atom, &Atom, i8)>, // (user head p(i), canonical head p(1), σ from the vertex map)
 ) -> Result<AffineRouting, VakintError>;
 ```
 
@@ -184,8 +194,11 @@ Algorithm:
 2. Solve for the input loop momenta on an independent set of lines, treating `p_user` as known.
 3. Check every line up to its sign and `|det M| = 1`.
 4. Search the line signs as today. If no sign choice works, retry with `-σ` before failing.
+   Implemented order: written orientations with `σ`, then with `-σ`, then the line-sign search with `σ` and `-σ`.
+   An input already written in the family routing (every line equal to its oriented image) keeps its loop momenta.
 
-The canonical numerator is the user numerator with these images; it keeps the user's head `p(i)`.
+The canonical numerator is the user numerator with these images; it keeps the user's head `p(i)`. It is returned
+as an expanded polynomial in `dot(k(j),k(l))`, `dot(k(j),p(i))` and `dot(p(i),p(i))`.
 
 `Vakint::to_canonical` returns the family long form with matched powers (zero-power lines kept) and `σ·p(i)`, or the
 short form `NAME(σ·p(i), a_1..a_N)`.
@@ -217,10 +230,13 @@ digraph p2l_kite {
   `p(i)`).
 - `external_momenta` (spectators) must be empty for p-graphs in M1.
 - Powers, physical slots, contraction and numerator handling are unchanged. FeynKit `P(0)` scalar products in the
-  numerator map to `p(1)` products.
+  numerator map to `p(1)` products. Implemented: every graph line is written as a `prop` with its power, zero and
+  negative ones included, and the ordinary normalization of section 1 (tree lines, merged quadrics, contractions,
+  scaleless zero) applies to the resulting Atom exactly as to a written one.
 
 Export: `p_integral::to_dot(integral: AtomView, particle: &str) -> Result<String, VakintError>`.
-- Input: a normalized p-integral `topo` with positive powers.
+- Input: a p-integral `topo` with nonnegative powers and no tree line: zero-power lines are contracted and repeated
+  quadrics merged first (section 1, item 5); anything that needs a numerator factor, or is scaleless, is rejected.
 - It writes the DOT above: `exte0 -> v{in}`, `v{out} -> exte1`, one edge per line with `power=a` when `a != 1`,
   and `lmb_id` on the lines that carry a single `k(j)`. Numerators are not exported.
 - Test model: one scalar `phi` with vertices of valence 3 to 10 (fixture `tests/fixtures/phi_p_graphs.json`).

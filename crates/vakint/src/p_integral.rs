@@ -237,6 +237,37 @@ impl PropagatorWitness {
     }
 }
 
+/// The input of a p-integral backend (`reduce_p`, section 5), read off a
+/// matched term: independent of [`ReplacementRules`] beyond this accessor.
+#[allow(dead_code)]
+#[derive(Clone, Debug)]
+pub(crate) struct PropagatorRequest<'a> {
+    pub family: &'static PFamilyData,
+    /// Canonical line order; 0 = pinched, all >= 0.
+    pub powers: &'a [i64],
+    /// A scalar polynomial in the canonical `k(j)` and the user head.
+    pub canonical_numerator: AtomView<'a>,
+    /// The canonical `p(1)` written in the user head, `σ·p(i)`.
+    pub external: Atom,
+}
+
+impl ReplacementRules {
+    /// The backend input of a matched p-integral term whose numerator has
+    /// been canonicalized; `None` for a vacuum match.
+    #[allow(dead_code)]
+    pub(crate) fn propagator_request<'a>(
+        &'a self,
+        canonical_numerator: AtomView<'a>,
+    ) -> Option<PropagatorRequest<'a>> {
+        self.propagator.as_ref().map(|witness| PropagatorRequest {
+            family: witness.family(),
+            powers: &witness.powers,
+            canonical_numerator,
+            external: witness.canonical_external(),
+        })
+    }
+}
+
 /// The backend-independent result of one homogeneous p-integral contribution.
 ///
 /// The vakint value is

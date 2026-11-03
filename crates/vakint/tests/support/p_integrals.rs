@@ -276,18 +276,19 @@ fn routing_invariance(original: &Atom, seeds: std::ops::Range<u64>, relabel: boo
 
 /// Read a compact DOT p-graph back into vakint (`from_diagram`).
 pub fn from_dot(dot: &str) -> Atom {
+    from_dot_with(dot, &DiagramIntegralOptions::default())
+        .unwrap_or_else(|error| panic!("{dot}: {error}"))
+}
+
+/// [`from_dot`] with explicit options.
+pub fn from_dot_with(
+    dot: &str,
+    options: &DiagramIntegralOptions,
+) -> Result<Atom, vakint::VakintError> {
     let diagram =
         FeynmanDiagram::from_dot(PHI.clone(), dot).unwrap_or_else(|error| panic!("{dot}: {error}"));
     let family = diagram.propagator_family(&Kinematics::new()).unwrap();
-    Atom::from(
-        VakintExpression::from_diagram(
-            &diagram,
-            &family,
-            &Atom::one(),
-            &DiagramIntegralOptions::default(),
-        )
-        .unwrap_or_else(|error| panic!("{dot}: {error}")),
-    )
+    VakintExpression::from_diagram(&diagram, &family, &Atom::one(), options).map(Atom::from)
 }
 
 /// DOT round trip (section 3): `atom -> to_dot -> from_diagram` keeps the

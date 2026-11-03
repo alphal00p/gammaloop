@@ -137,6 +137,60 @@ mod two_loop {
     }
 }
 
+mod dot_ingress {
+    use super::*;
+    use vakint::diagram_integral::DiagramIntegralOptions;
+
+    /// A dotted bubble whose two legs both point into the graph.
+    const INCOMING_LEGS: &str = r#"digraph bubble {
+        exte0 [style=invis]; exte1 [style=invis];
+        exte0 -> v1 [id=0 particle="phi"];
+        exte1 -> v2 [id=1 particle="phi"];
+        v1 -> v2 [id=2 particle="phi" lmb_id=0];
+        v1 -> v2 [id=3 particle="phi" power=2];
+    }"#;
+
+    #[test]
+    fn the_first_leg_carries_p1_into_the_graph() {
+        assert_eq!(
+            canonical(&from_dot(INCOMING_LEGS)),
+            canonical(&parse(
+                "topo(prop(2,edge(1,2),k(1),0,1)*prop(3,edge(1,2),p(1)-k(1),0,2))"
+            )),
+        );
+    }
+
+    #[test]
+    fn the_external_momentum_can_be_renamed_but_not_accompanied() {
+        let renamed = from_dot_with(
+            INCOMING_LEGS,
+            &DiagramIntegralOptions {
+                external_momentum: Some(parse("p(3)")),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            canonical(&renamed),
+            canonical(&parse(
+                "topo(prop(2,edge(1,2),k(1),0,1)*prop(3,edge(1,2),p(3)-k(1),0,2))"
+            )),
+        );
+        for options in [
+            DiagramIntegralOptions {
+                external_momenta: vec![parse("q")],
+                ..Default::default()
+            },
+            DiagramIntegralOptions {
+                external_momentum: Some(parse("p(1)+p(2)")),
+                ..Default::default()
+            },
+        ] {
+            assert!(from_dot_with(INCOMING_LEGS, &options).is_err());
+        }
+    }
+}
+
 mod three_loop {
     use super::*;
 
