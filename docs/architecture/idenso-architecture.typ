@@ -276,6 +276,11 @@ finishers check the actual output in release builds. Metadata-authoritative
 fast paths carry metadata and check free-index preservation only in debug builds. That boundary
 observes existing ports without temporary index materialization or callback replay;
 constructor inference retains its materialization semantics within the same inference owner.
+The public `InterfaceInference::replacement_interface` exposes this observation to
+adapters. It preserves encoded open owners and logical axis identities while
+leaving scalar metadata opaque. A closed interface is not a certificate of
+commuting algebra, and observing a bare exact zero cannot recover a typed zero's
+carried layout; callers must retain that interface separately.
 Index substitution distinguishes graph storage identities from logical unresolved
 ports, checks every sum branch, and retains necessary multiplicity checks. Unchanged branches
 are borrowed; changed exact sums and products use bulk construction when callback ordering
