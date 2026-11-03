@@ -4,7 +4,160 @@ Use `just ci-checks` for the selected local suite and `just ci-checks-and-upload
 before final review. The latter runs static checks and publishes compiled runtime
 producers without running the runtime suite. NixCI runs that suite after the push.
 See #link("../../CONTRIBUTING.typ#nixci-cache")[CONTRIBUTING.typ] for credentials,
-licenses and retries.
+licenses and retries. `just check` checks compilation through the selected
+backend without running tests.
+
+== Native development commands
+
+The root Just recipes default to `backend=auto`: native tests, builds and PyO3
+packaging use Nix compilation and runtime runners when Nix is available,
+otherwise Cargo/Nextest or Maturin. `scripts/develop.sh` resolves and prints the
+backend before starting backend tooling. Without Nix, Rust commands invoke
+Cargo and Nextest directly, with no Python dispatcher. With Nix it obtains
+pinned shell tools from `flake.lock`, then `scripts/develop_nix.sh` invokes the
+native build derivations and test runners. Python remains in the separate wheel
+and cache-inspection tools. A Nix failure is never retried through Cargo.
+Use `just backend=cargo COMMAND`, `just test-cargo CRATE` or
+`just build-cargo CRATE` for explicit local Cargo iteration. An explicit Cargo
+override uses host tools. Use `nix develop -c just backend=cargo COMMAND` when
+local compilation needs the pinned toolchain and native libraries. See
+#link("../../CONTRIBUTING.typ#development-commands")[Common Commands] for command
+scope, specialized workflow exceptions and local `fmt` / `clean` operations.
+
+The Nix shell backend snapshots paths tracked by JJ or Git and copies
+their live contents, including uncommitted edits. It excludes `target/` and
+`.venv/`, and ignored files are not imported just because they exist beneath
+the workspace root. Newly added inputs must be tracked. The bootstrap pins
+shell tools before constructing the snapshot, keeps its tooling and source alive
+for the command, and cleans up afterward. Nix evaluation and
+build subprocesses receive an environment without `SYMBOLICA_LICENSE` or
+`SYMBOLICA_LICENSE_SIGNED`.
+
+Use `just test CRATE [NEXTEST_ARGS...]` for an individual workspace crate,
+including libraries outside GammaLoop's core. `just test-all` and `just test-ci`
+retain whole-workspace selection. For example:
+
+```sh
+just test spenso
+just test linnest -E 'test(layout)'
+just test gammaloop-integration-tests --test test_runs
+```
+
+Native commands share `.config/build-profile` (default `ci-optim`, matching CI).
+`just profile=dev COMMAND` and `just profile=release COMMAND` select explicit
+profiles for Rust and Python alike. The environment override is
+`GAMMALOOP_BUILD_PROFILE`. For tests, `--cargo-profile` changes compilation
+and `--profile` selects the Nextest runtime profile.
+
+Cargo uses one native Nextest invocation with `--workspace` or repeated `-p`
+selections. Features follow Cargo defaults and the caller's explicit flags;
+`--lib` and `--test` are Cargo build selectors. This avoids repeated compilation
+across per-package feature contexts and produces one JUnit report containing the
+selected tests, without later package runs overwriting earlier results. Cargo
+listing emits native Nextest JSON directly. Python API tests remain opt-in:
+`just test-python-api` adds `--features python-api-tests` and requires a prepared
+Python environment, as described in
+#link("../../CONTRIBUTING.typ#api-python-interop")[API / Python Interop].
+
+The Nix workspace graph owns archive selection, feature validation and platform
+filters. Explicit features outside the cached contexts are rejected before
+building. Cargo validates its own feature selections. `just ci-update`
+regenerates the workspace graph and scheduling configuration after context changes;
+there is no separate development-test metadata file.
+
+With Nix, the command builds or substitutes only that crate's archives and
+runner dependencies, using the same feature contexts and runtime setup as CI.
+Crates represented in multiple groups run each matching context, including the
+integration/Python split with its prepared Python runtime. Test filters select
+runtime execution without invalidating compilation artifacts. Tests execute on
+every invocation, even when all compiled inputs and the runner are already cached.
+An empty context is allowed when another context selects tests; an entirely
+empty selection fails unless `--no-tests=pass` or `--no-tests=warn` is supplied.
+`--profile ci_slow` also selects the slow lane's stack and worker settings.
+Pass `-E` and `-P` separately from other short options; clusters such as `-vE`
+are rejected so they cannot override mandatory platform exclusions.
+The shell backend prints a fresh local directory under `target/test-reports/`,
+with reports organized by group. Execution runs as the invoking user outside
+the Nix builder, using a private writable source snapshot, home, cache and
+temporary directory. `GAMMALOOP_WORKSPACE_ROOT`, `NEXTEST_WORKSPACE_ROOT` and
+`INSTA_WORKSPACE_ROOT` point fixture and snapshot lookup at the relocated source
+for that invocation. These are runner-owned overrides, not persistent shell
+configuration; direct stub generators also honor the workspace-root overrides.
+The source snapshot retains its CI group's context, including sibling
+helper crates launched by documentation tests; compiled archives remain selected
+per crate. A runtime resolves the license before replacing its home/config
+directories: a nonempty `SYMBOLICA_LICENSE`, then `SYMBOLICA_LICENSE_SIGNED`,
+then the caller's `${XDG_CONFIG_HOME:-$HOME/.config}/symbolica/license`.
+The staged source is removed on exit, including generated failure state;
+reports copied to the requested destination remain available.
+`just test-nix CRATE` remains an explicit Nix-only command;
+`just test-nix-all` selects the full CI aggregate.
+
+The same runners are available as
+`nix run .#test-CRATE -- REPORT_DIR NEXTEST_ARGS...`; for example:
+
+```sh
+nix run .#test-linnest -- target/test-reports/linnest -E 'test(layout)'
+```
+
+`just test-nix` uses the Nix shell backend. Runtime arguments are executable arguments,
+not Nix evaluation inputs. `nix build .#test-CRATE` only prepares an executable;
+it neither runs tests nor produces reports.
+`just test-nix-runner` checks argument handling and archive reuse using Kurvst's
+small test suite, plus documentation fixtures and the integration/Python split.
+`just development-check` runs shell-command, wheel and publication regressions
+without compiling workspace code.
+
+`just build CRATE [CARGO_ARGS...]`, ordinary CLI builds, tests and wheels use the
+shared profile. Explicit release recipes retain `release`; CLI variants retain
+`ufo_support` and optional `python_abi`. `check`, `clippy`, `doc` and `run` use the same shell entry point.
+`nix/development.nix` owns the native build/check/doc/wheel derivations; compatible
+builds reuse CI library artifacts. Built executables are atomically copied into
+`target/PROFILE/` (`target/debug/` for `dev`) with fresh modification times for
+the CLI launcher's profile selection described in Common Commands. Each installed
+binary retains its own GC root at `target/nix/bin/PROFILE/BINARY`; another build
+cannot discard the closure of a binary it did not replace. The UFO-enabled CLI
+wrapper pins Python 3.13, its matching UFO runtime and renderer data, while wheel
+builds retain the selected packaging interpreter.
+
+`just python-wheel gammaloop|community` builds a native wheel;
+`just python-develop gammaloop|community` also installs it in an existing virtual
+environment. `--python`, `VIRTUAL_ENV`, the matching `CONDA_PREFIX`, then root
+`.venv` determine the installation interpreter; system installs fail. All three
+backends install built wheels with uv, forcing reinstallation only of the
+selected distribution; dependency resolution may still change other packages.
+Python source changes require rebuilding and reinstalling;
+deliberately editable workflows can use manual `maturin develop`.
+
+The default `gammaloop` wheel builds the separate `gammaloop._gammaloop` extension, using the
+installed compatible Symbolica Python package. Building a combined kernel is
+optional and requires selecting `community` explicitly.
+
+Community is that combined `symbolica` host under
+`examples/notebooks/symbolica-host`, registering FeynKit, Linnet and Spenso as
+`hepkit`, `graph` and `tensor`, using the shared profile. It does not include
+GammaLoop, and these recipes do not offer a standalone `feynkit-py` wheel.
+GammaLoop accepts `--abi3`. Existing
+`build-api` variants retain their profile and ABI choices. See
+#link("../../CONTRIBUTING.typ#native-python")[Native Python packaging] for
+dependency provisioning and explicit `--no-deps` use with existing Community
+environments; root lockfile synchronization can replace the combined host.
+The default `development-wheel` flake package is a GammaLoop extension
+derivation using the shared profile, even without an explicit wheel request.
+
+Nix wheel outputs retain extracted native extensions so Nix records their
+runtime library references. Installation keeps a GC root under
+`ENV/.nix-python/DISTRIBUTION`; exported wheels keep
+`OUTPUT/.nix-WHEEL_FILENAME`. Installation and root replacement are serialized;
+failed installations retain their pending root and the previous environment root.
+Before installation, the selected interpreter checks the Nix native payload's
+loader compatibility. Full package imports must pass before the permanent root
+is replaced. Builds on Darwin omit Linux wheel compatibility flags; runtime
+compatibility on each deployment host remains necessary.
+Retain these roots while using the wheels,
+which depend on the native Nix store. Packaged initializers supply a default
+`SYMBOLICA_DATA_DIRECTORY` for renderer data without overriding an explicit
+value.
 
 == Local CI preparation
 
@@ -40,6 +193,30 @@ that every local CI producer is available from the cache. Closure size and
 coverage must be measured from realized outputs; a partial local store cannot
 establish the full publication size or all omitted producers.
 
+Use `just ci-upload-preview [scope]` to inspect these boundaries. The scope is
+`local`, `github` or `both`, defaulting to `both`; for example,
+`just ci-upload-preview github` inspects the compact publication. The report
+lists comparable selected attributes, output paths and realized/missing status, and sums
+deduplicated closure paths and raw NAR bytes for realized roots. Missing roots
+make the measurement partial. Selected CI producers outside GitHub's realized
+requisites are confirmed absent from its full closure only when all GitHub
+roots are realized. Raw NAR bytes do not measure compressed transfer size.
+
+The tracked-source preview has a different flake identity from raw `.#`
+publication: revision, NAR hash and modification metadata can differ, and raw
+directory filters can include untracked files. The documentation runner embeds
+source metadata, so `publication.sourceRevisionDependent` lists it separately as
+not comparable across source identities. It is excluded from comparable-root
+realization counts and closure measurements. Reported bytes are a comparable-root
+subtotal; the entire local upload size remains unknown when roots are excluded,
+even when comparable coverage is complete. This does not change upload selection.
+
+The preview evaluates offline with import-from-derivation disabled and queries
+the local store. It never realizes or downloads selected artifact outputs,
+uploads, or runs tests. The existing `develop.sh` entry may first bootstrap
+pinned shell and Python inspection tools; that tooling bootstrap is the limited
+exception to read-only inspection.
+
 == Configuration and cache boundaries
 
 #table(
@@ -47,10 +224,14 @@ establish the full publication size or all omitted producers.
   table.header([File], [Responsibility]),
   [`flake.nix`], [Compose public packages, checks, apps and development shells],
   [`nix/rust-workspace.nix`], [Rust sources, features, build profiles and artifact reuse],
+  [`nix/development.nix`], [Native build, check, Clippy, Rustdoc and wheel derivations],
   [`nix/documentation.nix`], [Documentation sources, reusable build artifacts and publication checks],
   [`nix/cargo-runtime.nix`], [Prepared Cargo environments for licensed doctest and documentation execution as the invoking user],
   [`nix/ci.nix`], [Test groups, required producers and NixCI scheduling],
   [`nix/ci-workspace-graph.json`, `nix-ci.nix`], [Generated workspace graph and self-contained NixCI configuration],
+  [`scripts/develop.sh`], [Backend selection and tooling bootstrap],
+  [`scripts/develop_nix.sh`], [Tracked source snapshots, Nix commands and native artifact retention],
+  [`scripts/python_wheel.py`], [Python interpreter selection, wheel packaging and installation],
   [`justfile`, `just/tests.just`], [Public native development commands],
   [`just/ci.just`], [Local checks, uploads, regeneration and reporting],
   [`.github/scripts/run-nix-ci-check.sh`, `.github/workflows/nix.yml`], [Realize check inputs, execute each runtime runner and export timing metadata],

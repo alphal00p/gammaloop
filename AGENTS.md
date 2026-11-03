@@ -14,8 +14,40 @@ modified code. Check the final diff against the policy, including design rules
 that formatting and Clippy cannot enforce, and report validation and any
 departures from the documented allowances.
 
+Before editing Python, read the [Python guidance](CONTRIBUTING.typ#python-style)
+and use the Ruff formatter. For native tests, builds and PyO3 packaging, use the
+[development commands](CONTRIBUTING.typ#development-commands): `just test CRATE`,
+`just build CRATE`, and `just python-wheel` / `just python-develop`.
+The default `backend=auto` selects Nix when available and Cargo/Maturin otherwise;
+a Nix failure remains a failure. Rust command construction stays in the shared
+shell dispatcher.
+Native commands and wheels share `.config/build-profile`; use
+`just profile=dev COMMAND` or `just profile=release COMMAND` for explicit modes.
+Use `backend=cargo` to explicitly select iteration with host tools. Preserve
+`SYMBOLICA_LICENSE` and the documented environment and wheel-lifetime rules.
+Nix prepares reusable archives and executable runners; licensed tests, doctests
+and documentation run as the invoking user on every invocation. Building or
+substituting a runner is preparation only, never evidence that its tests passed.
+Keep licenses out of Nix evaluation and derivations; use the runtime license
+loading described in the development commands.
+
 If instructions conflict, prefer the more specific local guidance and preserve
 the user's current work unless explicitly asked to change it.
+
+Before task edits, builds, tests, or experiments, create or resume your own
+feature workspace at `../<feature-name>`, relative to `main`. Keep `main`'s
+checked-out files read-only for implementation. Reuse only a workspace owned by
+the same task; see [CONTRIBUTING.typ](CONTRIBUTING.typ#agent-workspaces) for setup
+and resumption rules.
+
+Clean up your own temporary files, abandoned edits, and local processes as work
+continues. Preserve other contributors' work, shared caches, useful tests, and
+artifacts still needed for debugging, CI, or review. Follow
+[CONTRIBUTING.typ](CONTRIBUTING.typ#agent-cleanup) before removing a workspace.
+
+Before creating any new jj change, always ask the user which author name and
+email to use, and wait for their answer. Set that identity explicitly when
+creating the change.
 
 Use descriptive branch names without an agent prefix, for example
 `ci-final-review-readiness`. Do not add `codex/` unless explicitly requested.

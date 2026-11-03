@@ -18,9 +18,15 @@ doctest-nix:
 test-nix-all:
     nix run .#nix-ci-check-gammaloop-nextest
 
-# Run workspace nextest via Nix
-test-nix:
-    just test-nix-all
+# Run one workspace crate through Nix, with optional Nextest filters and flags.
+[positional-arguments]
+test-nix PACKAGE *args:
+    #!/usr/bin/env bash
+    exec bash scripts/develop.sh --backend nix test -p "$1" "${@:2}"
+
+# Check crate selection, filter handling and reuse against real Nix test archives.
+test-nix-runner:
+    python3 .github/scripts/test_nix_crate_runner.py
 
 # Generate coverage report via Nix
 coverage-nix:
@@ -104,3 +110,7 @@ ci-report MANIFEST OUTPUT_DIR:
 # Prepare the native CI dependency artifacts in the Nix store.
 build-deps-nix:
     nix build .#packages.$(nix eval --impure --raw --expr 'builtins.currentSystem').cargoArtifacts
+
+# Read-only artifact inspection; the launcher may bootstrap pinned inspection tools.
+ci-upload-preview scope="both":
+    bash scripts/develop.sh --backend nix upload-preview {{quote(scope)}}
