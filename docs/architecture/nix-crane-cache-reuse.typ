@@ -39,6 +39,13 @@ the removed licensed `checks.*.gammaloop-nextest-*` attributes. Current executio
 uses the runners documented in the CI guide. The retained
 `checks.*.gammaloop-nextest-binaries-*` attributes prepare archives only.
 
+Native command dispatch defaults to `backend=auto`, selecting Nix when available
+and Cargo/Maturin otherwise. A Nix failure is not retried through Cargo. Native builds and
+wheels share `.config/build-profile`; matching profiles alone do not erase
+feature, ABI or interpreter differences. The contributor guide owns the
+#link("../../CONTRIBUTING.typ#development-commands")[development commands] and
+#link("../../CONTRIBUTING.typ#native-python")[wheel installation and GC-root rules].
+
 == Sources checked
 <sources-checked>
 - Crane FAQ: #link("https://crane.dev/faq/constant-rebuilds.html")

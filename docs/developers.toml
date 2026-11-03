@@ -1807,7 +1807,7 @@ anchor = "ci-checks-and-upload:"
 # cachePublication.local selection for both uploads and builds. Independent
 # review cleared the recipe; differing-schedule fixture tests cover both
 # added and removed selected jobs. Scientific/runtime boundaries stay intact.
-digest = "73ef172e1e0c601ee1d4413c9b13941c00daa97f"
+digest = "912fad2e71048f53f498d64c0c208e345cf84eed"
 
 [[section.note]]
 id = "nix-crane-cache-reuse"
