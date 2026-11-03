@@ -27,6 +27,13 @@ use crate::symbols::S;
 /// external vertices.
 type Key = NativeGraph<u8, u8>;
 
+/// A canonical line `(id, from, to)` with canonical vertex labels.
+type CanonicalLine = (i64, usize, usize);
+
+/// The input lines (by index) and canonical lines sharing one pair of
+/// canonical endpoints.
+type ParallelPool = (Vec<usize>, Vec<CanonicalLine>);
+
 /// One catalogue representative: the first family in table order, then the
 /// lexicographically smallest set of pinched lines.
 #[derive(Clone, Debug)]
@@ -36,7 +43,7 @@ pub(crate) struct CatalogueEntry {
     pub pinched: Vec<i64>,
     /// The remaining family lines with the canonical labels of their
     /// `(from, to)` vertices.
-    lines: Vec<(i64, usize, usize)>,
+    lines: Vec<CanonicalLine>,
     /// Canonical label of the vertex where the family's `p(1)` enters.
     entry: usize,
 }
@@ -270,7 +277,7 @@ pub(crate) fn match_graph(graph: &PGraph) -> Result<Option<PMatch>, VakintError>
             .collect::<Vec<_>>()
     };
     // Pools of parallel lines, keyed by their unordered canonical endpoints.
-    let mut pools = BTreeMap::<(usize, usize), (Vec<usize>, Vec<(i64, usize, usize)>)>::new();
+    let mut pools = BTreeMap::<(usize, usize), ParallelPool>::new();
     for (index, line) in graph.lines.iter().enumerate() {
         let (a, b) = (labels[&line.ends.0], labels[&line.ends.1]);
         pools.entry((a.min(b), a.max(b))).or_default().0.push(index);
@@ -368,10 +375,10 @@ pub(crate) fn match_graph(graph: &PGraph) -> Result<Option<PMatch>, VakintError>
 /// Enumerate the assignments of input lines to canonical lines within each
 /// pool of parallel lines, stopping at the first `Some` of `visit`.
 fn assign<T>(
-    pools: &[(Vec<usize>, Vec<(i64, usize, usize)>)],
+    pools: &[ParallelPool],
     pool: usize,
-    assignment: &mut Vec<Option<(i64, usize, usize)>>,
-    visit: &mut impl FnMut(&[Option<(i64, usize, usize)>]) -> Option<T>,
+    assignment: &mut [Option<CanonicalLine>],
+    visit: &mut impl FnMut(&[Option<CanonicalLine>]) -> Option<T>,
 ) -> Option<T> {
     let Some((inputs, targets)) = pools.get(pool) else {
         return visit(assignment);

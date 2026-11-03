@@ -1218,9 +1218,10 @@ class VakintNumericalResult:
            The maximum pull for comparison. Default is 3.0.
         """
 
-def integral_from_diagram(diagram: FeynmanDiagram, family: IntegralFamily, numerator: Expression, *, powers: typing.Sequence[int] | None = None, physical_slots: typing.Optional[typing.Sequence[builtins.int]] = None, parameter_substitutions: typing.Mapping[symbolica.Expression, symbolica.Expression] | None = None, external_momenta: typing.Sequence[Expression] = []) -> VakintExpression:
+def integral_from_diagram(diagram: FeynmanDiagram, family: IntegralFamily, numerator: Expression, *, powers: typing.Sequence[int] | None = None, physical_slots: typing.Optional[typing.Sequence[builtins.int]] = None, parameter_substitutions: typing.Mapping[symbolica.Expression, symbolica.Expression] | None = None, external_momenta: typing.Sequence[Expression] = [], external_momentum: typing.Optional[Expression] = None) -> VakintExpression:
     r"""
-    Build a native VakintExpression from a routed, uncut vacuum graph.
+    Build a native VakintExpression from a routed, uncut vacuum graph, or from
+    a massless propagator-type graph with exactly two external legs.
 
     The family must retain the graph's stored loop basis; `physical_slots` maps
     sorted graph edges to zero-based family indices and defaults to the prefix.
@@ -1229,4 +1230,7 @@ def integral_from_diagram(diagram: FeynmanDiagram, family: IntegralFamily, numer
     Kinematics.scalar_product notation. Spectator order defines numerical vector
     IDs. Parameter substitutions are simultaneous and must already be reflected
     in the family's physical denominators. No graph factor is inserted.
+    For a propagator-type graph, `p(1)` (or the bare `p(i)` given as
+    `external_momentum`) flows in through the leg with the smallest edge id,
+    every line must be massless and `external_momenta` must be empty.
     """

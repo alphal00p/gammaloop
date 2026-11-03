@@ -393,15 +393,14 @@ impl Integral {
 
 /// `k(n) -> k(n,idx___)` and `p(n) -> p(n,idx___)` in a momentum image.
 fn with_index_tails(momentum: AtomView) -> Atom {
-    let p_tail = crate::with_k_index_tail(momentum)
+    crate::with_k_index_tail(momentum)
         .replace(vk_parse!("p(n_)").unwrap().to_pattern())
         .when(symbolica::id::Condition::from((
             vk_symbol!("n_"),
             crate::number_condition(),
         )))
         .allow_new_wildcards_on_rhs(true)
-        .with(vk_parse!("p(n_,idx___)").unwrap().to_pattern());
-    p_tail
+        .with(vk_parse!("p(n_,idx___)").unwrap().to_pattern())
 }
 
 /// The replacement rules of a matched p-integral (section 2, "Matching").

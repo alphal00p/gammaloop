@@ -159,6 +159,86 @@
       "name": "I4L_FG_pinch_4_6_7_8",
       "loops": 4,
       "propagator_slots": 8
+    },
+    {
+      "name": "P1L",
+      "loops": 1,
+      "propagator_slots": 2
+    },
+    {
+      "name": "P2L",
+      "loops": 2,
+      "propagator_slots": 5
+    },
+    {
+      "name": "P3L_LA",
+      "loops": 3,
+      "propagator_slots": 8
+    },
+    {
+      "name": "P3L_BE",
+      "loops": 3,
+      "propagator_slots": 8
+    },
+    {
+      "name": "P3L_NO",
+      "loops": 3,
+      "propagator_slots": 8
+    },
+    {
+      "name": "P4L_LA4",
+      "loops": 4,
+      "propagator_slots": 11
+    },
+    {
+      "name": "P4L_J1",
+      "loops": 4,
+      "propagator_slots": 11
+    },
+    {
+      "name": "P4L_J2",
+      "loops": 4,
+      "propagator_slots": 11
+    },
+    {
+      "name": "P4L_J4",
+      "loops": 4,
+      "propagator_slots": 11
+    },
+    {
+      "name": "P4L_J5",
+      "loops": 4,
+      "propagator_slots": 11
+    },
+    {
+      "name": "P4L_J6",
+      "loops": 4,
+      "propagator_slots": 11
+    },
+    {
+      "name": "P4L_J11",
+      "loops": 4,
+      "propagator_slots": 11
+    },
+    {
+      "name": "P4L_HAHA",
+      "loops": 4,
+      "propagator_slots": 11
+    },
+    {
+      "name": "P4L_NO1",
+      "loops": 4,
+      "propagator_slots": 11
+    },
+    {
+      "name": "P4L_NO2",
+      "loops": 4,
+      "propagator_slots": 11
+    },
+    {
+      "name": "P4L_NO3",
+      "loops": 4,
+      "propagator_slots": 11
     }
   ]
 }
