@@ -14,6 +14,7 @@ mod lorentz;
 mod master_precision;
 pub mod matad;
 pub mod matad_numerics;
+pub mod p_integral;
 pub mod precision;
 mod presentation;
 mod routing;
