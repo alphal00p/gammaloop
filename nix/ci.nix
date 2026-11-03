@@ -12,7 +12,7 @@
   hasUfoWheel = builtins.hasAttr system ufoWheelTags;
   # Compile the integration crate once; groups select disjoint test binaries.
   testFeatures."gammaloop-integration-tests" = ["python-api-tests"];
-  testFeatures."gammaloop-api" = if hasUfoWheel then ["ufo-import"] else [];
+  testFeatures."gammaloop-api" = if hasUfoWheel then ["ufo_support"] else [];
   # Isolated CFF tests must retain their numerical evaluation oracles.
   testFeatures."three-dimensional-reps" = ["eval"];
   # Nixpkgs Chromium is a Linux runtime; Darwin retains the ordinary native groups.
@@ -25,7 +25,7 @@
     {
       name = "core";
       runtimeUfoLoader = hasUfoWheel;
-      # Shared Python stub generation also enables ufo-import. Preserve the
+      # Shared Python stub generation also enables ufo_support. Preserve the
       # wheel guard for actual imports while retaining loader-version validation.
       # Archive filtersets reject test() predicates, so apply this only when running.
       runFilter =
@@ -41,6 +41,7 @@
     }
     {
       name = "docs";
+      runtimeRenderData = true;
       packages = [
         "alphal00p-docs-builder"
         "alphal00p-docs-catalogs"
@@ -69,24 +70,35 @@
     }
     {
       name = "linnet";
+      runtimeRenderData = true;
       packages = [
         "kurvst"
         "linnet"
         "linnet-py"
+        "linnet-render-py"
         "linnest"
       ];
     }
     {
       name = "spenso";
+      runtimeRenderData = true;
       packages = [
         "idenso"
         "spenso"
         "spenso-hep-lib"
         "spenso-macros"
         "spynso3"
+        "symbolica-notation"
         "symbolica-utils"
         "symbolica-data"
       ];
+    }
+    {
+      name = "browser";
+      runtimeRenderData = true;
+      runtimeBrowser = true;
+      packages = ["linnet-render-py" "spynso3" "feynkit-py"];
+      runFilter = "(binary(tensor_paging) or binary(cff_display) or test(=browser_display_fixtures) or test(/view::tests::/) or test(=mathml_view_outlined_exports))";
     }
     {
       name = "vakint";
@@ -259,6 +271,11 @@
             if group.runtimeUfoLoader or false
             then ["packages.${system}.gammaloop-ufo-python-runtime"]
             else []
+          )
+          ++ (
+            if group.runtimeRenderData or false
+            then ["packages.${system}.gammaloop-render-data"]
+            else []
           );
       })
       groups))
@@ -283,31 +300,25 @@
       "checks.${system}.gammaloop-check" = ["packages.${system}.cargoCheckArtifacts"];
       "checks.${system}.gammaloop-clippy" = ["packages.${system}.cargoCheckArtifacts"];
       "checks.${system}.gammaloop-doc" = ["packages.${system}.cargoCheckArtifacts"];
-      "checks.${system}.gammaloop-doctest" = [
-        "packages.${system}.cargoCheckArtifacts"
-        (cratePackageDepsAttr "gammaloop-api")
-      ];
       "packages.${system}.alphal00p-docs-pages" = ["packages.${system}.alphal00p-docs-cargo-artifacts"];
       "packages.${system}.alphal00p-docs-snapshot-fixture" = ["packages.${system}.alphal00p-docs-cargo-artifacts"];
       "packages.${system}.alphal00p-docs-cargo-artifacts" = [(cratePackageDepsAttr "gammaloop-api")];
-      "checks.${system}.alphal00p-docs" = [
-        "packages.${system}.alphal00p-docs-pages"
-        "packages.${system}.alphal00p-docs-snapshot-fixture"
-      ];
       "packages.${system}.workspaceBuildArtifacts" = ["packages.${system}.cargoArtifacts"];
       "checks.${system}.gammaloop-nextest-binaries" = nextestBinaryChecks;
       "packages.${system}.linnest-wasm" = ["packages.${system}.linnestWasmCargoArtifacts"];
       "checks.${system}.linnest-wasm" = ["packages.${system}.linnest-wasm"];
       "packages.${system}.gammaloop-llvm-coverage" = ["packages.${system}.gammaloop"];
-      "packages.${system}.nix-ci-check-alphal00p-docs" = ["packages.${system}.alphal00p-docs-cargo-artifacts"];
+      "packages.${system}.nix-ci-check-alphal00p-docs" = ["packages.${system}.alphal00p-docs-cargo-artifacts" "packages.${system}.gammaloop-render-data"];
       "packages.${system}.nix-ci-check-gammaloop-doctest" = [
         "packages.${system}.cargoCheckArtifacts"
         (cratePackageDepsAttr "gammaloop-api")
+        "packages.${system}.gammaloop-render-data"
       ];
       "packages.${system}.nix-ci-check-gammaloop-nextest" =
         nextestBinaryChecks
         ++ [
           "packages.${system}.gammaloop-python-module"
+          "packages.${system}.gammaloop-render-data"
         ]
         ++ (if hasUfoWheel then ["packages.${system}.gammaloop-ufo-python-runtime"] else []);
     }
@@ -348,8 +359,6 @@
   doNotBuild = unique (
     [
       "checks.${system}.gammaloop"
-      "checks.${system}.gammaloop-doctest"
-      "checks.${system}.gammaloop-nextest"
       "checks.${system}.gammaloop-nextest-binaries"
       "packages.${system}.default"
       "packages.${system}.crane-ci-prebuild"
@@ -357,7 +366,6 @@
       "packages.${system}.gammaloop-llvm-coverage"
       "packages.${system}.nix-ci-check-gammaloop-nextest"
     ]
-    ++ map (group: "checks.${system}.gammaloop-nextest-${group.name}") groups
     ++ [
       (crateTestBinaryAttr workspaceHackPackage)
       (workspacePackageGraphAttr workspaceHackPackage)
@@ -442,6 +450,20 @@ in {
     workspaceTestComponentDependencyRepresentativesFor
     workspaceTestDependencyComponentRepresentatives
     ;
+  publication = {
+    local = onlyBuild;
+    # The docs runner embeds flake metadata that differs in tracked-path previews.
+    sourceRevisionDependent = ["packages.${system}.nix-ci-check-alphal00p-docs"];
+    producers = builtins.filter (job: !(builtins.elem job primaryChecks)) onlyBuild;
+    github = [
+      "packages.${system}.alphal00p-docs-cargo-artifacts"
+      "packages.${system}.crane-ci-prebuild"
+      "packages.${system}.gammaloop"
+      "packages.${system}.gammaloop-python-module"
+      "checks.${system}.gammaloop-nextest-binaries"
+    ];
+    githubMaxNarBytes = 8 * 1024 * 1024 * 1024;
+  };
   configuration = {
     systems = [system];
     inherit onlyBuild;

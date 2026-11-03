@@ -17,6 +17,8 @@ on:
       - 'spenso-macros-v*'
       - 'spenso-hep-lib-v*'
       - 'spynso3-v*'
+      - 'feynkit-v*'
+      - 'feynkit-*-v*'
       - 'idenso-v*'
       - 'idenso-community-v*'
       - 'vakint-v*'
@@ -57,7 +59,6 @@ env:
   # closure separate from the broader Nix producer set.
   HESTIA_CACHE_VERSION_SALT: gammaloop-docs-no-closure-v1
   HESTIA_DRAIN_TIMEOUT: 7200
-  SYMBOLICA_LICENSE: ${{ secrets.SYMBOLICA_LICENSE_SIGNED || 'GAMMALOOP_USER' }}
 
 jobs:
   build:
@@ -132,6 +133,9 @@ jobs:
             echo "channel=$channel"
             echo "snapshot_tag=$snapshot_tag"
             echo "publish=$publish"
+            # Capture the running build recipe before a manual snapshot checkout.
+            # Its compiler flags and action versions must invalidate old wheels.
+            echo "wheel_recipe=$(git hash-object .github/workflows/docs-pages.yml)"
           } >> "$GITHUB_OUTPUT"
 
       - id: snapshot_source
@@ -150,15 +154,17 @@ jobs:
             scripts/render-docs-svg-assets.sh \
             justfile; do
             if ! git cat-file -e "$SNAPSHOT_TAG^{commit}:$required"; then
-              echo "::error::Snapshot tag $SNAPSHOT_TAG predates the five-product Typst documentation toolchain and cannot be rebuilt faithfully." >&2
+              echo "::error::Snapshot tag $SNAPSHOT_TAG predates the multi-product Typst documentation toolchain and cannot be rebuilt faithfully." >&2
               exit 2
             fi
           done
           git checkout --detach "refs/tags/$SNAPSHOT_TAG"
           if grep -q '"alphal00p-docs-pages"' flake.nix; then
-            echo "cacheable=true" >> "$GITHUB_OUTPUT"
+            program=$(nix eval --impure --json .#packages.x86_64-linux.alphal00p-docs-pages \
+              --apply 'package: package.meta.mainProgram or null')
+            echo "runner=$(jq '. == "alphal00p-docs-pages"' <<< "$program")" >> "$GITHUB_OUTPUT"
           else
-            echo "cacheable=false" >> "$GITHUB_OUTPUT"
+            echo "runner=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Refresh publication catalogue
@@ -169,11 +175,12 @@ jobs:
             python3 scripts/update-publications.py --keep-existing-on-error
 
       - id: docs
-        name: Build all five sites
+        name: Build the documentation sites
         env:
-          CACHEABLE_SNAPSHOT: ${{ steps.snapshot_source.outputs.cacheable }}
+          SNAPSHOT_RUNNER: ${{ steps.snapshot_source.outputs.runner }}
           CHANNEL: ${{ steps.release.outputs.channel }}
           SNAPSHOT_TAG: ${{ steps.release.outputs.snapshot_tag }}
+          SYMBOLICA_LICENSE: ${{ secrets.SYMBOLICA_LICENSE_SIGNED || 'GAMMALOOP_USER' }}
         run: |
           set -euo pipefail
           build_started=$SECONDS
@@ -189,23 +196,27 @@ jobs:
 
           if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ] \
             && [ "$CHANNEL" = snapshot ] \
-            && [ "$CACHEABLE_SNAPSHOT" = false ]; then
-            # Historical five-product tags predate the cacheable Pages output.
+            && [ "$SNAPSHOT_RUNNER" = false ]; then
+            # Historical tags lack the runtime launcher. Render from their
+            # source as the invoking user, never through a licensed derivation.
             nix develop --command \
               just docs-site all "$CHANNEL" "$SNAPSHOT_TAG" target/alphal00p-docs
             docs_path=$PWD/target/alphal00p-docs
             cargo_producer=historical-build
           else
             nix_log=$RUNNER_TEMP/alphal00p-docs-nix.log
-            docs_path=$(
-              nix build \
+            docs_runner=$(
+              env -u SYMBOLICA_LICENSE -u SYMBOLICA_LICENSE_PATH \
+                -u SYMBOLICA_LICENSE_SIGNED -u SYMBOLICA_LICENSE_FILE nix build \
                 --impure \
-                --no-link \
+                --out-link "$RUNNER_TEMP/alphal00p-docs-runner" \
                 --print-build-logs \
                 --print-out-paths \
                 .#packages.x86_64-linux.alphal00p-docs-pages \
                 2> >(tee "$nix_log" >&2)
             )
+            docs_path=$RUNNER_TEMP/alphal00p-docs
+            "$docs_runner/bin/alphal00p-docs-pages" "$docs_path"
             if grep -Eq "building '.+-alphal00p-docs-cargo-[^']+\\.drv'" "$nix_log"; then
               cargo_producer=rebuilt
             elif grep -Eq "copying path '.+-alphal00p-docs-cargo-[^']+'" "$nix_log"; then
@@ -221,7 +232,7 @@ jobs:
             echo "seconds=$build_seconds"
             echo "cargo_producer=$cargo_producer"
           } >> "$GITHUB_OUTPUT"
-          echo "Reusable Cargo producer: $cargo_producer; five-site build: ${build_seconds}s"
+          echo "Reusable Cargo producer: $cargo_producer; site build: ${build_seconds}s"
 
       - id: notebook_source
         name: Select browser notebook support at the documented revision
@@ -232,39 +243,70 @@ jobs:
             && grep -Fq -- '"--docs"' crates/linnet-py/examples/export_wasm.py; then
             {
               echo "enabled=true"
-              echo "revision=$(git rev-parse HEAD)"
+              if grep -Fq '"notebook-wasm-wheel"' flake.nix; then
+                echo "nix_wheel=true"
+              fi
+              if [ -f examples/notebooks/symbolica-host/pyproject.toml ]; then
+                echo "community=true"
+              fi
+              # The wheel embeds crate assets and Python modules, but not the
+              # website theme or prose. Reuse it across documentation edits.
+              wheel_source=$(
+                git ls-files -s -- Cargo.toml Cargo.lock .cargo .config crates vendor assets \
+                  examples/notebooks/symbolica-host \
+                  docs/products/linnet/content/quickstart-python.typ \
+                  ':(exclude)crates/alphal00p-docs-*' \
+                  ':(exclude)crates/linnet-py/examples' | git hash-object --stdin
+              )
+              echo "wheel_source=$wheel_source"
               echo "epoch=$(git log -1 --format=%ct)"
+              # Old snapshots used their commit epoch. Keep that policy when
+              # rebuilding a historical tag so its published wheel stays identical.
+              wheel_epoch=$(git log -1 --format=%ct)
+              if grep -Fq '"alphal00p-docs-notebooks"' flake.nix; then
+                wheel_epoch=315532800
+              fi
+              echo "wheel_epoch=$wheel_epoch"
             } >> "$GITHUB_OUTPUT"
           else
             echo "enabled=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - id: notebook_wheel
-        name: Restore this revision's browser wheel
-        if: steps.notebook_source.outputs.enabled == 'true'
+      - id: community_notebook_wheel
+        name: Restore the shared Symbolica browser wheel for these build inputs
+        if: steps.notebook_source.outputs.enabled == 'true' && steps.notebook_source.outputs.nix_wheel != 'true'
         uses: actions/cache@v4
         with:
-          path: ${{ runner.temp }}/linnet-docs-wheel
-          key: linnet-docs-wheel-v1-${{ runner.os }}-rust-1.98.1-cibuildwheel-4.2.0-${{ steps.notebook_source.outputs.revision }}
+          path: ${{ runner.temp }}/symbolica-docs-wheel
+          key: symbolica-docs-wheel-v2-${{ runner.os }}-${{ steps.release.outputs.wheel_recipe }}-${{ steps.notebook_source.outputs.wheel_epoch }}-${{ steps.notebook_source.outputs.wheel_source }}
 
       - name: Install the WebAssembly Rust target
-        if: steps.notebook_source.outputs.enabled == 'true' && steps.notebook_wheel.outputs.cache-hit != 'true'
+        if: steps.notebook_source.outputs.enabled == 'true' && steps.notebook_source.outputs.nix_wheel != 'true' && steps.community_notebook_wheel.outputs.cache-hit != 'true'
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.98.1
           targets: wasm32-unknown-emscripten
 
-      - name: Build and test the documented revision's browser wheel
-        if: steps.notebook_source.outputs.enabled == 'true' && steps.notebook_wheel.outputs.cache-hit != 'true'
+      - name: Build the shared Symbolica browser wheel
+        if: steps.notebook_source.outputs.enabled == 'true' && steps.notebook_source.outputs.nix_wheel != 'true' && steps.community_notebook_wheel.outputs.cache-hit != 'true'
         uses: pypa/cibuildwheel@v4.2.0
         with:
           package-dir: examples/notebooks/symbolica-host
           output-dir: ${{ runner.temp }}/symbolica-docs-wheel
         env:
           CIBW_BUILD: cp314-pyodide_wasm32
-          CIBW_ENVIRONMENT_PYODIDE: CARGO_PROFILE_RELEASE_LTO=thin CARGO_BUILD_JOBS=2 SOURCE_DATE_EPOCH=${{ steps.notebook_source.outputs.epoch }}
+          CIBW_ENVIRONMENT_PYODIDE: MATURIN_PEP517_ARGS='--locked --no-default-features --features wasm' RUSTFLAGS='' CARGO_PROFILE_RELEASE_LTO=thin CARGO_BUILD_JOBS=2 SOURCE_DATE_EPOCH=${{ steps.notebook_source.outputs.wheel_epoch }}
           CIBW_PLATFORM: pyodide
-          SOURCE_DATE_EPOCH: ${{ steps.notebook_source.outputs.epoch }}
+          SOURCE_DATE_EPOCH: ${{ steps.notebook_source.outputs.wheel_epoch }}
+
+      - name: Build the shared browser wheel through Nix
+        if: steps.notebook_source.outputs.nix_wheel == 'true'
+        run: |
+          set -euo pipefail
+          wheel_output=$(nix build --print-build-logs --print-out-paths \
+            --out-link "$RUNNER_TEMP/notebook-wasm-wheel" .#notebook-wasm-wheel)
+          mkdir -p "$RUNNER_TEMP/symbolica-docs-wheel"
+          cp "$wheel_output/"*.whl "$RUNNER_TEMP/symbolica-docs-wheel/"
 
       - id: publication_bundle
         name: Bundle live notebooks with the documentation
@@ -283,7 +325,7 @@ jobs:
           fi
 
           shopt -s nullglob
-          wheels=("$RUNNER_TEMP/linnet-docs-wheel/"*.whl)
+          wheels=("$RUNNER_TEMP/symbolica-docs-wheel/"*.whl)
           if [ "${#wheels[@]}" -ne 1 ]; then
             echo "Expected exactly one browser wheel for the documented revision" >&2
             exit 2
@@ -296,6 +338,12 @@ jobs:
             channel_path="snapshots/$SNAPSHOT_TAG"
           fi
           exporter_help=$(python3 crates/linnet-py/examples/export_wasm.py --help)
+          if grep -Fq '"alphal00p-docs-notebooks"' flake.nix; then
+            notebook_export=(nix run .#alphal00p-docs-notebooks --)
+          else
+            # Historical snapshots retain their revision's exporter environment.
+            notebook_export=(nix develop --command uv run --no-project --with marimo==0.24.0 python crates/linnet-py/examples/export_wasm.py)
+          fi
           products=(linnet)
           community_products=(spenso idenso feynkit)
           product_selection=false
@@ -315,9 +363,7 @@ jobs:
             if [ "$product_selection" = true ]; then
               docs_args+=("$product")
             fi
-            nix develop --command \
-              uv run --no-project --with marimo==0.24.0 python \
-              crates/linnet-py/examples/export_wasm.py \
+            "${notebook_export[@]}" \
               "${docs_args[@]}" \
               --wheel "${wheels[0]}" \
               --output "$staged_docs/products/$product/$channel_path/assets/notebooks"

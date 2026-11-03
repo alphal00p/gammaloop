@@ -18,6 +18,9 @@ elif [ "${1-}" = "--dev-optim" ]; then
 elif [ "${1-}" = "-o" ]; then
     profile_override="dev-optim"
     shift
+elif [ "${1-}" = "--ci-optim" ]; then
+    profile_override="ci-optim"
+    shift
 elif [ "${1-}" = "--debug" ]; then
     profile_override="debug"
     shift
@@ -34,29 +37,16 @@ select_binary() {
     fi
 
     local release_binary="$script_dir/target/release/gammaloop"
-    local dev_optim_binary="$script_dir/target/dev-optim/gammaloop"
     local debug_binary="$script_dir/target/debug/gammaloop"
-
-    if [ -x "$release_binary" ] && [ -x "$dev_optim_binary" ]; then
-        if [ "$dev_optim_binary" -nt "$release_binary" ]; then
-            selected_profile="dev-optim"
-            binary="$dev_optim_binary"
-        else
-            selected_profile="release"
-            binary="$release_binary"
+    local profile candidate
+    for profile in release dev-optim ci-optim; do
+        candidate="$script_dir/target/$profile/gammaloop"
+        if [ -x "$candidate" ] && { [ -z "$binary" ] || [ "$candidate" -nt "$binary" ]; }; then
+            selected_profile="$profile"
+            binary="$candidate"
         fi
-        return
-    fi
-
-    if [ -x "$release_binary" ]; then
-        selected_profile="release"
-        binary="$release_binary"
-        return
-    fi
-
-    if [ -x "$dev_optim_binary" ]; then
-        selected_profile="dev-optim"
-        binary="$dev_optim_binary"
+    done
+    if [ -n "$binary" ]; then
         return
     fi
 
@@ -110,6 +100,7 @@ Could not find an executable gammaloop binary.
 Expected one of:
   $script_dir/target/release/gammaloop
   $script_dir/target/dev-optim/gammaloop
+  $script_dir/target/ci-optim/gammaloop
   $script_dir/target/debug/gammaloop
 
 Build one first with, for example:

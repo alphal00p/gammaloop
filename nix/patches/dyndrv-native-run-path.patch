@@ -1,0 +1,25 @@
+--- a/worker/worker.py
++++ b/worker/worker.py
+@@ -1234,12 +1234,18 @@
+                 }
+             )
+             runtime_names = set(self.runtime_names)
+-            if self.action == "run":
++            if self.action in {"run", "test"}:
+                 runner = stage / "runtime-runner.py"
++                runner_code = (
++                    "import os,sys\n"
++                    f"os.environ['PATH'] = {self.spec['runtime_path']!r}\n"
++                )
++                if self.action == "run":
++                    runner_code += "os.chdir(os.environ['CARGO_DYNDRV_ORIGINAL_CWD'])\n"
++                    self.environment["CARGO_DYNDRV_ORIGINAL_CWD"] = str(self.workspace)
+                 runner.write_text(
+-                    "import os,sys\nos.chdir(os.environ['CARGO_DYNDRV_ORIGINAL_CWD'])\nos.execvpe(sys.argv[1],sys.argv[1:],os.environ)\n"
+-                )
+-                self.environment["CARGO_DYNDRV_ORIGINAL_CWD"] = str(self.workspace)
++                    runner_code + "os.execvpe(sys.argv[1],sys.argv[1:],os.environ)\n"
++                )
+                 host = (
+                     subprocess.check_output(
+                         [self.environment["RUSTC"], "-vV"], text=True
