@@ -11,13 +11,14 @@ case "${1-}" in
     --backend=*) backend=${1#*=}; shift ;;
 esac
 case "${1-}" in --backend|--backend=*) fail 'backend may be given only once before the action' ;; esac
-case "$backend" in auto|nix|cargo) ;; *) fail "invalid backend: $backend" ;; esac
+case "$backend" in auto|nix|cargo|dyndrv) ;; *) fail "invalid backend: $backend" ;; esac
 if [[ $backend == auto ]]; then
     if command -v nix >/dev/null 2>&1; then backend=nix; else backend=cargo; fi
 fi
-[[ $backend != nix ]] || command -v nix >/dev/null 2>&1 || fail 'Nix was explicitly selected but is not installed'
+[[ $backend != nix && $backend != dyndrv ]] || command -v nix >/dev/null 2>&1 || fail 'Nix was explicitly selected but is not installed'
 action=${1-}; [[ -n $action ]] || fail 'missing action'; shift
-case "$action" in test|list|build|check|clippy|doc|run|fmt|clean|python|upload-preview) ;; *) fail "unknown action: $action" ;; esac
+case "$action" in test|list|build|check|clippy|doc|run|fmt|clean|python|upload-preview|stop|gc) ;; *) fail "unknown action: $action" ;; esac
+case "$action" in stop|gc) [[ $backend == dyndrv ]] || fail "$action requires backend=dyndrv" ;; esac
 if [[ -z ${GAMMALOOP_BUILD_PROFILE:-} ]]; then
     GAMMALOOP_BUILD_PROFILE=$(< "$root/.config/build-profile")
 fi
@@ -38,11 +39,19 @@ if [[ $backend == nix ]]; then
     nix_main "$@"
     exit
 fi
+if [[ $backend == dyndrv ]]; then
+    source "$root/scripts/develop_dyndrv.sh"
+    # Leave native command construction below shared with ordinary Cargo.
+    cargo_execute() { dyndrv_main "$@"; }
+else
+    cargo_execute() { exec cargo "$@"; }
+fi
 case "$action" in
-    python) load_license; exec python3 "$root/scripts/python_wheel.py" --backend cargo "$@" ;;
-    upload-preview) fail "$action requires Nix" ;;
-    fmt) exec cargo fmt --all "$@" ;;
-    clean) exec cargo clean "$@" ;;
+    python) load_license; if [[ $backend == dyndrv ]]; then dyndrv_main "$@"; exit; fi; exec python3 "$root/scripts/python_wheel.py" --backend cargo "$@" ;;
+    upload-preview) [[ $backend != dyndrv ]] || dyndrv_main "$@"; fail "$action requires Nix" ;;
+    stop|gc) dyndrv_main "$@"; exit ;;
+    fmt) cargo_execute fmt --all "$@"; exit ;;
+    clean) cargo_execute clean "$@"; exit ;;
 esac
 load_license
 args=(); profile_set=false; selection=false; runtime_profile=ci_gammaloop; no_tests=fail
@@ -80,7 +89,12 @@ if [[ $action == test || $action == list ]]; then
     fi
     command=(cargo nextest run --locked --cargo-profile "$profile" ${args[@]+"${args[@]}"} --profile "$runtime_profile")
     if [[ $action == list ]]; then command[2]=list; command+=(--message-format json); else command+=(--no-tests "$no_tests"); fi
-    exec "${command[@]}" -E "$expression" ${forwarded[@]+"${forwarded[@]}"}
+    if [[ $backend == dyndrv ]]; then
+        dyndrv_main "${command[@]:1}" -E "$expression" ${forwarded[@]+"${forwarded[@]}"}
+    else
+        exec "${command[@]}" -E "$expression" ${forwarded[@]+"${forwarded[@]}"}
+    fi
+    exit
 fi
 # Cargo validates native flags. Inspect only the build prefix to supply defaults.
 for arg in "$@"; do
@@ -90,4 +104,8 @@ done
 command=(cargo "$action" --locked)
 "$profile_set" || command+=(--profile "$GAMMALOOP_BUILD_PROFILE")
 "$selection" || command+=(-p gammaloop-api)
-exec "${command[@]}" "$@"
+if [[ $backend == dyndrv ]]; then
+    dyndrv_main "${command[@]:1}" "$@"
+else
+    exec "${command[@]}" "$@"
+fi

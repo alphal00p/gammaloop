@@ -24,6 +24,14 @@ local compilation needs the pinned toolchain and native libraries. See
 #link("../../CONTRIBUTING.typ#development-commands")[Common Commands] for command
 scope, specialized workflow exceptions and local `fmt` / `clean` operations.
 
+`backend=dyndrv` is a separate explicit choice, using the `cargo-dyndrv` fork
+pinned in `flake.lock` at `c1935d6`. It shares Cargo command construction with the
+ordinary Cargo path and delegates source staging, compiler delivery and store
+lifecycle to the pinned worker, with the local native runtime-path patch applied
+by `nix/dyndrv.nix`. It does not replace the NixCI graph or upload
+selection. See #link("../../CONTRIBUTING.typ#dyndrv-development")[the dyndrv
+workflow] for host requirements, qualification commands and retained state.
+
 The Nix shell backend snapshots paths tracked by JJ or Git and copies
 their live contents, including uncommitted edits. It excludes `target/` and
 `.venv/`, and ignored files are not imported just because they exist beneath
@@ -231,6 +239,7 @@ exception to read-only inspection.
   [`nix/ci-workspace-graph.json`, `nix-ci.nix`], [Generated workspace graph and self-contained NixCI configuration],
   [`scripts/develop.sh`], [Backend selection and tooling bootstrap],
   [`scripts/develop_nix.sh`], [Tracked source snapshots, Nix commands and native artifact retention],
+  [`scripts/develop_dyndrv.sh`, `nix/dyndrv-bootstrap.nix`, `nix/dyndrv.nix`], [Pinned worker bootstrap, compiler environment and explicit dyndrv dispatch],
   [`scripts/python_wheel.py`], [Python interpreter selection, wheel packaging and installation],
   [`justfile`, `just/tests.just`], [Public native development commands],
   [`just/ci.just`], [Local checks, uploads, regeneration and reporting],

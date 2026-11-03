@@ -2,14 +2,22 @@
 """Build and install native Python distribution wheels."""
 
 import argparse
+import ast
+import base64
+import csv
 import fcntl
+import hashlib
+import io
 import json
 import os
 import platform
 import shutil
 import subprocess
 import sys
+import tempfile
+import tomllib
 import uuid
+import zipfile
 from pathlib import Path
 from urllib.parse import quote
 
@@ -146,6 +154,298 @@ def python_environment(requested=None, install=False):
     return executable, details
 
 
+def wheel_render_data(spec, manifest, destination):
+    """Collect the render consumers' declared resources from Cargo's graph."""
+    metadata = json.loads(
+        run(
+            [
+                spec["cargo"],
+                "metadata",
+                "--locked",
+                "--offline",
+                "--format-version",
+                "1",
+                "--manifest-path",
+                manifest,
+            ],
+            env=nix_environment(),
+            capture=True,
+        )
+    )
+    packages = {
+        package["name"]: Path(package["manifest_path"]).parent
+        for package in metadata["packages"]
+    }
+    for name in ("typst-renderer", "linnet-render-py"):
+        if name not in packages:
+            continue
+        consumer = packages[name]
+        for asset in json.loads((consumer / "data.json").read_text())["assets"]:
+            relative, source = Path(asset["name"]), Path(asset["path"])
+            if any(
+                path.is_absolute() or ".." in path.parts for path in (relative, source)
+            ):
+                raise ValueError("Render asset escapes its declared package")
+            provider = (
+                consumer if not asset.get("package") else packages[asset["package"]]
+            )
+            target = destination / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            data = (provider / source).read_bytes()
+            if target.exists() and target.read_bytes() != data:
+                raise ValueError("Render consumers disagree on a shared asset")
+            target.write_bytes(data)
+        for notice in (consumer / "fonts").glob("*NOTICE*"):
+            shutil.copyfile(notice, destination / (name + "-" + notice.name))
+        if name == "linnet-render-py":
+            shutil.copyfile(
+                consumer / "fonts/STIX-Two-OFL.txt", destination / "STIX-Two-OFL.txt"
+            )
+    if "typst-assets" in packages:
+        for notice in packages["typst-assets"].glob("LICENSE*"):
+            if notice.is_file():
+                destination.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(notice, destination / notice.name)
+
+
+def wheel_data_directory(wheel, directory, module, native=None):
+    """Set a default resource path in the packaged copy and refresh RECORD."""
+    initializer = module.split(".")[0] + "/__init__.py"
+    with zipfile.ZipFile(wheel) as archive:
+        entries = [(info, archive.read(info)) for info in archive.infolist()]
+    records = [
+        info.filename
+        for info, _ in entries
+        if info.filename.endswith(".dist-info/RECORD")
+    ]
+    if len(records) != 1:
+        raise ValueError("Wheel must contain exactly one RECORD")
+    modified = []
+    found = directory is None
+    for info, content in entries:
+        if native and info.filename in native:
+            content = native[info.filename].read_bytes()
+        if directory is not None and info.filename == initializer:
+            found = True
+            source = content.decode()
+            offset = 0
+            for statement in ast.parse(source).body:
+                if (
+                    isinstance(statement, ast.ImportFrom)
+                    and statement.module == "__future__"
+                ) or (
+                    offset == 0
+                    and isinstance(statement, ast.Expr)
+                    and isinstance(statement.value, ast.Constant)
+                    and isinstance(statement.value.value, str)
+                ):
+                    offset = statement.end_lineno
+                else:
+                    break
+            lines = source.splitlines(keepends=True)
+            lines.insert(
+                offset,
+                '\nimport os as _nix_os\n_nix_os.environ.setdefault("SYMBOLICA_DATA_DIRECTORY", '
+                + repr(str(directory))
+                + ")\ndel _nix_os\n",
+            )
+            content = "".join(lines).encode()
+        if info.filename != records[0]:
+            modified.append((info, content))
+    if not found:
+        raise ValueError("Wheel resource initializer is missing")
+    record = io.StringIO(newline="")
+    writer = csv.writer(record, lineterminator="\n")
+    for info, content in modified:
+        digest = (
+            base64.urlsafe_b64encode(hashlib.sha256(content).digest())
+            .rstrip(b"=")
+            .decode()
+        )
+        writer.writerow([info.filename, "sha256=" + digest, len(content)])
+    writer.writerow([records[0], "", ""])
+    replacement = wheel.with_suffix(".tmp")
+    try:
+        with zipfile.ZipFile(
+            replacement, "w", compression=zipfile.ZIP_DEFLATED
+        ) as archive:
+            for info, content in modified:
+                archive.writestr(info, content)
+            archive.writestr(records[0], record.getvalue())
+        replacement.replace(wheel)
+    finally:
+        replacement.unlink(missing_ok=True)
+
+
+def dyndrv_wheel(command, output_dir, details):
+    """Run Maturin through the compiler bridge and retain native runtime inputs."""
+    bootstrap = Path(os.environ["GAMMALOOP_DYNDRV_BOOTSTRAP"])
+    spec = json.loads((bootstrap / "environment.json").read_text())
+    _, pinned = python_environment(spec["environment"]["PYO3_PYTHON"])
+    if any(
+        details[key] != pinned[key]
+        for key in ("implementation", "machine", "debug", "free_threaded")
+    ):
+        raise ValueError("dyndrv wheels require standard CPython for the build machine")
+    if details["version"] != pinned["version"]:
+        name = "python" + "".join(map(str, details["version"]))
+        bootstrap = Path(
+            run(
+                [
+                    "nix",
+                    "build",
+                    "--impure",
+                    "--out-link",
+                    str(output_dir / ".python-bootstrap"),
+                    "--print-out-paths",
+                    "--expr",
+                    '(import ((builtins.getEnv "GAMMALOOP_WORKSPACE_ROOT") + "/nix/dyndrv-bootstrap.nix")).tools',
+                ],
+                env=nix_environment()
+                | {
+                    "GAMMALOOP_WORKSPACE_ROOT": str(ROOT),
+                    "GAMMALOOP_DYNDRV_PYTHON": name,
+                },
+                capture=True,
+            )
+        )
+        spec = json.loads((bootstrap / "environment.json").read_text())
+        _, pinned = python_environment(spec["environment"]["PYO3_PYTHON"])
+        if details["version"] != pinned["version"]:
+            raise ValueError(
+                "The pinned CPython package does not match the requested interpreter"
+            )
+    command[command.index("--interpreter") + 1] = spec["environment"]["PYO3_PYTHON"]
+    command += ["--offline", "--compatibility", "linux", "--auditwheel", "skip"]
+    run(
+        [
+            spec["worker"],
+            "--bootstrap",
+            str(bootstrap),
+            "--workspace",
+            str(ROOT),
+            "--action",
+            "python",
+            "--",
+            *command[1:],
+        ]
+    )
+    return retain_dyndrv_wheel(
+        output_dir, bootstrap, spec, command[command.index("--manifest-path") + 1]
+    )
+
+
+def retain_dyndrv_wheel(output_dir, bootstrap, spec, manifest):
+    """Patch, root and export a native wheel independently of compiler state."""
+    # Compressed wheel bytes hide ELF references from Nix's reference scanner.
+    # Retain the unpacked payload (and bootstrap) independently of workspace clean.
+    with tempfile.TemporaryDirectory(prefix="dyndrv-wheel-") as temporary:
+        payload = Path(temporary)
+        wheels = list(output_dir.glob("*.whl"))
+        if len(wheels) != 1:
+            raise ValueError("Maturin did not produce exactly one wheel")
+        native = {}
+        runtime_references = {str(bootstrap)}
+        with zipfile.ZipFile(wheels[0]) as archive:
+            for name in archive.namelist():
+                if name.endswith((".so", ".dylib")):
+                    relative = Path(name)
+                    if relative.is_absolute() or ".." in relative.parts:
+                        raise ValueError("Wheel native payload escapes its package")
+                    destination = payload / "lib" / relative
+                    destination.parent.mkdir(parents=True, exist_ok=True)
+                    destination.write_bytes(archive.read(name))
+                    existing = run(
+                        [
+                            str(bootstrap / "tools/bin/patchelf"),
+                            "--print-rpath",
+                            str(destination),
+                        ],
+                        capture=True,
+                    )
+                    paths = spec["environment"]["LD_LIBRARY_PATH"].split(":")
+                    for path in existing.split(":"):
+                        if not path:
+                            continue
+                        candidate = Path(path)
+                        if (
+                            candidate.is_relative_to("/nix/store")
+                            and len(candidate.parts) >= 4
+                        ):
+                            store_root = Path(*candidate.parts[:4])
+                            if store_root.is_file():
+                                continue  # An environment JSON file is not a library directory.
+                        paths.append(path)
+                    for path in paths:
+                        candidate = Path(path)
+                        if (
+                            candidate.is_relative_to("/nix/store")
+                            and len(candidate.parts) >= 4
+                        ):
+                            store_root = Path(*candidate.parts[:4])
+                            if not store_root.is_dir():
+                                raise ValueError(
+                                    f"Wheel runtime library is unavailable in the host store: {path}"
+                                )
+                            runtime_references.add(str(store_root))
+                    run(
+                        [
+                            str(bootstrap / "tools/bin/patchelf"),
+                            "--set-rpath",
+                            ":".join(dict.fromkeys(paths)),
+                            str(destination),
+                        ]
+                    )
+                    native[name] = destination
+        if not (payload / "lib").is_dir():
+            raise ValueError("Wheel contains no native library")
+        resources = output_dir / "render-data"
+        if resources.is_dir():
+            shutil.copytree(resources, payload / "data")
+        (payload / "bootstrap").symlink_to(bootstrap)
+        root = output_dir / (".nix-" + wheels[0].name)
+        # Evaluation/import and root installation share one Nix client lifetime,
+        # so concurrent system collection cannot race an unrooted imported path.
+        output = Path(
+            run(
+                [
+                    "nix",
+                    "build",
+                    "--impure",
+                    "--out-link",
+                    str(root),
+                    "--print-out-paths",
+                    "--expr",
+                    '(import ((builtins.getEnv "GAMMALOOP_WORKSPACE_ROOT") + "/nix/dyndrv-bootstrap.nix")).wheel-runtime',
+                ],
+                env=nix_environment()
+                | {
+                    "GAMMALOOP_DYNDRV_WHEEL_PAYLOAD": str(payload),
+                    "GAMMALOOP_DYNDRV_BOOTSTRAP": str(bootstrap),
+                    "GAMMALOOP_DYNDRV_WHEEL_REFERENCES": json.dumps(
+                        sorted(runtime_references)
+                    ),
+                    "GAMMALOOP_WORKSPACE_ROOT": str(ROOT),
+                },
+                capture=True,
+            )
+        )
+        project = ROOT / (
+            "examples/notebooks/symbolica-host" if "symbolica-host" in manifest else "."
+        )
+        module = tomllib.loads((project / "pyproject.toml").read_text())["tool"][
+            "maturin"
+        ]["module-name"]
+        wheel_data_directory(
+            wheels[0],
+            output / "data" if (payload / "data").is_dir() else None,
+            module,
+            native,
+        )
+
+    return output
+
+
 def python_package(arguments, backend):
     parser = argparse.ArgumentParser(allow_abbrev=False)
     parser.add_argument("distribution", choices=("gammaloop", "community"))
@@ -257,12 +557,43 @@ def python_package(arguments, backend):
         ]
         if not host:
             command += ["--no-default-features", "--features", ",".join(features)]
-        before = {path: path.stat().st_mtime_ns for path in output_dir.glob("*.whl")}
-        run(command)
+        before = {
+            path: path.stat().st_mtime_ns
+            for path in output_dir.glob("*.whl")
+            if path.is_file() and not path.name.startswith(".")
+        }
+        if backend == "dyndrv":
+            # Isolate Maturin's output selection from existing or concurrent wheels.
+            with tempfile.TemporaryDirectory(
+                prefix=".dyndrv-", dir=output_dir
+            ) as temporary:
+                command[command.index("--out") + 1] = temporary
+                output = dyndrv_wheel(command, Path(temporary), details)
+                built = next(
+                    path
+                    for path in Path(temporary).glob("*.whl")
+                    if path.is_file() and not path.name.startswith(".")
+                )
+                wheel = output_dir / built.name
+                with (output_dir / ".gammaloop-wheel.lock").open("a") as lock:
+                    fcntl.flock(lock, fcntl.LOCK_EX)
+                    exported = output_dir / ("." + uuid.uuid4().hex + ".whl")
+                    try:
+                        shutil.copyfile(built, exported)
+                        exported.replace(wheel)
+                    finally:
+                        exported.unlink(missing_ok=True)
+                    retain_output(
+                        output, output_dir / (".nix-" + wheel.name), capture=True
+                    )
+        else:
+            run(command)
         wheels = [
             path
             for path in output_dir.glob("*.whl")
-            if before.get(path) != path.stat().st_mtime_ns
+            if path.is_file()
+            and not path.name.startswith(".")
+            and before.get(path) != path.stat().st_mtime_ns
         ]
         if len(wheels) != 1:
             raise ValueError("Maturin did not produce exactly one new wheel")
@@ -288,7 +619,7 @@ def python_package(arguments, backend):
         prefix = Path(details["prefix"])
         with (prefix / ".gammaloop-install.lock").open("a") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX)
-            if backend == "nix":
+            if backend in {"nix", "dyndrv"}:
                 native = sorted(
                     [
                         *(output / "lib").rglob("*.so"),
@@ -315,16 +646,17 @@ def python_package(arguments, backend):
                 else "from gammaloop import GammaLoopAPI"
             )
             run([interpreter, "-c", imports], env=license_environment())
-            if backend == "nix":
+            if backend in {"nix", "dyndrv"}:
                 permanent_root = prefix / ".nix-python" / distribution
                 retain_output(output, permanent_root)
-                root.unlink()
+                if backend == "nix":
+                    root.unlink()
 
 
 def main(arguments=None):
     parser = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
     parser.add_argument(
-        "--backend", choices=("nix", "cargo"), action="append", required=True
+        "--backend", choices=("nix", "cargo", "dyndrv"), action="append", required=True
     )
     options, arguments = parser.parse_known_args(arguments)
     if len(options.backend) != 1:

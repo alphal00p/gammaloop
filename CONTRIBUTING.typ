@@ -629,7 +629,9 @@ validation performed and any checks that could not be completed.
 - After changing CI feature contexts, run `just ci-update`.
   `just development-check` runs shell-command, wheel and publication regressions;
   `just test-nix-runner`
-  exercises real Nix archives, runtime selection and reuse.
+  exercises real Nix archives, runtime selection and reuse. The separate host
+  command `just test-dyndrv` exercises real dyndrv local patches, workspace edits
+  and store reuse; it cannot run inside a nested Nix build sandbox.
 - Pass emulated libtest arguments after `--`, for example
   `just test_gammaloop -- --skip TEST_NAME`.
 - Put targeted unit tests next to the implementation they exercise.
@@ -726,7 +728,8 @@ Cargo/Maturin otherwise. `scripts/develop.sh` selects the backend and prints
 `Backend: nix` or `Backend: cargo` before starting backend tooling. Cargo and
 Nextest run directly without a Python dispatcher. The Nix path bootstraps pinned
 shell tools from `flake.lock`, then `scripts/develop_nix.sh` invokes the native
-build derivations and test runners. Python owns wheel packaging and cache inspection. Rust command
+build derivations and test runners. Python owns wheel packaging, cache inspection
+and the opt-in dyndrv source and worker lifecycle described below. Rust command
 arrays remain shared in the shell. A failed Nix command is never retried through
 Cargo.
 `just backend=cargo COMMAND` explicitly selects host Cargo/Maturin tools. Use
@@ -834,6 +837,166 @@ Python wheels use the interpreter selected for packaging.
 binary, falling back to `debug` only when none is available. Select a profile
 explicitly with
 `--release`, `--dev-optim`, `--ci-optim` or `--debug`.
+
+=== Opt-in cargo-dyndrv development
+<dyndrv-development>
+
+Select `backend=dyndrv` explicitly to use the stock-Cargo backend from
+`lcnbr/cargo-dyndrv`, pinned in `flake.lock` at
+`c1935d6314ea41013aea17a330d218efa35df6c7`. Auto dispatch never selects it:
+
+```bash
+just backend=dyndrv check
+just backend=dyndrv test linnest -E 'test(layout)'
+just profile=dev backend=dyndrv build spenso
+just backend=dyndrv clippy
+just backend=dyndrv run --help
+just backend=dyndrv list-all-tests
+```
+
+The shared shell constructs the same Cargo/Nextest arguments as `backend=cargo`.
+The pinned fork supplies `cargo-dyndrv-worker`, source staging, store lifecycle,
+compiler patches and generic regression suites. GammaLoop supplies its compiler
+environment, runtime-variable policy and wheel export hook. `nix/dyndrv.nix`
+also applies `nix/patches/dyndrv-native-run-path.patch` so native run/test children
+use the prepared runtime tool path. Its bootstrap
+prepares tools and lockfile vendoring directly from `flake.lock`, without
+evaluating `nix/rust-workspace.nix` or the
+committed CI workspace graph. `backend=auto` and the existing NixCI build and
+upload paths are unchanged. Rust API documentation and native Linux Python wheels
+are supported; `just ci-upload-preview` still uses `backend=nix`. Rustdoc executes as
+the invoking user, with its dependencies built through the immutable compiler
+bridge. Its HTML is exported to `target/doc/`; documentation execution is recorded
+separately from cached compiler delivery. Open the exported HTML on the host;
+Cargo's `--open` still refers to the namespace path. Export merges the Cargo doc
+tree, so obsolete pages can remain until the documentation output is cleaned.
+
+Cargo discovers workspace members, path dependencies and local patches, including
+external workspaces and their inherited settings. Change ordinary Cargo manifests
+or Cargo configuration to point at a local Symbolica checkout; no flake source
+list needs updating. Commands use `--locked`: update `Cargo.lock` through the
+normal Cargo workflow first when a patch or workspace change requires it. Each
+local source root must belong to JJ or Git. Staging copies live selected files,
+including dirty files and new nonignored modules, preserves unchanged content's
+timestamps, rewrites Cargo paths and prunes deleted files. Build output,
+virtual environments and credentials are excluded. Source symlinks must resolve
+within the declared, selected source trees.
+
+`just backend=dyndrv check` bypasses the CI-specific immutable Symbolica source
+pin guard so local forks can be checked; ordinary backends retain that guard.
+
+This backend requires Linux, a non-root user and enabled unprivileged user/mount
+namespaces. A Clan-managed `/etc/cargo-dyndrv/store.json` selects the shared system
+Nix daemon and store. The Clan `cargo-dyndrv-store` role enables content-addressed
+derivations and creates the administrator-owned `/build/cargo-dyndrv` mount point.
+Clients use equal logical source paths across UIDs, with private physical stages,
+targets and incremental working state. Ordinary users remain untrusted Nix users;
+the integration does not add them to `trusted-users`.
+
+Without that configuration, it uses a same-user private daemon and store.
+`CARGO_DYNDRV_STORE=private` explicitly selects this isolated mode;
+`CARGO_DYNDRV_STORE=system` selects the system daemon, which requires the Clan
+configuration to be active. `CARGO_DYNDRV_STORE_CONFIG` selects another
+configuration file. State defaults to
+`${XDG_STATE_HOME:-$HOME/.local/state}/cargo-dyndrv`; set
+`CARGO_DYNDRV_STATE` to select another private state directory. The worker
+requires owned directories with mode `0700`, outside the Cargo source roots.
+Use the `CARGO_DYNDRV_*` settings above for store selection and worker state;
+legacy `GAMMALOOP_DYNDRV_*` settings do not configure those policies. Existing
+state is not migrated or removed automatically.
+Targets remain isolated by workspace and build policy while compiler outputs
+can be shared in the selected store. Changing the toolchain, bootstrap metadata
+or worker code starts a separate target. A new target can still reuse unchanged
+immutable compiler outputs.
+Licenses remain runtime inputs and are omitted from compiler requests.
+
+Cargo's profiles and `CARGO_INCREMENTAL` select incremental compilation as
+with ordinary Cargo. The backend owns and retains each compiler's incremental
+state alongside its output. Failed builds retain incremental backing too, so
+collection cannot silently invalidate a Cargo-fresh dependency or cache.
+`CARGO_INCREMENTAL=0` explicitly disables it. The diagnostic
+`CARGO_DYNDRV_OBSERVE_INCREMENTAL=1` records actual object reuse; its additional
+hashing and held descriptors are excluded from normal performance claims.
+
+Compiler requests retain their complete owning source root, compiler dependencies
+and their source roots, declared generated inputs and additional roots referenced
+by compiler arguments or forwarded environment values. Dependency source roots
+remain available to procedural macros that read their own assets during downstream
+expansion. An external local Symbolica checkout therefore
+does not depend on unrelated edits in the GammaLoop checkout. Crates within one
+local source root still share that root's invalidation. Reads across source roots
+must declare the additional path through compiler arguments or environment;
+implicit reads of unrelated roots are outside this source contract. Files within
+each retained root are kept whole, including inputs read by procedural macros.
+`NIX_BUILD_TOP` describes the builder directory, not an additional source root;
+its value remains part of the compiler environment and request identity.
+
+Vendored registry/Git packages have individual read-only mounts at stable logical
+paths. Cargo's lockfile-specific directory index remains available to the session,
+but each compiler request captures only its selected package trees. Adding an
+unused locked dependency no longer changes an existing package's source path or
+compiler inputs. Changes to selected source bytes, versions or features still
+invalidate the corresponding requests.
+
+Compiler tools and native libraries have a separate environment and closure from
+session tools such as JJ, UV, Maturin and Nextest. Updating session tools alone
+does not change compiler inputs. The full bootstrap and vendor closure remain
+retained for command execution and launchers. Toolchain, feature, effective
+compiler environment and incremental state differences can still prevent sharing;
+no end-to-end speedup is promised.
+
+For Python, use `just backend=dyndrv python-wheel gammaloop` or
+`just backend=dyndrv python-develop community`. Maturin runs as the caller through
+the same compiler bridge. The selected interpreter must be standard CPython for
+the build machine; the bootstrap selects its matching interpreter package from
+the pinned nixpkgs. Wheels retain native runtime libraries and declared rendering
+resources through independent host-store roots
+at `target/wheels/.nix-WHEELNAME` and, for installs, the environment's
+`.nix-python/DISTRIBUTION`. Keep those roots while using the wheels. Workspace
+clean does not remove them. These are native Linux development wheels that depend
+on Nix-store libraries, with the same installation options as other backends.
+RPATH repair applies only to the finished wheel, preserving dependency compiler
+flags. Maturin's PyO3 environment and a different interpreter's compiler environment
+can still prevent reuse with ordinary Rust builds or another Python version;
+reuse across Cargo and Maturin requires matching compiler inputs.
+
+Build and run commands install launchers at the ordinary `target/PROFILE/BINARY`
+paths, so `./gammaloop` remains available after a CLI build. A launcher enters the
+same source/store namespace, preserves caller arguments and working directory,
+and holds the workspace lock while running. Keep its private state, retained
+executable and store roots while using it; the launcher is not a portable binary.
+The policy's `bootstrap-root` also retains its launcher tools in the host store.
+
+Each command prints its durable session path. State retains
+`workspaces/WORKSPACE/POLICY/sessions/`, `last-run.json`, staged sources and targets,
+compiler receipts and the daemon log for reuse and diagnosis. Nextest reports
+are also copied to the invoking workspace's `target/test-reports/dyndrv/`.
+`just backend=dyndrv clean` removes that workspace/policy's target, owned launchers
+and compiler GC roots while preserving session evidence and other backends'
+replacement executables. `just dyndrv-gc` collects unreferenced
+private-store products; `just dyndrv-stop` stops the private daemon without
+deleting state. Both refuse to act while a worker command uses the daemon.
+In system-store mode these commands refuse to stop or collect the shared daemon;
+the Clan/NixOS services own its lifecycle and collection policy. Workspace clean
+only releases that workspace's roots and targets. Newly imported compiler inputs,
+metadata and outputs receive roots before delivery, keeping them valid during
+concurrent system garbage collection.
+Clean targets before collecting outputs no longer needed. Preserve sessions
+required for review before removing their state. `just test-dyndrv` runs the host
+integration test with the pinned bootstrap Python and retains validation artifacts under
+`target/dyndrv-validation/integration/` (`--directory` selects another location).
+
+Additional host qualification recipes are `just test-dyndrv-incremental`,
+`just test-dyndrv-invalidation`, `just test-dyndrv-extensions` and
+`just test-dyndrv-system`. They cover incremental recovery, compiler-input
+invalidation, Rustdoc/wheel export and shared-store behavior. These are commands
+to run against the candidate under review; historical donor results do not
+establish that this FeynKit revision passes them.
+
+A command leaves an `in-progress.json` marker until its compiler backing is
+retained. After a hard kill or interrupted retention, the next command requires
+`just backend=dyndrv clean`. Live Cargo children keep the workspace lock and daemon
+lease even if their worker dies, so collection waits for those children to exit.
 
 === Native Python packaging
 <native-python>

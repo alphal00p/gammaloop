@@ -2,6 +2,7 @@
 
 import base64
 import contextlib
+import csv
 import fcntl
 import hashlib
 import importlib.util
@@ -12,6 +13,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import tomllib
 import unittest
 import zipfile
 from pathlib import Path
@@ -25,6 +27,164 @@ MODULE_SPEC = importlib.util.spec_from_file_location(
 )
 wheel = importlib.util.module_from_spec(MODULE_SPEC)
 MODULE_SPEC.loader.exec_module(wheel)
+
+
+class WheelResourcesTests(unittest.TestCase):
+    def test_checked_in_linnet_resources_with_spynso3_in_graph(self):
+        packages = []
+        for name in ("linnet-render-py", "spynso3"):
+            manifest = REPOSITORY / "crates" / name / "Cargo.toml"
+            packages.append(
+                {
+                    "name": tomllib.loads(manifest.read_text())["package"]["name"],
+                    "manifest_path": str(manifest),
+                }
+            )
+        consumer = REPOSITORY / "crates/linnet-render-py"
+        self.assertFalse((REPOSITORY / "crates/spynso3/data.json").exists())
+        with tempfile.TemporaryDirectory() as temporary:
+            destination = Path(temporary) / "render-data"
+            with mock.patch.object(
+                wheel, "run", return_value=json.dumps({"packages": packages})
+            ):
+                wheel.wheel_render_data({"cargo": "cargo"}, "Cargo.toml", destination)
+            expected = {"STIX-Two-OFL.txt"}
+            for asset in json.loads((consumer / "data.json").read_text())["assets"]:
+                self.assertIsNone(asset.get("package"))
+                expected.add(asset["name"])
+                self.assertEqual(
+                    (destination / asset["name"]).read_bytes(),
+                    (consumer / asset["path"]).read_bytes(),
+                )
+            self.assertIn("render/fonts/STIXTwoMath-Regular.woff2", expected)
+            self.assertEqual(
+                (destination / "STIX-Two-OFL.txt").read_bytes(),
+                (consumer / "fonts/STIX-Two-OFL.txt").read_bytes(),
+            )
+            self.assertEqual(
+                {
+                    str(path.relative_to(destination))
+                    for path in destination.rglob("*")
+                    if path.is_file()
+                },
+                expected,
+            )
+
+    def test_external_typst_resources_and_notices_remain_supported(self):
+        # Typst is external; bound its fixture to one provider font and notices.
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            consumer = root / "typst-renderer"
+            provider = root / "typst-assets"
+            for package in (consumer, provider):
+                (package / "fonts").mkdir(parents=True)
+            font = provider / "fonts/example.ttf"
+            font.write_bytes(b"external font fixture")
+            (consumer / "data.json").write_text(
+                json.dumps(
+                    {
+                        "assets": [
+                            {
+                                "name": "render/fonts/example.ttf",
+                                "path": "fonts/example.ttf",
+                                "package": "typst-assets",
+                            }
+                        ]
+                    }
+                )
+            )
+            (consumer / "fonts/FONT-NOTICE.txt").write_text("consumer notice")
+            (provider / "LICENSE").write_text("provider license")
+            (provider / "LICENSE-directory").mkdir()
+            packages = [
+                {"name": package.name, "manifest_path": str(package / "Cargo.toml")}
+                for package in (consumer, provider)
+            ]
+            destination = root / "render-data"
+            with mock.patch.object(
+                wheel, "run", return_value=json.dumps({"packages": packages})
+            ):
+                wheel.wheel_render_data({"cargo": "cargo"}, "Cargo.toml", destination)
+            self.assertEqual(
+                (destination / "render/fonts/example.ttf").read_bytes(),
+                font.read_bytes(),
+            )
+            self.assertEqual(
+                (destination / "typst-renderer-FONT-NOTICE.txt").read_text(),
+                "consumer notice",
+            )
+            self.assertEqual((destination / "LICENSE").read_text(), "provider license")
+            self.assertFalse((destination / "LICENSE-directory").exists())
+
+    def test_missing_font_provider_does_not_copy_destination_onto_itself(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            destination = Path(temporary)
+            (destination / "LICENSE").write_text("existing notice")
+            with mock.patch.object(wheel, "run", return_value='{"packages": []}'):
+                wheel.wheel_render_data({"cargo": "cargo"}, "Cargo.toml", destination)
+            self.assertEqual((destination / "LICENSE").read_text(), "existing notice")
+
+    def test_native_repair_updates_record_without_resource_initializer(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            path = root / "example.whl"
+            native = root / "native.so"
+            native.write_bytes(b"repaired native payload")
+            with zipfile.ZipFile(path, "w") as archive:
+                archive.writestr("gammaloop/native.so", b"original")
+                archive.writestr("gammaloop-0.0.0.dist-info/RECORD", "")
+            wheel.wheel_data_directory(
+                path, None, "gammaloop", {"gammaloop/native.so": native}
+            )
+            with zipfile.ZipFile(path) as archive:
+                self.assertEqual(
+                    archive.read("gammaloop/native.so"), native.read_bytes()
+                )
+                record = archive.read("gammaloop-0.0.0.dist-info/RECORD").decode()
+                digest = (
+                    base64.urlsafe_b64encode(
+                        hashlib.sha256(native.read_bytes()).digest()
+                    )
+                    .rstrip(b"=")
+                    .decode()
+                )
+                self.assertIn("sha256=" + digest, record)
+
+    def test_packaged_resource_initializer_and_record_remain_valid(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "example.whl"
+            with zipfile.ZipFile(path, "w") as archive:
+                archive.writestr(
+                    "gammaloop/__init__.py",
+                    '"""Package docs."""\nfrom __future__ import annotations\nvalue = 7\n',
+                )
+                archive.writestr("gammaloop/native.so", b"native payload")
+                archive.writestr("gammaloop-0.0.0.dist-info/RECORD", "")
+            wheel.wheel_data_directory(
+                path, Path("/nix/store/example/data"), "gammaloop._gammaloop"
+            )
+            with zipfile.ZipFile(path) as archive:
+                source = archive.read("gammaloop/__init__.py").decode()
+                compile(source, "__init__.py", "exec")
+                self.assertIn('setdefault("SYMBOLICA_DATA_DIRECTORY",', source)
+                records = csv.reader(
+                    io.StringIO(
+                        archive.read("gammaloop-0.0.0.dist-info/RECORD").decode()
+                    )
+                )
+                for name, digest, size in records:
+                    if not digest:
+                        self.assertTrue(name.endswith("/RECORD"))
+                        continue
+                    content = archive.read(name)
+                    self.assertEqual(int(size), len(content))
+                    self.assertEqual(
+                        digest,
+                        "sha256="
+                        + base64.urlsafe_b64encode(hashlib.sha256(content).digest())
+                        .rstrip(b"=")
+                        .decode(),
+                    )
 
 
 class WheelEntryPointTests(unittest.TestCase):

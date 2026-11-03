@@ -20,7 +20,10 @@ and use the Ruff formatter. For native tests, builds and PyO3 packaging, use the
 `just build CRATE`, and `just python-wheel` / `just python-develop`.
 The default `backend=auto` selects Nix when available and Cargo/Maturin otherwise;
 a Nix failure remains a failure. Rust command construction stays in the shared
-shell dispatcher.
+shell dispatcher. Explicit `backend=dyndrv` uses `cargo-dyndrv-worker` from the
+fork pinned in `flake.lock` at `c1935d6`; auto never selects it. See the
+[dyndrv workflow](CONTRIBUTING.typ#dyndrv-development) for qualification limits,
+session evidence and cleanup.
 Native commands and wheels share `.config/build-profile`; use
 `just profile=dev COMMAND` or `just profile=release COMMAND` for explicit modes.
 Use `backend=cargo` to explicitly select iteration with host tools. Preserve

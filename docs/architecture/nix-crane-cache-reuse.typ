@@ -40,7 +40,9 @@ uses the runners documented in the CI guide. The retained
 `checks.*.gammaloop-nextest-binaries-*` attributes prepare archives only.
 
 Native command dispatch defaults to `backend=auto`, selecting Nix when available
-and Cargo/Maturin otherwise. A Nix failure is not retried through Cargo. Native builds and
+and Cargo/Maturin otherwise. A Nix failure is not retried through Cargo. Explicit
+`backend=dyndrv` instead uses the `cargo-dyndrv` worker pinned at `c1935d6`, while
+preserving the shared shell's Cargo command construction. Native builds and
 wheels share `.config/build-profile`; matching profiles alone do not erase
 feature, ABI or interpreter differences. The contributor guide owns the
 #link("../../CONTRIBUTING.typ#development-commands")[development commands] and

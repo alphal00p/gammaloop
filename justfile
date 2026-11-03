@@ -4,6 +4,14 @@ profile := env_var_or_default("GAMMALOOP_BUILD_PROFILE", trim(read(justfile_dire
 export GAMMALOOP_BUILD_PROFILE := profile
 backend := "auto"
 
+# Stop the shared per-user dyndrv daemon after all of its commands have finished.
+dyndrv-stop:
+    bash scripts/develop.sh --backend dyndrv stop
+
+# Collect unreferenced products in the private dyndrv store.
+dyndrv-gc:
+    bash scripts/develop.sh --backend dyndrv gc
+
 mod linnet 'crates/linnet/Justfile'
 mod tydenso 'tydenso/Justfile'
 
@@ -170,7 +178,10 @@ check-spynso-wasm:
 check:
     #!/usr/bin/env bash
     set -euo pipefail
-    just check-symbolica-feature-isolation
+    # dyndrv resolves local Symbolica forks through Cargo instead of the CI source pin.
+    if [[ {{ quote(backend) }} != dyndrv ]]; then
+        just check-symbolica-feature-isolation
+    fi
     bash scripts/develop.sh --backend {{ quote(backend) }} check --workspace --all-targets
 
 doc:
@@ -419,3 +430,74 @@ python-develop PACKAGE="gammaloop" *args:
 # Verify dispatch behavior without compiling workspace code.
 development-check:
     nix run .#development-tests
+
+# Qualify dyndrv on the host, outside a nested Nix build sandbox.
+[positional-arguments]
+test-dyndrv-incremental *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    export GAMMALOOP_WORKSPACE_ROOT={{ quote(justfile_directory()) }}
+    bootstrap=$(
+        unset SYMBOLICA_LICENSE SYMBOLICA_LICENSE_SIGNED
+        nix build --impure --no-link --print-out-paths --expr '
+          (import ((builtins.getEnv "GAMMALOOP_WORKSPACE_ROOT") + "/nix/dyndrv-bootstrap.nix")).tools
+        '
+    )
+    exec "$bootstrap/tools/bin/python3" "$bootstrap/worker-tests/test_incremental.py" --bootstrap "$bootstrap" --directory "$PWD/target/dyndrv-validation/incremental" "$@"
+
+# After activating the Clan role, qualify reuse across two isolated user homes.
+[positional-arguments]
+test-dyndrv-system *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    export GAMMALOOP_WORKSPACE_ROOT={{ quote(justfile_directory()) }}
+    bootstrap=$(
+        unset SYMBOLICA_LICENSE SYMBOLICA_LICENSE_SIGNED
+        nix build --impure --no-link --print-out-paths --expr '
+          (import ((builtins.getEnv "GAMMALOOP_WORKSPACE_ROOT") + "/nix/dyndrv-bootstrap.nix")).tools
+        '
+    )
+    exec "$bootstrap/tools/bin/python3" "$bootstrap/worker-tests/test_system.py" --bootstrap "$bootstrap" --evidence "$PWD/target/dyndrv-validation/system-store" "$@"
+
+# Qualify registry sharing, Rust documentation and native Python packaging.
+[positional-arguments]
+test-dyndrv-extensions *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    export GAMMALOOP_WORKSPACE_ROOT={{ quote(justfile_directory()) }}
+    bootstrap=$(
+        unset SYMBOLICA_LICENSE SYMBOLICA_LICENSE_SIGNED
+        nix build --impure --no-link --print-out-paths --expr '
+          (import ((builtins.getEnv "GAMMALOOP_WORKSPACE_ROOT") + "/nix/dyndrv-bootstrap.nix")).tools
+        '
+    )
+    exec "$bootstrap/tools/bin/python3" .github/scripts/test_dyndrv_extensions.py --bootstrap "$bootstrap" "$@"
+
+# Qualify dyndrv on the host, outside a nested Nix build sandbox.
+[positional-arguments]
+test-dyndrv *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    export GAMMALOOP_WORKSPACE_ROOT={{ quote(justfile_directory()) }}
+    bootstrap=$(
+        unset SYMBOLICA_LICENSE SYMBOLICA_LICENSE_SIGNED
+        nix build --impure --no-link --print-out-paths --expr '
+          (import ((builtins.getEnv "GAMMALOOP_WORKSPACE_ROOT") + "/nix/dyndrv-bootstrap.nix")).tools
+        '
+    )
+    exec "$bootstrap/tools/bin/python3" .github/scripts/test_dyndrv_integration.py --bootstrap "$bootstrap" "$@"
+
+# Qualify local-source, lockfile and session-tool compiler invalidation boundaries.
+[positional-arguments]
+test-dyndrv-invalidation *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    export GAMMALOOP_WORKSPACE_ROOT={{ quote(justfile_directory()) }}
+    bootstrap=$(
+        unset SYMBOLICA_LICENSE SYMBOLICA_LICENSE_SIGNED
+        nix build --impure --no-link --print-out-paths --expr '
+          (import ((builtins.getEnv "GAMMALOOP_WORKSPACE_ROOT") + "/nix/dyndrv-bootstrap.nix")).tools
+        '
+    )
+    "$bootstrap/tools/bin/python3" "$bootstrap/worker-tests/test_invalidation.py" --bootstrap "$bootstrap" --directory "$PWD/target/dyndrv-validation/invalidation-matrix" "$@"
+    exec "$bootstrap/tools/bin/python3" "$bootstrap/worker-tests/test_macro_sources.py" --bootstrap "$bootstrap" --directory "$PWD/target/dyndrv-validation/invalidation-macro" "$@"

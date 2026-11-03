@@ -19,6 +19,11 @@
       url = "github:ipetkov/crane";
     };
 
+    cargo-dyndrv = {
+      url = "github:lcnbr/cargo-dyndrv/c1935d6314ea41013aea17a330d218efa35df6c7";
+      flake = false;
+    };
+
     # Refresh deliberately with `just ci-cache-base REVISION` after a green run.
     ci-cache-base = {
       url = "github:alphal00p/gammaloop/9935a2b52d047daf5bbe6616c798fa07e364da6a";
@@ -166,6 +171,7 @@
           ./tydenso/Justfile
           ./scripts/develop.sh
           ./scripts/develop_nix.sh
+          ./scripts/develop_dyndrv.sh
           ./scripts/python_wheel.py
           ./scripts/cache_publication.py
           ./nix/browser-check.py
@@ -193,7 +199,7 @@
           python3 ${developmentDispatchSource}/.github/scripts/test_export_test_timings.py
           (
             cd ${developmentDispatchSource}
-            shellcheck scripts/develop.sh scripts/develop_nix.sh .github/scripts/run-nix-ci-check.sh
+            shellcheck scripts/develop.sh scripts/develop_nix.sh scripts/develop_dyndrv.sh .github/scripts/run-nix-ci-check.sh
           )
           test -e ${workspace.allChecks.gammaloop-guppy-workspace-graph}
           mkdir -p "$out"
@@ -419,7 +425,7 @@
               python3 .github/scripts/test_cache_publication.py "$@"
               python3 .github/scripts/test_nix_crate_runner.py BrowserSelectionTests "$@"
               python3 .github/scripts/test_export_test_timings.py "$@"
-              shellcheck scripts/develop.sh scripts/develop_nix.sh .github/scripts/run-nix-ci-check.sh
+              shellcheck scripts/develop.sh scripts/develop_nix.sh scripts/develop_dyndrv.sh .github/scripts/run-nix-ci-check.sh
             '';
           };
         };
