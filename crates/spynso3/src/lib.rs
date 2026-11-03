@@ -86,6 +86,21 @@ pub mod network;
 pub mod pattern;
 pub mod projectors;
 mod simplification;
+/// The Python reduction status reused by Rust adapters.
+///
+/// ```
+/// use idenso::tensor::simplification::ReductionStatus;
+/// use spynso3::PyReductionStatus;
+///
+/// for (native, python) in [
+///     (ReductionStatus::Complete, PyReductionStatus::Complete),
+///     (ReductionStatus::Deferred, PyReductionStatus::Deferred),
+///     (ReductionStatus::Capped, PyReductionStatus::Capped),
+/// ] {
+///     assert_eq!(PyReductionStatus::from(native), python);
+/// }
+/// ```
+pub use simplification::PyReductionStatus;
 pub mod structure;
 pub mod tensor_rule;
 

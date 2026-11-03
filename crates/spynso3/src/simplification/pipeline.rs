@@ -194,7 +194,7 @@ pub(crate) fn algebra_settings(
     module = "symbolica.community.tensor"
 )]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum PyReductionStatus {
+pub enum PyReductionStatus {
     /// No eligible work remains under the requested settings.
     Complete,
     /// Exact eligible work remains for a subsequent operation.
