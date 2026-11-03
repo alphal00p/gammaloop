@@ -19,6 +19,62 @@ fn chain_model() -> Model {
 }
 
 #[test]
+fn exact_overrides_cannot_invalidate_structural_zero_normalization() {
+    let mut definition: serde_json::Value =
+        serde_json::from_str(&Model::phi4().to_json().unwrap()).unwrap();
+    definition["parameters"].as_array_mut().unwrap().extend([
+        serde_json::json!({"name":"null_", "nature":"internal", "parameter_type":"real", "value":[0.0,0.0], "expression":null}),
+        serde_json::json!({"name":"derived_null", "nature":"internal", "parameter_type":"real", "value":[4.0,0.0], "expression":"2*null_"})
+    ]);
+    definition["particles"][0]["mass"] = "derived_null".into();
+    let model = Model::from_json(&definition.to_string()).unwrap();
+    let original = model.to_json().unwrap();
+    for name in ["ZERO", "null_", "derived_null"] {
+        for value in [
+            Atom::num(2),
+            Atom::var(symbol!("structural_zero_test::free")),
+        ] {
+            assert!(matches!(
+                model.scalar_bindings(
+                    None,
+                    &BTreeMap::from([(symbol!(&format!("UFO::{name}")), value)])
+                ),
+                Err(ModelError::StructuralZeroOverride { .. })
+            ));
+        }
+        model
+            .scalar_bindings(
+                None,
+                &BTreeMap::from([(symbol!(&format!("UFO::{name}")), Atom::Zero)]),
+            )
+            .unwrap();
+    }
+    assert_eq!(model.to_json().unwrap(), original);
+}
+
+#[test]
+fn exact_override_precedence_survives_a_temporary_internal_literal_zero() {
+    let mut definition: serde_json::Value =
+        serde_json::from_str(&Model::phi4().to_json().unwrap()).unwrap();
+    let parameter = definition["parameters"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|parameter| parameter["name"] == "mass")
+        .unwrap();
+    parameter["nature"] = "internal".into();
+    let model = Model::from_json(&definition.to_string()).unwrap();
+    let card = ParameterCard::from_json(r#"{"mass":[0,0]}"#).unwrap();
+    let values = model
+        .scalar_bindings(
+            Some(&card),
+            &BTreeMap::from([(symbol!("UFO::mass"), Atom::num(2))]),
+        )
+        .unwrap();
+    assert_eq!(values[&symbol!("UFO::mass")], Atom::num(2));
+}
+
+#[test]
 fn exact_overrides_resolve_dependencies_without_a_card_or_stale_caches() {
     let model = chain_model();
     let before = model.to_json().unwrap();

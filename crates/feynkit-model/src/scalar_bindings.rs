@@ -70,6 +70,9 @@ impl Model {
     ///
     /// Pass the restriction card explicitly even for a model to which it was
     /// previously applied: the model does not retain internal-override history.
+    /// A nonzero or unresolved override of a structural-zero parameter is an
+    /// error: import may already have removed it from masses and propagators.
+    /// Such changes require the original unrestricted model definition.
     pub fn scalar_bindings(
         &self,
         card: Option<&ParameterCard>,
@@ -116,7 +119,16 @@ impl Model {
                 .iter()
                 .map(|(symbol, value)| (*symbol, value.clone())),
         );
-        resolve_scalar_bindings(values)
+        let resolved = resolve_scalar_bindings(values)?;
+        for name in model.structural_zero_parameter_names() {
+            if !resolved
+                .get(&symbol!(&format!("UFO::{name}")))
+                .is_some_and(|value| value.expand().is_zero())
+            {
+                return Err(ModelError::StructuralZeroOverride { name: name.clone() });
+            }
+        }
+        Ok(resolved)
     }
 }
 
