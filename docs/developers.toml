@@ -1090,7 +1090,11 @@ anchor = "    fn simplify_product("
 # Baseline review 2026-11-02: final color polynomial materialization now passes
 # the retained occurrence history into the result constructor, matching the note's
 # authoritative-metadata contract. Color identities and completion policy are unchanged.
-digest = "89c3f56778f30e69035d8c918fc491669d85ea64"
+# Reviewed 2026-11-03: adjoint chains on summed cycles expose reserved dummy
+# structure constants only when an existing loop identity reduces the result.
+# The Idenso note records registration-order independence for closed networks,
+# fixed-component and representation guards, and the open-word spelling limit.
+digest = "6add8a9d89b1116f4eb009fba0788fc939fbd15f"
 
 [[section.note.scope]]
 path = "crates/idenso/src/tensor/collection/collected.rs"
