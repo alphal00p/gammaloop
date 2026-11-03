@@ -323,6 +323,18 @@ impl Vakint {
             }
             data.masters.finalize(raw, settings, loop_count, mode)?
         };
+        // The catalogue checks its own substitution; every RustRed entry
+        // point (single integral, ordered batch, term) passes here as well.
+        crate::truncation_guard::ensure_known_orders(
+            &result,
+            crate::utils::vakint_macros::vk_symbol!(&settings.epsilon_symbol),
+            settings
+                .number_of_terms_in_epsilon_expansion
+                .checked_sub(i64::try_from(loop_count).map_err(data::failure)?)
+                .and_then(|value| value.checked_sub(1)),
+            "RustRed",
+            crate::truncation_guard::plain_name,
+        )?;
         if settings.use_dot_product_notation {
             Ok(result)
         } else {

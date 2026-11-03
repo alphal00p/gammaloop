@@ -409,17 +409,15 @@ impl MATAD {
             }
             .to_atom();
 
-            // Sanity check.
-            if let Some(m) = evaluated_integral
-                .pattern_match(&vk_parse!("Oep(x_,y_)").unwrap().to_pattern(), None, None)
-                .next()
-            {
-                return Err(VakintError::MATADError(format!(
-                    "MATAD expansion yielded terms beyond expansion depth supported: Oep({},{})",
-                    m.get(&S.x_).unwrap(),
-                    m.get(&S.y_).unwrap(),
-                )));
-            }
+            // Sanity check: coefficients with epsilon poles can expose
+            // master orders beyond the tabulated `Oep` tails.
+            crate::truncation_guard::ensure_known_orders(
+                &evaluated_integral,
+                vk_symbol!("ep"),
+                Some(expansion_depth),
+                "MATAD",
+                crate::truncation_guard::plain_name,
+            )?;
             if options.direct_numerical_substition {
                 debug!("{}: Substituting period constants...", "MATAD".green());
                 evaluated_integral = evaluated_integral.expand();
@@ -435,17 +433,15 @@ impl MATAD {
                         crate::hpl::normalize_constants(evaluated_integral.as_view())?;
                 }
             }
-            // Sanity check.
-            if let Some(m) = evaluated_integral
-                .pattern_match(&vk_parse!("Oep(x_,y_)").unwrap().to_pattern(), None, None)
-                .next()
-            {
-                return Err(VakintError::MATADError(format!(
-                    "MATAD expansion yielded terms beyond expansion depth supported: Oep({},{})",
-                    m.get(&S.x_).unwrap(),
-                    m.get(&S.y_).unwrap(),
-                )));
-            }
+            // Sanity check: coefficients with epsilon poles can expose
+            // master orders beyond the tabulated `Oep` tails.
+            crate::truncation_guard::ensure_known_orders(
+                &evaluated_integral,
+                vk_symbol!("ep"),
+                Some(expansion_depth),
+                "MATAD",
+                crate::truncation_guard::plain_name,
+            )?;
         }
 
         evaluated_integral = evaluated_integral

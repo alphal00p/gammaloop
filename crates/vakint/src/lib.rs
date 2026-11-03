@@ -20,6 +20,7 @@ mod routing;
 pub mod rustred_evaluation;
 pub mod symbols;
 pub mod topologies;
+pub mod truncation_guard;
 pub mod utils;
 
 use ahash::RandomState;
@@ -84,6 +85,7 @@ pub use rustred_evaluation::{
     ShippedOrderedCacheUse, ordered_cache_producer,
 };
 pub use rustred_evaluation::{RustRedEvaluationError, RustRedEvaluationOptions, RustRedMasterMode};
+pub use truncation_guard::{MissingMasterOrder, MissingMasterOrders};
 
 use regex::Regex;
 use rug::float::Constant;
@@ -500,6 +502,8 @@ pub enum VakintError {
     Inspection(#[from] inspection::InspectionError),
     #[error("numerical precision: {0}")]
     NumericalPrecision(String),
+    #[error(transparent)]
+    MissingMasterOrders(#[from] truncation_guard::MissingMasterOrders),
     #[error("unknown vakint error")]
     Unknown,
 }
@@ -1983,6 +1987,17 @@ impl EvaluationMethod {
         matches!(self, Self::RustRed(_))
             || (self.numerical_output() && !matches!(self, Self::PySecDec(_)))
     }
+    /// The backend name used in diagnostics.
+    pub fn backend_name(&self) -> &'static str {
+        match self {
+            EvaluationMethod::AlphaLoop(_) => "alphaLoop",
+            EvaluationMethod::MATAD(_) => "MATAD",
+            EvaluationMethod::FMFT(_) => "FMFT",
+            EvaluationMethod::PySecDec(_) => "pySecDec",
+            EvaluationMethod::RustRed(_) => "RustRed",
+        }
+    }
+
     pub fn supports(&self, settings: &VakintSettings, topology: &Topology) -> bool {
         match self {
             EvaluationMethod::AlphaLoop(_) => {
@@ -2143,6 +2158,16 @@ impl EvaluationMethod {
                 vakint.rustred_evaluate(settings, numerator, integral_specs, opts)
             }
         }?;
+        // Backend-independent final check: no unknown master tail may survive
+        // the truncation at the requested order.
+        let loop_count = integral_specs.canonical_topology.get_integral().n_loops as i64;
+        truncation_guard::ensure_known_orders(
+            &result,
+            vk_symbol!(settings.epsilon_symbol.as_str()),
+            Some(settings.number_of_terms_in_epsilon_expansion - loop_count - 1),
+            self.backend_name(),
+            truncation_guard::plain_name,
+        )?;
         // RustRed already applies this convention at its common
         // pre-substitution boundary, including this direct public entry point.
         if matches!(self, EvaluationMethod::RustRed(_)) {
@@ -5752,13 +5777,17 @@ Evaluated (n_loops=1, mu_r=1) :
             );
             let numerator_path = String::from("numerator.txt");
             vars.insert("numerator_path".into(), numerator_path.clone());
-            // Expand the numerator around epsilon=0 to make sure it is polynomial
+            // Expand the numerator around epsilon=0 to make sure it is polynomial.
+            // Its truncated tail multiplies an integral with up to 1/eps^(2L)
+            // poles, so keep 2L orders beyond the requested one: a shallower
+            // expansion would silently drop contributions at requested orders.
             processed_numerator = processed_numerator
                 .series(
                     vk_symbol!(settings.epsilon_symbol.as_str()),
                     Atom::Zero.as_atom_view(),
                     Rational::from(
-                        settings.number_of_terms_in_epsilon_expansion - (integral.n_loops as i64),
+                        settings.number_of_terms_in_epsilon_expansion - 1
+                            + (integral.n_loops as i64),
                     ),
                 )
                 .unwrap()
@@ -6113,6 +6142,14 @@ Evaluated (n_loops=1, mu_r=1) :
                             vk_symbol!(&settings.epsilon_symbol),
                             "PySecDec",
                         )?;
+                        // pySecDec integrates through the requested order only:
+                        // mark the next order unknown, so that a normalization
+                        // factor with an ε pole cannot silently drop it.
+                        processed += truncation_guard::unknown_tail(
+                            vk_symbol!(&settings.epsilon_symbol),
+                            settings.number_of_terms_in_epsilon_expansion - n_loops,
+                            &Atom::var(vk_symbol!("pySecDec_integral")),
+                        );
                         processed = processed
                             * pysecdec_normalization_correction.to_owned()
                             * settings
@@ -6374,8 +6411,11 @@ Evaluated (n_loops=1, mu_r=1) :
         //         .join("\n")
         // );
 
-        let mut evaluated_integral =
-            self.process_form_output(settings, form_result, indices, vector_mapping)?;
+        // FORM appends an `alarm…` symbol beyond the last known order of every
+        // master; make those the shared unknown tails checked after truncation.
+        let mut evaluated_integral = truncation_guard::alphaloop_alarms_to_unknown_tails(
+            &self.process_form_output(settings, form_result, indices, vector_mapping)?,
+        );
         debug!(
             "{}: raw result from FORM:\n{}",
             "AlphaLoop".green(),
@@ -7478,6 +7518,14 @@ Evaluated (n_loops=1, mu_r=1) :
                 progress,
             )?;
             let result: Atom = vakint_expr.into();
+            // Every backend checks its own truncation; this is the final net.
+            truncation_guard::ensure_known_orders(
+                &result,
+                vk_symbol!(settings.epsilon_symbol.as_str()),
+                None,
+                "vakint evaluation",
+                truncation_guard::plain_name,
+            )?;
             MonitorContext::native_phase(observation, "evaluation_output", Some(result.as_view()));
             Ok(result)
         })
@@ -7519,7 +7567,15 @@ Evaluated (n_loops=1, mu_r=1) :
             self.validate_settings(settings)?;
             let mut vakint_expr = VakintExpression::prepare_evaluation(input, self, settings)?;
             vakint_expr.evaluate_integral(self, settings)?;
-            Ok(vakint_expr.into())
+            let result: Atom = vakint_expr.into();
+            truncation_guard::ensure_known_orders(
+                &result,
+                vk_symbol!(settings.epsilon_symbol.as_str()),
+                None,
+                "vakint evaluation",
+                truncation_guard::plain_name,
+            )?;
+            Ok(result)
         }))
     }
 }

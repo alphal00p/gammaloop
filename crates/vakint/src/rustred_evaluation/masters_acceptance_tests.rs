@@ -105,11 +105,16 @@ fn check_added_coefficient(data: &RustRedData, loops: usize, name: &str, power: 
             loops,
             RustRedMasterMode::Numerical,
         )
-        .unwrap_err()
-        .to_string();
-    assert!(
-        error.contains(&format!("unavailable epsilon coefficient {}", power + 1)),
-        "{error}"
+        .unwrap_err();
+    let missing = crate::truncation_guard::expect_missing_orders(error);
+    assert_eq!(
+        missing
+            .masters
+            .iter()
+            .map(|missing| missing.first_missing_order)
+            .collect::<Vec<_>>(),
+        [power + 1],
+        "{missing}"
     );
 }
 

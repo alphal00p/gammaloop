@@ -107,7 +107,7 @@ impl FMFT {
 
             // Sanity check: coefficients can expose otherwise higher unknown
             // master orders through spurious epsilon poles.
-            Self::reject_unknown_orders(&evaluated_integral)?;
+            Self::reject_unknown_orders(&evaluated_integral, expansion_depth)?;
             if options.susbstitute_masters {
                 // Distribute exact Laurent coefficients before replacing PR
                 // coefficients by approximate table values. Otherwise an
@@ -122,7 +122,7 @@ impl FMFT {
                 evaluated_integral = evaluated_integral.expand();
                 evaluated_integral = crate::hpl::normalize_constants(evaluated_integral.as_view())?;
                 // Sanity check, including tails inside the numerical tables.
-                Self::reject_unknown_orders(&evaluated_integral)?;
+                Self::reject_unknown_orders(&evaluated_integral, expansion_depth)?;
             }
         }
 
@@ -153,18 +153,14 @@ impl FMFT {
         Ok(evaluated_integral)
     }
 
-    fn reject_unknown_orders(expression: &Atom) -> Result<(), VakintError> {
-        if let Some(matched) = expression
-            .pattern_match(&vk_parse!("Oep(x_,y_)").unwrap().to_pattern(), None, None)
-            .next()
-        {
-            return Err(VakintError::FMFTError(format!(
-                "FMFT expansion yielded terms beyond expansion depth supported: Oep({},{})",
-                matched.get(&S.x_).unwrap(),
-                matched.get(&S.y_).unwrap(),
-            )));
-        }
-        Ok(())
+    fn reject_unknown_orders(expression: &Atom, expansion_depth: i64) -> Result<(), VakintError> {
+        Ok(crate::truncation_guard::ensure_known_orders(
+            expression,
+            vk_symbol!("ep"),
+            Some(expansion_depth),
+            "FMFT",
+            crate::truncation_guard::plain_name,
+        )?)
     }
 }
 

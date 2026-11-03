@@ -68,6 +68,29 @@ pub(crate) struct Master {
     pub(crate) data: Option<Arc<LoopData>>,
 }
 
+impl Master {
+    /// The lowest Laurent order of the master: `ε^-L` for an `L`-loop
+    /// vacuum master, or a lower order shipped by its data.
+    fn leading_power(&self) -> Result<i64, RustRedEvaluationError> {
+        let loops = -i64::try_from(self.loop_count).map_err(failure)?;
+        Ok(self
+            .coefficients
+            .keys()
+            .next()
+            .map_or(loops, |lowest| loops.min(*lowest)))
+    }
+
+    /// The last order through which every Laurent coefficient from
+    /// [`Self::leading_power`] on is available (`leading_power - 1` if none).
+    fn known_through(&self, leading_power: i64) -> i64 {
+        let mut last = leading_power - 1;
+        while self.coefficients.contains_key(&(last + 1)) {
+            last += 1;
+        }
+        last
+    }
+}
+
 #[derive(Debug)]
 pub(crate) struct MasterCatalog {
     pub(crate) version: String,
@@ -912,8 +935,7 @@ impl MasterCatalog {
             raw
         };
         let direct = self.finalize_independent(raw.clone(), settings, loop_count, mode);
-        if matches!(&direct, Err(error) if !matches!(error,
-            VakintError::RustRedEvaluation(RustRedEvaluationError::MasterCapability { .. })))
+        if matches!(&direct, Err(error) if !Self::lacks_master_data(error))
             || mode == RustRedMasterMode::Retain
             || self.basis_aliases.is_empty()
         {
@@ -939,10 +961,35 @@ impl MasterCatalog {
             return direct;
         }
         match self.finalize_independent(normalized, settings, loop_count, mode) {
-            Err(VakintError::RustRedEvaluation(RustRedEvaluationError::MasterCapability {
-                ..
-            })) => direct,
+            Err(error) if Self::lacks_master_data(&error) => direct,
             result => result,
+        }
+    }
+
+    /// Missing master data, as opposed to corruption, parsing or algebra errors.
+    fn lacks_master_data(error: &VakintError) -> bool {
+        matches!(
+            error,
+            VakintError::RustRedEvaluation(RustRedEvaluationError::MasterCapability { .. })
+                | VakintError::MissingMasterOrders(_)
+        )
+    }
+
+    /// The backend label of missing-order reports, with this data snapshot.
+    fn guard_backend(&self) -> String {
+        format!("RustRed, data {}", self.version)
+    }
+
+    /// A master of a missing-order report: its data identity and terminal.
+    fn describe_master(&self, master: &Atom) -> String {
+        match self.masters.get(master) {
+            Some(data) => format!(
+                "{} ({}-loop, {})",
+                data.identity,
+                data.loop_count,
+                crate::truncation_guard::plain_name(master)
+            ),
+            None => crate::truncation_guard::plain_name(master),
         }
     }
 
@@ -977,9 +1024,20 @@ impl MasterCatalog {
             // A bare master needs its highest requested coefficient directly;
             // no other term or finite coefficient can cancel this dependency.
             // General expressions retain the exact combination below.
-            let first = -i64::try_from(master.loop_count).map_err(failure)?;
-            if target >= first {
-                self.coefficient(&self.coefficient_symbol(&raw, target))?;
+            let first = master.leading_power()?;
+            if target >= first && !master.coefficients.contains_key(&target) {
+                let known = master.known_through(first);
+                return Err(crate::truncation_guard::MissingMasterOrders {
+                    backend: self.guard_backend(),
+                    requested_order: Some(target),
+                    masters: vec![crate::truncation_guard::MissingMasterOrder {
+                        master: self.describe_master(&raw),
+                        first_missing_order: known + 1,
+                        last_needed_order: Some(target),
+                        first_affected_result_order: known + 1,
+                    }],
+                }
+                .into());
             }
         }
         let symbols: Vec<_> = Self::referenced_masters(&raw).into_iter().collect();
@@ -1007,17 +1065,16 @@ impl MasterCatalog {
             let minimum = multiplicities
                 .iter()
                 .try_fold(0_i64, |sum, (symbol, power)| {
-                    let loops = i64::try_from(self.masters[symbol].loop_count).map_err(failure)?;
-                    sum.checked_sub(
-                        loops
+                    let leading = self.masters[symbol].leading_power()?;
+                    sum.checked_add(
+                        leading
                             .checked_mul(*power)
                             .ok_or_else(|| failure("master product order overflow"))?,
                     )
                     .ok_or_else(|| failure("master product order overflow"))
                 })?;
             for symbol in multiplicities.keys() {
-                let own_minimum =
-                    -i64::try_from(self.masters[symbol].loop_count).map_err(failure)?;
+                let own_minimum = self.masters[symbol].leading_power()?;
                 let last = target
                     .checked_sub(valuation)
                     .and_then(|value| value.checked_sub(minimum))
@@ -1033,9 +1090,20 @@ impl MasterCatalog {
         let mut exact_values = BTreeMap::new();
         for (symbol, last) in required {
             let master = &self.masters[&symbol];
-            let first = -(master.loop_count as i64);
-            let mut expansion = Atom::Zero;
-            for power in first..=last {
+            let first = master.leading_power()?;
+            // Substitute the available coefficients the planned depth needs
+            // and an explicit unknown tail ε^k·Oep(k, master) beyond them.
+            // Missing data and any misplanned depth thus survive truncation
+            // as `Oep` instead of becoming zero (see `truncation_guard`).
+            let through = last.min(master.known_through(first));
+            let mut expansion = crate::truncation_guard::unknown_tail(
+                epsilon,
+                through
+                    .checked_add(1)
+                    .ok_or_else(|| failure("required master epsilon order overflow"))?,
+                &symbol,
+            );
+            for power in first..=through {
                 let placeholder = self.coefficient_symbol(&symbol, power);
                 if let Some(coefficient) = master.coefficients.get(&power)
                     && let Some(formula) = &coefficient.exact
@@ -1072,12 +1140,13 @@ impl MasterCatalog {
         // unavailable order can multiply a provably zero combination of known
         // lower orders. Resolve that algebraic question before rejecting it.
         if mode == RustRedMasterMode::Numerical
-            && matches!(
-                self.check_coefficients(&result, false),
-                Err(VakintError::RustRedEvaluation(
-                    RustRedEvaluationError::MasterCapability { .. }
+            && (crate::truncation_guard::has_unknown_tail(result.as_view())
+                || matches!(
+                    self.check_coefficients(&result, false),
+                    Err(VakintError::RustRedEvaluation(
+                        RustRedEvaluationError::MasterCapability { .. }
+                    ))
                 ))
-            )
         {
             let replacements = exact_values
                 .into_iter()
@@ -1085,6 +1154,13 @@ impl MasterCatalog {
                 .collect::<Vec<_>>();
             result = combine_exact(result.replace_multiple(&replacements));
         }
+        crate::truncation_guard::ensure_known_orders(
+            &result,
+            epsilon,
+            Some(target),
+            &self.guard_backend(),
+            |master| self.describe_master(master),
+        )?;
         self.check_coefficients(&result, mode == RustRedMasterMode::Numerical)?;
         if mode == RustRedMasterMode::Numerical {
             result = self.resolve_numerical(result, settings)?;
@@ -1879,9 +1955,21 @@ mod tests {
         let raw = master * vk_parse!("ep^-1").unwrap();
         let error = catalog
             .finalize(raw, &settings(200, 2), 1, RustRedMasterMode::Symbolic)
-            .unwrap_err()
-            .to_string();
-        assert!(error.contains("unavailable epsilon coefficient 1"));
+            .unwrap_err();
+        let missing = crate::truncation_guard::expect_missing_orders(error);
+        assert_eq!(missing.requested_order, Some(0));
+        assert!(missing.backend.contains("test-v1"), "{missing}");
+        let [missing] = missing.masters.as_slice() else {
+            panic!("one master lacks orders: {missing:?}");
+        };
+        assert!(
+            missing.master.starts_with("test-master"),
+            "{}",
+            missing.master
+        );
+        assert_eq!(missing.first_missing_order, 1);
+        assert_eq!(missing.last_needed_order, Some(1));
+        assert_eq!(missing.first_affected_result_order, 0);
     }
 
     #[test]
@@ -2258,13 +2346,20 @@ mod tests {
         let error = catalog
             .finalize_independent(master, &request, 1, RustRedMasterMode::Symbolic)
             .unwrap_err();
-        assert!(matches!(&error, VakintError::RustRedEvaluation(
-            RustRedEvaluationError::MasterCapability { detail }
-        ) if detail.contains("test-master")
-            && detail.contains("requires unavailable epsilon coefficient 4097")
-            && detail.contains("available powers [-1, 0]")
-            && detail.contains("test-v1")));
         assert!(!error.to_string().contains("work limit"));
+        let missing = crate::truncation_guard::expect_missing_orders(error);
+        assert!(missing.backend.contains("test-v1"), "{missing}");
+        assert_eq!(missing.requested_order, Some(4097));
+        let [missing] = missing.masters.as_slice() else {
+            panic!("one master lacks orders: {missing:?}");
+        };
+        assert!(
+            missing.master.starts_with("test-master"),
+            "{}",
+            missing.master
+        );
+        assert_eq!(missing.first_missing_order, 1);
+        assert_eq!(missing.last_needed_order, Some(4097));
     }
 
     #[test]

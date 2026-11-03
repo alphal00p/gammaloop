@@ -69,7 +69,12 @@ fn native_pr_exact_cancellation_precedes_approximate_master_tables() {
 
 #[test]
 fn native_pr_missing_laurent_order_and_spurious_poles_fail_closed() {
-    for (terms, expression) in [(5, "PR9x"), (6, "PR9d"), (5, "PR11d/ep")] {
+    // (terms, expression, master, first missing order, last needed order)
+    for (terms, expression, master, first, last) in [
+        (5, "PR9x", "I_PR9x", 0, 0),
+        (6, "PR9d", "I_PR9d", 1, 1),
+        (5, "PR11d/ep", "I_PR11d", 1, 1),
+    ] {
         let error = finalizer(terms, 25)
             .finalize_native_reduced_masters(
                 vk_parse!(expression).unwrap(),
@@ -77,12 +82,17 @@ fn native_pr_missing_laurent_order_and_spurious_poles_fail_closed() {
                 &FMFTOptions::default(),
             )
             .unwrap_err();
-        assert!(
-            error
-                .to_string()
-                .contains("beyond expansion depth supported"),
-            "{error}"
+        let missing = crate::truncation_guard::expect_missing_orders(error);
+        assert_eq!(missing.backend, "FMFT", "{expression}");
+        assert_eq!(missing.requested_order, Some(terms - 5), "{expression}");
+        assert_eq!(missing.masters.len(), 1, "{expression}: {missing}");
+        let missing = &missing.masters[0];
+        assert_eq!(
+            (missing.master.as_str(), missing.first_missing_order),
+            (master, first),
+            "{expression}"
         );
+        assert_eq!(missing.last_needed_order, Some(last), "{expression}");
     }
 }
 
@@ -98,12 +108,8 @@ fn native_pr_dimension_and_custom_epsilon_poles_expose_unknown_orders() {
                 &FMFTOptions::default(),
             )
             .unwrap_err();
-        assert!(
-            error
-                .to_string()
-                .contains("beyond expansion depth supported"),
-            "{expression}: {error}",
-        );
+        let missing = crate::truncation_guard::expect_missing_orders(error);
+        assert_eq!(missing.masters[0].master, "I_PR11d", "{expression}");
     }
 }
 

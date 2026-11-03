@@ -842,6 +842,19 @@ pub fn log_laurent_diagnostics(label: &str, value: AtomView, epsilon_name: &str)
     }
 }
 
+/// The missing-order report of an evaluation that must fail closed because
+/// its result needs master Laurent coefficients that are not available.
+#[allow(dead_code)]
+pub fn expect_missing_master_orders(
+    result: Result<Atom, VakintError>,
+) -> vakint::MissingMasterOrders {
+    match result {
+        Err(VakintError::MissingMasterOrders(missing)) => missing,
+        Err(other) => panic!("expected missing master Laurent orders, got the error: {other}"),
+        Ok(value) => panic!("expected missing master Laurent orders, got the result: {value}"),
+    }
+}
+
 const MULTI_LANE_TEST_STACK_BYTES: usize = 32 * 1024 * 1024;
 
 pub fn run_multi_lane_acceptance(work: impl FnOnce() + Send + 'static) {

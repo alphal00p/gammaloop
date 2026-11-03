@@ -235,6 +235,26 @@ class MasterSymbolicExpression:
         """
     def _repr_html_(self) -> builtins.str: ...
 
+class MissingMasterOrdersError(builtins.ValueError):
+    r"""
+    The requested ε order needs master Laurent coefficients that are not available.
+
+    Every backend substitutes a master by its known Laurent coefficients plus an explicit
+    unknown tail; a reduction coefficient with an ε pole can expose that tail at a requested
+    order. Vakint then raises this error instead of returning an incomplete result.
+
+    Attributes ``backend`` (str), ``requested_order`` (int or None) and ``masters`` (list of
+    ``(master, first_missing_order, last_needed_order, first_affected_result_order)`` tuples)
+    describe the missing coefficients. It derives from ``ValueError``.
+
+    Examples
+    --------
+    >>> from symbolica.community.hepkit.vakint import MissingMasterOrdersError
+    >>> issubclass(MissingMasterOrdersError, ValueError)
+    True
+    """
+    ...
+
 @typing.final
 class NumericalCoefficient:
     r"""

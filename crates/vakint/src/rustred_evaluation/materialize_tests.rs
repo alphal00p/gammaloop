@@ -258,10 +258,10 @@ fn cross_integral_cancellation_precedes_master_coefficient_availability() {
     // the exact IBP identity makes the combined result zero at every order.
     let unavailable = engine
         .evaluate_integral(&config, vakint_parse!("topo(I1L(1,1))").unwrap().as_view())
-        .unwrap_err()
-        .to_string();
-    assert!(
-        unavailable.contains("unavailable epsilon coefficient"),
+        .unwrap_err();
+    let unavailable = crate::truncation_guard::expect_missing_orders(unavailable);
+    assert_eq!(
+        unavailable.masters[0].first_missing_order, 5,
         "{unavailable}"
     );
     let input = vakint_parse!("topo(I1L(1,2))-(1-ep)*topo(I1L(1,1))").unwrap();

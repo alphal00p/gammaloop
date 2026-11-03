@@ -338,6 +338,18 @@ which powers actually survive. Its output target is
 `number_of_terms_in_epsilon_expansion-L-1`; there is no historical fixed
 four-loop finite-part ceiling. Missing coefficients produce an error, not zero.
 
+In addition to this depth planning, every backend substitutes a master by its
+available coefficients plus an explicit unknown tail `ep^k*Oep(k, master)`
+beyond them (the mechanism of the MATAD and FMFT tables; alphaLoop's `alarm`
+symbols are mapped onto it, and RustRed appends it after the planned depth).
+After the expansion is truncated at the requested order, a surviving `Oep`
+means that a reduction coefficient with an epsilon pole multiplies a master
+known only to a lower order. `src/truncation_guard.rs` then raises
+`VakintError::MissingMasterOrders` (Python: `MissingMasterOrdersError`, a
+`ValueError`), naming each master, its missing Laurent orders and the
+requested order. A tail beyond the requested order is truncated exactly, so
+the guard never changes a correct result.
+
 == Five-loop campaign inventory and historical provenance
 
 The initial external 5L pack contains native IBPs, graphs and 905 declared

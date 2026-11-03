@@ -34,9 +34,31 @@ use inspection::{
     PrecisionWarningWrapper, VakintConstantWrapper, VakintMasterWrapper,
 };
 
+#[cfg(not(feature = "python_stubgen"))]
+use pyo3::create_exception;
 use pyo3::types::PyListMethods;
 #[cfg(feature = "python_stubgen")]
+use pyo3_stub_gen::create_exception;
+#[cfg(feature = "python_stubgen")]
 use pyo3_stub_gen::derive::*;
+
+create_exception!(
+    symbolica.community.hepkit.vakint,
+    MissingMasterOrdersError,
+    exceptions::PyValueError,
+    "The requested ε order needs master Laurent coefficients that are not available.\n\n\
+Every backend substitutes a master by its known Laurent coefficients plus an explicit\n\
+unknown tail; a reduction coefficient with an ε pole can expose that tail at a requested\n\
+order. Vakint then raises this error instead of returning an incomplete result.\n\n\
+Attributes ``backend`` (str), ``requested_order`` (int or None) and ``masters`` (list of\n\
+``(master, first_missing_order, last_needed_order, first_affected_result_order)`` tuples)\n\
+describe the missing coefficients. It derives from ``ValueError``.\n\n\
+Examples\n\
+--------\n\
+>>> from symbolica.community.hepkit.vakint import MissingMasterOrdersError\n\
+>>> issubclass(MissingMasterOrdersError, ValueError)\n\
+True"
+);
 
 impl SymbolicaCommunityModule for VakintWrapper {
     fn get_citations() -> Vec<Citation> {
@@ -72,6 +94,10 @@ macro_rules! define_vakint_python_surface {
         pub(crate) fn initialize_vakint(m: &Bound<'_, PyModule>) -> PyResult<()> {
             $(<$class as ModuleInit>::init(m)?;)+
             m.add_function(pyo3::wrap_pyfunction!(diagram_integral::integral_from_diagram, m)?)?;
+            m.add(
+                "MissingMasterOrdersError",
+                m.py().get_type::<MissingMasterOrdersError>(),
+            )?;
             Ok(())
         }
 
@@ -80,6 +106,7 @@ macro_rules! define_vakint_python_surface {
         pub const PYTHON_STUB_SURFACE: &[&str] = &[
             $(<$class as PyClass>::NAME,)+
             "integral_from_diagram",
+            "MissingMasterOrdersError",
         ];
     };
 }
@@ -106,7 +133,31 @@ define_vakint_python_surface! {
 }
 
 fn vakint_to_python_error(vakint_error: VakintError) -> PyErr {
-    exceptions::PyValueError::new_err(format!("Vakint error | {vakint_error}"))
+    let message = format!("Vakint error | {vakint_error}");
+    let VakintError::MissingMasterOrders(missing) = vakint_error else {
+        return exceptions::PyValueError::new_err(message);
+    };
+    let error = MissingMasterOrdersError::new_err(message);
+    Python::attach(|py| {
+        let value = error.value(py);
+        let masters = missing
+            .masters
+            .iter()
+            .map(|master| {
+                (
+                    master.master.clone(),
+                    master.first_missing_order,
+                    master.last_needed_order,
+                    master.first_affected_result_order,
+                )
+            })
+            .collect::<Vec<_>>();
+        // Attributes are best effort: the message already names everything.
+        let _ = value.setattr("backend", missing.backend.clone());
+        let _ = value.setattr("requested_order", missing.requested_order);
+        let _ = value.setattr("masters", masters);
+    });
+    error
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
