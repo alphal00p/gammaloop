@@ -224,9 +224,18 @@ directly. Python clients use this ownership flow through
 `symbolica.community.hepkit`; the curated PyO3 API does not expose
 GammaLoop runtime details.
 
+Generation and grouping share one first-use registration of the six
+overall-factor bookkeeping heads. Together with ordered coupling declaration,
+this removes generation-worker races in their creation order. The serial,
+parallel and Born-first regressions compare fresh processes; this does not
+reorder symbols already registered by other consumers. Canonical model export
+ordering remains a separate contract.
+
 The canonical model retains exact rational electric charges and optional
 left- and right-handed hypercharges. Model-supplied parameter labels are
-registered before parsing their expressions. Propagator lookup, including
+registered in declaration order, followed by coupling names in model order,
+before their expressions are parsed. Coupling expansion matches both names
+and replacement expressions literally. Propagator lookup, including
 antiparticle orientation, belongs to the model and is reused by generation.
 Chemical potentials are optional validated parameter identifiers in that same
 model and survive JSON and binary round trips. Exact internal zero expressions
@@ -1508,9 +1517,10 @@ their amplitude version 12 and cross-section version 15 unchanged.
   including couplings removed from the saved model by restrictions. State loading restores
   those registrations before parsing the model or importing Symbolica's archive. Linnet's
   existing subset printer is restored from its label without reconstructing graph topology.
-  Model loading also registers every declared parameter and coupling before parsing their
-  expressions, so
-  forward references retain the same callbacks. Symbolica cannot serialize the Rust
+  Model loading registers parameter names and their presentation callbacks, then
+  predeclares coupling names before parsing expressions. Coupling predeclaration
+  establishes symbol identity and order; it does not install parameter presentation
+  callbacks on couplings. Symbolica cannot serialize the Rust
   callbacks themselves; version 9 and older states must be regenerated, not relabeled.
 - Version 9 combined Symbolica 3 evaluator/rational payloads with native sampling and threshold metadata. Version 7 stored exact CFF coefficients as native rationals. Version 6 removed obsolete deferred-integrand fields; version 5 added component-local generated-CFF ownership and prefactor metadata; version 4 added the typed global-prefactor sign.
 - State loading and direct overwrite both require exactly the current manifest version; older states must be regenerated, and states from newer binaries require a newer GammaLoop binary.

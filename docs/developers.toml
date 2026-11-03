@@ -211,7 +211,10 @@ anchor = "pub fn generate("
 # named free interfaces after template transport and actual-owner admission,
 # replacing the obsolete occurrence-axis claim. Leaf arguments, identities and
 # scoped history stay retained; this documents merged #209 without a new physics claim.
-digest = "3b6646287b66a50365e173522ffa87b2c9a0a1dd"
+# Reviewed 2026-11-03: generation and grouping share first-use factor-head
+# registration. The architecture limits reproducibility to controlled fresh
+# initialization histories; numerator admission and transport are unchanged.
+digest = "eb4d0d3a14db5d1cfa7fbc8169d4b1b32fb34b1d"
 
 [[section.note.scope]]
 path = "crates/feynkit-model/src/model.rs"
@@ -241,7 +244,10 @@ anchor = "pub struct Model {"
 # name and its expression literally, including underscore-suffixed symbols.
 # The regression preserves unrelated symbols. Canonical model ownership and
 # serialization remain unchanged; this does not qualify zero-mass substitutions.
-digest = "c97bf9c4296fe7a87b271fd5724bb7ecb26426d4"
+# Reviewed 2026-11-03: parameter registration is followed by ordered coupling
+# declaration before parsing. The architecture separates symbol identity/order
+# from parameter callbacks and canonical export, and retains literal expansion.
+digest = "e1689e05ee72e5b7ffb3483c690d7c24d9fe828b"
 
 [[section.note.scope]]
 path = "crates/feynkit-graph/src/lib.rs"
@@ -1766,7 +1772,10 @@ anchor = "pub(crate) fn group_diagrams("
 # canonical serializer; grouping identities and comparison rules are unchanged.
 # Reviewed 2026-10-25: merged color-only index-label regression coverage retains
 # the direct simplify_algebra call and canonical GroupingIndex serialization.
-digest = "b17edcfeef2c2328f0abedfa9921d8ccf2771e21"
+# No-impact attestation 2026-11-03: grouping reuses the shared annotation head.
+# Group algebra, source identities, factor payloads and historical timings are
+# unchanged; this does not establish new performance results.
+digest = "ebe871d99d414d083daf59ba14764d5b7b26aae5"
 
 [[section.note]]
 id = "nix-crane-cache-reuse"
