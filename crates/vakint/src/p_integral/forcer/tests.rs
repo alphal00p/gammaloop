@@ -462,6 +462,36 @@ fn forcer_four_loop_battery() {
 }
 
 #[test]
+fn tform_workers_reproduce_the_frozen_output() {
+    let Some(form) = forcer_test_form() else {
+        eprintln!("FORM 5 is unavailable: skipped the TFORM run");
+        return;
+    };
+    let battery: Battery = serde_json::from_str(include_str!(
+        "../../../tests/fixtures/forcer/p3l_battery.json"
+    ))
+    .unwrap();
+    let case = battery
+        .cases
+        .iter()
+        .find(|case| case.name == "la_rank4")
+        .unwrap();
+    let settings = VakintSettings {
+        n_cores: 2,
+        ..settings(&form)
+    };
+    let reduced = reduce_p(
+        family(&case.family),
+        &case.powers,
+        parse(&case.numerator).as_view(),
+        &parse(&case.external),
+        &settings,
+    )
+    .unwrap();
+    assert_eq!(reduced, case.frozen());
+}
+
+#[test]
 fn canonical_kite_becomes_the_forcer_graph() {
     let input = forcer_input(
         family("P2L"),
