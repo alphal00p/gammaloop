@@ -46,7 +46,7 @@ fn incomplete_checkouts_fail_without_network_or_local_mutation() {
     let releases = format!("http://{}", listener.local_addr().unwrap());
     let options = OfficialExternalDataOptions {
         local_artifacts_path: Some(directory.path().to_owned()),
-        timeout: Duration::from_millis(100),
+        timeout: Some(Duration::from_millis(100)),
         ..Default::default()
     };
     let mut engine = Vakint::new().unwrap();
@@ -235,7 +235,7 @@ fn unrelated_manifest_and_empty_loop_directory_allow_managed_installation() {
             1,
             &OfficialExternalDataOptions {
                 local_artifacts_path: Some(destination.path().to_owned()),
-                timeout: Duration::from_secs(3),
+                timeout: Some(Duration::from_secs(3)),
                 ..Default::default()
             },
             &server.url,
@@ -269,7 +269,7 @@ fn official_download_follows_redirect_then_reuses_offline_without_extraction() {
     let destination = tempfile::tempdir().unwrap();
     let options = OfficialExternalDataOptions {
         local_artifacts_path: Some(destination.path().to_owned()),
-        timeout: Duration::from_secs(3),
+        timeout: Some(Duration::from_secs(3)),
         ..Default::default()
     };
     let mut engine = Vakint::new().unwrap();
@@ -319,7 +319,7 @@ fn fixture_release_bypasses_stale_latest_and_reuses_immutable_data_offline() {
     let options = OfficialExternalDataOptions {
         version: required.clone(),
         local_artifacts_path: Some(destination.path().to_owned()),
-        timeout: Duration::from_secs(3),
+        timeout: Some(Duration::from_secs(3)),
         ..Default::default()
     };
     let mut engine = Vakint::new().unwrap();
@@ -377,7 +377,7 @@ fn extraction_refuses_links_wrong_loop_and_resource_overflow() {
                 destination.path(),
                 1,
                 &OfficialExternalDataOptions {
-                    max_extracted_bytes: max_bytes,
+                    max_extracted_bytes: Some(max_bytes),
                     ..Default::default()
                 }
             )
@@ -412,7 +412,7 @@ fn interrupted_pack_installation_is_transactional_and_resumes_completed_packs() 
     let destination = tempfile::tempdir().unwrap();
     let options = OfficialExternalDataOptions {
         local_artifacts_path: Some(destination.path().to_owned()),
-        timeout: Duration::from_secs(3),
+        timeout: Some(Duration::from_secs(3)),
         ..Default::default()
     };
     let mut engine = Vakint::new().unwrap();
@@ -455,7 +455,7 @@ fn refresh_switches_all_requested_loops_together_and_preserves_the_old_installat
     let destination = tempfile::tempdir().unwrap();
     let options = OfficialExternalDataOptions {
         local_artifacts_path: Some(destination.path().to_owned()),
-        timeout: Duration::from_secs(3),
+        timeout: Some(Duration::from_secs(3)),
         ..Default::default()
     };
     let mut engine = Vakint::new().unwrap();
@@ -552,7 +552,7 @@ fn extraction_bounds_extension_metadata_before_tar_yields_file_entries() {
             destination.path(),
             1,
             &OfficialExternalDataOptions {
-                max_extracted_bytes: 8 * 1024,
+                max_extracted_bytes: Some(8 * 1024),
                 ..Default::default()
             }
         )
@@ -660,4 +660,15 @@ fn advertised_prepared_caches_are_ignored_through_five_loops() {
         .unwrap();
     assert_eq!(report.loops.len(), 5);
     assert!(engine.loaded_application().is_ok());
+}
+
+#[test]
+fn official_transfer_options_have_no_default_limits() {
+    // No arbitrary limits by default: no request timeout, no archive, extraction or
+    // entry cap (were 3600 s, 2 GiB, 8 GiB and 250000 entries).
+    let options = OfficialExternalDataOptions::default();
+    assert_eq!(options.timeout, None);
+    assert_eq!(options.max_archive_bytes, None);
+    assert_eq!(options.max_extracted_bytes, None);
+    assert_eq!(options.max_entries, None);
 }

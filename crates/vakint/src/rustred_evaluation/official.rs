@@ -27,12 +27,17 @@ pub struct OfficialExternalDataOptions {
     /// None resolves the current working directory when the loader is called.
     pub local_artifacts_path: Option<PathBuf>,
     pub refresh: bool,
-    /// Timeout for each HTTP request. Native authentication, copying and reuse
-    /// have no default compute deadline; caller resource budgets still apply.
-    pub timeout: Duration,
-    pub max_archive_bytes: u64,
-    pub max_extracted_bytes: u64,
-    pub max_entries: usize,
+    /// Optional timeout for each HTTP request; `None` (the default) sets none, so a
+    /// large download on a slow link is never cut. Native authentication, copying
+    /// and reuse have no compute deadline; caller resource budgets still apply.
+    pub timeout: Option<Duration>,
+    /// Optional caps on the downloaded archive, the extracted bytes and the archive
+    /// entries; `None` (the default) sets none. Every download is already bounded
+    /// by the size and SHA256 that its release manifest declares, and extraction
+    /// starts only after that check. `Some(0)` is rejected.
+    pub max_archive_bytes: Option<u64>,
+    pub max_extracted_bytes: Option<u64>,
+    pub max_entries: Option<usize>,
     /// Workers verifying the five-loop routes while the application loads,
     /// usually the [`crate::VakintSettings::n_cores`] of later evaluations;
     /// one verifies on the calling thread. Defaults to [`crate::default_n_cores`].
@@ -45,10 +50,10 @@ impl Default for OfficialExternalDataOptions {
             version: "latest".into(),
             local_artifacts_path: None,
             refresh: false,
-            timeout: Duration::from_secs(3600),
-            max_archive_bytes: 2 * 1024 * 1024 * 1024,
-            max_extracted_bytes: 8 * 1024 * 1024 * 1024,
-            max_entries: 250_000,
+            timeout: None,
+            max_archive_bytes: None,
+            max_extracted_bytes: None,
+            max_entries: None,
             n_cores: crate::default_n_cores(),
         }
     }
@@ -145,10 +150,10 @@ impl Vakint {
     ) -> Result<ExternalDataLoadReport, VakintError> {
         version_component(&options.version)?;
         if !(1..=5).contains(&max_loop_count)
-            || options.timeout.is_zero()
-            || options.max_archive_bytes == 0
-            || options.max_extracted_bytes == 0
-            || options.max_entries == 0
+            || options.timeout.is_some_and(|timeout| timeout.is_zero())
+            || options.max_archive_bytes == Some(0)
+            || options.max_extracted_bytes == Some(0)
+            || options.max_entries == Some(0)
         {
             return Err(data::failure(
                 "loop count must be 1 through 5 and transfer limits must be positive",
@@ -198,11 +203,13 @@ impl Vakint {
             .as_ref()
             .map(|v| cache.join(v).join("manifest.json"));
         let tls = ureq::native_tls::TlsConnector::new().map_err(data::failure)?;
-        let agent = ureq::AgentBuilder::new()
+        let mut builder = ureq::AgentBuilder::new()
             .tls_connector(std::sync::Arc::new(tls))
-            .timeout(options.timeout)
-            .redirects(8)
-            .build();
+            .redirects(8);
+        if let Some(timeout) = options.timeout {
+            builder = builder.timeout(timeout);
+        }
+        let agent = builder.build();
         let bytes = if let Some(path) = local_manifest.filter(|p| p.is_file()) {
             read_bounded(File::open(path).map_err(data::failure)?, MAX_MANIFEST_BYTES)?
         } else {
@@ -386,7 +393,7 @@ fn install_pack(
     let expected_bytes = pack
         .archive_bytes
         .ok_or_else(|| data::failure("archive size is absent"))?;
-    if expected_bytes > options.max_archive_bytes {
+    if options.max_archive_bytes.is_some_and(|cap| expected_bytes > cap) {
         return Err(data::failure(
             "release archive exceeds configured size limit",
         ));
@@ -414,7 +421,7 @@ fn install_pack(
         total = total
             .checked_add(n as u64)
             .ok_or_else(|| data::failure("archive length overflow"))?;
-        if total > expected_bytes || total > options.max_archive_bytes {
+        if total > expected_bytes || options.max_archive_bytes.is_some_and(|cap| total > cap) {
             return Err(data::failure("download exceeds declared archive size"));
         }
         digest.update(&buffer[..n]);
@@ -449,16 +456,18 @@ fn extract_pack(
 ) -> Result<(), RustRedEvaluationError> {
     // Bound the complete inflated stream, including GNU/PAX extension records
     // consumed internally by tar before an ordinary entry is yielded.
-    let inflated_limit = options
-        .max_extracted_bytes
-        .checked_add(1)
-        .ok_or_else(|| data::failure("extracted size limit overflow"))?;
+    let inflated_limit = match options.max_extracted_bytes {
+        Some(cap) => cap
+            .checked_add(1)
+            .ok_or_else(|| data::failure("extracted size limit overflow"))?,
+        None => u64::MAX,
+    };
     let mut inflated = MultiGzDecoder::new(reader).take(inflated_limit);
     let mut archive = tar::Archive::new(&mut inflated);
     let mut seen = BTreeSet::new();
     let mut total = 0u64;
     for (index, entry) in archive.entries().map_err(data::failure)?.enumerate() {
-        if index >= options.max_entries {
+        if options.max_entries.is_some_and(|cap| index >= cap) {
             return Err(data::failure("archive entry limit exceeded"));
         }
         let mut entry = entry.map_err(data::failure)?;
@@ -484,7 +493,7 @@ fn extract_pack(
         total = total
             .checked_add(entry.size())
             .ok_or_else(|| data::failure("extracted size overflow"))?;
-        if total > options.max_extracted_bytes {
+        if options.max_extracted_bytes.is_some_and(|cap| total > cap) {
             return Err(data::failure("extracted size limit exceeded"));
         }
         if !entry.unpack_in(destination).map_err(data::failure)? {
