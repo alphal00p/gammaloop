@@ -59,6 +59,12 @@ that the default metric/vector contractor is certified complete. `false` also
 covers an unproved result; metric-only work does not establish default
 completion. It says nothing about arbitrary tensor component contraction.
 
+Metric-port renaming may cross native unary conjugation when the replacement
+is an explicit compatible slot. The wrapper and its coefficients remain intact.
+Vector and scalar substitutions do not cross this boundary, and other broadcast
+functions remain opaque. This narrow rule does not combine conjugation with
+contraction or make refused vector substitutions invoke their normalizers.
+
 == Callbacks and interface proofs
 
 Intrinsic normalization permits the component reducer to use graph incidence

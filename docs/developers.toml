@@ -983,7 +983,11 @@ anchor = "pub struct ContractSettings<'a> {"
 # the enclosing carrier's conservative history instead of re-admitting payloads.
 # Regional payloads return through with_identity_result, retaining its existing
 # callback-sensitive publication checks; this is a metadata-boundary change.
-digest = "442fe89c0ec2fc603e7eeb88b73e69ad9e1b7e60"
+# Reviewed 2026-11-03: this file adds conjugated metric-port regressions.
+# The Idenso and Schoonschip notes describe the corresponding slot-replacement
+# capability, preserving variance, scalar opacity and lazy vector refusal.
+# Contractor ownership and existing checked publication remain unchanged.
+digest = "99ce4ba307d317c5992743c7fded6912fdb524d9"
 
 [[section.note.scope]]
 path = "crates/idenso/src/tensor/simplification.rs"
