@@ -17,9 +17,11 @@ use crate::representations::{Bispinor, ColorAdjoint, ColorAntiFundamental, Color
 use crate::shorthands::schoonschip::{DotNormalizer, SlotContraction};
 use crate::{CookMode, CookSettings, CookingError, NetworkToolingError};
 use ahash::{AHashMap, AHashSet};
+use spenso::network::library::function_lib::INBUILTS;
 use spenso::network::library::symbolic::{ETS, ExplicitKey};
 use spenso::network::parsing::{AtomStructureExt, ParseState, StrictTensorFilter};
 use spenso::network::tags::SPENSO_TAG;
+use spenso::network::tensor_symmetry::TensorSlotSymmetry;
 use spenso::shadowing;
 use spenso::shadowing::{ANTISYM, CYCLIC, SYM};
 #[cfg(debug_assertions)]
@@ -656,7 +658,8 @@ impl SymbolicTensor<PartialStructure> {
     ) -> Self {
         let is_metric =
             matches!(expression.as_view(), AtomView::Fun(fun) if fun.get_symbol() == ETS.metric);
-        let is_composite = !matches!(expression.as_view(), AtomView::Fun(_));
+        let is_composite = !matches!(expression.as_view(), AtomView::Fun(function)
+            if !function.get_symbol().has_tag(&SPENSO_TAG.tensor_word));
         let structure = if structure.has_unresolved_ports() {
             structure.canonicalize_open_ports()
         } else {
@@ -1062,7 +1065,8 @@ impl SymbolicTensor<PartialStructure> {
             proofs.normalized_product = Default::default();
             self.expression = expression;
             self.is_metric = matches!(self.expression.as_view(), AtomView::Fun(fun) if fun.get_symbol() == ETS.metric);
-            self.is_composite = !matches!(self.expression.as_view(), AtomView::Fun(_));
+            self.is_composite = !matches!(self.expression.as_view(), AtomView::Fun(function)
+                if !function.get_symbol().has_tag(&SPENSO_TAG.tensor_word));
             self.proofs = proofs;
         }
         // The construction owner already established this interface. Finishing
@@ -1839,12 +1843,14 @@ impl SymbolicTensor<PartialStructure> {
 impl InterfaceInference {
     // These structural builtins cannot invoke user code themselves. Delta only
     // compares fixed components; cyclic only unwraps a sole sym projector.
-    // Their descendants remain checked for user callbacks.
+    // Native conjugation only unwraps a double conjugation. Their descendants
+    // remain checked for user callbacks.
     pub(crate) fn intrinsic_normalization_head(symbol: Symbol) -> bool {
         symbol.get_evaluation_info().is_none()
             && (symbol == ETS.metric
                 || symbol == ETS.delta
                 || symbol == SPENSO_TAG.dot
+                || symbol == INBUILTS.conj
                 || symbol.get_normalization_function().is_none()
                 || symbol == AIND_SYMBOLS.dind
                 || symbol == *shadowing::CYCLIC)
@@ -1863,6 +1869,7 @@ impl InterfaceInference {
             && (symbol == *metric.get_or_insert_with(|| ETS.metric)
                 || symbol == ETS.delta
                 || symbol == SPENSO_TAG.dot
+                || symbol == INBUILTS.conj
                 || symbol.get_normalization_function().is_none()
                 || symbol == AIND_SYMBOLS.dind
                 || symbol == *shadowing::CYCLIC)
@@ -2567,6 +2574,12 @@ impl InterfaceInference {
         }
 
         match value {
+            AtomView::Var(variable) if variable.get_symbol().has_tag(&SPENSO_TAG.tensor_word) => {
+                syntax_error = Some(TensorInferenceError::invalid(format!(
+                    "tensor word symbol `{}` must be called with operands",
+                    variable.get_symbol()
+                )));
+            }
             AtomView::Var(variable) if variable.get_symbol().has_tag(&SPENSO_TAG.tensor) => {
                 syntax_error = Some(TensorInferenceError::invalid(format!(
                     "tensor symbol `{}` must be called with at least one structural port",
@@ -2580,6 +2593,57 @@ impl InterfaceInference {
                     return false;
                 }
                 let symbol = function.get_symbol();
+                if symbol.has_tag(&SPENSO_TAG.tensor_word) {
+                    if symbol.is_scalar()
+                        || symbol.has_tag(&SPENSO_TAG.tensor)
+                        || symbol.has_tag(&SPENSO_TAG.rank1)
+                        || symbol.has_tag(&SPENSO_TAG.representation)
+                        || symbol.has_tag(&SPENSO_TAG.broadcast)
+                    {
+                        syntax_error = Some(TensorInferenceError::invalid(
+                            "a tensor word head must carry only the tensor-word structural role",
+                        ));
+                        return false;
+                    }
+                    if function.get_nargs() == 0 {
+                        syntax_error = Some(TensorInferenceError::invalid(
+                            "tensor words require at least one operand; use the typed word constructor for the identity",
+                        ));
+                        return false;
+                    }
+                    for argument in function.iter() {
+                        if !SymbolicTensor::<PartialStructure>::is_word_operand(symbol, argument) {
+                            syntax_error = Some(TensorInferenceError::invalid(
+                                "word operands must be individual generators or same-head words with scalar coefficients; keep commuting tensor coefficients outside the word",
+                            ));
+                            return false;
+                        }
+                        if self.slots.parse::<LibraryRep, AbstractIndex>(argument).is_ok()
+                            || self.slots.parse_representation::<LibraryRep>(argument).is_ok()
+                        {
+                            syntax_error = Some(TensorInferenceError::invalid(
+                                "tensor word operands must be tensors or coefficients, not bare structural ports",
+                            ));
+                            return false;
+                        }
+                        if Self::has_structured_syntax(argument) {
+                            match self.infer_view(argument) {
+                                Ok(interface) if interface.open_positions().is_empty() => {}
+                                Ok(_) => {
+                                    syntax_error = Some(TensorInferenceError::invalid(
+                                        "tensor words with unresolved operands require the typed word constructor",
+                                    ));
+                                    return false;
+                                }
+                                Err(error) => {
+                                    syntax_error = Some(error);
+                                    return false;
+                                }
+                            }
+                        }
+                    }
+                    return true;
+                }
                 // Explicit scalar functions own their metadata, which may itself
                 // contain tensor syntax without exposing any tensor ports.
                 if SPENSO_TAG.is_scalar_metadata(symbol)
@@ -2880,6 +2944,7 @@ impl InterfaceInference {
         &mut self,
         function: symbolica::atom::representation::FunView<'_>,
     ) -> InferenceResult<()> {
+        TensorSlotSymmetry::validate_function(function).map_err(TensorInferenceError::invalid)?;
         let symbol = function.get_symbol();
         for argument in function.iter() {
             if self
@@ -3155,7 +3220,7 @@ impl InterfaceInference {
                     .map(TensorInterface::into_algebra_result);
             }
 
-            if symbol == SPENSO_TAG.bracket {
+            if symbol == SPENSO_TAG.bracket || symbol.has_tag(&SPENSO_TAG.tensor_word) {
                 let mut interfaces = Vec::new();
                 for argument in arguments {
                     if !Self::has_structured_syntax(argument) {
@@ -3163,7 +3228,7 @@ impl InterfaceInference {
                     }
                     interfaces.push(self.infer_view(argument)?);
                 }
-                if interfaces.is_empty() {
+                if interfaces.is_empty() && !symbol.has_tag(&SPENSO_TAG.tensor_word) {
                     return Err(TensorInferenceError::invalid(
                         "ordered tensor products require at least one tensor operand",
                     ));
