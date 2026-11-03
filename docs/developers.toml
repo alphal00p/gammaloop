@@ -151,7 +151,10 @@ anchor = "struct GammaLoopAPI {"
 # Reviewed 2026-10-15: Python delegates imports and symbolic operations to canonical
 # graph and typed tensor owners. Session/state ownership and the f64 boundary remain
 # unchanged; compact import now has a dedicated documented scope.
-digest = "adc6974f20de538c6acfb2913aa5c9b16b590617"
+# No-impact attestation 2026-11-02 against 501183a5: only the stub generator's
+# project-root lookup and imports changed, allowing relocated workspace roots.
+# GammaLoopAPI sessions, command dispatch, threading and the f64 boundary are unchanged.
+digest = "2b62293b0ecb10979d3214cc10b9c61eb8821211"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/lib.rs"
@@ -204,7 +207,11 @@ anchor = "pub fn generate("
 # NumeratorInterface, preserving hidden zero history through the same owner as
 # graph translation. Generic callback errors retain their original Rust types.
 # Generation/cache admission and axis-order ownership remain as documented; new regressions compare direct and template transport.
-digest = "c6353d34dcf95aa6006928573b87db2f24f53ba9"
+# Baseline review 2026-11-02: the current architecture now records canonical
+# named free interfaces after template transport and actual-owner admission,
+# replacing the obsolete occurrence-axis claim. Leaf arguments, identities and
+# scoped history stay retained; this documents merged #209 without a new physics claim.
+digest = "3b6646287b66a50365e173522ffa87b2c9a0a1dd"
 
 [[section.note.scope]]
 path = "crates/feynkit-model/src/model.rs"
@@ -268,7 +275,11 @@ anchor = "pub struct FeynmanDiagram {"
 # validation, prefactor replacement and topology/routing ownership are retained.
 # Reviewed 2026-10-23: Cooking, index and slot causes remain typed in DiagramError; scene configuration has a distinct diagnostic. Retained tensor and serialization ownership remain unchanged.
 # No-impact attestation 2026-10-23: boxed tensor error sources preserve graph ownership and error semantics.
-digest = "2cbc7e6e672b92c090ee9052f5bf062fbf3f8bfa"
+# Baseline review 2026-11-02: the architecture records multiply_many fragment
+# composition, canonical named interfaces and the positional multiplication path.
+# The source regression covers positional/ranked-zero reconstruction and JSON/DOT
+# round trips; this review adds no numerical or performance qualification.
+digest = "79cb84f0885f45d159bcf3ad470922d195013600"
 
 [[section.note.scope]]
 path = "crates/feynkit-tensor/src/lib.rs"
@@ -683,7 +694,10 @@ anchor = "pub trait IndexTooling {"
 # callback replacements; typed history is not recovered from normalized text.
 # No-impact attestation 2026-10-23: the native-adjoint test fixture uses canonical
 # local-zero spelling; its logical-axis and component assertions are unchanged.
-digest = "b6b8af1e73031ce2c7dc97185cc31f4a90c63d64"
+# Baseline review 2026-11-02: the syntax note now states that adjunction requires
+# published index history; mutated parts must pass finish_parts explicitly.
+# This replaces lazy admission, without changing the adjoint's algebra.
+digest = "820fbf610c4bb06867a7013d0b8631e57704ff7d"
 
 [[section.note]]
 id = "spenso-architecture"
@@ -845,7 +859,10 @@ anchor = "pub trait IndexTooling {"
 # These boundaries agree with the Idenso note's authoritative typed-metadata model.
 # No-impact attestation 2026-10-23: the native-adjoint test fixture uses canonical
 # local-zero spelling; its logical-axis and component assertions are unchanged.
-digest = "b6b8af1e73031ce2c7dc97185cc31f4a90c63d64"
+# Baseline review 2026-11-02: the Idenso note now states that adjunction requires
+# published index history; mutated parts must pass finish_parts explicitly.
+# This replaces lazy admission, without changing the adjoint's algebra.
+digest = "820fbf610c4bb06867a7013d0b8631e57704ff7d"
 
 [[section.note.scope]]
 path = "crates/idenso/src/cook.rs"
@@ -898,7 +915,11 @@ anchor = "pub struct SymbolicTensor<S = OrderedStructure<LibraryRep, AbstractInd
 # Reviewed 2026-10-23: Certified construction stays crate-private; metadata sharing and borrowed composition preserve authoritative interfaces. Public API examples document the existing algebra contracts.
 # Reviewed 2026-10-24: normalization contract checks, explicit producer trust, scalar scope handling and value/history documentation are described in the Idenso note; existing release validators remain intact.
 # Reviewed 2026-10-25: shared exact collector exports remain crate-private; merged tensor metadata and normalization contracts are unchanged.
-digest = "73043dc6e75efb7d9961f007520c75f29d45d5a8"
+# Baseline review 2026-11-02: the note records explicit history publication at
+# ordered/scalar intake, invalid-multiplicity rejection (panic for new_scalar),
+# and canonical named result interfaces for wrapping and negation, with positional
+# bindings retained. This source review adds no scientific qualification.
+digest = "b95ee5f1852b22a03b1fe79bfe4342d3c42e831e"
 
 [[section.note.scope]]
 path = "crates/idenso/src/tensor/indexed.rs"
@@ -925,7 +946,11 @@ end_anchor = "    /// Scope explicit indices"
 # Reviewed 2026-10-23: Cooking and slot failures retain typed causes through mapped metadata operations. The syntax observer and authoritative admission boundaries remain unchanged.
 # No-impact attestation 2026-10-23: direct error-constructor mapping preserves representation-dimension inference.
 # Reviewed 2026-10-24: dimension mapping retains its metadata-authoritative release path and checks user callback free-index preservation in debug builds.
-digest = "baaf9cb6ea598edc83c1135da5ebb0d0394d0505"
+# Baseline review 2026-11-02: the existing range moved but also changed its
+# publication precondition and result-history transport; its anchors are retained.
+# The note now requires published input before mapping and distinguishes unchanged
+# payload, interface and oriented history when retaining completed reductions.
+digest = "602ecc787c95ff01a067ed58736127940627a9cb"
 
 [[section.note.scope]]
 path = "crates/idenso/src/tensor/contract.rs"
@@ -950,7 +975,11 @@ anchor = "pub struct ContractSettings<'a> {"
 # the shared graph/tape owner.
 # Reviewed 2026-10-19: only deferred-frontier test inputs change in this file; all completion assertions remain. The Idenso/readiness notes explain the newly supported vector-sum partner contraction and unchanged unsupported generic-tensor policy.
 # Reviewed 2026-10-24: the produced-parts constructor is renamed explicitly; contractor algorithms and existing release-time callback validation are unchanged.
-digest = "94e9d8b2efc414ab4457e7f33d9e8ee4a41b439c"
+# Baseline review 2026-11-02: the note records prerequisite regions carrying
+# the enclosing carrier's conservative history instead of re-admitting payloads.
+# Regional payloads return through with_identity_result, retaining its existing
+# callback-sensitive publication checks; this is a metadata-boundary change.
+digest = "442fe89c0ec2fc603e7eeb88b73e69ad9e1b7e60"
 
 [[section.note.scope]]
 path = "crates/idenso/src/tensor/simplification.rs"
@@ -977,7 +1006,11 @@ anchor = "pub struct AlgebraSettings {"
 # Reviewed 2026-10-23: unchanged here; the shared color seed policy no longer
 # recurses through arithmetic, and disabled components are color algebra again.
 # Reviewed 2026-10-23: The planner threads coefficient-collection permission into both color and Dirac kernels.
-digest = "3a0628ea619e65a4c7e10e270e7a4aa29fd4e07b"
+# Baseline review 2026-11-02: planner entry now requires published index history
+# instead of lazy admission, as documented in the shared algebra precondition.
+# The matching test assertion follows that owner; identity settings and scheduling
+# are unchanged.
+digest = "49ae6d4398bf4decc931f01d09ef49e69f64996f"
 
 [[section.note.scope]]
 path = "crates/idenso/src/tensor/simplification/observation.rs"
@@ -990,7 +1023,11 @@ anchor = "pub(crate) struct DomainObservations {"
 # callback-sensitive validation. The note distinguishes admitted facts from explicit
 # component execution.
 # Reviewed 2026-10-16: The architecture records completed observation sharing during the initial walk while every occurrence is scanned and counted.
-digest = "27c32f90af7aeed625ec0def5ca8f727dd7e3477"
+# Baseline no-impact review 2026-11-02: only tests change. The cached-observation
+# fixture supplies retained history, and the external-incidence fixture explicitly
+# admits its input before expecting no hidden connection. Production observation
+# and sharing code is unchanged; no new performance evidence is claimed.
+digest = "db5acfbe8224f247a5e2d82845c2d5ee4a67c57c"
 
 
 [[section.note.scope]]
@@ -1036,7 +1073,10 @@ anchor = "    fn simplify_product("
 # captured summand dummies; metrics and disabled traces are color algebra as before
 # the retained-component change, and row prerequisites follow the planner's status rule.
 # Reviewed 2026-10-23: Certified color rows and final weights use the shared collector; external metrics certify terminal rows, metric-only sums remain arithmetic, and local facts are cleared before planner publication.
-digest = "34dfbdb59da43b47aa9966b4ae168452ddaa554d"
+# Baseline review 2026-11-02: final color polynomial materialization now passes
+# the retained occurrence history into the result constructor, matching the note's
+# authoritative-metadata contract. Color identities and completion policy are unchanged.
+digest = "89c3f56778f30e69035d8c918fc491669d85ea64"
 
 [[section.note.scope]]
 path = "crates/idenso/src/tensor/collection/collected.rs"
@@ -1049,7 +1089,10 @@ anchor = "pub(crate) struct CollectedOutput"
 # Reviewed 2026-10-23: Documented the scoped doc-hidden temporary-variable
 # exception; Dirac regressions pin shared exact complex collection and typed-zero
 # cancellation. The shared owner and architecture description remain unchanged.
-digest = "de3aeb2b35712816908c6f6490d548e46cb864ba"
+# Baseline review 2026-11-02: the unit coefficient supplies empty history and
+# the refusal fixture preserves its source history under explicit constructor
+# ownership. Polynomial arithmetic and refusal gates are unchanged.
+digest = "ca8c5cb4f9dd9ee5152cbb94df6c8d919e098c35"
 
 [[section.note.scope]]
 path = "crates/idenso/src/tensor/collection.rs"
@@ -1059,7 +1102,11 @@ end_anchor = "    fn collection_observations("
 # Reviewed 2026-10-23: the two-argument finalizer combines completed rows;
 # source-origin bookkeeping is removed with the bespoke color arithmetic.
 # Callback timing, immutable spectators and frontier gates remain unchanged.
-digest = "fea694882a4b5be3160175636d9ecaeaa1b6ecfe"
+# Baseline review 2026-11-02: the note records published-input requirements,
+# independently scoped parser-lowered power arms in both collection modes,
+# retained subgraph history and scalar-local versus repeated public power uses.
+# The existing range and frontier/refusal boundaries remain; no new physics claim.
+digest = "8f078f8c9d4f7fd1fea495180aa1185894b5cfa3"
 
 [[section.note]]
 id = "idenso-form-color-dirac-source-map"
@@ -1195,7 +1242,10 @@ anchor = "pub struct Vakint {"
 # Reviewed 2026-10-20: Saved FORM index dimensions retain the caller epsilon convention
 # so exact vector-map sources match. Existing registered-metadata parsing, conflicting
 # tag refusal, and backend algebra are unchanged.
-digest = "c2e489a41ac7a123e652811ebe421f3e0852fd1c"
+# No-impact attestation 2026-11-02 against 501183a5: only the Python stub
+# generator's project-root lookup and imports changed for relocated workspaces.
+# Vakint topology, evaluation, precision and backend contracts are unchanged.
+digest = "37ed1a3aee0577c3bd7322568b6fba841f4e1518"
 
 [[section.note.scope]]
 path = "crates/vakint/src/topologies.rs"
@@ -1642,7 +1692,10 @@ anchor = "ci-checks-and-upload:"
 # No architecture impact 2026-10-10: remove recipes for absent audit/deny
 # checks and correct the dependency-profile comment; selected checks, uploads,
 # and runtime producer boundaries are unchanged.
-digest = "0f8a76ea61d80a7847d9e8d16756e9914e245ae2"
+# Reviewed 2026-11-02 against 501183a5: ci.typ documents executable licensed
+# runners, per-crate test dispatch and the read-only upload preview. Building or
+# uploading a runner prepares inputs; each runtime invocation executes its checks.
+digest = "ef1bc3ca6abdc9ec7cd6c08f7d36893dd4a6dd64"
 
 [[section.note]]
 id = "feynkit-merge-readiness"
@@ -1680,7 +1733,11 @@ symbol = "DomainObservations::finish_observation"
 anchor = "fn finish_observation("
 # Reviewed 2026-10-16: completed duplicate scopes share immutable observations;
 # every occurrence remains inspected and counted. Massif and RSS evidence is recorded.
-digest = "27c32f90af7aeed625ec0def5ca8f727dd7e3477"
+# Baseline no-impact review 2026-11-02: only observation tests change to supply
+# retained history and explicitly admit the external-incidence fixture before
+# its assertion. Production sharing is unchanged, so the historical readiness
+# measurements are preserved without claiming fresh performance qualification.
+digest = "db5acfbe8224f247a5e2d82845c2d5ee4a67c57c"
 
 [[section.note.scope]]
 path = "crates/feynkit-generator/src/grouping.rs"
@@ -1776,7 +1833,10 @@ end_anchor = "# Exercise the embedded Typst watcher"
 # terminal publication boundaries are retained.
 # Reviewed 2026-10-15: The live registry remains the source of authored note/product
 # inputs. Historical CI experiments defer current policy to ci.typ.
-digest = "a6e8d348f30ef64d9c936604c62dcb59ca635d1a"
+# No-impact attestation 2026-11-02 against 501183a5: this producer range only
+# changes a comment to describe executable runners inheriting the user's license;
+# registry selection and reusable Cargo artifact construction are unchanged.
+digest = "2f0895ef6312939b1fd6a722f7a4be6df409d780"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"
@@ -1874,7 +1934,11 @@ end_anchor = "workspacePackageExtraSourceRootsForSourcePackages ="
 # Reviewed 2026-10-25: browser CI declares native fixture and browser-script source
 # ownership, with pinned Chromium/Playwright/AnyWidget/Marimo runtime tools. The
 # separate nextest group reuses per-crate producers; ci.typ records this added coverage.
-digest = "5bb33f0636444ee9a41e219d9b0c9d7a0afccdbb"
+# Baseline no-impact review 2026-11-02: the selected range only adds
+# linnet-render-py's iframe.js to production assets and Spynso's evaluator_horner.py
+# plus FeynKit's installed_squared_amplitude_display.py to compile-time test inputs.
+# The documented source ownership and producer/runtime boundaries are unchanged.
+digest = "5efb7f8ae06edd47459e3f4e32cc623472a7942b"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"
@@ -1904,7 +1968,14 @@ end_anchor = "\nin\n{\n  inherit"
 # No-impact attestation 2026-10-24: the pinned font bundle is copied into the
 # installed package only in the terminal documentation test script, after wheel
 # builds; reusable Cargo/crane producer inputs and cache boundaries are unchanged.
-digest = "a36c6354ece22a926dc6efb1ac634895402cf522"
+# Reviewed 2026-11-02 against 501183a5: the current runtime boundary and Pages
+# sections describe invoking-user execution, runtime licensing/channel/provenance,
+# fresh local renders and publication checks over reusable compiled inputs.
+# Earlier terminal derivations and measurements are explicitly historical.
+# No-impact review 2026-11-02 against e32b14a2: the terminal resource copy
+# makes only its copied directories owner-writable for runtime cleanup. Pinned
+# resource bytes, installed-package discovery and producer ownership are unchanged.
+digest = "46c2a94622bd5edd53e04db1f4bd04a4a771a5b8"
 
 [[section.note.scope]]
 path = "nix/rust-workspace.nix"

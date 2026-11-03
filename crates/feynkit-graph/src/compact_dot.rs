@@ -360,6 +360,11 @@ impl FeynmanDiagram {
             }
         }
         let (mut diagram, source_map) = builder.finalize()?;
+        if attributes.contains_key("projector") && !attributes.contains_key("projector_interface") {
+            // No logical order was declared. Use named algebra order in the
+            // final chart after checked transport has retained index history.
+            diagram.projector = diagram.projector.canonicalize_named_interface();
+        }
         if !loop_edges.is_empty() {
             if loop_edges.keys().copied().ne(0..loop_edges.len()) {
                 return Err(DiagramError::InvalidLoopMomentumBasis(
@@ -480,6 +485,134 @@ impl FeynmanDiagram {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use spenso::structure::abstract_index::AbstractIndex;
+    use spenso::structure::partial::PartialIndex;
+    use spenso::structure::representation::LibraryRep;
+    use spenso::structure::slot::IsAbstractSlot;
+    use spenso::tensor_symbol;
+    use symbolica::function;
+
+    #[test]
+    fn compact_projector_layout_distinguishes_inference_from_declaration() {
+        let model = Arc::new(
+            Model::from_json(include_str!(
+                "../../feynkit-model/tests/fixtures/scalars_2p_3p.json"
+            ))
+            .unwrap(),
+        );
+        let input = r#"digraph projector_bubble {
+            final_state="scalar_1,scalar_1"
+            ext [style=invis]
+            ext -> a:5 [id=0 particle=scalar_1 is_cut=7]
+            a:1 -> b:2 [id=1 particle=scalar_1 lmb_id=0]
+            b:0 -> ext [id=2 particle=scalar_1 is_cut=7]
+            a:3 -> b:4 [id=3 particle=scalar_1]
+        }"#;
+        let rep = Minkowski {}.new_rep(4).cast::<LibraryRep>();
+        let index = |owner| AbstractIndex::Named(symbols::hedge_index().into(), owner, 1);
+        let slot = |owner| rep.slot(PartialIndex::Explicit(index(owner)));
+        let slot_atom = |owner| rep.slot::<AbstractIndex, _>(index(owner)).to_atom();
+        let head = tensor_symbol!("compact_projector_order");
+        let source_owners = [0, 5];
+        let payload = function!(head, slot_atom(0), slot_atom(5));
+        for declaration in [None, Some([0, 1]), Some([1, 0])] {
+            let mut parsed = DotGraph::from_string(input).unwrap();
+            parsed
+                .global_data
+                .statements
+                .insert("projector".into(), payload.to_canonical_string());
+            if let Some(order) = declaration {
+                let interface = NumeratorInterface(
+                    order
+                        .into_iter()
+                        .map(|position| slot_atom(source_owners[position]))
+                        .collect(),
+                );
+                parsed
+                    .global_data
+                    .statements
+                    .insert("projector_interface".into(), interface.to_json());
+            }
+            let (diagram, source_map) =
+                FeynmanDiagram::from_compact_dot(Arc::clone(&model), parsed.clone()).unwrap();
+            // Source h0 belongs to the outgoing leg, h5 to the incoming leg.
+            // Resolve their finalized endpoints independently of tensor transport.
+            let target_owners = [
+                DiagramHalfEdge {
+                    edge: source_map.edges()[2],
+                    endpoint: DiagramEndpoint::Source,
+                },
+                DiagramHalfEdge {
+                    edge: source_map.edges()[0],
+                    endpoint: DiagramEndpoint::Target,
+                },
+            ]
+            .map(|half| diagram.half_edge_id(half).unwrap().0);
+            assert_eq!(target_owners, [5, 0]);
+            let target_ports = target_owners.map(slot);
+            let expected_payload = function!(
+                head,
+                slot_atom(target_owners[0]),
+                slot_atom(target_owners[1])
+            );
+            let expected_order = declaration.unwrap_or([1, 0]);
+            let expected_ports = expected_order.map(|position| target_ports[position]);
+            assert_eq!(diagram.projector().expression(), &expected_payload);
+            assert_eq!(
+                diagram.projector().structure().logical_slots(),
+                expected_ports
+            );
+            if declaration.is_none() {
+                assert_eq!(diagram.projector().presentation_atom(), expected_payload);
+                let (exported, interface) = NumeratorInterface::export(diagram.projector());
+                assert!(
+                    interface.is_some(),
+                    "leaf syntax alone has a different logical order"
+                );
+                let restored = NumeratorInterface::admit(exported, interface).unwrap();
+                assert!(restored.same_value(diagram.projector()));
+            } else {
+                // A declared ranked zero has no payload from which to recover order.
+                parsed
+                    .global_data
+                    .statements
+                    .insert("projector".into(), "0".into());
+                let (zero, _) =
+                    FeynmanDiagram::from_compact_dot(Arc::clone(&model), parsed).unwrap();
+                assert!(zero.projector().is_zero());
+                assert_eq!(zero.projector().structure().logical_slots(), expected_ports);
+            }
+        }
+
+        // An undeclared positional interface must bypass named-axis sorting.
+        let mut parsed = DotGraph::from_string(input).unwrap();
+        let payload = function!(head, rep.to_symbolic([]), slot_atom(0));
+        let source = NumeratorInterface::admit(payload.clone(), None).unwrap();
+        parsed
+            .global_data
+            .statements
+            .insert("projector".into(), payload.to_canonical_string());
+        let (diagram, source_map) = FeynmanDiagram::from_compact_dot(model, parsed).unwrap();
+        let target_owner = diagram
+            .half_edge_id(DiagramHalfEdge {
+                edge: source_map.edges()[2],
+                endpoint: DiagramEndpoint::Source,
+            })
+            .unwrap()
+            .0;
+        let mut expected_ports = source.structure().logical_slots();
+        expected_ports[1] = slot(target_owner);
+        let expected_payload = source
+            .expression()
+            .replace(slot_atom(0).to_pattern())
+            .with(slot_atom(target_owner));
+        assert_eq!(
+            diagram.projector().structure().logical_slots(),
+            expected_ports
+        );
+        assert_eq!(diagram.projector().structure().open_positions(), [0]);
+        assert_eq!(diagram.projector().expression(), &expected_payload);
+    }
 
     #[test]
     fn compact_final_state_alternatives_preserve_the_union_of_physical_cuts() {

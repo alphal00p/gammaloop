@@ -300,18 +300,9 @@
       "checks.${system}.gammaloop-check" = ["packages.${system}.cargoCheckArtifacts"];
       "checks.${system}.gammaloop-clippy" = ["packages.${system}.cargoCheckArtifacts"];
       "checks.${system}.gammaloop-doc" = ["packages.${system}.cargoCheckArtifacts"];
-      "checks.${system}.gammaloop-doctest" = [
-        "packages.${system}.cargoCheckArtifacts"
-        (cratePackageDepsAttr "gammaloop-api")
-        "packages.${system}.gammaloop-render-data"
-      ];
       "packages.${system}.alphal00p-docs-pages" = ["packages.${system}.alphal00p-docs-cargo-artifacts"];
       "packages.${system}.alphal00p-docs-snapshot-fixture" = ["packages.${system}.alphal00p-docs-cargo-artifacts"];
       "packages.${system}.alphal00p-docs-cargo-artifacts" = [(cratePackageDepsAttr "gammaloop-api")];
-      "checks.${system}.alphal00p-docs" = [
-        "packages.${system}.alphal00p-docs-pages"
-        "packages.${system}.alphal00p-docs-snapshot-fixture"
-      ];
       "packages.${system}.workspaceBuildArtifacts" = ["packages.${system}.cargoArtifacts"];
       "checks.${system}.gammaloop-nextest-binaries" = nextestBinaryChecks;
       "packages.${system}.linnest-wasm" = ["packages.${system}.linnestWasmCargoArtifacts"];
@@ -368,8 +359,6 @@
   doNotBuild = unique (
     [
       "checks.${system}.gammaloop"
-      "checks.${system}.gammaloop-doctest"
-      "checks.${system}.gammaloop-nextest"
       "checks.${system}.gammaloop-nextest-binaries"
       "packages.${system}.default"
       "packages.${system}.crane-ci-prebuild"
@@ -377,7 +366,6 @@
       "packages.${system}.gammaloop-llvm-coverage"
       "packages.${system}.nix-ci-check-gammaloop-nextest"
     ]
-    ++ map (group: "checks.${system}.gammaloop-nextest-${group.name}") groups
     ++ [
       (crateTestBinaryAttr workspaceHackPackage)
       (workspacePackageGraphAttr workspaceHackPackage)
@@ -462,6 +450,20 @@ in {
     workspaceTestComponentDependencyRepresentativesFor
     workspaceTestDependencyComponentRepresentatives
     ;
+  publication = {
+    local = onlyBuild;
+    # The docs runner embeds flake metadata that differs in tracked-path previews.
+    sourceRevisionDependent = ["packages.${system}.nix-ci-check-alphal00p-docs"];
+    producers = builtins.filter (job: !(builtins.elem job primaryChecks)) onlyBuild;
+    github = [
+      "packages.${system}.alphal00p-docs-cargo-artifacts"
+      "packages.${system}.crane-ci-prebuild"
+      "packages.${system}.gammaloop"
+      "packages.${system}.gammaloop-python-module"
+      "checks.${system}.gammaloop-nextest-binaries"
+    ];
+    githubMaxNarBytes = 8 * 1024 * 1024 * 1024;
+  };
   configuration = {
     systems = [system];
     inherit onlyBuild;

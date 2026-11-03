@@ -3,6 +3,7 @@ use clap::ValueEnum;
 use gammaloop_tracing_filter::{GammaDisplayFormat, GammaLogFilter};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use std::env;
 use std::{path::PathBuf, sync::OnceLock};
 use tracing::level_filters::LevelFilter;
 use tracing_appender::non_blocking::WorkerGuard;
@@ -273,11 +274,13 @@ fn parse_log_filter_or_default(
 }
 
 fn test_log_dir() -> PathBuf {
-    std::env::var(ENV_TEST_LOG_DIR)
+    env::var_os(ENV_TEST_LOG_DIR)
         .map(PathBuf::from)
-        .unwrap_or_else(|_| {
-            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .join("../..")
+        .unwrap_or_else(|| {
+            env::var_os("GAMMALOOP_WORKSPACE_ROOT")
+                .or_else(|| env::var_os("NEXTEST_WORKSPACE_ROOT"))
+                .map(PathBuf::from)
+                .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.."))
                 .join("target/test-logs")
         })
 }

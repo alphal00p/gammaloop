@@ -59,7 +59,6 @@ env:
   # closure separate from the broader Nix producer set.
   HESTIA_CACHE_VERSION_SALT: gammaloop-docs-no-closure-v1
   HESTIA_DRAIN_TIMEOUT: 7200
-  SYMBOLICA_LICENSE: ${{ secrets.SYMBOLICA_LICENSE_SIGNED || 'GAMMALOOP_USER' }}
 
 jobs:
   build:
@@ -158,9 +157,11 @@ jobs:
           done
           git checkout --detach "refs/tags/$SNAPSHOT_TAG"
           if grep -q '"alphal00p-docs-pages"' flake.nix; then
-            echo "cacheable=true" >> "$GITHUB_OUTPUT"
+            program=$(nix eval --impure --json .#packages.x86_64-linux.alphal00p-docs-pages \
+              --apply 'package: package.meta.mainProgram or null')
+            echo "runner=$(jq '. == "alphal00p-docs-pages"' <<< "$program")" >> "$GITHUB_OUTPUT"
           else
-            echo "cacheable=false" >> "$GITHUB_OUTPUT"
+            echo "runner=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Refresh publication catalogue
@@ -173,9 +174,10 @@ jobs:
       - id: docs
         name: Build all five sites
         env:
-          CACHEABLE_SNAPSHOT: ${{ steps.snapshot_source.outputs.cacheable }}
+          SNAPSHOT_RUNNER: ${{ steps.snapshot_source.outputs.runner }}
           CHANNEL: ${{ steps.release.outputs.channel }}
           SNAPSHOT_TAG: ${{ steps.release.outputs.snapshot_tag }}
+          SYMBOLICA_LICENSE: ${{ secrets.SYMBOLICA_LICENSE_SIGNED || 'GAMMALOOP_USER' }}
         run: |
           set -euo pipefail
           build_started=$SECONDS
@@ -191,23 +193,27 @@ jobs:
 
           if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ] \
             && [ "$CHANNEL" = snapshot ] \
-            && [ "$CACHEABLE_SNAPSHOT" = false ]; then
-            # Historical five-product tags predate the cacheable Pages output.
+            && [ "$SNAPSHOT_RUNNER" = false ]; then
+            # Historical tags lack the runtime launcher. Render from their
+            # source as the invoking user, never through a licensed derivation.
             nix develop --command \
               just docs-site all "$CHANNEL" "$SNAPSHOT_TAG" target/alphal00p-docs
             docs_path=$PWD/target/alphal00p-docs
             cargo_producer=historical-build
           else
             nix_log=$RUNNER_TEMP/alphal00p-docs-nix.log
-            docs_path=$(
-              nix build \
+            docs_runner=$(
+              env -u SYMBOLICA_LICENSE -u SYMBOLICA_LICENSE_PATH \
+                -u SYMBOLICA_LICENSE_SIGNED -u SYMBOLICA_LICENSE_FILE nix build \
                 --impure \
-                --no-link \
+                --out-link "$RUNNER_TEMP/alphal00p-docs-runner" \
                 --print-build-logs \
                 --print-out-paths \
                 .#packages.x86_64-linux.alphal00p-docs-pages \
                 2> >(tee "$nix_log" >&2)
             )
+            docs_path=$RUNNER_TEMP/alphal00p-docs
+            "$docs_runner/bin/alphal00p-docs-pages" "$docs_path"
             if grep -Eq "building '.+-alphal00p-docs-cargo-[^']+\\.drv'" "$nix_log"; then
               cargo_producer=rebuilt
             elif grep -Eq "copying path '.+-alphal00p-docs-cargo-[^']+'" "$nix_log"; then

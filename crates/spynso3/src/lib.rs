@@ -4,6 +4,13 @@ pub use linnet_render_py::data_assets;
 #[macro_use]
 mod documentation;
 
+#[cfg(feature = "python_stubgen")]
+use pyo3_stub_gen::{Result as StubResult, StubInfo};
+#[cfg(feature = "python_stubgen")]
+use std::env;
+#[cfg(feature = "python_stubgen")]
+use std::path::PathBuf;
+
 use std::ops::Deref;
 
 use eyre::eyre;
@@ -2150,11 +2157,13 @@ submit! {
 
 /// Gather the unified Spenso and Idenso Python API registered by Spynso3.
 #[cfg(feature = "python_stubgen")]
-pub fn stub_info() -> pyo3_stub_gen::Result<pyo3_stub_gen::StubInfo> {
-    let mut info = pyo3_stub_gen::StubInfo::from_project_root(
-        "symbolica".to_owned(),
-        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")),
-    )?;
+pub fn stub_info() -> StubResult<StubInfo> {
+    // A caller can be another crate's test binary; its manifest directory is not ours.
+    let project_root = env::var_os("GAMMALOOP_WORKSPACE_ROOT")
+        .or_else(|| env::var_os("NEXTEST_WORKSPACE_ROOT"))
+        .map(|root| PathBuf::from(root).join("crates/spynso3"))
+        .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")));
+    let mut info = StubInfo::from_project_root("symbolica".to_owned(), project_root)?;
     if let Some(module) = info.modules.get_mut("symbolica.community.tensor") {
         SpensoModule::prepare_stub_module(module);
     }

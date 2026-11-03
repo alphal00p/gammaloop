@@ -174,14 +174,14 @@ maintained in
   exact payloads. `file.*` fields are hidden from the display sink and written
   as structured JSONL logfile fields with the routing prefix stripped
   (`file.expr` is stored as `expr`).
-- To capture a focused test trace to file while keeping stderr quiet, run for
-  example:
+- To capture a focused test trace to file while keeping stderr quiet, explicitly
+  select Cargo so the test inherits the logging environment and local log path:
   ```bash
   GL_DISPLAY_FILTER=off \
   GL_LOGFILE_FILTER='[{#uv,#integrated,#vakint,#trace}]=debug' \
   GL_TEST_LOG_DIR=/tmp/gammaloop-test-logs \
-  cargo test -p gammalooprs --test test_renormalization --profile dev-optim \
-    finite_part_ghost_3loop_renormalization_sum_origin_mwe -- --ignored --nocapture
+  just profile=dev backend=cargo test gammalooprs --test test_renormalization \
+    --nocapture finite_part_ghost_3loop_developed
   ```
 - Use `GL_ALL_LOG_FILTER` only when display and logfile should receive the same
   filter. Otherwise prefer `GL_DISPLAY_FILTER` and `GL_LOGFILE_FILTER` so large
@@ -561,7 +561,7 @@ validation performed and any checks that could not be completed.
 
 ==== Clippy And Validation
 
-- Run checks appropriate to the affected code. Use `cargo check` for quick
+- Run checks appropriate to the affected code. Use `just check` for quick
   feedback when useful; it is not a prerequisite for every build or test run.
 - Follow Clippy diligently. Run the repository's Clippy checks for relevant
   Rust changes with the pinned toolchain and configured lint set. Address
@@ -576,8 +576,11 @@ validation performed and any checks that could not be completed.
   weaken lint settings merely to make checks pass.
 
 === Python
+<python-style>
 
-- Use the ruff formatter.
+- Use the Ruff formatter.
+- Use the native wheel commands under
+  #link("#native-python")[Native Python packaging] for PyO3 development.
 
 === Tests
 
@@ -588,12 +591,47 @@ validation performed and any checks that could not be completed.
   required by an explicitly requested behavior change.
 - During development, run checks relevant to the change. Before final review,
   prepare and upload the selected CI artifacts; NixCI runs the full suite.
-- Install `cargo-nextest` 0.9.137 or newer. The repository configuration
-  enforces this minimum; update an existing installation with
+- Without Nix, install `cargo-nextest` 0.9.137 or newer. The repository
+  configuration enforces this minimum; update an existing installation with
   `cargo nextest self update`.
 - Rust integration tests live in `tests/` with shared fixtures in
   `tests/resources/`.
-- Use `cargo nextest` via `just test TEST_NAME` for targeted integration runs.
+- Use `just test CRATE [NEXTEST_ARGS...]`, for example `just test spenso` or
+  `just test gammaloop-integration-tests --test test_runs`.
+  Compilation uses the shared build profile (default `ci-optim`);
+  `--cargo-profile` selects a Cargo profile and `--profile` selects a Nextest
+  runtime profile.
+- With Nix available, tests reuse per-crate CI archives selected and validated
+  by the Nix workspace graph. Explicit features outside the cached contexts
+  are rejected before building. Runtime filters do not invalidate Nix archives.
+  Nix builds or substitutes archives and a runner, then the runner executes
+  tests as the invoking user outside the builder on every invocation. Building
+  a runner alone does not run tests or establish a passing result.
+- Cargo uses one Nextest invocation with `--workspace` or repeated `-p`
+  selections, normal Cargo feature flags and `--lib` / `--test` selectors.
+  Default features apply unless explicitly changed. Generated Nix contexts do not
+  constrain Cargo selection. One invocation avoids repeated compilation across
+  per-package contexts and produces one JUnit report for the selected tests.
+  Python API tests are opt-in through `just test-python-api`, which explicitly
+  enables `python-api-tests`; Cargo requires the prepared Python environment
+  described under #link("#api-python-interop")[API / Python Interop].
+- `just test-all` and `just test-ci` retain whole-workspace selection.
+  `just test-cargo CRATE` or `just backend=cargo test CRATE` explicitly selects
+  Cargo; `just test-nix CRATE` and `just test-nix-all` remain Nix-only commands.
+- A per-crate runner can also be invoked directly, with a local report directory:
+  ```bash
+  nix run .#test-linnest -- target/test-reports/linnest -E 'test(layout)'
+  ```
+  The general form is `nix run .#test-CRATE -- REPORT_DIR NEXTEST_ARGS...`.
+  `nix build .#test-CRATE` prepares that executable; reports are produced only
+  when it runs. With Nix, `just test` prints its fresh directory under
+  `target/test-reports/`.
+- After changing CI feature contexts, run `just ci-update`.
+  `just development-check` runs shell-command, wheel and publication regressions;
+  `just test-nix-runner`
+  exercises real Nix archives, runtime selection and reuse. The separate host
+  command `just test-dyndrv` exercises real dyndrv local patches, workspace edits
+  and store reuse; it cannot run inside a nested Nix build sandbox.
 - Pass emulated libtest arguments after `--`, for example
   `just test_gammaloop -- --skip TEST_NAME`.
 - Put targeted unit tests next to the implementation they exercise.
@@ -681,8 +719,74 @@ from the rendered PDF.
 - Rust benches live under `crates/gammalooprs/benches/`.
 
 == Common Commands
+<development-commands>
 
-- Build Rust CLI in dev-optim:
+Run native tests, builds, checks, Clippy, Rustdoc, CLI commands and PyO3 packaging
+through the root Just recipes. The default `backend=auto` selects
+Nix compilation and runtime runners whenever `nix` is available, or ordinary
+Cargo/Maturin otherwise. `scripts/develop.sh` selects the backend and prints
+`Backend: nix` or `Backend: cargo` before starting backend tooling. Cargo and
+Nextest run directly without a Python dispatcher. The Nix path bootstraps pinned
+shell tools from `flake.lock`, then `scripts/develop_nix.sh` invokes the native
+build derivations and test runners. Python owns wheel packaging, cache inspection
+and the opt-in dyndrv source and worker lifecycle described below. Rust command
+arrays remain shared in the shell. A failed Nix command is never retried through
+Cargo.
+`just backend=cargo COMMAND` explicitly selects host Cargo/Maturin tools. Use
+`nix develop -c just backend=cargo COMMAND` when that iteration needs the pinned
+toolchain and native libraries.
+
+The shared profile in `.config/build-profile` is `ci-optim`, matching CI.
+CLI, crate builds, checks, tests and Python wheels all use it by default.
+Select a different profile consistently with `just profile=dev COMMAND` or
+`just profile=release COMMAND`; `GAMMALOOP_BUILD_PROFILE` provides the same
+override for direct script invocations and nested commands. Explicit
+`--profile PROFILE` on builds/wheels, `--cargo-profile PROFILE` on tests and
+`--release` override that default. Nextest's `--profile` remains its runtime
+policy selection. Extension-module linking and Python embedding retain their
+distinct required features; unifying profiles does not combine those modes.
+
+The Nix shell backend snapshots tracked file paths using JJ or Git and copies their
+live contents, including uncommitted edits. Ignored build output and virtual
+environments do not enter this Nix source snapshot; `target/` and `.venv/` are
+excluded explicitly. Add new files to version control before relying on them
+as build inputs. Temporary snapshots remain alive while commands use them and
+are removed afterward.
+
+Automatic dispatch covers these native commands. Browser/Pyodide packaging,
+the separate Tydenso WASM workspace, benchmarks, and specialized documentation
+exporters, catalogs and Vakint generators retain their existing workflows,
+including raw Cargo commands. `just fmt` and `just clean` operate locally on
+sources and build output with the selected or bootstrap-provided tooling;
+they do not request Nix workspace artifact builds.
+
+From the feature workspace root, use `nix develop -c just COMMAND` when you need
+the pinned Just and development tools. Where the parent directory has an allowed
+shared `.envrc`, use `direnv exec .. nix develop -c just COMMAND` in noninteractive
+shells so its environment is loaded. Licensed runtime commands preserve a
+nonempty exported `SYMBOLICA_LICENSE`, then use `SYMBOLICA_LICENSE_SIGNED` if
+available, then read `${XDG_CONFIG_HOME:-$HOME/.config}/symbolica/license`.
+Resolve the license before changing the runtime home directory. Keep its value
+out of logs, version control, Nix evaluation and derivation attributes.
+
+Nix runners execute licensed Nextest tests, doctests and documentation as the
+invoking user in private source, home, cache and temporary directories. They set
+`GAMMALOOP_WORKSPACE_ROOT`, `NEXTEST_WORKSPACE_ROOT` and `INSTA_WORKSPACE_ROOT`
+for that invocation so fixture and snapshot lookup uses the relocated source.
+Keep these relocation overrides out of persistent shell or direnv configuration:
+direct stub generators also honor them, so stale values can redirect source
+lookup. Runtime fixture helpers use these roots instead of assuming a compiled-in
+builder path still exists. Compiled inputs remain reusable, while each runtime
+invocation performs its own work and writes results to the requested local
+directory.
+
+- Build or test a selected crate (builds default to `ci-optim`):
+  ```bash
+  just build spenso
+  just test linnest -E 'test(layout)'
+  just build-cargo spenso --profile dev
+  ```
+- Build Rust CLI with the shared profile:
   ```bash
   just build-cli
   ```
@@ -690,11 +794,11 @@ from the rendered PDF.
   ```bash
   just build-cli-abi
   ```
-- Build Python API bindings:
+- Build and install Python API bindings into an existing virtual environment:
   ```bash
   just build-api
   ```
-- Build Python API bindings with stable ABI:
+- Build and install Python API bindings with stable ABI:
   ```bash
   just build-api-abi
   ```
@@ -702,6 +806,12 @@ from the rendered PDF.
   ```bash
   just fmt
   just clippy
+  ```
+- Check, build Rustdoc, or run the CLI through the same command entry point:
+  ```bash
+  just check
+  just doc
+  just run --help
   ```
 - If you run into a macOS linking issue complaining about a missing `__emul...`
   symbol, try building with `EXTRA_MACOS_LIBS_FOR_GNU_GCC=T`; see
@@ -711,6 +821,234 @@ from the rendered PDF.
 The root `justfile` keeps build and lint commands. Test, NixCI and drawing recipes
 are imported from `just/tests.just`, `just/ci.just` and `just/drawing.just`; run all
 commands from the repository as before. Use `just --list` to see them.
+
+`just build CRATE [CARGO_ARGS...]` accepts profile, feature and target selectors.
+The ordinary `build-cli` variants use the shared profile, `ufo_support`
+and optional `python_abi`; explicitly named release commands select `release`.
+`build-cli-no-pyo3` disables Python embedding.
+Nix-built binaries are atomically copied into `target/PROFILE/`
+(`target/debug/` for `dev`) with fresh modification times. Keep their per-binary
+GC roots in `target/nix/bin/PROFILE/BINARY` while using those executables: copied
+wrappers and native libraries can still refer to the Nix store. Installing a
+different binary retains the roots of previously installed binaries.
+The UFO-enabled Nix CLI uses the pinned Python 3.13 runtime and renderer data;
+Python wheels use the interpreter selected for packaging.
+`./gammaloop` selects the newest available `release`, `dev-optim` or `ci-optim`
+binary, falling back to `debug` only when none is available. Select a profile
+explicitly with
+`--release`, `--dev-optim`, `--ci-optim` or `--debug`.
+
+=== Opt-in cargo-dyndrv development
+<dyndrv-development>
+
+Select `backend=dyndrv` explicitly to use the stock-Cargo backend from
+`lcnbr/cargo-dyndrv`, pinned in `flake.lock` at
+`c1935d6314ea41013aea17a330d218efa35df6c7`. Auto dispatch never selects it:
+
+```bash
+just backend=dyndrv check
+just backend=dyndrv test linnest -E 'test(layout)'
+just profile=dev backend=dyndrv build spenso
+just backend=dyndrv clippy
+just backend=dyndrv run --help
+just backend=dyndrv list-all-tests
+```
+
+The shared shell constructs the same Cargo/Nextest arguments as `backend=cargo`.
+The pinned fork supplies `cargo-dyndrv-worker`, source staging, store lifecycle,
+compiler patches and generic regression suites. GammaLoop supplies its compiler
+environment, runtime-variable policy and wheel export hook. `nix/dyndrv.nix`
+also applies `nix/patches/dyndrv-native-run-path.patch` so native run/test children
+use the prepared runtime tool path. Its bootstrap
+prepares tools and lockfile vendoring directly from `flake.lock`, without
+evaluating `nix/rust-workspace.nix` or the
+committed CI workspace graph. `backend=auto` and the existing NixCI build and
+upload paths are unchanged. Rust API documentation and native Linux Python wheels
+are supported; `just ci-upload-preview` still uses `backend=nix`. Rustdoc executes as
+the invoking user, with its dependencies built through the immutable compiler
+bridge. Its HTML is exported to `target/doc/`; documentation execution is recorded
+separately from cached compiler delivery. Open the exported HTML on the host;
+Cargo's `--open` still refers to the namespace path. Export merges the Cargo doc
+tree, so obsolete pages can remain until the documentation output is cleaned.
+
+Cargo discovers workspace members, path dependencies and local patches, including
+external workspaces and their inherited settings. Change ordinary Cargo manifests
+or Cargo configuration to point at a local Symbolica checkout; no flake source
+list needs updating. Commands use `--locked`: update `Cargo.lock` through the
+normal Cargo workflow first when a patch or workspace change requires it. Each
+local source root must belong to JJ or Git. Staging copies live selected files,
+including dirty files and new nonignored modules, preserves unchanged content's
+timestamps, rewrites Cargo paths and prunes deleted files. Build output,
+virtual environments and credentials are excluded. Source symlinks must resolve
+within the declared, selected source trees.
+
+`just backend=dyndrv check` bypasses the CI-specific immutable Symbolica source
+pin guard so local forks can be checked; ordinary backends retain that guard.
+
+This backend requires Linux, a non-root user and enabled unprivileged user/mount
+namespaces. A Clan-managed `/etc/cargo-dyndrv/store.json` selects the shared system
+Nix daemon and store. The Clan `cargo-dyndrv-store` role enables content-addressed
+derivations and creates the administrator-owned `/build/cargo-dyndrv` mount point.
+Clients use equal logical source paths across UIDs, with private physical stages,
+targets and incremental working state. Ordinary users remain untrusted Nix users;
+the integration does not add them to `trusted-users`.
+
+Without that configuration, it uses a same-user private daemon and store.
+`CARGO_DYNDRV_STORE=private` explicitly selects this isolated mode;
+`CARGO_DYNDRV_STORE=system` selects the system daemon, which requires the Clan
+configuration to be active. `CARGO_DYNDRV_STORE_CONFIG` selects another
+configuration file. State defaults to
+`${XDG_STATE_HOME:-$HOME/.local/state}/cargo-dyndrv`; set
+`CARGO_DYNDRV_STATE` to select another private state directory. The worker
+requires owned directories with mode `0700`, outside the Cargo source roots.
+Use the `CARGO_DYNDRV_*` settings above for store selection and worker state;
+legacy `GAMMALOOP_DYNDRV_*` settings do not configure those policies. Existing
+state is not migrated or removed automatically.
+Targets remain isolated by workspace and build policy while compiler outputs
+can be shared in the selected store. Changing the toolchain, bootstrap metadata
+or worker code starts a separate target. A new target can still reuse unchanged
+immutable compiler outputs.
+Licenses remain runtime inputs and are omitted from compiler requests.
+
+Cargo's profiles and `CARGO_INCREMENTAL` select incremental compilation as
+with ordinary Cargo. The backend owns and retains each compiler's incremental
+state alongside its output. Failed builds retain incremental backing too, so
+collection cannot silently invalidate a Cargo-fresh dependency or cache.
+`CARGO_INCREMENTAL=0` explicitly disables it. The diagnostic
+`CARGO_DYNDRV_OBSERVE_INCREMENTAL=1` records actual object reuse; its additional
+hashing and held descriptors are excluded from normal performance claims.
+
+Compiler requests retain their complete owning source root, compiler dependencies
+and their source roots, declared generated inputs and additional roots referenced
+by compiler arguments or forwarded environment values. Dependency source roots
+remain available to procedural macros that read their own assets during downstream
+expansion. An external local Symbolica checkout therefore
+does not depend on unrelated edits in the GammaLoop checkout. Crates within one
+local source root still share that root's invalidation. Reads across source roots
+must declare the additional path through compiler arguments or environment;
+implicit reads of unrelated roots are outside this source contract. Files within
+each retained root are kept whole, including inputs read by procedural macros.
+`NIX_BUILD_TOP` describes the builder directory, not an additional source root;
+its value remains part of the compiler environment and request identity.
+
+Vendored registry/Git packages have individual read-only mounts at stable logical
+paths. Cargo's lockfile-specific directory index remains available to the session,
+but each compiler request captures only its selected package trees. Adding an
+unused locked dependency no longer changes an existing package's source path or
+compiler inputs. Changes to selected source bytes, versions or features still
+invalidate the corresponding requests.
+
+Compiler tools and native libraries have a separate environment and closure from
+session tools such as JJ, UV, Maturin and Nextest. Updating session tools alone
+does not change compiler inputs. The full bootstrap and vendor closure remain
+retained for command execution and launchers. Toolchain, feature, effective
+compiler environment and incremental state differences can still prevent sharing;
+no end-to-end speedup is promised.
+
+For Python, use `just backend=dyndrv python-wheel gammaloop` or
+`just backend=dyndrv python-develop community`. Maturin runs as the caller through
+the same compiler bridge. The selected interpreter must be standard CPython for
+the build machine; the bootstrap selects its matching interpreter package from
+the pinned nixpkgs. Wheels retain native runtime libraries and declared rendering
+resources through independent host-store roots
+at `target/wheels/.nix-WHEELNAME` and, for installs, the environment's
+`.nix-python/DISTRIBUTION`. Keep those roots while using the wheels. Workspace
+clean does not remove them. These are native Linux development wheels that depend
+on Nix-store libraries, with the same installation options as other backends.
+RPATH repair applies only to the finished wheel, preserving dependency compiler
+flags. Maturin's PyO3 environment and a different interpreter's compiler environment
+can still prevent reuse with ordinary Rust builds or another Python version;
+reuse across Cargo and Maturin requires matching compiler inputs.
+
+Build and run commands install launchers at the ordinary `target/PROFILE/BINARY`
+paths, so `./gammaloop` remains available after a CLI build. A launcher enters the
+same source/store namespace, preserves caller arguments and working directory,
+and holds the workspace lock while running. Keep its private state, retained
+executable and store roots while using it; the launcher is not a portable binary.
+The policy's `bootstrap-root` also retains its launcher tools in the host store.
+
+Each command prints its durable session path. State retains
+`workspaces/WORKSPACE/POLICY/sessions/`, `last-run.json`, staged sources and targets,
+compiler receipts and the daemon log for reuse and diagnosis. Nextest reports
+are also copied to the invoking workspace's `target/test-reports/dyndrv/`.
+`just backend=dyndrv clean` removes that workspace/policy's target, owned launchers
+and compiler GC roots while preserving session evidence and other backends'
+replacement executables. `just dyndrv-gc` collects unreferenced
+private-store products; `just dyndrv-stop` stops the private daemon without
+deleting state. Both refuse to act while a worker command uses the daemon.
+In system-store mode these commands refuse to stop or collect the shared daemon;
+the Clan/NixOS services own its lifecycle and collection policy. Workspace clean
+only releases that workspace's roots and targets. Newly imported compiler inputs,
+metadata and outputs receive roots before delivery, keeping them valid during
+concurrent system garbage collection.
+Clean targets before collecting outputs no longer needed. Preserve sessions
+required for review before removing their state. `just test-dyndrv` runs the host
+integration test with the pinned bootstrap Python and retains validation artifacts under
+`target/dyndrv-validation/integration/` (`--directory` selects another location).
+
+Additional host qualification recipes are `just test-dyndrv-incremental`,
+`just test-dyndrv-invalidation`, `just test-dyndrv-extensions` and
+`just test-dyndrv-system`. They cover incremental recovery, compiler-input
+invalidation, Rustdoc/wheel export and shared-store behavior. These are commands
+to run against the candidate under review; historical donor results do not
+establish that this FeynKit revision passes them.
+
+A command leaves an `in-progress.json` marker until its compiler backing is
+retained. After a hard kill or interrupted retention, the next command requires
+`just backend=dyndrv clean`. Live Cargo children keep the workspace lock and daemon
+lease even if their worker dies, so collection waits for those children to exit.
+
+=== Native Python packaging
+<native-python>
+
+`just python-wheel gammaloop|community` builds a wheel;
+`just python-develop gammaloop|community` also installs it. Both accept
+`--profile PROFILE`, `--release`, `--python INTERPRETER` and `--out DIRECTORY`
+(default `target/wheels`). Both distributions use the shared build profile,
+defaulting to `ci-optim`. GammaLoop also accepts `--abi3`.
+For example, after creating or activating an environment:
+
+```bash
+just python-wheel gammaloop --abi3 --out target/wheels
+just profile=dev python-develop gammaloop
+just profile=release build-cli
+just python-develop community --python .venv/bin/python
+```
+
+Installation selects `--python` when supplied, otherwise `VIRTUAL_ENV`,
+`CONDA_PREFIX`, or the repository's existing `.venv`. The interpreter must
+belong to a virtual environment or match the active Conda prefix; system
+installation is rejected. Nix wheels require standard CPython supported by the
+pinned Nix packages. `build-api`, `build-api-abi`, `build-api-release` and
+`build-api-abi-release` retain their profiles and ABI choices; their `-wheel`
+variants build without installing.
+
+All three backends build and install wheels, so rerun the command after Python
+source changes as well as native changes. These commands do not make an editable
+installation. Manual `maturin develop` remains available when an editable
+workflow is deliberately needed; select its manifest, features and environment
+explicitly.
+
+The `gammaloop` target builds the existing `gammaloop._gammaloop` extension
+with its extension-module linking features. The `community` target builds the
+combined `symbolica` distribution in `examples/notebooks/symbolica-host`,
+containing FeynKit, Spenso and Linnet. That host has no GammaLoop feature;
+GammaLoop remains a separate extension. These targets retain their existing
+package interfaces.
+Use separate environments for the two distributions where their Symbolica
+versions differ; do not pass objects between independently compiled kernels.
+uv forces reinstallation only of the requested distribution; dependency
+resolution can still install or replace other packages. Use `--no-deps` only
+when the target environment already provides compatible dependencies. Provision
+optional UFO-loader dependencies for workflows that use them.
+
+Nix wheels depend on native libraries in the Nix store. Keep the retained
+`ENV/.nix-python/DISTRIBUTION` root for installed wheels and the output directory's
+`.nix-WHEEL_FILENAME` root for exported wheels while they are in use.
+Here `DISTRIBUTION` is `gammaloop` or `symbolica`. Copying the wheel alone does
+not make it portable. The packaged initializer defaults `SYMBOLICA_DATA_DIRECTORY`
+to the retained renderer data, preserving an explicitly set value. User licensing
+is still required for library use.
 
 == CI Readiness
 <ci-readiness>
@@ -766,27 +1104,47 @@ suite and upload cycle.
 Work from the repository root; enter `nix develop` if you need the pinned Just
 and build tools. Stage newly added files first so the Git-backed flake sees them.
 
-`just check` runs Cargo checking only. For the selected CI suite without uploading:
+`just check` performs compilation checking through the selected backend; it does
+not run tests. For the selected CI suite without uploading:
 
 ```sh
 just ci-checks
 ```
 
 This runs the selected Rust and Python tests, Clippy, doctests, formatting,
-workspace/CI graph checks, and the full five-product documentation check. The
+workspace/CI graph checks, and the full documentation publication check. The
 documentation check validates generated inputs, renders latest and snapshot
 sites, checks their HTML, and exercises publication behavior. Licensed checks,
-including documentation, require `SYMBOLICA_LICENSE` in your local environment.
-An unchanged successful Nix check can be reused without executing its tests again.
-The separate `gammaloop-nextest-browser` check runs real Chromium/widget tests
-with pinned Nix browser and Python dependencies, plus native fixture producers.
-Run it explicitly with `nix build --impure .#checks.x86_64-linux.gammaloop-nextest-browser`.
+including documentation, load a license at runtime as described in
+#link("#development-commands")[Common Commands]. Every licensed runtime
+invocation executes, even when its runner and compiled inputs are cached.
+`nix flake check` builds the public unlicensed checks, including the CLI,
+standalone Rustdoc, persistent Typst renderer and WASM checks. It does not run
+the licensed suite; use `just ci-checks` for that.
+
+The separate `gammaloop-nextest-browser` runtime check runs real Chromium/widget
+tests with pinned Nix browser and Python dependencies, plus native fixture
+producers. Run it explicitly with
+`nix run .#nix-ci-check-gammaloop-nextest-browser -- target/test-reports/browser`.
 The ordinary Spynso suite includes paging even without AnyWidget; its live-widget
 case skips when the optional package is absent. See
 #link("docs/architecture/ci.typ")[the CI inventory] for browser coverage and inputs.
+Browser runners reject Nextest stress options before launching their native tests.
 
-`nix flake check --impure` additionally builds the CLI, standalone Rustdoc,
-persistent Typst renderer and WASM checks exported by the flake.
+`just test-nix-all`, `just doctest-nix` and the documentation step in
+`just ci-checks` run the executable packages `nix-ci-check-gammaloop-nextest`,
+`nix-ci-check-gammaloop-doctest` and `nix-ci-check-alphal00p-docs`, respectively.
+Their default local report paths are printed on invocation. To render pages
+directly, give the documentation executable an absent or empty output directory:
+
+```sh
+nix run .#alphal00p-docs-pages -- target/docs-pages
+nix run .#alphal00p-docs-snapshot-fixture -- target/docs-snapshot
+```
+
+These packages retain cacheable compiled inputs; rendered pages are produced
+locally each time the executable runs. Building either package only prepares
+its runner.
 
 On `itphlies`, run the following before pushing CI-enabled work, including
 updates to a PR already in final review. The host's Nix daemon is configured to
@@ -817,7 +1175,8 @@ After changing dependencies or features, run `cargo hakari generate` and
 `cargo hakari verify` in `nix develop`. Commit the updated workspace-hack manifest
 and lockfile. After changing workspace manifests or test groups, run
 `just ci-update` before the checks and commit the regenerated
-`nix/ci-workspace-graph.json` and `nix-ci.nix` with the change.
+`nix/ci-workspace-graph.json` and `nix-ci.nix`
+with the change.
 
 Put your NixCI token in `~/.netrc`, or point `NIXCI_NETRC` at an existing file:
 
@@ -833,13 +1192,55 @@ shell enables no upload hook. Bare Cargo builds do not populate this cache.
 An untrusted daemon may warn that it ignores `netrc-file`; the upload client
 still uses that file to authenticate with the destination cache.
 
-The upload command realizes the build jobs selected by `nix/ci.nix` and publishes
-their runtime closures. These jobs include static checks, lightweight runtime
-launchers and the producers that retain test binaries and compiler artifacts.
-The command does not select runtime test-result checks. Existing matching build
-outputs are published too. It does not select packaging, WASM, dev shells or
-unrelated repositories.
+The upload command realizes `configuration.onlyBuild` from `nix/ci.nix` for the
+current system and publishes the selected outputs and their runtime closures.
+These jobs include static checks, lightweight runtime launchers, scheduling
+barriers and producers that retain test binaries and compiler artifacts.
+Runtime results are local execution outputs and are not uploaded as Nix check
+results. Existing matching build outputs are published too. The command does
+not select packaging, WASM, dev shells or unrelated repositories.
 Required shared dependencies can still be part of the uploaded closures.
+
+Inspect publication coverage before uploading:
+
+```sh
+just ci-upload-preview
+just ci-upload-preview local
+just ci-upload-preview github
+```
+
+The optional scope is `local`, `github` or `both` (the default). The preview
+lists comparable selected attributes and output paths as realized or missing, plus the
+deduplicated closure path count and raw NAR bytes for realized roots. Missing
+roots make that measurement partial. It also reports selected CI producers
+outside GitHub's realized closure; omissions are confirmed against the full
+GitHub closure only when every GitHub root is realized.
+The tracked-source preview has a different flake identity from raw `.#`
+publication: revision, NAR hash and modification metadata can differ, and raw
+directory filters can include untracked files. The documentation runner embeds
+source metadata, so `publication.sourceRevisionDependent` lists it separately as
+not comparable across source identities. It is excluded from comparable-root
+realization counts and closure measurements. Reported bytes are a comparable-root
+subtotal; the entire local upload size remains unknown when roots are excluded,
+even when comparable coverage is complete. This does not change upload selection.
+
+Inspection uses offline evaluation with import-from-derivation disabled and
+local store queries. It never builds or downloads selected artifact outputs,
+uploads, or executes tests. The existing `develop.sh` launcher may bootstrap
+pinned shell and Python inspection tools before inspection.
+
+GitHub Actions uses a separate compact five-root producer publication with an
+8 GiB raw NAR closure limit. It intentionally omits many intermediate archives:
+self-contained merged archives do not retain references to all their inputs.
+Publishing that closure therefore does not publish every producer selected by
+the local command. Request-specific development builds and Python wheels are
+also outside the default local upload selection.
+
+The optional `ci-compiler-state` package is not ordinarily uploaded. When
+refreshing `ci-cache-base`, publish the compatible baseline once after its
+revision is publishable; do not add every revision's compiler state to ordinary
+per-commit uploads. See #link("docs/architecture/ci.typ")[the CI guide] for the
+baseline workflow.
 
 Static checks and artifact preparation share one timed build phase; upload time
 is reported separately.
@@ -850,9 +1251,9 @@ benchmarks without publishing. Remote reuse also requires matching outputs: a ma
 for example, does not replace a Linux build.
 
 NixCI starts each selected runtime launcher even when that launcher is cached.
-The launcher requests the corresponding Nix test-result check; a matching cached
-result can skip test execution. Uploading compiled producers prepares the inputs
-for uncached runtime checks, rather than certifying their results locally.
+The launcher executes its tests as the invoking user and propagates their exit
+status. Uploading compiled producers and runners prepares execution inputs;
+only successful runtime execution establishes that the selected suite passed.
 
 The flake retains NixCI's substituter and signing-key settings for downloads.
 On a shared daemon, an administrator must configure the cache's trust and access
@@ -1090,6 +1491,7 @@ preferences; they protect behavior that has been easy to regress.
   `ThresholdCounterterm { subset_index }`, and `FullMultiplicativeFactor`.
 
 === API / Python Interop
+<api-python-interop>
 
 - `gammaloop-api` defaults to `cli`, which owns the executable, interactive
   editor, and shell completion generators. Python packaging disables default
@@ -1107,9 +1509,10 @@ preferences; they protect behavior that has been easy to regress.
 - The Rust API has precise endpoints `evaluate_sample_precise` and
   `evaluate_samples_precise`; the Python API intentionally stays `f64`-only.
 - Python API end-to-end tests are subprocess-based and assume the contributor
-  already built/installed the Python extension in the active environment
-  (`maturin develop` or `just build-api`). Do not try to embed Python into the
-  Rust test binary for these tests.
+  already built/installed the Python extension in the selected environment for
+  Cargo runs (`just python-develop gammaloop` or `just build-api`). Nix test
+  runners use their prepared Python runtime. Do not try to embed Python into
+  the Rust test binary for these tests.
 - The top-level `.venv` in the repo is a reasonable default development
   environment for running the Python API examples/tests after building the
   extension there.

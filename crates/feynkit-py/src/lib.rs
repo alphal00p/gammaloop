@@ -21,6 +21,13 @@ mod tensor;
 mod ufo;
 mod wavefunction;
 
+#[cfg(feature = "python_stubgen")]
+use pyo3_stub_gen::{Result as StubResult, StubInfo};
+#[cfg(feature = "python_stubgen")]
+use std::env;
+#[cfg(feature = "python_stubgen")]
+use std::path::PathBuf;
+
 use pyo3::types::PyModule;
 use pyo3::types::PyModuleMethods;
 #[cfg(any(test, feature = "python_stubgen"))]
@@ -227,13 +234,16 @@ pub fn initialize_feynkit(module: &Bound<'_, PyModule>) -> PyResult<()> {
 
 /// Gather the FeynKit stub inventory without declaring an independent wheel.
 #[cfg(feature = "python_stubgen")]
-pub fn stub_info() -> pyo3_stub_gen::Result<pyo3_stub_gen::StubInfo> {
+pub fn stub_info() -> StubResult<StubInfo> {
+    // A caller can be another crate's test binary; its manifest directory is not ours.
+    let project_root = env::var_os("GAMMALOOP_WORKSPACE_ROOT")
+        .or_else(|| env::var_os("NEXTEST_WORKSPACE_ROOT"))
+        .map(|root| PathBuf::from(root).join("crates/feynkit-py"))
+        .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")));
     // Unqualified dependency classes belong to Symbolica; FeynKit declarations
     // explicitly name their community module.
-    let mut info = pyo3_stub_gen::StubInfo::from_project_root(
-        "symbolica".to_owned(),
-        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("python"),
-    )?;
+    let mut info =
+        StubInfo::from_project_root("symbolica".to_owned(), project_root.join("python"))?;
     let module = info
         .modules
         .get_mut("symbolica.community.hepkit")

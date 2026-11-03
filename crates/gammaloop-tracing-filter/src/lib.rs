@@ -630,6 +630,7 @@ fn is_valid_ident(name: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use std::env;
     use std::{
         collections::{BTreeMap, BTreeSet},
         fs,
@@ -689,8 +690,16 @@ mod tests {
 
     #[test]
     fn all_run_card_log_directives_parse() {
-        let run_cards_root =
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/resources/run_cards");
+        let workspace_root = env::var_os("GAMMALOOP_WORKSPACE_ROOT")
+            .or_else(|| env::var_os("NEXTEST_WORKSPACE_ROOT"))
+            .map(PathBuf::from)
+            .unwrap_or_else(|| {
+                env::var_os("CARGO_MANIFEST_DIR")
+                    .map(PathBuf::from)
+                    .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")))
+                    .join("../..")
+            });
+        let run_cards_root = workspace_root.join("tests/resources/run_cards");
         let mut files = Vec::new();
         collect_toml_files(&run_cards_root, &mut files);
 

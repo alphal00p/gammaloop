@@ -52,12 +52,14 @@ CHECK = r"""async ({javascript, controls, css, font, mode, theme}) => {
     }
     return element;
   };
+  // Match the native SVG serializer: without CDATA, markup in JS comments is
+  // parsed as SVG and the script no longer matches the trusted controls source.
   const graph = label => `<figure style="margin:0"><svg data-linnet-interactive="true"
     viewBox="0 0 120 80" width="120pt" height="80pt">
     <rect width="120" height="80" fill="#ffffff"/>
     <a data-linnet-kind="node" data-linnet-id="0" data-linnet-detail='{"edges":[]}'>
       <circle cx="60" cy="40" r="8" fill="#000000"/>
-    </a><style>${css}</style><script>${controls}</script></svg>
+    </a><style>${css}</style><script><![CDATA[${controls}]]></script></svg>
     <figcaption>${label}</figcaption></figure>`;
   const state = {
     request:{id:'snapshot', labels:[], pending:false, font_key:`font-${mode}`},
@@ -85,6 +87,8 @@ CHECK = r"""async ({javascript, controls, css, font, mode, theme}) => {
     const frame = host.querySelector('iframe');
     assert(frame.contentDocument === doc, 'stale frame emitted ready');
     assert(getComputedStyle(frame).visibility === 'visible', 'ready frame remains hidden');
+    assert(doc.querySelector('script').textContent === controls,
+      'fixture changed the trusted controls source');
     assert(doc.querySelector('.linnet-viewport'), 'ready preceded graph initialization');
     assert(parseFloat(frame.style.height) >= doc.body.getBoundingClientRect().height,
       'ready preceded frame sizing');
@@ -185,9 +189,15 @@ def main():
                         "pageerror",
                         lambda error, errors=errors: errors.append(str(error)),
                     )
-                    result = page.evaluate(
-                        CHECK, {**sources, "mode": mode, "theme": theme}
-                    )
+                    try:
+                        result = page.evaluate(
+                            CHECK, {**sources, "mode": mode, "theme": theme}
+                        )
+                    except Exception as error:
+                        error.add_note(
+                            f"mode={mode}, theme={theme}, page errors={errors}"
+                        )
+                        raise
                     assert not errors, errors
                     print(json.dumps(result), flush=True)
                     page.close()

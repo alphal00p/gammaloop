@@ -1,4 +1,9 @@
 use feynkit_cff::{CffError, CffOptions, CffResult, HedgeGraphCffExt, SurfaceCache};
+#[cfg(feature = "python_stubgen")]
+use pyo3_stub_gen::{Result as StubResult, StubInfo};
+#[cfg(feature = "python_stubgen")]
+use std::env;
+
 use feynkit_graph::expressions::evaluate_overall_factor;
 use gammaloop_tracing_filter::LogFormat;
 use gammalooprs::{
@@ -274,11 +279,13 @@ pub fn register_python_api_for_docs(m: &Bound<PyModule>) -> PyResult<()> {
 
 /// Gather the Python API registered for `gammaloop._gammaloop`.
 #[cfg(feature = "python_stubgen")]
-pub fn stub_info() -> pyo3_stub_gen::Result<pyo3_stub_gen::StubInfo> {
-    pyo3_stub_gen::StubInfo::from_project_root(
-        "gammaloop._gammaloop".to_owned(),
-        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")),
-    )
+pub fn stub_info() -> StubResult<StubInfo> {
+    // A caller can be another crate's test binary; its manifest directory is not ours.
+    let project_root = env::var_os("GAMMALOOP_WORKSPACE_ROOT")
+        .or_else(|| env::var_os("NEXTEST_WORKSPACE_ROOT"))
+        .map(|root| PathBuf::from(root).join("crates/gammaloop-api"))
+        .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")));
+    StubInfo::from_project_root("gammaloop._gammaloop".to_owned(), project_root)
 }
 
 /// Read-only, detached view over serialized GammaLoop settings.

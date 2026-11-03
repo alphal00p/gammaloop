@@ -19,6 +19,11 @@
       url = "github:ipetkov/crane";
     };
 
+    cargo-dyndrv = {
+      url = "github:lcnbr/cargo-dyndrv/c1935d6314ea41013aea17a330d218efa35df6c7";
+      flake = false;
+    };
+
     # Refresh deliberately with `just ci-cache-base REVISION` after a green run.
     ci-cache-base = {
       url = "github:alphal00p/gammaloop/9935a2b52d047daf5bbe6616c798fa07e364da6a";
@@ -102,6 +107,94 @@
         workspaceRoot = ./.;
         incrementalBaselineRoot = /. + builtins.unsafeDiscardStringContext self.inputs.ci-cache-base.outPath;
       };
+      requestedTestProfile = builtins.getEnv "GAMMALOOP_NIX_TEST_PROFILE";
+      testWorkspace =
+        if requestedTestProfile == "" || requestedTestProfile == workspace.ciCargoProfile
+        then workspace
+        else
+          import ./nix/rust-workspace.nix {
+            inherit self pkgs docsPkgs craneLib wasmCraneLib ciToolchain wasmTarget system nixCiArtifactBarrier;
+            workspaceRoot = ./.;
+            testCargoProfile = requestedTestProfile;
+            incrementalBaselineRoot = /. + builtins.unsafeDiscardStringContext self.inputs.ci-cache-base.outPath;
+          };
+      development = import ./nix/development.nix {
+        inherit pkgs craneLib workspace;
+        workspaceRoot = ./.;
+      };
+      developmentTools = import ./nix/development-tools.nix {inherit pkgs;};
+      developmentDispatchPython = pkgs.python313.withPackages (ps: [ps.tomli-w]);
+      developmentDispatchTools = [
+        developmentDispatchPython
+        developmentTools
+        ciToolchain
+        pkgs.git
+        pkgs.jujutsu
+        pkgs.just
+        pkgs.gnugrep
+        pkgs.gnused
+        pkgs.shellcheck
+      ];
+      developmentPythonTools = pkgs.buildEnv {
+        name = "gammaloop-development-python-tools";
+        paths = [
+          pkgs.python313
+          pkgs.uv
+          pkgs.maturin
+          ciToolchain
+        ];
+      };
+      developmentDispatchSource = lib.fileset.toSource {
+        root = ./.;
+        fileset = lib.fileset.unions [
+          ./.config/build-profile
+          ./gammaloop
+          ./justfile
+          ./just/ci.just
+          ./just/tests.just
+          ./just/drawing.just
+          ./crates/linnet/Justfile
+          ./crates/linnet-render-py/Cargo.toml
+          ./crates/spynso3/Cargo.toml
+          ./crates/linnet-render-py/data.json
+          ./crates/linnet-render-py/fonts/STIXTwoMath-Regular.woff2
+          ./crates/linnet-render-py/fonts/STIX-Two-OFL.txt
+          ./tydenso/Justfile
+          ./scripts/develop.sh
+          ./scripts/develop_nix.sh
+          ./scripts/develop_dyndrv.sh
+          ./scripts/python_wheel.py
+          ./scripts/cache_publication.py
+          ./nix/browser-check.py
+          ./.github/scripts/run-nix-ci-check.sh
+          ./.github/scripts/export-test-timings.py
+          ./.github/scripts/test_export_test_timings.py
+          ./.github/workflows/nix.yml
+          ./.github/workflows/docs-pages.yml
+          ./.github/scripts/test_cache_publication.py
+          ./.github/scripts/test_develop.py
+          ./.github/scripts/test_python_wheel.py
+          ./.github/scripts/test_nix_crate_runner.py
+        ];
+      };
+      developmentDispatchCheck =
+        pkgs.runCommand "development-dispatch-check"
+        {
+          nativeBuildInputs = developmentDispatchTools;
+        }
+        ''
+          python3 ${developmentDispatchSource}/.github/scripts/test_develop.py
+          python3 ${developmentDispatchSource}/.github/scripts/test_python_wheel.py
+          python3 ${developmentDispatchSource}/.github/scripts/test_cache_publication.py
+          python3 ${developmentDispatchSource}/.github/scripts/test_nix_crate_runner.py BrowserSelectionTests
+          python3 ${developmentDispatchSource}/.github/scripts/test_export_test_timings.py
+          (
+            cd ${developmentDispatchSource}
+            shellcheck scripts/develop.sh scripts/develop_nix.sh scripts/develop_dyndrv.sh .github/scripts/run-nix-ci-check.sh
+          )
+          test -e ${workspace.allChecks.gammaloop-guppy-workspace-graph}
+          mkdir -p "$out"
+        '';
       inherit
         (workspace)
         docsTypst
@@ -133,6 +226,7 @@
         craneTestDependencyOutputs
         craneTestBinaryPackageOutputs
         nextestContextualTestOutputs
+        nextestCrateChecks
         impureCheckRunnerPackages
         commonArgs
         workspaceTestSrc
@@ -237,7 +331,14 @@
             RUSTFLAGS = rustFlags;
           });
     in {
-      checks = allChecks;
+      lib.cachePublication =
+        (import ./nix/ci.nix {
+          inherit system;
+          workspaceGraph = builtins.fromJSON (builtins.readFile ./nix/ci-workspace-graph.json);
+        }).publication;
+      checks =
+        (builtins.removeAttrs allChecks workspace.licensedCheckNames)
+        // {gammaloop-guppy-workspace-graph = developmentDispatchCheck;};
 
       hydraJobs = hestiaChecks;
 
@@ -245,6 +346,8 @@
 
       packages =
         {
+          development-tools = developmentTools;
+          development-python-tools = developmentPythonTools;
           default = gammaloop-cli;
           clinnet = clinnet-cli;
           gammaloop = gammaloop-cli;
@@ -278,6 +381,8 @@
         // craneTestDependencyOutputs
         // craneTestBinaryPackageOutputs
         // nextestContextualTestOutputs
+        // testWorkspace.nextestCrateChecks
+        // lib.mapAttrs' (name: value: lib.nameValuePair "development-${name}" value) development
         // impureCheckRunnerPackages
         // lib.optionalAttrs (!pkgs.stdenv.hostPlatform.isDarwin) {
           gammaloop-llvm-coverage = craneLib.cargoLlvmCov (commonArgs
@@ -289,6 +394,20 @@
         };
 
       apps = {
+        development-tests = flake-utils.lib.mkApp {
+          drv = pkgs.writeShellApplication {
+            name = "gammaloop-development-tests";
+            runtimeInputs = developmentDispatchTools;
+            text = ''
+              python3 .github/scripts/test_develop.py "$@"
+              python3 .github/scripts/test_python_wheel.py "$@"
+              python3 .github/scripts/test_cache_publication.py "$@"
+              python3 .github/scripts/test_nix_crate_runner.py BrowserSelectionTests "$@"
+              python3 .github/scripts/test_export_test_timings.py "$@"
+              shellcheck scripts/develop.sh scripts/develop_nix.sh scripts/develop_dyndrv.sh .github/scripts/run-nix-ci-check.sh
+            '';
+          };
+        };
         ci-report = flake-utils.lib.mkApp {
           drv = pkgs.writeShellApplication {
             name = "ci-report";

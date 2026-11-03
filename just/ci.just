@@ -12,23 +12,29 @@ doc-nix:
 
 # Run doctests via Nix (same as CI)
 doctest-nix:
-    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').gammaloop-doctest
+    nix run .#nix-ci-check-gammaloop-doctest
 
 # Run workspace nextest via Nix (same as CI)
 test-nix-all:
-    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').gammaloop-nextest
+    nix run .#nix-ci-check-gammaloop-nextest
 
-# Run workspace nextest via Nix
-test-nix:
-    just test-nix-all
+# Run one workspace crate through Nix, with optional Nextest filters and flags.
+[positional-arguments]
+test-nix PACKAGE *args:
+    #!/usr/bin/env bash
+    exec bash scripts/develop.sh --backend nix test -p "$1" "${@:2}"
+
+# Check crate selection, filter handling and reuse against real Nix test archives.
+test-nix-runner:
+    python3 .github/scripts/test_nix_crate_runner.py
 
 # Generate coverage report via Nix
 coverage-nix:
     nix build .#packages.$(nix eval --impure --raw --expr 'builtins.currentSystem').gammaloop-llvm-coverage
 
 # Run all CI checks locally (same as CI)
-ci-checks: clippy-nix fmt-check-nix ci-graph-check doctest-nix test-nix
-    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').alphal00p-docs
+ci-checks: clippy-nix fmt-check-nix ci-graph-check doctest-nix test-nix-all
+    nix run .#nix-ci-check-alphal00p-docs
 
 # Check static inputs and upload compiled producers; leave runtime tests to NixCI.
 # See https://nix-ci.com/documentation/nix-ci-cache
@@ -53,7 +59,7 @@ ci-checks-and-upload:
     trap 'rm -rf "$tmp"' EXIT
 
     # Scheduled builds include static checks, runtime launchers and their producers.
-    # Do not realize test-result checks: NixCI runs them after these inputs arrive.
+    # Building a runtime launcher does not run it; NixCI executes it after upload.
     started=$SECONDS
     # Keep all selected closures rooted until the upload finishes, including
     # across the gap between realization and nix copy on a shared daemon.
@@ -106,3 +112,7 @@ ci-report MANIFEST OUTPUT_DIR:
 # Prepare the native CI dependency artifacts in the Nix store.
 build-deps-nix:
     nix build .#packages.$(nix eval --impure --raw --expr 'builtins.currentSystem').cargoArtifacts
+
+# Read-only artifact inspection; the launcher may bootstrap pinned inspection tools.
+ci-upload-preview scope="both":
+    bash scripts/develop.sh --backend nix upload-preview {{quote(scope)}}

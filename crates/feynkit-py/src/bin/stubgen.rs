@@ -1,11 +1,12 @@
+use std::env;
 use std::fs;
-
-const STUB_PATH: &str = concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/python/symbolica/community/hepkit/__init__.pyi"
-);
+use std::path::PathBuf;
 
 fn main() -> pyo3_stub_gen::Result<()> {
+    let root = env::var_os("GAMMALOOP_WORKSPACE_ROOT")
+        .or_else(|| env::var_os("NEXTEST_WORKSPACE_ROOT"))
+        .map(|root| PathBuf::from(root).join("crates/feynkit-py"))
+        .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")));
     let info = feynkit_py::stub_info()?;
     let module = info
         .modules
@@ -17,7 +18,7 @@ fn main() -> pyo3_stub_gen::Result<()> {
             )
         })?;
     fs::write(
-        STUB_PATH,
+        root.join("python/symbolica/community/hepkit/__init__.pyi"),
         normalize_stub_source(&feynkit_py::FeynkitModule::stub_source(module)),
     )?;
     Ok(())

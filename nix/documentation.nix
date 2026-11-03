@@ -23,6 +23,7 @@
 }:
 let
   inherit (pkgs) lib;
+  mkCargoRuntime = import ./cargo-runtime.nix { inherit pkgs craneLib; };
   docsCargoProfile = ciCargoProfile;
   documentationRevision = self.dirtyRev or (self.rev or (self.narHash or "local"));
   typst015 =
@@ -174,7 +175,7 @@ let
     CARGO_PROFILE = docsCargoProfile;
     CARGO_TARGET_DIR = alphal00pDocsCargoTarget;
     # Symbolica 3 needs no compile-time key in either the reusable producer or
-    # the documentation consumer; the build below supplies its runtime license.
+    # the documentation consumer; executable runners inherit the user's license.
   };
   alphal00pDocsRealCargoArgs = alphal00pDocsCargoArgs // {
     postPatch = normalizeWorkspaceHackBuildScriptTimestampScript + ''
@@ -338,7 +339,6 @@ let
     TYPST_FONT_PATHS = docsFontPath;
     TYPST_PACKAGE_CACHE_PATH = "${docsTypst}/lib/typst/packages";
     ALPHAL00P_DOCS_CARGO_PROFILE = docsCargoProfile;
-    SYMBOLICA_LICENSE = builtins.getEnv "SYMBOLICA_LICENSE";
     SYMBOLICA_DATA_DIRECTORY = symbolicaRenderData;
     doNotLinkInheritedArtifacts = true;
     doInstallCargoArtifacts = false;
@@ -346,36 +346,6 @@ let
     doCheck = false;
     installPhaseCommand = "";
   };
-
-  alphal00pDocsPagesChannel =
-    let
-      requested = builtins.getEnv "ALPHAL00P_DOCS_CHANNEL";
-      channel = if requested == "" then "latest" else requested;
-    in
-    assert lib.assertMsg (builtins.elem channel [
-      "latest"
-      "snapshot"
-    ]) "ALPHAL00P_DOCS_CHANNEL must be latest or snapshot";
-    channel;
-  alphal00pDocsPagesSnapshotTag =
-    let
-      tag = builtins.getEnv "ALPHAL00P_DOCS_SNAPSHOT_TAG";
-    in
-    assert lib.assertMsg (
-      (alphal00pDocsPagesChannel == "latest" && tag == "")
-      || (alphal00pDocsPagesChannel == "snapshot" && tag != "")
-    ) "ALPHAL00P_DOCS_SNAPSHOT_TAG must be set exactly for snapshot builds";
-    tag;
-  alphal00pDocsPagesGitCommit =
-    let
-      commit = builtins.getEnv "ALPHAL00P_DOCS_GIT_COMMIT";
-    in
-    if commit == "" then documentationRevision else commit;
-  alphal00pDocsPagesGitTimestamp =
-    let
-      timestamp = builtins.getEnv "ALPHAL00P_DOCS_GIT_TIMESTAMP";
-    in
-    if timestamp == "" then toString self.lastModified else timestamp;
 
   alphal00pDocsValidationCommands = ''
     cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-catalogs --features ${lib.escapeShellArg documentationCatalogFeatures} --bin alphal00p-docs-gammaloop-reference -- --check
@@ -406,10 +376,18 @@ let
     # Exercise installed-wheel discovery offline with the pinned resource bytes
     # in the same package layout used by symbolica-fonts on PyPI.
     "$linnet_python/bin/python" - <<'PY'
+    import os
     import shutil
+    import stat
     from pathlib import Path
     from symbolica import data
-    shutil.copytree("${symbolicaRenderData}", Path(data.__file__).parent / "_data/fonts")
+    fonts = Path(data.__file__).parent / "_data/fonts"
+    shutil.copytree("${symbolicaRenderData}", fonts)
+    # copytree preserves immutable store directory modes; the private runtime
+    # must be able to remove its copies, while leaving resource bytes untouched.
+    for directory, _, _ in os.walk(fonts):
+        path = Path(directory)
+        path.chmod(path.stat().st_mode | stat.S_IWUSR)
     PY
     "$linnet_python/bin/python" -m unittest discover -s crates/linnet-py/tests -p 'test_*.py'
     cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-builder -- check
@@ -456,12 +434,11 @@ let
     test ! -e "${output}/developers/architecture/spenso-parsing-flow/diagram.html"
   '';
 
-  # Keep the immutable-route render independently cacheable. The latest
-  # package already validates the shared authored/generated inputs, while
+  # Keep the immutable-route render independently runnable. The latest
+  # runner already validates the shared authored/generated inputs, while
   # this fixture exercises the snapshot-specific route layout and HTML.
-  # The merge check below can then test publication policy without putting
-  # two complete all-product renders in one time-limited NixCI builder.
-  alphal00pDocsSnapshotFixture = craneLib.mkCargoDerivation (
+  # The publication runner below combines both results outside Nix builders.
+  alphal00pDocsSnapshotFixture = mkCargoRuntime (
     alphal00pDocsDerivationArgs
     // {
       pname = "alphal00p-docs-snapshot-fixture";
@@ -469,7 +446,7 @@ let
       ALPHAL00P_DOCS_GIT_TIMESTAMP = toString self.lastModified;
       buildPhaseCargoCommand = ''
         # Exercise stale global routes and existing product channels in the
-        # single cached snapshot render, then remove the fixture-only files.
+        # single snapshot render, then remove the fixture-only files.
         mkdir -p "$out/developers" \
           "$out/.staging" \
           "$out/products/gammaloop/latest" \
@@ -503,172 +480,189 @@ let
     }
   );
 
-  alphal00pDocsCheck =
-    pkgs.runCommand "alphal00p-docs-check"
-      {
-        nativeBuildInputs = [
-          pkgs.bash
-          pkgs.diffutils
-          pkgs.findutils
-          pkgs.gnugrep
-          pkgs.python313
-        ];
-      }
-      ''
-        set -x
+  alphal00pDocsCheck = mkCargoRuntime {
+    pname = "alphal00p-docs-check";
+    inherit (ciArgs) version;
+    src = lib.fileset.toSource {
+      root = workspaceRoot;
+      fileset = workspaceRoot + "/scripts/update-docs-pages.sh";
+    };
+    cargoArtifacts = null;
+    cargoVendorDir = null;
+    nativeBuildInputs = [
+      pkgs.bash
+      pkgs.diffutils
+      pkgs.findutils
+      pkgs.gnugrep
+      pkgs.python313
+    ];
+    buildPhaseCargoCommand = ''
+      docs_first="$TMPDIR/alphal00p-docs-first"
+      docs_snapshot="$TMPDIR/alphal00p-docs-snapshot"
+      ALPHAL00P_DOCS_CHANNEL=latest ALPHAL00P_DOCS_SNAPSHOT_TAG= \
+        ${lib.getExe alphal00pDocsPages} "$docs_first"
+      ${lib.getExe alphal00pDocsSnapshotFixture} "$docs_snapshot"
 
-        docs_first="$TMPDIR/alphal00p-docs-first"
-        docs_snapshot=${alphal00pDocsSnapshotFixture}
-        mkdir -p "$docs_first"
-        cp -R ${alphal00pDocsPages}/. "$docs_first"
-        chmod -R u+w "$docs_first"
+      docs_pages_test="$TMPDIR/alphal00p-docs-pages-test"
+      mkdir -p "$docs_pages_test/products/gammaloop/snapshots/legacy"
+      mkdir -p "$docs_pages_test/developers"
+      mkdir -p "$docs_pages_test/.git"
+      printf 'historical snapshot\n' > "$docs_pages_test/products/gammaloop/snapshots/legacy/.note"
+      printf 'removed developer route\n' > "$docs_pages_test/developers/old.txt"
+      mv "$docs_first/search-index.json" "$TMPDIR/federated-search-index.json"
+      if bash ${
+        (workspaceRoot + "/scripts/update-docs-pages.sh")
+      } latest "$docs_first" "$docs_pages_test" \
+        2> "$TMPDIR/missing-federated-search-index.err"; then
+        missing_search_status=0
+      else
+        missing_search_status=$?
+      fi
+      mv "$TMPDIR/federated-search-index.json" "$docs_first/search-index.json"
+      test "$missing_search_status" -ne 0
+      grep -Fq 'latest build has no federated search index' \
+        "$TMPDIR/missing-federated-search-index.err"
+      bash ${(workspaceRoot + "/scripts/update-docs-pages.sh")} latest "$docs_first" "$docs_pages_test"
+      cmp "$docs_pages_test/search-index.json" "$docs_first/search-index.json"
+      test -s "$docs_pages_test/products/gammaloop/snapshots/legacy/.note"
+      test ! -e "$docs_pages_test/developers/old.txt"
+      test -s "$docs_pages_test/developers/architecture/gammaloop-architecture/index.html"
+      test -s "$docs_pages_test/developers/architecture/documentation-improvement-plan/index.html"
+      cp "$docs_pages_test/index.html" "$TMPDIR/portal-before-snapshot.html"
+      cp "$docs_pages_test/developers/.note" "$TMPDIR/developers-before-snapshot.note"
+      cp "$docs_pages_test/products/gammaloop/latest/.note" "$TMPDIR/latest-before-snapshot.note"
+      bash ${
+        (workspaceRoot + "/scripts/update-docs-pages.sh")
+      } snapshot "$docs_snapshot" "$docs_pages_test" v0.3.4
+      cmp "$docs_pages_test/index.html" "$TMPDIR/portal-before-snapshot.html"
+      cmp "$docs_pages_test/developers/.note" "$TMPDIR/developers-before-snapshot.note"
+      cmp "$docs_pages_test/products/gammaloop/latest/.note" "$TMPDIR/latest-before-snapshot.note"
+      for product in gammaloop linnet spenso idenso vakint feynkit; do
+        test -s "$docs_pages_test/products/$product/snapshots/v0.3.4/.note"
+      done
 
-        docs_pages_test="$TMPDIR/alphal00p-docs-pages-test"
-        mkdir -p "$docs_pages_test/products/gammaloop/snapshots/legacy"
-        mkdir -p "$docs_pages_test/developers"
-        mkdir -p "$docs_pages_test/.git"
-        printf 'historical snapshot\n' > "$docs_pages_test/products/gammaloop/snapshots/legacy/.note"
-        printf 'removed developer route\n' > "$docs_pages_test/developers/old.txt"
-        mv "$docs_first/search-index.json" "$TMPDIR/federated-search-index.json"
-        if bash ${
-          (workspaceRoot + "/scripts/update-docs-pages.sh")
-        } latest "$docs_first" "$docs_pages_test" \
-          2> "$TMPDIR/missing-federated-search-index.err"; then
-          missing_search_status=0
-        else
-          missing_search_status=$?
-        fi
-        mv "$TMPDIR/federated-search-index.json" "$docs_first/search-index.json"
-        test "$missing_search_status" -ne 0
-        grep -Fq 'latest build has no federated search index' \
-          "$TMPDIR/missing-federated-search-index.err"
-        bash ${(workspaceRoot + "/scripts/update-docs-pages.sh")} latest "$docs_first" "$docs_pages_test"
-        cmp "$docs_pages_test/search-index.json" "$docs_first/search-index.json"
-        test -s "$docs_pages_test/products/gammaloop/snapshots/legacy/.note"
-        test ! -e "$docs_pages_test/developers/old.txt"
-        test -s "$docs_pages_test/developers/architecture/gammaloop-architecture/index.html"
-        test -s "$docs_pages_test/developers/architecture/documentation-improvement-plan/index.html"
-        cp "$docs_pages_test/index.html" "$TMPDIR/portal-before-snapshot.html"
-        cp "$docs_pages_test/developers/.note" "$TMPDIR/developers-before-snapshot.note"
-        cp "$docs_pages_test/products/gammaloop/latest/.note" "$TMPDIR/latest-before-snapshot.note"
-        bash ${
-          (workspaceRoot + "/scripts/update-docs-pages.sh")
-        } snapshot "$docs_snapshot" "$docs_pages_test" v0.3.4
-        cmp "$docs_pages_test/index.html" "$TMPDIR/portal-before-snapshot.html"
-        cmp "$docs_pages_test/developers/.note" "$TMPDIR/developers-before-snapshot.note"
-        cmp "$docs_pages_test/products/gammaloop/latest/.note" "$TMPDIR/latest-before-snapshot.note"
-        for product in gammaloop linnet spenso idenso vakint feynkit; do
-          test -s "$docs_pages_test/products/$product/snapshots/v0.3.4/.note"
-        done
+      mkdir -p "$out"
+      cp -R "$docs_first"/. "$out"/
 
-        mkdir -p "$out"
-        cp -R "$docs_first"/. "$out"/
-
-        test -s "$out/index.html"
-        test -e "$out/.nojekyll"
-        test -s "$out/assets/site.css"
-        test -s "$out/assets/site.js"
-        test -s "$out/assets/local-unitarity-light.svg"
-        test -s "$out/assets/local-unitarity-dark.svg"
-        test -s "$out/assets/gammalooplogo-light.svg"
-        test -s "$out/assets/gammalooplogo-dark.svg"
-        test -s "$out/developers/.note"
-        test -s "$out/developers/index.html"
-        test -s "$out/developers/search-index.json"
-        test -s "$out/developers/assets/site.css"
-        test -s "$out/developers/assets/site.js"
-        test -s "$out/developers/architecture/gammaloop-architecture/index.html"
-        ${alphal00pDocsDeveloperAssertions "$out"}
-        for product in gammaloop linnet spenso idenso vakint feynkit; do
-          product_root="$out/products/$product"
-          test -s "$product_root/index.html"
-          test -s "$product_root/latest/index.html"
-          test -s "$product_root/latest/.note"
-          test -s "$product_root/latest/manual.pdf"
-          test -s "$product_root/latest/search-index.json"
-          test -s "$product_root/latest/snapshot.json"
-          test -s "$product_root/latest/tutorial/index.html"
-          test -s "$product_root/latest/reference/interfaces/index.html"
-          test -s "$product_root/latest/version-history/index.html"
-          test -s "$product_root/latest/assets/site.css"
-          test -s "$product_root/latest/assets/site.js"
-          test -s "$product_root/latest/assets/local-unitarity-light.svg"
-          test -s "$product_root/latest/assets/local-unitarity-dark.svg"
-          test -s "$product_root/latest/assets/gammalooplogo-light.svg"
-          test -s "$product_root/latest/assets/gammalooplogo-dark.svg"
-          test -s "$product_root/latest/reference/rust/index.html"
-          test -s "$product_root/latest/reference/python/index.html"
-          test -n "$(find "$product_root/latest/reference/python" \
-            -mindepth 2 -maxdepth 2 -name index.html -print -quit)"
-          ! grep -q "Rustdoc generation was skipped" \
-            "$product_root/latest/reference/rust/index.html"
-        done
-        for product in gammaloop linnet spenso idenso vakint; do
-          product_root="$out/products/$product"
-          test -s "$product_root/latest/manual/interfaces/index.html"
-          test -s "$product_root/latest/manual/releases/index.html"
-          grep -Fq 'url=../../reference/interfaces/' \
-            "$product_root/latest/manual/interfaces/index.html"
-          grep -Fq 'url=../../version-history/' \
-            "$product_root/latest/manual/releases/index.html"
-        done
-        test -s "$out/products/gammaloop/latest/reference/rust/gammalooprs/index.html"
-        test -s "$out/products/gammaloop/latest/reference/rust/gammaloop_api/index.html"
-        test -s "$out/products/linnet/latest/reference/rust/linnet/index.html"
-        test -s "$out/products/spenso/latest/reference/rust/spenso/index.html"
-        test -s "$out/products/spenso/latest/reference/rust/spenso_macros/index.html"
-        test -s "$out/products/spenso/latest/reference/rust/spenso_hep_lib/index.html"
-        test -s "$out/products/idenso/latest/reference/rust/idenso/index.html"
-        test -s "$out/products/vakint/latest/reference/rust/vakint/index.html"
-        for component in feynkit feynkit_amplitude feynkit_model feynkit_ufo feynkit_kinematics feynkit_graph feynkit_generator feynkit_cff feynkit_tensor; do
-          test -s "$out/products/feynkit/latest/reference/rust/$component/index.html"
-        done
-        test -s "$out/products/feynkit/latest/reference/python/feynkit-community/index.html"
-        test -s "$out/products/gammaloop/latest/reference/rust/theme.css"
-        grep -Fq 'href="../theme.css"' \
-          "$out/products/gammaloop/latest/reference/rust/gammalooprs/index.html"
-        grep -Fq 'class="alphal00p-rustdoc-bar"' \
-          "$out/products/gammaloop/latest/reference/rust/gammalooprs/index.html"
+      test -s "$out/index.html"
+      test -e "$out/.nojekyll"
+      test -s "$out/assets/site.css"
+      test -s "$out/assets/site.js"
+      test -s "$out/assets/local-unitarity-light.svg"
+      test -s "$out/assets/local-unitarity-dark.svg"
+      test -s "$out/assets/gammalooplogo-light.svg"
+      test -s "$out/assets/gammalooplogo-dark.svg"
+      test -s "$out/developers/.note"
+      test -s "$out/developers/index.html"
+      test -s "$out/developers/search-index.json"
+      test -s "$out/developers/assets/site.css"
+      test -s "$out/developers/assets/site.js"
+      test -s "$out/developers/architecture/gammaloop-architecture/index.html"
+      ${alphal00pDocsDeveloperAssertions "$out"}
+      for product in gammaloop linnet spenso idenso vakint feynkit; do
+        product_root="$out/products/$product"
+        test -s "$product_root/index.html"
+        test -s "$product_root/latest/index.html"
+        test -s "$product_root/latest/.note"
+        test -s "$product_root/latest/manual.pdf"
+        test -s "$product_root/latest/search-index.json"
+        test -s "$product_root/latest/snapshot.json"
+        test -s "$product_root/latest/tutorial/index.html"
+        test -s "$product_root/latest/reference/interfaces/index.html"
+        test -s "$product_root/latest/version-history/index.html"
+        test -s "$product_root/latest/assets/site.css"
+        test -s "$product_root/latest/assets/site.js"
+        test -s "$product_root/latest/assets/local-unitarity-light.svg"
+        test -s "$product_root/latest/assets/local-unitarity-dark.svg"
+        test -s "$product_root/latest/assets/gammalooplogo-light.svg"
+        test -s "$product_root/latest/assets/gammalooplogo-dark.svg"
+        test -s "$product_root/latest/reference/rust/index.html"
+        test -s "$product_root/latest/reference/python/index.html"
+        test -n "$(find "$product_root/latest/reference/python" \
+          -mindepth 2 -maxdepth 2 -name index.html -print -quit)"
+        ! grep -q "Rustdoc generation was skipped" \
+          "$product_root/latest/reference/rust/index.html"
+      done
+      for product in gammaloop linnet spenso idenso vakint; do
+        product_root="$out/products/$product"
+        test -s "$product_root/latest/manual/interfaces/index.html"
+        test -s "$product_root/latest/manual/releases/index.html"
+        grep -Fq 'url=../../reference/interfaces/' \
+          "$product_root/latest/manual/interfaces/index.html"
+        grep -Fq 'url=../../version-history/' \
+          "$product_root/latest/manual/releases/index.html"
+      done
+      test -s "$out/products/gammaloop/latest/reference/rust/gammalooprs/index.html"
+      test -s "$out/products/gammaloop/latest/reference/rust/gammaloop_api/index.html"
+      test -s "$out/products/linnet/latest/reference/rust/linnet/index.html"
+      test -s "$out/products/spenso/latest/reference/rust/spenso/index.html"
+      test -s "$out/products/spenso/latest/reference/rust/spenso_macros/index.html"
+      test -s "$out/products/spenso/latest/reference/rust/spenso_hep_lib/index.html"
+      test -s "$out/products/idenso/latest/reference/rust/idenso/index.html"
+      test -s "$out/products/vakint/latest/reference/rust/vakint/index.html"
+      for component in feynkit feynkit_amplitude feynkit_model feynkit_ufo feynkit_kinematics feynkit_graph feynkit_generator feynkit_cff feynkit_tensor; do
+        test -s "$out/products/feynkit/latest/reference/rust/$component/index.html"
+      done
+      test -s "$out/products/feynkit/latest/reference/python/feynkit-community/index.html"
+      test -s "$out/products/gammaloop/latest/reference/rust/theme.css"
+      grep -Fq 'href="../theme.css"' \
+        "$out/products/gammaloop/latest/reference/rust/gammalooprs/index.html"
+      grep -Fq 'class="alphal00p-rustdoc-bar"' \
+        "$out/products/gammaloop/latest/reference/rust/gammalooprs/index.html"
+      test -s \
+        "$out/products/gammaloop/latest/reference/rust/src/gammalooprs/lib.rs.html"
+      grep -Fq 'href="../../theme.css"' \
+        "$out/products/gammaloop/latest/reference/rust/src/gammalooprs/lib.rs.html"
+      grep -Fq 'class="alphal00p-rustdoc-bar"' \
+        "$out/products/gammaloop/latest/reference/rust/src/gammalooprs/lib.rs.html"
+      test -s "$out/products/linnet/latest/reference/typst/index.html"
+      for typst_page in graph layout drawing templates subgraph; do
         test -s \
-          "$out/products/gammaloop/latest/reference/rust/src/gammalooprs/lib.rs.html"
-        grep -Fq 'href="../../theme.css"' \
-          "$out/products/gammaloop/latest/reference/rust/src/gammalooprs/lib.rs.html"
-        grep -Fq 'class="alphal00p-rustdoc-bar"' \
-          "$out/products/gammaloop/latest/reference/rust/src/gammalooprs/lib.rs.html"
-        test -s "$out/products/linnet/latest/reference/typst/index.html"
-        for typst_page in graph layout drawing templates subgraph; do
-          test -s \
-            "$out/products/linnet/latest/reference/typst/$typst_page/index.html"
-        done
-        grep -Fq '"title": "graph.build"' \
-          "$out/products/linnet/latest/search-index.json"
-        ! grep -Fq '"title": "Parameters"' \
-          "$out/products/linnet/latest/search-index.json"
-        grep -Fq 'href="../../../../gammaloop/latest/guides/kurvst/"' \
-          "$out/products/linnet/latest/reference/typst/index.html"
-      '';
+          "$out/products/linnet/latest/reference/typst/$typst_page/index.html"
+      done
+      grep -Fq '"title": "graph.build"' \
+        "$out/products/linnet/latest/search-index.json"
+      ! grep -Fq '"title": "Parameters"' \
+        "$out/products/linnet/latest/search-index.json"
+      grep -Fq 'href="../../../../gammaloop/latest/guides/kurvst/"' \
+        "$out/products/linnet/latest/reference/typst/index.html"
+    '';
+  };
 
-  alphal00pDocsPages = craneLib.mkCargoDerivation (
+  alphal00pDocsPages = mkCargoRuntime (
     alphal00pDocsDerivationArgs
     // {
       pname = "alphal00p-docs-pages";
-      ALPHAL00P_DOCS_CHANNEL = alphal00pDocsPagesChannel;
-      ALPHAL00P_DOCS_GIT_COMMIT = alphal00pDocsPagesGitCommit;
-      ALPHAL00P_DOCS_GIT_TIMESTAMP = alphal00pDocsPagesGitTimestamp;
-      ALPHAL00P_DOCS_SNAPSHOT_TAG = alphal00pDocsPagesSnapshotTag;
       buildPhaseCargoCommand = ''
+        export ALPHAL00P_DOCS_CHANNEL="''${ALPHAL00P_DOCS_CHANNEL:-latest}"
+        export ALPHAL00P_DOCS_SNAPSHOT_TAG="''${ALPHAL00P_DOCS_SNAPSHOT_TAG:-}"
+        case "$ALPHAL00P_DOCS_CHANNEL" in
+          latest|snapshot) ;;
+          *) echo "ALPHAL00P_DOCS_CHANNEL must be latest or snapshot" >&2; exit 2 ;;
+        esac
+        if [[ "$ALPHAL00P_DOCS_CHANNEL" == latest && -n "$ALPHAL00P_DOCS_SNAPSHOT_TAG" ]] ||
+          [[ "$ALPHAL00P_DOCS_CHANNEL" == snapshot && -z "$ALPHAL00P_DOCS_SNAPSHOT_TAG" ]]; then
+          echo "ALPHAL00P_DOCS_SNAPSHOT_TAG must be set exactly for snapshot builds" >&2
+          exit 2
+        fi
+        if [[ -z "''${ALPHAL00P_DOCS_GIT_COMMIT:-}" ]]; then
+          export ALPHAL00P_DOCS_GIT_COMMIT=${lib.escapeShellArg documentationRevision}
+        fi
+        if [[ -z "''${ALPHAL00P_DOCS_GIT_TIMESTAMP:-}" ]]; then
+          export ALPHAL00P_DOCS_GIT_TIMESTAMP=${lib.escapeShellArg (toString self.lastModified)}
+        fi
         ${alphal00pDocsValidationCommands}
 
         docs_args=(
           build
           --product all
-          --channel ${lib.escapeShellArg alphal00pDocsPagesChannel}
+          --channel "$ALPHAL00P_DOCS_CHANNEL"
           --output "$out"
           --rustdoc-target-root ${lib.escapeShellArg alphal00pDocsCargoTargetRoot}
         )
-        ${lib.optionalString (alphal00pDocsPagesChannel == "snapshot") ''
-          docs_args+=(--snapshot-tag ${lib.escapeShellArg alphal00pDocsPagesSnapshotTag})
-        ''}
+        if [[ "$ALPHAL00P_DOCS_CHANNEL" == snapshot ]]; then
+          docs_args+=(--snapshot-tag "$ALPHAL00P_DOCS_SNAPSHOT_TAG")
+        fi
         cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-builder -- "''${docs_args[@]}"
         python3 scripts/check-docs-html.py "$out"
 

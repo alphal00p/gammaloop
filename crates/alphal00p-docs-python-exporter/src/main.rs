@@ -1,6 +1,9 @@
 //! Emit one pyo3-stub-gen inventory as a deterministic checked-in stub.
 
-use std::{env, error::Error, fs, path::PathBuf};
+use std::env;
+use std::error::Error;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 #[cfg(any(
     feature = "feynkit",
@@ -71,20 +74,29 @@ fn main() -> Result<(), Box<dyn Error>> {
         .join("\n");
     normalized.push('\n');
     let mut outputs = vec![output];
+    // Nextest owns relocated test roots; standalone exporters can select the same source tree.
+    let root = match env::var_os("NEXTEST_WORKSPACE_ROOT")
+        .or_else(|| env::var_os("GAMMALOOP_WORKSPACE_ROOT"))
+    {
+        Some(root) => PathBuf::from(root),
+        None => Path::new(env!("CARGO_MANIFEST_DIR"))
+            .ancestors()
+            .nth(2)
+            .ok_or("documentation exporter is not inside a workspace")?
+            .to_path_buf(),
+    };
     match component.as_str() {
-        "feynkit-community" => outputs.push(
-            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .join("../feynkit-py/python/symbolica/community/hepkit/__init__.pyi"),
-        ),
+        "feynkit-community" => outputs
+            .push(root.join("crates/feynkit-py/python/symbolica/community/hepkit/__init__.pyi")),
         "linnet-graph" => outputs.extend([
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../linnet-py/python/symbolica/community/graph/__init__.pyi"),
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../examples/notebooks/symbolica-host/python/symbolica/community/graph/__init__.pyi"),
-        ]),
-        "spynso3" => outputs.push(
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(
-                "../../examples/notebooks/symbolica-host/python/symbolica/community/tensor/__init__.pyi",
+            root.join("crates/linnet-py/python/symbolica/community/graph/__init__.pyi"),
+            root.join(
+                "examples/notebooks/symbolica-host/python/symbolica/community/graph/__init__.pyi",
             ),
-        ),
+        ]),
+        "spynso3" => outputs.push(root.join(
+            "examples/notebooks/symbolica-host/python/symbolica/community/tensor/__init__.pyi",
+        )),
         _ => {}
     }
     outputs.sort();
