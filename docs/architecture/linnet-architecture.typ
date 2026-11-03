@@ -134,6 +134,14 @@ caller to supply bytes for exactly the archived type. Callers remain responsible
 versioning those bytes. DOT is the human-readable interchange format. Linnet has no state
 directory, database, or background persistence service.
 
+`Permutation` validates direct and inverse mappings at construction and during
+serde/bincode decoding. Both must be bijections of the same index domain and
+each other's inverse. The serialized `map`/`inv` fields keep their wire format,
+but invalid stored mappings are rejected. Mutable slice iteration relies on
+this checked invariant to yield each element at most once, even when callers
+retain earlier references. Typed-vector conversion and DOT parsing preserve
+the underlying `PermutationError` when admission fails.
+
 The `drawing` feature enables `cgmath` and the layout modules. The `symbolica` feature enables
 the half-edge Symbolica adapter. These features extend data conversion or analysis; they do not
 change the involution and node-incidence contracts. The optional `energy-timing` feature

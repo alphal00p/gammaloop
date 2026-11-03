@@ -611,20 +611,23 @@ impl<S: NodeStorageOps<NodeData = DotVertexData>> DotGraph<S> {
         let edge_perm: Permutation =
             edge_map
                 .try_into()
-                .map_err(|()| DotParseError::InvalidExplicitIdPermutation {
+                .map_err(|source| DotParseError::InvalidExplicitIdPermutation {
                     kind: ExplicitIdKind::Edge,
+                    source,
                 })?;
         let node_perm: Permutation =
             node_map
                 .try_into()
-                .map_err(|()| DotParseError::InvalidExplicitIdPermutation {
+                .map_err(|source| DotParseError::InvalidExplicitIdPermutation {
                     kind: ExplicitIdKind::Node,
+                    source,
                 })?;
         let hedge_perm: Permutation =
             hedge_map
                 .try_into()
-                .map_err(|()| DotParseError::InvalidExplicitIdPermutation {
+                .map_err(|source| DotParseError::InvalidExplicitIdPermutation {
                     kind: ExplicitIdKind::Hedge,
+                    source,
                 })?;
         // println!("Hedge Perm: {hedge_perm}");
         // println!("Edge Perm: {edge_perm}");
