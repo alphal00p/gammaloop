@@ -4,6 +4,8 @@ use symbolica::id::Replacement;
 
 #[path = "routing_tests/four_loop.rs"]
 mod four_loop;
+#[path = "routing_tests/user_routings.rs"]
+mod user_routings;
 
 #[test]
 fn forced_basis_preserves_mass_and_power_under_a_negative_orientation() {

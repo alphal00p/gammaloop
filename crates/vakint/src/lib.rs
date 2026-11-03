@@ -16,6 +16,7 @@ pub mod matad;
 pub mod matad_numerics;
 pub mod precision;
 mod presentation;
+mod routing;
 pub mod rustred_evaluation;
 pub mod symbols;
 pub mod topologies;
@@ -1034,6 +1035,29 @@ fn get_prop_with_id(
         })
 }
 
+/// `f(n)` -> the pattern `f(n,idx___)` matching the momentum with any index tail.
+fn with_index_tail(head: AtomView) -> Result<Atom, VakintError> {
+    let AtomView::Fun(function) = head else {
+        return Err(VakintError::InvalidMomentumExpression(format!(
+            "loop momentum {head} is not of the form <symbol>(<int>)"
+        )));
+    };
+    let mut builder = FunctionBuilder::new(function.get_symbol());
+    for argument in function.iter() {
+        builder = builder.add_arg(argument);
+    }
+    Ok(builder.add_arg(vk_parse!("idx___").unwrap()).finish())
+}
+
+/// Attach the `idx___` index tail to every canonical loop momentum `k(i)`.
+fn with_k_index_tail(momentum: AtomView) -> Atom {
+    momentum
+        .replace(vk_parse!("k(ilmb_)").unwrap().to_pattern())
+        .when(Condition::from((vk_symbol!("ilmb_"), number_condition())))
+        .allow_new_wildcards_on_rhs(true)
+        .with(vk_parse!("k(ilmb_,idx___)").unwrap().to_pattern())
+}
+
 impl Default for Integral {
     fn default() -> Self {
         Integral::new(0, None, None, EvaluationOrder::empty()).unwrap()
@@ -1466,6 +1490,7 @@ impl Integral {
         let mut best_match_thus_far: Option<(
             ((usize, usize), (Vec<usize>, Vec<(usize, bool)>)),
             ReplacementRules,
+            Vec<(Atom, Atom)>,
         )> = None;
 
         let mut topology_matcher = undirected_input.pattern_match(
@@ -1513,6 +1538,7 @@ impl Integral {
             let mut score_for_this_match: (usize, usize) = (0, 0);
             let mut degeneracy_lifter_for_this_match: Vec<usize> = vec![];
             let mut degeneracy_lifter_exact_for_this_match: Vec<(usize, bool)> = vec![];
+            let mut routing_equations_for_this_match: Vec<(Atom, Atom)> = vec![];
             for prop_id in 1..=self.n_props {
                 if let Some(canonical_prop_match) = get_prop_with_id(
                     self.canonical_expression.as_ref().unwrap().as_view(),
@@ -1609,43 +1635,36 @@ impl Integral {
                         .edge_ids_canonical_to_input_map
                         .insert(prop_id, input_prop_id);
 
-                    let potential_lmb_match = input_prop_match.get(&vk_symbol!("q_")).unwrap();
-                    // This is an LMB that'll need replacement in the numerator
-                    // if let Match::Single(AtomView::Fun(_)) = potential_lmb_match {
-                    if potential_lmb_match
+                    // The momentum bound by this match, not looked up by ID: input IDs
+                    // need not be unique.
+                    let input_momentum = match m1
+                        .match_stack
+                        .get(vk_symbol!(format!("q{}__", prop_id).as_str()))
+                    {
+                        Some(Match::Single(momentum)) => momentum.to_owned(),
+                        _ => input_prop_match.get(&vk_symbol!("q_")).unwrap().clone(),
+                    };
+                    let input_momentum = &input_momentum;
+                    let canonical_momentum = canonical_prop_match.get(&vk_symbol!("q_")).unwrap();
+                    // Prefer matches in which input propagators carrying a single loop
+                    // momentum land on single-momentum canonical propagators: this keeps
+                    // the numerator substitution simple. It does not affect correctness,
+                    // the substitution itself is solved from all edges below.
+                    if input_momentum
                         .pattern_match(&vk_parse!("q_(args__)").unwrap().to_pattern(), None, None)
                         .count()
                         == 1
                     {
-                        let (input_momentum_symbol, (input_momentum_atom_id, _input_momentum_id)) =
-                            get_individual_momenta(potential_lmb_match.as_view())?
-                                .pop()
-                                .unwrap();
-                        let input_lmb_pattern = function!(
-                            input_momentum_symbol,
-                            &input_momentum_atom_id,
-                            &vk_parse!("idx___").unwrap()
-                        );
-
-                        let mut canonical_momenta_atom_for_pattern = canonical_prop_match
-                            .get(&vk_symbol!("q_"))
-                            .unwrap()
-                            .replace(vk_parse!("k(ilmb_)").unwrap().to_pattern())
-                            .when(Condition::from((vk_symbol!("ilmb_"), number_condition())))
-                            .allow_new_wildcards_on_rhs(true)
-                            .with(vk_parse!("k(ilmb_,idx___)").unwrap().to_pattern());
-                        let lmb_replacement_length: i32 =
-                            canonical_momenta_atom_for_pattern.nterms() as i32;
-                        score_for_this_match.0 += (lmb_replacement_length - 1).max(0) as usize;
-                        if is_edge_flipped {
-                            canonical_momenta_atom_for_pattern =
-                                (canonical_momenta_atom_for_pattern * -1).expand()
-                        }
-
-                        replacement_rules
-                            .numerator_substitutions
-                            .insert(input_lmb_pattern, canonical_momenta_atom_for_pattern);
+                        score_for_this_match.0 += canonical_momentum.nterms().saturating_sub(1);
                     }
+                    routing_equations_for_this_match.push((
+                        input_momentum.clone(),
+                        if is_edge_flipped {
+                            -canonical_momentum
+                        } else {
+                            canonical_momentum.clone()
+                        },
+                    ));
                 } else {
                     replacement_rules.canonical_expression_substitutions.insert(
                         vk_parse!(format!("pow({})", prop_id).as_str()).unwrap(),
@@ -1654,7 +1673,8 @@ impl Integral {
                 }
             }
 
-            if let Some(((score, degeneracy_lifer), _repl_rules)) = best_match_thus_far.as_ref() {
+            if let Some(((score, degeneracy_lifer), _repl_rules, _)) = best_match_thus_far.as_ref()
+            {
                 // println!(
                 //     "DEBUG A {:?}, {:?}, {:?}",
                 //     score, degeneracy_lifer.0, degeneracy_lifer.1
@@ -1698,6 +1718,7 @@ impl Integral {
                     ),
                 ),
                 replacement_rules.clone(),
+                routing_equations_for_this_match,
             ));
 
             // Early termination if this is a perfect match
@@ -1708,11 +1729,19 @@ impl Integral {
             }
         }
 
-        if let Some((_score, replacement_rules)) = &best_match_thus_far {
-            // println!("VHDEBUG FROM integral: {}", self);
-            // println!("VHDEBUG Found match: {}", replacement_rules);
-            // panic!("VHDEBUG STOP");
-            Ok(Some(replacement_rules.to_owned()))
+        if let Some((_score, mut replacement_rules, routing_equations)) = best_match_thus_far {
+            // Every input loop momentum is rewritten in the canonical basis by
+            // solving all matched edges simultaneously; a loop momentum need not
+            // be a propagator momentum and a reversed edge may carry -k(i).
+            for (input_head, canonical_image) in
+                routing::input_loop_momenta_in_canonical_basis(&routing_equations)?
+            {
+                replacement_rules.numerator_substitutions.insert(
+                    with_index_tail(input_head.as_view())?,
+                    with_k_index_tail(canonical_image.as_view()),
+                );
+            }
+            Ok(Some(replacement_rules))
         } else {
             // let msg = [
             //     format!("User topology: {}", undirected_input),
