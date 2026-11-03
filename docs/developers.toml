@@ -237,7 +237,11 @@ anchor = "pub struct Model {"
 # models without ZERO retain the exact proof on their internal parameters.
 # Reviewed 2026-10-16: The architecture distinguishes structural mass classification from a known zero pole in a massive covariant multiplet.
 # Reviewed 2026-10-16: Canonical expression export makes fingerprints independent of registration order; model ownership and strict import validation remain unchanged.
-digest = "0fdae8e4e1028c7e0cf0aa8e27f2443b53076d10"
+# Reviewed 2026-11-03: coupling expansion matches both the declared coupling
+# name and its expression literally, including underscore-suffixed symbols.
+# The regression preserves unrelated symbols. Canonical model ownership and
+# serialization remain unchanged; this does not qualify zero-mass substitutions.
+digest = "c97bf9c4296fe7a87b271fd5724bb7ecb26426d4"
 
 [[section.note.scope]]
 path = "crates/feynkit-graph/src/lib.rs"
