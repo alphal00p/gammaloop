@@ -1,6 +1,8 @@
 # Gammaloop build and development commands
 
-ci_cargo_profile := "ci-optim"
+profile := env_var_or_default("GAMMALOOP_BUILD_PROFILE", trim(read(justfile_directory() + "/.config/build-profile")))
+export GAMMALOOP_BUILD_PROFILE := profile
+backend := "auto"
 
 mod linnet 'crates/linnet/Justfile'
 mod tydenso 'tydenso/Justfile'
@@ -32,65 +34,65 @@ _sync-drawing-assets:
         ;;
     esac
 
-# Build gammaloop Python CLI with UFO support and dev-optim profile
+# Build gammaloop CLI with UFO support and the shared profile.
 build-cli: _sync-drawing-assets
-    cargo build -p gammaloop-api --bin gammaloop --features ufo-import --profile dev-optim
+    bash scripts/develop.sh --backend {{ quote(backend) }} build -p gammaloop-api --bin gammaloop --features ufo-import
 
 # Build gammaloop CLI without Python (no pyo3)
 build-cli-no-pyo3: _sync-drawing-assets
-    cargo build -p gammaloop-api --bin gammaloop --no-default-features --features cli --profile dev-optim
+    bash scripts/develop.sh --backend {{ quote(backend) }} build -p gammaloop-api --bin gammaloop --no-default-features --features cli
 
-# Build gammaloop Python CLI with UFO support and stable ABI (dev-optim profile)
+# Build gammaloop CLI with UFO support, stable ABI and the shared profile.
 build-cli-abi: _sync-drawing-assets
-    cargo build -p gammaloop-api --bin gammaloop --features ufo-import,abi3 --profile dev-optim
+    bash scripts/develop.sh --backend {{ quote(backend) }} build -p gammaloop-api --bin gammaloop --features ufo-import,abi3
 
 # Build gammaloop Python CLI in release mode
 build-cli-release: _sync-drawing-assets
-    cargo build -p gammaloop-api --bin gammaloop --features ufo-import --release
+    bash scripts/develop.sh --backend {{ quote(backend) }} build -p gammaloop-api --bin gammaloop --features ufo-import --release
 
 # Build gammaloop Python CLI in release mode with stable ABI
 build-cli-release-abi: _sync-drawing-assets
-    cargo build -p gammaloop-api --bin gammaloop --features ufo-import,abi3 --release
+    bash scripts/develop.sh --backend {{ quote(backend) }} build -p gammaloop-api --bin gammaloop --features ufo-import,abi3 --release
 
-# Build gammaloop Python API with UFO support and dev-optim profile
+# Build and install the GammaLoop Python API with the shared profile.
 build-api: _sync-drawing-assets
-    maturin develop -m crates/gammaloop-api/Cargo.toml --no-default-features --features=extension-module --profile=dev-optim
+    bash scripts/develop.sh --backend {{ quote(backend) }} python gammaloop --install
 
-# Build gammaloop Python API with UFO support and stable ABI (dev-optim profile)
+# Build and install the GammaLoop Python API with stable ABI and the shared profile.
 build-api-abi: _sync-drawing-assets
-    maturin develop -m crates/gammaloop-api/Cargo.toml --no-default-features --features=extension-module,abi3 --profile=dev-optim
+    bash scripts/develop.sh --backend {{ quote(backend) }} python gammaloop --install --abi3
 
-# Build gammaloop Python API with UFO support and dev-optim profile
+# Build a GammaLoop Python wheel with the shared profile.
 build-api-wheel: _sync-drawing-assets
-    maturin build -m crates/gammaloop-api/Cargo.toml --no-default-features --features=extension-module --profile=dev-optim
+    bash scripts/develop.sh --backend {{ quote(backend) }} python gammaloop
 
-# Build gammaloop Python API with UFO support and stable ABI (dev-optim profile)
+# Build a GammaLoop Python wheel with stable ABI and the shared profile.
 build-api-abi-wheel: _sync-drawing-assets
-    maturin build -m crates/gammaloop-api/Cargo.toml --no-default-features --features=extension-module,abi3 --profile=dev-optim
+    bash scripts/develop.sh --backend {{ quote(backend) }} python gammaloop --abi3
 
 # Build gammaloop Python API with UFO support and release profile
 build-api-release: _sync-drawing-assets
-    maturin develop -m crates/gammaloop-api/Cargo.toml --no-default-features --features=extension-module --profile=release
+    bash scripts/develop.sh --backend {{ quote(backend) }} python gammaloop --profile release --install
 
 # Build gammaloop Python API with UFO support and stable ABI (release profile)
 build-api-abi-release: _sync-drawing-assets
-    maturin develop -m crates/gammaloop-api/Cargo.toml --no-default-features --features=extension-module,abi3 --profile=release
+    bash scripts/develop.sh --backend {{ quote(backend) }} python gammaloop --profile release --install --abi3
 
 # Build gammaloop Python API wheel with UFO support and release profile
 build-api-release-wheel: _sync-drawing-assets
-    maturin build -m crates/gammaloop-api/Cargo.toml --no-default-features --features=extension-module --profile=release
+    bash scripts/develop.sh --backend {{ quote(backend) }} python gammaloop --profile release
 
 # Build gammaloop Python API wheel with UFO support and stable ABI (release profile)
 build-api-abi-release-wheel: _sync-drawing-assets
-    maturin build -m crates/gammaloop-api/Cargo.toml --no-default-features --features=extension-module,abi3 --profile=release
+    bash scripts/develop.sh --backend {{ quote(backend) }} python gammaloop --profile release --abi3
 
 # Build all workspace packages
 build-all:
-    cargo build --workspace
+    bash scripts/develop.sh --backend {{ quote(backend) }} build --workspace
 
 # Clean build artifacts
 clean:
-    cargo clean
+    bash scripts/develop.sh --backend {{ quote(backend) }} clean
 
 # Guard mutually exclusive Symbolica backends in Hakari's native-only graph.
 check-symbolica-feature-isolation:
@@ -165,11 +167,14 @@ check-spynso-wasm:
       --target wasm32-unknown-emscripten
 
 # Check code without building
-check: check-symbolica-feature-isolation
-    cargo check --workspace --all-targets --locked
+check:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    just check-symbolica-feature-isolation
+    bash scripts/develop.sh --backend {{ quote(backend) }} check --workspace --all-targets
 
 doc:
-    cargo doc --workspace --no-deps --locked --profile {{ ci_cargo_profile }}
+    bash scripts/develop.sh --backend {{ quote(backend) }} doc --workspace --no-deps
 
 # Render the website illustrations and Linnest example into target/docs-svg-assets.
 docs-svg-assets:
@@ -338,20 +343,50 @@ docs-serve PRODUCT PORT="8000" OUTPUT="target/alphal00p-docs-serve":
     just docs-watch {{ quote(PRODUCT) }} {{ quote(PORT) }} {{ quote(OUTPUT) }}
 
 # Format code
+[positional-arguments]
 fmt *lint_args:
-    cargo fmt --all {{ lint_args }}
+    bash scripts/develop.sh --backend {{ quote(backend) }} fmt "$@"
 
 # Run clippy linter
+[positional-arguments]
 clippy *lint_args:
-    cargo clippy --workspace --all-targets --locked --profile {{ ci_cargo_profile }} {{ lint_args }}
+    bash scripts/develop.sh --backend {{ quote(backend) }} clippy --workspace --all-targets "$@"
 
 # Build everything in release mode for maximum performance
 build-release-all:
-    cargo build --workspace --release
+    bash scripts/develop.sh --backend {{ quote(backend) }} build --workspace --release
 
 # Build in release mode using the local Cargo artifacts.
 dev-release: build-release-all
 
 # Run gammaloop
+[positional-arguments]
 run *ARGS:
-    cargo run -p gammaloop-api --bin gammaloop --features ufo-import --profile dev-optim -- {{ ARGS }}
+    bash scripts/develop.sh --backend {{ quote(backend) }} run -p gammaloop-api --bin gammaloop --features ufo-import -- "$@"
+
+# Build a selected workspace crate, preferring the shared Nix store.
+[positional-arguments]
+build CRATE="gammaloop-api" *args:
+    #!/usr/bin/env bash
+    bash scripts/develop.sh --backend {{ quote(backend) }} build -p "$1" "${@:2}"
+
+# Explicit Cargo iteration, without automatic backend selection.
+[positional-arguments]
+build-cargo CRATE="gammaloop-api" *args:
+    #!/usr/bin/env bash
+    bash scripts/develop.sh --backend cargo build -p "$1" "${@:2}"
+
+# Build a native Python wheel: gammaloop or the combined Community host.
+[positional-arguments]
+python-wheel PACKAGE="gammaloop" *args:
+    bash scripts/develop.sh --backend {{ quote(backend) }} python "$@"
+
+# Build and install a wheel into the active environment or repository .venv.
+[positional-arguments]
+python-develop PACKAGE="gammaloop" *args:
+    #!/usr/bin/env bash
+    bash scripts/develop.sh --backend {{ quote(backend) }} python "$1" --install "${@:2}"
+
+# Verify dispatch behavior without compiling workspace code.
+development-check:
+    nix run .#development-tests
