@@ -29,6 +29,9 @@ pub struct DiagramIntegralOptions {
     pub physical_slots: Option<Vec<usize>>,
     pub parameter_substitutions: Vec<(Atom, Atom)>,
     pub external_momenta: Vec<Atom>,
+    /// The name of the external momentum of a propagator-type graph (two
+    /// external legs), a bare `p(i)`; `p(1)` by default.
+    pub external_momentum: Option<Atom>,
 }
 
 impl VakintExpression {
@@ -54,6 +57,9 @@ impl VakintExpression {
         let invalid = |message: &str| VakintError::InvalidIntegralFormat(message.into());
         let native_error = |error: &dyn std::fmt::Display| invalid(&error.to_string());
         let basis = diagram.loop_momentum_basis();
+        if basis.external_edges.len() == 2 && diagram.cuts().is_empty() {
+            return Self::from_propagator_diagram(diagram, family, numerator, options);
+        }
         if !basis.external_edges.is_empty()
             || !diagram.cuts().is_empty()
             || !family.external_momenta().is_empty()
@@ -360,6 +366,260 @@ impl VakintExpression {
         // polynomial merely to rename its already contracted scalar products.
         scalar = scalar.replace_multiple(&products);
         if !scalar_symbols(&scalar) {
+            return Err(invalid(
+                "numerator contains unconverted momentum/tensor notation; use declared scalar products",
+            ));
+        }
+        Self::try_from(scalar * S.topo.call(topology))
+    }
+
+    /// Convert a routed, uncut massless propagator-type graph: exactly two
+    /// external legs (docs/p_integrals.md, section 3).
+    ///
+    /// The external momentum `p(1)` (or `options.external_momentum`) flows into
+    /// the graph through the leg with the smallest edge id; the stored routing
+    /// supplies its sign, whichever leg FeynKit made dependent. Every graph line
+    /// becomes a `prop` with its power, also when it is zero or negative: the
+    /// ordinary p-integral normalization then contracts, merges and moves
+    /// them to the numerator exactly as for a written Atom. Negative powers of
+    /// auxiliary family slots enter the numerator.
+    fn from_propagator_diagram(
+        diagram: &FeynmanDiagram,
+        family: &IntegralFamily,
+        numerator: &Atom,
+        options: &DiagramIntegralOptions,
+    ) -> Result<Self, VakintError> {
+        let invalid = |message: &str| VakintError::InvalidIntegralFormat(message.into());
+        let native_error = |error: &dyn std::fmt::Display| invalid(&error.to_string());
+        if !options.external_momenta.is_empty() {
+            return Err(invalid(
+                "p-graphs take no spectator momenta: external_momenta must be empty",
+            ));
+        }
+        let head = options
+            .external_momentum
+            .clone()
+            .unwrap_or_else(|| S.p.call(1));
+        if !matches!(head.as_view(), AtomView::Fun(function)
+            if function.get_symbol() == S.p && function.get_nargs() == 1
+                && function.iter().next().and_then(|id| i64::try_from(id).ok()).is_some())
+        {
+            return Err(invalid("external_momentum must be a bare p(i)"));
+        }
+        diagram.validate().map_err(|error| native_error(&error))?;
+        let basis = diagram.loop_momentum_basis();
+        let mut edges = diagram.edges().collect::<Vec<_>>();
+        edges.sort_by_key(|(id, _, _)| *id);
+        let (legs, mut lines): (Vec<_>, Vec<_>) = edges.into_iter().partition(|(_, ends, edge)| {
+            edge.external.is_some() || ends.source.is_none() || ends.target.is_none()
+        });
+        if legs.len() != 2 || lines.is_empty() {
+            return Err(invalid(
+                "a p-graph has exactly two external legs and internal propagators",
+            ));
+        }
+        lines.sort_by_key(|(id, _, _)| *id);
+
+        let free = Kinematics::in_dimension(&family.kinematics().dimension().to_symbolic())
+            .map_err(|error| native_error(&error))?;
+        let physical = diagram
+            .propagator_family(&free)
+            .map_err(|error| native_error(&error))?;
+        let loops = family.loop_momenta();
+        if loops != physical.loop_momenta()
+            || loops.len() != diagram.loop_count()
+            || family.external_momenta() != physical.external_momenta()
+            || physical.external_momenta().len() != 1
+        {
+            return Err(invalid(
+                "family loop and external basis does not match the stored graph routing",
+            ));
+        }
+        // The external basis is indexed by leg position; the dependent leg's
+        // coordinate never occurs.
+        let independent = &physical.external_momenta()[0];
+        let externals = basis
+            .external_edges
+            .iter()
+            .map(|edge| {
+                if basis.dependent_externals.contains(edge) {
+                    Atom::Zero
+                } else {
+                    independent.clone()
+                }
+            })
+            .collect::<Vec<_>>();
+        let signature = |id| {
+            basis
+                .edge_signatures
+                .get(id)
+                .ok_or_else(|| invalid("stored graph routing is missing an edge"))
+        };
+        // p(1) is the momentum flowing into the graph through the first leg.
+        let (first, first_ends, _) = &legs[0];
+        let along = signature(first)?
+            .external
+            .apply(&externals)
+            .map_err(|error| native_error(&error))?
+            .unwrap_or_default();
+        let into = if first_ends.source.is_none() {
+            along
+        } else {
+            -along
+        };
+        // into = c·P with c = ±1, hence P = c·p(1).
+        let orientation = if (into.clone() - independent).expand().is_zero() {
+            Atom::num(1)
+        } else if (into + independent).expand().is_zero() {
+            Atom::num(-1)
+        } else {
+            return Err(invalid(
+                "the first external leg does not carry the external momentum",
+            ));
+        };
+        let scaled = &orientation * &head;
+
+        let parameter = |expression: &Atom| {
+            expression.get_all_symbols(true).iter().all(|symbol| {
+                !symbol.get_name().starts_with("spenso::")
+                    && loops
+                        .iter()
+                        .chain([independent])
+                        .all(|momentum| !momentum.get_all_symbols(true).contains(symbol))
+            })
+        };
+        if options
+            .parameter_substitutions
+            .iter()
+            .any(|(source, target)| {
+                !matches!(source.as_view(), AtomView::Var(_))
+                    || !parameter(source)
+                    || !parameter(target)
+            })
+        {
+            return Err(invalid(
+                "parameter substitutions must be scalar, not momentum/representation rewrites",
+            ));
+        }
+        let substitutions = options
+            .parameter_substitutions
+            .iter()
+            .map(|(source, target)| Replacement::new(source.clone(), target.clone()))
+            .collect::<Vec<_>>();
+        let substitute = |expression: &Atom| expression.replace_multiple(&substitutions);
+        let denominators = family.denominators();
+        let default_slots = (0..lines.len()).collect::<Vec<_>>();
+        let physical_slots = options.physical_slots.as_deref().unwrap_or(&default_slots);
+        let physical_set = physical_slots.iter().copied().collect::<HashSet<_>>();
+        if physical_slots.len() != lines.len()
+            || physical_set.len() != physical_slots.len()
+            || physical_slots
+                .iter()
+                .any(|slot| *slot >= denominators.len())
+            || physical.denominators().len() != lines.len()
+            || physical_slots
+                .iter()
+                .zip(physical.denominators())
+                .any(|(slot, wanted)| {
+                    !(&denominators[*slot] - substitute(wanted))
+                        .expand()
+                        .is_zero()
+                })
+        {
+            return Err(invalid(
+                "family physical denominator order/sign/masses do not match the graph",
+            ));
+        }
+        let powers = match options.powers.as_deref() {
+            Some(powers) => powers.to_vec(),
+            None => {
+                let mut values = vec![Integer::from(0); denominators.len()];
+                for ((_, _, edge), slot) in lines.iter().zip(physical_slots) {
+                    values[*slot] = Integer::from(edge.propagator_power);
+                }
+                values
+            }
+        };
+        if powers.len() != denominators.len() {
+            return Err(invalid(
+                "powers must be one integer (not bool) per family denominator",
+            ));
+        }
+        if powers
+            .iter()
+            .enumerate()
+            .any(|(slot, power)| !physical_set.contains(&slot) && power > &Integer::from(0))
+        {
+            return Err(invalid("auxiliary powers must be nonpositive"));
+        }
+
+        let mapped = (0..loops.len())
+            .map(|i| S.k.call(i + 1))
+            .collect::<Vec<_>>();
+        let mut topology = Atom::one();
+        for (index, ((id, ends, _), slot)) in lines.iter().zip(physical_slots).enumerate() {
+            let line = signature(id)?;
+            let momentum = line
+                .apply(&mapped, &externals)
+                .map_err(|error| native_error(&error))?
+                .unwrap_or_default()
+                .replace(independent.to_pattern())
+                .with(scaled.to_pattern());
+            let original = line
+                .apply(loops, &externals)
+                .map_err(|error| native_error(&error))?
+                .unwrap_or_default();
+            let square = physical
+                .kinematics()
+                .scalar_product(&original, &original)
+                .map_err(|error| native_error(&error))?;
+            if !substitute(&(square - &physical.denominators()[index]).expand())
+                .expand()
+                .is_zero()
+            {
+                return Err(invalid("p-graph propagators must be massless"));
+            }
+            let (Some(source), Some(target)) = (ends.source, ends.target) else {
+                unreachable!("internal lines have two endpoints");
+            };
+            topology *= S.prop.call((
+                id.0,
+                S.edge.call((source.0, target.0)),
+                momentum,
+                Atom::Zero,
+                Atom::num(powers[*slot].clone()),
+            ));
+        }
+
+        let mut scalar = substitute(numerator);
+        for (slot, (denominator, power)) in denominators.iter().zip(&powers).enumerate() {
+            if !physical_set.contains(&slot) && power < &Integer::from(0) {
+                scalar *= denominator.pow(Atom::num(-power.clone()));
+            }
+        }
+        let momenta = loops
+            .iter()
+            .chain([independent])
+            .cloned()
+            .collect::<Vec<_>>();
+        let targets = mapped.iter().chain([&scaled]).cloned().collect::<Vec<_>>();
+        let free = free
+            .with_momenta(momenta.iter().cloned())
+            .map_err(|error| native_error(&error))?;
+        let mut products = Vec::new();
+        for (i, left) in momenta.iter().enumerate() {
+            for (j, right) in momenta.iter().enumerate().skip(i) {
+                let product = free
+                    .scalar_product(left, right)
+                    .map_err(|error| native_error(&error))?;
+                products.push(Replacement::new(
+                    product,
+                    S.dot.call((&targets[i], &targets[j])),
+                ));
+            }
+        }
+        scalar = scalar.replace_multiple(&products);
+        if !parameter(&scalar) {
             return Err(invalid(
                 "numerator contains unconverted momentum/tensor notation; use declared scalar products",
             ));

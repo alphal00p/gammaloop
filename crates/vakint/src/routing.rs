@@ -21,10 +21,10 @@ fn invalid(detail: impl std::fmt::Display) -> VakintError {
 }
 
 /// A linear combination of momentum heads such as `k(2)`, keyed by the head.
-type LinearMomentum = BTreeMap<Atom, Rational>;
+pub(crate) type LinearMomentum = BTreeMap<Atom, Rational>;
 
 /// Parse an expanded linear combination `sum_i c_i f_i(n_i)` with rational `c_i`.
-fn linear_momentum(momentum: AtomView) -> Result<LinearMomentum, VakintError> {
+pub(crate) fn linear_momentum(momentum: AtomView) -> Result<LinearMomentum, VakintError> {
     let expanded = momentum.expand();
     let mut result = LinearMomentum::new();
     let mut add_term = |term: AtomView| -> Result<(), VakintError> {
@@ -81,6 +81,32 @@ fn linear_momentum(momentum: AtomView) -> Result<LinearMomentum, VakintError> {
 pub(crate) fn input_loop_momenta_in_canonical_basis(
     equations: &[(Atom, Atom)],
 ) -> Result<Vec<(Atom, Atom)>, VakintError> {
+    input_loop_momenta_in_canonical_basis_affine(equations, None).map(|routing| routing.images)
+}
+
+/// The basis change of a matched propagator-type (p-) integral.
+#[derive(Clone, Debug)]
+pub(crate) struct AffineRouting {
+    /// `(input k(j), image Σ M_jl k(l) + c_j·p_user)`, `M` integer with `|det M| = 1`.
+    pub images: Vec<(Atom, Atom)>,
+    /// The canonical `p(1)` is `external_sign·p_user`.
+    pub external_sign: i8,
+}
+
+/// [`input_loop_momenta_in_canonical_basis`] for integrals with one external
+/// momentum. `external = (p_user, p_canonical, σ)` names the user's external
+/// head, the canonical one and the orientation proposed by the graph match:
+/// canonical momenta are read with `p_canonical -> σ·p_user` and the input
+/// loop momenta are solved with `p_user` known, so their images are affine.
+/// If no line-sign choice works, `-σ` is tried before failing. Any returned
+/// map is an exact change of variables: every input line is plus or minus its
+/// canonical image and the loop block is unimodular. The written line
+/// orientations are tried with both `σ` and `-σ` before any line sign is
+/// searched. `None` is the vacuum case.
+pub(crate) fn input_loop_momenta_in_canonical_basis_affine(
+    equations: &[(Atom, Atom)],
+    external: Option<(&Atom, &Atom, i8)>,
+) -> Result<AffineRouting, VakintError> {
     let parsed = equations
         .iter()
         .map(|(input, canonical)| {
@@ -90,16 +116,59 @@ pub(crate) fn input_loop_momenta_in_canonical_basis(
             ))
         })
         .collect::<Result<Vec<_>, VakintError>>()?;
+    let Some((user, canonical, sign)) = external else {
+        return solve_routing(&parsed, None, true).map(|images| AffineRouting {
+            images,
+            external_sign: 1,
+        });
+    };
+    let mut failure = None;
+    for (sign, search_signs) in [(sign, false), (-sign, false), (sign, true), (-sign, true)] {
+        // Read the canonical external head as sign·p_user.
+        let oriented = parsed
+            .iter()
+            .map(|(input, image)| {
+                let mut image = image.clone();
+                if let Some(coefficient) = image.remove(canonical) {
+                    let entry = image.entry(user.clone()).or_insert_with(Rational::zero);
+                    *entry = &*entry + &(&coefficient * &Rational::from(sign as i64));
+                    image.retain(|_, coefficient| !coefficient.is_zero());
+                }
+                (input.clone(), image)
+            })
+            .collect::<Vec<_>>();
+        match solve_routing(&oriented, Some(user), search_signs) {
+            Ok(images) => {
+                return Ok(AffineRouting {
+                    images,
+                    external_sign: sign,
+                });
+            }
+            Err(error) => failure = Some(error),
+        }
+    }
+    Err(failure.expect("every orientation was tried"))
+}
+
+/// Solve `input(e) · X + a(e)·p = ± image(e)` for the input loop heads, where
+/// `external` is a head known on both sides (absent for vacuum routings).
+/// Without `search_signs` only the written orientations are tried.
+fn solve_routing(
+    parsed: &[(LinearMomentum, LinearMomentum)],
+    external: Option<&Atom>,
+    search_signs: bool,
+) -> Result<Vec<(Atom, Atom)>, VakintError> {
     let heads = |side: fn(&(LinearMomentum, LinearMomentum)) -> &LinearMomentum| {
         parsed
             .iter()
             .flat_map(|row| side(row).keys().cloned())
+            .filter(|head| Some(head) != external)
             .collect::<std::collections::BTreeSet<_>>()
             .into_iter()
             .collect::<Vec<_>>()
     };
     let unknowns = heads(|row| &row.0);
-    let targets = heads(|row| &row.1);
+    let mut targets = heads(|row| &row.1);
     if unknowns.len() != targets.len() {
         return Err(invalid(format!(
             "the input routing uses {} loop momenta but the matched topology has {}",
@@ -107,6 +176,10 @@ pub(crate) fn input_loop_momenta_in_canonical_basis(
             targets.len()
         )));
     }
+    let loops = targets.len();
+    // The external head is the last target column; the input's own external
+    // component is known and moves to the right-hand side.
+    targets.extend(external.cloned());
     let dense = |momentum: &LinearMomentum, basis: &[Atom]| {
         basis
             .iter()
@@ -117,6 +190,16 @@ pub(crate) fn input_loop_momenta_in_canonical_basis(
         .iter()
         .map(|(input, _)| dense(input, &unknowns))
         .collect::<Vec<_>>();
+    let offsets = parsed
+        .iter()
+        .map(|(input, _)| {
+            let mut offset = vec![Rational::zero(); targets.len()];
+            if let Some(external) = external {
+                offset[loops] = input.get(external).cloned().unwrap_or_else(Rational::zero);
+            }
+            offset
+        })
+        .collect::<Vec<_>>();
     let images = parsed
         .iter()
         .map(|(_, canonical)| dense(canonical, &targets))
@@ -125,22 +208,31 @@ pub(crate) fn input_loop_momenta_in_canonical_basis(
         invalid("the propagator momenta do not determine every input loop momentum")
     })?;
     let lines_agree = |solution: &[Vec<Rational>]| {
-        inputs.iter().zip(&images).all(|(input, image)| {
-            let mapped = (0..targets.len())
-                .map(|column| {
-                    input
-                        .iter()
-                        .zip(solution)
-                        .fold(Rational::zero(), |sum, (coefficient, row)| {
-                            &sum + &(coefficient * &row[column])
-                        })
-                })
-                .collect::<Vec<_>>();
-            mapped == *image || mapped.iter().zip(image).all(|(a, b)| *a == -b.clone())
-        })
+        inputs
+            .iter()
+            .zip(&offsets)
+            .zip(&images)
+            .all(|((input, offset), image)| {
+                let mapped = (0..targets.len())
+                    .map(|column| {
+                        input
+                            .iter()
+                            .zip(solution)
+                            .fold(offset[column].clone(), |sum, (coefficient, row)| {
+                                &sum + &(coefficient * &row[column])
+                            })
+                    })
+                    .collect::<Vec<_>>();
+                mapped == *image || mapped.iter().zip(image).all(|(a, b)| *a == -b.clone())
+            })
     };
     // Sign mask 0 keeps the written orientations of the basis lines.
-    for signs in 0..1usize << basis.len() {
+    let masks = if search_signs {
+        1usize << basis.len()
+    } else {
+        1
+    };
+    for signs in 0..masks {
         let matrix = basis.iter().map(|&row| inputs[row].clone()).collect();
         let rhs = basis
             .iter()
@@ -148,19 +240,25 @@ pub(crate) fn input_loop_momenta_in_canonical_basis(
             .map(|(position, &row)| {
                 images[row]
                     .iter()
-                    .map(|entry| {
-                        if signs & (1 << position) == 0 {
+                    .zip(&offsets[row])
+                    .map(|(entry, offset)| {
+                        let entry = if signs & (1 << position) == 0 {
                             entry.clone()
                         } else {
                             -entry.clone()
-                        }
+                        };
+                        &entry - offset
                     })
                     .collect()
             })
             .collect();
         let solution =
             solve_square(matrix, rhs).expect("independent rows form an invertible matrix");
-        if determinant(solution.clone()).abs().is_one() && lines_agree(&solution) {
+        let loop_block = solution
+            .iter()
+            .map(|row| row[..loops].to_vec())
+            .collect::<Vec<_>>();
+        if determinant(loop_block).abs().is_one() && lines_agree(&solution) {
             return Ok(unknowns
                 .into_iter()
                 .zip(solution)
@@ -352,6 +450,37 @@ mod tests {
                 ("k(1)-k(2)", "k(1)+k(2)"),
             ],
             &["-k(1)", "k(2)"],
+        );
+    }
+
+    fn solve_affine(equations: &[(&str, &str)], sign: i8) -> AffineRouting {
+        let equations = equations
+            .iter()
+            .map(|(input, canonical)| (vk_parse!(*input).unwrap(), vk_parse!(*canonical).unwrap()))
+            .collect::<Vec<_>>();
+        let (user, canonical) = (vk_parse!("p(3)").unwrap(), vk_parse!("p(1)").unwrap());
+        input_loop_momenta_in_canonical_basis_affine(&equations, Some((&user, &canonical, sign)))
+            .unwrap()
+    }
+
+    #[test]
+    fn affine_images_carry_the_external_momentum_with_its_orientation() {
+        // The bubble k(1), k(1)-p(1) in the user's routing k(5)+p(3), k(5).
+        let bubble = [("k(5)+p(3)", "k(1)"), ("k(5)", "k(1)-p(1)")];
+        let routing = solve_affine(&bubble, 1);
+        assert_eq!(routing.external_sign, 1);
+        assert_eq!(routing.images.len(), 1);
+        assert_eq!(
+            (&routing.images[0].1 - vk_parse!("k(1)-p(3)").unwrap()).expand(),
+            Atom::Zero
+        );
+        // The same bubble with q reversed: a wrong orientation guess is retried.
+        let reversed = [("k(5)-p(3)", "k(1)"), ("k(5)", "k(1)-p(1)")];
+        let routing = solve_affine(&reversed, 1);
+        assert_eq!(routing.external_sign, -1);
+        assert_eq!(
+            (&routing.images[0].1 - vk_parse!("k(1)+p(3)").unwrap()).expand(),
+            Atom::Zero
         );
     }
 

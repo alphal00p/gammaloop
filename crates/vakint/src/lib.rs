@@ -734,6 +734,8 @@ pub struct ReplacementRules {
     edge_ids_canonical_to_input_map: HashMap<usize, usize>,
     canonical_expression_substitutions: HashMap<Atom, Atom>,
     numerator_substitutions: HashMap<Atom, Atom>,
+    /// The p-integral witness; `None` for vacuum integrals.
+    propagator: Option<p_integral::PropagatorWitness>,
 }
 
 impl fmt::Display for ReplacementRules {
@@ -780,6 +782,15 @@ impl fmt::Display for ReplacementRules {
                 .collect::<Vec<String>>()
                 .join(", ")
         )?;
+        if let Some(witness) = &self.propagator {
+            writeln!(
+                f,
+                "  propagator: {{ family: {}, p(1) -> {}, powers: {:?} }}",
+                witness.family().name,
+                witness.canonical_external(),
+                witness.powers
+            )?;
+        }
         write!(f, "}}")
     }
 }
@@ -790,6 +801,7 @@ impl Default for ReplacementRules {
             edge_ids_canonical_to_input_map: HashMap::new(),
             canonical_expression_substitutions: HashMap::new(),
             numerator_substitutions: HashMap::new(),
+            propagator: None,
         }
     }
 }
@@ -2938,6 +2950,10 @@ impl VakintTerm {
         source_id: usize,
         mut observation: Option<&mut CandidateRoutedApplicationObserver<'_>>,
     ) -> Result<IntegralEvaluation, VakintError> {
+        if !self.normalize_propagator()? {
+            self.integral = Atom::num(1);
+            return Ok(IntegralEvaluation::Complete { numerical: false });
+        }
         let integral_specs =
             self.prepare_integral_specs(vakint, settings, observation.as_deref_mut())?;
 
@@ -3176,7 +3192,19 @@ impl VakintTerm {
             return Ok(()); // No further canonicalization possible
         }
 
+        // A p-integral numerator is rewritten in scalar-product form, both to
+        // reject tensors before the substitution and to expand its result.
+        let external = replacement_rules
+            .propagator
+            .as_ref()
+            .map(|witness| witness.external.clone());
+        if let Some(external) = &external {
+            self.numerator = p_integral::scalar_numerator(self.numerator.as_view(), external)?;
+        }
         self.apply_numerator_replacement_rules(replacement_rules, settings)?;
+        if let Some(external) = &external {
+            self.numerator = p_integral::scalar_numerator(self.numerator.as_view(), external)?;
+        }
 
         Ok(())
     }
@@ -3226,6 +3254,12 @@ impl VakintTerm {
         vakint: &Vakint,
         settings: &VakintSettings,
     ) -> Result<(), VakintError> {
+        // A p-integral numerator is never projected: its loop momenta are
+        // contracted with the external momentum. It only takes scalar form.
+        if let Some(external) = self.propagator_external()? {
+            self.numerator = p_integral::scalar_numerator(self.numerator.as_view(), &external)?;
+            return Ok(());
+        }
         settings.with_resource_budget(|| match settings.tensor_reduction_method {
             TensorReductionMethod::AlphaLoop => self.tensor_reduce_alphaloop(vakint, settings),
             TensorReductionMethod::FeynKit => self.tensor_reduce_feynkit(settings, false),
@@ -4726,6 +4760,9 @@ impl VakintExpression {
     ) -> Result<(), VakintError> {
         for term in self.0.iter_mut() {
             resources::checkpoint()?;
+            if !term.normalize_propagator()? {
+                continue;
+            }
             if let Some(replacement_rules) = match_input(term.integral.as_view())? {
                 //println!("replacement_rules = {}", replacement_rules,);
                 term.canonicalize(settings, &replacement_rules, short_form)?;
@@ -4735,6 +4772,8 @@ impl VakintExpression {
                 ));
             }
         }
+        // Scaleless p-integrals vanish exactly.
+        self.0.retain(|term| !term.numerator.is_zero());
         Ok(())
     }
 
@@ -4779,6 +4818,9 @@ impl VakintExpression {
             >::new();
             for (source_id, term) in self.0.iter_mut().enumerate() {
                 resources::checkpoint()?;
+                if !term.normalize_propagator()? {
+                    continue;
+                }
                 let matched =
                     term.prepare_integral_specs(vakint, settings, observation.as_deref_mut())?;
                 let method = vakint
@@ -5089,6 +5131,11 @@ impl Vakint {
         settings: &VakintSettings,
         input: AtomView,
     ) -> Result<Option<ReplacementRules>, VakintError> {
+        // p-integrals are identified by their own catalogue, before any
+        // vacuum or five-loop matcher (docs/p_integrals.md, section 1).
+        if p_integral::infer_kind(input)? == p_integral::IntegralKind::Propagator {
+            return self.topologies.match_propagator(input);
+        }
         if let Some(matched) = self
             .topologies
             .match_topologies_to_user_input(input, false)?
