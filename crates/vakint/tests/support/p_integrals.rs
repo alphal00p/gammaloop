@@ -4,6 +4,9 @@
 //! Integrals are written as strings in vakint's `topo(prop(...))` notation,
 //! with an optional numerator factor in front.
 
+// The frontend and Forcer test binaries each use a part of these helpers.
+#![allow(dead_code)]
+
 use std::sync::LazyLock;
 
 use feynkit_graph::FeynmanDiagram;
@@ -13,7 +16,10 @@ use symbolica::atom::{Atom, AtomCore, AtomView};
 use symbolica::id::Replacement;
 use vakint::diagram_integral::DiagramIntegralOptions;
 use vakint::symbols::S;
-use vakint::{Vakint, VakintExpression, VakintSettings, p_integral, vakint_parse};
+use vakint::{
+    EvaluationMethod, EvaluationOrder, ForcerOptions, LoopNormalizationFactor, RustRedMasterMode,
+    Vakint, VakintDependency, VakintExpression, VakintSettings, p_integral, vakint_parse,
+};
 
 static VAKINT: LazyLock<Vakint> = LazyLock::new(|| Vakint::new().unwrap());
 
@@ -191,24 +197,31 @@ fn substitute(input: &Atom, rules: &[(Atom, Atom)]) -> Atom {
 /// break the graph symmetries: a vertex relabeling is only exact up to the
 /// automorphisms that preserve the powers.
 pub fn assert_p_routing_invariant(input: &str, seeds: std::ops::Range<u64>) {
-    routing_invariance(&parse(input), seeds, true);
+    routing_invariance(&parse(input), seeds, true, canonical);
 }
 
 /// [`assert_p_routing_invariant`] for a parsed integral.
 pub fn assert_p_atom_routing_invariant(original: &Atom, seeds: std::ops::Range<u64>) {
-    routing_invariance(original, seeds, true);
+    routing_invariance(original, seeds, true, canonical);
 }
 
 /// [`assert_p_routing_invariant`] without vertex relabelings, for graphs with
 /// two vertices: exchanging them maps every line to itself, so the reversal
 /// `q -> -q` is a symmetry and a relabeling may pick either orientation.
 pub fn assert_p_reroutings_invariant(input: &str, seeds: std::ops::Range<u64>) {
-    routing_invariance(&parse(input), seeds, false);
+    routing_invariance(&parse(input), seeds, false, canonical);
 }
 
-fn routing_invariance(original: &Atom, seeds: std::ops::Range<u64>, relabel: bool) {
+/// `observe` (the canonical form, or an evaluation) of every rerouting,
+/// reversal and renaming of `original` equals that of `original`.
+fn routing_invariance(
+    original: &Atom,
+    seeds: std::ops::Range<u64>,
+    relabel: bool,
+    observe: impl Fn(&Atom) -> Atom,
+) {
     let original = original.clone();
-    let expected = canonical(&original);
+    let expected = observe(&original);
     let loops = loops(&original);
     let (k, p, p3) = (
         |axis: usize| vakint_parse!(format!("k({axis})")).unwrap(),
@@ -263,13 +276,13 @@ fn routing_invariance(original: &Atom, seeds: std::ops::Range<u64>, relabel: boo
                 (a, b, q)
             }
         });
-        let found = canonical(&relabeled);
+        let found = observe(&relabeled);
         assert_eq!(found, expected, "seed {seed}: {relabeled}");
         let reversed = substitute(&relabeled, &[(p.clone(), -p.clone())]);
-        let found = substitute(&canonical(&reversed), &[(p.clone(), -p.clone())]);
+        let found = substitute(&observe(&reversed), &[(p.clone(), -p.clone())]);
         assert_eq!(found, expected, "seed {seed}, p(1) -> -p(1): {reversed}");
         let renamed = substitute(&relabeled, &[(p.clone(), p3.clone())]);
-        let found = substitute(&canonical(&renamed), &[(p3.clone(), p.clone())]);
+        let found = substitute(&observe(&renamed), &[(p3.clone(), p.clone())]);
         assert_eq!(found, expected, "seed {seed}, p(1) -> p(3): {renamed}");
     }
 }
@@ -301,4 +314,112 @@ pub fn assert_p_dot_round_trip(input: &str) {
     assert_eq!(canonical(&imported), canonical(&atom), "{input}\n{dot}");
     let again = p_integral::to_dot(imported.as_view(), "phi").unwrap();
     assert_eq!(from_dot(&again), imported, "{dot}\n{again}");
+}
+
+/// FORM 5 for live Forcer runs: `VAKINT_TEST_FORM5`, otherwise the default
+/// FORM (`FORM_PATH` or `form`) when it is FORM 5, as in the dev shell and CI.
+pub fn forcer_form() -> Option<String> {
+    std::env::var("VAKINT_TEST_FORM5").ok().or_else(|| {
+        let form = std::env::var("FORM_PATH").unwrap_or_else(|_| "form".into());
+        VakintDependency::Forcer
+            .version(&form, "python3")
+            .is_ok()
+            .then_some(form)
+    })
+}
+
+/// Settings that evaluate p-integrals with Forcer alone (FORM at `form`), in
+/// `master_mode` and `normalization`, through `terms` Laurent terms.
+pub fn forcer_settings(
+    form: &str,
+    master_mode: RustRedMasterMode,
+    normalization: LoopNormalizationFactor,
+    terms: i64,
+) -> VakintSettings {
+    VakintSettings {
+        evaluation_order: EvaluationOrder(vec![EvaluationMethod::Forcer(ForcerOptions {
+            master_mode,
+        })]),
+        form_exe_path: form.into(),
+        integral_normalization_factor: normalization,
+        number_of_terms_in_epsilon_expansion: terms,
+        use_dot_product_notation: true,
+        n_cores: 1,
+        ..VakintSettings::default()
+    }
+}
+
+/// The Forcer evaluation of `input` with `settings`.
+pub fn forcer_evaluate(input: &Atom, settings: &VakintSettings) -> Atom {
+    VAKINT
+        .evaluate(settings, input.as_view())
+        .unwrap_or_else(|error| panic!("{input}: {error}"))
+}
+
+/// Laurent coefficients `ε^first..=ε^last` of `value` at `Q² = μ² = 1`:
+/// `dot(p(1),p(1)) = -1` and every logarithm zero.
+pub fn at_unit_scale(value: &Atom, first: i64, last: i64) -> Vec<Atom> {
+    let x = Atom::var(vakint::vakint_symbol!("x_"));
+    let p = symbolica::function!(S.p, &x);
+    let unit = value
+        .replace(symbolica::function!(S.dot, &p, &p).to_pattern())
+        .with(Atom::num(-1).to_pattern())
+        .replace(symbolica::function!(symbolica::atom::Symbol::LOG, &x).to_pattern())
+        .with(Atom::Zero.to_pattern())
+        .expand();
+    let epsilon = Atom::var(vakint::vakint_symbol!("ε"));
+    let shifted = (unit * epsilon.pow(Atom::num(-first))).expand();
+    let mut coefficients = vec![Atom::Zero; (last - first + 1) as usize];
+    for (monomial, coefficient) in shifted.coefficient_list::<i8>(std::slice::from_ref(&epsilon)) {
+        let power = match monomial.as_view() {
+            AtomView::Num(_) => 0,
+            AtomView::Pow(power) => i64::try_from(power.get_base_exp().1).unwrap(),
+            _ => 1,
+        };
+        if let Some(slot) = coefficients.get_mut(power as usize) {
+            *slot = coefficient.expand();
+        }
+    }
+    coefficients
+}
+
+/// The G-scheme Laurent coefficients of a Forcer evaluation of `input` at
+/// `Q² = μ² = 1`, from `ε^-L` through `ε^last`.
+pub fn assert_forcer_g_scheme(input: &str, loops: i64, last: i64, expected: &[Atom]) {
+    let Some(form) = forcer_form() else {
+        eprintln!("FORM 5 is unavailable: skipped the live Forcer evaluation of {input}");
+        return;
+    };
+    let settings = forcer_settings(
+        &form,
+        RustRedMasterMode::Symbolic,
+        LoopNormalizationFactor::GScheme,
+        last + loops + 1,
+    );
+    let value = forcer_evaluate(&parse(input), &settings);
+    let found = at_unit_scale(&value, -loops, last);
+    let expected = expected.iter().map(|e| e.expand()).collect::<Vec<_>>();
+    assert_eq!(found, expected, "{input}: {value}");
+}
+
+/// [`assert_p_routing_invariant`] on exact (`Retain`) Forcer evaluations.
+pub fn assert_forcer_routing_invariant(input: &str, seeds: std::ops::Range<u64>) {
+    let Some(form) = forcer_form() else {
+        eprintln!("FORM 5 is unavailable: skipped the live Forcer routings of {input}");
+        return;
+    };
+    let settings = forcer_settings(
+        &form,
+        RustRedMasterMode::Retain,
+        LoopNormalizationFactor::GScheme,
+        4,
+    );
+    routing_invariance(&parse(input), seeds, true, |integral| {
+        forcer_evaluate(integral, &settings)
+    });
+}
+
+/// `ζ(n)`, as the finalized results write it.
+pub fn zeta(n: i64) -> Atom {
+    symbolica::transcendental::zeta().call(Atom::num(n))
 }

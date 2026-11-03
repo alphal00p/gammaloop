@@ -178,6 +178,20 @@ pub(crate) fn builtin_definition(source: AtomView<'_>) -> Result<Option<Atom>, V
                     "expected zeta at an integer order of at least two",
                 ));
             }
+            if symbol == vk_symbol!("MZV") {
+                let arguments = function.iter().collect::<Vec<_>>();
+                // Symbolica's GPL evaluator stops at weight six; the
+                // evaluable terminal sums the MZV directly at any weight.
+                return integer_indices(&arguments)
+                    .filter(|indices| mzv_word(indices).is_some())
+                    .map(|indices| Some(crate::p_integral::mzv::mzv_value(&indices)))
+                    .ok_or_else(|| {
+                        invalid(
+                            source,
+                            "expected MZV(n_1,...,n_k) with integers n_1 >= 2, n_i >= 1",
+                        )
+                    });
+            }
             if symbol == vk_symbol!("Sqrt") || symbol == Symbol::SQRT {
                 let arguments = function.iter().collect::<Vec<_>>();
                 if let [argument] = arguments.as_slice()
@@ -226,6 +240,35 @@ pub(crate) fn builtin_definition(source: AtomView<'_>) -> Result<Option<Atom>, V
         _ => {}
     }
     Ok(None)
+}
+
+fn integer_indices(arguments: &[AtomView]) -> Option<Vec<i64>> {
+    arguments
+        .iter()
+        .map(|argument| get_integer_from_atom(*argument))
+        .collect()
+}
+
+/// The multiple zeta value `MZV(n_1, ..., n_k) = Σ_(m_1 > ... > m_k >= 1) Π m_i^(-n_i)`
+/// (the datamine convention used by Forcer) as a GPL at one:
+/// `(-1)^k G(0^(n_1-1), 1, ..., 0^(n_k-1), 1; 1)`. Returns the sign and the
+/// letters, or `None` for a divergent or malformed index list.
+pub(crate) fn mzv_word(indices: &[i64]) -> Option<(i64, Vec<i64>)> {
+    if indices.is_empty() || indices[0] < 2 || indices.iter().any(|&n| n < 1) {
+        return None;
+    }
+    let letters = indices
+        .iter()
+        .flat_map(|&n| std::iter::repeat_n(0, n as usize - 1).chain([1]))
+        .collect();
+    Some((
+        if indices.len().is_multiple_of(2) {
+            1
+        } else {
+            -1
+        },
+        letters,
+    ))
 }
 
 /// Discover named constants and the concrete projections in the built-in data.

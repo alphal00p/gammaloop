@@ -1,0 +1,571 @@
+{
+  "forcer_commit": "68a30bfb2aec3672a2f674ca8666bfc970105e24",
+  "form_version": "5.0.0",
+  "cases": [
+    {
+      "name": "bubble_11_n0",
+      "family": "P1L",
+      "powers": [
+        1,
+        1
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)*rat(1,1)\n"
+      ]
+    },
+    {
+      "name": "bubble_11_n1",
+      "family": "P1L",
+      "powers": [
+        1,
+        1
+      ],
+      "numerator": "dot(k(1),p(3))",
+      "external": "p(3)",
+      "outputs": [
+        "GschemeConstants(0,0)*rat(1,2)\n"
+      ]
+    },
+    {
+      "name": "bubble_11_n2",
+      "family": "P1L",
+      "powers": [
+        1,
+        1
+      ],
+      "numerator": "dot(k(1),p(3))^2",
+      "external": "-p(3)",
+      "outputs": [
+        "GschemeConstants(0,0)*rat(1,4)\n"
+      ]
+    },
+    {
+      "name": "bubble_11_n3",
+      "family": "P1L",
+      "powers": [
+        1,
+        1
+      ],
+      "numerator": "dot(k(1),p(2))^3",
+      "external": "p(2)",
+      "outputs": [
+        "GschemeConstants(0,0)*rat(1,8)\n"
+      ]
+    },
+    {
+      "name": "bubble_11_n4",
+      "family": "P1L",
+      "powers": [
+        1,
+        1
+      ],
+      "numerator": "dot(k(1),p(1))^4",
+      "external": "-p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)*rat(1,16)\n"
+      ]
+    },
+    {
+      "name": "bubble_21_n0",
+      "family": "P1L",
+      "powers": [
+        2,
+        1
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)*rat(2*ep - 1,1)\n"
+      ]
+    },
+    {
+      "name": "bubble_21_n1",
+      "family": "P1L",
+      "powers": [
+        2,
+        1
+      ],
+      "numerator": "dot(k(1),p(3))",
+      "external": "p(3)",
+      "outputs": [
+        "GschemeConstants(0,0)*rat(ep,1)\n"
+      ]
+    },
+    {
+      "name": "bubble_21_n2",
+      "family": "P1L",
+      "powers": [
+        2,
+        1
+      ],
+      "numerator": "dot(k(1),p(3))^2",
+      "external": "-p(3)",
+      "outputs": [
+        "GschemeConstants(0,0)*rat(2*ep + 1,4)\n"
+      ]
+    },
+    {
+      "name": "bubble_21_n3",
+      "family": "P1L",
+      "powers": [
+        2,
+        1
+      ],
+      "numerator": "dot(k(1),p(2))^3",
+      "external": "p(2)",
+      "outputs": [
+        "GschemeConstants(0,0)*rat(ep + 1,4)\n"
+      ]
+    },
+    {
+      "name": "bubble_21_n4",
+      "family": "P1L",
+      "powers": [
+        2,
+        1
+      ],
+      "numerator": "dot(k(1),p(1))^4",
+      "external": "-p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)*rat(2*ep + 3,16)\n"
+      ]
+    },
+    {
+      "name": "bubble_12_n0",
+      "family": "P1L",
+      "powers": [
+        1,
+        2
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)*rat(2*ep - 1,1)\n"
+      ]
+    },
+    {
+      "name": "bubble_12_n1",
+      "family": "P1L",
+      "powers": [
+        1,
+        2
+      ],
+      "numerator": "dot(k(1),p(3))",
+      "external": "p(3)",
+      "outputs": [
+        "GschemeConstants(0,0)*rat(ep - 1,1)\n"
+      ]
+    },
+    {
+      "name": "bubble_12_n2",
+      "family": "P1L",
+      "powers": [
+        1,
+        2
+      ],
+      "numerator": "dot(k(1),p(3))^2",
+      "external": "-p(3)",
+      "outputs": [
+        "GschemeConstants(0,0)*rat(2*ep - 3,4)\n"
+      ]
+    },
+    {
+      "name": "bubble_12_n3",
+      "family": "P1L",
+      "powers": [
+        1,
+        2
+      ],
+      "numerator": "dot(k(1),p(2))^3",
+      "external": "p(2)",
+      "outputs": [
+        "GschemeConstants(0,0)*rat(ep - 2,4)\n"
+      ]
+    },
+    {
+      "name": "bubble_12_n4",
+      "family": "P1L",
+      "powers": [
+        1,
+        2
+      ],
+      "numerator": "dot(k(1),p(1))^4",
+      "external": "-p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)*rat(2*ep - 5,16)\n"
+      ]
+    },
+    {
+      "name": "bubble_22_n0",
+      "family": "P1L",
+      "powers": [
+        2,
+        2
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)*rat(4*ep^2 + 2*ep - 2,1)\n"
+      ]
+    },
+    {
+      "name": "bubble_22_n1",
+      "family": "P1L",
+      "powers": [
+        2,
+        2
+      ],
+      "numerator": "dot(k(1),p(3))",
+      "external": "p(3)",
+      "outputs": [
+        "GschemeConstants(0,0)*rat(2*ep^2 + ep - 1,1)\n"
+      ]
+    },
+    {
+      "name": "bubble_22_n2",
+      "family": "P1L",
+      "powers": [
+        2,
+        2
+      ],
+      "numerator": "dot(k(1),p(3))^2",
+      "external": "-p(3)",
+      "outputs": [
+        "GschemeConstants(0,0)*rat(2*ep^2 + ep - 2,2)\n"
+      ]
+    },
+    {
+      "name": "bubble_22_n3",
+      "family": "P1L",
+      "powers": [
+        2,
+        2
+      ],
+      "numerator": "dot(k(1),p(2))^3",
+      "external": "p(2)",
+      "outputs": [
+        "GschemeConstants(0,0)*rat(2*ep^2 + ep - 4,4)\n"
+      ]
+    },
+    {
+      "name": "bubble_22_n4",
+      "family": "P1L",
+      "powers": [
+        2,
+        2
+      ],
+      "numerator": "dot(k(1),p(1))^4",
+      "external": "-p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)*rat(2*ep^2 + ep - 7,8)\n"
+      ]
+    },
+    {
+      "name": "bubble_31_n0",
+      "family": "P1L",
+      "powers": [
+        3,
+        1
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)*rat(2*ep^2 - ep,1)\n"
+      ]
+    },
+    {
+      "name": "bubble_31_n1",
+      "family": "P1L",
+      "powers": [
+        3,
+        1
+      ],
+      "numerator": "dot(k(1),p(3))",
+      "external": "p(3)",
+      "outputs": [
+        "GschemeConstants(0,0)*rat(2*ep^2 + ep - 1,2)\n"
+      ]
+    },
+    {
+      "name": "bubble_31_n2",
+      "family": "P1L",
+      "powers": [
+        3,
+        1
+      ],
+      "numerator": "dot(k(1),p(3))^2",
+      "external": "-p(3)",
+      "outputs": [
+        "GschemeConstants(0,0)*rat(2*ep^2 + 3*ep - 1,4)\n"
+      ]
+    },
+    {
+      "name": "bubble_31_n3",
+      "family": "P1L",
+      "powers": [
+        3,
+        1
+      ],
+      "numerator": "dot(k(1),p(2))^3",
+      "external": "p(2)",
+      "outputs": [
+        "GschemeConstants(0,0)*rat(2*ep^2 + 5*ep,8)\n"
+      ]
+    },
+    {
+      "name": "bubble_31_n4",
+      "family": "P1L",
+      "powers": [
+        3,
+        1
+      ],
+      "numerator": "dot(k(1),p(1))^4",
+      "external": "-p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)*rat(2*ep^2 + 7*ep + 2,16)\n"
+      ]
+    },
+    {
+      "name": "bubble_13_n0",
+      "family": "P1L",
+      "powers": [
+        1,
+        3
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)*rat(2*ep^2 - ep,1)\n"
+      ]
+    },
+    {
+      "name": "bubble_13_n1",
+      "family": "P1L",
+      "powers": [
+        1,
+        3
+      ],
+      "numerator": "dot(k(1),p(3))",
+      "external": "p(3)",
+      "outputs": [
+        "GschemeConstants(0,0)*rat(2*ep^2 - 3*ep + 1,2)\n"
+      ]
+    },
+    {
+      "name": "bubble_13_n2",
+      "family": "P1L",
+      "powers": [
+        1,
+        3
+      ],
+      "numerator": "dot(k(1),p(3))^2",
+      "external": "-p(3)",
+      "outputs": [
+        "GschemeConstants(0,0)*rat(2*ep^2 - 5*ep + 3,4)\n"
+      ]
+    },
+    {
+      "name": "bubble_13_n3",
+      "family": "P1L",
+      "powers": [
+        1,
+        3
+      ],
+      "numerator": "dot(k(1),p(2))^3",
+      "external": "p(2)",
+      "outputs": [
+        "GschemeConstants(0,0)*rat(2*ep^2 - 7*ep + 6,8)\n"
+      ]
+    },
+    {
+      "name": "bubble_13_n4",
+      "family": "P1L",
+      "powers": [
+        1,
+        3
+      ],
+      "numerator": "dot(k(1),p(1))^4",
+      "external": "-p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)*rat(2*ep^2 - 9*ep + 10,16)\n"
+      ]
+    },
+    {
+      "name": "bubble_32_n0",
+      "family": "P1L",
+      "powers": [
+        3,
+        2
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)*rat(4*ep^3 + 8*ep^2 - ep - 2,1)\n"
+      ]
+    },
+    {
+      "name": "bubble_32_n1",
+      "family": "P1L",
+      "powers": [
+        3,
+        2
+      ],
+      "numerator": "dot(k(1),p(3))",
+      "external": "p(3)",
+      "outputs": [
+        "GschemeConstants(0,0)*rat(2*ep^3 + 5*ep^2 + ep - 2,1)\n"
+      ]
+    },
+    {
+      "name": "bubble_32_n2",
+      "family": "P1L",
+      "powers": [
+        3,
+        2
+      ],
+      "numerator": "dot(k(1),p(3))^2",
+      "external": "-p(3)",
+      "outputs": [
+        "GschemeConstants(0,0)*rat(4*ep^3 + 12*ep^2 + 3*ep - 5,4)\n"
+      ]
+    },
+    {
+      "name": "bubble_32_n3",
+      "family": "P1L",
+      "powers": [
+        3,
+        2
+      ],
+      "numerator": "dot(k(1),p(2))^3",
+      "external": "p(2)",
+      "outputs": [
+        "GschemeConstants(0,0)*rat(2*ep^3 + 7*ep^2 + ep - 4,4)\n"
+      ]
+    },
+    {
+      "name": "bubble_32_n4",
+      "family": "P1L",
+      "powers": [
+        3,
+        2
+      ],
+      "numerator": "dot(k(1),p(1))^4",
+      "external": "-p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)*rat(4*ep^3 + 16*ep^2 - ep - 16,16)\n"
+      ]
+    },
+    {
+      "name": "scaleless_0_1_n0",
+      "family": "P1L",
+      "powers": [
+        0,
+        1
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": []
+    },
+    {
+      "name": "scaleless_0_1_n2",
+      "family": "P1L",
+      "powers": [
+        0,
+        1
+      ],
+      "numerator": "dot(k(1),p(1))^2",
+      "external": "p(1)",
+      "outputs": []
+    },
+    {
+      "name": "scaleless_1_0_n0",
+      "family": "P1L",
+      "powers": [
+        1,
+        0
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": []
+    },
+    {
+      "name": "scaleless_1_0_n2",
+      "family": "P1L",
+      "powers": [
+        1,
+        0
+      ],
+      "numerator": "dot(k(1),p(1))^2",
+      "external": "p(1)",
+      "outputs": []
+    },
+    {
+      "name": "scaleless_m1_2_n0",
+      "family": "P1L",
+      "powers": [
+        -1,
+        2
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": []
+    },
+    {
+      "name": "scaleless_m1_2_n2",
+      "family": "P1L",
+      "powers": [
+        -1,
+        2
+      ],
+      "numerator": "dot(k(1),p(1))^2",
+      "external": "p(1)",
+      "outputs": []
+    },
+    {
+      "name": "scaleless_2_m2_n0",
+      "family": "P1L",
+      "powers": [
+        2,
+        -2
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": []
+    },
+    {
+      "name": "scaleless_2_m2_n2",
+      "family": "P1L",
+      "powers": [
+        2,
+        -2
+      ],
+      "numerator": "dot(k(1),p(1))^2",
+      "external": "p(1)",
+      "outputs": []
+    },
+    {
+      "name": "scaleless_m2_m1_n0",
+      "family": "P1L",
+      "powers": [
+        -2,
+        -1
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": []
+    },
+    {
+      "name": "scaleless_m2_m1_n2",
+      "family": "P1L",
+      "powers": [
+        -2,
+        -1
+      ],
+      "numerator": "dot(k(1),p(1))^2",
+      "external": "p(1)",
+      "outputs": []
+    }
+  ]
+}

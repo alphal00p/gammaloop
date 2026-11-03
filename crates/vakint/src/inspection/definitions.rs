@@ -847,6 +847,13 @@ pub(crate) fn builtin(source: AtomView<'_>) -> Result<Option<Atom>, VakintError>
                     .collect::<Vec<_>>();
                 gpl(&letters, symbol == vk_symbol!("GPLImag"))
                     .map_err(|reason| undefined(source, reason))?
+            } else if symbol == vk_symbol!("MZV") {
+                let (sign, letters) = integer_arguments(&arguments)
+                    .and_then(|indices| super::constants::mzv_word(&indices))
+                    .ok_or_else(unsupported)?;
+                let letters = letters.into_iter().map(Atom::num).collect::<Vec<_>>();
+                Atom::num(sign)
+                    * gpl(&letters, false).map_err(|reason| undefined(source, reason))?
             } else if symbol == vk_symbol!("PolylogReal") || symbol == vk_symbol!("PolylogImag") {
                 let [order, point] = arguments.as_slice() else {
                     return Err(unsupported());

@@ -28,6 +28,7 @@ use crate::{VakintExpression, diagram_integral::DiagramIntegralOptions};
 )]
 #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pyfunction]
+#[allow(clippy::too_many_arguments)]
 #[pyo3(signature = (diagram, family, numerator, *, powers=None, physical_slots=None, parameter_substitutions=None, external_momenta=Vec::new(), external_momentum=None), text_signature = "(diagram, family, numerator, *, powers=None, physical_slots=None, parameter_substitutions=None, external_momenta=(), external_momentum=None)")]
 pub(crate) fn integral_from_diagram(
     diagram: PyRef<'_, PyFeynmanDiagram>,

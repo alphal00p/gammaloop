@@ -7,7 +7,10 @@ reduction, analytic FORM-backed methods and numerical pySecDec evaluation.
 By default Vakint evaluates with RustRed, which needs neither FORM nor pySecDec. When FORM
 (4.2.1 or newer) is available, the default evaluation order keeps AlphaLoop, MATAD and FMFT after
 RustRed as fallbacks, followed by pySecDec when it can be imported. Explicitly requested
-FORM-based backends report a missing FORM installation.
+FORM-based backends report a missing FORM installation. Massless propagator integrals
+(p-integrals, one to four loops; `docs/p_integrals.md`) can also be evaluated with the vendored
+Forcer program (`EvaluationOrder::forcer_only()`), which needs FORM 5; Forcer is distributed
+with its authors' permission (see `form_src/forcer/NOTICE`).
 
 Two settings control how the ordered reduction computes. `n_cores` is the single source of every
 worker count (RustRed's ordered scheduler and modular replay, the five-loop frontend, the retained

@@ -59,6 +59,9 @@ workspace = true
 default-features = false
 features = ["integer-gmp", "float-mpfr", "tracing_max_level_info"]
 
+[build-dependencies]
+flate2 = "1.1.9"
+
 [dev-dependencies]
 linnet = { workspace = true, default-features = true }
 feynkit-generator = { workspace = true }

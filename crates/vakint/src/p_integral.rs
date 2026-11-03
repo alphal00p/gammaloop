@@ -11,13 +11,18 @@
 
 mod catalogue;
 mod dot;
+pub(crate) mod finalize;
+pub(crate) mod forcer;
 #[cfg(test)]
 mod frontend_tests;
 mod input;
+mod laurent;
+pub(crate) mod masters;
+pub(crate) mod mzv;
 
 use std::sync::OnceLock;
 
-use symbolica::atom::{Atom, AtomCore, AtomView};
+use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
 
 use crate::rustred_evaluation::RustRedMasterMode;
 use crate::symbols::S;
@@ -211,6 +216,46 @@ pub(crate) const P_FAMILIES: [PFamilyData; 16] = [
     },
 ];
 
+impl PFamilyData {
+    /// Number of lines (propagators) of the family: `3L - 1`.
+    pub(crate) fn line_count(&self) -> usize {
+        3 * self.loops - 1
+    }
+}
+
+/// `vakint::PG(x1,x2)`: Forcer's `GschemeConstants(x1,x2)`,
+/// `(1+x1+x2)·G(1+x1ε, 1+x2ε)/(ε·G(1,1))`.
+pub(crate) fn pg_symbol() -> Symbol {
+    vk_symbol!("PG")
+}
+
+/// `vakint::PMaster(name)`: Forcer's `Master(name)`, in the G-scheme.
+pub(crate) fn p_master_symbol() -> Symbol {
+    vk_symbol!("PMaster")
+}
+
+/// The user's external head `p(i)` and the sign `σ` of `external = σ·p(i)`.
+pub(crate) fn external_head(external: &Atom) -> Result<(Atom, i64), VakintError> {
+    let invalid = || {
+        VakintError::InvalidIntegralFormat(format!(
+            "p-integral: the external momentum must be ±p(i), not {external}"
+        ))
+    };
+    match external.as_view() {
+        AtomView::Fun(head) if head.get_symbol() == S.p && head.get_nargs() == 1 => {
+            Ok((external.clone(), 1))
+        }
+        AtomView::Mul(_) => {
+            let head = -external;
+            match head.as_view() {
+                AtomView::Fun(f) if f.get_symbol() == S.p && f.get_nargs() == 1 => Ok((head, -1)),
+                _ => Err(invalid()),
+            }
+        }
+        _ => Err(invalid()),
+    }
+}
+
 /// The p-integral part of a matching witness.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct PropagatorWitness {
@@ -254,7 +299,6 @@ pub(crate) struct PropagatorRequest<'a> {
 impl ReplacementRules {
     /// The backend input of a matched p-integral term whose numerator has
     /// been canonicalized; `None` for a vacuum match.
-    #[allow(dead_code)]
     pub(crate) fn propagator_request<'a>(
         &'a self,
         canonical_numerator: AtomView<'a>,
@@ -288,6 +332,12 @@ pub struct ForcerOptions {
     /// How masters are represented, exactly as for RustRed: identical modes
     /// make both backends' results directly comparable.
     pub master_mode: RustRedMasterMode,
+}
+
+impl std::fmt::Display for ForcerOptions {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "master_mode={}", self.master_mode)
+    }
 }
 
 /// A [`P_FAMILIES`] entry with its canonical lines parsed.
@@ -382,9 +432,10 @@ impl Integral {
             short_expression: Some(parsed.short_expression()),
             short_expression_pattern: None,
             alphaloop_expression: None,
-            applicable_evaluation_methods: EvaluationOrder(vec![EvaluationMethod::RustRed(
-                Default::default(),
-            )]),
+            applicable_evaluation_methods: EvaluationOrder(vec![
+                EvaluationMethod::RustRed(Default::default()),
+                EvaluationMethod::Forcer(Default::default()),
+            ]),
             node_pairs: Default::default(),
             unoriented_generic_pattern: unmatchable,
         })

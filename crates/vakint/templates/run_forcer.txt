@@ -1,0 +1,19 @@
+#-
+#include- forcer.h
+
+V {vectors};
+Format 255;
+
+{locals}
+
+* Loop momenta in terms of the Forcer line momenta p1, p2, ... and Q.
+{substitutions}
+.sort
+
+* Exact reduction in the G-scheme master basis, no expansion.
+#call Forcer()
+.sort
+
+{writes}
+
+.end

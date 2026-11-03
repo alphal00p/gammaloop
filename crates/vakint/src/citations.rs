@@ -14,6 +14,7 @@ pub(crate) enum CitationSource {
     Fmft = 4,
     PySecDec = 8,
     RustRed = 32,
+    Forcer = 64,
 }
 
 /// Monotonic, process-wide usage; reporting never clears another caller's flags.
@@ -60,6 +61,7 @@ impl CitationUsage {
             CitationSource::Fmft,
             CitationSource::PySecDec,
             CitationSource::RustRed,
+            CitationSource::Forcer,
         ] {
             if used & source as u8 != 0 {
                 citations.push(source.citation());
@@ -126,6 +128,22 @@ impl CitationSource {
                 bibtex: "@software{rustred, title={RustRed}, url={https://github.com/alphal00p/rustred}}".into(),
                 reasons: vec!["Vakint used native RustRed reduction with its shipped, checked artifacts.".into()],
                 description: "Four-loop candidate evaluation is checked pointwise, not a full-family closure certificate.".into(),
+                relevance: None,
+            },
+            Self::Forcer => Citation {
+                id: "arXiv:1704.06650".into(),
+                url: "https://arxiv.org/abs/1704.06650".into(),
+                reference: "B. Ruijl and T. Ueda and J. A. M. Vermaseren. Forcer, a FORM program for the parametric reduction of four-loop massless propagator diagrams (2017), Zenodo DOI 10.5281/zenodo.1043944.".into(),
+                bibtex: r#"@article{vakint_forcer,
+  author = {B. Ruijl and T. Ueda and J. A. M. Vermaseren},
+  title = {{Forcer, a FORM program for the parametric reduction of four-loop massless propagator diagrams}},
+  year = {2017},
+  eprint = {1704.06650},
+  archivePrefix = {arXiv},
+  doi = {10.5281/zenodo.1043944}
+}"#.into(),
+                reasons: vec!["Vakint used the vendored Forcer backend for massless propagator integrals.".into()],
+                description: "".into(),
                 relevance: None,
             },
             Self::PySecDec => Citation {

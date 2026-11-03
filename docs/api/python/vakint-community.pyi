@@ -432,7 +432,7 @@ class Vakint:
         verify_numerator_identification : Optional[bool]
             Whether to verify the identification of numerator structures. Default is True.
         integral_normalization_factor : Optional[str]
-            The normalization factor to be used for integrals. Can be "MSbar", "pySecDec", "FMFTandMATAD" or a custom string. Default is "MSbar".
+            The normalization factor to be used for integrals. Can be "MSbar", "pySecDec", "FMFTandMATAD", "GScheme" or a custom string. Default is "MSbar".
         allow_unknown_integrals : Optional[bool]
             Whether to allow unknown integrals to be processed. Default is True.
         clean_tmp_dir : Optional[bool]
@@ -864,6 +864,28 @@ class VakintEvaluationMethod:
         ## Examples
         ```python
         rustred_method = VakintEvaluationMethod.new_rustred_method(
+            master_mode="numerical"
+        )
+        ```
+
+        Parameters
+        ----------
+
+        master_mode : str
+           "retain", "symbolic", or "numerical" (default).
+        """
+    @classmethod
+    def new_forcer_method(cls, master_mode: builtins.str = 'numerical') -> VakintEvaluationMethod:
+        r"""
+        Create the Forcer evaluation method for massless propagator integrals.
+
+        Forcer (vendored in Vakint) reduces one- to four-loop p-integrals exactly
+        in its G-scheme master basis; it needs FORM 5. Master modes are those of
+        RustRed, so both backends' results are directly comparable.
+
+        ## Examples
+        ```python
+        forcer_method = VakintEvaluationMethod.new_forcer_method(
             master_mode="numerical"
         )
         ```
