@@ -404,19 +404,82 @@ pub fn assert_forcer_g_scheme(input: &str, loops: i64, last: i64, expected: &[At
 
 /// [`assert_p_routing_invariant`] on exact (`Retain`) Forcer evaluations.
 pub fn assert_forcer_routing_invariant(input: &str, seeds: std::ops::Range<u64>) {
-    let Some(form) = forcer_form() else {
-        eprintln!("FORM 5 is unavailable: skipped the live Forcer routings of {input}");
+    assert_forcer_atom_routing_invariant(&parse(input), seeds);
+}
+
+/// [`assert_forcer_routing_invariant`] for a parsed integral.
+pub fn assert_forcer_atom_routing_invariant(original: &Atom, seeds: std::ops::Range<u64>) {
+    let Some(settings) = live_forcer_retain_settings(original) else {
         return;
     };
-    let settings = forcer_settings(
+    routing_invariance(original, seeds, true, |integral| {
+        forcer_evaluate(integral, &settings)
+    });
+}
+
+/// The DOT export of `input` (a normalized p-integral with positive powers),
+/// read back through `from_diagram`, evaluates exactly like `input`.
+pub fn assert_forcer_dot_like_atom(input: &Atom) {
+    let Some(settings) = live_forcer_retain_settings(input) else {
+        return;
+    };
+    let dot = p_integral::to_dot(input.as_view(), "phi").unwrap();
+    assert_eq!(
+        forcer_evaluate(&from_dot(&dot), &settings),
+        forcer_evaluate(input, &settings),
+        "{input}\n{dot}"
+    );
+}
+
+/// The default evaluation order (RustRed first) hands the p-integral terms of
+/// `vacuum + p_integral` to Forcer and the vacuum term to its own backend: the
+/// sum evaluates like its two terms evaluated apart, and the p-integral alone
+/// like Forcer alone.
+pub fn assert_default_order_dispatches_to_forcer(vacuum: &str, p_integral: &str) {
+    let Some(form) = forcer_form() else {
+        eprintln!("FORM 5 is unavailable: skipped the default-order evaluation of {p_integral}");
+        return;
+    };
+    let forcer = forcer_settings(
+        &form,
+        RustRedMasterMode::Symbolic,
+        LoopNormalizationFactor::MSbar,
+        3,
+    );
+    // The default order with Forcer in the master mode of `forcer`.
+    let mut order = EvaluationOrder::available(&form, "python3");
+    assert!(matches!(order.0[0], EvaluationMethod::RustRed(_)));
+    for method in order.0.iter_mut() {
+        if let EvaluationMethod::Forcer(options) = method {
+            options.master_mode = RustRedMasterMode::Symbolic;
+        }
+    }
+    let default = VakintSettings {
+        evaluation_order: order,
+        ..forcer.clone()
+    };
+    let (vacuum, p_integral) = (parse(vacuum), parse(p_integral));
+    let p_value = forcer_evaluate(&p_integral, &default);
+    assert_eq!(p_value, forcer_evaluate(&p_integral, &forcer));
+    assert_eq!(
+        forcer_evaluate(&(&vacuum + &p_integral), &default).expand(),
+        (forcer_evaluate(&vacuum, &default) + p_value).expand()
+    );
+}
+
+/// Exact (`Retain`) G-scheme Forcer settings, or `None` (with a skip
+/// message) without FORM 5.
+fn live_forcer_retain_settings(input: &Atom) -> Option<VakintSettings> {
+    let Some(form) = forcer_form() else {
+        eprintln!("FORM 5 is unavailable: skipped the live Forcer evaluation of {input}");
+        return None;
+    };
+    Some(forcer_settings(
         &form,
         RustRedMasterMode::Retain,
         LoopNormalizationFactor::GScheme,
         4,
-    );
-    routing_invariance(&parse(input), seeds, true, |integral| {
-        forcer_evaluate(integral, &settings)
-    });
+    ))
 }
 
 /// `ζ(n)`, as the finalized results write it.

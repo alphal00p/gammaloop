@@ -94,6 +94,38 @@ fn forcer_evaluations_are_routing_invariant() {
 }
 
 #[test]
+fn user_routings_evaluate_alike_at_one_three_and_four_loops() {
+    assert_forcer_routing_invariant(
+        "dot(k(1),p(1))^2*topo(prop(1,edge(1,2),k(1),0,2)*prop(2,edge(2,1),k(1)-p(1),0,1))",
+        0..2,
+    );
+    assert_forcer_atom_routing_invariant(
+        &(parse("dot(k(1),p(1))*dot(k(2),k(3))")
+            * canonical(&parse("topo(P3L_BE(p(1),1,2,1,1,1,1,1,1))"))),
+        0..2,
+    );
+    assert_forcer_atom_routing_invariant(
+        &(parse("dot(k(1),p(1))") * canonical(&parse("topo(P4L_LA4(p(1),1,1,1,1,1,1,1,1,1,1,1))"))),
+        0..1,
+    );
+}
+
+#[test]
+fn three_and_four_loop_dot_graphs_evaluate_like_their_atoms() {
+    for top in [
+        "topo(P3L_NO(p(1),1,1,1,1,1,1,1,2))",
+        "topo(P4L_NO1(p(1),1,1,1,1,1,1,1,1,1,1,1))",
+    ] {
+        assert_forcer_dot_like_atom(&canonical(&parse(top)));
+    }
+}
+
+#[test]
+fn the_default_order_hands_p_integrals_to_forcer() {
+    assert_default_order_dispatches_to_forcer("topo(prop(1,edge(1,1),k(1),muvsq,1))", KITE);
+}
+
+#[test]
 fn dot_graphs_evaluate_like_their_atoms() {
     let Some(form) = forcer_form() else {
         eprintln!("FORM 5 is unavailable: skipped the live Forcer DOT evaluation");
