@@ -668,7 +668,89 @@ fn official_transfer_options_have_no_default_limits() {
     // entry cap (were 3600 s, 2 GiB, 8 GiB and 250000 entries).
     let options = OfficialExternalDataOptions::default();
     assert_eq!(options.timeout, None);
+    // progress-based detector and retry counter instead of a whole-transfer timeout
+    assert_eq!(options.read_idle_timeout, Some(Duration::from_secs(300)));
+    assert_eq!(options.transfer_retries, 5);
     assert_eq!(options.max_archive_bytes, None);
     assert_eq!(options.max_extracted_bytes, None);
     assert_eq!(options.max_entries, None);
+}
+
+/// Serves `assets`, one thread per connection; the first request for each archive sends its
+/// headers and half of the body, then stalls longer than the client's read-idle detector.
+fn start_stalling_server(assets: BTreeMap<String, Vec<u8>>) -> (String, Arc<AtomicBool>, thread::JoinHandle<()>) {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
+    listener.set_nonblocking(true).unwrap();
+    let stop = Arc::new(AtomicBool::new(false));
+    let stopped = Arc::clone(&stop);
+    let assets = Arc::new(assets);
+    let stalled = Arc::new(std::sync::Mutex::new(std::collections::BTreeSet::new()));
+    let handle = thread::spawn(move || {
+        while !stopped.load(Ordering::Relaxed) {
+            match listener.accept() {
+                Ok((mut stream, _)) => {
+                    let (assets, stalled) = (Arc::clone(&assets), Arc::clone(&stalled));
+                    thread::spawn(move || {
+                        stream.set_nonblocking(false).unwrap();
+                        stream.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+                        let mut request = [0u8; 4096];
+                        let Ok(n) = stream.read(&mut request) else { return };
+                        let text = String::from_utf8_lossy(&request[..n]);
+                        let Some(path) = text.split_whitespace().nth(1).map(str::to_owned) else { return };
+                        match assets.get(&path) {
+                            Some(bytes) if path.ends_with(".tar.gz") && stalled.lock().unwrap().insert(path.clone()) => {
+                                let _ = write!(stream, "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", bytes.len());
+                                let _ = stream.write_all(&bytes[..bytes.len() / 2]);
+                                let _ = stream.flush();
+                                thread::sleep(Duration::from_millis(800));
+                            }
+                            Some(bytes) => {
+                                let _ = write!(stream, "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", bytes.len());
+                                let _ = stream.write_all(bytes);
+                            }
+                            None => {
+                                let _ = stream.write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+                            }
+                        }
+                    });
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => thread::sleep(Duration::from_millis(5)),
+                Err(error) => panic!("stalling fixture server: {error}"),
+            }
+        }
+    });
+    (url, stop, handle)
+}
+
+#[test]
+fn stalled_transfer_is_detected_by_read_idle_and_retried() {
+    // NL2: no whole-transfer deadline; a body that stops arriving trips the read-idle detector
+    // and the transfer is retried (the second request of each archive is served in full).
+    let source = fixture();
+    let (url, stop, handle) = start_stalling_server(release_assets(source.path()));
+    let destination = tempfile::tempdir().unwrap();
+    let options = OfficialExternalDataOptions {
+        local_artifacts_path: Some(destination.path().to_owned()),
+        read_idle_timeout: Some(Duration::from_millis(200)),
+        transfer_retries: 2,
+        ..Default::default()
+    };
+    let mut engine = Vakint::new().unwrap();
+    let report = engine.load_official_external_data_from(2, &options, &url).unwrap();
+    assert!(report.loops.iter().all(|p| p.source == "downloaded"));
+    // without retries the same stall is a transport error
+    let again = tempfile::tempdir().unwrap();
+    let (url2, stop2, handle2) = start_stalling_server(release_assets(source.path()));
+    let no_retry = OfficialExternalDataOptions {
+        local_artifacts_path: Some(again.path().to_owned()),
+        read_idle_timeout: Some(Duration::from_millis(200)),
+        transfer_retries: 0,
+        ..Default::default()
+    };
+    assert!(Vakint::new().unwrap().load_official_external_data_from(2, &no_retry, &url2).is_err());
+    for (s, h) in [(stop, handle), (stop2, handle2)] {
+        s.store(true, Ordering::Relaxed);
+        h.join().unwrap();
+    }
 }

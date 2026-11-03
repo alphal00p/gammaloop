@@ -31,6 +31,15 @@ pub struct OfficialExternalDataOptions {
     /// large download on a slow link is never cut. Native authentication, copying
     /// and reuse have no compute deadline; caller resource budgets still apply.
     pub timeout: Option<Duration>,
+    /// Read-idle detector, a progress check and not a transfer deadline: connecting, or a read
+    /// of the response, that receives no byte for this long fails with a transport error, and
+    /// the transfer is retried. `None` disables it. Default 300 s.
+    pub read_idle_timeout: Option<Duration>,
+    /// Retries of a transfer after a transport failure (refused or reset connection, read idle
+    /// beyond `read_idle_timeout`, body ended before its declared size). A retry counter, not a
+    /// limit on the data: a size or SHA256 mismatch and an HTTP error status are never retried.
+    /// Default 5.
+    pub transfer_retries: usize,
     /// Optional caps on the downloaded archive, the extracted bytes and the archive
     /// entries; `None` (the default) sets none. Every download is already bounded
     /// by the size and SHA256 that its release manifest declares, and extraction
@@ -51,6 +60,8 @@ impl Default for OfficialExternalDataOptions {
             local_artifacts_path: None,
             refresh: false,
             timeout: None,
+            read_idle_timeout: Some(Duration::from_secs(300)),
+            transfer_retries: 5,
             max_archive_bytes: None,
             max_extracted_bytes: None,
             max_entries: None,
@@ -151,6 +162,7 @@ impl Vakint {
         version_component(&options.version)?;
         if !(1..=5).contains(&max_loop_count)
             || options.timeout.is_some_and(|timeout| timeout.is_zero())
+            || options.read_idle_timeout.is_some_and(|idle| idle.is_zero())
             || options.max_archive_bytes == Some(0)
             || options.max_extracted_bytes == Some(0)
             || options.max_entries == Some(0)
@@ -209,6 +221,9 @@ impl Vakint {
         if let Some(timeout) = options.timeout {
             builder = builder.timeout(timeout);
         }
+        if let Some(idle) = options.read_idle_timeout {
+            builder = builder.timeout_connect(idle).timeout_read(idle);
+        }
         let agent = builder.build();
         let bytes = if let Some(path) = local_manifest.filter(|p| p.is_file()) {
             read_bounded(File::open(path).map_err(data::failure)?, MAX_MANIFEST_BYTES)?
@@ -218,7 +233,7 @@ impl Vakint {
             } else {
                 &options.version
             };
-            download_manifest(&agent, &format!("{releases}/{tag}/manifest.json"))?
+            download_manifest(&agent, &format!("{releases}/{tag}/manifest.json"), options.transfer_retries)?
         };
         let manifest: ReleaseManifest = serde_json::from_slice(&bytes).map_err(data::failure)?;
         validate_manifest(&manifest, max_loop_count)?;
@@ -351,13 +366,70 @@ fn validate_manifest(
     Ok(())
 }
 
-fn download_manifest(agent: &ureq::Agent, url: &str) -> Result<Vec<u8>, RustRedEvaluationError> {
-    let response = agent
-        .get(url)
-        .set("Accept-Encoding", "identity")
-        .call()
-        .map_err(data::failure)?;
-    read_bounded(response.into_reader(), MAX_MANIFEST_BYTES)
+/// Outcome of one transfer attempt: a transport failure is retried, anything else is final.
+enum Transfer {
+    Transport(RustRedEvaluationError),
+    Final(RustRedEvaluationError),
+}
+
+fn call_error(error: ureq::Error) -> Transfer {
+    match error {
+        ureq::Error::Status(..) => Transfer::Final(data::failure(error)),
+        ureq::Error::Transport(_) => Transfer::Transport(data::failure(error)),
+    }
+}
+
+#[cfg(not(test))]
+const RETRY_BACKOFF_MS: u64 = 1000;
+#[cfg(test)]
+const RETRY_BACKOFF_MS: u64 = 1;
+
+/// Run `attempt` again after a transport failure, at most `retries` more times, waiting
+/// 1, 2, 4, ... s (at most 60 s) between attempts.
+fn retry_transfer<T>(
+    retries: usize,
+    mut attempt: impl FnMut() -> Result<T, Transfer>,
+) -> Result<T, RustRedEvaluationError> {
+    let mut done = 0usize;
+    loop {
+        match attempt() {
+            Ok(value) => return Ok(value),
+            Err(Transfer::Final(error)) => return Err(error),
+            Err(Transfer::Transport(error)) if done >= retries => return Err(error),
+            Err(Transfer::Transport(_)) => {
+                done += 1;
+                std::thread::sleep(Duration::from_millis(
+                    (RETRY_BACKOFF_MS << (done - 1).min(6)).min(60_000),
+                ));
+            }
+        }
+    }
+}
+
+fn download_manifest(
+    agent: &ureq::Agent,
+    url: &str,
+    retries: usize,
+) -> Result<Vec<u8>, RustRedEvaluationError> {
+    retry_transfer(retries, || {
+        let response = agent
+            .get(url)
+            .set("Accept-Encoding", "identity")
+            .call()
+            .map_err(call_error)?;
+        let mut bytes = Vec::new();
+        response
+            .into_reader()
+            .take(MAX_MANIFEST_BYTES + 1)
+            .read_to_end(&mut bytes)
+            .map_err(|error| Transfer::Transport(data::failure(error)))?;
+        if bytes.len() as u64 > MAX_MANIFEST_BYTES {
+            return Err(Transfer::Final(data::failure(
+                "external-data manifest exceeds size limit",
+            )));
+        }
+        Ok(bytes)
+    })
 }
 
 fn read_bounded(reader: impl Read, limit: u64) -> Result<Vec<u8>, RustRedEvaluationError> {
@@ -403,34 +475,52 @@ fn install_pack(
         .tempdir_in(cache)
         .map_err(data::failure)?;
     let archive_path = scratch.path().join("pack.tar.gz");
-    let mut archive = File::create(&archive_path).map_err(data::failure)?;
-    let mut reader = agent
-        .get(&format!("{releases}/{version}/{}", pack.archive))
-        .set("Accept-Encoding", "identity")
-        .call()
-        .map_err(data::failure)?
-        .into_reader();
-    let mut digest = Sha256::new();
-    let mut total = 0u64;
-    let mut buffer = [0u8; 64 * 1024];
-    loop {
-        let n = reader.read(&mut buffer).map_err(data::failure)?;
-        if n == 0 {
-            break;
+    // One attempt downloads the whole archive again; a transport failure (including a body
+    // that ends before its declared size) is retried, a size overrun or SHA256 mismatch is final.
+    retry_transfer(options.transfer_retries, || {
+        let mut archive =
+            File::create(&archive_path).map_err(|error| Transfer::Final(data::failure(error)))?;
+        let mut reader = agent
+            .get(&format!("{releases}/{version}/{}", pack.archive))
+            .set("Accept-Encoding", "identity")
+            .call()
+            .map_err(call_error)?
+            .into_reader();
+        let mut digest = Sha256::new();
+        let mut total = 0u64;
+        let mut buffer = [0u8; 64 * 1024];
+        loop {
+            let n = reader
+                .read(&mut buffer)
+                .map_err(|error| Transfer::Transport(data::failure(error)))?;
+            if n == 0 {
+                break;
+            }
+            total = total
+                .checked_add(n as u64)
+                .ok_or_else(|| Transfer::Final(data::failure("archive length overflow")))?;
+            if total > expected_bytes || options.max_archive_bytes.is_some_and(|cap| total > cap) {
+                return Err(Transfer::Final(data::failure(
+                    "download exceeds declared archive size",
+                )));
+            }
+            digest.update(&buffer[..n]);
+            archive
+                .write_all(&buffer[..n])
+                .map_err(|error| Transfer::Final(data::failure(error)))?;
         }
-        total = total
-            .checked_add(n as u64)
-            .ok_or_else(|| data::failure("archive length overflow"))?;
-        if total > expected_bytes || options.max_archive_bytes.is_some_and(|cap| total > cap) {
-            return Err(data::failure("download exceeds declared archive size"));
+        if total < expected_bytes {
+            return Err(Transfer::Transport(data::failure(
+                "release archive ended before its declared size",
+            )));
         }
-        digest.update(&buffer[..n]);
-        archive.write_all(&buffer[..n]).map_err(data::failure)?;
-    }
-    if total != expected_bytes || Some(format!("{:x}", digest.finalize())) != pack.archive_sha256 {
-        return Err(data::failure("release archive size or SHA256 mismatch"));
-    }
-    drop(archive);
+        if Some(format!("{:x}", digest.finalize())) != pack.archive_sha256 {
+            return Err(Transfer::Final(data::failure(
+                "release archive size or SHA256 mismatch",
+            )));
+        }
+        Ok(())
+    })?;
     let extracted = scratch.path().join("extracted");
     fs::create_dir(&extracted).map_err(data::failure)?;
     extract_pack(
