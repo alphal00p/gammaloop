@@ -25,8 +25,8 @@ use version_compare::{Cmp, compare_to};
 
 use super::ForcerOptions;
 use super::{
-    FORCER_UPSTREAM_COMMIT, MINIMAL_FORCER_FORM_VERSION, P_FAMILIES, PFamilyData,
-    ReducedPropagatorValue, external_head,
+    FORCER_UPSTREAM_COMMIT, MINIMAL_FORCER_FORM_VERSION, PFamilyData, ReducedPropagatorValue,
+    external_head,
 };
 use crate::symbols::S;
 use crate::utils::vakint_macros::{vk_parse, vk_symbol};
@@ -879,26 +879,9 @@ pub(crate) fn combine_parts(
         .collect())
 }
 
-/// The registry family of a matched p-integral topology.
-fn matched_family(integral_specs: &ReplacementRules) -> Result<&'static PFamilyData, VakintError> {
-    let integral = integral_specs.canonical_topology.get_integral();
-    P_FAMILIES
-        .iter()
-        .find(|family| family.name == integral.name)
-        .ok_or_else(|| {
-            VakintError::InvalidGenericExpression(format!(
-                "Integral {} is not a p-integral family supported by Forcer.",
-                integral.name
-            ))
-        })
-}
-
 impl Vakint {
-    /// Reduce one matched p-integral with Forcer and finalize it.
-    ///
-    /// The family, powers and external momentum are read off the matched
-    /// replacement rules: `pow(n)` holds the power of canonical line `n` and
-    /// `p(1)` the canonical external momentum `σ·p(i)`.
+    /// Reduce one matched p-integral with Forcer and finalize it. The
+    /// family, powers and external momentum come from the matching witness.
     pub(crate) fn forcer_evaluate(
         &self,
         settings: &VakintSettings,
@@ -906,35 +889,32 @@ impl Vakint {
         integral_specs: &ReplacementRules,
         options: &ForcerOptions,
     ) -> Result<Atom, VakintError> {
-        let family = matched_family(integral_specs)?;
-        let substitutions = &integral_specs.canonical_expression_substitutions;
-        let powers = (1..=family.line_count())
-            .map(|line| {
-                substitutions
-                    .get(&function!(S.pow, Atom::num(line as i64)))
-                    .map_or(Some(0), |power| get_integer_from_atom(power.as_view()))
-                    .ok_or_else(|| {
-                        VakintError::InvalidIntegralFormat("powers must be integers".into())
-                    })
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        let canonical_external = function!(S.p, Atom::num(1));
-        let external = substitutions
-            .get(&canonical_external)
-            .cloned()
-            .unwrap_or(canonical_external);
+        let request = integral_specs
+            .propagator_request(numerator)
+            .ok_or_else(|| {
+                VakintError::InvalidGenericExpression(format!(
+                    "Integral {} is not a p-integral supported by Forcer.",
+                    integral_specs.canonical_topology.get_integral().name
+                ))
+            })?;
         debug!(
             "Processing {} with {}: powers {:?}, external {}",
-            family.name,
+            request.family.name,
             "Forcer".green(),
-            powers,
-            external
+            request.powers,
+            request.external
         );
-        let values = reduce_p(family, &powers, numerator, &external, settings)?;
+        let values = reduce_p(
+            request.family,
+            request.powers,
+            request.canonical_numerator,
+            &request.external,
+            settings,
+        )?;
         super::finalize::finalize(
             &values,
-            family.loops,
-            &external,
+            request.family.loops,
+            &request.external,
             settings,
             options.master_mode,
             "Forcer",

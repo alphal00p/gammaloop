@@ -145,7 +145,7 @@ fn one_to_four_loop_witnesses_map_every_user_routing_onto_the_canonical_lines() 
     let mut four_loop_pinches = 0;
     for topology in vakint.topologies.iter() {
         let integral = topology.get_integral();
-        if matches!(topology, Topology::Unknown(_)) {
+        if matches!(topology, Topology::Unknown(_) | Topology::Propagator(_)) {
             continue;
         }
         if integral.n_loops == 4 && integral.name.contains("_pinch_") {
