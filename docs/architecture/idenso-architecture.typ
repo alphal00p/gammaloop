@@ -88,6 +88,12 @@ a different construction. Addition exports its shared external interface while e
 binds its internal pairs; a closed scalar power likewise owns its internal scope. Logical
 structure separately retains orientation, axis order and the declared shape of zero.
 
+An exponent has its own scalar scope. Its closed contractions remain visible to
+explicit-pair queries through nested powers without adding uses to the surrounding
+product, and its chain placeholders cannot borrow an enclosing matrix scope. Open exponent ports
+and invalid local multiplicities still fail admission; scalar metadata remains
+opaque to observation.
+
 The explicit ordered specialization implements `TensorStructure` and network contraction.
 Structural methods delegate to the ordered slots, while permutations rewrite slot atoms and
 introduce identity tensors when needed. Its `Contract` implementation multiplies the atoms and
