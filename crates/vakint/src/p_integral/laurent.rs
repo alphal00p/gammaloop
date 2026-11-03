@@ -113,12 +113,17 @@ impl Laurent {
             if !exponent.is_integer() {
                 return Err(failure(format!("fractional ε power in {expression}")));
             }
-            let power = exponent.numerator().to_i64().ok_or_else(|| failure("ε power"))?;
+            let power = exponent
+                .numerator()
+                .to_i64()
+                .ok_or_else(|| failure("ε power"))?;
             if power <= order {
                 terms.insert(power, coefficient.expand());
             }
         }
-        let valuation = terms.first_key_value().map_or(order + 1, |(power, _)| *power);
+        let valuation = terms
+            .first_key_value()
+            .map_or(order + 1, |(power, _)| *power);
         Ok(Laurent {
             valuation,
             coefficients: (valuation..=order)
@@ -336,7 +341,10 @@ fn valuation(expression: &Atom, epsilon: Symbol) -> Result<Option<i64>, VakintEr
         return Err(failure(format!("fractional ε power in {expression}")));
     }
     Ok(Some(
-        exponent.numerator().to_i64().ok_or_else(|| failure("ε power"))?,
+        exponent
+            .numerator()
+            .to_i64()
+            .ok_or_else(|| failure("ε power"))?,
     ))
 }
 
@@ -457,11 +465,20 @@ mod tests {
         // Symbolica's own series keeps log(𝑒^x).
         let x = Atom::var(crate::symbols::S.x_);
         let rhs = rhs
-            .replace(function!(symbolica::atom::Symbol::LOG, Atom::var(symbolica::atom::Symbol::E).pow(&x)).to_pattern())
+            .replace(
+                function!(
+                    symbolica::atom::Symbol::LOG,
+                    Atom::var(symbolica::atom::Symbol::E).pow(&x)
+                )
+                .to_pattern(),
+            )
             .with(x.to_pattern())
             .expand();
         let difference = (&lhs - &rhs).expand();
-        assert!(difference.is_zero(), "{lhs}\n!=\n{rhs}\ndifference {difference}");
+        assert!(
+            difference.is_zero(),
+            "{lhs}\n!=\n{rhs}\ndifference {difference}"
+        );
     }
 
     #[test]
@@ -475,7 +492,11 @@ mod tests {
         assert_same(
             expand(&one, &no, e, 2).unwrap(),
             table
-                .series(e, Atom::Zero.as_view(), symbolica::domains::rational::Rational::from(2))
+                .series(
+                    e,
+                    Atom::Zero.as_view(),
+                    symbolica::domains::rational::Rational::from(2),
+                )
                 .unwrap()
                 .to_atom(),
         );
@@ -489,9 +510,7 @@ mod tests {
             + pg(2, 1) * vk_parse!("mass^2").unwrap();
         let reference = (Atom::num(1) - Atom::num(2) * &ep) / &ep
             * pg_value(0, 0, e).pow(Atom::num(2))
-            + (Atom::num(3) * &ep - Atom::num(1)) / &ep
-                * pg_value(0, 0, e)
-                * pg_value(1, 0, e)
+            + (Atom::num(3) * &ep - Atom::num(1)) / &ep * pg_value(0, 0, e) * pg_value(1, 0, e)
             + pg_value(2, 1, e) * vk_parse!("mass^2").unwrap();
         let prefactor = vk_parse!(
             "(𝑖*𝜋^(2-ε)*Gamma(1+ε)*Gamma(1-ε)^2/Gamma(2-2*ε))^2*exp(-logQ2mu-log_mu_sq)^(2*ε)\
@@ -505,7 +524,10 @@ mod tests {
                 gamma_series(&(&prefactor * &reference), e, order).unwrap(),
             );
         }
-        assert_eq!(valuation(&(Atom::num(3) / ep.pow(Atom::num(2))), e).unwrap(), Some(-2));
+        assert_eq!(
+            valuation(&(Atom::num(3) / ep.pow(Atom::num(2))), e).unwrap(),
+            Some(-2)
+        );
     }
 
     #[test]
@@ -521,13 +543,15 @@ mod tests {
             .unwrap()
             .replace(crate::symbols::S.n_loops.to_pattern())
             .with(Atom::num(1).to_pattern());
-        let measure = vk_parse!(
-            "(𝑖*𝜋^(2-ε)*Gamma(1+ε)*Gamma(1-ε)^2/Gamma(2-2*ε))*exp(-logQ2mu-log_mu_sq)^ε"
-        )
-        .unwrap();
+        let measure =
+            vk_parse!("(𝑖*𝜋^(2-ε)*Gamma(1+ε)*Gamma(1-ε)^2/Gamma(2-2*ε))*exp(-logQ2mu-log_mu_sq)^ε")
+                .unwrap();
         let prefactor = Vakint::normalize_gamma_functions((normalization * measure).as_view());
         let split = super::split(&prefactor, e);
         let exponent = split.exponent(2);
-        assert!(!exponent[0].contains_symbol(vk_symbol!("log_mu_sq")), "{exponent:?}");
+        assert!(
+            !exponent[0].contains_symbol(vk_symbol!("log_mu_sq")),
+            "{exponent:?}"
+        );
     }
 }

@@ -261,7 +261,14 @@ pub(crate) fn mzv_word(indices: &[i64]) -> Option<(i64, Vec<i64>)> {
         .iter()
         .flat_map(|&n| std::iter::repeat_n(0, n as usize - 1).chain([1]))
         .collect();
-    Some((if indices.len() % 2 == 0 { 1 } else { -1 }, letters))
+    Some((
+        if indices.len().is_multiple_of(2) {
+            1
+        } else {
+            -1
+        },
+        letters,
+    ))
 }
 
 /// Discover named constants and the concrete projections in the built-in data.

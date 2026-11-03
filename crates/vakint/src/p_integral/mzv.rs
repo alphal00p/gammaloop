@@ -89,7 +89,9 @@ fn polylog_at_half(indices: &[usize], terms: usize, bits: u32) -> Float {
         return one;
     }
     let power = |m: usize, s: usize| {
-        (0..s).fold(one.clone(), |value, _| value / Float::with_val(bits, m as u64))
+        (0..s).fold(one.clone(), |value, _| {
+            value / Float::with_val(bits, m as u64)
+        })
     };
     // inner[m] = Σ over the deeper indices with the deepest sum below m+1.
     let mut inner = vec![one.clone(); terms + 1];
@@ -131,8 +133,8 @@ fn word_indices(letters: &[u8]) -> Vec<usize> {
 /// The MZV at `bits` of precision (summed with guard bits, the series tail
 /// below `2^-(bits + 32)`).
 fn mzv_float(indices: &[i64], bits: u32) -> Result<Float, String> {
-    static CACHE: LazyLock<Mutex<BTreeMap<(Vec<i64>, u32), Float>>> =
-        LazyLock::new(Default::default);
+    type Cache = BTreeMap<(Vec<i64>, u32), Float>;
+    static CACHE: LazyLock<Mutex<Cache>> = LazyLock::new(Default::default);
     let key = (indices.to_vec(), bits);
     if let Some(value) = CACHE.lock().map_err(|_| "MZV cache is poisoned")?.get(&key) {
         return Ok(value.clone());
@@ -200,7 +202,10 @@ mod tests {
         );
         // ζ(5,3) (datamine convention, m_1 > m_2).
         assert!(
-            relative_difference(value(&[5, 3]), &known("0.037707672984847544011304782293659")) < 1e-30
+            relative_difference(
+                value(&[5, 3]),
+                &known("0.037707672984847544011304782293659")
+            ) < 1e-30
         );
         // Stuffle: ζ(3)ζ(5) = ζ(5,3) + ζ(3,5) + ζ(8).
         let stuffle = value(&[5, 3]) + &value(&[3, 5]) + &value(&[8]);

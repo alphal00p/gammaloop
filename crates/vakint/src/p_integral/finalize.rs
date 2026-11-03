@@ -71,10 +71,7 @@ fn gamma_tail() -> Symbol {
 
 /// `n + c·ε` of a linear Γ argument, with integer `n` and rational `c`.
 #[cfg(test)]
-fn linear_argument(
-    argument: symbolica::atom::AtomView,
-    epsilon: Symbol,
-) -> Option<(i64, Atom)> {
+fn linear_argument(argument: symbolica::atom::AtomView, epsilon: Symbol) -> Option<(i64, Atom)> {
     let argument = argument.to_owned().expand();
     let e = Atom::var(epsilon);
     let slope = argument.coefficient(e.as_view()).expand();
@@ -163,9 +160,7 @@ pub(crate) fn gamma_series(
 fn expand_exponents(expression: &Atom) -> Atom {
     expression
         .replace(function!(Symbol::EXP, Atom::var(S.x_)).to_pattern())
-        .with_map(|matched| {
-            function!(Symbol::EXP, matched.get(S.x_).unwrap().to_atom().expand())
-        })
+        .with_map(|matched| function!(Symbol::EXP, matched.get(S.x_).unwrap().to_atom().expand()))
 }
 
 /// The finalized p-integral `Σ_w ...` of the module documentation, in

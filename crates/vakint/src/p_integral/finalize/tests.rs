@@ -55,7 +55,7 @@ pub(crate) fn coefficients_at_unit_scale(
         * e.pow(Atom::num(-first)))
     .expand();
     let mut coefficients = vec![Atom::Zero; (last - first + 1) as usize];
-    for (monomial, coefficient) in shifted.coefficient_list::<i8>(&[e.clone()]) {
+    for (monomial, coefficient) in shifted.coefficient_list::<i8>(std::slice::from_ref(&e)) {
         let power = if monomial == Atom::num(1) {
             0
         } else if monomial == e {
@@ -79,16 +79,17 @@ pub(crate) fn coefficients_at_unit_scale(
 fn g(a: Atom, b: Atom, e: &Atom) -> Atom {
     let half_d = Atom::num(2) - e;
     let d = Atom::num(4) - Atom::num(2) * e;
-    gamma().call(&a + &b - &half_d)
-        * gamma().call(&half_d - &a)
-        * gamma().call(&half_d - &b)
+    gamma().call(&a + &b - &half_d) * gamma().call(&half_d - &a) * gamma().call(&half_d - &b)
         / (gamma().call(a.clone()) * gamma().call(b.clone()) * gamma().call(d - a - b))
 }
 
 fn assert_series_equal(lhs: &Atom, rhs: &Atom, settings: &VakintSettings, depth: i64) {
     let e = vk_symbol!(&settings.epsilon_symbol);
     let difference = super::gamma_series(&(lhs - rhs), e, depth).unwrap();
-    assert!(difference.is_zero(), "{lhs}\n!=\n{rhs}\ndifference: {difference}");
+    assert!(
+        difference.is_zero(),
+        "{lhs}\n!=\n{rhs}\ndifference: {difference}"
+    );
 }
 
 #[test]
@@ -171,7 +172,10 @@ fn numerical(expression: &Atom, settings: &VakintSettings) -> f64 {
 /// Both sides evaluated separately, at the relative tolerance of `f64`.
 fn assert_numerically_equal(lhs: &Atom, rhs: &Atom, settings: &VakintSettings) {
     let (a, b) = (numerical(lhs, settings), numerical(rhs, settings));
-    assert!((a - b).abs() <= 1e-15 * b.abs(), "{lhs} = {a} != {rhs} = {b}");
+    assert!(
+        (a - b).abs() <= 1e-15 * b.abs(),
+        "{lhs} = {a} != {rhs} = {b}"
+    );
 }
 
 #[test]
@@ -219,10 +223,20 @@ fn g_scheme_normalization_returns_the_forcer_value() {
         + (Atom::num(3) * &e - Atom::num(1)) / &e * pg(0, 0) * pg(1, 0);
     let head = parse("p(3)");
     for mode in [RustRedMasterMode::Symbolic, RustRedMasterMode::Numerical] {
-        let result = finalize(&[value(-1, -kite.clone())], 2, &head, &settings, mode, "test")
-            .unwrap();
+        let result = finalize(
+            &[value(-1, -kite.clone())],
+            2,
+            &head,
+            &settings,
+            mode,
+            "test",
+        )
+        .unwrap();
         let coefficients = coefficients_at_unit_scale(&result, &settings, &head, -2, 0);
-        assert!(coefficients[0].is_zero() && coefficients[1].is_zero(), "{result}");
+        assert!(
+            coefficients[0].is_zero() && coefficients[1].is_zero(),
+            "{result}"
+        );
         // I = (Q²)^w (Q²/μ²)^(-2ε) (-C_G) at Q² = μ² = 1.
         assert_eq!(coefficients[2], (Atom::num(-6) * zeta().call(3)).expand());
     }

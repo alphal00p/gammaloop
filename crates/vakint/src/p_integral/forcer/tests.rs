@@ -97,7 +97,10 @@ impl Case {
 }
 
 fn fixture_path(file: &str) -> String {
-    format!("{}/tests/fixtures/forcer/{file}", env!("CARGO_MANIFEST_DIR"))
+    format!(
+        "{}/tests/fixtures/forcer/{file}",
+        env!("CARGO_MANIFEST_DIR")
+    )
 }
 
 /// Every case of a battery: frozen values, and the same values from a live
@@ -108,13 +111,19 @@ fn forcer_battery(file: &str, frozen: &str) -> Vec<(Case, Vec<ReducedPropagatorV
     let write = std::env::var("VAKINT_FORCER_FIXTURES").is_ok_and(|mode| mode == "write");
     let live = forcer_test_form();
     if write {
-        let form = live.as_deref().expect("regenerating Forcer fixtures needs FORM 5");
+        let form = live
+            .as_deref()
+            .expect("regenerating Forcer fixtures needs FORM 5");
         battery.form_version = forcer_form_version(form).unwrap();
         for case in &mut battery.cases {
             case.outputs = match case.input() {
                 None => Vec::new(),
                 Some(input) => {
-                    let names = input.parts.iter().map(|p| p.name.as_str()).collect::<Vec<_>>();
+                    let names = input
+                        .parts
+                        .iter()
+                        .map(|p| p.name.as_str())
+                        .collect::<Vec<_>>();
                     run_forcer(&settings(form), &input.program, &names).unwrap()
                 }
             };
@@ -139,7 +148,11 @@ fn forcer_battery(file: &str, frozen: &str) -> Vec<(Case, Vec<ReducedPropagatorV
                     &settings(form),
                 )
                 .unwrap_or_else(|error| panic!("{}: {error}", case.name));
-                assert_eq!(reduced, frozen, "{}: live Forcer differs from the fixture", case.name);
+                assert_eq!(
+                    reduced, frozen,
+                    "{}: live Forcer differs from the fixture",
+                    case.name
+                );
             }
             (case, frozen)
         })
@@ -154,7 +167,12 @@ fn assert_finalizes(case: &Case, values: &[ReducedPropagatorValue], terms: i64) 
         let settings = finalize_tests::settings(LoopNormalizationFactor::MSbar, terms);
         let result = finalize(values, loops, &external, &settings, mode, "Forcer")
             .unwrap_or_else(|error| panic!("{} ({mode}): {error}", case.name));
-        assert_eq!(result.is_zero(), values.is_empty(), "{} ({mode})", case.name);
+        assert_eq!(
+            result.is_zero(),
+            values.is_empty(),
+            "{} ({mode})",
+            case.name
+        );
     }
 }
 
@@ -166,11 +184,18 @@ fn assert_series_zero(expression: Atom, depth: i64, context: &str) {
 /// The reduced values with every `PG` written in Γ functions.
 fn exact(values: &[ReducedPropagatorValue], scale_power: i64) -> Atom {
     let mut total = Atom::Zero;
-    for value in values.iter().filter(|value| value.scale_power == scale_power) {
+    for value in values
+        .iter()
+        .filter(|value| value.scale_power == scale_power)
+    {
         total += &value.reduced;
     }
     total
-        .replace(pg_symbol().call((Atom::var(S.x_), Atom::var(S.y_))).to_pattern())
+        .replace(
+            pg_symbol()
+                .call((Atom::var(S.x_), Atom::var(S.y_)))
+                .to_pattern(),
+        )
         .with_map(|matched| {
             let x = get_integer_from_atom(matched.get(S.x_).unwrap().to_atom().as_view()).unwrap();
             let y = get_integer_from_atom(matched.get(S.y_).unwrap().to_atom().as_view()).unwrap();
@@ -187,9 +212,7 @@ fn g(a: i64, b: Atom) -> Atom {
     let half_d = Atom::num(2) - &e;
     let d = Atom::num(4) - Atom::num(2) * &e;
     let a = Atom::num(a);
-    gamma().call(&a + &b - &half_d)
-        * gamma().call(&half_d - &a)
-        * gamma().call(&half_d - &b)
+    gamma().call(&a + &b - &half_d) * gamma().call(&half_d - &a) * gamma().call(&half_d - &b)
         / (gamma().call(a.clone()) * gamma().call(b.clone()) * gamma().call(d - a - b))
 }
 
@@ -221,8 +244,14 @@ fn bubble_case(case: &Case) -> (i64, i64, i64, i64) {
         .numerator
         .split('^')
         .nth(1)
-        .map_or(if case.numerator == "1" { 0 } else { 1 }, |n| n.parse().unwrap());
-    let sigma = if case.external.starts_with('-') { -1 } else { 1 };
+        .map_or(if case.numerator == "1" { 0 } else { 1 }, |n| {
+            n.parse().unwrap()
+        });
+    let sigma = if case.external.starts_with('-') {
+        -1
+    } else {
+        1
+    };
     (case.powers[0], case.powers[1], n, sigma)
 }
 
@@ -278,8 +307,7 @@ fn forcer_two_loop_battery() {
         "Forcer",
     )
     .unwrap();
-    let coefficients =
-        finalize_tests::coefficients_at_unit_scale(&kite, &settings, &head, -2, 0);
+    let coefficients = finalize_tests::coefficients_at_unit_scale(&kite, &settings, &head, -2, 0);
     assert_eq!(
         coefficients,
         [
@@ -308,8 +336,15 @@ fn forcer_three_loop_battery() {
         assert_finalizes(case, values, 4);
         // The scalar planar and non-planar tops have the G-scheme value 20ζ5.
         if ["la_top", "no_top"].contains(&case.name.as_str()) {
-            let result = finalize(values, 3, &head, &settings, RustRedMasterMode::Symbolic, "Forcer")
-                .unwrap();
+            let result = finalize(
+                values,
+                3,
+                &head,
+                &settings,
+                RustRedMasterMode::Symbolic,
+                "Forcer",
+            )
+            .unwrap();
             let coefficients =
                 finalize_tests::coefficients_at_unit_scale(&result, &settings, &head, -3, 0);
             assert_eq!(
@@ -325,6 +360,67 @@ fn forcer_three_loop_battery() {
             );
         }
     }
+    // Master(no) is tabulated through ε^7 and Master(t105) through ε^9; LA
+    // multiplies t105 by PG(0,0)(3-6ε)/ε, so two further poles reach ε^9 at
+    // nine terms (ε^5).
+    let value = |name: &str| {
+        &battery
+            .iter()
+            .find(|(case, _)| case.name == name)
+            .unwrap()
+            .1
+    };
+    assert_guard(value("no_top"), 3, 1, 10, ("no", 8));
+    assert_guard(value("la_top"), 3, 2, 9, ("t105", 10));
+}
+
+/// The `Oep` guard on Forcer results: with an extra `1/ε^pole`, `deepest_terms`
+/// Laurent terms succeed and one more needs the unknown order
+/// `first_missing_order` of `master`.
+fn assert_guard(
+    values: &[ReducedPropagatorValue],
+    loops: usize,
+    pole: i64,
+    deepest_terms: i64,
+    (master, first_missing_order): (&str, i64),
+) {
+    let head = parse("p(1)");
+    let evaluate = |terms: i64| {
+        let settings = finalize_tests::settings(LoopNormalizationFactor::GScheme, terms);
+        let e = Atom::var(vk_symbol!(&settings.epsilon_symbol));
+        let values = values
+            .iter()
+            .map(|value| ReducedPropagatorValue {
+                scale_power: value.scale_power,
+                reduced: &value.reduced * e.pow(Atom::num(-pole)),
+            })
+            .collect::<Vec<_>>();
+        finalize(
+            &values,
+            loops,
+            &head,
+            &settings,
+            RustRedMasterMode::Symbolic,
+            "Forcer",
+        )
+    };
+    let within =
+        evaluate(deepest_terms).unwrap_or_else(|error| panic!("within the master depth: {error}"));
+    assert!(!within.is_zero());
+    match evaluate(deepest_terms + 1) {
+        Err(VakintError::MissingMasterOrders(missing)) => {
+            assert_eq!(missing.backend, "Forcer");
+            assert!(
+                missing
+                    .masters
+                    .iter()
+                    .any(|m| m.master.contains(master)
+                        && m.first_missing_order == first_missing_order),
+                "{missing}"
+            );
+        }
+        other => panic!("expected missing master orders, got {other:?}"),
+    }
 }
 
 #[test]
@@ -339,9 +435,19 @@ fn forcer_four_loop_battery() {
     // The ladder p-integral is C(2L,L)·ζ(2L-1) in the G-scheme: 70ζ7 at four loops.
     let head = parse("p(1)");
     let settings = finalize_tests::settings(LoopNormalizationFactor::GScheme, 5);
-    let (_, ladder) = battery.iter().find(|(case, _)| case.name == "la4_top").unwrap();
-    let result =
-        finalize(ladder, 4, &head, &settings, RustRedMasterMode::Symbolic, "Forcer").unwrap();
+    let (_, ladder) = battery
+        .iter()
+        .find(|(case, _)| case.name == "la4_top")
+        .unwrap();
+    let result = finalize(
+        ladder,
+        4,
+        &head,
+        &settings,
+        RustRedMasterMode::Symbolic,
+        "Forcer",
+    )
+    .unwrap();
     let coefficients = finalize_tests::coefficients_at_unit_scale(&result, &settings, &head, -4, 0);
     assert_eq!(
         coefficients,
@@ -372,9 +478,17 @@ fn canonical_kite_becomes_the_forcer_graph() {
         "/(p1.p1)^1/(p2.p2)^1/(p3.p3)^1/(p4.p4)^1/(p5.p5)^2\
          *vx(p3,-p5,Q)*vx(-p1,p4,-Q)*vx(-p2,-p4,p5)*vx(p1,p2,-p3);",
     ] {
-        assert!(input.program.contains(fragment), "{fragment}\n{}", input.program);
+        assert!(
+            input.program.contains(fragment),
+            "{fragment}\n{}",
+            input.program
+        );
     }
-    assert!(input.program.contains("id k1 = +p1;\nid k2 = +p2;"), "{}", input.program);
+    assert!(
+        input.program.contains("id k1 = +p1;\nid k2 = +p2;"),
+        "{}",
+        input.program
+    );
     // w = 2L - Σa + r = 4 - 6 + 3, sign (-1)^(6+3).
     assert_eq!(
         input.parts,
@@ -417,7 +531,13 @@ fn pinched_loop_lines_are_solved_through_the_remaining_lines() {
                         total = total.sub(Fraction::new(-(entry as i128), 1).mul(*x));
                     }
                     let expected = Fraction::new((column == j) as i128, 1);
-                    assert_eq!(total, expected, "{}: k({}) column {column}", family.name, j + 1);
+                    assert_eq!(
+                        total,
+                        expected,
+                        "{}: k({}) column {column}",
+                        family.name,
+                        j + 1
+                    );
                 }
             }
         }
@@ -435,8 +555,14 @@ fn scaleless_sectors_vanish_without_running_forcer() {
         ("P2L", vec![1, 1, 1, 0, 0]),
     ] {
         let settings = settings("/forcer-scaleless-test-never-runs-form");
-        let values = reduce_p(family(name), &powers, Atom::num(1).as_view(), &parse("p(1)"), &settings)
-            .unwrap();
+        let values = reduce_p(
+            family(name),
+            &powers,
+            Atom::num(1).as_view(),
+            &parse("p(1)"),
+            &settings,
+        )
+        .unwrap();
         assert!(values.is_empty(), "{name} {powers:?}");
     }
 }
@@ -453,7 +579,10 @@ fn a_vacuum_part_behind_a_cut_vertex_is_scaleless() {
     let with_tadpole = [line(1, 2), line(2, 1), line(2, 3), line(3, 2)];
     for (lines, scaleless) in [(&bubble[..], false), (&with_tadpole[..], true)] {
         let graph = ContractedGraph::new(lines, &vec![false; lines.len()]);
-        assert_eq!(graph.is_scaleless(&lines.iter().collect::<Vec<_>>()), scaleless);
+        assert_eq!(
+            graph.is_scaleless(&lines.iter().collect::<Vec<_>>()),
+            scaleless
+        );
     }
 }
 
@@ -483,9 +612,7 @@ fn forcer_output_maps_to_the_p_master_basis() {
         e,
     )
     .unwrap();
-    let expected = parse(
-        "PG(0,0)^2*(2*ε-1)/(2*ε)+PG(0,0)*PG(1,0)*(1-3*ε)/(2*ε)+PMaster(no)",
-    );
+    let expected = parse("PG(0,0)^2*(2*ε-1)/(2*ε)+PG(0,0)*PG(1,0)*(1-3*ε)/(2*ε)+PMaster(no)");
     assert_eq!((parsed - expected).expand(), Atom::Zero);
     for unexpected in ["Master(no)*xi", "ALARMno", "GschemeConstants(x,0)"] {
         assert!(
@@ -537,7 +664,8 @@ fn forcer_requires_form_five() {
     );
     let message = error.to_string();
     assert!(
-        message.contains("needs FORM >= 5.0.0") && message.contains("EvaluationOrder::rustred_only()"),
+        message.contains("needs FORM >= 5.0.0")
+            && message.contains("EvaluationOrder::rustred_only()"),
         "{message}"
     );
 }

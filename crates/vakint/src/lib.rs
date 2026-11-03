@@ -1947,12 +1947,14 @@ impl VakintDependency {
         match self {
             Self::FORM => checked_form_version(form_exe_path),
             Self::PySecDec => checked_pysecdec_version(python_exe_path),
-            Self::Forcer => p_integral::forcer::forcer_form_version(form_exe_path).map_err(
-                |reason| VakintError::ForcerUnavailable {
-                    form_exe_path: form_exe_path.into(),
-                    reason,
-                },
-            ),
+            Self::Forcer => {
+                p_integral::forcer::forcer_form_version(form_exe_path).map_err(|reason| {
+                    VakintError::ForcerUnavailable {
+                        form_exe_path: form_exe_path.into(),
+                        reason,
+                    }
+                })
+            }
         }
     }
 }

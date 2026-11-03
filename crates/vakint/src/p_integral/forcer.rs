@@ -23,13 +23,13 @@ use symbolica::coefficient::CoefficientView;
 use symbolica::function;
 use version_compare::{Cmp, compare_to};
 
+use super::ForcerOptions;
 use super::{
     FORCER_UPSTREAM_COMMIT, MINIMAL_FORCER_FORM_VERSION, P_FAMILIES, PFamilyData,
     ReducedPropagatorValue, external_head,
 };
 use crate::symbols::S;
 use crate::utils::vakint_macros::{vk_parse, vk_symbol};
-use super::ForcerOptions;
 use crate::{
     ReplacementRules, TEMPLATES, Vakint, VakintError, VakintSettings, get_integer_from_atom,
     get_prop_with_id,
@@ -133,8 +133,9 @@ impl CanonicalLine {
 }
 
 fn canonical_lines(family: &PFamilyData) -> Result<Vec<CanonicalLine>, VakintError> {
-    let invalid =
-        |detail: String| VakintError::InvalidGenericExpression(format!("{}: {detail}", family.name));
+    let invalid = |detail: String| {
+        VakintError::InvalidGenericExpression(format!("{}: {detail}", family.name))
+    };
     Vakint::initialize_vakint_symbols();
     let expression = vk_parse!(family.lines).map_err(|error| invalid(error.to_string()))?;
     let heads = (1..=family.loops)
@@ -465,10 +466,7 @@ pub(crate) fn forcer_input(
             .entry(graph.find(line.from))
             .or_default()
             .push(format!("-{name}"));
-        vertices
-            .entry(graph.find(line.to))
-            .or_default()
-            .push(name);
+        vertices.entry(graph.find(line.to)).or_default().push(name);
     }
     vertices.entry(graph.find(1)).or_default().push("Q".into());
     vertices.entry(graph.find(2)).or_default().push("-Q".into());
@@ -737,7 +735,9 @@ pub(crate) fn parse_forcer_output(output: &str, epsilon: Symbol) -> Result<Atom,
         }
     });
     match unexpected {
-        Some(part) => Err(failure(format!("unexpected symbol {part} in the Forcer result"))),
+        Some(part) => Err(failure(format!(
+            "unexpected symbol {part} in the Forcer result"
+        ))),
         None => Ok(converted),
     }
 }
@@ -913,7 +913,9 @@ impl Vakint {
                 substitutions
                     .get(&function!(S.pow, Atom::num(line as i64)))
                     .map_or(Some(0), |power| get_integer_from_atom(power.as_view()))
-                    .ok_or_else(|| VakintError::InvalidIntegralFormat("powers must be integers".into()))
+                    .ok_or_else(|| {
+                        VakintError::InvalidIntegralFormat("powers must be integers".into())
+                    })
             })
             .collect::<Result<Vec<_>, _>>()?;
         let canonical_external = function!(S.p, Atom::num(1));

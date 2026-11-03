@@ -75,8 +75,7 @@ fn embed_forcer_sources() {
     for path in vendored_files(&root) {
         let name = path.to_str().unwrap().replace('\\', "/");
         let target = compressed.join(format!("{}.gz", name.replace('/', "__")));
-        let mut encoder =
-            flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+        let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
         encoder
             .write_all(&std::fs::read(root.join(&path)).unwrap())
             .unwrap();

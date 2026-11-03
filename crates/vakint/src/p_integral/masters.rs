@@ -80,10 +80,12 @@ fn parse_table() -> Result<BTreeMap<String, Atom>, VakintError> {
             if tail[2] != name {
                 tails += 1;
             }
-            format!("ep^{0}*Oep({0},PMaster({1}))", &tail[1], &name)
+            format!("ep^{0}*Oep({0},PMaster({1}))", &tail[1], name)
         });
         if tails != 1 {
-            return Err(failure(format!("Master({name}) needs exactly one own ALARM tail")));
+            return Err(failure(format!(
+                "Master({name}) needs exactly one own ALARM tail"
+            )));
         }
         let expansion = vk_parse!(&body)
             .map_err(|error| failure(format!("Master({name}): {error}")))?
@@ -92,9 +94,7 @@ fn parse_table() -> Result<BTreeMap<String, Atom>, VakintError> {
         let mut unknown = None;
         expansion.visitor(&mut |part| match part {
             // Symbolica writes ζ(2n) through π^(2n).
-            AtomView::Var(variable)
-                if ![epsilon, Symbol::PI].contains(&variable.get_symbol()) =>
-            {
+            AtomView::Var(variable) if ![epsilon, Symbol::PI].contains(&variable.get_symbol()) => {
                 unknown = Some(part.to_owned());
                 false
             }

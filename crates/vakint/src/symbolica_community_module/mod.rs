@@ -646,6 +646,46 @@ impl VakintEvaluationMethodWrapper {
         })
     }
 
+    #[pyo3(signature = (master_mode = "numerical"))]
+    #[classmethod]
+    /// Create the Forcer evaluation method for massless propagator integrals.
+    ///
+    /// Forcer (vendored in Vakint) reduces one- to four-loop p-integrals exactly
+    /// in its G-scheme master basis; it needs FORM 5. Master modes are those of
+    /// RustRed, so both backends' results are directly comparable.
+    ///
+    /// ## Examples
+    /// ```python
+    /// forcer_method = VakintEvaluationMethod.new_forcer_method(
+    ///     master_mode="numerical"
+    /// )
+    /// ```
+    ///
+    /// Parameters
+    /// ----------
+    ///
+    /// master_mode : str
+    ///    "retain", "symbolic", or "numerical" (default).
+    pub fn new_forcer_method(
+        _cls: &Bound<'_, PyType>,
+        master_mode: &str,
+    ) -> PyResult<VakintEvaluationMethodWrapper> {
+        Ok(VakintEvaluationMethodWrapper {
+            method: EvaluationMethod::Forcer(crate::ForcerOptions {
+                master_mode: match master_mode {
+                    "retain" => crate::RustRedMasterMode::Retain,
+                    "symbolic" => crate::RustRedMasterMode::Symbolic,
+                    "numerical" => crate::RustRedMasterMode::Numerical,
+                    _ => {
+                        return Err(pyo3::exceptions::PyValueError::new_err(
+                            "master_mode must be retain, symbolic, or numerical",
+                        ));
+                    }
+                },
+            }),
+        })
+    }
+
     #[pyo3(signature = (expand_masters = None, susbstitute_masters = None, substitute_hpls = None, direct_numerical_substition = None))]
     #[classmethod]
     /// Create a new VakintEvaluationMethod instance representing the MATAD method.
@@ -957,7 +997,7 @@ impl VakintWrapper {
     /// verify_numerator_identification : Optional[bool]
     ///     Whether to verify the identification of numerator structures. Default is True.
     /// integral_normalization_factor : Optional[str]
-    ///     The normalization factor to be used for integrals. Can be "MSbar", "pySecDec", "FMFTandMATAD" or a custom string. Default is "MSbar".
+    ///     The normalization factor to be used for integrals. Can be "MSbar", "pySecDec", "FMFTandMATAD", "GScheme" or a custom string. Default is "MSbar".
     /// allow_unknown_integrals : Optional[bool]
     ///     Whether to allow unknown integrals to be processed. Default is True.
     /// clean_tmp_dir : Optional[bool]
@@ -1115,6 +1155,7 @@ impl VakintWrapper {
                     "MSbar" => LoopNormalizationFactor::MSbar,
                     "pySecDec" => LoopNormalizationFactor::pySecDec,
                     "FMFTandMATAD" => LoopNormalizationFactor::FMFTandMATAD,
+                    "GScheme" => LoopNormalizationFactor::GScheme,
                     s => LoopNormalizationFactor::Custom(s.into()),
                 }
             } else {

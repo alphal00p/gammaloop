@@ -260,8 +260,8 @@ Backend boundary (`p_integral::ReducedPropagatorValue`): every backend returns, 
     `G10` and `G20` expansions of Masters.prc.
 - Coefficients are rational in ε.
 
-Shared p-finalizer (`p_integral::finalize(values, loops, external, settings, master_mode)`, owned by the Forcer agent,
-used by both backends):
+Shared p-finalizer (`p_integral::finalize::finalize(values, loops, external, settings, master_mode, backend)`, owned
+by the Forcer agent, used by both backends; `backend` names the backend in `MissingMasterOrders` reports):
 
 ```text
 I = Σ_w [F·i·π^(d/2)·εG(1,1)]^L · (-dot(p,p))^w · (-dot(p,p)/mursq)^(-Lε) · mursq^(-Lε) · reduced_w
@@ -272,10 +272,16 @@ I = Σ_w [F·i·π^(d/2)·εG(1,1)]^L · (-dot(p,p))^w · (-dot(p,p)/mursq)^(-L�
   `mursq^(-Lε)` symbolically.
 - Master modes are identical to RustRed's (`RustRedMasterMode`):
   - `Retain`: exact, masters symbolic, no expansion;
-  - `Symbolic`: expanded, `PG` expanded exactly, `PMaster` kept as labelled coefficients;
+  - `Symbolic`: expanded, `PG` expanded exactly, `PMaster` replaced by its exact Masters.prc coefficients with the
+    constants symbolic (`zeta(n)`, `MZV(...)`), as RustRed's `Symbolic` mode substitutes exact master formulas;
   - `Numerical`: `PG` from exact Γ series; `PMaster` from the table, with `Oep` tails.
 - `Symbolic` and `Numerical` expand in ε through `number_of_terms_in_epsilon_expansion - L - 1` and finish with
-  `truncation_guard::ensure_known_orders`.
+  `truncation_guard::ensure_known_orders`. The numerical constants are evaluated by the caller's numerical boundary
+  (`EvaluationMethod::numerical_output`), as for the other backends.
+- The expansion (`p_integral/laurent.rs`) writes every master monomial as
+  `rational(ε) × exp(Σ log Γ(1+cε) + scale logarithms) × PMaster(ε)` and multiplies the three Laurent series with
+  expanded coefficients, each to the depth the others' valuations require. Symbolica's generic series of the Γ
+  products took minutes for one 4L ε^0 coefficient; this takes milliseconds.
 - Logs appear as `log(-dot(p(i),p(i))/mursq)`, always in dot notation. The polynomial factors follow
   `use_dot_product_notation`.
 
@@ -294,7 +300,9 @@ p-master table (`PMaster` values):
   - `z5z3` -> `MZV(5,3)`, `z7z3` -> `MZV(7,3)`, `z5z3z3` -> `MZV(5,3,3)`, `z9z3` -> `MZV(9,3)`,
     `z6z4z1z1` -> `MZV(6,4,1,1)`.
 - `vakint::MZV(n_1,...,n_k)` is a new built-in constant, `Σ_{m_1>...>m_k>=1} ∏ m_i^(-n_i)` (Forcer/datamine
-  convention). It is defined and evaluated through the existing `GPLReal` evaluator.
+  convention). Its exact definition (inspection) is the GPL `(-1)^k G(0^(n_1-1),1,...,0^(n_k-1),1; 1)`. Symbolica's
+  GPL evaluator stops at weight six, so numerically `MZV(...)` becomes the evaluable terminal
+  `MZVvalue(mzv_indices(...))` of `p_integral/mzv.rs` (Hölder convolution at 1/2, any weight and precision).
 - Pinned by tests: `MZV(5,3) = 0.03770767298484754401130478229...`, and `ζ(5)ζ(3) = MZV(5,3) + MZV(3,5) + ζ(8)`
   numerically.
 - The table is built in (the Forcer backend must work without external data). Masters.prc is under the vendoring
@@ -319,8 +327,9 @@ Inputs:
 - `powers` is in canonical line order (0 = pinched, all >= 0 after normalization).
 - `canonical_numerator` is a scalar polynomial in canonical `k(j)` and the user head.
 - `external` is the canonical `p(1)` written in the user head, `σ·p(i)`.
-- These are independent of `ReplacementRules`, so the backends can be built in parallel with the frontend. The glue
-  reads them from the witness.
+- These are independent of `ReplacementRules`, so the backends can be built in parallel with the frontend. The
+  Forcer glue (`Vakint::forcer_evaluate`) reads the family from the matched `Integral` name, the powers from
+  `pow(n)` and `external` from `p(1)` in `canonical_expression_substitutions` (section 2), so it needs no witness.
 
 Results are exact in ε. Expansion, normalization, master substitution and the `Oep` guard happen only in the shared
 finalizer.
@@ -449,9 +458,11 @@ Rules:
   `forcer_settings()`, `rustred_p_settings()`, `assert_p_backends_agree(input, laurent_terms)` (exact Retain
   comparison plus Numerical to 1e-30), `assert_p_routing_invariant(input, seeds)`, `assert_p_dot_round_trip(atom)`,
   `assert_p_scaleless(input)`, `assert_p_error(input, fragment)`.
-- Forcer battery data are frozen in `tests/fixtures/forcer/p{L}l_*.json`: input atom, raw exact Forcer output per
-  degree, FORM version and Forcer commit. Without FORM, they test the parser, the finalizer and RustRed.
-- With `VAKINT_TEST_FORM5=/path/to/form`, a live run regenerates the outputs and compares them with the fixtures.
+- Forcer battery data are frozen in `tests/fixtures/forcer/p{L}l_battery.json`: the canonical input (family, powers,
+  numerator, external), the raw exact Forcer output of each homogeneous part, FORM version and Forcer commit.
+  Without FORM, they test the input generation, the parser, the finalizer and RustRed.
+- With FORM 5 (`VAKINT_TEST_FORM5=/path/to/form`, or the default `form` when it is FORM 5, as in the dev shell and
+  CI) every case also runs live and must reproduce the fixture; `VAKINT_FORCER_FIXTURES=write` regenerates them.
 - Fast gate (`just test_vakint`): everything at 1L-3L plus a few frozen 4L cases. Slow 4L RustRed cases go in the
   `test_vakint` profile's default-filter (never in `slow::` modules); `test_vakint_full` runs everything.
 
