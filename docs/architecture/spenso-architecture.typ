@@ -135,6 +135,14 @@ contractions with matching labels. Concrete execution rejects unmaterialized
 bound ports. Network arithmetic refreshes its state from the resulting graph,
 and component execution invalidates logical layout observations it cannot retain.
 
+`NetworkGraph::to_expression_at_with_operation` exposes native expression emission
+through separate value and operation callbacks. The value callback can intercept
+a whole node before descent; otherwise children are emitted in tree order and the
+operation callback sees their completed expressions. Unary arity is checked before
+that callback. Returning `None` uses the native constructor, callback errors
+propagate, and generated syntax is not visited again. This output operation does
+not admit a typed tensor or publish its retained metadata.
+
 Execution follows one semantic path with interchangeable policies:
 
 ```text
