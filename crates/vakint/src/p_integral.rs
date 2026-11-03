@@ -15,6 +15,7 @@ use crate::utils::vakint_macros::vk_symbol;
 
 pub(crate) mod finalize;
 pub(crate) mod forcer;
+mod laurent;
 pub(crate) mod masters;
 pub(crate) mod mzv;
 

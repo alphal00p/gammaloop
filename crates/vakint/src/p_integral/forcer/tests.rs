@@ -336,6 +336,23 @@ fn forcer_four_loop_battery() {
     for (case, values) in &battery {
         assert_finalizes(case, values, 5);
     }
+    // The ladder p-integral is C(2L,L)·ζ(2L-1) in the G-scheme: 70ζ7 at four loops.
+    let head = parse("p(1)");
+    let settings = finalize_tests::settings(LoopNormalizationFactor::GScheme, 5);
+    let (_, ladder) = battery.iter().find(|(case, _)| case.name == "la4_top").unwrap();
+    let result =
+        finalize(ladder, 4, &head, &settings, RustRedMasterMode::Symbolic, "Forcer").unwrap();
+    let coefficients = finalize_tests::coefficients_at_unit_scale(&result, &settings, &head, -4, 0);
+    assert_eq!(
+        coefficients,
+        [
+            Atom::Zero,
+            Atom::Zero,
+            Atom::Zero,
+            Atom::Zero,
+            (Atom::num(-70) * symbolica::transcendental::zeta().call(7)).expand()
+        ]
+    );
 }
 
 #[test]
@@ -537,4 +554,34 @@ fn vendored_sources_materialize_once_and_completely() {
         include_bytes!("../../../form_src/forcer/forcer/Masters.prc")
     );
     assert_eq!(vendored::FORCER_FILES.len(), 21);
+}
+
+#[test]
+#[ignore = "profiling"]
+fn profile_four_loop_finalize() {
+    let battery: Battery = serde_json::from_str(include_str!(
+        "../../../tests/fixtures/forcer/p4l_battery.json"
+    ))
+    .unwrap();
+    for case in &battery.cases {
+        let values = case.frozen();
+        for terms in [4, 5, 6] {
+            let settings = finalize_tests::settings(LoopNormalizationFactor::MSbar, terms);
+            let start = std::time::Instant::now();
+            let result = finalize(
+                &values,
+                4,
+                &parse(&case.external),
+                &settings,
+                RustRedMasterMode::Symbolic,
+                "Forcer",
+            );
+            eprintln!(
+                "{} terms={terms}: {:?}, {}",
+                case.name,
+                start.elapsed(),
+                result.map_or_else(|e| e.to_string(), |r| r.to_string().len().to_string())
+            );
+        }
+    }
 }

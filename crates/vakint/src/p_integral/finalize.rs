@@ -12,18 +12,16 @@
 //! `logmUVmu`/`log_mu_sq` split, so that normalizations carrying
 //! `exp(log_mu_sq)^(εL)` (MSbar, GScheme) cancel `(μ²)^(-Lε)` symbolically.
 
-use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
-use symbolica::domains::rational::Rational;
+use symbolica::atom::{Atom, AtomCore, Symbol};
 use symbolica::function;
-use symbolica::id::Replacement;
-use symbolica::transcendental::{euler_gamma, gamma, zeta};
+use symbolica::transcendental::gamma;
 
-use super::{ReducedPropagatorValue, external_head, masters, p_master_symbol, pg_symbol};
+use super::{ReducedPropagatorValue, external_head};
 use crate::rustred_evaluation::RustRedMasterMode;
 use crate::symbols::S;
 use crate::utils::simplify_real;
 use crate::utils::vakint_macros::{vk_parse, vk_symbol};
-use crate::{Vakint, VakintError, VakintSettings, get_integer_from_atom};
+use crate::{Vakint, VakintError, VakintSettings};
 
 /// Placeholder for `log(Q²/μ²) = log(-dot(p,p)/mursq)`.
 fn log_q_mu() -> Symbol {
@@ -66,12 +64,17 @@ pub(crate) fn pg_value(x1: i64, x2: i64, epsilon: Symbol) -> Atom {
 }
 
 /// Marks the first omitted order of a truncated `log Γ(1+cε)`.
+#[cfg(test)]
 fn gamma_tail() -> Symbol {
     vk_symbol!("GammaSeriesTail")
 }
 
 /// `n + c·ε` of a linear Γ argument, with integer `n` and rational `c`.
-fn linear_argument(argument: AtomView, epsilon: Symbol) -> Option<(i64, Atom)> {
+#[cfg(test)]
+fn linear_argument(
+    argument: symbolica::atom::AtomView,
+    epsilon: Symbol,
+) -> Option<(i64, Atom)> {
     let argument = argument.to_owned().expand();
     let e = Atom::var(epsilon);
     let slope = argument.coefficient(e.as_view()).expand();
@@ -79,8 +82,8 @@ fn linear_argument(argument: AtomView, epsilon: Symbol) -> Option<(i64, Atom)> {
         .replace(e.to_pattern())
         .with(Atom::Zero.to_pattern())
         .expand();
-    let n = get_integer_from_atom(constant.as_view())?;
-    (matches!(slope.as_view(), AtomView::Num(_))
+    let n = crate::get_integer_from_atom(constant.as_view())?;
+    (matches!(slope.as_view(), symbolica::atom::AtomView::Num(_))
         && (Atom::num(n) + &slope * &e - &argument).expand().is_zero())
     .then_some((n, slope))
 }
@@ -89,7 +92,9 @@ fn linear_argument(argument: AtomView, epsilon: Symbol) -> Option<(i64, Atom)> {
 /// function of `ε` times `Γ(1+cε) = exp(-γcε + Σ_(k=2..=depth) (-1)^k ζ(k)(cε)^k/k)`,
 /// the exponent ending in `ε^(depth+1)·GammaSeriesTail`. Symbolica then
 /// expands the exponentials; other Γ functions are left unchanged.
+#[cfg(test)]
 pub(crate) fn expand_gamma_functions(expression: &Atom, epsilon: Symbol, depth: i64) -> Atom {
+    use symbolica::transcendental::{euler_gamma, zeta};
     let e = Atom::var(epsilon);
     expression
         .replace(function!(gamma(), Atom::var(S.x_)).to_pattern())
@@ -123,6 +128,7 @@ pub(crate) fn expand_gamma_functions(expression: &Atom, epsilon: Symbol, depth: 
 /// The Laurent series of `expression` through `ε^order`, with every linear
 /// Γ function expanded deep enough: the depth grows until no truncated
 /// `log Γ` tail reaches the requested order.
+#[cfg(test)]
 pub(crate) fn gamma_series(
     expression: &Atom,
     epsilon: Symbol,
@@ -132,7 +138,11 @@ pub(crate) fn gamma_series(
     let mut depth = order.max(0) + 8;
     loop {
         let series = expand_gamma_functions(&expression, epsilon, depth)
-            .series(epsilon, Atom::Zero.as_view(), Rational::from(order))
+            .series(
+                epsilon,
+                Atom::Zero.as_view(),
+                symbolica::domains::rational::Rational::from(order),
+            )
             .map_err(|error| VakintError::SymbolicaError(error.to_string()))?
             .to_atom()
             .expand();
@@ -146,59 +156,6 @@ pub(crate) fn gamma_series(
         }
         depth *= 2;
     }
-}
-
-/// Replace every `PG(x1,x2)` by its exact Γ form and every `PMaster(name)`
-/// by its tabulated expansion with an unknown tail.
-fn substitute_masters(expression: &Atom, epsilon: Symbol) -> Result<Atom, VakintError> {
-    let mut replacements = Vec::new();
-    let mut error = None;
-    expression.visitor(&mut |part| {
-        let AtomView::Fun(function) = part else {
-            return true;
-        };
-        if function.get_symbol() == pg_symbol() {
-            let arguments = function
-                .iter()
-                .map(get_integer_from_atom)
-                .collect::<Option<Vec<_>>>();
-            match arguments.as_deref() {
-                Some([x1, x2]) => {
-                    replacements.push((part.to_owned(), pg_value(*x1, *x2, epsilon)));
-                }
-                _ => error = Some(VakintError::EvaluationError(format!("invalid {part}"))),
-            }
-            return false;
-        }
-        if function.get_symbol() == p_master_symbol() {
-            let name = match function.iter().next() {
-                Some(AtomView::Var(name)) if function.get_nargs() == 1 => {
-                    name.get_symbol().get_stripped_name().to_string()
-                }
-                _ => {
-                    error = Some(VakintError::EvaluationError(format!("invalid {part}")));
-                    return false;
-                }
-            };
-            match masters::p_master_expansion(&name, epsilon) {
-                Ok(value) => replacements.push((part.to_owned(), value)),
-                Err(e) => error = Some(e),
-            }
-            return false;
-        }
-        true
-    });
-    if let Some(error) = error {
-        return Err(error);
-    }
-    replacements.sort();
-    replacements.dedup();
-    Ok(expression.replace_multiple(
-        &replacements
-            .into_iter()
-            .map(|(source, target)| Replacement::new(source.to_pattern(), target))
-            .collect::<Vec<_>>(),
-    ))
 }
 
 /// Expand the arguments of all exponentials so that merged factors such as
@@ -249,13 +206,14 @@ pub(crate) fn finalize(
         eps = settings.epsilon_symbol
     ))
     .map_err(|error| VakintError::SymbolicaError(error.to_string()))?;
-    let total = Vakint::normalize_gamma_functions((normalization * measure * reduced).as_view());
-
     let mut result = if mode == RustRedMasterMode::Retain {
+        let total =
+            Vakint::normalize_gamma_functions((&normalization * &measure * &reduced).as_view());
         expand_exponents(&simplify_real(total.as_view()))
     } else {
         let target = settings.number_of_terms_in_epsilon_expansion - l - 1;
-        let expanded = gamma_series(&substitute_masters(&total, epsilon)?, epsilon, target)?;
+        let prefactor = Vakint::normalize_gamma_functions((normalization * measure).as_view());
+        let expanded = super::laurent::expand(&prefactor, &reduced, epsilon, target)?;
         crate::truncation_guard::ensure_known_orders(
             &expanded,
             epsilon,
