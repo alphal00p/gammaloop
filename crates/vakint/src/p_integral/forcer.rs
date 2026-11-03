@@ -15,7 +15,7 @@ use std::process::{Command, Stdio};
 use std::sync::{LazyLock, Mutex};
 
 use colored::Colorize;
-use log::debug;
+use log::{debug, warn};
 use regex::Regex;
 use string_template_plus::{Render, RenderOptions, Template};
 use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
@@ -39,18 +39,71 @@ mod vendored {
     include!(concat!(env!("OUT_DIR"), "/vakint_forcer_sources.rs"));
 }
 
-/// Name of the per-process directory holding the materialized Forcer sources.
-fn materialized_directory_name() -> String {
-    format!("vakint-forcer-{}", &FORCER_UPSTREAM_COMMIT[..7])
+/// Name of the directory shared by the processes of the user `owner`.
+fn shared_directory_name(owner: u32) -> String {
+    format!("vakint-forcer-{}-{owner}", &FORCER_UPSTREAM_COMMIT[..7])
 }
 
-/// Written last into a materialized source directory: its presence means the
-/// directory is complete.
-const COMPLETE_MARKER: &str = ".vakint-forcer-complete";
+/// The embedded Forcer sources, decompressed: relative path and bytes.
+fn vendored_sources() -> Result<Vec<(&'static str, Vec<u8>)>, VakintError> {
+    vendored::FORCER_FILES
+        .iter()
+        .map(|(name, compressed)| {
+            let mut contents = Vec::new();
+            std::io::Read::read_to_end(
+                &mut flate2::read::GzDecoder::new(*compressed),
+                &mut contents,
+            )?;
+            Ok((*name, contents))
+        })
+        .collect()
+}
+
+/// The owner of `path` (not following links) when it is a directory closed
+/// to everyone else (no group or other permission bits).
+#[cfg(unix)]
+fn private_directory_owner(path: &Path) -> Option<u32> {
+    use std::os::unix::fs::{MetadataExt, PermissionsExt};
+    let metadata = fs::symlink_metadata(path).ok()?;
+    (metadata.is_dir() && metadata.permissions().mode() & 0o077 == 0).then(|| metadata.uid())
+}
+
+#[cfg(not(unix))]
+fn private_directory_owner(_path: &Path) -> Option<u32> {
+    None
+}
+
+#[cfg(unix)]
+fn make_private(path: &Path) -> std::io::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    fs::set_permissions(path, fs::Permissions::from_mode(0o700))
+}
+
+#[cfg(not(unix))]
+fn make_private(_path: &Path) -> std::io::Result<()> {
+    Ok(())
+}
+
+/// Whether `directory` can be handed to FORM: a private directory of `owner`
+/// holding exactly the embedded sources as regular files.
+fn is_trusted(directory: &Path, owner: u32, sources: &[(&str, Vec<u8>)]) -> bool {
+    private_directory_owner(directory) == Some(owner)
+        && sources.iter().all(|(name, contents)| {
+            let path = directory.join(name);
+            fs::symlink_metadata(&path).is_ok_and(|metadata| metadata.is_file())
+                && fs::read(&path).is_ok_and(|found| found == *contents)
+        })
+}
 
 /// The vendored sources under `base` (`temporary_directory`, else the system
-/// temporary directory), written once per process and directory. A complete
-/// directory left by another process with the same upstream commit is reused.
+/// temporary directory), materialized once per process and base.
+///
+/// FORM includes `forcer.h` from this directory, so it is trusted only when
+/// it is a private directory (mode 0700, not a link) of the current user
+/// holding byte for byte the embedded sources. Such a directory is shared by
+/// the processes of one user. Anything else at that path, e.g. a directory
+/// planted by another user of a shared `/tmp` or a damaged copy, is never
+/// used: the sources then go to a fresh private directory of this process.
 fn materialized_sources(base: Option<&str>) -> Result<PathBuf, VakintError> {
     static DIRECTORIES: LazyLock<Mutex<HashMap<PathBuf, PathBuf>>> =
         LazyLock::new(Default::default);
@@ -61,33 +114,53 @@ fn materialized_sources(base: Option<&str>) -> Result<PathBuf, VakintError> {
     if let Some(directory) = directories.get(&root) {
         return Ok(directory.clone());
     }
-    let target = root.join(materialized_directory_name());
-    if !target.join(COMPLETE_MARKER).is_file() {
-        fs::create_dir_all(&root)?;
-        let staging = crate::create_unique_tmp_run_dir(Some(&*root.to_string_lossy()), ".forcer")?;
-        for (name, compressed) in vendored::FORCER_FILES {
-            let path = staging.join(name);
-            if let Some(parent) = path.parent() {
-                fs::create_dir_all(parent)?;
+    let sources = vendored_sources()?;
+    let staging = crate::create_unique_tmp_run_dir(Some(&*root.to_string_lossy()), ".forcer")?;
+    make_private(&staging)?;
+    let directory = match private_directory_owner(&staging) {
+        Some(owner) => {
+            let shared = root.join(shared_directory_name(owner));
+            if is_trusted(&shared, owner, &sources) {
+                fs::remove_dir(&staging)?;
+                shared
+            } else {
+                write_sources(&staging, &sources)?;
+                // Atomic publication; a concurrent process may have won the race.
+                let published =
+                    fs::symlink_metadata(&shared).is_err() && fs::rename(&staging, &shared).is_ok();
+                if published {
+                    shared
+                } else if is_trusted(&shared, owner, &sources) {
+                    fs::remove_dir_all(&staging)?;
+                    shared
+                } else {
+                    warn!(
+                        "Ignoring the untrusted Forcer source directory '{}'; using '{}' instead.",
+                        shared.display(),
+                        staging.display()
+                    );
+                    staging
+                }
             }
-            let mut contents = Vec::new();
-            std::io::Read::read_to_end(
-                &mut flate2::read::GzDecoder::new(*compressed),
-                &mut contents,
-            )?;
-            fs::write(path, contents)?;
         }
-        fs::write(staging.join(COMPLETE_MARKER), FORCER_UPSTREAM_COMMIT)?;
-        // Atomic publication: a concurrent process may have won the race.
-        if let Err(error) = fs::rename(&staging, &target) {
-            fs::remove_dir_all(&staging)?;
-            if !target.join(COMPLETE_MARKER).is_file() {
-                return Err(error.into());
-            }
+        None => {
+            write_sources(&staging, &sources)?;
+            staging
         }
+    };
+    directories.insert(root, directory.clone());
+    Ok(directory)
+}
+
+fn write_sources(directory: &Path, sources: &[(&str, Vec<u8>)]) -> Result<(), VakintError> {
+    for (name, contents) in sources {
+        let path = directory.join(name);
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        fs::write(path, contents)?;
     }
-    directories.insert(root, target.clone());
-    Ok(target)
+    Ok(())
 }
 
 /// The FORM version at `form_exe_path` when it can run Forcer, otherwise the

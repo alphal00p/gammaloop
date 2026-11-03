@@ -455,8 +455,7 @@ pub enum VakintError {
     #[error(
         "the Forcer backend (massless propagator integrals) needs FORM >= {minimal}, but \
         '{form_exe_path}' {reason}. Install FORM 5 (https://github.com/form-dev/form) and \
-        expose it through PATH, FORM_PATH or form_exe_path, or evaluate p-integrals with \
-        RustRed (EvaluationOrder::rustred_only()).",
+        expose it through PATH, FORM_PATH or form_exe_path.",
         minimal = p_integral::MINIMAL_FORCER_FORM_VERSION
     )]
     ForcerUnavailable {
@@ -4903,6 +4902,16 @@ impl VakintExpression {
                 let method = vakint
                     .evaluation_method(settings, &matched.canonical_topology)
                     .ok_or_else(|| {
+                        // Only Forcer evaluates p-integrals: say why it cannot.
+                        if let Topology::Propagator(_) = &matched.canonical_topology
+                            && let Err(reason) =
+                                p_integral::forcer::forcer_form_version(&settings.form_exe_path)
+                        {
+                            return VakintError::ForcerUnavailable {
+                                form_exe_path: settings.form_exe_path.clone(),
+                                reason,
+                            };
+                        }
                         VakintError::NoEvaluationMethodFound(
                             term.integral.to_string(),
                             settings.number_of_terms_in_epsilon_expansion

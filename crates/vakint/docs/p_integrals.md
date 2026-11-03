@@ -51,7 +51,8 @@ dot(k(1),p(3))^2 * topo(prop(1,edge(1,3),k(1),0,2)*prop(2,edge(1,4),p(3)-k(1),0,
 Kind inference (no flag):
 - The integral is a p-integral (`IntegralKind::Propagator`) iff some prop momentum contains a head `p(_)`, or its
   short-form head is a p family name. Otherwise it is a vacuum integral (`IntegralKind::Vacuum`), exactly as today.
-- This is unambiguous: vacuum matching already rejects `p` in prop momenta (`Integral::new`, the Unknown topology).
+- This is unambiguous: vacuum matching already rejects `p` in prop momenta (`Integral::new`). Under `allow_unknown_integrals` a
+  `topo` with `p` in its momenta is validated as a p-integral and an invalid one is an error, not `UNKNOWN`.
   The Atom therefore stays self-describing without a `topo(...)` argument.
 - Inference lives in `p_integral::infer_kind(integral: AtomView) -> Result<IntegralKind, VakintError>`.
   `Vakint::match_topologies_for_settings` dispatches on it before any vacuum or five-loop matcher runs.
@@ -363,16 +364,20 @@ Wiring:
 - An explicit Forcer request without FORM 5 is the new
   `VakintError::ForcerUnavailable { form_exe_path, reason }`:
   > "the Forcer backend (massless propagator integrals) needs FORM >= 5.0.0, but '{form_exe_path}' {reason}.
-  > Install FORM 5 (https://github.com/form-dev/form) and expose it through PATH, FORM_PATH or form_exe_path,
-  > or evaluate p-integrals with RustRed (EvaluationOrder::rustred_only())."
+  > Install FORM 5 (https://github.com/form-dev/form) and expose it through PATH, FORM_PATH or form_exe_path."
+  The same error replaces `NoEvaluationMethodFound` when no method of the order evaluates a p-integral and FORM 5 is
+  missing (Forcer is the only p-integral backend until RustRed ships p data).
 
 Vendoring:
 - `crates/vakint/form_src/forcer/`: verbatim upstream `forcer.h` and the 19 files of `forcer/` from
   benruijl/forcer `68a30bf` (`68a30bfb2aec3672a2f674ca8666bfc970105e24`), unmodified. vakint never calls
   `gschemeexpand` or `msbarexpand`, so the depth patch of the study copy is not needed.
 - `build.rs` embeds the files gzip-compressed (flate2 build-dependency; ~1.1 MB instead of 9.6 MB).
-- At runtime they are materialized once per process into `<temporary_directory|TMPDIR>/vakint-forcer-68a30bf/`
-  (atomic rename) and symlinked into each FORM run directory.
+- At runtime they are materialized once per process into `<temporary_directory|TMPDIR>/vakint-forcer-68a30bf-<uid>/`
+  (atomic rename) and symlinked into each FORM run directory. FORM includes `forcer.h` from there, so the directory
+  is reused only when it is a private (mode 0700, not a link) directory of the current user holding byte for byte
+  the embedded sources; anything else (a directory planted by another user of a shared /tmp, a damaged copy) is
+  ignored and the sources go to a fresh private directory of the process.
 
 `form_src/forcer/NOTICE` (exact content):
 

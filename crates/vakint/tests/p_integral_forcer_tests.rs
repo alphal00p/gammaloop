@@ -13,7 +13,9 @@ mod p_integrals;
 
 use p_integrals::*;
 use symbolica::atom::{Atom, AtomCore};
-use vakint::{LoopNormalizationFactor, RustRedMasterMode, VakintError, VakintSettings};
+use vakint::{
+    EvaluationOrder, LoopNormalizationFactor, RustRedMasterMode, VakintError, VakintSettings,
+};
 
 const BUBBLE: &str = "topo(prop(1,edge(1,2),k(1),0,1)*prop(2,edge(2,1),k(1)-p(1),0,1))";
 
@@ -174,19 +176,26 @@ fn numerical_masters_reproduce_the_kite() {
 #[test]
 fn forcer_without_form_five_is_reported() {
     let missing = "/vakint-forcer-tests/missing-form";
-    let settings = forcer_settings(
+    let forcer_only = forcer_settings(
         missing,
         RustRedMasterMode::Symbolic,
         LoopNormalizationFactor::pySecDec,
         4,
     );
-    match vakint::Vakint::new()
-        .unwrap()
-        .evaluate(&settings, parse(KITE).as_view())
-    {
-        Err(VakintError::ForcerUnavailable { form_exe_path, .. }) => {
-            assert_eq!(form_exe_path, missing)
+    // The default order without FORM 5 has no method for p-integrals.
+    let default_order = VakintSettings {
+        evaluation_order: EvaluationOrder::available(missing, "python3"),
+        ..forcer_only.clone()
+    };
+    for settings in [forcer_only, default_order] {
+        match vakint::Vakint::new()
+            .unwrap()
+            .evaluate(&settings, parse(KITE).as_view())
+        {
+            Err(VakintError::ForcerUnavailable { form_exe_path, .. }) => {
+                assert_eq!(form_exe_path, missing)
+            }
+            other => panic!("expected ForcerUnavailable, got {other:?}"),
         }
-        other => panic!("expected ForcerUnavailable, got {other:?}"),
     }
 }

@@ -694,24 +694,88 @@ fn forcer_requires_form_five() {
     );
     let message = error.to_string();
     assert!(
-        message.contains("needs FORM >= 5.0.0")
-            && message.contains("EvaluationOrder::rustred_only()"),
+        message.contains("needs FORM >= 5.0.0") && !message.contains("RustRed"),
         "{message}"
     );
 }
 
+/// The current user's shared source directory under `root`, which the
+/// test owns.
+#[cfg(unix)]
+fn shared_directory(root: &std::path::Path) -> (u32, PathBuf) {
+    use std::os::unix::fs::MetadataExt;
+    let owner = std::fs::metadata(root).unwrap().uid();
+    (owner, root.join(shared_directory_name(owner)))
+}
+
+#[cfg(unix)]
 #[test]
 fn vendored_sources_materialize_once_and_completely() {
     let directory = tempfile::tempdir().unwrap();
     let base = directory.path().to_string_lossy().into_owned();
     let first = materialized_sources(Some(&base)).unwrap();
     assert_eq!(first, materialized_sources(Some(&base)).unwrap());
-    assert!(first.join(COMPLETE_MARKER).is_file());
+    let (owner, shared) = shared_directory(directory.path());
+    assert_eq!(first, shared);
+    assert!(is_trusted(&first, owner, &vendored_sources().unwrap()));
     assert_eq!(
         std::fs::read(first.join("forcer").join("Masters.prc")).unwrap(),
         include_bytes!("../../../form_src/forcer/forcer/Masters.prc")
     );
     assert_eq!(vendored::FORCER_FILES.len(), 21);
+}
+
+/// The directory FORM gets when the shared source directory was planted
+/// (a complete private copy) and then altered by `tamper`.
+#[cfg(unix)]
+fn sources_used_after(tamper: impl Fn(&std::path::Path)) -> (bool, bool) {
+    let root = tempfile::tempdir().unwrap();
+    let (owner, shared) = shared_directory(root.path());
+    std::fs::create_dir(&shared).unwrap();
+    make_private(&shared).unwrap();
+    write_sources(&shared, &vendored_sources().unwrap()).unwrap();
+    tamper(&shared);
+    let used = materialized_sources(Some(&root.path().to_string_lossy())).unwrap();
+    let trusted = is_trusted(&used, owner, &vendored_sources().unwrap());
+    (used == shared, trusted)
+}
+
+#[cfg(unix)]
+#[test]
+fn untrusted_source_directories_are_never_used() {
+    use std::os::unix::fs::PermissionsExt;
+    // A complete private copy of the current user is shared.
+    assert_eq!(sources_used_after(|_| ()), (true, true));
+    // A forcer.h that runs a shell command when FORM includes it.
+    assert_eq!(
+        sources_used_after(|shared| {
+            std::fs::write(shared.join("forcer.h"), "#system touch PLANTED\n").unwrap()
+        }),
+        (false, true)
+    );
+    // A partly deleted copy.
+    assert_eq!(
+        sources_used_after(|shared| {
+            std::fs::remove_file(shared.join("forcer").join("Masters.prc")).unwrap()
+        }),
+        (false, true)
+    );
+    // Sources that other users can replace.
+    assert_eq!(
+        sources_used_after(|shared| {
+            std::fs::set_permissions(shared, std::fs::Permissions::from_mode(0o777)).unwrap()
+        }),
+        (false, true)
+    );
+    // A link to a complete copy elsewhere.
+    assert_eq!(
+        sources_used_after(|shared| {
+            let elsewhere = shared.with_extension("elsewhere");
+            std::fs::rename(shared, &elsewhere).unwrap();
+            std::os::unix::fs::symlink(&elsewhere, shared).unwrap();
+        }),
+        (false, true)
+    );
 }
 
 #[test]
