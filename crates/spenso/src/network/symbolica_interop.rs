@@ -4,7 +4,6 @@ use std::{borrow::Cow, fmt::Display, sync::Arc};
 use std::path::Path;
 
 use ahash::{AHashMap, AHashSet, HashMap};
-#[cfg(feature = "native-code-generation")]
 use eyre::eyre;
 use linnet::{
     half_edge::{NodeIndex, tree::SimpleTraversalTree},
@@ -15,7 +14,9 @@ use symbolica::evaluate::{
     CompileOptions, CompiledCode, CompiledNumber, ExportNumber, ExportSettings, ExportedCode,
 };
 use symbolica::{
-    atom::{Atom, AtomCore, AtomOrView, AtomView, Indeterminate, KeyLookup, Symbol},
+    atom::{
+        Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Indeterminate, KeyLookup, Symbol,
+    },
     coefficient::ConvertToRing,
     domains::{
         EuclideanDomain, InternalOrdering,
@@ -94,12 +95,61 @@ impl<K: std::fmt::Debug + Display, Aind: AbsInd> NetworkGraph<K, Symbol, Aind> {
             &NetworkNode<K, Symbol, Aind>,
         ) -> Result<Option<Atom>, TensorNetworkError<K, Symbol>>,
     ) -> Result<Atom, TensorNetworkError<K, Symbol>> {
+        self.to_expression_at_with_operation(tree, node, value, &mut |_, _, _| Ok(None))
+    }
+
+    /// Emit stored leaves and ordered operation results through separate hooks.
+    ///
+    /// `value` retains the early-interception semantics of `to_expression_at`.
+    /// Otherwise, children are emitted once in native tree order, unary arity is
+    /// checked, and `operation` may replace the completed operation. Returning
+    /// `None` uses the ordinary native constructor. Returned syntax is never
+    /// traversed again. This is an output boundary, not tensor admission.
+    ///
+    /// # Errors
+    /// Returns hook errors, missing stored-leaf expressions, and malformed unary
+    /// operation arities without invoking the operation hook for invalid input.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use linnet::tree::child_vec::ChildVecStore;
+    /// use spenso::network::TensorNetworkError;
+    /// use spenso::network::graph::{NetworkGraph, NetworkNode, NetworkOp};
+    /// use symbolica::atom::{Atom, AtomCore, Symbol};
+    /// let graph = NetworkGraph::<i8, Symbol>::scalar(0).pow(2);
+    /// let tree = graph.expr_tree().cast::<ChildVecStore<()>>();
+    /// let root = graph.graph.node_id(graph.head());
+    /// let result = graph.to_expression_at_with_operation(
+    ///     &tree, root,
+    ///     &mut |_, node| Ok(matches!(node, NetworkNode::Leaf(_)).then(|| Atom::num(3))),
+    ///     &mut |_, operation, children| {
+    ///         Ok(matches!(operation, NetworkOp::Power(_)).then(|| children[0].clone()))
+    ///     },
+    /// )?;
+    /// assert_eq!(result, Atom::num(3));
+    /// # Ok::<(), TensorNetworkError<i8, Symbol>>(())
+    /// ```
+    pub fn to_expression_at_with_operation(
+        &self,
+        tree: &SimpleTraversalTree<ChildVecStore<()>>,
+        node: NodeIndex,
+        value: &mut impl FnMut(
+            NodeIndex,
+            &NetworkNode<K, Symbol, Aind>,
+        ) -> Result<Option<Atom>, TensorNetworkError<K, Symbol>>,
+        operation: &mut impl FnMut(
+            NodeIndex,
+            &NetworkOp<Symbol>,
+            &[Atom],
+        ) -> Result<Option<Atom>, TensorNetworkError<K, Symbol>>,
+    ) -> Result<Atom, TensorNetworkError<K, Symbol>> {
         if let Some(result) = value(node, &self.graph[node])? {
             return Ok(result);
         }
-        let operation = match &self.graph[node] {
+        let op = match &self.graph[node] {
             NetworkNode::Leaf(_) => {
-                return Err(TensorNetworkError::Other(eyre::eyre!(
+                return Err(TensorNetworkError::Other(eyre!(
                     "stored occurrence has no expression"
                 )));
             }
@@ -107,23 +157,35 @@ impl<K: std::fmt::Debug + Display, Aind: AbsInd> NetworkGraph<K, Symbol, Aind> {
         };
         let children = tree
             .iter_children(node, &self.graph)
-            .map(|child| self.to_expression_at(tree, child, value))
+            .map(|child| self.to_expression_at_with_operation(tree, child, value, operation))
             .collect::<Result<Vec<_>, _>>()?;
-        match operation {
+        if matches!(
+            op,
+            NetworkOp::Neg | NetworkOp::Power(_) | NetworkOp::Function(_)
+        ) && children.len() != 1
+        {
+            return Err(TensorNetworkError::Other(eyre!(
+                "unary network operation must have exactly one child"
+            )));
+        }
+        if let Some(result) = operation(node, op, &children)? {
+            return Ok(result);
+        }
+        match op {
             NetworkOp::Sum => Ok(Atom::add_many(children)),
             NetworkOp::Product => Ok(Atom::mul_many(children)),
             NetworkOp::Neg | NetworkOp::Power(_) | NetworkOp::Function(_) => {
                 let [value]: [Atom; 1] = children.try_into().map_err(|_| {
-                    TensorNetworkError::Other(eyre::eyre!(
+                    TensorNetworkError::Other(eyre!(
                         "unary network operation must have exactly one child"
                     ))
                 })?;
-                Ok(match operation {
+                Ok(match op {
                     NetworkOp::Neg => -value,
                     NetworkOp::Power(power) => value.pow(*power),
-                    NetworkOp::Function(symbol) => symbolica::atom::FunctionBuilder::new(*symbol)
-                        .add_arg(value)
-                        .finish(),
+                    NetworkOp::Function(symbol) => {
+                        FunctionBuilder::new(*symbol).add_arg(value).finish()
+                    }
                     _ => unreachable!(),
                 })
             }
@@ -1017,5 +1079,190 @@ where
                 MixedTensor::Param(t) => t.clone(),
             },
         )
+    }
+}
+
+#[cfg(test)]
+mod operation_emission_tests {
+    use super::{NetworkGraph, NetworkNode, NetworkOp, TensorNetworkError};
+    use crate::network::graph::NetworkLeaf;
+    use crate::network::tags::SPENSO_TAG;
+    use crate::structure::abstract_index::AbstractIndex;
+    use linnet::half_edge::NodeIndex;
+    use linnet::tree::child_vec::ChildVecStore;
+    use symbolica::atom::{Atom, AtomCore, FunctionBuilder, Symbol};
+    use symbolica::{function, symbol};
+
+    type Graph = NetworkGraph<i8, Symbol, AbstractIndex>;
+    type Error = TensorNetworkError<i8, Symbol>;
+
+    fn leaf(_: NodeIndex, node: &NetworkNode<i8, Symbol>) -> Result<Option<Atom>, Error> {
+        Ok(match node {
+            NetworkNode::Leaf(NetworkLeaf::Scalar(index)) => Some(Atom::num(index.index() + 2)),
+            _ => None,
+        })
+    }
+
+    #[test]
+    fn operation_emission_none_preserves_native_constructors() {
+        let f = symbol!("operation_emission::none_f");
+        let a = Graph::scalar(0);
+        let b = Graph::scalar(1);
+        for (graph, expected) in [
+            (a.clone() + b.clone(), Atom::num(5)),
+            (a.clone() * b, Atom::num(6)),
+            (-a.clone(), Atom::num(-2)),
+            (a.clone().pow(-1), Atom::num((1, 2))),
+            (a.function(f), function!(f, 2)),
+            (Graph::zero(), Atom::Zero),
+        ] {
+            let tree = graph.expr_tree().cast::<ChildVecStore<()>>();
+            let root = graph.graph.node_id(graph.head());
+            let old = graph.to_expression_at(&tree, root, &mut leaf).unwrap();
+            let new = graph
+                .to_expression_at_with_operation(&tree, root, &mut leaf, &mut |_, _, _| Ok(None))
+                .unwrap();
+            assert_eq!(old, expected);
+            assert_eq!(new, expected);
+        }
+    }
+
+    #[test]
+    fn operation_emission_runs_bottom_up_without_revisiting_generated_syntax() {
+        let f = symbol!("operation_emission::outer_f");
+        let generated = symbol!("operation_emission::generated");
+        let graph = (-((Graph::scalar(0) * Graph::scalar(1)).pow(2))).function(f);
+        let tree = graph.expr_tree().cast::<ChildVecStore<()>>();
+        let root = graph.graph.node_id(graph.head());
+        let mut calls = Vec::new();
+        let actual = graph
+            .to_expression_at_with_operation(
+                &tree,
+                root,
+                &mut leaf,
+                &mut |_, operation, children| {
+                    calls.push(*operation);
+                    Ok(match operation {
+                        NetworkOp::Power(2) => Some(function!(generated, &children[0])),
+                        _ => None,
+                    })
+                },
+            )
+            .unwrap();
+        assert_eq!(
+            calls,
+            [
+                NetworkOp::Product,
+                NetworkOp::Power(2),
+                NetworkOp::Neg,
+                NetworkOp::Function(f)
+            ]
+        );
+        assert_eq!(actual, function!(f, -function!(generated, 6)));
+    }
+
+    #[test]
+    fn operation_emission_retains_distinguishable_native_child_order() {
+        let graph = Graph::scalar(0) * Graph::scalar(1);
+        let tree = graph.expr_tree().cast::<ChildVecStore<()>>();
+        let root = graph.graph.node_id(graph.head());
+        let ordered = tree
+            .iter_children(root, &graph.graph)
+            .map(|node| leaf(node, &graph.graph[node]).unwrap().unwrap())
+            .collect::<Vec<_>>();
+        let head = symbol!("operation_emission::ordered_children");
+        let expected = FunctionBuilder::new(head).add_args(&ordered).finish();
+        assert_ne!(expected, function!(head, &ordered[1], &ordered[0]));
+        let actual = graph
+            .to_expression_at_with_operation(
+                &tree,
+                root,
+                &mut leaf,
+                &mut |_, operation, children| {
+                    assert_eq!(*operation, NetworkOp::Product);
+                    assert_eq!(children, ordered);
+                    Ok(Some(FunctionBuilder::new(head).add_args(children).finish()))
+                },
+            )
+            .unwrap();
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn operation_emission_value_interception_keeps_whole_payloads_opaque() {
+        let f = symbol!("operation_emission::opaque");
+        let graph = (Graph::scalar(0) * Graph::scalar(1)).pow(2);
+        let tree = graph.expr_tree().cast::<ChildVecStore<()>>();
+        let root = graph.graph.node_id(graph.head());
+        let payload = function!(f, Atom::var(f).pow(-1));
+        let mut values = 0;
+        let mut operations = 0;
+        let actual = graph
+            .to_expression_at_with_operation(
+                &tree,
+                root,
+                &mut |node, _| {
+                    assert_eq!(node, root);
+                    values += 1;
+                    Ok(Some(payload.clone()))
+                },
+                &mut |_, _, _| {
+                    operations += 1;
+                    Ok(None)
+                },
+            )
+            .unwrap();
+        assert_eq!(actual, payload);
+        assert_eq!(values, 1);
+        assert_eq!(operations, 0);
+    }
+
+    #[test]
+    fn operation_emission_checks_unary_arity_before_callback() {
+        let mut graph = Graph::scalar(0) * Graph::scalar(1);
+        let root = graph.graph.node_id(graph.head());
+        graph.graph[root] = NetworkNode::Op(NetworkOp::Neg);
+        let tree = graph.expr_tree().cast::<ChildVecStore<()>>();
+        let mut calls = 0;
+        let error = graph
+            .to_expression_at_with_operation(&tree, root, &mut leaf, &mut |_, _, _| {
+                calls += 1;
+                Ok(Some(Atom::one()))
+            })
+            .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("unary network operation must have exactly one child")
+        );
+        assert_eq!(calls, 0);
+    }
+
+    #[test]
+    fn operation_emission_power_hook_can_protect_a_closed_product_before_pow() {
+        let a = symbol!("operation_emission::contracted_a");
+        let b = symbol!("operation_emission::contracted_b");
+        let base = function!(a, 1) * function!(b, 1);
+        let graph = Graph::scalar(0).pow(-1);
+        let tree = graph.expr_tree().cast::<ChildVecStore<()>>();
+        let root = graph.graph.node_id(graph.head());
+        let expected = function!(SPENSO_TAG.bracket, &base).pow(-1);
+        let actual = graph
+            .to_expression_at_with_operation(
+                &tree,
+                root,
+                &mut |_, node| Ok(matches!(node, NetworkNode::Leaf(_)).then(|| base.clone())),
+                &mut |_, operation, children| {
+                    Ok(match operation {
+                        NetworkOp::Power(power) => {
+                            Some(function!(SPENSO_TAG.bracket, &children[0]).pow(*power))
+                        }
+                        _ => None,
+                    })
+                },
+            )
+            .unwrap();
+        assert_eq!(actual, expected);
+        assert_ne!(actual, base.pow(-1));
     }
 }
