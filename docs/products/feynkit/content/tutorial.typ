@@ -195,6 +195,11 @@ additional assumptions can be supplied with `real=[...]`. Other scalar symbols,
 including complex couplings, retain their conjugation. Named model couplings are expanded
 into their analytic parameter expressions before conjugation.
 
+Model real names, explicit `real=[...]` expressions and the selected dimension
+are matched exactly, including names ending in underscores. Such names do not
+act as substitution wildcards. An unrelated symbolic dimension remains
+conjugated unless it is selected as the dimension or explicitly declared real.
+
 Squaring includes all interferences. Ket and bra indices remain separate, as do their
 loop integration variables. `sum_spins([0, 1], average_initial=True)` closes selected
 legs; omitting the labels selects all remaining legs. An explicitly repeated sum raises

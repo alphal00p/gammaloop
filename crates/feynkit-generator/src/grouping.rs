@@ -69,6 +69,7 @@ use thiserror::Error;
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::prelude::*;
 
+use crate::generation::FACTOR_HEADS;
 use crate::{
     DiagramGroup, GenerationOptions, GraphGroupingOptions, GroupMember, NumeratorGrouping,
 };
@@ -1161,7 +1162,7 @@ fn collapse_groups(
                     GroupingError::SourceDiagramIndexOverflow(member.source_diagram)
                 })?;
                 factor += function!(
-                    symbol!("feynkit_generator_factor::NumeratorDependentGrouping"),
+                    FACTOR_HEADS.numerator_dependent_grouping,
                     Atom::num(source_diagram),
                     member.ratio.clone(),
                     member.overall_factor.clone()
