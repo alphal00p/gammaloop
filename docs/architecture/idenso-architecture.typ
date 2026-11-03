@@ -693,6 +693,12 @@ reducer. Equal remaining states merge before result emission. Metrics alone
 and metrics with rank-one tensors use this same owner. Powers whose bases
 contain local dummy pairs finish that scalar scope before the power is applied.
 
+An explicit metric port may be renamed through native unary conjugation while
+preserving the conjugation wrapper, coefficients and slot variance. This does
+not permit vector or scalar substitution through conjugation, and arbitrary
+broadcast functions remain opaque. Refused vector substitutions do not invoke
+their normalizers. Conjugation and contraction remain separate operations.
+
 Callback-sensitive syntax uses the existing ordered substitution schedule and
 checked result construction. It does not acquire a trusted interface merely
 because a substitution was algebraically a contraction. The example
