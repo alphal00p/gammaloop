@@ -141,7 +141,10 @@ and shadow axes. A ranked zero becomes an empty sparse tensor with the declared
 ports. The parser still materializes component tensors; this is not a parse-free
 handoff. The optional configuration selects reversible index capture; that
 source filter controls cooking, while inverse restoration also exposes portable
-dimension payloads such as scalar dimension coefficients. Representation
+dimension payloads such as scalar dimension coefficients outside Scalar metadata.
+Representation-payload cooking and restoration preserve Scalar-tagged function
+containers, including their literal encoded payloads; `AnyFunction` selection
+retains its broader traversal. Representation
 dimensions need their own checked specialization before finite component
 execution; formal dimensions do not acquire component tables through decoding.
 

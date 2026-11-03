@@ -432,8 +432,8 @@ interface, materializes unresolved ports, and releases its own planning-cache
 references before parsing components. Other shared owners can still retain the
 same caches. The optional configuration must select reversible index capture;
 its `dimensions=false` source filter controls cooking, not inverse restoration.
-`uncook` also restores portable dimension payloads, including dimensions that
-have become scalar coefficients. Actual representation dimensions must be
+`uncook` also restores portable dimension payloads outside Scalar metadata,
+including dimensions that have become scalar coefficients. Actual representation dimensions must be
 specialized through the checked dimension owner before finite component
 execution. Restoring a symbolic dimension does not provide a component table.
 This handoff still parses and materializes component tensors. The result includes
@@ -442,6 +442,12 @@ for component coordinates and shadow axes; matching only the port multiset does
 not preserve logical axis order. A ranked zero becomes an empty sparse tensor
 with its original ports. Concrete components and contraction execution remain
 Spenso responsibilities.
+
+With the `RepresentationPayload` source filter, cooking and inverse restoration
+treat Scalar-tagged function containers as opaque metadata. Their nested labels
+and encoded dimensions remain literal, preserving the metadata passed to enclosing
+normalization callbacks. `AnyFunction` selection retains its broader traversal
+and inverse-decoding behavior.
 
 The indexed `into_network` entry point consumes the same retained carrier and
 uses this handoff with an already explicit public interface. Its logical layout,
