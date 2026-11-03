@@ -1,0 +1,377 @@
+{
+  "forcer_commit": "68a30bfb2aec3672a2f674ca8666bfc970105e24",
+  "form_version": "5.0.0",
+  "cases": [
+    {
+      "name": "kite",
+      "family": "P2L",
+      "powers": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)^2*rat( - 2*ep + 1,ep) + GschemeConstants(0,0)*GschemeConstants(1,0)*rat(3*ep - 1,ep)\n"
+      ]
+    },
+    {
+      "name": "kite_dot1",
+      "family": "P2L",
+      "powers": [
+        2,
+        1,
+        1,
+        1,
+        1
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)^2*rat( - 4*ep + 2,1) + GschemeConstants(0,0)*GschemeConstants(1,0)*rat(18*ep^2 + 3*ep - 3,2*ep + 2)\n"
+      ]
+    },
+    {
+      "name": "kite_dot2",
+      "family": "P2L",
+      "powers": [
+        1,
+        2,
+        1,
+        1,
+        1
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)^2*rat(4*ep - 2,ep + 1) + GschemeConstants(0,0)*GschemeConstants(1,0)*rat(18*ep^3 - 15*ep^2 - 6*ep + 3,ep^2 + 2*ep + 1)\n"
+      ]
+    },
+    {
+      "name": "kite_dot3",
+      "family": "P2L",
+      "powers": [
+        1,
+        1,
+        2,
+        1,
+        1
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)^2*rat( - 4*ep + 2,1) + GschemeConstants(0,0)*GschemeConstants(1,0)*rat(18*ep^2 + 3*ep - 3,2*ep + 2)\n"
+      ]
+    },
+    {
+      "name": "kite_dot4",
+      "family": "P2L",
+      "powers": [
+        1,
+        1,
+        1,
+        2,
+        1
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)^2*rat( - 4*ep + 2,1) + GschemeConstants(0,0)*GschemeConstants(1,0)*rat(18*ep^2 + 3*ep - 3,2*ep + 2)\n"
+      ]
+    },
+    {
+      "name": "kite_dot5",
+      "family": "P2L",
+      "powers": [
+        1,
+        1,
+        1,
+        1,
+        2
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)^2*rat( - 4*ep + 2,1) + GschemeConstants(0,0)*GschemeConstants(1,0)*rat(18*ep^2 + 3*ep - 3,2*ep + 2)\n"
+      ]
+    },
+    {
+      "name": "kite_dots_25",
+      "family": "P2L",
+      "powers": [
+        1,
+        2,
+        1,
+        1,
+        2
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)^2*rat(8*ep^2 - 2,ep + 1) + GschemeConstants(0,0)*GschemeConstants(1,0)*rat(54*ep^5 + 81*ep^4 - 60*ep^3 - 63*ep^2 + 6*ep + 6,ep^3 + 4*ep^2 + 5*ep + 2)\n"
+      ]
+    },
+    {
+      "name": "kite_dots_23",
+      "family": "P2L",
+      "powers": [
+        1,
+        2,
+        2,
+        1,
+        1
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)^2*rat(8*ep^2 - 2,ep + 1) + GschemeConstants(0,0)*GschemeConstants(1,0)*rat(54*ep^5 + 81*ep^4 - 60*ep^3 - 63*ep^2 + 6*ep + 6,ep^3 + 4*ep^2 + 5*ep + 2)\n"
+      ]
+    },
+    {
+      "name": "kite_dot1_cubed",
+      "family": "P2L",
+      "powers": [
+        3,
+        1,
+        1,
+        1,
+        1
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)^2*rat( - 4*ep^2 + 1,1) + GschemeConstants(0,0)*GschemeConstants(1,0)*rat(54*ep^4 + 27*ep^3 + 21*ep^2 - 3*ep - 3,2*ep^2 + 6*ep + 4)\n"
+      ]
+    },
+    {
+      "name": "kite_kq_rank1",
+      "family": "P2L",
+      "powers": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "numerator": "dot(k(1),p(1))",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)^2*rat(2*ep - 1,2*ep) + GschemeConstants(0,0)*GschemeConstants(1,0)*rat( - 3*ep + 1,2*ep)\n"
+      ]
+    },
+    {
+      "name": "kite_kq_rank1_reversed",
+      "family": "P2L",
+      "powers": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "numerator": "-dot(k(1),p(3))",
+      "external": "-p(3)",
+      "outputs": [
+        "GschemeConstants(0,0)^2*rat(2*ep - 1,2*ep) + GschemeConstants(0,0)*GschemeConstants(1,0)*rat( - 3*ep + 1,2*ep)\n"
+      ]
+    },
+    {
+      "name": "kite_kk_rank1",
+      "family": "P2L",
+      "powers": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "numerator": "dot(k(1),k(2))",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)^2*rat(-1,2)\n"
+      ]
+    },
+    {
+      "name": "kite_rank2",
+      "family": "P2L",
+      "powers": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "numerator": "dot(k(2),p(1))^2",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)*GschemeConstants(1,0)*rat(2*ep - 1,6*ep - 4)\n"
+      ]
+    },
+    {
+      "name": "kite_rank2_mixed",
+      "family": "P2L",
+      "powers": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)*GschemeConstants(1,0)*rat( - 2*ep + 1,12*ep - 8)\n"
+      ]
+    },
+    {
+      "name": "kite_rank3",
+      "family": "P2L",
+      "powers": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "numerator": "dot(k(1),p(1))^2*dot(k(2),k(2))",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)^2*rat(1,4)\n"
+      ]
+    },
+    {
+      "name": "kite_rank4",
+      "family": "P2L",
+      "powers": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "numerator": "dot(k(1),p(1))^2*dot(k(2),p(1))^2",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)*GschemeConstants(1,0)*rat(20*ep^2 - 38*ep + 15,216*ep^2 - 432*ep + 192)\n"
+      ]
+    },
+    {
+      "name": "kite_rank4_kk",
+      "family": "P2L",
+      "powers": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "numerator": "dot(k(1),k(2))^2",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)^2*rat(-1,8) + GschemeConstants(0,0)*GschemeConstants(1,0)*rat(ep - 1,12*ep - 8)\n"
+      ]
+    },
+    {
+      "name": "kite_coefficients",
+      "family": "P2L",
+      "powers": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "numerator": "(1+ε)*dot(k(1),p(3))^2+mass^2*dot(k(1),k(2))+dot(p(3),p(3))*dot(k(2),p(3))",
+      "external": "p(3)",
+      "outputs": [
+        "GschemeConstants(0,0)^2*rat(-1,2)\n",
+        " 0\n",
+        "GschemeConstants(0,0)^2*rat( - 2*ep + 1,4*ep) + GschemeConstants(0,0)*GschemeConstants(1,0)*rat(5*ep^2 - 5*ep + 1,6*ep^2 - 4*ep)\n"
+      ]
+    },
+    {
+      "name": "kite_dot_rank2",
+      "family": "P2L",
+      "powers": [
+        2,
+        1,
+        1,
+        1,
+        1
+      ],
+      "numerator": "dot(k(2),p(1))^2",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)*GschemeConstants(1,0)*rat(4*ep^2 - 1,4*ep + 4)\n"
+      ]
+    },
+    {
+      "name": "kite_dots_rank4",
+      "family": "P2L",
+      "powers": [
+        1,
+        2,
+        1,
+        2,
+        1
+      ],
+      "numerator": "dot(k(1),k(2))*dot(k(1),p(1))*dot(k(2),p(1))",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)^2*rat(2*ep - 1,8*ep) + GschemeConstants(0,0)*GschemeConstants(1,0)*rat(16*ep^5 + 18*ep^4 - 7*ep^3 - 22*ep^2 - ep + 2,8*ep^3 + 24*ep^2 + 16*ep)\n"
+      ]
+    },
+    {
+      "name": "sunset",
+      "family": "P2L",
+      "powers": [
+        1,
+        1,
+        0,
+        0,
+        1
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)*GschemeConstants(1,0)*rat(ep,6*ep - 4)\n"
+      ]
+    },
+    {
+      "name": "pinched_k1_rank2",
+      "family": "P2L",
+      "powers": [
+        0,
+        1,
+        1,
+        1,
+        1
+      ],
+      "numerator": "dot(k(1),p(1))^2",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)*GschemeConstants(1,0)*rat(8*ep - 7,36*ep - 24)\n"
+      ]
+    },
+    {
+      "name": "negative_power",
+      "family": "P2L",
+      "powers": [
+        1,
+        1,
+        1,
+        1,
+        -1
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)*GschemeConstants(1,0)*rat(1,2)\n",
+        "GschemeConstants(0,0)*GschemeConstants(1,0)*rat( - 2*ep + 1,6*ep - 4)\n"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+Forcer: a FORM program for massless four-loop propagator integrals.
+Authors: Ben Ruijl, Takahiro Ueda, Jos Vermaseren (ERC Advanced Grant 320651, HEPGAME).
+Upstream: https://github.com/benruijl/forcer, commit 68a30bfb2aec3672a2f674ca8666bfc970105e24 (vendored unmodified).
+Reference: B. Ruijl, T. Ueda, J.A.M. Vermaseren, arXiv:1704.06650; Zenodo DOI 10.5281/zenodo.1043944.
+Masters.prc expansions follow R.N. Lee, A.V. Smirnov, V.A. Smirnov, arXiv:1108.0732.
+The upstream repository carries no LICENSE file. These sources are redistributed inside vakint with the
+permission of the Forcer authors (Ben Ruijl, collaborator), granted on 2026-11-03.

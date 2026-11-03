@@ -6,9 +6,17 @@
 //! four-loop family registry, the matching witness and the backend-independent
 //! reduced value. Matching, evaluation and finalization are wired elsewhere.
 
-use symbolica::atom::Atom;
+use symbolica::atom::{Atom, AtomView, Symbol};
 
+use crate::VakintError;
 use crate::rustred_evaluation::RustRedMasterMode;
+use crate::symbols::S;
+use crate::utils::vakint_macros::vk_symbol;
+
+pub(crate) mod finalize;
+pub(crate) mod forcer;
+pub(crate) mod masters;
+pub(crate) mod mzv;
 
 /// Upstream commit of the vendored Forcer sources (`form_src/forcer`).
 pub const FORCER_UPSTREAM_COMMIT: &str = "68a30bfb2aec3672a2f674ca8666bfc970105e24";
@@ -186,6 +194,46 @@ pub(crate) const P_FAMILIES: [PFamilyData; 16] = [
     },
 ];
 
+impl PFamilyData {
+    /// Number of lines (propagators) of the family: `3L - 1`.
+    pub(crate) fn line_count(&self) -> usize {
+        3 * self.loops - 1
+    }
+}
+
+/// `vakint::PG(x1,x2)`: Forcer's `GschemeConstants(x1,x2)`,
+/// `(1+x1+x2)·G(1+x1ε, 1+x2ε)/(ε·G(1,1))`.
+pub(crate) fn pg_symbol() -> Symbol {
+    vk_symbol!("PG")
+}
+
+/// `vakint::PMaster(name)`: Forcer's `Master(name)`, in the G-scheme.
+pub(crate) fn p_master_symbol() -> Symbol {
+    vk_symbol!("PMaster")
+}
+
+/// The user's external head `p(i)` and the sign `σ` of `external = σ·p(i)`.
+pub(crate) fn external_head(external: &Atom) -> Result<(Atom, i64), VakintError> {
+    let invalid = || {
+        VakintError::InvalidIntegralFormat(format!(
+            "p-integral: the external momentum must be ±p(i), not {external}"
+        ))
+    };
+    match external.as_view() {
+        AtomView::Fun(head) if head.get_symbol() == S.p && head.get_nargs() == 1 => {
+            Ok((external.clone(), 1))
+        }
+        AtomView::Mul(_) => {
+            let head = -external;
+            match head.as_view() {
+                AtomView::Fun(f) if f.get_symbol() == S.p && f.get_nargs() == 1 => Ok((head, -1)),
+                _ => Err(invalid()),
+            }
+        }
+        _ => Err(invalid()),
+    }
+}
+
 /// The p-integral part of a matching witness.
 #[allow(dead_code)]
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -218,6 +266,12 @@ pub struct ForcerOptions {
     /// How masters are represented, exactly as for RustRed: identical modes
     /// make both backends' results directly comparable.
     pub master_mode: RustRedMasterMode,
+}
+
+impl std::fmt::Display for ForcerOptions {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "master_mode={}", self.master_mode)
+    }
 }
 
 #[cfg(test)]

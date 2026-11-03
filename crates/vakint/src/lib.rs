@@ -60,6 +60,7 @@ pub fn parse_rustred_ordered_weight_arithmetic(
 ) -> Result<RustRedOrderedWeightArithmetic, String> {
     text.parse().map_err(|error| format!("{error}"))
 }
+pub use p_integral::ForcerOptions;
 pub use rustred::scalar_numerator::ScalarNumeratorLimits as RustRedScalarNumeratorLimits;
 use rustred::solver::CandidateRoutedApplicationObserver;
 use rustred_evaluation::MathSpan;
@@ -397,6 +398,10 @@ static TEMPLATES: phf::Map<&'static str, &'static str> = phf_map! {
         env!("CARGO_MANIFEST_DIR"),
         "/templates/run_fmft.txt"
     )),
+    "run_forcer.txt" => include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/templates/run_forcer.txt"
+    )),
 };
 
 #[derive(Error, Debug)]
@@ -444,6 +449,17 @@ pub enum VakintError {
     )]
     FormRequired {
         required_by: String,
+        form_exe_path: String,
+        reason: String,
+    },
+    #[error(
+        "the Forcer backend (massless propagator integrals) needs FORM >= {minimal}, but \
+        '{form_exe_path}' {reason}. Install FORM 5 (https://github.com/form-dev/form) and \
+        expose it through PATH, FORM_PATH or form_exe_path, or evaluate p-integrals with \
+        RustRed (EvaluationOrder::rustred_only()).",
+        minimal = p_integral::MINIMAL_FORCER_FORM_VERSION
+    )]
+    ForcerUnavailable {
         form_exe_path: String,
         reason: String,
     },
@@ -1916,6 +1932,8 @@ impl fmt::Display for MATADOptions {
 pub enum VakintDependency {
     FORM,
     PySecDec,
+    /// FORM at `form_exe_path`, at least [`p_integral::MINIMAL_FORCER_FORM_VERSION`].
+    Forcer,
 }
 
 impl VakintDependency {
@@ -1929,6 +1947,12 @@ impl VakintDependency {
         match self {
             Self::FORM => checked_form_version(form_exe_path),
             Self::PySecDec => checked_pysecdec_version(python_exe_path),
+            Self::Forcer => p_integral::forcer::forcer_form_version(form_exe_path).map_err(
+                |reason| VakintError::ForcerUnavailable {
+                    form_exe_path: form_exe_path.into(),
+                    reason,
+                },
+            ),
         }
     }
 }
@@ -1941,6 +1965,9 @@ pub enum EvaluationMethod {
     PySecDec(PySecDecOptions),
     /// FORM-independent scalar reduction through shipped RustRed IBP artifacts.
     RustRed(RustRedEvaluationOptions),
+    /// Massless propagator integrals (one to four loops) through the vendored
+    /// Forcer FORM program; needs FORM 5.
+    Forcer(ForcerOptions),
 }
 
 impl fmt::Display for EvaluationMethod {
@@ -1954,6 +1981,7 @@ impl fmt::Display for EvaluationMethod {
                 //write!(f, "PySecDec")
             }
             EvaluationMethod::RustRed(opts) => write!(f, "RustRed ({})", opts),
+            EvaluationMethod::Forcer(opts) => write!(f, "Forcer ({})", opts),
         }
     }
 }
@@ -1967,6 +1995,7 @@ impl EvaluationMethod {
             Self::FMFT(_) => "FMFT",
             Self::PySecDec(_) => "pySecDec",
             Self::RustRed(_) => "RustRed",
+            Self::Forcer(_) => "Forcer",
         }
     }
 
@@ -1981,6 +2010,7 @@ impl EvaluationMethod {
             Self::FMFT(options) => options.expand_masters && options.susbstitute_masters,
             Self::PySecDec(_) => true,
             Self::RustRed(options) => options.master_mode == RustRedMasterMode::Numerical,
+            Self::Forcer(options) => options.master_mode == RustRedMasterMode::Numerical,
         }
     }
 
@@ -1996,6 +2026,7 @@ impl EvaluationMethod {
             EvaluationMethod::FMFT(_) => "FMFT",
             EvaluationMethod::PySecDec(_) => "pySecDec",
             EvaluationMethod::RustRed(_) => "RustRed",
+            EvaluationMethod::Forcer(_) => "Forcer",
         }
     }
 
@@ -2041,6 +2072,15 @@ impl EvaluationMethod {
             EvaluationMethod::RustRed(options) => {
                 rustred_evaluation::supports(settings, topology, options)
             }
+            EvaluationMethod::Forcer(_) => {
+                topology
+                    .get_integral()
+                    .applicable_evaluation_methods
+                    .0
+                    .iter()
+                    .any(|m| matches!(m, EvaluationMethod::Forcer(_)))
+                    && p_integral::P_INTEGRAL_LOOP_COUNTS.contains(&topology.get_integral().n_loops)
+            }
         }
     }
 
@@ -2059,6 +2099,7 @@ impl EvaluationMethod {
                 vec![VakintDependency::FORM, VakintDependency::PySecDec]
             }
             EvaluationMethod::RustRed(_) => vec![],
+            EvaluationMethod::Forcer(_) => vec![VakintDependency::Forcer],
         }
     }
 
@@ -2075,6 +2116,7 @@ impl EvaluationMethod {
             EvaluationMethod::MATAD(_) => {}
             EvaluationMethod::FMFT(_) => {}
             EvaluationMethod::RustRed(_) => {}
+            EvaluationMethod::Forcer(_) => {}
             EvaluationMethod::PySecDec(opts) => {
                 let mut f64_numerical_masses: HashMap<String, f64, std::hash::RandomState> =
                     numerical_params_complex
@@ -2158,6 +2200,9 @@ impl EvaluationMethod {
             EvaluationMethod::RustRed(opts) => {
                 vakint.rustred_evaluate(settings, numerator, integral_specs, opts)
             }
+            EvaluationMethod::Forcer(opts) => {
+                vakint.forcer_evaluate(settings, numerator, integral_specs, opts)
+            }
         }?;
         // Backend-independent final check: no unknown master tail may survive
         // the truncation at the requested order.
@@ -2236,6 +2281,10 @@ impl EvaluationOrder {
             RustRedEvaluationOptions::default(),
         )])
     }
+    /// Select only the Forcer backend (massless propagator integrals, FORM 5).
+    pub fn forcer_only() -> Self {
+        EvaluationOrder(vec![EvaluationMethod::Forcer(ForcerOptions::default())])
+    }
     pub fn fmft_only(fmft_options: Option<FMFTOptions>) -> Self {
         EvaluationOrder(vec![EvaluationMethod::FMFT(
             fmft_options.unwrap_or_default(),
@@ -2259,10 +2308,12 @@ impl EvaluationOrder {
         EvaluationOrder(vec![])
     }
     /// Every backend, RustRed first. The FORM-based backends are fallbacks for
-    /// integrals RustRed does not support or whose RustRed data is not loaded.
+    /// integrals RustRed does not support or whose RustRed data is not loaded;
+    /// Forcer only evaluates p-integrals.
     pub fn all() -> Self {
         EvaluationOrder(vec![
             EvaluationMethod::RustRed(RustRedEvaluationOptions::default()),
+            EvaluationMethod::Forcer(ForcerOptions::default()),
             EvaluationMethod::AlphaLoop(AlphaLoopOptions::default()),
             EvaluationMethod::MATAD(MATADOptions::default()),
             EvaluationMethod::FMFT(FMFTOptions::default()),
@@ -2278,7 +2329,8 @@ impl EvaluationOrder {
     }
     /// [`EvaluationOrder::all`] restricted to the backends whose external
     /// dependencies are usable with these executables: RustRed alone when FORM
-    /// is unavailable, and pySecDec only when it can also be imported.
+    /// is unavailable, Forcer only with FORM 5, and pySecDec only when it can
+    /// also be imported.
     /// Executables are probed at most once per process.
     pub fn available(form_exe_path: &str, python_exe_path: &str) -> Self {
         let mut order = Self::all();
@@ -2550,6 +2602,10 @@ pub enum LoopNormalizationFactor {
     pySecDec,
     MSbar,
     FMFTandMATAD,
+    /// Forcer's G-scheme: per loop `(i·π^(d/2))^(-1)·exp(log_mu_sq)^ε/(ε·G(1,1))`
+    /// with `G(1,1) = Γ(ε)Γ(1-ε)²/Γ(2-2ε)`. A p-integral then evaluates to
+    /// `(Q²)^w·(Q²/μ²)^(-Lε)` times its Forcer G-scheme value.
+    GScheme,
     Custom(String),
 }
 
@@ -2568,6 +2624,12 @@ impl LoopNormalizationFactor {
                 // And where it is best to keep each term taken to an epsilon power separately so that after the expansion
                 // we can easily get the expected cancellation of log(4 pi) and eulerGamma.
                 "(2*𝜋)^(-4*n_loops)*exp(log_mu_sq)^(eps*n_loops)*𝜋^(eps*n_loops)*exp(EulerGamma)^(eps*n_loops)".into()
+            }
+            LoopNormalizationFactor::GScheme => {
+                // ε·G(1,1) = Γ(1+ε)Γ(1-ε)²/Γ(2-2ε), with exact Γ functions.
+                "(𝑖*(𝜋^((4-2*eps)/2)))^(-n_loops)*exp(log_mu_sq)^(eps*n_loops)\
+                 *(Gamma(1+eps)*Gamma(1-eps)^2/Gamma(2-2*eps))^(-n_loops)"
+                    .into()
             }
             LoopNormalizationFactor::Custom(s) => s.clone(),
         }
@@ -2678,6 +2740,14 @@ impl fmt::Display for LoopNormalizationFactor {
                     self.to_expression()
                 )
             }
+            LoopNormalizationFactor::GScheme => {
+                write!(
+                    f,
+                    "{} convention [ {} ]",
+                    String::from("GScheme").green(),
+                    self.to_expression()
+                )
+            }
             LoopNormalizationFactor::Custom(_) => {
                 write!(
                     f,
@@ -2701,6 +2771,11 @@ impl TryFrom<&LoopNormalizationFactor> for Atom {
                 processed_a = processed_a
                     .replace(vk_parse!("pi").unwrap().to_pattern())
                     .with(Atom::var(Symbol::PI).to_pattern());
+                // Only the built-in G-scheme uses exact Γ functions; custom
+                // strings keep `Gamma` as an unknown symbol.
+                if matches!(expr, LoopNormalizationFactor::GScheme) {
+                    processed_a = Vakint::normalize_gamma_functions(processed_a.as_view());
+                }
                 Ok(processed_a)
             }
             Err(e) => Err(VakintError::InvalidLoopNormalization(
@@ -5199,6 +5274,15 @@ Evaluated (n_loops=1, mu_r=1) :
                 })?;
             debug!(
                 "{} successfully detected with version '{}'",
+                "FORM".green(),
+                version.green()
+            );
+        }
+        if !required_by(VakintDependency::Forcer).is_empty() {
+            let version = VakintDependency::Forcer
+                .version(&settings.form_exe_path, &settings.python_exe_path)?;
+            debug!(
+                "{} successfully detected with version '{}' for Forcer",
                 "FORM".green(),
                 version.green()
             );
