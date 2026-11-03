@@ -273,7 +273,9 @@ Where no patch is fully causal, the first patch keeps a small floor that keeps t
 exact; overlaps it crosses with opposite slopes stay uncancelled there. Raised residues
 differentiate the weights with the `h` profile. The warm-up log reports the centers, the
 causal, partial and uncovered shares of an independent verification sample, and the overlap
-points that keep opposite slopes. A graph without relevant cut points keeps the origin.
+points that keep opposite slopes. That count bounds the uncancelled overlaps from above: it
+includes points near a second surface and surface pairs that are not poles of any cut. A graph
+without relevant cut points keeps the origin.
 
 Centers are binary64 points stored in the warm-up frame. Every precision embeds them exactly,
 and stability rotations rotate them. Positive-E sampling hosts belong to the first patch.
@@ -289,7 +291,11 @@ records the search coverage, pointwise cancellation and frozen-grid Monte Carlo 
 the massive scalar double triangle and triangle-box-triangle, at rest and at spacelike momentum.
 To check one overlap, run `approach` from a point on both cut surfaces along an axis that
 separates their roots, with `general.generate_events=true`. The per-cut event weights show
-whether the two $1\/t$ poles cancel; the card's `approach_dt_overlap` block is an example.
+whether the two $1\/t$ poles cancel. The card's `approach_dt_overlap` block is an example. Its
+`approach_tbt_rest1_pole` block shows an overlap where no patch is causal and the first patch
+keeps the pole. Within about $10^(-6)$ of an overlap, binary64 can lose the cancellation
+between cuts without failing the stability check. Scans there should start the
+`stability.levels` at `Quad`.
 
 == Fermi surfaces at zero temperature
 

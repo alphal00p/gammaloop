@@ -132,6 +132,26 @@ commands = [
   "approach -p dt -i NLO -m --graph-id 0 -x 0.3212345456393843 0.0 1.0384639564382658 0.0 0.22539501322019227 0.41258280423477773 --approach-axis 0.3212345456393843,0.0,1.0384639564382658,0.0,0.0,0.0 --axis-label LL_root_shift --n-points 9 --skip-midpoint --logarithmic --min-abs-t 1e-10 --max-abs-t 1e-2 --n-cores $(cores:8) --output-results $(output:/tmp/thermal-lu-centers-approach.json)",
 ]
 
+# Triangle-box-triangle overlaps that the searched plans leave uncancelled; run after
+# `kinematics` with process=tbt. The midpoints lie on two cut surfaces (|eta| < 1e-14); the
+# axis is the gradient of the first surface projected orthogonally to the second. At rest
+# (energy=1.0, momentum=0.0, e_cm=1.0) cut 6 meets cuts 4 and 8 where neither patch is causal,
+# so patch 0 (the origin) carries the pole. Spacelike (energy=0.5, momentum=1.5,
+# e_cm=1.4142135623730951) cuts 6 and 8 meet where only the patch-0 floor survives.
+[[command_blocks]]
+name = "approach_tbt_rest1_pole"
+commands = [
+  "set process -p tbt -i NLO kv general.generate_events=true",
+  "approach -p tbt -i NLO -m --graph-id 0 -x -0.030149715607229528 -0.30324501833460327 -0.30762550853927795 0.06631515175856761 -0.40372593649707467 -0.29770399463459934 -0.47866162228656156 0.04826756019465816 0.23346047525748553 --approach-axis=0.04833401427864149,-0.612080166082546,-0.5061951229585904,0.27545209959439776,-0.20745415189350871,-0.37508197071430693,0.0019179334568758066,0.2725690033255059,0.18136449966479903 --axis-label cut6_root_shift --n-points 9 --skip-midpoint --logarithmic --min-abs-t 1e-10 --max-abs-t 1e-2 --n-cores $(cores:8) --output-results $(output:/tmp/thermal-lu-centers-approach-tbt-rest1.json)",
+]
+
+[[command_blocks]]
+name = "approach_tbt_space_pole"
+commands = [
+  "set process -p tbt -i NLO kv general.generate_events=true",
+  "approach -p tbt -i NLO -m --graph-id 0 -x 0.05383225963527338 -0.10052280223311756 0.4817876899855644 -0.26310912622628513 -0.2363137409066516 1.1248322831768838 0.05797516505948894 0.278703160396434 0.8696909069915253 --approach-axis=-0.007107945967886817,0.06247346967484249,-0.9893813854645156,-0.050554681945145355,-0.05589621946077497,0.06662377927087638,0.025739514963006277,0.030445231532107778,-0.07391001862216535 --axis-label cut6_root_shift --n-points 9 --skip-midpoint --logarithmic --min-abs-t 1e-10 --max-abs-t 1e-2 --n-cores $(cores:8) --output-results $(output:/tmp/thermal-lu-centers-approach-tbt-space.json)",
+]
+
 # Adapt for `training` iterations of `batch` samples, then sample the frozen grid up to `samples`.
 # The defaults above set n_increase = 0 and no target accuracy. Per-iteration archives separate
 # the frozen samples. campaign.py runs `kinematics`, `apex_<process>` for apex centers, and this

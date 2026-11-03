@@ -272,7 +272,10 @@ anchor = "mod render_ratatui;"
 # its missing-reference positive control changed; integration behavior is unchanged.
 # No architecture impact 2026-10-11: the existing result-archive path helper is
 # public for acceptance tests; paths and persistence behavior are unchanged.
-digest = "96a529380419396b71a9e4fc3c4323215a75de74"
+# No architecture impact 2026-11-03: grid updates take iteration-dependent
+# learning rates (zero after integrator.training_iterations); status flow,
+# rendering and completed-iteration resume are unchanged.
+digest = "0df3d5c14c3ff445ca2efe68a55bcb14132dc24c"
 
 [[section.note]]
 id = "uv-renormalization"
