@@ -15,16 +15,28 @@
 //!   a master graph of the data root through native FeynKit ingress, with
 //!   optional raised (dotted) common-basis powers.
 //! * `measure --data-root ROOT --input FILE.json --backend rustred|alphaloop|matad|fmft
-//!   --scope reduction|full [--cache cold|warm|default] [--form PATH] [--n-cores N]
-//!   [--epsilon-terms K] [--precision DIGITS] --out FILE.json`.
+//!   --scope reduction|full [--cache cold|warm|default] [--warmup FILE.json] [--form PATH]
+//!   [--n-cores N] [--epsilon-terms K] [--precision DIGITS] --out FILE.json`.
 //!   `reduction`: masters retained (RustRed Retain; FORM backends without
 //!   master expansion/substitution). `full`: the complete public call
 //!   (RustRed Numerical, FORM backends with their defaults), followed by an
 //!   untimed numerical evaluation at unit mass and scale for the cross-backend
-//!   comparison. Cache (RustRed): `cold` = no step cache, first call;
-//!   `warm` = in-memory step cache, second identical call in the same process;
-//!   `default` = engine defaults (shipped step caches on), first call.
+//!   comparison. `--warmup`: a different small integral of the same loop count,
+//!   evaluated twice with the same settings before the timed call (untimed for
+//!   the cell; recorded): the first call of a process pays one-time setup (the
+//!   FORM backends parse their master tables on first use, RustRed builds lazy
+//!   catalogues), so every timed call is steady-state. Cache (RustRed): `cold` =
+//!   no step cache; `warm` = in-memory step cache, second identical call;
+//!   `default` = engine defaults (shipped step caches on).
+//!   Around the timed call the record keeps the CPU time of the process and its
+//!   reaped children and the run-queue delay of its threads (contention evidence).
 //! * `identity --data-root ROOT --out FILE.json`: build and data identities.
+//!
+//! Build identity: `docs/benchmark/build-benchmark-binary.sh` sets
+//! `VAKINT_BENCH_BUILD_COMMIT` (git HEAD) and `VAKINT_BENCH_BUILD_DIRTY` (number
+//! of modified or untracked paths outside `crates/vakint/docs`) at build time; a
+//! plain cargo build reports them as unknown and `make-benchmark.sh --install`
+//! refuses such a binary.
 use ::vakint;
 #[path = "../tests/fixtures/qcd_ladder/mod.rs"]
 #[allow(dead_code)]
@@ -55,6 +67,80 @@ use vakint::{
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 const SOURCE: &str = include_str!("benchmark_suite.rs");
+
+fn build_identity() -> Value {
+    json!({
+        "commit": option_env!("VAKINT_BENCH_BUILD_COMMIT"),
+        "dirty_paths": option_env!("VAKINT_BENCH_BUILD_DIRTY").and_then(|v| v.parse::<u64>().ok()),
+        "profile": option_env!("VAKINT_BENCH_BUILD_PROFILE"),
+        "debug_assertions": cfg!(debug_assertions),
+        "experimental_rustred": cfg!(feature = "experimental-rustred"),
+    })
+}
+
+/// CPU time of this process and of its reaped children, and run-queue delay of its threads.
+#[derive(Clone, Default)]
+struct Usage {
+    /// utime + stime of this process [s] (/proc/self/stat, USER_HZ = 100).
+    self_cpu: f64,
+    /// cutime + cstime: reaped children, e.g. FORM [s].
+    children_cpu: f64,
+    /// per thread: (cpu ns, run-queue delay ns) from /proc/self/task/*/schedstat.
+    threads: BTreeMap<u64, (u64, u64)>,
+}
+
+fn usage() -> Usage {
+    let mut out = Usage::default();
+    if let Ok(stat) = fs::read_to_string("/proc/self/stat") {
+        // fields after the parenthesised command name; utime is field 14 overall
+        if let Some(rest) = stat.rsplit_once(')').map(|(_, r)| r) {
+            let f: Vec<f64> = rest
+                .split_whitespace()
+                .map(|v| v.parse::<f64>().unwrap_or(0.0))
+                .collect();
+            if f.len() > 14 {
+                out.self_cpu = (f[11] + f[12]) / 100.0;
+                out.children_cpu = (f[13] + f[14]) / 100.0;
+            }
+        }
+    }
+    if let Ok(tasks) = fs::read_dir("/proc/self/task") {
+        for task in tasks.flatten() {
+            let Ok(tid) = task.file_name().to_string_lossy().parse::<u64>() else {
+                continue;
+            };
+            if let Ok(text) = fs::read_to_string(task.path().join("schedstat")) {
+                let v: Vec<u64> = text
+                    .split_whitespace()
+                    .map(|x| x.parse().unwrap_or(0))
+                    .collect();
+                if v.len() >= 2 {
+                    out.threads.insert(tid, (v[0], v[1]));
+                }
+            }
+        }
+    }
+    out
+}
+
+fn usage_delta(before: &Usage, after: &Usage, wall: f64) -> Value {
+    let (mut cpu_ns, mut delay_ns) = (0_u64, 0_u64);
+    for (tid, (cpu, delay)) in &after.threads {
+        let (c0, d0) = before.threads.get(tid).copied().unwrap_or((0, 0));
+        cpu_ns += cpu.saturating_sub(c0);
+        delay_ns += delay.saturating_sub(d0);
+    }
+    let run_delay = delay_ns as f64 * 1e-9;
+    json!({
+        "cpu_seconds_self": after.self_cpu - before.self_cpu,
+        "cpu_seconds_children": after.children_cpu - before.children_cpu,
+        "thread_cpu_seconds": cpu_ns as f64 * 1e-9,
+        "thread_run_delay_seconds": run_delay,
+        "run_delay_fraction": if wall > 0.0 { run_delay / wall } else { 0.0 },
+        "threads": after.threads.len(),
+        "note": "CPU time from /proc/self/stat (USER_HZ 100; children = reaped child processes such as FORM); run-queue delay of the threads alive at the end (/proc/self/task/*/schedstat)",
+    })
+}
 
 struct Args(BTreeMap<String, String>);
 
@@ -354,8 +440,26 @@ fn measure(args: &Args) -> Result<()> {
             .ok_or("input record without input")?,
     )?;
     let parse_seconds = parsing.elapsed().as_secs_f64();
+    let warmup_record: Option<Value> = match args.opt("warmup") {
+        Some(path) => Some(serde_json::from_str(&fs::read_to_string(path)?)?),
+        None => None,
+    };
+    let warmup_input = match &warmup_record {
+        Some(record) => {
+            if record["loop_count"] != input_record["loop_count"] {
+                return Err("the warm-up integral must have the loop count of the input".into());
+            }
+            if record["input_sha256"] == input_record["input_sha256"] {
+                return Err("the warm-up integral must differ from the timed input".into());
+            }
+            Some(parse_atom(
+                record["input"].as_str().ok_or("warm-up record without input")?,
+            )?)
+        }
+        None => None,
+    };
 
-    let call = |engine: &Vakint| -> Result<(Atom, f64, Value)> {
+    let call = |engine: &Vakint, input: &Atom| -> Result<(Atom, f64, Value)> {
         let started = Instant::now();
         #[cfg(feature = "experimental-rustred")]
         let (result, math) = {
@@ -381,18 +485,43 @@ fn measure(args: &Args) -> Result<()> {
         Ok((result?, seconds, math))
     };
 
-    let (first, first_seconds, first_math) = call(&engine)?;
-    let mut timed = (first.clone(), first_seconds, first_math.clone());
+    // Warm-up: the first call of the process pays the one-time setup; the second is steady-state.
+    let mut warmup = Value::Null;
+    if let Some(w) = &warmup_input {
+        let (w0, s0, _) = call(&engine, w)?;
+        let (w1, s1, _) = call(&engine, w)?;
+        if w0 != w1 {
+            return Err("the repeated warm-up call returned a different expression".into());
+        }
+        let record = warmup_record.as_ref().expect("warm-up record");
+        warmup = json!({
+            "input_sha256": record["input_sha256"],
+            "label": record.get("label").cloned().unwrap_or(Value::Null),
+            "first_seconds": s0,
+            "second_seconds": s1,
+            "one_time_setup_seconds": s0 - s1,
+        });
+    }
+
     let mut first_record = Value::Null;
-    if cache == "warm" {
+    let timed = if cache == "warm" {
+        let (first, first_seconds, first_math) = call(&engine, &input)?;
         first_record = json!({"seconds": first_seconds, "capture": first_math});
-        let second = call(&engine)?;
+        let before = usage();
+        let second = call(&engine, &input)?;
+        let after = usage();
         if second.0 != first {
             return Err("the warm call returned a different expression".into());
         }
-        timed = second;
-    }
-    let (value, call_seconds, math) = timed;
+        (second, usage_delta(&before, &after, second.1))
+    } else {
+        let before = usage();
+        let only = call(&engine, &input)?;
+        let after = usage();
+        let delta = usage_delta(&before, &after, only.1);
+        (only, delta)
+    };
+    let ((value, call_seconds, math), call_usage) = timed;
     let rss_after_call = peak_rss_bytes();
     let canonical = value.to_canonical_string();
     let (rustred_masters, form_masters) = master_census(value.as_view());
@@ -466,6 +595,8 @@ fn measure(args: &Args) -> Result<()> {
             "loader_seconds": loader_seconds,
             "parse_seconds": parse_seconds,
             "call_seconds": call_seconds,
+            "call_usage": call_usage,
+            "warmup": warmup,
             "first_call": first_record,
             "reduction_capture": math,
             "process_seconds": process_start.elapsed().as_secs_f64(),
@@ -480,6 +611,7 @@ fn measure(args: &Args) -> Result<()> {
             "numerical": numerical,
             "allowed_cpus": allowed_cpus(),
             "debug_assertions": cfg!(debug_assertions),
+            "build": build_identity(),
         }),
     )?;
     let _ = fs::remove_dir_all(&work);
@@ -503,6 +635,7 @@ fn identity(args: &Args) -> Result<()> {
             "vakint_version": env!("CARGO_PKG_VERSION"),
             "harness_source_sha256": sha256_bytes(SOURCE.as_bytes()),
             "executable_sha256": sha256_file(&exe)?,
+            "build": build_identity(),
             "debug_assertions": cfg!(debug_assertions),
             "experimental_rustred": cfg!(feature = "experimental-rustred"),
             "data_root": root,
