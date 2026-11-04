@@ -47,13 +47,13 @@
      "source": {"kind": "rung", "projection": "zero-momentum"}},
     {"id": "5L-rung-q2", "loops": 5, "title": "QCD ladder, O(q²)", "subtitle": "4 gluon rungs", "heavy": true,
      "source": {"kind": "rung", "projection": "quadratic"}},
-    {"id": "5L-P105", "loops": 5, "title": "Top-sector master P105", "subtitle": "12 lines · scalar",
-     "source": {"kind": "graph", "master": "P105"}},
-    {"id": "5L-P63", "loops": 5, "title": "Master P63", "subtitle": "10 lines · one dot · rank 1",
-     "source": {"kind": "graph", "master": "P63"}},
-    {"id": "5L-P105-dot", "loops": 5, "title": "P105 sector", "subtitle": "one extra dot", "heavy": true,
-     "source": {"kind": "graph", "master": "P105", "powers": [2,1,1,1,1,1,1,1,1,1,0,1,0,0,1]}},
-    {"id": "5L-P63-dot", "loops": 5, "title": "P63 sector", "subtitle": "one extra dot", "heavy": true,
-     "source": {"kind": "graph", "master": "P63", "powers": [1,1,0,1,2,-1,1,1,1,1,0,2,0,0,1]}}
+    {"id": "5L-P105", "loops": 5, "title": "Top-sector master", "subtitle": "12 lines · scalar",
+     "source": {"kind": "graph", "master_powers": [1,1,1,1,1,1,1,1,1,1,0,1,0,0,1]}},
+    {"id": "5L-P63", "loops": 5, "title": "Dotted master", "subtitle": "10 lines · rank 1",
+     "source": {"kind": "graph", "master_powers": [1,1,0,1,2,-1,1,1,1,1,0,1,0,0,1]}},
+    {"id": "5L-P105-dot", "loops": 5, "title": "Top sector", "subtitle": "master + one dot", "heavy": true,
+     "source": {"kind": "graph", "master_powers": [1,1,1,1,1,1,1,1,1,1,0,1,0,0,1], "powers": [2,1,1,1,1,1,1,1,1,1,0,1,0,0,1]}},
+    {"id": "5L-P63-dot", "loops": 5, "title": "Dotted-master sector", "subtitle": "master + one dot", "heavy": true,
+     "source": {"kind": "graph", "master_powers": [1,1,0,1,2,-1,1,1,1,1,0,1,0,0,1], "powers": [1,1,0,1,2,-1,1,1,1,1,0,2,0,0,1]}}
   ]
 }

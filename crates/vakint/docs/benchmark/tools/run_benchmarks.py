@@ -130,8 +130,16 @@ def prepare(args, case, out):
         cmd = [args.binary, "prepare-rung", "--loops", str(case["loops"]), "--projection", src["projection"],
                "--work-dir", str(work), "--out", str(tmp)]
     elif src["kind"] == "graph":
+        master = src.get("master")
+        if "master_powers" in src:  # robust to the renaming of a new basis: find the master by its powers
+            manifest = json.loads((args.data_root / f"{case['loops']}L" / "manifest.json").read_text())
+            found = [m["name"] for m in manifest["masters"] if m["powers"] == src["master_powers"]]
+            if len(found) != 1:
+                print(f"  prepare {case['id']}: no unique master with powers {src['master_powers']}", flush=True)
+                return None
+            master = found[0]
         cmd = [args.binary, "prepare-graph", "--data-root", str(args.data_root), "--loops", str(case["loops"]),
-               "--master", src["master"], "--out", str(tmp)]
+               "--master", master, "--out", str(tmp)]
         if "powers" in src:
             cmd += ["--powers", ",".join(map(str, src["powers"]))]
     elif src["kind"] in ("expression", "fixture"):

@@ -181,7 +181,7 @@
           let full = cell-of(c, "rustred.full.default")
           let nm = cold.at("masters_retained", default: none)
           (
-            table.cell(text(size: 8.1pt)[#c.title \ #text(fill: luma(95), size: 7.4pt, c.subtitle)]),
+            table.cell(text(size: 8.1pt)[#c.title#{let m = c.at("input", default: (:)).at("master", default: none); if m != none [ #text(fill: luma(95))[(#m)]]} \ #text(fill: luma(95), size: 7.4pt, c.subtitle)]),
             table.cell(text(size: 7.8pt)[#if nm != none { str(nm) } else { [—] }]),
             cmp(cold, cell-of(c, rk + ".reduction"), rl, extra: ibp-line(cold)),
             cmp(cold, cell-of(c, "alphaloop.reduction"), "αL", show-alone: false),
