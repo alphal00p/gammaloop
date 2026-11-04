@@ -684,6 +684,12 @@ fn start_stalling_server(assets: BTreeMap<String, Vec<u8>>) -> (String, Arc<Atom
     listener.set_nonblocking(true).unwrap();
     let stop = Arc::new(AtomicBool::new(false));
     let stopped = Arc::clone(&stop);
+    // like Server::start: the default version "latest" asks for /data-latest/manifest.json, answered by a redirect
+    let latest_manifest = assets
+        .keys()
+        .rfind(|path| path.ends_with("/manifest.json"))
+        .unwrap()
+        .clone();
     let assets = Arc::new(assets);
     let stalled = Arc::new(std::sync::Mutex::new(std::collections::BTreeSet::new()));
     let handle = thread::spawn(move || {
@@ -691,6 +697,7 @@ fn start_stalling_server(assets: BTreeMap<String, Vec<u8>>) -> (String, Arc<Atom
             match listener.accept() {
                 Ok((mut stream, _)) => {
                     let (assets, stalled) = (Arc::clone(&assets), Arc::clone(&stalled));
+                    let latest_manifest = latest_manifest.clone();
                     thread::spawn(move || {
                         stream.set_nonblocking(false).unwrap();
                         stream.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
@@ -698,6 +705,10 @@ fn start_stalling_server(assets: BTreeMap<String, Vec<u8>>) -> (String, Arc<Atom
                         let Ok(n) = stream.read(&mut request) else { return };
                         let text = String::from_utf8_lossy(&request[..n]);
                         let Some(path) = text.split_whitespace().nth(1).map(str::to_owned) else { return };
+                        if path == "/data-latest/manifest.json" {
+                            let _ = write!(stream, "HTTP/1.1 302 Found\r\nLocation: {latest_manifest}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+                            return;
+                        }
                         match assets.get(&path) {
                             Some(bytes) if path.ends_with(".tar.gz") && stalled.lock().unwrap().insert(path.clone()) => {
                                 let _ = write!(stream, "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", bytes.len());
