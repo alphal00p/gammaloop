@@ -1,0 +1,59 @@
+{
+  "schema": "vakint.benchmark-cases.v1",
+  "note": "Benchmark set of docs/benchmark.typ. Rungs: tests/fixtures/qcd_ladder (gluon self-energy through a massless quark loop with L-1 gluon rungs; zero momentum = metric contraction at q = 0, quadratic = transverse q^2 coefficient). Expressions use the vakint namespace; mUVsq is the common unit mass. Backends: rustred everywhere; matad and alphaloop at 1L-3L; fmft at 4L (vakint applicability). 'heavy' cells are measured once and may run in their own unit.",
+  "groups": [
+    {"loops": 1, "label": "One loop"},
+    {"loops": 2, "label": "Two loops"},
+    {"loops": 3, "label": "Three loops"},
+    {"loops": 4, "label": "Four loops"},
+    {"loops": 5, "label": "Five loops"}
+  ],
+  "cases": [
+    {"id": "1L-rung-q0", "loops": 1, "title": "QCD ladder, q = 0", "subtitle": "quark loop, no rung",
+     "source": {"kind": "rung", "projection": "zero-momentum"}},
+    {"id": "1L-rung-q2", "loops": 1, "title": "QCD ladder, O(q²)", "subtitle": "quark loop, no rung",
+     "source": {"kind": "rung", "projection": "quadratic"}},
+    {"id": "1L-T1-dots", "loops": 1, "title": "Tadpole T1", "subtitle": "power 5 · rank 4",
+     "source": {"kind": "expression", "input": "dot(k(1),k(1))^2*topo(prop(1,edge(1,1),k(1),mUVsq,5))"}},
+
+    {"id": "2L-rung-q0", "loops": 2, "title": "QCD ladder, q = 0", "subtitle": "1 gluon rung",
+     "source": {"kind": "rung", "projection": "zero-momentum"}},
+    {"id": "2L-rung-q2", "loops": 2, "title": "QCD ladder, O(q²)", "subtitle": "1 gluon rung",
+     "source": {"kind": "rung", "projection": "quadratic"}},
+    {"id": "2L-T111-dots", "loops": 2, "title": "Sunset T111", "subtitle": "powers 3,2,2 · rank 4",
+     "source": {"kind": "expression", "input": "dot(k(1),k(2))^2*topo(prop(1,edge(1,2),k(1),mUVsq,3)*prop(2,edge(1,2),k(2),mUVsq,2)*prop(3,edge(2,1),k(1)+k(2),mUVsq,2))"}},
+
+    {"id": "3L-rung-q0", "loops": 3, "title": "QCD ladder, q = 0", "subtitle": "2 gluon rungs",
+     "source": {"kind": "rung", "projection": "zero-momentum"}},
+    {"id": "3L-rung-q2", "loops": 3, "title": "QCD ladder, O(q²)", "subtitle": "2 gluon rungs",
+     "source": {"kind": "rung", "projection": "quadratic"}},
+    {"id": "3L-D6", "loops": 3, "title": "Tetrahedron D6", "subtitle": "master",
+     "source": {"kind": "expression", "input": "topo(prop(1,edge(1,2),k(1),mUVsq,1)*prop(2,edge(2,3),k(2),mUVsq,1)*prop(3,edge(3,1),k(3),mUVsq,1)*prop(4,edge(1,4),k(3)-k(1),mUVsq,1)*prop(5,edge(2,4),k(1)-k(2),mUVsq,1)*prop(6,edge(3,4),k(2)-k(3),mUVsq,1))"}},
+    {"id": "3L-D6-dots", "loops": 3, "title": "Tetrahedron D6", "subtitle": "3 dots · rank 4",
+     "source": {"kind": "expression", "input": "dot(k(1),k(2))*dot(k(2),k(3))*topo(prop(1,edge(1,2),k(1),mUVsq,2)*prop(2,edge(2,3),k(2),mUVsq,2)*prop(3,edge(3,1),k(3),mUVsq,1)*prop(4,edge(1,4),k(3)-k(1),mUVsq,1)*prop(5,edge(2,4),k(1)-k(2),mUVsq,2)*prop(6,edge(3,4),k(2)-k(3),mUVsq,1))"}},
+
+    {"id": "4L-rung-q0", "loops": 4, "title": "QCD ladder, q = 0", "subtitle": "3 gluon rungs",
+     "source": {"kind": "rung", "projection": "zero-momentum"}},
+    {"id": "4L-rung-q2", "loops": 4, "title": "QCD ladder, O(q²)", "subtitle": "3 gluon rungs",
+     "source": {"kind": "rung", "projection": "quadratic"}},
+    {"id": "4L-H-p2", "loops": 4, "title": "H family", "subtitle": "one line squared",
+     "source": {"kind": "fixture", "file": "tests/fixtures/benchmark_reduction.json", "case": "0:2"}},
+    {"id": "4L-FG-p4", "loops": 4, "title": "FG family", "subtitle": "one line to the 4th",
+     "source": {"kind": "fixture", "file": "tests/fixtures/benchmark_reduction.json", "case": "1:4"}},
+    {"id": "4L-X-p4", "loops": 4, "title": "X family", "subtitle": "one line to the 4th",
+     "source": {"kind": "fixture", "file": "tests/fixtures/benchmark_reduction.json", "case": "3:4"}},
+
+    {"id": "5L-rung-q0", "loops": 5, "title": "QCD ladder, q = 0", "subtitle": "4 gluon rungs", "heavy": true,
+     "source": {"kind": "rung", "projection": "zero-momentum"}},
+    {"id": "5L-rung-q2", "loops": 5, "title": "QCD ladder, O(q²)", "subtitle": "4 gluon rungs", "heavy": true,
+     "source": {"kind": "rung", "projection": "quadratic"}},
+    {"id": "5L-P105", "loops": 5, "title": "Top-sector master P105", "subtitle": "12 lines · scalar",
+     "source": {"kind": "graph", "master": "P105"}},
+    {"id": "5L-P63", "loops": 5, "title": "Master P63", "subtitle": "10 lines · one dot · rank 1",
+     "source": {"kind": "graph", "master": "P63"}},
+    {"id": "5L-P105-dot", "loops": 5, "title": "P105 sector", "subtitle": "one extra dot", "heavy": true,
+     "source": {"kind": "graph", "master": "P105", "powers": [2,1,1,1,1,1,1,1,1,1,0,1,0,0,1]}},
+    {"id": "5L-P63-dot", "loops": 5, "title": "P63 sector", "subtitle": "one extra dot", "heavy": true,
+     "source": {"kind": "graph", "master": "P63", "powers": [1,1,0,1,2,-1,1,1,1,1,0,2,0,0,1]}}
+  ]
+}
