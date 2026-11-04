@@ -290,7 +290,7 @@ factors. Colour gives the role in RustRed's reduction:
     // layer labels
     for (layer, lines) in lines-of {
       place(dx: 0pt, dy: ry + 0.15cm + int(layer) * row - 0.18cm,
-        text(size: 6.8pt, font: sans, fill: luma(120))[#lines lines])
+        text(size: 6.8pt, font: sans, fill: luma(120))[#lines #if lines == 1 [line] else [lines]])
     }
     // edges first
     for e in g.arrows {
