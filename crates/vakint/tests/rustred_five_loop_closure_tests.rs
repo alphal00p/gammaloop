@@ -41,9 +41,15 @@ fn engine() -> Result<ClosureEngine> {
                     && function.get_nargs() == 16)
         })
         .count();
+    // Every master the authenticated 5L manifest declares (640 in the v0.2.0
+    // campaign) and nothing else.
+    let manifest: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(report.path.join("5L/manifest.json"))?)?;
+    let declared = manifest["masters"].as_array().map_or(0, Vec::len);
+    assert!(declared > 0, "the authenticated 5L manifest declares no master");
     assert_eq!(
-        five_loop_masters, 640,
-        "closure tests require the authenticated 640-master campaign"
+        five_loop_masters, declared,
+        "closure tests require the authenticated campaign's declared 5L masters"
     );
     let settings = VakintSettings {
         epsilon_symbol: "eps".into(),

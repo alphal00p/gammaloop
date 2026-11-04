@@ -1270,7 +1270,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "requires the authenticated 640-master 5L pack; no IBP application is loaded"]
+    #[ignore = "requires an authenticated 5L external-data pack; no IBP application is loaded"]
     fn authentic_five_loop_declared_terminals_remain_uncomputed() {
         Vakint::initialize_vakint_symbols();
         let source = Source::Directory(
@@ -1289,26 +1289,53 @@ mod tests {
         // Authenticate the real 5L pack and its payloads without constructing
         // an IBP application, attaching caches, or loading lower-loop packs.
         let data = Arc::new(LoopData::load(source, pack, &release.version).unwrap());
-        assert_eq!(data.manifest.masters.len(), 640);
+        // Every declared terminal is either uncomputed (the 640 terminals of
+        // the v0.2.0 campaign) or a known master with published coefficients.
+        assert!(!data.manifest.masters.is_empty());
         for terminal in &data.manifest.masters {
-            assert_eq!(terminal["kind"], "uncomputed-terminal");
-            assert_eq!(terminal["status"], "not_computed");
-            assert!(terminal["coefficients"].as_array().unwrap().is_empty());
-            assert!(
+            let uncomputed = terminal["status"] == "not_computed";
+            if uncomputed {
+                assert_eq!(terminal["kind"], "uncomputed-terminal");
+            } else {
+                assert_eq!(terminal["status"], "accepted");
+                assert_eq!(terminal["kind"], "known-master");
+            }
+            assert_eq!(
+                terminal["coefficients"].as_array().unwrap().is_empty(),
+                uncomputed
+            );
+            assert_eq!(
                 terminal["available_epsilon_powers"]
                     .as_array()
                     .unwrap()
-                    .is_empty()
+                    .is_empty(),
+                uncomputed
             );
         }
-        let terminal = &data.manifest.masters[0];
+        // The first uncomputed terminal, else the first declared one; the
+        // declared-terminal errors below need an uncomputed terminal.
+        let uncomputed = data
+            .manifest
+            .masters
+            .iter()
+            .find(|terminal| terminal["status"] == "not_computed");
+        let terminal = uncomputed.unwrap_or(&data.manifest.masters[0]);
         let identity = terminal["master_id"].as_str().unwrap();
-        assert_eq!(
-            identity,
-            "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_m4_p1_p1_p0_p0_p1_p1_p1_m4_p1_p1_p0_p1_m1_p0"
-        );
         let powers: Vec<i64> = serde_json::from_value(terminal["powers"].clone()).unwrap();
-        assert_eq!(powers, [-4, 1, 1, 0, 0, 1, 1, 1, -4, 1, 1, 0, 1, -1, 0]);
+        // The signed-index identity encodes the indices (m = minus, p = plus).
+        let indices = powers
+            .iter()
+            .map(|power| {
+                if *power < 0 {
+                    format!("m{}", -power)
+                } else {
+                    format!("p{power}")
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("_");
+        assert!(identity.starts_with("L5_"), "{identity}");
+        assert!(identity.ends_with(&format!("_{indices}")), "{identity}");
         let family = data
             .manifest
             .families
@@ -1334,30 +1361,35 @@ mod tests {
             .finalize(master.clone(), &settings, 5, RustRedMasterMode::Retain)
             .unwrap();
         assert_eq!(retained, master);
-        let direct_error = catalog
-            .finalize(master.clone(), &settings, 5, RustRedMasterMode::Numerical)
-            .unwrap_err()
-            .to_string();
-        let symbolic_error = catalog
-            .finalize(master.clone(), &settings, 5, RustRedMasterMode::Symbolic)
-            .unwrap_err()
-            .to_string();
-        let retained_error = catalog
-            .resolve_numerical(retained, &settings)
-            .unwrap_err()
-            .to_string();
-        for error in [&direct_error, &symbolic_error, &retained_error] {
-            assert!(error.contains(identity), "{error}");
-            assert!(
-                error.contains("declared terminal has no computed coefficients"),
-                "{error}"
-            );
-            assert!(error.contains(&release.version), "{error}");
-            assert!(error.contains(graph.to_str().unwrap()), "{error}");
-            assert!(!error.contains("undeclared residual master"), "{error}");
+        let mut direct_error = String::new();
+        let mut retained_error = String::new();
+        if uncomputed.is_some() {
+            direct_error = catalog
+                .finalize(master.clone(), &settings, 5, RustRedMasterMode::Numerical)
+                .unwrap_err()
+                .to_string();
+            let symbolic_error = catalog
+                .finalize(master.clone(), &settings, 5, RustRedMasterMode::Symbolic)
+                .unwrap_err()
+                .to_string();
+            retained_error = catalog
+                .resolve_numerical(retained, &settings)
+                .unwrap_err()
+                .to_string();
+            for error in [&direct_error, &symbolic_error, &retained_error] {
+                assert!(error.contains(identity), "{error}");
+                assert!(
+                    error.contains("declared terminal has no computed coefficients"),
+                    "{error}"
+                );
+                assert!(error.contains(&release.version), "{error}");
+                assert!(error.contains(graph.to_str().unwrap()), "{error}");
+                assert!(!error.contains("undeclared residual master"), "{error}");
+            }
         }
-        // The common-family graph is a powered P640 representative, not a
-        // certified parent for an arbitrary residual in that family. Reuse the
+        // The common-family graph is a powered representative (P640 of the
+        // v0.2.0 campaign), not a certified parent for an arbitrary residual
+        // in that family. Reuse the
         // authenticated metadata's maximal-parent references without inferring
         // another routing from positive slots alone.
         let parent_references = data
@@ -1383,10 +1415,15 @@ mod tests {
             .path(family["graph"].as_str().unwrap())
             .unwrap()
             .unwrap();
-        assert_eq!(
-            fs::read(&family_graph).unwrap(),
-            data.read("masters/P640/graph.dot").unwrap()
-        );
+        let family_bytes = fs::read(&family_graph).unwrap();
+        assert!(data.manifest.masters.iter().any(|declared| {
+            data.read(&format!(
+                "{}/graph.dot",
+                declared["directory"].as_str().unwrap()
+            ))
+            .unwrap()
+                == family_bytes
+        }));
         let mut dotted_powers = powers.clone();
         dotted_powers[1] += 1;
         let unknown = catalog.symbol(family["fingerprint"].as_str().unwrap(), &dotted_powers);

@@ -189,28 +189,50 @@ fn five_loop_monitor_preserves_full_results_and_final_substitution_errors() -> R
     assert!(!reference.families.is_empty());
     assert_eq!(latest(&path, "succeeded")?["core"]["status"], "succeeded");
 
-    // Inspect an already declared, positive-power scalar master. Its stored
-    // graph/routing/powers supply the public ingress; no new reduction search or
-    // replacement master fixture is introduced to provoke an error.
+    // Inspect an already declared, positive-power scalar master: the last one
+    // the authenticated 5L manifest declares (P640 of the 640-terminal v0.2.0
+    // campaign). Its stored graph/routing/powers supply the public ingress; no
+    // new reduction search or replacement master fixture is introduced to
+    // provoke an error. A terminal without coefficients must fail its final
+    // substitution as a declared terminal; a computed one must fail closed when
+    // the request needs one Laurent order beyond its last published coefficient.
     let manifest: Value = serde_json::from_slice(&fs::read(report.path.join("5L/manifest.json"))?)?;
     let metadata = manifest["masters"]
         .as_array()
         .ok_or("5L manifest has no masters")?
         .iter()
-        .find(|master| master["name"] == "P640")
-        .ok_or("authenticated campaign lacks P640")?;
-    let powers: Vec<i64> = serde_json::from_value(metadata["powers"].clone())?;
-    assert_eq!(powers, [4, 2, 1, 0, 1, 1, 1, 0, 0, 2, 1, 1, 1, 1, 1]);
-    assert_eq!(metadata["status"], "not_computed");
-    let symbol: MasterSymbol = metadata["master_id"]
+        .filter(|master| {
+            master["powers"].as_array().is_some_and(|powers| {
+                powers
+                    .iter()
+                    .all(|power| power.as_i64().is_some_and(|power| power >= 0))
+            })
+        })
+        .last()
+        .ok_or("authenticated campaign declares no positive-power scalar master")?;
+    let name = metadata["name"].as_str().ok_or("5L master has no name")?;
+    let identity = metadata["master_id"]
         .as_str()
-        .ok_or("P640 has no native identity")?
-        .parse()?;
+        .ok_or("5L master has no native identity")?;
+    let computed = match metadata["status"].as_str() {
+        Some("not_computed") => false,
+        Some("accepted") => true,
+        status => return Err(format!("{name}: unexpected master status {status:?}").into()),
+    };
+    eprintln!("selected 5L master {name} ({identity}), computed: {computed}");
+    let symbol: MasterSymbol = identity.parse()?;
     let master = engine.get_master(&symbol, 16)?;
     assert_eq!(master.loop_count(), 5);
-    assert!(!master.is_computed());
-    assert!(master.coefficients().is_empty());
+    assert_eq!(master.is_computed(), computed, "{name}");
+    assert_eq!(master.coefficients().is_empty(), !computed, "{name}");
     assert!(master.graph().numerator().expression().is_one());
+    // Depth whose last requested order is one beyond the last coefficient:
+    // the target order is number_of_terms_in_epsilon_expansion - loops - 1.
+    let depth = master
+        .coefficients()
+        .keys()
+        .next_back()
+        .map(|last| last + 1 + 5 + 1);
     let dimension = Atom::var(feynkit_graph::symbols::dimension());
     let kinematics = Kinematics::in_dimension(&dimension)?;
     let family = master.graph().integral_family(&kinematics, &[])?;
@@ -227,14 +249,29 @@ fn five_loop_monitor_preserves_full_results_and_final_substitution_errors() -> R
             "numerical_master_substitution",
         ),
     ] {
-        let settings = self::settings(mode);
+        let mut settings = self::settings(mode);
+        if let Some(depth) = depth {
+            settings.number_of_terms_in_epsilon_expansion = depth;
+        }
         let reference = engine.evaluate(&settings, input.as_view()).unwrap_err();
-        assert!(
-            reference
-                .to_string()
-                .contains("declared terminal has no computed coefficients")
-        );
-        assert!(!reference.to_string().contains("undeclared residual master"));
+        let text = reference.to_string();
+        if computed {
+            assert!(
+                matches!(reference, vakint::VakintError::MissingMasterOrders(_)),
+                "{name}: {text}"
+            );
+            assert!(
+                text.contains("beyond the available expansion depth"),
+                "{name}: {text}"
+            );
+            assert!(text.contains(identity), "{name}: {text}");
+        } else {
+            assert!(
+                text.contains("declared terminal has no computed coefficients"),
+                "{name}: {text}"
+            );
+        }
+        assert!(!text.contains("undeclared residual master"), "{name}: {text}");
         let observed = engine
             .evaluate_with_monitor(&settings, input.as_view(), &options)
             .unwrap_err();

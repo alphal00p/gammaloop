@@ -1,9 +1,15 @@
-//! Public retained/substituted behavior against the authenticated 640-master campaign.
+//! Public retained/substituted behavior against the authenticated five-loop campaign.
 use super::*;
 use crate::{EvaluationMethod, EvaluationOrder, LoopNormalizationFactor, RustRedEvaluationOptions};
 
 fn engine() -> (Vakint, VakintSettings) {
     let path = super::super::test_data::external_path_through(5);
+    // Every master the authenticated 5L manifest declares (640 in the v0.2.0
+    // campaign).
+    let manifest: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(path.join("5L/manifest.json")).unwrap()).unwrap();
+    let declared = manifest["masters"].as_array().map_or(0, Vec::len);
+    assert!(declared > 0, "the authenticated 5L manifest declares no master");
     let mut engine = Vakint::new().unwrap();
     engine.load_external_data(path, 5).unwrap();
     assert_eq!(
@@ -15,8 +21,8 @@ fn engine() -> (Vakint, VakintSettings) {
             .values()
             .filter(|master| master.loop_count == 5)
             .count(),
-        640,
-        "these controls require the authenticated 640-master campaign"
+        declared,
+        "these controls require the authenticated campaign's declared 5L masters"
     );
     let settings = VakintSettings {
         epsilon_symbol: "ep".into(),
