@@ -72,7 +72,11 @@
 
 // One comparison cell: RustRed value in bold, the reference value and RustRed/reference below.
 // `show-alone`: when the reference does not apply, still show the RustRed value (else only "n/a").
-#let cmp(rr, ref, label, show-alone: true, alone-note: [—]) = {
+#let ibp-line(c) = {
+  let m = c.at("reduction_math_median", default: none)
+  if c.status == "ok" and m != none { text(size: 6.1pt, fill: luma(105))[IBP #dur(m)] }
+}
+#let cmp(rr, ref, label, show-alone: true, alone-note: [—], extra: none) = {
   let a = med(rr)
   let b = med(ref)
   if ref.status == "n/a" and not show-alone {
@@ -90,13 +94,14 @@
       text(size: 6.6pt, fill: luma(80))[#label #dur(b)]
       if a != none { text(size: 6.9pt, weight: "semibold")[#h(3pt)#ratio-text(a / b)] }
     } else { text(size: 6.6pt, fill: if ref.status == "failed" { rgb("b42318") } else { luma(110) })[#label #ref.status] }
+    if extra != none { linebreak(); extra }
   })
 }
 // Warm RustRed call against the cold one.
 #let warm(case) = {
   let w = cell-of(case, "rustred.reduction.warm")
   let c = cell-of(case, "rustred.reduction.cold")
-  cmp(w, c, "cold")
+  cmp(w, c, "cold", extra: ibp-line(w))
 }
 #let agree(case) = {
   let a = case.agreement
@@ -137,7 +142,9 @@
   _Cold_: fresh process, no step cache; _warm_: the same call repeated in that process (Ordered step
   cache populated); _full_ uses the engine defaults (shipped step caches on). Engine creation and data
   loading are excluded. Median of fresh processes on one CPU, normalization $overline("MS")$, $L+1$
-  orders in $epsilon$. _Agreement_: decimal digits shared by every backend's numerical result with
+  orders in $epsilon$. _IBP_: the part of a RustRed call spent in the reduction itself (rule
+  application and ordered scheduling); the rest is input processing, topology matching, numerator
+  lowering and output. _Agreement_: decimal digits shared by every backend's numerical result with
   RustRed's at $m = mu = 1$, worst order.
 ]
 
@@ -176,7 +183,7 @@
           (
             table.cell(text(size: 8.1pt)[#c.title \ #text(fill: luma(95), size: 7.4pt, c.subtitle)]),
             table.cell(text(size: 7.8pt)[#if nm != none { str(nm) } else { [—] }]),
-            cmp(cold, cell-of(c, rk + ".reduction"), rl),
+            cmp(cold, cell-of(c, rk + ".reduction"), rl, extra: ibp-line(cold)),
             cmp(cold, cell-of(c, "alphaloop.reduction"), "αL", show-alone: false),
             warm(c),
             cmp(full, cell-of(c, rk + ".full"), rl),
@@ -208,13 +215,32 @@
     *Not measured in this build* (#pend.len() cells): #pend.join(", ").])
 }
 
+#block(width: 100%, inset: (x: 0pt, y: 4pt))[
+  #text(9pt, weight: "bold", fill: navy)[Provenance]
+#{
+  set text(8pt)
+  let src = ident.at("source", default: (:))
+  table(columns: (auto, 1fr), stroke: none, inset: (x: 3pt, y: 2pt),
+    [Data root], raw(str(ident.data_root)),
+    [Root manifest], raw(str(ident.at("root_manifest_sha256", default: "—"))),
+    [Vakint], [#ident.vakint_version · source #raw(str(src.at("commit", default: "—")).slice(0, 12)) #if src.at("dirty_files", default: 0) > 0 [(+#src.dirty_files modified files)]],
+    [Harness binary], raw(str(ident.executable_sha256)),
+    [FORM], [#host.at("form_version", default: "—")],
+    [Host], [#host.at("cpu_model", default: "—"), #host.at("logical_cpus", default: "—") logical CPUs; timed on CPUs #host.at("cpus_used", default: ()).map(str).join(", ")],
+    [Contention], [#{let c = results.at("contention", default: (:)); [SMT sibling of the timed CPU busy #c.at("sibling_busy_median", default: "—") (median), #c.at("sibling_busy_max", default: "—") (max); 1-min load up to #c.at("load1_max", default: "—")]}],
+    [Regenerate], raw("crates/vakint/docs/benchmark/make-benchmark.sh DATA_ROOT BENCHMARK_BINARY OUT_DIR --install"),
+    [Built], [#results.assembled_utc #if draft [· *DRAFT*: not the published data]],
+  )
+}
+]
+
 // ---------------------------------------------------------------- graphs --
 
 = Reduction graphs <graphs>
 
 Each node is a vacuum topology of the shipped reduction (graphs up to isomorphism), on the row of its
 number of lines; an edge joins a topology to the one obtained by removing a line (thicker: several lines
-give the same topology), following Fig. 21 of B. Ruijl's thesis. Removing a line that is a loop of its
+give the same topology), following Fig. 21 of B. Ruijl's thesis (Leiden, 2017). Removing a line that is a loop of its
 own gives zero and is not drawn. One-vertex-reducible graphs (vacuum products) are merged by their
 factors. Colour gives the role in RustRed's reduction:
 
@@ -309,10 +335,12 @@ factors. Colour gives the role in RustRed's reduction:
 }
 #let fig-graph(L, body, cap) = figure(body, caption: [*#(L)-loop reduction graph.* #cap #gstats(L).], kind: image)
 
-#fig-graph(1, draw-graph(graphs.loops.at("1"), width: 17cm, row: 1cm),
-  [The single tadpole T1 carries the one-loop master; dots and numerators reduce inside it.])
-#fig-graph(2, draw-graph(graphs.loops.at("2"), width: 17cm, row: 1.1cm),
-  [Removing any of the three sunset lines gives the product T1².])
+#grid(columns: (1fr, 1fr), column-gutter: 8mm,
+  fig-graph(1, draw-graph(graphs.loops.at("1"), width: 8.2cm, row: 1cm),
+    [The tadpole T1 carries the one-loop master; dots and numerators reduce inside it.]),
+  fig-graph(2, draw-graph(graphs.loops.at("2"), width: 8.2cm, row: 1.1cm),
+    [Removing any of the three sunset lines gives the product T1².]),
+)
 #fig-graph(3, draw-graph(graphs.loops.at("3"), width: 17cm, row: 1.1cm),
   [MATAD names; small numbers count the RustRed terminals of a topology (symmetric sectors stay separate terminals of the closed three-loop program).])
 #fig-graph(4, draw-graph(graphs.loops.at("4"), width: 17cm, row: 1.15cm, rx: 0.7cm),
@@ -320,21 +348,6 @@ factors. Colour gives the role in RustRed's reduction:
 
 #page(flipped: true, margin: (x: 12mm, y: 12mm))[
   #fig-graph(5, draw-graph(graphs.loops.at("5"), width: 27cm, row: 1.95cm, labels: false, rx: 0.36cm, ry: 0.27cm, label-size: 6.6pt, edge-alpha: 105, edge-base: 0.25pt),
-    [Numbers: masters of the shipped basis in a topology. Rings: the 67 owner sectors of the saved application (ring width grows with the size of their rule tables).])
+    [Numbers: masters of the shipped basis in a topology. Rings: topologies holding the #graphs.loops.at("5").stats.owner_programs owner sectors of the saved application (ring width grows with the size of their rule tables).])
   #legend
 ]
-
-= Provenance <provenance>
-#{
-  set text(8pt)
-  let src = ident.at("source", default: (:))
-  table(columns: (auto, 1fr), stroke: none, inset: (x: 3pt, y: 2pt),
-    [Data root], raw(str(ident.data_root)),
-    [Root manifest], raw(str(ident.at("root_manifest_sha256", default: "—"))),
-    [Vakint], [#ident.vakint_version · source #raw(str(src.at("commit", default: "—")).slice(0, 12)) #if src.at("dirty_files", default: 0) > 0 [(+#src.dirty_files modified files)]],
-    [Harness binary], raw(str(ident.executable_sha256)),
-    [FORM], [#host.at("form_version", default: "—")],
-    [Host], [#host.at("cpu_model", default: "—"), #host.at("logical_cpus", default: "—") logical CPUs; timed on CPUs #host.at("cpus_used", default: ()).map(str).join(", ")],
-    [Built], [#results.assembled_utc #if draft [· *DRAFT*: not the published data]],
-  )
-}

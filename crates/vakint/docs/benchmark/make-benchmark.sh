@@ -10,11 +10,12 @@
 # --install         copy results/graphs to docs/benchmark/data/{suite,graphs}.json, the PDF to docs/benchmark.pdf
 #                   and write docs/benchmark/data/receipt.json (identities of data, binary, source and PDF)
 # --draft           DRAFT watermark
-# Other options go to tools/run_benchmarks.py (--cpus, --skip-heavy, --heavy-only, --only, --repetitions,
+# Other options go to tools/run_benchmarks.py (--cpus, --skip-heavy, --heavy-only, --only, --cells, --repetitions,
+# --max-sibling-busy, --contention-retries,
 # --heavy-n-cores, --heavy-cpus, --form, --assemble-only). Needs python3, typst (0.15) and, for the
 # FORM backends, form on PATH (or --form).
 set -euo pipefail
-if (( $# < 3 )); then sed -n '2,19p' "$0"; exit 2; fi
+if (( $# < 3 )); then awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"; exit 2; fi
 ROOT=$(realpath "$1"); BIN=$(realpath "$2"); OUT=$3; shift 3
 mkdir -p "$OUT"; OUT=$(realpath "$OUT")
 HERE=$(cd "$(dirname "$0")" && pwd); DOCS=$(dirname "$HERE")
@@ -56,14 +57,19 @@ if (( INSTALL )); then
   python3 -I - "$OUT" "$HERE/data/receipt.json" "$DOCS/benchmark.pdf" "$ROOT" <<'EOF'
 import json, sys, hashlib, datetime
 out, receipt, pdf, root = sys.argv[1:5]
-ident = json.load(open(out + "/identity.json"))
+results = json.load(open(out + "/results.json"))
+ident = results["identity"]
 h = lambda p: hashlib.sha256(open(p, "rb").read()).hexdigest()
 json.dump({"schema": "vakint.benchmark-receipt.v1",
            "installed_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
            "data_root": root, "root_manifest_sha256": ident.get("root_manifest_sha256"),
            "loop_manifest_sha256": ident.get("loop_manifest_sha256"),
            "executable_sha256": ident.get("executable_sha256"), "harness_source_sha256": ident.get("harness_source_sha256"),
-           "vakint_version": ident.get("vakint_version"),
+           "vakint_version": ident.get("vakint_version"), "source": ident.get("source"),
+           "draft": results.get("draft"),
+           "cells": {"measured": sum(1 for c in results["cases"] for v in c["cells"].values() if v["status"] == "ok"),
+                     "pending": sum(1 for c in results["cases"] for v in c["cells"].values() if v["status"] == "pending"),
+                     "failed": sum(1 for c in results["cases"] for v in c["cells"].values() if v["status"] == "failed")},
            "suite_sha256": h(out + "/results.json"), "graphs_sha256": h(out + "/graphs.json"), "pdf_sha256": h(pdf)},
           open(receipt, "w"), indent=1)
 EOF

@@ -165,11 +165,29 @@ def prepare(args, case, out):
 # ------------------------------------------------------------- measurement --
 
 def measure(args, case, cell, rep, cpu, out, input_file):
+    """One sample; re-measured (up to --contention-retries times) while the SMT sibling of the
+    timed CPU was busier than --max-sibling-busy, keeping the earlier attempts in the record."""
+    attempts = []
+    for attempt in range(args.contention_retries + 1):
+        meta = measure_once(args, case, cell, rep, cpu, out, input_file, attempts)
+        if meta is None:
+            return
+        busy = [v for v in meta["sibling_busy_fraction"].values() if v is not None]
+        if not busy or max(busy) <= args.max_sibling_busy or meta["exit_code"] != 0:
+            return
+        if attempt < args.contention_retries:
+            target = out / "raw" / case["id"] / f"{cell_name(cell)}-r{rep}.json"
+            attempts.append(json.loads(target.read_text()).get("call_seconds"))
+            target.unlink()
+            print(f"  {case['id']:<14} {cell_name(cell):<26} r{rep}: sibling busy {max(busy):.2f}, re-measuring", flush=True)
+
+
+def measure_once(args, case, cell, rep, cpu, out, input_file, attempts):
     backend, scope, cache = cell
     name = cell_name(cell)
     target = out / "raw" / case["id"] / f"{name}-r{rep}.json"
     if target.exists():
-        return
+        return None
     log = out / "logs" / case["id"] / f"{name}-r{rep}.log"
     log.parent.mkdir(parents=True, exist_ok=True)
     work = out / "raw" / case["id"] / f"{name}-r{rep}.part.json"
@@ -203,7 +221,8 @@ def measure(args, case, cell, rep, cpu, out, input_file):
     meta = {"case": case["id"], "cell": name, "repetition": rep, "cpu": cpu, "siblings": sib,
             "sibling_busy_fraction": {str(c): busy(c) for c in sib}, "cpu_busy_fraction": busy(cpu),
             "load1_start": load0, "load1_end": os.getloadavg()[0], "started_utc": start_utc,
-            "wall_seconds": wall, "exit_code": proc.returncode, "command": cmd, "n_cores": n_cores}
+            "wall_seconds": wall, "exit_code": proc.returncode, "command": cmd, "n_cores": n_cores,
+            "contended_attempt_seconds": list(attempts)}
     if proc.returncode == 0 and work.exists():
         rec = json.loads(work.read_text())
         rec["harness"] = meta
@@ -215,6 +234,7 @@ def measure(args, case, cell, rep, cpu, out, input_file):
         write_json(target, {"schema": "vakint.benchmark-measurement.v1", "failed": True, "error_tail": tail,
                             "harness": meta, "backend": backend, "scope": scope, "cache": cache})
         print(f"  {case['id']:<14} {name:<26} r{rep} cpu{cpu}: FAILED rc={proc.returncode}", flush=True)
+    return meta
 
 
 # ---------------------------------------------------------------- assembly --
@@ -332,7 +352,7 @@ def assemble(args, cases_doc, out, identity, pipeline):
             elif bad:
                 tail = bad[-1].get("error_tail", "")
                 lines = [l for l in tail.splitlines() if l.strip()]
-                c = {"status": "failed", "error": lines[-1][-300:] if lines else "no output"}
+                c = {"status": "failed", "error": lines[-1][:300] if lines else "no output"}
             elif case.get("heavy") and args.skip_heavy:
                 c = {"status": "pending", "reason": "heavy cell, measured in its own run"}
             else:
@@ -347,8 +367,30 @@ def assemble(args, cases_doc, out, identity, pipeline):
         if "rustred" in full_records:
             row["rustred_numerical"] = full_records["rustred"].get("numerical")
         cases.append(row)
+    sib, loads, used = [], [], set()
+    for raw in (out / "raw").glob("*/*.json"):
+        try:
+            h = json.loads(raw.read_text()).get("harness") or {}
+        except (OSError, json.JSONDecodeError):
+            continue
+        if h.get("cpu") is not None:
+            used.add(h["cpu"])
+            if h.get("n_cores", 1) > 1 and h.get("command"):
+                used |= set(expand_cpus(h["command"][2]))
+        sib += [v for v in (h.get("sibling_busy_fraction") or {}).values() if v is not None]
+        if h.get("load1_start") is not None:
+            loads.append(h["load1_start"])
+    contention = {}
+    if sib:
+        sib.sort()
+        contention = {"sibling_busy_median": round(sib[len(sib) // 2], 3), "sibling_busy_max": round(sib[-1], 3)}
+    if loads:
+        contention["load1_max"] = round(max(loads), 1)
+    if used:
+        identity.setdefault("host", {})["cpus_used"] = sorted(used)
     result = {
         "schema": "vakint.benchmark-results.v1",
+        "contention": contention,
         "draft": bool(args.draft),
         "assembled_utc": now(),
         "identity": identity,
@@ -400,6 +442,10 @@ def main():
     ap.add_argument("--form", default="form")
     ap.add_argument("--assemble-only", action="store_true")
     ap.add_argument("--prepare-only", action="store_true", help="prepare inputs only (no measurement, no assembly)")
+    ap.add_argument("--cells", help="measure only these cells, e.g. rustred.reduction.cold,fmft.full")
+    ap.add_argument("--max-sibling-busy", type=float, default=0.25,
+                    help="re-measure a sample whose SMT sibling was busier than this fraction (default 0.25)")
+    ap.add_argument("--contention-retries", type=int, default=2)
     ap.add_argument("--draft", action="store_true")
     args = ap.parse_args()
     args.binary = str(Path(args.binary).resolve())
@@ -448,6 +494,9 @@ def main():
             reps = args.heavy_repetitions if case.get("heavy") else args.repetitions
             for rep in range(reps):
                 cells = cells_for(case)
+                if args.cells:
+                    wanted = set(args.cells.split(","))
+                    cells = [c for c in cells if cell_name(c) in wanted]
                 if rep % 2 == 1:
                     cells = list(reversed(cells))
                 for cell in cells:
