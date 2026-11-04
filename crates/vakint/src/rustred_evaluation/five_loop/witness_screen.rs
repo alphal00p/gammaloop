@@ -630,20 +630,70 @@ mod tests {
             "256/81*gs^10*(4-2*ε)*(dot(k(2),k(3))-dot(k(1),k(2)))*(dot(k(3),k(4))-dot(k(1),k(4)))*dot(k(4),k(4))*dot(k(5),k(5))+7/3*gs^10/(3-2*ε)*dot(k(1),k(2))^2*dot(k(3),k(5))^2",
         ] {
             let numerator = vk_parse!(numerator).unwrap();
-            let terminals = {
-                let application = engine.saved_application(&settings).unwrap();
-                let prepared = application.prepared.lock().unwrap();
-                prepared
-                    .remaining_terminals()
-                    .iter()
-                    .map(|terminal| terminal.integral().clone())
-                    .collect::<BTreeSet<IntegralKey>>()
-            };
-            let mut compared = false;
+            assert!(screened_selection_matches_reference(
+                &engine,
+                &settings,
+                input.as_view(),
+                numerator.as_view(),
+                None,
+            ));
+        }
+        // Master inputs: the integrand of a remaining terminal must be sent as
+        // that terminal itself, also when a symmetric image has a smaller key
+        // (BASIS-v2 P387 = 640-pack P387, [1,1,0,1,2,-1,1,1,1,1,0,1,0,0,1]; its
+        // image [-1,1,0,1,1,1,1,1,1,1,0,2,0,0,1] costs a 1.57 M-key walk).
+        for powers in [
+            [1, 1, 0, 1, 2, -1, 1, 1, 1, 1, 0, 1, 0, 0, 1],
+            [1, 1, 0, 1, 1, -1, 1, 1, 1, 1, 0, 1, 0, 0, 1],
+        ] {
+            let key = IntegralKey::try_new(powers.to_vec()).unwrap();
+            let master = super::super::admission_census_tests::input_for_key(&key).unwrap();
+            assert!(
+                screened_selection_matches_reference(
+                    &engine,
+                    &settings,
+                    master.integral.as_view(),
+                    master.numerator.as_view(),
+                    Some(&key),
+                ),
+                "master {powers:?}"
+            );
+        }
+    }
+
+    /// Compares the screened selection with the brute-force reference (full
+    /// keys of every witness, terminal-only witnesses first). With `master`,
+    /// the input is that remaining terminal's own integrand and the selected
+    /// support must be exactly that key. Returns whether a comparison ran.
+    fn screened_selection_matches_reference(
+        engine: &Vakint,
+        settings: &VakintSettings,
+        input: AtomView,
+        numerator: AtomView,
+        master: Option<&IntegralKey>,
+    ) -> bool {
+        // The same terminal set as the implementation: remaining terminals of
+        // the package's own family (family fingerprint filter).
+        let terminals = {
+            let application = engine.saved_application(settings).unwrap();
+            let prepared = application.prepared.lock().unwrap();
+            let family = prepared.family().fingerprint();
+            prepared
+                .remaining_terminals()
+                .iter()
+                .filter(|terminal| terminal.family_fingerprint() == family)
+                .map(|terminal| terminal.integral().clone())
+                .collect::<BTreeSet<IntegralKey>>()
+        };
+        if let Some(master) = master {
+            assert!(terminals.contains(master), "{master:?} is not a remaining terminal");
+        }
+        let mut compared = false;
+        {
             engine
                 .topologies
                 .match_topologies_to_user_input_with_selection(
-                    input.as_view(),
+                    input,
                     false,
                     Default::default(),
                     |witnesses| {
@@ -652,8 +702,8 @@ mod tests {
                             crate::topologies::first_minimal_acceptance(witnesses, |witness| {
                                 Ok(engine
                                     .rustred_matched_input_key(
-                                        &settings,
-                                        numerator.as_view(),
+                                        settings,
+                                        numerator,
                                         witness,
                                     )?
                                     .map(|key| {
@@ -662,30 +712,35 @@ mod tests {
                                     }))
                             })?;
                         let (selected, support) = engine.select_rustred_witness(
-                            &settings,
-                            numerator.as_view(),
+                            settings,
+                            numerator,
                             witnesses,
                         )?;
                         assert_eq!(selected, expected, "numerator {numerator}");
                         if let Some(index) = selected {
                             let key = engine
                                 .rustred_matched_input_key(
-                                    &settings,
-                                    numerator.as_view(),
+                                    settings,
+                                    numerator,
                                     &witnesses[index],
                                 )?
                                 .unwrap();
-                            assert!(key.iter().map(|(key, _)| key).eq(support.unwrap().iter()));
+                            let support = support.unwrap();
+                            assert!(key.iter().map(|(key, _)| key).eq(support.iter()));
+                            if let Some(master) = master {
+                                assert_eq!(support.iter().collect::<Vec<_>>(), vec![master]);
+                            }
                         } else {
                             assert!(support.is_none());
+                            assert!(master.is_none(), "a master input must be admitted");
                         }
                         compared = true;
                         Ok(selected)
                     },
                 )
                 .unwrap();
-            assert!(compared);
         }
+        compared
     }
 
     #[test]
