@@ -776,9 +776,10 @@ $bold(c)+t(bold(k)-bold(c))$, whose Jacobian is $t^(3L)$. The default is the ori
 `centers = "search"` prepares centers at warm-up for the current external kinematics
 (`integrands/process/cross_section/lu_flow.rs`). The search samples every active cut
 surface with certified radial roots, keeps thermally relevant points, and projects points
-near a second cut surface onto their intersection with the nearest one, extended by a random
-walk along it. An intersection point carries the more suppressed Boltzmann factor of its two
-cuts; these points feed the warm-up verification and, with `intersection_patches`, the
+near a second cut surface onto their intersection with the nearest one whose gradient is not
+parallel there, so that coinciding surfaces are never paired, and extends each intersection
+by a random walk along it. An intersection point carries the more suppressed Boltzmann factor
+of its two cuts; these points feed the warm-up verification and, with `intersection_patches`, the
 patches. Linear
 programs in the center (Clarabel) ask every nearby surface for slopes
 `grad(eta).(y-c)` of one common sign above a threshold; each root enters with `|d_t eta|`, so

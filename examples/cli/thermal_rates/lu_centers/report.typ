@@ -51,7 +51,9 @@ It shoots random rays through the origin and through random base points and samp
 active cut surface with the certified signed radial root solver. It keeps points whose
 absorbed bath energies are within the `relevance` Boltzmann factor of the most relevant point.
 Points near a second cut surface, within `slope` of it, are grouped by their nearest such
-surface; up to 64 of them per pair are projected onto the intersection by Gauss–Newton steps,
+surface whose gradient is not parallel to theirs, so surfaces that coincide, as those of cuts 4
+and 8 of the TBT do at rest, are not paired; up to 64 points per pair are projected onto the
+intersection by Gauss–Newton steps,
 and a random walk along it fills each pair to 64 points: rays from a few base points rarely
 pass close to an intersection of codimension two, which is where overlap poles sit. An intersection point
 carries the more suppressed Boltzmann factor of its two cuts, whose overlap residues coincide
@@ -168,7 +170,7 @@ reproduce the same root-tolerance error, so the rotation check does not escalate
   [DT $(1,0)$], [origin; 1.000 / 0.000], [origin; 1.000 / 0.000; 0], [same],
   [DT $(1.6,0)$], [origin; 1.000 / 0.000], [origin; 1.000 / 0.000; 0], [same],
   [DT $(0.5,1.5)$], [4; 0.949 / 0.046], [3; 0.956 / 0.035; 0.122], [8; 0.994 / 0.006; 0.016],
-  [TBT $(1,0)$], [2; 0.964 / 0.025], [2; 0.972 / 0.019; 0.007], [4; 0.988 / 0.010; 0.000],
+  [TBT $(1,0)$], [2; 0.964 / 0.025], [2; 0.972 / 0.019; 0.126], [7; 0.990 / 0.008; 0.021],
   [TBT $(1.6,0)$], [origin; 1.000 / 0.000], [origin; 1.000 / 0.000; 0], [same],
   [TBT $(0.5,1.5)$], [6; 0.813 / 0.175], [6; 0.867 / 0.124; 0.035], [8; 0.869 / 0.122; 0.017],
 )
@@ -177,7 +179,10 @@ Each cell gives the number of patches, the valid (causal for the earlier build) 
 Boltzmann-weighted shares of the verification cut points, and the share of the Boltzmann
 weight of the sampled surface intersections that patches with opposite slopes carry. The
 earlier build reported counts of points near a second surface instead; the approach census
-below tests which overlaps are uncancelled poles. First centers lie on the probe axis, at
+below tests which overlaps are uncancelled poles. Before the intersection sampler skipped
+coinciding surfaces, it paired most TBT $(1,0)$ points of cuts 4 and 8 with each other. Such
+pairs have one normal and never count as opposed, so the shares there read 0.007 and 0.000 and
+the intersection patches were four. First centers lie on the probe axis, at
 $(0.708, 0.775) hat(bold(p))$ per generation loop momentum for the spacelike DT with causal
 gates, $(0.700, 0.796) hat(bold(p))$ for the default sign-symmetric plan and
 $(0.702, 0.789) hat(bold(p))$ with intersection patches, and are the origin at rest.
@@ -366,7 +371,7 @@ $(1,0)$ poles and the two spacelike ones that the causal-gate plans left are fin
 a third spacelike probe, whose causal-gate residue was $2 times 10^(-6)$ of its per-cut
 residues, and all DT probes. With `intersection_patches` all 42 distinct probes are finite.
 The card blocks `approach_tbt_rest1_pole` and `approach_tbt_space_pole` give the finite sums
-`6.999e-5` and `-5.496e-8` with the default plans and `1.1336e-4` and `2.5870e-8` with
+`6.999e-5` and `-5.496e-8` with the default plans and `2.4360e-5` and `2.5870e-8` with
 intersection patches. In the last scan binary64 accepts `-6.96e-5` at $t=-10^(-10)$, a
 cancellation loss that Quad-first stability levels remove.
 
@@ -381,17 +386,19 @@ the origin residue.
   [origin], [1], [$(4.84 plus.minus 0.41) times 10^(-7)$], [—], [—],
   [causal gates], [2], [$(2.60 plus.minus 0.22) times 10^(-7)$], [284], [459],
   [sign-symmetric, default], [2], [$(1.36 plus.minus 0.16) times 10^(-7)$], [461], [276],
-  [sign-symmetric, second sample], [2], [$(1.55 plus.minus 0.19) times 10^(-7)$], [463], [278],
-  [`intersection_patches`], [4], [$(2.58 plus.minus 0.88) times 10^(-8)$], [718], [24],
+  [sign-symmetric, second sample], [2], [$(1.60 plus.minus 0.19) times 10^(-7)$], [449], [291],
+  [`intersection_patches`], [7], [$(4.5 plus.minus 3.1) times 10^(-9)$], [738], [5],
 )
 
 The second two-patch plan is the search with `intersection_patches = true` capped at two
 patches. Its second sampling round therefore draws other points, and its second center
-differs. Both two-patch plans lower $K$ of the causal-gate plan 1.7 to 1.9 times, and four
-intersection patches lower it 5.3 times more. The Cauchy scale $pi K\/2$ falls from
-$4.1 times 10^(-7)$ (7.8% of the integral) to $2.1 times 10^(-7)$ (4.1%) for the default plan
-and $4.1 times 10^(-8)$ (0.8%) with intersection patches, but the index-1 tail remains in
-every plan.
+differs. Both two-patch plans lower $K$ of the causal-gate plan 1.6 to 1.9 times, and seven
+intersection patches lower it about 30 times more, within a factor of three. The Cauchy scale
+$pi K\/2$ falls from $4.1 times 10^(-7)$ (7.8% of the integral) to $2.1 times 10^(-7)$ (4.1%)
+for the default plan and $7 times 10^(-9)$ (0.14%) with intersection patches, but the
+index-1 tail remains in every plan. The four intersection patches that the sampler chose
+before it skipped coinciding surfaces cancelled 718 points, with
+$K = (2.58 plus.minus 0.88) times 10^(-8)$.
 
 Eight seeds per configuration repeat the frozen-grid campaigns of the first Monte Carlo table.
 The last column gives the cost per sample relative to origin flow: one iteration of
@@ -410,16 +417,17 @@ loads.
   [DT $(0.5,1.5)$], [intersection patches, 8 patches], [`6.683e−5 ± 1.4e−7` (+0.44)], [`6.681e−5 ± 1.3e−7` (+0.30)], [1.36 – 1.00], [−0.52 (−0.54, −0.50)], [7.6],
   [TBT $(1,0)$], [causal gates, 2 patches#super[\*]], [`4.78e−6 ± 2.5e−7` (−1.54)], [`5.24e−6 ± 3.4e−7` (+0.06)], [3.24 – 1.23], [−0.53 (−0.56, −0.52)], [2.7],
   [TBT $(1,0)$], [default, 2 patches], [`5.54e−6 ± 3.1e−7` (+0.94)], [`7.5e−6 ± 1.7e−6` (+1.28)], [12.3 – 1.45], [heavy tail], [2.6],
-  [TBT $(1,0)$], [second sample, 2 patches#super[†]], [`5.20e−6 ± 3.7e−7` (−0.04)], [`5.36e−6 ± 3.8e−7` (+0.35)], [2.60 – 1.11], [−0.58 (−0.62, −0.56)], [2.8],
-  [TBT $(1,0)$], [intersection patches, 4 patches], [`5.30e−6 ± 5.8e−7` (+0.13)], [`5.5e−6 ± 2.6e−6` (+0.11)], [12.2 – 4.58], [heavy tail], [7.9],
+  [TBT $(1,0)$], [second sample, 2 patches#super[†]], [`5.10e−6 ± 3.5e−7` (−0.33)], [`6.6e−6 ± 1.3e−6` (+1.01)], [7.98 – 3.89], [heavy tail], [2.8],
+  [TBT $(1,0)$], [intersection patches, 7 patches], [`5.57e−6 ± 2.6e−7` (+1.19)], [`5.63e−6 ± 3.1e−7` (+1.22)], [1.82 – 1.02], [−0.53 (−0.59, −0.52)], [12.7#super[‡]],
   [TBT $(0.5,1.5)$], [default, 6 patches], [`9.6e−7 ± 1.1e−7` (−1.52)], [`1.21e−6 ± 4.0e−7` (+0.18)], [7.85 – 4.15], [heavy tail], [14.5],
   [TBT $(0.5,1.5)$], [intersection patches, 8 patches], [`9.4e−7 ± 1.7e−7` (−1.16)], [`8.5e−7 ± 3.6e−7` (−0.79)], [10.1 – 3.03], [heavy tail], [22.7],
 )
 
 #super[\*] Causal-gate build, as in the first table. #super[†] The same search with
-`intersection_patches = true` and `max_patches = 2`, which the current build reproduces
-exactly: the intersections sampled in the first round change the sample of the second, whose
-second center differs, and the cap leaves no room for intersection patches.
+`intersection_patches = true` and `max_patches = 2`: the intersections sampled in the first
+round change the sample of the second, whose second center differs, and the cap leaves no
+room for intersection patches. #super[‡] From a later side-by-side snapshot, in which the
+default plan cost 2.8.
 
 At the spacelike DT the three-patch plan keeps finite variance and agrees with the
 reference, at about the cost of the four causal-gate patches. Eight intersection patches do
@@ -428,16 +436,21 @@ as well, at about twice the cost of the default plan.
 At $(1,0)$ the weighted means of both two-patch plans agree with the reference. The largest
 weight of the default plan, 5.63, carries the signature $c_6 = 2 c_4 = 2 c_8$ of the
 uncancelled pole on $M$, and so do its next one (1.30) and the largest of the second sample
-(2.88). One such hit, a shift of $1.4 times 10^(-5)$ in its seed, dominates the scatter of the
-default plan's seeds and its block-spread ratio of 12 at the smallest block; the second sample
-drew none as large.
+(3.97), which the default plan cancels. One such hit, a shift of $1.4 times 10^(-5)$ in its
+seed, dominates the scatter of the default plan's seeds and its block-spread ratio of 12 at the
+smallest block; that of the second sample shifts its seed by $1.0 times 10^(-5)$. Before the
+intersection sampler skipped coinciding surfaces, the second sample had another second center
+and drew no such hit: block spread 2.60 to 1.11 times the internal errors.
 Eight seeds of $4 times 10^5$ samples cannot separate plans whose $K$ differ by less than
-about two. Four intersection patches lower $K$ 5.3 times, but not the tail: their block
-spread stays 4.6 times the internal errors at the largest blocks. Their largest weight,
-$-6.65$, is a pole on $M$ that origin flow keeps too and the default plan cancels. The next
-four, from 2.99 down to 0.78, carry cut-6 weights of up to 76 at points where origin flow and
-the default plan give at most $8 times 10^(-3)$; at $-0.98$ cuts 0 and 3 ($-45.1$ each)
-overcompensate cut 6. The extra patches thus create spikes of their own.
+about two. The seeds of the seven intersection patches agree with the reference, and their
+block spread falls from 1.82 to 1.02 times the internal errors; as for causal gates, this does
+not establish finite variance. None of their five largest weights, 0.41 down to 0.21 in
+magnitude, lies on $M$. They carry cut-6 weights of up to 4.15 and equal cut-0 and cut-3
+weights of up to 2.75 in magnitude at points where origin flow and the default plan give at
+most 0.045 per cut. The extra patches thus create spikes of their own, and they cost 4.5 times
+as much as the default plan. Before the sampler skipped coinciding surfaces, four intersection
+patches drew a pole on $M$ of weight $-6.65$, and their block spread stayed 4.6 times the
+internal errors at the largest blocks.
 
 At $(0.5,1.5)$ the default plan costs about as much as the causal-gate six-patch plan, 12 to
 15 times origin flow side by side, and drops at most 0.018% of its samples as nonfinite or
@@ -479,9 +492,8 @@ spacelike kinematics. The census itself used a diagnostic dump of projected over
 that this branch does not include, and the scans of $M$ used scripts outside it as well.
 `campaign.py` runs the default plans with `--centers search`. The other sign-symmetric
 campaigns ran the same `kinematics` and `integrate` commands directly, with
-`lu_flow.search.intersection_patches=true` added to the `kinematics` settings. The second
-two-patch sample ran with `lu_flow.search.max_patches=2` on an intermediate build that always
-sampled intersections; the current build reproduces its plan with both settings.
+`lu_flow.search.intersection_patches=true` added to the `kinematics` settings, and the second
+two-patch sample with `lu_flow.search.max_patches=2` added as well.
 
 == Supported cases and limitations
 
@@ -503,9 +515,10 @@ sampled intersections; the current build reproduces its plan with both settings.
   cancels 62% of the points of $M$ that origin flow misorients, against 38% for causal gates,
   and lowers the Cauchy-like uncertainty of the index-1 tail from about $4 times 10^(-7)$ to
   $2 times 10^(-7)$ (4.1%), which more samples do not reduce. A single hit on $M$ dominates
-  the scatter of its seeds. Intersection patches cancel 97% of those points and lower $K$ 5.3
-  times more, but at 2.3 to 3 times the cost they add spikes of their own, and their seeds
-  stay heavy-tailed.
+  the scatter of its seeds. Intersection patches cancel 99% of those points and lower that
+  uncertainty to $7 times 10^(-9)$ (0.14%). Their seeds agree with the reference, with block
+  spread 1.82 to 1.02 times the internal errors, but they cost 4.5 times as much as the
+  default plan and add spikes of their own.
 - Not resolved: the spacelike TBT. Origin, apex, unrefined L1 and searched plans all leave
   genuine uncancelled poles. The default six-patch plan completes its campaign, but its
   block spread exceeds the internal errors four to eight times, and three of its four largest
@@ -521,8 +534,8 @@ sampled intersections; the current build reproduces its plan with both settings.
 - The search samples surfaces and certifies coverage only statistically. Its objective is the
   Boltzmann-weighted share of sign-consistent cut points, and with intersection patches of
   sampled intersections, a proxy for the integrand's variance. Each point samples only the
-  intersection of its surface with the nearest other one. Thermal suppression bounds the
-  region considered; the slope threshold decays at large momenta.
+  intersection of its surface with the nearest other one that crosses it. Thermal suppression
+  bounds the region considered; the slope threshold decays at large momenta.
 - Massless particles, soft kinks and the light cone are outside this validation. The
   finiteness argument for exceptional energies does not cover them.
 - Patches multiply the root work by their number; weights skip integrand evaluations where

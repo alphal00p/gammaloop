@@ -157,13 +157,14 @@ surface intersections; opt-in `lu_flow.search.intersection_patches` also covers 
 intersections (report section "Sign-symmetric gates and intersection patches"). At rest
 below the HH threshold, where cut 6 meets cuts 4 and 8, the default two-patch
 triangle-box-triangle plan still keeps an index-1 tail of Cauchy scale about
-$2 times 10^(-7)$ (4%), half that of causal gates. Intersection patches cut it to 0.8% but
-add spikes of their own at two to three times the cost, so they stay opt-in. At spacelike momentum uncancelled same-sign cut pairs remain under every
-plan. The mild $(1.6,0)$ tail is a bounded $bold(k)_1 approx bold(k)_2$ peak of cancelling HH
-cuts, not an overlap. Open: a structured patch family for the collinear and
-rotation-invariant H-surfaces. Binary64 cancellation loss near overlaps passes the rotation
-check. Far radial roots on unbounded H-surface lobes miss the solver's absolute residual
-tolerance without a lower-precision root to compare with.
+$2 times 10^(-7)$ (4%), half that of causal gates. Intersection patches cut it to 0.14% and
+bring the block spread within twice the internal errors, but they add spikes of their own at
+4.5 times the cost, so they stay opt-in. At spacelike momentum uncancelled same-sign cut
+pairs remain under every plan. The mild $(1.6,0)$ tail is a bounded
+$bold(k)_1 approx bold(k)_2$ peak of cancelling HH cuts, not an overlap. Open: a structured
+patch family for the collinear and rotation-invariant H-surfaces. Binary64 cancellation loss
+near overlaps passes the rotation check. Far radial roots on unbounded H-surface lobes miss
+the solver's absolute residual tolerance without a lower-precision root to compare with.
 
 === Inclusive vacuum-parity continuation: implementation and validation
 

@@ -68,7 +68,7 @@ const LP_POINTS_PER_SURFACE: usize = 160;
 const ORIENTATION_ROUNDS: usize = 3;
 /// Relevant sampled cut points per surface that are constrained and checked.
 const POINTS_PER_SURFACE: usize = 1000;
-/// Sampled points of the intersection of a cut surface with its nearest other one.
+/// Sampled points of the intersection of a cut surface with its nearest crossing one.
 const INTERSECTION_POINTS: usize = 64;
 /// Random-walk steps per sampled point of an intersection, the budget of one pair.
 const INTERSECTION_ATTEMPTS: usize = 4;
@@ -463,6 +463,15 @@ impl LuFlowPlan {
 
 fn dot(a: &[f64], b: &[f64]) -> f64 {
     a.iter().zip(b).map(|(a, b)| a * b).sum()
+}
+
+/// Whether two normals at one point are parallel to the precision of an intersection
+/// projection. Coinciding cut surfaces, such as those of cuts whose equations agree at rest,
+/// are parallel everywhere and have no transverse intersection.
+fn parallel(a: &[f64], b: &[f64]) -> bool {
+    let (aa, ab, bb) = (dot(a, a), dot(a, b), dot(b, b));
+    let determinant = aa * bb - ab * ab;
+    determinant.is_nan() || determinant <= 1e-12 * aa * bb
 }
 
 /// A cut surface near a sampled point.
@@ -875,15 +884,16 @@ impl CenterSearch<'_> {
         for _ in 0..PROJECTION_ITERATIONS {
             let [va, vb] =
                 [a, b].map(|surface| surface.orientation as f64 * self.value(surface, &point));
+            let [na, nb] = [a, b].map(|surface| self.oriented_gradient(surface, &point));
+            // Checked before convergence, so a point of two coinciding surfaces is rejected.
+            if parallel(&na, &nb) {
+                return None;
+            }
             if va.abs().max(vb.abs()) < PROJECTION_TOLERANCE * self.gate.scale {
                 return Some(point);
             }
-            let [na, nb] = [a, b].map(|surface| self.oriented_gradient(surface, &point));
             let (aa, ab, bb) = (dot(&na, &na), dot(&na, &nb), dot(&nb, &nb));
             let determinant = aa * bb - ab * ab;
-            if determinant.is_nan() || determinant <= 1e-12 * aa * bb {
-                return None;
-            }
             let (la, lb) = (
                 (bb * va - ab * vb) / determinant,
                 (aa * vb - ab * va) / determinant,
@@ -900,15 +910,20 @@ impl CenterSearch<'_> {
 
     /// Points on the intersections of the cut surfaces that meet near the relevant `points`.
     /// Up to a fixed number of evenly spaced points near a second surface are projected onto
-    /// its intersection with the nearest one, and a random walk along it fills each pair up to
-    /// that number: rays from a few base points rarely pass close to an intersection, where a
-    /// center that crosses the two surfaces with opposite slopes leaves an overlap pole
-    /// uncancelled.
+    /// its intersection with the nearest one that crosses it there, and a random walk along it
+    /// fills each pair up to that number: rays from a few base points rarely pass close to an
+    /// intersection, where a center that crosses the two surfaces with opposite slopes leaves
+    /// an overlap pole uncancelled.
     fn intersections(&mut self, points: &[CutPoint], reference: f64) -> Vec<CutPoint> {
         let pairs = points
             .iter()
             .filter_map(|point| {
-                let partner = point.near.get(1)?.surface;
+                // A coinciding surface vanishes at every point too and would be nearest.
+                let (own, others) = point.near.split_first()?;
+                let partner = others
+                    .iter()
+                    .find(|other| !parallel(&own.normal, &other.normal))?
+                    .surface;
                 let pair = [point.surface.min(partner), point.surface.max(partner)];
                 Some((pair, &point.point))
             })
@@ -1585,6 +1600,46 @@ mod tests {
         for surface in &search.surfaces {
             assert!(search.value(surface, &point).abs() < 1e-12 * 1.5);
         }
+    }
+
+    /// A copy of the first absorption surface coincides with it, as cuts whose equations
+    /// agree at rest do. It is the nearest other surface of every point of the original, but
+    /// the two have no transverse intersection: their points pair with the crossing surface.
+    #[test]
+    fn intersections_pair_points_with_crossing_not_coinciding_surfaces() {
+        let mut overlap = Overlap::new();
+        overlap.hsurfaces.push(overlap.hsurfaces[0].clone());
+        overlap.absorbed.push(overlap.absorbed[0]);
+        let settings = LuCenterSearchSettings::default();
+        let mut search = overlap.search(&settings);
+        // The first surface depends on `q` only: shifting `r` keeps the start on the original
+        // and the copy and brings it within the band of the crossing surface.
+        let mut start = overlap.point.clone();
+        start[5] += 0.01;
+        let points = search.constrain(
+            [0, 2]
+                .map(|surface| search.cut_point(surface, None, start.clone()))
+                .into(),
+            0.0,
+        );
+        for point in &points {
+            let near = point.near.iter().map(|near| near.surface).collect_vec();
+            assert_eq!(near, [point.surface, 2 - point.surface, 1]);
+        }
+        let intersections = search.intersections(&points, 0.0);
+        let pairs = intersections
+            .iter()
+            .map(|point| [point.surface, point.partner.unwrap()])
+            .unique()
+            .sorted()
+            .collect_vec();
+        assert_eq!(pairs, [[0, 1], [1, 2]]);
+        for point in &intersections {
+            for surface in &search.surfaces {
+                assert!(search.value(surface, &point.point).abs() < 1e-12 * 1.5);
+            }
+        }
+        assert_eq!(search.project([0, 2], &start), None);
     }
 
     #[test]

@@ -262,7 +262,9 @@ warm-up for the current external momenta. It samples every active cut surface wi
 radial roots. It keeps points whose absorbed bath energies $E$ are not suppressed, by
 $e^(-beta E)$ without chemical potentials, by more than `relevance` relative to the most
 relevant sampled point of the graph. A point near a second cut surface, whose equation is
-within `slope` times the energy scale of it, is also grouped with the nearest such surface;
+within `slope` times the energy scale of it, is also grouped with the nearest such surface
+whose gradient is not parallel to its own there, so surfaces that coincide, as some cuts do at
+rest, are not paired;
 up to 64 such points per pair are projected onto the intersection, and a random walk along it
 fills each pair to 64 points,
 since rays rarely pass close to an intersection of codimension two. An intersection point
