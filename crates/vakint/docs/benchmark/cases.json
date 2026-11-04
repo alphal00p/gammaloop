@@ -8,6 +8,14 @@
     {"loops": 4, "label": "Four loops"},
     {"loops": 5, "label": "Five loops"}
   ],
+  "warmups_note": "Before every timed call the harness evaluates the warm-up integral of the same loop count twice with the same settings (untimed for the cell): the first call of a process pays one-time setup (FORM backends: master tables; RustRed: lazy catalogues), so every timed call is steady-state. Each warm-up differs from every case.",
+  "warmups": {
+    "1": {"label": "T1, power 2", "source": {"kind": "expression", "input": "topo(prop(1,edge(1,1),k(1),mUVsq,2))"}},
+    "2": {"label": "T111, powers 1,1,2", "source": {"kind": "expression", "input": "topo(prop(1,edge(1,2),k(1),mUVsq,1)*prop(2,edge(1,2),k(2),mUVsq,1)*prop(3,edge(2,1),k(1)+k(2),mUVsq,2))"}},
+    "3": {"label": "D6, one dot", "source": {"kind": "expression", "input": "topo(prop(1,edge(1,2),k(1),mUVsq,2)*prop(2,edge(2,3),k(2),mUVsq,1)*prop(3,edge(3,1),k(3),mUVsq,1)*prop(4,edge(1,4),k(3)-k(1),mUVsq,1)*prop(5,edge(2,4),k(1)-k(2),mUVsq,1)*prop(6,edge(3,4),k(2)-k(3),mUVsq,1))"}},
+    "4": {"label": "FG, one line squared", "source": {"kind": "fixture", "file": "tests/fixtures/benchmark_reduction.json", "case": "1:2"}},
+    "5": {"label": "smallest master no case uses", "source": {"kind": "graph", "select": "fewest-lines"}}
+  },
   "cases": [
     {"id": "1L-rung-q0", "loops": 1, "title": "QCD ladder, q = 0", "subtitle": "quark loop, no rung",
      "source": {"kind": "rung", "projection": "zero-momentum"}},

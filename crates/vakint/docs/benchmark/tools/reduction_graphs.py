@@ -248,12 +248,30 @@ BASIS_SYMBOL = re.compile(r"\b(PR\d+d?|miD6|miBN|miT111|miD5|miDM|miE3)\b")
 
 # ------------------------------------------------------------------ layout --
 
-def layout(layers, arrows_by_child, arrows_by_parent):
-    """Barycentre ordering per layer, then coordinate relaxation (unit spacing)."""
+def crossings(order, keys, arrows_by_parent):
+    """Edge crossings between consecutive layers (edges join adjacent layers; weight 1 per edge)."""
+    pos = {i: k for ln in order for k, i in enumerate(order[ln])}
+    total = 0
+    for ln in keys:
+        edges = sorted((pos[u], pos[v]) for u in order[ln] for v in arrows_by_parent.get(u, ()))
+        # count inversions of the child positions (pairs with u1 < u2 and v1 > v2)
+        for a in range(len(edges)):
+            ua, va = edges[a]
+            for b in range(a + 1, len(edges)):
+                ub, vb = edges[b]
+                if ub != ua and vb < va:
+                    total += 1
+    return total
+
+
+def layout(layers, arrows_by_child, arrows_by_parent, sweeps=400):
+    """Layer ordering: barycentre sweeps (keeping the ordering with the fewest crossings), then adjacent
+    transpositions while they remove crossings; then coordinate relaxation (unit spacing)."""
     order = {ln: sorted(ids) for ln, ids in layers.items()}
     keys = sorted(layers, reverse=True)
     pos = {i: k for ln in keys for k, i in enumerate(order[ln])}
-    for sweep in range(24):
+    best, best_order = crossings(order, keys, arrows_by_parent), {k: list(v) for k, v in order.items()}
+    for sweep in range(sweeps):
         seq = keys[1:] if sweep % 2 == 0 else list(reversed(keys[:-1]))
         for ln in seq:
             nbrs = arrows_by_child if sweep % 2 == 0 else arrows_by_parent
@@ -265,6 +283,36 @@ def layout(layers, arrows_by_child, arrows_by_parent):
             order[ln].sort(key=lambda i: (bary(i), pos[i]))
             for k, i in enumerate(order[ln]):
                 pos[i] = k
+        c = crossings(order, keys, arrows_by_parent)
+        if c < best:
+            best, best_order = c, {k: list(v) for k, v in order.items()}
+    order = best_order
+
+    def local(ln):
+        """Crossings of the two layer pairs touching layer ln."""
+        sub = [k for k in keys if abs(k - ln) <= 1]
+        return crossings({k: order[k] for k in sub}, [k for k in sub if k != min(sub)], arrows_by_parent)
+
+    # sifting: move every node to the position of its layer with the fewest local crossings
+    for _ in range(4):
+        moved = False
+        for ln in keys:
+            for node in list(order[ln]):
+                row = order[ln]
+                row.remove(node)
+                scores = []
+                for k in range(len(row) + 1):
+                    row.insert(k, node)
+                    scores.append((local(ln), abs(k - len(row) / 2), k))
+                    row.pop(k)
+                k = min(scores)[2]
+                row.insert(k, node)
+                moved |= row.index(node) != k
+        c = crossings(order, keys, arrows_by_parent)
+        if c >= best and not moved:
+            break
+        best = min(best, c)
+    layout.crossings = crossings(order, keys, arrows_by_parent)
     # x coordinates: centred, then relaxed towards neighbours keeping order
     x = {}
     width = max(len(v) for v in order.values())
@@ -493,6 +541,7 @@ def extract(root: Path):
             "nodes": node_list,
             "arrows": arrow_list,
             "span": round(span, 4),
+            "crossings": layout.crossings,
             "max_layer_width": width,
             "layers": len(layers),
             "stats": {

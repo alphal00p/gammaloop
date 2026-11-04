@@ -204,6 +204,8 @@ def prepare(args, case, out):
             return None
     rec = json.loads(tmp.read_text())
     rec["case_source"] = spec
+    if case.get("label"):
+        rec["label"] = case["label"]
     rec["prepare_wall_seconds"] = time.time() - started
     write_json(target, rec)
     tmp.unlink(missing_ok=True)
@@ -300,17 +302,22 @@ def measure_once(args, case, cell, rep, cpu, out, input_file, attempts):
     env = dict(os.environ, RAYON_NUM_THREADS=str(n_cores), OMP_NUM_THREADS="1", MKL_NUM_THREADS="1",
                SYMBOLICA_HIDE_BANNER="1")
     sib = sorted({s for c in timed for s in sibling(c)} - set(timed))
-    t0 = cpu_times(timed + sib)
-    q0 = schedstat(set(timed))
     load0 = os.getloadavg()[0]
+    log_file = open(log, "w")
+    t0 = cpu_times(timed + sib)
+    time.sleep(0.002)  # block once: this thread's CPU time so far is accounted before the snapshot
+    own0 = time.thread_time()
+    q0 = schedstat(set(timed))
     started, start_utc = time.time(), now()
-    with open(log, "w") as f:
-        proc = subprocess.Popen(cmd, stdout=f, stderr=subprocess.STDOUT, env=env)
-        _, status, ru = os.wait4(proc.pid, 0)
+    proc = subprocess.Popen(cmd, stdout=log_file, stderr=subprocess.STDOUT, env=env)
+    _, status, ru = os.wait4(proc.pid, 0)
+    proc.returncode = os.waitstatus_to_exitcode(status)
     wall = time.time() - started
-    returncode = os.waitstatus_to_exitcode(status)
-    t1 = cpu_times(timed + sib)
     q1 = schedstat(set(timed))
+    harness_cpu = time.thread_time() - own0  # this worker thread (pinned to its CPU) inside the window
+    t1 = cpu_times(timed + sib)
+    log_file.close()
+    returncode = proc.returncode
 
     def busy(c):
         if c not in t0 or c not in t1:
@@ -320,7 +327,7 @@ def measure_once(args, case, cell, rep, cpu, out, input_file, attempts):
         return round(1 - idle / total, 4) if total > 0 else None
 
     own_cpu = ru.ru_utime + ru.ru_stime  # the process tree (wait4: the child and its reaped descendants)
-    rq_cpu = sum(q1[c][0] - q0[c][0] for c in timed if c in q0 and c in q1) * 1e-9
+    rq_cpu = sum(q1[c][0] - q0[c][0] for c in timed if c in q0 and c in q1) * 1e-9 - harness_cpu
     rq_delay = sum(q1[c][1] - q0[c][1] for c in timed if c in q0 and c in q1) * 1e-9
     meta = {"case": case["id"], "cell": name, "repetition": rep, "cpu": cpu, "timed_cpus": timed, "siblings": sib,
             "l3_domain": l3_domain(cpu),
@@ -456,9 +463,8 @@ def assemble(args, cases_doc, out, identity, pipeline):
                 if setups:
                     c["one_time_setup_median"] = stats(setups)["median"]
                     c["warmup_first_median"] = stats([r["warmup"]["first_seconds"] for r in good])["median"]
-                    slot = one_time.setdefault(str(case["loops"]), {}).setdefault(cell[0], {"setup": [], "loader": []})
-                    if not (cell[0] == "rustred" and cache != "cold"):  # RustRed: cache off, no step-cache reuse
-                        slot["setup"] += setups
+                    slot = one_time.setdefault(str(case["loops"]), {}).setdefault(name, {"setup": [], "loader": []})
+                    slot["setup"] += setups
                     if cell[0] == "rustred":
                         slot["loader"] += [r["loader_seconds"] for r in good]
                 c["contended"] = sum(1 for r in good if r["harness"].get("contended"))
@@ -634,12 +640,6 @@ def main():
         args.heavy_cpus = ",".join(map(str, sorted(os.sched_getaffinity(0))))
     if args.heavy_n_cores > 1 and len(expand_cpus(args.heavy_cpus)) < args.heavy_n_cores:
         raise SystemExit(f"--heavy-cpus has fewer than --heavy-n-cores = {args.heavy_n_cores} CPUs")
-    domains = {}
-    for c in cpus:
-        domains.setdefault(l3_domain(c), []).append(c)
-    shared = [v for v in domains.values() if len(v) > 1]
-    if shared and len(cpus) > 1 and not args.assemble_only and not args.allow_shared_l3:
-        raise SystemExit(f"worker CPUs share an L3 cache: {shared}; give one CPU per L3 domain or --allow-shared-l3")
     args.binary_sha256 = sha256(Path(args.binary))
     form_path = shutil.which(args.form)
     args.form_sha256 = sha256(Path(form_path)) if form_path else None
@@ -665,7 +665,8 @@ def main():
 
     run = {"started_utc": now(), "argv": sys.argv, "cpus": cpus}
     # input hashes of the prepared inputs (sample keys); warm-up integrals per loop count
-    warmups = [{"id": f"warmup-{L}L", "loops": int(L), "source": src} for L, src in cases_doc.get("warmups", {}).items()]
+    warmups = [{"id": f"warmup-{L}L", "loops": int(L), "label": w.get("label"), "source": w["source"]}
+               for L, w in cases_doc.get("warmups", {}).items()]
     args.input_sha = {}
     for p in (out / "inputs").glob("*.json") if (out / "inputs").exists() else []:
         try:
@@ -710,8 +711,19 @@ def main():
                     else:
                         jobs.put((case, cell, rep))
         t = time.time()
+        workers = cpus[:max(1, jobs.qsize())]
+        domains = {}
+        for c in workers:
+            domains.setdefault(l3_domain(c), []).append(c)
+        shared = [v for v in domains.values() if len(v) > 1]
+        if shared and not args.allow_shared_l3:
+            raise SystemExit(f"worker CPUs share an L3 cache: {shared}; give one CPU per L3 domain or --allow-shared-l3")
 
         def worker(cpu):
+            try:  # this thread's own work stays on its CPU (never on another worker's timed CPU)
+                os.sched_setaffinity(threading.get_native_id(), {cpu})
+            except OSError:
+                pass
             while True:
                 try:
                     case, cell, rep = jobs.get_nowait()
@@ -719,7 +731,7 @@ def main():
                     return
                 measure(args, case, cell, rep, cpu, out, inputs[case["id"]])
 
-        threads = [threading.Thread(target=worker, args=(c,)) for c in cpus]
+        threads = [threading.Thread(target=worker, args=(c,)) for c in workers]
         for th in threads:
             th.start()
         for th in threads:
