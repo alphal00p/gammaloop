@@ -630,3 +630,7 @@ convention. Shared preparation uses native `AbstractIndex`; only spinor words
 receive the required gamma-zero construction and cleanup. Pure scalar and color
 inputs retain the existing conjugation semantics, and callback-sensitive output
 still passes checked reconstruction.
+
+Payload conjugation uses registered duality for explicit slots, including custom
+dual and self-dual representations. Exact dimension and index payloads survive;
+compact representation metadata and Scalar containers remain opaque.

@@ -707,7 +707,11 @@ anchor = "pub trait IndexTooling {"
 # Baseline review 2026-11-02: the syntax note now states that adjunction requires
 # published index history; mutated parts must pass finish_parts explicitly.
 # This replaces lazy admission, without changing the adjoint's algebra.
-digest = "820fbf610c4bb06867a7013d0b8631e57704ff7d"
+# Reviewed 2026-11-04: registered-representation adjoint tests cover custom
+# dual/self-dual spaces, both index-preservation modes, contraction, double
+# adjunction and ranked zero. The native payload owner now follows registered
+# slot duality; the architecture notes preserve exact payloads and opaque metadata.
+digest = "1631f48ec02c3acf0096c975dcd7bc6b88ee7e0f"
 
 [[section.note]]
 id = "spenso-architecture"
@@ -872,7 +876,11 @@ anchor = "pub trait IndexTooling {"
 # Baseline review 2026-11-02: the Idenso note now states that adjunction requires
 # published index history; mutated parts must pass finish_parts explicitly.
 # This replaces lazy admission, without changing the adjoint's algebra.
-digest = "820fbf610c4bb06867a7013d0b8631e57704ff7d"
+# Reviewed 2026-11-04: registered-representation adjoint tests cover custom
+# dual/self-dual spaces, both index-preservation modes, contraction, double
+# adjunction and ranked zero. The native payload owner now follows registered
+# slot duality; the architecture notes preserve exact payloads and opaque metadata.
+digest = "1631f48ec02c3acf0096c975dcd7bc6b88ee7e0f"
 
 [[section.note.scope]]
 path = "crates/idenso/src/cook.rs"
