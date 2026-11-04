@@ -53,6 +53,7 @@
     ],
     "feynkit-amplitude": [
       "feynkit-graph",
+      "feynkit-kinematics",
       "feynkit-model",
       "idenso",
       "linnet",
@@ -60,6 +61,7 @@
     ],
     "feynkit-cff": [
       "feynkit-graph",
+      "feynkit-kinematics",
       "linnet",
       "spenso",
       "symbolica-notation",
@@ -68,6 +70,7 @@
     "feynkit-generator": [
       "feynkit-amplitude",
       "feynkit-graph",
+      "feynkit-kinematics",
       "feynkit-model",
       "idenso",
       "linnet",
@@ -86,7 +89,8 @@
     ],
     "feynkit-kinematics": [
       "linnet",
-      "spenso"
+      "spenso",
+      "symbolica-notation"
     ],
     "feynkit-model": [
       "linnet"
@@ -111,6 +115,7 @@
     ],
     "feynkit-tensor": [
       "feynkit-graph",
+      "feynkit-kinematics",
       "idenso",
       "linnet",
       "spenso"
@@ -135,6 +140,7 @@
     "gammaloop-integration-tests": [
       "feynkit-generator",
       "feynkit-graph",
+      "feynkit-kinematics",
       "feynkit-model",
       "gammaloop-api",
       "gammaloop-workspace-hack",
@@ -316,6 +322,7 @@
     },
     "feynkit-amplitude": {
       "feynkit-graph": [],
+      "feynkit-kinematics": [],
       "feynkit-model": [],
       "idenso": [],
       "linnet": [],
@@ -325,6 +332,7 @@
     },
     "feynkit-cff": {
       "feynkit-graph": [],
+      "feynkit-kinematics": [],
       "linnet": [
         "bincode",
         "serde"
@@ -338,6 +346,7 @@
     "feynkit-generator": {
       "feynkit-amplitude": [],
       "feynkit-graph": [],
+      "feynkit-kinematics": [],
       "feynkit-model": [],
       "idenso": [],
       "linnet": [
@@ -371,7 +380,8 @@
       "linnet": [],
       "spenso": [
         "shadowing"
-      ]
+      ],
+      "symbolica-notation": []
     },
     "feynkit-model": {
       "linnet": []
@@ -402,6 +412,7 @@
     },
     "feynkit-tensor": {
       "feynkit-graph": [],
+      "feynkit-kinematics": [],
       "idenso": [],
       "linnet": [],
       "spenso": [
@@ -443,6 +454,7 @@
     "gammaloop-integration-tests": {
       "feynkit-generator": [],
       "feynkit-graph": [],
+      "feynkit-kinematics": [],
       "feynkit-model": [],
       "gammaloop-api": [],
       "gammaloop-workspace-hack": [],
@@ -1450,6 +1462,7 @@
     ],
     "feynkit-amplitude": [
       "feynkit-graph",
+      "feynkit-kinematics",
       "feynkit-model",
       "idenso",
       "linnet",
@@ -1457,6 +1470,7 @@
     ],
     "feynkit-cff": [
       "feynkit-graph",
+      "feynkit-kinematics",
       "feynkit-model",
       "linnet",
       "spenso",
@@ -1466,6 +1480,7 @@
     "feynkit-generator": [
       "feynkit-amplitude",
       "feynkit-graph",
+      "feynkit-kinematics",
       "feynkit-model",
       "idenso",
       "linnet",
@@ -1484,7 +1499,8 @@
     ],
     "feynkit-kinematics": [
       "linnet",
-      "spenso"
+      "spenso",
+      "symbolica-notation"
     ],
     "feynkit-model": [
       "linnet"
@@ -1509,6 +1525,7 @@
     ],
     "feynkit-tensor": [
       "feynkit-graph",
+      "feynkit-kinematics",
       "feynkit-model",
       "idenso",
       "linnet",
@@ -1534,6 +1551,7 @@
     "gammaloop-integration-tests": [
       "feynkit-generator",
       "feynkit-graph",
+      "feynkit-kinematics",
       "feynkit-model",
       "gammaloop-api",
       "gammaloop-workspace-hack",
@@ -1720,6 +1738,7 @@
     },
     "feynkit-amplitude": {
       "feynkit-graph": [],
+      "feynkit-kinematics": [],
       "feynkit-model": [],
       "idenso": [],
       "linnet": [],
@@ -1729,6 +1748,7 @@
     },
     "feynkit-cff": {
       "feynkit-graph": [],
+      "feynkit-kinematics": [],
       "feynkit-model": [],
       "linnet": [
         "bincode",
@@ -1743,6 +1763,7 @@
     "feynkit-generator": {
       "feynkit-amplitude": [],
       "feynkit-graph": [],
+      "feynkit-kinematics": [],
       "feynkit-model": [],
       "idenso": [],
       "linnet": [
@@ -1776,7 +1797,8 @@
       "linnet": [],
       "spenso": [
         "shadowing"
-      ]
+      ],
+      "symbolica-notation": []
     },
     "feynkit-model": {
       "linnet": []
@@ -1807,6 +1829,7 @@
     },
     "feynkit-tensor": {
       "feynkit-graph": [],
+      "feynkit-kinematics": [],
       "feynkit-model": [],
       "idenso": [],
       "linnet": [],
@@ -1849,6 +1872,7 @@
     "gammaloop-integration-tests": {
       "feynkit-generator": [],
       "feynkit-graph": [],
+      "feynkit-kinematics": [],
       "feynkit-model": [],
       "gammaloop-api": [],
       "gammaloop-workspace-hack": [],

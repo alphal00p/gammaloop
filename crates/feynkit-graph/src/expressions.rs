@@ -5,6 +5,7 @@
 //! crown is selected, allowing dummy half-edges to be absent. An excluded region
 //! removes its edges and all vertices incident to that region.
 
+use feynkit_kinematics::symbols as kinematics_symbols;
 use linnet::half_edge::involution::{EdgeIndex, HedgePair};
 use linnet::half_edge::subgraph::subset::SubSet;
 use linnet::half_edge::subgraph::{ModifySubSet, SubGraphLike, SubSetLike, SubSetOps};
@@ -244,7 +245,7 @@ impl crate::FeynmanDiagram {
         dimension: Dimension,
     ) -> Result<Atom, crate::DiagramError> {
         let symbols = PropagatorSymbols {
-            momentum: crate::symbols::momentum(),
+            momentum: kinematics_symbols::momentum(),
             denominator: crate::symbols::denominator(),
         };
         self.graph.denominator_of(
@@ -281,7 +282,7 @@ impl crate::FeynmanDiagram {
                 vertex
                     .numerator
                     .expression()
-                    .all_dod(crate::symbols::momentum())?,
+                    .all_dod(kinematics_symbols::momentum())?,
             );
         }
         for (pair, edge_id, edge) in self.graph.iter_edges_of(subgraph) {
@@ -290,7 +291,7 @@ impl crate::FeynmanDiagram {
                     edge.data
                         .numerator
                         .expression()
-                        .edge_dod(crate::symbols::momentum(), edge_id.0)?,
+                        .edge_dod(kinematics_symbols::momentum(), edge_id.0)?,
                 ) - 2;
             }
         }

@@ -1,6 +1,7 @@
 use crate::generation::FACTOR_HEADS;
 #[cfg(test)]
 use crate::generation::cp_merge_diagnostic;
+use feynkit_kinematics::symbols as kinematics_symbols;
 #[cfg(test)]
 use serde_json::json;
 use std::collections::{BTreeMap, BTreeSet};
@@ -916,13 +917,9 @@ fn normalize_momentum_routing(
         .filter_map(|(slot, edge)| {
             external_connections.get(edge).map(|connection| {
                 Replacement::new(
-                    function!(feynkit_graph::symbols::external_momentum(), slot, args).to_pattern(),
-                    function!(
-                        feynkit_graph::symbols::external_momentum(),
-                        *connection,
-                        args
-                    )
-                    .to_pattern(),
+                    function!(kinematics_symbols::external_momentum(), slot, args).to_pattern(),
+                    function!(kinematics_symbols::external_momentum(), *connection, args)
+                        .to_pattern(),
                 )
             })
         })
@@ -1509,7 +1506,7 @@ fn tensor_sample_library(
     for loop_index in 0..diagram.loop_momentum_basis().loop_edges.len() {
         insert_sample_vector(
             &mut library,
-            feynkit_graph::symbols::loop_momentum(),
+            kinematics_symbols::loop_momentum(),
             Atom::num(loop_index),
             &format!("loop-momentum:{loop_index}"),
             false,
@@ -1535,7 +1532,7 @@ fn tensor_sample_library(
         if inserted_momenta.insert(external.connection) {
             insert_sample_vector(
                 &mut library,
-                feynkit_graph::symbols::external_momentum(),
+                kinematics_symbols::external_momentum(),
                 Atom::num(external.connection),
                 &format!("external-momentum:{}", external.connection),
                 false,
@@ -2080,8 +2077,8 @@ mod tests {
     use symbolica::atom::ZeroTestSettings;
 
     use feynkit_graph::{
-        DiagramCut, DiagramCutSide, DiagramEdge, DiagramEndpoint, DiagramHalfEdge, DiagramVertex,
-        ExternalState, VertexId, VertexSlot,
+        DiagramCut, DiagramCutSide, DiagramEdge, DiagramEndpoint, DiagramError, DiagramHalfEdge,
+        DiagramVertex, ExternalState, VertexId, VertexSlot,
     };
     use spenso::structure::representation::{Minkowski, RepName};
 
@@ -2497,7 +2494,7 @@ mod tests {
             if internal_edges_first { 2_i64 } else { 1_i64 },
         ));
         let index = Minkowski {}.new_rep(4).to_symbolic([endpoint]);
-        let numerator = FunctionBuilder::new(crate::momentum_symbol())
+        let numerator = FunctionBuilder::new(kinematics_symbols::momentum())
             .add_arg(loop_edge.0 as i64)
             .add_arg(index.clone())
             .finish();
@@ -5218,7 +5215,7 @@ mod tests {
             });
             let lorentz = Minkowski {}.new_rep(4).to_symbolic([index(labels[5])]);
             let momentum = |edge: i64| {
-                FunctionBuilder::new(crate::momentum_symbol())
+                FunctionBuilder::new(kinematics_symbols::momentum())
                     .add_arg(edge)
                     .add_arg(&lorentz)
                     .finish()
@@ -5405,7 +5402,7 @@ mod tests {
         // constructor before parsing. No indices, coefficients or tensor
         // attributes are inferred or changed by this fixture-only adaptation.
         let legacy_q = "gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:q}::Q";
-        let native_q = Atom::var(graph_api::momentum_symbol()).to_canonical_string();
+        let native_q = Atom::var(kinematics_symbols::momentum()).to_canonical_string();
         assert_eq!(
             native_q,
             "gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q"
@@ -5420,6 +5417,37 @@ mod tests {
                 .replace(legacy_edge, &native_edge)
         });
         let dots = native_dots.each_ref().map(String::as_str);
+        // This finite association is pinned for these two frozen inputs only.
+        // The production importer still rejects their historical Model identity.
+        let historical = "e845ddde3d54cde80542b9c73ca6392b518dcabe8c6b5a551343e5f933ac7f98";
+        let associated = "a9f6ae4fafba3163992d30b6fa9152860a351f0a97dbe1aeb74f499dc2d7df69";
+        let current = model.fingerprint().to_string();
+        assert_eq!(current, associated, "B2 Model association needs review");
+        assert!(matches!(
+            FeynmanDiagram::from_dot(Arc::clone(&model), dots[0]),
+            Err(DiagramError::DotModelFingerprintMismatch { serialized, actual })
+                if serialized == historical && actual.to_string() == current
+        ));
+        let historical_tag = format!("model_fingerprint=\"{historical}\"");
+        let associated_tag = format!("model_fingerprint=\"{associated}\"");
+        let associate_frozen = |dot: &str, target: &str| {
+            (target == associated
+                && dots.contains(&dot)
+                && dot.matches(&historical_tag).count() == 1)
+                .then(|| dot.replacen(&historical_tag, &associated_tag, 1))
+        };
+        assert!(associate_frozen(dots[0], historical).is_none());
+        let foreign = dots[0].replacen("interaction_id=136", "interaction_id=135", 1);
+        assert_ne!(foreign, dots[0]);
+        assert!(associate_frozen(&foreign, &current).is_none());
+        let missing = dots[0].replacen(&historical_tag, "model_fingerprint=\"foreign\"", 1);
+        assert!(associate_frozen(&missing, &current).is_none());
+        let duplicate = format!("{}\n{historical_tag}", dots[0]);
+        assert!(associate_frozen(&duplicate, &current).is_none());
+        let associated_dots = dots.map(|dot| {
+            associate_frozen(dot, &current).expect("verified frozen B2 input association")
+        });
+        let dots = associated_dots.each_ref().map(String::as_str);
         let diagrams = dots.map(|dot| FeynmanDiagram::from_dot(Arc::clone(&model), dot).unwrap());
         let originals = diagrams.each_ref().map(|diagram| {
             // These frozen sources have unit projectors and prefactors; assert

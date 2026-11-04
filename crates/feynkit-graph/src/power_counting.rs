@@ -55,10 +55,11 @@ impl<T: AtomCore> DOD for T {}
 #[cfg(test)]
 mod tests {
     use super::*;
+    use feynkit_kinematics::symbols as kinematics_symbols;
 
     #[test]
     fn test_dod() {
-        let momentum = crate::momentum_symbol();
+        let momentum = kinematics_symbols::momentum();
         let (e1, e2) = (1, 2);
         let q1 = function!(momentum, e1, Atom::Zero);
         let q2 = function!(momentum, e2, Atom::Zero);

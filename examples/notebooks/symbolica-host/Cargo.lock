@@ -1113,6 +1113,7 @@ name = "feynkit-amplitude"
 version = "0.1.0"
 dependencies = [
  "feynkit-graph",
+ "feynkit-kinematics",
  "feynkit-model",
  "idenso",
  "linnet",
@@ -1127,6 +1128,7 @@ version = "0.1.0"
 dependencies = [
  "bincode",
  "feynkit-graph",
+ "feynkit-kinematics",
  "linnet",
  "serde",
  "spenso",
@@ -1145,6 +1147,7 @@ dependencies = [
  "bincode-trait-derive",
  "feynkit-amplitude",
  "feynkit-graph",
+ "feynkit-kinematics",
  "feynkit-model",
  "idenso",
  "linnet",
@@ -1190,6 +1193,7 @@ dependencies = [
  "serde",
  "spenso",
  "symbolica",
+ "symbolica-notation",
  "thiserror 2.0.18",
 ]
 
@@ -1240,6 +1244,7 @@ name = "feynkit-tensor"
 version = "0.1.0"
 dependencies = [
  "feynkit-graph",
+ "feynkit-kinematics",
  "idenso",
  "linnet",
  "spenso",

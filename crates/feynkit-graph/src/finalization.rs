@@ -5,8 +5,9 @@ use super::{
     ExternalLeg, ExternalState, FeynmanDiagram, FeynmanDiagramBuilder, Flow, HedgeGraph,
     HedgeGraphBuilder, HedgePair, LazyLock, LoopMomentumBasis, Model, NodeIndex,
     NumeratorInterface, OnceCell, OnceLock, Orientation, PartialStructure, SuBitGraph,
-    SymbolicTensor, VertexId, is_unit, momentum_symbol, symbols,
+    SymbolicTensor, VertexId, is_unit, symbols,
 };
+use feynkit_kinematics::symbols as kinematics_symbols;
 use linnet::half_edge::EdgeAccessors;
 use linnet::half_edge::involution::Hedge;
 use linnet::half_edge::remap::HedgeRemap;
@@ -138,7 +139,7 @@ impl IndexOwners {
             (symbols::hedge_index(), IndexOwner::HalfEdge),
             (symbols::edge_index(), IndexOwner::Edge),
             (symbols::vertex_index(), IndexOwner::Vertex),
-            (momentum_symbol(), IndexOwner::Momentum),
+            (kinematics_symbols::momentum(), IndexOwner::Momentum),
             (symbols::u(), IndexOwner::ExternalState),
             (symbols::ubar(), IndexOwner::ExternalState),
             (symbols::v(), IndexOwner::ExternalState),
@@ -1577,8 +1578,8 @@ mod tests {
                 let final_label = function!(owner, final_index, 1);
                 let port = Minkowski {}.new_rep(4).to_symbolic([label.clone()]);
                 let contracted = NumeratorInterface::admit(
-                    function!(symbols::momentum(), 0, &port)
-                        * function!(symbols::momentum(), 0, &port),
+                    function!(kinematics_symbols::momentum(), 0, &port)
+                        * function!(kinematics_symbols::momentum(), 0, &port),
                     None,
                 )
                 .unwrap();
@@ -1624,7 +1625,7 @@ mod tests {
                 let probe = |label| {
                     NumeratorInterface::admit(
                         function!(
-                            symbols::momentum(),
+                            kinematics_symbols::momentum(),
                             1,
                             Minkowski {}.new_rep(4).to_symbolic([label])
                         ),

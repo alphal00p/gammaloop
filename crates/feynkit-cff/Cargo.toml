@@ -13,6 +13,7 @@ symbolica-notation = { workspace = true }
 three-dimensional-reps = { workspace = true }
 bincode = { workspace = true, features = ["serde"] }
 feynkit-graph = { version = "0.1.0", path = "../feynkit-graph", default-features = false }
+feynkit-kinematics = { version = "0.1.0", path = "../feynkit-kinematics", default-features = false }
 linnet = { workspace = true, features = ["bincode", "serde"] }
 serde = { workspace = true, features = ["derive"] }
 symbolica = { workspace = true, default-features = false }
@@ -26,5 +27,5 @@ serde_json = { workspace = true }
 
 [features]
 default = ["native"]
-native = ["feynkit-graph/native"]
-wasm = ["feynkit-graph/wasm"]
+native = ["feynkit-graph/native", "feynkit-kinematics/native"]
+wasm = ["feynkit-graph/wasm", "feynkit-kinematics/wasm"]

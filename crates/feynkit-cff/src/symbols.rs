@@ -1,5 +1,6 @@
 //! Canonical GammaLoop energy symbols, also used by standalone FeynKit.
 
+use feynkit_kinematics::symbols as kinematics_symbols;
 use spenso::network::tags::mathml;
 use std::sync::LazyLock;
 
@@ -129,7 +130,7 @@ pub fn energy_atom(edge: EdgeId) -> Atom {
 }
 pub fn external_energy_atom(edge: EdgeId) -> Atom {
     function!(
-        feynkit_graph::momentum_symbol(),
+        kinematics_symbols::momentum(),
         edge.index() as i64,
         function!(AIND_SYMBOLS.cind, 0)
     )

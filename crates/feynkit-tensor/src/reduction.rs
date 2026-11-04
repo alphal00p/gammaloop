@@ -31,6 +31,7 @@
 //! whichever side has fewer contraction orbits.  Only residual free-index
 //! output uses the explicitly budgeted labeled-pairing path.
 
+use feynkit_kinematics::symbols as kinematics_symbols;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use feynkit_graph::FeynmanDiagram;
@@ -382,7 +383,7 @@ impl TensorReducer {
     /// bare Symbolica symbol, so FeynKit's tensor tags remain initialization
     /// order independent.
     pub fn feynkit(dimension: Atom) -> Self {
-        Self::new(dimension).with_integrated_head(feynkit_graph::momentum_symbol())
+        Self::new(dimension).with_integrated_head(kinematics_symbols::momentum())
     }
 
     /// Select every vector with this Symbolica function head.
@@ -1195,7 +1196,7 @@ impl FeynmanDiagramTensorExt for FeynmanDiagram {
         let mut reducer = TensorReducer::new(dimension.clone());
         for (pair, edge, data) in self.underlying().iter_edges_of(subgraph) {
             if pair.is_paired() && data.data.external.is_none() && !data.data.is_dummy {
-                let vector = FunctionBuilder::new(feynkit_graph::momentum_symbol())
+                let vector = FunctionBuilder::new(kinematics_symbols::momentum())
                     .add_arg(edge.0)
                     .add_arg(&representation)
                     .finish();
@@ -2507,7 +2508,7 @@ mod tests {
     fn graph_compound_dimension_preserves_selected_edge_and_declared_ports() {
         use linnet::half_edge::involution::EdgeIndex;
         use linnet::half_edge::subgraph::ModifySubSet;
-        let momentum = feynkit_graph::momentum_symbol();
+        let momentum = kinematics_symbols::momentum();
         let [mu, nu] = [Atom::num(7), Atom::num(11)];
         let four = Atom::num(4);
         let numerator = indexed(momentum, 0, &four, &mu) * indexed(momentum, 0, &four, &nu)
@@ -2610,7 +2611,7 @@ mod tests {
             connection: 1,
         });
         builder.add_edge(right, None, outgoing).unwrap();
-        let momentum = feynkit_graph::momentum_symbol();
+        let momentum = kinematics_symbols::momentum();
         let d = Atom::var(symbol!("graph_reduce_D"));
         let mu = Atom::var(symbol!("graph_reduce_mu"));
         let nu = Atom::var(symbol!("graph_reduce_nu"));

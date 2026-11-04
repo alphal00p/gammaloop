@@ -1,4 +1,5 @@
 use feynkit_graph::symbols;
+use feynkit_kinematics::symbols as kinematics_symbols;
 use idenso::tensor::composition;
 use idenso::tensor::inference::InterfaceInference;
 use idenso::{CookMode, CookSettings};
@@ -71,7 +72,7 @@ use feynkit_amplitude::ColorRepresentation;
 use crate::options::ResolvedRestrictions;
 use crate::{
     GenerationType, Grouping, GroupingError, Naming, NumeratorOptions, ParticleSelector, Process,
-    ProcessError, Request, Run, Selection, SelectorError, Stage, momentum_symbol,
+    ProcessError, Request, Run, Selection, SelectorError, Stage,
 };
 pub use enumeration::{
     ExternalLabel, GenerationDiagramView, GenerationDressingView, GenerationSkeletonView,
@@ -374,26 +375,26 @@ impl<'legs> NumeratorInstantiation<'legs> {
             };
             let head = function.get_symbol();
             let mut arguments = function.iter();
-            let owner = if head == symbols::hedge_index() || head == symbols::momentum() {
-                let leg = usize::try_from(
-                    arguments
-                        .next()
-                        .expect("localized template momentum and half-edge heads carry a leg ID"),
-                )
-                .expect("localized template leg IDs are nonnegative integers");
-                if head == symbols::momentum() {
-                    self.legs[leg].edge
+            let owner =
+                if head == symbols::hedge_index() || head == kinematics_symbols::momentum() {
+                    let leg =
+                        usize::try_from(arguments.next().expect(
+                            "localized template momentum and half-edge heads carry a leg ID",
+                        ))
+                        .expect("localized template leg IDs are nonnegative integers");
+                    if head == kinematics_symbols::momentum() {
+                        self.legs[leg].edge
+                    } else {
+                        self.legs[leg].hedge
+                    }
+                } else if head == symbols::vertex_index() || head == symbols::edge_index() {
+                    arguments.next();
+                    match self.owner {
+                        NumeratorOwner::Vertex(owner) | NumeratorOwner::Edge(owner) => owner,
+                    }
                 } else {
-                    self.legs[leg].hedge
-                }
-            } else if head == symbols::vertex_index() || head == symbols::edge_index() {
-                arguments.next();
-                match self.owner {
-                    NumeratorOwner::Vertex(owner) | NumeratorOwner::Edge(owner) => owner,
-                }
-            } else {
-                return;
-            };
+                    return;
+                };
             match i64::try_from(owner) {
                 Ok(owner) => {
                     **out = FunctionBuilder::new(head)
@@ -701,7 +702,8 @@ impl<'legs> NumeratorInstantiation<'legs> {
             let AtomView::Fun(function) = term else {
                 return;
             };
-            if function.get_symbol() != momentum_symbol() || function.get_nargs() != 2 {
+            if function.get_symbol() != kinematics_symbols::momentum() || function.get_nargs() != 2
+            {
                 return;
             }
             let mut arguments = function.iter();
@@ -710,7 +712,7 @@ impl<'legs> NumeratorInstantiation<'legs> {
             if Self::is_representation(index, "mink") {
                 return;
             }
-            **out = FunctionBuilder::new(momentum_symbol())
+            **out = FunctionBuilder::new(kinematics_symbols::momentum())
                 .add_arg(edge)
                 .add_arg(self.minkowski(index.to_owned()))
                 .finish();
@@ -1111,10 +1113,10 @@ impl<'legs> NumeratorInstantiation<'legs> {
         let AtomView::Fun(function) = momentum else {
             return Err(self.invalid_tensor(momentum, "expected a localized momentum"));
         };
-        if function.get_symbol() != momentum_symbol() || function.get_nargs() != 1 {
+        if function.get_symbol() != kinematics_symbols::momentum() || function.get_nargs() != 1 {
             return Err(self.invalid_tensor(momentum, "expected a rank-one localized momentum"));
         }
-        Ok(FunctionBuilder::new(momentum_symbol())
+        Ok(FunctionBuilder::new(kinematics_symbols::momentum())
             .add_arg(function.iter().next().expect("the arity was checked"))
             .add_arg(index)
             .finish())
@@ -1356,7 +1358,7 @@ impl<'legs> NumeratorInstantiation<'legs> {
     ) -> Result<Atom, GenerationError> {
         let edge = i64::try_from(leg.edge)
             .map_err(|_| GenerationError::ArithmeticOverflow("a symbolic edge identifier"))?;
-        let mut momentum = FunctionBuilder::new(momentum_symbol()).add_arg(edge);
+        let mut momentum = FunctionBuilder::new(kinematics_symbols::momentum()).add_arg(edge);
         if let Some(index) = index {
             momentum = momentum.add_arg(index);
         }
@@ -1512,7 +1514,7 @@ impl NumeratorTemplate {
                     symbols::hedge_index(),
                     symbols::vertex_index(),
                     symbols::edge_index(),
-                    symbols::momentum(),
+                    kinematics_symbols::momentum(),
                     AIND_SYMBOLS.openind,
                 ]
                 .contains(&function.get_symbol());
@@ -1580,7 +1582,7 @@ impl NumeratorTemplate {
             label.visitor(&mut |node| {
                 // An opaque index depending on a momentum ID could itself
                 // alias when incident legs share an edge.
-                fixed_labels &= node.get_symbol() != Some(symbols::momentum());
+                fixed_labels &= node.get_symbol() != Some(kinematics_symbols::momentum());
                 fixed_labels
             });
         }
@@ -2310,7 +2312,7 @@ impl Generator {
         let hedge_head = feynkit_graph::symbols::hedge_index();
         let edge_head = feynkit_graph::symbols::edge_index();
         let carriers = [
-            momentum_symbol(),
+            kinematics_symbols::momentum(),
             feynkit_graph::symbols::u(),
             feynkit_graph::symbols::ubar(),
             feynkit_graph::symbols::v(),
@@ -7906,7 +7908,7 @@ mod tests {
                         _ => None,
                     }
                 } else if (head == feynkit_graph::symbols::edge_index()
-                    || head == momentum_symbol())
+                    || head == kinematics_symbols::momentum())
                     && owner == Some(0)
                 {
                     Some(actual_edge.0)

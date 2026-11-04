@@ -1,6 +1,7 @@
 //! Shared symbolic energy definitions and denominator inspection for CFF and LTD.
 pub(crate) mod integration;
 
+use feynkit_kinematics::symbols as kinematics_symbols;
 use std::collections::BTreeMap;
 
 use feynkit_cff::generalized::{LinearEnergyExpr, LinearSurfaceID, LinearSurfaceKind};
@@ -78,7 +79,7 @@ impl PyOnShellEnergy {
                     .map_err(error::model)?
                     .symbolic_mass(diagram.model());
                 let squared = (1..=3).fold(mass.pow(2), |sum, axis| {
-                    let component = feynkit_graph::symbols::momentum()
+                    let component = kinematics_symbols::momentum()
                         .call((edge_id, symbol!("spenso::cind").call(axis)));
                     sum + basis.route_expression(&component).pow(2)
                 });

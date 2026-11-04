@@ -1,5 +1,6 @@
 //! Independent diagrams obtained by opening a selected region's boundary.
 
+use feynkit_kinematics::symbols as kinematics_symbols;
 use idenso::tensor::SymbolicTensor;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -195,8 +196,10 @@ impl FeynmanDiagram {
                 } else if head == symbols::vertex_index() {
                     vertices.get(&owner).copied()
                 } else {
-                    if head == symbols::loop_momentum() || head == symbols::external_momentum() {
-                        let coordinates = if head == symbols::loop_momentum() {
+                    if head == kinematics_symbols::loop_momentum()
+                        || head == kinematics_symbols::external_momentum()
+                    {
+                        let coordinates = if head == kinematics_symbols::loop_momentum() {
                             &self.loop_momentum_basis.loop_edges
                         } else {
                             &self.loop_momentum_basis.external_edges
@@ -206,11 +209,11 @@ impl FeynmanDiagram {
                             return;
                         };
                         owner = edge.0;
-                        head = symbols::momentum();
+                        head = kinematics_symbols::momentum();
                     }
                     if ![
                         symbols::edge_index(),
-                        symbols::momentum(),
+                        kinematics_symbols::momentum(),
                         symbols::denominator(),
                         symbols::u(),
                         symbols::ubar(),
@@ -426,7 +429,7 @@ mod tests {
                 * function!(symbols::vertex_index(), 1, 2)
                 * function!(symbols::edge_index(), old_edge, 3)
                 * function!(
-                    symbols::loop_momentum(),
+                    kinematics_symbols::loop_momentum(),
                     0,
                     function!(spenso::structure::abstract_index::AIND_SYMBOLS.cind, 0)
                 ),
@@ -463,7 +466,7 @@ mod tests {
             * function!(symbols::vertex_index(), 0, 2)
             * function!(symbols::edge_index(), new_edge, 3)
             * function!(
-                symbols::momentum(),
+                kinematics_symbols::momentum(),
                 new_loop_edge,
                 function!(spenso::structure::abstract_index::AIND_SYMBOLS.cind, 0)
             );

@@ -17,8 +17,9 @@
 //! open, so it is not sampled here.
 
 use feynkit_generator::{Classes, GraphGroupingOptions, Grouping, Naming, NumeratorOptions, Run};
+use feynkit_graph::FeynmanDiagram;
 use feynkit_graph::symbols::vertex_index;
-use feynkit_graph::{FeynmanDiagram, momentum_symbol};
+use feynkit_kinematics::symbols as kinematics_symbols;
 use feynkit_model::Model;
 use serde_json::{Value, json};
 use spenso::structure::representation::{Minkowski, RepName};
@@ -39,7 +40,7 @@ fn dot(a: i64, b: i64, vertex: i64) -> Atom {
         .new_rep(4)
         .to_symbolic([vertex_index().call((vertex, 9))]);
     let q = |edge: i64| {
-        FunctionBuilder::new(momentum_symbol())
+        FunctionBuilder::new(kinematics_symbols::momentum())
             .add_arg(edge)
             .add_arg(mu.clone())
             .finish()

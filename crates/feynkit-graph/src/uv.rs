@@ -1,5 +1,6 @@
 //! Local massive UV Taylor expansion, before integration or forest subtraction.
 
+use feynkit_kinematics::symbols as kinematics_symbols;
 use std::collections::BTreeMap;
 
 use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike, SubSetOps};
@@ -56,7 +57,7 @@ impl FeynmanDiagram {
         }
         let scale = symbol!("feynkit_graph::uv_expansion_scale"; Scalar);
         let args = symbol!("feynkit_graph::uv_expansion_args___");
-        let loop_pattern = function!(symbols::loop_momentum(), args);
+        let loop_pattern = function!(kinematics_symbols::loop_momentum(), args);
         let rescale = |expression: &Atom| {
             basis
                 .route_expression(expression)
@@ -84,7 +85,7 @@ impl FeynmanDiagram {
                     .symbolic_mass(&self.model)
                     .replace(symbol!("UFO::ZERO"))
                     .with(Atom::Zero);
-                let edge_momentum = symbols::momentum().call(edge.0);
+                let edge_momentum = kinematics_symbols::momentum().call(edge.0);
                 let momentum = rescale(&edge_momentum);
                 let hard = (&momentum * scale).expand().replace(scale).with(Atom::Zero);
                 let quadratic =
@@ -120,15 +121,18 @@ impl FeynmanDiagram {
             .with(Atom::one());
         // Restore the edge coordinates expected by diagram tensor reduction.
         let replacements = [
-            (symbols::loop_momentum(), &basis.loop_edges),
-            (symbols::external_momentum(), &basis.external_edges),
+            (kinematics_symbols::loop_momentum(), &basis.loop_edges),
+            (
+                kinematics_symbols::external_momentum(),
+                &basis.external_edges,
+            ),
         ]
         .into_iter()
         .flat_map(|(head, edges)| {
             edges.iter().enumerate().map(move |(index, EdgeId(edge))| {
                 Replacement::new(
                     function!(head, index, args).to_pattern(),
-                    function!(symbols::momentum(), *edge, args).to_pattern(),
+                    function!(kinematics_symbols::momentum(), *edge, args).to_pattern(),
                 )
             })
         })

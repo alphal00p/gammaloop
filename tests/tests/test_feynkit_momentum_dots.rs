@@ -1,6 +1,7 @@
 use feynkit_generator::{
     Loops, Naming, NumeratorOptions, Orders, Process, Restrict, Run, TopologyRules,
 };
+use feynkit_kinematics::symbols as kinematics_symbols;
 use feynkit_model::Model;
 use idenso::tensor::ContractSettings;
 use symbolica::atom::AtomCore;
@@ -42,7 +43,7 @@ fn generated_qcd_numerator_contractions_convert_to_dots() {
         })
         .expect("the QCD self-energy sample must contain its gluon loop");
     let numerator = gluon_loop.numerator().unwrap().clone();
-    let momentum = feynkit_graph::momentum_symbol();
+    let momentum = kinematics_symbols::momentum();
     assert!(momentum.has_tag("spenso::tensor"));
     assert!(momentum.has_tag("spenso::rank1"));
 

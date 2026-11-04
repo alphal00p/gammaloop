@@ -2,7 +2,7 @@
 //!
 //! This crate owns only language- and application-independent physics types:
 //! three- and four-momenta, spatial rotations, Lorentz boosts, signed momentum
-//! combinations, scoped symbolic scalar products, Mandelstam kinematics,
+//! combinations, canonical momentum heads, scoped symbolic scalar products, Mandelstam kinematics,
 //! fixed scalar/vector/spinor external states, initial-state flux and symbolic
 //! two- and three-body phase-space densities,
 //! and generalized-kt jet clustering. Event records, particle
@@ -16,6 +16,7 @@ mod helicity;
 mod momentum;
 mod signature;
 mod symbolic;
+pub mod symbols;
 mod transform;
 mod wavefunction;
 mod weyl;

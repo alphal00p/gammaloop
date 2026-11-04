@@ -38,15 +38,12 @@ pub use power_counting::DOD;
 pub use scene::SceneOptions;
 
 // Symbolica does not permit adding tags after a bare symbol with the same name
-// has been registered. Claim momentum, index and Lorentz heads during global state
+// has been registered. Claim graph index, wavefunction and Lorentz heads during global state
 // initialization so parsing and generation always agree on their tensor types.
 // Use Spenso's canonical tag names and shared printer so FeynKit interoperates
 // with the Spenso instance embedded by the host.
 symbolica::initialize!(|| spenso::symbolica_init::in_symbolica_initializer(|| {
     let _ = Minkowski {}.to_symbolic([Atom::Zero]);
-    symbols::momentum();
-    symbols::loop_momentum();
-    symbols::external_momentum();
     symbols::edge_index();
     symbols::vertex_index();
     symbols::hedge_index();
@@ -59,10 +56,6 @@ symbolica::initialize!(|| spenso::symbolica_init::in_symbolica_initializer(|| {
     symbols::epsilon();
     symbols::epsilonbar();
 }));
-
-pub fn momentum_symbol() -> symbolica::atom::Symbol {
-    symbols::momentum()
-}
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
@@ -2918,6 +2911,7 @@ impl DiagramSourceMap {
 mod tests {
     use super::*;
     use feynkit_kinematics::SignOrZero;
+    use feynkit_kinematics::symbols as kinematics_symbols;
     use linnet::half_edge::remap::HedgeRemap;
     use linnet::half_edge::subgraph::ModifySubSet;
     use linnet::permutation::Permutation;
@@ -3289,8 +3283,8 @@ mod tests {
             index(hedge(0, DiagramEndpoint::Target)) * index(hedge(1, DiagramEndpoint::Source))
         );
         let (_, _, edge) = diagram.edges().nth(2).unwrap();
-        let momentum =
-            symbols::momentum().call((2, Minkowski {}.new_rep(4).to_symbolic([Atom::num(1)])));
+        let momentum = kinematics_symbols::momentum()
+            .call((2, Minkowski {}.new_rep(4).to_symbolic([Atom::num(1)])));
         assert_eq!(
             NumeratorInterface::export(&edge.numerator).0,
             momentum * Atom::num(hedge(2, DiagramEndpoint::Source) as i64)
@@ -3318,8 +3312,8 @@ mod tests {
         )
         .unwrap();
         let (_, vertex) = diagram.vertices().next().unwrap();
-        let momentum =
-            symbols::momentum().call((2, Minkowski {}.new_rep(4).to_symbolic([Atom::num(1)])));
+        let momentum = kinematics_symbols::momentum()
+            .call((2, Minkowski {}.new_rep(4).to_symbolic([Atom::num(1)])));
         assert_eq!(
             NumeratorInterface::export(&vertex.numerator).0,
             symbols::hedge_index().call((1,)) * momentum
@@ -3976,7 +3970,7 @@ mod tests {
     fn routing_collects_numeric_signs_without_distributing_products() {
         let diagram = one_loop();
         let basis = diagram.loop_momentum_basis();
-        let q = symbols::momentum().call(basis.tree_edges[0].0);
+        let q = kinematics_symbols::momentum().call(basis.tree_edges[0].0);
         let routed = basis.route_expression(&q);
         assert!(matches!(routed.as_view(), AtomView::Add(_)));
         let a = Atom::var(symbolica::symbol!("routing_test::a"));
@@ -4030,7 +4024,7 @@ mod tests {
         assert_eq!(basis.external_edges, vec![EdgeId(2)]);
         assert!(basis.dependent_externals.is_empty());
         let mass = Atom::var(symbolica::symbol!("feynkit_graph::test_mUV"));
-        let soft = symbolica::function!(symbols::momentum(), 2, 0);
+        let soft = symbolica::function!(kinematics_symbols::momentum(), 2, 0);
         let scalar = diagram
             .uv_expansion_of(&selected, &mass, 4, None, &BTreeMap::new())
             .unwrap();
@@ -4039,7 +4033,7 @@ mod tests {
             .unwrap();
         assert_eq!(tensor, &soft * scalar);
         let momenta = (0..3)
-            .map(|edge| basis.route_expression(&symbols::momentum().call(edge)))
+            .map(|edge| basis.route_expression(&kinematics_symbols::momentum().call(edge)))
             .fold(Atom::Zero, |a, b| a + b);
         assert_eq!(momenta.expand(), Atom::Zero);
     }
@@ -4050,7 +4044,7 @@ mod tests {
         let mass = Atom::var(symbolica::symbol!("feynkit_graph::test_mUV"));
         let selected = bubble.internal_subgraph();
         let loop_edge = bubble.momentum_basis_of(&selected).unwrap().loop_edges[0];
-        let q = symbols::momentum().call(loop_edge.0);
+        let q = kinematics_symbols::momentum().call(loop_edge.0);
         let q2 = Minkowski {}
             .new_rep(symbols::dimension())
             .inner_product(&q, &q);
@@ -4095,7 +4089,7 @@ mod tests {
         let bare = Atom::one() / bubble.denominator_of(&selected, &BTreeMap::new()).unwrap();
         let scale = symbolica::symbol!("feynkit_graph::uv_test_scale"; Scalar);
         let args = symbolica::symbol!("feynkit_graph::uv_test_args___");
-        let loop_momentum = symbolica::function!(symbols::loop_momentum(), args);
+        let loop_momentum = symbolica::function!(kinematics_symbols::loop_momentum(), args);
         let remainder = basis
             .route_expression(&explicit(bare - &expansion))
             .replace(loop_momentum.to_pattern())
@@ -4113,7 +4107,11 @@ mod tests {
         let mut expansion = explicit(expansion);
         for edge in basis.external_edges {
             expansion = expansion
-                .replace(symbolica::function!(symbols::momentum(), edge.0, args))
+                .replace(symbolica::function!(
+                    kinematics_symbols::momentum(),
+                    edge.0,
+                    args
+                ))
                 .with(Atom::Zero);
         }
         let vacuum = &q2 - mass.pow(2);
@@ -4132,10 +4130,10 @@ mod tests {
         let loop_edge = basis.loop_edges[0];
         let shifted_edge = basis.tree_edges[0];
         let external_edge = basis.external_edges[0];
-        let k = symbols::momentum().call(loop_edge.0);
-        let p = symbols::momentum().call(external_edge.0);
+        let k = kinematics_symbols::momentum().call(loop_edge.0);
+        let p = kinematics_symbols::momentum().call(external_edge.0);
         assert_eq!(
-            basis.route_expression(&symbols::momentum().call(shifted_edge.0)),
+            basis.route_expression(&kinematics_symbols::momentum().call(shifted_edge.0)),
             basis.route_expression(&(&p - &k))
         );
         let metric = Minkowski {}.new_rep(symbols::dimension());
@@ -4244,7 +4242,7 @@ mod tests {
         let mass = Atom::var(symbolica::symbol!("feynkit_graph::test_mUV"));
         let mass2 = mass.pow(2);
         let vacuum = expressions::PropagatorSymbols {
-            momentum: symbols::momentum(),
+            momentum: kinematics_symbols::momentum(),
             denominator: symbols::denominator(),
         }
         .denominator(EdgeIndex(loop_edge.0), &mass2, symbols::dimension());
@@ -4260,7 +4258,7 @@ mod tests {
         );
         let index = symbolica::symbol!("feynkit_graph::uv_test_mu");
         let tensor = symbolica::function!(
-            symbols::momentum(),
+            kinematics_symbols::momentum(),
             loop_edge.0,
             symbolica::function!(symbolica::symbol!("spenso::mink"), 4, index)
         );
@@ -4306,7 +4304,7 @@ mod tests {
                     let mut vertex = vertex.clone();
                     vertex.numerator = NumeratorInterface::admit(
                         symbolica::function!(
-                            momentum_symbol(),
+                            kinematics_symbols::momentum(),
                             internal_edges[0].0,
                             symbolica::function!(
                                 spenso::structure::abstract_index::AIND_SYMBOLS.cind,
@@ -4323,7 +4321,7 @@ mod tests {
                     if internal_edges.contains(&id) {
                         edge.numerator = NumeratorInterface::admit(
                             symbolica::function!(
-                                momentum_symbol(),
+                                kinematics_symbols::momentum(),
                                 id.0,
                                 symbolica::function!(
                                     spenso::structure::abstract_index::AIND_SYMBOLS.cind,
@@ -4388,8 +4386,8 @@ mod tests {
     #[test]
     fn denominator_uses_only_internal_edges_and_symbolic_masses() {
         let bubble = one_loop();
-        let q1 = symbolica::function!(momentum_symbol(), 1);
-        let q2 = symbolica::function!(momentum_symbol(), 2);
+        let q1 = symbolica::function!(kinematics_symbols::momentum(), 1);
+        let q2 = symbolica::function!(kinematics_symbols::momentum(), 2);
         let mass2 = Atom::var(symbolica::symbol!("UFO::M")).pow(2);
         let metric = Minkowski {}.new_rep(symbols::dimension());
         let expected = symbolica::function!(
@@ -5949,6 +5947,38 @@ mod tests {
             diagram.reverse_edge(EdgeId(1)),
             Err(DiagramError::UnknownEdge { edge: 1, edges: 1 })
         ));
+    }
+
+    #[test]
+    fn kinematics_heads_survive_routing_and_external_relabeling() {
+        let diagram = one_loop();
+        let swap = BTreeMap::from([(0, 1), (1, 0)]);
+        let relabeled = diagram.relabel_external_legs(&swap).unwrap();
+        for current in [&diagram, &relabeled] {
+            let basis = current.loop_momentum_basis();
+            let edge = basis.loop_edges[0];
+            let routed = basis.route_expression(&kinematics_symbols::momentum().call(edge.0));
+            assert_eq!(routed, kinematics_symbols::loop_momentum().call(0));
+            let external = basis
+                .external_edges
+                .iter()
+                .enumerate()
+                .find(|(_, edge)| !basis.dependent_externals.contains(edge))
+                .unwrap();
+            let routed = basis.route_expression(&kinematics_symbols::momentum().call(external.1.0));
+            assert_eq!(
+                routed,
+                kinematics_symbols::external_momentum().call(external.0)
+            );
+        }
+        assert_eq!(
+            relabeled
+                .relabel_external_legs(&swap)
+                .unwrap()
+                .to_json()
+                .unwrap(),
+            diagram.to_json().unwrap()
+        );
     }
 
     #[test]

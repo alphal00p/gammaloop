@@ -147,7 +147,8 @@ rather than through GammaLoop's application state:
     Python process initialization or global stream/logging
     configuration],
     [`feynkit-kinematics`], [Generic three-/four-momenta, boosts,
-    rotations, momentum signatures, and generalized-(k\_T) clustering],
+    rotations, momentum signatures, canonical Q/K/P momentum symbols and
+    their notation, and generalized-(k\_T) clustering],
     [`feynkit-graph`], [Linnet-backed finalized diagram IR, external/cut
     metadata, canonical symbolic numerators and factors, DOT/serde
     support, and selected loop-momentum routing],
@@ -174,11 +175,13 @@ rather than through GammaLoop's application state:
   , kind: table
   )
 
-Within this family, dependencies point from foundations to consumers:
+Selected dependencies within this family point from foundations to consumers.
+This sketch highlights shared owners and is not the complete Cargo graph:
 
 ```text
 feynkit-model ------> feynkit-graph, feynkit-generator, feynkit-ufo
-feynkit-kinematics -> feynkit-graph
+feynkit-kinematics -> feynkit-graph, feynkit-amplitude,
+                     feynkit-generator, feynkit-cff, feynkit-tensor
 feynkit-graph ------> feynkit-amplitude, feynkit-generator, feynkit-cff
 feynkit-amplitude -> feynkit-generator
 feynkit-graph,
@@ -327,12 +330,17 @@ signal exceptions cancel execution and propagate with their original identity. V
 requests return complete empty collections; cancellation produces explicitly incomplete
 reports. Runtime controls and Python callbacks are never serialized into process definitions.
 
-The graph crate registers momentum and index symbols before parsing or
-generation. Index identities retain their source, sink, edge, or vertex head;
-label metadata drives Spenso's shared plain, LaTeX, and Typst printers,
-including portable render trees. Momentum heads retain their algebraic names and
-carry `spenso::tensor-label:q`; the shared indexed-symbol printer and portable
-Typst head resolver display them as $q$ with the edge identifier and tensor index.
+`feynkit-kinematics::symbols` owns the canonical generic, loop and external
+momentum heads `Q`, `K` and `P`. Their `gammalooprs` namespace and tensor identity
+tags are preserved. The constructors register the display labels $q$, $k$ and
+$p$ through process-local `symbolica-notation`; these labels are not serialized
+symbol tags. The shared tensor printer uses this notation with the object label
+and tensor index.
+
+`feynkit-graph` retains index and wavefunction symbols, edge-momentum assignment
+and graph-specific routing. Index identities retain their source, sink, edge or
+vertex head; label metadata drives Spenso's shared plain, LaTeX and Typst printers,
+including portable render trees.
 
 FeynKit graph figures and GammaLoop drawings share the canonical particle-to-style
 mapping and Typst physics callbacks. Line patterns and labels derive from model

@@ -1,3 +1,4 @@
+use feynkit_kinematics::symbols as kinematics_symbols;
 use feynkit_kinematics::{
     Axis, Boost, ClusteringResult, FourMomentum, Helicity, Jet, JetAlgorithm, JetDefinition,
     Rotation, ThreeMomentum,
@@ -104,7 +105,7 @@ impl PyKinematics {
     /// >>> reference = hep.Kinematics.external_momentum()
     #[staticmethod]
     fn external_momentum() -> PythonExpression {
-        Atom::var(feynkit_graph::symbols::external_momentum()).into()
+        Atom::var(kinematics_symbols::external_momentum()).into()
     }
 
     /// Loop momentum family indexed by loop basis position.
@@ -115,7 +116,7 @@ impl PyKinematics {
     /// >>> reference = hep.Kinematics.loop_momentum()
     #[staticmethod]
     fn loop_momentum() -> PythonExpression {
-        Atom::var(feynkit_graph::symbols::loop_momentum()).into()
+        Atom::var(kinematics_symbols::loop_momentum()).into()
     }
 
     /// Start with no scalar-product assumptions in the chosen dimension.

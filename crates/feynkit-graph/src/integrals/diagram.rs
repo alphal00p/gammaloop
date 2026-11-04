@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 use feynkit_kinematics::Kinematics;
+use feynkit_kinematics::symbols as kinematics_symbols;
 use spenso::structure::representation::{Minkowski, RepName};
 use symbolica::atom::{Atom, AtomCore, AtomView};
 use symbolica::id::Pattern;
@@ -65,14 +66,14 @@ impl FeynmanDiagram {
             .collect();
         let basis = self.loop_momentum_basis();
         let loops = (0..basis.loop_edges.len())
-            .map(|i| symbols::loop_momentum().call(i))
+            .map(|i| kinematics_symbols::loop_momentum().call(i))
             .collect();
         let externals = basis
             .external_edges
             .iter()
             .enumerate()
             .filter(|(_, edge)| !basis.dependent_externals.contains(edge))
-            .map(|(i, _)| symbols::external_momentum().call(i))
+            .map(|(i, _)| kinematics_symbols::external_momentum().call(i))
             .collect();
         Ok(IntegralFamily::new(
             loops,
@@ -97,14 +98,14 @@ impl FeynmanDiagram {
             return Err(IntegralFamilyError::NoLoops.into());
         }
         let loops = (0..basis.loop_edges.len())
-            .map(|i| symbols::loop_momentum().call(i))
+            .map(|i| kinematics_symbols::loop_momentum().call(i))
             .collect::<Vec<_>>();
         let externals = basis
             .external_edges
             .iter()
             .enumerate()
             .filter(|(_, edge)| !basis.dependent_externals.contains(edge))
-            .map(|(i, _)| symbols::external_momentum().call(i))
+            .map(|(i, _)| kinematics_symbols::external_momentum().call(i))
             .collect::<Vec<_>>();
         let kin = kinematics
             .clone()
@@ -183,7 +184,7 @@ mod tests {
             entries.iter().map(|(id, _)| *id).collect::<Vec<_>>(),
             vec![EdgeId(2), EdgeId(3)]
         );
-        let loop_momentum = symbols::loop_momentum().call(0);
+        let loop_momentum = kinematics_symbols::loop_momentum().call(0);
         let mass = Atom::var(symbolica::symbol!("UFO::mass"));
         assert_eq!(
             entries[0].1,
@@ -252,7 +253,7 @@ mod tests {
         let mass = Atom::var(symbolica::symbol!("UFO::mass"));
         let expected = (0..2)
             .map(|index| {
-                let momentum = symbols::loop_momentum().call(index);
+                let momentum = kinematics_symbols::loop_momentum().call(index);
                 family
                     .kinematics()
                     .scalar_product(&momentum, &momentum)
@@ -279,7 +280,10 @@ mod tests {
         .unwrap();
         let invariant = symbolica::symbol!("feynkit_graph_test::invariant_");
         let kinematics = Kinematics::new()
-            .with_mass_squared(&symbols::external_momentum().call(1), Atom::var(invariant))
+            .with_mass_squared(
+                &kinematics_symbols::external_momentum().call(1),
+                Atom::var(invariant),
+            )
             .unwrap();
         let family = diagram.propagator_family(&kinematics).unwrap();
         assert_eq!(family.denominators().len(), 2);

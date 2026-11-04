@@ -205,3 +205,20 @@ invocation error. Four pre-existing graph-numerator-expansion parser helpers
 remain omitted. All correction findings have scoped branch approvals; this
 combined candidate still requires NEW independent Astra integration review.
 No source19 or later implementation is started, and WP3 remains incomplete.
+
+
+== Current original-pair source scope, 4 November 2026
+
+The current original-pair B2 regression additionally makes a guarded association
+between its two frozen GL028/GL034 test inputs and the pinned current Model.
+After constructor-owned Q/edge presentation normalization, it first verifies
+that production annotated-DOT import rejects the historical Model fingerprint.
+Only then does the test replace that one historical fingerprint marker in those
+two buffers. The production fingerprint guard, original DOT files and original
+mathematical/fallback assertions remain unchanged.
+
+The isolated association candidate `c4187b9aec78878790572682fb258036ade8b1a4`
+passed the original-pair selection and canonical Clippy. Those results belong to
+that candidate; the staged and combined PASS records above retain their original
+revision meanings. A later composition requires its own validation and receives
+no whole-a_ddx qualification from this source-scope refresh.

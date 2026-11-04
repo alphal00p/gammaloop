@@ -3,6 +3,7 @@
 //! External carriers are half-edge selections, independent of whether the full
 //! graph pairs them (sewn initial states) or leaves them dangling (amplitudes).
 
+use feynkit_kinematics::symbols as kinematics_symbols;
 use feynkit_kinematics::{MomentumSignature, SignOrZero, Signature};
 use itertools::Itertools;
 use linnet::half_edge::builder::HedgeGraphBuilder;
@@ -17,8 +18,9 @@ use linnet::half_edge::tree::SimpleTraversalTree;
 use linnet::half_edge::{HedgeGraph, HedgeGraphError, NoData};
 use linnet::union_find::UnionFind;
 use std::collections::{BTreeMap, BTreeSet};
-use symbolica::atom::{Atom, AtomOrView, FunctionBuilder, Symbol};
+use symbolica::atom::{Atom, AtomCore, AtomOrView, FunctionBuilder, Symbol};
 use symbolica::id::Replacement;
+use symbolica::{function, symbol};
 use thiserror::Error;
 
 mod cache;
@@ -1707,8 +1709,6 @@ impl crate::LoopMomentumBasis {
     /// Replace every edge momentum by the same loop and external coordinates
     /// used by numerical routing, retaining any tensor indices on that momentum.
     pub fn momentum_replacements(&self) -> Vec<Replacement> {
-        use symbolica::atom::AtomCore;
-        use symbolica::{function, symbol};
         let arguments = symbol!("feynkit_graph::routing_arguments___");
         let loop_edges = self
             .loop_edges
@@ -1727,19 +1727,19 @@ impl crate::LoopMomentumBasis {
                 let internal = MomentumBasis::signature_atom(
                     &signature.loops,
                     &loop_edges,
-                    crate::symbols::loop_momentum(),
+                    kinematics_symbols::loop_momentum(),
                     &args,
                     false,
                 );
                 let external = MomentumBasis::signature_atom(
                     &signature.external,
                     &external_edges,
-                    crate::symbols::external_momentum(),
+                    kinematics_symbols::external_momentum(),
                     &args,
                     false,
                 );
                 Replacement::new(
-                    function!(crate::symbols::momentum(), edge.0, arguments).to_pattern(),
+                    function!(kinematics_symbols::momentum(), edge.0, arguments).to_pattern(),
                     (internal + external).to_pattern(),
                 )
             })
@@ -1749,7 +1749,6 @@ impl crate::LoopMomentumBasis {
     /// Route momenta and collect numerical multiples of sums without
     /// distributing products of numerator factors.
     pub fn route_expression(&self, expression: &Atom) -> Atom {
-        use symbolica::atom::AtomCore;
         expression
             .replace_multiple(self.momentum_replacements())
             .expand_num()

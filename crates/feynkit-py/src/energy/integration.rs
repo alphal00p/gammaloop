@@ -5,6 +5,7 @@ use feynkit_cff::generalized::{
     graph_io::{EnergyEdgeIndexMap, ParsedGraphExternalEdge, ParsedGraphInternalEdge},
 };
 use feynkit_graph::FeynmanDiagram;
+use feynkit_kinematics::symbols as kinematics_symbols;
 use pyo3::{exceptions::PyValueError, prelude::*};
 use std::{collections::BTreeMap, sync::Arc};
 use symbolica::{
@@ -145,7 +146,7 @@ impl EnergyGraph {
     // bounding would erase the edge-local degree certificate used by the generator.
     pub fn numerator_bounds(&self, numerator: &Atom) -> PyResult<Vec<(usize, usize)>> {
         for coordinate in 0..self.parsed.loop_names.len() {
-            let energy = feynkit_graph::symbols::loop_momentum()
+            let energy = kinematics_symbols::loop_momentum()
                 .call((coordinate, symbolica::symbol!("spenso::cind").call(0)));
             if numerator.contains(energy.as_view()) {
                 return Err(PyValueError::new_err(

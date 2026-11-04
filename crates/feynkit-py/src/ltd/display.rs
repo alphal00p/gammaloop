@@ -18,7 +18,7 @@ use crate::display;
 use feynkit_cff::generalized::graph_io;
 use feynkit_cff::symbols as energy_symbols;
 use feynkit_graph::SceneOptions;
-use feynkit_graph::symbols;
+use feynkit_kinematics::symbols as kinematics_symbols;
 use spenso::network::tags::mathml;
 use spynso3::display::NOTEBOOK_STYLE;
 use symbolica::symbol;
@@ -38,7 +38,7 @@ impl PyLtdRepresentation {
         };
         let mut labels = Vec::new();
         for edge in indices.internal.values() {
-            let momentum = mathml(symbols::momentum().call(*edge))?;
+            let momentum = mathml(kinematics_symbols::momentum().call(*edge))?;
             let component = mathml(energy_symbols::external_energy_atom(EdgeIndex(*edge)))?;
             let energy = mathml(energy_symbols::on_shell_atom(EdgeIndex(*edge)))?;
             labels.push((format!("q-{edge}"), momentum.clone()));
@@ -56,7 +56,7 @@ impl PyLtdRepresentation {
         for edge in external_edges {
             let coordinate = edge.edge_id - indices.internal.len();
             let physical = indices.external[&coordinate];
-            let momentum = mathml(symbols::external_momentum().call(coordinate))?;
+            let momentum = mathml(kinematics_symbols::external_momentum().call(coordinate))?;
             labels.push((format!("p-{physical}"), momentum));
         }
         // Inert fragments share Symbolica/Spenso notation. The browser measures
@@ -149,13 +149,13 @@ impl PyLtdRepresentation {
         };
         let edge_momenta = edges
             .iter()
-            .map(|edge| Ok((*edge, momentum_html(symbols::momentum(), *edge)?)))
+            .map(|edge| Ok((*edge, momentum_html(kinematics_symbols::momentum(), *edge)?)))
             .collect::<PyResult<BTreeMap<_, _>>>()?;
         let loop_momenta = (0..self.parsed.loop_names.len())
-            .map(|id| momentum_html(symbols::loop_momentum(), id))
+            .map(|id| momentum_html(kinematics_symbols::loop_momentum(), id))
             .collect::<PyResult<Vec<_>>>()?;
         let external_momenta = (0..self.indices.external.len())
-            .map(|id| momentum_html(symbols::external_momentum(), id))
+            .map(|id| momentum_html(kinematics_symbols::external_momentum(), id))
             .collect::<PyResult<Vec<_>>>()?;
         Ok(json!({
             "name": self.diagram.name(), "loops": self.parsed.loop_names.len(),

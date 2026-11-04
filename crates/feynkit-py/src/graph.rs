@@ -1,3 +1,4 @@
+use feynkit_kinematics::symbols as kinematics_symbols;
 use linnet_render_py::PyDiagramView;
 use linnet_render_py::PyRenderSettings;
 use linnet_render_py::typst_export;
@@ -425,7 +426,7 @@ impl PyDiagramEdge {
             return Err(error::DiagramError::new_err("dummy edges have no momentum"));
         }
         let symbols = PropagatorSymbols {
-            momentum: feynkit_graph::symbols::momentum(),
+            momentum: kinematics_symbols::momentum(),
             denominator: feynkit_graph::symbols::denominator(),
         };
         Ok(symbols.energy(EdgeIndex(self.id)).into())
@@ -474,7 +475,7 @@ impl PyDiagramEdge {
             None => feynkit_graph::symbols::dimension().into(),
         };
         let symbols = PropagatorSymbols {
-            momentum: feynkit_graph::momentum_symbol(),
+            momentum: kinematics_symbols::momentum(),
             denominator: feynkit_graph::symbols::denominator(),
         };
         let momentum =
@@ -1488,13 +1489,13 @@ impl PyLoopMomentumBasis {
             (
                 "loop_momenta",
                 loop_momenta,
-                feynkit_graph::symbols::loop_momentum(),
+                kinematics_symbols::loop_momentum(),
                 (0..self.inner.loop_edges.len()).collect::<Vec<_>>(),
             ),
             (
                 "external_momenta",
                 external_momenta,
-                feynkit_graph::symbols::external_momentum(),
+                kinematics_symbols::external_momentum(),
                 self.inner
                     .external_edges
                     .iter()
@@ -5098,6 +5099,7 @@ mod tests {
 
     use super::{DiagramSelection, PyFeynmanDiagram, parse_symbolic_annotation};
     use feynkit_graph::FeynmanDiagram;
+    use feynkit_kinematics::symbols as kinematics_symbols;
     use feynkit_model::Model;
     use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
     use pyo3::types::PyDict;
@@ -5154,7 +5156,7 @@ mod tests {
     fn canonical_denominator_has_a_scalar_interface() {
         let denominator = feynkit_graph::symbols::denominator();
         assert!(denominator.is_scalar());
-        let momentum = FunctionBuilder::new(feynkit_graph::momentum_symbol())
+        let momentum = FunctionBuilder::new(kinematics_symbols::momentum())
             .add_arg(0)
             .finish();
         let atom = FunctionBuilder::new(denominator)

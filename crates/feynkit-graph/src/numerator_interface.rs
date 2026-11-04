@@ -408,6 +408,7 @@ impl<'de> Deserialize<'de> for NumeratorInterface {
 mod tests {
     use super::*;
     use crate::symbols;
+    use feynkit_kinematics::symbols as kinematics_symbols;
     use idenso::tensor::composition::TensorCompositionError;
     use spenso::structure::representation::{Euclidean, Minkowski, RepName};
     use spenso::tensor_symbol;
@@ -778,7 +779,7 @@ mod tests {
     #[test]
     fn anonymous_owner_transport_rejects_ambiguous_factor_reordering() {
         let rep = Minkowski {}.new_rep(4);
-        let momentum = symbols::momentum();
+        let momentum = kinematics_symbols::momentum();
         let source_momenta = [0, 1].map(|owner| function!(momentum, owner, rep.to_symbolic([])));
         let target_momenta = [3, 2].map(|owner| function!(momentum, owner, rep.to_symbolic([])));
         let source =

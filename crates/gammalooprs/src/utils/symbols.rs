@@ -1,3 +1,4 @@
+use feynkit_kinematics::symbols as kinematics_symbols;
 use std::{
     cell::RefCell,
     collections::{BTreeMap, HashMap},
@@ -800,7 +801,7 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
     dim: feynkit_graph::symbols::dimension(),
     v: feynkit_graph::symbols::v(),
     u: feynkit_graph::symbols::u(),
-    emr_mom: feynkit_graph::symbols::momentum(),
+    emr_mom: kinematics_symbols::momentum(),
     // The original index-free momentum is provenance metadata, not a tensor child.
     uv_momentum_provenance: symbol!("gammalooprs::uv::momentum_provenance"; Scalar),
     uv_class: symbol!("gammalooprs::uv::class"),
@@ -954,8 +955,8 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
             })
     ),
     energy: feynkit_cff::symbols::energy(),
-    external_mom: feynkit_graph::symbols::external_momentum(),
-    loop_mom: feynkit_graph::symbols::loop_momentum(),
+    external_mom: kinematics_symbols::external_momentum(),
+    loop_mom: kinematics_symbols::loop_momentum(),
     epsilon: feynkit_graph::symbols::epsilon(),
     pi: Symbol::PI,
     color_wrap: symbol!("color"),

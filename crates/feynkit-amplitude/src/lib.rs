@@ -14,6 +14,7 @@ pub use spin::{AxialReference, SpinSum, SpinSumError};
 
 use feynkit_graph::expressions::evaluate_overall_factor;
 use feynkit_graph::{DiagramError, ExternalState, FeynmanDiagram, symbols};
+use feynkit_kinematics::symbols as kinematics_symbols;
 use feynkit_model::{Model, ModelError, ParameterType, ParticleId};
 use idenso::dirac::GammaSimplifySettings;
 use idenso::representations::Bispinor;
@@ -189,7 +190,7 @@ pub struct AmplitudeLeg {
 impl AmplitudeLeg {
     /// Physical incoming/outgoing momentum, with the external leg's stable label.
     pub fn momentum(&self) -> Atom {
-        symbols::external_momentum().call(self.index)
+        kinematics_symbols::external_momentum().call(self.index)
     }
 
     /// Common bare label for this leg's spin and color ports.
@@ -382,9 +383,13 @@ impl Amplitude {
             let bra = expression.wrap_indices(Self::bra(), false)?;
             let mapped = bra
                 .expression()
-                .replace(function!(symbols::loop_momentum(), loop_index, args))
+                .replace(function!(
+                    kinematics_symbols::loop_momentum(),
+                    loop_index,
+                    args
+                ))
                 .with(function!(
-                    symbols::loop_momentum(),
+                    kinematics_symbols::loop_momentum(),
                     Self::bra().call(loop_index),
                     args
                 ));
@@ -455,7 +460,10 @@ impl Amplitude {
             ));
         }
         let args = symbol!("feynkit_amplitude::args___");
-        for head in [symbols::external_momentum(), symbols::loop_momentum()] {
+        for head in [
+            kinematics_symbols::external_momentum(),
+            kinematics_symbols::loop_momentum(),
+        ] {
             let vector = head.call(args);
             rules.push(Replacement::new(
                 conjugate.call(&vector).to_pattern(),
@@ -466,8 +474,14 @@ impl Amplitude {
         // families are real even though arbitrary user tensor products need not be.
         let left = symbol!("feynkit_amplitude::left___");
         let right = symbol!("feynkit_amplitude::right___");
-        for p in [symbols::external_momentum(), symbols::loop_momentum()] {
-            for q in [symbols::external_momentum(), symbols::loop_momentum()] {
+        for p in [
+            kinematics_symbols::external_momentum(),
+            kinematics_symbols::loop_momentum(),
+        ] {
+            for q in [
+                kinematics_symbols::external_momentum(),
+                kinematics_symbols::loop_momentum(),
+            ] {
                 let dot = function!(SPENSO_TAG.dot, p.call(left), q.call(right));
                 rules.push(Replacement::new(conjugate.call(&dot).to_pattern(), dot));
             }
@@ -564,8 +578,12 @@ impl Amplitude {
                 .and_then(|(_, _, e)| e.external.as_ref())
                 .expect("validated external basis edge");
             momentum_rules.push(Replacement::new(
-                function!(symbols::external_momentum(), position, args).to_pattern(),
-                function!(symbols::external_momentum(), external.index, args),
+                function!(kinematics_symbols::external_momentum(), position, args).to_pattern(),
+                function!(
+                    kinematics_symbols::external_momentum(),
+                    external.index,
+                    args
+                ),
             ));
         }
         let denominator = diagram.denominator_of_in_dimension(

@@ -1,3 +1,4 @@
+use feynkit_kinematics::symbols as kinematics_symbols;
 use pyo3::prelude::*;
 use symbolica::{api::python::PythonExpression, atom::Atom, symbol};
 
@@ -36,7 +37,7 @@ impl PySymbols {
     /// >>> reference = hep.Symbols.edge_momentum()
     #[staticmethod]
     fn edge_momentum() -> PythonExpression {
-        Atom::var(feynkit_graph::symbols::momentum()).into()
+        Atom::var(kinematics_symbols::momentum()).into()
     }
 
     /// Tagged propagator denominator head; its fourth argument is the inverse denominator.

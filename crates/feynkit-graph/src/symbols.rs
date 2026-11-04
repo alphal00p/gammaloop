@@ -17,7 +17,7 @@
 //! }
 //! ```
 use spenso::network::tags;
-use spenso::network::tags::{COMPONENT_LABELS_SUBSCRIPT_TAG, SPENSO_TAG};
+use spenso::network::tags::SPENSO_TAG;
 use spenso::shadowing::symbolica_utils::SpensoPrintSettings;
 use spenso::spenso_print_scripted_indexed;
 use symbolica_notation::{DisplayText, IndexDisplay, Notation, TextOverrides};
@@ -28,28 +28,6 @@ use std::sync::LazyLock;
 use symbolica::atom::{Atom, AtomView, Symbol};
 use symbolica::printer::PrintUserData;
 use symbolica::symbol;
-
-pub fn momentum() -> Symbol {
-    static SYMBOL: LazyLock<Symbol> = LazyLock::new(|| {
-        let symbol = symbol!(
-            "gammalooprs::Q",
-            print = tags::tensor_print,
-            tags = [
-                SPENSO_TAG.rank1.clone(),
-                SPENSO_TAG.tensor.clone(),
-                COMPONENT_LABELS_SUBSCRIPT_TAG.to_owned()
-            ]
-        );
-        Notation {
-            head: Some(IndexDisplay::symbol("q").expect("the canonical label is valid")),
-            ..Notation::default()
-        }
-        .register(symbol)
-        .expect("the canonical graph symbol has one notation");
-        symbol
-    });
-    *SymbolicaInitLazy::new(&SYMBOL)
-}
 
 pub fn edge_index() -> Symbol {
     static SYMBOL: LazyLock<Symbol> = LazyLock::new(|| {
@@ -160,50 +138,6 @@ pub fn denominator() -> Symbol {
 
 pub fn dimension() -> Symbol {
     static SYMBOL: LazyLock<Symbol> = LazyLock::new(|| symbol!("gammalooprs::dim"));
-    *SymbolicaInitLazy::new(&SYMBOL)
-}
-
-pub fn loop_momentum() -> Symbol {
-    static SYMBOL: LazyLock<Symbol> = LazyLock::new(|| {
-        let symbol = symbol!(
-            "gammalooprs::K",
-            print = tags::tensor_print,
-            tags = [
-                SPENSO_TAG.rank1.clone(),
-                SPENSO_TAG.tensor.clone(),
-                COMPONENT_LABELS_SUBSCRIPT_TAG.to_owned()
-            ]
-        );
-        Notation {
-            head: Some(IndexDisplay::symbol("k").expect("the canonical label is valid")),
-            ..Notation::default()
-        }
-        .register(symbol)
-        .expect("the canonical graph symbol has one notation");
-        symbol
-    });
-    *SymbolicaInitLazy::new(&SYMBOL)
-}
-
-pub fn external_momentum() -> Symbol {
-    static SYMBOL: LazyLock<Symbol> = LazyLock::new(|| {
-        let symbol = symbol!(
-            "gammalooprs::P",
-            print = tags::tensor_print,
-            tags = [
-                SPENSO_TAG.rank1.clone(),
-                SPENSO_TAG.tensor.clone(),
-                COMPONENT_LABELS_SUBSCRIPT_TAG.to_owned()
-            ]
-        );
-        Notation {
-            head: Some(IndexDisplay::symbol("p").expect("the canonical label is valid")),
-            ..Notation::default()
-        }
-        .register(symbol)
-        .expect("the canonical graph symbol has one notation");
-        symbol
-    });
     *SymbolicaInitLazy::new(&SYMBOL)
 }
 
@@ -325,7 +259,6 @@ pub fn epsilonbar() -> Symbol {
 mod tests {
     use super::*;
     use spenso::network::tags::mathml;
-    use spenso::structure::abstract_index::AIND_SYMBOLS;
     use symbolica::atom::AtomCore;
     use symbolica::parse;
     use symbolica::printer::{PrintMode, PrintOptions, PrintState};
@@ -399,47 +332,5 @@ mod tests {
         assert_eq!(original.as_view().get_data(), bytes);
         assert_eq!(reparsed.as_view().get_data(), bytes);
         assert_eq!(reparsed.to_canonical_string(), source);
-    }
-
-    #[test]
-    fn momentum_components_keep_object_indices() {
-        for (head, label) in [
-            (momentum(), "q"),
-            (loop_momentum(), "k"),
-            (external_momentum(), "p"),
-        ] {
-            assert_eq!(
-                head.call(27).printer(PrintOptions::typst()).to_string(),
-                format!("{label}_27")
-            );
-            let component = head.call_args([Atom::num(27), AIND_SYMBOLS.cind.call(0)]);
-            assert_eq!(
-                component.printer(PrintOptions::typst()).to_string(),
-                format!("attach(attach({label},b:(27)),t:0)")
-            );
-            let plain = PrintOptions {
-                custom_print_mode: SpensoPrintSettings::typst().into(),
-                ..Default::default()
-            };
-            assert_eq!(
-                component.printer(plain).to_string(),
-                format!("{label}₂₇^(0)")
-            );
-            let latex = PrintOptions {
-                custom_print_mode: SpensoPrintSettings::typst().into(),
-                ..PrintOptions::latex()
-            };
-            assert_eq!(
-                component.printer(latex).to_string(),
-                format!("{label}_{{27}}^{{0}}")
-            );
-            assert!(
-                component
-                    .pow(2)
-                    .printer(PrintOptions::typst())
-                    .to_string()
-                    .contains("lr((attach(")
-            );
-        }
     }
 }

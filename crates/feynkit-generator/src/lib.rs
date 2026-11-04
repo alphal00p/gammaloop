@@ -12,8 +12,6 @@ mod options;
 mod parser;
 mod process;
 
-use feynkit_graph::momentum_symbol;
-
 pub use generation::{
     BuiltDiagramSet, Counts, DiagramGroup, DiagramSet, ExternalLabel, ExternalNode,
     FeynmanDiagramRulesExt, GenerationDiagramView, GenerationDressingView, GenerationError,

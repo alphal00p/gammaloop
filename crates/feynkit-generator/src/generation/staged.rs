@@ -1423,9 +1423,9 @@ mod tests {
     use crate::generation::graph::{Endpoint, GeneratedGraph};
     use crate::{Cuts, GenerationControl, GraphGroupingOptions};
     use crate::{Loops, Orders, Process, Restrict, TopologyRules};
-    use feynkit_graph as graph_api;
     use feynkit_graph::symbols;
     use feynkit_graph::{DiagramEndpoint, DiagramId, ExternalState};
+    use feynkit_kinematics::symbols as kinematics_symbols;
     use serde_json::Value;
     use serde_json::json;
     use std::env;
@@ -2770,7 +2770,7 @@ mod tests {
         let composed = raw.frame_map(&second_graph);
         assert_eq!(composed.vertices, vec![0, 1]);
         assert_eq!(composed.edges, vec![(0, false), (1, true)]);
-        let q = graph_api::momentum_symbol().call(0);
+        let q = kinematics_symbols::momentum().call(0);
         let h = symbols::hedge_index().call(0);
         let v = symbols::vertex_index().call(0);
         let options = NumeratorOptions::default()
@@ -2779,11 +2779,11 @@ mod tests {
         let moved = first.options(&options).unwrap();
         assert_eq!(
             moved.prefactor,
-            -graph_api::momentum_symbol().call(1) * symbols::hedge_index().call(3)
+            -kinematics_symbols::momentum().call(1) * symbols::hedge_index().call(3)
         );
         assert_eq!(
             moved.projector.unwrap(),
-            -graph_api::momentum_symbol().call(1) * symbols::vertex_index().call(1)
+            -kinematics_symbols::momentum().call(1) * symbols::vertex_index().call(1)
         );
         assert_eq!(
             composed.options(&options).unwrap(),

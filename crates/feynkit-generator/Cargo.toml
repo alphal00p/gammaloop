@@ -13,6 +13,7 @@ feynkit-amplitude = { version = "0.1.0", path = "../feynkit-amplitude", default-
 bincode-trait-derive = { workspace = true }
 bincode = { workspace = true, features = ["serde"] }
 feynkit-graph = { version = "0.1.0", path = "../feynkit-graph", default-features = false }
+feynkit-kinematics = { version = "0.1.0", path = "../feynkit-kinematics", default-features = false }
 feynkit-model = { version = "0.1.0", path = "../feynkit-model" }
 idenso = { workspace = true }
 num-bigint = { version = "0.4.6", features = ["serde"] }
@@ -35,5 +36,5 @@ tempfile = "3.8"
 
 [features]
 default = ["native"]
-native = ["feynkit-amplitude/native", "feynkit-graph/native", "spenso-hep-lib/native"]
-wasm = ["feynkit-amplitude/wasm", "feynkit-graph/wasm", "spenso-hep-lib/wasm"]
+native = ["feynkit-amplitude/native", "feynkit-graph/native", "spenso-hep-lib/native", "feynkit-kinematics/native"]
+wasm = ["feynkit-amplitude/wasm", "feynkit-graph/wasm", "spenso-hep-lib/wasm", "feynkit-kinematics/wasm"]
