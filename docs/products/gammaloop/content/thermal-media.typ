@@ -230,6 +230,8 @@ $bold(k)_t=bold(c)+t(bold(k)-bold(c))$, whose Jacobian is $t^(3L)$. Cuts that cr
 overlap cancel locally only if their radial slopes $nabla eta dot (bold(y)-bold(c))$ share
 one sign; a slope near zero also makes the root ill conditioned. Each physical cut equation
 is oriented as emitted minus absorbed energies minus $E$, so a positive slope is causal.
+Every root enters with the absolute value of its slope, so a common negative slope also
+cancels an overlap.
 E-surfaces are convex and positive about any interior center. Thermal H-surfaces are not:
 at spacelike probe momenta the origin can cross two overlapping absorption cuts with opposite
 slopes, and even at rest the triangle-box-triangle has rotation-invariant H-surfaces that no
@@ -248,6 +250,7 @@ rays = 256
 slope = 0.05
 relevance = 1e-10
 seed = 1
+intersection_patches = false
 
 [lu_flow.fixed_centers]   # explicit centers override both modes
 GL0 = [[1, [0.5]], [3, [0.5]]]
@@ -258,23 +261,37 @@ generation loop edge, with one coefficient per physical external momentum. The s
 warm-up for the current external momenta. It samples every active cut surface with certified
 radial roots. It keeps points whose absorbed bath energies $E$ are not suppressed, by
 $e^(-beta E)$ without chemical potentials, by more than `relevance` relative to the most
-relevant sampled point of the graph. Each point, and every other cut surface whose equation
-is within `slope` times the energy scale of it, requires the center to lie in a causal
-half-space. The energy scale is $max(abs(p^0), abs(bold(p)))$ over the external momenta, and
-the slope threshold, `slope` times that scale, decays quadratically beyond it. A weighted
-linear program, refined by a pattern search on the covered Boltzmann weight, chooses the
-first center in the subspace invariant under rotations that fix the external momenta. For
-the convex relaxation this costs nothing: it is the origin at rest and lies on the probe axis
-otherwise. Further centers are added while each covers at least `min_patch_gain` of the
-Boltzmann-weighted points. They split the integrand with a smooth partition of unity in the
-physical point $bold(y)$. Every root of every cut in patch $k$ carries the same weight
-$w_k(bold(y))$, which vanishes wherever its center is not causal on a nearby cut surface.
-Where no patch is fully causal, the first patch keeps a small floor that keeps the partition
-exact; overlaps it crosses with opposite slopes stay uncancelled there. Raised residues
-differentiate the weights with the `h` profile. The warm-up log reports the centers, the
-causal, partial and uncovered shares of an independent verification sample, and the overlap
-points that keep opposite slopes. That count bounds the uncancelled overlaps from above: it
-includes points near a second surface and surface pairs that are not poles of any cut. A graph
+relevant sampled point of the graph. A point near a second cut surface, whose equation is
+within `slope` times the energy scale of it, is also grouped with the nearest such surface;
+up to 64 such points per pair are projected onto the intersection, and a random walk along it
+fills each pair to 64 points,
+since rays rarely pass close to an intersection of codimension two. An intersection point
+carries the more suppressed Boltzmann factor of its two cuts. These points enter the warm-up
+verification and, with `intersection_patches = true`, the patches. Each cut point requires the
+slopes of its own and every nearby cut surface to share one sign and to exceed the slope threshold. The
+energy scale is $max(abs(p^0), abs(bold(p)))$ over the external momenta, and the slope
+threshold, `slope` times that scale, decays quadratically beyond it. Weighted linear programs,
+started from a common causal and a common anticausal orientation, re-solved with the
+orientations their centers give each point, and refined by a pattern search on the covered
+Boltzmann weight, choose the first center in the subspace invariant under rotations that fix
+the external momenta. For the relaxation with one orientation this costs nothing: it is the
+origin at rest and lies on the probe axis otherwise. Further centers are added while each
+covers at least `min_patch_gain` of the Boltzmann-weighted cut points. With
+`intersection_patches = true`, further centers are then added while each covers that share
+of the intersections that the cut-point patches leave uncovered. They cancel more overlap poles, but every patch adds
+rays that cross cut surfaces with small slopes, so the default leaves them out. The patches
+split the integrand with a smooth partition of unity in the physical point $bold(y)$. Every
+root of every cut in patch $k$
+carries the same weight $w_k(bold(y))$, which vanishes wherever its center crosses nearby cut
+surfaces with opposite or small slopes. Where no patch is fully valid, a small floor goes to
+the patches whose slopes share one sign above an eighth of the threshold on the surfaces
+within a quarter of the band, and where none does, to the first patch; the partition stays
+exact, and overlaps that the floor patch crosses with
+opposite slopes stay uncancelled. Raised residues differentiate the weights with the `h`
+profile. The warm-up log reports the centers, the valid, partial and uncovered shares of an
+independent verification sample, and the share of the Boltzmann weight of its sampled
+intersections that patches with opposite slopes carry. That share bounds the uncancelled
+overlap weight from above, since not every intersection is a pole of a cut integrand. A graph
 without relevant cut points keeps the origin.
 
 Centers are binary64 points stored in the warm-up frame. Every precision embeds them exactly,
@@ -283,7 +300,7 @@ Configured or searched centers require `subtraction.disable_threshold_subtractio
 no zero-temperature Fermi-surface sectors; threshold counterterms and symbolic Fermi contact
 terms still assume the origin flow. The default origin flow preserves existing runs.
 
-A causal center removes uncancelled overlap poles but cannot remove folds: rays tangent to
+A center with one common slope sign removes uncancelled overlap poles but cannot remove folds: rays tangent to
 non-star-shaped H-surfaces give integrable but heavy-tailed weights, and raised cuts amplify
 small slopes. The
 #source-link("examples/cli/thermal_rates/lu_centers/report.typ", label: "LU center validation")
@@ -292,8 +309,8 @@ the massive scalar double triangle and triangle-box-triangle, at rest and at spa
 To check one overlap, run `approach` from a point on both cut surfaces along an axis that
 separates their roots, with `general.generate_events=true`. The per-cut event weights show
 whether the two $1\/t$ poles cancel. The card's `approach_dt_overlap` block is an example. Its
-`approach_tbt_rest1_pole` block shows an overlap where no patch is causal and the first patch
-keeps the pole. Within about $10^(-6)$ of an overlap, binary64 can lose the cancellation
+`approach_tbt_rest1_pole` block shows a rest-frame overlap where origin flow keeps the pole
+and the searched plan cancels it. Within about $10^(-6)$ of an overlap, binary64 can lose the cancellation
 between cuts without failing the stability check. Scans there should start the
 `stability.levels` at `Quad`.
 

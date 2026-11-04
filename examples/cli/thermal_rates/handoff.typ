@@ -151,16 +151,19 @@ cancellation (the card's `approach_dt_overlap` scan), and eight-seed frozen-grid
 scaling. Origin flow keeps an uncancelled overlap pole in the spacelike double triangle; the
 searched center removes it and restores $N^(-1\/2)$ scaling. An `approach` census of exact
 overlap points (report section "Approach census of overlaps") shows that only a minority of
-flagged surface pairs are poles at all. Every pole the searched plans leave uncancelled comes
-through the first patch's floor, where no patch passes its gate. At rest below the HH
-threshold, the two-patch triangle-box-triangle plan keeps the origin's pole on the manifold
-where cut 6 meets cuts 4 and 8, an index-1 tail of Cauchy scale about $4 times 10^(-7)$ (8%).
-At spacelike momentum genuine poles remain under every plan. The mild $(1.6,0)$ tail is a
-bounded $bold(k)_1 approx bold(k)_2$ peak of cancelling HH cuts, not an overlap. Open: a
-sign-symmetric gate, a floor that falls back to the most consistent patch, and a search that
-samples genuine pole intersections directly. Binary64 cancellation loss near overlaps passes
-the rotation check. Far radial roots on unbounded H-surface lobes miss the solver's absolute
-residual tolerance without a lower-precision root to compare with.
+flagged surface pairs are poles at all. Gates now accept slopes of either common sign, the
+floor falls back to patches whose slopes share one sign at an eighth of the threshold, and the search projects cut points onto
+surface intersections; opt-in `lu_flow.search.intersection_patches` also covers those
+intersections (report section "Sign-symmetric gates and intersection patches"). At rest
+below the HH threshold, where cut 6 meets cuts 4 and 8, the default two-patch
+triangle-box-triangle plan still keeps an index-1 tail of Cauchy scale about
+$2 times 10^(-7)$ (4%), half that of causal gates. Intersection patches cut it to 0.8% but
+add spikes of their own at two to three times the cost, so they stay opt-in. At spacelike momentum uncancelled same-sign cut pairs remain under every
+plan. The mild $(1.6,0)$ tail is a bounded $bold(k)_1 approx bold(k)_2$ peak of cancelling HH
+cuts, not an overlap. Open: a structured patch family for the collinear and
+rotation-invariant H-surfaces. Binary64 cancellation loss near overlaps passes the rotation
+check. Far radial roots on unbounded H-surface lobes miss the solver's absolute residual
+tolerance without a lower-precision root to compare with.
 
 === Inclusive vacuum-parity continuation: implementation and validation
 

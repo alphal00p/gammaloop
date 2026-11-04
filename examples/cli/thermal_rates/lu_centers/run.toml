@@ -132,12 +132,12 @@ commands = [
   "approach -p dt -i NLO -m --graph-id 0 -x 0.3212345456393843 0.0 1.0384639564382658 0.0 0.22539501322019227 0.41258280423477773 --approach-axis 0.3212345456393843,0.0,1.0384639564382658,0.0,0.0,0.0 --axis-label LL_root_shift --n-points 9 --skip-midpoint --logarithmic --min-abs-t 1e-10 --max-abs-t 1e-2 --n-cores $(cores:8) --output-results $(output:/tmp/thermal-lu-centers-approach.json)",
 ]
 
-# Triangle-box-triangle overlaps that the searched plans leave uncancelled; run after
-# `kinematics` with process=tbt. The midpoints lie on two cut surfaces (|eta| < 1e-14); the
-# axis is the gradient of the first surface projected orthogonally to the second. At rest
-# (energy=1.0, momentum=0.0, e_cm=1.0) cut 6 meets cuts 4 and 8 where neither patch is causal,
-# so patch 0 (the origin) carries the pole. Spacelike (energy=0.5, momentum=1.5,
-# e_cm=1.4142135623730951) cuts 6 and 8 meet where only the patch-0 floor survives.
+# Triangle-box-triangle overlaps where causal-only gates left a pole; run after `kinematics`
+# with process=tbt. The midpoints lie on two cut surfaces (|eta| < 1e-14); the axis is the
+# gradient of the first surface projected orthogonally to the second. At rest (energy=1.0,
+# momentum=0.0, e_cm=1.0) cut 6 meets cuts 4 and 8: origin flow keeps the pole, and the
+# searched plan cancels it. Spacelike (energy=0.5, momentum=1.5,
+# e_cm=1.4142135623730951) cuts 6 and 8 meet next to a third cut surface, and both cancel it.
 [[command_blocks]]
 name = "approach_tbt_rest1_pole"
 commands = [

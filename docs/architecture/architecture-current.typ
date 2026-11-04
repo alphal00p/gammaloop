@@ -775,16 +775,26 @@ $bold(c)+t(bold(k)-bold(c))$, whose Jacobian is $t^(3L)$. The default is the ori
 `fixed_centers` gives explicit per-graph centers from external-momentum coefficients, and
 `centers = "search"` prepares centers at warm-up for the current external kinematics
 (`integrands/process/cross_section/lu_flow.rs`). The search samples every active cut
-surface with certified radial roots, keeps thermally relevant points, and solves linear
-programs in the center for causal slopes `grad(eta).(y-c) > 0` (Clarabel), refined by a
-pattern search on the covered Boltzmann weight. The first center lies in the subspace
-invariant under rotations that fix the external momenta, so it is the origin at rest. Further
-centers form patches with a smooth partition of unity in the physical point $bold(y)$: every
-root of every cut in patch $k$ carries the same weight $w_k(bold(y))$, which vanishes where
-center $k$ is not causal on a nearby cut surface and enters raised residues through the `h`
-jets. Where no patch is fully causal, a small floor on the first patch keeps the partition
-exact. Without relevant cut points the search keeps the origin. Positive-E sampling hosts belong to the first
-patch. A plan stores binary64 centers in the warm-up frame; every precision embeds them
+surface with certified radial roots, keeps thermally relevant points, and projects points
+near a second cut surface onto their intersection with the nearest one, extended by a random
+walk along it. An intersection point carries the more suppressed Boltzmann factor of its two
+cuts; these points feed the warm-up verification and, with `intersection_patches`, the
+patches. Linear
+programs in the center (Clarabel) ask every nearby surface for slopes
+`grad(eta).(y-c)` of one common sign above a threshold; each root enters with `|d_t eta|`, so
+either sign cancels an overlap. They start from a common causal and a common anticausal
+orientation, are re-solved with the orientations their centers give each point, and are
+refined by a pattern search on the covered Boltzmann weight. The first center lies in the
+subspace invariant under rotations that fix the external momenta, so it is the origin at rest.
+Further centers cover the remaining cut points and, with `intersection_patches`, then the
+remaining intersections. They form
+patches with a smooth partition of unity in the physical point $bold(y)$: every root of every
+cut in patch $k$ carries the same weight $w_k(bold(y))$, which vanishes where center $k$
+crosses nearby cut surfaces with opposite or small slopes and enters raised residues through
+the `h` jets. Where no patch is fully valid, a small floor goes to the patches whose slopes
+share one sign above an eighth of the threshold on the surfaces within a quarter of the band,
+or else to the first patch, and keeps the partition exact. Without relevant cut points the search keeps the origin. Positive-E sampling
+hosts belong to the first patch. A plan stores binary64 centers in the warm-up frame; every precision embeds them
 exactly and stability rotations rotate them. Configured or searched centers require
 threshold subtraction disabled and no zero-temperature Fermi sectors, whose terms still
 use origin-centered derivatives. A center that restores cancellation at one overlap does not

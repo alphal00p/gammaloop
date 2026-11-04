@@ -234,6 +234,7 @@ mod tests {
                 search: LuCenterSearchSettings {
                     max_patches: 3,
                     slope: 0.1,
+                    intersection_patches: true,
                     ..Default::default()
                 },
             },
@@ -242,6 +243,7 @@ mod tests {
         let serialized = toml::to_string(&settings).unwrap();
         assert!(serialized.contains("centers = \"search\""));
         assert!(serialized.contains("fixed_centers"));
+        assert!(serialized.contains("intersection_patches = true"));
         assert!(!serialized.contains("relevance"));
         assert_eq!(
             toml::from_str::<RuntimeSettings>(&serialized).unwrap(),

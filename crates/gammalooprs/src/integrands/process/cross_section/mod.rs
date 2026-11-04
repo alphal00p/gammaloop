@@ -3424,7 +3424,8 @@ impl GraphTerm for CrossSectionGraphTerm {
                     _ => None,
                 };
                 // The smooth partition vanishes with all its derivatives where this
-                // patch's center is not causal on a nearby cut surface.
+                // patch's center crosses nearby cut surfaces with opposite or small slopes
+                // and the floor goes to other patches.
                 if patch_weight
                     .as_ref()
                     .is_some_and(|weight| *weight == momentum_sample.zero())

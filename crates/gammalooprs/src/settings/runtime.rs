@@ -2649,8 +2649,9 @@ pub enum LuFlowCenters {
     /// Dilate about the origin of the generation loop-momentum basis.
     #[default]
     Origin,
-    /// Search causally oriented centers at warm-up, splitting the integrand into smooth
-    /// patches when no single center orients every relevant cut surface.
+    /// Search centers at warm-up whose slopes on nearby cut surfaces share one sign,
+    /// splitting the integrand into smooth patches when no single center orients every
+    /// relevant cut surface.
     Search,
 }
 
@@ -2668,12 +2669,13 @@ pub struct LuFlowSettings {
     /// canonical external order: `c_i = sum_a coefficients[a] * p_a`.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub fixed_centers: BTreeMap<String, Vec<(usize, Vec<f64>)>>,
-    /// Controls of the causal-center search.
+    /// Controls of the center search.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub search: LuCenterSearchSettings,
 }
 
-/// Preparation-time search for causally oriented Local Unitarity centers.
+/// Preparation-time search for Local Unitarity centers that orient the relevant cut
+/// surfaces with one sign.
 #[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -2683,16 +2685,18 @@ pub struct LuCenterSearchSettings {
     #[serde(skip_serializing_if = "is_usize::<8>")]
     pub max_patches: usize,
     /// A further patch must newly cover at least this Boltzmann-weighted fraction of the
-    /// relevant sampled cut points.
+    /// relevant sampled cut points and, with `intersection_patches`, then of the sampled
+    /// surface intersections that the cut-point patches leave uncovered.
     #[serde(skip_serializing_if = "is_default_lu_center_patch_gain")]
     pub min_patch_gain: f64,
     /// Rays per base point and cut surface used to sample the cut surfaces.
     #[serde(skip_serializing_if = "is_usize::<256>")]
     pub rays: usize,
-    /// Required radial slope `grad(eta).(y - c)` of every covered cut point, in units of the
-    /// external energy scale `max(|p^0|, |p|)` over the external momenta (`e_cm` if they
-    /// vanish); it decays quadratically in `|y|` beyond that scale. Other cut surfaces
-    /// within this many energy units of a point constrain its centers too.
+    /// Required magnitude of the radial slope `grad(eta).(y - c)` of every covered cut point,
+    /// in units of the external energy scale `max(|p^0|, |p|)` over the external momenta
+    /// (`e_cm` if they vanish); it decays quadratically in `|y|` beyond that scale. Other cut
+    /// surfaces within this many energy units of a point constrain its centers too, and all
+    /// their slopes there must share one sign.
     #[serde(skip_serializing_if = "is_default_lu_center_slope")]
     pub slope: f64,
     /// Ignore cut points whose absorbed bath energies `E` suppress them, by `exp(-beta E)`
@@ -2703,6 +2707,11 @@ pub struct LuCenterSearchSettings {
     /// Seed of the sampled surface points.
     #[serde(skip_serializing_if = "is_u64::<1>")]
     pub seed: u64,
+    /// Add patches for the sampled intersections of nearby cut surfaces that the cut-point
+    /// patches leave uncovered. They cancel more overlap poles, but every further patch adds
+    /// rays that cross cut surfaces with small slopes.
+    #[serde(skip_serializing_if = "is_false")]
+    pub intersection_patches: bool,
 }
 
 const DEFAULT_LU_CENTER_SLOPE: f64 = 0.05;
@@ -2737,6 +2746,7 @@ impl Default for LuCenterSearchSettings {
             slope: DEFAULT_LU_CENTER_SLOPE,
             relevance: DEFAULT_LU_CENTER_RELEVANCE,
             seed: 1,
+            intersection_patches: false,
         }
     }
 }
