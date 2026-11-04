@@ -609,7 +609,9 @@ mod tests {
     }
 
     /// The exact selection equals the first minimal full key over all verified
-    /// witnesses, with the official five-loop package's real admission.
+    /// witnesses, with the official five-loop package's real admission, among
+    /// the witnesses whose whole support is remaining terminals when there are
+    /// any (terminal-first preference), otherwise among all of them.
     #[test]
     #[ignore = "loads the official five-loop saved application (minutes)"]
     fn screened_selection_matches_first_minimal_full_key_with_the_official_package() {
@@ -628,6 +630,15 @@ mod tests {
             "256/81*gs^10*(4-2*ε)*(dot(k(2),k(3))-dot(k(1),k(2)))*(dot(k(3),k(4))-dot(k(1),k(4)))*dot(k(4),k(4))*dot(k(5),k(5))+7/3*gs^10/(3-2*ε)*dot(k(1),k(2))^2*dot(k(3),k(5))^2",
         ] {
             let numerator = vk_parse!(numerator).unwrap();
+            let terminals = {
+                let application = engine.saved_application(&settings).unwrap();
+                let prepared = application.prepared.lock().unwrap();
+                prepared
+                    .remaining_terminals()
+                    .iter()
+                    .map(|terminal| terminal.integral().clone())
+                    .collect::<BTreeSet<IntegralKey>>()
+            };
             let mut compared = false;
             engine
                 .topologies
@@ -636,13 +647,19 @@ mod tests {
                     false,
                     Default::default(),
                     |witnesses| {
+                        // Terminal-only witnesses sort first (false < true).
                         let expected =
                             crate::topologies::first_minimal_acceptance(witnesses, |witness| {
-                                engine.rustred_matched_input_key(
-                                    &settings,
-                                    numerator.as_view(),
-                                    witness,
-                                )
+                                Ok(engine
+                                    .rustred_matched_input_key(
+                                        &settings,
+                                        numerator.as_view(),
+                                        witness,
+                                    )?
+                                    .map(|key| {
+                                        let outside = !key.iter().all(|(key, _)| terminals.contains(key));
+                                        (outside, key)
+                                    }))
                             })?;
                         let (selected, support) = engine.select_rustred_witness(
                             &settings,

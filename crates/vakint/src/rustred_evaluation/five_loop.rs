@@ -393,7 +393,15 @@ impl Vakint {
 
     /// Exact selection among verified witnesses, identical to taking the first
     /// witness (in enumeration order) with the minimal admitted key of
-    /// [`Self::rustred_matched_input_key`], or `None` if no witness is admitted.
+    /// [`Self::rustred_matched_input_key`], or `None` if no witness is admitted,
+    /// except that admitted witnesses whose whole exact support consists of
+    /// the package's remaining terminals (masters) are preferred over all
+    /// others. Every witness is the same integral; a terminal-only witness
+    /// needs no IBP walk, while the lexicographically minimal one can be a
+    /// symmetric image that the package reduces by a long walk (the 5L master
+    /// with powers [1,1,0,1,2,-1,1,1,1,1,0,1,0,0,1] was sent to its image
+    /// [-1,1,0,1,1,1,1,1,1,1,0,2,0,0,1]: an Ordered walk of 1.57 M keys and a
+    /// modular lift of hours, instead of the identity).
     ///
     /// The full key needs a weighted lowering over symbolic coefficients per
     /// witness. Instead, admission is first decided from the exact lowered key
@@ -518,6 +526,27 @@ impl Vakint {
                     .map(|(key, _)| key.clone())
                     .collect(),
             };
+        // Prefer witnesses whose exact support is all remaining terminals: the
+        // input is then already in masters and its reduction is the identity.
+        // An empty support (a vanishing integrand) qualifies vacuously and still
+        // precedes every nonempty key below.
+        let terminals = prepared
+            .remaining_terminals()
+            .iter()
+            .filter(|terminal| terminal.family_fingerprint() == prepared.family().fingerprint())
+            .map(|terminal| terminal.integral().clone())
+            .collect::<BTreeSet<IntegralKey>>();
+        let terminal_only = heads
+            .iter()
+            .filter(|(index, _)| {
+                support_of(*index, &keys)
+                    .iter()
+                    .all(|key| terminals.contains(key))
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        let preferred_terminals = !terminal_only.is_empty();
+        let heads = if preferred_terminals { terminal_only } else { heads };
         let Some(minimum) = heads.iter().map(|(_, head)| head).min().cloned() else {
             log::debug!(target: "vakint::five_loop_match", "phase=witness_selection admitted=0 screened={} full_keys={} elapsed_seconds={:.6}", witnesses.len() - unknown.len(), keys.len(), started.elapsed().as_secs_f64());
             return Ok((None, None));
@@ -562,7 +591,7 @@ impl Vakint {
             }
             best.expect("tied witnesses are nonempty").1
         };
-        log::debug!(target: "vakint::five_loop_match", "phase=witness_selection admitted={} tied={} selected={selected} screened={} full_keys={} elapsed_seconds={:.6}", heads.len(), tied.len(), witnesses.len() - unknown.len(), keys.len(), started.elapsed().as_secs_f64());
+        log::debug!(target: "vakint::five_loop_match", "phase=witness_selection admitted={} tied={} selected={selected} terminal_only={preferred_terminals} screened={} full_keys={} elapsed_seconds={:.6}", heads.len(), tied.len(), witnesses.len() - unknown.len(), keys.len(), started.elapsed().as_secs_f64());
         Ok((Some(selected), Some(support_of(selected, &keys))))
     }
 
