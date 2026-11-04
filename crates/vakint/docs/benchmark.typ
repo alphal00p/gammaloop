@@ -7,13 +7,14 @@
 #let draft = sys.inputs.at("draft", default: if results.at("draft", default: false) { "true" } else { "false" }) == "true"
 
 #let navy = rgb("173f65")
-#let ink = rgb("243343")
+#let ink = rgb("1d2733")
 #let pale = rgb("eaf2fa")
 #let muted = rgb("5b6876")
 #let sans = ("DejaVu Sans", "Roboto", "Noto Sans", "Libertinus Serif")
 #let ident = results.identity
 #let host = ident.at("host", default: (:))
 #let day = results.assembled_utc.slice(0, 10)
+#let timing = results.at("timing", default: (:))
 
 #set document(title: "Vakint reduction benchmark", author: "Valentin Hirschi")
 #set page(
@@ -28,7 +29,7 @@
 #set text(font: "Libertinus Serif", size: 10.4pt, fill: ink, lang: "en")
 #set par(justify: true, leading: 0.62em, spacing: 0.8em)
 #show heading.where(level: 1): it => block(above: 1.1em, below: 0.6em, text(14pt, weight: "bold", fill: navy, it.body))
-#show raw: set text(font: "DejaVu Sans Mono", size: 8pt)
+#show raw: set text(font: "DejaVu Sans Mono", size: 7.6pt)
 #show figure.caption: set text(size: 9pt)
 #show figure.where(kind: table): set figure.caption(position: top)
 #show figure.where(kind: table): set block(breakable: true)
@@ -36,6 +37,7 @@
 // ---------------------------------------------------------------- helpers --
 
 #let is-num(x) = type(x) == int or type(x) == float
+#let pl(n, one, many: none) = [#n #if n == 1 { one } else if many != none { many } else { one + "s" }]
 #let fixed(x, d) = {
   let s = str(calc.round(x, digits: d))
   if d == 0 { return s }
@@ -47,62 +49,75 @@
   let a = calc.abs(x)
   if a >= 100 { fixed(x, 0) } else if a >= 10 { fixed(x, 1) } else if a >= 1 { fixed(x, 2) } else { fixed(x, 3) }
 }
-// Seconds with an adapted unit.
+// Unit chosen for a duration, and the duration in that unit.
+#let unit-of(s) = if s < 1e-3 { (1e6, "µs") } else if s < 1 { (1e3, "ms") } else if s < 600 { (1, "s") } else if s < 36000 { (1 / 60, "min") } else { (1 / 3600, "h") }
 #let dur(s) = {
   if not is-num(s) { return [—] }
-  if s < 1e-3 { [#sig(s * 1e6)#h(1pt)µs] }
-  else if s < 1 { [#sig(s * 1e3)#h(1pt)ms] }
-  else if s < 600 { [#sig(s)#h(1pt)s] }
-  else if s < 36000 { [#sig(s / 60)#h(1pt)min] }
-  else { [#sig(s / 3600)#h(1pt)h] }
+  let (f, u) = unit-of(s)
+  [#sig(s * f)#h(1pt)#u]
 }
+// `x` in the unit of `ref` (the minimum next to its median), no unit.
+#let in-unit(x, ref) = { let (f, _) = unit-of(ref); sig(x * f) }
 #let ratio-text(r) = {
   if r < 0.095 { [×1/#str(int(calc.round(1 / r)))] }
   else if r < 10 { [×#fixed(r, if r < 1 { 2 } else { 1 })] }
   else { [×#str(int(calc.round(r)))] }
 }
-// Diverging palette, log2 scale: ×1/64 (deep green, RustRed faster) to ×64 (deep red).
+// Diverging palette of the ninjars benchmark, log2 scale: ×1/64 (green, RustRed faster) to ×64 (red).
 #let span2 = 6
-#let palette = gradient.linear(rgb("#3f9a4c"), rgb("#a6d79b"), rgb("#ffffff"), rgb("#f9c4a8"), rgb("#cf4f3d"))
+#let palette = gradient.linear(rgb("#5aae61"), rgb("#d9f0d3"), rgb("#ffffff"), rgb("#fddbc7"), rgb("#d6604d"))
 #let ratio-fill(r) = palette.sample(calc.clamp(0.5 + calc.log(r, base: 2) / (2 * span2), 0, 1) * 100%)
 #let na-fill = rgb("f3f5f8")
+// Secondary text: grey on light fills, ink on the saturated ends of the palette.
+#let lum(c) = { let (r, g, b, ..) = c.rgb().components(); 0.2126 * r / 100% + 0.7152 * g / 100% + 0.0722 * b / 100% }
+#let second-ink(fill) = if fill != none and lum(fill) < 0.72 { ink } else { luma(85) }
 
 #let cell-of(case, key) = case.cells.at(key, default: (status: "pending"))
 #let med(c) = if c.status == "ok" { c.median } else { none }
+// Small note next to a value: the minimum of the runs, or the run/core count when it is not a repetition.
+#let spread(c, fill) = {
+  if c.status != "ok" { return none }
+  let nc = c.at("n_cores", default: 1)
+  let note = if c.n == 1 {
+    if nc > 1 [#nc cores · 1 run] else [1 run]
+  } else {
+    let m = [(#in-unit(c.min, c.median))]
+    if nc > 1 [#m #nc cores] else { m }
+  }
+  text(size: 5.6pt, weight: "regular", fill: second-ink(fill))[#h(2pt)#note]
+}
+#let blank = text(size: 6.9pt)[#sym.space.nobreak]
 
-// One comparison cell: RustRed value in bold, the reference value and RustRed/reference below.
+// One comparison cell, three lines: RustRed median (min) / reference median (min) / ratio.
 // `show-alone`: when the reference does not apply, still show the RustRed value (else only "n/a").
 #let ibp-line(c) = {
   let m = c.at("reduction_math_median", default: none)
-  if c.status == "ok" and m != none { text(size: 6.1pt, fill: luma(105))[IBP #dur(m)] }
+  if c.status == "ok" and m != none [IBP #dur(m)]
 }
-#let cmp(rr, ref, label, show-alone: true, alone-note: [—], extra: none) = {
+#let cmp(rr, ref, label, show-alone: true, alone-note: [no FORM backend], extra: none, ref-spread: true) = {
   let a = med(rr)
   let b = med(ref)
   if ref.status == "n/a" and not show-alone {
     return table.cell(fill: na-fill, text(size: 7pt, fill: luma(150))[n/a])
   }
   let fill = if a != none and b != none { ratio-fill(a / b) } else if ref.status == "n/a" { na-fill } else { none }
+  let ink2 = second-ink(fill)
   table.cell(fill: fill, {
-    set par(leading: 0.32em, justify: false)
-    if a != none { text(weight: "bold", size: 8.4pt, dur(a)) } else {
+    set par(leading: 0.34em, justify: false)
+    if a != none { text(weight: "bold", size: 8.4pt, fill: ink, dur(a)); spread(rr, fill) } else {
       text(size: 7.6pt, fill: if rr.status == "failed" { rgb("b42318") } else { muted }, rr.status)
     }
     linebreak()
-    if ref.status == "n/a" { text(size: 6.4pt, fill: luma(130), alone-note) }
-    else if b != none {
-      text(size: 6.6pt, fill: luma(80))[#label #dur(b)]
-      if a != none { text(size: 6.9pt, weight: "semibold")[#h(3pt)#ratio-text(a / b)] }
-    } else { text(size: 6.6pt, fill: if ref.status == "failed" { rgb("b42318") } else { luma(110) })[#label #ref.status] }
-    if extra != none { linebreak(); extra }
+    if ref.status == "n/a" { text(size: 6.3pt, fill: luma(120), alone-note) }
+    else if b != none { text(size: 6.6pt, fill: ink2)[#label #dur(b)]; if ref-spread { spread(ref, fill) } }
+    else { text(size: 6.6pt, fill: if ref.status == "failed" { rgb("b42318") } else { luma(110) })[#label #ref.status] }
+    linebreak()
+    if a != none and b != none { text(size: 7pt, weight: "semibold", fill: ink, ratio-text(a / b)) } else { blank }
+    if extra != none { linebreak(); text(size: 6.1pt, fill: ink2, extra) }
   })
 }
 // Warm RustRed call against the cold one.
-#let warm(case) = {
-  let w = cell-of(case, "rustred.reduction.warm")
-  let c = cell-of(case, "rustred.reduction.cold")
-  cmp(w, c, "cold", extra: ibp-line(w))
-}
+#let warm(case) = cmp(cell-of(case, "rustred.reduction.warm"), cell-of(case, "rustred.reduction.cold"), "cold", ref-spread: false)
 #let agree(case) = {
   let a = case.agreement
   table.cell({
@@ -120,32 +135,34 @@
   let l = case.loops
   if l <= 3 { ("matad", "M") } else if l == 4 { ("fmft", "F") } else { ("matad", "M") }
 }
+#let cell-label = (
+  "rustred.reduction.cold": "reduction", "rustred.reduction.warm": "warm reduction",
+  "rustred.full.default": "full call", "matad.reduction": "MATAD reduction", "matad.full": "MATAD full call",
+  "alphaloop.reduction": "alphaLoop reduction", "alphaloop.full": "alphaLoop full call",
+  "fmft.reduction": "FMFT reduction", "fmft.full": "FMFT full call",
+)
+#let case-label(c) = [#c.loops\L #c.title#if c.at("input", default: (:)).at("master", default: none) != none [ (#c.input.master)], #c.subtitle]
 
 // ------------------------------------------------------------------ title --
 
+#let core-claim = if timing.at("all_single_core", default: true) [every timed process on one core] else [
+  one core per timed process except #pl(timing.multi_core_cells.len(), "marked cell")]
 #align(center)[
   #v(0.2em)
   #text(22pt, weight: "bold", fill: navy)[Vakint reduction benchmark]
   #v(-0.35em)
   #text(12pt, fill: luma(80))[RustRed versus alphaLoop, MATAD and FMFT · reduction graphs from one to five loops]
   #v(0.15em)
-  #text(9pt, fill: luma(110))[#day · #host.at("cpu_model", default: "") · every timed process on one core · vakint #ident.vakint_version]
+  #text(9pt, fill: luma(110))[#day · #host.at("cpu_model", default: "") · #core-claim · vakint #ident.vakint_version]
 ]
 
 #block(fill: pale, inset: 10pt, radius: 4pt, width: 100%)[
   #set text(9.3pt)
-  *Reading guide.* Each coloured cell shows the RustRed time in bold, the reference below it and the
-  ratio _RustRed ÷ reference_; green means RustRed is faster, red slower, white is parity
-  (log scale, ×1/64 to ×64). _Reduction_: the public `evaluate` call with masters retained
-  (RustRed `Retain`; FORM backends without master expansion or substitution). _Full_: the complete
-  public call with master values (RustRed `Numerical`; FORM backends with their defaults).
-  _Cold_: fresh process, no step cache; _warm_: the same call repeated in that process (Ordered step
-  cache populated); _full_ uses the engine defaults (shipped step caches on). Engine creation and data
-  loading are excluded. Median of fresh processes on one CPU, normalization $overline("MS")$, $L+1$
-  orders in $epsilon$. _IBP_: the part of a RustRed call spent in the reduction itself (rule
-  application and ordered scheduling); the rest is input processing, topology matching, numerator
-  lowering and output. _Agreement_: decimal digits shared by every backend's numerical result with
-  RustRed's at $m = mu = 1$, worst order.
+  *Reading guide.* Bold: RustRed median, then the reference's (M = MATAD, F = FMFT, αL = alphaLoop) and the ratio
+  RustRed ÷ reference; green = RustRed faster, red = slower (log scale); (·) = minimum over the runs.
+  _Reduction_: masters retained; _full_: complete call with master values; _warm_: the identical call repeated
+  in the process (step cache filled). Every timed call follows an untimed warm-up on another integral, so one-time
+  setup is excluded (listed below the table). _IBP_: RustRed's time in the reduction itself.
 ]
 
 = Timings <timings>
@@ -153,23 +170,25 @@
 #let header-style(body) = {
   set text(7.6pt, font: sans)
   set par(justify: false)
+  set table.cell(breakable: false)
   show table.cell.where(y: 0): set text(fill: white, weight: "bold")
   body
 }
 #let groups = results.groups
 #figure(
   kind: table,
-  caption: [*RustRed versus the FORM backends.* Reference letters: M = MATAD, F = FMFT, αL = alphaLoop.
-    MATAD and alphaLoop apply to one to three loops, FMFT to four loops; no FORM backend reaches five loops
-    (n/a). Masters: distinct masters in RustRed's retained result.],
+  caption: [*RustRed versus the FORM backends* (MATAD and alphaLoop: one to three loops; FMFT: four loops; none
+    reaches five). Terminals: distinct RustRed master symbols in the retained result (one to three loops: terminals of
+    the closed program, symmetric copies included). Agreement: digits shared with RustRed at $m = mu = 1$, worst
+    order of $epsilon$.],
   header-style(table(
-    columns: (1fr, 1.15cm, 2.3cm, 2.3cm, 2.3cm, 2.3cm, 2.3cm, 1.3cm),
+    columns: (1fr, 1.1cm, 2.32cm, 2.32cm, 2.32cm, 2.32cm, 2.32cm, 1.25cm),
     align: (x, y) => if x == 0 { left + horizon } else { center + horizon },
     inset: (x: 4pt, y: 4pt),
     stroke: (x, y) => (top: if y <= 1 { none } else { 0.4pt + luma(225) },
                        left: if x >= 2 and y > 0 { 0.4pt + luma(225) } else { none }),
     fill: (x, y) => if y == 0 { navy } else { none },
-    table.header([Test case], [Masters], [Reduction\ vs M / F], [Reduction\ vs αL], [Warm\ reduction],
+    table.header([Test case], [Termi-\ nals], [Reduction\ vs M / F], [Reduction\ vs αL], [Warm\ reduction],
       [Full call\ vs M / F], [Full call\ vs αL], [Agree-\ ment]),
     ..for g in groups {
       let rows = results.cases.filter(c => c.loops == g.loops)
@@ -203,16 +222,53 @@
   #box(width: 9cm)[×1/64 #h(1fr) ×1/8 #h(1fr) ×1 #h(1fr) ×8 #h(1fr) ×64]
 ]
 
-#let pend = results.cases.map(c => c.cells.pairs().filter(p => p.at(1).status == "pending").map(p => c.id + " " + p.at(0))).flatten()
-#let failed = results.cases.map(c => c.cells.pairs().filter(p => p.at(1).status == "failed").map(p => (c.id + " " + p.at(0), p.at(1).at("error", default: "")))).flatten().chunks(2)
+// One-time cost per process (excluded from every cell).
+#let once = results.at("one_time_per_process", default: (:))
+#if once.len() > 0 {
+  let loops = range(1, 6).map(str).filter(l => l in once)
+  let get(l, cell, key) = once.at(l).at(cell, default: (:)).at(key, default: none)
+  let loader(l) = { let v = get(l, "rustred.reduction.cold", "loader_median"); if v == none { get(l, "rustred.full.default", "loader_median") } else { v } }
+  let rows = (
+    ([RustRed data load], l => loader(l)),
+    ([RustRed full call], l => get(l, "rustred.full.default", "setup_median")),
+    ([MATAD full call], l => get(l, "matad.full", "setup_median")),
+    ([alphaLoop full call], l => get(l, "alphaloop.full", "setup_median")),
+    ([FMFT full call], l => get(l, "fmft.full", "setup_median")),
+  )
+  block(width: 100%, above: 0.9em)[
+    #set text(7.6pt, font: sans)
+    #text(weight: "bold", fill: navy)[Once per process] #text(fill: luma(90))[(excluded from every cell; first-call setup = first minus second call on the warm-up integral)]
+    #v(-0.3em)
+    #table(columns: (3.4cm,) + loops.map(_ => 1.6cm), stroke: none, inset: (x: 3pt, y: 2.2pt),
+      align: (x, y) => if x == 0 { left } else { right },
+      table.hline(stroke: 0.4pt + luma(200)),
+      [], ..loops.map(l => text(fill: navy, weight: "bold")[#l\L]),
+      table.hline(stroke: 0.4pt + luma(220)),
+      ..for (label, f) in rows {
+        let vals = loops.map(l => f(l))
+        if vals.all(v => v == none) { () } else {
+          (label, ..vals.map(v => if v == none { text(fill: luma(160))[—] } else { dur(calc.max(v, 0)) }))
+        }
+      },
+      table.hline(stroke: 0.4pt + luma(200)),
+    )
+  ]
+}
+
+#let failed = results.cases.map(c => c.cells.pairs().filter(p => p.at(1).status == "failed").map(p => (c, p.at(0), p.at(1)))).flatten().chunks(3)
+#let pending = results.cases.map(c => (c, c.cells.pairs().filter(p => p.at(1).status == "pending").map(p => cell-label.at(p.at(0), default: p.at(0))))).filter(p => p.at(1).len() > 0)
 #if failed.len() > 0 {
   block(fill: rgb("fdecea"), inset: 7pt, radius: 3pt, width: 100%, text(size: 7.6pt)[
-    *Failed calls* (the error is the backend's own):
-    #for (cell, err) in failed [#linebreak()#raw(cell): #text(fill: luma(70), err.slice(0, calc.min(err.len(), 240)))]])
+    *Failed calls.*
+    #for (c, k, v) in failed {
+      let s = v.at("error_summary", default: (text: v.at("error", default: "")))
+      [#linebreak()#case-label(c) · #cell-label.at(k, default: k) (#v.at("n", default: 1)/#v.at("n", default: 1) runs): #text(fill: luma(60), s.text)]
+    }])
 }
-#if pend.len() > 0 {
+#if pending.len() > 0 {
   block(fill: rgb("fff3df"), inset: 7pt, radius: 3pt, width: 100%, text(size: 7.6pt)[
-    *Not measured in this build* (#pend.len() cells): #pend.join(", ").])
+    *Not measured in this build* (#pl(pending.map(p => p.at(1).len()).sum(), "cell")):
+    #pending.map(((c, ks)) => [#case-label(c): #ks.join(", ")]).join("; ").])
 }
 
 #block(width: 100%, inset: (x: 0pt, y: 4pt))[
@@ -220,16 +276,25 @@
 #{
   set text(8pt)
   let src = ident.at("source", default: (:))
+  let dg = ident.at("data_git", default: none)
+  let cn = results.at("contention", default: (:))
+  let pct(x) = if x == none { [—] } else [#calc.round(x * 100, digits: 1)%]
+  let form = host.at("form_version", default: "—").replace(regex("\(\w{3}\s+\d+\s+\d{4},?\s*\)?"), "").replace(regex("\s+\(\s*\)"), "").trim()
   table(columns: (auto, 1fr), stroke: none, inset: (x: 3pt, y: 2pt),
-    [Data root], raw(str(ident.data_root)),
-    [Root manifest], raw(str(ident.at("root_manifest_sha256", default: "—"))),
-    [Vakint], [#ident.vakint_version · source #raw(str(src.at("commit", default: "—")).slice(0, 12)) #if src.at("dirty_files", default: 0) > 0 [(+#src.dirty_files modified files)]],
+    [Data], if dg != none and dg.at("commit", default: none) != none [
+      vakint-external-data #raw(str(dg.at("describe", default: dg.commit))) · commit #raw(dg.commit.slice(0, 12))#if dg.at("dirty_files", default: 0) > 0 [ (+#pl(dg.dirty_files, "modified file"))]
+    ] else [snapshot (no git checkout): #raw(str(ident.data_root))],
+    [Data manifest], raw(str(ident.at("root_manifest_sha256", default: "—"))),
+    [Vakint], [#ident.vakint_version · built from #raw(str(src.at("commit", default: "unknown")).slice(0, calc.min(12, str(src.at("commit", default: "unknown")).len())))#{
+      let d = src.at("dirty_paths", default: none)
+      if d == none [ (build identity unknown)] else if d > 0 [ (+#pl(d, "modified path"))] else [ (clean)]
+    } · profile #src.at("profile", default: "—")],
     [Harness binary], raw(str(ident.executable_sha256)),
-    [FORM], [#host.at("form_version", default: "—")],
-    [Host], [#host.at("cpu_model", default: "—"), #host.at("logical_cpus", default: "—") logical CPUs; timed on CPUs #host.at("cpus_used", default: ()).map(str).join(", ")],
-    [Contention], [#{let c = results.at("contention", default: (:)); [SMT sibling of the timed CPU busy #c.at("sibling_busy_median", default: "—") (median), #c.at("sibling_busy_max", default: "—") (max); 1-min load up to #c.at("load1_max", default: "—")]}],
+    [FORM], [#form],
+    [Host], [#host.at("cpu_model", default: "—"), #host.at("logical_cpus", default: "—") logical CPUs; timed on CPUs #host.at("cpus_used", default: ()).map(str).join(", ") (#pl(cn.at("l3_domains", default: 0), "L3 domain"))],
+    [Contention], [#cn.at("samples", default: "—") samples, #cn.at("contended_samples", default: "—") still contended after re-measurement · SMT sibling busy #pct(cn.at("sibling_busy_median", default: none)) median (max #pct(cn.at("sibling_busy_max", default: none))) · run-queue delay #pct(cn.at("run_delay_median", default: none)) (max #pct(cn.at("run_delay_max", default: none))) · other tasks on the timed CPU #pct(cn.at("foreign_cpu_median", default: none)) (max #pct(cn.at("foreign_cpu_max", default: none))) · 1-min load ≤ #cn.at("load1_max", default: "—")],
     [Regenerate], raw("crates/vakint/docs/benchmark/make-benchmark.sh DATA_ROOT BENCHMARK_BINARY OUT_DIR --install"),
-    [Built], [#results.assembled_utc #if draft [· *DRAFT*: not the published data]],
+    [Built], [#results.assembled_utc #if draft [· *DRAFT*: not the published data or build]],
   )
 }
 ]
@@ -238,50 +303,58 @@
 
 = Reduction graphs <graphs>
 
-Each node is a vacuum topology of the shipped reduction (graphs up to isomorphism), on the row of its
-number of lines; an edge joins a topology to the one obtained by removing a line (thicker: several lines
-give the same topology), following Fig. 21 of B. Ruijl's thesis (Leiden, 2017). Removing a line that is a loop of its
-own gives zero and is not drawn. One-vertex-reducible graphs (vacuum products) are merged by their
-factors. Colour gives the role in RustRed's reduction:
+Nodes are the vacuum topologies of the shipped reduction, on the row of their number of lines; an edge removes one
+line (thicker: several lines), as in Fig. 21 of B. Ruijl's thesis (Leiden, 2017). Products (one-vertex-reducible
+graphs) are merged by their factors; numbers count masters (one to three loops: RustRed terminals).
 
-#let teal(t) = color.mix((rgb("ffffff"), (1 - t) * 100%), (rgb("0f766e"), t * 100%))
-#let green(t) = color.mix((rgb("ffffff"), (1 - t) * 100%), (rgb("3f9a4c"), t * 100%))
-#let node-fill(n, maxm) = {
-  let m = n.masters.len()
-  if m == 0 { white } else {
-    let t = 0.28 + 0.62 * calc.log(1 + m) / calc.log(1 + maxm)
-    if n.product { green(t) } else { teal(t) }
-  }
+#let c-master = rgb("2a9d8f")
+#let c-master-line = rgb("1d6f65")
+#let c-product = rgb("f4a259")
+#let c-product-line = rgb("c9762a")
+#let c-away-line = luma(140)
+#let node-class(n) = if n.product { "product" } else if n.masters.len() > 0 { "master" } else { "away" }
+#let node-fill(n) = {
+  let k = node-class(n)
+  if k == "master" { c-master } else if k == "product" { if n.masters.len() > 0 { c-product } else { white } } else { white }
 }
-#let node-stroke(n) = if n.product { 0.7pt + rgb("3f9a4c") } else if n.masters.len() > 0 { 0.7pt + rgb("0f766e") } else { 0.7pt + luma(120) }
-#let legend = {
-  set text(7.6pt, font: sans, fill: luma(50))
-  let sw(f, s) = box(baseline: 1.5pt, ellipse(width: 10pt, height: 7pt, fill: f, stroke: s))
-  grid(columns: 3, column-gutter: 14pt, row-gutter: 5pt, align: left + horizon,
-    [#sw(teal(0.75), 0.7pt + rgb("0f766e")) topology with masters (darker: more)],
-    [#sw(green(0.75), 0.7pt + rgb("3f9a4c")) product of lower-loop masters],
-    [#sw(white, 0.7pt + luma(120)) reduced away by the rule tables],
-    [#sw(white, 0.7pt + rgb("3f9a4c")) product without own master],
-    [#box(baseline: 1.5pt, ellipse(width: 10pt, height: 7pt, fill: white, stroke: 1.6pt + navy)) owns a rule program],
-    [#box(baseline: 1.5pt, line(length: 14pt, stroke: 1.2pt + luma(140))) line removal (width: lines)],
-  )
+#let node-stroke(n) = {
+  let k = node-class(n)
+  0.7pt + if k == "master" { c-master-line } else if k == "product" { c-product-line } else { c-away-line }
 }
-#legend
+#let edge-paint(n, alpha) = {
+  let k = node-class(n)
+  let (r, g, b) = if k == "master" { (42, 157, 143) } else if k == "product" { (214, 130, 60) } else { (110, 120, 135) }
+  rgb(r, g, b, alpha)
+}
+#let legend(columns: 5) = {
+  set text(7.4pt, font: sans, fill: luma(50))
+  set par(justify: false)
+  let sw(f, s) = box(baseline: 1.5pt, ellipse(width: 11pt, height: 7.5pt, fill: f, stroke: s))
+  align(center, grid(columns: columns, column-gutter: 12pt, row-gutter: 5pt, align: left + horizon,
+    [#sw(c-master, 0.7pt + c-master-line) topology with masters],
+    [#sw(c-product, 0.7pt + c-product-line) product of lower-loop masters],
+    [#sw(white, 0.7pt + c-product-line) product, no master of its own],
+    [#sw(white, 0.7pt + c-away-line) reduced away],
+    [#box(baseline: 1.5pt, ellipse(width: 11pt, height: 7.5pt, fill: white, stroke: 1.6pt + navy)) owns a rule program],
+  ))
+}
+#legend(columns: 3)
 
 #let draw-graph(g, width: 17cm, row: 1.25cm, labels: true, rx: 0.62cm, ry: 0.27cm, label-size: 6.8pt, edge-alpha: 150, edge-base: 0.35pt, max-unit: 3.2cm) = {
   let nodes = g.nodes
   let layers = g.layers
   let span = calc.max(g.span, 1)
-  let maxm = calc.max(1, ..nodes.map(n => n.masters.len()))
   let maxb = calc.max(1, ..nodes.map(n => n.owner_bytes))
   let left = 1.3cm
   let w = width - left - 2 * rx
   let pos = (:)
+  let by-id = (:)
   let wide = nodes.any(n => n.x > 0)
   let unit = if wide { calc.min(w / span, max-unit) } else { 0cm }
   let offset = if wide { (w - unit * span) / 2 } else { w / 2 }
   for n in nodes {
     pos.insert(n.id, (left + rx + offset + n.x * unit, ry + 0.15cm + n.layer * row))
+    by-id.insert(n.id, n)
   }
   let height = (layers - 1) * row + 2 * ry + 0.5cm
   let lines-of = (:)
@@ -290,18 +363,24 @@ factors. Colour gives the role in RustRed's reduction:
     // layer labels
     for (layer, lines) in lines-of {
       place(dx: 0pt, dy: ry + 0.15cm + int(layer) * row - 0.18cm,
-        text(size: 6.8pt, font: sans, fill: luma(120))[#lines #if lines == 1 [line] else [lines]])
+        text(size: 6.8pt, font: sans, fill: luma(120))[#pl(lines, "line")])
     }
-    // edges first
-    for e in g.arrows {
+    // edges first, coloured by the class of the topology they reach; long edges fainter
+    let edges = g.arrows.map(e => {
+      let (x1, _) = pos.at(e.from)
+      let (x2, _) = pos.at(e.to)
+      (e, calc.abs((x2 - x1) / w))
+    }).sorted(key: p => -p.at(1))
+    for (e, d) in edges {
       let (x1, y1) = pos.at(e.from)
       let (x2, y2) = pos.at(e.to)
       let y1b = y1 + ry
       let y2t = y2 - ry
       let dy = (y2t - y1b) * 0.5
       let wdt = edge-base + 0.45pt * calc.log(e.lines, base: 2)
+      let a = int(edge-alpha * calc.clamp(1.15 - 2.2 * d, 0.3, 1))
       place(curve(
-        stroke: (paint: rgb(110, 122, 140, edge-alpha), thickness: wdt, cap: "round"),
+        stroke: (paint: edge-paint(by-id.at(e.to), a), thickness: wdt, cap: "round"),
         curve.move((x1, y1b)),
         curve.cubic((x1, y1b + dy), (x2, y2t - dy), (x2, y2t)),
       ))
@@ -314,40 +393,41 @@ factors. Colour gives the role in RustRed's reduction:
         place(dx: x - rx - ring, dy: y - ry - ring,
           ellipse(width: 2 * rx + 2 * ring, height: 2 * ry + 2 * ring, fill: navy, stroke: none))
       }
-      place(dx: x - rx, dy: y - ry, ellipse(width: 2 * rx, height: 2 * ry, fill: node-fill(n, maxm), stroke: node-stroke(n)))
+      let fill = node-fill(n)
+      place(dx: x - rx, dy: y - ry, ellipse(width: 2 * rx, height: 2 * ry, fill: fill, stroke: node-stroke(n)))
       let m = n.masters.len()
-      let dark = m > 0 and (0.28 + 0.62 * calc.log(1 + m) / calc.log(1 + maxm)) > 0.6
+      let on-dark = fill == c-master
       let label = if labels { n.name } else if m > 0 { str(m) } else { "" }
       place(dx: x - rx, dy: y - ry, box(width: 2 * rx, height: 2 * ry, align(center + horizon,
-        text(size: label-size, font: sans, fill: if dark { white } else { ink }, weight: if labels { "regular" } else { "bold" })[#label])))
+        text(size: label-size, font: sans, fill: if on-dark { white } else { ink }, weight: if labels { "regular" } else { "bold" })[#label])))
       if labels and m > 0 {
-        place(dx: x + rx * 0.62, dy: y - ry - 0.21cm, text(size: 5.8pt, font: sans, fill: rgb("0f766e"), weight: "bold")[#m])
+        place(dx: x + rx * 0.62, dy: y - ry - 0.22cm, text(size: 6pt, font: sans, weight: "bold",
+          fill: if n.product { c-product-line } else { c-master-line })[#m])
       }
     }
   })
 }
 
 #let gstats(L) = {
-  let g = graphs.loops.at(str(L))
-  let s = g.stats
-  [#s.topologies topologies (#s.irreducible irreducible, #s.products products), #s.removable_lines removable lines
-   in #s.transitions edges, #s.masters masters on #s.master_topologies topologies]
+  let s = graphs.loops.at(str(L)).stats
+  let what = if L <= 3 { "terminal" } else { "master" }
+  [#pl(s.topologies, "topology", many: "topologies") · #pl(s.transitions, "edge") · #pl(s.masters, what)]
 }
 #let fig-graph(L, body, cap) = figure(body, caption: [*#(L)-loop reduction graph.* #cap #gstats(L).], kind: image)
 
 #grid(columns: (1fr, 1fr), column-gutter: 8mm,
   fig-graph(1, draw-graph(graphs.loops.at("1"), width: 8.2cm, row: 1cm),
-    [The tadpole T1 carries the one-loop master; dots and numerators reduce inside it.]),
+    [T1 carries the one-loop master; dots and numerators reduce inside it.]),
   fig-graph(2, draw-graph(graphs.loops.at("2"), width: 8.2cm, row: 1.1cm),
-    [Removing any of the three sunset lines gives the product T1².]),
+    [Removing any sunset line gives T1².]),
 )
-#fig-graph(3, draw-graph(graphs.loops.at("3"), width: 17cm, row: 1.1cm),
-  [MATAD names; small numbers count the RustRed terminals of a topology (symmetric sectors stay separate terminals of the closed three-loop program).])
-#fig-graph(4, draw-graph(graphs.loops.at("4"), width: 17cm, row: 1.15cm, rx: 0.7cm),
-  [Rings: the four FMFT family programs H, X, BMW, FG; irreducible topologies are named by their FMFT master PR$k$.])
+#fig-graph(3, draw-graph(graphs.loops.at("3"), width: 17cm, row: 1.35cm, rx: 0.7cm, ry: 0.3cm, label-size: 7.2pt),
+  [MATAD names; symmetric sectors are separate terminals of the closed program.])
+#fig-graph(4, draw-graph(graphs.loops.at("4"), width: 17.8cm, row: 2.1cm, rx: 0.82cm, ry: 0.34cm, label-size: 7.4pt),
+  [Rings: the FMFT family programs H, X, BMW, FG; irreducible topologies named by their FMFT master PR$k$.])
 
 #page(flipped: true, margin: (x: 12mm, y: 12mm))[
-  #fig-graph(5, draw-graph(graphs.loops.at("5"), width: 27cm, row: 1.95cm, labels: false, rx: 0.36cm, ry: 0.27cm, label-size: 6.6pt, edge-alpha: 105, edge-base: 0.25pt),
-    [Numbers: masters of the shipped basis in a topology. Rings: topologies holding the #graphs.loops.at("5").stats.owner_programs owner sectors of the saved application (ring width grows with the size of their rule tables).])
-  #legend
+  #fig-graph(5, draw-graph(graphs.loops.at("5"), width: 27cm, row: 2.15cm, labels: false, rx: 0.36cm, ry: 0.27cm, label-size: 6.6pt, edge-alpha: 120, edge-base: 0.25pt),
+    [Rings: the #graphs.loops.at("5").stats.owner_programs owner sectors of the saved application (width grows with their rule tables).])
+  #legend()
 ]

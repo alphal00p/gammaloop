@@ -433,6 +433,24 @@ def agreement(records):
     return result
 
 
+def summarize_error(tail):
+    """Short, attributed form of a failed call's error (who rejected what), for the report."""
+    import re
+    lines = [l for l in (tail or "").splitlines() if l.strip()]
+    last = lines[-1] if lines else "no output"
+    m = re.search(r"NumericalPrecision\(\"coefficient multiplying (.*?): numerical precision: (real|imaginary) component has no "
+                  r"reliable significant decimal digit; midpoint ([-+0-9.eE]+), absolute uncertainty ([-+0-9.eE]+)", last)
+    if m:
+        coeff, comp, mid, err = m.groups()
+        g = lambda x: f"{float(x):.1e}".replace("-", "−")
+        zero = abs(float(mid)) <= float(err)
+        return {"source": "vakint precision guard",
+                "text": f"vakint's precision guard rejects the backend's result: the {comp} part of the coefficient of "
+                        f"{coeff} is {g(mid)} ± {g(err)}" + (" (consistent with zero, no reliable digit)" if zero else
+                                                              " (no reliable digit)")}
+    return {"source": "backend", "text": last[:240]}
+
+
 def assemble(args, cases_doc, out, identity, pipeline):
     cases = []
     stale_total = 0
@@ -488,7 +506,8 @@ def assemble(args, cases_doc, out, identity, pipeline):
             elif bad:
                 tail = bad[-1].get("error_tail", "")
                 lines = [l for l in tail.splitlines() if l.strip()]
-                c = {"status": "failed", "error": lines[-1][:300] if lines else "no output", "n": len(bad)}
+                c = {"status": "failed", "error": lines[-1][:300] if lines else "no output", "n": len(bad),
+                     "error_summary": summarize_error(tail)}
             elif case.get("heavy") and args.skip_heavy:
                 c = {"status": "pending", "reason": "heavy cell, measured in its own run"}
             else:
@@ -577,7 +596,7 @@ def host_info(cpus, form):
         fv = subprocess.run([form, "-v"], capture_output=True, text=True, timeout=60).stdout.strip().splitlines()[0]
         # drop the build date ("FORM 5.0.0 (Jan  1 1980, v5.0.0) 64-bits": Nix epoch artefact)
         import re
-        fv = re.sub(r"\((?:[A-Z][a-z]{2}\s+\d+\s+\d{4}),\s*", "(", fv)
+        fv = re.sub(r"\s*\(\s*\)", "", re.sub(r"[A-Z][a-z]{2}\s+\d{1,2}\s+\d{4},?\s*", "", fv))
     except Exception as e:  # FORM is optional for RustRed-only runs
         fv = f"unavailable: {e}"
     return {"cpu_model": model, "logical_cpus": os.cpu_count(), "cpus_used": cpus,
