@@ -513,7 +513,8 @@ fn measure(args: &Args) -> Result<()> {
         if second.0 != first {
             return Err("the warm call returned a different expression".into());
         }
-        (second, usage_delta(&before, &after, second.1))
+        let delta = usage_delta(&before, &after, second.1);
+        (second, delta)
     } else {
         let before = usage();
         let only = call(&engine, &input)?;

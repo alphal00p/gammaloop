@@ -4,16 +4,24 @@
 usage: run_benchmarks.py --binary BIN --data-root ROOT --out-dir OUT [--cases cases.json]
                          [--only ID,...] [--skip-heavy | --heavy-only] [--repetitions N]
                          [--heavy-repetitions N] [--cpus LIST] [--form PATH] [--assemble-only]
-                         [--heavy-n-cores N] [--draft]
+                         [--heavy-n-cores N] [--heavy-cpus LIST] [--draft] [--allow-shared-l3]
 
-Layout of OUT: identity.json, inputs/<case>.json (prepared inputs), raw/<case>/<cell>-r<k>.json
-(one measurement each; a failed sample keeps its error), logs/, results.json (assembled).
-A sample that already exists is never re-measured, so the command resumes after an interruption.
+Layout of OUT: identity.json, inputs/<case>.json (prepared inputs; warmup-<L>L.json: the warm-up
+integrals), raw/<case>/<cell>-r<k>.json (one measurement each; a failed sample keeps its error),
+raw/<case>/stale/ (samples of another binary, input, data root or FORM), logs/, results.json.
+Resumable: a sample is kept only while its key (binary SHA-256, input and warm-up SHA-256, data-root
+manifest SHA-256, FORM SHA-256, n_cores, protocol) matches the current run; any other sample is moved
+to stale/ and measured again, and the assembly ignores it.
 
-Every sample runs `taskset -c CPU BIN measure ...` with one worker thread (RAYON/OMP/MKL = 1 and
-vakint n_cores 1) on a CPU of --cpus (default: the CPUs this process may use). Samples of one CPU
-never overlap; several CPUs run samples concurrently. The record keeps the CPU, the 1-minute load,
-and the busy fraction of the CPU's SMT sibling during the sample (contention evidence).
+Every sample runs `taskset -c CPU BIN measure --warmup inputs/warmup-<L>L.json ...` with one worker
+thread (RAYON/OMP/MKL = 1, vakint n_cores 1) on a CPU of --cpus (default: the CPUs this process may
+use; one CPU per L3 domain unless --allow-shared-l3). Samples of one CPU never overlap; several CPUs
+run samples concurrently; multi-core heavy samples (--heavy-n-cores > 1) run alone afterwards on
+--heavy-cpus (default: all CPUs this process may use). Contention evidence per sample: busy fraction
+of the SMT siblings, run-queue delay and foreign CPU time on the timed CPUs (/proc/schedstat minus the
+process tree's own CPU time from wait4), run-queue delay of the harness threads around the timed call.
+A contended sample (thresholds --max-sibling-busy, --max-run-delay, --max-foreign-cpu) is measured
+again up to --contention-retries times; the last attempt is kept and flagged when still contended.
 """
 from __future__ import annotations
 
@@ -42,6 +50,9 @@ BACKENDS = {  # vakint applicability (lib.rs EvaluationMethod::supports)
     "fmft": (4, 4, "FMFT covers four loops only"),
 }
 CELLS_RUSTRED = [("rustred", "reduction", "cold"), ("rustred", "reduction", "warm"), ("rustred", "full", "default")]
+# Version of the measurement protocol; samples of another protocol are stale.
+# 2: untimed warm-up (twice, another small integral of the same loop count) before every timed call.
+PROTOCOL = 2
 
 
 def now():
@@ -79,6 +90,28 @@ def sibling(cpu):
         return [c for c in expand_cpus(text) if c != cpu]
     except OSError:
         return []
+
+
+def l3_domain(cpu):
+    try:
+        return Path(f"/sys/devices/system/cpu/cpu{cpu}/cache/index3/shared_cpu_list").read_text().strip()
+    except OSError:
+        return None
+
+
+def schedstat(cpus):
+    """Per CPU (rq_cpu_time ns, run_delay ns) of /proc/schedstat (sched_info: tasks other than idle)."""
+    out = {}
+    try:
+        for line in Path("/proc/schedstat").read_text().splitlines():
+            if line.startswith("cpu"):
+                f = line.split()
+                c = int(f[0][3:])
+                if c in cpus and len(f) >= 9:
+                    out[c] = (int(f[7]), int(f[8]))
+    except OSError:
+        pass
+    return out
 
 
 def cpu_times(cpus):
@@ -131,13 +164,21 @@ def prepare(args, case, out):
                "--work-dir", str(work), "--out", str(tmp)]
     elif src["kind"] == "graph":
         master = src.get("master")
+        manifest = json.loads((args.data_root / f"{case['loops']}L" / "manifest.json").read_text())
         if "master_powers" in src:  # robust to the renaming of a new basis: find the master by its powers
-            manifest = json.loads((args.data_root / f"{case['loops']}L" / "manifest.json").read_text())
             found = [m["name"] for m in manifest["masters"] if m["powers"] == src["master_powers"]]
             if len(found) != 1:
                 print(f"  prepare {case['id']}: no unique master with powers {src['master_powers']}", flush=True)
                 return None
             master = found[0]
+        elif src.get("select") == "fewest-lines":  # smallest master not used by a case (warm-up)
+            used = {tuple(c["source"].get("master_powers", ())) for c in args.all_cases}
+            pool = [m for m in manifest["masters"] if tuple(m["powers"]) not in used]
+            pool.sort(key=lambda m: (sum(1 for p in m["powers"] if p > 0), sum(abs(p) for p in m["powers"]), m["name"]))
+            if not pool:
+                print(f"  prepare {case['id']}: no master to select", flush=True)
+                return None
+            master = pool[0]["name"]
         cmd = [args.binary, "prepare-graph", "--data-root", str(args.data_root), "--loops", str(case["loops"]),
                "--master", master, "--out", str(tmp)]
         if "powers" in src:
@@ -172,22 +213,58 @@ def prepare(args, case, out):
 
 # ------------------------------------------------------------- measurement --
 
+def sample_n_cores(args, case, backend):
+    return args.heavy_n_cores if (case.get("heavy") and backend == "rustred") else 1
+
+
+def sample_key(args, case, cell):
+    """Identity of a valid sample: a sample with another key is stale (other binary, input, data, FORM)."""
+    backend = cell[0]
+    return {"protocol": PROTOCOL, "executable_sha256": args.binary_sha256,
+            "input_sha256": args.input_sha.get(case["id"]),
+            "warmup_input_sha256": args.input_sha.get(f"warmup-{case['loops']}L"),
+            "root_manifest_sha256": args.root_manifest_sha256,
+            "form_sha256": args.form_sha256 if backend != "rustred" else None,
+            "n_cores": sample_n_cores(args, case, backend)}
+
+
+def sample_is_current(args, case, cell, rec):
+    return (rec.get("harness") or {}).get("key") == sample_key(args, case, cell)
+
+
+def contention_score(args, meta):
+    """Reasons a sample counts as contended (empty: clean)."""
+    why = []
+    busy = [v for v in meta["sibling_busy_fraction"].values() if v is not None]
+    if busy and max(busy) > args.max_sibling_busy:
+        why.append(f"SMT sibling {max(busy):.0%} busy")
+    if (meta.get("cpu_run_delay_fraction") or 0) > args.max_run_delay:
+        why.append(f"run-queue delay {meta['cpu_run_delay_fraction']:.1%} of the wall time")
+    if (meta.get("foreign_cpu_fraction") or 0) > args.max_foreign_cpu:
+        why.append(f"other tasks ran {meta['foreign_cpu_fraction']:.1%} of the wall time on the timed CPU")
+    call = meta.get("call_run_delay_fraction")
+    if call is not None and call > args.max_run_delay:
+        why.append(f"timed call waited {call:.1%} in the run queue")
+    return why
+
+
 def measure(args, case, cell, rep, cpu, out, input_file):
-    """One sample; re-measured (up to --contention-retries times) while the SMT sibling of the
-    timed CPU was busier than --max-sibling-busy, keeping the earlier attempts in the record."""
+    """One sample; measured again (up to --contention-retries times, not for multi-core heavy samples)
+    while it was contended, keeping the earlier attempts' times and reasons in the record."""
     attempts = []
-    for attempt in range(args.contention_retries + 1):
+    retries = 0 if sample_n_cores(args, case, cell[0]) > 1 else args.contention_retries
+    for attempt in range(retries + 1):
         meta = measure_once(args, case, cell, rep, cpu, out, input_file, attempts)
-        if meta is None:
+        if meta is None or meta["exit_code"] != 0:
             return
-        busy = [v for v in meta["sibling_busy_fraction"].values() if v is not None]
-        if not busy or max(busy) <= args.max_sibling_busy or meta["exit_code"] != 0:
+        why = meta["contention"]
+        if not why:
             return
-        if attempt < args.contention_retries:
+        if attempt < retries:
             target = out / "raw" / case["id"] / f"{cell_name(cell)}-r{rep}.json"
-            attempts.append(json.loads(target.read_text()).get("call_seconds"))
+            attempts.append({"call_seconds": json.loads(target.read_text()).get("call_seconds"), "contention": why})
             target.unlink()
-            print(f"  {case['id']:<14} {cell_name(cell):<26} r{rep}: sibling busy {max(busy):.2f}, re-measuring", flush=True)
+            print(f"  {case['id']:<14} {cell_name(cell):<26} r{rep}: {'; '.join(why)}, re-measuring", flush=True)
 
 
 def measure_once(args, case, cell, rep, cpu, out, input_file, attempts):
@@ -195,29 +272,45 @@ def measure_once(args, case, cell, rep, cpu, out, input_file, attempts):
     name = cell_name(cell)
     target = out / "raw" / case["id"] / f"{name}-r{rep}.json"
     if target.exists():
-        return None
+        try:
+            rec = json.loads(target.read_text())
+        except (OSError, json.JSONDecodeError):
+            rec = {}
+        if sample_is_current(args, case, cell, rec):
+            return None
+        stale = target.parent / "stale"
+        stale.mkdir(exist_ok=True)
+        target.replace(stale / f"{name}-r{rep}.{int(time.time())}.json")
+        print(f"  {case['id']:<14} {name:<26} r{rep}: stale sample (other binary/input/data/protocol) moved to stale/", flush=True)
     log = out / "logs" / case["id"] / f"{name}-r{rep}.log"
     log.parent.mkdir(parents=True, exist_ok=True)
     work = out / "raw" / case["id"] / f"{name}-r{rep}.part.json"
-    n_cores = args.heavy_n_cores if (case.get("heavy") and backend == "rustred") else 1
-    cmd = ["taskset", "-c", str(cpu) if n_cores == 1 else args.heavy_cpus or str(cpu),
+    n_cores = sample_n_cores(args, case, backend)
+    timed = [cpu] if n_cores == 1 else expand_cpus(args.heavy_cpus)
+    cmd = ["taskset", "-c", ",".join(map(str, timed)),
            args.binary, "measure", "--data-root", str(args.data_root), "--input", str(input_file),
            "--backend", backend, "--scope", scope, "--n-cores", str(n_cores), "--out", str(work)]
+    warm = out / "inputs" / f"warmup-{case['loops']}L.json"
+    if warm.exists():
+        cmd += ["--warmup", str(warm)]
     if cache != "-":
         cmd += ["--cache", cache]
     if backend != "rustred":
         cmd += ["--form", args.form]
-    threads = str(n_cores)
-    env = dict(os.environ, RAYON_NUM_THREADS=threads, OMP_NUM_THREADS="1", MKL_NUM_THREADS="1",
+    env = dict(os.environ, RAYON_NUM_THREADS=str(n_cores), OMP_NUM_THREADS="1", MKL_NUM_THREADS="1",
                SYMBOLICA_HIDE_BANNER="1")
-    sib = sibling(cpu)
-    t0 = cpu_times([cpu] + sib)
+    sib = sorted({s for c in timed for s in sibling(c)} - set(timed))
+    t0 = cpu_times(timed + sib)
+    q0 = schedstat(set(timed))
     load0 = os.getloadavg()[0]
     started, start_utc = time.time(), now()
     with open(log, "w") as f:
-        proc = subprocess.run(cmd, stdout=f, stderr=subprocess.STDOUT, env=env)
+        proc = subprocess.Popen(cmd, stdout=f, stderr=subprocess.STDOUT, env=env)
+        _, status, ru = os.wait4(proc.pid, 0)
     wall = time.time() - started
-    t1 = cpu_times([cpu] + sib)
+    returncode = os.waitstatus_to_exitcode(status)
+    t1 = cpu_times(timed + sib)
+    q1 = schedstat(set(timed))
 
     def busy(c):
         if c not in t0 or c not in t1:
@@ -226,22 +319,36 @@ def measure_once(args, case, cell, rep, cpu, out, input_file, attempts):
         idle = t1[c][1] - t0[c][1]
         return round(1 - idle / total, 4) if total > 0 else None
 
-    meta = {"case": case["id"], "cell": name, "repetition": rep, "cpu": cpu, "siblings": sib,
+    own_cpu = ru.ru_utime + ru.ru_stime  # the process tree (wait4: the child and its reaped descendants)
+    rq_cpu = sum(q1[c][0] - q0[c][0] for c in timed if c in q0 and c in q1) * 1e-9
+    rq_delay = sum(q1[c][1] - q0[c][1] for c in timed if c in q0 and c in q1) * 1e-9
+    meta = {"case": case["id"], "cell": name, "repetition": rep, "cpu": cpu, "timed_cpus": timed, "siblings": sib,
+            "l3_domain": l3_domain(cpu),
             "sibling_busy_fraction": {str(c): busy(c) for c in sib}, "cpu_busy_fraction": busy(cpu),
+            "process_cpu_seconds": round(own_cpu, 4),
+            "cpu_run_delay_fraction": round(rq_delay / wall, 5) if wall > 0 and q0 else None,
+            "foreign_cpu_fraction": round(max(0.0, rq_cpu - own_cpu) / wall, 5) if wall > 0 and q0 else None,
             "load1_start": load0, "load1_end": os.getloadavg()[0], "started_utc": start_utc,
-            "wall_seconds": wall, "exit_code": proc.returncode, "command": cmd, "n_cores": n_cores,
-            "contended_attempt_seconds": list(attempts)}
-    if proc.returncode == 0 and work.exists():
+            "wall_seconds": wall, "exit_code": returncode, "command": cmd, "n_cores": n_cores,
+            "key": sample_key(args, case, cell), "contended_attempts": list(attempts)}
+    if returncode == 0 and work.exists():
         rec = json.loads(work.read_text())
+        meta["call_run_delay_fraction"] = (rec.get("call_usage") or {}).get("run_delay_fraction")
+        meta["contention"] = contention_score(args, meta)
+        meta["contended"] = bool(meta["contention"])
         rec["harness"] = meta
         write_json(target, rec)
         work.unlink()
-        print(f"  {case['id']:<14} {name:<26} r{rep} cpu{cpu}: {rec['call_seconds']:.4g} s", flush=True)
+        flag = f"  [contended: {'; '.join(meta['contention'])}]" if meta["contended"] else ""
+        print(f"  {case['id']:<14} {name:<26} r{rep} cpu{cpu}: {rec['call_seconds']:.4g} s{flag}", flush=True)
     else:
+        meta["contention"] = []
         tail = log.read_text(errors="replace")[-4000:] if log.exists() else ""
         write_json(target, {"schema": "vakint.benchmark-measurement.v1", "failed": True, "error_tail": tail,
                             "harness": meta, "backend": backend, "scope": scope, "cache": cache})
-        print(f"  {case['id']:<14} {name:<26} r{rep} cpu{cpu}: FAILED rc={proc.returncode}", flush=True)
+        work.unlink(missing_ok=True)
+        print(f"  {case['id']:<14} {name:<26} r{rep} cpu{cpu}: FAILED rc={returncode}", flush=True)
+    shutil.rmtree(work.with_suffix(".work"), ignore_errors=True)  # FORM scratch of the harness
     return meta
 
 
@@ -321,6 +428,8 @@ def agreement(records):
 
 def assemble(args, cases_doc, out, identity, pipeline):
     cases = []
+    stale_total = 0
+    one_time = {}  # loops -> backend -> lists
     for case in cases_doc["cases"]:
         row = {k: case.get(k) for k in ("id", "loops", "title", "subtitle", "heavy")}
         row["kind"] = case["source"]["kind"]
@@ -336,11 +445,24 @@ def assemble(args, cases_doc, out, identity, pipeline):
             name = cell_name(cell)
             samples = sorted((out / "raw" / case["id"]).glob(f"{name}-r*.json")) if (out / "raw" / case["id"]).exists() else []
             recs = [json.loads(p.read_text()) for p in samples]
-            good = [r for r in recs if not r.get("failed")]
-            bad = [r for r in recs if r.get("failed")]
+            current = [r for r in recs if sample_is_current(args, case, cell, r)]
+            stale_total += len(recs) - len(current)
+            good = [r for r in current if not r.get("failed")]
+            bad = [r for r in current if r.get("failed")]
             if good:
                 c = {"status": "ok", **stats([r["call_seconds"] for r in good])}
                 c["loader_median"] = stats([r["loader_seconds"] for r in good])["median"]
+                setups = [r["warmup"]["one_time_setup_seconds"] for r in good if isinstance(r.get("warmup"), dict)]
+                if setups:
+                    c["one_time_setup_median"] = stats(setups)["median"]
+                    c["warmup_first_median"] = stats([r["warmup"]["first_seconds"] for r in good])["median"]
+                    slot = one_time.setdefault(str(case["loops"]), {}).setdefault(cell[0], {"setup": [], "loader": []})
+                    if not (cell[0] == "rustred" and cache != "cold"):  # RustRed: cache off, no step-cache reuse
+                        slot["setup"] += setups
+                    if cell[0] == "rustred":
+                        slot["loader"] += [r["loader_seconds"] for r in good]
+                c["contended"] = sum(1 for r in good if r["harness"].get("contended"))
+                c["contention"] = sorted({w for r in good for w in r["harness"].get("contention") or []})[:6]
                 math_s = [r["reduction_capture"]["reduction_math_seconds"] for r in good
                           if isinstance(r.get("reduction_capture"), dict) and r["reduction_capture"].get("reduction_math_seconds")]
                 if math_s:
@@ -348,8 +470,8 @@ def assemble(args, cases_doc, out, identity, pipeline):
                 c["peak_rss_bytes"] = max((r.get("peak_rss_bytes") or 0) for r in good)
                 c["masters_retained"] = good[0].get("retained_rustred_masters")
                 c["output_sha256"] = sorted({r["output_sha256"] for r in good})
-                c["n_cores"] = good[0].get("n_cores")
-                c["cpus"] = sorted({r["harness"]["cpu"] for r in good})
+                c["n_cores"] = max(r.get("n_cores") or 1 for r in good)
+                c["cpus"] = sorted({x for r in good for x in r["harness"].get("timed_cpus", [r["harness"]["cpu"]])})
                 c["sibling_busy_max"] = max((v for r in good for v in r["harness"]["sibling_busy_fraction"].values()
                                              if v is not None), default=None)
                 c["load1_max"] = max(r["harness"]["load1_start"] for r in good)
@@ -360,7 +482,7 @@ def assemble(args, cases_doc, out, identity, pipeline):
             elif bad:
                 tail = bad[-1].get("error_tail", "")
                 lines = [l for l in tail.splitlines() if l.strip()]
-                c = {"status": "failed", "error": lines[-1][:300] if lines else "no output"}
+                c = {"status": "failed", "error": lines[-1][:300] if lines else "no output", "n": len(bad)}
             elif case.get("heavy") and args.skip_heavy:
                 c = {"status": "pending", "reason": "heavy cell, measured in its own run"}
             else:
@@ -375,30 +497,62 @@ def assemble(args, cases_doc, out, identity, pipeline):
         if "rustred" in full_records:
             row["rustred_numerical"] = full_records["rustred"].get("numerical")
         cases.append(row)
-    sib, loads, used = [], [], set()
+    sib, loads, used, delays, foreign, n_samples, n_contended, l3 = [], [], set(), [], [], 0, 0, set()
+    by_case = {c["id"]: c for c in cases_doc["cases"]}
     for raw in (out / "raw").glob("*/*.json"):
         try:
-            h = json.loads(raw.read_text()).get("harness") or {}
+            rec = json.loads(raw.read_text())
         except (OSError, json.JSONDecodeError):
             continue
-        if h.get("cpu") is not None:
-            used.add(h["cpu"])
-            if h.get("n_cores", 1) > 1 and h.get("command"):
-                used |= set(expand_cpus(h["command"][2]))
+        h = rec.get("harness") or {}
+        case = by_case.get(h.get("case"))
+        cell = next((c for c in cells_for(case) if cell_name(c) == h.get("cell")), None) if case else None
+        if not cell or not sample_is_current(args, case, cell, rec) or rec.get("failed"):
+            continue
+        n_samples += 1
+        n_contended += bool(h.get("contended"))
+        used |= set(h.get("timed_cpus") or [h["cpu"]])
+        if h.get("l3_domain"):
+            l3.add(h["l3_domain"])
         sib += [v for v in (h.get("sibling_busy_fraction") or {}).values() if v is not None]
+        if h.get("cpu_run_delay_fraction") is not None:
+            delays.append(h["cpu_run_delay_fraction"])
+        if h.get("foreign_cpu_fraction") is not None:
+            foreign.append(h["foreign_cpu_fraction"])
         if h.get("load1_start") is not None:
             loads.append(h["load1_start"])
-    contention = {}
-    if sib:
-        sib.sort()
-        contention = {"sibling_busy_median": round(sib[len(sib) // 2], 3), "sibling_busy_max": round(sib[-1], 3)}
+
+    def q(v, f):
+        v = sorted(v)
+        return round(v[min(len(v) - 1, int(f * len(v)))], 4) if v else None
+    contention = {"samples": n_samples, "contended_samples": n_contended,
+                  "sibling_busy_median": q(sib, 0.5), "sibling_busy_max": q(sib, 1.0),
+                  "run_delay_median": q(delays, 0.5), "run_delay_max": q(delays, 1.0),
+                  "foreign_cpu_median": q(foreign, 0.5), "foreign_cpu_max": q(foreign, 1.0),
+                  "l3_domains": len(l3),
+                  "thresholds": {"sibling_busy": args.max_sibling_busy, "run_delay": args.max_run_delay,
+                                 "foreign_cpu": args.max_foreign_cpu}}
     if loads:
         contention["load1_max"] = round(max(loads), 1)
     if used:
         identity.setdefault("host", {})["cpus_used"] = sorted(used)
+    # One-time cost per process (excluded from every cell): RustRed data load, first-call setup of every backend.
+    once = {L: {b: {"setup_median": stats(v["setup"])["median"] if v["setup"] else None,
+                    "loader_median": stats(v["loader"])["median"] if v["loader"] else None}
+                for b, v in per.items()} for L, per in one_time.items()}
+    ok_cells = [(c, k, v) for c in cases for k, v in c["cells"].items() if v["status"] == "ok"]
+    timing = {"multi_core_cells": [f"{c['id']} {k}" for c, k, v in ok_cells if (v.get("n_cores") or 1) > 1],
+              "single_run_cells": [f"{c['id']} {k}" for c, k, v in ok_cells if v["n"] == 1],
+              "min_repetitions": min((v["n"] for _, _, v in ok_cells), default=None),
+              "max_repetitions": max((v["n"] for _, _, v in ok_cells), default=None)}
+    timing["all_single_core"] = not timing["multi_core_cells"]
     result = {
         "schema": "vakint.benchmark-results.v1",
         "contention": contention,
+        "one_time_per_process": once,
+        "timing": timing,
+        "stale_samples_ignored": stale_total,
+        "protocol": PROTOCOL,
         "draft": bool(args.draft),
         "assembled_utc": now(),
         "identity": identity,
@@ -415,6 +569,9 @@ def host_info(cpus, form):
     model = next((l.split(":", 1)[1].strip() for l in cpuinfo.splitlines() if l.startswith("model name")), None)
     try:
         fv = subprocess.run([form, "-v"], capture_output=True, text=True, timeout=60).stdout.strip().splitlines()[0]
+        # drop the build date ("FORM 5.0.0 (Jan  1 1980, v5.0.0) 64-bits": Nix epoch artefact)
+        import re
+        fv = re.sub(r"\((?:[A-Z][a-z]{2}\s+\d+\s+\d{4}),\s*", "(", fv)
     except Exception as e:  # FORM is optional for RustRed-only runs
         fv = f"unavailable: {e}"
     return {"cpu_model": model, "logical_cpus": os.cpu_count(), "cpus_used": cpus,
@@ -426,10 +583,15 @@ def host_info(cpus, form):
 def git_info(path):
     def g(*a):
         try:
-            return subprocess.run(["git", "-C", str(path), *a], capture_output=True, text=True).stdout.strip()
+            r = subprocess.run(["git", "-C", str(path), *a], capture_output=True, text=True)
+            return r.stdout.strip() if r.returncode == 0 else None
         except Exception:
             return None
+    if g("rev-parse", "--is-inside-work-tree") != "true":
+        return None
     return {"commit": g("rev-parse", "HEAD"), "branch": g("rev-parse", "--abbrev-ref", "HEAD"),
+            "describe": g("describe", "--tags", "--always", "--dirty"),
+            "remote": g("config", "--get", "remote.origin.url"),
             "dirty_files": len([l for l in (g("status", "--porcelain") or "").splitlines() if l.strip()])}
 
 
@@ -453,7 +615,12 @@ def main():
     ap.add_argument("--cells", help="measure only these cells, e.g. rustred.reduction.cold,fmft.full")
     ap.add_argument("--max-sibling-busy", type=float, default=0.25,
                     help="re-measure a sample whose SMT sibling was busier than this fraction (default 0.25)")
+    ap.add_argument("--max-run-delay", type=float, default=0.03,
+                    help="re-measure a sample whose timed CPU's run-queue delay exceeded this fraction of the wall time")
+    ap.add_argument("--max-foreign-cpu", type=float, default=0.03,
+                    help="re-measure a sample when other tasks used more than this fraction of the timed CPU")
     ap.add_argument("--contention-retries", type=int, default=2)
+    ap.add_argument("--allow-shared-l3", action="store_true", help="allow concurrent workers that share an L3 cache")
     ap.add_argument("--draft", action="store_true")
     args = ap.parse_args()
     args.binary = str(Path(args.binary).resolve())
@@ -461,7 +628,21 @@ def main():
     out = args.out_dir.resolve()
     out.mkdir(parents=True, exist_ok=True)
     cases_doc = json.loads(args.cases.read_text())
+    args.all_cases = cases_doc["cases"]
     cpus = expand_cpus(args.cpus) if args.cpus else sorted(os.sched_getaffinity(0))
+    if args.heavy_n_cores > 1 and not args.heavy_cpus:
+        args.heavy_cpus = ",".join(map(str, sorted(os.sched_getaffinity(0))))
+    if args.heavy_n_cores > 1 and len(expand_cpus(args.heavy_cpus)) < args.heavy_n_cores:
+        raise SystemExit(f"--heavy-cpus has fewer than --heavy-n-cores = {args.heavy_n_cores} CPUs")
+    domains = {}
+    for c in cpus:
+        domains.setdefault(l3_domain(c), []).append(c)
+    shared = [v for v in domains.values() if len(v) > 1]
+    if shared and len(cpus) > 1 and not args.assemble_only and not args.allow_shared_l3:
+        raise SystemExit(f"worker CPUs share an L3 cache: {shared}; give one CPU per L3 domain or --allow-shared-l3")
+    args.binary_sha256 = sha256(Path(args.binary))
+    form_path = shutil.which(args.form)
+    args.form_sha256 = sha256(Path(form_path)) if form_path else None
     started = time.time()
     pipeline_file = out / "pipeline.json"
     pipeline = json.loads(pipeline_file.read_text()) if pipeline_file.exists() else {"runs": []}
@@ -470,12 +651,27 @@ def main():
     if not ident_path.exists() or not args.assemble_only:
         subprocess.run([args.binary, "identity", "--data-root", str(args.data_root), "--out", str(ident_path)], check=True)
     identity = json.loads(ident_path.read_text())
+    if identity.get("executable_sha256") != args.binary_sha256 or Path(identity.get("data_root", "")) != args.data_root:
+        subprocess.run([args.binary, "identity", "--data-root", str(args.data_root), "--out", str(ident_path)], check=True)
+        identity = json.loads(ident_path.read_text())
+    args.root_manifest_sha256 = identity.get("root_manifest_sha256")
     identity["host"] = host_info(cpus, args.form)
-    identity["source"] = git_info(CRATE)
+    # the measured build (embedded at build time), not the checkout these tools run from
+    identity["source"] = identity.get("build") or {}
+    identity["tools_checkout"] = git_info(CRATE)
+    identity["data_git"] = git_info(args.data_root)
     identity["cases_sha256"] = sha256(args.cases)
     identity["tools_sha256"] = {p.name: sha256(p) for p in sorted(HERE.glob("*.py"))}
 
     run = {"started_utc": now(), "argv": sys.argv, "cpus": cpus}
+    # input hashes of the prepared inputs (sample keys); warm-up integrals per loop count
+    warmups = [{"id": f"warmup-{L}L", "loops": int(L), "source": src} for L, src in cases_doc.get("warmups", {}).items()]
+    args.input_sha = {}
+    for p in (out / "inputs").glob("*.json") if (out / "inputs").exists() else []:
+        try:
+            args.input_sha[p.stem] = json.loads(p.read_text()).get("input_sha256")
+        except (OSError, json.JSONDecodeError):
+            pass
     if not args.assemble_only:
         selected = cases_doc["cases"]
         if args.only:
@@ -487,15 +683,16 @@ def main():
             selected = [c for c in selected if c.get("heavy")]
         t = time.time()
         inputs = {}
-        for case in selected:
+        for case in [w for w in warmups if w["loops"] in {c["loops"] for c in selected}] + selected:
             p = prepare(args, case, out)
             if p:
                 inputs[case["id"]] = p
+                args.input_sha[case["id"]] = json.loads(p.read_text()).get("input_sha256")
         run["prepare_seconds"] = time.time() - t
         if args.prepare_only:
             print(f"prepared {len(inputs)} inputs in {run['prepare_seconds']:.1f} s", flush=True)
             return
-        jobs = queue.Queue()
+        jobs, heavy_jobs = queue.Queue(), []
         for case in selected:
             if case["id"] not in inputs:
                 continue
@@ -508,7 +705,10 @@ def main():
                 if rep % 2 == 1:
                     cells = list(reversed(cells))
                 for cell in cells:
-                    jobs.put((case, cell, rep))
+                    if sample_n_cores(args, case, cell[0]) > 1:
+                        heavy_jobs.append((case, cell, rep))
+                    else:
+                        jobs.put((case, cell, rep))
         t = time.time()
 
         def worker(cpu):
@@ -524,6 +724,8 @@ def main():
             th.start()
         for th in threads:
             th.join()
+        for case, cell, rep in heavy_jobs:  # multi-core samples alone, one after the other
+            measure(args, case, cell, rep, expand_cpus(args.heavy_cpus)[0], out, inputs[case["id"]])
         run["measure_seconds"] = time.time() - t
     run["finished_utc"] = now()
     run["wall_seconds"] = time.time() - started
