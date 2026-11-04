@@ -305,6 +305,9 @@ pub mod symbolica_ext;
 pub mod tracing;
 
 #[cfg(test)]
+mod phase_benchmark;
+
+#[cfg(test)]
 mod tests {
     use super::{
         ApproxEq, ArbPrec, Complex, F, FloatLike, QuadFloat, Real, SamplingFloat, SymbolicaComplex,
