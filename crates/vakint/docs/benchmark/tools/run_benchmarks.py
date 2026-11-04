@@ -20,8 +20,9 @@ run samples concurrently; multi-core heavy samples (--heavy-n-cores > 1) run alo
 --heavy-cpus (default: all CPUs this process may use). Contention evidence per sample: busy fraction
 of the SMT siblings, run-queue delay and foreign CPU time on the timed CPUs (/proc/schedstat minus the
 process tree's own CPU time from wait4), run-queue delay of the harness threads around the timed call.
-A contended sample (thresholds --max-sibling-busy, --max-run-delay, --max-foreign-cpu) is measured
-again up to --contention-retries times; the last attempt is kept and flagged when still contended.
+A contended sample (busy SMT sibling, foreign CPU time on the timed CPU, run-queue delay of the timed call;
+thresholds --max-sibling-busy, --max-foreign-cpu, --max-run-delay) is measured again up to --contention-retries
+times; the last attempt is kept; the assembly flags samples with the thresholds of the assembling run.
 """
 from __future__ import annotations
 
@@ -235,13 +236,12 @@ def sample_is_current(args, case, cell, rec):
 
 
 def contention_score(args, meta):
-    """Reasons a sample counts as contended (empty: clean)."""
+    """Reasons a sample counts as contended (empty: clean). The CPU-level run-queue delay is recorded but is no criterion:
+    it includes a backend's own processes waiting for each other (vakint and its FORM child, ~3 % on an idle CPU)."""
     why = []
-    busy = [v for v in meta["sibling_busy_fraction"].values() if v is not None]
+    busy = [v for v in (meta.get("sibling_busy_fraction") or {}).values() if v is not None]
     if busy and max(busy) > args.max_sibling_busy:
         why.append(f"SMT sibling {max(busy):.0%} busy")
-    if (meta.get("cpu_run_delay_fraction") or 0) > args.max_run_delay:
-        why.append(f"run-queue delay {meta['cpu_run_delay_fraction']:.1%} of the wall time")
     if (meta.get("foreign_cpu_fraction") or 0) > args.max_foreign_cpu:
         why.append(f"other tasks ran {meta['foreign_cpu_fraction']:.1%} of the wall time on the timed CPU")
     call = meta.get("call_run_delay_fraction")
@@ -485,8 +485,9 @@ def assemble(args, cases_doc, out, identity, pipeline):
                     slot["setup"] += setups
                     if cell[0] == "rustred":
                         slot["loader"] += [r["loader_seconds"] for r in good]
-                c["contended"] = sum(1 for r in good if r["harness"].get("contended"))
-                c["contention"] = sorted({w for r in good for w in r["harness"].get("contention") or []})[:6]
+                why = [contention_score(args, r["harness"]) for r in good]
+                c["contended"] = sum(1 for w in why if w)
+                c["contention"] = sorted({x for w in why for x in w})[:6]
                 math_s = [r["reduction_capture"]["reduction_math_seconds"] for r in good
                           if isinstance(r.get("reduction_capture"), dict) and r["reduction_capture"].get("reduction_math_seconds")]
                 if math_s:
@@ -535,7 +536,7 @@ def assemble(args, cases_doc, out, identity, pipeline):
         if not cell or not sample_is_current(args, case, cell, rec) or rec.get("failed"):
             continue
         n_samples += 1
-        n_contended += bool(h.get("contended"))
+        n_contended += bool(contention_score(args, h))
         used |= set(h.get("timed_cpus") or [h["cpu"]])
         if h.get("l3_domain"):
             l3.add(h["l3_domain"])
@@ -641,7 +642,7 @@ def main():
     ap.add_argument("--max-sibling-busy", type=float, default=0.25,
                     help="re-measure a sample whose SMT sibling was busier than this fraction (default 0.25)")
     ap.add_argument("--max-run-delay", type=float, default=0.03,
-                    help="re-measure a sample whose timed CPU's run-queue delay exceeded this fraction of the wall time")
+                    help="re-measure a sample whose timed call waited in the run queue longer than this fraction of its time")
     ap.add_argument("--max-foreign-cpu", type=float, default=0.03,
                     help="re-measure a sample when other tasks used more than this fraction of the timed CPU")
     ap.add_argument("--contention-retries", type=int, default=2)
