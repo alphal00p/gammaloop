@@ -24,7 +24,7 @@ use vakint::{
     VakintSettings,
 };
 
-const USAGE: &str = "usage: five_loop_qcd_ladder --work-dir PATH [--artifacts PATH] [--projection quadratic|zero-momentum] [--prepared-input PATH|--fresh-prepare] [--prepare-only|--dress-only] [--warm] [--monitor] [--progress-snapshot PATH] [--progress-interval-seconds N]\nThe reduction uses RustRed's ordered scheduler with the weight arithmetic of VAKINT_ORDERED_WEIGHT_ARITHMETIC (Vakint's default, modular_polynomial, when unset) on VAKINT_N_CORES cores (Vakint's default when unset). --warm repeats the evaluation in the same engine and checks exact parity; there is no result cache.\nMonitoring defaults off. --monitor requires progress-tui and defaults its snapshot to work-dir/monitor.json. A snapshot path enables native JSON without a TUI; interval defaults to 1s and must be finite and nonnegative. Monitored timings include diagnostic observation overhead.";
+const USAGE: &str = "usage: five_loop_qcd_ladder --work-dir PATH [--artifacts PATH] [--projection quadratic|zero-momentum] [--prepared-input PATH|--fresh-prepare] [--prepare-only|--dress-only] [--warm] [--monitor] [--progress-snapshot PATH] [--progress-interval-seconds N]\nThe reduction uses RustRed's ordered scheduler with the weight arithmetic of VAKINT_ORDERED_WEIGHT_ARITHMETIC (Vakint's default when unset, which five-loop requests run as modular_sampled) on VAKINT_N_CORES cores (Vakint's default when unset). --warm repeats the evaluation in the same engine and checks exact parity; there is no result cache.\nMonitoring defaults off. --monitor requires progress-tui and defaults its snapshot to work-dir/monitor.json. A snapshot path enables native JSON without a TUI; interval defaults to 1s and must be finite and nonnegative. Monitored timings include diagnostic observation overhead.";
 
 struct StageLogger {
     phases: Mutex<BTreeMap<String, Vec<f64>>>,
@@ -349,6 +349,11 @@ fn main() -> fixture::Result<()> {
             rustred::solver::UnresolvedPolicy::Preserve;
         settings.ordered_weight_arithmetic = arithmetic;
         settings.n_cores = fixture::comparison::n_cores_from_environment()?;
+        // The arithmetic the five-loop requests run (the default selection
+        // runs modular_sampled), next to the selection it comes from.
+        report["ordered_weight_arithmetic"] =
+            json!(settings.rustred_five_loop_ordered_weight_arithmetic().to_string());
+        report["ordered_weight_arithmetic_selection"] = json!(arithmetic.to_string());
         report["conventions"] = json!({
             "integral_normalization":format!("{:?}",settings.integral_normalization_factor),
             "integral_normalization_expression":settings.get_integral_normalization_factor_atom()?.to_canonical_string(),

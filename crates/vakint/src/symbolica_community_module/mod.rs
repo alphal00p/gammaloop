@@ -1062,9 +1062,12 @@ impl VakintWrapper {
         let n_cores = n_cores.unwrap_or_else(crate::default_n_cores);
         crate::execution::validate_n_cores(n_cores)
             .map_err(|error| exceptions::PyValueError::new_err(error.to_string()))?;
+        // No selection is the default selection (not an explicit choice).
         let ordered_weight_arithmetic = ordered_weight_arithmetic
-            .unwrap_or(crate::DEFAULT_ORDERED_WEIGHT_ARITHMETIC)
-            .parse::<crate::OrderedWeightArithmetic>()
+            .map_or_else(
+                || Ok(crate::OrderedWeightArithmetic::default()),
+                str::parse::<crate::OrderedWeightArithmetic>,
+            )
             .map_err(|error| exceptions::PyValueError::new_err(error.to_string()))?;
         let ordered_cache = cache::settings(
             ordered_cache,

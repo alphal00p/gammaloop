@@ -1384,7 +1384,8 @@ impl SavedApplication {
         MonitorContext::native_phase(observation.as_deref_mut(), "scalar_lowering", None);
         let mut application = self.prepared.lock().map_err(failure)?;
         application.set_reduction_strategy(rustred::reduction::ReductionStrategy::Ordered);
-        application.set_ordered_weight_arithmetic(settings.rustred_ordered_weight_arithmetic());
+        application
+            .set_ordered_weight_arithmetic(super::five_loop_ordered_weight_arithmetic(settings));
         let scheduler = super::ordered_scheduler(settings);
         application.set_ordered_scheduler_options(scheduler);
         // The cache is the one of this package's own program (its rule tables

@@ -2464,6 +2464,14 @@ impl VakintSettings {
         self.ordered_weight_arithmetic.resolve(self.n_cores)
     }
 
+    /// RustRed's Ordered weight arithmetic of a five-loop saved-application
+    /// request: [`Self::rustred_ordered_weight_arithmetic`], except that the
+    /// default selection runs `modular_sampled` on the same workers (see
+    /// [`OrderedWeightArithmetic::is_default_selection`]).
+    pub fn rustred_five_loop_ordered_weight_arithmetic(&self) -> RustRedOrderedWeightArithmetic {
+        rustred_evaluation::five_loop_ordered_weight_arithmetic(self)
+    }
+
     /// Check the worker count, the Ordered weight arithmetic and the native
     /// options derived from them.
     fn validate_execution(&self) -> Result<(), VakintError> {

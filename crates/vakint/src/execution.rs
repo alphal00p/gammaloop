@@ -66,13 +66,26 @@ pub(crate) fn validate_n_cores(n_cores: usize) -> Result<(), VakintError> {
 /// RustRed's `ModularCommon` and of the mode's options. A modular mode runs on
 /// [`crate::VakintSettings::n_cores`] workers unless the selection fixes
 /// `threads`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+///
+/// Equality compares the selection (mode, options, fixed workers); whether it
+/// is the default selection ([`Self::is_default_selection`]) is not part of it.
+#[derive(Clone, Copy, Debug)]
 pub struct OrderedWeightArithmetic {
     /// Mode and options with the worker count normalized to one.
     mode: RustRedOrderedWeightArithmetic,
     /// Worker count fixed by the selection instead of `n_cores`.
     threads: Option<usize>,
+    /// Made by [`Default`] (no explicit choice of the mode).
+    by_default: bool,
 }
+
+impl PartialEq for OrderedWeightArithmetic {
+    fn eq(&self, other: &Self) -> bool {
+        self.mode == other.mode && self.threads == other.threads
+    }
+}
+
+impl Eq for OrderedWeightArithmetic {}
 
 impl OrderedWeightArithmetic {
     /// Select `arithmetic`; a modular mode runs on `n_cores` workers, whatever
@@ -81,6 +94,7 @@ impl OrderedWeightArithmetic {
         Self {
             mode: arithmetic.with_threads(1),
             threads: None,
+            by_default: false,
         }
     }
 
@@ -118,6 +132,15 @@ impl OrderedWeightArithmetic {
         self.threads
     }
 
+    /// Whether the mode is the default one ([`Default`], also with workers
+    /// fixed by [`Self::with_threads`]) rather than an explicit choice: an
+    /// explicitly selected `modular_polynomial` is not the default selection,
+    /// although it equals it. Five-loop requests use `modular_sampled` for the
+    /// default selection.
+    pub fn is_default_selection(&self) -> bool {
+        self.by_default
+    }
+
     /// RustRed's arithmetic of a call with `n_cores` workers.
     pub fn resolve(&self, n_cores: usize) -> RustRedOrderedWeightArithmetic {
         self.mode.with_threads(self.threads.unwrap_or(n_cores))
@@ -126,9 +149,13 @@ impl OrderedWeightArithmetic {
 
 impl Default for OrderedWeightArithmetic {
     fn default() -> Self {
-        DEFAULT_ORDERED_WEIGHT_ARITHMETIC
+        let selection: Self = DEFAULT_ORDERED_WEIGHT_ARITHMETIC
             .parse()
-            .expect("the default ordered weight arithmetic is valid")
+            .expect("the default ordered weight arithmetic is valid");
+        Self {
+            by_default: true,
+            ..selection
+        }
     }
 }
 
@@ -216,6 +243,16 @@ mod tests {
             OrderedWeightArithmetic::default(),
             OrderedWeightArithmetic::modular_polynomial()
         );
+        // Equal, but only the default is the default selection.
+        assert!(OrderedWeightArithmetic::default().is_default_selection());
+        assert!(
+            OrderedWeightArithmetic::default()
+                .with_threads(2)
+                .is_default_selection()
+        );
+        assert!(!OrderedWeightArithmetic::modular_polynomial().is_default_selection());
+        let parsed: OrderedWeightArithmetic = DEFAULT_ORDERED_WEIGHT_ARITHMETIC.parse().unwrap();
+        assert!(!parsed.is_default_selection());
     }
 
     #[test]
