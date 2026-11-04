@@ -71,6 +71,17 @@ dind(cof(NC, j)) dual color-fundamental slot
 such as `mink`, `bis`, and `coad` use the same representation on both sides of a
 contraction. Dualizable representations such as `cof` use the unwrapped slot for
 one orientation and `dind(...)` for the dual orientation.
+Index canonicalization preserves these wrappers while renaming their shared
+base index. Removing duality first would allow a symmetric metric to merge two
+oppositely oriented occurrences into an invalid tensor square.
+
+`SlotMatcher::map_expression_indices` maps native slot labels with the caller's
+`AbsInd`/`ParseableAind` codec while preserving representation, dimension and
+variance. Each slot is visited as one payload, Scalar metadata remains opaque,
+and generated labels are not revisited, so assignments are simultaneous.
+Returning `None` retains a slot. `AbstractIndex::wrap_expression` uses this owner
+and keeps its existing Open-marker and selection rules. Typed-carrier validation
+and metadata publication remain the caller's responsibility.
 
 Direct slot arguments define the exposed tensor structure. Non-slot arguments
 are metadata on the symbolic tensor leaf:
