@@ -22,6 +22,7 @@ use colored::Colorize;
 use eyre::Result;
 use feynkit_tensor::TensorReducer;
 use graph::Graph;
+use idenso::{CookMode, CookSettings};
 #[allow(unused)]
 use log::{debug, info, warn};
 
@@ -3777,6 +3778,9 @@ impl VakintTerm {
         dimension: &Atom,
         opaque_compact_vectors: &BTreeMap<Atom, Atom>,
     ) -> Atom {
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
         let dots_mapped = numerator.replace_map(|term, _context, out| {
             let AtomView::Fun(function) = term else {
                 return;
@@ -3784,15 +3788,22 @@ impl VakintTerm {
             if function.get_symbol() != SPENSO_TAG.dot || function.get_nargs() != 2 {
                 return;
             }
-            let arguments = function.iter().collect::<Vec<_>>();
-            let Some(left) =
-                Self::compact_spenso_vector(arguments[0], dimension, opaque_compact_vectors)
-            else {
+            // Global uncooking keeps scalar dots opaque. This bridge owns their
+            // vector operands; decode their ports while retaining scalar metadata.
+            let arguments =
+                [function.get(0), function.get(1)].map(|argument| cooking.uncook(argument));
+            let Some(left) = Self::compact_spenso_vector(
+                arguments[0].as_view(),
+                dimension,
+                opaque_compact_vectors,
+            ) else {
                 return;
             };
-            let Some(right) =
-                Self::compact_spenso_vector(arguments[1], dimension, opaque_compact_vectors)
-            else {
+            let Some(right) = Self::compact_spenso_vector(
+                arguments[1].as_view(),
+                dimension,
+                opaque_compact_vectors,
+            ) else {
                 return;
             };
             **out = FunctionBuilder::new(S.dot)
@@ -6687,9 +6698,46 @@ Evaluated (n_loops=1, mu_r=1) :
 
 #[cfg(test)]
 mod tests {
+    use spenso::vector_symbol;
     use symbolica::parse_lit;
 
     use super::*;
+
+    #[test]
+    fn native_dot_bridge_decodes_ports_without_opening_scalar_metadata() {
+        initialize_spenso_reps();
+        let dimension = vk_parse!("4-2*ε").unwrap();
+        let representation = function!(Minkowski::selfless_symbol(), &dimension);
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let cooked_representation = cooking.try_cook(representation.as_view()).unwrap();
+        assert_ne!(cooked_representation, representation);
+        let metadata = function!(
+            symbol!("vakint::bridge_private_scalar_metadata"; Scalar),
+            &cooked_representation
+        );
+        let original = function!(
+            vector_symbol!("vakint::bridge_scalar_metadata_vector"),
+            &metadata,
+            &representation
+        );
+        let external = function!(
+            *FEYNKIT_EXTERNAL_VECTOR,
+            function!(SPENSO_TAG.pure_scalar, &original),
+            &cooked_representation
+        );
+        let input = function!(
+            SPENSO_TAG.dot,
+            external,
+            function!(S.k, 1, &cooked_representation)
+        );
+        let expected = function!(S.dot, original, function!(S.k, 1));
+        assert_eq!(
+            VakintTerm::spenso_to_vakint_numerator(input.as_view(), &dimension, &BTreeMap::new()),
+            expected
+        );
+    }
 
     #[test]
     fn script_templates_preserve_escapes_literals_and_inserted_expressions() {

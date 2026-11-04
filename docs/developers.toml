@@ -443,7 +443,11 @@ end_anchor = "\n#[debug_instrument]\npub(crate) fn to_vakint_integrand<"
 # tensor factorization, genuine summed contractions and selector bounds remain guarded.
 # Reviewed 2026-10-23: Vakint restoration canonicalizes uvterm local zero before
 # typed admission; backend dummy/public-port separation and UV algorithms remain.
-digest = "52239c3b024703396d4e60480fd22ecf04761d32"
+# No-impact attestation 2026-11-05 against 4cbf321a: explicit decoding of
+# owned dot operands restores the documented native-index export contract.
+# Scalar-private metadata, factorization, retained ports and UV phase ordering
+# are unchanged.
+digest = "1782392a9bf29c68bb270a32d5e603113072e796"
 
 [[section.note.scope]]
 path = "crates/vakint/src/lib.rs"
@@ -1272,7 +1276,11 @@ anchor = "pub struct Vakint {"
 # No-impact attestation 2026-11-02 against 501183a5: only the Python stub
 # generator's project-root lookup and imports changed for relocated workspaces.
 # Vakint topology, evaluation, precision and backend contracts are unchanged.
-digest = "37ed1a3aee0577c3bd7322568b6fba841f4e1518"
+# No-impact attestation 2026-11-05 against 4cbf321a: decoding owned native-dot
+# vector ports restores the existing compact and external-vector conversion
+# contract. Scalar-private metadata stays opaque; factorization, tensor backend
+# selection and scalar evaluation policy are unchanged.
+digest = "ab420d52f1a0653441325d9d6274bc3655fbafc5"
 
 [[section.note.scope]]
 path = "crates/vakint/src/topologies.rs"

@@ -870,6 +870,19 @@ mod tests {
     }
 
     #[test]
+    fn integration_target_compatibility_preserves_tiny_phase_differences() {
+        let mut estimate = IntegralEstimate {
+            result: Complex::new(F(2.0), F(-1e-16)),
+            error: Complex::new(F(2e-18), F(0.0)),
+            ..IntegralEstimate::default()
+        };
+        let target = Complex::new(F(2.0), F(0.0));
+        assert!(!estimate.is_compatible_with_target(target, 1));
+        estimate.error = Complex::new(F(2e-15), F(0.0));
+        assert!(estimate.is_compatible_with_target(target, 1));
+    }
+
+    #[test]
     fn test_integration_result_display() {
         let result = IntegralEstimate {
             neval: 1000000,

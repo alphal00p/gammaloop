@@ -1319,7 +1319,10 @@ impl Integrated<'_> {
                     return;
                 }
                 let vectors = [dot.get(0), dot.get(1)].map(|vector| {
-                    if let AtomView::Fun(momentum) = vector
+                    // The dot owner decodes its vector ports explicitly because
+                    // global uncooking preserves scalar payloads.
+                    let vector = cooking.uncook(vector);
+                    if let AtomView::Fun(momentum) = vector.as_view()
                         && [vakint::symbols::S.k, vakint::symbols::S.p]
                             .contains(&momentum.get_symbol())
                         && momentum.get_nargs() == 2
@@ -1331,7 +1334,7 @@ impl Integrated<'_> {
                         // Only Vakint momenta have an implicit representation.
                         // A fixed vector must retain its native compact port so
                         // angular projection restores the actual tensor leaf.
-                        vector.to_owned()
+                        vector
                     }
                 });
                 **out = vakint::symbols::S.dot(&vectors[0], &vectors[1]);
