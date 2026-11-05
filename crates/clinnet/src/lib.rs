@@ -747,6 +747,7 @@ impl TypstRenderer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::env;
 
     fn value_dict(fields: impl IntoIterator<Item = (impl Into<String>, TypstValue)>) -> TypstValue {
         TypstValue::Dictionary(
@@ -1332,9 +1333,18 @@ mod tests {
             .compile_template(&assertions, base.join("generic-assertions.pdf"), &[])
             .unwrap();
 
-        let gamma_assertions =
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/resources/gamma-style-behavior.typ");
-        let repository = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        // Archive-based runners relocate fixtures together with the workspace.
+        let repository = env::var_os("GAMMALOOP_WORKSPACE_ROOT")
+            .or_else(|| env::var_os("NEXTEST_WORKSPACE_ROOT"))
+            .map(PathBuf::from)
+            .unwrap_or_else(|| {
+                env::var_os("CARGO_MANIFEST_DIR")
+                    .map(PathBuf::from)
+                    .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")))
+                    .join("../..")
+            });
+        let resources = repository.join("crates/clinnet/tests/resources");
+        let gamma_assertions = resources.join("gamma-style-behavior.typ");
         renderer
             .compile_template(
                 &gamma_assertions,
@@ -1343,8 +1353,7 @@ mod tests {
             )
             .unwrap();
 
-        let preparation_assertions =
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/resources/preparation-behavior.typ");
+        let preparation_assertions = resources.join("preparation-behavior.typ");
         renderer
             .compile_template(
                 &preparation_assertions,

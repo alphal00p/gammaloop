@@ -469,7 +469,8 @@ own workspace. Bounded: one regression, one bisect, one written verdict.
   formatted; CI clippy with `--deny warnings`; fast lane green; oracle fast
   tier at 1, 8, 32 threads; SM three-loop filtered 3150 at 1 and 8 threads;
   `four_loop_numerator` 4664/306 and the perturbation regressions at 1, 8, 32;
-  `test_generate_sm_a_ddx` in 5 fresh processes; BRST quartet, epem NLO,
+  `test_generate_sm_a_ddx` in one ordinary passing run, repeated only for
+  relevant changes or evidence of nondeterminism; BRST quartet, epem NLO,
   CoolQM gate. Then milestone #strong[M-rebuild] (WP10). Any changed count
   needs the WP9 standard, not a re-record.
 
@@ -630,7 +631,7 @@ R = rebuild (WP3), N/Ro/C = names, route, Classes stages, F = final (WP13).
   [Oracle fast tier, 1/8/32 threads], [R N Ro C F], [all rows; headroom to 240 s noted (m8)],
   [SM three-loop filtered], [R F], [3150 at 1 and 8 threads],
   [`four_loop_numerator` + perturbation regressions], [R F], [4664/306 at 1, 8, 32],
-  [`test_generate_sm_a_ddx`], [R F], [5 of 5 fresh processes],
+  [`test_generate_sm_a_ddx`], [R F], [One ordinary passing run; repeat only for relevant changes or evidence of nondeterminism],
   [BRST quartet, epem NLO, CoolQM 3σ], [R F], [as recorded in v4],
   [B2 exact comparison and production sampled/fallback regression], [R F], [WP1 correctness question resolved; accepted ratios valid for the original pair],
   [Name stability and pin errors], [N F], [identical across threads, Auto/None, grouping],

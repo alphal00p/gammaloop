@@ -57,8 +57,13 @@ CHECK = r"""async ({javascript, controls, css, font, mode, theme}) => {
     <rect width="120" height="80" fill="#ffffff"/>
     <a data-linnet-kind="node" data-linnet-id="0" data-linnet-detail='{"edges":[]}'>
       <circle cx="60" cy="40" r="8" fill="#000000"/>
-    </a><style>${css}</style><script>${controls}</script></svg>
+    </a><style>${css}</style><script><![CDATA[${controls}]]></script></svg>
     <figcaption>${label}</figcaption></figure>`;
+  // Match the native SVG writer: script text must survive HTML parsing exactly
+  // before the sandbox's parent can admit it as a trusted control source.
+  const parsed = new DOMParser().parseFromString(graph('fixture'), 'text/html');
+  assert(parsed.querySelector('script')?.textContent === controls,
+    'SVG fixture changed the trusted control source');
   const state = {
     request:{id:'snapshot', labels:[], pending:false, font_key:`font-${mode}`},
     rendered:{id:'snapshot', html:graph('first diagram')}, scripts:[controls], font:{},
