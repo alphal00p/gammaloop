@@ -147,6 +147,17 @@ def main(directory, ltd_directory, executable, engine="chromium"):
         )
         page.evaluate("document.fonts.load('19px \"STIX Two Math\"'); true")
         page.wait_for_function("document.fonts.check('19px \"STIX Two Math\"')")
+        # The residue ordering is not a higher-pole fixture contract. Select an
+        # actual order-two cut through the same public explorer control as a user.
+        page.locator(".feynkit-ltd-result").evaluate("""root => {
+            const data = JSON.parse(root.querySelector('[data-ltd]').textContent);
+            const raised = data.residues.find(residue =>
+                Object.values(residue.pole_orders).includes(2));
+            if (!raised) throw Error('raised fixture contains no order-two cut residue');
+            const input = root.querySelector('[data-sum-input]');
+            input.value = raised.id;
+            input.dispatchEvent(new KeyboardEvent('keydown', {key:'Enter', bubbles:true}));
+        }""")
         assert_math_fonts(page, engine)
         assert_baselines(page)
         assert page.locator("[data-power-label]").count() > 0
