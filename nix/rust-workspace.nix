@@ -643,6 +643,15 @@
   };
 
   workspacePackageExtraSourceRoots.runtimeTest = {
+    # Runtime-only consumers: nauty transcripts and the repository DOT corpus.
+    linnet = [
+      "crates/linnet/tests/resources/nauty"
+      "crates/gammalooprs/tests/fixtures"
+      "crates/linnest/examples"
+      "examples/cli"
+      "examples/notebooks/fixtures"
+      "tests/resources/graphs"
+    ];
     spynso3 = ["crates/spynso3/tests/browser_math_font.py" "crates/spynso3/tests/browser_tensor_explorer.py"];
     "linnet-render-py" = ["crates/linnet-render-py/tests"];
     "feynkit-py" = ["crates/feynkit-py/tests"];

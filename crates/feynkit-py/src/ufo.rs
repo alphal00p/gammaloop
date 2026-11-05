@@ -603,7 +603,9 @@ mod tests {
                         .or_else(|| env::var_os("NEXTEST_WORKSPACE_ROOT"))
                         .map(|root| PathBuf::from(root).join("crates/feynkit-py"))
                         .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")))
-                        .join("tests/fixtures/scalars_2p_3p.json"),
+                        .join("tests/fixtures/scalars_2p_3p.json")
+                        .to_string_lossy()
+                        .as_ref(),
                 )
                 .unwrap();
             let code = CString::new(

@@ -3179,7 +3179,8 @@ end_anchor = "workspacePackageExtraSourceRootsForSourcePackages ="
 # Existing input ownership/filter and cache-selection rules remain; added coverage has no old pass credit.
 # Workflow repair candidate 2026-10-31: binds current source boundaries and
 # runtime consumers; prior review references remain historical. Pending ordinary review.
-digest = "c6b24b68d11a89c401b3746a8c96423aa34c0977"
+# R34: declare missing Linnet runtime fixtures; compiler and runtime policies unchanged.
+digest = "1330b8e494362759d2bf26c1ce211c193cad17e7"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"
