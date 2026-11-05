@@ -381,6 +381,12 @@ mod out_of_domain {
             "topo(prop(1,edge(1,2),k(1)+p(2),0,1)*prop(2,edge(2,1),k(1)-p(1),0,1))",
             "a p-integral has one external momentum; found",
         );
+        // Several heads conserve momentum when every vertex balance is free of
+        // k: here p(2)+3*p(1) enters at vertex 2 and leaves at vertex 1.
+        assert_p_unknown(
+            "topo(prop(1,edge(1,2),k(1)+p(2),0,1)*prop(2,edge(2,1),k(1)-3*p(1),0,1))",
+            "a p-integral has one external momentum; found",
+        );
         assert_p_unknown(
             FIVE_LOOP_SUNSET,
             "p-integral not covered by the 1L-4L registry",
@@ -429,6 +435,45 @@ mod out_of_domain {
         );
         // A short form is no unknown integral: out of domain, it stays an error.
         assert_p_malformed("topo(P1L(p(1),1/2,1))", "powers must be integers");
+    }
+
+    /// Malformed wins: an input that is out of domain AND malformed is an error
+    /// under any setting, never an unknown integral (M2-V1 review round 1).
+    #[test]
+    fn malformed_inputs_out_of_domain_as_well_are_errors_under_any_setting() {
+        // Massive line and repeated prop ids.
+        assert_p_malformed(
+            "topo(prop(1,edge(1,2),k(1),muvsq,1)*prop(1,edge(2,1),k(1)-p(1),0,1))",
+            "prop ids must be distinct",
+        );
+        // Massive line and two loop momenta on a one-cycle graph.
+        assert_p_malformed(
+            "topo(prop(1,edge(1,2),k(1)+k(2),muvsq,1)*prop(2,edge(2,1),k(1)+k(2)-p(1),0,1))",
+            "the routing does not match the graph's loop count",
+        );
+        // Non-integer power and a loop-count mismatch.
+        assert_p_malformed(
+            "topo(prop(1,edge(1,2),k(1)+k(2),0,1/2)*prop(2,edge(2,1),k(1)+k(2)-p(1),0,1))",
+            "the routing does not match the graph's loop count",
+        );
+        // Massive line and a routing of determinant 2.
+        assert_p_malformed(
+            "topo(prop(1,edge(1,2),2*k(1),muvsq,1)*prop(2,edge(2,1),2*k(1)-p(1),0,1))",
+            "no unimodular change of loop momenta",
+        );
+        // Two heads and a loop momentum that is not conserved.
+        assert_p_malformed(
+            "topo(prop(1,edge(1,2),k(1)+p(2),0,1)*prop(2,edge(2,1),2*k(1)-3*p(1),0,1))",
+            "momentum conservation",
+        );
+        // A graph outside the registry (five loops) with a routing of
+        // determinant 2.
+        assert_p_malformed(
+            "topo(prop(1,edge(1,2),2*k(1),0,1)*prop(2,edge(1,2),k(2),0,1)*prop(3,edge(1,2),k(3),0,1)\
+             *prop(4,edge(1,2),k(4),0,1)*prop(5,edge(1,2),k(5),0,1)\
+             *prop(6,edge(2,1),2*k(1)+k(2)+k(3)+k(4)+k(5)-p(1),0,1))",
+            "no unimodular change of loop momenta",
+        );
     }
 }
 

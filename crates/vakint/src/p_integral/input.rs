@@ -263,6 +263,107 @@ pub(super) fn is_scaleless(lines: &[(i64, i64)], entry: i64, exit: i64, loops: u
         })
 }
 
+/// The cycle rank of the lines `ends` must equal the number of loop momenta
+/// (item 4).
+fn check_loop_count(ends: &[(i64, i64)], loops: usize) -> Result<(), VakintError> {
+    let vertices = ends
+        .iter()
+        .flat_map(|&(a, b)| [a, b])
+        .collect::<BTreeSet<_>>();
+    let rank = ends.len() + components(&vertices, ends, None).len() - vertices.len();
+    if rank != loops {
+        return Err(invalid(format!(
+            "the routing does not match the graph's loop count ({loops} loop momenta, cycle rank {rank})"
+        )));
+    }
+    Ok(())
+}
+
+/// Momentum conservation of the loop momenta alone (item 3 with several
+/// external heads): every vertex balance is free of `k(j)`.
+fn check_loop_conservation(
+    ends: &[(i64, i64)],
+    momenta: &[LinearMomentum],
+) -> Result<(), VakintError> {
+    let mut balances = BTreeMap::<i64, LinearMomentum>::new();
+    for (&(from, to), momentum) in ends.iter().zip(momenta) {
+        for (vertex, sign) in [(from, 1), (to, -1)] {
+            let balance = balances.entry(vertex).or_default();
+            for (head, coefficient) in momentum {
+                let entry = balance.entry(head.clone()).or_insert_with(Rational::zero);
+                *entry = &*entry + &(coefficient * &Rational::from(sign));
+            }
+            balance.retain(|_, coefficient| !coefficient.is_zero());
+        }
+    }
+    match balances
+        .iter()
+        .find(|(_, balance)| !loop_part(balance).is_empty())
+    {
+        Some((vertex, balance)) => Err(invalid(format!(
+            "momentum conservation: {vertex} -> {}",
+            to_atom(balance)
+        ))),
+        None => Ok(()),
+    }
+}
+
+/// The loop momenta are a basis of the graph's integer cycles (a unimodular
+/// routing): on the chords of a spanning tree their coefficients form a
+/// square matrix of determinant ±1. Assumes conservation and a matching loop
+/// count, so that the chords determine every line.
+fn check_unimodular(ends: &[(i64, i64)], momenta: &[LinearMomentum]) -> Result<(), VakintError> {
+    let heads = momenta
+        .iter()
+        .flat_map(|momentum| loop_part(momentum).into_keys())
+        .collect::<BTreeSet<_>>();
+    let mut classes = VertexClasses::default();
+    let mut chords = Vec::new();
+    for (&(a, b), momentum) in ends.iter().zip(momenta) {
+        if classes.find(a) == classes.find(b) {
+            chords.push(
+                heads
+                    .iter()
+                    .map(|head| momentum.get(head).cloned().unwrap_or_else(Rational::zero))
+                    .collect::<Vec<_>>(),
+            );
+        } else {
+            classes.merge((a, b));
+        }
+    }
+    if chords.len() != heads.len() || !determinant(chords).abs().is_one() {
+        return Err(invalid(
+            "no unimodular change of loop momenta maps the routing onto a basis of the \
+             graph's cycles (the loop momenta of the chords of a spanning tree must have \
+             determinant ±1)",
+        ));
+    }
+    Ok(())
+}
+
+/// The determinant of a square rational matrix (Gaussian elimination).
+fn determinant(mut matrix: Vec<Vec<Rational>>) -> Rational {
+    let mut determinant = Rational::one();
+    for column in 0..matrix.len() {
+        let Some(found) = (column..matrix.len()).find(|&row| !matrix[row][column].is_zero()) else {
+            return Rational::zero();
+        };
+        if found != column {
+            matrix.swap(found, column);
+            determinant = -determinant;
+        }
+        let pivot_row = matrix[column].clone();
+        determinant = &determinant * &pivot_row[column];
+        for row in &mut matrix[column + 1..] {
+            let factor = &row[column] / &pivot_row[column];
+            for (entry, pivot_entry) in row.iter_mut().zip(&pivot_row).skip(column) {
+                *entry = &*entry - &(&factor * pivot_entry);
+            }
+        }
+    }
+    determinant
+}
+
 impl PGraph {
     /// Parse and validate a long or short form p-integral (section 1, items 1-4).
     pub(crate) fn parse(integral: AtomView) -> Result<Self, VakintError> {
@@ -284,6 +385,9 @@ impl PGraph {
         if let Some(family) = short_form_family(argument) {
             return Self::from_lines(family.short_form_lines(argument)?);
         }
+        // Malformed wins: a reason to be out of domain (the first one found)
+        // is only returned once every structural check has passed.
+        let mut out_of_domain_reason = None;
         let mut lines = Vec::new();
         for factor in factors(argument) {
             let AtomView::Fun(prop) = factor else {
@@ -311,10 +415,12 @@ impl PGraph {
                 return Err(invalid(format!("prop {id}: vertex ids must be nonnegative")).into());
             }
             if !arguments[3].is_zero() {
-                return Err(out_of_domain(format!(
-                    "p-integrals are massless; prop {id} has mass {}",
-                    arguments[3]
-                )));
+                out_of_domain_reason.get_or_insert_with(|| {
+                    format!(
+                        "p-integrals are massless; prop {id} has mass {}",
+                        arguments[3]
+                    )
+                });
             }
             lines.push((id, ends, arguments[2].to_owned(), arguments[4].to_owned()));
         }
@@ -330,53 +436,70 @@ impl PGraph {
             .iter()
             .flat_map(|momentum| momentum.keys().filter(|head| is_external(head)).cloned())
             .collect::<BTreeSet<_>>();
-        if heads.len() != 1 {
-            let detail = format!(
-                "a p-integral has one external momentum; found {}",
-                if heads.is_empty() {
-                    "none".to_owned()
-                } else {
+        if heads.is_empty() {
+            return Err(invalid("a p-integral has one external momentum; found none").into());
+        }
+        let ends = lines.iter().map(|(_, ends, ..)| *ends).collect::<Vec<_>>();
+        // Conservation is checked before the powers, as in the spec.
+        let graph = if heads.len() == 1 {
+            Some(Self::validated(
+                lines
+                    .iter()
+                    .map(|(id, ends, momentum, _)| (*id, *ends, momentum.clone()))
+                    .collect(),
+                heads.iter().next().unwrap().clone(),
+            )?)
+        } else {
+            // Several heads: a multi-scale integral, out of domain if its
+            // loop momenta are conserved at every vertex.
+            check_loop_conservation(&ends, &momenta)?;
+            out_of_domain_reason.get_or_insert_with(|| {
+                format!(
+                    "a p-integral has one external momentum; found {}",
                     heads
                         .iter()
                         .map(Atom::to_string)
                         .collect::<Vec<_>>()
                         .join(", ")
-                }
-            );
-            // Several heads: a multi-scale integral; none: not a p-integral.
-            return Err(if heads.is_empty() {
-                invalid(detail).into()
-            } else {
-                out_of_domain(detail)
+                )
             });
+            None
+        };
+        let mut powers = Vec::with_capacity(lines.len());
+        for (id, _, _, power) in &lines {
+            match get_integer_from_atom(power.as_view()) {
+                Some(power) => powers.push(power),
+                None => {
+                    out_of_domain_reason.get_or_insert_with(|| {
+                        format!("powers must be integers; prop {id} has power {power}")
+                    });
+                }
+            }
         }
-        // Conservation is checked before the powers, as in the spec.
-        let graph = Self::validated(
-            lines
-                .iter()
-                .map(|(id, ends, momentum, _)| (*id, *ends, momentum.clone()))
-                .collect(),
-            heads.into_iter().next().unwrap(),
-        )?;
-        let lines = lines
-            .into_iter()
-            .map(|(id, ends, momentum, power)| {
-                let power = get_integer_from_atom(power.as_view()).ok_or_else(|| {
-                    out_of_domain(format!(
-                        "powers must be integers; prop {id} has power {power}"
-                    ))
-                })?;
-                Ok(PLine {
+        let loops = momenta
+            .iter()
+            .flat_map(|momentum| loop_part(momentum).into_keys())
+            .collect::<BTreeSet<_>>()
+            .len();
+        check_loop_count(&ends, loops)?;
+        if let Some(reason) = out_of_domain_reason {
+            check_unimodular(&ends, &momenta)?;
+            return Err(out_of_domain(reason));
+        }
+        let graph = graph.expect("one external head without an out-of-domain reason");
+        Ok(Self {
+            lines: lines
+                .into_iter()
+                .zip(powers)
+                .map(|((id, ends, momentum, _), power)| PLine {
                     id,
                     ends,
                     momentum,
                     power,
                 })
-            })
-            .collect::<Result<Vec<_>, PRejection>>()?;
-        let graph = Self { lines, ..graph };
-        graph.check_loop_count()?;
-        Ok(graph)
+                .collect(),
+            ..graph
+        })
     }
 
     /// Lines with integer powers, as produced by a short form.
@@ -466,18 +589,19 @@ impl PGraph {
     /// The cycle rank must equal the number of loop momenta (item 4).
     fn check_loop_count(&self) -> Result<(), VakintError> {
         let ends = self.lines.iter().map(|line| line.ends).collect::<Vec<_>>();
-        let vertices = ends
+        check_loop_count(&ends, self.loops)
+    }
+
+    /// The routing is unimodular: the loop momenta are a basis of the graph's
+    /// integer cycles (see [`check_unimodular`]).
+    pub(crate) fn check_unimodular(&self) -> Result<(), VakintError> {
+        let ends = self.lines.iter().map(|line| line.ends).collect::<Vec<_>>();
+        let momenta = self
+            .lines
             .iter()
-            .flat_map(|&(a, b)| [a, b])
-            .collect::<BTreeSet<_>>();
-        let rank = ends.len() + components(&vertices, &ends, None).len() - vertices.len();
-        if rank != self.loops {
-            return Err(invalid(format!(
-                "the routing does not match the graph's loop count ({} loop momenta, cycle rank {rank})",
-                self.loops
-            )));
-        }
-        Ok(())
+            .map(|line| line_momentum(line.id, line.momentum.as_view()))
+            .collect::<Result<Vec<_>, _>>()?;
+        check_unimodular(&ends, &momenta)
     }
 
     /// Section 1, items 5 and 6: tree lines become `dot(p,p)^(-a)`, lines with

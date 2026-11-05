@@ -508,7 +508,7 @@ pub fn assert_p_malformed(input: &str, fragment: &str) {
 /// (section 1, "Out of domain"): without `allow_unknown_integrals` it is an
 /// error mentioning `fragment`; with it (the default) it canonicalizes to the
 /// unknown integral `topo(UNKNOWN(...))` of its long form, which is `input`
-/// itself, and evaluating it is an error, not a value.
+/// itself, and evaluating it is the out-of-domain error, not a value.
 pub fn assert_p_unknown(input: &str, fragment: &str) {
     assert_p_error(input, fragment);
     let settings = VakintSettings::default();
@@ -521,8 +521,12 @@ pub fn assert_p_unknown(input: &str, fragment: &str) {
         .replace(parse("topo(x_)").to_pattern())
         .with(parse("topo(UNKNOWN(x_))").to_pattern());
     assert_eq!(unknown, expected, "{input}");
-    if let Ok(value) = VAKINT.evaluate(&settings, atom.as_view()) {
-        panic!("{input} is no p-integral, yet it evaluated to {value}");
+    match VAKINT.evaluate(&settings, atom.as_view()) {
+        Ok(value) => panic!("{input} is no p-integral, yet it evaluated to {value}"),
+        Err(error) => assert!(
+            error.to_string().contains("out-of-domain p-integral"),
+            "{input}: evaluating gave '{error}', not the out-of-domain error"
+        ),
     }
 }
 

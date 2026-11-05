@@ -267,6 +267,42 @@ mod tests {
         assert!(relative_difference(stuffle, &(value(&[5, 3]) * &value(&[3]))) < 1e-55);
     }
 
+    /// The independent value check of `ζ(6,4,1,1)` (duality cannot be one,
+    /// see [`every_master_table_constant_satisfies_duality`]): the stuffle
+    /// `ζ(6)ζ(4,1,1) = ζ(6,4,1,1) + ζ(4,6,1,1) + ζ(4,1,6,1) + ζ(4,1,1,6)
+    /// + ζ(10,1,1) + ζ(4,7,1) + ζ(4,1,7)` with the literal `ζ(6) = π^6/945`.
+    /// A relative error of 1e-6 per `Li(1/2)` factor breaks it at ~1e-9.
+    #[test]
+    fn the_weight_twelve_depth_four_constant_satisfies_a_stuffle() {
+        let value = |indices: &[i64]| mzv_float(indices, 200).unwrap();
+        let pi = Float::parse(
+            "3.14159265358979323846264338327950288419716939937510582097494459230781640628620899862803482534211706798",
+            Some(200),
+        )
+        .unwrap();
+        let pi_squared = pi.clone() * &pi;
+        let zeta6 = pi_squared.clone() * &pi_squared * &pi_squared / Float::with_val(200, 945);
+        // ζ(6) itself, against the literal.
+        assert!(relative_difference(value(&[6]), &zeta6) < 1e-55);
+        let stuffle = [
+            vec![6, 4, 1, 1],
+            vec![4, 6, 1, 1],
+            vec![4, 1, 6, 1],
+            vec![4, 1, 1, 6],
+            vec![10, 1, 1],
+            vec![4, 7, 1],
+            vec![4, 1, 7],
+        ]
+        .iter()
+        .fold(Float::new(200), |sum, indices| sum + &value(indices));
+        let difference = relative_difference(stuffle, &(zeta6 * &value(&[4, 1, 1])));
+        assert!(difference < 1e-55, "{difference}");
+    }
+
+    /// Duality `ζ(w) = ζ(τ(w))` through [`mzv_float`] only tests the word and
+    /// index handling: the Hölder convolution gives the dual word the same
+    /// split products (term `j` becomes term `n - j`), so it holds even with a
+    /// wrong `polylog_at_half`. The values are checked by the stuffles above.
     #[test]
     fn every_master_table_constant_satisfies_duality() {
         let constants = master_table_constants();
@@ -303,6 +339,8 @@ mod tests {
     fn every_master_table_constant_evaluates_numerically() {
         // Through vakint's numerical evaluator at 40 digits: 1 + 10^25·(ζ(w)
         // - ζ(τ(w))) is 1 to double precision iff the two agree to ~1e-35.
+        // Like the duality test above, this checks that the evaluator reaches
+        // `mzv_float` with the right indices, not the values themselves.
         let settings = crate::VakintSettings {
             run_time_decimal_precision: 40,
             ..Default::default()

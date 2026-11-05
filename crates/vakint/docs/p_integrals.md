@@ -60,10 +60,18 @@ Kind inference (no flag):
   unknown integral is `topo(UNKNOWN(...))` of the long form (after the exact normalization of items 5-6 when only item
   8 applies); its momenta keep `p(i)` (only this fallback admits them; at base 64090b527 the `UNKNOWN` matcher refused
   `p` heads) and its loop count is the number of `k(j)`. No backend evaluates it (pySecDec takes external momenta only
-  in numerators), so evaluating it is an error; `to_canonical` passes it through. A short form out of domain (a
-  non-integer power) is no unknown integral and keeps its error. Malformed inputs (not a `prop`, a bad edge or vertex
-  id, repeated prop ids, no external head, broken momentum conservation, a loop-count mismatch, a momentum that is not
-  an integer combination of heads, a non-unimodular routing, a tensor numerator) are errors under any setting.
+  in numerators), so evaluating it, or matching the `topo(UNKNOWN(...))` output again, is the error "out-of-domain
+  p-integral (...): an unknown integral with an external momentum p(i), which no backend evaluates";
+  `to_canonical` passes it through once. A short form out of domain (a non-integer power) is no unknown integral and
+  keeps its error. Malformed inputs (not a `prop`, a bad edge or vertex id, repeated prop ids, no external head,
+  broken momentum conservation, a loop-count mismatch, a momentum that is not an integer combination of heads, a
+  non-unimodular routing) are errors under any setting, also when the input is out of domain as well: malformed
+  wins, every structural check runs before an out-of-domain reason is returned. With several external heads,
+  conservation means that every vertex balance is free of `k(j)` (the heads injected at a vertex are arbitrary).
+  A non-unimodular routing of a graph in the registry is rejected by its affine routing (Matching); for an
+  out-of-domain input or a graph outside the registry it is checked on the chords of a spanning tree (their loop
+  momentum coefficients must have determinant ±1). The numerator of an unknown integral is not inspected (as for a
+  vacuum `UNKNOWN`): a tensor numerator is an error (item 7) only on a p-integral in the domain.
 - In code: `p_integral::input::PRejection { OutOfDomain(String), Malformed(VakintError) }`; the fallback is
   `Topologies::match_propagator(input, allow_unknown_integrals)`.
 - Inference lives in `p_integral::infer_kind(integral: AtomView) -> Result<IntegralKind, VakintError>`.
@@ -73,7 +81,8 @@ Validation, in this order. Every error is `VakintError::InvalidIntegralFormat("p
 1. A nonzero mass in any prop: "p-integrals are massless; prop {id} has mass {m}".
 2. More than one external head, e.g. `p(1)` and `p(2)`: "a p-integral has one external momentum; found {heads}".
    A sum `p(1)+p(2)` injected at one vertex is rejected the same way: define `q` as a single head.
-3. Vertex balances not of the form above: "momentum conservation: {vertex} -> {balance}".
+3. Vertex balances not of the form above: "momentum conservation: {vertex} -> {balance}". With several heads
+   (item 2, out of domain), a vertex balance that contains a loop momentum.
 4. Non-integer power: "powers must be integers". A cycle rank different from the number of distinct `k(j)` heads:
    "the routing does not match the graph's loop count".
 5. Normalization (exact, before matching):
@@ -93,7 +102,8 @@ Validation, in this order. Every error is `VakintError::InvalidIntegralFormat("p
    The tensor prepass (`tensor_reduce_for_evaluation`) must not project p-integral terms; it only puts them in
    scalar-product form.
 8. More than 4 loops, or a graph that is in no catalogue (section 2): `VakintError::UnreckognizedIntegral`, with the
-   note "p-integral not covered by the 1L-4L registry".
+   note "p-integral not covered by the 1L-4L registry", without `allow_unknown_integrals`; with it, the unknown
+   integral of "Out of domain" above (after its routing passed the unimodularity check).
 
 ## 2. Topology registry and matching
 
@@ -529,20 +539,26 @@ Per loop count:
     tail into the requested order gives `MissingMasterOrders`, and the same request one order lower passes.
   - Error cases of section 1: massive line, two heads, broken conservation, non-integer power, tensor numerator,
     5L input, non-unimodular routing; the same out-of-domain inputs are `UNKNOWN` under `allow_unknown_integrals`, the
-    malformed ones stay errors, and unknown vacuum integrals are unchanged.
+    malformed ones stay errors (also when they are out of domain as well), and unknown vacuum integrals are unchanged.
   - Normalization: tree line, merged identical quadrics, negative power; evaluated (live Forcer): tree lines of power 1
-    and 2, a negative short-form power, a reversed short-form head, and a bubble chain through a cut vertex (`1/ε^2`,
-    not scaleless).
+    and 2, a negative short-form power, a negative long-form power (`-1` and `-2`), a reversed short-form head, and a
+    bubble chain through a cut vertex (`1/ε^2`, not scaleless).
   - Analytic identities (live Forcer, `tests/p_integral_forcer_tests.rs::identities`): odd and even rank and the
     reversed external momentum (`σ = -1`) at 1L-4L (`k·q = (k² + q² - (k-q)²)/2` and its partial fractions on the
     bubble, the kite, `NO` and `LA4`); index notation and linear `dot` arguments (also FORM-free on canonical forms).
-  - The `Oep` guard through `Vakint::evaluate` at 4L (`P4L_NO1`, symbolic and numerical masters).
+  - The `Oep` guard through `Vakint::evaluate` at 4L (`P4L_NO1`, symbolic and numerical masters): 10 Laurent terms
+    pass and 11 give `MissingMasterOrders`, in both modes.
   - G-scheme on vacuum integrals (FORM-free, RustRed: the massive tadpole is `1/ε - 2 + ζ2 ε`) and on a vacuum plus a
     p-integral (FORM 5).
-  - FORM older than 5 (fake FORM 4.3.1, FORM-free): `EvaluationOrder::all()` validates, a vacuum integral evaluates, a
-    p-integral reports `ForcerUnavailable`, and an order of Forcer alone fails validation.
-  - The MZV evaluator (`src/p_integral/mzv.rs`): stuffle relations at weights 8-12 and duality for every `ζ(n)` and
-    `MZV(...)` of the master table, directly and through the numerical evaluator.
+  - FORM older than 5 (fake FORM 4.3.1, FORM-free): the Forcer check of the settings validation passes for a mixed
+    order (`EvaluationOrder::all()` may still fail on a missing pySecDec, so `all()` without pySecDec is the order
+    asserted to validate), a vacuum integral evaluates, a p-integral reports `ForcerUnavailable`, and an order of
+    Forcer alone fails validation.
+  - The MZV evaluator (`src/p_integral/mzv.rs`): stuffle relations at weights 8-12, one for every multiple constant
+    of the master table (`ζ(5,3)`, `ζ(7,3)`, `ζ(9,3)`, `ζ(5,3,3)`, and `ζ(6)ζ(4,1,1)` with `ζ(6) = π^6/945` for
+    `ζ(6,4,1,1)`), and duality for every `ζ(n)` and `MZV(...)` of the master table, directly and through the numerical
+    evaluator. Duality only tests the word and index handling: the Hölder convolution gives a word and its dual the
+    same split products, so it holds even with a wrong `Li(1/2)`; the stuffles are the value checks.
   - Forcer sources: a foreign or modified materialized directory is never used
     (`forcer::tests::untrusted_source_directories_are_never_used`).
 - Registry and catalogue:

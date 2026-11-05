@@ -419,6 +419,24 @@ mod normalization {
     }
 
     #[test]
+    fn negative_long_form_powers_evaluate_as_numerators() {
+        // Line 3 of this kite carries k(2).
+        let kite = |third: i64| {
+            format!(
+                "topo(prop(1,edge(1,3),k(1),0,1)*prop(2,edge(1,4),p(1)-k(1),0,1)\
+                 *prop(3,edge(3,4),k(2),0,{third})*prop(4,edge(3,2),k(1)-k(2),0,1)\
+                 *prop(5,edge(4,2),p(1)-k(1)+k(2),0,1))"
+            )
+        };
+        for power in [1, 2] {
+            assert_p_identity(
+                &kite(-power),
+                &format!("dot(k(2),k(2))^{power}*{}", kite(0)),
+            );
+        }
+    }
+
+    #[test]
     fn a_reversed_short_form_head_evaluates_alike() {
         // A scalar integral is even in q.
         assert_p_identity("topo(P2L(-p(1),1,2,1,3,1))", "topo(P2L(p(1),1,2,1,3,1))");
@@ -439,7 +457,8 @@ mod normalization {
 
 /// The `Oep` guard through `Vakint::evaluate` at four loops (M1 review,
 /// missing test 5): asking for more orders than the masters provide is a
-/// `MissingMasterOrders` error, one order fewer passes.
+/// `MissingMasterOrders` error, one order fewer passes. The boundary is
+/// pinned (10 pass, 11 fail) so that a guard firing too early fails too.
 #[test]
 fn the_four_loop_oep_guard_fails_closed_through_evaluate() {
     let Some(form) = forcer_form() else {
@@ -448,8 +467,8 @@ fn the_four_loop_oep_guard_fails_closed_through_evaluate() {
     };
     let top = parse("topo(P4L_NO1(p(1),1,1,1,1,1,1,1,1,1,1,1))");
     for (mode, passing, failing) in [
-        (RustRedMasterMode::Symbolic, 5, 11),
-        (RustRedMasterMode::Numerical, 9, 11),
+        (RustRedMasterMode::Symbolic, 10, 11),
+        (RustRedMasterMode::Numerical, 10, 11),
     ] {
         let evaluate = |terms| {
             vakint::Vakint::new().unwrap().evaluate(

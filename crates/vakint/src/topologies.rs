@@ -28,6 +28,12 @@ pub use momentum_mapping::MomentumMatchLimits;
 #[cfg(test)]
 pub(crate) use momentum_mapping::first_minimal_acceptance;
 
+/// The error of evaluating (or re-matching) the unknown integral of an
+/// out-of-domain p-integral: no backend evaluates it.
+pub(crate) const OUT_OF_DOMAIN_P_INTEGRAL: &str = "out-of-domain p-integral (docs/p_integrals.md, \
+     section 1, \"Out of domain\"): an unknown integral with an external momentum p(i), which no \
+     backend evaluates";
+
 pub enum TopologyContractions {
     Custom(Vec<Vec<usize>>),
     Automatic,
@@ -444,6 +450,10 @@ impl Topologies {
             }
             Err(rejection) => return Err(rejection.into()),
         };
+        // A registry match checks the routing through its change of loop
+        // momenta; a graph outside the registry is checked here, so that a
+        // malformed routing never becomes an unknown integral.
+        let unimodular = graph.check_unimodular();
         let graph = match graph.normalize()? {
             Normalized::Zero => return Ok(None),
             Normalized::Graph { graph, .. } => graph,
@@ -454,6 +464,7 @@ impl Topologies {
             ))
         };
         let Some(matched) = p_integral::match_graph(&graph)? else {
+            unimodular?;
             return self.match_unknown_propagator(input, allow_unknown_integrals, uncovered());
         };
         let name = P_FAMILIES[matched.family].name;
@@ -1055,8 +1066,15 @@ impl Topology {
                         )?
                         .iter()
                         {
-                            if external_momenta && *mom_symbol == S.p {
-                                continue;
+                            if *mom_symbol == S.p {
+                                if external_momenta {
+                                    continue;
+                                }
+                                // The unknown integral of an out-of-domain
+                                // p-integral (`Topologies::match_propagator`).
+                                return Err(VakintError::InvalidIntegralFormat(
+                                    OUT_OF_DOMAIN_P_INTEGRAL.to_owned(),
+                                ));
                             }
                             if *mom_symbol != S.k {
                                 return Err(VakintError::InvalidIntegralFormat(format!(
