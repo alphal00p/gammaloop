@@ -271,7 +271,6 @@ mod tests {
     /// see [`every_master_table_constant_satisfies_duality`]): the stuffle
     /// `ζ(6)ζ(4,1,1) = ζ(6,4,1,1) + ζ(4,6,1,1) + ζ(4,1,6,1) + ζ(4,1,1,6)
     /// + ζ(10,1,1) + ζ(4,7,1) + ζ(4,1,7)` with the literal `ζ(6) = π^6/945`.
-    /// A relative error of 1e-6 per `Li(1/2)` factor breaks it at ~1e-9.
     #[test]
     fn the_weight_twelve_depth_four_constant_satisfies_a_stuffle() {
         let value = |indices: &[i64]| mzv_float(indices, 200).unwrap();

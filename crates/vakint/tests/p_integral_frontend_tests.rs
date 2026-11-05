@@ -435,12 +435,9 @@ mod out_of_domain {
         );
         // A short form is no unknown integral: out of domain, it stays an error.
         assert_p_malformed("topo(P1L(p(1),1/2,1))", "powers must be integers");
-    }
 
-    /// Malformed wins: an input that is out of domain AND malformed is an error
-    /// under any setting, never an unknown integral (M2-V1 review round 1).
-    #[test]
-    fn malformed_inputs_out_of_domain_as_well_are_errors_under_any_setting() {
+        // Malformed wins: an input that is out of domain AND malformed is an
+        // error under any setting, never an unknown integral.
         // Massive line and repeated prop ids.
         assert_p_malformed(
             "topo(prop(1,edge(1,2),k(1),muvsq,1)*prop(1,edge(2,1),k(1)-p(1),0,1))",
