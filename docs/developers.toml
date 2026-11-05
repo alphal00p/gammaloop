@@ -270,7 +270,10 @@ path = "tests/tests/test_feyngen.rs"
 symbol = "named certified QCD2 row and current physical CLI controls"
 anchor = "fn feyngen_str("
 # Reviewed intent preserved through current staged/interop/input owners; no changed physical conventions.
-digest = "36a56dabb52a9462a23d6512cf91bd0b5bc07bba"
+# No-impact attestation 2026-11-05: the reviewed snapshot13 expectation update
+# preserves the certified QCD2 row and physical CLI controls. The review above
+# remains historical; this digest follows the accepted fixture-only child.
+digest = "620d91457488804fb3163fafcca6a49fdfc3473a"
 
 [[section.note]]
 id = "generation-frame-certificate"
