@@ -381,9 +381,11 @@ impl PGraph {
     /// `topo(UNKNOWN(...))` with an external momentum: the unknown integral of
     /// an out-of-domain p-integral (`Topologies::match_propagator`).
     pub(crate) fn is_out_of_domain_unknown(integral: AtomView) -> bool {
+        // The symbol comes last: `vk_symbol!` interns it, and this check runs
+        // on every vacuum term, which must not register a new symbol.
         matches!(topology_argument(integral), Some(AtomView::Fun(unknown))
-            if unknown.get_symbol() == vk_symbol!("UNKNOWN")
-                && unknown.iter().any(props_mention_external_momentum))
+            if unknown.iter().any(props_mention_external_momentum)
+                && unknown.get_symbol() == vk_symbol!("UNKNOWN"))
     }
 
     /// [`Self::parse`] with the reason of a rejection: out of the p-integral
