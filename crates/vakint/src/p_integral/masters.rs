@@ -147,3 +147,41 @@ pub(crate) fn p_master_expansion(name: &str, epsilon: Symbol) -> Result<Atom, Va
         .replace(Atom::var(table_epsilon()).to_pattern())
         .with(Atom::var(epsilon).to_pattern()))
 }
+
+/// The names of the tabulated p-masters (`Masters.prc` names such as `no`,
+/// `t105`, `no1`), sorted: the only names a backend may return as
+/// `PMaster(name)`.
+pub(crate) fn p_master_names() -> Result<Vec<&'static str>, VakintError> {
+    Ok(p_master_table()?.keys().map(String::as_str).collect())
+}
+
+/// The name of `PMaster(name)`, if `atom` is one: a single argument, a symbol
+/// of vakint's namespace.
+pub(crate) fn p_master_name(atom: AtomView) -> Option<String> {
+    let AtomView::Fun(function) = atom else {
+        return None;
+    };
+    if function.get_symbol() != super::p_master_symbol() || function.get_nargs() != 1 {
+        return None;
+    }
+    match function.iter().next() {
+        Some(AtomView::Var(name)) if name.get_symbol().get_namespace() == crate::NAMESPACE => {
+            Some(name.get_symbol().get_stripped_name().to_string())
+        }
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn the_sixteen_forcer_masters_are_named() {
+        assert_eq!(
+            super::p_master_names().unwrap(),
+            [
+                "bebe", "cross", "fastar2", "haha", "lala", "no", "no1", "no2", "no6", "nono",
+                "nostar5", "nostar6", "t105", "t124", "t145", "t155"
+            ]
+        );
+    }
+}

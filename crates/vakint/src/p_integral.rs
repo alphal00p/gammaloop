@@ -6,10 +6,14 @@
 //! four-loop family registry, the matching witness and the backend-independent
 //! reduced value, together with the frontend: kind inference, validation and
 //! exact normalization (`input`), the catalogue and graph matching
-//! (`catalogue`) and the DOT export (`dot`). Evaluation and finalization are
-//! wired elsewhere.
+//! (`catalogue`) and the DOT export (`dot`). Both backends share the
+//! numerator split (`parts`), the finalizer (`finalize`, `laurent`), the
+//! p-master table (`masters`) and the exact tag-basis comparison (`compare`);
+//! the Forcer backend and its frozen fixtures live in `forcer`.
 
 mod catalogue;
+#[doc(hidden)]
+pub mod compare;
 mod dot;
 pub(crate) mod finalize;
 pub(crate) mod forcer;
@@ -19,6 +23,7 @@ mod input;
 mod laurent;
 pub(crate) mod masters;
 pub(crate) mod mzv;
+pub(crate) mod parts;
 
 use std::sync::OnceLock;
 
@@ -34,6 +39,9 @@ use crate::{
 
 pub(crate) use catalogue::{PMatch, match_graph};
 pub use dot::to_dot;
+/// Frozen Forcer outputs for the integration tests (not part of the API).
+#[doc(hidden)]
+pub use forcer::fixtures as forcer_fixtures;
 pub(crate) use input::{Normalized, PGraph, PLine};
 
 pub(crate) fn invalid(detail: impl std::fmt::Display) -> VakintError {
@@ -232,6 +240,14 @@ pub(crate) fn pg_symbol() -> Symbol {
 /// `vakint::PMaster(name)`: Forcer's `Master(name)`, in the G-scheme.
 pub(crate) fn p_master_symbol() -> Symbol {
     vk_symbol!("PMaster")
+}
+
+/// `vakint::PGamma(m) = Γ(1+mε)` for a nonzero integer `m`, raised to integer
+/// powers: the Gamma tags of the RustRed p reduction (M2 plan, convention C4).
+/// `Retain` keeps it symbolic; `Symbolic` and `Numerical` expand it exactly to
+/// any depth (`laurent::expand`).
+pub(crate) fn p_gamma_symbol() -> Symbol {
+    vk_symbol!("PGamma")
 }
 
 /// The user's external head `p(i)` and the sign `σ` of `external = σ·p(i)`.

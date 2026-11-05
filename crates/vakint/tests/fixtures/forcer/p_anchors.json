@@ -1,0 +1,189 @@
+{
+  "forcer_commit": "68a30bfb2aec3672a2f674ca8666bfc970105e24",
+  "form_version": "5.0.0",
+  "provenance": "M2-V2 normalization anchors (M2 plan section 3.3); fixtures::anchor_cases in src/p_integral/forcer/fixtures.rs; VAKINT_FORCER_FIXTURES=write with FORM 5; outputs are raw Forcer C_G before the Wick sign: reduced = (-1)^(sum a + r) C_G (ForcerCase::frozen_values)",
+  "cases": [
+    {
+      "name": "p1l_11",
+      "family": "P1L",
+      "powers": [
+        1,
+        1
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)*rat(1,1)\n"
+      ]
+    },
+    {
+      "name": "p1l_kq_plus",
+      "family": "P1L",
+      "powers": [
+        1,
+        1
+      ],
+      "numerator": "dot(k(1),p(1))",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)*rat(1,2)\n"
+      ]
+    },
+    {
+      "name": "p1l_kq_minus",
+      "family": "P1L",
+      "powers": [
+        1,
+        1
+      ],
+      "numerator": "dot(k(1),p(1))",
+      "external": "-p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)*rat(-1,2)\n"
+      ]
+    },
+    {
+      "name": "kite",
+      "family": "P2L",
+      "powers": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)^2*rat( - 2*ep + 1,ep) + GschemeConstants(0,0)*GschemeConstants(1,0)*rat(3*ep - 1,ep)\n"
+      ]
+    },
+    {
+      "name": "kite_rank3_kp",
+      "family": "P2L",
+      "powers": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "numerator": "dot(k(1),p(1))^2*dot(k(2),p(1))",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)*GschemeConstants(1,0)*rat(2*ep - 1,12*ep - 8)\n"
+      ]
+    },
+    {
+      "name": "kite_rank3_mixed",
+      "family": "P2L",
+      "powers": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "numerator": "dot(k(1),p(1))*dot(k(1),k(2))",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)^2*rat(1,4) + GschemeConstants(0,0)*GschemeConstants(1,0)*rat(2*ep - 1,24*ep - 16)\n"
+      ]
+    },
+    {
+      "name": "no",
+      "family": "P3L_NO",
+      "powers": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "Master(no)*rat(1,1)\n"
+      ]
+    },
+    {
+      "name": "t105_parent_la",
+      "family": "P3L_LA",
+      "powers": [
+        1,
+        1,
+        1,
+        0,
+        1,
+        1,
+        0,
+        1
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)*GschemeConstants(1,0)*GschemeConstants(2,0)*rat(5*ep - 1,9*ep - 3) + GschemeConstants(0,0)*Master(t105)*rat( - 2*ep,3*ep - 1)\n"
+      ]
+    },
+    {
+      "name": "t105_parent_no",
+      "family": "P3L_NO",
+      "powers": [
+        1,
+        0,
+        1,
+        0,
+        1,
+        1,
+        1,
+        1
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)*GschemeConstants(1,0)*GschemeConstants(2,0)*rat(5*ep - 1,9*ep - 3) + GschemeConstants(0,0)*Master(t105)*rat( - 2*ep,3*ep - 1)\n"
+      ]
+    },
+    {
+      "name": "t105_parent_la_dotted",
+      "family": "P3L_LA",
+      "powers": [
+        2,
+        1,
+        1,
+        0,
+        1,
+        1,
+        0,
+        1
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)*Master(t105)*rat(2*ep - 1,1)\n"
+      ]
+    },
+    {
+      "name": "t105_parent_la_rank2",
+      "family": "P3L_LA",
+      "powers": [
+        1,
+        1,
+        1,
+        0,
+        1,
+        1,
+        0,
+        1
+      ],
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)*GschemeConstants(1,0)*GschemeConstants(2,0)*rat( - ep^2,144*ep^2 - 180*ep + 54)\n"
+      ]
+    }
+  ]
+}

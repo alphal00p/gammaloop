@@ -16,7 +16,7 @@ use symbolica::function;
 use symbolica::poly::series::SeriesDepth;
 use symbolica::transcendental::{euler_gamma, gamma, zeta};
 
-use super::{masters, p_master_symbol, pg_symbol};
+use super::{masters, p_gamma_symbol, p_master_symbol, pg_symbol};
 use crate::{VakintError, get_integer_from_atom};
 
 fn failure(detail: impl std::fmt::Display) -> VakintError {
@@ -348,11 +348,35 @@ fn valuation(expression: &Atom, epsilon: Symbol) -> Result<Option<i64>, VakintEr
     ))
 }
 
+/// The first power in `expression` of a function in `symbols` whose exponent
+/// is not an `i16` integer. The collection in `i16` exponents (the range of
+/// RustRed's `GammaTag`) panics or leaves such a power in a coefficient.
+pub(crate) fn unsupported_power(expression: &Atom, symbols: &[Symbol]) -> Option<Atom> {
+    let mut unsupported = None;
+    expression.visitor(&mut |part| {
+        if let AtomView::Pow(power) = part {
+            let (base, exponent) = power.get_base_exp();
+            let i16_integer = get_integer_from_atom(exponent)
+                .is_some_and(|exponent| i16::try_from(exponent).is_ok());
+            if !i16_integer
+                && matches!(base, AtomView::Fun(function) if symbols.contains(&function.get_symbol()))
+            {
+                unsupported = Some(part.to_owned());
+            }
+        }
+        unsupported.is_none()
+    });
+    unsupported
+}
+
 /// The Laurent expansion through `ε^order` of `prefactor × reduced`, where
-/// `reduced` is linear in products of the masters `PG(x1,x2)` (replaced by
+/// `reduced` is a polynomial in the masters `PG(x1,x2)` (replaced by
 /// `pg_value`) and `PMaster(name)` (replaced by its tabulated expansion and
-/// unknown tail) and `prefactor` is a product of rational factors, Γ
-/// functions and exponentials.
+/// unknown tail) and a Laurent polynomial in the Gamma tags `PGamma(m)`, every
+/// `PGamma(m)^e = Γ(1+mε)^e` with an `i16` exponent `e` expanded exactly like
+/// the Γ functions of the prefactor, and `prefactor` is a product of rational
+/// factors, Γ functions and exponentials. Any other dependence on these
+/// symbols is an error, never a result that still contains them.
 pub(crate) fn expand(
     prefactor: &Atom,
     reduced: &Atom,
@@ -362,7 +386,7 @@ pub(crate) fn expand(
     let mut masters = Vec::new();
     reduced.visitor(&mut |part| {
         if let AtomView::Fun(function) = part
-            && [pg_symbol(), p_master_symbol()].contains(&function.get_symbol())
+            && [pg_symbol(), p_master_symbol(), p_gamma_symbol()].contains(&function.get_symbol())
         {
             masters.push(part.to_owned());
             return false;
@@ -371,8 +395,18 @@ pub(crate) fn expand(
     });
     masters.sort();
     masters.dedup();
+    let symbols = [pg_symbol(), p_master_symbol(), p_gamma_symbol()];
+    let expanded = reduced.expand();
+    if let Some(power) = unsupported_power(&expanded, &symbols) {
+        return Err(failure(format!("{power} is not an i16 integer power")));
+    }
     let mut total = Atom::Zero;
-    for (monomial, coefficient) in reduced.expand().coefficient_list::<i8>(&masters) {
+    for (monomial, coefficient) in expanded.coefficient_list::<i16>(&masters) {
+        if symbols.iter().any(|s| coefficient.contains_symbol(*s)) {
+            return Err(failure(format!(
+                "{coefficient} is not free of PG, PMaster and PGamma"
+            )));
+        }
         // The Γ form of the PG factors joins the prefactor; PMaster factors
         // are tabulated Laurent polynomials.
         let mut product = prefactor * &coefficient;
@@ -389,6 +423,21 @@ pub(crate) fn expand(
                 }
                 _ => (factor.clone(), Some(1)),
             };
+            if let AtomView::Fun(function) = base.as_view()
+                && function.get_symbol() == p_gamma_symbol()
+            {
+                // A Gamma tag: any nonzero integer power of Γ(1+mε), m ≠ 0.
+                let m = match function.iter().collect::<Vec<_>>().as_slice() {
+                    [m] => get_integer_from_atom(*m).filter(|m| *m != 0),
+                    _ => None,
+                };
+                let (Some(m), Some(power)) = (m, power) else {
+                    return Err(failure(format!("invalid Gamma tag {factor}")));
+                };
+                product *=
+                    super::finalize::gamma_one_plus(m, &Atom::var(epsilon)).pow(Atom::num(power));
+                continue;
+            }
             let power = power
                 .filter(|p| *p > 0)
                 .ok_or_else(|| failure(format!("invalid master power {factor}")))?;
@@ -408,10 +457,8 @@ pub(crate) fn expand(
                 };
                 product *= super::finalize::pg_value(*x1, *x2, epsilon).pow(Atom::num(power));
             } else {
-                let name = match function.iter().next() {
-                    Some(AtomView::Var(name)) => name.get_symbol().get_stripped_name().to_string(),
-                    _ => return Err(failure(format!("invalid {base}"))),
-                };
+                let name = masters::p_master_name(base.as_view())
+                    .ok_or_else(|| failure(format!("invalid {base}")))?;
                 let value = Laurent::from_polynomial(
                     &masters::p_master_expansion(&name, epsilon)?,
                     epsilon,
@@ -455,8 +502,8 @@ mod tests {
     use symbolica::atom::{Atom, AtomCore};
     use symbolica::function;
 
-    use super::super::finalize::{gamma_series, pg_value};
-    use super::super::{masters, p_master_symbol, pg_symbol};
+    use super::super::finalize::{gamma_one_plus, gamma_series, pg_value};
+    use super::super::{masters, p_gamma_symbol, p_master_symbol, pg_symbol};
     use super::{expand, valuation};
     use crate::Vakint;
     use crate::utils::vakint_macros::{vk_parse, vk_symbol};
@@ -528,6 +575,109 @@ mod tests {
             valuation(&(Atom::num(3) / ep.pow(Atom::num(2))), e).unwrap(),
             Some(-2)
         );
+    }
+
+    #[test]
+    fn gamma_tags_expand_exactly_to_any_depth() {
+        Vakint::initialize_vakint_symbols();
+        let e = vk_symbol!("ε");
+        let ep = Atom::var(e);
+        let one = Atom::num(1);
+        let tag = |m: i64| p_gamma_symbol().call((m,));
+        let pg = |x1: i64, x2: i64| function!(pg_symbol(), Atom::num(x1), Atom::num(x2));
+        let gamma = |m: i64| gamma_one_plus(m, &ep);
+        // Products of tag powers (negative ones included), with poles, a G-scheme
+        // constant and a coefficient that is not a number.
+        let reduced = tag(1).pow(Atom::num(2)) * tag(-2).pow(Atom::num(-1)) / ep.pow(Atom::num(2))
+            + (&one - Atom::num(2) * &ep) / &ep * tag(3) * tag(-1).pow(Atom::num(-3)) * pg(1, 0)
+            + tag(2) * tag(-3).pow(Atom::num(2)) * vk_parse!("mass^2").unwrap()
+            + tag(4).pow(Atom::num(-2)) * Atom::num(7);
+        let reference = gamma(1).pow(Atom::num(2)) * gamma(-2).pow(Atom::num(-1))
+            / ep.pow(Atom::num(2))
+            + (&one - Atom::num(2) * &ep) / &ep
+                * gamma(3)
+                * gamma(-1).pow(Atom::num(-3))
+                * pg_value(1, 0, e)
+            + gamma(2) * gamma(-3).pow(Atom::num(2)) * vk_parse!("mass^2").unwrap()
+            + gamma(4).pow(Atom::num(-2)) * Atom::num(7);
+        let prefactor = Vakint::normalize_gamma_functions(
+            vk_parse!("(𝑖*𝜋^(2-ε)*Gamma(1+ε)*Gamma(1-ε)^2/Gamma(2-2*ε))^3")
+                .unwrap()
+                .as_view(),
+        );
+        for order in [-2, 0, 3, 6] {
+            assert_same(
+                expand(&prefactor, &reduced, e, order).unwrap(),
+                gamma_series(&(&prefactor * &reference), e, order).unwrap(),
+            );
+        }
+        // A tag times a tabulated master: the tag series times the table.
+        let t105 = function!(p_master_symbol(), Atom::var(vk_symbol!("t105")));
+        let table = masters::p_master_expansion("t105", e).unwrap();
+        assert_same(
+            expand(&one, &(tag(-2).pow(Atom::num(3)) * &t105), e, 6).unwrap(),
+            gamma_series(&(gamma(-2).pow(Atom::num(3)) * table), e, 6).unwrap(),
+        );
+        // Malformed tags fail closed.
+        for bad in [p_gamma_symbol().call((0,)), p_gamma_symbol().call((1, 2))] {
+            assert!(expand(&one, &bad, e, 0).is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn gamma_tag_powers_expand_over_the_whole_i16_range() {
+        Vakint::initialize_vakint_symbols();
+        let e = vk_symbol!("ε");
+        let ep = Atom::var(e);
+        let one = Atom::num(1);
+        let tag = p_gamma_symbol().call((1,));
+        for power in [127, 128, 200, -128, -129, -200] {
+            assert_same(
+                expand(&one, &tag.pow(Atom::num(power)), e, 2).unwrap(),
+                gamma_series(&gamma_one_plus(1, &ep).pow(Atom::num(power)), e, 2).unwrap(),
+            );
+        }
+        // The ends of the range, by the exponential series Γ(1+ε) = exp(-γε + O(ε²)).
+        for power in [i64::from(i16::MAX), i64::from(i16::MIN)] {
+            let value = expand(&one, &tag.pow(Atom::num(power)), e, 1).unwrap();
+            let gamma_e = Atom::var(symbolica::transcendental::euler_gamma());
+            assert_same(value, &one - Atom::num(power) * gamma_e * &ep);
+        }
+    }
+
+    #[test]
+    fn anything_but_a_laurent_polynomial_in_the_tags_fails_closed() {
+        Vakint::initialize_vakint_symbols();
+        let e = vk_symbol!("ε");
+        let ep = Atom::var(e);
+        let one = Atom::num(1);
+        let tag = p_gamma_symbol().call((1,));
+        let no = function!(p_master_symbol(), Atom::var(vk_symbol!("no")));
+        let foreign_no = function!(
+            p_master_symbol(),
+            Atom::var(symbolica::symbol!("other::no"))
+        );
+        for bad in [
+            tag.pow(Atom::num(32768)),
+            tag.pow(Atom::num(-32769)),
+            tag.pow(Atom::num(40000)),
+            (tag.pow(Atom::num(30000)) + &one).pow(Atom::num(2)),
+            tag.pow(Atom::num(1) / Atom::num(2)),
+            tag.pow(ep.clone()),
+            &one / (&one + &tag),
+            function!(vk_symbol!("foo"), &tag),
+            no.pow(Atom::num(-1)),
+            &one / (&one + &no),
+            pg_symbol().call((1, 0)).pow(ep.clone()),
+            foreign_no,
+            function!(p_master_symbol(), Atom::var(vk_symbol!("no")), 2),
+        ] {
+            let error = expand(&one, &bad, e, 2).expect_err(&bad.to_string());
+            assert!(
+                matches!(error, crate::VakintError::SymbolicaError(_)),
+                "{bad}: {error}"
+            );
+        }
     }
 
     #[test]
