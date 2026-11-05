@@ -632,3 +632,252 @@ impl Vakint {
         Ok(false)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A common-basis integrand in its first defining parent, as the B1-K
+    /// probe and `admission_census_tests::input_for_key` build it.
+    fn parent_input(key: &IntegralKey) -> Option<(Atom, Atom)> {
+        let (integral, _) = parent_form(key, first_parent(key)?, &Atom::one())?;
+        let mut numerator = Atom::one();
+        for (slot, power) in key.powers().iter().enumerate() {
+            if *power < 0 {
+                numerator *= (S.dot.call((momentum(slot), momentum(slot))) - Atom::one())
+                    .pow(power.unsigned_abs() as u32);
+            }
+        }
+        Some((integral, numerator))
+    }
+
+    /// A unimodular loop-momentum relabelling: k1->k2, k2->k1+k3, k3->-k3,
+    /// k4->k5, k5->k4-k2.
+    fn relabel(atom: &Atom) -> Atom {
+        let k = |axis: usize| S.k.call(axis);
+        transport_numerator(atom, &[k(2), k(1) + k(3), -k(3), k(5), k(4) - k(2)])
+    }
+
+    fn canonical(input: &Atom) -> symbolica::graph::Graph<u8, symbolica::graph::Empty> {
+        crate::topologies::power_colored_canonical_graph(input.as_view(), 5)
+            .unwrap()
+            .unwrap()
+    }
+
+    /// Package-free: contraction, power-colored canonical forms and the
+    /// verified power-preserving maps of the BASIS-v2 master P387.
+    #[test]
+    fn power_preserving_maps_find_relabelled_copies_and_respect_powers() {
+        Vakint::initialize_vakint_symbols();
+        let key = IntegralKey::try_new(vec![1, 1, 0, 1, 2, -1, 1, 1, 1, 1, 0, 1, 0, 0, 1]).unwrap();
+        let parent = first_parent(&key).unwrap();
+        let contracted = contracted_form(&key, parent).unwrap();
+        // Contracting the parent form with the negative power written on its
+        // line reproduces the master's contracted graph and moves that power
+        // into the numerator, as the B1-K probe writes it.
+        let (_, numerator) = parent_input(&key).unwrap();
+        let mut signed = Atom::one();
+        for (index, slot) in census::PARENTS[parent].physical_slots.iter().enumerate() {
+            let (left, right) = incidence(parent, *slot).unwrap();
+            signed *= S.prop.call((
+                index + 1,
+                S.edge.call((left + 1, right + 1)),
+                momentum(*slot),
+                Atom::one(),
+                Atom::num(key.powers()[*slot]),
+            ));
+        }
+        let signed = S.topo.call(signed);
+        let one = Atom::one();
+        let (from_parent, moved, mass) =
+            contract(&VakintSettings::default(), signed.as_view(), one.as_view())
+                .unwrap()
+                .unwrap();
+        assert_eq!(mass, Atom::one());
+        assert_eq!(canonical(&from_parent), canonical(&contracted));
+        assert_eq!(moved, numerator);
+        // A relabelled copy maps back, by maps that are verified and unimodular.
+        let relabelled = relabel(&contracted);
+        assert_eq!(canonical(&relabelled), canonical(&contracted));
+        let maps = crate::topologies::power_preserving_momentum_maps(
+            relabelled.as_view(),
+            contracted.as_view(),
+            5,
+        )
+        .unwrap()
+        .unwrap();
+        assert!(!maps.is_empty());
+        // Transporting the relabelled numerator by any map gives back a
+        // numerator over the master's lines (the inverse relabelling).
+        assert!(maps.iter().all(|images| images.len() == 5));
+        // Another power pattern on the same graph has a different colored
+        // canonical form and no power-preserving map.
+        let other = IntegralKey::try_new(vec![1, 1, 0, 1, 3, -1, 1, 1, 1, 1, 0, 1, 0, 0, 1]).unwrap();
+        let other = contracted_form(&other, first_parent(&other).unwrap()).unwrap();
+        assert_ne!(canonical(&other), canonical(&contracted));
+        assert!(
+            crate::topologies::power_preserving_momentum_maps(other.as_view(), contracted.as_view(), 5)
+                .unwrap()
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    /// Every package master in its parent form, contracted, and relabelled in
+    /// both forms is rewritten as the master itself (its identity witness
+    /// lowers to exactly the master key); the P387-sector non-masters V1-V3
+    /// (numerator squared, extra dots) keep their ordinary path; any rewrite
+    /// of a dotted or numerator variant of a master lands on a single master.
+    #[test]
+    #[ignore = "loads the official five-loop saved application (minutes)"]
+    fn every_master_input_form_is_transported_to_the_master_and_variants_are_not() {
+        let directory = super::super::super::test_data::external_path_through(5).join("5L/ibps");
+        let mut settings = VakintSettings::default();
+        let engine = super::super::super::test_data::external_engine()
+            .with_rustred_application(&mut settings, &directory)
+            .unwrap();
+        let application = engine.saved_application(&settings).unwrap();
+        let terminals = application.own_terminals().unwrap();
+        let transported_keys = |integral: &Atom, numerator: &Atom| {
+            let (mut integral, mut numerator) = (integral.clone(), numerator.clone());
+            engine
+                .transport_rustred_master_term(&settings, &mut integral, &mut numerator)
+                .unwrap()
+                .map(|witness| {
+                    engine
+                        .witness_keys_unchecked(&settings, &application, numerator.as_view(), &witness)
+                        .unwrap()
+                })
+        };
+        let mut checked = 0;
+        for key in &terminals {
+            let (integral, numerator) = parent_input(key).unwrap();
+            let (contracted, contracted_numerator, _) =
+                contract(&settings, integral.as_view(), numerator.as_view())
+                    .unwrap()
+                    .unwrap();
+            for (form, (integral, numerator)) in [
+                (integral.clone(), numerator.clone()),
+                (contracted.clone(), contracted_numerator.clone()),
+                (relabel(&contracted), relabel(&contracted_numerator)),
+                (relabel(&integral), relabel(&numerator)),
+            ]
+            .iter()
+            .enumerate()
+            {
+                assert_eq!(
+                    transported_keys(integral, numerator),
+                    Some(vec![key.clone()]),
+                    "master {:?}, form {form}",
+                    key.powers()
+                );
+            }
+            let first_positive = key.powers().iter().position(|power| *power > 0).unwrap();
+            let first_free = key.powers().iter().position(|power| *power <= 0).unwrap();
+            for (slot, delta) in [(first_positive, 1), (first_free, -1)] {
+                let mut powers = key.powers().to_vec();
+                powers[slot] += delta;
+                let variant = IntegralKey::try_new(powers).unwrap();
+                let Some((integral, numerator)) = parent_input(&variant) else {
+                    continue;
+                };
+                if let Some(keys) = transported_keys(&integral, &numerator) {
+                    assert!(
+                        keys.len() == 1 && terminals.contains(&keys[0]),
+                        "variant {:?} rewritten onto {keys:?}",
+                        variant.powers()
+                    );
+                }
+            }
+            checked += 1;
+        }
+        assert_eq!(checked, terminals.len());
+        for powers in [
+            [1, 1, 0, 1, 2, -2, 1, 1, 1, 1, 0, 1, 0, 0, 1],
+            [1, 1, 0, 1, 3, -1, 1, 1, 1, 1, 0, 1, 0, 0, 1],
+            [2, 1, 0, 1, 2, -1, 1, 1, 1, 1, 0, 1, 0, 0, 1],
+        ] {
+            let variant = IntegralKey::try_new(powers.to_vec()).unwrap();
+            let (integral, numerator) = parent_input(&variant).unwrap();
+            let (contracted, contracted_numerator, _) =
+                contract(&settings, integral.as_view(), numerator.as_view())
+                    .unwrap()
+                    .unwrap();
+            assert_eq!(transported_keys(&integral, &numerator), None, "{powers:?}");
+            assert_eq!(
+                transported_keys(&contracted, &contracted_numerator),
+                None,
+                "{powers:?} contracted"
+            );
+        }
+    }
+
+    /// Every shipped four-loop master written in its program's slot order, with
+    /// reversed propagator ids, and under a unimodular loop relabelling is
+    /// rewritten into the program's own long form; a dotted variant that is
+    /// not a master is left unchanged.
+    #[test]
+    #[ignore = "loads the official four-loop data"]
+    fn every_four_loop_master_form_is_written_in_its_program_form() {
+        let engine = super::super::super::test_data::external_engine();
+        let settings = VakintSettings::default();
+        let data = engine.rustred_data.as_ref().unwrap();
+        let programs = data.four_loop.as_ref().unwrap();
+        let k = |axis: usize| S.k.call(axis);
+        let relabel4 = |atom: &Atom| transport_numerator(atom, &[k(2), k(1) + k(3), -k(3), k(4) - k(1)]);
+        let mut checked = 0;
+        for master in &data.loops[&4].manifest.masters {
+            let alias = master["alias"].as_str().unwrap();
+            let powers: Vec<i64> = serde_json::from_value(master["powers"].clone()).unwrap();
+            let label = format!("four-loop-{}", alias.trim_start_matches("4L_"));
+            let index = (0..4).find(|index| programs.physical_edges(*index).unwrap().0 == label).unwrap();
+            let (_, edges) = programs.physical_edges(index).unwrap();
+            let momenta = programs.physical_momenta(index).unwrap();
+            let own = four_loop_long_form(edges, momenta, &powers[..momenta.len()], &Atom::one());
+            let reversed = {
+                let n = momenta.len();
+                let mut integral = Atom::one();
+                for (slot, (((left, right), momentum), power)) in
+                    edges.iter().zip(momenta).zip(&powers).enumerate()
+                {
+                    integral *= S.prop.call((
+                        n - slot,
+                        S.edge.call((Atom::num(*left), Atom::num(*right))),
+                        momentum,
+                        Atom::one(),
+                        Atom::num(*power),
+                    ));
+                }
+                S.topo.call(integral)
+            };
+            for (form, input) in [own.clone(), reversed, relabel4(&own)].into_iter().enumerate() {
+                let mut integral = input;
+                let one = Atom::one();
+                assert!(
+                    engine.transport_four_loop_master(&settings, &mut integral, one.as_view()).unwrap(),
+                    "{alias} {powers:?} form {form}"
+                );
+                assert_eq!(integral, own, "{alias} {powers:?} form {form}");
+            }
+            // A dotted variant is rewritten only onto the program form of a
+            // shipped master (it can equal one only under a symmetry).
+            let mut dotted = powers[..momenta.len()].to_vec();
+            let first = dotted.iter().position(|power| *power > 0).unwrap();
+            dotted[first] += 1;
+            let mut integral = four_loop_long_form(edges, momenta, &dotted, &Atom::one());
+            let one = Atom::one();
+            if engine.transport_four_loop_master(&settings, &mut integral, one.as_view()).unwrap() {
+                assert!(
+                    programs.master_forms.get().unwrap().iter().any(|form| {
+                        let (_, edges) = programs.physical_edges(form.program).unwrap();
+                        let momenta = programs.physical_momenta(form.program).unwrap();
+                        four_loop_long_form(edges, momenta, &form.powers, &Atom::one()) == integral
+                    }),
+                    "{alias} dotted {dotted:?} rewritten onto a non-master"
+                );
+            }
+            checked += 1;
+        }
+        assert_eq!(checked, data.loops[&4].manifest.masters.len());
+    }
+}
