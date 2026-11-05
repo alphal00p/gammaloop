@@ -119,10 +119,11 @@ pub(super) fn mentions_external_momentum(integral: AtomView) -> bool {
     let Some(argument) = topology_argument(integral) else {
         return false;
     };
-    if short_form_family(argument).is_some() {
-        return true;
-    }
-    factors(argument).into_iter().any(|factor| match factor {
+    short_form_family(argument).is_some() || props_mention_external_momentum(argument)
+}
+
+fn props_mention_external_momentum(props: AtomView) -> bool {
+    factors(props).into_iter().any(|factor| match factor {
         AtomView::Fun(prop) if prop.get_symbol() == S.prop && prop.get_nargs() == 5 => prop
             .iter()
             .nth(2)
@@ -375,6 +376,14 @@ impl PGraph {
     pub(crate) fn is_out_of_domain(integral: AtomView) -> bool {
         mentions_external_momentum(integral)
             && Self::parse_checked(integral).is_err_and(|rejection| rejection.is_out_of_domain())
+    }
+
+    /// `topo(UNKNOWN(...))` with an external momentum: the unknown integral of
+    /// an out-of-domain p-integral (`Topologies::match_propagator`).
+    pub(crate) fn is_out_of_domain_unknown(integral: AtomView) -> bool {
+        matches!(topology_argument(integral), Some(AtomView::Fun(unknown))
+            if unknown.get_symbol() == vk_symbol!("UNKNOWN")
+                && unknown.iter().any(props_mention_external_momentum))
     }
 
     /// [`Self::parse`] with the reason of a rejection: out of the p-integral

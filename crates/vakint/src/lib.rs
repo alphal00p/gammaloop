@@ -3015,6 +3015,18 @@ impl VakintTerm {
                 self.integral.to_string(),
             ));
         };
+        // A raw p-integral outside the registry (`evaluate_integral` does not
+        // canonicalize it into the `topo(UNKNOWN(...))` the matcher refuses):
+        // pySecDec, the only method of an unknown integral, takes external
+        // momenta only in numerators (docs/p_integrals.md, section 1).
+        if matches!(integral_specs.canonical_topology, Topology::Unknown(_))
+            && p_integral::infer_kind(self.integral.as_view())?
+                == p_integral::IntegralKind::Propagator
+        {
+            return Err(VakintError::InvalidIntegralFormat(
+                topologies::OUT_OF_DOMAIN_P_INTEGRAL.to_owned(),
+            ));
+        }
 
         // Choose the witness before transporting the scalar numerator. A
         // finite saved union may admit only some exact family presentations;
@@ -3517,6 +3529,13 @@ impl VakintTerm {
         vakint: &Vakint,
         settings: &VakintSettings,
     ) -> Result<(), VakintError> {
+        // No backend evaluates the unknown integral of an out-of-domain
+        // p-integral: its numerator (e.g. a tree factor) is never projected.
+        if p_integral::PGraph::is_out_of_domain_unknown(self.integral.as_view()) {
+            return Err(VakintError::InvalidIntegralFormat(
+                topologies::OUT_OF_DOMAIN_P_INTEGRAL.to_owned(),
+            ));
+        }
         self.stage_numerical_inputs(vakint, settings)?;
         let compact = (settings.rustred_artifact_path.is_some() || vakint.has_rustred_loop(5))
             && matches!(

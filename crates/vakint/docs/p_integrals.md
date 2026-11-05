@@ -59,11 +59,15 @@ Kind inference (no flag):
   heads (item 2), a non-integer power (item 4), more than four loops or a graph outside the registry (item 8). The
   unknown integral is `topo(UNKNOWN(...))` of the long form (after the exact normalization of items 5-6 when only item
   8 applies); its momenta keep `p(i)` (only this fallback admits them; at base 64090b527 the `UNKNOWN` matcher refused
-  `p` heads) and its loop count is the number of `k(j)`. No backend evaluates it (pySecDec takes external momenta only
-  in numerators), so evaluating it, or matching the `topo(UNKNOWN(...))` output again, is the error "out-of-domain
-  p-integral (...): an unknown integral with an external momentum p(i), which no backend evaluates";
-  `to_canonical` passes it through once. A short form out of domain (a non-integer power) is no unknown integral and
-  keeps its error. Malformed inputs (not a `prop`, a bad edge or vertex id, repeated prop ids, no external head,
+  `p` heads) and its loop count is the number of `k(j)`. The `UNKNOWN` matcher needs the prop ids `1..N`: an input
+  whose ids have a gap, also when the normalization merged a line that is not the last one, fails closed with that
+  matcher's error ("UNKNOWN integrals must have propagator ids ranging from 1 to ..."). No backend evaluates an
+  unknown integral with `p(i)` (pySecDec takes external momenta only in numerators), so evaluating it, or matching
+  the `topo(UNKNOWN(...))` output again, is the error "out-of-domain p-integral (...): an unknown integral with an
+  external momentum p(i), which no backend evaluates"; `to_canonical` passes it through once. `Vakint::evaluate`
+  reports this error whatever the numerator. `Vakint::evaluate_integral` does not canonicalize, so a raw input reports
+  it for item 8, and the error of its own item for items 1, 2 and 4; no evaluation method is reached. A short form out
+  of domain (a non-integer power) is no unknown integral and keeps its error. Malformed inputs (not a `prop`, a bad edge or vertex id, repeated prop ids, no external head,
   broken momentum conservation, a loop-count mismatch, a momentum that is not an integer combination of heads, a
   non-unimodular routing) are errors under any setting, also when the input is out of domain as well: malformed
   wins, every structural check runs before an out-of-domain reason is returned. With several external heads,
@@ -77,7 +81,9 @@ Kind inference (no flag):
 - Inference lives in `p_integral::infer_kind(integral: AtomView) -> Result<IntegralKind, VakintError>`.
   `Vakint::match_topologies_for_settings` dispatches on it before any vacuum or five-loop matcher runs.
 
-Validation, in this order. Every error is `VakintError::InvalidIntegralFormat("p-integral: ...")` unless stated:
+Validation, in this order. Every error is `VakintError::InvalidIntegralFormat("p-integral: ...")` unless stated.
+The order is that of the checks, not of the reports: the out-of-domain reasons (items 1, 2, the non-integer power of
+item 4) are only recorded, and reported after the structural checks passed (malformed wins, see "Out of domain"):
 1. A nonzero mass in any prop: "p-integrals are massless; prop {id} has mass {m}".
 2. More than one external head, e.g. `p(1)` and `p(2)`: "a p-integral has one external momentum; found {heads}".
    A sum `p(1)+p(2)` injected at one vertex is rejected the same way: define `q` as a single head.

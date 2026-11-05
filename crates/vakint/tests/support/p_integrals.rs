@@ -21,7 +21,7 @@ use vakint::{
     Vakint, VakintDependency, VakintExpression, VakintSettings, p_integral, vakint_parse,
 };
 
-static VAKINT: LazyLock<Vakint> = LazyLock::new(|| Vakint::new().unwrap());
+pub static VAKINT: LazyLock<Vakint> = LazyLock::new(|| Vakint::new().unwrap());
 
 /// The scalar `phi` of the DOT tests: massless, vertices of valence 3 to 10.
 pub static PHI: LazyLock<Model> = LazyLock::new(|| {
@@ -550,30 +550,38 @@ pub fn assert_p_identity_with(lhs: &str, rhs: &str, normalization: LoopNormaliza
     assert!(difference.is_zero(), "{lhs} - ({rhs}) = {difference}");
 }
 
-/// A fake FORM executable that reports `FORM {version}` to `form -version`
-/// and does nothing else; it lives as long as this value.
-pub struct FakeForm {
+/// A fake executable that prints one line, whatever its arguments, and does
+/// nothing else; it lives as long as this value.
+pub struct FakeExecutable {
     _directory: tempfile::TempDir,
     pub path: String,
 }
 
-/// A [`FakeForm`] of `version`, e.g. "4.3.1" for a host without FORM 5.
-pub fn fake_form(version: &str) -> FakeForm {
+fn fake_executable(name: &str, output: &str) -> FakeExecutable {
     use std::io::Write;
     use std::os::unix::fs::PermissionsExt;
     let directory = tempfile::tempdir().unwrap();
-    let path = directory.path().join("form");
+    let path = directory.path().join(name);
     {
         let mut script = std::fs::File::create(&path).unwrap();
-        writeln!(
-            script,
-            "#!/bin/sh\necho \"FORM {version} (vakint test fake) 64-bits\""
-        )
-        .unwrap();
+        writeln!(script, "#!/bin/sh\necho \"{output}\"").unwrap();
     }
     std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
-    FakeForm {
+    FakeExecutable {
         path: path.to_str().unwrap().to_owned(),
         _directory: directory,
     }
+}
+
+/// A fake FORM of `version`, e.g. "4.3.1" for a host without FORM 5.
+pub fn fake_form(version: &str) -> FakeExecutable {
+    fake_executable(
+        "form",
+        &format!("FORM {version} (vakint test fake) 64-bits"),
+    )
+}
+
+/// A fake python whose every run reports the pySecDec `version`.
+pub fn fake_python(version: &str) -> FakeExecutable {
+    fake_executable("python3", version)
 }

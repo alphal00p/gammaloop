@@ -361,6 +361,9 @@ const FIVE_LOOP_SUNSET: &str = "topo(prop(1,edge(1,2),k(1),0,1)*prop(2,edge(1,2)
 
 /// Section 1, "Out of domain" (M1 review F1, missing test 8).
 mod out_of_domain {
+    use symbolica::atom::Atom;
+    use vakint::{EvaluationOrder, VakintError, VakintSettings};
+
     use super::*;
 
     #[test]
@@ -391,6 +394,79 @@ mod out_of_domain {
             FIVE_LOOP_SUNSET,
             "p-integral not covered by the 1L-4L registry",
         );
+    }
+
+    fn assert_out_of_domain_error(result: Result<Atom, VakintError>) {
+        match result {
+            Err(VakintError::InvalidIntegralFormat(message)) => {
+                assert!(message.contains("out-of-domain p-integral"), "{message}")
+            }
+            other => panic!("not the out-of-domain error: {other:?}"),
+        }
+    }
+
+    /// `evaluate_integral` does not canonicalize: a raw catalogue miss reaches
+    /// the evaluation of `Topology::Unknown`, whose only method is pySecDec.
+    /// Needs neither FORM nor pySecDec.
+    #[test]
+    fn evaluate_integral_refuses_a_raw_catalogue_miss_before_any_method() {
+        let python = fake_python("1.6.4");
+        let form = fake_form("5.0.0");
+        let sunset = parse(FIVE_LOOP_SUNSET);
+        for evaluation_order in [EvaluationOrder::pysecdec_only(None), EvaluationOrder::all()] {
+            let settings = VakintSettings {
+                evaluation_order,
+                python_exe_path: python.path.clone(),
+                form_exe_path: form.path.clone(),
+                ..VakintSettings::default()
+            };
+            assert_out_of_domain_error(VAKINT.evaluate_integral(&settings, sunset.as_view()));
+        }
+        assert_out_of_domain_error(
+            VAKINT.evaluate_integral(&VakintSettings::default(), sunset.as_view()),
+        );
+        // Raw input with a reason of its own: that reason (section 1).
+        let massive =
+            parse("topo(prop(1,edge(1,2),k(1),muvsq,1)*prop(2,edge(2,1),k(1)-p(1),muvsq,1))");
+        let error = VAKINT
+            .evaluate_integral(&VakintSettings::default(), massive.as_view())
+            .unwrap_err();
+        assert!(
+            error.to_string().contains("p-integrals are massless"),
+            "{error}"
+        );
+    }
+
+    /// A tree line leaves a negative power in the numerator of the unknown
+    /// integral: the tensor prepass must not report it first.
+    #[test]
+    fn a_tree_factor_of_an_unknown_integral_keeps_the_out_of_domain_error() {
+        let tree = parse(
+            &FIVE_LOOP_SUNSET.replace("-p(1),0,1))", "-p(1),0,1)*prop(7,edge(3,1),p(1),0,2))"),
+        );
+        assert_out_of_domain_error(VAKINT.evaluate(&VakintSettings::default(), tree.as_view()));
+    }
+
+    /// The UNKNOWN matcher needs the prop ids 1..N: merging a middle line in
+    /// the normalization (props 1 and 2 here) fails closed with its error.
+    #[test]
+    fn a_normalization_that_leaves_a_gap_in_the_prop_ids_is_an_error() {
+        let merged = parse(
+            "topo(prop(1,edge(1,3),k(1),0,1)*prop(2,edge(3,2),k(1),0,1)*prop(3,edge(1,2),k(2),0,1)\
+             *prop(4,edge(1,2),k(3),0,1)*prop(5,edge(1,2),k(4),0,1)*prop(6,edge(1,2),k(5),0,1)\
+             *prop(7,edge(2,1),k(1)+k(2)+k(3)+k(4)+k(5)-p(1),0,1))",
+        );
+        let settings = VakintSettings::default();
+        for result in [
+            VAKINT.to_canonical(&settings, merged.as_view(), false),
+            VAKINT.evaluate(&settings, merged.as_view()),
+        ] {
+            let error = result.unwrap_err().to_string();
+            assert!(
+                error.contains("UNKNOWN integrals must have propagator ids"),
+                "{error}"
+            );
+        }
     }
 
     #[test]

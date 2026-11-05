@@ -305,21 +305,25 @@ mod tests {
     #[test]
     fn every_master_table_constant_satisfies_duality() {
         let constants = master_table_constants();
-        // ζ(3), ..., ζ(11) and the five datamine products (the even ζ(2n)
-        // are written through π^(2n)).
-        for expected in [
-            vec![3],
-            vec![5, 3],
-            vec![7, 3],
-            vec![9, 3],
-            vec![5, 3, 3],
-            vec![6, 4, 1, 1],
-        ] {
-            assert!(
-                constants.contains(&expected),
-                "{expected:?} not in {constants:?}"
-            );
-        }
+        // The odd ζ(n) and the five datamine products (the even ζ(2n) are
+        // written through π^(2n)). The exact set: a new multiple constant of
+        // the table fails here until it has its stuffle in the tests above
+        // (docs/p_integrals.md, section 7).
+        assert_eq!(
+            constants,
+            std::collections::BTreeSet::from([
+                vec![3],
+                vec![5],
+                vec![7],
+                vec![9],
+                vec![11],
+                vec![5, 3],
+                vec![7, 3],
+                vec![9, 3],
+                vec![5, 3, 3],
+                vec![6, 4, 1, 1],
+            ])
+        );
         for indices in &constants {
             let dual = dual(indices);
             assert_ne!(&dual, indices, "self-dual {indices:?} proves nothing");
