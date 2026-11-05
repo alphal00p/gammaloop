@@ -1,0 +1,4106 @@
+{
+  "schema": "vakint.p-benchmark-inputs.v1",
+  "generator": "crates/vakint/tools/p_benchmark/generate_inputs.py",
+  "grid": {
+    "loops": [
+      1,
+      2,
+      3,
+      4
+    ],
+    "dots": [
+      0,
+      1,
+      2
+    ],
+    "ranks": [
+      0,
+      2,
+      4,
+      6,
+      8
+    ]
+  },
+  "cells": [
+    {
+      "name": "L1_d0_r0",
+      "loops": 1,
+      "dots": 0,
+      "rank": 0,
+      "numerator": "1",
+      "tops": [
+        {
+          "family": "P1L",
+          "powers": [
+            1,
+            1
+          ]
+        }
+      ],
+      "input": "(1)*topo(prop(1,edge(1,2),k(1),0,1)*prop(2,edge(2,1),k(1)-p(1),0,1))"
+    },
+    {
+      "name": "L1_d0_r2",
+      "loops": 1,
+      "dots": 0,
+      "rank": 2,
+      "numerator": "dot(k(1),p(1))*dot(k(1),p(1))",
+      "tops": [
+        {
+          "family": "P1L",
+          "powers": [
+            1,
+            1
+          ]
+        }
+      ],
+      "input": "(dot(k(1),p(1))*dot(k(1),p(1)))*topo(prop(1,edge(1,2),k(1),0,1)*prop(2,edge(2,1),k(1)-p(1),0,1))"
+    },
+    {
+      "name": "L1_d0_r4",
+      "loops": 1,
+      "dots": 0,
+      "rank": 4,
+      "numerator": "dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1))",
+      "tops": [
+        {
+          "family": "P1L",
+          "powers": [
+            1,
+            1
+          ]
+        }
+      ],
+      "input": "(dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1)))*topo(prop(1,edge(1,2),k(1),0,1)*prop(2,edge(2,1),k(1)-p(1),0,1))"
+    },
+    {
+      "name": "L1_d0_r6",
+      "loops": 1,
+      "dots": 0,
+      "rank": 6,
+      "numerator": "dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1))",
+      "tops": [
+        {
+          "family": "P1L",
+          "powers": [
+            1,
+            1
+          ]
+        }
+      ],
+      "input": "(dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1)))*topo(prop(1,edge(1,2),k(1),0,1)*prop(2,edge(2,1),k(1)-p(1),0,1))"
+    },
+    {
+      "name": "L1_d0_r8",
+      "loops": 1,
+      "dots": 0,
+      "rank": 8,
+      "numerator": "dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1))",
+      "tops": [
+        {
+          "family": "P1L",
+          "powers": [
+            1,
+            1
+          ]
+        }
+      ],
+      "input": "(dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1)))*topo(prop(1,edge(1,2),k(1),0,1)*prop(2,edge(2,1),k(1)-p(1),0,1))"
+    },
+    {
+      "name": "L1_d1_r0",
+      "loops": 1,
+      "dots": 1,
+      "rank": 0,
+      "numerator": "1",
+      "tops": [
+        {
+          "family": "P1L",
+          "powers": [
+            2,
+            1
+          ]
+        }
+      ],
+      "input": "(1)*topo(prop(1,edge(1,2),k(1),0,2)*prop(2,edge(2,1),k(1)-p(1),0,1))"
+    },
+    {
+      "name": "L1_d1_r2",
+      "loops": 1,
+      "dots": 1,
+      "rank": 2,
+      "numerator": "dot(k(1),p(1))*dot(k(1),p(1))",
+      "tops": [
+        {
+          "family": "P1L",
+          "powers": [
+            2,
+            1
+          ]
+        }
+      ],
+      "input": "(dot(k(1),p(1))*dot(k(1),p(1)))*topo(prop(1,edge(1,2),k(1),0,2)*prop(2,edge(2,1),k(1)-p(1),0,1))"
+    },
+    {
+      "name": "L1_d1_r4",
+      "loops": 1,
+      "dots": 1,
+      "rank": 4,
+      "numerator": "dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1))",
+      "tops": [
+        {
+          "family": "P1L",
+          "powers": [
+            2,
+            1
+          ]
+        }
+      ],
+      "input": "(dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1)))*topo(prop(1,edge(1,2),k(1),0,2)*prop(2,edge(2,1),k(1)-p(1),0,1))"
+    },
+    {
+      "name": "L1_d1_r6",
+      "loops": 1,
+      "dots": 1,
+      "rank": 6,
+      "numerator": "dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1))",
+      "tops": [
+        {
+          "family": "P1L",
+          "powers": [
+            2,
+            1
+          ]
+        }
+      ],
+      "input": "(dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1)))*topo(prop(1,edge(1,2),k(1),0,2)*prop(2,edge(2,1),k(1)-p(1),0,1))"
+    },
+    {
+      "name": "L1_d1_r8",
+      "loops": 1,
+      "dots": 1,
+      "rank": 8,
+      "numerator": "dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1))",
+      "tops": [
+        {
+          "family": "P1L",
+          "powers": [
+            2,
+            1
+          ]
+        }
+      ],
+      "input": "(dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1)))*topo(prop(1,edge(1,2),k(1),0,2)*prop(2,edge(2,1),k(1)-p(1),0,1))"
+    },
+    {
+      "name": "L1_d2_r0",
+      "loops": 1,
+      "dots": 2,
+      "rank": 0,
+      "numerator": "1",
+      "tops": [
+        {
+          "family": "P1L",
+          "powers": [
+            2,
+            2
+          ]
+        }
+      ],
+      "input": "(1)*topo(prop(1,edge(1,2),k(1),0,2)*prop(2,edge(2,1),k(1)-p(1),0,2))"
+    },
+    {
+      "name": "L1_d2_r2",
+      "loops": 1,
+      "dots": 2,
+      "rank": 2,
+      "numerator": "dot(k(1),p(1))*dot(k(1),p(1))",
+      "tops": [
+        {
+          "family": "P1L",
+          "powers": [
+            2,
+            2
+          ]
+        }
+      ],
+      "input": "(dot(k(1),p(1))*dot(k(1),p(1)))*topo(prop(1,edge(1,2),k(1),0,2)*prop(2,edge(2,1),k(1)-p(1),0,2))"
+    },
+    {
+      "name": "L1_d2_r4",
+      "loops": 1,
+      "dots": 2,
+      "rank": 4,
+      "numerator": "dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1))",
+      "tops": [
+        {
+          "family": "P1L",
+          "powers": [
+            2,
+            2
+          ]
+        }
+      ],
+      "input": "(dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1)))*topo(prop(1,edge(1,2),k(1),0,2)*prop(2,edge(2,1),k(1)-p(1),0,2))"
+    },
+    {
+      "name": "L1_d2_r6",
+      "loops": 1,
+      "dots": 2,
+      "rank": 6,
+      "numerator": "dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1))",
+      "tops": [
+        {
+          "family": "P1L",
+          "powers": [
+            2,
+            2
+          ]
+        }
+      ],
+      "input": "(dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1)))*topo(prop(1,edge(1,2),k(1),0,2)*prop(2,edge(2,1),k(1)-p(1),0,2))"
+    },
+    {
+      "name": "L1_d2_r8",
+      "loops": 1,
+      "dots": 2,
+      "rank": 8,
+      "numerator": "dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1))",
+      "tops": [
+        {
+          "family": "P1L",
+          "powers": [
+            2,
+            2
+          ]
+        }
+      ],
+      "input": "(dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1))*dot(k(1),p(1)))*topo(prop(1,edge(1,2),k(1),0,2)*prop(2,edge(2,1),k(1)-p(1),0,2))"
+    },
+    {
+      "name": "L2_d0_r0",
+      "loops": 2,
+      "dots": 0,
+      "rank": 0,
+      "numerator": "1",
+      "tops": [
+        {
+          "family": "P2L",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        }
+      ],
+      "input": "(1)*topo(prop(1,edge(2,4),k(1),0,1)*prop(2,edge(3,4),k(2),0,1)*prop(3,edge(4,1),k(1)+k(2),0,1)*prop(4,edge(3,2),k(1)+p(1),0,1)*prop(5,edge(1,3),k(1)+k(2)+p(1),0,1))"
+    },
+    {
+      "name": "L2_d0_r2",
+      "loops": 2,
+      "dots": 0,
+      "rank": 2,
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))",
+      "tops": [
+        {
+          "family": "P2L",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        }
+      ],
+      "input": "(dot(k(1),p(1))*dot(k(2),p(1)))*topo(prop(1,edge(2,4),k(1),0,1)*prop(2,edge(3,4),k(2),0,1)*prop(3,edge(4,1),k(1)+k(2),0,1)*prop(4,edge(3,2),k(1)+p(1),0,1)*prop(5,edge(1,3),k(1)+k(2)+p(1),0,1))"
+    },
+    {
+      "name": "L2_d0_r4",
+      "loops": 2,
+      "dots": 0,
+      "rank": 4,
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(2))",
+      "tops": [
+        {
+          "family": "P2L",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        }
+      ],
+      "input": "(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(2)))*topo(prop(1,edge(2,4),k(1),0,1)*prop(2,edge(3,4),k(2),0,1)*prop(3,edge(4,1),k(1)+k(2),0,1)*prop(4,edge(3,2),k(1)+p(1),0,1)*prop(5,edge(1,3),k(1)+k(2)+p(1),0,1))"
+    },
+    {
+      "name": "L2_d0_r6",
+      "loops": 2,
+      "dots": 0,
+      "rank": 6,
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(2))*dot(k(1),p(1))*dot(k(2),p(1))",
+      "tops": [
+        {
+          "family": "P2L",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        }
+      ],
+      "input": "(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(2))*dot(k(1),p(1))*dot(k(2),p(1)))*topo(prop(1,edge(2,4),k(1),0,1)*prop(2,edge(3,4),k(2),0,1)*prop(3,edge(4,1),k(1)+k(2),0,1)*prop(4,edge(3,2),k(1)+p(1),0,1)*prop(5,edge(1,3),k(1)+k(2)+p(1),0,1))"
+    },
+    {
+      "name": "L2_d0_r8",
+      "loops": 2,
+      "dots": 0,
+      "rank": 8,
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(2))*dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(2))",
+      "tops": [
+        {
+          "family": "P2L",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        }
+      ],
+      "input": "(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(2))*dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(2)))*topo(prop(1,edge(2,4),k(1),0,1)*prop(2,edge(3,4),k(2),0,1)*prop(3,edge(4,1),k(1)+k(2),0,1)*prop(4,edge(3,2),k(1)+p(1),0,1)*prop(5,edge(1,3),k(1)+k(2)+p(1),0,1))"
+    },
+    {
+      "name": "L2_d1_r0",
+      "loops": 2,
+      "dots": 1,
+      "rank": 0,
+      "numerator": "1",
+      "tops": [
+        {
+          "family": "P2L",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1
+          ]
+        }
+      ],
+      "input": "(1)*topo(prop(1,edge(2,4),k(1),0,2)*prop(2,edge(3,4),k(2),0,1)*prop(3,edge(4,1),k(1)+k(2),0,1)*prop(4,edge(3,2),k(1)+p(1),0,1)*prop(5,edge(1,3),k(1)+k(2)+p(1),0,1))"
+    },
+    {
+      "name": "L2_d1_r2",
+      "loops": 2,
+      "dots": 1,
+      "rank": 2,
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))",
+      "tops": [
+        {
+          "family": "P2L",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1
+          ]
+        }
+      ],
+      "input": "(dot(k(1),p(1))*dot(k(2),p(1)))*topo(prop(1,edge(2,4),k(1),0,2)*prop(2,edge(3,4),k(2),0,1)*prop(3,edge(4,1),k(1)+k(2),0,1)*prop(4,edge(3,2),k(1)+p(1),0,1)*prop(5,edge(1,3),k(1)+k(2)+p(1),0,1))"
+    },
+    {
+      "name": "L2_d1_r4",
+      "loops": 2,
+      "dots": 1,
+      "rank": 4,
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(2))",
+      "tops": [
+        {
+          "family": "P2L",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1
+          ]
+        }
+      ],
+      "input": "(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(2)))*topo(prop(1,edge(2,4),k(1),0,2)*prop(2,edge(3,4),k(2),0,1)*prop(3,edge(4,1),k(1)+k(2),0,1)*prop(4,edge(3,2),k(1)+p(1),0,1)*prop(5,edge(1,3),k(1)+k(2)+p(1),0,1))"
+    },
+    {
+      "name": "L2_d1_r6",
+      "loops": 2,
+      "dots": 1,
+      "rank": 6,
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(2))*dot(k(1),p(1))*dot(k(2),p(1))",
+      "tops": [
+        {
+          "family": "P2L",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1
+          ]
+        }
+      ],
+      "input": "(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(2))*dot(k(1),p(1))*dot(k(2),p(1)))*topo(prop(1,edge(2,4),k(1),0,2)*prop(2,edge(3,4),k(2),0,1)*prop(3,edge(4,1),k(1)+k(2),0,1)*prop(4,edge(3,2),k(1)+p(1),0,1)*prop(5,edge(1,3),k(1)+k(2)+p(1),0,1))"
+    },
+    {
+      "name": "L2_d1_r8",
+      "loops": 2,
+      "dots": 1,
+      "rank": 8,
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(2))*dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(2))",
+      "tops": [
+        {
+          "family": "P2L",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1
+          ]
+        }
+      ],
+      "input": "(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(2))*dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(2)))*topo(prop(1,edge(2,4),k(1),0,2)*prop(2,edge(3,4),k(2),0,1)*prop(3,edge(4,1),k(1)+k(2),0,1)*prop(4,edge(3,2),k(1)+p(1),0,1)*prop(5,edge(1,3),k(1)+k(2)+p(1),0,1))"
+    },
+    {
+      "name": "L2_d2_r0",
+      "loops": 2,
+      "dots": 2,
+      "rank": 0,
+      "numerator": "1",
+      "tops": [
+        {
+          "family": "P2L",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            2
+          ]
+        }
+      ],
+      "input": "(1)*topo(prop(1,edge(2,4),k(1),0,2)*prop(2,edge(3,4),k(2),0,1)*prop(3,edge(4,1),k(1)+k(2),0,1)*prop(4,edge(3,2),k(1)+p(1),0,1)*prop(5,edge(1,3),k(1)+k(2)+p(1),0,2))"
+    },
+    {
+      "name": "L2_d2_r2",
+      "loops": 2,
+      "dots": 2,
+      "rank": 2,
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))",
+      "tops": [
+        {
+          "family": "P2L",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            2
+          ]
+        }
+      ],
+      "input": "(dot(k(1),p(1))*dot(k(2),p(1)))*topo(prop(1,edge(2,4),k(1),0,2)*prop(2,edge(3,4),k(2),0,1)*prop(3,edge(4,1),k(1)+k(2),0,1)*prop(4,edge(3,2),k(1)+p(1),0,1)*prop(5,edge(1,3),k(1)+k(2)+p(1),0,2))"
+    },
+    {
+      "name": "L2_d2_r4",
+      "loops": 2,
+      "dots": 2,
+      "rank": 4,
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(2))",
+      "tops": [
+        {
+          "family": "P2L",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            2
+          ]
+        }
+      ],
+      "input": "(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(2)))*topo(prop(1,edge(2,4),k(1),0,2)*prop(2,edge(3,4),k(2),0,1)*prop(3,edge(4,1),k(1)+k(2),0,1)*prop(4,edge(3,2),k(1)+p(1),0,1)*prop(5,edge(1,3),k(1)+k(2)+p(1),0,2))"
+    },
+    {
+      "name": "L2_d2_r6",
+      "loops": 2,
+      "dots": 2,
+      "rank": 6,
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(2))*dot(k(1),p(1))*dot(k(2),p(1))",
+      "tops": [
+        {
+          "family": "P2L",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            2
+          ]
+        }
+      ],
+      "input": "(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(2))*dot(k(1),p(1))*dot(k(2),p(1)))*topo(prop(1,edge(2,4),k(1),0,2)*prop(2,edge(3,4),k(2),0,1)*prop(3,edge(4,1),k(1)+k(2),0,1)*prop(4,edge(3,2),k(1)+p(1),0,1)*prop(5,edge(1,3),k(1)+k(2)+p(1),0,2))"
+    },
+    {
+      "name": "L2_d2_r8",
+      "loops": 2,
+      "dots": 2,
+      "rank": 8,
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(2))*dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(2))",
+      "tops": [
+        {
+          "family": "P2L",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            2
+          ]
+        }
+      ],
+      "input": "(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(2))*dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(2)))*topo(prop(1,edge(2,4),k(1),0,2)*prop(2,edge(3,4),k(2),0,1)*prop(3,edge(4,1),k(1)+k(2),0,1)*prop(4,edge(3,2),k(1)+p(1),0,1)*prop(5,edge(1,3),k(1)+k(2)+p(1),0,2))"
+    },
+    {
+      "name": "L3_d0_r0",
+      "loops": 3,
+      "dots": 0,
+      "rank": 0,
+      "numerator": "1",
+      "tops": [
+        {
+          "family": "P3L_LA",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P3L_BE",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P3L_NO",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        }
+      ],
+      "input": "(1)*topo(prop(1,edge(3,4),k(1),0,1)*prop(2,edge(2,6),k(2),0,1)*prop(3,edge(5,6),k(3),0,1)*prop(4,edge(6,4),k(2)+k(3),0,1)*prop(5,edge(5,2),k(2)+p(1),0,1)*prop(6,edge(4,1),k(1)+k(2)+k(3),0,1)*prop(7,edge(3,5),k(2)+k(3)+p(1),0,1)*prop(8,edge(1,3),k(1)+k(2)+k(3)+p(1),0,1))+(1)*topo(prop(1,edge(2,5),k(1),0,1)*prop(2,edge(4,6),k(2),0,1)*prop(3,edge(5,6),k(3),0,1)*prop(4,edge(3,2),k(1)+p(1),0,1)*prop(5,edge(5,4),k(1)-k(3),0,1)*prop(6,edge(6,3),k(2)+k(3),0,1)*prop(7,edge(4,1),k(1)-k(2)-k(3),0,1)*prop(8,edge(1,3),k(1)-k(2)-k(3)+p(1),0,1))+(1)*topo(prop(1,edge(2,6),k(1),0,1)*prop(2,edge(4,5),k(2),0,1)*prop(3,edge(4,6),k(3),0,1)*prop(4,edge(6,3),k(1)+k(3),0,1)*prop(5,edge(5,2),k(1)+p(1),0,1)*prop(6,edge(1,4),k(2)+k(3),0,1)*prop(7,edge(3,5),k(1)-k(2)+p(1),0,1)*prop(8,edge(3,1),k(2)+k(3)-p(1),0,1))"
+    },
+    {
+      "name": "L3_d0_r2",
+      "loops": 3,
+      "dots": 0,
+      "rank": 2,
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))",
+      "tops": [
+        {
+          "family": "P3L_LA",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P3L_BE",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P3L_NO",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        }
+      ],
+      "input": "(dot(k(1),p(1))*dot(k(2),p(1)))*topo(prop(1,edge(3,4),k(1),0,1)*prop(2,edge(2,6),k(2),0,1)*prop(3,edge(5,6),k(3),0,1)*prop(4,edge(6,4),k(2)+k(3),0,1)*prop(5,edge(5,2),k(2)+p(1),0,1)*prop(6,edge(4,1),k(1)+k(2)+k(3),0,1)*prop(7,edge(3,5),k(2)+k(3)+p(1),0,1)*prop(8,edge(1,3),k(1)+k(2)+k(3)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1)))*topo(prop(1,edge(2,5),k(1),0,1)*prop(2,edge(4,6),k(2),0,1)*prop(3,edge(5,6),k(3),0,1)*prop(4,edge(3,2),k(1)+p(1),0,1)*prop(5,edge(5,4),k(1)-k(3),0,1)*prop(6,edge(6,3),k(2)+k(3),0,1)*prop(7,edge(4,1),k(1)-k(2)-k(3),0,1)*prop(8,edge(1,3),k(1)-k(2)-k(3)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1)))*topo(prop(1,edge(2,6),k(1),0,1)*prop(2,edge(4,5),k(2),0,1)*prop(3,edge(4,6),k(3),0,1)*prop(4,edge(6,3),k(1)+k(3),0,1)*prop(5,edge(5,2),k(1)+p(1),0,1)*prop(6,edge(1,4),k(2)+k(3),0,1)*prop(7,edge(3,5),k(1)-k(2)+p(1),0,1)*prop(8,edge(3,1),k(2)+k(3)-p(1),0,1))"
+    },
+    {
+      "name": "L3_d0_r4",
+      "loops": 3,
+      "dots": 0,
+      "rank": 4,
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))",
+      "tops": [
+        {
+          "family": "P3L_LA",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P3L_BE",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P3L_NO",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        }
+      ],
+      "input": "(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3)))*topo(prop(1,edge(3,4),k(1),0,1)*prop(2,edge(2,6),k(2),0,1)*prop(3,edge(5,6),k(3),0,1)*prop(4,edge(6,4),k(2)+k(3),0,1)*prop(5,edge(5,2),k(2)+p(1),0,1)*prop(6,edge(4,1),k(1)+k(2)+k(3),0,1)*prop(7,edge(3,5),k(2)+k(3)+p(1),0,1)*prop(8,edge(1,3),k(1)+k(2)+k(3)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3)))*topo(prop(1,edge(2,5),k(1),0,1)*prop(2,edge(4,6),k(2),0,1)*prop(3,edge(5,6),k(3),0,1)*prop(4,edge(3,2),k(1)+p(1),0,1)*prop(5,edge(5,4),k(1)-k(3),0,1)*prop(6,edge(6,3),k(2)+k(3),0,1)*prop(7,edge(4,1),k(1)-k(2)-k(3),0,1)*prop(8,edge(1,3),k(1)-k(2)-k(3)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3)))*topo(prop(1,edge(2,6),k(1),0,1)*prop(2,edge(4,5),k(2),0,1)*prop(3,edge(4,6),k(3),0,1)*prop(4,edge(6,3),k(1)+k(3),0,1)*prop(5,edge(5,2),k(1)+p(1),0,1)*prop(6,edge(1,4),k(2)+k(3),0,1)*prop(7,edge(3,5),k(1)-k(2)+p(1),0,1)*prop(8,edge(3,1),k(2)+k(3)-p(1),0,1))"
+    },
+    {
+      "name": "L3_d0_r6",
+      "loops": 3,
+      "dots": 0,
+      "rank": 6,
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(2),p(1))*dot(k(3),p(1))",
+      "tops": [
+        {
+          "family": "P3L_LA",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P3L_BE",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P3L_NO",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        }
+      ],
+      "input": "(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(2),p(1))*dot(k(3),p(1)))*topo(prop(1,edge(3,4),k(1),0,1)*prop(2,edge(2,6),k(2),0,1)*prop(3,edge(5,6),k(3),0,1)*prop(4,edge(6,4),k(2)+k(3),0,1)*prop(5,edge(5,2),k(2)+p(1),0,1)*prop(6,edge(4,1),k(1)+k(2)+k(3),0,1)*prop(7,edge(3,5),k(2)+k(3)+p(1),0,1)*prop(8,edge(1,3),k(1)+k(2)+k(3)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(2),p(1))*dot(k(3),p(1)))*topo(prop(1,edge(2,5),k(1),0,1)*prop(2,edge(4,6),k(2),0,1)*prop(3,edge(5,6),k(3),0,1)*prop(4,edge(3,2),k(1)+p(1),0,1)*prop(5,edge(5,4),k(1)-k(3),0,1)*prop(6,edge(6,3),k(2)+k(3),0,1)*prop(7,edge(4,1),k(1)-k(2)-k(3),0,1)*prop(8,edge(1,3),k(1)-k(2)-k(3)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(2),p(1))*dot(k(3),p(1)))*topo(prop(1,edge(2,6),k(1),0,1)*prop(2,edge(4,5),k(2),0,1)*prop(3,edge(4,6),k(3),0,1)*prop(4,edge(6,3),k(1)+k(3),0,1)*prop(5,edge(5,2),k(1)+p(1),0,1)*prop(6,edge(1,4),k(2)+k(3),0,1)*prop(7,edge(3,5),k(1)-k(2)+p(1),0,1)*prop(8,edge(3,1),k(2)+k(3)-p(1),0,1))"
+    },
+    {
+      "name": "L3_d0_r8",
+      "loops": 3,
+      "dots": 0,
+      "rank": 8,
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(2),p(1))*dot(k(3),p(1))*dot(k(1),k(2))",
+      "tops": [
+        {
+          "family": "P3L_LA",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P3L_BE",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P3L_NO",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        }
+      ],
+      "input": "(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(2),p(1))*dot(k(3),p(1))*dot(k(1),k(2)))*topo(prop(1,edge(3,4),k(1),0,1)*prop(2,edge(2,6),k(2),0,1)*prop(3,edge(5,6),k(3),0,1)*prop(4,edge(6,4),k(2)+k(3),0,1)*prop(5,edge(5,2),k(2)+p(1),0,1)*prop(6,edge(4,1),k(1)+k(2)+k(3),0,1)*prop(7,edge(3,5),k(2)+k(3)+p(1),0,1)*prop(8,edge(1,3),k(1)+k(2)+k(3)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(2),p(1))*dot(k(3),p(1))*dot(k(1),k(2)))*topo(prop(1,edge(2,5),k(1),0,1)*prop(2,edge(4,6),k(2),0,1)*prop(3,edge(5,6),k(3),0,1)*prop(4,edge(3,2),k(1)+p(1),0,1)*prop(5,edge(5,4),k(1)-k(3),0,1)*prop(6,edge(6,3),k(2)+k(3),0,1)*prop(7,edge(4,1),k(1)-k(2)-k(3),0,1)*prop(8,edge(1,3),k(1)-k(2)-k(3)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(2),p(1))*dot(k(3),p(1))*dot(k(1),k(2)))*topo(prop(1,edge(2,6),k(1),0,1)*prop(2,edge(4,5),k(2),0,1)*prop(3,edge(4,6),k(3),0,1)*prop(4,edge(6,3),k(1)+k(3),0,1)*prop(5,edge(5,2),k(1)+p(1),0,1)*prop(6,edge(1,4),k(2)+k(3),0,1)*prop(7,edge(3,5),k(1)-k(2)+p(1),0,1)*prop(8,edge(3,1),k(2)+k(3)-p(1),0,1))"
+    },
+    {
+      "name": "L3_d1_r0",
+      "loops": 3,
+      "dots": 1,
+      "rank": 0,
+      "numerator": "1",
+      "tops": [
+        {
+          "family": "P3L_LA",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P3L_BE",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P3L_NO",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        }
+      ],
+      "input": "(1)*topo(prop(1,edge(3,4),k(1),0,2)*prop(2,edge(2,6),k(2),0,1)*prop(3,edge(5,6),k(3),0,1)*prop(4,edge(6,4),k(2)+k(3),0,1)*prop(5,edge(5,2),k(2)+p(1),0,1)*prop(6,edge(4,1),k(1)+k(2)+k(3),0,1)*prop(7,edge(3,5),k(2)+k(3)+p(1),0,1)*prop(8,edge(1,3),k(1)+k(2)+k(3)+p(1),0,1))+(1)*topo(prop(1,edge(2,5),k(1),0,2)*prop(2,edge(4,6),k(2),0,1)*prop(3,edge(5,6),k(3),0,1)*prop(4,edge(3,2),k(1)+p(1),0,1)*prop(5,edge(5,4),k(1)-k(3),0,1)*prop(6,edge(6,3),k(2)+k(3),0,1)*prop(7,edge(4,1),k(1)-k(2)-k(3),0,1)*prop(8,edge(1,3),k(1)-k(2)-k(3)+p(1),0,1))+(1)*topo(prop(1,edge(2,6),k(1),0,2)*prop(2,edge(4,5),k(2),0,1)*prop(3,edge(4,6),k(3),0,1)*prop(4,edge(6,3),k(1)+k(3),0,1)*prop(5,edge(5,2),k(1)+p(1),0,1)*prop(6,edge(1,4),k(2)+k(3),0,1)*prop(7,edge(3,5),k(1)-k(2)+p(1),0,1)*prop(8,edge(3,1),k(2)+k(3)-p(1),0,1))"
+    },
+    {
+      "name": "L3_d1_r2",
+      "loops": 3,
+      "dots": 1,
+      "rank": 2,
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))",
+      "tops": [
+        {
+          "family": "P3L_LA",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P3L_BE",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P3L_NO",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        }
+      ],
+      "input": "(dot(k(1),p(1))*dot(k(2),p(1)))*topo(prop(1,edge(3,4),k(1),0,2)*prop(2,edge(2,6),k(2),0,1)*prop(3,edge(5,6),k(3),0,1)*prop(4,edge(6,4),k(2)+k(3),0,1)*prop(5,edge(5,2),k(2)+p(1),0,1)*prop(6,edge(4,1),k(1)+k(2)+k(3),0,1)*prop(7,edge(3,5),k(2)+k(3)+p(1),0,1)*prop(8,edge(1,3),k(1)+k(2)+k(3)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1)))*topo(prop(1,edge(2,5),k(1),0,2)*prop(2,edge(4,6),k(2),0,1)*prop(3,edge(5,6),k(3),0,1)*prop(4,edge(3,2),k(1)+p(1),0,1)*prop(5,edge(5,4),k(1)-k(3),0,1)*prop(6,edge(6,3),k(2)+k(3),0,1)*prop(7,edge(4,1),k(1)-k(2)-k(3),0,1)*prop(8,edge(1,3),k(1)-k(2)-k(3)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1)))*topo(prop(1,edge(2,6),k(1),0,2)*prop(2,edge(4,5),k(2),0,1)*prop(3,edge(4,6),k(3),0,1)*prop(4,edge(6,3),k(1)+k(3),0,1)*prop(5,edge(5,2),k(1)+p(1),0,1)*prop(6,edge(1,4),k(2)+k(3),0,1)*prop(7,edge(3,5),k(1)-k(2)+p(1),0,1)*prop(8,edge(3,1),k(2)+k(3)-p(1),0,1))"
+    },
+    {
+      "name": "L3_d1_r4",
+      "loops": 3,
+      "dots": 1,
+      "rank": 4,
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))",
+      "tops": [
+        {
+          "family": "P3L_LA",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P3L_BE",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P3L_NO",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        }
+      ],
+      "input": "(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3)))*topo(prop(1,edge(3,4),k(1),0,2)*prop(2,edge(2,6),k(2),0,1)*prop(3,edge(5,6),k(3),0,1)*prop(4,edge(6,4),k(2)+k(3),0,1)*prop(5,edge(5,2),k(2)+p(1),0,1)*prop(6,edge(4,1),k(1)+k(2)+k(3),0,1)*prop(7,edge(3,5),k(2)+k(3)+p(1),0,1)*prop(8,edge(1,3),k(1)+k(2)+k(3)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3)))*topo(prop(1,edge(2,5),k(1),0,2)*prop(2,edge(4,6),k(2),0,1)*prop(3,edge(5,6),k(3),0,1)*prop(4,edge(3,2),k(1)+p(1),0,1)*prop(5,edge(5,4),k(1)-k(3),0,1)*prop(6,edge(6,3),k(2)+k(3),0,1)*prop(7,edge(4,1),k(1)-k(2)-k(3),0,1)*prop(8,edge(1,3),k(1)-k(2)-k(3)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3)))*topo(prop(1,edge(2,6),k(1),0,2)*prop(2,edge(4,5),k(2),0,1)*prop(3,edge(4,6),k(3),0,1)*prop(4,edge(6,3),k(1)+k(3),0,1)*prop(5,edge(5,2),k(1)+p(1),0,1)*prop(6,edge(1,4),k(2)+k(3),0,1)*prop(7,edge(3,5),k(1)-k(2)+p(1),0,1)*prop(8,edge(3,1),k(2)+k(3)-p(1),0,1))"
+    },
+    {
+      "name": "L3_d1_r6",
+      "loops": 3,
+      "dots": 1,
+      "rank": 6,
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(2),p(1))*dot(k(3),p(1))",
+      "tops": [
+        {
+          "family": "P3L_LA",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P3L_BE",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P3L_NO",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        }
+      ],
+      "input": "(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(2),p(1))*dot(k(3),p(1)))*topo(prop(1,edge(3,4),k(1),0,2)*prop(2,edge(2,6),k(2),0,1)*prop(3,edge(5,6),k(3),0,1)*prop(4,edge(6,4),k(2)+k(3),0,1)*prop(5,edge(5,2),k(2)+p(1),0,1)*prop(6,edge(4,1),k(1)+k(2)+k(3),0,1)*prop(7,edge(3,5),k(2)+k(3)+p(1),0,1)*prop(8,edge(1,3),k(1)+k(2)+k(3)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(2),p(1))*dot(k(3),p(1)))*topo(prop(1,edge(2,5),k(1),0,2)*prop(2,edge(4,6),k(2),0,1)*prop(3,edge(5,6),k(3),0,1)*prop(4,edge(3,2),k(1)+p(1),0,1)*prop(5,edge(5,4),k(1)-k(3),0,1)*prop(6,edge(6,3),k(2)+k(3),0,1)*prop(7,edge(4,1),k(1)-k(2)-k(3),0,1)*prop(8,edge(1,3),k(1)-k(2)-k(3)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(2),p(1))*dot(k(3),p(1)))*topo(prop(1,edge(2,6),k(1),0,2)*prop(2,edge(4,5),k(2),0,1)*prop(3,edge(4,6),k(3),0,1)*prop(4,edge(6,3),k(1)+k(3),0,1)*prop(5,edge(5,2),k(1)+p(1),0,1)*prop(6,edge(1,4),k(2)+k(3),0,1)*prop(7,edge(3,5),k(1)-k(2)+p(1),0,1)*prop(8,edge(3,1),k(2)+k(3)-p(1),0,1))"
+    },
+    {
+      "name": "L3_d1_r8",
+      "loops": 3,
+      "dots": 1,
+      "rank": 8,
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(2),p(1))*dot(k(3),p(1))*dot(k(1),k(2))",
+      "tops": [
+        {
+          "family": "P3L_LA",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P3L_BE",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P3L_NO",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        }
+      ],
+      "input": "(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(2),p(1))*dot(k(3),p(1))*dot(k(1),k(2)))*topo(prop(1,edge(3,4),k(1),0,2)*prop(2,edge(2,6),k(2),0,1)*prop(3,edge(5,6),k(3),0,1)*prop(4,edge(6,4),k(2)+k(3),0,1)*prop(5,edge(5,2),k(2)+p(1),0,1)*prop(6,edge(4,1),k(1)+k(2)+k(3),0,1)*prop(7,edge(3,5),k(2)+k(3)+p(1),0,1)*prop(8,edge(1,3),k(1)+k(2)+k(3)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(2),p(1))*dot(k(3),p(1))*dot(k(1),k(2)))*topo(prop(1,edge(2,5),k(1),0,2)*prop(2,edge(4,6),k(2),0,1)*prop(3,edge(5,6),k(3),0,1)*prop(4,edge(3,2),k(1)+p(1),0,1)*prop(5,edge(5,4),k(1)-k(3),0,1)*prop(6,edge(6,3),k(2)+k(3),0,1)*prop(7,edge(4,1),k(1)-k(2)-k(3),0,1)*prop(8,edge(1,3),k(1)-k(2)-k(3)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(2),p(1))*dot(k(3),p(1))*dot(k(1),k(2)))*topo(prop(1,edge(2,6),k(1),0,2)*prop(2,edge(4,5),k(2),0,1)*prop(3,edge(4,6),k(3),0,1)*prop(4,edge(6,3),k(1)+k(3),0,1)*prop(5,edge(5,2),k(1)+p(1),0,1)*prop(6,edge(1,4),k(2)+k(3),0,1)*prop(7,edge(3,5),k(1)-k(2)+p(1),0,1)*prop(8,edge(3,1),k(2)+k(3)-p(1),0,1))"
+    },
+    {
+      "name": "L3_d2_r0",
+      "loops": 3,
+      "dots": 2,
+      "rank": 0,
+      "numerator": "1",
+      "tops": [
+        {
+          "family": "P3L_LA",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        },
+        {
+          "family": "P3L_BE",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        },
+        {
+          "family": "P3L_NO",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        }
+      ],
+      "input": "(1)*topo(prop(1,edge(3,4),k(1),0,2)*prop(2,edge(2,6),k(2),0,1)*prop(3,edge(5,6),k(3),0,1)*prop(4,edge(6,4),k(2)+k(3),0,1)*prop(5,edge(5,2),k(2)+p(1),0,1)*prop(6,edge(4,1),k(1)+k(2)+k(3),0,1)*prop(7,edge(3,5),k(2)+k(3)+p(1),0,1)*prop(8,edge(1,3),k(1)+k(2)+k(3)+p(1),0,2))+(1)*topo(prop(1,edge(2,5),k(1),0,2)*prop(2,edge(4,6),k(2),0,1)*prop(3,edge(5,6),k(3),0,1)*prop(4,edge(3,2),k(1)+p(1),0,1)*prop(5,edge(5,4),k(1)-k(3),0,1)*prop(6,edge(6,3),k(2)+k(3),0,1)*prop(7,edge(4,1),k(1)-k(2)-k(3),0,1)*prop(8,edge(1,3),k(1)-k(2)-k(3)+p(1),0,2))+(1)*topo(prop(1,edge(2,6),k(1),0,2)*prop(2,edge(4,5),k(2),0,1)*prop(3,edge(4,6),k(3),0,1)*prop(4,edge(6,3),k(1)+k(3),0,1)*prop(5,edge(5,2),k(1)+p(1),0,1)*prop(6,edge(1,4),k(2)+k(3),0,1)*prop(7,edge(3,5),k(1)-k(2)+p(1),0,1)*prop(8,edge(3,1),k(2)+k(3)-p(1),0,2))"
+    },
+    {
+      "name": "L3_d2_r2",
+      "loops": 3,
+      "dots": 2,
+      "rank": 2,
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))",
+      "tops": [
+        {
+          "family": "P3L_LA",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        },
+        {
+          "family": "P3L_BE",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        },
+        {
+          "family": "P3L_NO",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        }
+      ],
+      "input": "(dot(k(1),p(1))*dot(k(2),p(1)))*topo(prop(1,edge(3,4),k(1),0,2)*prop(2,edge(2,6),k(2),0,1)*prop(3,edge(5,6),k(3),0,1)*prop(4,edge(6,4),k(2)+k(3),0,1)*prop(5,edge(5,2),k(2)+p(1),0,1)*prop(6,edge(4,1),k(1)+k(2)+k(3),0,1)*prop(7,edge(3,5),k(2)+k(3)+p(1),0,1)*prop(8,edge(1,3),k(1)+k(2)+k(3)+p(1),0,2))+(dot(k(1),p(1))*dot(k(2),p(1)))*topo(prop(1,edge(2,5),k(1),0,2)*prop(2,edge(4,6),k(2),0,1)*prop(3,edge(5,6),k(3),0,1)*prop(4,edge(3,2),k(1)+p(1),0,1)*prop(5,edge(5,4),k(1)-k(3),0,1)*prop(6,edge(6,3),k(2)+k(3),0,1)*prop(7,edge(4,1),k(1)-k(2)-k(3),0,1)*prop(8,edge(1,3),k(1)-k(2)-k(3)+p(1),0,2))+(dot(k(1),p(1))*dot(k(2),p(1)))*topo(prop(1,edge(2,6),k(1),0,2)*prop(2,edge(4,5),k(2),0,1)*prop(3,edge(4,6),k(3),0,1)*prop(4,edge(6,3),k(1)+k(3),0,1)*prop(5,edge(5,2),k(1)+p(1),0,1)*prop(6,edge(1,4),k(2)+k(3),0,1)*prop(7,edge(3,5),k(1)-k(2)+p(1),0,1)*prop(8,edge(3,1),k(2)+k(3)-p(1),0,2))"
+    },
+    {
+      "name": "L3_d2_r4",
+      "loops": 3,
+      "dots": 2,
+      "rank": 4,
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))",
+      "tops": [
+        {
+          "family": "P3L_LA",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        },
+        {
+          "family": "P3L_BE",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        },
+        {
+          "family": "P3L_NO",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        }
+      ],
+      "input": "(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3)))*topo(prop(1,edge(3,4),k(1),0,2)*prop(2,edge(2,6),k(2),0,1)*prop(3,edge(5,6),k(3),0,1)*prop(4,edge(6,4),k(2)+k(3),0,1)*prop(5,edge(5,2),k(2)+p(1),0,1)*prop(6,edge(4,1),k(1)+k(2)+k(3),0,1)*prop(7,edge(3,5),k(2)+k(3)+p(1),0,1)*prop(8,edge(1,3),k(1)+k(2)+k(3)+p(1),0,2))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3)))*topo(prop(1,edge(2,5),k(1),0,2)*prop(2,edge(4,6),k(2),0,1)*prop(3,edge(5,6),k(3),0,1)*prop(4,edge(3,2),k(1)+p(1),0,1)*prop(5,edge(5,4),k(1)-k(3),0,1)*prop(6,edge(6,3),k(2)+k(3),0,1)*prop(7,edge(4,1),k(1)-k(2)-k(3),0,1)*prop(8,edge(1,3),k(1)-k(2)-k(3)+p(1),0,2))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3)))*topo(prop(1,edge(2,6),k(1),0,2)*prop(2,edge(4,5),k(2),0,1)*prop(3,edge(4,6),k(3),0,1)*prop(4,edge(6,3),k(1)+k(3),0,1)*prop(5,edge(5,2),k(1)+p(1),0,1)*prop(6,edge(1,4),k(2)+k(3),0,1)*prop(7,edge(3,5),k(1)-k(2)+p(1),0,1)*prop(8,edge(3,1),k(2)+k(3)-p(1),0,2))"
+    },
+    {
+      "name": "L3_d2_r6",
+      "loops": 3,
+      "dots": 2,
+      "rank": 6,
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(2),p(1))*dot(k(3),p(1))",
+      "tops": [
+        {
+          "family": "P3L_LA",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        },
+        {
+          "family": "P3L_BE",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        },
+        {
+          "family": "P3L_NO",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        }
+      ],
+      "input": "(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(2),p(1))*dot(k(3),p(1)))*topo(prop(1,edge(3,4),k(1),0,2)*prop(2,edge(2,6),k(2),0,1)*prop(3,edge(5,6),k(3),0,1)*prop(4,edge(6,4),k(2)+k(3),0,1)*prop(5,edge(5,2),k(2)+p(1),0,1)*prop(6,edge(4,1),k(1)+k(2)+k(3),0,1)*prop(7,edge(3,5),k(2)+k(3)+p(1),0,1)*prop(8,edge(1,3),k(1)+k(2)+k(3)+p(1),0,2))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(2),p(1))*dot(k(3),p(1)))*topo(prop(1,edge(2,5),k(1),0,2)*prop(2,edge(4,6),k(2),0,1)*prop(3,edge(5,6),k(3),0,1)*prop(4,edge(3,2),k(1)+p(1),0,1)*prop(5,edge(5,4),k(1)-k(3),0,1)*prop(6,edge(6,3),k(2)+k(3),0,1)*prop(7,edge(4,1),k(1)-k(2)-k(3),0,1)*prop(8,edge(1,3),k(1)-k(2)-k(3)+p(1),0,2))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(2),p(1))*dot(k(3),p(1)))*topo(prop(1,edge(2,6),k(1),0,2)*prop(2,edge(4,5),k(2),0,1)*prop(3,edge(4,6),k(3),0,1)*prop(4,edge(6,3),k(1)+k(3),0,1)*prop(5,edge(5,2),k(1)+p(1),0,1)*prop(6,edge(1,4),k(2)+k(3),0,1)*prop(7,edge(3,5),k(1)-k(2)+p(1),0,1)*prop(8,edge(3,1),k(2)+k(3)-p(1),0,2))"
+    },
+    {
+      "name": "L3_d2_r8",
+      "loops": 3,
+      "dots": 2,
+      "rank": 8,
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(2),p(1))*dot(k(3),p(1))*dot(k(1),k(2))",
+      "tops": [
+        {
+          "family": "P3L_LA",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        },
+        {
+          "family": "P3L_BE",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        },
+        {
+          "family": "P3L_NO",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        }
+      ],
+      "input": "(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(2),p(1))*dot(k(3),p(1))*dot(k(1),k(2)))*topo(prop(1,edge(3,4),k(1),0,2)*prop(2,edge(2,6),k(2),0,1)*prop(3,edge(5,6),k(3),0,1)*prop(4,edge(6,4),k(2)+k(3),0,1)*prop(5,edge(5,2),k(2)+p(1),0,1)*prop(6,edge(4,1),k(1)+k(2)+k(3),0,1)*prop(7,edge(3,5),k(2)+k(3)+p(1),0,1)*prop(8,edge(1,3),k(1)+k(2)+k(3)+p(1),0,2))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(2),p(1))*dot(k(3),p(1))*dot(k(1),k(2)))*topo(prop(1,edge(2,5),k(1),0,2)*prop(2,edge(4,6),k(2),0,1)*prop(3,edge(5,6),k(3),0,1)*prop(4,edge(3,2),k(1)+p(1),0,1)*prop(5,edge(5,4),k(1)-k(3),0,1)*prop(6,edge(6,3),k(2)+k(3),0,1)*prop(7,edge(4,1),k(1)-k(2)-k(3),0,1)*prop(8,edge(1,3),k(1)-k(2)-k(3)+p(1),0,2))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(2),p(1))*dot(k(3),p(1))*dot(k(1),k(2)))*topo(prop(1,edge(2,6),k(1),0,2)*prop(2,edge(4,5),k(2),0,1)*prop(3,edge(4,6),k(3),0,1)*prop(4,edge(6,3),k(1)+k(3),0,1)*prop(5,edge(5,2),k(1)+p(1),0,1)*prop(6,edge(1,4),k(2)+k(3),0,1)*prop(7,edge(3,5),k(1)-k(2)+p(1),0,1)*prop(8,edge(3,1),k(2)+k(3)-p(1),0,2))"
+    },
+    {
+      "name": "L4_d0_r0",
+      "loops": 4,
+      "dots": 0,
+      "rank": 0,
+      "numerator": "1",
+      "tops": [
+        {
+          "family": "P4L_LA4",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_J1",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_J2",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_J4",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_J5",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_J6",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_J11",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_HAHA",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_NO1",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_NO2",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_NO3",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        }
+      ],
+      "input": "(1)*topo(prop(1,edge(3,4),k(1),0,1)*prop(2,edge(7,8),k(2),0,1)*prop(3,edge(2,6),k(3),0,1)*prop(4,edge(5,6),k(4),0,1)*prop(5,edge(6,8),k(3)+k(4),0,1)*prop(6,edge(5,2),k(3)+p(1),0,1)*prop(7,edge(8,4),k(2)+k(3)+k(4),0,1)*prop(8,edge(7,5),k(3)+k(4)+p(1),0,1)*prop(9,edge(4,1),k(1)+k(2)+k(3)+k(4),0,1)*prop(10,edge(3,7),k(2)+k(3)+k(4)+p(1),0,1)*prop(11,edge(1,3),k(1)+k(2)+k(3)+k(4)+p(1),0,1))+(1)*topo(prop(1,edge(2,5),k(1),0,1)*prop(2,edge(5,8),k(2),0,1)*prop(3,edge(6,7),k(3),0,1)*prop(4,edge(7,8),k(4),0,1)*prop(5,edge(3,2),k(1)+p(1),0,1)*prop(6,edge(5,4),k(1)-k(2),0,1)*prop(7,edge(8,6),k(2)+k(4),0,1)*prop(8,edge(7,4),k(3)-k(4),0,1)*prop(9,edge(6,3),k(2)-k(3)+k(4),0,1)*prop(10,edge(4,1),k(1)-k(2)+k(3)-k(4),0,1)*prop(11,edge(1,3),k(1)-k(2)+k(3)-k(4)+p(1),0,1))+(1)*topo(prop(1,edge(4,6),k(1),0,1)*prop(2,edge(5,7),k(2),0,1)*prop(3,edge(5,8),k(3),0,1)*prop(4,edge(7,8),k(4),0,1)*prop(5,edge(2,5),k(2)+k(3),0,1)*prop(6,edge(7,4),k(2)-k(4),0,1)*prop(7,edge(8,6),k(3)+k(4),0,1)*prop(8,edge(6,3),k(1)+k(3)+k(4),0,1)*prop(9,edge(1,4),k(1)-k(2)+k(4),0,1)*prop(10,edge(3,2),k(2)+k(3)+p(1),0,1)*prop(11,edge(3,1),k(1)-k(2)+k(4)-p(1),0,1))+(1)*topo(prop(1,edge(7,8),k(1),0,1)*prop(2,edge(5,7),k(2),0,1)*prop(3,edge(6,8),k(3),0,1)*prop(4,edge(2,6),k(4),0,1)*prop(5,edge(8,3),k(1)+k(3),0,1)*prop(6,edge(3,7),k(1)-k(2),0,1)*prop(7,edge(3,1),k(2)+k(3),0,1)*prop(8,edge(4,6),k(3)-k(4),0,1)*prop(9,edge(5,2),k(4)+p(1),0,1)*prop(10,edge(1,4),k(2)+k(3)+p(1),0,1)*prop(11,edge(4,5),k(2)+k(4)+p(1),0,1))+(1)*topo(prop(1,edge(3,4),k(1),0,1)*prop(2,edge(2,6),k(2),0,1)*prop(3,edge(7,8),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(5,2),k(2)+p(1),0,1)*prop(6,edge(6,7),k(2)-k(4),0,1)*prop(7,edge(8,5),k(3)+k(4),0,1)*prop(8,edge(7,4),k(2)-k(3)-k(4),0,1)*prop(9,edge(4,1),k(1)+k(2)-k(3)-k(4),0,1)*prop(10,edge(3,5),k(2)-k(3)-k(4)+p(1),0,1)*prop(11,edge(1,3),k(1)+k(2)-k(3)-k(4)+p(1),0,1))+(1)*topo(prop(1,edge(5,7),k(1),0,1)*prop(2,edge(7,8),k(2),0,1)*prop(3,edge(2,6),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(7,3),k(1)-k(2),0,1)*prop(6,edge(4,1),k(2)+k(3),0,1)*prop(7,edge(8,4),k(2)+k(4),0,1)*prop(8,edge(5,2),k(3)+p(1),0,1)*prop(9,edge(6,4),k(3)-k(4),0,1)*prop(10,edge(3,5),k(1)+k(3)+p(1),0,1)*prop(11,edge(1,3),k(2)+k(3)+p(1),0,1))+(1)*topo(prop(1,edge(3,4),k(1),0,1)*prop(2,edge(2,6),k(2),0,1)*prop(3,edge(5,8),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(5,2),k(2)+p(1),0,1)*prop(6,edge(6,7),k(2)-k(4),0,1)*prop(7,edge(8,4),k(3)+k(4),0,1)*prop(8,edge(4,1),k(1)+k(3)+k(4),0,1)*prop(9,edge(7,5),k(2)+k(3)+p(1),0,1)*prop(10,edge(3,7),k(3)+k(4)+p(1),0,1)*prop(11,edge(1,3),k(1)+k(3)+k(4)+p(1),0,1))+(1)*topo(prop(1,edge(2,6),k(1),0,1)*prop(2,edge(4,7),k(2),0,1)*prop(3,edge(6,8),k(3),0,1)*prop(4,edge(7,8),k(4),0,1)*prop(5,edge(5,2),k(1)+p(1),0,1)*prop(6,edge(6,4),k(1)-k(3),0,1)*prop(7,edge(7,3),k(2)-k(4),0,1)*prop(8,edge(8,5),k(3)+k(4),0,1)*prop(9,edge(4,1),k(1)-k(2)-k(3),0,1)*prop(10,edge(3,5),k(1)-k(3)-k(4)+p(1),0,1)*prop(11,edge(1,3),k(1)-k(2)-k(3)+p(1),0,1))+(1)*topo(prop(1,edge(2,6),k(1),0,1)*prop(2,edge(4,7),k(2),0,1)*prop(3,edge(5,8),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(5,2),k(1)+p(1),0,1)*prop(6,edge(6,7),k(1)-k(4),0,1)*prop(7,edge(8,4),k(3)+k(4),0,1)*prop(8,edge(7,3),k(1)+k(2)-k(4),0,1)*prop(9,edge(3,5),k(1)+k(3)+p(1),0,1)*prop(10,edge(1,4),k(2)-k(3)-k(4),0,1)*prop(11,edge(3,1),k(2)-k(3)-k(4)-p(1),0,1))+(1)*topo(prop(1,edge(2,6),k(1),0,1)*prop(2,edge(5,8),k(2),0,1)*prop(3,edge(6,7),k(3),0,1)*prop(4,edge(7,8),k(4),0,1)*prop(5,edge(5,2),k(1)+p(1),0,1)*prop(6,edge(6,4),k(1)-k(3),0,1)*prop(7,edge(8,4),k(2)+k(4),0,1)*prop(8,edge(7,3),k(3)-k(4),0,1)*prop(9,edge(3,5),k(1)+k(2)+p(1),0,1)*prop(10,edge(4,1),k(1)+k(2)-k(3)+k(4),0,1)*prop(11,edge(1,3),k(1)+k(2)-k(3)+k(4)+p(1),0,1))+(1)*topo(prop(1,edge(5,7),k(1),0,1)*prop(2,edge(5,8),k(2),0,1)*prop(3,edge(6,7),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(2,5),k(1)+k(2),0,1)*prop(6,edge(7,4),k(1)+k(3),0,1)*prop(7,edge(8,4),k(2)+k(4),0,1)*prop(8,edge(3,6),k(3)+k(4),0,1)*prop(9,edge(3,2),k(1)+k(2)+p(1),0,1)*prop(10,edge(4,1),k(1)+k(2)+k(3)+k(4),0,1)*prop(11,edge(1,3),k(1)+k(2)+k(3)+k(4)+p(1),0,1))"
+    },
+    {
+      "name": "L4_d0_r2",
+      "loops": 4,
+      "dots": 0,
+      "rank": 2,
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))",
+      "tops": [
+        {
+          "family": "P4L_LA4",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_J1",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_J2",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_J4",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_J5",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_J6",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_J11",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_HAHA",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_NO1",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_NO2",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_NO3",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        }
+      ],
+      "input": "(dot(k(1),p(1))*dot(k(2),p(1)))*topo(prop(1,edge(3,4),k(1),0,1)*prop(2,edge(7,8),k(2),0,1)*prop(3,edge(2,6),k(3),0,1)*prop(4,edge(5,6),k(4),0,1)*prop(5,edge(6,8),k(3)+k(4),0,1)*prop(6,edge(5,2),k(3)+p(1),0,1)*prop(7,edge(8,4),k(2)+k(3)+k(4),0,1)*prop(8,edge(7,5),k(3)+k(4)+p(1),0,1)*prop(9,edge(4,1),k(1)+k(2)+k(3)+k(4),0,1)*prop(10,edge(3,7),k(2)+k(3)+k(4)+p(1),0,1)*prop(11,edge(1,3),k(1)+k(2)+k(3)+k(4)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1)))*topo(prop(1,edge(2,5),k(1),0,1)*prop(2,edge(5,8),k(2),0,1)*prop(3,edge(6,7),k(3),0,1)*prop(4,edge(7,8),k(4),0,1)*prop(5,edge(3,2),k(1)+p(1),0,1)*prop(6,edge(5,4),k(1)-k(2),0,1)*prop(7,edge(8,6),k(2)+k(4),0,1)*prop(8,edge(7,4),k(3)-k(4),0,1)*prop(9,edge(6,3),k(2)-k(3)+k(4),0,1)*prop(10,edge(4,1),k(1)-k(2)+k(3)-k(4),0,1)*prop(11,edge(1,3),k(1)-k(2)+k(3)-k(4)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1)))*topo(prop(1,edge(4,6),k(1),0,1)*prop(2,edge(5,7),k(2),0,1)*prop(3,edge(5,8),k(3),0,1)*prop(4,edge(7,8),k(4),0,1)*prop(5,edge(2,5),k(2)+k(3),0,1)*prop(6,edge(7,4),k(2)-k(4),0,1)*prop(7,edge(8,6),k(3)+k(4),0,1)*prop(8,edge(6,3),k(1)+k(3)+k(4),0,1)*prop(9,edge(1,4),k(1)-k(2)+k(4),0,1)*prop(10,edge(3,2),k(2)+k(3)+p(1),0,1)*prop(11,edge(3,1),k(1)-k(2)+k(4)-p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1)))*topo(prop(1,edge(7,8),k(1),0,1)*prop(2,edge(5,7),k(2),0,1)*prop(3,edge(6,8),k(3),0,1)*prop(4,edge(2,6),k(4),0,1)*prop(5,edge(8,3),k(1)+k(3),0,1)*prop(6,edge(3,7),k(1)-k(2),0,1)*prop(7,edge(3,1),k(2)+k(3),0,1)*prop(8,edge(4,6),k(3)-k(4),0,1)*prop(9,edge(5,2),k(4)+p(1),0,1)*prop(10,edge(1,4),k(2)+k(3)+p(1),0,1)*prop(11,edge(4,5),k(2)+k(4)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1)))*topo(prop(1,edge(3,4),k(1),0,1)*prop(2,edge(2,6),k(2),0,1)*prop(3,edge(7,8),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(5,2),k(2)+p(1),0,1)*prop(6,edge(6,7),k(2)-k(4),0,1)*prop(7,edge(8,5),k(3)+k(4),0,1)*prop(8,edge(7,4),k(2)-k(3)-k(4),0,1)*prop(9,edge(4,1),k(1)+k(2)-k(3)-k(4),0,1)*prop(10,edge(3,5),k(2)-k(3)-k(4)+p(1),0,1)*prop(11,edge(1,3),k(1)+k(2)-k(3)-k(4)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1)))*topo(prop(1,edge(5,7),k(1),0,1)*prop(2,edge(7,8),k(2),0,1)*prop(3,edge(2,6),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(7,3),k(1)-k(2),0,1)*prop(6,edge(4,1),k(2)+k(3),0,1)*prop(7,edge(8,4),k(2)+k(4),0,1)*prop(8,edge(5,2),k(3)+p(1),0,1)*prop(9,edge(6,4),k(3)-k(4),0,1)*prop(10,edge(3,5),k(1)+k(3)+p(1),0,1)*prop(11,edge(1,3),k(2)+k(3)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1)))*topo(prop(1,edge(3,4),k(1),0,1)*prop(2,edge(2,6),k(2),0,1)*prop(3,edge(5,8),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(5,2),k(2)+p(1),0,1)*prop(6,edge(6,7),k(2)-k(4),0,1)*prop(7,edge(8,4),k(3)+k(4),0,1)*prop(8,edge(4,1),k(1)+k(3)+k(4),0,1)*prop(9,edge(7,5),k(2)+k(3)+p(1),0,1)*prop(10,edge(3,7),k(3)+k(4)+p(1),0,1)*prop(11,edge(1,3),k(1)+k(3)+k(4)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1)))*topo(prop(1,edge(2,6),k(1),0,1)*prop(2,edge(4,7),k(2),0,1)*prop(3,edge(6,8),k(3),0,1)*prop(4,edge(7,8),k(4),0,1)*prop(5,edge(5,2),k(1)+p(1),0,1)*prop(6,edge(6,4),k(1)-k(3),0,1)*prop(7,edge(7,3),k(2)-k(4),0,1)*prop(8,edge(8,5),k(3)+k(4),0,1)*prop(9,edge(4,1),k(1)-k(2)-k(3),0,1)*prop(10,edge(3,5),k(1)-k(3)-k(4)+p(1),0,1)*prop(11,edge(1,3),k(1)-k(2)-k(3)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1)))*topo(prop(1,edge(2,6),k(1),0,1)*prop(2,edge(4,7),k(2),0,1)*prop(3,edge(5,8),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(5,2),k(1)+p(1),0,1)*prop(6,edge(6,7),k(1)-k(4),0,1)*prop(7,edge(8,4),k(3)+k(4),0,1)*prop(8,edge(7,3),k(1)+k(2)-k(4),0,1)*prop(9,edge(3,5),k(1)+k(3)+p(1),0,1)*prop(10,edge(1,4),k(2)-k(3)-k(4),0,1)*prop(11,edge(3,1),k(2)-k(3)-k(4)-p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1)))*topo(prop(1,edge(2,6),k(1),0,1)*prop(2,edge(5,8),k(2),0,1)*prop(3,edge(6,7),k(3),0,1)*prop(4,edge(7,8),k(4),0,1)*prop(5,edge(5,2),k(1)+p(1),0,1)*prop(6,edge(6,4),k(1)-k(3),0,1)*prop(7,edge(8,4),k(2)+k(4),0,1)*prop(8,edge(7,3),k(3)-k(4),0,1)*prop(9,edge(3,5),k(1)+k(2)+p(1),0,1)*prop(10,edge(4,1),k(1)+k(2)-k(3)+k(4),0,1)*prop(11,edge(1,3),k(1)+k(2)-k(3)+k(4)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1)))*topo(prop(1,edge(5,7),k(1),0,1)*prop(2,edge(5,8),k(2),0,1)*prop(3,edge(6,7),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(2,5),k(1)+k(2),0,1)*prop(6,edge(7,4),k(1)+k(3),0,1)*prop(7,edge(8,4),k(2)+k(4),0,1)*prop(8,edge(3,6),k(3)+k(4),0,1)*prop(9,edge(3,2),k(1)+k(2)+p(1),0,1)*prop(10,edge(4,1),k(1)+k(2)+k(3)+k(4),0,1)*prop(11,edge(1,3),k(1)+k(2)+k(3)+k(4)+p(1),0,1))"
+    },
+    {
+      "name": "L4_d0_r4",
+      "loops": 4,
+      "dots": 0,
+      "rank": 4,
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))",
+      "tops": [
+        {
+          "family": "P4L_LA4",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_J1",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_J2",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_J4",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_J5",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_J6",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_J11",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_HAHA",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_NO1",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_NO2",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_NO3",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        }
+      ],
+      "input": "(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3)))*topo(prop(1,edge(3,4),k(1),0,1)*prop(2,edge(7,8),k(2),0,1)*prop(3,edge(2,6),k(3),0,1)*prop(4,edge(5,6),k(4),0,1)*prop(5,edge(6,8),k(3)+k(4),0,1)*prop(6,edge(5,2),k(3)+p(1),0,1)*prop(7,edge(8,4),k(2)+k(3)+k(4),0,1)*prop(8,edge(7,5),k(3)+k(4)+p(1),0,1)*prop(9,edge(4,1),k(1)+k(2)+k(3)+k(4),0,1)*prop(10,edge(3,7),k(2)+k(3)+k(4)+p(1),0,1)*prop(11,edge(1,3),k(1)+k(2)+k(3)+k(4)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3)))*topo(prop(1,edge(2,5),k(1),0,1)*prop(2,edge(5,8),k(2),0,1)*prop(3,edge(6,7),k(3),0,1)*prop(4,edge(7,8),k(4),0,1)*prop(5,edge(3,2),k(1)+p(1),0,1)*prop(6,edge(5,4),k(1)-k(2),0,1)*prop(7,edge(8,6),k(2)+k(4),0,1)*prop(8,edge(7,4),k(3)-k(4),0,1)*prop(9,edge(6,3),k(2)-k(3)+k(4),0,1)*prop(10,edge(4,1),k(1)-k(2)+k(3)-k(4),0,1)*prop(11,edge(1,3),k(1)-k(2)+k(3)-k(4)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3)))*topo(prop(1,edge(4,6),k(1),0,1)*prop(2,edge(5,7),k(2),0,1)*prop(3,edge(5,8),k(3),0,1)*prop(4,edge(7,8),k(4),0,1)*prop(5,edge(2,5),k(2)+k(3),0,1)*prop(6,edge(7,4),k(2)-k(4),0,1)*prop(7,edge(8,6),k(3)+k(4),0,1)*prop(8,edge(6,3),k(1)+k(3)+k(4),0,1)*prop(9,edge(1,4),k(1)-k(2)+k(4),0,1)*prop(10,edge(3,2),k(2)+k(3)+p(1),0,1)*prop(11,edge(3,1),k(1)-k(2)+k(4)-p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3)))*topo(prop(1,edge(7,8),k(1),0,1)*prop(2,edge(5,7),k(2),0,1)*prop(3,edge(6,8),k(3),0,1)*prop(4,edge(2,6),k(4),0,1)*prop(5,edge(8,3),k(1)+k(3),0,1)*prop(6,edge(3,7),k(1)-k(2),0,1)*prop(7,edge(3,1),k(2)+k(3),0,1)*prop(8,edge(4,6),k(3)-k(4),0,1)*prop(9,edge(5,2),k(4)+p(1),0,1)*prop(10,edge(1,4),k(2)+k(3)+p(1),0,1)*prop(11,edge(4,5),k(2)+k(4)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3)))*topo(prop(1,edge(3,4),k(1),0,1)*prop(2,edge(2,6),k(2),0,1)*prop(3,edge(7,8),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(5,2),k(2)+p(1),0,1)*prop(6,edge(6,7),k(2)-k(4),0,1)*prop(7,edge(8,5),k(3)+k(4),0,1)*prop(8,edge(7,4),k(2)-k(3)-k(4),0,1)*prop(9,edge(4,1),k(1)+k(2)-k(3)-k(4),0,1)*prop(10,edge(3,5),k(2)-k(3)-k(4)+p(1),0,1)*prop(11,edge(1,3),k(1)+k(2)-k(3)-k(4)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3)))*topo(prop(1,edge(5,7),k(1),0,1)*prop(2,edge(7,8),k(2),0,1)*prop(3,edge(2,6),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(7,3),k(1)-k(2),0,1)*prop(6,edge(4,1),k(2)+k(3),0,1)*prop(7,edge(8,4),k(2)+k(4),0,1)*prop(8,edge(5,2),k(3)+p(1),0,1)*prop(9,edge(6,4),k(3)-k(4),0,1)*prop(10,edge(3,5),k(1)+k(3)+p(1),0,1)*prop(11,edge(1,3),k(2)+k(3)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3)))*topo(prop(1,edge(3,4),k(1),0,1)*prop(2,edge(2,6),k(2),0,1)*prop(3,edge(5,8),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(5,2),k(2)+p(1),0,1)*prop(6,edge(6,7),k(2)-k(4),0,1)*prop(7,edge(8,4),k(3)+k(4),0,1)*prop(8,edge(4,1),k(1)+k(3)+k(4),0,1)*prop(9,edge(7,5),k(2)+k(3)+p(1),0,1)*prop(10,edge(3,7),k(3)+k(4)+p(1),0,1)*prop(11,edge(1,3),k(1)+k(3)+k(4)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3)))*topo(prop(1,edge(2,6),k(1),0,1)*prop(2,edge(4,7),k(2),0,1)*prop(3,edge(6,8),k(3),0,1)*prop(4,edge(7,8),k(4),0,1)*prop(5,edge(5,2),k(1)+p(1),0,1)*prop(6,edge(6,4),k(1)-k(3),0,1)*prop(7,edge(7,3),k(2)-k(4),0,1)*prop(8,edge(8,5),k(3)+k(4),0,1)*prop(9,edge(4,1),k(1)-k(2)-k(3),0,1)*prop(10,edge(3,5),k(1)-k(3)-k(4)+p(1),0,1)*prop(11,edge(1,3),k(1)-k(2)-k(3)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3)))*topo(prop(1,edge(2,6),k(1),0,1)*prop(2,edge(4,7),k(2),0,1)*prop(3,edge(5,8),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(5,2),k(1)+p(1),0,1)*prop(6,edge(6,7),k(1)-k(4),0,1)*prop(7,edge(8,4),k(3)+k(4),0,1)*prop(8,edge(7,3),k(1)+k(2)-k(4),0,1)*prop(9,edge(3,5),k(1)+k(3)+p(1),0,1)*prop(10,edge(1,4),k(2)-k(3)-k(4),0,1)*prop(11,edge(3,1),k(2)-k(3)-k(4)-p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3)))*topo(prop(1,edge(2,6),k(1),0,1)*prop(2,edge(5,8),k(2),0,1)*prop(3,edge(6,7),k(3),0,1)*prop(4,edge(7,8),k(4),0,1)*prop(5,edge(5,2),k(1)+p(1),0,1)*prop(6,edge(6,4),k(1)-k(3),0,1)*prop(7,edge(8,4),k(2)+k(4),0,1)*prop(8,edge(7,3),k(3)-k(4),0,1)*prop(9,edge(3,5),k(1)+k(2)+p(1),0,1)*prop(10,edge(4,1),k(1)+k(2)-k(3)+k(4),0,1)*prop(11,edge(1,3),k(1)+k(2)-k(3)+k(4)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3)))*topo(prop(1,edge(5,7),k(1),0,1)*prop(2,edge(5,8),k(2),0,1)*prop(3,edge(6,7),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(2,5),k(1)+k(2),0,1)*prop(6,edge(7,4),k(1)+k(3),0,1)*prop(7,edge(8,4),k(2)+k(4),0,1)*prop(8,edge(3,6),k(3)+k(4),0,1)*prop(9,edge(3,2),k(1)+k(2)+p(1),0,1)*prop(10,edge(4,1),k(1)+k(2)+k(3)+k(4),0,1)*prop(11,edge(1,3),k(1)+k(2)+k(3)+k(4)+p(1),0,1))"
+    },
+    {
+      "name": "L4_d0_r6",
+      "loops": 4,
+      "dots": 0,
+      "rank": 6,
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1))",
+      "tops": [
+        {
+          "family": "P4L_LA4",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_J1",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_J2",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_J4",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_J5",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_J6",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_J11",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_HAHA",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_NO1",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_NO2",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_NO3",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        }
+      ],
+      "input": "(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1)))*topo(prop(1,edge(3,4),k(1),0,1)*prop(2,edge(7,8),k(2),0,1)*prop(3,edge(2,6),k(3),0,1)*prop(4,edge(5,6),k(4),0,1)*prop(5,edge(6,8),k(3)+k(4),0,1)*prop(6,edge(5,2),k(3)+p(1),0,1)*prop(7,edge(8,4),k(2)+k(3)+k(4),0,1)*prop(8,edge(7,5),k(3)+k(4)+p(1),0,1)*prop(9,edge(4,1),k(1)+k(2)+k(3)+k(4),0,1)*prop(10,edge(3,7),k(2)+k(3)+k(4)+p(1),0,1)*prop(11,edge(1,3),k(1)+k(2)+k(3)+k(4)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1)))*topo(prop(1,edge(2,5),k(1),0,1)*prop(2,edge(5,8),k(2),0,1)*prop(3,edge(6,7),k(3),0,1)*prop(4,edge(7,8),k(4),0,1)*prop(5,edge(3,2),k(1)+p(1),0,1)*prop(6,edge(5,4),k(1)-k(2),0,1)*prop(7,edge(8,6),k(2)+k(4),0,1)*prop(8,edge(7,4),k(3)-k(4),0,1)*prop(9,edge(6,3),k(2)-k(3)+k(4),0,1)*prop(10,edge(4,1),k(1)-k(2)+k(3)-k(4),0,1)*prop(11,edge(1,3),k(1)-k(2)+k(3)-k(4)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1)))*topo(prop(1,edge(4,6),k(1),0,1)*prop(2,edge(5,7),k(2),0,1)*prop(3,edge(5,8),k(3),0,1)*prop(4,edge(7,8),k(4),0,1)*prop(5,edge(2,5),k(2)+k(3),0,1)*prop(6,edge(7,4),k(2)-k(4),0,1)*prop(7,edge(8,6),k(3)+k(4),0,1)*prop(8,edge(6,3),k(1)+k(3)+k(4),0,1)*prop(9,edge(1,4),k(1)-k(2)+k(4),0,1)*prop(10,edge(3,2),k(2)+k(3)+p(1),0,1)*prop(11,edge(3,1),k(1)-k(2)+k(4)-p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1)))*topo(prop(1,edge(7,8),k(1),0,1)*prop(2,edge(5,7),k(2),0,1)*prop(3,edge(6,8),k(3),0,1)*prop(4,edge(2,6),k(4),0,1)*prop(5,edge(8,3),k(1)+k(3),0,1)*prop(6,edge(3,7),k(1)-k(2),0,1)*prop(7,edge(3,1),k(2)+k(3),0,1)*prop(8,edge(4,6),k(3)-k(4),0,1)*prop(9,edge(5,2),k(4)+p(1),0,1)*prop(10,edge(1,4),k(2)+k(3)+p(1),0,1)*prop(11,edge(4,5),k(2)+k(4)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1)))*topo(prop(1,edge(3,4),k(1),0,1)*prop(2,edge(2,6),k(2),0,1)*prop(3,edge(7,8),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(5,2),k(2)+p(1),0,1)*prop(6,edge(6,7),k(2)-k(4),0,1)*prop(7,edge(8,5),k(3)+k(4),0,1)*prop(8,edge(7,4),k(2)-k(3)-k(4),0,1)*prop(9,edge(4,1),k(1)+k(2)-k(3)-k(4),0,1)*prop(10,edge(3,5),k(2)-k(3)-k(4)+p(1),0,1)*prop(11,edge(1,3),k(1)+k(2)-k(3)-k(4)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1)))*topo(prop(1,edge(5,7),k(1),0,1)*prop(2,edge(7,8),k(2),0,1)*prop(3,edge(2,6),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(7,3),k(1)-k(2),0,1)*prop(6,edge(4,1),k(2)+k(3),0,1)*prop(7,edge(8,4),k(2)+k(4),0,1)*prop(8,edge(5,2),k(3)+p(1),0,1)*prop(9,edge(6,4),k(3)-k(4),0,1)*prop(10,edge(3,5),k(1)+k(3)+p(1),0,1)*prop(11,edge(1,3),k(2)+k(3)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1)))*topo(prop(1,edge(3,4),k(1),0,1)*prop(2,edge(2,6),k(2),0,1)*prop(3,edge(5,8),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(5,2),k(2)+p(1),0,1)*prop(6,edge(6,7),k(2)-k(4),0,1)*prop(7,edge(8,4),k(3)+k(4),0,1)*prop(8,edge(4,1),k(1)+k(3)+k(4),0,1)*prop(9,edge(7,5),k(2)+k(3)+p(1),0,1)*prop(10,edge(3,7),k(3)+k(4)+p(1),0,1)*prop(11,edge(1,3),k(1)+k(3)+k(4)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1)))*topo(prop(1,edge(2,6),k(1),0,1)*prop(2,edge(4,7),k(2),0,1)*prop(3,edge(6,8),k(3),0,1)*prop(4,edge(7,8),k(4),0,1)*prop(5,edge(5,2),k(1)+p(1),0,1)*prop(6,edge(6,4),k(1)-k(3),0,1)*prop(7,edge(7,3),k(2)-k(4),0,1)*prop(8,edge(8,5),k(3)+k(4),0,1)*prop(9,edge(4,1),k(1)-k(2)-k(3),0,1)*prop(10,edge(3,5),k(1)-k(3)-k(4)+p(1),0,1)*prop(11,edge(1,3),k(1)-k(2)-k(3)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1)))*topo(prop(1,edge(2,6),k(1),0,1)*prop(2,edge(4,7),k(2),0,1)*prop(3,edge(5,8),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(5,2),k(1)+p(1),0,1)*prop(6,edge(6,7),k(1)-k(4),0,1)*prop(7,edge(8,4),k(3)+k(4),0,1)*prop(8,edge(7,3),k(1)+k(2)-k(4),0,1)*prop(9,edge(3,5),k(1)+k(3)+p(1),0,1)*prop(10,edge(1,4),k(2)-k(3)-k(4),0,1)*prop(11,edge(3,1),k(2)-k(3)-k(4)-p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1)))*topo(prop(1,edge(2,6),k(1),0,1)*prop(2,edge(5,8),k(2),0,1)*prop(3,edge(6,7),k(3),0,1)*prop(4,edge(7,8),k(4),0,1)*prop(5,edge(5,2),k(1)+p(1),0,1)*prop(6,edge(6,4),k(1)-k(3),0,1)*prop(7,edge(8,4),k(2)+k(4),0,1)*prop(8,edge(7,3),k(3)-k(4),0,1)*prop(9,edge(3,5),k(1)+k(2)+p(1),0,1)*prop(10,edge(4,1),k(1)+k(2)-k(3)+k(4),0,1)*prop(11,edge(1,3),k(1)+k(2)-k(3)+k(4)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1)))*topo(prop(1,edge(5,7),k(1),0,1)*prop(2,edge(5,8),k(2),0,1)*prop(3,edge(6,7),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(2,5),k(1)+k(2),0,1)*prop(6,edge(7,4),k(1)+k(3),0,1)*prop(7,edge(8,4),k(2)+k(4),0,1)*prop(8,edge(3,6),k(3)+k(4),0,1)*prop(9,edge(3,2),k(1)+k(2)+p(1),0,1)*prop(10,edge(4,1),k(1)+k(2)+k(3)+k(4),0,1)*prop(11,edge(1,3),k(1)+k(2)+k(3)+k(4)+p(1),0,1))"
+    },
+    {
+      "name": "L4_d0_r8",
+      "loops": 4,
+      "dots": 0,
+      "rank": 8,
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1))*dot(k(2),k(3))",
+      "tops": [
+        {
+          "family": "P4L_LA4",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_J1",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_J2",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_J4",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_J5",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_J6",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_J11",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_HAHA",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_NO1",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_NO2",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_NO3",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        }
+      ],
+      "input": "(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1))*dot(k(2),k(3)))*topo(prop(1,edge(3,4),k(1),0,1)*prop(2,edge(7,8),k(2),0,1)*prop(3,edge(2,6),k(3),0,1)*prop(4,edge(5,6),k(4),0,1)*prop(5,edge(6,8),k(3)+k(4),0,1)*prop(6,edge(5,2),k(3)+p(1),0,1)*prop(7,edge(8,4),k(2)+k(3)+k(4),0,1)*prop(8,edge(7,5),k(3)+k(4)+p(1),0,1)*prop(9,edge(4,1),k(1)+k(2)+k(3)+k(4),0,1)*prop(10,edge(3,7),k(2)+k(3)+k(4)+p(1),0,1)*prop(11,edge(1,3),k(1)+k(2)+k(3)+k(4)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1))*dot(k(2),k(3)))*topo(prop(1,edge(2,5),k(1),0,1)*prop(2,edge(5,8),k(2),0,1)*prop(3,edge(6,7),k(3),0,1)*prop(4,edge(7,8),k(4),0,1)*prop(5,edge(3,2),k(1)+p(1),0,1)*prop(6,edge(5,4),k(1)-k(2),0,1)*prop(7,edge(8,6),k(2)+k(4),0,1)*prop(8,edge(7,4),k(3)-k(4),0,1)*prop(9,edge(6,3),k(2)-k(3)+k(4),0,1)*prop(10,edge(4,1),k(1)-k(2)+k(3)-k(4),0,1)*prop(11,edge(1,3),k(1)-k(2)+k(3)-k(4)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1))*dot(k(2),k(3)))*topo(prop(1,edge(4,6),k(1),0,1)*prop(2,edge(5,7),k(2),0,1)*prop(3,edge(5,8),k(3),0,1)*prop(4,edge(7,8),k(4),0,1)*prop(5,edge(2,5),k(2)+k(3),0,1)*prop(6,edge(7,4),k(2)-k(4),0,1)*prop(7,edge(8,6),k(3)+k(4),0,1)*prop(8,edge(6,3),k(1)+k(3)+k(4),0,1)*prop(9,edge(1,4),k(1)-k(2)+k(4),0,1)*prop(10,edge(3,2),k(2)+k(3)+p(1),0,1)*prop(11,edge(3,1),k(1)-k(2)+k(4)-p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1))*dot(k(2),k(3)))*topo(prop(1,edge(7,8),k(1),0,1)*prop(2,edge(5,7),k(2),0,1)*prop(3,edge(6,8),k(3),0,1)*prop(4,edge(2,6),k(4),0,1)*prop(5,edge(8,3),k(1)+k(3),0,1)*prop(6,edge(3,7),k(1)-k(2),0,1)*prop(7,edge(3,1),k(2)+k(3),0,1)*prop(8,edge(4,6),k(3)-k(4),0,1)*prop(9,edge(5,2),k(4)+p(1),0,1)*prop(10,edge(1,4),k(2)+k(3)+p(1),0,1)*prop(11,edge(4,5),k(2)+k(4)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1))*dot(k(2),k(3)))*topo(prop(1,edge(3,4),k(1),0,1)*prop(2,edge(2,6),k(2),0,1)*prop(3,edge(7,8),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(5,2),k(2)+p(1),0,1)*prop(6,edge(6,7),k(2)-k(4),0,1)*prop(7,edge(8,5),k(3)+k(4),0,1)*prop(8,edge(7,4),k(2)-k(3)-k(4),0,1)*prop(9,edge(4,1),k(1)+k(2)-k(3)-k(4),0,1)*prop(10,edge(3,5),k(2)-k(3)-k(4)+p(1),0,1)*prop(11,edge(1,3),k(1)+k(2)-k(3)-k(4)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1))*dot(k(2),k(3)))*topo(prop(1,edge(5,7),k(1),0,1)*prop(2,edge(7,8),k(2),0,1)*prop(3,edge(2,6),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(7,3),k(1)-k(2),0,1)*prop(6,edge(4,1),k(2)+k(3),0,1)*prop(7,edge(8,4),k(2)+k(4),0,1)*prop(8,edge(5,2),k(3)+p(1),0,1)*prop(9,edge(6,4),k(3)-k(4),0,1)*prop(10,edge(3,5),k(1)+k(3)+p(1),0,1)*prop(11,edge(1,3),k(2)+k(3)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1))*dot(k(2),k(3)))*topo(prop(1,edge(3,4),k(1),0,1)*prop(2,edge(2,6),k(2),0,1)*prop(3,edge(5,8),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(5,2),k(2)+p(1),0,1)*prop(6,edge(6,7),k(2)-k(4),0,1)*prop(7,edge(8,4),k(3)+k(4),0,1)*prop(8,edge(4,1),k(1)+k(3)+k(4),0,1)*prop(9,edge(7,5),k(2)+k(3)+p(1),0,1)*prop(10,edge(3,7),k(3)+k(4)+p(1),0,1)*prop(11,edge(1,3),k(1)+k(3)+k(4)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1))*dot(k(2),k(3)))*topo(prop(1,edge(2,6),k(1),0,1)*prop(2,edge(4,7),k(2),0,1)*prop(3,edge(6,8),k(3),0,1)*prop(4,edge(7,8),k(4),0,1)*prop(5,edge(5,2),k(1)+p(1),0,1)*prop(6,edge(6,4),k(1)-k(3),0,1)*prop(7,edge(7,3),k(2)-k(4),0,1)*prop(8,edge(8,5),k(3)+k(4),0,1)*prop(9,edge(4,1),k(1)-k(2)-k(3),0,1)*prop(10,edge(3,5),k(1)-k(3)-k(4)+p(1),0,1)*prop(11,edge(1,3),k(1)-k(2)-k(3)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1))*dot(k(2),k(3)))*topo(prop(1,edge(2,6),k(1),0,1)*prop(2,edge(4,7),k(2),0,1)*prop(3,edge(5,8),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(5,2),k(1)+p(1),0,1)*prop(6,edge(6,7),k(1)-k(4),0,1)*prop(7,edge(8,4),k(3)+k(4),0,1)*prop(8,edge(7,3),k(1)+k(2)-k(4),0,1)*prop(9,edge(3,5),k(1)+k(3)+p(1),0,1)*prop(10,edge(1,4),k(2)-k(3)-k(4),0,1)*prop(11,edge(3,1),k(2)-k(3)-k(4)-p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1))*dot(k(2),k(3)))*topo(prop(1,edge(2,6),k(1),0,1)*prop(2,edge(5,8),k(2),0,1)*prop(3,edge(6,7),k(3),0,1)*prop(4,edge(7,8),k(4),0,1)*prop(5,edge(5,2),k(1)+p(1),0,1)*prop(6,edge(6,4),k(1)-k(3),0,1)*prop(7,edge(8,4),k(2)+k(4),0,1)*prop(8,edge(7,3),k(3)-k(4),0,1)*prop(9,edge(3,5),k(1)+k(2)+p(1),0,1)*prop(10,edge(4,1),k(1)+k(2)-k(3)+k(4),0,1)*prop(11,edge(1,3),k(1)+k(2)-k(3)+k(4)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1))*dot(k(2),k(3)))*topo(prop(1,edge(5,7),k(1),0,1)*prop(2,edge(5,8),k(2),0,1)*prop(3,edge(6,7),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(2,5),k(1)+k(2),0,1)*prop(6,edge(7,4),k(1)+k(3),0,1)*prop(7,edge(8,4),k(2)+k(4),0,1)*prop(8,edge(3,6),k(3)+k(4),0,1)*prop(9,edge(3,2),k(1)+k(2)+p(1),0,1)*prop(10,edge(4,1),k(1)+k(2)+k(3)+k(4),0,1)*prop(11,edge(1,3),k(1)+k(2)+k(3)+k(4)+p(1),0,1))"
+    },
+    {
+      "name": "L4_d1_r0",
+      "loops": 4,
+      "dots": 1,
+      "rank": 0,
+      "numerator": "1",
+      "tops": [
+        {
+          "family": "P4L_LA4",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_J1",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_J2",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_J4",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_J5",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_J6",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_J11",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_HAHA",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_NO1",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_NO2",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_NO3",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        }
+      ],
+      "input": "(1)*topo(prop(1,edge(3,4),k(1),0,2)*prop(2,edge(7,8),k(2),0,1)*prop(3,edge(2,6),k(3),0,1)*prop(4,edge(5,6),k(4),0,1)*prop(5,edge(6,8),k(3)+k(4),0,1)*prop(6,edge(5,2),k(3)+p(1),0,1)*prop(7,edge(8,4),k(2)+k(3)+k(4),0,1)*prop(8,edge(7,5),k(3)+k(4)+p(1),0,1)*prop(9,edge(4,1),k(1)+k(2)+k(3)+k(4),0,1)*prop(10,edge(3,7),k(2)+k(3)+k(4)+p(1),0,1)*prop(11,edge(1,3),k(1)+k(2)+k(3)+k(4)+p(1),0,1))+(1)*topo(prop(1,edge(2,5),k(1),0,2)*prop(2,edge(5,8),k(2),0,1)*prop(3,edge(6,7),k(3),0,1)*prop(4,edge(7,8),k(4),0,1)*prop(5,edge(3,2),k(1)+p(1),0,1)*prop(6,edge(5,4),k(1)-k(2),0,1)*prop(7,edge(8,6),k(2)+k(4),0,1)*prop(8,edge(7,4),k(3)-k(4),0,1)*prop(9,edge(6,3),k(2)-k(3)+k(4),0,1)*prop(10,edge(4,1),k(1)-k(2)+k(3)-k(4),0,1)*prop(11,edge(1,3),k(1)-k(2)+k(3)-k(4)+p(1),0,1))+(1)*topo(prop(1,edge(4,6),k(1),0,2)*prop(2,edge(5,7),k(2),0,1)*prop(3,edge(5,8),k(3),0,1)*prop(4,edge(7,8),k(4),0,1)*prop(5,edge(2,5),k(2)+k(3),0,1)*prop(6,edge(7,4),k(2)-k(4),0,1)*prop(7,edge(8,6),k(3)+k(4),0,1)*prop(8,edge(6,3),k(1)+k(3)+k(4),0,1)*prop(9,edge(1,4),k(1)-k(2)+k(4),0,1)*prop(10,edge(3,2),k(2)+k(3)+p(1),0,1)*prop(11,edge(3,1),k(1)-k(2)+k(4)-p(1),0,1))+(1)*topo(prop(1,edge(7,8),k(1),0,2)*prop(2,edge(5,7),k(2),0,1)*prop(3,edge(6,8),k(3),0,1)*prop(4,edge(2,6),k(4),0,1)*prop(5,edge(8,3),k(1)+k(3),0,1)*prop(6,edge(3,7),k(1)-k(2),0,1)*prop(7,edge(3,1),k(2)+k(3),0,1)*prop(8,edge(4,6),k(3)-k(4),0,1)*prop(9,edge(5,2),k(4)+p(1),0,1)*prop(10,edge(1,4),k(2)+k(3)+p(1),0,1)*prop(11,edge(4,5),k(2)+k(4)+p(1),0,1))+(1)*topo(prop(1,edge(3,4),k(1),0,2)*prop(2,edge(2,6),k(2),0,1)*prop(3,edge(7,8),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(5,2),k(2)+p(1),0,1)*prop(6,edge(6,7),k(2)-k(4),0,1)*prop(7,edge(8,5),k(3)+k(4),0,1)*prop(8,edge(7,4),k(2)-k(3)-k(4),0,1)*prop(9,edge(4,1),k(1)+k(2)-k(3)-k(4),0,1)*prop(10,edge(3,5),k(2)-k(3)-k(4)+p(1),0,1)*prop(11,edge(1,3),k(1)+k(2)-k(3)-k(4)+p(1),0,1))+(1)*topo(prop(1,edge(5,7),k(1),0,2)*prop(2,edge(7,8),k(2),0,1)*prop(3,edge(2,6),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(7,3),k(1)-k(2),0,1)*prop(6,edge(4,1),k(2)+k(3),0,1)*prop(7,edge(8,4),k(2)+k(4),0,1)*prop(8,edge(5,2),k(3)+p(1),0,1)*prop(9,edge(6,4),k(3)-k(4),0,1)*prop(10,edge(3,5),k(1)+k(3)+p(1),0,1)*prop(11,edge(1,3),k(2)+k(3)+p(1),0,1))+(1)*topo(prop(1,edge(3,4),k(1),0,2)*prop(2,edge(2,6),k(2),0,1)*prop(3,edge(5,8),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(5,2),k(2)+p(1),0,1)*prop(6,edge(6,7),k(2)-k(4),0,1)*prop(7,edge(8,4),k(3)+k(4),0,1)*prop(8,edge(4,1),k(1)+k(3)+k(4),0,1)*prop(9,edge(7,5),k(2)+k(3)+p(1),0,1)*prop(10,edge(3,7),k(3)+k(4)+p(1),0,1)*prop(11,edge(1,3),k(1)+k(3)+k(4)+p(1),0,1))+(1)*topo(prop(1,edge(2,6),k(1),0,2)*prop(2,edge(4,7),k(2),0,1)*prop(3,edge(6,8),k(3),0,1)*prop(4,edge(7,8),k(4),0,1)*prop(5,edge(5,2),k(1)+p(1),0,1)*prop(6,edge(6,4),k(1)-k(3),0,1)*prop(7,edge(7,3),k(2)-k(4),0,1)*prop(8,edge(8,5),k(3)+k(4),0,1)*prop(9,edge(4,1),k(1)-k(2)-k(3),0,1)*prop(10,edge(3,5),k(1)-k(3)-k(4)+p(1),0,1)*prop(11,edge(1,3),k(1)-k(2)-k(3)+p(1),0,1))+(1)*topo(prop(1,edge(2,6),k(1),0,2)*prop(2,edge(4,7),k(2),0,1)*prop(3,edge(5,8),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(5,2),k(1)+p(1),0,1)*prop(6,edge(6,7),k(1)-k(4),0,1)*prop(7,edge(8,4),k(3)+k(4),0,1)*prop(8,edge(7,3),k(1)+k(2)-k(4),0,1)*prop(9,edge(3,5),k(1)+k(3)+p(1),0,1)*prop(10,edge(1,4),k(2)-k(3)-k(4),0,1)*prop(11,edge(3,1),k(2)-k(3)-k(4)-p(1),0,1))+(1)*topo(prop(1,edge(2,6),k(1),0,2)*prop(2,edge(5,8),k(2),0,1)*prop(3,edge(6,7),k(3),0,1)*prop(4,edge(7,8),k(4),0,1)*prop(5,edge(5,2),k(1)+p(1),0,1)*prop(6,edge(6,4),k(1)-k(3),0,1)*prop(7,edge(8,4),k(2)+k(4),0,1)*prop(8,edge(7,3),k(3)-k(4),0,1)*prop(9,edge(3,5),k(1)+k(2)+p(1),0,1)*prop(10,edge(4,1),k(1)+k(2)-k(3)+k(4),0,1)*prop(11,edge(1,3),k(1)+k(2)-k(3)+k(4)+p(1),0,1))+(1)*topo(prop(1,edge(5,7),k(1),0,2)*prop(2,edge(5,8),k(2),0,1)*prop(3,edge(6,7),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(2,5),k(1)+k(2),0,1)*prop(6,edge(7,4),k(1)+k(3),0,1)*prop(7,edge(8,4),k(2)+k(4),0,1)*prop(8,edge(3,6),k(3)+k(4),0,1)*prop(9,edge(3,2),k(1)+k(2)+p(1),0,1)*prop(10,edge(4,1),k(1)+k(2)+k(3)+k(4),0,1)*prop(11,edge(1,3),k(1)+k(2)+k(3)+k(4)+p(1),0,1))"
+    },
+    {
+      "name": "L4_d1_r2",
+      "loops": 4,
+      "dots": 1,
+      "rank": 2,
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))",
+      "tops": [
+        {
+          "family": "P4L_LA4",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_J1",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_J2",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_J4",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_J5",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_J6",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_J11",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_HAHA",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_NO1",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_NO2",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_NO3",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        }
+      ],
+      "input": "(dot(k(1),p(1))*dot(k(2),p(1)))*topo(prop(1,edge(3,4),k(1),0,2)*prop(2,edge(7,8),k(2),0,1)*prop(3,edge(2,6),k(3),0,1)*prop(4,edge(5,6),k(4),0,1)*prop(5,edge(6,8),k(3)+k(4),0,1)*prop(6,edge(5,2),k(3)+p(1),0,1)*prop(7,edge(8,4),k(2)+k(3)+k(4),0,1)*prop(8,edge(7,5),k(3)+k(4)+p(1),0,1)*prop(9,edge(4,1),k(1)+k(2)+k(3)+k(4),0,1)*prop(10,edge(3,7),k(2)+k(3)+k(4)+p(1),0,1)*prop(11,edge(1,3),k(1)+k(2)+k(3)+k(4)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1)))*topo(prop(1,edge(2,5),k(1),0,2)*prop(2,edge(5,8),k(2),0,1)*prop(3,edge(6,7),k(3),0,1)*prop(4,edge(7,8),k(4),0,1)*prop(5,edge(3,2),k(1)+p(1),0,1)*prop(6,edge(5,4),k(1)-k(2),0,1)*prop(7,edge(8,6),k(2)+k(4),0,1)*prop(8,edge(7,4),k(3)-k(4),0,1)*prop(9,edge(6,3),k(2)-k(3)+k(4),0,1)*prop(10,edge(4,1),k(1)-k(2)+k(3)-k(4),0,1)*prop(11,edge(1,3),k(1)-k(2)+k(3)-k(4)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1)))*topo(prop(1,edge(4,6),k(1),0,2)*prop(2,edge(5,7),k(2),0,1)*prop(3,edge(5,8),k(3),0,1)*prop(4,edge(7,8),k(4),0,1)*prop(5,edge(2,5),k(2)+k(3),0,1)*prop(6,edge(7,4),k(2)-k(4),0,1)*prop(7,edge(8,6),k(3)+k(4),0,1)*prop(8,edge(6,3),k(1)+k(3)+k(4),0,1)*prop(9,edge(1,4),k(1)-k(2)+k(4),0,1)*prop(10,edge(3,2),k(2)+k(3)+p(1),0,1)*prop(11,edge(3,1),k(1)-k(2)+k(4)-p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1)))*topo(prop(1,edge(7,8),k(1),0,2)*prop(2,edge(5,7),k(2),0,1)*prop(3,edge(6,8),k(3),0,1)*prop(4,edge(2,6),k(4),0,1)*prop(5,edge(8,3),k(1)+k(3),0,1)*prop(6,edge(3,7),k(1)-k(2),0,1)*prop(7,edge(3,1),k(2)+k(3),0,1)*prop(8,edge(4,6),k(3)-k(4),0,1)*prop(9,edge(5,2),k(4)+p(1),0,1)*prop(10,edge(1,4),k(2)+k(3)+p(1),0,1)*prop(11,edge(4,5),k(2)+k(4)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1)))*topo(prop(1,edge(3,4),k(1),0,2)*prop(2,edge(2,6),k(2),0,1)*prop(3,edge(7,8),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(5,2),k(2)+p(1),0,1)*prop(6,edge(6,7),k(2)-k(4),0,1)*prop(7,edge(8,5),k(3)+k(4),0,1)*prop(8,edge(7,4),k(2)-k(3)-k(4),0,1)*prop(9,edge(4,1),k(1)+k(2)-k(3)-k(4),0,1)*prop(10,edge(3,5),k(2)-k(3)-k(4)+p(1),0,1)*prop(11,edge(1,3),k(1)+k(2)-k(3)-k(4)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1)))*topo(prop(1,edge(5,7),k(1),0,2)*prop(2,edge(7,8),k(2),0,1)*prop(3,edge(2,6),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(7,3),k(1)-k(2),0,1)*prop(6,edge(4,1),k(2)+k(3),0,1)*prop(7,edge(8,4),k(2)+k(4),0,1)*prop(8,edge(5,2),k(3)+p(1),0,1)*prop(9,edge(6,4),k(3)-k(4),0,1)*prop(10,edge(3,5),k(1)+k(3)+p(1),0,1)*prop(11,edge(1,3),k(2)+k(3)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1)))*topo(prop(1,edge(3,4),k(1),0,2)*prop(2,edge(2,6),k(2),0,1)*prop(3,edge(5,8),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(5,2),k(2)+p(1),0,1)*prop(6,edge(6,7),k(2)-k(4),0,1)*prop(7,edge(8,4),k(3)+k(4),0,1)*prop(8,edge(4,1),k(1)+k(3)+k(4),0,1)*prop(9,edge(7,5),k(2)+k(3)+p(1),0,1)*prop(10,edge(3,7),k(3)+k(4)+p(1),0,1)*prop(11,edge(1,3),k(1)+k(3)+k(4)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1)))*topo(prop(1,edge(2,6),k(1),0,2)*prop(2,edge(4,7),k(2),0,1)*prop(3,edge(6,8),k(3),0,1)*prop(4,edge(7,8),k(4),0,1)*prop(5,edge(5,2),k(1)+p(1),0,1)*prop(6,edge(6,4),k(1)-k(3),0,1)*prop(7,edge(7,3),k(2)-k(4),0,1)*prop(8,edge(8,5),k(3)+k(4),0,1)*prop(9,edge(4,1),k(1)-k(2)-k(3),0,1)*prop(10,edge(3,5),k(1)-k(3)-k(4)+p(1),0,1)*prop(11,edge(1,3),k(1)-k(2)-k(3)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1)))*topo(prop(1,edge(2,6),k(1),0,2)*prop(2,edge(4,7),k(2),0,1)*prop(3,edge(5,8),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(5,2),k(1)+p(1),0,1)*prop(6,edge(6,7),k(1)-k(4),0,1)*prop(7,edge(8,4),k(3)+k(4),0,1)*prop(8,edge(7,3),k(1)+k(2)-k(4),0,1)*prop(9,edge(3,5),k(1)+k(3)+p(1),0,1)*prop(10,edge(1,4),k(2)-k(3)-k(4),0,1)*prop(11,edge(3,1),k(2)-k(3)-k(4)-p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1)))*topo(prop(1,edge(2,6),k(1),0,2)*prop(2,edge(5,8),k(2),0,1)*prop(3,edge(6,7),k(3),0,1)*prop(4,edge(7,8),k(4),0,1)*prop(5,edge(5,2),k(1)+p(1),0,1)*prop(6,edge(6,4),k(1)-k(3),0,1)*prop(7,edge(8,4),k(2)+k(4),0,1)*prop(8,edge(7,3),k(3)-k(4),0,1)*prop(9,edge(3,5),k(1)+k(2)+p(1),0,1)*prop(10,edge(4,1),k(1)+k(2)-k(3)+k(4),0,1)*prop(11,edge(1,3),k(1)+k(2)-k(3)+k(4)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1)))*topo(prop(1,edge(5,7),k(1),0,2)*prop(2,edge(5,8),k(2),0,1)*prop(3,edge(6,7),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(2,5),k(1)+k(2),0,1)*prop(6,edge(7,4),k(1)+k(3),0,1)*prop(7,edge(8,4),k(2)+k(4),0,1)*prop(8,edge(3,6),k(3)+k(4),0,1)*prop(9,edge(3,2),k(1)+k(2)+p(1),0,1)*prop(10,edge(4,1),k(1)+k(2)+k(3)+k(4),0,1)*prop(11,edge(1,3),k(1)+k(2)+k(3)+k(4)+p(1),0,1))"
+    },
+    {
+      "name": "L4_d1_r4",
+      "loops": 4,
+      "dots": 1,
+      "rank": 4,
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))",
+      "tops": [
+        {
+          "family": "P4L_LA4",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_J1",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_J2",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_J4",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_J5",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_J6",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_J11",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_HAHA",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_NO1",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_NO2",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_NO3",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        }
+      ],
+      "input": "(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3)))*topo(prop(1,edge(3,4),k(1),0,2)*prop(2,edge(7,8),k(2),0,1)*prop(3,edge(2,6),k(3),0,1)*prop(4,edge(5,6),k(4),0,1)*prop(5,edge(6,8),k(3)+k(4),0,1)*prop(6,edge(5,2),k(3)+p(1),0,1)*prop(7,edge(8,4),k(2)+k(3)+k(4),0,1)*prop(8,edge(7,5),k(3)+k(4)+p(1),0,1)*prop(9,edge(4,1),k(1)+k(2)+k(3)+k(4),0,1)*prop(10,edge(3,7),k(2)+k(3)+k(4)+p(1),0,1)*prop(11,edge(1,3),k(1)+k(2)+k(3)+k(4)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3)))*topo(prop(1,edge(2,5),k(1),0,2)*prop(2,edge(5,8),k(2),0,1)*prop(3,edge(6,7),k(3),0,1)*prop(4,edge(7,8),k(4),0,1)*prop(5,edge(3,2),k(1)+p(1),0,1)*prop(6,edge(5,4),k(1)-k(2),0,1)*prop(7,edge(8,6),k(2)+k(4),0,1)*prop(8,edge(7,4),k(3)-k(4),0,1)*prop(9,edge(6,3),k(2)-k(3)+k(4),0,1)*prop(10,edge(4,1),k(1)-k(2)+k(3)-k(4),0,1)*prop(11,edge(1,3),k(1)-k(2)+k(3)-k(4)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3)))*topo(prop(1,edge(4,6),k(1),0,2)*prop(2,edge(5,7),k(2),0,1)*prop(3,edge(5,8),k(3),0,1)*prop(4,edge(7,8),k(4),0,1)*prop(5,edge(2,5),k(2)+k(3),0,1)*prop(6,edge(7,4),k(2)-k(4),0,1)*prop(7,edge(8,6),k(3)+k(4),0,1)*prop(8,edge(6,3),k(1)+k(3)+k(4),0,1)*prop(9,edge(1,4),k(1)-k(2)+k(4),0,1)*prop(10,edge(3,2),k(2)+k(3)+p(1),0,1)*prop(11,edge(3,1),k(1)-k(2)+k(4)-p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3)))*topo(prop(1,edge(7,8),k(1),0,2)*prop(2,edge(5,7),k(2),0,1)*prop(3,edge(6,8),k(3),0,1)*prop(4,edge(2,6),k(4),0,1)*prop(5,edge(8,3),k(1)+k(3),0,1)*prop(6,edge(3,7),k(1)-k(2),0,1)*prop(7,edge(3,1),k(2)+k(3),0,1)*prop(8,edge(4,6),k(3)-k(4),0,1)*prop(9,edge(5,2),k(4)+p(1),0,1)*prop(10,edge(1,4),k(2)+k(3)+p(1),0,1)*prop(11,edge(4,5),k(2)+k(4)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3)))*topo(prop(1,edge(3,4),k(1),0,2)*prop(2,edge(2,6),k(2),0,1)*prop(3,edge(7,8),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(5,2),k(2)+p(1),0,1)*prop(6,edge(6,7),k(2)-k(4),0,1)*prop(7,edge(8,5),k(3)+k(4),0,1)*prop(8,edge(7,4),k(2)-k(3)-k(4),0,1)*prop(9,edge(4,1),k(1)+k(2)-k(3)-k(4),0,1)*prop(10,edge(3,5),k(2)-k(3)-k(4)+p(1),0,1)*prop(11,edge(1,3),k(1)+k(2)-k(3)-k(4)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3)))*topo(prop(1,edge(5,7),k(1),0,2)*prop(2,edge(7,8),k(2),0,1)*prop(3,edge(2,6),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(7,3),k(1)-k(2),0,1)*prop(6,edge(4,1),k(2)+k(3),0,1)*prop(7,edge(8,4),k(2)+k(4),0,1)*prop(8,edge(5,2),k(3)+p(1),0,1)*prop(9,edge(6,4),k(3)-k(4),0,1)*prop(10,edge(3,5),k(1)+k(3)+p(1),0,1)*prop(11,edge(1,3),k(2)+k(3)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3)))*topo(prop(1,edge(3,4),k(1),0,2)*prop(2,edge(2,6),k(2),0,1)*prop(3,edge(5,8),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(5,2),k(2)+p(1),0,1)*prop(6,edge(6,7),k(2)-k(4),0,1)*prop(7,edge(8,4),k(3)+k(4),0,1)*prop(8,edge(4,1),k(1)+k(3)+k(4),0,1)*prop(9,edge(7,5),k(2)+k(3)+p(1),0,1)*prop(10,edge(3,7),k(3)+k(4)+p(1),0,1)*prop(11,edge(1,3),k(1)+k(3)+k(4)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3)))*topo(prop(1,edge(2,6),k(1),0,2)*prop(2,edge(4,7),k(2),0,1)*prop(3,edge(6,8),k(3),0,1)*prop(4,edge(7,8),k(4),0,1)*prop(5,edge(5,2),k(1)+p(1),0,1)*prop(6,edge(6,4),k(1)-k(3),0,1)*prop(7,edge(7,3),k(2)-k(4),0,1)*prop(8,edge(8,5),k(3)+k(4),0,1)*prop(9,edge(4,1),k(1)-k(2)-k(3),0,1)*prop(10,edge(3,5),k(1)-k(3)-k(4)+p(1),0,1)*prop(11,edge(1,3),k(1)-k(2)-k(3)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3)))*topo(prop(1,edge(2,6),k(1),0,2)*prop(2,edge(4,7),k(2),0,1)*prop(3,edge(5,8),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(5,2),k(1)+p(1),0,1)*prop(6,edge(6,7),k(1)-k(4),0,1)*prop(7,edge(8,4),k(3)+k(4),0,1)*prop(8,edge(7,3),k(1)+k(2)-k(4),0,1)*prop(9,edge(3,5),k(1)+k(3)+p(1),0,1)*prop(10,edge(1,4),k(2)-k(3)-k(4),0,1)*prop(11,edge(3,1),k(2)-k(3)-k(4)-p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3)))*topo(prop(1,edge(2,6),k(1),0,2)*prop(2,edge(5,8),k(2),0,1)*prop(3,edge(6,7),k(3),0,1)*prop(4,edge(7,8),k(4),0,1)*prop(5,edge(5,2),k(1)+p(1),0,1)*prop(6,edge(6,4),k(1)-k(3),0,1)*prop(7,edge(8,4),k(2)+k(4),0,1)*prop(8,edge(7,3),k(3)-k(4),0,1)*prop(9,edge(3,5),k(1)+k(2)+p(1),0,1)*prop(10,edge(4,1),k(1)+k(2)-k(3)+k(4),0,1)*prop(11,edge(1,3),k(1)+k(2)-k(3)+k(4)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3)))*topo(prop(1,edge(5,7),k(1),0,2)*prop(2,edge(5,8),k(2),0,1)*prop(3,edge(6,7),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(2,5),k(1)+k(2),0,1)*prop(6,edge(7,4),k(1)+k(3),0,1)*prop(7,edge(8,4),k(2)+k(4),0,1)*prop(8,edge(3,6),k(3)+k(4),0,1)*prop(9,edge(3,2),k(1)+k(2)+p(1),0,1)*prop(10,edge(4,1),k(1)+k(2)+k(3)+k(4),0,1)*prop(11,edge(1,3),k(1)+k(2)+k(3)+k(4)+p(1),0,1))"
+    },
+    {
+      "name": "L4_d1_r6",
+      "loops": 4,
+      "dots": 1,
+      "rank": 6,
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1))",
+      "tops": [
+        {
+          "family": "P4L_LA4",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_J1",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_J2",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_J4",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_J5",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_J6",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_J11",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_HAHA",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_NO1",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_NO2",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_NO3",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        }
+      ],
+      "input": "(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1)))*topo(prop(1,edge(3,4),k(1),0,2)*prop(2,edge(7,8),k(2),0,1)*prop(3,edge(2,6),k(3),0,1)*prop(4,edge(5,6),k(4),0,1)*prop(5,edge(6,8),k(3)+k(4),0,1)*prop(6,edge(5,2),k(3)+p(1),0,1)*prop(7,edge(8,4),k(2)+k(3)+k(4),0,1)*prop(8,edge(7,5),k(3)+k(4)+p(1),0,1)*prop(9,edge(4,1),k(1)+k(2)+k(3)+k(4),0,1)*prop(10,edge(3,7),k(2)+k(3)+k(4)+p(1),0,1)*prop(11,edge(1,3),k(1)+k(2)+k(3)+k(4)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1)))*topo(prop(1,edge(2,5),k(1),0,2)*prop(2,edge(5,8),k(2),0,1)*prop(3,edge(6,7),k(3),0,1)*prop(4,edge(7,8),k(4),0,1)*prop(5,edge(3,2),k(1)+p(1),0,1)*prop(6,edge(5,4),k(1)-k(2),0,1)*prop(7,edge(8,6),k(2)+k(4),0,1)*prop(8,edge(7,4),k(3)-k(4),0,1)*prop(9,edge(6,3),k(2)-k(3)+k(4),0,1)*prop(10,edge(4,1),k(1)-k(2)+k(3)-k(4),0,1)*prop(11,edge(1,3),k(1)-k(2)+k(3)-k(4)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1)))*topo(prop(1,edge(4,6),k(1),0,2)*prop(2,edge(5,7),k(2),0,1)*prop(3,edge(5,8),k(3),0,1)*prop(4,edge(7,8),k(4),0,1)*prop(5,edge(2,5),k(2)+k(3),0,1)*prop(6,edge(7,4),k(2)-k(4),0,1)*prop(7,edge(8,6),k(3)+k(4),0,1)*prop(8,edge(6,3),k(1)+k(3)+k(4),0,1)*prop(9,edge(1,4),k(1)-k(2)+k(4),0,1)*prop(10,edge(3,2),k(2)+k(3)+p(1),0,1)*prop(11,edge(3,1),k(1)-k(2)+k(4)-p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1)))*topo(prop(1,edge(7,8),k(1),0,2)*prop(2,edge(5,7),k(2),0,1)*prop(3,edge(6,8),k(3),0,1)*prop(4,edge(2,6),k(4),0,1)*prop(5,edge(8,3),k(1)+k(3),0,1)*prop(6,edge(3,7),k(1)-k(2),0,1)*prop(7,edge(3,1),k(2)+k(3),0,1)*prop(8,edge(4,6),k(3)-k(4),0,1)*prop(9,edge(5,2),k(4)+p(1),0,1)*prop(10,edge(1,4),k(2)+k(3)+p(1),0,1)*prop(11,edge(4,5),k(2)+k(4)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1)))*topo(prop(1,edge(3,4),k(1),0,2)*prop(2,edge(2,6),k(2),0,1)*prop(3,edge(7,8),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(5,2),k(2)+p(1),0,1)*prop(6,edge(6,7),k(2)-k(4),0,1)*prop(7,edge(8,5),k(3)+k(4),0,1)*prop(8,edge(7,4),k(2)-k(3)-k(4),0,1)*prop(9,edge(4,1),k(1)+k(2)-k(3)-k(4),0,1)*prop(10,edge(3,5),k(2)-k(3)-k(4)+p(1),0,1)*prop(11,edge(1,3),k(1)+k(2)-k(3)-k(4)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1)))*topo(prop(1,edge(5,7),k(1),0,2)*prop(2,edge(7,8),k(2),0,1)*prop(3,edge(2,6),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(7,3),k(1)-k(2),0,1)*prop(6,edge(4,1),k(2)+k(3),0,1)*prop(7,edge(8,4),k(2)+k(4),0,1)*prop(8,edge(5,2),k(3)+p(1),0,1)*prop(9,edge(6,4),k(3)-k(4),0,1)*prop(10,edge(3,5),k(1)+k(3)+p(1),0,1)*prop(11,edge(1,3),k(2)+k(3)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1)))*topo(prop(1,edge(3,4),k(1),0,2)*prop(2,edge(2,6),k(2),0,1)*prop(3,edge(5,8),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(5,2),k(2)+p(1),0,1)*prop(6,edge(6,7),k(2)-k(4),0,1)*prop(7,edge(8,4),k(3)+k(4),0,1)*prop(8,edge(4,1),k(1)+k(3)+k(4),0,1)*prop(9,edge(7,5),k(2)+k(3)+p(1),0,1)*prop(10,edge(3,7),k(3)+k(4)+p(1),0,1)*prop(11,edge(1,3),k(1)+k(3)+k(4)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1)))*topo(prop(1,edge(2,6),k(1),0,2)*prop(2,edge(4,7),k(2),0,1)*prop(3,edge(6,8),k(3),0,1)*prop(4,edge(7,8),k(4),0,1)*prop(5,edge(5,2),k(1)+p(1),0,1)*prop(6,edge(6,4),k(1)-k(3),0,1)*prop(7,edge(7,3),k(2)-k(4),0,1)*prop(8,edge(8,5),k(3)+k(4),0,1)*prop(9,edge(4,1),k(1)-k(2)-k(3),0,1)*prop(10,edge(3,5),k(1)-k(3)-k(4)+p(1),0,1)*prop(11,edge(1,3),k(1)-k(2)-k(3)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1)))*topo(prop(1,edge(2,6),k(1),0,2)*prop(2,edge(4,7),k(2),0,1)*prop(3,edge(5,8),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(5,2),k(1)+p(1),0,1)*prop(6,edge(6,7),k(1)-k(4),0,1)*prop(7,edge(8,4),k(3)+k(4),0,1)*prop(8,edge(7,3),k(1)+k(2)-k(4),0,1)*prop(9,edge(3,5),k(1)+k(3)+p(1),0,1)*prop(10,edge(1,4),k(2)-k(3)-k(4),0,1)*prop(11,edge(3,1),k(2)-k(3)-k(4)-p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1)))*topo(prop(1,edge(2,6),k(1),0,2)*prop(2,edge(5,8),k(2),0,1)*prop(3,edge(6,7),k(3),0,1)*prop(4,edge(7,8),k(4),0,1)*prop(5,edge(5,2),k(1)+p(1),0,1)*prop(6,edge(6,4),k(1)-k(3),0,1)*prop(7,edge(8,4),k(2)+k(4),0,1)*prop(8,edge(7,3),k(3)-k(4),0,1)*prop(9,edge(3,5),k(1)+k(2)+p(1),0,1)*prop(10,edge(4,1),k(1)+k(2)-k(3)+k(4),0,1)*prop(11,edge(1,3),k(1)+k(2)-k(3)+k(4)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1)))*topo(prop(1,edge(5,7),k(1),0,2)*prop(2,edge(5,8),k(2),0,1)*prop(3,edge(6,7),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(2,5),k(1)+k(2),0,1)*prop(6,edge(7,4),k(1)+k(3),0,1)*prop(7,edge(8,4),k(2)+k(4),0,1)*prop(8,edge(3,6),k(3)+k(4),0,1)*prop(9,edge(3,2),k(1)+k(2)+p(1),0,1)*prop(10,edge(4,1),k(1)+k(2)+k(3)+k(4),0,1)*prop(11,edge(1,3),k(1)+k(2)+k(3)+k(4)+p(1),0,1))"
+    },
+    {
+      "name": "L4_d1_r8",
+      "loops": 4,
+      "dots": 1,
+      "rank": 8,
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1))*dot(k(2),k(3))",
+      "tops": [
+        {
+          "family": "P4L_LA4",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_J1",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_J2",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_J4",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_J5",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_J6",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_J11",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_HAHA",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_NO1",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_NO2",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "family": "P4L_NO3",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        }
+      ],
+      "input": "(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1))*dot(k(2),k(3)))*topo(prop(1,edge(3,4),k(1),0,2)*prop(2,edge(7,8),k(2),0,1)*prop(3,edge(2,6),k(3),0,1)*prop(4,edge(5,6),k(4),0,1)*prop(5,edge(6,8),k(3)+k(4),0,1)*prop(6,edge(5,2),k(3)+p(1),0,1)*prop(7,edge(8,4),k(2)+k(3)+k(4),0,1)*prop(8,edge(7,5),k(3)+k(4)+p(1),0,1)*prop(9,edge(4,1),k(1)+k(2)+k(3)+k(4),0,1)*prop(10,edge(3,7),k(2)+k(3)+k(4)+p(1),0,1)*prop(11,edge(1,3),k(1)+k(2)+k(3)+k(4)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1))*dot(k(2),k(3)))*topo(prop(1,edge(2,5),k(1),0,2)*prop(2,edge(5,8),k(2),0,1)*prop(3,edge(6,7),k(3),0,1)*prop(4,edge(7,8),k(4),0,1)*prop(5,edge(3,2),k(1)+p(1),0,1)*prop(6,edge(5,4),k(1)-k(2),0,1)*prop(7,edge(8,6),k(2)+k(4),0,1)*prop(8,edge(7,4),k(3)-k(4),0,1)*prop(9,edge(6,3),k(2)-k(3)+k(4),0,1)*prop(10,edge(4,1),k(1)-k(2)+k(3)-k(4),0,1)*prop(11,edge(1,3),k(1)-k(2)+k(3)-k(4)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1))*dot(k(2),k(3)))*topo(prop(1,edge(4,6),k(1),0,2)*prop(2,edge(5,7),k(2),0,1)*prop(3,edge(5,8),k(3),0,1)*prop(4,edge(7,8),k(4),0,1)*prop(5,edge(2,5),k(2)+k(3),0,1)*prop(6,edge(7,4),k(2)-k(4),0,1)*prop(7,edge(8,6),k(3)+k(4),0,1)*prop(8,edge(6,3),k(1)+k(3)+k(4),0,1)*prop(9,edge(1,4),k(1)-k(2)+k(4),0,1)*prop(10,edge(3,2),k(2)+k(3)+p(1),0,1)*prop(11,edge(3,1),k(1)-k(2)+k(4)-p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1))*dot(k(2),k(3)))*topo(prop(1,edge(7,8),k(1),0,2)*prop(2,edge(5,7),k(2),0,1)*prop(3,edge(6,8),k(3),0,1)*prop(4,edge(2,6),k(4),0,1)*prop(5,edge(8,3),k(1)+k(3),0,1)*prop(6,edge(3,7),k(1)-k(2),0,1)*prop(7,edge(3,1),k(2)+k(3),0,1)*prop(8,edge(4,6),k(3)-k(4),0,1)*prop(9,edge(5,2),k(4)+p(1),0,1)*prop(10,edge(1,4),k(2)+k(3)+p(1),0,1)*prop(11,edge(4,5),k(2)+k(4)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1))*dot(k(2),k(3)))*topo(prop(1,edge(3,4),k(1),0,2)*prop(2,edge(2,6),k(2),0,1)*prop(3,edge(7,8),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(5,2),k(2)+p(1),0,1)*prop(6,edge(6,7),k(2)-k(4),0,1)*prop(7,edge(8,5),k(3)+k(4),0,1)*prop(8,edge(7,4),k(2)-k(3)-k(4),0,1)*prop(9,edge(4,1),k(1)+k(2)-k(3)-k(4),0,1)*prop(10,edge(3,5),k(2)-k(3)-k(4)+p(1),0,1)*prop(11,edge(1,3),k(1)+k(2)-k(3)-k(4)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1))*dot(k(2),k(3)))*topo(prop(1,edge(5,7),k(1),0,2)*prop(2,edge(7,8),k(2),0,1)*prop(3,edge(2,6),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(7,3),k(1)-k(2),0,1)*prop(6,edge(4,1),k(2)+k(3),0,1)*prop(7,edge(8,4),k(2)+k(4),0,1)*prop(8,edge(5,2),k(3)+p(1),0,1)*prop(9,edge(6,4),k(3)-k(4),0,1)*prop(10,edge(3,5),k(1)+k(3)+p(1),0,1)*prop(11,edge(1,3),k(2)+k(3)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1))*dot(k(2),k(3)))*topo(prop(1,edge(3,4),k(1),0,2)*prop(2,edge(2,6),k(2),0,1)*prop(3,edge(5,8),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(5,2),k(2)+p(1),0,1)*prop(6,edge(6,7),k(2)-k(4),0,1)*prop(7,edge(8,4),k(3)+k(4),0,1)*prop(8,edge(4,1),k(1)+k(3)+k(4),0,1)*prop(9,edge(7,5),k(2)+k(3)+p(1),0,1)*prop(10,edge(3,7),k(3)+k(4)+p(1),0,1)*prop(11,edge(1,3),k(1)+k(3)+k(4)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1))*dot(k(2),k(3)))*topo(prop(1,edge(2,6),k(1),0,2)*prop(2,edge(4,7),k(2),0,1)*prop(3,edge(6,8),k(3),0,1)*prop(4,edge(7,8),k(4),0,1)*prop(5,edge(5,2),k(1)+p(1),0,1)*prop(6,edge(6,4),k(1)-k(3),0,1)*prop(7,edge(7,3),k(2)-k(4),0,1)*prop(8,edge(8,5),k(3)+k(4),0,1)*prop(9,edge(4,1),k(1)-k(2)-k(3),0,1)*prop(10,edge(3,5),k(1)-k(3)-k(4)+p(1),0,1)*prop(11,edge(1,3),k(1)-k(2)-k(3)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1))*dot(k(2),k(3)))*topo(prop(1,edge(2,6),k(1),0,2)*prop(2,edge(4,7),k(2),0,1)*prop(3,edge(5,8),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(5,2),k(1)+p(1),0,1)*prop(6,edge(6,7),k(1)-k(4),0,1)*prop(7,edge(8,4),k(3)+k(4),0,1)*prop(8,edge(7,3),k(1)+k(2)-k(4),0,1)*prop(9,edge(3,5),k(1)+k(3)+p(1),0,1)*prop(10,edge(1,4),k(2)-k(3)-k(4),0,1)*prop(11,edge(3,1),k(2)-k(3)-k(4)-p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1))*dot(k(2),k(3)))*topo(prop(1,edge(2,6),k(1),0,2)*prop(2,edge(5,8),k(2),0,1)*prop(3,edge(6,7),k(3),0,1)*prop(4,edge(7,8),k(4),0,1)*prop(5,edge(5,2),k(1)+p(1),0,1)*prop(6,edge(6,4),k(1)-k(3),0,1)*prop(7,edge(8,4),k(2)+k(4),0,1)*prop(8,edge(7,3),k(3)-k(4),0,1)*prop(9,edge(3,5),k(1)+k(2)+p(1),0,1)*prop(10,edge(4,1),k(1)+k(2)-k(3)+k(4),0,1)*prop(11,edge(1,3),k(1)+k(2)-k(3)+k(4)+p(1),0,1))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1))*dot(k(2),k(3)))*topo(prop(1,edge(5,7),k(1),0,2)*prop(2,edge(5,8),k(2),0,1)*prop(3,edge(6,7),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(2,5),k(1)+k(2),0,1)*prop(6,edge(7,4),k(1)+k(3),0,1)*prop(7,edge(8,4),k(2)+k(4),0,1)*prop(8,edge(3,6),k(3)+k(4),0,1)*prop(9,edge(3,2),k(1)+k(2)+p(1),0,1)*prop(10,edge(4,1),k(1)+k(2)+k(3)+k(4),0,1)*prop(11,edge(1,3),k(1)+k(2)+k(3)+k(4)+p(1),0,1))"
+    },
+    {
+      "name": "L4_d2_r0",
+      "loops": 4,
+      "dots": 2,
+      "rank": 0,
+      "numerator": "1",
+      "tops": [
+        {
+          "family": "P4L_LA4",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        },
+        {
+          "family": "P4L_J1",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        },
+        {
+          "family": "P4L_J2",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        },
+        {
+          "family": "P4L_J4",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        },
+        {
+          "family": "P4L_J5",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        },
+        {
+          "family": "P4L_J6",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        },
+        {
+          "family": "P4L_J11",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        },
+        {
+          "family": "P4L_HAHA",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        },
+        {
+          "family": "P4L_NO1",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        },
+        {
+          "family": "P4L_NO2",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        },
+        {
+          "family": "P4L_NO3",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        }
+      ],
+      "input": "(1)*topo(prop(1,edge(3,4),k(1),0,2)*prop(2,edge(7,8),k(2),0,1)*prop(3,edge(2,6),k(3),0,1)*prop(4,edge(5,6),k(4),0,1)*prop(5,edge(6,8),k(3)+k(4),0,1)*prop(6,edge(5,2),k(3)+p(1),0,1)*prop(7,edge(8,4),k(2)+k(3)+k(4),0,1)*prop(8,edge(7,5),k(3)+k(4)+p(1),0,1)*prop(9,edge(4,1),k(1)+k(2)+k(3)+k(4),0,1)*prop(10,edge(3,7),k(2)+k(3)+k(4)+p(1),0,1)*prop(11,edge(1,3),k(1)+k(2)+k(3)+k(4)+p(1),0,2))+(1)*topo(prop(1,edge(2,5),k(1),0,2)*prop(2,edge(5,8),k(2),0,1)*prop(3,edge(6,7),k(3),0,1)*prop(4,edge(7,8),k(4),0,1)*prop(5,edge(3,2),k(1)+p(1),0,1)*prop(6,edge(5,4),k(1)-k(2),0,1)*prop(7,edge(8,6),k(2)+k(4),0,1)*prop(8,edge(7,4),k(3)-k(4),0,1)*prop(9,edge(6,3),k(2)-k(3)+k(4),0,1)*prop(10,edge(4,1),k(1)-k(2)+k(3)-k(4),0,1)*prop(11,edge(1,3),k(1)-k(2)+k(3)-k(4)+p(1),0,2))+(1)*topo(prop(1,edge(4,6),k(1),0,2)*prop(2,edge(5,7),k(2),0,1)*prop(3,edge(5,8),k(3),0,1)*prop(4,edge(7,8),k(4),0,1)*prop(5,edge(2,5),k(2)+k(3),0,1)*prop(6,edge(7,4),k(2)-k(4),0,1)*prop(7,edge(8,6),k(3)+k(4),0,1)*prop(8,edge(6,3),k(1)+k(3)+k(4),0,1)*prop(9,edge(1,4),k(1)-k(2)+k(4),0,1)*prop(10,edge(3,2),k(2)+k(3)+p(1),0,1)*prop(11,edge(3,1),k(1)-k(2)+k(4)-p(1),0,2))+(1)*topo(prop(1,edge(7,8),k(1),0,2)*prop(2,edge(5,7),k(2),0,1)*prop(3,edge(6,8),k(3),0,1)*prop(4,edge(2,6),k(4),0,1)*prop(5,edge(8,3),k(1)+k(3),0,1)*prop(6,edge(3,7),k(1)-k(2),0,1)*prop(7,edge(3,1),k(2)+k(3),0,1)*prop(8,edge(4,6),k(3)-k(4),0,1)*prop(9,edge(5,2),k(4)+p(1),0,1)*prop(10,edge(1,4),k(2)+k(3)+p(1),0,1)*prop(11,edge(4,5),k(2)+k(4)+p(1),0,2))+(1)*topo(prop(1,edge(3,4),k(1),0,2)*prop(2,edge(2,6),k(2),0,1)*prop(3,edge(7,8),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(5,2),k(2)+p(1),0,1)*prop(6,edge(6,7),k(2)-k(4),0,1)*prop(7,edge(8,5),k(3)+k(4),0,1)*prop(8,edge(7,4),k(2)-k(3)-k(4),0,1)*prop(9,edge(4,1),k(1)+k(2)-k(3)-k(4),0,1)*prop(10,edge(3,5),k(2)-k(3)-k(4)+p(1),0,1)*prop(11,edge(1,3),k(1)+k(2)-k(3)-k(4)+p(1),0,2))+(1)*topo(prop(1,edge(5,7),k(1),0,2)*prop(2,edge(7,8),k(2),0,1)*prop(3,edge(2,6),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(7,3),k(1)-k(2),0,1)*prop(6,edge(4,1),k(2)+k(3),0,1)*prop(7,edge(8,4),k(2)+k(4),0,1)*prop(8,edge(5,2),k(3)+p(1),0,1)*prop(9,edge(6,4),k(3)-k(4),0,1)*prop(10,edge(3,5),k(1)+k(3)+p(1),0,1)*prop(11,edge(1,3),k(2)+k(3)+p(1),0,2))+(1)*topo(prop(1,edge(3,4),k(1),0,2)*prop(2,edge(2,6),k(2),0,1)*prop(3,edge(5,8),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(5,2),k(2)+p(1),0,1)*prop(6,edge(6,7),k(2)-k(4),0,1)*prop(7,edge(8,4),k(3)+k(4),0,1)*prop(8,edge(4,1),k(1)+k(3)+k(4),0,1)*prop(9,edge(7,5),k(2)+k(3)+p(1),0,1)*prop(10,edge(3,7),k(3)+k(4)+p(1),0,1)*prop(11,edge(1,3),k(1)+k(3)+k(4)+p(1),0,2))+(1)*topo(prop(1,edge(2,6),k(1),0,2)*prop(2,edge(4,7),k(2),0,1)*prop(3,edge(6,8),k(3),0,1)*prop(4,edge(7,8),k(4),0,1)*prop(5,edge(5,2),k(1)+p(1),0,1)*prop(6,edge(6,4),k(1)-k(3),0,1)*prop(7,edge(7,3),k(2)-k(4),0,1)*prop(8,edge(8,5),k(3)+k(4),0,1)*prop(9,edge(4,1),k(1)-k(2)-k(3),0,1)*prop(10,edge(3,5),k(1)-k(3)-k(4)+p(1),0,1)*prop(11,edge(1,3),k(1)-k(2)-k(3)+p(1),0,2))+(1)*topo(prop(1,edge(2,6),k(1),0,2)*prop(2,edge(4,7),k(2),0,1)*prop(3,edge(5,8),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(5,2),k(1)+p(1),0,1)*prop(6,edge(6,7),k(1)-k(4),0,1)*prop(7,edge(8,4),k(3)+k(4),0,1)*prop(8,edge(7,3),k(1)+k(2)-k(4),0,1)*prop(9,edge(3,5),k(1)+k(3)+p(1),0,1)*prop(10,edge(1,4),k(2)-k(3)-k(4),0,1)*prop(11,edge(3,1),k(2)-k(3)-k(4)-p(1),0,2))+(1)*topo(prop(1,edge(2,6),k(1),0,2)*prop(2,edge(5,8),k(2),0,1)*prop(3,edge(6,7),k(3),0,1)*prop(4,edge(7,8),k(4),0,1)*prop(5,edge(5,2),k(1)+p(1),0,1)*prop(6,edge(6,4),k(1)-k(3),0,1)*prop(7,edge(8,4),k(2)+k(4),0,1)*prop(8,edge(7,3),k(3)-k(4),0,1)*prop(9,edge(3,5),k(1)+k(2)+p(1),0,1)*prop(10,edge(4,1),k(1)+k(2)-k(3)+k(4),0,1)*prop(11,edge(1,3),k(1)+k(2)-k(3)+k(4)+p(1),0,2))+(1)*topo(prop(1,edge(5,7),k(1),0,2)*prop(2,edge(5,8),k(2),0,1)*prop(3,edge(6,7),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(2,5),k(1)+k(2),0,1)*prop(6,edge(7,4),k(1)+k(3),0,1)*prop(7,edge(8,4),k(2)+k(4),0,1)*prop(8,edge(3,6),k(3)+k(4),0,1)*prop(9,edge(3,2),k(1)+k(2)+p(1),0,1)*prop(10,edge(4,1),k(1)+k(2)+k(3)+k(4),0,1)*prop(11,edge(1,3),k(1)+k(2)+k(3)+k(4)+p(1),0,2))"
+    },
+    {
+      "name": "L4_d2_r2",
+      "loops": 4,
+      "dots": 2,
+      "rank": 2,
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))",
+      "tops": [
+        {
+          "family": "P4L_LA4",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        },
+        {
+          "family": "P4L_J1",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        },
+        {
+          "family": "P4L_J2",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        },
+        {
+          "family": "P4L_J4",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        },
+        {
+          "family": "P4L_J5",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        },
+        {
+          "family": "P4L_J6",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        },
+        {
+          "family": "P4L_J11",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        },
+        {
+          "family": "P4L_HAHA",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        },
+        {
+          "family": "P4L_NO1",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        },
+        {
+          "family": "P4L_NO2",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        },
+        {
+          "family": "P4L_NO3",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        }
+      ],
+      "input": "(dot(k(1),p(1))*dot(k(2),p(1)))*topo(prop(1,edge(3,4),k(1),0,2)*prop(2,edge(7,8),k(2),0,1)*prop(3,edge(2,6),k(3),0,1)*prop(4,edge(5,6),k(4),0,1)*prop(5,edge(6,8),k(3)+k(4),0,1)*prop(6,edge(5,2),k(3)+p(1),0,1)*prop(7,edge(8,4),k(2)+k(3)+k(4),0,1)*prop(8,edge(7,5),k(3)+k(4)+p(1),0,1)*prop(9,edge(4,1),k(1)+k(2)+k(3)+k(4),0,1)*prop(10,edge(3,7),k(2)+k(3)+k(4)+p(1),0,1)*prop(11,edge(1,3),k(1)+k(2)+k(3)+k(4)+p(1),0,2))+(dot(k(1),p(1))*dot(k(2),p(1)))*topo(prop(1,edge(2,5),k(1),0,2)*prop(2,edge(5,8),k(2),0,1)*prop(3,edge(6,7),k(3),0,1)*prop(4,edge(7,8),k(4),0,1)*prop(5,edge(3,2),k(1)+p(1),0,1)*prop(6,edge(5,4),k(1)-k(2),0,1)*prop(7,edge(8,6),k(2)+k(4),0,1)*prop(8,edge(7,4),k(3)-k(4),0,1)*prop(9,edge(6,3),k(2)-k(3)+k(4),0,1)*prop(10,edge(4,1),k(1)-k(2)+k(3)-k(4),0,1)*prop(11,edge(1,3),k(1)-k(2)+k(3)-k(4)+p(1),0,2))+(dot(k(1),p(1))*dot(k(2),p(1)))*topo(prop(1,edge(4,6),k(1),0,2)*prop(2,edge(5,7),k(2),0,1)*prop(3,edge(5,8),k(3),0,1)*prop(4,edge(7,8),k(4),0,1)*prop(5,edge(2,5),k(2)+k(3),0,1)*prop(6,edge(7,4),k(2)-k(4),0,1)*prop(7,edge(8,6),k(3)+k(4),0,1)*prop(8,edge(6,3),k(1)+k(3)+k(4),0,1)*prop(9,edge(1,4),k(1)-k(2)+k(4),0,1)*prop(10,edge(3,2),k(2)+k(3)+p(1),0,1)*prop(11,edge(3,1),k(1)-k(2)+k(4)-p(1),0,2))+(dot(k(1),p(1))*dot(k(2),p(1)))*topo(prop(1,edge(7,8),k(1),0,2)*prop(2,edge(5,7),k(2),0,1)*prop(3,edge(6,8),k(3),0,1)*prop(4,edge(2,6),k(4),0,1)*prop(5,edge(8,3),k(1)+k(3),0,1)*prop(6,edge(3,7),k(1)-k(2),0,1)*prop(7,edge(3,1),k(2)+k(3),0,1)*prop(8,edge(4,6),k(3)-k(4),0,1)*prop(9,edge(5,2),k(4)+p(1),0,1)*prop(10,edge(1,4),k(2)+k(3)+p(1),0,1)*prop(11,edge(4,5),k(2)+k(4)+p(1),0,2))+(dot(k(1),p(1))*dot(k(2),p(1)))*topo(prop(1,edge(3,4),k(1),0,2)*prop(2,edge(2,6),k(2),0,1)*prop(3,edge(7,8),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(5,2),k(2)+p(1),0,1)*prop(6,edge(6,7),k(2)-k(4),0,1)*prop(7,edge(8,5),k(3)+k(4),0,1)*prop(8,edge(7,4),k(2)-k(3)-k(4),0,1)*prop(9,edge(4,1),k(1)+k(2)-k(3)-k(4),0,1)*prop(10,edge(3,5),k(2)-k(3)-k(4)+p(1),0,1)*prop(11,edge(1,3),k(1)+k(2)-k(3)-k(4)+p(1),0,2))+(dot(k(1),p(1))*dot(k(2),p(1)))*topo(prop(1,edge(5,7),k(1),0,2)*prop(2,edge(7,8),k(2),0,1)*prop(3,edge(2,6),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(7,3),k(1)-k(2),0,1)*prop(6,edge(4,1),k(2)+k(3),0,1)*prop(7,edge(8,4),k(2)+k(4),0,1)*prop(8,edge(5,2),k(3)+p(1),0,1)*prop(9,edge(6,4),k(3)-k(4),0,1)*prop(10,edge(3,5),k(1)+k(3)+p(1),0,1)*prop(11,edge(1,3),k(2)+k(3)+p(1),0,2))+(dot(k(1),p(1))*dot(k(2),p(1)))*topo(prop(1,edge(3,4),k(1),0,2)*prop(2,edge(2,6),k(2),0,1)*prop(3,edge(5,8),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(5,2),k(2)+p(1),0,1)*prop(6,edge(6,7),k(2)-k(4),0,1)*prop(7,edge(8,4),k(3)+k(4),0,1)*prop(8,edge(4,1),k(1)+k(3)+k(4),0,1)*prop(9,edge(7,5),k(2)+k(3)+p(1),0,1)*prop(10,edge(3,7),k(3)+k(4)+p(1),0,1)*prop(11,edge(1,3),k(1)+k(3)+k(4)+p(1),0,2))+(dot(k(1),p(1))*dot(k(2),p(1)))*topo(prop(1,edge(2,6),k(1),0,2)*prop(2,edge(4,7),k(2),0,1)*prop(3,edge(6,8),k(3),0,1)*prop(4,edge(7,8),k(4),0,1)*prop(5,edge(5,2),k(1)+p(1),0,1)*prop(6,edge(6,4),k(1)-k(3),0,1)*prop(7,edge(7,3),k(2)-k(4),0,1)*prop(8,edge(8,5),k(3)+k(4),0,1)*prop(9,edge(4,1),k(1)-k(2)-k(3),0,1)*prop(10,edge(3,5),k(1)-k(3)-k(4)+p(1),0,1)*prop(11,edge(1,3),k(1)-k(2)-k(3)+p(1),0,2))+(dot(k(1),p(1))*dot(k(2),p(1)))*topo(prop(1,edge(2,6),k(1),0,2)*prop(2,edge(4,7),k(2),0,1)*prop(3,edge(5,8),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(5,2),k(1)+p(1),0,1)*prop(6,edge(6,7),k(1)-k(4),0,1)*prop(7,edge(8,4),k(3)+k(4),0,1)*prop(8,edge(7,3),k(1)+k(2)-k(4),0,1)*prop(9,edge(3,5),k(1)+k(3)+p(1),0,1)*prop(10,edge(1,4),k(2)-k(3)-k(4),0,1)*prop(11,edge(3,1),k(2)-k(3)-k(4)-p(1),0,2))+(dot(k(1),p(1))*dot(k(2),p(1)))*topo(prop(1,edge(2,6),k(1),0,2)*prop(2,edge(5,8),k(2),0,1)*prop(3,edge(6,7),k(3),0,1)*prop(4,edge(7,8),k(4),0,1)*prop(5,edge(5,2),k(1)+p(1),0,1)*prop(6,edge(6,4),k(1)-k(3),0,1)*prop(7,edge(8,4),k(2)+k(4),0,1)*prop(8,edge(7,3),k(3)-k(4),0,1)*prop(9,edge(3,5),k(1)+k(2)+p(1),0,1)*prop(10,edge(4,1),k(1)+k(2)-k(3)+k(4),0,1)*prop(11,edge(1,3),k(1)+k(2)-k(3)+k(4)+p(1),0,2))+(dot(k(1),p(1))*dot(k(2),p(1)))*topo(prop(1,edge(5,7),k(1),0,2)*prop(2,edge(5,8),k(2),0,1)*prop(3,edge(6,7),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(2,5),k(1)+k(2),0,1)*prop(6,edge(7,4),k(1)+k(3),0,1)*prop(7,edge(8,4),k(2)+k(4),0,1)*prop(8,edge(3,6),k(3)+k(4),0,1)*prop(9,edge(3,2),k(1)+k(2)+p(1),0,1)*prop(10,edge(4,1),k(1)+k(2)+k(3)+k(4),0,1)*prop(11,edge(1,3),k(1)+k(2)+k(3)+k(4)+p(1),0,2))"
+    },
+    {
+      "name": "L4_d2_r4",
+      "loops": 4,
+      "dots": 2,
+      "rank": 4,
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))",
+      "tops": [
+        {
+          "family": "P4L_LA4",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        },
+        {
+          "family": "P4L_J1",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        },
+        {
+          "family": "P4L_J2",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        },
+        {
+          "family": "P4L_J4",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        },
+        {
+          "family": "P4L_J5",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        },
+        {
+          "family": "P4L_J6",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        },
+        {
+          "family": "P4L_J11",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        },
+        {
+          "family": "P4L_HAHA",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        },
+        {
+          "family": "P4L_NO1",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        },
+        {
+          "family": "P4L_NO2",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        },
+        {
+          "family": "P4L_NO3",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        }
+      ],
+      "input": "(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3)))*topo(prop(1,edge(3,4),k(1),0,2)*prop(2,edge(7,8),k(2),0,1)*prop(3,edge(2,6),k(3),0,1)*prop(4,edge(5,6),k(4),0,1)*prop(5,edge(6,8),k(3)+k(4),0,1)*prop(6,edge(5,2),k(3)+p(1),0,1)*prop(7,edge(8,4),k(2)+k(3)+k(4),0,1)*prop(8,edge(7,5),k(3)+k(4)+p(1),0,1)*prop(9,edge(4,1),k(1)+k(2)+k(3)+k(4),0,1)*prop(10,edge(3,7),k(2)+k(3)+k(4)+p(1),0,1)*prop(11,edge(1,3),k(1)+k(2)+k(3)+k(4)+p(1),0,2))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3)))*topo(prop(1,edge(2,5),k(1),0,2)*prop(2,edge(5,8),k(2),0,1)*prop(3,edge(6,7),k(3),0,1)*prop(4,edge(7,8),k(4),0,1)*prop(5,edge(3,2),k(1)+p(1),0,1)*prop(6,edge(5,4),k(1)-k(2),0,1)*prop(7,edge(8,6),k(2)+k(4),0,1)*prop(8,edge(7,4),k(3)-k(4),0,1)*prop(9,edge(6,3),k(2)-k(3)+k(4),0,1)*prop(10,edge(4,1),k(1)-k(2)+k(3)-k(4),0,1)*prop(11,edge(1,3),k(1)-k(2)+k(3)-k(4)+p(1),0,2))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3)))*topo(prop(1,edge(4,6),k(1),0,2)*prop(2,edge(5,7),k(2),0,1)*prop(3,edge(5,8),k(3),0,1)*prop(4,edge(7,8),k(4),0,1)*prop(5,edge(2,5),k(2)+k(3),0,1)*prop(6,edge(7,4),k(2)-k(4),0,1)*prop(7,edge(8,6),k(3)+k(4),0,1)*prop(8,edge(6,3),k(1)+k(3)+k(4),0,1)*prop(9,edge(1,4),k(1)-k(2)+k(4),0,1)*prop(10,edge(3,2),k(2)+k(3)+p(1),0,1)*prop(11,edge(3,1),k(1)-k(2)+k(4)-p(1),0,2))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3)))*topo(prop(1,edge(7,8),k(1),0,2)*prop(2,edge(5,7),k(2),0,1)*prop(3,edge(6,8),k(3),0,1)*prop(4,edge(2,6),k(4),0,1)*prop(5,edge(8,3),k(1)+k(3),0,1)*prop(6,edge(3,7),k(1)-k(2),0,1)*prop(7,edge(3,1),k(2)+k(3),0,1)*prop(8,edge(4,6),k(3)-k(4),0,1)*prop(9,edge(5,2),k(4)+p(1),0,1)*prop(10,edge(1,4),k(2)+k(3)+p(1),0,1)*prop(11,edge(4,5),k(2)+k(4)+p(1),0,2))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3)))*topo(prop(1,edge(3,4),k(1),0,2)*prop(2,edge(2,6),k(2),0,1)*prop(3,edge(7,8),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(5,2),k(2)+p(1),0,1)*prop(6,edge(6,7),k(2)-k(4),0,1)*prop(7,edge(8,5),k(3)+k(4),0,1)*prop(8,edge(7,4),k(2)-k(3)-k(4),0,1)*prop(9,edge(4,1),k(1)+k(2)-k(3)-k(4),0,1)*prop(10,edge(3,5),k(2)-k(3)-k(4)+p(1),0,1)*prop(11,edge(1,3),k(1)+k(2)-k(3)-k(4)+p(1),0,2))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3)))*topo(prop(1,edge(5,7),k(1),0,2)*prop(2,edge(7,8),k(2),0,1)*prop(3,edge(2,6),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(7,3),k(1)-k(2),0,1)*prop(6,edge(4,1),k(2)+k(3),0,1)*prop(7,edge(8,4),k(2)+k(4),0,1)*prop(8,edge(5,2),k(3)+p(1),0,1)*prop(9,edge(6,4),k(3)-k(4),0,1)*prop(10,edge(3,5),k(1)+k(3)+p(1),0,1)*prop(11,edge(1,3),k(2)+k(3)+p(1),0,2))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3)))*topo(prop(1,edge(3,4),k(1),0,2)*prop(2,edge(2,6),k(2),0,1)*prop(3,edge(5,8),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(5,2),k(2)+p(1),0,1)*prop(6,edge(6,7),k(2)-k(4),0,1)*prop(7,edge(8,4),k(3)+k(4),0,1)*prop(8,edge(4,1),k(1)+k(3)+k(4),0,1)*prop(9,edge(7,5),k(2)+k(3)+p(1),0,1)*prop(10,edge(3,7),k(3)+k(4)+p(1),0,1)*prop(11,edge(1,3),k(1)+k(3)+k(4)+p(1),0,2))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3)))*topo(prop(1,edge(2,6),k(1),0,2)*prop(2,edge(4,7),k(2),0,1)*prop(3,edge(6,8),k(3),0,1)*prop(4,edge(7,8),k(4),0,1)*prop(5,edge(5,2),k(1)+p(1),0,1)*prop(6,edge(6,4),k(1)-k(3),0,1)*prop(7,edge(7,3),k(2)-k(4),0,1)*prop(8,edge(8,5),k(3)+k(4),0,1)*prop(9,edge(4,1),k(1)-k(2)-k(3),0,1)*prop(10,edge(3,5),k(1)-k(3)-k(4)+p(1),0,1)*prop(11,edge(1,3),k(1)-k(2)-k(3)+p(1),0,2))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3)))*topo(prop(1,edge(2,6),k(1),0,2)*prop(2,edge(4,7),k(2),0,1)*prop(3,edge(5,8),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(5,2),k(1)+p(1),0,1)*prop(6,edge(6,7),k(1)-k(4),0,1)*prop(7,edge(8,4),k(3)+k(4),0,1)*prop(8,edge(7,3),k(1)+k(2)-k(4),0,1)*prop(9,edge(3,5),k(1)+k(3)+p(1),0,1)*prop(10,edge(1,4),k(2)-k(3)-k(4),0,1)*prop(11,edge(3,1),k(2)-k(3)-k(4)-p(1),0,2))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3)))*topo(prop(1,edge(2,6),k(1),0,2)*prop(2,edge(5,8),k(2),0,1)*prop(3,edge(6,7),k(3),0,1)*prop(4,edge(7,8),k(4),0,1)*prop(5,edge(5,2),k(1)+p(1),0,1)*prop(6,edge(6,4),k(1)-k(3),0,1)*prop(7,edge(8,4),k(2)+k(4),0,1)*prop(8,edge(7,3),k(3)-k(4),0,1)*prop(9,edge(3,5),k(1)+k(2)+p(1),0,1)*prop(10,edge(4,1),k(1)+k(2)-k(3)+k(4),0,1)*prop(11,edge(1,3),k(1)+k(2)-k(3)+k(4)+p(1),0,2))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3)))*topo(prop(1,edge(5,7),k(1),0,2)*prop(2,edge(5,8),k(2),0,1)*prop(3,edge(6,7),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(2,5),k(1)+k(2),0,1)*prop(6,edge(7,4),k(1)+k(3),0,1)*prop(7,edge(8,4),k(2)+k(4),0,1)*prop(8,edge(3,6),k(3)+k(4),0,1)*prop(9,edge(3,2),k(1)+k(2)+p(1),0,1)*prop(10,edge(4,1),k(1)+k(2)+k(3)+k(4),0,1)*prop(11,edge(1,3),k(1)+k(2)+k(3)+k(4)+p(1),0,2))"
+    },
+    {
+      "name": "L4_d2_r6",
+      "loops": 4,
+      "dots": 2,
+      "rank": 6,
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1))",
+      "tops": [
+        {
+          "family": "P4L_LA4",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        },
+        {
+          "family": "P4L_J1",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        },
+        {
+          "family": "P4L_J2",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        },
+        {
+          "family": "P4L_J4",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        },
+        {
+          "family": "P4L_J5",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        },
+        {
+          "family": "P4L_J6",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        },
+        {
+          "family": "P4L_J11",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        },
+        {
+          "family": "P4L_HAHA",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        },
+        {
+          "family": "P4L_NO1",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        },
+        {
+          "family": "P4L_NO2",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        },
+        {
+          "family": "P4L_NO3",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        }
+      ],
+      "input": "(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1)))*topo(prop(1,edge(3,4),k(1),0,2)*prop(2,edge(7,8),k(2),0,1)*prop(3,edge(2,6),k(3),0,1)*prop(4,edge(5,6),k(4),0,1)*prop(5,edge(6,8),k(3)+k(4),0,1)*prop(6,edge(5,2),k(3)+p(1),0,1)*prop(7,edge(8,4),k(2)+k(3)+k(4),0,1)*prop(8,edge(7,5),k(3)+k(4)+p(1),0,1)*prop(9,edge(4,1),k(1)+k(2)+k(3)+k(4),0,1)*prop(10,edge(3,7),k(2)+k(3)+k(4)+p(1),0,1)*prop(11,edge(1,3),k(1)+k(2)+k(3)+k(4)+p(1),0,2))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1)))*topo(prop(1,edge(2,5),k(1),0,2)*prop(2,edge(5,8),k(2),0,1)*prop(3,edge(6,7),k(3),0,1)*prop(4,edge(7,8),k(4),0,1)*prop(5,edge(3,2),k(1)+p(1),0,1)*prop(6,edge(5,4),k(1)-k(2),0,1)*prop(7,edge(8,6),k(2)+k(4),0,1)*prop(8,edge(7,4),k(3)-k(4),0,1)*prop(9,edge(6,3),k(2)-k(3)+k(4),0,1)*prop(10,edge(4,1),k(1)-k(2)+k(3)-k(4),0,1)*prop(11,edge(1,3),k(1)-k(2)+k(3)-k(4)+p(1),0,2))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1)))*topo(prop(1,edge(4,6),k(1),0,2)*prop(2,edge(5,7),k(2),0,1)*prop(3,edge(5,8),k(3),0,1)*prop(4,edge(7,8),k(4),0,1)*prop(5,edge(2,5),k(2)+k(3),0,1)*prop(6,edge(7,4),k(2)-k(4),0,1)*prop(7,edge(8,6),k(3)+k(4),0,1)*prop(8,edge(6,3),k(1)+k(3)+k(4),0,1)*prop(9,edge(1,4),k(1)-k(2)+k(4),0,1)*prop(10,edge(3,2),k(2)+k(3)+p(1),0,1)*prop(11,edge(3,1),k(1)-k(2)+k(4)-p(1),0,2))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1)))*topo(prop(1,edge(7,8),k(1),0,2)*prop(2,edge(5,7),k(2),0,1)*prop(3,edge(6,8),k(3),0,1)*prop(4,edge(2,6),k(4),0,1)*prop(5,edge(8,3),k(1)+k(3),0,1)*prop(6,edge(3,7),k(1)-k(2),0,1)*prop(7,edge(3,1),k(2)+k(3),0,1)*prop(8,edge(4,6),k(3)-k(4),0,1)*prop(9,edge(5,2),k(4)+p(1),0,1)*prop(10,edge(1,4),k(2)+k(3)+p(1),0,1)*prop(11,edge(4,5),k(2)+k(4)+p(1),0,2))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1)))*topo(prop(1,edge(3,4),k(1),0,2)*prop(2,edge(2,6),k(2),0,1)*prop(3,edge(7,8),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(5,2),k(2)+p(1),0,1)*prop(6,edge(6,7),k(2)-k(4),0,1)*prop(7,edge(8,5),k(3)+k(4),0,1)*prop(8,edge(7,4),k(2)-k(3)-k(4),0,1)*prop(9,edge(4,1),k(1)+k(2)-k(3)-k(4),0,1)*prop(10,edge(3,5),k(2)-k(3)-k(4)+p(1),0,1)*prop(11,edge(1,3),k(1)+k(2)-k(3)-k(4)+p(1),0,2))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1)))*topo(prop(1,edge(5,7),k(1),0,2)*prop(2,edge(7,8),k(2),0,1)*prop(3,edge(2,6),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(7,3),k(1)-k(2),0,1)*prop(6,edge(4,1),k(2)+k(3),0,1)*prop(7,edge(8,4),k(2)+k(4),0,1)*prop(8,edge(5,2),k(3)+p(1),0,1)*prop(9,edge(6,4),k(3)-k(4),0,1)*prop(10,edge(3,5),k(1)+k(3)+p(1),0,1)*prop(11,edge(1,3),k(2)+k(3)+p(1),0,2))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1)))*topo(prop(1,edge(3,4),k(1),0,2)*prop(2,edge(2,6),k(2),0,1)*prop(3,edge(5,8),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(5,2),k(2)+p(1),0,1)*prop(6,edge(6,7),k(2)-k(4),0,1)*prop(7,edge(8,4),k(3)+k(4),0,1)*prop(8,edge(4,1),k(1)+k(3)+k(4),0,1)*prop(9,edge(7,5),k(2)+k(3)+p(1),0,1)*prop(10,edge(3,7),k(3)+k(4)+p(1),0,1)*prop(11,edge(1,3),k(1)+k(3)+k(4)+p(1),0,2))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1)))*topo(prop(1,edge(2,6),k(1),0,2)*prop(2,edge(4,7),k(2),0,1)*prop(3,edge(6,8),k(3),0,1)*prop(4,edge(7,8),k(4),0,1)*prop(5,edge(5,2),k(1)+p(1),0,1)*prop(6,edge(6,4),k(1)-k(3),0,1)*prop(7,edge(7,3),k(2)-k(4),0,1)*prop(8,edge(8,5),k(3)+k(4),0,1)*prop(9,edge(4,1),k(1)-k(2)-k(3),0,1)*prop(10,edge(3,5),k(1)-k(3)-k(4)+p(1),0,1)*prop(11,edge(1,3),k(1)-k(2)-k(3)+p(1),0,2))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1)))*topo(prop(1,edge(2,6),k(1),0,2)*prop(2,edge(4,7),k(2),0,1)*prop(3,edge(5,8),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(5,2),k(1)+p(1),0,1)*prop(6,edge(6,7),k(1)-k(4),0,1)*prop(7,edge(8,4),k(3)+k(4),0,1)*prop(8,edge(7,3),k(1)+k(2)-k(4),0,1)*prop(9,edge(3,5),k(1)+k(3)+p(1),0,1)*prop(10,edge(1,4),k(2)-k(3)-k(4),0,1)*prop(11,edge(3,1),k(2)-k(3)-k(4)-p(1),0,2))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1)))*topo(prop(1,edge(2,6),k(1),0,2)*prop(2,edge(5,8),k(2),0,1)*prop(3,edge(6,7),k(3),0,1)*prop(4,edge(7,8),k(4),0,1)*prop(5,edge(5,2),k(1)+p(1),0,1)*prop(6,edge(6,4),k(1)-k(3),0,1)*prop(7,edge(8,4),k(2)+k(4),0,1)*prop(8,edge(7,3),k(3)-k(4),0,1)*prop(9,edge(3,5),k(1)+k(2)+p(1),0,1)*prop(10,edge(4,1),k(1)+k(2)-k(3)+k(4),0,1)*prop(11,edge(1,3),k(1)+k(2)-k(3)+k(4)+p(1),0,2))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1)))*topo(prop(1,edge(5,7),k(1),0,2)*prop(2,edge(5,8),k(2),0,1)*prop(3,edge(6,7),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(2,5),k(1)+k(2),0,1)*prop(6,edge(7,4),k(1)+k(3),0,1)*prop(7,edge(8,4),k(2)+k(4),0,1)*prop(8,edge(3,6),k(3)+k(4),0,1)*prop(9,edge(3,2),k(1)+k(2)+p(1),0,1)*prop(10,edge(4,1),k(1)+k(2)+k(3)+k(4),0,1)*prop(11,edge(1,3),k(1)+k(2)+k(3)+k(4)+p(1),0,2))"
+    },
+    {
+      "name": "L4_d2_r8",
+      "loops": 4,
+      "dots": 2,
+      "rank": 8,
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1))*dot(k(2),k(3))",
+      "tops": [
+        {
+          "family": "P4L_LA4",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        },
+        {
+          "family": "P4L_J1",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        },
+        {
+          "family": "P4L_J2",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        },
+        {
+          "family": "P4L_J4",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        },
+        {
+          "family": "P4L_J5",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        },
+        {
+          "family": "P4L_J6",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        },
+        {
+          "family": "P4L_J11",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        },
+        {
+          "family": "P4L_HAHA",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        },
+        {
+          "family": "P4L_NO1",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        },
+        {
+          "family": "P4L_NO2",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        },
+        {
+          "family": "P4L_NO3",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        }
+      ],
+      "input": "(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1))*dot(k(2),k(3)))*topo(prop(1,edge(3,4),k(1),0,2)*prop(2,edge(7,8),k(2),0,1)*prop(3,edge(2,6),k(3),0,1)*prop(4,edge(5,6),k(4),0,1)*prop(5,edge(6,8),k(3)+k(4),0,1)*prop(6,edge(5,2),k(3)+p(1),0,1)*prop(7,edge(8,4),k(2)+k(3)+k(4),0,1)*prop(8,edge(7,5),k(3)+k(4)+p(1),0,1)*prop(9,edge(4,1),k(1)+k(2)+k(3)+k(4),0,1)*prop(10,edge(3,7),k(2)+k(3)+k(4)+p(1),0,1)*prop(11,edge(1,3),k(1)+k(2)+k(3)+k(4)+p(1),0,2))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1))*dot(k(2),k(3)))*topo(prop(1,edge(2,5),k(1),0,2)*prop(2,edge(5,8),k(2),0,1)*prop(3,edge(6,7),k(3),0,1)*prop(4,edge(7,8),k(4),0,1)*prop(5,edge(3,2),k(1)+p(1),0,1)*prop(6,edge(5,4),k(1)-k(2),0,1)*prop(7,edge(8,6),k(2)+k(4),0,1)*prop(8,edge(7,4),k(3)-k(4),0,1)*prop(9,edge(6,3),k(2)-k(3)+k(4),0,1)*prop(10,edge(4,1),k(1)-k(2)+k(3)-k(4),0,1)*prop(11,edge(1,3),k(1)-k(2)+k(3)-k(4)+p(1),0,2))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1))*dot(k(2),k(3)))*topo(prop(1,edge(4,6),k(1),0,2)*prop(2,edge(5,7),k(2),0,1)*prop(3,edge(5,8),k(3),0,1)*prop(4,edge(7,8),k(4),0,1)*prop(5,edge(2,5),k(2)+k(3),0,1)*prop(6,edge(7,4),k(2)-k(4),0,1)*prop(7,edge(8,6),k(3)+k(4),0,1)*prop(8,edge(6,3),k(1)+k(3)+k(4),0,1)*prop(9,edge(1,4),k(1)-k(2)+k(4),0,1)*prop(10,edge(3,2),k(2)+k(3)+p(1),0,1)*prop(11,edge(3,1),k(1)-k(2)+k(4)-p(1),0,2))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1))*dot(k(2),k(3)))*topo(prop(1,edge(7,8),k(1),0,2)*prop(2,edge(5,7),k(2),0,1)*prop(3,edge(6,8),k(3),0,1)*prop(4,edge(2,6),k(4),0,1)*prop(5,edge(8,3),k(1)+k(3),0,1)*prop(6,edge(3,7),k(1)-k(2),0,1)*prop(7,edge(3,1),k(2)+k(3),0,1)*prop(8,edge(4,6),k(3)-k(4),0,1)*prop(9,edge(5,2),k(4)+p(1),0,1)*prop(10,edge(1,4),k(2)+k(3)+p(1),0,1)*prop(11,edge(4,5),k(2)+k(4)+p(1),0,2))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1))*dot(k(2),k(3)))*topo(prop(1,edge(3,4),k(1),0,2)*prop(2,edge(2,6),k(2),0,1)*prop(3,edge(7,8),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(5,2),k(2)+p(1),0,1)*prop(6,edge(6,7),k(2)-k(4),0,1)*prop(7,edge(8,5),k(3)+k(4),0,1)*prop(8,edge(7,4),k(2)-k(3)-k(4),0,1)*prop(9,edge(4,1),k(1)+k(2)-k(3)-k(4),0,1)*prop(10,edge(3,5),k(2)-k(3)-k(4)+p(1),0,1)*prop(11,edge(1,3),k(1)+k(2)-k(3)-k(4)+p(1),0,2))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1))*dot(k(2),k(3)))*topo(prop(1,edge(5,7),k(1),0,2)*prop(2,edge(7,8),k(2),0,1)*prop(3,edge(2,6),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(7,3),k(1)-k(2),0,1)*prop(6,edge(4,1),k(2)+k(3),0,1)*prop(7,edge(8,4),k(2)+k(4),0,1)*prop(8,edge(5,2),k(3)+p(1),0,1)*prop(9,edge(6,4),k(3)-k(4),0,1)*prop(10,edge(3,5),k(1)+k(3)+p(1),0,1)*prop(11,edge(1,3),k(2)+k(3)+p(1),0,2))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1))*dot(k(2),k(3)))*topo(prop(1,edge(3,4),k(1),0,2)*prop(2,edge(2,6),k(2),0,1)*prop(3,edge(5,8),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(5,2),k(2)+p(1),0,1)*prop(6,edge(6,7),k(2)-k(4),0,1)*prop(7,edge(8,4),k(3)+k(4),0,1)*prop(8,edge(4,1),k(1)+k(3)+k(4),0,1)*prop(9,edge(7,5),k(2)+k(3)+p(1),0,1)*prop(10,edge(3,7),k(3)+k(4)+p(1),0,1)*prop(11,edge(1,3),k(1)+k(3)+k(4)+p(1),0,2))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1))*dot(k(2),k(3)))*topo(prop(1,edge(2,6),k(1),0,2)*prop(2,edge(4,7),k(2),0,1)*prop(3,edge(6,8),k(3),0,1)*prop(4,edge(7,8),k(4),0,1)*prop(5,edge(5,2),k(1)+p(1),0,1)*prop(6,edge(6,4),k(1)-k(3),0,1)*prop(7,edge(7,3),k(2)-k(4),0,1)*prop(8,edge(8,5),k(3)+k(4),0,1)*prop(9,edge(4,1),k(1)-k(2)-k(3),0,1)*prop(10,edge(3,5),k(1)-k(3)-k(4)+p(1),0,1)*prop(11,edge(1,3),k(1)-k(2)-k(3)+p(1),0,2))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1))*dot(k(2),k(3)))*topo(prop(1,edge(2,6),k(1),0,2)*prop(2,edge(4,7),k(2),0,1)*prop(3,edge(5,8),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(5,2),k(1)+p(1),0,1)*prop(6,edge(6,7),k(1)-k(4),0,1)*prop(7,edge(8,4),k(3)+k(4),0,1)*prop(8,edge(7,3),k(1)+k(2)-k(4),0,1)*prop(9,edge(3,5),k(1)+k(3)+p(1),0,1)*prop(10,edge(1,4),k(2)-k(3)-k(4),0,1)*prop(11,edge(3,1),k(2)-k(3)-k(4)-p(1),0,2))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1))*dot(k(2),k(3)))*topo(prop(1,edge(2,6),k(1),0,2)*prop(2,edge(5,8),k(2),0,1)*prop(3,edge(6,7),k(3),0,1)*prop(4,edge(7,8),k(4),0,1)*prop(5,edge(5,2),k(1)+p(1),0,1)*prop(6,edge(6,4),k(1)-k(3),0,1)*prop(7,edge(8,4),k(2)+k(4),0,1)*prop(8,edge(7,3),k(3)-k(4),0,1)*prop(9,edge(3,5),k(1)+k(2)+p(1),0,1)*prop(10,edge(4,1),k(1)+k(2)-k(3)+k(4),0,1)*prop(11,edge(1,3),k(1)+k(2)-k(3)+k(4)+p(1),0,2))+(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1))*dot(k(2),k(3)))*topo(prop(1,edge(5,7),k(1),0,2)*prop(2,edge(5,8),k(2),0,1)*prop(3,edge(6,7),k(3),0,1)*prop(4,edge(6,8),k(4),0,1)*prop(5,edge(2,5),k(1)+k(2),0,1)*prop(6,edge(7,4),k(1)+k(3),0,1)*prop(7,edge(8,4),k(2)+k(4),0,1)*prop(8,edge(3,6),k(3)+k(4),0,1)*prop(9,edge(3,2),k(1)+k(2)+p(1),0,1)*prop(10,edge(4,1),k(1)+k(2)+k(3)+k(4),0,1)*prop(11,edge(1,3),k(1)+k(2)+k(3)+k(4)+p(1),0,2))"
+    }
+  ]
+}

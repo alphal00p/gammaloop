@@ -34,6 +34,9 @@ use crate::{
 
 pub(crate) use catalogue::{PMatch, match_graph};
 pub use dot::to_dot;
+/// Frozen Forcer outputs for the integration tests (not part of the API).
+#[doc(hidden)]
+pub use forcer::fixtures as forcer_fixtures;
 pub(crate) use input::{Normalized, PGraph, PLine};
 
 pub(crate) fn invalid(detail: impl std::fmt::Display) -> VakintError {

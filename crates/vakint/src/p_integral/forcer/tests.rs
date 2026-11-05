@@ -7,34 +7,16 @@
 //! `form` when it is version 5) every case also runs live and must reproduce
 //! the frozen output; `VAKINT_FORCER_FIXTURES=write` regenerates the files.
 
-use serde::{Deserialize, Serialize};
 use symbolica::atom::{Atom, AtomCore};
 use symbolica::transcendental::gamma;
 
 use super::super::finalize::{finalize, pg_value, tests as finalize_tests};
 use super::super::{P_FAMILIES, PFamilyData, ReducedPropagatorValue, pg_symbol};
+use super::fixtures::{ForcerCase as Case, ForcerFixture as Battery};
 use super::*;
 use crate::rustred_evaluation::RustRedMasterMode;
 use crate::utils::vakint_macros::vk_parse;
 use crate::{EvaluationOrder, LoopNormalizationFactor, VakintError, VakintSettings};
-
-#[derive(Debug, Deserialize, Serialize)]
-struct Battery {
-    forcer_commit: String,
-    form_version: String,
-    cases: Vec<Case>,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-struct Case {
-    name: String,
-    family: String,
-    powers: Vec<i64>,
-    numerator: String,
-    external: String,
-    /// The raw `%E` output of each Forcer local, in `ForcerInput::parts` order.
-    outputs: Vec<String>,
-}
 
 fn family(name: &str) -> &'static PFamilyData {
     P_FAMILIES
@@ -69,31 +51,10 @@ fn epsilon() -> Symbol {
     vk_symbol!(&VakintSettings::default().epsilon_symbol)
 }
 
-impl Case {
-    fn input(&self) -> Option<ForcerInput> {
-        forcer_input(
-            family(&self.family),
-            &self.powers,
-            parse(&self.numerator).as_view(),
-            &parse(&self.external),
-        )
-        .unwrap_or_else(|error| panic!("{}: {error}", self.name))
-    }
-
-    /// The reduced values of the frozen Forcer output.
-    fn frozen(&self) -> Vec<ReducedPropagatorValue> {
-        match self.input() {
-            None => {
-                assert!(self.outputs.is_empty(), "{}: scaleless", self.name);
-                Vec::new()
-            }
-            Some(input) => {
-                assert_eq!(input.parts.len(), self.outputs.len(), "{}", self.name);
-                combine_parts(&input.parts, &self.outputs, epsilon())
-                    .unwrap_or_else(|error| panic!("{}: {error}", self.name))
-            }
-        }
-    }
+/// The reduced values of the frozen Forcer output of a case.
+fn frozen(case: &Case) -> Vec<ReducedPropagatorValue> {
+    case.frozen(epsilon())
+        .unwrap_or_else(|error| panic!("{}: {error}", case.name))
 }
 
 fn fixture_path(file: &str) -> String {
@@ -103,42 +64,37 @@ fn fixture_path(file: &str) -> String {
     )
 }
 
+/// `VAKINT_FORCER_FIXTURES=write`: regenerate the fixture files (FORM 5).
+fn writing_fixtures() -> bool {
+    std::env::var("VAKINT_FORCER_FIXTURES").is_ok_and(|mode| mode == "write")
+}
+
+/// FORM processes run at a time by the fixture writer
+/// (`VAKINT_FORCER_FIXTURES_JOBS`, default 1).
+fn writer_jobs() -> usize {
+    std::env::var("VAKINT_FORCER_FIXTURES_JOBS")
+        .ok()
+        .and_then(|jobs| jobs.parse().ok())
+        .unwrap_or(1)
+}
+
 /// Every case of a battery: frozen values, and the same values from a live
 /// Forcer run when FORM 5 is available.
-fn forcer_battery(file: &str, frozen: &str) -> Vec<(Case, Vec<ReducedPropagatorValue>)> {
-    let mut battery: Battery = serde_json::from_str(frozen).unwrap();
-    assert_eq!(battery.forcer_commit, FORCER_UPSTREAM_COMMIT);
-    let write = std::env::var("VAKINT_FORCER_FIXTURES").is_ok_and(|mode| mode == "write");
+fn forcer_battery(file: &str, frozen_json: &str) -> Vec<(Case, Vec<ReducedPropagatorValue>)> {
+    let mut battery = Battery::parse(frozen_json).unwrap();
     let live = forcer_test_form();
-    if write {
+    if writing_fixtures() {
         let form = live
             .as_deref()
             .expect("regenerating Forcer fixtures needs FORM 5");
-        battery.form_version = forcer_form_version(form).unwrap();
-        for case in &mut battery.cases {
-            case.outputs = match case.input() {
-                None => Vec::new(),
-                Some(input) => {
-                    let names = input
-                        .parts
-                        .iter()
-                        .map(|p| p.name.as_str())
-                        .collect::<Vec<_>>();
-                    run_forcer(&settings(form), &input.program, &names).unwrap()
-                }
-            };
-        }
-        std::fs::write(
-            fixture_path(file),
-            serde_json::to_string_pretty(&battery).unwrap() + "\n",
-        )
-        .unwrap();
+        battery.write_outputs(form, writer_jobs()).unwrap();
+        std::fs::write(fixture_path(file), battery.to_json()).unwrap();
     }
     battery
         .cases
         .into_iter()
         .map(|case| {
-            let frozen = case.frozen();
+            let frozen = frozen(&case);
             if let Some(form) = &live {
                 let reduced = reduce_p(
                     family(&case.family),
@@ -632,7 +588,7 @@ fn tform_workers_reproduce_the_frozen_output() {
         eprintln!("FORM 5 is unavailable: skipped the TFORM run");
         return;
     };
-    let battery: Battery = serde_json::from_str(include_str!(
+    let battery = Battery::parse(include_str!(
         "../../../tests/fixtures/forcer/p3l_battery.json"
     ))
     .unwrap();
@@ -653,7 +609,7 @@ fn tform_workers_reproduce_the_frozen_output() {
         &settings,
     )
     .unwrap();
-    assert_eq!(reduced, case.frozen());
+    assert_eq!(reduced, frozen(case));
 }
 
 #[test]
@@ -1030,12 +986,12 @@ fn untrusted_source_directories_are_never_used() {
 #[test]
 #[ignore = "profiling"]
 fn profile_four_loop_finalize() {
-    let battery: Battery = serde_json::from_str(include_str!(
+    let battery = Battery::parse(include_str!(
         "../../../tests/fixtures/forcer/p4l_battery.json"
     ))
     .unwrap();
     for case in &battery.cases {
-        let values = case.frozen();
+        let values = frozen(case);
         for terms in [4, 5, 6] {
             let settings = finalize_tests::settings(LoopNormalizationFactor::MSbar, terms);
             let start = std::time::Instant::now();
@@ -1054,5 +1010,117 @@ fn profile_four_loop_finalize() {
                 result.map_or_else(|e| e.to_string(), |r| r.to_string().len().to_string())
             );
         }
+    }
+}
+
+const BENCHMARK_INPUTS: &str = include_str!("../../../tests/fixtures/benchmark_p_integrals.json");
+
+/// `blake3` of the Forcer programs of every fixture case (name, program),
+/// recorded before the shared numerator split moved to `parts.rs`: the
+/// programs Forcer receives stay byte-identical. The grid and anchor digests
+/// are taken over their definitions (`grid_cases`, `anchor_cases`), which
+/// `grid_and_anchor_fixtures_match_their_definitions` ties to the files.
+const PROGRAM_DIGESTS: [(&str, &str); 8] = [
+    (
+        "p1l_battery.json",
+        "11175f6ceaf2370815cf4e1095dfd6ffaee092d957ff0de954b0e4eeebba5a6b",
+    ),
+    (
+        "p2l_battery.json",
+        "0a9bc25fbe24811ff7b83370ff68bd8c7922c73ea7dd57b64f48ef178b2d506e",
+    ),
+    (
+        "p3l_battery.json",
+        "2b0acde15a0c7d062e34f9df09238b52d4b97e3716faf043cf64663bb97a6527",
+    ),
+    (
+        "p4l_battery.json",
+        "4db77a0e957fc721fc0b981feab8a2197b43828e4973aecf19520343356e6596",
+    ),
+    (
+        "p_anchors.json",
+        "aab2618020f36cce87741607310144342b15e1ff77bdc09bc433153c5d6cc0ba",
+    ),
+    (
+        "p1l_grid.json",
+        "c39b65da7cc27d95bdad2f49eacbea75f224a13aa885eb975cd1a1a542f7d3aa",
+    ),
+    (
+        "p2l_grid.json",
+        "e9ee167ffb1fe8d8bdb63eb535ca4422122bcdb45cba33761d522325293ef14b",
+    ),
+    (
+        "p3l_grid.json",
+        "15e4b5afbbd66cd15b45bc84f2d4a375e2ea79b498b7f79c5c82597a2b17be20",
+    ),
+];
+
+/// The cases of a fixture file, without outputs.
+fn fixture_definitions(file: &str) -> Battery {
+    let grid = |loops| {
+        Battery::unwritten(
+            super::fixtures::GRID_PROVENANCE,
+            super::fixtures::grid_cases(loops, BENCHMARK_INPUTS).unwrap(),
+        )
+    };
+    match file {
+        "p_anchors.json" => Battery::unwritten(
+            super::fixtures::ANCHOR_PROVENANCE,
+            super::fixtures::anchor_cases(),
+        ),
+        "p1l_grid.json" => grid(1),
+        "p2l_grid.json" => grid(2),
+        "p3l_grid.json" => grid(3),
+        battery => Battery::parse(&std::fs::read_to_string(fixture_path(battery)).unwrap()).unwrap(),
+    }
+}
+
+#[test]
+fn forcer_programs_are_byte_identical() {
+    let found = PROGRAM_DIGESTS
+        .iter()
+        .map(|(file, _)| (*file, fixture_definitions(file).program_digest().unwrap()))
+        .collect::<Vec<_>>();
+    for ((file, expected), (_, digest)) in PROGRAM_DIGESTS.iter().zip(&found) {
+        assert_eq!(expected, digest, "{file}: Forcer programs changed; all digests: {found:#?}");
+    }
+}
+
+#[test]
+fn the_grid_covers_every_nonzero_labelled_sector() {
+    let count = |loops: usize| {
+        P_FAMILIES
+            .iter()
+            .filter(|family| family.loops == loops)
+            .map(|family| super::fixtures::nonzero_sectors(family.name).unwrap().len())
+            .sum::<usize>()
+    };
+    assert_eq!([count(1), count(2), count(3)], [1, 8, 175]);
+    let names = |loops| {
+        super::fixtures::grid_cases(loops, BENCHMARK_INPUTS)
+            .unwrap()
+            .into_iter()
+            .map(|case| case.name)
+            .collect::<Vec<_>>()
+    };
+    let (one, two, three) = (names(1), names(2), names(3));
+    let kind = |names: &[String], prefix: &str| names.iter().filter(|n| n.starts_with(prefix)).count();
+    assert_eq!(
+        [one.len(), kind(&one, "bench_"), kind(&one, "sector_"), kind(&one, "dotted_")],
+        [17, 15, 2, 0]
+    );
+    assert_eq!(
+        [two.len(), kind(&two, "bench_"), kind(&two, "sector_"), kind(&two, "dotted_")],
+        [39, 15, 16, 8]
+    );
+    assert_eq!(
+        [three.len(), kind(&three, "bench_"), kind(&three, "sector_"), kind(&three, "dotted_")],
+        [417, 45, 350, 22]
+    );
+    for names in [&one, &two, &three] {
+        let mut unique = names.clone();
+        unique.sort();
+        unique.dedup();
+        assert_eq!(unique.len(), names.len());
     }
 }

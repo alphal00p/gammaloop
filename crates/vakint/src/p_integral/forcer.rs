@@ -1020,5 +1020,7 @@ impl Vakint {
     }
 }
 
+pub mod fixtures;
+
 #[cfg(test)]
 mod tests;
