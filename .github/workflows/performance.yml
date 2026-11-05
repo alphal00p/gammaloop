@@ -16,6 +16,10 @@ on:
         required: true
   workflow_dispatch:
     inputs:
+      candidate:
+        description: Candidate revision (defaults to the dispatched revision)
+        required: false
+        type: string
       baseline:
         description: Baseline revision (pinned before building)
         default: main
@@ -24,6 +28,7 @@ on:
 
 permissions:
   contents: read
+  statuses: write
 
 jobs:
   compare:
@@ -62,6 +67,17 @@ jobs:
         run: |
           echo "candidate=$(git -C candidate rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "baseline=$(git -C baseline rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Report pending performance gate
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE: ${{ steps.revisions.outputs.candidate }}
+        run: |
+          gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$CANDIDATE" \
+            -f state=pending -f context='PR174 paired performance' \
+            -f description='Paired performance comparison running' \
+            -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            >/dev/null
       - id: framework
         name: Read the pinned gammabench revision
         run: |
@@ -192,3 +208,15 @@ jobs:
       - name: Remove the cache credentials
         if: always()
         run: rm -f "$RUNNER_TEMP/nixci.netrc"
+      - name: Report final performance gate
+        if: always() && github.event_name == 'workflow_dispatch' && steps.revisions.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE: ${{ steps.revisions.outputs.candidate }}
+          GATE_STATE: ${{ job.status == 'success' && 'success' || 'failure' }}
+        run: |
+          gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$CANDIDATE" \
+            -f state="$GATE_STATE" -f context='PR174 paired performance' \
+            -f description='Paired performance comparison completed' \
+            -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            >/dev/null
