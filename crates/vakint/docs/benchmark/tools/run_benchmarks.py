@@ -523,7 +523,7 @@ def assemble(args, cases_doc, out, identity, pipeline):
         if "rustred" in full_records:
             row["rustred_numerical"] = full_records["rustred"].get("numerical")
         cases.append(row)
-    sib, loads, used, delays, foreign, n_samples, n_contended, l3 = [], [], set(), [], [], 0, 0, set()
+    sib, loads, used, delays, foreign, n_samples, n_contended, l3, calls = [], [], set(), [], [], 0, 0, set(), []
     by_case = {c["id"]: c for c in cases_doc["cases"]}
     for raw in (out / "raw").glob("*/*.json"):
         try:
@@ -545,6 +545,8 @@ def assemble(args, cases_doc, out, identity, pipeline):
             delays.append(h["cpu_run_delay_fraction"])
         if h.get("foreign_cpu_fraction") is not None:
             foreign.append(h["foreign_cpu_fraction"])
+        if h.get("call_run_delay_fraction") is not None:
+            calls.append(h["call_run_delay_fraction"])
         if h.get("load1_start") is not None:
             loads.append(h["load1_start"])
 
@@ -553,7 +555,8 @@ def assemble(args, cases_doc, out, identity, pipeline):
         return round(v[min(len(v) - 1, int(f * len(v)))], 4) if v else None
     contention = {"samples": n_samples, "contended_samples": n_contended,
                   "sibling_busy_median": q(sib, 0.5), "sibling_busy_max": q(sib, 1.0),
-                  "run_delay_median": q(delays, 0.5), "run_delay_max": q(delays, 1.0),
+                  "cpu_run_delay_median": q(delays, 0.5), "cpu_run_delay_max": q(delays, 1.0),
+                  "call_run_delay_median": q(calls, 0.5), "call_run_delay_max": q(calls, 1.0),
                   "foreign_cpu_median": q(foreign, 0.5), "foreign_cpu_max": q(foreign, 1.0),
                   "l3_domains": len(l3),
                   "thresholds": {"sibling_busy": args.max_sibling_busy, "run_delay": args.max_run_delay,
