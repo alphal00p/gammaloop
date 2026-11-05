@@ -75,6 +75,150 @@ pub(crate) fn first_minimal_acceptance<K: Ord>(
 }
 
 impl MomentumInput {
+    /// Power colors of the propagators (each an integer power in 1..=254), or
+    /// `None` when some power is symbolic, non-positive or too large.
+    fn power_colors(&self) -> Option<Vec<u8>> {
+        self.propagators
+            .iter()
+            .map(|propagator| {
+                get_integer_from_atom(propagator.power.as_view())
+                    .filter(|power| (1..=254).contains(power))
+                    .map(|power| power as u8)
+            })
+            .collect()
+    }
+
+    /// Canonical form of the power-colored edge-marked incidence graph: two
+    /// inputs with positive integer powers can only be equal under a momentum
+    /// map that sends each line to a line of equal power if these agree.
+    pub fn power_colored_canonical_graph(
+        &self,
+    ) -> Result<Option<symbolica::graph::Graph<u8, Empty>>, VakintError> {
+        let Some(colors) = self.power_colors() else {
+            return Ok(None);
+        };
+        Ok(Some(
+            edge_orbits::EdgeGraph::new_colored(&self.incidence, &colors)?
+                .canonical
+                .graph,
+        ))
+    }
+
+    /// Every verified unimodular loop-momentum map from this input onto
+    /// `target` that sends each propagator onto a propagator of equal power
+    /// (all power-colored graph isomorphisms, each with every orientation of
+    /// the loop basis, verified denominator by denominator with the Jacobian
+    /// by FeynKit), as the images of this input's loop momenta in the target's
+    /// loop momenta, in deterministic order. `None` if a power is not a
+    /// positive integer.
+    pub fn power_preserving_maps(
+        &self,
+        target: &MomentumInput,
+    ) -> Result<Option<Vec<Vec<Atom>>>, VakintError> {
+        let mut maps = Vec::new();
+        Ok(self
+            .find_power_preserving_map(target, |images| {
+                maps.push(images.to_vec());
+                Ok(false)
+            })?
+            .map(|_| maps))
+    }
+
+    /// The maps of [`Self::power_preserving_maps`] in the same order, offered
+    /// to `accept` one at a time until it returns `true` (then `Some(true)`);
+    /// the enumeration of the remaining isomorphisms is skipped.
+    pub fn find_power_preserving_map(
+        &self,
+        target: &MomentumInput,
+        mut accept: impl FnMut(&[Atom]) -> Result<bool, VakintError>,
+    ) -> Result<Option<bool>, VakintError> {
+        let (Some(source_colors), Some(target_colors)) = (self.power_colors(), target.power_colors())
+        else {
+            return Ok(None);
+        };
+        let loops = self.family.loop_momenta();
+        if loops.len() != target.family.loop_momenta().len()
+            || self.propagators.len() != target.propagators.len()
+        {
+            return Ok(Some(false));
+        }
+        let source_graph = edge_orbits::EdgeGraph::new_colored(&self.incidence, &source_colors)?;
+        let target_graph = edge_orbits::EdgeGraph::new_colored(&target.incidence, &target_colors)?;
+        if source_graph.canonical.graph != target_graph.canonical.graph {
+            return Ok(Some(false));
+        }
+        let variables = (1..=loops.len())
+            .map(|axis| Atom::var(vk_symbol!(format!("momentum_match_source_{axis}"))))
+            .collect::<Vec<_>>();
+        let substitute = loops
+            .iter()
+            .zip(&variables)
+            .map(|(source, variable)| Replacement::new(source.clone(), variable.clone()))
+            .collect::<Vec<_>>();
+        let sources = self
+            .basis
+            .iter()
+            .map(|&slot| {
+                self.propagators[slot]
+                    .momentum
+                    .replace_multiple(&substitute)
+            })
+            .collect::<Vec<_>>();
+        let orientations = 1usize
+            .checked_shl(loops.len().try_into().map_err(invalid)?)
+            .ok_or_else(|| invalid("momentum orientation count overflow"))?;
+        let mut seen = BTreeSet::new();
+        let mut work = 0;
+        let accepted = edge_orbits::visit_until(&source_graph, &target_graph, None, &mut work, |permutation| {
+            let images = self
+                .basis
+                .iter()
+                .map(|&slot| &target.propagators[permutation[slot]].momentum)
+                .collect::<Vec<_>>();
+            for signs in 0..orientations {
+                symbolica::utils::resources::checkpoint()?;
+                let system = sources
+                    .iter()
+                    .zip(&images)
+                    .enumerate()
+                    .map(|(axis, (source, image))| {
+                        source
+                            - Atom::num(if signs & (1 << axis) == 0 { 1 } else { -1 }) * (*image)
+                    })
+                    .collect::<Vec<_>>();
+                let coordinates = Topology::solve_loop_coordinates(&system, &variables)?;
+                if !seen.insert(coordinates.clone()) {
+                    continue;
+                }
+                let Some(mapping) = self
+                    .family
+                    .mapping_to(&target.family, &coordinates)
+                    .map_err(invalid)?
+                else {
+                    continue;
+                };
+                if mapping
+                    .denominator_map()
+                    .iter()
+                    .enumerate()
+                    .any(|(source, target)| source_colors[source] != target_colors[*target])
+                {
+                    continue;
+                }
+                let images = mapping
+                    .momentum_rules()
+                    .iter()
+                    .map(|(_, image)| image.clone())
+                    .collect::<Vec<_>>();
+                if accept(&images)? {
+                    return Ok(true);
+                }
+            }
+            Ok(false)
+        })?;
+        Ok(Some(accepted))
+    }
+
     #[cfg(test)]
     pub fn match_topologies_with_acceptance<'a, K: Ord>(
         &self,

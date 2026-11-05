@@ -60,7 +60,18 @@ struct Input {
 struct Descriptor {
     label: &'static str,
     physical_momenta: Vec<Atom>,
+    /// Incidence (edge_from, edge_to) of each physical slot.
+    physical_edges: Vec<(i64, i64)>,
     family_fingerprint: String,
+}
+
+/// One four-loop package master in its own contracted long form (unit mass),
+/// for master recognition (see `five_loop::master_transport`).
+pub(super) struct FourLoopMasterForm {
+    pub(super) program: usize,
+    pub(super) powers: Vec<i64>,
+    pub(super) canonical: symbolica::graph::Graph<u8, symbolica::graph::Empty>,
+    pub(super) contracted: Atom,
 }
 
 // Each parent program owns its native candidate rules and terminal
@@ -77,6 +88,8 @@ pub(super) struct FourLoopPrograms {
     inputs: Vec<Input>,
     descriptors: Vec<Descriptor>,
     programs: Vec<LoadedProgram>,
+    /// Package masters in contracted form, prepared on first use.
+    pub(super) master_forms: std::sync::OnceLock<Vec<FourLoopMasterForm>>,
 }
 
 impl FourLoopPrograms {
@@ -130,6 +143,7 @@ impl FourLoopPrograms {
             inputs,
             descriptors,
             programs,
+            master_forms: std::sync::OnceLock::new(),
         })
     }
 
@@ -148,6 +162,13 @@ impl FourLoopPrograms {
             .iter()
             .map(|program| program.step_cache.clone())
             .collect()
+    }
+
+    /// Program label (`four-loop-h`, ...) and physical incidence of program `index`.
+    pub(super) fn physical_edges(&self, index: usize) -> Option<(&'static str, &[(i64, i64)])> {
+        self.descriptors
+            .get(index)
+            .map(|descriptor| (descriptor.label, descriptor.physical_edges.as_slice()))
     }
 
     pub(super) fn physical_momenta(&self, index: usize) -> Option<&[Atom]> {
@@ -173,6 +194,7 @@ impl Vakint {
 
 fn descriptor(label: &'static str, source: &str) -> Result<Descriptor, String> {
     let mut physical_momenta = Vec::new();
+    let mut physical_edges = Vec::new();
     let mut propagators = Vec::new();
     let mut auxiliary_seen = false;
     for line in source
@@ -216,6 +238,7 @@ fn descriptor(label: &'static str, source: &str) -> Result<Descriptor, String> {
         });
         if !auxiliary {
             physical_momenta.push(momentum);
+            physical_edges.push((row[0], row[1]));
         }
     }
     if propagators.len() != 10 || physical_momenta.is_empty() {
@@ -240,6 +263,7 @@ fn descriptor(label: &'static str, source: &str) -> Result<Descriptor, String> {
     Ok(Descriptor {
         label,
         physical_momenta,
+        physical_edges,
         family_fingerprint: family.fingerprint().to_owned(),
     })
 }

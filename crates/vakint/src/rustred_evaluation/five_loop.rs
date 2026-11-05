@@ -66,6 +66,8 @@ type SelectedWitness = (ReplacementRules, Option<Option<Vec<IntegralKey>>>);
 
 #[path = "five_loop/witness_cache.rs"]
 mod witness_cache;
+#[path = "five_loop/master_transport.rs"]
+mod master_transport;
 #[path = "five_loop/witness_screen.rs"]
 mod witness_screen;
 pub use witness_cache::RustRedWitnessCacheStatistics;
@@ -90,6 +92,11 @@ mod test_profiles;
 #[cfg(test)]
 #[path = "five_loop/partial_acceptance.rs"]
 mod partial_acceptance;
+
+
+
+
+
 
 #[cfg(all(
     test,
@@ -145,6 +152,10 @@ pub(crate) struct SavedApplication {
     product_charts: SavedApplicationProductChartStatistics,
     data: Arc<super::data::RustRedData>,
     witnesses: Mutex<WitnessCache>,
+    /// The package masters in their own contracted long forms, prepared on
+    /// the first master-transport attempt (see
+    /// [`Vakint::transport_rustred_master_term`]).
+    master_forms: std::sync::OnceLock<Vec<master_transport::MasterForm>>,
     /// Ordered step-cache identity of the loaded package: its
     /// saved-application identity as rule tables and RustRed's binding
     /// (family, variables, policy).
@@ -1120,9 +1131,18 @@ impl Vakint {
                 symbolica::utils::resources::checkpoint()?;
                 let matching_started = std::time::Instant::now();
                 MonitorContext::native_phase(observation.as_deref_mut(), "routing_verification", None);
-                let mut matched = self
-                    .match_rustred_input(settings, term.integral.as_view(), term.numerator.as_view())?
-                    .ok_or_else(|| failure("input has no registered topology match"))?;
+                // A term equal to a package master is rewritten as the master's
+                // own representation and keeps its identity witness (no walk).
+                let mut matched = match self.transport_rustred_master_term(
+                    settings,
+                    &mut term.integral,
+                    &mut term.numerator,
+                )? {
+                    Some(witness) => witness,
+                    None => self
+                        .match_rustred_input(settings, term.integral.as_view(), term.numerator.as_view())?
+                        .ok_or_else(|| failure("input has no registered topology match"))?,
+                };
                 log::debug!(target: "vakint::saved_application", "phase=frontend_admitted_witness_search elapsed_seconds={:.6}", matching_started.elapsed().as_secs_f64());
                 let replacement_started = std::time::Instant::now();
                 MonitorContext::native_phase(observation.as_deref_mut(), "numerator_replacement", None);
@@ -1242,6 +1262,7 @@ impl SavedApplication {
             product_charts,
             data,
             witnesses: Mutex::new(WitnessCache::default()),
+            master_forms: std::sync::OnceLock::new(),
         })
     }
 

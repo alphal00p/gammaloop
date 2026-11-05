@@ -13,13 +13,27 @@ pub(super) struct EdgeGraph {
 }
 impl EdgeGraph {
     pub fn new(graph: &Graph<Empty, Atom>) -> Result<Self, VakintError> {
+        Self::marked(graph, None)
+    }
+
+    /// The same edge-marked graph with every physical edge marked by a
+    /// nonzero color (e.g. its power): automorphisms and the canonical form
+    /// then preserve colors.
+    pub fn new_colored(graph: &Graph<Empty, Atom>, colors: &[u8]) -> Result<Self, VakintError> {
+        if colors.len() != graph.edges().len() || colors.contains(&0) {
+            return Err(invalid("edge colors must be nonzero, one per physical edge"));
+        }
+        Self::marked(graph, Some(colors))
+    }
+
+    fn marked(graph: &Graph<Empty, Atom>, colors: Option<&[u8]>) -> Result<Self, VakintError> {
         let mut marked = Graph::new();
         for _ in graph.nodes() {
             marked.add_node(0u8);
         }
         let mut edges = Vec::new();
-        for edge in graph.edges() {
-            let vertex = marked.add_node(1u8);
+        for (index, edge) in graph.edges().iter().enumerate() {
+            let vertex = marked.add_node(colors.map_or(1u8, |colors| colors[index]));
             // Two incidences are retained even for a self-loop. Undirected
             // physical orientation remains a momentum-map proof obligation.
             marked
@@ -46,8 +60,23 @@ pub(super) fn visit(
     work: &mut usize,
     mut visit: impl FnMut(&[usize]) -> Result<(), VakintError>,
 ) -> Result<(), VakintError> {
+    visit_until(source, target, limit, work, |permutation| {
+        visit(permutation).map(|()| false)
+    })
+    .map(|_| ())
+}
+
+/// [`visit`] in the same order, stopping after the first permutation for
+/// which `visit` returns `true` (then `Ok(true)`).
+pub(super) fn visit_until(
+    source: &EdgeGraph,
+    target: &EdgeGraph,
+    limit: Option<usize>,
+    work: &mut usize,
+    mut visit: impl FnMut(&[usize]) -> Result<bool, VakintError>,
+) -> Result<bool, VakintError> {
     if source.canonical.graph != target.canonical.graph {
-        return Ok(());
+        return Ok(false);
     }
     let lookup = target
         .edges
@@ -100,7 +129,9 @@ pub(super) fn visit(
     let mut seen = BTreeSet::from([base]);
     while let Some(permutation) = pending.pop_front() {
         charge(work, limit, "native edge automorphism witnesses")?;
-        visit(&permutation)?;
+        if visit(&permutation)? {
+            return Ok(true);
+        }
         for generator in &generators {
             let next = permutation
                 .iter()
@@ -122,5 +153,5 @@ pub(super) fn visit(
             }
         }
     }
-    Ok(())
+    Ok(false)
 }

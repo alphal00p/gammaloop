@@ -2894,6 +2894,9 @@ impl VakintTerm {
     ) -> Result<ReplacementRules, VakintError> {
         MonitorContext::native_phase(observation.as_deref_mut(), "topology_matching", None);
         self.stage_numerical_inputs(vakint, settings)?;
+        // A four-loop scalar integral equal to a shipped four-loop master is
+        // written in that master's own program form before matching.
+        vakint.transport_four_loop_master(settings, &mut self.integral, self.numerator.as_view())?;
         let mut integral_specs = if let Some(replacement_rules) =
             vakint.match_topologies_for_settings(settings, self.integral.as_view())?
         {
@@ -2915,9 +2918,18 @@ impl VakintTerm {
             matches!(integral_specs.canonical_topology, Topology::FiveLoop(_)) && scalar_rustred;
         if scalar_five_loop {
             MonitorContext::native_phase(observation, "routing_verification", None);
-            integral_specs = vakint
-                .match_rustred_input(settings, self.integral.as_view(), self.numerator.as_view())?
-                .unwrap_or(integral_specs);
+            // A term equal to a package master is rewritten as the master's own
+            // representation and keeps its identity witness (no walk).
+            integral_specs = match vakint.transport_rustred_master_term(
+                settings,
+                &mut self.integral,
+                &mut self.numerator,
+            )? {
+                Some(witness) => witness,
+                None => vakint
+                    .match_rustred_input(settings, self.integral.as_view(), self.numerator.as_view())?
+                    .unwrap_or(integral_specs),
+            };
         }
 
         integral_specs.apply_replacement_rules()?;
