@@ -12,6 +12,8 @@ mod python_stub;
 #[cfg(feature = "vakint-reference")]
 pub mod vakint_reference;
 
+#[cfg(test)]
+use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -1141,15 +1143,20 @@ pub fn resolve_stub(workspace_root: &Path, component: &str) -> Option<PathBuf> {
 }
 
 #[cfg(test)]
+fn test_workspace_root() -> PathBuf {
+    env::var_os("GAMMALOOP_WORKSPACE_ROOT")
+        .or_else(|| env::var_os("NEXTEST_WORKSPACE_ROOT"))
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.."))
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn every_rust_component_has_a_strict_catalog() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .ancestors()
-            .nth(2)
-            .unwrap();
+        let root = &test_workspace_root();
         for component in [
             "gammalooprs",
             "gammaloop-api",
@@ -1314,10 +1321,7 @@ mod tests {
 
     #[test]
     fn gammalooprs_curated_direct_members_are_documented() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .ancestors()
-            .nth(2)
-            .unwrap();
+        let root = &test_workspace_root();
         let request = CatalogRequest {
             product_id: "gammaloop".to_owned(),
             product_title: "GammaLoop".to_owned(),
@@ -1456,10 +1460,7 @@ mod tests {
 
     #[test]
     fn every_supported_gammaloop_python_export_has_docs() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .ancestors()
-            .nth(2)
-            .unwrap();
+        let root = &test_workspace_root();
         let source = fs::read_to_string(root.join("docs/api/python/gammaloop-python.pyi"))
             .expect("checked-in GammaLoop Python stub");
         let declarations = python_declarations(&source).unwrap();
@@ -1493,10 +1494,7 @@ mod tests {
             );
         }
 
-        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .ancestors()
-            .nth(2)
-            .unwrap();
+        let root = &test_workspace_root();
         let source = fs::read_to_string(root.join("docs/api/python/spynso3.pyi"))
             .expect("checked-in spynso3 Python stub");
         let declarations = python_declarations(&source).unwrap();
@@ -1727,10 +1725,7 @@ def run(value: int) -> int:
 
     #[test]
     fn python_catalogs_keep_source_examples_without_introspection_scaffolds() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .ancestors()
-            .nth(2)
-            .unwrap();
+        let root = &test_workspace_root();
         let request = CatalogRequest {
             product_id: "test".to_owned(),
             product_title: "Test".to_owned(),

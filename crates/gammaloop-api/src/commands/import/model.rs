@@ -897,7 +897,7 @@ mod tests {
     #[test]
     fn ufo_and_json_restrictions_preserve_model_content() -> Result<()> {
         gammalooprs::initialisation::test_initialise()?;
-        let assets = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/models");
+        let assets = crate::test_workspace_root().join("assets/models");
         let restrictions = builtin_json_model_restriction_names("sm").unwrap();
         for restriction in std::iter::once("full").chain(restrictions.iter().map(String::as_str)) {
             let path = assets.join(format!("ufo/sm-{restriction}"));
@@ -1175,7 +1175,7 @@ mod tests {
     #[test]
     fn fresh_sm_ufo_preserves_virtual_gauge_and_covariant_cut_states() -> Result<()> {
         gammalooprs::initialisation::test_initialise()?;
-        let assets = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/models");
+        let assets = crate::test_workspace_root().join("assets/models");
         let (imported, _) = load_ufo_model(&assets.join("ufo/sm"), None, false)?;
         let canonical = Model::from_path(assets.join("json/sm/sm.json"))?;
         assert_eq!(

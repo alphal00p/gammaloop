@@ -3,6 +3,7 @@
 //! and both DOT writers must write each graph as DOT that reads back to a graph
 //! with the same content, which is a fixed point of writing and reading.
 
+use std::env;
 use std::fmt::Write;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -62,7 +63,10 @@ fn content(graph: &DotGraph) -> (Vec<String>, Vec<String>) {
 
 #[test]
 fn repository_dot_files_parse_and_round_trip_through_both_writers() {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let root = env::var_os("GAMMALOOP_WORKSPACE_ROOT")
+        .or_else(|| env::var_os("NEXTEST_WORKSPACE_ROOT"))
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.."));
     let mut files = Vec::new();
     for dir in CORPUS {
         dot_files(&root.join(dir), &mut files);

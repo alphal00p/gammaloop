@@ -2759,6 +2759,7 @@ pub(crate) fn threshold_counterterm_recording_helper(
 
 #[cfg(test)]
 pub mod test {
+    use crate::utils::test_utils;
 
     use std::fs;
     use std::io::Cursor;
@@ -4562,8 +4563,7 @@ pub mod test {
     fn raised_amplitude_constituents_reject_different_group_ids() {
         test_initialise().unwrap();
         let model = crate::model::Model::from_path(
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("../../assets/models/json/scalars/scalars_2p_3p.json"),
+            test_utils::workspace_root().join("assets/models/json/scalars/scalars_2p_3p.json"),
         )
         .unwrap();
         let mut graph = AmplitudeGraph::new(
@@ -4647,8 +4647,7 @@ pub mod test {
             .spawn(|| {
                 test_initialise().unwrap();
                 let model = crate::model::Model::from_path(
-                    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                        .join("../../assets/models/json/scalars/scalars_2p_3p.json"),
+                    test_utils::workspace_root().join("assets/models/json/scalars/scalars_2p_3p.json"),
                 )
                 .unwrap();
                 let mut graph = crate::graph::Graph::from_dot(include_str!("../../../../tests/resources/graphs/dotted_bubble_amp.dot"), &model)

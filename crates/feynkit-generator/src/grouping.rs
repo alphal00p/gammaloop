@@ -3793,11 +3793,13 @@ mod tests {
     // were translated to names. The restricted SM keeps the source mass classes.
     fn sampled_quotient_physical_pair() -> (Arc<Model>, Vec<FeynmanDiagram>) {
         let mut model = Model::standard_model();
-        let card = ParameterCard::from_path(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../assets/models/json/sm/restrict_default.json"
-        ))
-        .unwrap();
+        let root = env::var_os("GAMMALOOP_WORKSPACE_ROOT")
+            .or_else(|| env::var_os("NEXTEST_WORKSPACE_ROOT"))
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.."));
+        let card =
+            ParameterCard::from_path(root.join("assets/models/json/sm/restrict_default.json"))
+                .unwrap();
         model.apply_parameter_card(&card).unwrap();
         model.simplify_zero_values().unwrap();
         let model = Arc::new(model);

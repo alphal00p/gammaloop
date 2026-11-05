@@ -1,4 +1,6 @@
+use std::env;
 use std::ffi::CString;
+use std::path::PathBuf;
 
 use feynkit_graph::{DiagramEdge, DiagramVertex, FeynmanDiagram, NumeratorInterface};
 use feynkit_model::Model;
@@ -115,7 +117,11 @@ fn browser_display_fixtures() {
         let locals = PyDict::new(py);
         locals.set_item(
             "test_directory",
-            concat!(env!("CARGO_MANIFEST_DIR"), "/tests"),
+            env::var_os("GAMMALOOP_WORKSPACE_ROOT")
+                .or_else(|| env::var_os("NEXTEST_WORKSPACE_ROOT"))
+                .map(|root| PathBuf::from(root).join("crates/feynkit-py"))
+                .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")))
+                .join("tests"),
         )?;
         py.run(&code, Some(&locals), Some(&locals))
     })

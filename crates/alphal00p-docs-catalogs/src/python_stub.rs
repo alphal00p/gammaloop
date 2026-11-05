@@ -692,12 +692,11 @@ fn split_top_level_once(source: &str, delimiter: char) -> Option<(&str, &str)> {
 
 #[cfg(test)]
 mod tests {
-    use std::path::Path;
 
     use alphal00p_docs_schema::{ApiLanguage, DocItemKind, DocMemberKind};
 
     use super::*;
-    use crate::{CatalogRequest, export_catalog, first_sentence};
+    use crate::{CatalogRequest, export_catalog, first_sentence, test_workspace_root};
 
     #[test]
     fn parses_python_exports_in_declared_order() {
@@ -1063,10 +1062,7 @@ def run(value: str, strict: bool = False) -> str:
 
     #[test]
     fn existing_snapshots_generate_deterministic_nested_catalogs() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .ancestors()
-            .nth(2)
-            .unwrap();
+        let root = &test_workspace_root();
         let components = [
             ("gammaloop-python", "gammaloop._gammaloop"),
             ("linnet-graph", "symbolica.community.graph"),

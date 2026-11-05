@@ -577,7 +577,9 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
 
 #[cfg(test)]
 mod tests {
+    use std::env;
     use std::ffi::CString;
+    use std::path::PathBuf;
 
     use pyo3::types::PyDict;
 
@@ -597,10 +599,11 @@ mod tests {
             locals
                 .set_item(
                     "MODEL_PATH",
-                    concat!(
-                        env!("CARGO_MANIFEST_DIR"),
-                        "/tests/fixtures/scalars_2p_3p.json"
-                    ),
+                    env::var_os("GAMMALOOP_WORKSPACE_ROOT")
+                        .or_else(|| env::var_os("NEXTEST_WORKSPACE_ROOT"))
+                        .map(|root| PathBuf::from(root).join("crates/feynkit-py"))
+                        .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")))
+                        .join("tests/fixtures/scalars_2p_3p.json"),
                 )
                 .unwrap();
             let code = CString::new(

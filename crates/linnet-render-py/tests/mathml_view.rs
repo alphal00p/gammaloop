@@ -2,7 +2,9 @@
 //!
 //! Root coordinates compilation/execution. The ignored producer retains every
 //! prepared view until its own browser receipt has completed native rendering.
+use std::env;
 use std::ffi::CString;
+use std::path::PathBuf;
 
 use linnest::svg::{
     Dash, Details, EdgeDrawing, LabelMetrics, LabelSource, NodeDrawing, Scene, Stroke,
@@ -155,7 +157,11 @@ fn run_python(entry: &str) -> PyResult<()> {
         locals.set_item("adapter_source", include_str!("../src/view.py"))?;
         locals.set_item(
             "test_directory",
-            concat!(env!("CARGO_MANIFEST_DIR"), "/tests"),
+            env::var_os("GAMMALOOP_WORKSPACE_ROOT")
+                .or_else(|| env::var_os("NEXTEST_WORKSPACE_ROOT"))
+                .map(|root| PathBuf::from(root).join("crates/linnet-render-py"))
+                .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")))
+                .join("tests"),
         )?;
         let source = CString::new(include_str!("mathml_view_support.py")).unwrap();
         py.run(&source, Some(&locals), Some(&locals))?;

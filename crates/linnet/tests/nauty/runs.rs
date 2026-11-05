@@ -1,12 +1,16 @@
 //! The runs of nauty's `runalltests` and how each one is translated.
 
+use std::env;
 use std::path::PathBuf;
 
 /// The nauty-derived fixtures, with nauty's licence and attribution.
 pub fn fixture_path(name: &str) -> PathBuf {
-    [env!("CARGO_MANIFEST_DIR"), "tests/resources/nauty", name]
-        .iter()
-        .collect()
+    env::var_os("GAMMALOOP_WORKSPACE_ROOT")
+        .or_else(|| env::var_os("NEXTEST_WORKSPACE_ROOT"))
+        .map(|root| PathBuf::from(root).join("crates/linnet"))
+        .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")))
+        .join("tests/resources/nauty")
+        .join(name)
 }
 
 pub fn fixture(name: &str) -> String {
