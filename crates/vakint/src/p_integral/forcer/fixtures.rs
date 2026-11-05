@@ -373,6 +373,44 @@ fn rank_two_numerators(loops: usize) -> Vec<String> {
     numerators
 }
 
+/// The labelled sectors (family and line powers) in which the fixed rank-2
+/// numerator of [`grid_cases`] gives an exact 0, by cancelling a line into a
+/// scaleless integral or by a symmetry of the sector, and how many numerators
+/// further the first nonzero one is. A zero would carry no rank-2 information;
+/// Forcer's silent zero for an unrecognized input is a different thing, refused
+/// by `run_forcer`.
+const RANK_TWO_STEPS: [(&str, usize); 29] = [
+    ("P1L_11", 1),
+    ("P2L_11001", 1),
+    ("P2L_11011", 1),
+    ("P2L_10111", 1),
+    ("P3L_LA_11100110", 1),
+    ("P3L_LA_10111110", 1),
+    ("P3L_LA_10101101", 1),
+    ("P3L_LA_11011101", 1),
+    ("P3L_LA_11110011", 1),
+    ("P3L_LA_01011111", 3),
+    ("P3L_LA_10111111", 1),
+    ("P3L_BE_11110010", 1),
+    ("P3L_BE_11110110", 1),
+    ("P3L_BE_10111110", 1),
+    ("P3L_BE_11110001", 1),
+    ("P3L_BE_11011001", 1),
+    ("P3L_BE_11110101", 1),
+    ("P3L_BE_01011101", 1),
+    ("P3L_BE_11100011", 1),
+    ("P3L_BE_01110111", 1),
+    ("P3L_BE_11001111", 1),
+    ("P3L_BE_11011111", 1),
+    ("P3L_NO_11111010", 1),
+    ("P3L_NO_10110110", 1),
+    ("P3L_NO_11101001", 1),
+    ("P3L_NO_11101101", 1),
+    ("P3L_NO_10111101", 1),
+    ("P3L_NO_00111011", 1),
+    ("P3L_NO_00101111", 1),
+];
+
 /// Number of dotted sectors per loop count in the grid fixtures (30 in all).
 const DOTTED_SECTORS: [(usize, usize); 2] = [(2, 8), (3, 22)];
 
@@ -382,7 +420,8 @@ const DOTTED_SECTORS: [(usize, usize); 2] = [(2, 8), (3, 22)];
 /// - `sector_<family>_<lines>_r0` and `_r2`: every non-scaleless labelled
 ///   sector of every family of `loops` loops (lines at power 1 or 0, the line
 ///   powers in the name), with numerator 1 and with one rank-2 numerator, the
-///   `(7n+3) mod m`-th of the `m` rank-2 numerators for the `n`-th sector;
+///   `(7n+3+s) mod m`-th of the `m` rank-2 numerators for the `n`-th sector,
+///   `s` from [`RANK_TWO_STEPS`] (0 for most sectors), so that it is nonzero;
 /// - `dotted_<family>_<lines>`: a spread sample of those sectors (2L: 8,
 ///   3L: 22, 30 in all) with every second positive line, starting with the
 ///   first or the second, at power 2.
@@ -411,7 +450,12 @@ pub fn grid_cases(loops: usize, benchmark: &str) -> Result<Vec<ForcerCase>, Vaki
         }
     }
     for (index, (family, powers)) in sectors.iter().enumerate() {
-        let label = format!("sector_{family}_{}", power_label(powers));
+        let sector = format!("{family}_{}", power_label(powers));
+        let step = RANK_TWO_STEPS
+            .iter()
+            .find(|(listed, _)| *listed == sector)
+            .map_or(0, |(_, step)| *step);
+        let label = format!("sector_{sector}");
         cases.push(ForcerCase::new(
             format!("{label}_r0"),
             family,
@@ -423,7 +467,7 @@ pub fn grid_cases(loops: usize, benchmark: &str) -> Result<Vec<ForcerCase>, Vaki
             format!("{label}_r2"),
             family,
             powers.clone(),
-            &rank_two[(7 * index + 3) % rank_two.len()],
+            &rank_two[(7 * index + 3 + step) % rank_two.len()],
             "p(1)",
         ));
     }
@@ -451,11 +495,13 @@ pub fn grid_cases(loops: usize, benchmark: &str) -> Result<Vec<ForcerCase>, Vaki
 /// The provenance line of the grid fixtures.
 pub const GRID_PROVENANCE: &str = "M2-V2 grid: benchmark cells (tests/fixtures/benchmark_p_integrals.json), \
 every non-scaleless labelled sector at rank 0 and 2, dotted sectors; \
-fixtures::grid_cases in src/p_integral/forcer/fixtures.rs; VAKINT_FORCER_FIXTURES=write with FORM 5";
+fixtures::grid_cases in src/p_integral/forcer/fixtures.rs; VAKINT_FORCER_FIXTURES=write with FORM 5; \
+outputs are raw Forcer C_G before the Wick sign: reduced = (-1)^(sum a + r) C_G (ForcerCase::frozen_values)";
 
 /// The provenance line of the anchors.
 pub const ANCHOR_PROVENANCE: &str = "M2-V2 normalization anchors (M2 plan section 3.3); \
-fixtures::anchor_cases in src/p_integral/forcer/fixtures.rs; VAKINT_FORCER_FIXTURES=write with FORM 5";
+fixtures::anchor_cases in src/p_integral/forcer/fixtures.rs; VAKINT_FORCER_FIXTURES=write with FORM 5; \
+outputs are raw Forcer C_G before the Wick sign: reduced = (-1)^(sum a + r) C_G (ForcerCase::frozen_values)";
 
 /// The normalization anchors of the M2 plan (section 3.3), without outputs:
 /// - `p1l_11`: `P1L(1,1) = 1/ε` in the G-scheme;

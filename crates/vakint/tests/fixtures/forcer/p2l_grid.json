@@ -1,7 +1,7 @@
 {
   "forcer_commit": "68a30bfb2aec3672a2f674ca8666bfc970105e24",
   "form_version": "5.0.0",
-  "provenance": "M2-V2 grid: benchmark cells (tests/fixtures/benchmark_p_integrals.json), every non-scaleless labelled sector at rank 0 and 2, dotted sectors; fixtures::grid_cases in src/p_integral/forcer/fixtures.rs; VAKINT_FORCER_FIXTURES=write with FORM 5",
+  "provenance": "M2-V2 grid: benchmark cells (tests/fixtures/benchmark_p_integrals.json), every non-scaleless labelled sector at rank 0 and 2, dotted sectors; fixtures::grid_cases in src/p_integral/forcer/fixtures.rs; VAKINT_FORCER_FIXTURES=write with FORM 5; outputs are raw Forcer C_G before the Wick sign: reduced = (-1)^(sum a + r) C_G (ForcerCase::frozen_values)",
   "cases": [
     {
       "name": "bench_L2_d0_r0_P2L",
@@ -333,10 +333,10 @@
         0,
         1
       ],
-      "numerator": "dot(k(2),k(2))",
+      "numerator": "dot(k(1),p(1))*dot(k(1),p(1))",
       "external": "p(1)",
       "outputs": [
-        " 0\n"
+        "GschemeConstants(0,0)*GschemeConstants(1,0)*rat(2*ep^2 - 3*ep,108*ep^2 - 216*ep + 96)\n"
       ]
     },
     {
@@ -397,10 +397,10 @@
         1,
         1
       ],
-      "numerator": "dot(k(1),k(1))",
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))",
       "external": "p(1)",
       "outputs": [
-        " 0\n"
+        "GschemeConstants(0,0)*GschemeConstants(1,0)*rat(4*ep - 3,72*ep - 48)\n"
       ]
     },
     {
@@ -429,10 +429,10 @@
         1,
         1
       ],
-      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))",
+      "numerator": "dot(k(1),k(2))",
       "external": "p(1)",
       "outputs": [
-        " 0\n"
+        "GschemeConstants(0,0)^2*rat(1,4)\n"
       ]
     },
     {

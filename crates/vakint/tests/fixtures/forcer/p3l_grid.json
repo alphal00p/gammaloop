@@ -1,7 +1,7 @@
 {
   "forcer_commit": "68a30bfb2aec3672a2f674ca8666bfc970105e24",
   "form_version": "5.0.0",
-  "provenance": "M2-V2 grid: benchmark cells (tests/fixtures/benchmark_p_integrals.json), every non-scaleless labelled sector at rank 0 and 2, dotted sectors; fixtures::grid_cases in src/p_integral/forcer/fixtures.rs; VAKINT_FORCER_FIXTURES=write with FORM 5",
+  "provenance": "M2-V2 grid: benchmark cells (tests/fixtures/benchmark_p_integrals.json), every non-scaleless labelled sector at rank 0 and 2, dotted sectors; fixtures::grid_cases in src/p_integral/forcer/fixtures.rs; VAKINT_FORCER_FIXTURES=write with FORM 5; outputs are raw Forcer C_G before the Wick sign: reduced = (-1)^(sum a + r) C_G (ForcerCase::frozen_values)",
   "cases": [
     {
       "name": "bench_L3_d0_r0_P3L_LA",
@@ -1042,10 +1042,10 @@
         1,
         0
       ],
-      "numerator": "dot(k(2),k(2))",
+      "numerator": "dot(k(2),p(1))*dot(k(3),p(1))",
       "external": "p(1)",
       "outputs": [
-        " 0\n"
+        "GschemeConstants(0,0)^2*GschemeConstants(2,0)*rat(9*ep^2 - 5*ep,384*ep^2 - 480*ep + 144)\n"
       ]
     },
     {
@@ -1270,10 +1270,10 @@
         1,
         0
       ],
-      "numerator": "dot(k(1),k(1))",
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))",
       "external": "p(1)",
       "outputs": [
-        " 0\n"
+        "GschemeConstants(0,0)*GschemeConstants(1,0)*GschemeConstants(2,0)*rat( - 36*ep^2 + 40*ep - 9,384*ep^2 - 480*ep + 144)\n"
       ]
     },
     {
@@ -1650,10 +1650,10 @@
         0,
         1
       ],
-      "numerator": "dot(k(3),k(3))",
+      "numerator": "dot(k(1),p(1))*dot(k(1),p(1))",
       "external": "p(1)",
       "outputs": [
-        " 0\n"
+        "GschemeConstants(0,0)*GschemeConstants(1,0)*GschemeConstants(2,0)*rat(2*ep^3 - 3*ep^2,1152*ep^3 - 2976*ep^2 + 2352*ep - 576)\n"
       ]
     },
     {
@@ -1726,10 +1726,10 @@
         0,
         1
       ],
-      "numerator": "dot(k(1),k(1))",
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))",
       "external": "p(1)",
       "outputs": [
-        " 0\n"
+        "GschemeConstants(0,0)^2*GschemeConstants(1,0)*rat(2*ep - 1,24*ep - 16)\n"
       ]
     },
     {
@@ -1954,10 +1954,10 @@
         1,
         1
       ],
-      "numerator": "dot(k(2),k(2))",
+      "numerator": "dot(k(2),p(1))*dot(k(3),p(1))",
       "external": "p(1)",
       "outputs": [
-        " 0\n"
+        "GschemeConstants(0,0)*GschemeConstants(1,0)*GschemeConstants(2,0)*rat(6*ep^2 - 6*ep + 1,192*ep^2 - 240*ep + 72)\n"
       ]
     },
     {
@@ -2448,10 +2448,10 @@
         1,
         1
       ],
-      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))",
+      "numerator": "dot(k(1),k(3))",
       "external": "p(1)",
       "outputs": [
-        " 0\n"
+        "GschemeConstants(0,0)^3*rat(1,4)\n"
       ]
     },
     {
@@ -2562,10 +2562,10 @@
         1,
         1
       ],
-      "numerator": "dot(k(3),k(3))",
+      "numerator": "dot(k(1),p(1))*dot(k(1),p(1))",
       "external": "p(1)",
       "outputs": [
-        " 0\n"
+        "GschemeConstants(0,0)^2*GschemeConstants(1,0)*rat( - ep + 1,24*ep - 16) + GschemeConstants(0,0)^2*GschemeConstants(2,0)*rat(3*ep - 1,16*ep - 8) + GschemeConstants(0,0)*GschemeConstants(1,0)*GschemeConstants(2,0)*rat(3*ep^2 - 4*ep + 1,48*ep^2 - 56*ep + 16\n      )\n"
       ]
     },
     {
@@ -2866,10 +2866,10 @@
         1,
         0
       ],
-      "numerator": "dot(k(2),k(2))",
+      "numerator": "dot(k(2),p(1))*dot(k(3),p(1))",
       "external": "p(1)",
       "outputs": [
-        " 0\n"
+        "GschemeConstants(0,0)*GschemeConstants(1,0)*GschemeConstants(2,0)*rat(18*ep^4 - 33*ep^3 + 13*ep^2,10368*ep^4 - 33696*ep^3 + 39024*ep^2 - 19296*ep + 3456)\n"
       ]
     },
     {
@@ -3018,10 +3018,10 @@
         1,
         0
       ],
-      "numerator": "dot(k(3),k(3))",
+      "numerator": "dot(k(1),p(1))*dot(k(1),p(1))",
       "external": "p(1)",
       "outputs": [
-        " 0\n"
+        "GschemeConstants(0,0)*GschemeConstants(1,0)*GschemeConstants(2,0)*rat(18*ep^2 - 17*ep + 3,192*ep^2 - 240*ep + 72)\n"
       ]
     },
     {
@@ -3170,10 +3170,10 @@
         1,
         0
       ],
-      "numerator": "dot(k(1),k(2))",
+      "numerator": "dot(k(1),p(1))*dot(k(3),p(1))",
       "external": "p(1)",
       "outputs": [
-        " 0\n"
+        "GschemeConstants(0,0)^2*GschemeConstants(2,0)*rat(18*ep^2 - 17*ep + 3,192*ep^2 - 240*ep + 72)\n"
       ]
     },
     {
@@ -3322,10 +3322,10 @@
         0,
         1
       ],
-      "numerator": "dot(k(2),k(2))",
+      "numerator": "dot(k(2),p(1))*dot(k(3),p(1))",
       "external": "p(1)",
       "outputs": [
-        " 0\n"
+        "GschemeConstants(0,0)*GschemeConstants(1,0)*GschemeConstants(2,0)*rat(18*ep^4 - 33*ep^3 + 13*ep^2,10368*ep^4 - 33696*ep^3 + 39024*ep^2 - 19296*ep + 3456)\n"
       ]
     },
     {
@@ -3398,10 +3398,10 @@
         0,
         1
       ],
-      "numerator": "dot(k(2),k(3))",
+      "numerator": "dot(k(3),p(1))*dot(k(3),p(1))",
       "external": "p(1)",
       "outputs": [
-        " 0\n"
+        "GschemeConstants(0,0)^2*GschemeConstants(1,0)*rat(ep^2 - 2*ep,216*ep^2 - 432*ep + 192)\n"
       ]
     },
     {
@@ -3550,10 +3550,10 @@
         0,
         1
       ],
-      "numerator": "dot(k(1),k(1))",
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))",
       "external": "p(1)",
       "outputs": [
-        " 0\n"
+        "GschemeConstants(0,0)*GschemeConstants(1,0)*GschemeConstants(2,0)*rat( - 2*ep^2 + 3*ep - 1,192*ep^2 - 272*ep + 96)\n"
       ]
     },
     {
@@ -3778,10 +3778,10 @@
         0,
         1
       ],
-      "numerator": "dot(k(2),k(2))",
+      "numerator": "dot(k(2),p(1))*dot(k(3),p(1))",
       "external": "p(1)",
       "outputs": [
-        " 0\n"
+        "GschemeConstants(0,0)*GschemeConstants(1,0)*GschemeConstants(2,0)*rat( - 24*ep^3 + 42*ep^2 - 17*ep,2304*ep^3 - 4416*ep^2 + 2784*ep - 576)\n"
       ]
     },
     {
@@ -4006,10 +4006,10 @@
         1,
         1
       ],
-      "numerator": "dot(k(1),k(1))",
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))",
       "external": "p(1)",
       "outputs": [
-        " 0\n"
+        "GschemeConstants(0,0)*GschemeConstants(1,0)*GschemeConstants(2,0)*rat( - 18*ep^4 + 33*ep^3 - 13*ep^2,10368*ep^4 - 33696*ep^3 + 39024*ep^2 - 19296*ep + 3456)\n"
       ]
     },
     {
@@ -4386,10 +4386,10 @@
         1,
         1
       ],
-      "numerator": "dot(k(3),k(3))",
+      "numerator": "dot(k(1),p(1))*dot(k(1),p(1))",
       "external": "p(1)",
       "outputs": [
-        " 0\n"
+        "GschemeConstants(0,0)*GschemeConstants(1,0)*GschemeConstants(2,0)*rat(162*ep^3 - 297*ep^2 + 187*ep - 42,1728*ep^3 - 3312*ep^2 + 2088*ep - 432)\n"
       ]
     },
     {
@@ -4462,10 +4462,10 @@
         1,
         1
       ],
-      "numerator": "dot(k(1),k(1))",
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))",
       "external": "p(1)",
       "outputs": [
-        " 0\n"
+        "GschemeConstants(0,0)^2*GschemeConstants(2,0)*rat( - 18*ep^2 + 17*ep - 3,384*ep^2 - 480*ep + 144)\n"
       ]
     },
     {
@@ -4690,10 +4690,10 @@
         1,
         1
       ],
-      "numerator": "dot(k(2),k(2))",
+      "numerator": "dot(k(2),p(1))*dot(k(3),p(1))",
       "external": "p(1)",
       "outputs": [
-        " 0\n"
+        "GschemeConstants(0,0)^2*GschemeConstants(1,0)*rat(8*ep^3 - 22*ep^2 + 17*ep - 4,96*ep^3 - 208*ep^2 + 96*ep) + GschemeConstants(0,0)^2*GschemeConstants(2,0)*rat(4*ep^2 - 7*ep + 2,96*ep^3 - 192*ep^2 + 72*ep) + GschemeConstants(0,0)*GschemeConstants(1,0)*\n      GschemeConstants(2,0)*rat( - 72*ep^4 + 192*ep^3 - 154*ep^2 + 45*ep - 4,576*ep^4 - 1536*ep^3 + 1200*ep^2 - 288*ep)\n"
       ]
     },
     {
@@ -5146,10 +5146,10 @@
         1,
         0
       ],
-      "numerator": "dot(k(2),k(2))",
+      "numerator": "dot(k(2),p(1))*dot(k(3),p(1))",
       "external": "p(1)",
       "outputs": [
-        " 0\n"
+        "GschemeConstants(0,0)*GschemeConstants(1,0)*GschemeConstants(2,0)*rat(2*ep - 1,64*ep - 48)\n"
       ]
     },
     {
@@ -5298,10 +5298,10 @@
         1,
         0
       ],
-      "numerator": "dot(k(3),k(3))",
+      "numerator": "dot(k(1),p(1))*dot(k(1),p(1))",
       "external": "p(1)",
       "outputs": [
-        " 0\n"
+        "GschemeConstants(0,0)*GschemeConstants(1,0)*GschemeConstants(2,0)*rat(ep,192*ep - 144)\n"
       ]
     },
     {
@@ -5830,10 +5830,10 @@
         0,
         1
       ],
-      "numerator": "dot(k(1),k(1))",
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))",
       "external": "p(1)",
       "outputs": [
-        " 0\n"
+        "GschemeConstants(0,0)^2*GschemeConstants(1,0)*rat( - ep,36*ep - 24)\n"
       ]
     },
     {
@@ -6058,10 +6058,10 @@
         0,
         1
       ],
-      "numerator": "dot(k(2),k(2))",
+      "numerator": "dot(k(2),p(1))*dot(k(3),p(1))",
       "external": "p(1)",
       "outputs": [
-        " 0\n"
+        "GschemeConstants(0,0)^2*GschemeConstants(1,0)*rat(4*ep - 1,72*ep - 48)\n"
       ]
     },
     {
@@ -6210,10 +6210,10 @@
         0,
         1
       ],
-      "numerator": "dot(k(3),k(3))",
+      "numerator": "dot(k(1),p(1))*dot(k(1),p(1))",
       "external": "p(1)",
       "outputs": [
-        " 0\n"
+        "GschemeConstants(0,0)^2*GschemeConstants(1,0)*rat(8*ep - 3,36*ep - 24)\n"
       ]
     },
     {
@@ -6666,10 +6666,10 @@
         1,
         1
       ],
-      "numerator": "dot(k(3),k(3))",
+      "numerator": "dot(k(1),p(1))*dot(k(1),p(1))",
       "external": "p(1)",
       "outputs": [
-        " 0\n"
+        "GschemeConstants(0,0)*GschemeConstants(1,0)*GschemeConstants(2,0)*rat(18*ep^2 - 11*ep,384*ep^2 - 480*ep + 144)\n"
       ]
     },
     {
@@ -7122,10 +7122,10 @@
         1,
         1
       ],
-      "numerator": "dot(k(3),k(3))",
+      "numerator": "dot(k(1),p(1))*dot(k(1),p(1))",
       "external": "p(1)",
       "outputs": [
-        " 0\n"
+        "GschemeConstants(0,0)*GschemeConstants(1,0)*GschemeConstants(2,0)*rat(162*ep^4 - 351*ep^3 + 178*ep^2,10368*ep^4 - 33696*ep^3 + 39024*ep^2 - 19296*ep + 3456)\n"
       ]
     },
     {

@@ -1145,7 +1145,9 @@ const BENCHMARK_INPUTS: &str = include_str!("../../../tests/fixtures/benchmark_p
 /// recorded before the shared numerator split moved to `parts.rs`: the
 /// programs Forcer receives stay byte-identical. The grid and anchor digests
 /// are taken over their definitions (`grid_cases`, `anchor_cases`), which
-/// `tests/p_integral_forcer_fixtures.rs` ties to the files.
+/// `tests/p_integral_forcer_fixtures.rs` ties to the files; the three grid
+/// digests were re-recorded when 29 rank-2 sectors got a nonzero numerator
+/// (`RANK_TWO_STEPS`), a change of the definitions, not of the rendering.
 const PROGRAM_DIGESTS: [(&str, &str); 8] = [
     (
         "p1l_battery.json",
@@ -1169,15 +1171,15 @@ const PROGRAM_DIGESTS: [(&str, &str); 8] = [
     ),
     (
         "p1l_grid.json",
-        "c39b65da7cc27d95bdad2f49eacbea75f224a13aa885eb975cd1a1a542f7d3aa",
+        "5869e41489de001c4f4c897c546e84e2ab8b2b06093b2d2d7dc4ebb2227fd849",
     ),
     (
         "p2l_grid.json",
-        "e9ee167ffb1fe8d8bdb63eb535ca4422122bcdb45cba33761d522325293ef14b",
+        "44945f050778bbe6fadce599daeca316f3b73faffb835386a6065b8e1b534f2a",
     ),
     (
         "p3l_grid.json",
-        "15e4b5afbbd66cd15b45bc84f2d4a375e2ea79b498b7f79c5c82597a2b17be20",
+        "a084c24715b21fc26c5b92f3cdea441510385b5c5b4ad3f872620e63c01924ae",
     ),
 ];
 

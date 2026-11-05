@@ -1,7 +1,7 @@
 {
   "forcer_commit": "68a30bfb2aec3672a2f674ca8666bfc970105e24",
   "form_version": "5.0.0",
-  "provenance": "M2-V2 normalization anchors (M2 plan section 3.3); fixtures::anchor_cases in src/p_integral/forcer/fixtures.rs; VAKINT_FORCER_FIXTURES=write with FORM 5",
+  "provenance": "M2-V2 normalization anchors (M2 plan section 3.3); fixtures::anchor_cases in src/p_integral/forcer/fixtures.rs; VAKINT_FORCER_FIXTURES=write with FORM 5; outputs are raw Forcer C_G before the Wick sign: reduced = (-1)^(sum a + r) C_G (ForcerCase::frozen_values)",
   "cases": [
     {
       "name": "p1l_11",

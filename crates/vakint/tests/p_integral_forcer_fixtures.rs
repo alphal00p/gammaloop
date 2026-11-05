@@ -1,6 +1,7 @@
 //! The frozen Forcer grid fixtures `tests/fixtures/forcer/p{1,2,3}l_grid.json`
-//! and `p_anchors.json`. They total about 0.22 MB and these checks take about
-//! a second, so they all run in the fast gate (`just test_vakint`).
+//! and `p_anchors.json`. With `tests/fixtures/benchmark_p_integrals.json` they
+//! total about 0.38 MB and these checks take about a second, so they all run in
+//! the fast gate (`just test_vakint`).
 //!
 //! Each file must hold exactly the cases of its definition
 //! (`vakint::p_integral::forcer_fixtures::{grid_cases, anchor_cases}`), and
@@ -31,9 +32,10 @@ fn retain_settings() -> VakintSettings {
     }
 }
 
-/// Every case parses, has a tag-basis form and finalizes exactly; scaleless
-/// cases have no output. A numerator can still cancel a line into a scaleless
-/// integral, which Forcer reduces to an exact `0`.
+/// Every case parses, has a tag-basis form and finalizes exactly to a nonzero
+/// value; scaleless cases have no output. A sector whose fixed rank-2 numerator
+/// gives an exact 0 is excluded by construction (`fixtures::grid_cases`), so a
+/// zero here is a change in Forcer's output, or its silent zero.
 fn assert_complete(file: &str, fixture: &ForcerFixture) {
     let settings = retain_settings();
     let epsilon = vakint::vakint_symbol!(&settings.epsilon_symbol);
@@ -51,8 +53,7 @@ fn assert_complete(file: &str, fixture: &ForcerFixture) {
             assert_eq!(basis.is_empty(), reduced.is_zero(), "{file}: {}", case.name);
         }
         let value = finalized(case, &settings, RustRedMasterMode::Retain);
-        let zero = values.iter().all(|(_, reduced)| reduced.is_zero());
-        assert_eq!(value.is_zero(), zero, "{file}: {}", case.name);
+        assert_eq!(value.is_zero(), values.is_empty(), "{file}: {}", case.name);
     }
 }
 
