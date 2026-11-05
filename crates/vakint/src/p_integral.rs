@@ -6,8 +6,10 @@
 //! four-loop family registry, the matching witness and the backend-independent
 //! reduced value, together with the frontend: kind inference, validation and
 //! exact normalization (`input`), the catalogue and graph matching
-//! (`catalogue`) and the DOT export (`dot`). Evaluation and finalization are
-//! wired elsewhere.
+//! (`catalogue`) and the DOT export (`dot`). Both backends share the
+//! numerator split (`parts`), the finalizer (`finalize`, `laurent`), the
+//! p-master table (`masters`) and the exact tag-basis comparison (`compare`);
+//! the Forcer backend and its frozen fixtures live in `forcer`.
 
 mod catalogue;
 #[doc(hidden)]
