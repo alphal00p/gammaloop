@@ -4,6 +4,7 @@
 
 use spynso3::SpensoModule;
 use std::ffi::CString;
+use std::path::PathBuf;
 use std::{env, fs};
 
 use pyo3::types::PyModule;
@@ -37,11 +38,16 @@ fn direct_tensor_paging() {
             modules.set_item("symbolica.community.tensor_native", &tensor)?;
 
             let code = CString::new(include_str!("installed_tensor_paging.py")).unwrap();
-            let filename = CString::new(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/tests/installed_tensor_paging.py"
-            ))
-            .unwrap();
+            let filename = env::var_os("GAMMALOOP_WORKSPACE_ROOT")
+                .or_else(|| env::var_os("NEXTEST_WORKSPACE_ROOT"))
+                .map(|root| {
+                    PathBuf::from(root).join("crates/spynso3/tests/installed_tensor_paging.py")
+                })
+                .unwrap_or_else(|| {
+                    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                        .join("tests/installed_tensor_paging.py")
+                });
+            let filename = CString::new(filename.to_string_lossy().as_bytes()).unwrap();
             let tests = PyModule::from_code(py, &code, &filename, c"installed_tensor_paging")?;
             let unittest = py.import("unittest")?;
             let suite = unittest

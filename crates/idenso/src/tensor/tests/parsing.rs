@@ -6,8 +6,8 @@ use spenso::network::{
     ContractScalars, ExecutionResult, Network, NetworkState, Sequential, SequentialExtract,
     SingleSmallestDegree, SmallestDegree, Steps,
 };
-use spenso::structure::OrderedStructure;
 use spenso::structure::representation::LibraryRep;
+use spenso::structure::{OrderedStructure, TensorStructure};
 use symbolica::atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol};
 use symbolica::printer::PrintOptions;
 
@@ -20,6 +20,7 @@ use symbolica_utils::AtomPrintExt;
 
 // use log::trace;
 
+use crate::representations::Bispinor;
 use crate::test_support::test_initialize;
 
 use core::panic;
@@ -1034,6 +1035,24 @@ fn infinite_execution() {
             break;
         }
     }
+    // DOT ports and extN are storage IDs; compare the actual typed interface separately.
+    let mut expected_slots = vec![
+        Minkowski {}.new_slot(4, symbol!("spenso::l_0")).to_lib(),
+        Minkowski {}.new_slot(4, symbol!("spenso::l_1")).to_lib(),
+        Bispinor {}.new_slot(4, symbol!("spenso::l_2")).to_lib(),
+        Bispinor {}.new_slot(4, symbol!("spenso::l_3")).to_lib(),
+        Minkowski {}.new_slot(4, symbol!("spenso::l_4")).to_lib(),
+    ];
+    expected_slots.sort();
+    let mut exposed = net_iter.graph.dangling_indices();
+    exposed.sort();
+    assert_eq!(exposed, expected_slots);
+    let ExecutionResult::Val(iterated) = net_iter.result_tensor(&lib).unwrap() else {
+        panic!("the fixed point must be a tensor with five open slots");
+    };
+    assert_eq!(iterated.structure.external_structure(), expected_slots);
+    assert_eq!(iterated.expression, expr);
+
     assert_snapshot!(
         net_iter.snapshot_dot(),@r#"
     digraph {
@@ -1045,20 +1064,25 @@ fn infinite_execution() {
       ext0	 [style=invis];
       0:0:s	-> ext0	 [id=0 color="red"];
       ext1	 [style=invis];
-      0:3:s	-> ext1	 [id=1 dir=none color="red" label="mink4|l_0"];
+      0:1:s	-> ext1	 [id=1 dir=none color="red" label="mink4|l_0"];
       ext2	 [style=invis];
-      0:1:s	-> ext2	 [id=2 dir=none color="red" label="bis4|l_3"];
+      0:5:s	-> ext2	 [id=2 dir=none color="red" label="mink4|l_4"];
       ext3	 [style=invis];
-      0:4:s	-> ext3	 [id=3 dir=none color="red" label="bis4|l_2"];
+      0:2:s	-> ext3	 [id=3 dir=none color="red" label="bis4|l_3"];
       ext4	 [style=invis];
-      0:2:s	-> ext4	 [id=4 dir=none color="red" label="mink4|l_1"];
+      0:4:s	-> ext4	 [id=4 dir=none color="red" label="mink4|l_1"];
       ext5	 [style=invis];
-      0:5:s	-> ext5	 [id=5 dir=none color="red" label="mink4|l_4"];
+      0:3:s	-> ext5	 [id=5 dir=none color="red" label="bis4|l_2"];
     }
     "#
     );
     net.execute::<Sequential, SmallestDegree, _, _, _>(&lib, &fnlib)
         .unwrap();
+    let ExecutionResult::Val(sequential) = net.result_tensor(&lib).unwrap() else {
+        panic!("sequential execution must retain the tensor interface");
+    };
+    assert_eq!(sequential.structure, iterated.structure);
+    assert_eq!(sequential.expression, iterated.expression);
 }
 
 #[test]

@@ -621,7 +621,26 @@ class BrowserPagingTests(PagingAssertions):
         )
         self.assertEqual(field, "preview")
         self.assertPage(inspected)
-        self.assertEqual((inspected["start"], inspected["end"]), (0, 10))
+        # A pinned popup starts at the omission, just like hover and open.
+        self.assertEqual(
+            (inspected["start"], inspected["end"]), (page["end"], page["end"] + 10)
+        )
+        _, earlier = self.pager._message(
+            {
+                "action": "preview",
+                "value": target,
+                "popup": True,
+                "start": 0,
+                "size": 10,
+            }
+        )
+        self.assertPage(earlier)
+        self.assertEqual((earlier["start"], earlier["end"]), (0, 10))
+        self.assertEqual(self.pager._page()["html"], page["html"])
+        opened = self.pager._action({"action": "open", "value": target})
+        self.assertPage(opened)
+        self.assertEqual(opened["start"], page["end"])
+        self.assertEqual(self.pager._action({"action": "back"})["html"], page["html"])
         second = self.pager._action({"action": "next"})
         self.assertPage(second)
         self.assertEqual(
@@ -681,26 +700,38 @@ class BrowserPagingTests(PagingAssertions):
 
     def test_nested_permuted_leaf_matches_complete_export(self):
         rep = Representation.mink(4)
-        leaf = TensorName("paging_nested_ports::P")(
+        tensor = TensorName("paging_nested_ports::P")(
             Representation.euc(3)("i"), rep("mu")
-        ).permute_axes([1, 0])
-        value = S("paging_nested_ports::y") * leaf
-        original = self.tensorState(value)
-        for root in self.notationRoots(value):
-            labels = [
-                unicodedata.normalize("NFKC", node.text or "")
-                for node in self.visibleNodes(root)
-                if node.tag.rsplit("}", 1)[-1] in ("mi", "mtext")
-                and unicodedata.normalize("NFKC", node.text or "") in ("mu", "i")
-            ]
-            self.assertEqual(labels, ["mu", "i"])
-        static = ET.fromstring(
-            re.search(r"<math\b.*?</math>", value.to_html(), re.DOTALL).group()
         )
-        self.assertLess(
-            self.visible(static).index("mu"), self.visible(static).index("i")
-        )
-        self.assertEqual(self.tensorState(value), original)
+        leaf = tensor.permute_axes([1, 0])
+        original = self.tensorState(leaf)
+        self.assertEqual(leaf.axes, tensor.axes[::-1])
+        self.assertEqual(leaf.to_expression(), tensor.to_expression())
+        expected_labels = [str(axis.index) for axis in tensor.axes]
+        scalar = S("paging_nested_ports::y")
+        for value in (scalar * leaf, leaf * scalar):
+            state = self.tensorState(value)
+            # Named multiplication canonicalizes the result's free interface;
+            # it retains each leaf's argument order and typed index associations.
+            self.assertEqual(value.axes, value.structure.axes)
+            self.assertEqual(value.structure, leaf.structure)
+            self.assertEqual(value.to_expression(), scalar * tensor.to_expression())
+            roots = self.notationRoots(value)
+            roots.append(
+                ET.fromstring(
+                    re.search(r"<math\b.*?</math>", value.to_html(), re.DOTALL).group()
+                )
+            )
+            for root in roots:
+                labels = [
+                    unicodedata.normalize("NFKC", node.text or "")
+                    for node in self.visibleNodes(root)
+                    if node.tag.rsplit("}", 1)[-1] in ("mi", "mtext")
+                    and unicodedata.normalize("NFKC", node.text or "") in ("mu", "i")
+                ]
+                self.assertEqual(labels, expected_labels)
+            self.assertEqual(self.tensorState(value), state)
+        self.assertEqual(self.tensorState(leaf), original)
 
     def test_generated_aliases_reserve_contracted_explicit_labels_viewer_wide(self):
         Representation.mink(4)
@@ -1370,6 +1401,7 @@ class TensorNotationTests(PagingAssertions):
                 S("spenso::mink")(4, S("free")),
             )
         )
+        original = self.tensorState(value)
         wrapped = value.wrap_indices(S("paging_scopes::scope"))
         texts = {}
         for style in ("alphabet", "graph", "raw"):
@@ -1382,11 +1414,17 @@ class TensorNotationTests(PagingAssertions):
         self.assertIn("2", texts["graph"])
         self.assertIn("1", texts["graph"])
         self.assertNotEqual(texts["alphabet"], texts["raw"])
-        zero = (0 * value).with_name("paging_scopes::NamedZero")
-        for root in self.notationRoots(zero):
-            self.assertEqual(self.visible(root), "0")
-        self.assertEqual(zero.rank, 2)
-        self.assertEqual(zero.axes, value.axes)
+        for result in (0 * value, value * 0):
+            zero = result.with_name("paging_scopes::NamedZero")
+            for root in self.notationRoots(zero):
+                self.assertEqual(self.visible(root), "0")
+            self.assertEqual(zero.rank, 2)
+            self.assertEqual(zero.structure, value.structure)
+            # A named product, including zero, exposes canonical free-axis order.
+            self.assertEqual(zero.axes, value.structure.axes)
+            self.assertEqual(zero.to_expression(), E("0"))
+            self.assertNotEqual(zero, TensorExpression(0))
+        self.assertEqual(self.tensorState(value), original)
 
     def test_cached_fragments_are_path_neutral_and_reused_across_layouts(self):
         fragment = '<mrow data-symbolica-path="97"><mi>A</mi><mo>′</mo></mrow>'
