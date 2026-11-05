@@ -197,7 +197,13 @@ fn series_parallel(family: &PFamilyData, powers: &[i64]) -> Atom {
         .iter()
         .zip(powers)
         .filter(|(_, power)| **power != 0)
-        .map(|(line, power)| (graph.find(line.from), graph.find(line.to), Atom::num(*power)))
+        .map(|(line, power)| {
+            (
+                graph.find(line.from),
+                graph.find(line.to),
+                Atom::num(*power),
+            )
+        })
         .collect::<Vec<_>>();
     let half_d = Atom::num(2) - Atom::var(epsilon());
     let mut value = Atom::num(1) / g_scheme_measure().pow(Atom::num(family.loops as i64));
@@ -287,7 +293,11 @@ fn g_scheme_measure() -> Atom {
 fn assert_series_parallel(case: &Case, values: &[ReducedPropagatorValue]) {
     let family = family(&case.family);
     assert_eq!(case.numerator, "1", "{}", case.name);
-    assert!(max_contracted_valence(family, &case.powers) >= 5, "{}", case.name);
+    assert!(
+        max_contracted_valence(family, &case.powers) >= 5,
+        "{}",
+        case.name
+    );
     let positive: i64 = case.powers.iter().filter(|a| **a > 0).sum();
     let degree: i64 = -case.powers.iter().filter(|a| **a < 0).sum::<i64>();
     let sign = if (positive + degree) % 2 == 0 { 1 } else { -1 };
@@ -552,7 +562,8 @@ fn forcer_four_loop_battery() {
     let k_dot_q = (lowered(5) - lowered(2) - series_parallel(la4, &case.powers)) / Atom::num(2);
     let positive: i64 = case.powers.iter().sum();
     assert_series_zero(
-        exact(values, 8 - positive + 1) - Atom::num(if positive % 2 == 0 { -1 } else { 1 }) * k_dot_q,
+        exact(values, 8 - positive + 1)
+            - Atom::num(if positive % 2 == 0 { -1 } else { 1 }) * k_dot_q,
         2,
         &case.name,
     );
@@ -733,7 +744,10 @@ fn forcer_refuses_its_silent_zero() {
         #write <F1.out> \"%E\", F1\n.end\n";
     match run_forcer(&settings(&form), program, &["F1"]) {
         Err(VakintError::ForcerUnrecognizedTopology(warning)) => {
-            assert!(warning.replace(' ', "").contains("v(p1,p2,p6,p9,p10)"), "{warning}")
+            assert!(
+                warning.replace(' ', "").contains("v(p1,p2,p6,p9,p10)"),
+                "{warning}"
+            )
         }
         other => panic!("expected ForcerUnrecognizedTopology, got {other:?}"),
     }
@@ -921,8 +935,11 @@ fn shared_directory(root: &std::path::Path) -> (u32, PathBuf) {
 fn vendored_sources_materialize_once_and_completely() {
     let directory = tempfile::tempdir().unwrap();
     let base = directory.path().to_string_lossy().into_owned();
-    let first = materialized_sources(Some(&base)).unwrap();
-    assert_eq!(first, materialized_sources(Some(&base)).unwrap());
+    let first = materialized_sources(Some(&base)).unwrap().unwrap();
+    assert_eq!(
+        Some(&first),
+        materialized_sources(Some(&base)).unwrap().as_ref()
+    );
     let (owner, shared) = shared_directory(directory.path());
     assert_eq!(first, shared);
     assert!(is_trusted(&first, owner, &vendored_sources().unwrap()));
@@ -933,8 +950,10 @@ fn vendored_sources_materialize_once_and_completely() {
     assert_eq!(vendored::FORCER_FILES.len(), 21);
 }
 
-/// The directory FORM gets when the shared source directory was planted
-/// (a complete private copy) and then altered by `tamper`.
+/// Whether FORM gets the shared source directory once it was planted (a
+/// complete private copy) and then altered by `tamper`, and whether the
+/// sources FORM gets are trusted. No private source directory is left beside
+/// the run directory.
 #[cfg(unix)]
 fn sources_used_after(tamper: impl Fn(&std::path::Path)) -> (bool, bool) {
     let root = tempfile::tempdir().unwrap();
@@ -943,9 +962,22 @@ fn sources_used_after(tamper: impl Fn(&std::path::Path)) -> (bool, bool) {
     make_private(&shared).unwrap();
     write_sources(&shared, &vendored_sources().unwrap()).unwrap();
     tamper(&shared);
-    let used = materialized_sources(Some(&root.path().to_string_lossy())).unwrap();
-    let trusted = is_trusted(&used, owner, &vendored_sources().unwrap());
-    (used == shared, trusted)
+    let base = root.path().to_string_lossy().into_owned();
+    let used = materialized_sources(Some(&base)).unwrap();
+    let run = prepare_run_directory(&VakintSettings {
+        temporary_directory: Some(base),
+        ..VakintSettings::default()
+    })
+    .unwrap();
+    let sources = vendored_sources().unwrap();
+    let trusted = match &used {
+        Some(directory) => is_trusted(directory, owner, &sources),
+        // The private copy inside the run directory.
+        None => is_trusted(&run, owner, &sources),
+    };
+    std::fs::remove_dir_all(&run).unwrap();
+    assert_eq!(leftovers(root.path()), Vec::<String>::new());
+    (used.as_ref() == Some(&shared), trusted)
 }
 
 #[cfg(unix)]
@@ -983,6 +1015,62 @@ fn untrusted_source_directories_are_never_used() {
             std::os::unix::fs::symlink(&elsewhere, shared).unwrap();
         }),
         (false, true)
+    );
+}
+
+/// A shared source directory of the current user that is not trusted (one
+/// source file altered), under `root`.
+#[cfg(unix)]
+fn plant_untrusted_shared_directory(root: &std::path::Path) -> PathBuf {
+    let (_, shared) = shared_directory(root);
+    std::fs::create_dir(&shared).unwrap();
+    make_private(&shared).unwrap();
+    write_sources(&shared, &vendored_sources().unwrap()).unwrap();
+    std::fs::write(shared.join("forcer.h"), "* altered\n").unwrap();
+    shared
+}
+
+/// The entries of `root` other than the shared source directory (and its
+/// moved-away copies).
+#[cfg(unix)]
+fn leftovers(root: &std::path::Path) -> Vec<String> {
+    let mut names = std::fs::read_dir(root)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+        .filter(|name| !name.starts_with("vakint-forcer-"))
+        .collect::<Vec<_>>();
+    names.sort();
+    names
+}
+
+#[cfg(unix)]
+#[test]
+fn untrusted_sources_leave_no_private_directory_behind() {
+    let Some(form) = forcer_test_form() else {
+        eprintln!("FORM 5 is unavailable: skipped the live run beside untrusted sources");
+        return;
+    };
+    let root = tempfile::tempdir().unwrap();
+    let shared = plant_untrusted_shared_directory(root.path());
+    let settings = VakintSettings {
+        temporary_directory: Some(root.path().to_string_lossy().into_owned()),
+        clean_tmp_dir: true,
+        ..settings(&form)
+    };
+    let reduced = reduce_p(
+        family("P1L"),
+        &[1, 1],
+        parse("1").as_view(),
+        &parse("p(1)"),
+        &settings,
+    )
+    .unwrap();
+    assert_eq!(reduced.len(), 1);
+    assert_eq!(leftovers(root.path()), Vec::<String>::new());
+    assert_eq!(
+        std::fs::read(shared.join("forcer.h")).unwrap(),
+        b"* altered\n",
+        "the planted directory is never touched"
     );
 }
 
@@ -1074,7 +1162,9 @@ fn fixture_definitions(file: &str) -> Battery {
         "p1l_grid.json" => grid(1),
         "p2l_grid.json" => grid(2),
         "p3l_grid.json" => grid(3),
-        battery => Battery::parse(&std::fs::read_to_string(fixture_path(battery)).unwrap()).unwrap(),
+        battery => {
+            Battery::parse(&std::fs::read_to_string(fixture_path(battery)).unwrap()).unwrap()
+        }
     }
 }
 
@@ -1085,7 +1175,10 @@ fn forcer_programs_are_byte_identical() {
         .map(|(file, _)| (*file, fixture_definitions(file).program_digest().unwrap()))
         .collect::<Vec<_>>();
     for ((file, expected), (_, digest)) in PROGRAM_DIGESTS.iter().zip(&found) {
-        assert_eq!(expected, digest, "{file}: Forcer programs changed; all digests: {found:#?}");
+        assert_eq!(
+            expected, digest,
+            "{file}: Forcer programs changed; all digests: {found:#?}"
+        );
     }
 }
 
@@ -1107,17 +1200,33 @@ fn the_grid_covers_every_nonzero_labelled_sector() {
             .collect::<Vec<_>>()
     };
     let (one, two, three) = (names(1), names(2), names(3));
-    let kind = |names: &[String], prefix: &str| names.iter().filter(|n| n.starts_with(prefix)).count();
+    let kind =
+        |names: &[String], prefix: &str| names.iter().filter(|n| n.starts_with(prefix)).count();
     assert_eq!(
-        [one.len(), kind(&one, "bench_"), kind(&one, "sector_"), kind(&one, "dotted_")],
+        [
+            one.len(),
+            kind(&one, "bench_"),
+            kind(&one, "sector_"),
+            kind(&one, "dotted_")
+        ],
         [17, 15, 2, 0]
     );
     assert_eq!(
-        [two.len(), kind(&two, "bench_"), kind(&two, "sector_"), kind(&two, "dotted_")],
+        [
+            two.len(),
+            kind(&two, "bench_"),
+            kind(&two, "sector_"),
+            kind(&two, "dotted_")
+        ],
         [39, 15, 16, 8]
     );
     assert_eq!(
-        [three.len(), kind(&three, "bench_"), kind(&three, "sector_"), kind(&three, "dotted_")],
+        [
+            three.len(),
+            kind(&three, "bench_"),
+            kind(&three, "sector_"),
+            kind(&three, "dotted_")
+        ],
         [417, 45, 350, 22]
     );
     for names in [&one, &two, &three] {
@@ -1126,4 +1235,170 @@ fn the_grid_covers_every_nonzero_labelled_sector() {
         unique.dedup();
         assert_eq!(unique.len(), names.len());
     }
+}
+
+/// `p_anchors.json`, checked against its definition.
+fn anchors() -> Battery {
+    super::fixtures::write_or_read(
+        std::path::Path::new(&fixture_path("p_anchors.json")),
+        super::fixtures::ANCHOR_PROVENANCE,
+        super::fixtures::anchor_cases(),
+        None,
+    )
+    .unwrap()
+}
+
+/// The frozen values of an anchor in the tag basis, per scale power.
+fn anchor_basis(anchors: &Battery, name: &str) -> Vec<(i64, super::super::compare::TagBasis)> {
+    let case = anchors.cases.iter().find(|case| case.name == name).unwrap();
+    frozen(case)
+        .into_iter()
+        .map(|value| {
+            let basis = super::super::compare::tag_basis(&value.reduced, epsilon()).unwrap();
+            (value.scale_power, basis)
+        })
+        .collect()
+}
+
+#[test]
+fn the_anchors_pin_the_normalization() {
+    use super::super::compare::TagBasis;
+    let anchors = anchors();
+    let e = Atom::var(epsilon());
+    let unit = |coefficient: Atom| TagBasis::from([((vec![], vec![]), coefficient.together())]);
+    // P1L(1,1) = 1/ε: w = 0, Wick sign (-1)^2.
+    assert_eq!(
+        anchor_basis(&anchors, "p1l_11"),
+        [(0, unit(Atom::num(1) / &e))]
+    );
+    // k·p on the bubble: w = 1, sign (-1)^3, odd in the sign of p.
+    assert_eq!(
+        anchor_basis(&anchors, "p1l_kq_plus"),
+        [(1, unit(Atom::num(-1) / (Atom::num(2) * &e)))]
+    );
+    assert_eq!(
+        anchor_basis(&anchors, "p1l_kq_minus"),
+        [(1, unit(Atom::num(1) / (Atom::num(2) * &e)))]
+    );
+    // NO(1^8, 0) is the master itself: I_M = +(εG(1,1))^3 Master(no) at w = -2.
+    assert_eq!(
+        anchor_basis(&anchors, "no"),
+        [(
+            -2,
+            TagBasis::from([((vec![], vec![("no".to_string(), 1)]), Atom::num(1))])
+        )]
+    );
+    // The kite: finalized ε^0 = (-1)^5 · 6ζ3.
+    let head = parse("p(1)");
+    let settings = finalize_tests::settings(LoopNormalizationFactor::GScheme, 3);
+    let kite = anchors
+        .cases
+        .iter()
+        .find(|case| case.name == "kite")
+        .unwrap();
+    let value = kite
+        .finalized(&settings, RustRedMasterMode::Symbolic)
+        .unwrap();
+    assert_eq!(
+        finalize_tests::coefficients_at_unit_scale(&value, &settings, &head, -2, 0),
+        [
+            Atom::Zero,
+            Atom::Zero,
+            (Atom::num(-6) * symbolica::transcendental::zeta().call(3)).expand()
+        ]
+    );
+    // The rank-3 kites carry (Q²)^w, w = 2L - Σa + (number of scalar
+    // products): (k1·p)²(k2·p) has three, (k1·p)(k1·k2) two.
+    for (name, w) in [("kite_rank3_kp", 2), ("kite_rank3_mixed", 1)] {
+        let basis = anchor_basis(&anchors, name);
+        assert_eq!(basis.len(), 1, "{name}");
+        assert_eq!(basis[0].0, w, "{name}");
+    }
+    // The plain three-loop kite with a doubled central line integrates to
+    // t1star05 with its ε-line at n = 0: the master t105 appears, and the LA
+    // and NO routings of the same sector agree exactly.
+    let la = anchor_basis(&anchors, "t105_parent_la");
+    assert_eq!(la, anchor_basis(&anchors, "t105_parent_no"));
+    assert_eq!(la.len(), 1);
+    assert!(
+        la[0]
+            .1
+            .keys()
+            .any(|(_, masters)| masters == &[("t105".to_string(), 1)]),
+        "{la:?}"
+    );
+    // A dot on a bubble line (n = 1) leaves the master alone.
+    let dotted = anchor_basis(&anchors, "t105_parent_la_dotted");
+    assert!(
+        dotted[0]
+            .1
+            .keys()
+            .all(|(_, masters)| masters == &[("t105".to_string(), 1)]),
+        "{dotted:?}"
+    );
+    for case in &anchors.cases {
+        let value = case
+            .finalized(&settings, RustRedMasterMode::Retain)
+            .unwrap_or_else(|error| panic!("{}: {error}", case.name));
+        assert!(!value.is_zero(), "{}", case.name);
+    }
+}
+
+#[test]
+fn the_benchmark_inputs_are_sums_of_registry_tops() {
+    let inputs = super::fixtures::BenchmarkInputs::parse(BENCHMARK_INPUTS).unwrap();
+    let mut cells = Vec::new();
+    for cell in &inputs.cells {
+        cells.push((cell.loops, cell.dots, cell.rank));
+        assert_eq!(
+            cell.name,
+            format!("L{}_d{}_r{}", cell.loops, cell.dots, cell.rank)
+        );
+        let tops = P_FAMILIES
+            .iter()
+            .filter(|family| family.loops == cell.loops)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            cell.tops
+                .iter()
+                .map(|top| top.family.as_str())
+                .collect::<Vec<_>>(),
+            tops.iter().map(|family| family.name).collect::<Vec<_>>()
+        );
+        let lines = 3 * cell.loops - 1;
+        let mut powers = vec![1; lines];
+        if cell.dots >= 1 {
+            powers[0] = 2;
+        }
+        if cell.dots >= 2 {
+            powers[lines - 1] = 2;
+        }
+        let mut terms = Vec::new();
+        for (top, family) in cell.tops.iter().zip(&tops) {
+            assert_eq!(top.powers, powers, "{}", cell.name);
+            let mut long = family.lines.to_string();
+            for (line, power) in powers.iter().enumerate().rev() {
+                long = long.replace(&format!("pow({})", line + 1), &power.to_string());
+            }
+            terms.push(format!("({})*{long}", cell.numerator));
+        }
+        assert_eq!(cell.input, terms.join("+"), "{}", cell.name);
+        // The numerator has rank r: r loop momenta in its scalar products.
+        assert_eq!(
+            cell.numerator.matches("k(").count(),
+            cell.rank,
+            "{}",
+            cell.name
+        );
+        assert!(!parse(&cell.input).is_zero(), "{}", cell.name);
+    }
+    let mut grid = Vec::new();
+    for loops in 1..=4 {
+        for dots in 0..=2 {
+            for rank in [0, 2, 4, 6, 8] {
+                grid.push((loops, dots, rank));
+            }
+        }
+    }
+    assert_eq!(cells, grid);
 }

@@ -79,7 +79,11 @@ fn written_or_read(file: &str, provenance: &str, definitions: Vec<ForcerCase>) -
 /// its definition.
 pub fn grid_fixture(loops: usize) -> ForcerFixture {
     let definitions = grid_cases(loops, &benchmark_inputs_text()).unwrap();
-    written_or_read(&format!("p{loops}l_grid.json"), GRID_PROVENANCE, definitions)
+    written_or_read(
+        &format!("p{loops}l_grid.json"),
+        GRID_PROVENANCE,
+        definitions,
+    )
 }
 
 /// `p_anchors.json` (regenerated first in writer mode), checked against its

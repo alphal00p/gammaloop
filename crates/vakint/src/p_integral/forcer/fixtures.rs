@@ -104,12 +104,11 @@ impl ForcerFixture {
     /// case with `jobs` FORM processes at a time and store the outputs and the
     /// FORM version.
     pub fn write_outputs(&mut self, form: &str, jobs: usize) -> Result<(), VakintError> {
-        self.form_version = super::forcer_form_version(form).map_err(|reason| {
-            VakintError::ForcerUnavailable {
+        self.form_version =
+            super::forcer_form_version(form).map_err(|reason| VakintError::ForcerUnavailable {
                 form_exe_path: form.into(),
                 reason,
-            }
-        })?;
+            })?;
         let programs = self
             .cases
             .iter()
@@ -194,7 +193,13 @@ pub(crate) fn registry_family(name: &str) -> Result<&'static PFamilyData, Vakint
 
 impl ForcerCase {
     /// A case without output.
-    pub fn new(name: String, family: &str, powers: Vec<i64>, numerator: &str, external: &str) -> Self {
+    pub fn new(
+        name: String,
+        family: &str,
+        powers: Vec<i64>,
+        numerator: &str,
+        external: &str,
+    ) -> Self {
         ForcerCase {
             name,
             family: family.into(),
@@ -228,10 +233,16 @@ impl ForcerCase {
 
     /// The frozen reduced values in `epsilon`: the backend contract of
     /// `docs/p_integrals.md` (section 5) at the frozen output.
-    pub(crate) fn frozen(&self, epsilon: Symbol) -> Result<Vec<ReducedPropagatorValue>, VakintError> {
+    pub(crate) fn frozen(
+        &self,
+        epsilon: Symbol,
+    ) -> Result<Vec<ReducedPropagatorValue>, VakintError> {
         match self.input()? {
             None if self.outputs.is_empty() => Ok(Vec::new()),
-            None => Err(malformed(format!("{}: outputs for a scaleless case", self.name))),
+            None => Err(malformed(format!(
+                "{}: outputs for a scaleless case",
+                self.name
+            ))),
             Some(input) if input.parts.len() != self.outputs.len() => Err(malformed(format!(
                 "{}: {} outputs for {} parts",
                 self.name,
@@ -463,8 +474,20 @@ pub fn anchor_cases() -> Vec<ForcerCase> {
     dotted_parent[0] = 2;
     vec![
         ForcerCase::new("p1l_11".into(), "P1L", vec![1, 1], "1", "p(1)"),
-        ForcerCase::new("p1l_kq_plus".into(), "P1L", vec![1, 1], "dot(k(1),p(1))", "p(1)"),
-        ForcerCase::new("p1l_kq_minus".into(), "P1L", vec![1, 1], "dot(k(1),p(1))", "-p(1)"),
+        ForcerCase::new(
+            "p1l_kq_plus".into(),
+            "P1L",
+            vec![1, 1],
+            "dot(k(1),p(1))",
+            "p(1)",
+        ),
+        ForcerCase::new(
+            "p1l_kq_minus".into(),
+            "P1L",
+            vec![1, 1],
+            "dot(k(1),p(1))",
+            "-p(1)",
+        ),
         ForcerCase::new("kite".into(), "P2L", vec![1; 5], "1", "p(1)"),
         ForcerCase::new(
             "kite_rank3_kp".into(),

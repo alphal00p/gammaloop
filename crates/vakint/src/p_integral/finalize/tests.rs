@@ -358,3 +358,57 @@ fn g_scheme_normalization_validates() {
         .unwrap();
     assert!(normalization.contains_symbol(symbolica::transcendental::gamma()));
 }
+
+#[test]
+fn gamma_tags_stay_symbolic_in_retain_and_expand_otherwise() {
+    // RustRed's tags: PGamma(m) = Γ(1+mε), here on the bubble value PG(0,0).
+    let head = parse("p(1)");
+    let tag = |m: i64| super::super::p_gamma_symbol().call((m,));
+    for normalization in [
+        LoopNormalizationFactor::GScheme,
+        LoopNormalizationFactor::MSbar,
+    ] {
+        let settings = settings(normalization.clone(), 5);
+        let e = epsilon(&settings);
+        let tagged = tag(2) * tag(-1).pow(Atom::num(-2)) * pg(0, 0);
+        let explicit = gamma().call(Atom::num(1) + Atom::num(2) * &e)
+            * gamma().call(Atom::num(1) - &e).pow(Atom::num(-2))
+            * pg(0, 0);
+        let retained = finalize(
+            &[value(0, tagged.clone())],
+            1,
+            &head,
+            &settings,
+            RustRedMasterMode::Retain,
+            "test",
+        )
+        .unwrap();
+        assert!(
+            retained.contains_symbol(super::super::p_gamma_symbol()),
+            "{retained}"
+        );
+        for mode in [RustRedMasterMode::Symbolic, RustRedMasterMode::Numerical] {
+            let finalized = |reduced: &Atom| {
+                finalize(
+                    &[value(0, reduced.clone())],
+                    1,
+                    &head,
+                    &settings,
+                    mode,
+                    "test",
+                )
+                .unwrap()
+            };
+            let (with_tags, with_gammas) = (finalized(&tagged), finalized(&explicit));
+            assert!(
+                !with_tags.contains_symbol(super::super::p_gamma_symbol()),
+                "{with_tags}"
+            );
+            assert_eq!(
+                coefficients_at_unit_scale(&with_tags, &settings, &head, -1, 3),
+                coefficients_at_unit_scale(&with_gammas, &settings, &head, -1, 3),
+                "{normalization:?} {mode}"
+            );
+        }
+    }
+}

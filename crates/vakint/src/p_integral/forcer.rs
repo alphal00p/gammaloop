@@ -94,17 +94,20 @@ fn is_trusted(directory: &Path, owner: u32, sources: &[(&str, Vec<u8>)]) -> bool
         })
 }
 
-/// The vendored sources under `base` (`temporary_directory`, else the system
-/// temporary directory), materialized once per process and base.
+/// The shared copy of the vendored sources under `base` (`temporary_directory`,
+/// else the system temporary directory), materialized once per process and
+/// base; `None` when that copy cannot be trusted.
 ///
 /// FORM includes `forcer.h` from this directory, so it is trusted only when
 /// it is a private directory (mode 0700, not a link) of the current user
 /// holding byte for byte the embedded sources. Such a directory is shared by
 /// the processes of one user. Anything else at that path, e.g. a directory
 /// planted by another user of a shared `/tmp` or a damaged copy, is never
-/// used: the sources then go to a fresh private directory of this process.
-fn materialized_sources(base: Option<&str>) -> Result<PathBuf, VakintError> {
-    static DIRECTORIES: LazyLock<Mutex<HashMap<PathBuf, PathBuf>>> =
+/// used: every Forcer run then writes a private copy of the sources into its
+/// own run directory, which goes away with it (`clean_tmp_dir`), so no private
+/// source directory outlives its run.
+fn materialized_sources(base: Option<&str>) -> Result<Option<PathBuf>, VakintError> {
+    static DIRECTORIES: LazyLock<Mutex<HashMap<PathBuf, Option<PathBuf>>>> =
         LazyLock::new(Default::default);
     let root = base.map(PathBuf::from).unwrap_or_else(std::env::temp_dir);
     let mut directories = DIRECTORIES
@@ -121,34 +124,57 @@ fn materialized_sources(base: Option<&str>) -> Result<PathBuf, VakintError> {
             let shared = root.join(shared_directory_name(owner));
             if is_trusted(&shared, owner, &sources) {
                 fs::remove_dir(&staging)?;
-                shared
+                Some(shared)
             } else {
                 write_sources(&staging, &sources)?;
                 // Atomic publication; a concurrent process may have won the race.
                 let published =
                     fs::symlink_metadata(&shared).is_err() && fs::rename(&staging, &shared).is_ok();
                 if published {
-                    shared
-                } else if is_trusted(&shared, owner, &sources) {
-                    fs::remove_dir_all(&staging)?;
-                    shared
+                    Some(shared)
                 } else {
-                    warn!(
-                        "Ignoring the untrusted Forcer source directory '{}'; using '{}' instead.",
-                        shared.display(),
-                        staging.display()
-                    );
-                    staging
+                    fs::remove_dir_all(&staging)?;
+                    if is_trusted(&shared, owner, &sources) {
+                        Some(shared)
+                    } else {
+                        warn!(
+                            "Ignoring the untrusted Forcer source directory '{}'; every Forcer \
+                             run gets a private copy of the sources instead.",
+                            shared.display()
+                        );
+                        None
+                    }
                 }
             }
         }
         None => {
-            write_sources(&staging, &sources)?;
-            staging
+            fs::remove_dir(&staging)?;
+            None
         }
     };
     directories.insert(root, directory.clone());
     Ok(directory)
+}
+
+/// A fresh run directory for one Forcer program: `forcer.h` and `forcer/`
+/// link to the shared sources, or are a private copy (the directory made
+/// private) when there is no trusted shared copy.
+fn prepare_run_directory(settings: &VakintSettings) -> Result<PathBuf, VakintError> {
+    let base = settings.temporary_directory.as_deref();
+    let shared = materialized_sources(base)?;
+    let run_directory = crate::create_unique_tmp_run_dir(base, "vakint_forcer")?;
+    match shared {
+        Some(sources) => {
+            for name in ["forcer.h", "forcer"] {
+                link(&sources.join(name), &run_directory.join(name))?;
+            }
+        }
+        None => {
+            make_private(&run_directory)?;
+            write_sources(&run_directory, &vendored_sources()?)?;
+        }
+    }
+    Ok(run_directory)
 }
 
 fn write_sources(directory: &Path, sources: &[(&str, Vec<u8>)]) -> Result<(), VakintError> {
@@ -260,7 +286,10 @@ pub(crate) fn forcer_input(
     let mut vertices = BTreeMap::<i64, Vec<String>>::new();
     for (index, line) in split.lines.iter().enumerate() {
         let name = format!("p{}", index + 1);
-        vertices.entry(line.from).or_default().push(format!("-{name}"));
+        vertices
+            .entry(line.from)
+            .or_default()
+            .push(format!("-{name}"));
         vertices.entry(line.to).or_default().push(name);
     }
     vertices.entry(1).or_default().push("Q".into());
@@ -440,12 +469,7 @@ fn run_forcer(
 ) -> Result<Vec<String>, VakintError> {
     crate::citations::USED_CITATIONS.record(crate::citations::CitationSource::Form);
     crate::citations::USED_CITATIONS.record(crate::citations::CitationSource::Forcer);
-    let sources = materialized_sources(settings.temporary_directory.as_deref())?;
-    let run_directory =
-        crate::create_unique_tmp_run_dir(settings.temporary_directory.as_deref(), "vakint_forcer")?;
-    for name in ["forcer.h", "forcer"] {
-        link(&sources.join(name), &run_directory.join(name))?;
-    }
+    let run_directory = prepare_run_directory(settings)?;
     fs::write(run_directory.join("run_forcer.frm"), program)?;
     let mut command = form_command(settings);
     command.arg("run_forcer.frm").current_dir(&run_directory);

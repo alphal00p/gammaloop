@@ -10,6 +10,8 @@
 //! wired elsewhere.
 
 mod catalogue;
+#[doc(hidden)]
+pub mod compare;
 mod dot;
 pub(crate) mod finalize;
 pub(crate) mod forcer;
@@ -236,6 +238,14 @@ pub(crate) fn pg_symbol() -> Symbol {
 /// `vakint::PMaster(name)`: Forcer's `Master(name)`, in the G-scheme.
 pub(crate) fn p_master_symbol() -> Symbol {
     vk_symbol!("PMaster")
+}
+
+/// `vakint::PGamma(m) = Γ(1+mε)` for a nonzero integer `m`, raised to integer
+/// powers: the Gamma tags of the RustRed p reduction (M2 plan, convention C4).
+/// `Retain` keeps it symbolic; `Symbolic` and `Numerical` expand it exactly to
+/// any depth (`laurent::expand`).
+pub(crate) fn p_gamma_symbol() -> Symbol {
+    vk_symbol!("PGamma")
 }
 
 /// The user's external head `p(i)` and the sign `σ` of `external = σ·p(i)`.

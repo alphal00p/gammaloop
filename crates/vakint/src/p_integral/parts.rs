@@ -529,7 +529,10 @@ pub(crate) fn split(
         let (monomial_sign, canonical) =
             canonical_monomial(monomial.as_view(), &head, sigma, loops)?;
         let (value, rest) = split_rational(&coefficient);
-        let term = (Fraction::new(monomial_sign as i128, 1).mul(value), canonical);
+        let term = (
+            Fraction::new(monomial_sign as i128, 1).mul(value),
+            canonical,
+        );
         let key = (term.1.degree(), rest);
         match groups.iter_mut().find(|(group, _)| *group == key) {
             Some((_, terms)) => terms.push(term),
@@ -560,9 +563,7 @@ pub(crate) fn split(
 /// Forcer renders [`split`] directly; the RustRed p backend lowers these
 /// parts onto the family slots.
 #[allow(dead_code)]
-pub(crate) fn split_parts(
-    request: &PropagatorRequest,
-) -> Result<Option<Vec<PPart>>, VakintError> {
+pub(crate) fn split_parts(request: &PropagatorRequest) -> Result<Option<Vec<PPart>>, VakintError> {
     Ok(split(
         request.family,
         request.powers,
@@ -570,4 +571,104 @@ pub(crate) fn split_parts(
         &request.external,
     )?
     .map(|split| split.parts))
+}
+
+#[cfg(test)]
+mod tests {
+    use symbolica::atom::Atom;
+
+    use super::*;
+    use crate::p_integral::P_FAMILIES;
+
+    fn parse(text: &str) -> Atom {
+        Vakint::initialize_vakint_symbols();
+        vk_parse!(text).unwrap()
+    }
+
+    fn parts(family: &str, powers: &[i64], numerator: &str, external: &str) -> Option<Vec<PPart>> {
+        let family = P_FAMILIES.iter().find(|f| f.name == family).unwrap();
+        let numerator = parse(numerator);
+        let request = PropagatorRequest {
+            family,
+            powers,
+            canonical_numerator: numerator.as_view(),
+            external: parse(external),
+        };
+        split_parts(&request).unwrap()
+    }
+
+    #[test]
+    fn parts_are_homogeneous_in_canonical_scalar_products() {
+        // The user head p(3) is -Q: odd powers of k·p(3) flip the sign.
+        let split = parts(
+            "P2L",
+            &[1, 1, 1, 1, 2],
+            "dot(k(1),p(3))^2*dot(k(2),k(2)) + 3*dot(k(1),p(3)) + (1+ε)*dot(k(2),p(3)) - 1/2",
+            "-p(3)",
+        )
+        .unwrap();
+        let q = |i| PDot::External(i);
+        let one = |n, d| Fraction::new(n, d);
+        // Degree 3: w = 4 - 6 + 3, Wick sign (-1)^(6+3).
+        let cubic = split.iter().find(|part| part.scale_power == 1).unwrap();
+        assert_eq!(cubic.wick_sign, -1);
+        assert_eq!(cubic.coefficient, Atom::num(1));
+        assert_eq!(
+            cubic.polynomial,
+            [(
+                one(1, 1),
+                PMonomial(vec![(q(1), 2), (PDot::Loops(2, 2), 1)])
+            )]
+        );
+        // Degree 1, rational and (1+ε) coefficients in separate parts.
+        let linear = split
+            .iter()
+            .filter(|part| part.scale_power == -1)
+            .collect::<Vec<_>>();
+        assert_eq!(linear.len(), 2);
+        assert!(linear.iter().all(|part| part.wick_sign == -1));
+        let rational = linear
+            .iter()
+            .find(|part| part.coefficient == Atom::num(1))
+            .unwrap();
+        assert_eq!(
+            rational.polynomial,
+            [(one(-3, 1), PMonomial(vec![(q(1), 1)]))]
+        );
+        let shifted = linear
+            .iter()
+            .find(|part| part.coefficient != Atom::num(1))
+            .unwrap();
+        assert_eq!(shifted.coefficient, parse("1+ε"));
+        assert_eq!(
+            shifted.polynomial,
+            [(one(-1, 1), PMonomial(vec![(q(2), 1)]))]
+        );
+        // Degree 0: w = 4 - 6, Wick sign +1.
+        let constant = split.iter().find(|part| part.scale_power == -2).unwrap();
+        assert_eq!(constant.wick_sign, 1);
+        assert_eq!(constant.polynomial, [(one(-1, 2), PMonomial::default())]);
+        assert_eq!(split.len(), 4);
+    }
+
+    #[test]
+    fn negative_powers_join_the_numerator_and_scaleless_sectors_are_none() {
+        // A negative power on line 1 (momentum k(1)) is the numerator k(1)²:
+        // one scalar product.
+        let split = parts("P1L", &[-1, 1], "1", "p(1)");
+        assert_eq!(split, None, "a single remaining line is scaleless");
+        let split = parts("P2L", &[-1, 1, 1, 1, 1], "1", "p(1)").unwrap();
+        assert_eq!(split.len(), 1);
+        // w = 2L - Σa + r = 4 - 4 + 1.
+        assert_eq!(split[0].scale_power, 1);
+        assert_eq!(
+            split[0].polynomial,
+            [(Fraction::new(1, 1), PMonomial(vec![(PDot::Loops(1, 1), 1)]))]
+        );
+        // A pinched loop (the two lines of k(2) gone) is scaleless.
+        assert_eq!(
+            parts("P2L", &[1, 0, 0, 1, 1], "dot(k(1),p(1))", "p(1)"),
+            None
+        );
+    }
 }

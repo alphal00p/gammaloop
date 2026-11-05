@@ -36,7 +36,12 @@ fn assert_complete(file: &str, fixture: &ForcerFixture) {
     let settings = retain_settings();
     for case in &fixture.cases {
         let values = frozen_values(case);
-        assert_eq!(values.is_empty(), case.outputs.is_empty(), "{file}: {}", case.name);
+        assert_eq!(
+            values.is_empty(),
+            case.outputs.is_empty(),
+            "{file}: {}",
+            case.name
+        );
         let value = finalized(case, &settings, RustRedMasterMode::Retain);
         let zero = values.iter().all(|(_, reduced)| reduced.is_zero());
         assert_eq!(value.is_zero(), zero, "{file}: {}", case.name);

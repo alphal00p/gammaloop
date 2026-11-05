@@ -34,7 +34,7 @@ fn log_mu() -> Symbol {
 }
 
 /// `Γ(1 + c·ε)` with a rational `c` (`Γ(1)` stays exact as `1`).
-fn gamma_one_plus(c: i64, epsilon: &Atom) -> Atom {
+pub(crate) fn gamma_one_plus(c: i64, epsilon: &Atom) -> Atom {
     gamma().call(Atom::num(1) + Atom::num(c) * epsilon)
 }
 
@@ -164,10 +164,10 @@ fn expand_exponents(expression: &Atom) -> Atom {
 }
 
 /// The finalized p-integral `Σ_w ...` of the module documentation, in
-/// `mode`: `Retain` keeps the exact `ε` dependence and the masters `PG` and
-/// `PMaster`; `Symbolic` and `Numerical` expand through
-/// `ε^(number_of_terms_in_epsilon_expansion - L - 1)` with `PG` expanded
-/// exactly and `PMaster` substituted from the Forcer table (constants stay
+/// `mode`: `Retain` keeps the exact `ε` dependence and the masters `PG`,
+/// `PMaster` and the Gamma tags `PGamma`; `Symbolic` and `Numerical` expand
+/// through `ε^(number_of_terms_in_epsilon_expansion - L - 1)` with `PG` and
+/// `PGamma` expanded exactly and `PMaster` substituted from the Forcer table (constants stay
 /// symbolic; the numerical boundary of the caller evaluates them). A surviving
 /// unknown master tail is a [`crate::truncation_guard::MissingMasterOrders`]
 /// error naming `backend`.
