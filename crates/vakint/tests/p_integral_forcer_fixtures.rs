@@ -4,7 +4,8 @@
 //!
 //! Each file must hold exactly the cases of its definition
 //! (`vakint::p_integral::forcer_fixtures::{grid_cases, anchor_cases}`), and
-//! every frozen output must parse and finalize. With FORM 5,
+//! every frozen output must parse, have a tag-basis form
+//! (`vakint::p_integral::compare::tag_basis`) and finalize. With FORM 5,
 //!
 //! ```text
 //! VAKINT_FORCER_FIXTURES=write VAKINT_FORCER_FIXTURES_JOBS=4 \
@@ -18,6 +19,7 @@
 mod p_fixtures;
 
 use p_fixtures::*;
+use vakint::p_integral::compare::tag_basis;
 use vakint::p_integral::forcer_fixtures::ForcerFixture;
 use vakint::{LoopNormalizationFactor, RustRedMasterMode, VakintSettings};
 
@@ -29,11 +31,12 @@ fn retain_settings() -> VakintSettings {
     }
 }
 
-/// Every case parses and finalizes exactly; scaleless cases have no output.
-/// A numerator can still cancel a line into a scaleless integral, which
-/// Forcer reduces to an exact `0`.
+/// Every case parses, has a tag-basis form and finalizes exactly; scaleless
+/// cases have no output. A numerator can still cancel a line into a scaleless
+/// integral, which Forcer reduces to an exact `0`.
 fn assert_complete(file: &str, fixture: &ForcerFixture) {
     let settings = retain_settings();
+    let epsilon = vakint::vakint_symbol!(&settings.epsilon_symbol);
     for case in &fixture.cases {
         let values = frozen_values(case);
         assert_eq!(
@@ -42,6 +45,11 @@ fn assert_complete(file: &str, fixture: &ForcerFixture) {
             "{file}: {}",
             case.name
         );
+        for (_, reduced) in &values {
+            let basis = tag_basis(reduced, epsilon)
+                .unwrap_or_else(|error| panic!("{file}: {}: {error}", case.name));
+            assert_eq!(basis.is_empty(), reduced.is_zero(), "{file}: {}", case.name);
+        }
         let value = finalized(case, &settings, RustRedMasterMode::Retain);
         let zero = values.iter().all(|(_, reduced)| reduced.is_zero());
         assert_eq!(value.is_zero(), zero, "{file}: {}", case.name);
