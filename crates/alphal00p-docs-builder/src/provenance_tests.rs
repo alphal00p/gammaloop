@@ -220,6 +220,15 @@ fn each_build_captures_one_revision_before_rendering() {
                 }
             }
         }
+        // This fixture owns its build output even when exported sources omit .gitignore.
+        let ignore_path = root.join(".gitignore");
+        let mut ignores = if ignore_path.exists() {
+            fs::read_to_string(&ignore_path).unwrap()
+        } else {
+            String::new()
+        };
+        ignores.push_str("\n/target/\n");
+        fs::write(ignore_path, ignores).unwrap();
         fs::create_dir(root.join(".jj")).unwrap();
         let bin = temporary.path().join("bin");
         fs::create_dir(&bin).unwrap();
