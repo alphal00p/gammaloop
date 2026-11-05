@@ -1,0 +1,631 @@
+{
+  "forcer_commit": "68a30bfb2aec3672a2f674ca8666bfc970105e24",
+  "form_version": "5.0.0",
+  "provenance": "M2-V2 grid: benchmark cells (tests/fixtures/benchmark_p_integrals.json), every non-scaleless labelled sector at rank 0 and 2, dotted sectors; fixtures::grid_cases in src/p_integral/forcer/fixtures.rs; VAKINT_FORCER_FIXTURES=write with FORM 5",
+  "cases": [
+    {
+      "name": "bench_L2_d0_r0_P2L",
+      "family": "P2L",
+      "powers": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)^2*rat( - 2*ep + 1,ep) + GschemeConstants(0,0)*GschemeConstants(1,0)*rat(3*ep - 1,ep)\n"
+      ]
+    },
+    {
+      "name": "bench_L2_d0_r2_P2L",
+      "family": "P2L",
+      "powers": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)*GschemeConstants(1,0)*rat( - 2*ep + 1,12*ep - 8)\n"
+      ]
+    },
+    {
+      "name": "bench_L2_d0_r4_P2L",
+      "family": "P2L",
+      "powers": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(2))",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)*GschemeConstants(1,0)*rat(1,12)\n"
+      ]
+    },
+    {
+      "name": "bench_L2_d0_r6_P2L",
+      "family": "P2L",
+      "powers": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(2))*dot(k(1),p(1))*dot(k(2),p(1))",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)*GschemeConstants(1,0)*rat( - 12*ep^3 + 46*ep^2 - 56*ep + 21,1296*ep^3 - 4752*ep^2 + 5472*ep - 1920)\n"
+      ]
+    },
+    {
+      "name": "bench_L2_d0_r8_P2L",
+      "family": "P2L",
+      "powers": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(2))*dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(2))",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)*GschemeConstants(1,0)*rat(20*ep^3 - 98*ep^2 + 165*ep - 96,7776*ep^3 - 28512*ep^2 + 32832*ep - 11520)\n"
+      ]
+    },
+    {
+      "name": "bench_L2_d1_r0_P2L",
+      "family": "P2L",
+      "powers": [
+        2,
+        1,
+        1,
+        1,
+        1
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)^2*rat( - 4*ep + 2,1) + GschemeConstants(0,0)*GschemeConstants(1,0)*rat(18*ep^2 + 3*ep - 3,2*ep + 2)\n"
+      ]
+    },
+    {
+      "name": "bench_L2_d1_r2_P2L",
+      "family": "P2L",
+      "powers": [
+        2,
+        1,
+        1,
+        1,
+        1
+      ],
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)^2*rat(2*ep - 1,4*ep) + GschemeConstants(0,0)*GschemeConstants(1,0)*rat(4*ep^3 - 3*ep^2 - 2*ep + 1,4*ep^2 + 4*ep)\n"
+      ]
+    },
+    {
+      "name": "bench_L2_d1_r4_P2L",
+      "family": "P2L",
+      "powers": [
+        2,
+        1,
+        1,
+        1,
+        1
+      ],
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(2))",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)^2*rat(1,8) + GschemeConstants(0,0)*GschemeConstants(1,0)*rat(8*ep^2 - 2*ep - 1,48*ep - 32)\n"
+      ]
+    },
+    {
+      "name": "bench_L2_d1_r6_P2L",
+      "family": "P2L",
+      "powers": [
+        2,
+        1,
+        1,
+        1,
+        1
+      ],
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(2))*dot(k(1),p(1))*dot(k(2),p(1))",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)*GschemeConstants(1,0)*rat(8*ep^3 - 36*ep^2 + 47*ep - 17,432*ep^2 - 864*ep + 384)\n"
+      ]
+    },
+    {
+      "name": "bench_L2_d1_r8_P2L",
+      "family": "P2L",
+      "powers": [
+        2,
+        1,
+        1,
+        1,
+        1
+      ],
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(2))*dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(2))",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)*GschemeConstants(1,0)*rat(16*ep^4 - 48*ep^3 + 30*ep^2 + 17*ep - 12,5184*ep^3 - 19008*ep^2 + 21888*ep - 7680)\n"
+      ]
+    },
+    {
+      "name": "bench_L2_d2_r0_P2L",
+      "family": "P2L",
+      "powers": [
+        2,
+        1,
+        1,
+        1,
+        2
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)^2*rat( - 8*ep^3 - 4*ep^2 + 2,ep + 1) + GschemeConstants(0,0)*GschemeConstants(1,0)*rat(54*ep^4 + 27*ep^3 - 6*ep^2 - 3*ep,ep^2 + 2*ep + 1)\n"
+      ]
+    },
+    {
+      "name": "bench_L2_d2_r2_P2L",
+      "family": "P2L",
+      "powers": [
+        2,
+        1,
+        1,
+        1,
+        2
+      ],
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)^2*rat(8*ep^2 - 2*ep - 1,4*ep) + GschemeConstants(0,0)*GschemeConstants(1,0)*rat(24*ep^4 - 14*ep^3 - 13*ep^2 + 2*ep + 1,4*ep^2 + 4*ep)\n"
+      ]
+    },
+    {
+      "name": "bench_L2_d2_r4_P2L",
+      "family": "P2L",
+      "powers": [
+        2,
+        1,
+        1,
+        1,
+        2
+      ],
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(2))",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)^2*rat(4*ep^2 - 3*ep + 1,8*ep) + GschemeConstants(0,0)*GschemeConstants(1,0)*rat(8*ep^4 - 10*ep^3 + 5*ep^2 + ep - 1,8*ep^2 + 8*ep)\n"
+      ]
+    },
+    {
+      "name": "bench_L2_d2_r6_P2L",
+      "family": "P2L",
+      "powers": [
+        2,
+        1,
+        1,
+        1,
+        2
+      ],
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(2))*dot(k(1),p(1))*dot(k(2),p(1))",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)^2*rat(-1,16) + GschemeConstants(0,0)*GschemeConstants(1,0)*rat(16*ep^4 - 40*ep^3 + 14*ep^2 - 5*ep + 3,144*ep^2 + 48*ep - 96)\n"
+      ]
+    },
+    {
+      "name": "bench_L2_d2_r8_P2L",
+      "family": "P2L",
+      "powers": [
+        2,
+        1,
+        1,
+        1,
+        2
+      ],
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(2))*dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(2))",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)^2*rat(-1,64) + GschemeConstants(0,0)*GschemeConstants(1,0)*rat(16*ep^5 - 88*ep^4 + 206*ep^3 - 249*ep^2 + 152*ep - 39,864*ep^3 - 864*ep^2 - 960*ep + 768)\n"
+      ]
+    },
+    {
+      "name": "sector_P2L_01110_r0",
+      "family": "P2L",
+      "powers": [
+        0,
+        1,
+        1,
+        1,
+        0
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)*GschemeConstants(1,0)*rat(ep,6*ep - 4)\n"
+      ]
+    },
+    {
+      "name": "sector_P2L_01110_r2",
+      "family": "P2L",
+      "powers": [
+        0,
+        1,
+        1,
+        1,
+        0
+      ],
+      "numerator": "dot(k(1),k(2))",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)*GschemeConstants(1,0)*rat( - ep,36*ep - 24)\n"
+      ]
+    },
+    {
+      "name": "sector_P2L_11110_r0",
+      "family": "P2L",
+      "powers": [
+        1,
+        1,
+        1,
+        1,
+        0
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)*GschemeConstants(1,0)*rat(1,2)\n"
+      ]
+    },
+    {
+      "name": "sector_P2L_11110_r2",
+      "family": "P2L",
+      "powers": [
+        1,
+        1,
+        1,
+        1,
+        0
+      ],
+      "numerator": "dot(k(2),p(1))*dot(k(2),p(1))",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)*GschemeConstants(1,0)*rat(2*ep - 1,36*ep - 24)\n"
+      ]
+    },
+    {
+      "name": "sector_P2L_11001_r0",
+      "family": "P2L",
+      "powers": [
+        1,
+        1,
+        0,
+        0,
+        1
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)*GschemeConstants(1,0)*rat(ep,6*ep - 4)\n"
+      ]
+    },
+    {
+      "name": "sector_P2L_11001_r2",
+      "family": "P2L",
+      "powers": [
+        1,
+        1,
+        0,
+        0,
+        1
+      ],
+      "numerator": "dot(k(2),k(2))",
+      "external": "p(1)",
+      "outputs": [
+        " 0\n"
+      ]
+    },
+    {
+      "name": "sector_P2L_11101_r0",
+      "family": "P2L",
+      "powers": [
+        1,
+        1,
+        1,
+        0,
+        1
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)*GschemeConstants(1,0)*rat(1,2)\n"
+      ]
+    },
+    {
+      "name": "sector_P2L_11101_r2",
+      "family": "P2L",
+      "powers": [
+        1,
+        1,
+        1,
+        0,
+        1
+      ],
+      "numerator": "dot(k(1),p(1))*dot(k(1),p(1))",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)*GschemeConstants(1,0)*rat(2*ep - 1,36*ep - 24)\n"
+      ]
+    },
+    {
+      "name": "sector_P2L_11011_r0",
+      "family": "P2L",
+      "powers": [
+        1,
+        1,
+        0,
+        1,
+        1
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)*GschemeConstants(1,0)*rat(1,2)\n"
+      ]
+    },
+    {
+      "name": "sector_P2L_11011_r2",
+      "family": "P2L",
+      "powers": [
+        1,
+        1,
+        0,
+        1,
+        1
+      ],
+      "numerator": "dot(k(1),k(1))",
+      "external": "p(1)",
+      "outputs": [
+        " 0\n"
+      ]
+    },
+    {
+      "name": "sector_P2L_10111_r0",
+      "family": "P2L",
+      "powers": [
+        1,
+        0,
+        1,
+        1,
+        1
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)^2*rat(1,1)\n"
+      ]
+    },
+    {
+      "name": "sector_P2L_10111_r2",
+      "family": "P2L",
+      "powers": [
+        1,
+        0,
+        1,
+        1,
+        1
+      ],
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))",
+      "external": "p(1)",
+      "outputs": [
+        " 0\n"
+      ]
+    },
+    {
+      "name": "sector_P2L_01111_r0",
+      "family": "P2L",
+      "powers": [
+        0,
+        1,
+        1,
+        1,
+        1
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)*GschemeConstants(1,0)*rat(1,2)\n"
+      ]
+    },
+    {
+      "name": "sector_P2L_01111_r2",
+      "family": "P2L",
+      "powers": [
+        0,
+        1,
+        1,
+        1,
+        1
+      ],
+      "numerator": "dot(k(1),k(2))",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)*GschemeConstants(1,0)*rat( - ep + 1,12*ep - 8)\n"
+      ]
+    },
+    {
+      "name": "sector_P2L_11111_r0",
+      "family": "P2L",
+      "powers": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)^2*rat( - 2*ep + 1,ep) + GschemeConstants(0,0)*GschemeConstants(1,0)*rat(3*ep - 1,ep)\n"
+      ]
+    },
+    {
+      "name": "sector_P2L_11111_r2",
+      "family": "P2L",
+      "powers": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "numerator": "dot(k(2),p(1))*dot(k(2),p(1))",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)*GschemeConstants(1,0)*rat(2*ep - 1,6*ep - 4)\n"
+      ]
+    },
+    {
+      "name": "dotted_P2L_02120",
+      "family": "P2L",
+      "powers": [
+        0,
+        2,
+        1,
+        2,
+        0
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)*GschemeConstants(1,0)*rat(6*ep^2 - 5*ep + 1,1)\n"
+      ]
+    },
+    {
+      "name": "dotted_P2L_12120",
+      "family": "P2L",
+      "powers": [
+        1,
+        2,
+        1,
+        2,
+        0
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)*GschemeConstants(1,0)*rat(36*ep^3 - 12*ep^2 - 9*ep + 3,2*ep + 2)\n"
+      ]
+    },
+    {
+      "name": "dotted_P2L_21002",
+      "family": "P2L",
+      "powers": [
+        2,
+        1,
+        0,
+        0,
+        2
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)*GschemeConstants(1,0)*rat(6*ep^2 - 5*ep + 1,1)\n"
+      ]
+    },
+    {
+      "name": "dotted_P2L_12102",
+      "family": "P2L",
+      "powers": [
+        1,
+        2,
+        1,
+        0,
+        2
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)*GschemeConstants(1,0)*rat(36*ep^3 - 12*ep^2 - 9*ep + 3,2*ep + 2)\n"
+      ]
+    },
+    {
+      "name": "dotted_P2L_21021",
+      "family": "P2L",
+      "powers": [
+        2,
+        1,
+        0,
+        2,
+        1
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)*GschemeConstants(1,0)*rat(18*ep^2 + 3*ep - 3,2*ep + 2)\n"
+      ]
+    },
+    {
+      "name": "dotted_P2L_10212",
+      "family": "P2L",
+      "powers": [
+        1,
+        0,
+        2,
+        1,
+        2
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)^2*rat(4*ep^2 + 2*ep - 2,1)\n"
+      ]
+    },
+    {
+      "name": "dotted_P2L_02121",
+      "family": "P2L",
+      "powers": [
+        0,
+        2,
+        1,
+        2,
+        1
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)*GschemeConstants(1,0)*rat(18*ep^3 - 15*ep^2 + 3*ep,ep + 2)\n"
+      ]
+    },
+    {
+      "name": "dotted_P2L_12121",
+      "family": "P2L",
+      "powers": [
+        1,
+        2,
+        1,
+        2,
+        1
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)^2*rat(8*ep^2 - 2,ep + 1) + GschemeConstants(0,0)*GschemeConstants(1,0)*rat(54*ep^5 + 81*ep^4 - 60*ep^3 - 63*ep^2 + 6*ep + 6,ep^3 + 4*ep^2 + 5*ep + 2)\n"
+      ]
+    }
+  ]
+}

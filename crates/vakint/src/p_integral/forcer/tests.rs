@@ -1022,7 +1022,7 @@ const BENCHMARK_INPUTS: &str = include_str!("../../../tests/fixtures/benchmark_p
 /// recorded before the shared numerator split moved to `parts.rs`: the
 /// programs Forcer receives stay byte-identical. The grid and anchor digests
 /// are taken over their definitions (`grid_cases`, `anchor_cases`), which
-/// `grid_and_anchor_fixtures_match_their_definitions` ties to the files.
+/// `tests/p_integral_forcer_fixtures.rs` ties to the files.
 const PROGRAM_DIGESTS: [(&str, &str); 8] = [
     (
         "p1l_battery.json",
