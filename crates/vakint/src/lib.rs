@@ -7515,6 +7515,12 @@ Evaluated (n_loops=1, mu_r=1) :
             self.validate_settings(settings)?;
             let mut vakint_expr = VakintExpression::prepare_evaluation(input, self, settings)?;
             MonitorContext::native_phase(observation.as_deref_mut(), "canonicalization", None);
+            // A four-loop scalar integral equal to a shipped four-loop master is
+            // written in its program's slot order before the legacy matcher,
+            // whose cost depends on the input's propagator order.
+            for term in &mut vakint_expr.0 {
+                self.transport_four_loop_master(settings, &mut term.integral, term.numerator.as_view())?;
+            }
             vakint_expr.canonicalize_with(settings, false, |input| {
                 self.match_topologies_for_settings(settings, input)
             })?;
