@@ -663,13 +663,33 @@ fn interface_guide_title(product_title: &str, surface: &str) -> String {
 }
 
 impl SiteBuilder {
+    /// Load documentation from the runtime workspace, or this crate's checkout.
+    ///
+    /// `GAMMALOOP_WORKSPACE_ROOT` takes precedence over `NEXTEST_WORKSPACE_ROOT`.
+    /// An explicitly supplied root must contain `docs/products/registry.toml`;
+    /// invalid overrides return an error rather than falling back to a checkout.
     pub fn discover() -> Result<Self> {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        Self::load(Self::workspace_root()?)
+    }
+
+    fn workspace_root() -> Result<PathBuf> {
+        for variable in ["GAMMALOOP_WORKSPACE_ROOT", "NEXTEST_WORKSPACE_ROOT"] {
+            if let Some(root) = env::var_os(variable) {
+                let root = PathBuf::from(root);
+                ensure!(
+                    !root.as_os_str().is_empty()
+                        && root.join("docs/products/registry.toml").is_file(),
+                    "{variable} specifies an invalid documentation workspace root {root:?}: expected docs/products/registry.toml"
+                );
+                return Ok(root);
+            }
+        }
+
+        Path::new(env!("CARGO_MANIFEST_DIR"))
             .ancestors()
             .nth(2)
-            .context("documentation builder is not inside a workspace")?
-            .to_path_buf();
-        Self::load(root)
+            .map(Path::to_path_buf)
+            .context("documentation builder is not inside a workspace")
     }
 
     fn load(root: PathBuf) -> Result<Self> {
@@ -9811,6 +9831,121 @@ mod tests {
     }
 
     #[test]
+    fn discovery_uses_relocated_roots_and_checkout_fallback() {
+        const CASE: &str = "ALPHAL00P_DOCS_DISCOVERY_TEST_CASE";
+        const ROOT: &str = "ALPHAL00P_DOCS_DISCOVERY_TEST_ROOT";
+        let Ok(case) = env::var(CASE) else {
+            let checkout = SiteBuilder::discover().unwrap();
+            let relocated = tempfile::tempdir().unwrap();
+            for path in [
+                "docs/products/registry.toml",
+                "docs/portal.toml",
+                "docs/talks.toml",
+                "docs/developers.toml",
+                "docs/legacy-prose.toml",
+                "docs/generated-rendered-evidence.toml",
+                "docs/data/publications.json",
+            ] {
+                let target = relocated.path().join(path);
+                fs::create_dir_all(target.parent().unwrap()).unwrap();
+                fs::copy(checkout.root.join(path), target).unwrap();
+            }
+            for case in [
+                "gammaloop",
+                "nextest",
+                "fallback",
+                "invalid",
+                "empty",
+                "invalid-nextest",
+            ] {
+                let mut command = Command::new(env::current_exe().unwrap());
+                command
+                    .args([
+                        "--exact",
+                        "tests::discovery_uses_relocated_roots_and_checkout_fallback",
+                        "--nocapture",
+                    ])
+                    .env(CASE, case)
+                    .env(ROOT, relocated.path());
+                for variable in [
+                    "GAMMALOOP_WORKSPACE_ROOT",
+                    "NEXTEST_WORKSPACE_ROOT",
+                    "INSTA_WORKSPACE_ROOT",
+                ] {
+                    command.env_remove(variable);
+                }
+                match case {
+                    "gammaloop" => {
+                        command
+                            .env("GAMMALOOP_WORKSPACE_ROOT", relocated.path())
+                            .env("NEXTEST_WORKSPACE_ROOT", relocated.path().join("missing"));
+                    }
+                    "nextest" => {
+                        command.env("NEXTEST_WORKSPACE_ROOT", relocated.path());
+                    }
+                    "invalid" | "empty" => {
+                        command
+                            .env(
+                                "GAMMALOOP_WORKSPACE_ROOT",
+                                if case == "empty" {
+                                    PathBuf::new()
+                                } else {
+                                    relocated.path().join("missing")
+                                },
+                            )
+                            .env("NEXTEST_WORKSPACE_ROOT", relocated.path());
+                    }
+                    "invalid-nextest" => {
+                        command.env("NEXTEST_WORKSPACE_ROOT", relocated.path().join("missing"));
+                    }
+                    "fallback" => {}
+                    _ => unreachable!(),
+                }
+                let output = command.output().unwrap();
+                assert!(output.status.success(), "case: {case}: {output:?}");
+            }
+            return;
+        };
+
+        if case == "fallback" {
+            // Archive build paths need not exist at runtime; verify selection without I/O.
+            assert_eq!(
+                SiteBuilder::workspace_root().unwrap(),
+                Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .ancestors()
+                    .nth(2)
+                    .unwrap()
+            );
+        } else if matches!(case.as_str(), "invalid" | "empty" | "invalid-nextest") {
+            let variable = if case == "invalid-nextest" {
+                "NEXTEST_WORKSPACE_ROOT"
+            } else {
+                "GAMMALOOP_WORKSPACE_ROOT"
+            };
+            let error = SiteBuilder::discover().err().unwrap().to_string();
+            assert!(error.contains(variable), "{error}");
+            assert!(
+                error.contains("invalid documentation workspace root"),
+                "{error}"
+            );
+            assert!(error.contains("docs/products/registry.toml"), "{error}");
+            assert!(
+                error.contains(&format!(
+                    "{:?}",
+                    PathBuf::from(env::var_os(variable).unwrap())
+                )),
+                "{error}"
+            );
+        } else {
+            let builder = SiteBuilder::discover().unwrap();
+            let root = PathBuf::from(env::var_os(ROOT).unwrap());
+            assert_eq!(builder.root, root);
+            assert_eq!(builder.registry.schema, SCHEMA_VERSION);
+            assert!(!builder.registry.product.is_empty());
+        }
+    }
+
+    #[test]
     fn snapshot_tags_are_safe_semver_routes() {
         assert!(looks_like_version("0.17.0"));
         assert!(looks_like_version("1.2.3-rc.1"));
@@ -11215,10 +11350,8 @@ mod tests {
 
     #[test]
     fn persistent_rustdoc_targets_reject_workspace_and_arbitrary_roots() {
-        let workspace = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .ancestors()
-            .nth(2)
-            .unwrap();
+        let root = SiteBuilder::workspace_root().unwrap();
+        let workspace = root.as_path();
         let arbitrary = workspace
             .parent()
             .unwrap()
@@ -11240,12 +11373,9 @@ mod tests {
         let temporary = tempfile::tempdir().unwrap();
         let workspace = temporary.path().join("workspace");
         fs::create_dir_all(workspace.join("target")).unwrap();
-        let repository = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .ancestors()
-            .nth(2)
-            .unwrap();
+        let repository = SiteBuilder::workspace_root().unwrap();
         let escape = temporary.path().join("escape");
-        symlink(repository, &escape).unwrap();
+        symlink(&repository, &escape).unwrap();
 
         let error =
             prepare_persistent_rustdoc_target(&workspace, &escape.join("cache")).unwrap_err();
