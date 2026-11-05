@@ -37,6 +37,9 @@ mod evaluation;
 mod routing;
 mod sectors;
 
+#[cfg(test)]
+mod phase_quench_tests;
+
 pub(crate) use evaluation::FermiSurfaceEvaluator;
 pub(crate) use sectors::FermiSurfaceSector;
 

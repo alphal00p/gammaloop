@@ -1,3 +1,4 @@
+use crate::cff::PhaseQuenchedDifference;
 use crate::{
     cff::{
         CffEnergyDegreeBoundReport,
@@ -253,6 +254,7 @@ pub(crate) struct OrientationProjection<'a> {
     pub(crate) orientation_pattern: &'a OrientationPattern,
     pub(crate) explicit_orientation_sum_only: bool,
     pub(crate) vacuum_subtraction: bool,
+    pub(crate) phase_quenched_difference: Option<&'a PhaseQuenchedDifference>,
 }
 
 impl<'a> OrientationProjection<'a> {
@@ -266,6 +268,7 @@ impl<'a> OrientationProjection<'a> {
             orientation_pattern,
             explicit_orientation_sum_only: false,
             vacuum_subtraction: false,
+            phase_quenched_difference: None,
         }
     }
 
@@ -286,6 +289,7 @@ impl<'a> OrientationProjection<'a> {
             orientation_pattern,
             explicit_orientation_sum_only,
             vacuum_subtraction: false,
+            phase_quenched_difference: None,
         }
     }
 
@@ -305,11 +309,20 @@ impl<'a> OrientationProjection<'a> {
             orientation_pattern,
             explicit_orientation_sum_only,
             vacuum_subtraction: false,
+            phase_quenched_difference: None,
         }
     }
 
     pub(crate) fn with_vacuum_subtraction(mut self, enabled: bool) -> Self {
         self.vacuum_subtraction = enabled;
+        self
+    }
+
+    pub(crate) fn with_phase_quenched_difference(
+        mut self,
+        projection: Option<&'a PhaseQuenchedDifference>,
+    ) -> Self {
+        self.phase_quenched_difference = projection;
         self
     }
 

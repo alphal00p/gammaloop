@@ -159,7 +159,10 @@ impl<'a> Localizer<'a> {
         self.orientation
             .record_energy_degree_bound_report(&cff.energy_degree_bound_report);
         Ok((
-            cff.with_vacuum_subtraction(self.orientation.vacuum_subtraction),
+            cff.with_medium_projection(
+                self.orientation.vacuum_subtraction,
+                self.orientation.phase_quenched_difference,
+            )?,
             contract_subgraph,
         ))
     }
@@ -626,7 +629,10 @@ impl<'a> Localizer<'a> {
                 &options,
                 None,
             )?
-            .with_vacuum_subtraction(self.orientation.vacuum_subtraction);
+            .with_medium_projection(
+                self.orientation.vacuum_subtraction,
+                self.orientation.phase_quenched_difference,
+            )?;
         self.orientation
             .record_energy_degree_bound_report(&cff.energy_degree_bound_report);
         let projected = self.project_cff(graph, to_contract, cff, contract_subgraph)?;

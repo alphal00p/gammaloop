@@ -507,3 +507,6 @@ pub use profile::{UVProfile, UVProfileAnalysis, UVProfilePassFail};
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod phase_quench_tests;

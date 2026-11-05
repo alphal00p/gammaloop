@@ -53,6 +53,8 @@ use three_dimensional_reps::{
 };
 
 pub mod orientations;
+mod phase_quench;
+pub(crate) use phase_quench::PhaseQuenchedDifference;
 //pub mod cut_expression;
 pub mod esurface;
 pub mod expression;
@@ -770,19 +772,26 @@ pub struct CutCFF {
 }
 
 impl CutCFF {
-    /// Subtract the vacuum projection only after all thermal factors have been
-    /// combined. Keep the wrapper opaque through subsequent UV operations.
-    pub(crate) fn with_vacuum_subtraction(mut self, enabled: bool) -> Self {
-        if enabled {
-            for term in self.terms.values_mut() {
-                for orientation in &mut term.orientations {
+    /// Transform each completed thermal weight before UV Taylor operations.
+    /// This consumes a freshly converted CFF: the phase-quenched difference
+    /// must act once, and also annihilates the vacuum contribution.
+    pub(crate) fn with_medium_projection(
+        mut self,
+        vacuum_subtraction: bool,
+        phase_quenched_difference: Option<&PhaseQuenchedDifference>,
+    ) -> Result<Self> {
+        for term in self.terms.values_mut() {
+            for orientation in &mut term.orientations {
+                if let Some(projection) = phase_quenched_difference {
+                    orientation.expression = projection.apply(&orientation.expression)?;
+                } else if vacuum_subtraction {
                     orientation.expression = orientation
                         .expression
                         .replace_multiple(&*VACUUM_SUBTRACTION);
                 }
             }
         }
-        self
+        Ok(self)
     }
 
     /// Convert a generated CFF into GammaLoop's scalar-denominator convention.

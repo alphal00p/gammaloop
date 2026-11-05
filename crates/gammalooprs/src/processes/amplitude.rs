@@ -9,6 +9,7 @@ use std::{
 
 use ahash::AHashSet;
 // use bincode::{Decode, Encode};
+use crate::cff::PhaseQuenchedDifference;
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
 use momtrop::SampleGenerator;
@@ -1475,6 +1476,11 @@ impl AmplitudeGraph {
                 options
             })
             .collect::<Result<Vec<_>>>()?;
+        let phase_quenched_difference = settings
+            .medium
+            .phase_quenched_difference
+            .then(|| PhaseQuenchedDifference::new(&self.graph))
+            .transpose()?;
         let projections = settings
             .three_dimensional_representations
             .iter()
@@ -1496,6 +1502,7 @@ impl AmplitudeGraph {
                     settings.requires_complete_orientation_sum(),
                 )
                 .with_vacuum_subtraction(settings.medium.vacuum_subtraction)
+                .with_phase_quenched_difference(phase_quenched_difference.as_ref())
             })
             .collect::<Vec<_>>();
         let cutstructure = CutStructure::empty(&self.graph);
@@ -2271,6 +2278,11 @@ impl AmplitudeGraph {
             cuts.push(cutset);
         }
         let cut_structure = CutStructure { cuts };
+        let phase_quenched_difference = settings
+            .medium
+            .phase_quenched_difference
+            .then(|| PhaseQuenchedDifference::new(&self.graph))
+            .transpose()?;
         let projections = settings
             .three_dimensional_representations
             .iter()
@@ -2283,6 +2295,7 @@ impl AmplitudeGraph {
                     settings.requires_complete_orientation_sum(),
                 )
                 .with_vacuum_subtraction(settings.medium.vacuum_subtraction)
+                .with_phase_quenched_difference(phase_quenched_difference.as_ref())
             })
             .collect::<Vec<_>>();
         let expressions = settings.uv.orchestrator.parametric_integrands(

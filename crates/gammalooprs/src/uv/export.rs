@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use crate::cff::PhaseQuenchedDifference;
 use color_eyre::Result;
 use eyre::{Context, eyre};
 use linnet::half_edge::subgraph::SubSetOps;
@@ -192,6 +193,10 @@ impl Process {
                 graph.production_3d_expression_options(generation_settings, representation)
             })
             .transpose()?;
+        let phase_quenched_difference = source
+            .filter(|_| generation_settings.medium.phase_quenched_difference)
+            .map(|(graph, _)| PhaseQuenchedDifference::new(graph))
+            .transpose()?;
         let orientation = source
             .zip(cff_options.as_ref())
             .map(|((_, expression), options)| {
@@ -202,6 +207,7 @@ impl Process {
                     generation_settings.requires_complete_orientation_sum(),
                 )
                 .with_vacuum_subtraction(generation_settings.medium.vacuum_subtraction)
+                .with_phase_quenched_difference(phase_quenched_difference.as_ref())
             });
         match integrand {
             ProcessIntegrand::Amplitude(integrand) => {

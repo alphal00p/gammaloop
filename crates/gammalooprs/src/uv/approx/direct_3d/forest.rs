@@ -131,7 +131,10 @@ impl Direct3dCts {
                 localizer.cutset,
                 localizer.orientation.orientation_pattern,
             )?
-            .with_vacuum_subtraction(localizer.orientation.vacuum_subtraction);
+            .with_medium_projection(
+                localizer.orientation.vacuum_subtraction,
+                localizer.orientation.phase_quenched_difference,
+            )?;
         localizer
             .orientation
             .record_energy_degree_bound_report(&cff.energy_degree_bound_report);

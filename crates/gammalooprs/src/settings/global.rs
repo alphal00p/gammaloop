@@ -218,17 +218,22 @@ impl GenerationSettings {
         if self
             .three_dimensional_representations
             .contains(&RepresentationMode::Ltd)
-            && (self.medium.mode != MediumMode::Vacuum || self.medium.vacuum_subtraction)
+            && (self.medium.mode != MediumMode::Vacuum || self.medium.removes_vacuum())
         {
             return Err(eyre!(
-                "LTD does not support finite-temperature or finite-density media or vacuum subtraction; use only `cff` in `global.generation.three_dimensional_representations`, or select `medium.mode = \"vacuum\"` without vacuum subtraction"
+                "LTD does not support finite-temperature or finite-density media, vacuum subtraction, or the phase-quenched difference; use only `cff` in `global.generation.three_dimensional_representations`, or select `medium.mode = \"vacuum\"` without either weight transformation"
             ));
         }
-        if (self.medium.mode != MediumMode::Vacuum || self.medium.vacuum_subtraction)
+        if (self.medium.mode != MediumMode::Vacuum || self.medium.removes_vacuum())
             && self.uv.local_uv_cts_from_expanded_4d_integrands
         {
             return Err(eyre!(
-                "`global.generation.uv.local_uv_cts_from_expanded_4d_integrands = true` is unsupported for finite-medium modes or vacuum subtraction; use local 3D subtraction instead"
+                "`global.generation.uv.local_uv_cts_from_expanded_4d_integrands = true` is unsupported for finite-medium modes, vacuum subtraction, or the phase-quenched difference; use local 3D subtraction instead"
+            ));
+        }
+        if self.medium.mode == MediumMode::Vacuum && self.medium.phase_quenched_difference {
+            return Err(eyre!(
+                "`global.generation.medium.phase_quenched_difference = true` requires a medium mode other than `vacuum`"
             ));
         }
 
@@ -239,8 +244,11 @@ impl GenerationSettings {
 #[cfg(test)]
 mod generation_settings_tests {
     use super::{
-        GenerationSettings, GenerationType, MediumMode, OrientationPattern, RepresentationMode,
+        GenerationSettings, GenerationType, MediumMode, MediumSettings, OrientationPattern,
+        RepresentationMode,
     };
+    use crate::settings::RuntimeSettings;
+    use crate::utils::serde_utils::ShowDefaultsGuard;
 
     #[test]
     fn cross_sections_require_vacuum_mode_without_vacuum_subtraction() {
@@ -315,6 +323,104 @@ mod generation_settings_tests {
             assert!(error.to_string().contains("vacuum_subtraction = true"));
             assert!(error.to_string().contains("other than `vacuum`"));
         }
+    }
+
+    #[test]
+    fn phase_quenched_difference_requires_a_medium_mode() {
+        let mut settings = GenerationSettings::default();
+        settings.medium.phase_quenched_difference = true;
+        for generation_type in [GenerationType::Amplitude, GenerationType::CrossSection] {
+            let error = settings.validate_for_process(generation_type).unwrap_err();
+            assert!(
+                error
+                    .to_string()
+                    .contains("phase_quenched_difference = true")
+            );
+            assert!(error.to_string().contains("other than `vacuum`"));
+        }
+        let error = settings
+            .validate_for_runtime(&RuntimeSettings::default())
+            .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("phase_quenched_difference = true")
+        );
+    }
+
+    #[test]
+    fn phase_quenched_difference_supports_both_media_with_vacuum_subtraction() {
+        for mode in [
+            MediumMode::ThermodynamicEquilibrium,
+            MediumMode::ZeroTemperatureEquilibrium,
+        ] {
+            for vacuum_subtraction in [false, true] {
+                let mut settings = GenerationSettings {
+                    medium: MediumSettings {
+                        mode,
+                        vacuum_subtraction,
+                        phase_quenched_difference: true,
+                    },
+                    ..Default::default()
+                };
+                settings.threshold_subtraction.enable_thresholds = false;
+                settings
+                    .validate_for_process(GenerationType::Amplitude)
+                    .unwrap();
+                settings
+                    .validate_for_runtime(&RuntimeSettings::default())
+                    .unwrap();
+                assert!(
+                    settings
+                        .validate_for_process(GenerationType::CrossSection)
+                        .is_err()
+                );
+                settings.explicit_orientation_sum_only = true;
+                settings.uv.local_uv_cts_from_expanded_4d_integrands = true;
+                let error = settings
+                    .validate_for_process(GenerationType::Amplitude)
+                    .unwrap_err();
+                assert!(
+                    error
+                        .to_string()
+                        .contains("use local 3D subtraction instead")
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn phase_quenched_difference_serialization_respects_show_defaults() {
+        let defaults = GenerationSettings::default();
+        assert!(!defaults.medium.phase_quenched_difference);
+        {
+            let _guard = ShowDefaultsGuard::new(false);
+            assert!(
+                !toml::to_string(&defaults)
+                    .unwrap()
+                    .contains("phase_quenched_difference")
+            );
+            let unchanged: GenerationSettings = toml::from_str(
+                "[medium]\nmode = \"zero_temperature_equilibrium\"\nvacuum_subtraction = true",
+            )
+            .unwrap();
+            assert!(!unchanged.medium.phase_quenched_difference);
+            let mut enabled = unchanged;
+            enabled.medium.phase_quenched_difference = true;
+            let encoded = toml::to_string(&enabled).unwrap();
+            assert!(encoded.contains("phase_quenched_difference = true"));
+            assert_eq!(
+                toml::from_str::<GenerationSettings>(&encoded).unwrap(),
+                enabled
+            );
+        }
+        let _guard = ShowDefaultsGuard::new(true);
+        let encoded = toml::to_string(&defaults).unwrap();
+        assert!(encoded.contains("phase_quenched_difference = false"));
+        assert_eq!(
+            toml::from_str::<GenerationSettings>(&encoded).unwrap(),
+            defaults
+        );
     }
 
     #[test]
@@ -472,9 +578,10 @@ mod generation_settings_tests {
                     for from_four_d in [false, true] {
                         let mut settings = GenerationSettings {
                             three_dimensional_representations: representations.clone(),
-                            medium: super::MediumSettings {
+                            medium: MediumSettings {
                                 mode,
                                 vacuum_subtraction,
+                                ..Default::default()
                             },
                             ..Default::default()
                         };
@@ -1225,6 +1332,11 @@ pub struct MediumSettings {
     /// requires a non-vacuum mode.
     #[serde(skip_serializing_if = "is_false")]
     pub vacuum_subtraction: bool,
+    /// Generate the phase-quenched minus QCD pressure contribution by independently averaging
+    /// the chemical-potential sign of each closed quark loop; requires a non-vacuum mode.
+    /// The generated amplitude retains the usual Minkowski pressure conversion.
+    #[serde(skip_serializing_if = "is_false")]
+    pub phase_quenched_difference: bool,
 }
 
 impl Default for MediumSettings {
@@ -1232,6 +1344,14 @@ impl Default for MediumSettings {
         Self {
             mode: MediumMode::Vacuum,
             vacuum_subtraction: false,
+            phase_quenched_difference: false,
         }
+    }
+}
+
+impl MediumSettings {
+    /// Whether the selected weight transformation cancels the vacuum contribution.
+    pub(crate) fn removes_vacuum(&self) -> bool {
+        self.vacuum_subtraction || self.phase_quenched_difference
     }
 }

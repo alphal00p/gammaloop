@@ -143,6 +143,39 @@ uncertainty preserved. The maintained
 #source-link("examples/cli/eos/cool_qm/NLO/cool_qm_eos_NLO.toml", label: "NLO cold quark matter run card")
 integrates such a contribution.
 
+== Phase-quenched pressure difference
+
+Set `global.generation.medium.phase_quenched_difference = true` to generate a connected QCD
+vacuum graph's contribution to $Delta p = p_"PQ" - p_"QCD"$:
+
+// docs-example: syntax
+```toml
+[cli_settings.global.generation.medium]
+mode = "thermodynamic_equilibrium"
+phase_quenched_difference = true
+
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = false
+```
+
+The option also supports `zero_temperature_equilibrium` and requires a non-vacuum medium mode.
+After energy integration, each complete thermal weight is replaced by its average over
+independent chemical-potential signs for the original closed quark loops, minus its original
+value. All propagators in one quark loop share its sign; distinct loops have independent signs,
+even when they have the same flavor. Flipping the common model parameter `muB` does not perform
+this operation.
+
+The transformation is applied at the vacuum-subtraction stage and is included in both local 3D
+UV counterterms and integrated UV counterterms. It already cancels the vacuum contribution, so
+`vacuum_subtraction = true` may be combined with it but is redundant. The generated amplitude
+retains the Minkowski convention described above: convert it to $Delta p$ with the same factor
+$-i$.
+
+Soft and threshold subtraction remain unavailable in medium modes. Even at zero temperature,
+this representation can contain spurious non-integrable singularities requiring subtraction.
+The phase-quenched option does not remove these singularities; full integrated comparisons with
+phase-quenched pressure results are therefore not supported validation benchmarks.
+
 == Fermi surfaces at zero temperature
 
 Several propagators sharing one mass parameter and the same momentum up to an overall sign,

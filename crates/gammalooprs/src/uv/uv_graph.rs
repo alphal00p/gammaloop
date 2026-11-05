@@ -217,11 +217,11 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
     ) where
         Self: AsRef<HedgeGraph<E, V, H>>,
     {
-        if !medium.vacuum_subtraction {
+        if !medium.removes_vacuum() {
             return;
         }
 
-        // Completed thermal weights already carry (1 - V). An operation covering
+        // The selected observable annihilates vacuum weights. An operation covering
         // all loops leaves no medium dependence, even when tree edges survive.
         // Omit it before either 4D or 3D computation; spinneys contain no bridges.
         let graph = self.as_ref();

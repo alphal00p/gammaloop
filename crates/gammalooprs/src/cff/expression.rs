@@ -594,7 +594,7 @@ mod tests {
                 .expression_with_selectors();
             let actual = graph
                 .cff_from_production_expression(&production, &cutset, &pattern)?
-                .with_vacuum_subtraction(true)
+                .with_medium_projection(true, None)?
                 .expression_with_selectors();
             assert_eq!(raw.iter().count(), actual.iter().count());
             for ((raw_key, raw), (actual_key, actual)) in raw.iter().zip(actual.iter()) {
@@ -616,7 +616,7 @@ mod tests {
             let full = graph.full_filter();
             let unit = graph
                 .cff(&full, &cutset, &pattern, &options, None)?
-                .with_vacuum_subtraction(true)
+                .with_medium_projection(true, None)?
                 .expression_with_selectors();
             assert!(
                 unit.iter().all(|(_, atom)| atom.is_zero()),
