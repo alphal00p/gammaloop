@@ -138,6 +138,77 @@ fn physical_family(momenta: &[Atom], loops: usize) -> Result<MomentumFamily, Fac
     MomentumFamily::new(basis, Vec::new(), denominators, &kinematics).map_err(error)
 }
 
+/// Exact matroid profile of a list of line momenta (integer coefficient
+/// vectors over the loop momenta): the number of linearly independent
+/// `loops`-subsets and, sorted, the number of such subsets containing each
+/// line. A momentum map onto another family sends every line to a line (up to
+/// sign) by an invertible linear map, so two line sets of equal size with
+/// different profiles have no such map. `None` when a coefficient is not an
+/// integer or the profile is not defined.
+fn basis_profile(momenta: &[Atom], loops: usize) -> Option<(usize, Vec<usize>)> {
+    if loops == 0 || momenta.len() < loops || momenta.len() > 16 {
+        return None;
+    }
+    let variables = (1..=loops).map(|axis| S.k.call(axis)).collect::<Vec<_>>();
+    let variable_refs = variables.iter().collect::<Vec<_>>();
+    let mut vectors = Vec::with_capacity(momenta.len());
+    for momentum in momenta {
+        let mut row = vec![0i128; loops];
+        for (monomial, coefficient) in momentum.expand().coefficient_list::<u16>(&variable_refs) {
+            let axis = variables.iter().position(|variable| variable == &monomial)?;
+            row[axis] += i128::from(crate::get_integer_from_atom(coefficient.as_view())?);
+        }
+        vectors.push(row);
+    }
+    // Fraction-free (Bareiss) elimination: nonzero determinant of a subset.
+    let independent = |subset: &[usize]| -> bool {
+        let mut matrix = subset.iter().map(|&line| vectors[line].clone()).collect::<Vec<_>>();
+        let n = matrix.len();
+        let mut previous = 1i128;
+        for pivot in 0..n {
+            let Some(row) = (pivot..n).find(|&row| matrix[row][pivot] != 0) else {
+                return false;
+            };
+            matrix.swap(pivot, row);
+            for row in pivot + 1..n {
+                for column in pivot + 1..n {
+                    matrix[row][column] = (matrix[row][column] * matrix[pivot][pivot]
+                        - matrix[row][pivot] * matrix[pivot][column])
+                        / previous;
+                }
+                matrix[row][pivot] = 0;
+            }
+            previous = matrix[pivot][pivot];
+        }
+        true
+    };
+    let mut total = 0usize;
+    let mut per_line = vec![0usize; momenta.len()];
+    let mut subset = (0..loops).collect::<Vec<_>>();
+    loop {
+        if independent(&subset) {
+            total += 1;
+            for &line in &subset {
+                per_line[line] += 1;
+            }
+        }
+        // Next combination in lexicographic order.
+        let mut index = loops;
+        while index > 0 && subset[index - 1] == momenta.len() - loops + index - 1 {
+            index -= 1;
+        }
+        if index == 0 {
+            break;
+        }
+        subset[index - 1] += 1;
+        for next in index..loops {
+            subset[next] = subset[next - 1] + 1;
+        }
+    }
+    per_line.sort_unstable();
+    Some((total, per_line))
+}
+
 fn mapped_key(
     source: &MomentumFamily,
     target: &MomentumFamily,
@@ -446,13 +517,38 @@ impl VacuumFactorProvider for ShippedFactorProvider {
                 },
             ));
         };
+        // Line momenta of the factor's positive slots, for the exact profile
+        // pre-check below (a program whose physical lines have another profile
+        // admits no momentum map, so its exhaustive search is skipped).
+        let source_profile = (0..slots.len())
+            .map(|index| {
+                source
+                    .quadratic_denominator(index)
+                    .ok()
+                    .flatten()
+                    .map(|quadratic| quadratic.momentum().clone())
+            })
+            .collect::<Option<Vec<_>>>()
+            .and_then(|momenta| basis_profile(&momenta, family.loop_count()));
         let mut index = 0;
         while let Some(momenta) = programs.physical_momenta(index) {
             if family.loop_count() != 4 {
                 break;
             }
             let destination = physical_family(momenta, family.loop_count())?;
-            if let Some((mapped, mapping)) = mapped_key(&source, &destination, &slots, target, 10)?
+            let mapping_started = std::time::Instant::now();
+            let excluded = momenta.len() == slots.len()
+                && source_profile.as_ref().is_some_and(|source_profile| {
+                    basis_profile(momenta, family.loop_count())
+                        .is_some_and(|profile| &profile != source_profile)
+                });
+            let found = if excluded {
+                None
+            } else {
+                mapped_key(&source, &destination, &slots, target, 10)?
+            };
+            log::debug!(target: "vakint::saved_application", "phase=lower_factor_mapping program={index} found={} excluded_by_profile={excluded} target={:?} elapsed_seconds={:.6}", found.is_some(), target.powers(), mapping_started.elapsed().as_secs_f64());
+            if let Some((mapped, mapping)) = found
             {
                 let (native, _) = programs
                     .native_program(index)
@@ -471,8 +567,10 @@ impl VacuumFactorProvider for ShippedFactorProvider {
                         .reduce_transported_unit_mass_guarded(&transport, target, limits)
                         .map_err(FactorProviderError::from);
                 }
+                let reduce_started = std::time::Instant::now();
                 let (reduced, conditions, work) =
                     native.reduce_unit_mass_guarded(&mapped, limits)?;
+                log::debug!(target: "vakint::saved_application", "phase=lower_factor_reduce program={index} mapped={:?} terms={} conditions={} elapsed_seconds={:.6}", mapped.powers(), reduced.terms().len(), conditions.len(), reduce_started.elapsed().as_secs_f64());
                 return Ok(result(
                     native.family_shared(),
                     reduced.terms(),
